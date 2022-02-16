@@ -51,10 +51,24 @@ namespace Projects_Launcher
             this.ramlabel = new System.Windows.Forms.Label();
             this.bilgibutton = new System.Windows.Forms.Label();
             this.guna2Panel1 = new Guna.UI2.WinForms.Guna2Panel();
+            this.raminfopanel = new Guna.UI2.WinForms.Guna2Panel();
+            this.label20 = new System.Windows.Forms.Label();
+            this.label21 = new System.Windows.Forms.Label();
+            this.label22 = new System.Windows.Forms.Label();
+            this.label23 = new System.Windows.Forms.Label();
+            this.label19 = new System.Windows.Forms.Label();
+            this.label14 = new System.Windows.Forms.Label();
+            this.label18 = new System.Windows.Forms.Label();
+            this.label11 = new System.Windows.Forms.Label();
+            this.label17 = new System.Windows.Forms.Label();
+            this.label15 = new System.Windows.Forms.Label();
+            this.label16 = new System.Windows.Forms.Label();
+            this.guna2PictureBox1 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.surumsec = new Guna.UI2.WinForms.Guna2ComboBox();
             this.label12 = new System.Windows.Forms.Label();
             this.heighttextbox = new Guna.UI2.WinForms.Guna2TextBox();
             this.widthtextbox = new Guna.UI2.WinForms.Guna2TextBox();
+            this.ramtextbox = new Guna.UI2.WinForms.Guna2TextBox();
             this.label10 = new System.Windows.Forms.Label();
             this.guna2ControlBox1 = new Guna.UI2.WinForms.Guna2ControlBox();
             this.surumtext = new System.Windows.Forms.Label();
@@ -64,25 +78,11 @@ namespace Projects_Launcher
             this.ayarlarbutton = new System.Windows.Forms.Label();
             this.oynabutton = new Guna.UI2.WinForms.Guna2Button();
             this.guna2BorderlessForm2 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
-            this.ramtextbox = new Guna.UI2.WinForms.Guna2TextBox();
-            this.guna2PictureBox1 = new Guna.UI2.WinForms.Guna2PictureBox();
-            this.label11 = new System.Windows.Forms.Label();
-            this.label14 = new System.Windows.Forms.Label();
-            this.label15 = new System.Windows.Forms.Label();
-            this.label16 = new System.Windows.Forms.Label();
-            this.label17 = new System.Windows.Forms.Label();
-            this.label18 = new System.Windows.Forms.Label();
-            this.label19 = new System.Windows.Forms.Label();
-            this.raminfopanel = new Guna.UI2.WinForms.Guna2Panel();
-            this.label20 = new System.Windows.Forms.Label();
-            this.label21 = new System.Windows.Forms.Label();
-            this.label22 = new System.Windows.Forms.Label();
-            this.label23 = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).BeginInit();
             this.guna2Panel1.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
             this.raminfopanel.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
             this.SuspendLayout();
             // 
             // pictureBox1
@@ -344,6 +344,159 @@ namespace Projects_Launcher
             this.guna2Panel1.Size = new System.Drawing.Size(1535, 715);
             this.guna2Panel1.TabIndex = 84;
             // 
+            // raminfopanel
+            // 
+            this.raminfopanel.Controls.Add(this.label20);
+            this.raminfopanel.Controls.Add(this.label21);
+            this.raminfopanel.Controls.Add(this.label22);
+            this.raminfopanel.Controls.Add(this.label23);
+            this.raminfopanel.Controls.Add(this.label19);
+            this.raminfopanel.Controls.Add(this.label14);
+            this.raminfopanel.Controls.Add(this.label18);
+            this.raminfopanel.Controls.Add(this.label11);
+            this.raminfopanel.Controls.Add(this.label17);
+            this.raminfopanel.Controls.Add(this.label15);
+            this.raminfopanel.Controls.Add(this.label16);
+            this.raminfopanel.Location = new System.Drawing.Point(911, 121);
+            this.raminfopanel.Name = "raminfopanel";
+            this.raminfopanel.Size = new System.Drawing.Size(491, 354);
+            this.raminfopanel.TabIndex = 103;
+            this.raminfopanel.Visible = false;
+            // 
+            // label20
+            // 
+            this.label20.AutoSize = true;
+            this.label20.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label20.ForeColor = System.Drawing.SystemColors.Control;
+            this.label20.Location = new System.Drawing.Point(131, 91);
+            this.label20.Name = "label20";
+            this.label20.Size = new System.Drawing.Size(121, 18);
+            this.label20.TabIndex = 106;
+            this.label20.Text = "6GB = 6144 MB";
+            // 
+            // label21
+            // 
+            this.label21.AutoSize = true;
+            this.label21.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label21.ForeColor = System.Drawing.SystemColors.Control;
+            this.label21.Location = new System.Drawing.Point(131, 130);
+            this.label21.Name = "label21";
+            this.label21.Size = new System.Drawing.Size(121, 18);
+            this.label21.TabIndex = 105;
+            this.label21.Text = "8GB = 8192 MB";
+            // 
+            // label22
+            // 
+            this.label22.AutoSize = true;
+            this.label22.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label22.ForeColor = System.Drawing.SystemColors.Control;
+            this.label22.Location = new System.Drawing.Point(131, 112);
+            this.label22.Name = "label22";
+            this.label22.Size = new System.Drawing.Size(121, 18);
+            this.label22.TabIndex = 104;
+            this.label22.Text = "7GB = 7168 MB";
+            // 
+            // label23
+            // 
+            this.label23.AutoSize = true;
+            this.label23.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label23.ForeColor = System.Drawing.SystemColors.Control;
+            this.label23.Location = new System.Drawing.Point(131, 69);
+            this.label23.Name = "label23";
+            this.label23.Size = new System.Drawing.Size(121, 18);
+            this.label23.TabIndex = 103;
+            this.label23.Text = "5GB = 5120 MB";
+            // 
+            // label19
+            // 
+            this.label19.AutoSize = true;
+            this.label19.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label19.ForeColor = System.Drawing.SystemColors.Control;
+            this.label19.Location = new System.Drawing.Point(4, 91);
+            this.label19.Name = "label19";
+            this.label19.Size = new System.Drawing.Size(121, 18);
+            this.label19.TabIndex = 102;
+            this.label19.Text = "2GB = 2048 MB";
+            // 
+            // label14
+            // 
+            this.label14.AutoSize = true;
+            this.label14.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(32)))), ((int)(((byte)(32)))));
+            this.label14.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.label14.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label14.ForeColor = System.Drawing.SystemColors.Control;
+            this.label14.Location = new System.Drawing.Point(3, 9);
+            this.label14.Name = "label14";
+            this.label14.Size = new System.Drawing.Size(108, 22);
+            this.label14.TabIndex = 96;
+            this.label14.Text = "RAM BİLGİ";
+            // 
+            // label18
+            // 
+            this.label18.AutoSize = true;
+            this.label18.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label18.ForeColor = System.Drawing.SystemColors.Control;
+            this.label18.Location = new System.Drawing.Point(4, 130);
+            this.label18.Name = "label18";
+            this.label18.Size = new System.Drawing.Size(121, 18);
+            this.label18.TabIndex = 101;
+            this.label18.Text = "4GB = 4096 MB";
+            // 
+            // label11
+            // 
+            this.label11.AutoSize = true;
+            this.label11.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label11.ForeColor = System.Drawing.SystemColors.Control;
+            this.label11.Location = new System.Drawing.Point(4, 31);
+            this.label11.Name = "label11";
+            this.label11.Size = new System.Drawing.Size(485, 18);
+            this.label11.TabIndex = 97;
+            this.label11.Text = "RAM\'i kutucuğa MB boyutunda yazabilirsiniz. 1GB = 1024MB\'e eşittir.";
+            // 
+            // label17
+            // 
+            this.label17.AutoSize = true;
+            this.label17.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label17.ForeColor = System.Drawing.SystemColors.Control;
+            this.label17.Location = new System.Drawing.Point(4, 112);
+            this.label17.Name = "label17";
+            this.label17.Size = new System.Drawing.Size(121, 18);
+            this.label17.TabIndex = 100;
+            this.label17.Text = "3GB = 3072 MB";
+            // 
+            // label15
+            // 
+            this.label15.AutoSize = true;
+            this.label15.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label15.ForeColor = System.Drawing.SystemColors.Control;
+            this.label15.Location = new System.Drawing.Point(4, 49);
+            this.label15.Name = "label15";
+            this.label15.Size = new System.Drawing.Size(61, 19);
+            this.label15.TabIndex = 98;
+            this.label15.Text = "Örnek:";
+            // 
+            // label16
+            // 
+            this.label16.AutoSize = true;
+            this.label16.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label16.ForeColor = System.Drawing.SystemColors.Control;
+            this.label16.Location = new System.Drawing.Point(4, 69);
+            this.label16.Name = "label16";
+            this.label16.Size = new System.Drawing.Size(121, 18);
+            this.label16.TabIndex = 99;
+            this.label16.Text = "1GB = 1024 MB";
+            // 
+            // guna2PictureBox1
+            // 
+            this.guna2PictureBox1.Image = global::Projects_Launcher.Properties.Resources.info;
+            this.guna2PictureBox1.ImageRotate = 0F;
+            this.guna2PictureBox1.Location = new System.Drawing.Point(701, 180);
+            this.guna2PictureBox1.Name = "guna2PictureBox1";
+            this.guna2PictureBox1.Size = new System.Drawing.Size(16, 16);
+            this.guna2PictureBox1.TabIndex = 95;
+            this.guna2PictureBox1.TabStop = false;
+            this.guna2PictureBox1.Click += new System.EventHandler(this.guna2PictureBox1_Click);
+            // 
             // surumsec
             // 
             this.surumsec.BackColor = System.Drawing.Color.Transparent;
@@ -421,6 +574,30 @@ namespace Projects_Launcher
             this.widthtextbox.Size = new System.Drawing.Size(53, 18);
             this.widthtextbox.TabIndex = 46;
             this.widthtextbox.TextChanged += new System.EventHandler(this.widthtextbox_TextChanged);
+            // 
+            // ramtextbox
+            // 
+            this.ramtextbox.Cursor = System.Windows.Forms.Cursors.IBeam;
+            this.ramtextbox.DefaultText = "4092";
+            this.ramtextbox.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(208)))), ((int)(((byte)(208)))), ((int)(((byte)(208)))));
+            this.ramtextbox.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(226)))), ((int)(((byte)(226)))));
+            this.ramtextbox.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
+            this.ramtextbox.DisabledState.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
+            this.ramtextbox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(32)))), ((int)(((byte)(32)))));
+            this.ramtextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.ramtextbox.Font = new System.Drawing.Font("Arial", 12F);
+            this.ramtextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.ramtextbox.Location = new System.Drawing.Point(656, 203);
+            this.ramtextbox.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.ramtextbox.MaxLength = 4;
+            this.ramtextbox.Name = "ramtextbox";
+            this.ramtextbox.PasswordChar = '\0';
+            this.ramtextbox.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(32)))), ((int)(((byte)(32)))));
+            this.ramtextbox.PlaceholderText = "";
+            this.ramtextbox.SelectedText = "";
+            this.ramtextbox.Size = new System.Drawing.Size(61, 18);
+            this.ramtextbox.TabIndex = 43;
+            this.ramtextbox.TextChanged += new System.EventHandler(this.ramtextbox_TextChanged);
             // 
             // label10
             // 
@@ -537,183 +714,6 @@ namespace Projects_Launcher
             this.guna2BorderlessForm2.DockIndicatorTransparencyValue = 0.6D;
             this.guna2BorderlessForm2.TransparentWhileDrag = true;
             // 
-            // ramtextbox
-            // 
-            this.ramtextbox.Cursor = System.Windows.Forms.Cursors.IBeam;
-            this.ramtextbox.DefaultText = "4092";
-            this.ramtextbox.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(208)))), ((int)(((byte)(208)))), ((int)(((byte)(208)))));
-            this.ramtextbox.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(226)))), ((int)(((byte)(226)))));
-            this.ramtextbox.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
-            this.ramtextbox.DisabledState.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
-            this.ramtextbox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(32)))), ((int)(((byte)(32)))));
-            this.ramtextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.ramtextbox.Font = new System.Drawing.Font("Arial", 12F);
-            this.ramtextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.ramtextbox.Location = new System.Drawing.Point(656, 203);
-            this.ramtextbox.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
-            this.ramtextbox.MaxLength = 4;
-            this.ramtextbox.Name = "ramtextbox";
-            this.ramtextbox.PasswordChar = '\0';
-            this.ramtextbox.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(32)))), ((int)(((byte)(32)))));
-            this.ramtextbox.PlaceholderText = "";
-            this.ramtextbox.SelectedText = "";
-            this.ramtextbox.Size = new System.Drawing.Size(61, 18);
-            this.ramtextbox.TabIndex = 43;
-            this.ramtextbox.TextChanged += new System.EventHandler(this.ramtextbox_TextChanged);
-            // 
-            // guna2PictureBox1
-            // 
-            this.guna2PictureBox1.Image = global::Projects_Launcher.Properties.Resources.info;
-            this.guna2PictureBox1.ImageRotate = 0F;
-            this.guna2PictureBox1.Location = new System.Drawing.Point(701, 180);
-            this.guna2PictureBox1.Name = "guna2PictureBox1";
-            this.guna2PictureBox1.Size = new System.Drawing.Size(16, 16);
-            this.guna2PictureBox1.TabIndex = 95;
-            this.guna2PictureBox1.TabStop = false;
-            this.guna2PictureBox1.Click += new System.EventHandler(this.guna2PictureBox1_Click);
-            // 
-            // label11
-            // 
-            this.label11.AutoSize = true;
-            this.label11.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label11.ForeColor = System.Drawing.SystemColors.Control;
-            this.label11.Location = new System.Drawing.Point(4, 31);
-            this.label11.Name = "label11";
-            this.label11.Size = new System.Drawing.Size(485, 18);
-            this.label11.TabIndex = 97;
-            this.label11.Text = "RAM\'i kutucuğa MB boyutunda yazabilirsiniz. 1GB = 1024MB\'e eşittir.";
-            // 
-            // label14
-            // 
-            this.label14.AutoSize = true;
-            this.label14.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(32)))), ((int)(((byte)(32)))));
-            this.label14.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.label14.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label14.ForeColor = System.Drawing.SystemColors.Control;
-            this.label14.Location = new System.Drawing.Point(3, 9);
-            this.label14.Name = "label14";
-            this.label14.Size = new System.Drawing.Size(108, 22);
-            this.label14.TabIndex = 96;
-            this.label14.Text = "RAM BİLGİ";
-            // 
-            // label15
-            // 
-            this.label15.AutoSize = true;
-            this.label15.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label15.ForeColor = System.Drawing.SystemColors.Control;
-            this.label15.Location = new System.Drawing.Point(4, 49);
-            this.label15.Name = "label15";
-            this.label15.Size = new System.Drawing.Size(61, 19);
-            this.label15.TabIndex = 98;
-            this.label15.Text = "Örnek:";
-            // 
-            // label16
-            // 
-            this.label16.AutoSize = true;
-            this.label16.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label16.ForeColor = System.Drawing.SystemColors.Control;
-            this.label16.Location = new System.Drawing.Point(4, 69);
-            this.label16.Name = "label16";
-            this.label16.Size = new System.Drawing.Size(121, 18);
-            this.label16.TabIndex = 99;
-            this.label16.Text = "1GB = 1024 MB";
-            // 
-            // label17
-            // 
-            this.label17.AutoSize = true;
-            this.label17.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label17.ForeColor = System.Drawing.SystemColors.Control;
-            this.label17.Location = new System.Drawing.Point(4, 112);
-            this.label17.Name = "label17";
-            this.label17.Size = new System.Drawing.Size(121, 18);
-            this.label17.TabIndex = 100;
-            this.label17.Text = "3GB = 3072 MB";
-            // 
-            // label18
-            // 
-            this.label18.AutoSize = true;
-            this.label18.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label18.ForeColor = System.Drawing.SystemColors.Control;
-            this.label18.Location = new System.Drawing.Point(4, 130);
-            this.label18.Name = "label18";
-            this.label18.Size = new System.Drawing.Size(121, 18);
-            this.label18.TabIndex = 101;
-            this.label18.Text = "4GB = 4096 MB";
-            // 
-            // label19
-            // 
-            this.label19.AutoSize = true;
-            this.label19.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label19.ForeColor = System.Drawing.SystemColors.Control;
-            this.label19.Location = new System.Drawing.Point(4, 91);
-            this.label19.Name = "label19";
-            this.label19.Size = new System.Drawing.Size(121, 18);
-            this.label19.TabIndex = 102;
-            this.label19.Text = "2GB = 2048 MB";
-            // 
-            // raminfopanel
-            // 
-            this.raminfopanel.Controls.Add(this.label20);
-            this.raminfopanel.Controls.Add(this.label21);
-            this.raminfopanel.Controls.Add(this.label22);
-            this.raminfopanel.Controls.Add(this.label23);
-            this.raminfopanel.Controls.Add(this.label19);
-            this.raminfopanel.Controls.Add(this.label14);
-            this.raminfopanel.Controls.Add(this.label18);
-            this.raminfopanel.Controls.Add(this.label11);
-            this.raminfopanel.Controls.Add(this.label17);
-            this.raminfopanel.Controls.Add(this.label15);
-            this.raminfopanel.Controls.Add(this.label16);
-            this.raminfopanel.Location = new System.Drawing.Point(911, 121);
-            this.raminfopanel.Name = "raminfopanel";
-            this.raminfopanel.Size = new System.Drawing.Size(443, 354);
-            this.raminfopanel.TabIndex = 103;
-            this.raminfopanel.Visible = false;
-            // 
-            // label20
-            // 
-            this.label20.AutoSize = true;
-            this.label20.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label20.ForeColor = System.Drawing.SystemColors.Control;
-            this.label20.Location = new System.Drawing.Point(131, 91);
-            this.label20.Name = "label20";
-            this.label20.Size = new System.Drawing.Size(121, 18);
-            this.label20.TabIndex = 106;
-            this.label20.Text = "6GB = 6144 MB";
-            // 
-            // label21
-            // 
-            this.label21.AutoSize = true;
-            this.label21.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label21.ForeColor = System.Drawing.SystemColors.Control;
-            this.label21.Location = new System.Drawing.Point(131, 130);
-            this.label21.Name = "label21";
-            this.label21.Size = new System.Drawing.Size(121, 18);
-            this.label21.TabIndex = 105;
-            this.label21.Text = "8GB = 8192 MB";
-            // 
-            // label22
-            // 
-            this.label22.AutoSize = true;
-            this.label22.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label22.ForeColor = System.Drawing.SystemColors.Control;
-            this.label22.Location = new System.Drawing.Point(131, 112);
-            this.label22.Name = "label22";
-            this.label22.Size = new System.Drawing.Size(121, 18);
-            this.label22.TabIndex = 104;
-            this.label22.Text = "7GB = 7168 MB";
-            // 
-            // label23
-            // 
-            this.label23.AutoSize = true;
-            this.label23.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label23.ForeColor = System.Drawing.SystemColors.Control;
-            this.label23.Location = new System.Drawing.Point(131, 69);
-            this.label23.Name = "label23";
-            this.label23.Size = new System.Drawing.Size(121, 18);
-            this.label23.TabIndex = 103;
-            this.label23.Text = "5GB = 5120 MB";
-            // 
             // ProjectsLauncherOptions
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -743,9 +743,9 @@ namespace Projects_Launcher
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).EndInit();
             this.guna2Panel1.ResumeLayout(false);
             this.guna2Panel1.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();
             this.raminfopanel.ResumeLayout(false);
             this.raminfopanel.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
