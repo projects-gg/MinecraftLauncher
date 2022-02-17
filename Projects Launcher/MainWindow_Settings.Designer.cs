@@ -38,7 +38,7 @@ namespace Projects_Launcher
             this.label8 = new System.Windows.Forms.Label();
             this.label7 = new System.Windows.Forms.Label();
             this.label6 = new System.Windows.Forms.Label();
-            this.label3 = new System.Windows.Forms.Label();
+            this.mbLabel = new System.Windows.Forms.Label();
             this.label5 = new System.Windows.Forms.Label();
             this.label4 = new System.Windows.Forms.Label();
             this.nickname = new System.Windows.Forms.Label();
@@ -81,6 +81,7 @@ namespace Projects_Launcher
             this.serverstatus = new System.Windows.Forms.Label();
             this.label24 = new System.Windows.Forms.Label();
             this.timer1 = new System.Windows.Forms.Timer(this.components);
+            this.ramMbToGbCalc = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).BeginInit();
             this.guna2Panel1.SuspendLayout();
@@ -179,17 +180,17 @@ namespace Projects_Launcher
             this.label6.TabIndex = 37;
             this.label6.Text = "Çeşitli Araçlar";
             // 
-            // label3
+            // mbLabel
             // 
-            this.label3.AutoSize = true;
-            this.label3.BackColor = System.Drawing.Color.Transparent;
-            this.label3.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label3.ForeColor = System.Drawing.SystemColors.Control;
-            this.label3.Location = new System.Drawing.Point(724, 203);
-            this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(32, 18);
-            this.label3.TabIndex = 36;
-            this.label3.Text = "MB";
+            this.mbLabel.AutoSize = true;
+            this.mbLabel.BackColor = System.Drawing.Color.Transparent;
+            this.mbLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.mbLabel.ForeColor = System.Drawing.SystemColors.Control;
+            this.mbLabel.Location = new System.Drawing.Point(724, 203);
+            this.mbLabel.Name = "mbLabel";
+            this.mbLabel.Size = new System.Drawing.Size(32, 18);
+            this.mbLabel.TabIndex = 36;
+            this.mbLabel.Text = "MB";
             // 
             // label5
             // 
@@ -328,6 +329,7 @@ namespace Projects_Launcher
             // guna2Panel1
             // 
             this.guna2Panel1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.guna2Panel1.Controls.Add(this.ramMbToGbCalc);
             this.guna2Panel1.Controls.Add(this.raminfopanel);
             this.guna2Panel1.Controls.Add(this.guna2PictureBox1);
             this.guna2Panel1.Controls.Add(this.texturepackyukle);
@@ -342,7 +344,7 @@ namespace Projects_Launcher
             this.guna2Panel1.Controls.Add(this.label8);
             this.guna2Panel1.Controls.Add(this.label7);
             this.guna2Panel1.Controls.Add(this.label6);
-            this.guna2Panel1.Controls.Add(this.label3);
+            this.guna2Panel1.Controls.Add(this.mbLabel);
             this.guna2Panel1.Controls.Add(this.label5);
             this.guna2Panel1.Controls.Add(this.label4);
             this.guna2Panel1.Controls.Add(this.nickname);
@@ -737,12 +739,13 @@ namespace Projects_Launcher
             this.serverstatus.BackColor = System.Drawing.Color.Transparent;
             this.serverstatus.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.serverstatus.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
-            this.serverstatus.Location = new System.Drawing.Point(250, 40);
+            this.serverstatus.Location = new System.Drawing.Point(276, 41);
             this.serverstatus.Name = "serverstatus";
             this.serverstatus.Size = new System.Drawing.Size(57, 20);
             this.serverstatus.TabIndex = 108;
             this.serverstatus.Text = "{status}";
             this.serverstatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.serverstatus.Click += new System.EventHandler(this.serverstatus_Click);
             // 
             // label24
             // 
@@ -750,7 +753,7 @@ namespace Projects_Launcher
             this.label24.BackColor = System.Drawing.Color.Transparent;
             this.label24.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.label24.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
-            this.label24.Location = new System.Drawing.Point(250, 20);
+            this.label24.Location = new System.Drawing.Point(248, 21);
             this.label24.Name = "label24";
             this.label24.Size = new System.Drawing.Size(101, 20);
             this.label24.TabIndex = 107;
@@ -760,6 +763,18 @@ namespace Projects_Launcher
             // 
             this.timer1.Enabled = true;
             this.timer1.Tick += new System.EventHandler(this.timer1_Tick);
+            // 
+            // ramMbToGbCalc
+            // 
+            this.ramMbToGbCalc.AutoSize = true;
+            this.ramMbToGbCalc.BackColor = System.Drawing.Color.Transparent;
+            this.ramMbToGbCalc.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.ramMbToGbCalc.ForeColor = System.Drawing.SystemColors.Control;
+            this.ramMbToGbCalc.Location = new System.Drawing.Point(775, 203);
+            this.ramMbToGbCalc.Name = "ramMbToGbCalc";
+            this.ramMbToGbCalc.Size = new System.Drawing.Size(0, 18);
+            this.ramMbToGbCalc.TabIndex = 105;
+            this.ramMbToGbCalc.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
             // ProjectsLauncherOptions
             // 
@@ -809,7 +824,7 @@ namespace Projects_Launcher
         private System.Windows.Forms.Label label8;
         private System.Windows.Forms.Label label7;
         private System.Windows.Forms.Label label6;
-        private System.Windows.Forms.Label label3;
+        private System.Windows.Forms.Label mbLabel;
         private System.Windows.Forms.Label label5;
         private System.Windows.Forms.Label label4;
         private System.Windows.Forms.Label nickname;
@@ -852,5 +867,6 @@ namespace Projects_Launcher
         private System.Windows.Forms.Label serverstatus;
         private System.Windows.Forms.Label label24;
         private System.Windows.Forms.Timer timer1;
+        private System.Windows.Forms.Label ramMbToGbCalc;
     }
 }

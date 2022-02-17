@@ -240,7 +240,15 @@ namespace Projects_Launcher
 
         private async void timer1_Tick(object sender, EventArgs e)
         {
-            await ServerStatus();
+            try
+            {
+                await ServerStatus();
+            }
+            catch
+            {
+                serverstatus.Hide();
+                label1.Hide();
+            }
         }
 
         private void guna2ControlBox1_Click(object sender, EventArgs e)

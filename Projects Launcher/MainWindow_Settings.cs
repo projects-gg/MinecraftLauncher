@@ -234,10 +234,23 @@ namespace Projects_Launcher
         {
             rambox = ramtextbox.Text;
             Properties.Settings.Default.RamMBS = rambox;
-            Properties.Settings.Default.Save(); ;
+            Properties.Settings.Default.Save();
+            mbLabel.Text = "MB =";
             if (Properties.Settings.Default.RamMBS != string.Empty)
             {
                 ramlabel.Text = Properties.Settings.Default.RamMBS;
+                try
+                {
+                    ramMbToGbCalc.Text = String.Format("{0:0.##}", Convert.ToDouble(ramtextbox.Text) / 1024) + "GB";
+                }
+                catch
+                {
+                    ramMbToGbCalc.Text = "Geçersiz Değer!";
+                }
+            } else if (ramMbToGbCalc.Text != "")
+            {
+                ramMbToGbCalc.Text = "";
+                mbLabel.Text = "MB";
             }
         }
 
@@ -397,7 +410,20 @@ namespace Projects_Launcher
 
         private async void timer1_Tick(object sender, EventArgs e)
         {
-            await ServerStatus();
+            try
+            {
+                await ServerStatus();
+            }
+            catch
+            {
+                serverstatus.Hide();
+                label1.Hide();
+            }
+        }
+
+        private void serverstatus_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }

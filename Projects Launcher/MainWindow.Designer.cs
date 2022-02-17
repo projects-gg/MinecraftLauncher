@@ -255,11 +255,12 @@ namespace Projects_Launcher
             this.label1.BackColor = System.Drawing.Color.Transparent;
             this.label1.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.label1.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
-            this.label1.Location = new System.Drawing.Point(250, 20);
+            this.label1.Location = new System.Drawing.Point(248, 21);
             this.label1.Name = "label1";
             this.label1.Size = new System.Drawing.Size(101, 20);
             this.label1.TabIndex = 92;
             this.label1.Text = "Aktif Oyuncu";
+            this.label1.Click += new System.EventHandler(this.label1_Click);
             // 
             // serverstatus
             // 
@@ -267,12 +268,13 @@ namespace Projects_Launcher
             this.serverstatus.BackColor = System.Drawing.Color.Transparent;
             this.serverstatus.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.serverstatus.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
-            this.serverstatus.Location = new System.Drawing.Point(250, 40);
+            this.serverstatus.Location = new System.Drawing.Point(276, 41);
             this.serverstatus.Name = "serverstatus";
             this.serverstatus.Size = new System.Drawing.Size(57, 20);
             this.serverstatus.TabIndex = 93;
             this.serverstatus.Text = "{status}";
             this.serverstatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            this.serverstatus.Click += new System.EventHandler(this.serverstatus_Click);
             // 
             // timer1
             // 
