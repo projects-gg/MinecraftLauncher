@@ -17,7 +17,9 @@ using CmlLib.Core.Installer;
 using CmlLib.Core.Files;
 using System.Threading;
 using HtmlAgilityPack;
-
+using System.Net;
+using MCServerStatus;
+using MCServerStatus.Models;
 namespace Projects_Launcher
 {
     public partial class ProjectsLauncherOptions : Form
@@ -42,75 +44,6 @@ namespace Projects_Launcher
 
         public static string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/resourcepacks";
         string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
-        private void guna2Panel1_Paint(object sender, PaintEventArgs e)
-        {
-
-        }
-
-        private void guna2PictureBox2_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void widthlabel_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void indirmeler_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void ramlabel_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void bilgibutton_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void pictureBox1_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void guna2ControlBox1_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void surumtext_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void nickname1_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void heightlabel_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void anamenü_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void ayarlarbutton_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void oynabutton_Click(object sender, EventArgs e)
-        {
-
-        }
 
         private void ProjectsLauncherOptions_Load(object sender, EventArgs e)
         {
@@ -395,6 +328,76 @@ namespace Projects_Launcher
         private void guna2ControlBox1_Click_1(object sender, EventArgs e)
         {
             Application.Exit();
+        }
+
+        private void oynabutton_Click(object sender, EventArgs e)
+        {
+            string fabric_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/fabric-loader-0.13.1-1.18.1";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
+
+            if (Directory.Exists(@fabric_appDataDizini))
+            {
+
+                session = MSession.GetOfflineSession(ProjectsLauncherLogin.nickname);
+                oynabutton.Text = "Başlatılıyor...";
+                oynabutton.Enabled = false;
+
+                Thread thread = new Thread(() => Launch());
+                thread.IsBackground = true;
+                thread.Start();
+
+                System.Threading.Thread.Sleep(6500);
+
+                for (int i = 0; i <= 100; i++)
+                {
+                    foreach (var process in Process.GetProcessesByName("javaw"))
+                    {
+                        Application.Exit();
+                    }
+                }
+            }
+            else
+            {
+
+                DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?", "Projects Launcher", MessageBoxButtons.YesNo);
+
+                if (secenek == DialogResult.Yes)
+                {
+                    WebClient wc = new WebClient();
+                    wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
+                    wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-installer-0.10.2.jar");
+                }
+                else if (secenek == DialogResult.No)
+                {
+                    //Hayır seçeneğine tıklandığında çalıştırılacak kodlar
+                }
+            }
+        }
+        private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
+        {
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/fabric-installer-0.10.2.jar";
+
+            string myPath = @appDataDizini;
+            System.Diagnostics.Process prc = new System.Diagnostics.Process();
+            prc.StartInfo.FileName = myPath;
+            System.Threading.Thread.Sleep(1000);
+            prc.Start();
+
+
+        }
+
+        private async Task ServerStatus()
+        {
+            IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
+            var status = await pinger.RequestAsync();
+            String server = status.Players.Online + "";
+            serverstatus.Text = server;
+        }
+
+        private async void timer1_Tick(object sender, EventArgs e)
+        {
+            await ServerStatus();
         }
     }
 }

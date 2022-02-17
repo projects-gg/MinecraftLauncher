@@ -18,6 +18,8 @@ using CmlLib.Core.Files;
 using System.Threading;
 using HtmlAgilityPack;
 using System.Net;
+using MCServerStatus;
+using MCServerStatus.Models;
 
 namespace Projects_Launcher
 {
@@ -37,7 +39,6 @@ namespace Projects_Launcher
         public static string height;
         public static string width;
         public static string versiyons;
-        StreamReader oku;
 
         string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
         private void ProjectsLauncherMain_Load(object sender, EventArgs e)
@@ -71,6 +72,17 @@ namespace Projects_Launcher
             {
                 surumtext.Text = Properties.Settings.Default.SelectedVersion;
             }
+
+            //server status
+            
+        }
+
+        private async Task ServerStatus()
+        {
+            IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
+            var status = await pinger.RequestAsync();
+            String server = status.Players.Online + "";
+            serverstatus.Text = server;
         }
 
         private void oynabutton_Click(object sender, EventArgs e)
@@ -116,9 +128,6 @@ namespace Projects_Launcher
                     //Hayır seçeneğine tıklandığında çalıştırılacak kodlar
                 }
             }
-
-
-           
         }
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
@@ -212,6 +221,11 @@ namespace Projects_Launcher
         private void guna2ControlBox1_Click(object sender, EventArgs e)
         {
             Application.Exit();
+        }
+
+        private async void timer1_Tick(object sender, EventArgs e)
+        {
+            await ServerStatus();
         }
     }
 }

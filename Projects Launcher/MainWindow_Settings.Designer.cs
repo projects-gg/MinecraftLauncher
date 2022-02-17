@@ -76,8 +76,11 @@ namespace Projects_Launcher
             this.heightlabel = new System.Windows.Forms.Label();
             this.anamenü = new System.Windows.Forms.Label();
             this.ayarlarbutton = new System.Windows.Forms.Label();
-            this.oynabutton = new Guna.UI2.WinForms.Guna2Button();
             this.guna2BorderlessForm2 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
+            this.oynabutton = new Guna.UI2.WinForms.Guna2Button();
+            this.serverstatus = new System.Windows.Forms.Label();
+            this.label24 = new System.Windows.Forms.Label();
+            this.timer1 = new System.Windows.Forms.Timer(this.components);
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).BeginInit();
             this.guna2Panel1.SuspendLayout();
@@ -691,6 +694,12 @@ namespace Projects_Launcher
             this.ayarlarbutton.TabIndex = 86;
             this.ayarlarbutton.Text = "AYARLAR";
             // 
+            // guna2BorderlessForm2
+            // 
+            this.guna2BorderlessForm2.ContainerControl = this;
+            this.guna2BorderlessForm2.DockIndicatorTransparencyValue = 0.6D;
+            this.guna2BorderlessForm2.TransparentWhileDrag = true;
+            // 
             // oynabutton
             // 
             this.oynabutton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
@@ -705,14 +714,37 @@ namespace Projects_Launcher
             this.oynabutton.Location = new System.Drawing.Point(687, 771);
             this.oynabutton.Name = "oynabutton";
             this.oynabutton.Size = new System.Drawing.Size(161, 42);
-            this.oynabutton.TabIndex = 85;
+            this.oynabutton.TabIndex = 95;
             this.oynabutton.Text = "Oyna";
+            this.oynabutton.Click += new System.EventHandler(this.oynabutton_Click);
             // 
-            // guna2BorderlessForm2
+            // serverstatus
             // 
-            this.guna2BorderlessForm2.ContainerControl = this;
-            this.guna2BorderlessForm2.DockIndicatorTransparencyValue = 0.6D;
-            this.guna2BorderlessForm2.TransparentWhileDrag = true;
+            this.serverstatus.AutoSize = true;
+            this.serverstatus.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.serverstatus.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
+            this.serverstatus.Location = new System.Drawing.Point(250, 40);
+            this.serverstatus.Name = "serverstatus";
+            this.serverstatus.Size = new System.Drawing.Size(57, 20);
+            this.serverstatus.TabIndex = 108;
+            this.serverstatus.Text = "{status}";
+            this.serverstatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // label24
+            // 
+            this.label24.AutoSize = true;
+            this.label24.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label24.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
+            this.label24.Location = new System.Drawing.Point(250, 20);
+            this.label24.Name = "label24";
+            this.label24.Size = new System.Drawing.Size(101, 20);
+            this.label24.TabIndex = 107;
+            this.label24.Text = "Aktif Oyuncu";
+            // 
+            // timer1
+            // 
+            this.timer1.Enabled = true;
+            this.timer1.Tick += new System.EventHandler(this.timer1_Tick);
             // 
             // ProjectsLauncherOptions
             // 
@@ -720,6 +752,9 @@ namespace Projects_Launcher
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
             this.ClientSize = new System.Drawing.Size(1536, 864);
+            this.Controls.Add(this.serverstatus);
+            this.Controls.Add(this.label24);
+            this.Controls.Add(this.oynabutton);
             this.Controls.Add(this.pictureBox1);
             this.Controls.Add(this.guna2PictureBox2);
             this.Controls.Add(this.widthlabel);
@@ -733,7 +768,6 @@ namespace Projects_Launcher
             this.Controls.Add(this.heightlabel);
             this.Controls.Add(this.anamenü);
             this.Controls.Add(this.ayarlarbutton);
-            this.Controls.Add(this.oynabutton);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Name = "ProjectsLauncherOptions";
@@ -784,7 +818,6 @@ namespace Projects_Launcher
         public System.Windows.Forms.Label heightlabel;
         private System.Windows.Forms.Label anamenü;
         private System.Windows.Forms.Label ayarlarbutton;
-        private Guna.UI2.WinForms.Guna2Button oynabutton;
         private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm2;
         public Guna.UI2.WinForms.Guna2TextBox ramtextbox;
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox1;
@@ -800,5 +833,9 @@ namespace Projects_Launcher
         private System.Windows.Forms.Label label21;
         private System.Windows.Forms.Label label22;
         private System.Windows.Forms.Label label23;
+        private Guna.UI2.WinForms.Guna2Button oynabutton;
+        private System.Windows.Forms.Label serverstatus;
+        private System.Windows.Forms.Label label24;
+        private System.Windows.Forms.Timer timer1;
     }
 }

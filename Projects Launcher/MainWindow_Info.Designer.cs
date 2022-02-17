@@ -53,6 +53,9 @@ namespace Projects_Launcher
             this.ramlabel = new System.Windows.Forms.Label();
             this.surumtext = new System.Windows.Forms.Label();
             this.guna2Panel1 = new Guna.UI2.WinForms.Guna2Panel();
+            this.serverstatus = new System.Windows.Forms.Label();
+            this.label1 = new System.Windows.Forms.Label();
+            this.timer1 = new System.Windows.Forms.Timer(this.components);
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
             this.guna2Panel1.SuspendLayout();
@@ -329,12 +332,42 @@ namespace Projects_Launcher
             this.guna2Panel1.Size = new System.Drawing.Size(1535, 715);
             this.guna2Panel1.TabIndex = 84;
             // 
+            // serverstatus
+            // 
+            this.serverstatus.AutoSize = true;
+            this.serverstatus.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.serverstatus.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
+            this.serverstatus.Location = new System.Drawing.Point(250, 40);
+            this.serverstatus.Name = "serverstatus";
+            this.serverstatus.Size = new System.Drawing.Size(57, 20);
+            this.serverstatus.TabIndex = 96;
+            this.serverstatus.Text = "{status}";
+            this.serverstatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label1.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
+            this.label1.Location = new System.Drawing.Point(250, 20);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(101, 20);
+            this.label1.TabIndex = 95;
+            this.label1.Text = "Aktif Oyuncu";
+            // 
+            // timer1
+            // 
+            this.timer1.Enabled = true;
+            this.timer1.Tick += new System.EventHandler(this.timer1_Tick);
+            // 
             // ProjectsLauncherInfo
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
             this.ClientSize = new System.Drawing.Size(1536, 864);
+            this.Controls.Add(this.serverstatus);
+            this.Controls.Add(this.label1);
             this.Controls.Add(this.pictureBox1);
             this.Controls.Add(this.bilgibutton);
             this.Controls.Add(this.ayarlarbutton);
@@ -387,5 +420,8 @@ namespace Projects_Launcher
         private System.Windows.Forms.Label surumtext;
         private Guna.UI2.WinForms.Guna2Panel guna2Panel1;
         private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm2;
+        private System.Windows.Forms.Label serverstatus;
+        private System.Windows.Forms.Label label1;
+        private System.Windows.Forms.Timer timer1;
     }
 }
