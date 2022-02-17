@@ -75,6 +75,7 @@ namespace Projects_Launcher
             {
                 surumtext.Text = Properties.Settings.Default.SelectedVersion;
             }
+
         }
 
         private void label9_Click(object sender, EventArgs e)
@@ -241,6 +242,11 @@ namespace Projects_Launcher
         private async void timer1_Tick(object sender, EventArgs e)
         {
             await ServerStatus();
+        }
+
+        private void guna2ControlBox1_Click(object sender, EventArgs e)
+        {
+            Application.Exit();
         }
     }
 }

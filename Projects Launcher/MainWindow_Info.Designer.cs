@@ -73,7 +73,7 @@ namespace Projects_Launcher
             // bilgibutton
             // 
             this.bilgibutton.AutoSize = true;
-            this.bilgibutton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.bilgibutton.BackColor = System.Drawing.Color.Transparent;
             this.bilgibutton.Cursor = System.Windows.Forms.Cursors.Hand;
             this.bilgibutton.Font = new System.Drawing.Font("Arial", 21.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.bilgibutton.ForeColor = System.Drawing.SystemColors.Control;
@@ -86,7 +86,7 @@ namespace Projects_Launcher
             // ayarlarbutton
             // 
             this.ayarlarbutton.AutoSize = true;
-            this.ayarlarbutton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.ayarlarbutton.BackColor = System.Drawing.Color.Transparent;
             this.ayarlarbutton.Cursor = System.Windows.Forms.Cursors.Hand;
             this.ayarlarbutton.Font = new System.Drawing.Font("Arial", 21.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.ayarlarbutton.ForeColor = System.Drawing.SystemColors.Control;
@@ -100,7 +100,7 @@ namespace Projects_Launcher
             // anamenü
             // 
             this.anamenü.AutoSize = true;
-            this.anamenü.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.anamenü.BackColor = System.Drawing.Color.Transparent;
             this.anamenü.Cursor = System.Windows.Forms.Cursors.Hand;
             this.anamenü.Font = new System.Drawing.Font("Arial", 21.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.anamenü.ForeColor = System.Drawing.SystemColors.Control;
@@ -141,6 +141,7 @@ namespace Projects_Launcher
             this.guna2ControlBox1.Name = "guna2ControlBox1";
             this.guna2ControlBox1.Size = new System.Drawing.Size(45, 29);
             this.guna2ControlBox1.TabIndex = 83;
+            this.guna2ControlBox1.Click += new System.EventHandler(this.guna2ControlBox1_Click);
             // 
             // label14
             // 
@@ -197,9 +198,9 @@ namespace Projects_Launcher
             // nickname1
             // 
             this.nickname1.AutoSize = true;
-            this.nickname1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.nickname1.BackColor = System.Drawing.Color.Transparent;
             this.nickname1.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.nickname1.ForeColor = System.Drawing.SystemColors.Control;
+            this.nickname1.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
             this.nickname1.Location = new System.Drawing.Point(71, 812);
             this.nickname1.Name = "nickname1";
             this.nickname1.Size = new System.Drawing.Size(102, 22);
@@ -209,7 +210,7 @@ namespace Projects_Launcher
             // heightlabel
             // 
             this.heightlabel.AutoSize = true;
-            this.heightlabel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.heightlabel.BackColor = System.Drawing.Color.Transparent;
             this.heightlabel.Cursor = System.Windows.Forms.Cursors.Hand;
             this.heightlabel.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.heightlabel.ForeColor = System.Drawing.Color.White;
@@ -268,7 +269,7 @@ namespace Projects_Launcher
             // widthlabel
             // 
             this.widthlabel.AutoSize = true;
-            this.widthlabel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.widthlabel.BackColor = System.Drawing.Color.Transparent;
             this.widthlabel.Cursor = System.Windows.Forms.Cursors.Hand;
             this.widthlabel.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.widthlabel.ForeColor = System.Drawing.Color.White;
@@ -281,7 +282,7 @@ namespace Projects_Launcher
             // indirmeler
             // 
             this.indirmeler.AutoSize = true;
-            this.indirmeler.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.indirmeler.BackColor = System.Drawing.Color.Transparent;
             this.indirmeler.Cursor = System.Windows.Forms.Cursors.Hand;
             this.indirmeler.Font = new System.Drawing.Font("Arial", 21.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.indirmeler.ForeColor = System.Drawing.SystemColors.Control;
@@ -295,7 +296,7 @@ namespace Projects_Launcher
             // ramlabel
             // 
             this.ramlabel.AutoSize = true;
-            this.ramlabel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.ramlabel.BackColor = System.Drawing.Color.Transparent;
             this.ramlabel.Cursor = System.Windows.Forms.Cursors.Hand;
             this.ramlabel.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.ramlabel.ForeColor = System.Drawing.Color.White;
@@ -308,10 +309,10 @@ namespace Projects_Launcher
             // surumtext
             // 
             this.surumtext.AutoSize = true;
-            this.surumtext.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.surumtext.BackColor = System.Drawing.Color.Transparent;
             this.surumtext.Cursor = System.Windows.Forms.Cursors.Hand;
             this.surumtext.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.surumtext.ForeColor = System.Drawing.SystemColors.Control;
+            this.surumtext.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(11)))), ((int)(((byte)(135)))), ((int)(((byte)(135)))));
             this.surumtext.Location = new System.Drawing.Point(71, 834);
             this.surumtext.Name = "surumtext";
             this.surumtext.Size = new System.Drawing.Size(247, 22);
@@ -320,7 +321,7 @@ namespace Projects_Launcher
             // 
             // guna2Panel1
             // 
-            this.guna2Panel1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(32)))), ((int)(((byte)(32)))));
+            this.guna2Panel1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
             this.guna2Panel1.Controls.Add(this.label14);
             this.guna2Panel1.Controls.Add(this.label13);
             this.guna2Panel1.Controls.Add(this.label12);
@@ -335,6 +336,7 @@ namespace Projects_Launcher
             // serverstatus
             // 
             this.serverstatus.AutoSize = true;
+            this.serverstatus.BackColor = System.Drawing.Color.Transparent;
             this.serverstatus.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.serverstatus.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
             this.serverstatus.Location = new System.Drawing.Point(250, 40);
@@ -347,6 +349,7 @@ namespace Projects_Launcher
             // label1
             // 
             this.label1.AutoSize = true;
+            this.label1.BackColor = System.Drawing.Color.Transparent;
             this.label1.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.label1.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
             this.label1.Location = new System.Drawing.Point(250, 20);
@@ -364,7 +367,7 @@ namespace Projects_Launcher
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(24)))), ((int)(((byte)(30)))), ((int)(((byte)(54)))));
             this.ClientSize = new System.Drawing.Size(1536, 864);
             this.Controls.Add(this.serverstatus);
             this.Controls.Add(this.label1);

@@ -83,6 +83,7 @@ namespace Projects_Launcher
             this.benihatırla.Animated = true;
             this.benihatırla.AutoCheck = false;
             this.benihatırla.AutoSize = true;
+            this.benihatırla.BackColor = System.Drawing.Color.Transparent;
             this.benihatırla.Checked = true;
             this.benihatırla.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
             this.benihatırla.CheckedState.BorderRadius = 0;
@@ -100,6 +101,7 @@ namespace Projects_Launcher
             this.benihatırla.UncheckedState.BorderRadius = 0;
             this.benihatırla.UncheckedState.BorderThickness = 0;
             this.benihatırla.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.benihatırla.UseVisualStyleBackColor = false;
             this.benihatırla.CheckedChanged += new System.EventHandler(this.benihatırla_CheckedChanged);
             // 
             // label4
@@ -156,6 +158,7 @@ namespace Projects_Launcher
             // girisyapbutton
             // 
             this.girisyapbutton.Animated = true;
+            this.girisyapbutton.BackColor = System.Drawing.Color.Transparent;
             this.girisyapbutton.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
             this.girisyapbutton.DisabledState.BorderColor = System.Drawing.Color.DarkGray;
             this.girisyapbutton.DisabledState.CustomBorderColor = System.Drawing.Color.DarkGray;
@@ -173,7 +176,7 @@ namespace Projects_Launcher
             // 
             // nicknametextbox
             // 
-            this.nicknametextbox.BackColor = System.Drawing.Color.White;
+            this.nicknametextbox.BackColor = System.Drawing.Color.Transparent;
             this.nicknametextbox.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
             this.nicknametextbox.Cursor = System.Windows.Forms.Cursors.IBeam;
             this.nicknametextbox.DefaultText = "Nickname";
@@ -181,7 +184,7 @@ namespace Projects_Launcher
             this.nicknametextbox.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(226)))), ((int)(((byte)(226)))));
             this.nicknametextbox.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
             this.nicknametextbox.DisabledState.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
-            this.nicknametextbox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.nicknametextbox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
             this.nicknametextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
             this.nicknametextbox.Font = new System.Drawing.Font("Segoe UI", 14.25F);
             this.nicknametextbox.ForeColor = System.Drawing.Color.White;
@@ -209,6 +212,7 @@ namespace Projects_Launcher
             // 
             // pictureBox1
             // 
+            this.pictureBox1.BackColor = System.Drawing.Color.Transparent;
             this.pictureBox1.Image = global::Projects_Launcher.Properties.Resources.pprojectss;
             this.pictureBox1.Location = new System.Drawing.Point(655, 318);
             this.pictureBox1.Name = "pictureBox1";
@@ -220,7 +224,7 @@ namespace Projects_Launcher
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
             this.ClientSize = new System.Drawing.Size(1536, 864);
             this.Controls.Add(this.pictureBox1);
             this.Controls.Add(this.label6);
