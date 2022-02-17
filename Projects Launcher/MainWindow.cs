@@ -141,7 +141,7 @@ namespace Projects_Launcher
 
 
         }
-        async private void path()
+        private void path()
         {
             System.Net.ServicePointManager.DefaultConnectionLimit = 256;
 
@@ -150,13 +150,13 @@ namespace Projects_Launcher
 
             var launcher = new CMLauncher(path);
 
-            foreach (var item in launcher.GetAllVersions())
+            /*foreach (var item in launcher.GetAllVersions())
             {
-                //versiyonselect.Items.Add(item.Name);
-            }
+                versiyonselect.Items.Add(item.Name);
+            }*/
         }
 
-        async public void Launch()
+        public async void Launch()
         {
             rammiktar = ramlabel.Text;
             height = heightlabel.Text;
@@ -185,9 +185,9 @@ namespace Projects_Launcher
                 ScreenWidth = int.Parse(height),
                 ScreenHeight = int.Parse(width),
             };
-            var proces = await launcher.CreateProcessAsync(surumtext.Text, ayarlar);
+            var clientStartProcess = await launcher.CreateProcessAsync(surumtext.Text, ayarlar);
 
-            proces.Start();
+            clientStartProcess.Start();
             //System.Threading.Thread.Sleep(1500);
             //for (int i = 0; i <= 100; i++)
             //{

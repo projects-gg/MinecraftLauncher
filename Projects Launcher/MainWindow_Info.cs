@@ -226,17 +226,16 @@ namespace Projects_Launcher
                 ScreenWidth = int.Parse(height),
                 ScreenHeight = int.Parse(width),
             };
-            var proces = await launcher.CreateProcessAsync(surumtext.Text, ayarlar);
+            var clientLaunchProcess = await launcher.CreateProcessAsync(surumtext.Text, ayarlar);
 
-            proces.Start();
+            clientLaunchProcess.Start();
         }
 
         private async Task ServerStatus()
         {
             IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
             var status = await pinger.RequestAsync();
-            String server = status.Players.Online + "";
-            serverstatus.Text = server;
+            serverstatus.Text = Convert.ToString(status.Players.Online);
         }
 
         private async void timer1_Tick(object sender, EventArgs e)
@@ -247,6 +246,16 @@ namespace Projects_Launcher
         private void guna2ControlBox1_Click(object sender, EventArgs e)
         {
             Application.Exit();
+        }
+
+        private void label1_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void serverstatus_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }
