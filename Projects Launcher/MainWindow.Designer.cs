@@ -97,11 +97,12 @@ namespace Projects_Launcher
             // 
             // guna2PictureBox3
             // 
+            this.guna2PictureBox3.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(70)))), ((int)(((byte)(30)))), ((int)(((byte)(54)))));
             this.guna2PictureBox3.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox3.Image")));
             this.guna2PictureBox3.ImageRotate = 0F;
             this.guna2PictureBox3.Location = new System.Drawing.Point(-1, 78);
             this.guna2PictureBox3.Name = "guna2PictureBox3";
-            this.guna2PictureBox3.Size = new System.Drawing.Size(1535, 715);
+            this.guna2PictureBox3.Size = new System.Drawing.Size(1544, 715);
             this.guna2PictureBox3.TabIndex = 81;
             this.guna2PictureBox3.TabStop = false;
             // 
@@ -177,11 +178,11 @@ namespace Projects_Launcher
             this.anamenü.AutoSize = true;
             this.anamenü.BackColor = System.Drawing.Color.Transparent;
             this.anamenü.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.anamenü.Font = new System.Drawing.Font("Arial", 21.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.anamenü.ForeColor = System.Drawing.SystemColors.Control;
+            this.anamenü.Font = new System.Drawing.Font("Arial", 21.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.anamenü.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(150)))), ((int)(((byte)(150)))), ((int)(((byte)(150)))));
             this.anamenü.Location = new System.Drawing.Point(713, 25);
             this.anamenü.Name = "anamenü";
-            this.anamenü.Size = new System.Drawing.Size(167, 34);
+            this.anamenü.Size = new System.Drawing.Size(164, 33);
             this.anamenü.TabIndex = 84;
             this.anamenü.Text = "ANA MENÜ";
             // 
@@ -260,7 +261,6 @@ namespace Projects_Launcher
             this.label1.Size = new System.Drawing.Size(101, 20);
             this.label1.TabIndex = 92;
             this.label1.Text = "Aktif Oyuncu";
-            this.label1.Click += new System.EventHandler(this.label1_Click);
             // 
             // serverstatus
             // 
@@ -274,7 +274,6 @@ namespace Projects_Launcher
             this.serverstatus.TabIndex = 93;
             this.serverstatus.Text = "{status}";
             this.serverstatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.serverstatus.Click += new System.EventHandler(this.serverstatus_Click);
             // 
             // timer1
             // 
@@ -305,6 +304,9 @@ namespace Projects_Launcher
             this.Controls.Add(this.nickname1);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.MaximizeBox = false;
+            this.MaximumSize = new System.Drawing.Size(1536, 864);
+            this.MinimumSize = new System.Drawing.Size(1536, 864);
             this.Name = "ProjectsLauncherMain";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Projects Launcher";

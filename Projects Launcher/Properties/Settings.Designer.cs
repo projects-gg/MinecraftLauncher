@@ -25,18 +25,6 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("sad")]
-        public string NickName {
-            get {
-                return ((string)(this["NickName"]));
-            }
-            set {
-                this["NickName"] = value;
-            }
-        }
-        
-        [global::System.Configuration.UserScopedSettingAttribute()]
-        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("")]
         public string BeniHatırla {
             get {
@@ -104,6 +92,18 @@ namespace Projects_Launcher.Properties {
             }
             set {
                 this["Ayar"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string NickName {
+            get {
+                return ((string)(this["NickName"]));
+            }
+            set {
+                this["NickName"] = value;
             }
         }
     }

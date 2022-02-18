@@ -62,6 +62,7 @@ namespace Projects_Launcher
             //{
             //    MessageBox.Show("Sunucuyla bağlantı sağlanamadı.");
             //}
+
         }
 
         private void benihatırla_CheckedChanged(object sender, EventArgs e)

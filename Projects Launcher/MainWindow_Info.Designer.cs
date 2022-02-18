@@ -75,11 +75,11 @@ namespace Projects_Launcher
             this.bilgibutton.AutoSize = true;
             this.bilgibutton.BackColor = System.Drawing.Color.Transparent;
             this.bilgibutton.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.bilgibutton.Font = new System.Drawing.Font("Arial", 21.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.bilgibutton.ForeColor = System.Drawing.SystemColors.Control;
+            this.bilgibutton.Font = new System.Drawing.Font("Arial", 21.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.bilgibutton.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(150)))), ((int)(((byte)(150)))), ((int)(((byte)(150)))));
             this.bilgibutton.Location = new System.Drawing.Point(1122, 21);
             this.bilgibutton.Name = "bilgibutton";
-            this.bilgibutton.Size = new System.Drawing.Size(92, 34);
+            this.bilgibutton.Size = new System.Drawing.Size(87, 33);
             this.bilgibutton.TabIndex = 88;
             this.bilgibutton.Text = "BİLGİ";
             // 
@@ -389,6 +389,9 @@ namespace Projects_Launcher
             this.Controls.Add(this.guna2Panel1);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.MaximizeBox = false;
+            this.MaximumSize = new System.Drawing.Size(1536, 864);
+            this.MinimumSize = new System.Drawing.Size(1536, 864);
             this.Name = "ProjectsLauncherInfo";
             this.Text = "Projects Launcher";
             this.Load += new System.EventHandler(this.ProjectsLauncherInfo_Load);

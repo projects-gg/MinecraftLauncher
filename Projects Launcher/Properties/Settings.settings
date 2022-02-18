@@ -2,9 +2,6 @@
 <SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="Projects_Launcher.Properties" GeneratedClassName="Settings">
   <Profiles />
   <Settings>
-    <Setting Name="NickName" Type="System.String" Scope="User">
-      <Value Profile="(Default)">sad</Value>
-    </Setting>
     <Setting Name="BeniHatırla" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
     </Setting>
@@ -22,6 +19,10 @@
     </Setting>
     <Setting Name="Ayar" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="NickName" Type="System.String" Scope="User">
+      <Value Profile="(Default)">
+                </Value>
     </Setting>
   </Settings>
 </SettingsFile>

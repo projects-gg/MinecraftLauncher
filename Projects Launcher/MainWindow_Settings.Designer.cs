@@ -51,6 +51,7 @@ namespace Projects_Launcher
             this.ramlabel = new System.Windows.Forms.Label();
             this.bilgibutton = new System.Windows.Forms.Label();
             this.guna2Panel1 = new Guna.UI2.WinForms.Guna2Panel();
+            this.ramMbToGbCalc = new System.Windows.Forms.Label();
             this.raminfopanel = new Guna.UI2.WinForms.Guna2Panel();
             this.label20 = new System.Windows.Forms.Label();
             this.label21 = new System.Windows.Forms.Label();
@@ -81,7 +82,6 @@ namespace Projects_Launcher
             this.serverstatus = new System.Windows.Forms.Label();
             this.label24 = new System.Windows.Forms.Label();
             this.timer1 = new System.Windows.Forms.Timer(this.components);
-            this.ramMbToGbCalc = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).BeginInit();
             this.guna2Panel1.SuspendLayout();
@@ -354,6 +354,18 @@ namespace Projects_Launcher
             this.guna2Panel1.Name = "guna2Panel1";
             this.guna2Panel1.Size = new System.Drawing.Size(1535, 715);
             this.guna2Panel1.TabIndex = 84;
+            // 
+            // ramMbToGbCalc
+            // 
+            this.ramMbToGbCalc.AutoSize = true;
+            this.ramMbToGbCalc.BackColor = System.Drawing.Color.Transparent;
+            this.ramMbToGbCalc.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.ramMbToGbCalc.ForeColor = System.Drawing.SystemColors.Control;
+            this.ramMbToGbCalc.Location = new System.Drawing.Point(775, 203);
+            this.ramMbToGbCalc.Name = "ramMbToGbCalc";
+            this.ramMbToGbCalc.Size = new System.Drawing.Size(0, 18);
+            this.ramMbToGbCalc.TabIndex = 105;
+            this.ramMbToGbCalc.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
             // raminfopanel
             // 
@@ -701,11 +713,11 @@ namespace Projects_Launcher
             this.ayarlarbutton.AutoSize = true;
             this.ayarlarbutton.BackColor = System.Drawing.Color.Transparent;
             this.ayarlarbutton.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.ayarlarbutton.Font = new System.Drawing.Font("Arial", 21.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.ayarlarbutton.ForeColor = System.Drawing.SystemColors.Control;
+            this.ayarlarbutton.Font = new System.Drawing.Font("Arial", 21.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.ayarlarbutton.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(150)))), ((int)(((byte)(150)))), ((int)(((byte)(150)))));
             this.ayarlarbutton.Location = new System.Drawing.Point(927, 22);
             this.ayarlarbutton.Name = "ayarlarbutton";
-            this.ayarlarbutton.Size = new System.Drawing.Size(146, 34);
+            this.ayarlarbutton.Size = new System.Drawing.Size(145, 33);
             this.ayarlarbutton.TabIndex = 86;
             this.ayarlarbutton.Text = "AYARLAR";
             // 
@@ -764,18 +776,6 @@ namespace Projects_Launcher
             this.timer1.Enabled = true;
             this.timer1.Tick += new System.EventHandler(this.timer1_Tick);
             // 
-            // ramMbToGbCalc
-            // 
-            this.ramMbToGbCalc.AutoSize = true;
-            this.ramMbToGbCalc.BackColor = System.Drawing.Color.Transparent;
-            this.ramMbToGbCalc.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.ramMbToGbCalc.ForeColor = System.Drawing.SystemColors.Control;
-            this.ramMbToGbCalc.Location = new System.Drawing.Point(775, 203);
-            this.ramMbToGbCalc.Name = "ramMbToGbCalc";
-            this.ramMbToGbCalc.Size = new System.Drawing.Size(0, 18);
-            this.ramMbToGbCalc.TabIndex = 105;
-            this.ramMbToGbCalc.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
-            // 
             // ProjectsLauncherOptions
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -800,6 +800,9 @@ namespace Projects_Launcher
             this.Controls.Add(this.ayarlarbutton);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.MaximizeBox = false;
+            this.MaximumSize = new System.Drawing.Size(1536, 864);
+            this.MinimumSize = new System.Drawing.Size(1536, 864);
             this.Name = "ProjectsLauncherOptions";
             this.Text = "Projects Launcher";
             this.Load += new System.EventHandler(this.ProjectsLauncherOptions_Load);
