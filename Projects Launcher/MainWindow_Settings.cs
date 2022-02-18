@@ -229,23 +229,7 @@ namespace Projects_Launcher
             rambox = ramtextbox.Text;
             Properties.Settings.Default.RamMBS = rambox;
             Properties.Settings.Default.Save();
-            mbLabel.Text = "MB =";
-            if (Properties.Settings.Default.RamMBS != string.Empty)
-            {
-                ramlabel.Text = Properties.Settings.Default.RamMBS;
-                try
-                {
-                    ramMbToGbCalc.Text = String.Format("{0:0.##}", Convert.ToDouble(ramtextbox.Text) / 1024) + "GB";
-                }
-                catch
-                {
-                    ramMbToGbCalc.Text = "Geçersiz Değer!";
-                }
-            } else if (ramMbToGbCalc.Text != "")
-            {
-                ramMbToGbCalc.Text = "";
-                mbLabel.Text = "MB";
-            }
+            ramlabel.Text = Properties.Settings.Default.RamMBS;
         }
 
         private void indirmeler_Click_1(object sender, EventArgs e)
@@ -334,7 +318,7 @@ namespace Projects_Launcher
 
         private void oynabutton_Click(object sender, EventArgs e)
         {
-            string fabric_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/fabric-loader-0.13.1-1.18.1";
+            string fabric_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/" + Properties.Settings.Default.SelectedVersion;
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
 
@@ -349,15 +333,8 @@ namespace Projects_Launcher
                 thread.IsBackground = true;
                 thread.Start();
 
-                System.Threading.Thread.Sleep(6500);
+                timer2.Enabled = true;
 
-                for (int i = 0; i <= 100; i++)
-                {
-                    foreach (var process in Process.GetProcessesByName("javaw"))
-                    {
-                        Application.Exit();
-                    }
-                }
             }
             else
             {
@@ -376,6 +353,21 @@ namespace Projects_Launcher
                 }
             }
         }
+        private void timer2_Tick(object sender, EventArgs e)
+        {
+            foreach (var process in Process.GetProcessesByName("javaw"))
+            {
+                this.Hide();
+            }
+
+            if (!Process.GetProcessesByName("javaw").Any())
+            {
+                oynabutton.Text = "Oyna";
+                oynabutton.Enabled = true;
+                this.Show();
+            }
+
+        }
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/fabric-installer-0.10.2.jar";
@@ -385,6 +377,7 @@ namespace Projects_Launcher
             prc.StartInfo.FileName = myPath;
             System.Threading.Thread.Sleep(1000);
             prc.Start();
+            this.Show();
 
 
         }
@@ -437,6 +430,48 @@ namespace Projects_Launcher
         private void anamenü_MouseLeave(object sender, EventArgs e)
         {
             anamenü.ForeColor = System.Drawing.Color.FromArgb(250, 235, 246);
+        }
+
+        private void surumsec_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (surumsec.Text == "fabric-loader-0.13.2-1.18.1")
+            {
+
+                string fabric_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/" + "fabric-loader-0.13.2-1.18.1";
+                string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
+
+                if (Directory.Exists(@fabric_appDataDizini))
+                {
+                    Properties.Settings.Default.SelectedVersion = surumsec.Text;
+                    Properties.Settings.Default.Save();
+                    surumtext.Text = Properties.Settings.Default.SelectedVersion;
+                }
+                else
+                {
+                    DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?", "Projects Launcher", MessageBoxButtons.YesNo);
+
+                    if (secenek == DialogResult.Yes)
+                    {
+                        this.Hide();
+                        WebClient wc = new WebClient();
+                        wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
+                        wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-installer-0.10.2.jar");
+                    }
+                    else if (secenek == DialogResult.No)
+                    {
+                        //Hayır seçeneğine tıklandığında çalıştırılacak kodlar
+                    }
+                }
+
+            }
+
+            if (surumsec.Text == "1.18.1")
+            {
+                Properties.Settings.Default.SelectedVersion = surumsec.Text;
+                Properties.Settings.Default.Save();
+                surumtext.Text = Properties.Settings.Default.SelectedVersion;
+            }
         }
     }
 }

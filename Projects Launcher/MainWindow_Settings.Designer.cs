@@ -82,6 +82,7 @@ namespace Projects_Launcher
             this.serverstatus = new System.Windows.Forms.Label();
             this.label24 = new System.Windows.Forms.Label();
             this.timer1 = new System.Windows.Forms.Timer(this.components);
+            this.timer2 = new System.Windows.Forms.Timer(this.components);
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).BeginInit();
             this.guna2Panel1.SuspendLayout();
@@ -538,11 +539,13 @@ namespace Projects_Launcher
             this.surumsec.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(68)))), ((int)(((byte)(88)))), ((int)(((byte)(112)))));
             this.surumsec.ItemHeight = 30;
             this.surumsec.Items.AddRange(new object[] {
-            "fabric-loader-0.13.1-1.18.1"});
+            "fabric-loader-0.13.2-1.18.1",
+            "1.18.1"});
             this.surumsec.Location = new System.Drawing.Point(345, 268);
             this.surumsec.Name = "surumsec";
             this.surumsec.Size = new System.Drawing.Size(151, 36);
             this.surumsec.TabIndex = 50;
+            this.surumsec.SelectedIndexChanged += new System.EventHandler(this.surumsec_SelectedIndexChanged);
             // 
             // label12
             // 
@@ -668,9 +671,9 @@ namespace Projects_Launcher
             this.surumtext.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(11)))), ((int)(((byte)(135)))), ((int)(((byte)(135)))));
             this.surumtext.Location = new System.Drawing.Point(62, 834);
             this.surumtext.Name = "surumtext";
-            this.surumtext.Size = new System.Drawing.Size(247, 22);
+            this.surumtext.Size = new System.Drawing.Size(156, 22);
             this.surumtext.TabIndex = 82;
-            this.surumtext.Text = "fabric-loader-0.12.12-1.18.1";
+            this.surumtext.Text = "{selectedversion}";
             // 
             // nickname1
             // 
@@ -780,6 +783,10 @@ namespace Projects_Launcher
             this.timer1.Enabled = true;
             this.timer1.Tick += new System.EventHandler(this.timer1_Tick);
             // 
+            // timer2
+            // 
+            this.timer2.Tick += new System.EventHandler(this.timer2_Tick);
+            // 
             // ProjectsLauncherOptions
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -808,6 +815,7 @@ namespace Projects_Launcher
             this.MaximumSize = new System.Drawing.Size(1536, 864);
             this.MinimumSize = new System.Drawing.Size(1536, 864);
             this.Name = "ProjectsLauncherOptions";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Projects Launcher";
             this.Load += new System.EventHandler(this.ProjectsLauncherOptions_Load);
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
@@ -875,5 +883,6 @@ namespace Projects_Launcher
         private System.Windows.Forms.Label label24;
         private System.Windows.Forms.Timer timer1;
         private System.Windows.Forms.Label ramMbToGbCalc;
+        private System.Windows.Forms.Timer timer2;
     }
 }

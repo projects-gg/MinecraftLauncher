@@ -73,7 +73,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("fabric-loader-0.13.1-1.18.1")]
+        [global::System.Configuration.DefaultSettingValueAttribute("fabric-loader-0.13.2-1.18.1")]
         public string SelectedVersion {
             get {
                 return ((string)(this["SelectedVersion"]));

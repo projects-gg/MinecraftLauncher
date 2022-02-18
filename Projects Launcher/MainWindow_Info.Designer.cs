@@ -31,7 +31,6 @@ namespace Projects_Launcher
         {
             this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ProjectsLauncherInfo));
-            this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.bilgibutton = new System.Windows.Forms.Label();
             this.ayarlarbutton = new System.Windows.Forms.Label();
             this.anamenü = new System.Windows.Forms.Label();
@@ -45,7 +44,6 @@ namespace Projects_Launcher
             this.heightlabel = new System.Windows.Forms.Label();
             this.label9 = new System.Windows.Forms.Label();
             this.label8 = new System.Windows.Forms.Label();
-            this.guna2PictureBox1 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.guna2BorderlessForm1 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.guna2BorderlessForm2 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.widthlabel = new System.Windows.Forms.Label();
@@ -56,19 +54,13 @@ namespace Projects_Launcher
             this.serverstatus = new System.Windows.Forms.Label();
             this.label1 = new System.Windows.Forms.Label();
             this.timer1 = new System.Windows.Forms.Timer(this.components);
+            this.pictureBox1 = new System.Windows.Forms.PictureBox();
+            this.guna2PictureBox1 = new Guna.UI2.WinForms.Guna2PictureBox();
+            this.timer2 = new System.Windows.Forms.Timer(this.components);
+            this.guna2Panel1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
-            this.guna2Panel1.SuspendLayout();
             this.SuspendLayout();
-            // 
-            // pictureBox1
-            // 
-            this.pictureBox1.Image = ((System.Drawing.Image)(resources.GetObject("pictureBox1.Image")));
-            this.pictureBox1.Location = new System.Drawing.Point(12, 13);
-            this.pictureBox1.Name = "pictureBox1";
-            this.pictureBox1.Size = new System.Drawing.Size(230, 53);
-            this.pictureBox1.TabIndex = 94;
-            this.pictureBox1.TabStop = false;
             // 
             // bilgibutton
             // 
@@ -248,16 +240,6 @@ namespace Projects_Launcher
             this.label8.TabIndex = 50;
             this.label8.Text = "Yardımcı Bağlantılar";
             // 
-            // guna2PictureBox1
-            // 
-            this.guna2PictureBox1.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox1.Image")));
-            this.guna2PictureBox1.ImageRotate = 0F;
-            this.guna2PictureBox1.Location = new System.Drawing.Point(1, 799);
-            this.guna2PictureBox1.Name = "guna2PictureBox1";
-            this.guna2PictureBox1.Size = new System.Drawing.Size(64, 64);
-            this.guna2PictureBox1.TabIndex = 93;
-            this.guna2PictureBox1.TabStop = false;
-            // 
             // guna2BorderlessForm1
             // 
             this.guna2BorderlessForm1.ContainerControl = this;
@@ -321,9 +303,9 @@ namespace Projects_Launcher
             this.surumtext.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(11)))), ((int)(((byte)(135)))), ((int)(((byte)(135)))));
             this.surumtext.Location = new System.Drawing.Point(71, 834);
             this.surumtext.Name = "surumtext";
-            this.surumtext.Size = new System.Drawing.Size(247, 22);
+            this.surumtext.Size = new System.Drawing.Size(156, 22);
             this.surumtext.TabIndex = 82;
-            this.surumtext.Text = "fabric-loader-0.12.12-1.18.1";
+            this.surumtext.Text = "{selectedversion}";
             // 
             // guna2Panel1
             // 
@@ -369,6 +351,29 @@ namespace Projects_Launcher
             this.timer1.Enabled = true;
             this.timer1.Tick += new System.EventHandler(this.timer1_Tick);
             // 
+            // pictureBox1
+            // 
+            this.pictureBox1.Image = ((System.Drawing.Image)(resources.GetObject("pictureBox1.Image")));
+            this.pictureBox1.Location = new System.Drawing.Point(12, 13);
+            this.pictureBox1.Name = "pictureBox1";
+            this.pictureBox1.Size = new System.Drawing.Size(230, 53);
+            this.pictureBox1.TabIndex = 94;
+            this.pictureBox1.TabStop = false;
+            // 
+            // guna2PictureBox1
+            // 
+            this.guna2PictureBox1.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox1.Image")));
+            this.guna2PictureBox1.ImageRotate = 0F;
+            this.guna2PictureBox1.Location = new System.Drawing.Point(1, 799);
+            this.guna2PictureBox1.Name = "guna2PictureBox1";
+            this.guna2PictureBox1.Size = new System.Drawing.Size(64, 64);
+            this.guna2PictureBox1.TabIndex = 93;
+            this.guna2PictureBox1.TabStop = false;
+            // 
+            // timer2
+            // 
+            this.timer2.Tick += new System.EventHandler(this.timer2_Tick);
+            // 
             // ProjectsLauncherInfo
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -399,10 +404,10 @@ namespace Projects_Launcher
             this.Name = "ProjectsLauncherInfo";
             this.Text = "Projects Launcher";
             this.Load += new System.EventHandler(this.ProjectsLauncherInfo_Load);
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();
             this.guna2Panel1.ResumeLayout(false);
             this.guna2Panel1.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -435,5 +440,6 @@ namespace Projects_Launcher
         private System.Windows.Forms.Label serverstatus;
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.Timer timer1;
+        private System.Windows.Forms.Timer timer2;
     }
 }

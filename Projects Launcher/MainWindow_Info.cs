@@ -128,7 +128,7 @@ namespace Projects_Launcher
 
         private void oynabutton_Click(object sender, EventArgs e)
         {
-            string fabric_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/fabric-loader-0.13.1-1.18.1";
+            string fabric_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/" + Properties.Settings.Default.SelectedVersion;
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
 
@@ -143,15 +143,8 @@ namespace Projects_Launcher
                 thread.IsBackground = true;
                 thread.Start();
 
-                System.Threading.Thread.Sleep(6500);
+                timer2.Enabled = true;
 
-                for (int i = 0; i <= 100; i++)
-                {
-                    foreach (var process in Process.GetProcessesByName("javaw"))
-                    {
-                        Application.Exit();
-                    }
-                }
             }
             else
             {
@@ -169,6 +162,21 @@ namespace Projects_Launcher
                     //Hayır seçeneğine tıklandığında çalıştırılacak kodlar
                 }
             }
+        }
+        private void timer2_Tick(object sender, EventArgs e)
+        {
+            foreach (var process in Process.GetProcessesByName("javaw"))
+            {
+                this.Hide();
+            }
+
+            if (!Process.GetProcessesByName("javaw").Any())
+            {
+                oynabutton.Text = "Oyna";
+                oynabutton.Enabled = true;
+                this.Show();
+            }
+
         }
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)

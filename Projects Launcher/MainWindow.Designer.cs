@@ -33,9 +33,7 @@ namespace Projects_Launcher
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ProjectsLauncherMain));
             this.guna2BorderlessForm2 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.guna2BorderlessForm1 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
-            this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.oynabutton = new Guna.UI2.WinForms.Guna2Button();
-            this.guna2PictureBox3 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.widthlabel = new System.Windows.Forms.Label();
             this.heightlabel = new System.Windows.Forms.Label();
             this.ramlabel = new System.Windows.Forms.Label();
@@ -45,11 +43,14 @@ namespace Projects_Launcher
             this.ayarlarbutton = new System.Windows.Forms.Label();
             this.guna2ControlBox1 = new Guna.UI2.WinForms.Guna2ControlBox();
             this.surumtext = new System.Windows.Forms.Label();
-            this.guna2PictureBox2 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.nickname1 = new System.Windows.Forms.Label();
             this.label1 = new System.Windows.Forms.Label();
             this.serverstatus = new System.Windows.Forms.Label();
             this.timer1 = new System.Windows.Forms.Timer(this.components);
+            this.pictureBox1 = new System.Windows.Forms.PictureBox();
+            this.guna2PictureBox3 = new Guna.UI2.WinForms.Guna2PictureBox();
+            this.guna2PictureBox2 = new Guna.UI2.WinForms.Guna2PictureBox();
+            this.timer2 = new System.Windows.Forms.Timer(this.components);
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox3)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).BeginInit();
@@ -66,15 +67,6 @@ namespace Projects_Launcher
             this.guna2BorderlessForm1.ContainerControl = this;
             this.guna2BorderlessForm1.DockIndicatorTransparencyValue = 0.6D;
             this.guna2BorderlessForm1.TransparentWhileDrag = true;
-            // 
-            // pictureBox1
-            // 
-            this.pictureBox1.Image = ((System.Drawing.Image)(resources.GetObject("pictureBox1.Image")));
-            this.pictureBox1.Location = new System.Drawing.Point(12, 13);
-            this.pictureBox1.Name = "pictureBox1";
-            this.pictureBox1.Size = new System.Drawing.Size(230, 53);
-            this.pictureBox1.TabIndex = 91;
-            this.pictureBox1.TabStop = false;
             // 
             // oynabutton
             // 
@@ -94,17 +86,6 @@ namespace Projects_Launcher
             this.oynabutton.TabIndex = 90;
             this.oynabutton.Text = "Oyna";
             this.oynabutton.Click += new System.EventHandler(this.oynabutton_Click);
-            // 
-            // guna2PictureBox3
-            // 
-            this.guna2PictureBox3.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(70)))), ((int)(((byte)(30)))), ((int)(((byte)(54)))));
-            this.guna2PictureBox3.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox3.Image")));
-            this.guna2PictureBox3.ImageRotate = 0F;
-            this.guna2PictureBox3.Location = new System.Drawing.Point(-1, 78);
-            this.guna2PictureBox3.Name = "guna2PictureBox3";
-            this.guna2PictureBox3.Size = new System.Drawing.Size(1544, 715);
-            this.guna2PictureBox3.TabIndex = 81;
-            this.guna2PictureBox3.TabStop = false;
             // 
             // widthlabel
             // 
@@ -229,20 +210,9 @@ namespace Projects_Launcher
             this.surumtext.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(11)))), ((int)(((byte)(135)))), ((int)(((byte)(135)))));
             this.surumtext.Location = new System.Drawing.Point(71, 834);
             this.surumtext.Name = "surumtext";
-            this.surumtext.Size = new System.Drawing.Size(247, 22);
+            this.surumtext.Size = new System.Drawing.Size(156, 22);
             this.surumtext.TabIndex = 80;
-            this.surumtext.Text = "fabric-loader-0.12.12-1.18.1";
-            // 
-            // guna2PictureBox2
-            // 
-            this.guna2PictureBox2.BackColor = System.Drawing.Color.Transparent;
-            this.guna2PictureBox2.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox2.Image")));
-            this.guna2PictureBox2.ImageRotate = 0F;
-            this.guna2PictureBox2.Location = new System.Drawing.Point(1, 799);
-            this.guna2PictureBox2.Name = "guna2PictureBox2";
-            this.guna2PictureBox2.Size = new System.Drawing.Size(64, 64);
-            this.guna2PictureBox2.TabIndex = 78;
-            this.guna2PictureBox2.TabStop = false;
+            this.surumtext.Text = "{selectedversion}";
             // 
             // nickname1
             // 
@@ -285,6 +255,41 @@ namespace Projects_Launcher
             // 
             this.timer1.Enabled = true;
             this.timer1.Tick += new System.EventHandler(this.timer1_Tick);
+            // 
+            // pictureBox1
+            // 
+            this.pictureBox1.Image = ((System.Drawing.Image)(resources.GetObject("pictureBox1.Image")));
+            this.pictureBox1.Location = new System.Drawing.Point(12, 13);
+            this.pictureBox1.Name = "pictureBox1";
+            this.pictureBox1.Size = new System.Drawing.Size(230, 53);
+            this.pictureBox1.TabIndex = 91;
+            this.pictureBox1.TabStop = false;
+            // 
+            // guna2PictureBox3
+            // 
+            this.guna2PictureBox3.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(70)))), ((int)(((byte)(30)))), ((int)(((byte)(54)))));
+            this.guna2PictureBox3.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox3.Image")));
+            this.guna2PictureBox3.ImageRotate = 0F;
+            this.guna2PictureBox3.Location = new System.Drawing.Point(-1, 78);
+            this.guna2PictureBox3.Name = "guna2PictureBox3";
+            this.guna2PictureBox3.Size = new System.Drawing.Size(1544, 715);
+            this.guna2PictureBox3.TabIndex = 81;
+            this.guna2PictureBox3.TabStop = false;
+            // 
+            // guna2PictureBox2
+            // 
+            this.guna2PictureBox2.BackColor = System.Drawing.Color.Transparent;
+            this.guna2PictureBox2.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox2.Image")));
+            this.guna2PictureBox2.ImageRotate = 0F;
+            this.guna2PictureBox2.Location = new System.Drawing.Point(1, 799);
+            this.guna2PictureBox2.Name = "guna2PictureBox2";
+            this.guna2PictureBox2.Size = new System.Drawing.Size(64, 64);
+            this.guna2PictureBox2.TabIndex = 78;
+            this.guna2PictureBox2.TabStop = false;
+            // 
+            // timer2
+            // 
+            this.timer2.Tick += new System.EventHandler(this.timer2_Tick);
             // 
             // ProjectsLauncherMain
             // 
@@ -346,5 +351,6 @@ namespace Projects_Launcher
         private System.Windows.Forms.Label serverstatus;
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.Timer timer1;
+        private System.Windows.Forms.Timer timer2;
     }
 }
