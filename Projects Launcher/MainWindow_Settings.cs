@@ -20,6 +20,8 @@ using HtmlAgilityPack;
 using System.Net;
 using MCServerStatus;
 using MCServerStatus.Models;
+using System.Net.NetworkInformation;
+
 namespace Projects_Launcher
 {
     public partial class ProjectsLauncherOptions : Form
@@ -39,6 +41,9 @@ namespace Projects_Launcher
         public static string width;
         public static string versiyons;
 
+        Ping p = new Ping();
+
+        int pingsayac;
 
         MSession session;
 
@@ -86,6 +91,11 @@ namespace Projects_Launcher
                 surumsec.Text = Properties.Settings.Default.SelectedVersion;
                 surumtext.Text = Properties.Settings.Default.SelectedVersion;
             }
+
+            //pingsayac
+            timer3.Start();
+
+            pingsayac = 0;
         }
 
         private void label7_Click(object sender, EventArgs e)
@@ -472,6 +482,19 @@ namespace Projects_Launcher
                 Properties.Settings.Default.Save();
                 surumtext.Text = Properties.Settings.Default.SelectedVersion;
             }
+        }
+
+        private void timer3_Tick(object sender, EventArgs e)
+        {
+            pingsayac++;
+
+            string a, b, c;
+            PingReply pr = p.Send("mc.projects.gg");
+            a = pr.Status.ToString();
+            b = pr.Address.ToString();
+            c = pr.RoundtripTime.ToString();
+            serverping.Text = string.Format("{2} ms", a, b, c);
+
         }
     }
 }

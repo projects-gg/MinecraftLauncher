@@ -20,6 +20,7 @@ using HtmlAgilityPack;
 using System.Net;
 using MCServerStatus;
 using MCServerStatus.Models;
+using System.Net.NetworkInformation;
 
 namespace Projects_Launcher
 {
@@ -39,6 +40,10 @@ namespace Projects_Launcher
         public static string height;
         public static string width;
         public static string versiyons;
+
+        Ping p = new Ping();
+
+        int pingsayac;
 
         string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
         private void ProjectsLauncherMain_Load(object sender, EventArgs e)
@@ -73,8 +78,11 @@ namespace Projects_Launcher
                 surumtext.Text = Properties.Settings.Default.SelectedVersion;
             }
 
-            //server status
-            
+            //pingsayac
+            timer3.Start();
+
+            pingsayac = 0;
+
         }
 
         private async Task ServerStatus()
@@ -95,8 +103,6 @@ namespace Projects_Launcher
             {
 
                 session = MSession.GetOfflineSession(ProjectsLauncherLogin.nickname);
-                oynabutton.Text = "Başlatılıyor...";
-                oynabutton.Enabled = false;
 
                 Thread thread = new Thread(() => Launch());
                 thread.IsBackground = true;
@@ -126,14 +132,17 @@ namespace Projects_Launcher
         {
             foreach (var process in Process.GetProcessesByName("javaw"))
             {
-                this.Hide();
+                oynabutton.Text = "Başlatılıyor...";
+                oynabutton.Enabled = false;
+                this.Enabled = false;
             }
 
+            
             if (!Process.GetProcessesByName("javaw").Any())
             {
                 oynabutton.Text = "Oyna";
                 oynabutton.Enabled = true;
-                this.Show();
+                this.Enabled = true;
             }
 
         }
@@ -197,14 +206,7 @@ namespace Projects_Launcher
             var clientStartProcess = await launcher.CreateProcessAsync(surumtext.Text, ayarlar);
 
             clientStartProcess.Start();
-            //System.Threading.Thread.Sleep(1500);
-            //for (int i = 0; i <= 100; i++)
-            //{
-            //     foreach (var process in Process.GetProcessesByName("javaw"))
-            //    {
-            //        Application.Exit();
-            //    }
-            // }
+
         }
 
         private void ayarlarbutton_Click(object sender, EventArgs e)
@@ -275,6 +277,17 @@ namespace Projects_Launcher
             indirmeler.ForeColor = System.Drawing.Color.FromArgb(255,255,255);
         }
 
-       
+        private void timer3_Tick(object sender, EventArgs e)
+        {
+            pingsayac++;
+
+                string a, b, c;
+                PingReply pr = p.Send("mc.projects.gg");
+                a = pr.Status.ToString();
+                b = pr.Address.ToString();
+                c = pr.RoundtripTime.ToString();
+                serverping.Text = string.Format("{2} ms", a, b, c);
+
+        }
     }
 }

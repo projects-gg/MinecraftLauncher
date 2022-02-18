@@ -83,6 +83,9 @@ namespace Projects_Launcher
             this.label24 = new System.Windows.Forms.Label();
             this.timer1 = new System.Windows.Forms.Timer(this.components);
             this.timer2 = new System.Windows.Forms.Timer(this.components);
+            this.timer3 = new System.Windows.Forms.Timer(this.components);
+            this.serverping = new System.Windows.Forms.Label();
+            this.label3 = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).BeginInit();
             this.guna2Panel1.SuspendLayout();
@@ -280,7 +283,7 @@ namespace Projects_Launcher
             this.widthlabel.Cursor = System.Windows.Forms.Cursors.Hand;
             this.widthlabel.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.widthlabel.ForeColor = System.Drawing.Color.White;
-            this.widthlabel.Location = new System.Drawing.Point(423, 43);
+            this.widthlabel.Location = new System.Drawing.Point(475, 41);
             this.widthlabel.Name = "widthlabel";
             this.widthlabel.Size = new System.Drawing.Size(43, 22);
             this.widthlabel.TabIndex = 92;
@@ -309,7 +312,7 @@ namespace Projects_Launcher
             this.ramlabel.Cursor = System.Windows.Forms.Cursors.Hand;
             this.ramlabel.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.ramlabel.ForeColor = System.Drawing.Color.White;
-            this.ramlabel.Location = new System.Drawing.Point(412, 21);
+            this.ramlabel.Location = new System.Drawing.Point(464, 19);
             this.ramlabel.Name = "ramlabel";
             this.ramlabel.Size = new System.Drawing.Size(54, 22);
             this.ramlabel.TabIndex = 90;
@@ -452,11 +455,11 @@ namespace Projects_Launcher
             this.label14.AutoSize = true;
             this.label14.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(32)))), ((int)(((byte)(32)))));
             this.label14.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.label14.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label14.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.label14.ForeColor = System.Drawing.SystemColors.Control;
             this.label14.Location = new System.Drawing.Point(3, 9);
             this.label14.Name = "label14";
-            this.label14.Size = new System.Drawing.Size(108, 22);
+            this.label14.Size = new System.Drawing.Size(109, 22);
             this.label14.TabIndex = 96;
             this.label14.Text = "RAM BİLGİ";
             // 
@@ -540,7 +543,18 @@ namespace Projects_Launcher
             this.surumsec.ItemHeight = 30;
             this.surumsec.Items.AddRange(new object[] {
             "fabric-loader-0.13.2-1.18.1",
-            "1.18.1"});
+            "1.18.1",
+            "1.17.1",
+            "1.16.5",
+            "1.15.2",
+            "1.14.4",
+            "1.13.2",
+            "1.12.2",
+            "1.11.2",
+            "1.10.2",
+            "1.9.4",
+            "1.8.9",
+            "1.7.10"});
             this.surumsec.Location = new System.Drawing.Point(345, 268);
             this.surumsec.Name = "surumsec";
             this.surumsec.Size = new System.Drawing.Size(151, 36);
@@ -694,7 +708,7 @@ namespace Projects_Launcher
             this.heightlabel.Cursor = System.Windows.Forms.Cursors.Hand;
             this.heightlabel.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.heightlabel.ForeColor = System.Drawing.Color.White;
-            this.heightlabel.Location = new System.Drawing.Point(472, 43);
+            this.heightlabel.Location = new System.Drawing.Point(524, 41);
             this.heightlabel.Name = "heightlabel";
             this.heightlabel.Size = new System.Drawing.Size(43, 22);
             this.heightlabel.TabIndex = 91;
@@ -759,7 +773,7 @@ namespace Projects_Launcher
             this.serverstatus.BackColor = System.Drawing.Color.Transparent;
             this.serverstatus.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.serverstatus.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
-            this.serverstatus.Location = new System.Drawing.Point(276, 41);
+            this.serverstatus.Location = new System.Drawing.Point(248, 41);
             this.serverstatus.Name = "serverstatus";
             this.serverstatus.Size = new System.Drawing.Size(57, 20);
             this.serverstatus.TabIndex = 108;
@@ -787,12 +801,43 @@ namespace Projects_Launcher
             // 
             this.timer2.Tick += new System.EventHandler(this.timer2_Tick);
             // 
+            // timer3
+            // 
+            this.timer3.Tick += new System.EventHandler(this.timer3_Tick);
+            // 
+            // serverping
+            // 
+            this.serverping.AutoSize = true;
+            this.serverping.BackColor = System.Drawing.Color.Transparent;
+            this.serverping.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.serverping.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
+            this.serverping.Location = new System.Drawing.Point(355, 42);
+            this.serverping.Name = "serverping";
+            this.serverping.Size = new System.Drawing.Size(49, 20);
+            this.serverping.TabIndex = 110;
+            this.serverping.Text = "{ping}";
+            this.serverping.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // label3
+            // 
+            this.label3.AutoSize = true;
+            this.label3.BackColor = System.Drawing.Color.Transparent;
+            this.label3.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label3.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
+            this.label3.Location = new System.Drawing.Point(355, 22);
+            this.label3.Name = "label3";
+            this.label3.Size = new System.Drawing.Size(40, 20);
+            this.label3.TabIndex = 109;
+            this.label3.Text = "Ping";
+            // 
             // ProjectsLauncherOptions
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(24)))), ((int)(((byte)(30)))), ((int)(((byte)(54)))));
             this.ClientSize = new System.Drawing.Size(1536, 864);
+            this.Controls.Add(this.serverping);
+            this.Controls.Add(this.label3);
             this.Controls.Add(this.serverstatus);
             this.Controls.Add(this.label24);
             this.Controls.Add(this.oynabutton);
@@ -884,5 +929,8 @@ namespace Projects_Launcher
         private System.Windows.Forms.Timer timer1;
         private System.Windows.Forms.Label ramMbToGbCalc;
         private System.Windows.Forms.Timer timer2;
+        private System.Windows.Forms.Timer timer3;
+        private System.Windows.Forms.Label serverping;
+        private System.Windows.Forms.Label label3;
     }
 }

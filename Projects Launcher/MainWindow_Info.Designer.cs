@@ -57,6 +57,9 @@ namespace Projects_Launcher
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.guna2PictureBox1 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.timer2 = new System.Windows.Forms.Timer(this.components);
+            this.timer3 = new System.Windows.Forms.Timer(this.components);
+            this.serverping = new System.Windows.Forms.Label();
+            this.label3 = new System.Windows.Forms.Label();
             this.guna2Panel1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
@@ -210,7 +213,7 @@ namespace Projects_Launcher
             this.heightlabel.Cursor = System.Windows.Forms.Cursors.Hand;
             this.heightlabel.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.heightlabel.ForeColor = System.Drawing.Color.White;
-            this.heightlabel.Location = new System.Drawing.Point(476, 43);
+            this.heightlabel.Location = new System.Drawing.Point(608, 41);
             this.heightlabel.Name = "heightlabel";
             this.heightlabel.Size = new System.Drawing.Size(43, 22);
             this.heightlabel.TabIndex = 91;
@@ -259,7 +262,7 @@ namespace Projects_Launcher
             this.widthlabel.Cursor = System.Windows.Forms.Cursors.Hand;
             this.widthlabel.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.widthlabel.ForeColor = System.Drawing.Color.White;
-            this.widthlabel.Location = new System.Drawing.Point(427, 43);
+            this.widthlabel.Location = new System.Drawing.Point(559, 41);
             this.widthlabel.Name = "widthlabel";
             this.widthlabel.Size = new System.Drawing.Size(43, 22);
             this.widthlabel.TabIndex = 92;
@@ -288,7 +291,7 @@ namespace Projects_Launcher
             this.ramlabel.Cursor = System.Windows.Forms.Cursors.Hand;
             this.ramlabel.Font = new System.Drawing.Font("Arial", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.ramlabel.ForeColor = System.Drawing.Color.White;
-            this.ramlabel.Location = new System.Drawing.Point(416, 21);
+            this.ramlabel.Location = new System.Drawing.Point(548, 19);
             this.ramlabel.Name = "ramlabel";
             this.ramlabel.Size = new System.Drawing.Size(54, 22);
             this.ramlabel.TabIndex = 90;
@@ -327,7 +330,7 @@ namespace Projects_Launcher
             this.serverstatus.BackColor = System.Drawing.Color.Transparent;
             this.serverstatus.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.serverstatus.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
-            this.serverstatus.Location = new System.Drawing.Point(276, 41);
+            this.serverstatus.Location = new System.Drawing.Point(248, 41);
             this.serverstatus.Name = "serverstatus";
             this.serverstatus.Size = new System.Drawing.Size(57, 20);
             this.serverstatus.TabIndex = 96;
@@ -374,12 +377,43 @@ namespace Projects_Launcher
             // 
             this.timer2.Tick += new System.EventHandler(this.timer2_Tick);
             // 
+            // timer3
+            // 
+            this.timer3.Tick += new System.EventHandler(this.timer3_Tick);
+            // 
+            // serverping
+            // 
+            this.serverping.AutoSize = true;
+            this.serverping.BackColor = System.Drawing.Color.Transparent;
+            this.serverping.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.serverping.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
+            this.serverping.Location = new System.Drawing.Point(355, 43);
+            this.serverping.Name = "serverping";
+            this.serverping.Size = new System.Drawing.Size(49, 20);
+            this.serverping.TabIndex = 98;
+            this.serverping.Text = "{ping}";
+            this.serverping.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            // 
+            // label3
+            // 
+            this.label3.AutoSize = true;
+            this.label3.BackColor = System.Drawing.Color.Transparent;
+            this.label3.Font = new System.Drawing.Font("Segoe UI", 11.25F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label3.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(130)))), ((int)(((byte)(30)))), ((int)(((byte)(240)))));
+            this.label3.Location = new System.Drawing.Point(355, 23);
+            this.label3.Name = "label3";
+            this.label3.Size = new System.Drawing.Size(40, 20);
+            this.label3.TabIndex = 97;
+            this.label3.Text = "Ping";
+            // 
             // ProjectsLauncherInfo
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(24)))), ((int)(((byte)(30)))), ((int)(((byte)(54)))));
             this.ClientSize = new System.Drawing.Size(1536, 864);
+            this.Controls.Add(this.serverping);
+            this.Controls.Add(this.label3);
             this.Controls.Add(this.serverstatus);
             this.Controls.Add(this.label1);
             this.Controls.Add(this.pictureBox1);
@@ -441,5 +475,8 @@ namespace Projects_Launcher
         private System.Windows.Forms.Label label1;
         private System.Windows.Forms.Timer timer1;
         private System.Windows.Forms.Timer timer2;
+        private System.Windows.Forms.Timer timer3;
+        private System.Windows.Forms.Label serverping;
+        private System.Windows.Forms.Label label3;
     }
 }

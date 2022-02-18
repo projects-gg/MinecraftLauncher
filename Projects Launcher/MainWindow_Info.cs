@@ -20,7 +20,7 @@ using HtmlAgilityPack;
 using System.Net;
 using MCServerStatus;
 using MCServerStatus.Models;
-
+using System.Net.NetworkInformation;
 namespace Projects_Launcher
 {
     public partial class ProjectsLauncherInfo : Form
@@ -40,6 +40,10 @@ namespace Projects_Launcher
         public static string height;
         public static string width;
         public static string versiyons;
+
+        Ping p = new Ping();
+
+        int pingsayac;
 
         MSession session;
         string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
@@ -75,6 +79,11 @@ namespace Projects_Launcher
             {
                 surumtext.Text = Properties.Settings.Default.SelectedVersion;
             }
+
+            //pingsayac
+            timer3.Start();
+
+            pingsayac = 0;
 
         }
 
@@ -292,6 +301,19 @@ namespace Projects_Launcher
         private void ayarlarbutton_MouseLeave(object sender, EventArgs e)
         {
             ayarlarbutton.ForeColor = System.Drawing.Color.FromArgb(250, 235, 246);
+        }
+
+        private void timer3_Tick(object sender, EventArgs e)
+        {
+            pingsayac++;
+
+            string a, b, c;
+            PingReply pr = p.Send("mc.projects.gg");
+            a = pr.Status.ToString();
+            b = pr.Address.ToString();
+            c = pr.RoundtripTime.ToString();
+            serverping.Text = string.Format("{2} ms", a, b, c);
+
         }
     }
 }
