@@ -260,7 +260,6 @@ namespace Projects_Launcher
             this.label1.Size = new System.Drawing.Size(101, 20);
             this.label1.TabIndex = 92;
             this.label1.Text = "Aktif Oyuncu";
-            this.label1.Click += new System.EventHandler(this.label1_Click);
             // 
             // serverstatus
             // 
@@ -274,7 +273,6 @@ namespace Projects_Launcher
             this.serverstatus.TabIndex = 93;
             this.serverstatus.Text = "{status}";
             this.serverstatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.serverstatus.Click += new System.EventHandler(this.serverstatus_Click);
             // 
             // timer1
             // 
