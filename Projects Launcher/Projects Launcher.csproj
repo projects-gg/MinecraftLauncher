@@ -27,6 +27,8 @@
     <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <BootstrapperEnabled>true</BootstrapperEnabled>
+    <NuGetPackageImportStamp>
+    </NuGetPackageImportStamp>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -106,6 +108,7 @@
       <Private>True</Private>
       <Private>True</Private>
     </Reference>
+    <Reference Include="System.Web" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -117,51 +120,51 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="LoginWindow.cs">
+    <Compile Include="MainWindows\LoginWindow.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="LoginWindow.Designer.cs">
+    <Compile Include="MainWindows\LoginWindow.Designer.cs">
       <DependentUpon>LoginWindow.cs</DependentUpon>
     </Compile>
-    <Compile Include="MainWindow.cs">
+    <Compile Include="MainWindows\MainWindow.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="MainWindow.Designer.cs">
+    <Compile Include="MainWindows\MainWindow.Designer.cs">
       <DependentUpon>MainWindow.cs</DependentUpon>
     </Compile>
-    <Compile Include="MainWindow_Settings.cs">
+    <Compile Include="MainWindows\MainWindow_Settings.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="MainWindow_Settings.Designer.cs">
+    <Compile Include="MainWindows\MainWindow_Settings.Designer.cs">
       <DependentUpon>MainWindow_Settings.cs</DependentUpon>
     </Compile>
-    <Compile Include="MainWindow_Info.cs">
+    <Compile Include="MainWindows\MainWindow_Info.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="MainWindow_Info.Designer.cs">
+    <Compile Include="MainWindows\MainWindow_Info.Designer.cs">
       <DependentUpon>MainWindow_Info.cs</DependentUpon>
     </Compile>
-    <Compile Include="ModdingWindow.cs">
+    <Compile Include="MainWindows\ModdingWindow.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="ModdingWindow.Designer.cs">
+    <Compile Include="MainWindows\ModdingWindow.Designer.cs">
       <DependentUpon>ModdingWindow.cs</DependentUpon>
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <EmbeddedResource Include="LoginWindow.resx">
+    <EmbeddedResource Include="MainWindows\LoginWindow.resx">
       <DependentUpon>LoginWindow.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="MainWindow.resx">
+    <EmbeddedResource Include="MainWindows\MainWindow.resx">
       <DependentUpon>MainWindow.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="MainWindow_Settings.resx">
+    <EmbeddedResource Include="MainWindows\MainWindow_Settings.resx">
       <DependentUpon>MainWindow_Settings.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="MainWindow_Info.resx">
+    <EmbeddedResource Include="MainWindows\MainWindow_Info.resx">
       <DependentUpon>MainWindow_Info.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="ModdingWindow.resx">
+    <EmbeddedResource Include="MainWindows\ModdingWindow.resx">
       <DependentUpon>ModdingWindow.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
@@ -192,6 +195,9 @@
   <ItemGroup>
     <Content Include="logo.ico" />
     <Content Include="projects.ico" />
+    <None Include="Resources\refresh.png" />
+    <None Include="Resources\arrow-right.png" />
+    <None Include="Resources\arrow-left.png" />
     <None Include="Resources\pprojectss.png" />
     <None Include="Resources\projects.png" />
     <None Include="Resources\2022-01-24_23.31.44.png" />
