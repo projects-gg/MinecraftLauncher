@@ -298,6 +298,8 @@ namespace Projects_Launcher
             this.indirmeler.TabIndex = 89;
             this.indirmeler.Text = "İNDİRMELER";
             this.indirmeler.Click += new System.EventHandler(this.indirmeler_Click_1);
+            this.indirmeler.MouseEnter += new System.EventHandler(this.indirmeler_MouseEnter);
+            this.indirmeler.MouseLeave += new System.EventHandler(this.indirmeler_MouseLeave);
             // 
             // ramlabel
             // 
@@ -325,6 +327,8 @@ namespace Projects_Launcher
             this.bilgibutton.TabIndex = 88;
             this.bilgibutton.Text = "BİLGİ";
             this.bilgibutton.Click += new System.EventHandler(this.bilgibutton_Click_1);
+            this.bilgibutton.MouseEnter += new System.EventHandler(this.bilgibutton_MouseEnter);
+            this.bilgibutton.MouseLeave += new System.EventHandler(this.bilgibutton_MouseLeave);
             // 
             // guna2Panel1
             // 
@@ -539,7 +543,6 @@ namespace Projects_Launcher
             this.surumsec.Name = "surumsec";
             this.surumsec.Size = new System.Drawing.Size(151, 36);
             this.surumsec.TabIndex = 50;
-            this.surumsec.SelectedIndexChanged += new System.EventHandler(this.surumsec_SelectedIndexChanged);
             // 
             // label12
             // 
@@ -707,6 +710,8 @@ namespace Projects_Launcher
             this.anamenü.TabIndex = 87;
             this.anamenü.Text = "ANA MENÜ";
             this.anamenü.Click += new System.EventHandler(this.anamenü_Click_1);
+            this.anamenü.MouseEnter += new System.EventHandler(this.anamenü_MouseEnter);
+            this.anamenü.MouseLeave += new System.EventHandler(this.anamenü_MouseLeave);
             // 
             // ayarlarbutton
             // 
@@ -757,7 +762,6 @@ namespace Projects_Launcher
             this.serverstatus.TabIndex = 108;
             this.serverstatus.Text = "{status}";
             this.serverstatus.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
-            this.serverstatus.Click += new System.EventHandler(this.serverstatus_Click);
             // 
             // label24
             // 

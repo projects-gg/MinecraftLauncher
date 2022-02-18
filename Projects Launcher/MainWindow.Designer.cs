@@ -158,6 +158,8 @@ namespace Projects_Launcher
             this.indirmeler.TabIndex = 86;
             this.indirmeler.Text = "İNDİRMELER";
             this.indirmeler.Click += new System.EventHandler(this.indirmeler_Click);
+            this.indirmeler.MouseEnter += new System.EventHandler(this.indirmeler_MouseEnter);
+            this.indirmeler.MouseLeave += new System.EventHandler(this.indirmeler_MouseLeave);
             // 
             // bilgibutton
             // 
@@ -172,6 +174,8 @@ namespace Projects_Launcher
             this.bilgibutton.TabIndex = 85;
             this.bilgibutton.Text = "BİLGİ";
             this.bilgibutton.Click += new System.EventHandler(this.bilgibutton_Click);
+            this.bilgibutton.MouseEnter += new System.EventHandler(this.bilgibutton_MouseEnter);
+            this.bilgibutton.MouseLeave += new System.EventHandler(this.bilgibutton_MouseLeave);
             // 
             // anamenü
             // 
@@ -199,6 +203,8 @@ namespace Projects_Launcher
             this.ayarlarbutton.TabIndex = 83;
             this.ayarlarbutton.Text = "AYARLAR";
             this.ayarlarbutton.Click += new System.EventHandler(this.ayarlarbutton_Click);
+            this.ayarlarbutton.MouseEnter += new System.EventHandler(this.ayarlarbutton_MouseEnter);
+            this.ayarlarbutton.MouseLeave += new System.EventHandler(this.ayarlarbutton_MouseLeave);
             // 
             // guna2ControlBox1
             // 

@@ -236,5 +236,34 @@ namespace Projects_Launcher
             }
         }
 
+        private void ayarlarbutton_MouseEnter(object sender, EventArgs e)
+        {
+            ayarlarbutton.ForeColor =  System.Drawing.Color.FromArgb(255,255,255);
+        }
+
+        private void ayarlarbutton_MouseLeave(object sender, EventArgs e)
+        {
+            ayarlarbutton.ForeColor = System.Drawing.Color.FromArgb(250,235,246);
+        }
+
+        private void bilgibutton_MouseLeave(object sender, EventArgs e)
+        {
+            bilgibutton.ForeColor = System.Drawing.Color.FromArgb(250, 235, 246);
+        }
+
+        private void bilgibutton_MouseEnter(object sender, EventArgs e)
+        {
+            bilgibutton.ForeColor = System.Drawing.Color.FromArgb(255,255,255);
+        }
+
+        private void indirmeler_MouseLeave(object sender, EventArgs e)
+        {
+            indirmeler.ForeColor = System.Drawing.Color.FromArgb(250, 235, 246);
+        }
+
+        private void indirmeler_MouseEnter(object sender, EventArgs e)
+        {
+            indirmeler.ForeColor = System.Drawing.Color.FromArgb(255,255,255);
+        }
     }
 }

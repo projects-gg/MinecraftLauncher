@@ -210,12 +210,6 @@ namespace Projects_Launcher
                 }
             }
         }
-
-        private void surumsec_SelectedIndexChanged(object sender, EventArgs e)
-        {
-
-        }
-
         private void widthtextbox_TextChanged(object sender, EventArgs e)
         {
             widthbox = widthtextbox.Text;
@@ -321,11 +315,6 @@ namespace Projects_Launcher
             proces.Start();
         }
 
-        private void ramtextbox_SelectedIndexChanged(object sender, EventArgs e)
-        {
-
-        }
-
         private void guna2PictureBox1_Click(object sender, EventArgs e)
         {
             if (raminfopanel.Visible == false)
@@ -420,10 +409,34 @@ namespace Projects_Launcher
                 label1.Hide();
             }
         }
-
-        private void serverstatus_Click(object sender, EventArgs e)
+        private void bilgibutton_MouseLeave(object sender, EventArgs e)
         {
+            bilgibutton.ForeColor = System.Drawing.Color.FromArgb(250, 235, 246);
+        }
 
+        private void bilgibutton_MouseEnter(object sender, EventArgs e)
+        {
+            bilgibutton.ForeColor = System.Drawing.Color.FromArgb(255, 255, 255);
+        }
+
+        private void indirmeler_MouseLeave(object sender, EventArgs e)
+        {
+            indirmeler.ForeColor = System.Drawing.Color.FromArgb(250, 235, 246);
+        }
+
+        private void indirmeler_MouseEnter(object sender, EventArgs e)
+        {
+            indirmeler.ForeColor = System.Drawing.Color.FromArgb(255, 255, 255);
+        }
+
+        private void anamenü_MouseEnter(object sender, EventArgs e)
+        {
+            anamenü.ForeColor = System.Drawing.Color.FromArgb(255, 255, 255);
+        }
+
+        private void anamenü_MouseLeave(object sender, EventArgs e)
+        {
+            anamenü.ForeColor = System.Drawing.Color.FromArgb(250, 235, 246);
         }
     }
 }

@@ -96,6 +96,8 @@ namespace Projects_Launcher
             this.ayarlarbutton.TabIndex = 86;
             this.ayarlarbutton.Text = "AYARLAR";
             this.ayarlarbutton.Click += new System.EventHandler(this.ayarlarbutton_Click);
+            this.ayarlarbutton.MouseEnter += new System.EventHandler(this.ayarlarbutton_MouseEnter);
+            this.ayarlarbutton.MouseLeave += new System.EventHandler(this.ayarlarbutton_MouseLeave);
             // 
             // anamenü
             // 
@@ -110,6 +112,8 @@ namespace Projects_Launcher
             this.anamenü.TabIndex = 87;
             this.anamenü.Text = "ANA MENÜ";
             this.anamenü.Click += new System.EventHandler(this.anamenü_Click);
+            this.anamenü.MouseEnter += new System.EventHandler(this.anamenü_MouseEnter);
+            this.anamenü.MouseLeave += new System.EventHandler(this.anamenü_MouseLeave);
             // 
             // oynabutton
             // 
@@ -292,6 +296,8 @@ namespace Projects_Launcher
             this.indirmeler.TabIndex = 89;
             this.indirmeler.Text = "İNDİRMELER";
             this.indirmeler.Click += new System.EventHandler(this.indirmeler_Click);
+            this.indirmeler.MouseEnter += new System.EventHandler(this.indirmeler_MouseEnter);
+            this.indirmeler.MouseLeave += new System.EventHandler(this.indirmeler_MouseLeave);
             // 
             // ramlabel
             // 
@@ -345,7 +351,6 @@ namespace Projects_Launcher
             this.serverstatus.TabIndex = 96;
             this.serverstatus.Text = "{status}";
             this.serverstatus.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
-            this.serverstatus.Click += new System.EventHandler(this.serverstatus_Click);
             // 
             // label1
             // 
@@ -358,7 +363,6 @@ namespace Projects_Launcher
             this.label1.Size = new System.Drawing.Size(101, 20);
             this.label1.TabIndex = 95;
             this.label1.Text = "Aktif Oyuncu";
-            this.label1.Click += new System.EventHandler(this.label1_Click);
             // 
             // timer1
             // 

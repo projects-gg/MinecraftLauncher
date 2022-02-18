@@ -256,14 +256,34 @@ namespace Projects_Launcher
             Application.Exit();
         }
 
-        private void label1_Click(object sender, EventArgs e)
+        private void anamenü_MouseEnter(object sender, EventArgs e)
         {
-
+            anamenü.ForeColor = System.Drawing.Color.FromArgb(255, 255, 255);
         }
 
-        private void serverstatus_Click(object sender, EventArgs e)
+        private void anamenü_MouseLeave(object sender, EventArgs e)
         {
+            anamenü.ForeColor = System.Drawing.Color.FromArgb(250, 235, 246);
+        }
 
+        private void indirmeler_MouseLeave(object sender, EventArgs e)
+        {
+            indirmeler.ForeColor = System.Drawing.Color.FromArgb(250, 235, 246);
+        }
+
+        private void indirmeler_MouseEnter(object sender, EventArgs e)
+        {
+            indirmeler.ForeColor = System.Drawing.Color.FromArgb(255, 255, 255);
+        }
+
+        private void ayarlarbutton_MouseEnter(object sender, EventArgs e)
+        {
+            ayarlarbutton.ForeColor = System.Drawing.Color.FromArgb(255, 255, 255);
+        }
+
+        private void ayarlarbutton_MouseLeave(object sender, EventArgs e)
+        {
+            ayarlarbutton.ForeColor = System.Drawing.Color.FromArgb(250, 235, 246);
         }
     }
 }
