@@ -235,5 +235,6 @@ namespace Projects_Launcher
                 label1.Hide();
             }
         }
+
     }
 }
