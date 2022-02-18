@@ -41,7 +41,7 @@ namespace Projects_Launcher
             WebClient wc = new WebClient();
             wc.DownloadProgressChanged += Wc_DownloadProgressChanged;
             wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-            wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-installer-0.10.2.jar");
+            wc.DownloadFileAsync(fabric, appDataDizini + "/.minecraft/fabric-installer-0.10.2.jar");
 
 
 
@@ -54,12 +54,12 @@ namespace Projects_Launcher
             WebClient wc = new WebClient();
             wc.DownloadProgressChanged += Wc_DownloadProgressChanged2;
             wc.DownloadFileCompleted += Wc_DownloadFileCompleted2;
-            wc.DownloadFileAsync(modpackurl, appDataDizini + "/.projects/mods.zip");
+            wc.DownloadFileAsync(modpackurl, appDataDizini + "/.minecraft/mods.zip");
         }
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/fabric-installer-0.10.2.jar";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/fabric-installer-0.10.2.jar";
 
             string myPath = @appDataDizini;
             System.Diagnostics.Process prc = new System.Diagnostics.Process();
@@ -79,7 +79,7 @@ namespace Projects_Launcher
 
         private void Wc_DownloadFileCompleted2(object sender, AsyncCompletedEventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/mods.zip";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/mods.zip";
 
             string myPath = @appDataDizini;
             System.Diagnostics.Process prc = new System.Diagnostics.Process();

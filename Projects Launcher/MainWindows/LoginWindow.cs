@@ -88,15 +88,31 @@ namespace Projects_Launcher
         {
             if (string.IsNullOrEmpty(nicknametextbox.Text))
             {
-                MessageBox.Show("Her hangi bir Nick girmediniz.");
+                girisyapbutton.Text = "Bekleniyor";
+                return;
             }
             else
             {
                 nickname = nicknametextbox.Text;
+                girisyapbutton.Text = "Giriş Yap";
             }
             ProjectsLauncherMain main = new ProjectsLauncherMain();
             this.Hide();
             main.Show();
+        }
+
+        private void nicknametextbox_TextChanged(object sender, EventArgs e)
+        {
+            nicknametextbox.Text = (nicknametextbox.Text).Trim();
+            if (!string.IsNullOrEmpty(nicknametextbox.Text))
+            {
+                girisyapbutton.Text = "Giriş Yap";
+                return;
+            }
+            else
+            {
+                girisyapbutton.Text = "Bekleniyor";
+            }
         }
     }
 }

@@ -46,7 +46,7 @@ namespace Projects_Launcher
         int pingsayac;
 
         MSession session;
-        string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
+        string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft";
         private void ProjectsLauncherInfo_Load(object sender, EventArgs e)
         {
             ramlabel.Visible = false;
@@ -137,7 +137,7 @@ namespace Projects_Launcher
 
         private void oynabutton_Click(object sender, EventArgs e)
         {
-            string fabric_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/" + Properties.Settings.Default.SelectedVersion;
+            string fabric_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/versions/" + Properties.Settings.Default.SelectedVersion;
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
 
@@ -164,7 +164,7 @@ namespace Projects_Launcher
                 {
                     WebClient wc = new WebClient();
                     wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-                    wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-installer-0.10.2.jar");
+                    wc.DownloadFileAsync(fabric, appDataDizini + "/.minecraft/fabric-installer-0.10.2.jar");
                 }
                 else if (secenek == DialogResult.No)
                 {
@@ -190,7 +190,7 @@ namespace Projects_Launcher
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/fabric-installer-0.10.2.jar";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/fabric-installer-0.10.2.jar";
 
             string myPath = @appDataDizini;
             System.Diagnostics.Process prc = new System.Diagnostics.Process();

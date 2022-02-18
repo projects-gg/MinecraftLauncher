@@ -171,7 +171,7 @@ namespace Projects_Launcher
             this.girisyapbutton.Name = "girisyapbutton";
             this.girisyapbutton.Size = new System.Drawing.Size(186, 54);
             this.girisyapbutton.TabIndex = 27;
-            this.girisyapbutton.Text = "Giriş Yap";
+            this.girisyapbutton.Text = "Bekleniyor";
             this.girisyapbutton.Click += new System.EventHandler(this.girisyapbutton_Click);
             // 
             // nicknametextbox
@@ -198,6 +198,7 @@ namespace Projects_Launcher
             this.nicknametextbox.SelectedText = "";
             this.nicknametextbox.Size = new System.Drawing.Size(260, 48);
             this.nicknametextbox.TabIndex = 26;
+            this.nicknametextbox.TextChanged += new System.EventHandler(this.nicknametextbox_TextChanged);
             // 
             // guna2ControlBox1
             // 

@@ -48,7 +48,7 @@ namespace Projects_Launcher
         MSession session;
 
         public static string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/resourcepacks";
-        string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
+        string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft";
 
         private void ProjectsLauncherOptions_Load(object sender, EventArgs e)
         {
@@ -100,7 +100,7 @@ namespace Projects_Launcher
 
         private void label7_Click(object sender, EventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/screenshots";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/screenshots";
 
             if (Directory.Exists(@appDataDizini))
             {
@@ -124,7 +124,7 @@ namespace Projects_Launcher
 
         private void label8_Click(object sender, EventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/logs";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/logs";
 
             if (Directory.Exists(@appDataDizini))
             {
@@ -148,7 +148,7 @@ namespace Projects_Launcher
 
         private void label9_Click(object sender, EventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/mods";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/mods";
 
             if (Directory.Exists(@appDataDizini))
             {
@@ -172,7 +172,7 @@ namespace Projects_Launcher
 
         private void label10_Click(object sender, EventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/Saves";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/Saves";
 
             if (Directory.Exists(@appDataDizini))
             {
@@ -328,7 +328,7 @@ namespace Projects_Launcher
 
         private void oynabutton_Click(object sender, EventArgs e)
         {
-            string fabric_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/" + Properties.Settings.Default.SelectedVersion;
+            string fabric_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/versions/" + Properties.Settings.Default.SelectedVersion;
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
             Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
 
@@ -355,7 +355,7 @@ namespace Projects_Launcher
                 {
                     WebClient wc = new WebClient();
                     wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-                    wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-installer-0.10.2.jar");
+                    wc.DownloadFileAsync(fabric, appDataDizini + "/.minecraft/fabric-installer-0.10.2.jar");
                 }
                 else if (secenek == DialogResult.No)
                 {
@@ -380,7 +380,7 @@ namespace Projects_Launcher
         }
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/fabric-installer-0.10.2.jar";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/fabric-installer-0.10.2.jar";
 
             string myPath = @appDataDizini;
             System.Diagnostics.Process prc = new System.Diagnostics.Process();
@@ -447,7 +447,7 @@ namespace Projects_Launcher
             if (surumsec.Text == "fabric-loader-0.13.2-1.18.1")
             {
 
-                string fabric_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/" + "fabric-loader-0.13.2-1.18.1";
+                string fabric_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/versions/" + "fabric-loader-0.13.2-1.18.1";
                 string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
                 Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
 
@@ -466,7 +466,7 @@ namespace Projects_Launcher
                         this.Hide();
                         WebClient wc = new WebClient();
                         wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-                        wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-installer-0.10.2.jar");
+                        wc.DownloadFileAsync(fabric, appDataDizini + "/.minecraft/fabric-installer-0.10.2.jar");
                     }
                     else if (secenek == DialogResult.No)
                     {
