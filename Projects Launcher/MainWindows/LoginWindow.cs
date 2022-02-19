@@ -14,6 +14,7 @@ using System.Threading;
 using System.Deployment.Application;
 using System.IO;
 using HtmlAgilityPack;
+using System.IO.Compression;
 
 
 namespace Projects_Launcher
@@ -88,7 +89,12 @@ namespace Projects_Launcher
         {
             if (string.IsNullOrEmpty(nicknametextbox.Text))
             {
-                girisyapbutton.Text = "Bekleniyor";
+                if (benihatırla.Checked == true)
+                {
+                    Properties.Settings.Default.NickName = nicknametextbox.Text;
+                    Properties.Settings.Default.Save();
+                }
+                girisyapbutton.Text = "Kullanıcı Adı Giriniz";
                 return;
             }
             else
@@ -106,13 +112,24 @@ namespace Projects_Launcher
             nicknametextbox.Text = (nicknametextbox.Text).Trim();
             if (!string.IsNullOrEmpty(nicknametextbox.Text))
             {
+                if (benihatırla.Checked == true)
+                {
+                    Properties.Settings.Default.NickName = nicknametextbox.Text;
+                    Properties.Settings.Default.Save();
+                }
                 girisyapbutton.Text = "Giriş Yap";
                 return;
             }
             else
             {
-                girisyapbutton.Text = "Bekleniyor";
+                girisyapbutton.Text = "Kullanıcı Adı Giriniz";
             }
+        }
+
+        private void guna2Button1_Click(object sender, EventArgs e)
+        {
+            string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/mods.zip";
+            string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft";
         }
     }
 }

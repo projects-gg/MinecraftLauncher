@@ -176,14 +176,17 @@ namespace Projects_Launcher
         {
             foreach (var process in Process.GetProcessesByName("javaw"))
             {
-                this.Hide();
+                oynabutton.Text = "Başlatılıyor...";
+                oynabutton.Enabled = false;
+                this.Visible = false;
             }
+
 
             if (!Process.GetProcessesByName("javaw").Any())
             {
                 oynabutton.Text = "Oyna";
                 oynabutton.Enabled = true;
-                this.Show();
+                this.Visible = true;
             }
 
         }
@@ -304,16 +307,14 @@ namespace Projects_Launcher
         }
 
         private void timer3_Tick(object sender, EventArgs e)
-        {
-            pingsayac++;
+        { //pingsayac++;
 
-            string a, b, c;
-            PingReply pr = p.Send("mc.projects.gg");
-            a = pr.Status.ToString();
-            b = pr.Address.ToString();
-            c = pr.RoundtripTime.ToString();
-            serverping.Text = string.Format("{2} ms", a, b, c);
-
+            //     string a, b, c;
+            //     PingReply pr = p.Send("mc.projects.gg");
+            //      a = pr.Status.ToString();
+            //     b = pr.Address.ToString();
+            //    c = pr.RoundtripTime.ToString();
+            //   serverping.Text = string.Format("{2} ms", a, b, c);
         }
     }
 }

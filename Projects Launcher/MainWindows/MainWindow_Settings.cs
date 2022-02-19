@@ -367,14 +367,17 @@ namespace Projects_Launcher
         {
             foreach (var process in Process.GetProcessesByName("javaw"))
             {
-                this.Hide();
+                oynabutton.Text = "Başlatılıyor...";
+                oynabutton.Enabled = false;
+                this.Visible = false;
             }
+
 
             if (!Process.GetProcessesByName("javaw").Any())
             {
                 oynabutton.Text = "Oyna";
                 oynabutton.Enabled = true;
-                this.Show();
+                this.Visible = true;
             }
 
         }
@@ -444,56 +447,21 @@ namespace Projects_Launcher
 
         private void surumsec_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (surumsec.Text == "fabric-loader-0.13.2-1.18.1")
-            {
-
-                string fabric_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/versions/" + "fabric-loader-0.13.2-1.18.1";
-                string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-                Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
-
-                if (Directory.Exists(@fabric_appDataDizini))
-                {
-                    Properties.Settings.Default.SelectedVersion = surumsec.Text;
-                    Properties.Settings.Default.Save();
-                    surumtext.Text = Properties.Settings.Default.SelectedVersion;
-                }
-                else
-                {
-                    DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?", "Projects Launcher", MessageBoxButtons.YesNo);
-
-                    if (secenek == DialogResult.Yes)
-                    {
-                        this.Hide();
-                        WebClient wc = new WebClient();
-                        wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-                        wc.DownloadFileAsync(fabric, appDataDizini + "/.minecraft/fabric-installer-0.10.2.jar");
-                    }
-                    else if (secenek == DialogResult.No)
-                    {
-                        //Hayır seçeneğine tıklandığında çalıştırılacak kodlar
-                    }
-                }
-
-            }
-
-            if (surumsec.Text == "1.18.1")
-            {
-                Properties.Settings.Default.SelectedVersion = surumsec.Text;
-                Properties.Settings.Default.Save();
-                surumtext.Text = Properties.Settings.Default.SelectedVersion;
-            }
+            Properties.Settings.Default.SelectedVersion = surumsec.Text;
+            Properties.Settings.Default.Save();
+            surumtext.Text = Properties.Settings.Default.SelectedVersion;
         }
 
         private void timer3_Tick(object sender, EventArgs e)
         {
-            pingsayac++;
+            //pingsayac++;
 
-            string a, b, c;
-            PingReply pr = p.Send("mc.projects.gg");
-            a = pr.Status.ToString();
-            b = pr.Address.ToString();
-            c = pr.RoundtripTime.ToString();
-            serverping.Text = string.Format("{2} ms", a, b, c);
+            //     string a, b, c;
+            //     PingReply pr = p.Send("mc.projects.gg");
+            //      a = pr.Status.ToString();
+            //     b = pr.Address.ToString();
+            //    c = pr.RoundtripTime.ToString();
+            //   serverping.Text = string.Format("{2} ms", a, b, c);
 
         }
     }

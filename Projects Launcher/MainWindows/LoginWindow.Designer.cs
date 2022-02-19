@@ -171,7 +171,7 @@ namespace Projects_Launcher
             this.girisyapbutton.Name = "girisyapbutton";
             this.girisyapbutton.Size = new System.Drawing.Size(186, 54);
             this.girisyapbutton.TabIndex = 27;
-            this.girisyapbutton.Text = "Bekleniyor";
+            this.girisyapbutton.Text = "Kullanıcı Adı Giriniz";
             this.girisyapbutton.Click += new System.EventHandler(this.girisyapbutton_Click);
             // 
             // nicknametextbox
@@ -179,7 +179,7 @@ namespace Projects_Launcher
             this.nicknametextbox.BackColor = System.Drawing.Color.Transparent;
             this.nicknametextbox.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
             this.nicknametextbox.Cursor = System.Windows.Forms.Cursors.IBeam;
-            this.nicknametextbox.DefaultText = "";
+            this.nicknametextbox.DefaultText = "Kullanıcı Adı";
             this.nicknametextbox.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(208)))), ((int)(((byte)(208)))), ((int)(((byte)(208)))));
             this.nicknametextbox.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(226)))), ((int)(((byte)(226)))));
             this.nicknametextbox.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));

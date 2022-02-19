@@ -18,6 +18,7 @@ using CmlLib.Core.Files;
 using System.Threading;
 using System.Net;
 using HtmlAgilityPack;
+using System.IO.Compression;
 
 
 namespace Projects_Launcher
@@ -28,9 +29,11 @@ namespace Projects_Launcher
         {
             InitializeComponent();
         }
-        Uri modpackurl = new Uri("https://www.dropbox.com/s/77vvegpkjxsold1/mods.zip?dl=1");
         Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
+
+        Uri modlar = new Uri("https://www.dropbox.com/sh/k7bwyfdywhgpr0m/AACZaJlPzx7sQ3QVTtPNecJMa?dl=1");
         string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
         private void ProjectsLauncherDownload_Load(object sender, EventArgs e)
         {
 
@@ -42,11 +45,6 @@ namespace Projects_Launcher
             wc.DownloadProgressChanged += Wc_DownloadProgressChanged;
             wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
             wc.DownloadFileAsync(fabric, appDataDizini + "/.minecraft/fabric-installer-0.10.2.jar");
-
-
-
-
-            // System.Threading.Thread.Sleep(2000);
         }
 
         private void indirbutton2_Click(object sender, EventArgs e)
@@ -54,12 +52,27 @@ namespace Projects_Launcher
             WebClient wc = new WebClient();
             wc.DownloadProgressChanged += Wc_DownloadProgressChanged2;
             wc.DownloadFileCompleted += Wc_DownloadFileCompleted2;
-            wc.DownloadFileAsync(modpackurl, appDataDizini + "/.minecraft/mods.zip");
+            wc.DownloadFileAsync(modlar, Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/mods.zip");
         }
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/fabric-installer-0.10.2.jar";
+
+            string myPath = @appDataDizini;
+            System.Diagnostics.Process prc = new System.Diagnostics.Process();
+            prc.StartInfo.FileName = myPath;
+            System.Threading.Thread.Sleep(1000);
+            prc.Start();
+
+
+        }
+        private void Wc_DownloadFileCompleted2(object sender, AsyncCompletedEventArgs e)
+        {
+         
+
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/mods.zip";
+
 
             string myPath = @appDataDizini;
             System.Diagnostics.Process prc = new System.Diagnostics.Process();
@@ -77,18 +90,7 @@ namespace Projects_Launcher
 
         }
 
-        private void Wc_DownloadFileCompleted2(object sender, AsyncCompletedEventArgs e)
-        {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/mods.zip";
-
-            string myPath = @appDataDizini;
-            System.Diagnostics.Process prc = new System.Diagnostics.Process();
-            prc.StartInfo.FileName = myPath;
-            System.Threading.Thread.Sleep(1000);
-            prc.Start();
-
-
-        }
+       
 
         private void Wc_DownloadProgressChanged2(object sender, DownloadProgressChangedEventArgs e)
         {

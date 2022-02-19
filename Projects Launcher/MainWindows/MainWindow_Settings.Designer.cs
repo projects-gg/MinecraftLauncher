@@ -543,6 +543,7 @@ namespace Projects_Launcher
             this.surumsec.ItemHeight = 30;
             this.surumsec.Items.AddRange(new object[] {
             "fabric-loader-0.13.2-1.18.1",
+            "OptiFine_1.18.1_HD_U_H4",
             "1.18.1",
             "1.17.1",
             "1.16.5",

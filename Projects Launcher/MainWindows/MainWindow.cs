@@ -95,58 +95,79 @@ namespace Projects_Launcher
 
         private void oynabutton_Click(object sender, EventArgs e)
         {
-            string fabric_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/versions/" + Properties.Settings.Default.SelectedVersion;
+            string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/versions/" + Properties.Settings.Default.SelectedVersion;
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
             Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
+            Uri optifine = new Uri("https://www.dropbox.com/s/lyorwo4m91luhzd/OptiFine_1.18.1_HD_U_H4.jar?dl=1");
 
-            if (Directory.Exists(@fabric_appDataDizini))
+            //fabric seçiliyse
+            if (Properties.Settings.Default.SelectedVersion == "fabric-loader-0.13.2-1.18.1")
             {
-
-                session = MSession.GetOfflineSession(ProjectsLauncherLogin.nickname);
-
-                Thread thread = new Thread(() => Launch());
-                thread.IsBackground = true;
-                thread.Start();
-
-                timer2.Enabled = true;
-
-            }
-            else
-            {
-
-               DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?", "Projects Launcher", MessageBoxButtons.YesNo);
-
-                if (secenek == DialogResult.Yes)
+                if (Directory.Exists(@surum_appDataDizini))
                 {
-                    WebClient wc = new WebClient();
-                    wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-                    wc.DownloadFileAsync(fabric, appDataDizini + "/.minecraft/fabric-installer-0.10.2.jar");
+
+                    session = MSession.GetOfflineSession(ProjectsLauncherLogin.nickname);
+
+                    Thread thread = new Thread(() => Launch());
+                    thread.IsBackground = true;
+                    thread.Start();
+
+                    timer2.Enabled = true;
+
                 }
-                else if (secenek == DialogResult.No)
+                else
                 {
-                    //Hayır seçeneğine tıklandığında çalıştırılacak kodlar
+
+                    DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?", "Projects Launcher", MessageBoxButtons.YesNo);
+
+                    if (secenek == DialogResult.Yes)
+                    {
+                        WebClient wc = new WebClient();
+                        wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
+                        wc.DownloadFileAsync(fabric, appDataDizini + "/.minecraft/fabric-installer-0.10.2.jar");
+                    }
+                    else if (secenek == DialogResult.No)
+                    {
+                        //Hayır seçeneğine tıklandığında çalıştırılacak kodlar
+                    }
                 }
             }
-        }
-        private void timer2_Tick(object sender, EventArgs e)
-        {
-            foreach (var process in Process.GetProcessesByName("javaw"))
+
+            //optifine seçiliyse
+            if (Properties.Settings.Default.SelectedVersion == "OptiFine_1.18.1_HD_U_H4")
             {
-                oynabutton.Text = "Başlatılıyor...";
-                oynabutton.Enabled = false;
-                this.Enabled = false;
+                if (Directory.Exists(@surum_appDataDizini))
+                {
+
+                    session = MSession.GetOfflineSession(ProjectsLauncherLogin.nickname);
+
+                    Thread thread = new Thread(() => Launch());
+                    thread.IsBackground = true;
+                    thread.Start();
+
+                    timer2.Enabled = true;
+
+                }
+                else
+                {
+
+                    DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?", "Projects Launcher", MessageBoxButtons.YesNo);
+
+                    if (secenek == DialogResult.Yes)
+                    {
+                        WebClient wc = new WebClient();
+                        wc.DownloadFileCompleted += Wc_DownloadFileCompleted2;
+                        wc.DownloadFileAsync(optifine, appDataDizini + "/.minecraft/OptiFine_1.18.1_HD_U_H.jar");
+                    }
+                    else if (secenek == DialogResult.No)
+                    {
+                        //Hayır seçeneğine tıklandığında çalıştırılacak kodlar
+                    }
+                }
             }
 
-            
-            if (!Process.GetProcessesByName("javaw").Any())
-            {
-                oynabutton.Text = "Oyna";
-                oynabutton.Enabled = true;
-                this.Enabled = true;
-            }
-
         }
-
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/fabric-installer-0.10.2.jar";
@@ -159,6 +180,38 @@ namespace Projects_Launcher
 
 
         }
+        private void Wc_DownloadFileCompleted2(object sender, AsyncCompletedEventArgs e)
+        {
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/OptiFine_1.18.1_HD_U_H.jar";
+
+            string myPath = @appDataDizini;
+            System.Diagnostics.Process prc = new System.Diagnostics.Process();
+            prc.StartInfo.FileName = myPath;
+            System.Threading.Thread.Sleep(1000);
+            prc.Start();
+
+
+        }
+        private void timer2_Tick(object sender, EventArgs e)
+        {
+            foreach (var process in Process.GetProcessesByName("javaw"))
+            {
+                oynabutton.Text = "Başlatılıyor...";
+                oynabutton.Enabled = false;
+                this.Visible = false;
+            }
+
+            
+            if (!Process.GetProcessesByName("javaw").Any())
+            {
+                oynabutton.Text = "Oyna";
+                oynabutton.Enabled = true;
+                this.Visible = true;
+            }
+
+        }
+
+      
         private void path()
         {
             System.Net.ServicePointManager.DefaultConnectionLimit = 256;
@@ -279,14 +332,14 @@ namespace Projects_Launcher
 
         private void timer3_Tick(object sender, EventArgs e)
         {
-            pingsayac++;
+            //pingsayac++;
 
-                string a, b, c;
-                PingReply pr = p.Send("mc.projects.gg");
-                a = pr.Status.ToString();
-                b = pr.Address.ToString();
-                c = pr.RoundtripTime.ToString();
-                serverping.Text = string.Format("{2} ms", a, b, c);
+           //     string a, b, c;
+           //     PingReply pr = p.Send("mc.projects.gg");
+          //      a = pr.Status.ToString();
+           //     b = pr.Address.ToString();
+            //    c = pr.RoundtripTime.ToString();
+             //   serverping.Text = string.Format("{2} ms", a, b, c);
 
         }
     }
