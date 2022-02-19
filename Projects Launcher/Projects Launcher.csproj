@@ -137,23 +137,11 @@
     <Compile Include="MainWindows\LoginWindow.Designer.cs">
       <DependentUpon>LoginWindow.cs</DependentUpon>
     </Compile>
-    <Compile Include="MainWindows\MainWindow.cs">
+    <Compile Include="MainWindows\MainWindowss.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="MainWindows\MainWindow.Designer.cs">
-      <DependentUpon>MainWindow.cs</DependentUpon>
-    </Compile>
-    <Compile Include="MainWindows\MainWindow_Settings.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="MainWindows\MainWindow_Settings.Designer.cs">
-      <DependentUpon>MainWindow_Settings.cs</DependentUpon>
-    </Compile>
-    <Compile Include="MainWindows\MainWindow_Info.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="MainWindows\MainWindow_Info.Designer.cs">
-      <DependentUpon>MainWindow_Info.cs</DependentUpon>
+    <Compile Include="MainWindows\MainWindowss.Designer.cs">
+      <DependentUpon>MainWindowss.cs</DependentUpon>
     </Compile>
     <Compile Include="MainWindows\ModdingWindow.cs">
       <SubType>Form</SubType>
@@ -166,14 +154,8 @@
     <EmbeddedResource Include="MainWindows\LoginWindow.resx">
       <DependentUpon>LoginWindow.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="MainWindows\MainWindow.resx">
-      <DependentUpon>MainWindow.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="MainWindows\MainWindow_Settings.resx">
-      <DependentUpon>MainWindow_Settings.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="MainWindows\MainWindow_Info.resx">
-      <DependentUpon>MainWindow_Info.cs</DependentUpon>
+    <EmbeddedResource Include="MainWindows\MainWindowss.resx">
+      <DependentUpon>MainWindowss.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="MainWindows\ModdingWindow.resx">
       <DependentUpon>ModdingWindow.cs</DependentUpon>
