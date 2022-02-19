@@ -42,20 +42,20 @@ namespace Projects_Launcher
         private void indirbutton_Click(object sender, EventArgs e)
         {
             WebClient wc = new WebClient();
-            wc.DownloadProgressChanged += Wc_DownloadProgressChanged;
-            wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
+            wc.DownloadProgressChanged += Wc_DownloadProgressChanged3;
+            wc.DownloadFileCompleted += Wc_DownloadFileCompleted3;
             wc.DownloadFileAsync(fabric, appDataDizini + "/.minecraft/fabric-installer-0.10.2.jar");
         }
 
         private void indirbutton2_Click(object sender, EventArgs e)
         {
             WebClient wc = new WebClient();
-            wc.DownloadProgressChanged += Wc_DownloadProgressChanged2;
-            wc.DownloadFileCompleted += Wc_DownloadFileCompleted2;
+            wc.DownloadProgressChanged += Wc_DownloadProgressChanged4;
+            wc.DownloadFileCompleted += Wc_DownloadFileCompleted4;
             wc.DownloadFileAsync(modlar, Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/mods.zip");
         }
 
-        private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
+        private void Wc_DownloadFileCompleted3(object sender, AsyncCompletedEventArgs e)
         {
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/fabric-installer-0.10.2.jar";
 
@@ -67,7 +67,7 @@ namespace Projects_Launcher
 
 
         }
-        private void Wc_DownloadFileCompleted2(object sender, AsyncCompletedEventArgs e)
+        private void Wc_DownloadFileCompleted4(object sender, AsyncCompletedEventArgs e)
         {
          
 
@@ -83,7 +83,7 @@ namespace Projects_Launcher
 
         }
 
-        private void Wc_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
+        private void Wc_DownloadProgressChanged3(object sender, DownloadProgressChangedEventArgs e)
         {
             yuzde1.Value = e.ProgressPercentage;
             yuzde1.Text = "%0" + e.BytesReceived;
@@ -92,13 +92,18 @@ namespace Projects_Launcher
 
        
 
-        private void Wc_DownloadProgressChanged2(object sender, DownloadProgressChangedEventArgs e)
+        private void Wc_DownloadProgressChanged4(object sender, DownloadProgressChangedEventArgs e)
         {
             yuzde2.Value = e.ProgressPercentage;
             yuzde2.Text = "%0" + e.BytesReceived;
 
 
 
+
+        }
+
+        private void indirbutton2_Click_1(object sender, EventArgs e)
+        {
 
         }
     }
