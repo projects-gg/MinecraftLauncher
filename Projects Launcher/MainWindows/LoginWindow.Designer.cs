@@ -124,7 +124,7 @@ namespace Projects_Launcher
             this.nicknametextbox.BackColor = System.Drawing.Color.Transparent;
             this.nicknametextbox.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
             this.nicknametextbox.Cursor = System.Windows.Forms.Cursors.IBeam;
-            this.nicknametextbox.DefaultText = "Kullanıcı Adı";
+            this.nicknametextbox.DefaultText = "";
             this.nicknametextbox.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(208)))), ((int)(((byte)(208)))), ((int)(((byte)(208)))));
             this.nicknametextbox.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(226)))), ((int)(((byte)(226)))));
             this.nicknametextbox.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
@@ -132,7 +132,7 @@ namespace Projects_Launcher
             this.nicknametextbox.FillColor = System.Drawing.Color.Transparent;
             this.nicknametextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
             this.nicknametextbox.Font = new System.Drawing.Font("Segoe UI", 14.25F);
-            this.nicknametextbox.ForeColor = System.Drawing.Color.White;
+            this.nicknametextbox.ForeColor = System.Drawing.Color.Gray;
             this.nicknametextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
             this.nicknametextbox.Location = new System.Drawing.Point(380, 171);
             this.nicknametextbox.Margin = new System.Windows.Forms.Padding(4);
@@ -144,6 +144,7 @@ namespace Projects_Launcher
             this.nicknametextbox.Size = new System.Drawing.Size(220, 34);
             this.nicknametextbox.TabIndex = 26;
             this.nicknametextbox.TextChanged += new System.EventHandler(this.nicknametextbox_TextChanged);
+            this.nicknametextbox.KeyDown += new System.Windows.Forms.KeyEventHandler(this.nicknametextbox_KeyDown);
             // 
             // guna2ControlBox1
             // 

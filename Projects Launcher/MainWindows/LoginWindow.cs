@@ -33,7 +33,7 @@ namespace Projects_Launcher
             InitializeComponent();
         }
         public static string nickname;
-        int v = 1;
+        int v = 2;
         Uri setup = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/setup.exe");
         string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
@@ -52,31 +52,33 @@ namespace Projects_Launcher
             string gelen = bilgiler.ReadToEnd();
             int baslangic = gelen.IndexOf("<p>") + 3;
             int bitis = gelen.Substring(baslangic).IndexOf("</p>");
-            string gelenbilgiler = gelen.Substring(baslangic, bitis);
+           string gelenbilgiler = gelen.Substring(baslangic, bitis);
             v = Convert.ToInt16(gelenbilgiler);
 
-            if (v == 3)
+            if (v == 2)
             {
 
             }
             else
             {
-                if (DialogResult.Yes == MessageBox.Show($@"Yeni versiyon: {v} kullanılabilir durumda. Yüklemek istiyor musunuz?",
-             "Bilgi",
-             MessageBoxButtons.YesNo,
-             MessageBoxIcon.Information,
-             MessageBoxDefaultButton.Button1))
-                {
-                    this.Enabled = false;
-                    WebClient wc = new WebClient();
-                    wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-                    wc.DownloadFileAsync(setup, appDataDizini + "/.projects/setup.exe");
-                }
+            DialogResult secenek = MessageBox.Show($@"Yeni versiyon: {v} kullanılabilir durumda. Yüklemek istiyor musunuz?", "Bilgi", MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
 
+            if (secenek == DialogResult.Yes)
+            {
+            this.Enabled = false;
+            WebClient wc = new WebClient();
+            wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
+             wc.DownloadFileAsync(setup, Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/setup.exe");
+            }
+            else if (secenek == DialogResult.No)
+            {
 
             }
 
         }
+        }
+
+
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
@@ -161,6 +163,31 @@ namespace Projects_Launcher
         private void timer1_Tick(object sender, EventArgs e)
         {
 
+        }
+
+        private void nicknametextbox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyData == Keys.Enter)
+            {
+                if (string.IsNullOrEmpty(nicknametextbox.Text))
+                {
+                    if (benihatırla.Checked == true)
+                    {
+                        Properties.Settings.Default.NickName = nicknametextbox.Text;
+                        Properties.Settings.Default.Save();
+                    }
+                    girisyapbutton.Text = "Kullanıcı Adı Giriniz";
+                    return;
+                }
+                else
+                {
+                    nickname = nicknametextbox.Text;
+                    girisyapbutton.Text = "Giriş Yap";
+                }
+                MainWindows.Anamenu main = new MainWindows.Anamenu();
+                this.Hide();
+                main.Show();
+            }
         }
     }
 }

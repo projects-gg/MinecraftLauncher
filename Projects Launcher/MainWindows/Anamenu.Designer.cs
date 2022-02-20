@@ -340,7 +340,7 @@ namespace Projects_Launcher.MainWindows
             // 
             this.formpanel.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("formpanel.BackgroundImage")));
             this.formpanel.Controls.Add(this.guna2Panel1);
-            this.formpanel.Location = new System.Drawing.Point(925, 119);
+            this.formpanel.Location = new System.Drawing.Point(0, 28);
             this.formpanel.Name = "formpanel";
             this.formpanel.Size = new System.Drawing.Size(980, 473);
             this.formpanel.TabIndex = 127;
@@ -364,7 +364,7 @@ namespace Projects_Launcher.MainWindows
             this.guna2Panel1.Controls.Add(this.label7);
             this.guna2Panel1.Controls.Add(this.label8);
             this.guna2Panel1.Controls.Add(this.label22);
-            this.guna2Panel1.Location = new System.Drawing.Point(0, 0);
+            this.guna2Panel1.Location = new System.Drawing.Point(-44, 684);
             this.guna2Panel1.Name = "guna2Panel1";
             this.guna2Panel1.Size = new System.Drawing.Size(980, 480);
             this.guna2Panel1.TabIndex = 1;
@@ -784,7 +784,10 @@ namespace Projects_Launcher.MainWindows
             this.Controls.Add(this.guna2PictureBox1);
             this.Font = new System.Drawing.Font("Alesand Round ExtBd", 8.249999F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
+            this.MaximumSize = new System.Drawing.Size(980, 503);
+            this.MinimumSize = new System.Drawing.Size(980, 503);
             this.Name = "Anamenu";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Anamenu";
             this.Load += new System.EventHandler(this.Anamenu_Load);
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();
