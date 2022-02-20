@@ -66,6 +66,7 @@ namespace Projects_Launcher.MainWindows
         string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
         Random rnd = new Random();
+        int x, y, z;
         private void Anamenu_Load(object sender, EventArgs e)
         {
             nickname1.Text = ProjectsLauncherLogin.nickname;
@@ -101,7 +102,7 @@ namespace Projects_Launcher.MainWindows
                 surumsec.Text = Properties.Settings.Default.SelectedVersion;
             }
 
-            var request = WebRequest.Create("https://minotar.net/helm/" + "/" + nickname1.Text);
+            var request = WebRequest.Create("https://minotar.net/body/" + "/" + nickname1.Text);
 
             using (var response = request.GetResponse())
             using (var stream = response.GetResponseStream())
@@ -321,7 +322,7 @@ namespace Projects_Launcher.MainWindows
         {
             Properties.Settings.Default.SelectedVersion = surumsec.Text;
             Properties.Settings.Default.Save();
-            surumlabell = Properties.Settings.Default.SelectedVersion;
+            surumt.Text = surumsec.Text;
         }
 
         private void website_Click(object sender, EventArgs e)
@@ -337,6 +338,57 @@ namespace Projects_Launcher.MainWindows
         private void instagram_Click(object sender, EventArgs e)
         {
             System.Diagnostics.Process.Start("https://www.instagram.com/projects.com.tr/");
+        }
+
+        private void geriformpanel_MouseEnter(object sender, EventArgs e)
+        {
+            x = rnd.Next(255);
+            y = rnd.Next(255);
+            z = rnd.Next(255);
+            geriformpanel.ForeColor = Color.FromArgb(x, y, z);
+        }
+
+        private void geriformpanel_MouseLeave(object sender, EventArgs e)
+        {
+            geriformpanel.ForeColor = Color.FromArgb(245, 245, 245);
+        }
+
+        private void changelogs_MouseEnter(object sender, EventArgs e)
+        {
+            x = rnd.Next(255);
+            y = rnd.Next(255);
+            z = rnd.Next(255);
+            geriformpanel.ForeColor = Color.FromArgb(x, y, z);
+        }
+
+        private void changelogs_MouseLeave(object sender, EventArgs e)
+        {
+            oynabutton.ForeColor = Color.FromArgb(245, 245, 245);
+        }
+
+        private void changelogs_Click(object sender, EventArgs e)
+        {
+            if (changelogst.Visible == false)
+            {
+                changelogst.Visible = true;
+            }
+            else
+            {
+                changelogst.Visible = false;
+            }
+        }
+
+        private void oynabutton_MouseEnter(object sender, EventArgs e)
+        {
+            x = rnd.Next(255);
+            y = rnd.Next(255);
+            z = rnd.Next(255);
+            oynabutton.ForeColor = Color.FromArgb(x, y, z);
+        }
+
+        private void oynabutton_MouseLeave(object sender, EventArgs e)
+        {
+            oynabutton.ForeColor = Color.FromArgb(245,245,245);
         }
     }
 }

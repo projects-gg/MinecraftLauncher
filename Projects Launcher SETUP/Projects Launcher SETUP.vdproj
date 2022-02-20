@@ -16,13 +16,13 @@
         "Entry"
         {
         "MsmKey" = "8:_0B3FB1EF4F1364F7F39677B548CAD53B"
-        "OwnerKey" = "8:_285ECF504F124EF99442F5FACF7B12BE"
+        "OwnerKey" = "8:_B1E4F805423D4A2396745B6F42DB558A"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
         {
         "MsmKey" = "8:_175D5B4C80B0A8680E127C5EFE97085E"
-        "OwnerKey" = "8:_285ECF504F124EF99442F5FACF7B12BE"
+        "OwnerKey" = "8:_B1E4F805423D4A2396745B6F42DB558A"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -34,13 +34,7 @@
         "Entry"
         {
         "MsmKey" = "8:_266C3DD85F92B5086CA338FBBD728B3E"
-        "OwnerKey" = "8:_285ECF504F124EF99442F5FACF7B12BE"
-        "MsmSig" = "8:_UNDEFINED"
-        }
-        "Entry"
-        {
-        "MsmKey" = "8:_285ECF504F124EF99442F5FACF7B12BE"
-        "OwnerKey" = "8:_UNDEFINED"
+        "OwnerKey" = "8:_B1E4F805423D4A2396745B6F42DB558A"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -52,13 +46,13 @@
         "Entry"
         {
         "MsmKey" = "8:_4B717C93A0D8CEF916A4ED4409CB49F8"
-        "OwnerKey" = "8:_285ECF504F124EF99442F5FACF7B12BE"
+        "OwnerKey" = "8:_B1E4F805423D4A2396745B6F42DB558A"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
         {
         "MsmKey" = "8:_63B78389D9620881F2DBD1EF50E53E7F"
-        "OwnerKey" = "8:_285ECF504F124EF99442F5FACF7B12BE"
+        "OwnerKey" = "8:_B1E4F805423D4A2396745B6F42DB558A"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -70,7 +64,7 @@
         "Entry"
         {
         "MsmKey" = "8:_66F510AC10C82C840789C97164ED2E61"
-        "OwnerKey" = "8:_285ECF504F124EF99442F5FACF7B12BE"
+        "OwnerKey" = "8:_B1E4F805423D4A2396745B6F42DB558A"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -82,7 +76,7 @@
         "Entry"
         {
         "MsmKey" = "8:_8F385CA34E01A6919C7610E01C789036"
-        "OwnerKey" = "8:_285ECF504F124EF99442F5FACF7B12BE"
+        "OwnerKey" = "8:_B1E4F805423D4A2396745B6F42DB558A"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -94,19 +88,25 @@
         "Entry"
         {
         "MsmKey" = "8:_AC865E1E137AD230A4556554480726FE"
-        "OwnerKey" = "8:_285ECF504F124EF99442F5FACF7B12BE"
+        "OwnerKey" = "8:_B1E4F805423D4A2396745B6F42DB558A"
+        "MsmSig" = "8:_UNDEFINED"
+        }
+        "Entry"
+        {
+        "MsmKey" = "8:_B1E4F805423D4A2396745B6F42DB558A"
+        "OwnerKey" = "8:_UNDEFINED"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
         {
         "MsmKey" = "8:_C0F45CC90DF8A8DB10E51BCAB6C8F341"
-        "OwnerKey" = "8:_285ECF504F124EF99442F5FACF7B12BE"
+        "OwnerKey" = "8:_B1E4F805423D4A2396745B6F42DB558A"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
         {
         "MsmKey" = "8:_C7D76E1D705C7B0424771319D790E105"
-        "OwnerKey" = "8:_285ECF504F124EF99442F5FACF7B12BE"
+        "OwnerKey" = "8:_B1E4F805423D4A2396745B6F42DB558A"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -118,7 +118,7 @@
         "Entry"
         {
         "MsmKey" = "8:_DC14358A6DC032A67C9AC0FB3D78D95E"
-        "OwnerKey" = "8:_285ECF504F124EF99442F5FACF7B12BE"
+        "OwnerKey" = "8:_B1E4F805423D4A2396745B6F42DB558A"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -136,7 +136,7 @@
         "Entry"
         {
         "MsmKey" = "8:_E0C93F330715F16F0DBF31C9E98DF302"
-        "OwnerKey" = "8:_285ECF504F124EF99442F5FACF7B12BE"
+        "OwnerKey" = "8:_B1E4F805423D4A2396745B6F42DB558A"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -148,7 +148,7 @@
         "Entry"
         {
         "MsmKey" = "8:_UNDEFINED"
-        "OwnerKey" = "8:_285ECF504F124EF99442F5FACF7B12BE"
+        "OwnerKey" = "8:_B1E4F805423D4A2396745B6F42DB558A"
         "MsmSig" = "8:_UNDEFINED"
         }
         "Entry"
@@ -247,6 +247,22 @@
         "PrivateKeyFile" = "8:"
         "TimeStampServer" = "8:"
         "InstallerBootstrapper" = "3:2"
+            "BootstrapperCfg:{63ACBE69-63AA-4F98-B2B6-99F9E24495F2}"
+            {
+            "Enabled" = "11:TRUE"
+            "PromptEnabled" = "11:TRUE"
+            "PrerequisitesLocation" = "2:1"
+            "Url" = "8:"
+            "ComponentsUrl" = "8:"
+                "Items"
+                {
+                    "{EDC2488A-8267-493A-A98E-7D9C3B36CDF3}:.NETFramework,Version=v4.7.2"
+                    {
+                    "Name" = "8:Microsoft .NET Framework 4.7.2 (x86 and x64)"
+                    "ProductCode" = "8:.NETFramework,Version=v4.7.2"
+                    }
+                }
+            }
         }
         "Release"
         {
@@ -263,6 +279,14 @@
         "PrivateKeyFile" = "8:"
         "TimeStampServer" = "8:"
         "InstallerBootstrapper" = "3:2"
+            "BootstrapperCfg:{63ACBE69-63AA-4F98-B2B6-99F9E24495F2}"
+            {
+            "Enabled" = "11:TRUE"
+            "PromptEnabled" = "11:TRUE"
+            "PrerequisitesLocation" = "2:1"
+            "Url" = "8:"
+            "ComponentsUrl" = "8:"
+            }
         }
     }
     "Deployable"
@@ -801,9 +825,9 @@
         "Product"
         {
         "Name" = "8:Microsoft Visual Studio"
-        "ProductName" = "8:Projects Launcher SETUP"
+        "ProductName" = "8:Projects Launcher"
         "ProductCode" = "8:{5507BCBA-129E-4C02-836D-DF625A54D8CD}"
-        "PackageCode" = "8:{F9AE8305-7407-40FD-ABB8-1184766BBE05}"
+        "PackageCode" = "8:{809D90A0-EA3C-48C3-A76E-A7999359CF24}"
         "UpgradeCode" = "8:{8E7486BB-8D6C-423B-A439-4A2532200F23}"
         "AspNetVersion" = "8:2.0.50727.0"
         "RestartWWWService" = "11:FALSE"
@@ -814,7 +838,7 @@
         "Manufacturer" = "8:Projects.GG"
         "ARPHELPTELEPHONE" = "8:"
         "ARPHELPLINK" = "8:"
-        "Title" = "8:Projects Launcher SETUP"
+        "Title" = "8:Projects Launcher"
         "Subject" = "8:"
         "ARPCONTACT" = "8:Projects.GG"
         "Keywords" = "8:"
@@ -931,8 +955,8 @@
             "ShowCmd" = "3:1"
             "IconIndex" = "3:0"
             "Transitive" = "11:FALSE"
-            "Target" = "8:_285ECF504F124EF99442F5FACF7B12BE"
-            "Folder" = "8:_A6DD87845898464CA68A058F676123CA"
+            "Target" = "8:_B1E4F805423D4A2396745B6F42DB558A"
+            "Folder" = "8:_D2655EFEABB048ECBB8BD2B739B8E297"
             "WorkingFolder" = "8:_A6DD87845898464CA68A058F676123CA"
             "Icon" = "8:_DE74E91323F0432FA7DF2152A803A909"
             "Feature" = "8:"
@@ -945,7 +969,7 @@
             "ShowCmd" = "3:1"
             "IconIndex" = "3:0"
             "Transitive" = "11:FALSE"
-            "Target" = "8:_285ECF504F124EF99442F5FACF7B12BE"
+            "Target" = "8:_B1E4F805423D4A2396745B6F42DB558A"
             "Folder" = "8:_5273EBEB557441ED933FC199DEE2C293"
             "WorkingFolder" = "8:_A6DD87845898464CA68A058F676123CA"
             "Icon" = "8:_DE74E91323F0432FA7DF2152A803A909"
@@ -1350,7 +1374,7 @@
         }
         "ProjectOutput"
         {
-            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_285ECF504F124EF99442F5FACF7B12BE"
+            "{5259A561-127C-4D43-A0A1-72F10C7B3BF8}:_B1E4F805423D4A2396745B6F42DB558A"
             {
             "SourcePath" = "8:..\\Projects Launcher\\obj\\Debug\\Projects Launcher.exe"
             "TargetName" = "8:"

@@ -52,8 +52,13 @@ namespace Projects_Launcher.MainWindows
             this.timer1 = new System.Windows.Forms.Timer(this.components);
             this.timer2 = new System.Windows.Forms.Timer(this.components);
             this.guna2ControlBox1 = new Guna.UI2.WinForms.Guna2ControlBox();
+            this.geriformpanel = new System.Windows.Forms.Label();
+            this.guna2BorderlessForm2 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
+            this.timer3 = new System.Windows.Forms.Timer(this.components);
+            this.timer4 = new System.Windows.Forms.Timer(this.components);
+            this.changelogst = new System.Windows.Forms.Label();
+            this.changelogs = new System.Windows.Forms.Label();
             this.formpanel = new Guna.UI2.WinForms.Guna2Panel();
-            this.guna2Panel1 = new Guna.UI2.WinForms.Guna2Panel();
             this.guna2PictureBox2 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.ramMbToGbCalc = new System.Windows.Forms.Label();
             this.raminfopanel = new Guna.UI2.WinForms.Guna2Panel();
@@ -79,10 +84,6 @@ namespace Projects_Launcher.MainWindows
             this.label7 = new System.Windows.Forms.Label();
             this.label8 = new System.Windows.Forms.Label();
             this.label22 = new System.Windows.Forms.Label();
-            this.geriformpanel = new System.Windows.Forms.Label();
-            this.guna2BorderlessForm2 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
-            this.timer3 = new System.Windows.Forms.Timer(this.components);
-            this.timer4 = new System.Windows.Forms.Timer(this.components);
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ayarlarbutton)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.instagram)).BeginInit();
@@ -90,7 +91,6 @@ namespace Projects_Launcher.MainWindows
             ((System.ComponentModel.ISupportInitialize)(this.website)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.skin)).BeginInit();
             this.formpanel.SuspendLayout();
-            this.guna2Panel1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).BeginInit();
             this.raminfopanel.SuspendLayout();
             this.SuspendLayout();
@@ -118,20 +118,22 @@ namespace Projects_Launcher.MainWindows
             this.oynabutton.BackColor = System.Drawing.Color.Transparent;
             this.oynabutton.Cursor = System.Windows.Forms.Cursors.Hand;
             this.oynabutton.Font = new System.Drawing.Font("Alesand Round ExtBd", 18F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.oynabutton.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.oynabutton.ForeColor = System.Drawing.Color.WhiteSmoke;
             this.oynabutton.Location = new System.Drawing.Point(50, 427);
             this.oynabutton.Name = "oynabutton";
             this.oynabutton.Size = new System.Drawing.Size(66, 28);
             this.oynabutton.TabIndex = 1;
             this.oynabutton.Text = "OYNA";
             this.oynabutton.Click += new System.EventHandler(this.oynabutton_Click);
+            this.oynabutton.MouseEnter += new System.EventHandler(this.oynabutton_MouseEnter);
+            this.oynabutton.MouseLeave += new System.EventHandler(this.oynabutton_MouseLeave);
             // 
             // label2
             // 
             this.label2.AutoSize = true;
             this.label2.BackColor = System.Drawing.Color.Transparent;
             this.label2.Font = new System.Drawing.Font("Alesand Round ExtBd", 21F, System.Drawing.FontStyle.Bold);
-            this.label2.ForeColor = System.Drawing.SystemColors.AppWorkspace;
+            this.label2.ForeColor = System.Drawing.Color.WhiteSmoke;
             this.label2.Location = new System.Drawing.Point(122, 423);
             this.label2.Name = "label2";
             this.label2.Size = new System.Drawing.Size(20, 33);
@@ -143,7 +145,7 @@ namespace Projects_Launcher.MainWindows
             this.surumt.AutoSize = true;
             this.surumt.BackColor = System.Drawing.Color.Transparent;
             this.surumt.Font = new System.Drawing.Font("Alesand", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.surumt.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.surumt.ForeColor = System.Drawing.Color.WhiteSmoke;
             this.surumt.Location = new System.Drawing.Point(148, 434);
             this.surumt.Name = "surumt";
             this.surumt.Size = new System.Drawing.Size(189, 18);
@@ -155,7 +157,7 @@ namespace Projects_Launcher.MainWindows
             this.label4.AutoSize = true;
             this.label4.BackColor = System.Drawing.Color.Transparent;
             this.label4.Font = new System.Drawing.Font("Alesand Round ExtBd", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label4.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.label4.ForeColor = System.Drawing.Color.WhiteSmoke;
             this.label4.Location = new System.Drawing.Point(702, 437);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(40, 18);
@@ -191,7 +193,7 @@ namespace Projects_Launcher.MainWindows
             this.nickname1.AutoSize = true;
             this.nickname1.BackColor = System.Drawing.Color.Transparent;
             this.nickname1.Font = new System.Drawing.Font("Alesand Round ExtBd", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.nickname1.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.nickname1.ForeColor = System.Drawing.Color.WhiteSmoke;
             this.nickname1.Location = new System.Drawing.Point(818, 437);
             this.nickname1.Name = "nickname1";
             this.nickname1.Size = new System.Drawing.Size(86, 18);
@@ -258,7 +260,7 @@ namespace Projects_Launcher.MainWindows
             this.skin.ImageRotate = 0F;
             this.skin.Location = new System.Drawing.Point(52, 42);
             this.skin.Name = "skin";
-            this.skin.Size = new System.Drawing.Size(64, 59);
+            this.skin.Size = new System.Drawing.Size(70, 140);
             this.skin.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
             this.skin.TabIndex = 18;
             this.skin.TabStop = false;
@@ -268,7 +270,7 @@ namespace Projects_Launcher.MainWindows
             this.surumtext.AutoSize = true;
             this.surumtext.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
             this.surumtext.ForeColor = System.Drawing.SystemColors.Control;
-            this.surumtext.Location = new System.Drawing.Point(293, 89);
+            this.surumtext.Location = new System.Drawing.Point(315, 89);
             this.surumtext.Name = "surumtext";
             this.surumtext.Size = new System.Drawing.Size(57, 12);
             this.surumtext.TabIndex = 125;
@@ -281,7 +283,7 @@ namespace Projects_Launcher.MainWindows
             this.widthlabel.AutoSize = true;
             this.widthlabel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
             this.widthlabel.ForeColor = System.Drawing.SystemColors.Control;
-            this.widthlabel.Location = new System.Drawing.Point(170, 89);
+            this.widthlabel.Location = new System.Drawing.Point(192, 89);
             this.widthlabel.Name = "widthlabel";
             this.widthlabel.Size = new System.Drawing.Size(61, 12);
             this.widthlabel.TabIndex = 124;
@@ -294,7 +296,7 @@ namespace Projects_Launcher.MainWindows
             this.heightlabel.AutoSize = true;
             this.heightlabel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
             this.heightlabel.ForeColor = System.Drawing.SystemColors.Control;
-            this.heightlabel.Location = new System.Drawing.Point(230, 89);
+            this.heightlabel.Location = new System.Drawing.Point(252, 89);
             this.heightlabel.Name = "heightlabel";
             this.heightlabel.Size = new System.Drawing.Size(63, 12);
             this.heightlabel.TabIndex = 123;
@@ -307,7 +309,7 @@ namespace Projects_Launcher.MainWindows
             this.ramlabel.AutoSize = true;
             this.ramlabel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
             this.ramlabel.ForeColor = System.Drawing.SystemColors.Control;
-            this.ramlabel.Location = new System.Drawing.Point(118, 89);
+            this.ramlabel.Location = new System.Drawing.Point(140, 89);
             this.ramlabel.Name = "ramlabel";
             this.ramlabel.Size = new System.Drawing.Size(52, 12);
             this.ramlabel.TabIndex = 122;
@@ -336,38 +338,84 @@ namespace Projects_Launcher.MainWindows
             this.guna2ControlBox1.TabIndex = 126;
             this.guna2ControlBox1.Click += new System.EventHandler(this.guna2ControlBox1_Click);
             // 
+            // geriformpanel
+            // 
+            this.geriformpanel.AutoSize = true;
+            this.geriformpanel.BackColor = System.Drawing.Color.Transparent;
+            this.geriformpanel.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.geriformpanel.Font = new System.Drawing.Font("Alesand", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.geriformpanel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.geriformpanel.Location = new System.Drawing.Point(12, 7);
+            this.geriformpanel.Name = "geriformpanel";
+            this.geriformpanel.Size = new System.Drawing.Size(37, 18);
+            this.geriformpanel.TabIndex = 128;
+            this.geriformpanel.Text = "Geri";
+            this.geriformpanel.Visible = false;
+            this.geriformpanel.Click += new System.EventHandler(this.geriformpanel_Click);
+            this.geriformpanel.MouseEnter += new System.EventHandler(this.geriformpanel_MouseEnter);
+            this.geriformpanel.MouseLeave += new System.EventHandler(this.geriformpanel_MouseLeave);
+            // 
+            // guna2BorderlessForm2
+            // 
+            this.guna2BorderlessForm2.ContainerControl = this;
+            this.guna2BorderlessForm2.DockIndicatorTransparencyValue = 0.6D;
+            this.guna2BorderlessForm2.TransparentWhileDrag = true;
+            // 
+            // timer3
+            // 
+            this.timer3.Interval = 749;
+            // 
+            // changelogst
+            // 
+            this.changelogst.AutoSize = true;
+            this.changelogst.BackColor = System.Drawing.Color.Transparent;
+            this.changelogst.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.changelogst.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.changelogst.Location = new System.Drawing.Point(139, 45);
+            this.changelogst.Name = "changelogst";
+            this.changelogst.Size = new System.Drawing.Size(641, 224);
+            this.changelogst.TabIndex = 129;
+            this.changelogst.Text = resources.GetString("changelogst.Text");
+            this.changelogst.Visible = false;
+            // 
+            // changelogs
+            // 
+            this.changelogs.AutoSize = true;
+            this.changelogs.BackColor = System.Drawing.Color.Transparent;
+            this.changelogs.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.changelogs.Font = new System.Drawing.Font("Alesand Round ExtBd", 18F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.changelogs.ForeColor = System.Drawing.Color.Transparent;
+            this.changelogs.Location = new System.Drawing.Point(438, 431);
+            this.changelogs.Name = "changelogs";
+            this.changelogs.Size = new System.Drawing.Size(139, 28);
+            this.changelogs.TabIndex = 130;
+            this.changelogs.Text = "Changelogs";
+            this.changelogs.Click += new System.EventHandler(this.changelogs_Click);
+            this.changelogs.MouseEnter += new System.EventHandler(this.changelogs_MouseEnter);
+            this.changelogs.MouseLeave += new System.EventHandler(this.changelogs_MouseLeave);
+            // 
             // formpanel
             // 
             this.formpanel.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("formpanel.BackgroundImage")));
-            this.formpanel.Controls.Add(this.guna2Panel1);
+            this.formpanel.Controls.Add(this.guna2PictureBox2);
+            this.formpanel.Controls.Add(this.ramMbToGbCalc);
+            this.formpanel.Controls.Add(this.raminfopanel);
+            this.formpanel.Controls.Add(this.surumsec);
+            this.formpanel.Controls.Add(this.heighttextbox);
+            this.formpanel.Controls.Add(this.widthtextbox);
+            this.formpanel.Controls.Add(this.label13);
+            this.formpanel.Controls.Add(this.ramtextbox);
+            this.formpanel.Controls.Add(this.mbLabel);
+            this.formpanel.Controls.Add(this.label5);
+            this.formpanel.Controls.Add(this.label1);
+            this.formpanel.Controls.Add(this.label7);
+            this.formpanel.Controls.Add(this.label8);
+            this.formpanel.Controls.Add(this.label22);
             this.formpanel.Location = new System.Drawing.Point(0, 28);
             this.formpanel.Name = "formpanel";
-            this.formpanel.Size = new System.Drawing.Size(980, 473);
-            this.formpanel.TabIndex = 127;
+            this.formpanel.Size = new System.Drawing.Size(980, 480);
+            this.formpanel.TabIndex = 131;
             this.formpanel.Visible = false;
-            this.formpanel.Paint += new System.Windows.Forms.PaintEventHandler(this.formpanel_Paint);
-            // 
-            // guna2Panel1
-            // 
-            this.guna2Panel1.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("guna2Panel1.BackgroundImage")));
-            this.guna2Panel1.Controls.Add(this.guna2PictureBox2);
-            this.guna2Panel1.Controls.Add(this.ramMbToGbCalc);
-            this.guna2Panel1.Controls.Add(this.raminfopanel);
-            this.guna2Panel1.Controls.Add(this.surumsec);
-            this.guna2Panel1.Controls.Add(this.heighttextbox);
-            this.guna2Panel1.Controls.Add(this.widthtextbox);
-            this.guna2Panel1.Controls.Add(this.label13);
-            this.guna2Panel1.Controls.Add(this.ramtextbox);
-            this.guna2Panel1.Controls.Add(this.mbLabel);
-            this.guna2Panel1.Controls.Add(this.label5);
-            this.guna2Panel1.Controls.Add(this.label1);
-            this.guna2Panel1.Controls.Add(this.label7);
-            this.guna2Panel1.Controls.Add(this.label8);
-            this.guna2Panel1.Controls.Add(this.label22);
-            this.guna2Panel1.Location = new System.Drawing.Point(-44, 684);
-            this.guna2Panel1.Name = "guna2Panel1";
-            this.guna2Panel1.Size = new System.Drawing.Size(980, 480);
-            this.guna2Panel1.TabIndex = 1;
             // 
             // guna2PictureBox2
             // 
@@ -730,31 +778,6 @@ namespace Projects_Launcher.MainWindows
             this.label22.TabIndex = 158;
             this.label22.Text = "Ayarlar";
             // 
-            // geriformpanel
-            // 
-            this.geriformpanel.AutoSize = true;
-            this.geriformpanel.BackColor = System.Drawing.Color.Transparent;
-            this.geriformpanel.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.geriformpanel.Font = new System.Drawing.Font("Alesand", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.geriformpanel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.geriformpanel.Location = new System.Drawing.Point(12, 7);
-            this.geriformpanel.Name = "geriformpanel";
-            this.geriformpanel.Size = new System.Drawing.Size(37, 18);
-            this.geriformpanel.TabIndex = 128;
-            this.geriformpanel.Text = "Geri";
-            this.geriformpanel.Visible = false;
-            this.geriformpanel.Click += new System.EventHandler(this.geriformpanel_Click);
-            // 
-            // guna2BorderlessForm2
-            // 
-            this.guna2BorderlessForm2.ContainerControl = this;
-            this.guna2BorderlessForm2.DockIndicatorTransparencyValue = 0.6D;
-            this.guna2BorderlessForm2.TransparentWhileDrag = true;
-            // 
-            // timer3
-            // 
-            this.timer3.Interval = 749;
-            // 
             // Anamenu
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
@@ -762,8 +785,10 @@ namespace Projects_Launcher.MainWindows
             this.BackColor = System.Drawing.SystemColors.Control;
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
             this.ClientSize = new System.Drawing.Size(980, 503);
-            this.Controls.Add(this.geriformpanel);
             this.Controls.Add(this.formpanel);
+            this.Controls.Add(this.changelogs);
+            this.Controls.Add(this.changelogst);
+            this.Controls.Add(this.geriformpanel);
             this.Controls.Add(this.guna2ControlBox1);
             this.Controls.Add(this.surumtext);
             this.Controls.Add(this.widthlabel);
@@ -784,10 +809,7 @@ namespace Projects_Launcher.MainWindows
             this.Controls.Add(this.guna2PictureBox1);
             this.Font = new System.Drawing.Font("Alesand Round ExtBd", 8.249999F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
-            this.MaximumSize = new System.Drawing.Size(980, 503);
-            this.MinimumSize = new System.Drawing.Size(980, 503);
             this.Name = "Anamenu";
-            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Anamenu";
             this.Load += new System.EventHandler(this.Anamenu_Load);
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();
@@ -797,8 +819,7 @@ namespace Projects_Launcher.MainWindows
             ((System.ComponentModel.ISupportInitialize)(this.website)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.skin)).EndInit();
             this.formpanel.ResumeLayout(false);
-            this.guna2Panel1.ResumeLayout(false);
-            this.guna2Panel1.PerformLayout();
+            this.formpanel.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).EndInit();
             this.raminfopanel.ResumeLayout(false);
             this.raminfopanel.PerformLayout();
@@ -830,9 +851,13 @@ namespace Projects_Launcher.MainWindows
         private System.Windows.Forms.Timer timer1;
         private System.Windows.Forms.Timer timer2;
         private Guna.UI2.WinForms.Guna2ControlBox guna2ControlBox1;
-        public Guna.UI2.WinForms.Guna2Panel formpanel;
         private System.Windows.Forms.Label geriformpanel;
-        private Guna.UI2.WinForms.Guna2Panel guna2Panel1;
+        private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm2;
+        private System.Windows.Forms.Timer timer3;
+        private System.Windows.Forms.Timer timer4;
+        private System.Windows.Forms.Label changelogs;
+        private System.Windows.Forms.Label changelogst;
+        private Guna.UI2.WinForms.Guna2Panel formpanel;
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox2;
         private System.Windows.Forms.Label ramMbToGbCalc;
         private Guna.UI2.WinForms.Guna2Panel raminfopanel;
@@ -858,8 +883,5 @@ namespace Projects_Launcher.MainWindows
         private System.Windows.Forms.Label label7;
         private System.Windows.Forms.Label label8;
         private System.Windows.Forms.Label label22;
-        private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm2;
-        private System.Windows.Forms.Timer timer3;
-        private System.Windows.Forms.Timer timer4;
     }
 }

@@ -2,26 +2,19 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data;
-using System.Diagnostics;
 using System.Drawing;
-using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using CmlLib;
-using CmlLib.Core.Auth;
 using CmlLib.Core;
-using CmlLib.Core.Downloader;
-using CmlLib.Core.Installer;
-using CmlLib.Core.Files;
+using CmlLib.Core.Auth;
 using System.Threading;
+using System.Deployment.Application;
+using System.IO;
 using HtmlAgilityPack;
-using System.Net;
-using MCServerStatus;
-using MCServerStatus.Models;
-using System.Net.NetworkInformation;
-
+using System.IO.Compression;
 
 
 namespace Projects_Launcher
@@ -33,9 +26,6 @@ namespace Projects_Launcher
             InitializeComponent();
         }
         public static string nickname;
-        int v = 2;
-        Uri setup = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/setup.exe");
-        string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
             if (Properties.Settings.Default.NickName != string.Empty)
@@ -43,54 +33,36 @@ namespace Projects_Launcher
                 nicknametextbox.Text = Properties.Settings.Default.NickName;
             }
 
-            timer1.Start();
-            string hedef = "https://mc.projects.gg/LauncherUpdateStream/version.php";
-            WebRequest istek = HttpWebRequest.Create(hedef);
-            WebResponse yanit;
-            yanit = istek.GetResponse();
-            StreamReader bilgiler = new StreamReader(yanit.GetResponseStream());
-            string gelen = bilgiler.ReadToEnd();
-            int baslangic = gelen.IndexOf("<p>") + 3;
-            int bitis = gelen.Substring(baslangic).IndexOf("</p>");
-           string gelenbilgiler = gelen.Substring(baslangic, bitis);
-            v = Convert.ToInt16(gelenbilgiler);
-
-            if (v == 2)
-            {
-
-            }
-            else
-            {
-            DialogResult secenek = MessageBox.Show($@"Yeni versiyon: {v} kullanılabilir durumda. Yüklemek istiyor musunuz?", "Bilgi", MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
-
-            if (secenek == DialogResult.Yes)
-            {
-            this.Enabled = false;
-            WebClient wc = new WebClient();
-            wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-             wc.DownloadFileAsync(setup, Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/setup.exe");
-            }
-            else if (secenek == DialogResult.No)
-            {
-
-            }
-
-        }
-        }
-
-
-
-        private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
-        {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/setup.exe";
-
-            string myPath = @appDataDizini;
-            System.Diagnostics.Process prc = new System.Diagnostics.Process();
-            prc.StartInfo.FileName = myPath;
-            System.Threading.Thread.Sleep(1000);
-            prc.Start();
-            Environment.Exit(0);
-
+            // try
+            // {
+            //     //ApplicationDeployment, güncelleştirme bilgilerine erişmemizi sağlayacak olan bir sınıftır.
+            //     ApplicationDeployment ad = ApplicationDeployment.CurrentDeployment;
+            //     //CheckForDetailedUpdate metodu ile güncelleme var mı? yok mu? kontrol ediyoruz.
+            //    UpdateCheckInfo info = ad.CheckForDetailedUpdate();
+            //   if (info.UpdateAvailable)
+            //    {
+            //       if (DialogResult.Yes == MessageBox.Show($@"Şu anki versiyonunuz: {ad.CurrentVersion.ToString()} Yeni versiyon: {info.AvailableVersion.ToString()} kullanılabilir durumda. Yüklemek istiyor musunuz?",
+            //           "Bilgi",
+            //           MessageBoxButtons.YesNo,
+            //          MessageBoxIcon.Information,
+            //            MessageBoxDefaultButton.Button1))
+            //       {
+            // //            if (ad.Update())
+            //           {
+            //             MessageBox.Show("Program Başarıyla Güncellendi. Şimdi yeniden Başlatılacak.");
+            //            Application.Restart();
+            //         }
+            //         else
+            //              MessageBox.Show("Güncelleme Sırasında Hata Oluştu");
+            //       }
+            //   }
+            //   else
+            //        MessageBox.Show("Güncelleme bulunmamaktadır.");
+            // }
+            // catch
+            //{
+            //    MessageBox.Show("Sunucuyla bağlantı sağlanamadı.");
+            //}
 
         }
 
@@ -158,36 +130,6 @@ namespace Projects_Launcher
         {
             string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/mods.zip";
             string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft";
-        }
-
-        private void timer1_Tick(object sender, EventArgs e)
-        {
-
-        }
-
-        private void nicknametextbox_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.KeyData == Keys.Enter)
-            {
-                if (string.IsNullOrEmpty(nicknametextbox.Text))
-                {
-                    if (benihatırla.Checked == true)
-                    {
-                        Properties.Settings.Default.NickName = nicknametextbox.Text;
-                        Properties.Settings.Default.Save();
-                    }
-                    girisyapbutton.Text = "Kullanıcı Adı Giriniz";
-                    return;
-                }
-                else
-                {
-                    nickname = nicknametextbox.Text;
-                    girisyapbutton.Text = "Giriş Yap";
-                }
-                MainWindows.Anamenu main = new MainWindows.Anamenu();
-                this.Hide();
-                main.Show();
-            }
         }
     }
 }
