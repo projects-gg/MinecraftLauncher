@@ -33,7 +33,7 @@ namespace Projects_Launcher
             InitializeComponent();
         }
         public static string nickname;
-        int v = 2;
+        int launcherVersion = 11;
         Uri setup = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/setup.exe");
         string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
@@ -52,30 +52,25 @@ namespace Projects_Launcher
             string gelen = bilgiler.ReadToEnd();
             int baslangic = gelen.IndexOf("<p>") + 3;
             int bitis = gelen.Substring(baslangic).IndexOf("</p>");
-           string gelenbilgiler = gelen.Substring(baslangic, bitis);
-            v = Convert.ToInt16(gelenbilgiler);
+            int lastLauncherVersion = Convert.ToInt16(gelen.Substring(baslangic, bitis));
 
-            if (v == 2)
+            if (!launcherVersion.Equals(lastLauncherVersion))
             {
+                DialogResult secenek =
+                    MessageBox.Show($@"Kullanılan Sürüm: {launcherVersion}" + "\n" + $@"Yeni Sürüm: {lastLauncherVersion}" + "\n" + "" + "\n" + "Yeni sürüme güncellensin mi?", "Güncelleme Mevcut",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
 
-            }
-            else
-            {
-            DialogResult secenek = MessageBox.Show($@"Yeni versiyon: {v} kullanılabilir durumda. Yüklemek istiyor musunuz?", "Bilgi", MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
-
-            if (secenek == DialogResult.Yes)
-            {
-            this.Enabled = false;
-            WebClient wc = new WebClient();
-            wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-             wc.DownloadFileAsync(setup, Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/setup.exe");
-            }
-            else if (secenek == DialogResult.No)
-            {
+                if (secenek == DialogResult.Yes)
+                {
+                    this.Enabled = false;
+                    WebClient wc = new WebClient();
+                    wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
+                    wc.DownloadFileAsync(setup,
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/setup.exe");
+                }
 
             }
 
-        }
         }
 
 
