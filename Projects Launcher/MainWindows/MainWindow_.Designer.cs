@@ -34,11 +34,11 @@ namespace Projects_Launcher.MainWindows
             this.MainWindow = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.timer1 = new System.Windows.Forms.Timer(this.components);
             this.guna2Panel1 = new Guna.UI2.WinForms.Guna2Panel();
-            this.guna2Panel2 = new Guna.UI2.WinForms.Guna2Panel();
-            this.kurallar = new System.Windows.Forms.Label();
-            this.website = new Guna.UI2.WinForms.Guna2Button();
-            this.nickname1 = new System.Windows.Forms.Label();
             this.oynabutton = new Guna.UI2.WinForms.Guna2Button();
+            this.kurallar = new System.Windows.Forms.Label();
+            this.guna2Panel2 = new Guna.UI2.WinForms.Guna2Panel();
+            this.nickname1 = new System.Windows.Forms.Label();
+            this.website = new Guna.UI2.WinForms.Guna2Button();
             this.surumsec = new Guna.UI2.WinForms.Guna2ComboBox();
             this.guna2PictureBox1 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.guna2Panel1.SuspendLayout();
@@ -59,8 +59,10 @@ namespace Projects_Launcher.MainWindows
             // 
             // guna2Panel1
             // 
-            this.guna2Panel1.Controls.Add(this.guna2Panel2);
             this.guna2Panel1.Controls.Add(this.oynabutton);
+            this.guna2Panel1.Controls.Add(this.kurallar);
+            this.guna2Panel1.Controls.Add(this.guna2Panel2);
+            this.guna2Panel1.Controls.Add(this.website);
             this.guna2Panel1.Controls.Add(this.surumsec);
             this.guna2Panel1.Controls.Add(this.guna2PictureBox1);
             this.guna2Panel1.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -70,17 +72,23 @@ namespace Projects_Launcher.MainWindows
             this.guna2Panel1.TabIndex = 0;
             this.guna2Panel1.Paint += new System.Windows.Forms.PaintEventHandler(this.guna2Panel1_Paint);
             // 
-            // guna2Panel2
+            // oynabutton
             // 
-            this.guna2Panel2.BackColor = System.Drawing.Color.Black;
-            this.guna2Panel2.Controls.Add(this.kurallar);
-            this.guna2Panel2.Controls.Add(this.website);
-            this.guna2Panel2.Controls.Add(this.nickname1);
-            this.guna2Panel2.ImeMode = System.Windows.Forms.ImeMode.Off;
-            this.guna2Panel2.Location = new System.Drawing.Point(542, 69);
-            this.guna2Panel2.Name = "guna2Panel2";
-            this.guna2Panel2.Size = new System.Drawing.Size(276, 126);
-            this.guna2Panel2.TabIndex = 134;
+            this.oynabutton.Animated = true;
+            this.oynabutton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(1)))), ((int)(((byte)(135)))), ((int)(((byte)(65)))));
+            this.oynabutton.DisabledState.BorderColor = System.Drawing.Color.DarkGray;
+            this.oynabutton.DisabledState.CustomBorderColor = System.Drawing.Color.DarkGray;
+            this.oynabutton.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(169)))), ((int)(((byte)(169)))), ((int)(((byte)(169)))));
+            this.oynabutton.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(141)))), ((int)(((byte)(141)))), ((int)(((byte)(141)))));
+            this.oynabutton.FillColor = System.Drawing.Color.Transparent;
+            this.oynabutton.Font = new System.Drawing.Font("Microsoft Sans Serif", 18F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.oynabutton.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(253)))), ((int)(((byte)(253)))), ((int)(((byte)(253)))));
+            this.oynabutton.Location = new System.Drawing.Point(285, 528);
+            this.oynabutton.Name = "oynabutton";
+            this.oynabutton.Size = new System.Drawing.Size(182, 45);
+            this.oynabutton.TabIndex = 133;
+            this.oynabutton.Text = "Oyna";
+            this.oynabutton.Click += new System.EventHandler(this.oynabutton_Click);
             // 
             // kurallar
             // 
@@ -88,12 +96,36 @@ namespace Projects_Launcher.MainWindows
             this.kurallar.BackColor = System.Drawing.Color.Transparent;
             this.kurallar.Font = new System.Drawing.Font("Segoe UI", 12.75F, System.Drawing.FontStyle.Underline, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.kurallar.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.kurallar.Location = new System.Drawing.Point(154, 85);
+            this.kurallar.Location = new System.Drawing.Point(717, 566);
             this.kurallar.Name = "kurallar";
             this.kurallar.Size = new System.Drawing.Size(68, 23);
             this.kurallar.TabIndex = 107;
             this.kurallar.Text = "Kurallar\r\n";
             this.kurallar.Click += new System.EventHandler(this.kurallar_Click);
+            // 
+            // guna2Panel2
+            // 
+            this.guna2Panel2.BackColor = System.Drawing.Color.Transparent;
+            this.guna2Panel2.Controls.Add(this.nickname1);
+            this.guna2Panel2.ImeMode = System.Windows.Forms.ImeMode.Off;
+            this.guna2Panel2.Location = new System.Drawing.Point(-1, 434);
+            this.guna2Panel2.Name = "guna2Panel2";
+            this.guna2Panel2.Size = new System.Drawing.Size(819, 72);
+            this.guna2Panel2.TabIndex = 134;
+            // 
+            // nickname1
+            // 
+            this.nickname1.AutoSize = true;
+            this.nickname1.BackColor = System.Drawing.Color.Transparent;
+            this.nickname1.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.nickname1.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.nickname1.Location = new System.Drawing.Point(4, 25);
+            this.nickname1.Name = "nickname1";
+            this.nickname1.RightToLeft = System.Windows.Forms.RightToLeft.No;
+            this.nickname1.Size = new System.Drawing.Size(749, 21);
+            this.nickname1.TabIndex = 98;
+            this.nickname1.Text = "Projects, sizin için eğlenceli çevrim içi oyun sunucuları oluşturur ve bunların a" +
+    "dil olarak oynanmasını sağlar.";
             // 
             // website
             // 
@@ -106,43 +138,12 @@ namespace Projects_Launcher.MainWindows
             this.website.FillColor = System.Drawing.Color.Transparent;
             this.website.Font = new System.Drawing.Font("Segoe UI Semibold", 12F, System.Drawing.FontStyle.Bold);
             this.website.ForeColor = System.Drawing.Color.White;
-            this.website.Location = new System.Drawing.Point(7, 79);
+            this.website.Location = new System.Drawing.Point(687, 528);
             this.website.Name = "website";
             this.website.Size = new System.Drawing.Size(118, 35);
             this.website.TabIndex = 106;
             this.website.Text = "Web Site";
             this.website.Click += new System.EventHandler(this.website_Click);
-            // 
-            // nickname1
-            // 
-            this.nickname1.AutoSize = true;
-            this.nickname1.BackColor = System.Drawing.Color.Transparent;
-            this.nickname1.Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.nickname1.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.nickname1.Location = new System.Drawing.Point(3, 0);
-            this.nickname1.Name = "nickname1";
-            this.nickname1.Size = new System.Drawing.Size(275, 63);
-            this.nickname1.TabIndex = 98;
-            this.nickname1.Text = "Projects, sizin için eğlenceli çevrim içi \r\noyun sunucuları oluşturur ve bunların" +
-    " \r\nadil olarak oynanmasını sağlar.";
-            // 
-            // oynabutton
-            // 
-            this.oynabutton.Animated = true;
-            this.oynabutton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(1)))), ((int)(((byte)(135)))), ((int)(((byte)(65)))));
-            this.oynabutton.DisabledState.BorderColor = System.Drawing.Color.DarkGray;
-            this.oynabutton.DisabledState.CustomBorderColor = System.Drawing.Color.DarkGray;
-            this.oynabutton.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(169)))), ((int)(((byte)(169)))), ((int)(((byte)(169)))));
-            this.oynabutton.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(141)))), ((int)(((byte)(141)))), ((int)(((byte)(141)))));
-            this.oynabutton.FillColor = System.Drawing.Color.Transparent;
-            this.oynabutton.Font = new System.Drawing.Font("Minecrafter", 18F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.oynabutton.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(253)))), ((int)(((byte)(253)))), ((int)(((byte)(253)))));
-            this.oynabutton.Location = new System.Drawing.Point(275, 490);
-            this.oynabutton.Name = "oynabutton";
-            this.oynabutton.Size = new System.Drawing.Size(182, 45);
-            this.oynabutton.TabIndex = 133;
-            this.oynabutton.Text = "Oyna";
-            this.oynabutton.Click += new System.EventHandler(this.oynabutton_Click);
             // 
             // surumsec
             // 
@@ -170,7 +171,7 @@ namespace Projects_Launcher.MainWindows
             "1.9.4",
             "1.8.9",
             "1.7.10"});
-            this.surumsec.Location = new System.Drawing.Point(0, 499);
+            this.surumsec.Location = new System.Drawing.Point(3, 537);
             this.surumsec.Name = "surumsec";
             this.surumsec.Size = new System.Drawing.Size(151, 36);
             this.surumsec.TabIndex = 132;
@@ -201,6 +202,7 @@ namespace Projects_Launcher.MainWindows
             this.Text = "Anamenu";
             this.Load += new System.EventHandler(this.ProjectsLauncherMain_Load);
             this.guna2Panel1.ResumeLayout(false);
+            this.guna2Panel1.PerformLayout();
             this.guna2Panel2.ResumeLayout(false);
             this.guna2Panel2.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();
