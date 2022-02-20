@@ -221,17 +221,17 @@ namespace Projects_Launcher.MainWindows
 
         private void ayarlarbutton_Click(object sender, EventArgs e)
         {
-            if (formpanel.Visible == false)
+            if (panel213.Visible == false)
             {
                 geriformpanel.Visible = true;
-                formpanel.Visible = true;
+                panel213.Visible = true;
             }
             else
             {
-                formpanel.Visible = false;
+                panel213.Visible = false;
             }
 
-           
+
         }
 
         private void timer2_Tick(object sender, EventArgs e)
@@ -273,12 +273,12 @@ namespace Projects_Launcher.MainWindows
 
         private void formpanel_Paint(object sender, PaintEventArgs e)
         {
-            formpanell = formpanel.Visible;
+            formpanell = panel213.Visible;
         }
 
         private void geriformpanel_Click(object sender, EventArgs e)
         {
-            formpanel.Visible = false;
+            panel213.Visible = false;
             geriformpanel.Visible = false;
         }
 
@@ -306,17 +306,7 @@ namespace Projects_Launcher.MainWindows
             MainWindows.Anamenu.ramlabell = Properties.Settings.Default.RamMBS;
         }
 
-        private void guna2PictureBox2_Click(object sender, EventArgs e)
-        {
-            if (raminfopanel.Visible == false)
-            {
-                raminfopanel.Visible = true;
-            }
-            else
-            {
-                raminfopanel.Visible = false;
-            }
-        }
+        
 
         private void surumsec_SelectedIndexChanged(object sender, EventArgs e)
         {
@@ -388,7 +378,7 @@ namespace Projects_Launcher.MainWindows
 
         private void oynabutton_MouseLeave(object sender, EventArgs e)
         {
-            oynabutton.ForeColor = Color.FromArgb(245,245,245);
+            oynabutton.ForeColor = Color.FromArgb(245, 245, 245);
         }
     }
 }

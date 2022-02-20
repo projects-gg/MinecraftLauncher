@@ -86,12 +86,12 @@ namespace Projects_Launcher.Properties {
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("")]
-        public string NickName {
+        public string NickNames {
             get {
-                return ((string)(this["NickName"]));
+                return ((string)(this["NickNames"]));
             }
             set {
-                this["NickName"] = value;
+                this["NickNames"] = value;
             }
         }
     }

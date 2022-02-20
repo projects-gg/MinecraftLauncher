@@ -17,9 +17,8 @@
     <Setting Name="SelectedVersion" Type="System.String" Scope="User">
       <Value Profile="(Default)">fabric-loader-0.13.2-1.18.1</Value>
     </Setting>
-    <Setting Name="NickName" Type="System.String" Scope="User">
-      <Value Profile="(Default)">
-                </Value>
+    <Setting Name="NickNames" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
     </Setting>
   </Settings>
 </SettingsFile>

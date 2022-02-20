@@ -28,9 +28,9 @@ namespace Projects_Launcher
         public static string nickname;
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
-            if (Properties.Settings.Default.NickName != string.Empty)
+            if (Properties.Settings.Default.NickNames != string.Empty)
             {
-                nicknametextbox.Text = Properties.Settings.Default.NickName;
+                nicknametextbox.Text = Properties.Settings.Default.NickNames;
             }
 
             // try
@@ -70,7 +70,7 @@ namespace Projects_Launcher
         {
             if (benihatırla.Checked == true)
             {
-                Properties.Settings.Default.NickName = nicknametextbox.Text;
+                Properties.Settings.Default.NickNames = nicknametextbox.Text;
                 Properties.Settings.Default.Save();
             }
         }
@@ -91,7 +91,7 @@ namespace Projects_Launcher
             {
                 if (benihatırla.Checked == true)
                 {
-                    Properties.Settings.Default.NickName = nicknametextbox.Text;
+                    Properties.Settings.Default.NickNames = nicknametextbox.Text;
                     Properties.Settings.Default.Save();
                 }
                 girisyapbutton.Text = "Kullanıcı Adı Giriniz";
@@ -114,7 +114,7 @@ namespace Projects_Launcher
             {
                 if (benihatırla.Checked == true)
                 {
-                    Properties.Settings.Default.NickName = nicknametextbox.Text;
+                    Properties.Settings.Default.NickNames = nicknametextbox.Text;
                     Properties.Settings.Default.Save();
                 }
                 girisyapbutton.Text = "Giriş Yap";
