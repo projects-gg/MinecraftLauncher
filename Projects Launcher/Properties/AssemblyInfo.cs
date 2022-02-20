@@ -21,7 +21,7 @@ using System.Runtime.InteropServices;
 [assembly: ComVisible(false)]
 
 // Bu proje COM'un kullanımına sunulursa, aşağıdaki GUID tür kitaplığının kimliği içindir
-[assembly: Guid("8711558b-eed9-4815-8ea0-9111af8c3131")]
+[assembly: Guid("8711558b-eed9-4815-8ea0-9111af623131")]
 
 // Bir derlemenin sürüm bilgileri aşağıdaki dört değerden oluşur:
 //
@@ -33,6 +33,6 @@ using System.Runtime.InteropServices;
 // Tüm değerleri belirtebilir veya varsayılan Derleme ve Düzeltme Numaralarını kullanmak için
 // aşağıda gösterildiği gibi '*' kullanabilirsiniz:
 // [assembly: AssemblyVersion("1.0.*")]
-[assembly: AssemblyVersion("1.1.1.1")]
-[assembly: AssemblyFileVersion("1.1.1.1")]
+[assembly: AssemblyVersion("2.0.0.5")]
+[assembly: AssemblyFileVersion("2.0.0.5")]
 [assembly: NeutralResourcesLanguage("tr")]

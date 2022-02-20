@@ -100,6 +100,14 @@ namespace Projects_Launcher.MainWindows
             {
                 surumsec.Text = Properties.Settings.Default.SelectedVersion;
             }
+
+            var request = WebRequest.Create("https://minotar.net/helm/" + "/" + nickname1.Text);
+
+            using (var response = request.GetResponse())
+            using (var stream = response.GetResponseStream())
+            {
+                skin.Image = Bitmap.FromStream(stream);
+            }
         }
 
         public void path()

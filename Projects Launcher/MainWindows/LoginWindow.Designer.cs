@@ -38,6 +38,7 @@ namespace Projects_Launcher
             this.girisyapbutton = new Guna.UI2.WinForms.Guna2Button();
             this.nicknametextbox = new Guna.UI2.WinForms.Guna2TextBox();
             this.guna2ControlBox1 = new Guna.UI2.WinForms.Guna2ControlBox();
+            this.timer1 = new System.Windows.Forms.Timer(this.components);
             this.SuspendLayout();
             // 
             // guna2BorderlessForm1
@@ -155,6 +156,10 @@ namespace Projects_Launcher
             this.guna2ControlBox1.TabIndex = 25;
             this.guna2ControlBox1.Click += new System.EventHandler(this.guna2ControlBox1_Click);
             // 
+            // timer1
+            // 
+            this.timer1.Tick += new System.EventHandler(this.timer1_Tick);
+            // 
             // ProjectsLauncherLogin
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -190,6 +195,7 @@ namespace Projects_Launcher
         private Guna.UI2.WinForms.Guna2Button girisyapbutton;
         private Guna.UI2.WinForms.Guna2TextBox nicknametextbox;
         private Guna.UI2.WinForms.Guna2ControlBox guna2ControlBox1;
+        private System.Windows.Forms.Timer timer1;
     }
 }
 

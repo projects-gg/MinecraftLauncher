@@ -44,7 +44,7 @@ namespace Projects_Launcher.MainWindows
             this.instagram = new Guna.UI2.WinForms.Guna2PictureBox();
             this.discord = new Guna.UI2.WinForms.Guna2PictureBox();
             this.website = new Guna.UI2.WinForms.Guna2PictureBox();
-            this.guna2PictureBox4 = new Guna.UI2.WinForms.Guna2PictureBox();
+            this.skin = new Guna.UI2.WinForms.Guna2PictureBox();
             this.surumtext = new System.Windows.Forms.Label();
             this.widthlabel = new System.Windows.Forms.Label();
             this.heightlabel = new System.Windows.Forms.Label();
@@ -88,7 +88,7 @@ namespace Projects_Launcher.MainWindows
             ((System.ComponentModel.ISupportInitialize)(this.instagram)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.discord)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.website)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox4)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.skin)).BeginInit();
             this.formpanel.SuspendLayout();
             this.guna2Panel1.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).BeginInit();
@@ -251,17 +251,17 @@ namespace Projects_Launcher.MainWindows
             this.website.TabStop = false;
             this.website.Click += new System.EventHandler(this.website_Click);
             // 
-            // guna2PictureBox4
+            // skin
             // 
-            this.guna2PictureBox4.BackColor = System.Drawing.Color.Transparent;
-            this.guna2PictureBox4.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox4.Image")));
-            this.guna2PictureBox4.ImageRotate = 0F;
-            this.guna2PictureBox4.Location = new System.Drawing.Point(52, 42);
-            this.guna2PictureBox4.Name = "guna2PictureBox4";
-            this.guna2PictureBox4.Size = new System.Drawing.Size(64, 59);
-            this.guna2PictureBox4.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
-            this.guna2PictureBox4.TabIndex = 18;
-            this.guna2PictureBox4.TabStop = false;
+            this.skin.BackColor = System.Drawing.Color.Transparent;
+            this.skin.Image = ((System.Drawing.Image)(resources.GetObject("skin.Image")));
+            this.skin.ImageRotate = 0F;
+            this.skin.Location = new System.Drawing.Point(52, 42);
+            this.skin.Name = "skin";
+            this.skin.Size = new System.Drawing.Size(64, 59);
+            this.skin.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
+            this.skin.TabIndex = 18;
+            this.skin.TabStop = false;
             // 
             // surumtext
             // 
@@ -340,7 +340,7 @@ namespace Projects_Launcher.MainWindows
             // 
             this.formpanel.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("formpanel.BackgroundImage")));
             this.formpanel.Controls.Add(this.guna2Panel1);
-            this.formpanel.Location = new System.Drawing.Point(0, 30);
+            this.formpanel.Location = new System.Drawing.Point(925, 119);
             this.formpanel.Name = "formpanel";
             this.formpanel.Size = new System.Drawing.Size(980, 473);
             this.formpanel.TabIndex = 127;
@@ -769,7 +769,7 @@ namespace Projects_Launcher.MainWindows
             this.Controls.Add(this.widthlabel);
             this.Controls.Add(this.heightlabel);
             this.Controls.Add(this.ramlabel);
-            this.Controls.Add(this.guna2PictureBox4);
+            this.Controls.Add(this.skin);
             this.Controls.Add(this.website);
             this.Controls.Add(this.discord);
             this.Controls.Add(this.instagram);
@@ -792,7 +792,7 @@ namespace Projects_Launcher.MainWindows
             ((System.ComponentModel.ISupportInitialize)(this.instagram)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.discord)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.website)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox4)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.skin)).EndInit();
             this.formpanel.ResumeLayout(false);
             this.guna2Panel1.ResumeLayout(false);
             this.guna2Panel1.PerformLayout();
@@ -815,7 +815,7 @@ namespace Projects_Launcher.MainWindows
         private System.Windows.Forms.Label pingsayacc;
         private System.Windows.Forms.Label label4;
         private System.Windows.Forms.Label nickname1;
-        private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox4;
+        private Guna.UI2.WinForms.Guna2PictureBox skin;
         private Guna.UI2.WinForms.Guna2PictureBox website;
         private Guna.UI2.WinForms.Guna2PictureBox discord;
         private Guna.UI2.WinForms.Guna2PictureBox instagram;
