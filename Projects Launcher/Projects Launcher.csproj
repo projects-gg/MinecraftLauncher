@@ -143,17 +143,17 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="MainWindows\Anamenu.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="MainWindows\Anamenu.Designer.cs">
+      <DependentUpon>Anamenu.cs</DependentUpon>
+    </Compile>
     <Compile Include="MainWindows\Changelogs.cs">
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="MainWindows\Changelogs.Designer.cs">
       <DependentUpon>Changelogs.cs</DependentUpon>
-    </Compile>
-    <Compile Include="MainWindows\MainWindow_.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="MainWindows\MainWindow_.Designer.cs">
-      <DependentUpon>MainWindow_.cs</DependentUpon>
     </Compile>
     <Compile Include="MainWindows\LoginWindow.cs">
       <SubType>Form</SubType>
@@ -161,34 +161,16 @@
     <Compile Include="MainWindows\LoginWindow.Designer.cs">
       <DependentUpon>LoginWindow.cs</DependentUpon>
     </Compile>
-    <Compile Include="MainWindows\MainWindowss.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="MainWindows\MainWindowss.Designer.cs">
-      <DependentUpon>MainWindowss.cs</DependentUpon>
-    </Compile>
-    <Compile Include="MainWindows\MainWindow_Settings.cs">
-      <SubType>Form</SubType>
-    </Compile>
-    <Compile Include="MainWindows\MainWindow_Settings.Designer.cs">
-      <DependentUpon>MainWindow_Settings.cs</DependentUpon>
-    </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <EmbeddedResource Include="MainWindows\Anamenu.resx">
+      <DependentUpon>Anamenu.cs</DependentUpon>
+    </EmbeddedResource>
     <EmbeddedResource Include="MainWindows\Changelogs.resx">
       <DependentUpon>Changelogs.cs</DependentUpon>
     </EmbeddedResource>
-    <EmbeddedResource Include="MainWindows\MainWindow_.resx">
-      <DependentUpon>MainWindow_.cs</DependentUpon>
-    </EmbeddedResource>
     <EmbeddedResource Include="MainWindows\LoginWindow.resx">
       <DependentUpon>LoginWindow.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="MainWindows\MainWindowss.resx">
-      <DependentUpon>MainWindowss.cs</DependentUpon>
-    </EmbeddedResource>
-    <EmbeddedResource Include="MainWindows\MainWindow_Settings.resx">
-      <DependentUpon>MainWindow_Settings.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>

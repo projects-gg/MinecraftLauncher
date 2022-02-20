@@ -102,7 +102,7 @@ namespace Projects_Launcher
                 nickname = nicknametextbox.Text;
                 girisyapbutton.Text = "Giriş Yap";
             }
-            MainWindows.ProjectsMain main = new MainWindows.ProjectsMain();
+            MainWindows.Anamenu main = new MainWindows.Anamenu();
             this.Hide();
             main.Show();
         }
