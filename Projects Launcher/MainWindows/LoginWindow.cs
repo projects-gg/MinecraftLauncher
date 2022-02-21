@@ -1,20 +1,8 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using CmlLib;
-using CmlLib.Core;
-using CmlLib.Core.Auth;
-using System.Threading;
-using System.Deployment.Application;
 using System.IO;
-using HtmlAgilityPack;
-using System.IO.Compression;
+using System.Net;
+using System.Windows.Forms;
 
 
 namespace Projects_Launcher
@@ -26,6 +14,8 @@ namespace Projects_Launcher
             InitializeComponent();
         }
         public static string nickname;
+        public int v = 3;
+        Uri setup = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/setup.exe");
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
             if (Properties.Settings.Default.NickNames != string.Empty)
@@ -33,36 +23,49 @@ namespace Projects_Launcher
                 nicknametextbox.Text = Properties.Settings.Default.NickNames;
             }
 
-            // try
-            // {
-            //     //ApplicationDeployment, güncelleştirme bilgilerine erişmemizi sağlayacak olan bir sınıftır.
-            //     ApplicationDeployment ad = ApplicationDeployment.CurrentDeployment;
-            //     //CheckForDetailedUpdate metodu ile güncelleme var mı? yok mu? kontrol ediyoruz.
-            //    UpdateCheckInfo info = ad.CheckForDetailedUpdate();
-            //   if (info.UpdateAvailable)
-            //    {
-            //       if (DialogResult.Yes == MessageBox.Show($@"Şu anki versiyonunuz: {ad.CurrentVersion.ToString()} Yeni versiyon: {info.AvailableVersion.ToString()} kullanılabilir durumda. Yüklemek istiyor musunuz?",
-            //           "Bilgi",
-            //           MessageBoxButtons.YesNo,
-            //          MessageBoxIcon.Information,
-            //            MessageBoxDefaultButton.Button1))
-            //       {
-            // //            if (ad.Update())
-            //           {
-            //             MessageBox.Show("Program Başarıyla Güncellendi. Şimdi yeniden Başlatılacak.");
-            //            Application.Restart();
-            //         }
-            //         else
-            //              MessageBox.Show("Güncelleme Sırasında Hata Oluştu");
-            //       }
-            //   }
-            //   else
-            //        MessageBox.Show("Güncelleme bulunmamaktadır.");
-            // }
-            // catch
-            //{
-            //    MessageBox.Show("Sunucuyla bağlantı sağlanamadı.");
-            //}
+            string hedef = "https://mc.projects.gg/LauncherUpdateStream/version.php";
+            WebRequest istek = HttpWebRequest.Create(hedef);
+            WebResponse yanit;
+            yanit = istek.GetResponse();
+            StreamReader bilgiler = new StreamReader(yanit.GetResponseStream());
+            string gelen = bilgiler.ReadToEnd();
+            int baslangic = gelen.IndexOf("<p>") + 3;
+            int bitis = gelen.Substring(baslangic).IndexOf("</p>");
+            string gelenbilgileri = gelen.Substring(baslangic, bitis);
+            v = Convert.ToInt16(gelenbilgileri);
+
+            if (v == 3)
+            {
+
+            }
+            else
+            {
+                DialogResult secenek = MessageBox.Show($@"Kullanılan Sürüm: 3" + "\n" + $@"Yeni Sürüm: {v}" + "\n" + "" + "\n" + "Yeni sürüme güncellensin mi?", "Güncelleme Mevcut",
+                      MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
+
+                if (secenek == DialogResult.Yes)
+                {
+                    this.Enabled = false;
+                    WebClient wc = new WebClient();
+                    wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
+                    wc.DownloadFileAsync(setup,
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/setup.exe");
+                }
+            }
+
+        }
+
+        private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
+        {
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/setup.exe";
+
+            string myPath = @appDataDizini;
+            System.Diagnostics.Process prc = new System.Diagnostics.Process();
+            prc.StartInfo.FileName = myPath;
+            System.Threading.Thread.Sleep(1000);
+            prc.Start();
+            Environment.Exit(0);
+
 
         }
 

@@ -1,26 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using CmlLib.Core;
+using CmlLib.Core.Auth;
+using System;
 using System.ComponentModel;
-using System.Data;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
-using CmlLib;
-using CmlLib.Core.Auth;
-using CmlLib.Core;
-using CmlLib.Core.Downloader;
-using CmlLib.Core.Installer;
-using CmlLib.Core.Files;
-using System.Threading;
-using HtmlAgilityPack;
 using System.Net;
-using MCServerStatus;
-using MCServerStatus.Models;
 using System.Net.NetworkInformation;
+using System.Threading;
+using System.Windows.Forms;
 
 namespace Projects_Launcher.MainWindows
 {
@@ -306,7 +295,7 @@ namespace Projects_Launcher.MainWindows
             MainWindows.Anamenu.ramlabell = Properties.Settings.Default.RamMBS;
         }
 
-        
+
 
         private void surumsec_SelectedIndexChanged(object sender, EventArgs e)
         {

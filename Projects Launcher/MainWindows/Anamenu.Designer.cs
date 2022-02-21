@@ -88,7 +88,7 @@ namespace Projects_Launcher.MainWindows
             // guna2PictureBox1
             // 
             this.guna2PictureBox1.BackColor = System.Drawing.Color.Transparent;
-            this.guna2PictureBox1.Image = global::Projects_Launcher.Properties.Resources.projects;
+            this.guna2PictureBox1.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox1.Image")));
             this.guna2PictureBox1.ImageRotate = 0F;
             this.guna2PictureBox1.Location = new System.Drawing.Point(840, 42);
             this.guna2PictureBox1.Name = "guna2PictureBox1";
@@ -142,7 +142,7 @@ namespace Projects_Launcher.MainWindows
             this.label4.BackColor = System.Drawing.Color.Transparent;
             this.label4.Font = new System.Drawing.Font("Alesand Round ExtBd", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.label4.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.label4.Location = new System.Drawing.Point(702, 437);
+            this.label4.Location = new System.Drawing.Point(702, 433);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(40, 18);
             this.label4.TabIndex = 4;
@@ -154,7 +154,7 @@ namespace Projects_Launcher.MainWindows
             this.pingsayacc.BackColor = System.Drawing.Color.Transparent;
             this.pingsayacc.Font = new System.Drawing.Font("Alesand", 9.749999F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.pingsayacc.ForeColor = System.Drawing.SystemColors.ActiveBorder;
-            this.pingsayacc.Location = new System.Drawing.Point(743, 440);
+            this.pingsayacc.Location = new System.Drawing.Point(743, 436);
             this.pingsayacc.Name = "pingsayacc";
             this.pingsayacc.Size = new System.Drawing.Size(43, 15);
             this.pingsayacc.TabIndex = 5;
@@ -357,7 +357,7 @@ namespace Projects_Launcher.MainWindows
             this.changelogst.ForeColor = System.Drawing.Color.WhiteSmoke;
             this.changelogst.Location = new System.Drawing.Point(139, 45);
             this.changelogst.Name = "changelogst";
-            this.changelogst.Size = new System.Drawing.Size(641, 224);
+            this.changelogst.Size = new System.Drawing.Size(640, 224);
             this.changelogst.TabIndex = 129;
             this.changelogst.Text = resources.GetString("changelogst.Text");
             this.changelogst.Visible = false;
@@ -392,7 +392,7 @@ namespace Projects_Launcher.MainWindows
             this.panel213.Controls.Add(this.label1);
             this.panel213.Controls.Add(this.label8);
             this.panel213.Controls.Add(this.label22);
-            this.panel213.Location = new System.Drawing.Point(0, 28);
+            this.panel213.Location = new System.Drawing.Point(954, 71);
             this.panel213.Name = "panel213";
             this.panel213.Size = new System.Drawing.Size(980, 480);
             this.panel213.TabIndex = 131;
