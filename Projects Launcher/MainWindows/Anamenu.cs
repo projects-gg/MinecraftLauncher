@@ -1,26 +1,17 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using CmlLib.Core;
+using CmlLib.Core.Auth;
+using MCServerStatus;
+using System;
 using System.ComponentModel;
-using System.Data;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Text;
+using System.Net;
+using System.Net.NetworkInformation;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using CmlLib;
-using CmlLib.Core.Auth;
-using CmlLib.Core;
-using CmlLib.Core.Downloader;
-using CmlLib.Core.Installer;
-using CmlLib.Core.Files;
-using System.Threading;
-using HtmlAgilityPack;
-using System.Net;
-using MCServerStatus;
-using MCServerStatus.Models;
-using System.Net.NetworkInformation;
 
 namespace Projects_Launcher.MainWindows
 {
@@ -212,6 +203,7 @@ namespace Projects_Launcher.MainWindows
 
         private void timer1_Tick(object sender, EventArgs e)
         {
+
             foreach (var process in Process.GetProcessesByName("javaw"))
             {
                 oynabutton.Text = "Başlatılıyor...";
@@ -447,7 +439,7 @@ namespace Projects_Launcher.MainWindows
 
         private void mods_MouseLeave(object sender, EventArgs e)
         {
-            mods.ForeColor = Color.FromArgb(245,245,245);
+            mods.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void texturepackfolder_MouseEnter(object sender, EventArgs e)
@@ -471,7 +463,7 @@ namespace Projects_Launcher.MainWindows
             texturepackaktar.ForeColor = Color.FromArgb(x, y, z);
         }
 
-    private void texturepackaktar_MouseLeave(object sender, EventArgs e)
+        private void texturepackaktar_MouseLeave(object sender, EventArgs e)
         {
             texturepackaktar.ForeColor = Color.FromArgb(245, 245, 245);
         }
@@ -557,7 +549,7 @@ namespace Projects_Launcher.MainWindows
                 }
             }
 
-            
+
         }
 
         private void texturepackfolder_Click(object sender, EventArgs e)

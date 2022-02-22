@@ -14,7 +14,7 @@ namespace Projects_Launcher
             InitializeComponent();
         }
         public static string nickname;
-        public int v = 2;
+        public int v = 3;
         Uri setup = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/setup.exe");
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
@@ -34,7 +34,7 @@ namespace Projects_Launcher
             string gelenbilgileri = gelen.Substring(baslangic, bitis);
             v = Convert.ToInt16(gelenbilgileri);
 
-            if (v == 2)
+            if (v == 3)
             {
 
             }
