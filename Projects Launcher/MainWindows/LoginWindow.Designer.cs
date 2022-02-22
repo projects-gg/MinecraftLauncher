@@ -106,7 +106,6 @@ namespace Projects_Launcher
             this.girisyapbutton.Anchor = System.Windows.Forms.AnchorStyles.Top;
             this.girisyapbutton.Animated = true;
             this.girisyapbutton.BackColor = System.Drawing.Color.Transparent;
-            this.girisyapbutton.BorderColor = System.Drawing.Color.White;
             this.girisyapbutton.BorderRadius = 5;
             this.girisyapbutton.BorderThickness = 1;
             this.girisyapbutton.DisabledState.BorderColor = System.Drawing.Color.DarkGray;

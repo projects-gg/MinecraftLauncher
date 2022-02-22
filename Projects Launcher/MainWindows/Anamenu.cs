@@ -437,6 +437,188 @@ namespace Projects_Launcher.MainWindows
             minramlabell = minramlabel.Text;
         }
 
+        private void mods_MouseEnter(object sender, EventArgs e)
+        {
+            x = rnd.Next(255);
+            y = rnd.Next(255);
+            z = rnd.Next(255);
+            mods.ForeColor = Color.FromArgb(x, y, z);
+        }
+
+        private void mods_MouseLeave(object sender, EventArgs e)
+        {
+            mods.ForeColor = Color.FromArgb(245,245,245);
+        }
+
+        private void texturepackfolder_MouseEnter(object sender, EventArgs e)
+        {
+            x = rnd.Next(255);
+            y = rnd.Next(255);
+            z = rnd.Next(255);
+            texturepackfolder.ForeColor = Color.FromArgb(x, y, z);
+        }
+
+        private void texturepackfolder_MouseLeave(object sender, EventArgs e)
+        {
+            texturepackfolder.ForeColor = Color.FromArgb(245, 245, 245);
+        }
+
+        private void texturepackaktar_MouseEnter(object sender, EventArgs e)
+        {
+            x = rnd.Next(255);
+            y = rnd.Next(255);
+            z = rnd.Next(255);
+            texturepackaktar.ForeColor = Color.FromArgb(x, y, z);
+        }
+
+    private void texturepackaktar_MouseLeave(object sender, EventArgs e)
+        {
+            texturepackaktar.ForeColor = Color.FromArgb(245, 245, 245);
+        }
+
+        private void mods_Click(object sender, EventArgs e)
+        {
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/mods";
+
+            if (Directory.Exists(@appDataDizini))
+            {
+
+                string myPath = @appDataDizini;
+                System.Diagnostics.Process prc = new System.Diagnostics.Process();
+                prc.StartInfo.FileName = myPath;
+                System.Threading.Thread.Sleep(1000);
+                prc.Start();
+            }
+            else
+            {
+                Directory.CreateDirectory(@appDataDizini);
+                string myPath = @appDataDizini;
+                System.Diagnostics.Process prc = new System.Diagnostics.Process();
+                prc.StartInfo.FileName = myPath;
+                System.Threading.Thread.Sleep(1000);
+                prc.Start();
+            }
+        }
+
+        private void texturepackaktar_Click(object sender, EventArgs e)
+        {
+            if (Directory.Exists(@TextureDizin))
+            {
+                OpenFileDialog file = new OpenFileDialog();
+                file.Filter = "ZIP Dosyası |*.zip";
+                file.FilterIndex = 2;
+                file.RestoreDirectory = true;
+                file.CheckFileExists = false;
+                file.Title = "ZIP Dosyası Seçiniz.";
+                file.ShowDialog();
+
+                string DosyaYolu = file.FileName;
+                string DosyaAdi = file.SafeFileName;
+                System.Threading.Thread.Sleep(500);
+                if (DosyaAdi != "" && DosyaYolu != "")
+                {
+                    if (File.Exists(TextureDizin + "\\" + DosyaAdi))
+                    {
+                        MessageBox.Show(DosyaAdi + " isimli TexturePack zaten mevcut.", "", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    else
+                    {
+                        File.Copy(DosyaYolu, TextureDizin + "\\" + DosyaAdi);
+                        MessageBox.Show("TexturePack başarıyla yüklendi.");
+                    }
+                }
+            }
+            else
+            {
+                Directory.CreateDirectory(@TextureDizin);
+
+                OpenFileDialog file = new OpenFileDialog();
+                file.Filter = "ZIP Dosyası |*.zip";
+                file.FilterIndex = 2;
+                file.RestoreDirectory = true;
+                file.CheckFileExists = false;
+                file.Title = "ZIP Dosyası Seçiniz.";
+                file.ShowDialog();
+
+                string DosyaYolu = file.FileName;
+                string DosyaAdi = file.SafeFileName;
+                System.Threading.Thread.Sleep(500);
+                if (DosyaAdi != "" && DosyaYolu != "")
+                {
+                    if (File.Exists(TextureDizin + "\\" + DosyaAdi))
+                    {
+                        MessageBox.Show(DosyaAdi + " isimli TexturePack zaten mevcut.", "", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    }
+                    else
+                    {
+                        File.Copy(DosyaYolu, TextureDizin + "\\" + DosyaAdi);
+                        MessageBox.Show("TexturePack başarıyla yüklendi.");
+                    }
+                }
+            }
+
+            
+        }
+
+        private void texturepackfolder_Click(object sender, EventArgs e)
+        {
+            if (Directory.Exists(@TextureDizin))
+            {
+
+                string myPath = @TextureDizin;
+                System.Diagnostics.Process prc = new System.Diagnostics.Process();
+                prc.StartInfo.FileName = myPath;
+                System.Threading.Thread.Sleep(1000);
+                prc.Start();
+            }
+            else
+            {
+                Directory.CreateDirectory(@TextureDizin);
+                string myPath = @TextureDizin;
+                System.Diagnostics.Process prc = new System.Diagnostics.Process();
+                prc.StartInfo.FileName = myPath;
+                System.Threading.Thread.Sleep(1000);
+                prc.Start();
+            }
+        }
+
+        private void gamefolder_Click(object sender, EventArgs e)
+        {
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft";
+
+            if (Directory.Exists(@appDataDizini))
+            {
+
+                string myPath = @appDataDizini;
+                System.Diagnostics.Process prc = new System.Diagnostics.Process();
+                prc.StartInfo.FileName = myPath;
+                System.Threading.Thread.Sleep(1000);
+                prc.Start();
+            }
+            else
+            {
+                Directory.CreateDirectory(@appDataDizini);
+                string myPath = @appDataDizini;
+                System.Diagnostics.Process prc = new System.Diagnostics.Process();
+                prc.StartInfo.FileName = myPath;
+                System.Threading.Thread.Sleep(1000);
+                prc.Start();
+            }
+        }
+
+        private void gamefolder_MouseEnter(object sender, EventArgs e)
+        {
+            x = rnd.Next(255);
+            y = rnd.Next(255);
+            z = rnd.Next(255);
+            gamefolder.ForeColor = Color.FromArgb(x, y, z);
+        }
+
+        private void gamefolder_MouseLeave(object sender, EventArgs e)
+        {
+            gamefolder.ForeColor = Color.FromArgb(245, 245, 245);
+        }
+
         private void oynabutton_MouseEnter(object sender, EventArgs e)
         {
             x = rnd.Next(255);

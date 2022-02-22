@@ -14,7 +14,7 @@ namespace Projects_Launcher
             InitializeComponent();
         }
         public static string nickname;
-        public int v = 3;
+        public int v = 2;
         Uri setup = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/setup.exe");
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
@@ -34,13 +34,13 @@ namespace Projects_Launcher
             string gelenbilgileri = gelen.Substring(baslangic, bitis);
             v = Convert.ToInt16(gelenbilgileri);
 
-            if (v == 3)
+            if (v == 2)
             {
 
             }
             else
             {
-                DialogResult secenek = MessageBox.Show($@"Kullanılan Sürüm: 3" + "\n" + $@"Yeni Sürüm: {v}" + "\n" + "" + "\n" + "Yeni sürüme güncellensin mi?", "Güncelleme Mevcut",
+                DialogResult secenek = MessageBox.Show($@"Yeni Sürüm: {v}" + "\n" + "" + "\n" + "Yeni sürüme güncellensin mi?", "Güncelleme Mevcut",
                       MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
 
                 if (secenek == DialogResult.Yes)

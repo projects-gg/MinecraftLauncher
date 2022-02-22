@@ -25,13 +25,13 @@
     <UpdatePeriodically>false</UpdatePeriodically>
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
-    <InstallUrl>https://mc.projects.gg/</InstallUrl>
+    <InstallUrl>https://mc.projects.gg/LauncherUpdateStream/versions/</InstallUrl>
     <SupportUrl>https://mc.projects.gg/</SupportUrl>
     <TargetCulture>tr-TR</TargetCulture>
     <ProductName>Projects Launcher</ProductName>
     <PublisherName>Projects</PublisherName>
     <SuiteName>Projects_Launcher</SuiteName>
-    <ApplicationRevision>3</ApplicationRevision>
+    <ApplicationRevision>4</ApplicationRevision>
     <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>
