@@ -12,7 +12,7 @@ namespace Projects_Launcher.Properties {
     
     
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
-    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "16.10.0.0")]
+    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "17.1.0.0")]
     internal sealed partial class Settings : global::System.Configuration.ApplicationSettingsBase {
         
         private static Settings defaultInstance = ((Settings)(global::System.Configuration.ApplicationSettingsBase.Synchronized(new Settings())));
@@ -38,12 +38,12 @@ namespace Projects_Launcher.Properties {
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("4096")]
-        public string RamMBS {
+        public string RamMax {
             get {
-                return ((string)(this["RamMBS"]));
+                return ((string)(this["RamMax"]));
             }
             set {
-                this["RamMBS"] = value;
+                this["RamMax"] = value;
             }
         }
         
@@ -92,6 +92,18 @@ namespace Projects_Launcher.Properties {
             }
             set {
                 this["NickNames"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("2048")]
+        public string RamMin {
+            get {
+                return ((string)(this["RamMin"]));
+            }
+            set {
+                this["RamMin"] = value;
             }
         }
     }

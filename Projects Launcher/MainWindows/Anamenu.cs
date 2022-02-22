@@ -1,15 +1,26 @@
-﻿using CmlLib.Core;
-using CmlLib.Core.Auth;
-using System;
+﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Data;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
-using System.Net;
-using System.Net.NetworkInformation;
-using System.Threading;
+using System.Text;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using CmlLib;
+using CmlLib.Core.Auth;
+using CmlLib.Core;
+using CmlLib.Core.Downloader;
+using CmlLib.Core.Installer;
+using CmlLib.Core.Files;
+using System.Threading;
+using HtmlAgilityPack;
+using System.Net;
+using MCServerStatus;
+using MCServerStatus.Models;
+using System.Net.NetworkInformation;
 
 namespace Projects_Launcher.MainWindows
 {
@@ -29,12 +40,14 @@ namespace Projects_Launcher.MainWindows
         public static string height;
         public static string width;
         public static string versiyons;
-        public static string rambox;
+        public static string minrambox;
+        public static string maxrambox;
         public static string widthbox;
         public static string heightbox;
         public static string sayac;
 
-        public static string ramlabell;
+        public static string maxramlabell;
+        public static string minramlabell;
         public static string heightlabell;
         public static string widthlabell;
         public static string surumlabell;
@@ -69,11 +82,17 @@ namespace Projects_Launcher.MainWindows
                 surumt.Text = Properties.Settings.Default.SelectedVersion;
             }
 
-            if (Properties.Settings.Default.RamMBS != string.Empty)
+            //ram
+            if (Properties.Settings.Default.RamMax != string.Empty)
             {
-                ramtextbox.Text = Properties.Settings.Default.RamMBS;
+                maxramtext.Text = Properties.Settings.Default.RamMax;
             }
-            ramtextbox.MaxLength = 4;
+            maxramtext.MaxLength = 4;
+            if (Properties.Settings.Default.RamMin != string.Empty)
+            {
+                minramtext.Text = Properties.Settings.Default.RamMin;
+            }
+            minramtext.MaxLength = 4;
 
             //Resolution
             if (Properties.Settings.Default.ResolutionHeight != string.Empty)
@@ -133,7 +152,8 @@ namespace Projects_Launcher.MainWindows
 
             var ayarlar = new MLaunchOption
             {
-                MaximumRamMb = int.Parse(Properties.Settings.Default.RamMBS),
+                MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax),
+                MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin),
                 Session = MSession.GetOfflineSession(sessions),
                 ServerIp = "mc.projects.gg",
                 ScreenWidth = int.Parse(Properties.Settings.Default.ResolutionWidth),
@@ -223,8 +243,17 @@ namespace Projects_Launcher.MainWindows
 
         }
 
-        private void timer2_Tick(object sender, EventArgs e)
+        private async Task ServerStatus()
         {
+            IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
+            var status = await pinger.RequestAsync();
+            String server = status.Players.Online + "";
+            serverplayer.Text = (server + " Kişi aktif!");
+        }
+
+        private async void timer2_Tick(object sender, EventArgs e)
+        {
+            //ping
             pingsayac++;
 
             string a, b, c;
@@ -233,6 +262,9 @@ namespace Projects_Launcher.MainWindows
             b = pr.Address.ToString();
             c = pr.RoundtripTime.ToString();
             pingsayacc.Text = string.Format("{2} ms", a, b, c);
+
+            //player
+            await ServerStatus();
         }
 
         private void guna2ControlBox1_Click(object sender, EventArgs e)
@@ -242,7 +274,7 @@ namespace Projects_Launcher.MainWindows
 
         private void ramlabel_Click(object sender, EventArgs e)
         {
-            ramlabell = ramlabel.Text;
+            maxramlabell = maxramlabel.Text;
         }
 
         private void widthlabel_Click(object sender, EventArgs e)
@@ -287,12 +319,30 @@ namespace Projects_Launcher.MainWindows
             MainWindows.Anamenu.heightlabell = Properties.Settings.Default.ResolutionHeight;
         }
 
-        private void ramtextbox_TextChanged(object sender, EventArgs e)
+        private void maxramtext_TextChanged(object sender, EventArgs e)
         {
-            rambox = ramtextbox.Text;
-            Properties.Settings.Default.RamMBS = rambox;
+            maxrambox = maxramtext.Text;
+            Properties.Settings.Default.RamMax = maxrambox;
             Properties.Settings.Default.Save();
-            MainWindows.Anamenu.ramlabell = Properties.Settings.Default.RamMBS;
+            maxramlabel.Text = Properties.Settings.Default.RamMax;
+
+            //GB Convert
+            if (Properties.Settings.Default.RamMax != string.Empty)
+            {
+                maxramlabel.Text = Properties.Settings.Default.RamMax;
+                try
+                {
+                    maxrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(maxramtext.Text) / 1024) + "GB";
+                }
+                catch
+                {
+                    maxrammb.Text = "Geçersiz Değer!";
+                }
+            }
+            else if (maxrammb.Text != "")
+            {
+                maxrammb.Text = "";
+            }
         }
 
 
@@ -355,6 +405,36 @@ namespace Projects_Launcher.MainWindows
             {
                 changelogst.Visible = false;
             }
+        }
+
+        private void minramtext_TextChanged(object sender, EventArgs e)
+        {
+            minrambox = minramtext.Text;
+            Properties.Settings.Default.RamMin = minrambox;
+            Properties.Settings.Default.Save();
+            minramlabel.Text = Properties.Settings.Default.RamMin;
+
+            //GB Convert
+            if (Properties.Settings.Default.RamMin != string.Empty)
+            {
+                try
+                {
+                    minrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(minramtext.Text) / 1024) + "GB";
+                }
+                catch
+                {
+                    minrammb.Text = "Geçersiz Değer!";
+                }
+            }
+            else if (maxrammb.Text != "")
+            {
+                minrammb.Text = "";
+            }
+        }
+
+        private void minramlabel_Click(object sender, EventArgs e)
+        {
+            minramlabell = minramlabel.Text;
         }
 
         private void oynabutton_MouseEnter(object sender, EventArgs e)

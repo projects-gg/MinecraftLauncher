@@ -61,6 +61,7 @@ namespace Projects_Launcher
             // 
             // benihatırla
             // 
+            this.benihatırla.Anchor = System.Windows.Forms.AnchorStyles.Top;
             this.benihatırla.Animated = true;
             this.benihatırla.AutoCheck = false;
             this.benihatırla.AutoSize = true;
@@ -87,6 +88,7 @@ namespace Projects_Launcher
             // 
             // label3
             // 
+            this.label3.Anchor = System.Windows.Forms.AnchorStyles.Top;
             this.label3.AutoSize = true;
             this.label3.BackColor = System.Drawing.Color.Transparent;
             this.label3.Cursor = System.Windows.Forms.Cursors.Hand;
@@ -101,9 +103,12 @@ namespace Projects_Launcher
             // 
             // girisyapbutton
             // 
+            this.girisyapbutton.Anchor = System.Windows.Forms.AnchorStyles.Top;
             this.girisyapbutton.Animated = true;
-            this.girisyapbutton.BackColor = System.Drawing.Color.Black;
-            this.girisyapbutton.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
+            this.girisyapbutton.BackColor = System.Drawing.Color.Transparent;
+            this.girisyapbutton.BorderColor = System.Drawing.Color.White;
+            this.girisyapbutton.BorderRadius = 5;
+            this.girisyapbutton.BorderThickness = 1;
             this.girisyapbutton.DisabledState.BorderColor = System.Drawing.Color.DarkGray;
             this.girisyapbutton.DisabledState.CustomBorderColor = System.Drawing.Color.DarkGray;
             this.girisyapbutton.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(169)))), ((int)(((byte)(169)))), ((int)(((byte)(169)))));
@@ -120,7 +125,8 @@ namespace Projects_Launcher
             // 
             // nicknametextbox
             // 
-            this.nicknametextbox.BackColor = System.Drawing.Color.Transparent;
+            this.nicknametextbox.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.nicknametextbox.BackColor = System.Drawing.Color.Tomato;
             this.nicknametextbox.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
             this.nicknametextbox.Cursor = System.Windows.Forms.Cursors.IBeam;
             this.nicknametextbox.DefaultText = "Kullanıcı Adı";
@@ -133,6 +139,7 @@ namespace Projects_Launcher
             this.nicknametextbox.Font = new System.Drawing.Font("Segoe UI", 14.25F);
             this.nicknametextbox.ForeColor = System.Drawing.Color.White;
             this.nicknametextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.nicknametextbox.IconLeft = global::Projects_Launcher.Properties.Resources.projects;
             this.nicknametextbox.Location = new System.Drawing.Point(380, 171);
             this.nicknametextbox.Margin = new System.Windows.Forms.Padding(4);
             this.nicknametextbox.Name = "nicknametextbox";
@@ -159,8 +166,10 @@ namespace Projects_Launcher
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AutoSize = true;
             this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
+            this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
             this.ClientSize = new System.Drawing.Size(980, 503);
             this.Controls.Add(this.raminfo);
             this.Controls.Add(this.benihatırla);
@@ -168,6 +177,7 @@ namespace Projects_Launcher
             this.Controls.Add(this.girisyapbutton);
             this.Controls.Add(this.nicknametextbox);
             this.Controls.Add(this.guna2ControlBox1);
+            this.DoubleBuffered = true;
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MaximizeBox = false;

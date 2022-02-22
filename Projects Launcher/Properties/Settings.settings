@@ -5,7 +5,7 @@
     <Setting Name="BeniHatırla" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
     </Setting>
-    <Setting Name="RamMBS" Type="System.String" Scope="User">
+    <Setting Name="RamMax" Type="System.String" Scope="User">
       <Value Profile="(Default)">4096</Value>
     </Setting>
     <Setting Name="ResolutionHeight" Type="System.String" Scope="User">
@@ -19,6 +19,9 @@
     </Setting>
     <Setting Name="NickNames" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="RamMin" Type="System.String" Scope="User">
+      <Value Profile="(Default)">2048</Value>
     </Setting>
   </Settings>
 </SettingsFile>
