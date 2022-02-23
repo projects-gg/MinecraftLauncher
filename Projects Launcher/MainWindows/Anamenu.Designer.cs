@@ -433,7 +433,7 @@ namespace Projects_Launcher.MainWindows
             this.panel213.Controls.Add(this.label1);
             this.panel213.Controls.Add(this.label8);
             this.panel213.Controls.Add(this.label22);
-            this.panel213.Location = new System.Drawing.Point(924, 119);
+            this.panel213.Location = new System.Drawing.Point(0, 28);
             this.panel213.Name = "panel213";
             this.panel213.Size = new System.Drawing.Size(980, 475);
             this.panel213.TabIndex = 133;
@@ -819,7 +819,10 @@ namespace Projects_Launcher.MainWindows
             this.Font = new System.Drawing.Font("Alesand Round ExtBd", 8.249999F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            this.MaximumSize = new System.Drawing.Size(980, 503);
+            this.MinimumSize = new System.Drawing.Size(980, 503);
             this.Name = "Anamenu";
+            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Anamenu";
             this.Load += new System.EventHandler(this.Anamenu_Load);
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();

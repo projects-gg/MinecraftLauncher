@@ -31,7 +31,7 @@
     <ProductName>Projects Launcher</ProductName>
     <PublisherName>Projects</PublisherName>
     <SuiteName>Projects_Launcher</SuiteName>
-    <ApplicationRevision>1</ApplicationRevision>
+    <ApplicationRevision>4</ApplicationRevision>
     <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>
@@ -72,7 +72,7 @@
     <ManifestCertificateThumbprint>F783675D08C4699B2B12DD76B798A62602413673</ManifestCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup>
-    <SignAssembly>true</SignAssembly>
+    <SignAssembly>false</SignAssembly>
   </PropertyGroup>
   <PropertyGroup>
     <TargetZone>LocalIntranet</TargetZone>
