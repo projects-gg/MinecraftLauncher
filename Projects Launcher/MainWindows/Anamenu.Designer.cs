@@ -59,6 +59,8 @@ namespace Projects_Launcher.MainWindows
             this.minramlabel = new System.Windows.Forms.Label();
             this.serverplayer = new System.Windows.Forms.Label();
             this.panel213 = new Guna.UI2.WinForms.Guna2Panel();
+            this.gamefolder = new System.Windows.Forms.Label();
+            this.texturepackaktar = new System.Windows.Forms.Label();
             this.texturepackfolder = new System.Windows.Forms.Label();
             this.mods = new System.Windows.Forms.Label();
             this.maxrammb = new System.Windows.Forms.Label();
@@ -78,8 +80,6 @@ namespace Projects_Launcher.MainWindows
             this.label1 = new System.Windows.Forms.Label();
             this.label8 = new System.Windows.Forms.Label();
             this.label22 = new System.Windows.Forms.Label();
-            this.texturepackaktar = new System.Windows.Forms.Label();
-            this.gamefolder = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ayarlarbutton)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.instagram)).BeginInit();
@@ -433,11 +433,43 @@ namespace Projects_Launcher.MainWindows
             this.panel213.Controls.Add(this.label1);
             this.panel213.Controls.Add(this.label8);
             this.panel213.Controls.Add(this.label22);
-            this.panel213.Location = new System.Drawing.Point(0, 28);
+            this.panel213.Location = new System.Drawing.Point(924, 119);
             this.panel213.Name = "panel213";
             this.panel213.Size = new System.Drawing.Size(980, 475);
             this.panel213.TabIndex = 133;
             this.panel213.Visible = false;
+            // 
+            // gamefolder
+            // 
+            this.gamefolder.AutoSize = true;
+            this.gamefolder.BackColor = System.Drawing.Color.Transparent;
+            this.gamefolder.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.gamefolder.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
+            this.gamefolder.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.gamefolder.Location = new System.Drawing.Point(178, 347);
+            this.gamefolder.Name = "gamefolder";
+            this.gamefolder.Size = new System.Drawing.Size(111, 21);
+            this.gamefolder.TabIndex = 181;
+            this.gamefolder.Text = "Oyun Klasörü";
+            this.gamefolder.Click += new System.EventHandler(this.gamefolder_Click);
+            this.gamefolder.MouseEnter += new System.EventHandler(this.gamefolder_MouseEnter);
+            this.gamefolder.MouseLeave += new System.EventHandler(this.gamefolder_MouseLeave);
+            // 
+            // texturepackaktar
+            // 
+            this.texturepackaktar.AutoSize = true;
+            this.texturepackaktar.BackColor = System.Drawing.Color.Transparent;
+            this.texturepackaktar.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.texturepackaktar.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
+            this.texturepackaktar.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.texturepackaktar.Location = new System.Drawing.Point(364, 347);
+            this.texturepackaktar.Name = "texturepackaktar";
+            this.texturepackaktar.Size = new System.Drawing.Size(148, 21);
+            this.texturepackaktar.TabIndex = 180;
+            this.texturepackaktar.Text = "Texturepack Aktar";
+            this.texturepackaktar.Click += new System.EventHandler(this.texturepackaktar_Click);
+            this.texturepackaktar.MouseEnter += new System.EventHandler(this.texturepackaktar_MouseEnter);
+            this.texturepackaktar.MouseLeave += new System.EventHandler(this.texturepackaktar_MouseLeave);
             // 
             // texturepackfolder
             // 
@@ -751,38 +783,6 @@ namespace Projects_Launcher.MainWindows
             this.label22.Size = new System.Drawing.Size(94, 29);
             this.label22.TabIndex = 158;
             this.label22.Text = "Ayarlar";
-            // 
-            // texturepackaktar
-            // 
-            this.texturepackaktar.AutoSize = true;
-            this.texturepackaktar.BackColor = System.Drawing.Color.Transparent;
-            this.texturepackaktar.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.texturepackaktar.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
-            this.texturepackaktar.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.texturepackaktar.Location = new System.Drawing.Point(364, 347);
-            this.texturepackaktar.Name = "texturepackaktar";
-            this.texturepackaktar.Size = new System.Drawing.Size(148, 21);
-            this.texturepackaktar.TabIndex = 180;
-            this.texturepackaktar.Text = "Texturepack Aktar";
-            this.texturepackaktar.Click += new System.EventHandler(this.texturepackaktar_Click);
-            this.texturepackaktar.MouseEnter += new System.EventHandler(this.texturepackaktar_MouseEnter);
-            this.texturepackaktar.MouseLeave += new System.EventHandler(this.texturepackaktar_MouseLeave);
-            // 
-            // gamefolder
-            // 
-            this.gamefolder.AutoSize = true;
-            this.gamefolder.BackColor = System.Drawing.Color.Transparent;
-            this.gamefolder.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.gamefolder.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
-            this.gamefolder.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.gamefolder.Location = new System.Drawing.Point(178, 347);
-            this.gamefolder.Name = "gamefolder";
-            this.gamefolder.Size = new System.Drawing.Size(111, 21);
-            this.gamefolder.TabIndex = 181;
-            this.gamefolder.Text = "Oyun Klasörü";
-            this.gamefolder.Click += new System.EventHandler(this.gamefolder_Click);
-            this.gamefolder.MouseEnter += new System.EventHandler(this.gamefolder_MouseEnter);
-            this.gamefolder.MouseLeave += new System.EventHandler(this.gamefolder_MouseLeave);
             // 
             // Anamenu
             // 

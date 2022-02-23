@@ -12,6 +12,7 @@ using System.Net.NetworkInformation;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using CmlLib.Core.Downloader;
 
 namespace Projects_Launcher.MainWindows
 {
@@ -60,6 +61,8 @@ namespace Projects_Launcher.MainWindows
 
         Random rnd = new Random();
         int x, y, z;
+
+        private int uiThreadId = Thread.CurrentThread.ManagedThreadId;
         private void Anamenu_Load(object sender, EventArgs e)
         {
             nickname1.Text = ProjectsLauncherLogin.nickname;
@@ -109,7 +112,6 @@ namespace Projects_Launcher.MainWindows
                 skin.Image = Bitmap.FromStream(stream);
             }
         }
-
         public void path()
         {
             System.Net.ServicePointManager.DefaultConnectionLimit = 256;
