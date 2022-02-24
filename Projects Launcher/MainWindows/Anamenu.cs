@@ -50,8 +50,8 @@ namespace Projects_Launcher.MainWindows
 
         int pingsayac;
 
-        public static string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/resourcepacks";
-        string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft";
+        public static string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/resourcepacks";
+        string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
 
         Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
 
@@ -128,20 +128,11 @@ namespace Projects_Launcher.MainWindows
         }
         public async void Launch()
         {
-
-            //var path = new MinecraftPath();
-
-
-
             var path = new MinecraftPath(launcherdizin);
             var launcher = new CMLauncher(path);
             //versiyon = versiyonselect.SelectedItem.ToString();
             sessions = ProjectsLauncherLogin.nickname;
-
-            launcher.FileChanged += (e) =>
-            {
-                //log.Text = (string.Format("[{0}] {1} - {2}/{3}", e.FileKind.ToString(), e.FileName, e.ProgressedFileCount, e.TotalFileCount));
-            };
+            //var path = new MinecraftPath();
 
             var ayarlar = new MLaunchOption
             {
@@ -157,22 +148,40 @@ namespace Projects_Launcher.MainWindows
             clientStartProcess.Start();
 
         }
+
+        
         private void oynabutton_Click(object sender, EventArgs e)
         {
-            string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/versions/" + Properties.Settings.Default.SelectedVersion;
+            string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/" + Properties.Settings.Default.SelectedVersion;
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
             Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
-            if (Directory.Exists(@surum_appDataDizini))
+
+                if (Directory.Exists(@surum_appDataDizini))
             {
+                try
+                {
+                    session = MSession.GetOfflineSession(ProjectsLauncherLogin.nickname);
 
-                session = MSession.GetOfflineSession(ProjectsLauncherLogin.nickname);
+                    Thread thread = new Thread(() => Launch());
+                    thread.IsBackground = true;
+                    thread.Start();
 
-                Thread thread = new Thread(() => Launch());
-                thread.IsBackground = true;
-                thread.Start();
+                    timer1.Enabled = true;
+                    this.Enabled = false;
 
-                timer1.Enabled = true;
+                }
+                catch
+                {
+                    DialogResult secenek = MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi", MessageBoxButtons.OK);
+
+                    if (secenek == DialogResult.OK)
+                    {
+                     
+                    }
+                    this.Enabled = true;
+                }
+               
 
             }
             else
@@ -184,17 +193,19 @@ namespace Projects_Launcher.MainWindows
                 {
                     WebClient wc = new WebClient();
                     wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-                    wc.DownloadFileAsync(fabric, appDataDizini + "/.minecraft/fabric-installer-0.10.2.jar");
+                    wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-installer-0.10.2.jar");
                 }
                 else if (secenek == DialogResult.No)
                 {
                     //Hayır seçeneğine tıklandığında çalıştırılacak kodlar
                 }
             }
+
+       
         }
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/fabric-installer-0.10.2.jar";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/fabric-installer-0.10.2.jar";
 
             string myPath = @appDataDizini;
             System.Diagnostics.Process prc = new System.Diagnostics.Process();
@@ -211,15 +222,19 @@ namespace Projects_Launcher.MainWindows
                 oynabutton.Text = "Başlatılıyor...";
                 oynabutton.Enabled = false;
                 this.Visible = false;
+
+                if (!Process.GetProcessesByName("javaw").Any())
+                {
+                    oynabutton.Text = "Oyna";
+                    oynabutton.Enabled = true;
+                    this.Visible = true;
+                    this.Enabled = true;
+                }
             }
+            
 
 
-            if (!Process.GetProcessesByName("javaw").Any())
-            {
-                oynabutton.Text = "Oyna";
-                oynabutton.Enabled = true;
-                this.Visible = true;
-            }
+           
         }
 
         private void ayarlarbutton_Click(object sender, EventArgs e)
@@ -251,14 +266,14 @@ namespace Projects_Launcher.MainWindows
             try
             {
                 //ping
-                pingsayac++;
+                //pingsayac++;
 
-                string a, b, c;
-                PingReply pr = p.Send("mc.projects.gg");
-                a = pr.Status.ToString();
-                b = pr.Address.ToString();
-                c = pr.RoundtripTime.ToString();
-                pingsayacc.Text = string.Format("{2} ms", a, b, c);
+                //string a, b, c;
+                //PingReply pr = p.Send("mc.projects.gg");
+                //a = pr.Status.ToString();
+                //b = pr.Address.ToString();
+                //c = pr.RoundtripTime.ToString();
+                //pingsayacc.Text = string.Format("{2} ms", a, b, c);
 
                 //player
                 await ServerStatus();
@@ -482,7 +497,7 @@ namespace Projects_Launcher.MainWindows
 
         private void mods_Click(object sender, EventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/mods";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/mods";
 
             if (Directory.Exists(@appDataDizini))
             {
@@ -588,7 +603,7 @@ namespace Projects_Launcher.MainWindows
 
         private void gamefolder_Click(object sender, EventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
 
             if (Directory.Exists(@appDataDizini))
             {

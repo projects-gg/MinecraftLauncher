@@ -14,7 +14,8 @@ namespace Projects_Launcher
             InitializeComponent();
         }
         public static string nickname;
-        public int v = 3;
+        public int v = 5;
+        public string s;
         Uri setup = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/setup.exe");
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
@@ -34,23 +35,46 @@ namespace Projects_Launcher
             string gelenbilgileri = gelen.Substring(baslangic, bitis);
             v = Convert.ToInt16(gelenbilgileri);
 
-            if (v == 3)
+            try
+            {
+                if (v == 5)
+                {
+
+                }
+                else
+                {
+                    DialogResult secenek = MessageBox.Show($@"Yeni Sürüm: {v}" + "\n" + "" + "\n" + "Yeni sürüme güncellensin mi?", "Güncelleme Mevcut",
+                          MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
+
+                    if (secenek == DialogResult.Yes)
+                    {
+                        this.Enabled = false;
+                        WebClient wc = new WebClient();
+                        wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
+                        wc.DownloadFileAsync(setup,
+                            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/setup.exe");
+                    }
+                }
+            }
+            catch
+            {
+                DialogResult secenek = MessageBox.Show($@"Güncelleme bilgileri alınamadı.", "Bilgi",
+                          MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
+
+                if (secenek == DialogResult.OK)
+                {
+                  
+                }
+            }
+
+            //projects kontrol
+            if (Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects"))
             {
 
             }
             else
             {
-                DialogResult secenek = MessageBox.Show($@"Yeni Sürüm: {v}" + "\n" + "" + "\n" + "Yeni sürüme güncellensin mi?", "Güncelleme Mevcut",
-                      MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
-
-                if (secenek == DialogResult.Yes)
-                {
-                    this.Enabled = false;
-                    WebClient wc = new WebClient();
-                    wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-                    wc.DownloadFileAsync(setup,
-                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/setup.exe");
-                }
+                Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects");
             }
 
         }
@@ -131,8 +155,8 @@ namespace Projects_Launcher
 
         private void guna2Button1_Click(object sender, EventArgs e)
         {
-            string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft/mods.zip";
-            string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.minecraft";
+            string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/mods.zip";
+            string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
         }
     }
 }

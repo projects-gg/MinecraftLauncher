@@ -433,7 +433,7 @@ namespace Projects_Launcher.MainWindows
             this.panel213.Controls.Add(this.label1);
             this.panel213.Controls.Add(this.label8);
             this.panel213.Controls.Add(this.label22);
-            this.panel213.Location = new System.Drawing.Point(0, 28);
+            this.panel213.Location = new System.Drawing.Point(935, 35);
             this.panel213.Name = "panel213";
             this.panel213.Size = new System.Drawing.Size(980, 475);
             this.panel213.TabIndex = 133;
@@ -614,7 +614,7 @@ namespace Projects_Launcher.MainWindows
             this.surumsec.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(68)))), ((int)(((byte)(88)))), ((int)(((byte)(112)))));
             this.surumsec.ItemHeight = 30;
             this.surumsec.Items.AddRange(new object[] {
-            "fabric-loader-0.13.2-1.18.1",
+            "fabric-loader-0.13.3-1.18.1",
             "1.18.1",
             "1.17.1",
             "1.16.5",
