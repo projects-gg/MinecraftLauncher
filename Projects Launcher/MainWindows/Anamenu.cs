@@ -247,18 +247,28 @@ namespace Projects_Launcher.MainWindows
 
         private async void timer2_Tick(object sender, EventArgs e)
         {
-            //ping
-            pingsayac++;
+            
+            try
+            {
+                //ping
+                pingsayac++;
 
-            string a, b, c;
-            PingReply pr = p.Send("mc.projects.gg");
-            a = pr.Status.ToString();
-            b = pr.Address.ToString();
-            c = pr.RoundtripTime.ToString();
-            pingsayacc.Text = string.Format("{2} ms", a, b, c);
+                string a, b, c;
+                PingReply pr = p.Send("mc.projects.gg");
+                a = pr.Status.ToString();
+                b = pr.Address.ToString();
+                c = pr.RoundtripTime.ToString();
+                pingsayacc.Text = string.Format("{2} ms", a, b, c);
 
-            //player
-            await ServerStatus();
+                //player
+                await ServerStatus();
+            }
+            catch
+            {
+
+            }
+
+            
         }
 
         private void guna2ControlBox1_Click(object sender, EventArgs e)

@@ -113,7 +113,7 @@ namespace Projects_Launcher.MainWindows
             this.oynabutton.Cursor = System.Windows.Forms.Cursors.Hand;
             this.oynabutton.Font = new System.Drawing.Font("Alesand Round ExtBd", 18F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.oynabutton.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.oynabutton.Location = new System.Drawing.Point(50, 427);
+            this.oynabutton.Location = new System.Drawing.Point(47, 427);
             this.oynabutton.Name = "oynabutton";
             this.oynabutton.Size = new System.Drawing.Size(66, 28);
             this.oynabutton.TabIndex = 1;
@@ -152,7 +152,7 @@ namespace Projects_Launcher.MainWindows
             this.label4.BackColor = System.Drawing.Color.Transparent;
             this.label4.Font = new System.Drawing.Font("Alesand Round ExtBd", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.label4.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.label4.Location = new System.Drawing.Point(702, 433);
+            this.label4.Location = new System.Drawing.Point(697, 433);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(40, 18);
             this.label4.TabIndex = 4;
