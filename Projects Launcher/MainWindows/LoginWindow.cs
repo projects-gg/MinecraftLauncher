@@ -14,8 +14,7 @@ namespace Projects_Launcher
             InitializeComponent();
         }
         public static string nickname;
-        public int v = 5;
-        public string s;
+        public int v = 6;
         Uri setup = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/setup.exe");
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
@@ -37,7 +36,7 @@ namespace Projects_Launcher
 
             try
             {
-                if (v == 5)
+                if (v == 6)
                 {
 
                 }

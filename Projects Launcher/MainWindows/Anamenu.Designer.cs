@@ -144,7 +144,7 @@ namespace Projects_Launcher.MainWindows
             this.surumt.Name = "surumt";
             this.surumt.Size = new System.Drawing.Size(189, 18);
             this.surumt.TabIndex = 3;
-            this.surumt.Text = "fabric-loader-0.13.2-1.18.1";
+            this.surumt.Text = "fabric-loader-0.13.3-1.18.1";
             // 
             // label4
             // 
@@ -433,7 +433,7 @@ namespace Projects_Launcher.MainWindows
             this.panel213.Controls.Add(this.label1);
             this.panel213.Controls.Add(this.label8);
             this.panel213.Controls.Add(this.label22);
-            this.panel213.Location = new System.Drawing.Point(935, 35);
+            this.panel213.Location = new System.Drawing.Point(0, 28);
             this.panel213.Name = "panel213";
             this.panel213.Size = new System.Drawing.Size(980, 475);
             this.panel213.TabIndex = 133;
