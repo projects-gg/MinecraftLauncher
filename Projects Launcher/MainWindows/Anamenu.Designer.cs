@@ -111,11 +111,11 @@ namespace Projects_Launcher.MainWindows
             this.oynabutton.AutoSize = true;
             this.oynabutton.BackColor = System.Drawing.Color.Transparent;
             this.oynabutton.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.oynabutton.Font = new System.Drawing.Font("Alesand Round ExtBd", 18F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.oynabutton.Font = new System.Drawing.Font("Arial", 15F, System.Drawing.FontStyle.Bold);
             this.oynabutton.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.oynabutton.Location = new System.Drawing.Point(47, 427);
+            this.oynabutton.Location = new System.Drawing.Point(56, 428);
             this.oynabutton.Name = "oynabutton";
-            this.oynabutton.Size = new System.Drawing.Size(66, 28);
+            this.oynabutton.Size = new System.Drawing.Size(66, 24);
             this.oynabutton.TabIndex = 1;
             this.oynabutton.Text = "OYNA";
             this.oynabutton.Click += new System.EventHandler(this.oynabutton_Click);
@@ -138,11 +138,11 @@ namespace Projects_Launcher.MainWindows
             // 
             this.surumt.AutoSize = true;
             this.surumt.BackColor = System.Drawing.Color.Transparent;
-            this.surumt.Font = new System.Drawing.Font("Alesand", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.surumt.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.surumt.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.surumt.Location = new System.Drawing.Point(148, 434);
+            this.surumt.Location = new System.Drawing.Point(141, 430);
             this.surumt.Name = "surumt";
-            this.surumt.Size = new System.Drawing.Size(189, 18);
+            this.surumt.Size = new System.Drawing.Size(194, 18);
             this.surumt.TabIndex = 3;
             this.surumt.Text = "fabric-loader-0.13.3-1.18.1";
             // 
@@ -150,11 +150,11 @@ namespace Projects_Launcher.MainWindows
             // 
             this.label4.AutoSize = true;
             this.label4.BackColor = System.Drawing.Color.Transparent;
-            this.label4.Font = new System.Drawing.Font("Alesand Round ExtBd", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label4.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Bold);
             this.label4.ForeColor = System.Drawing.Color.WhiteSmoke;
             this.label4.Location = new System.Drawing.Point(697, 433);
             this.label4.Name = "label4";
-            this.label4.Size = new System.Drawing.Size(40, 18);
+            this.label4.Size = new System.Drawing.Size(48, 19);
             this.label4.TabIndex = 4;
             this.label4.Text = "PING";
             // 
@@ -162,11 +162,11 @@ namespace Projects_Launcher.MainWindows
             // 
             this.pingsayacc.AutoSize = true;
             this.pingsayacc.BackColor = System.Drawing.Color.Transparent;
-            this.pingsayacc.Font = new System.Drawing.Font("Alesand", 9.749999F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.pingsayacc.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.pingsayacc.ForeColor = System.Drawing.SystemColors.ActiveBorder;
             this.pingsayacc.Location = new System.Drawing.Point(743, 436);
             this.pingsayacc.Name = "pingsayacc";
-            this.pingsayacc.Size = new System.Drawing.Size(43, 15);
+            this.pingsayacc.Size = new System.Drawing.Size(50, 16);
             this.pingsayacc.TabIndex = 5;
             this.pingsayacc.Text = "xxx ms";
             // 
@@ -186,11 +186,11 @@ namespace Projects_Launcher.MainWindows
             // 
             this.nickname1.AutoSize = true;
             this.nickname1.BackColor = System.Drawing.Color.Transparent;
-            this.nickname1.Font = new System.Drawing.Font("Alesand Round ExtBd", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.nickname1.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Bold);
             this.nickname1.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.nickname1.Location = new System.Drawing.Point(818, 437);
+            this.nickname1.Location = new System.Drawing.Point(809, 437);
             this.nickname1.Name = "nickname1";
-            this.nickname1.Size = new System.Drawing.Size(86, 18);
+            this.nickname1.Size = new System.Drawing.Size(95, 19);
             this.nickname1.TabIndex = 7;
             this.nickname1.Text = "{nickname}";
             // 
@@ -373,11 +373,11 @@ namespace Projects_Launcher.MainWindows
             this.changelogs.AutoSize = true;
             this.changelogs.BackColor = System.Drawing.Color.Transparent;
             this.changelogs.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.changelogs.Font = new System.Drawing.Font("Alesand Round ExtBd", 18F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.changelogs.Font = new System.Drawing.Font("Arial", 14F, System.Drawing.FontStyle.Bold);
             this.changelogs.ForeColor = System.Drawing.Color.Transparent;
-            this.changelogs.Location = new System.Drawing.Point(444, 424);
+            this.changelogs.Location = new System.Drawing.Point(452, 428);
             this.changelogs.Name = "changelogs";
-            this.changelogs.Size = new System.Drawing.Size(139, 28);
+            this.changelogs.Size = new System.Drawing.Size(122, 22);
             this.changelogs.TabIndex = 130;
             this.changelogs.Text = "Changelogs";
             this.changelogs.Click += new System.EventHandler(this.changelogs_Click);
