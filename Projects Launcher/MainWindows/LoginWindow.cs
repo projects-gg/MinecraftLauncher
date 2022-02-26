@@ -144,11 +144,13 @@ namespace Projects_Launcher
                     Properties.Settings.Default.Save();
                 }
                 girisyapbutton.Text = "Giriş Yap";
+                girisyapbutton.Enabled = true;
                 return;
             }
             else
             {
                 girisyapbutton.Text = "Kullanıcı Adı Giriniz";
+                girisyapbutton.Enabled = false;
             }
         }
 

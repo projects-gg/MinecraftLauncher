@@ -31,7 +31,6 @@ namespace Projects_Launcher.MainWindows
         {
             this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Anamenu));
-            this.guna2BorderlessForm1 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.guna2PictureBox1 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.oynabutton = new System.Windows.Forms.Label();
             this.label2 = new System.Windows.Forms.Label();
@@ -51,12 +50,10 @@ namespace Projects_Launcher.MainWindows
             this.timer2 = new System.Windows.Forms.Timer(this.components);
             this.guna2ControlBox1 = new Guna.UI2.WinForms.Guna2ControlBox();
             this.geriformpanel = new System.Windows.Forms.Label();
-            this.guna2BorderlessForm2 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
-            this.changelogst = new System.Windows.Forms.Label();
-            this.changelogs = new System.Windows.Forms.Label();
             this.minramlabel = new System.Windows.Forms.Label();
             this.serverplayer = new System.Windows.Forms.Label();
             this.panel213 = new Guna.UI2.WinForms.Guna2Panel();
+            this.label4 = new System.Windows.Forms.Label();
             this.gamefolder = new System.Windows.Forms.Label();
             this.texturepackaktar = new System.Windows.Forms.Label();
             this.texturepackfolder = new System.Windows.Forms.Label();
@@ -86,12 +83,6 @@ namespace Projects_Launcher.MainWindows
             ((System.ComponentModel.ISupportInitialize)(this.skin)).BeginInit();
             this.panel213.SuspendLayout();
             this.SuspendLayout();
-            // 
-            // guna2BorderlessForm1
-            // 
-            this.guna2BorderlessForm1.ContainerControl = this;
-            this.guna2BorderlessForm1.DockIndicatorTransparencyValue = 0.6D;
-            this.guna2BorderlessForm1.TransparentWhileDrag = true;
             // 
             // guna2PictureBox1
             // 
@@ -325,42 +316,6 @@ namespace Projects_Launcher.MainWindows
             this.geriformpanel.MouseEnter += new System.EventHandler(this.geriformpanel_MouseEnter);
             this.geriformpanel.MouseLeave += new System.EventHandler(this.geriformpanel_MouseLeave);
             // 
-            // guna2BorderlessForm2
-            // 
-            this.guna2BorderlessForm2.ContainerControl = this;
-            this.guna2BorderlessForm2.DockIndicatorTransparencyValue = 0.6D;
-            this.guna2BorderlessForm2.TransparentWhileDrag = true;
-            // 
-            // changelogst
-            // 
-            this.changelogst.AutoSize = true;
-            this.changelogst.BackColor = System.Drawing.Color.Transparent;
-            this.changelogst.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.changelogst.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.changelogst.Location = new System.Drawing.Point(145, 45);
-            this.changelogst.Name = "changelogst";
-            this.changelogst.Size = new System.Drawing.Size(640, 224);
-            this.changelogst.TabIndex = 129;
-            this.changelogst.Text = resources.GetString("changelogst.Text");
-            this.changelogst.Visible = false;
-            this.changelogst.Click += new System.EventHandler(this.changelogst_Click);
-            // 
-            // changelogs
-            // 
-            this.changelogs.AutoSize = true;
-            this.changelogs.BackColor = System.Drawing.Color.Transparent;
-            this.changelogs.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.changelogs.Font = new System.Drawing.Font("Arial", 14F, System.Drawing.FontStyle.Bold);
-            this.changelogs.ForeColor = System.Drawing.Color.Transparent;
-            this.changelogs.Location = new System.Drawing.Point(452, 428);
-            this.changelogs.Name = "changelogs";
-            this.changelogs.Size = new System.Drawing.Size(122, 22);
-            this.changelogs.TabIndex = 130;
-            this.changelogs.Text = "Changelogs";
-            this.changelogs.Click += new System.EventHandler(this.changelogs_Click);
-            this.changelogs.MouseEnter += new System.EventHandler(this.changelogs_MouseEnter);
-            this.changelogs.MouseLeave += new System.EventHandler(this.changelogs_MouseLeave);
-            // 
             // minramlabel
             // 
             this.minramlabel.AutoSize = true;
@@ -389,6 +344,7 @@ namespace Projects_Launcher.MainWindows
             // panel213
             // 
             this.panel213.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("panel213.BackgroundImage")));
+            this.panel213.Controls.Add(this.label4);
             this.panel213.Controls.Add(this.gamefolder);
             this.panel213.Controls.Add(this.texturepackaktar);
             this.panel213.Controls.Add(this.texturepackfolder);
@@ -415,6 +371,19 @@ namespace Projects_Launcher.MainWindows
             this.panel213.Size = new System.Drawing.Size(980, 475);
             this.panel213.TabIndex = 133;
             this.panel213.Visible = false;
+            // 
+            // label4
+            // 
+            this.label4.AutoSize = true;
+            this.label4.BackColor = System.Drawing.Color.Transparent;
+            this.label4.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.label4.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
+            this.label4.ForeColor = System.Drawing.SystemColors.Control;
+            this.label4.Location = new System.Drawing.Point(235, 166);
+            this.label4.Name = "label4";
+            this.label4.Size = new System.Drawing.Size(19, 21);
+            this.label4.TabIndex = 183;
+            this.label4.Text = "x";
             // 
             // gamefolder
             // 
@@ -649,7 +618,7 @@ namespace Projects_Launcher.MainWindows
             this.heighttextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
             this.heighttextbox.Font = new System.Drawing.Font("Arial", 12F);
             this.heighttextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.heighttextbox.Location = new System.Drawing.Point(261, 168);
+            this.heighttextbox.Location = new System.Drawing.Point(261, 167);
             this.heighttextbox.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.heighttextbox.MaxLength = 4;
             this.heighttextbox.Name = "heighttextbox";
@@ -772,8 +741,6 @@ namespace Projects_Launcher.MainWindows
             this.Controls.Add(this.panel213);
             this.Controls.Add(this.serverplayer);
             this.Controls.Add(this.minramlabel);
-            this.Controls.Add(this.changelogs);
-            this.Controls.Add(this.changelogst);
             this.Controls.Add(this.geriformpanel);
             this.Controls.Add(this.guna2ControlBox1);
             this.Controls.Add(this.surumtext);
@@ -814,8 +781,6 @@ namespace Projects_Launcher.MainWindows
         }
 
         #endregion
-
-        private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm1;
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox1;
         private System.Windows.Forms.Label oynabutton;
         private System.Windows.Forms.Label surumt;
@@ -835,9 +800,6 @@ namespace Projects_Launcher.MainWindows
         private System.Windows.Forms.Timer timer2;
         private Guna.UI2.WinForms.Guna2ControlBox guna2ControlBox1;
         private System.Windows.Forms.Label geriformpanel;
-        private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm2;
-        private System.Windows.Forms.Label changelogs;
-        private System.Windows.Forms.Label changelogst;
         public System.Windows.Forms.Label minramlabel;
         private System.Windows.Forms.Label serverplayer;
         private Guna.UI2.WinForms.Guna2Panel panel213;
@@ -862,5 +824,6 @@ namespace Projects_Launcher.MainWindows
         private System.Windows.Forms.Label mods;
         private System.Windows.Forms.Label texturepackaktar;
         private System.Windows.Forms.Label gamefolder;
+        private System.Windows.Forms.Label label4;
     }
 }

@@ -185,7 +185,7 @@ namespace Projects_Launcher.MainWindows
         
         private void oynabutton_Click(object sender, EventArgs e)
         {
-            string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/" + Properties.Settings.Default.SelectedVersion;
+            string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/fabric-loader-0.13.3-1.18.1";
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
             Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
@@ -445,19 +445,6 @@ namespace Projects_Launcher.MainWindows
         {
             oynabutton.ForeColor = Color.FromArgb(245, 245, 245);
         }
-
-        private void changelogs_Click(object sender, EventArgs e)
-        {
-            if (changelogst.Visible == false)
-            {
-                changelogst.Visible = true;
-            }
-            else
-            {
-                changelogst.Visible = false;
-            }
-        }
-
         private void minramtext_TextChanged(object sender, EventArgs e)
         {
             minrambox = minramtext.Text;
