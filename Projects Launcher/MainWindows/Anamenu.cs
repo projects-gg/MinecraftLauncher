@@ -81,21 +81,54 @@ namespace Projects_Launcher.MainWindows
             {
                 maxramtext.Text = Properties.Settings.Default.RamMax;
             }
+            if (Properties.Settings.Default.RamMax != string.Empty)
+            {
+                maxramlabel.Text = Properties.Settings.Default.RamMax;
+                try
+                {
+                    maxrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(maxramtext.Text) / 1024) + "GB";
+                }
+                catch
+                {
+                    maxrammb.Text = "Geçersiz Değer!";
+                }
+            }
+            else if (maxrammb.Text != "")
+            {
+                maxrammb.Text = "";
+            }
             maxramtext.MaxLength = 4;
+
+
             if (Properties.Settings.Default.RamMin != string.Empty)
             {
                 minramtext.Text = Properties.Settings.Default.RamMin;
+            }
+            if (Properties.Settings.Default.RamMin != string.Empty)
+            {
+                try
+                {
+                    minrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(minramtext.Text) / 1024) + "GB";
+                }
+                catch
+                {
+                    minrammb.Text = "Geçersiz Değer!";
+                }
+            }
+            else if (maxrammb.Text != "")
+            {
+                minrammb.Text = "";
             }
             minramtext.MaxLength = 4;
 
             //Resolution
             if (Properties.Settings.Default.ResolutionHeight != string.Empty)
             {
-                heighttextbox.Text = Properties.Settings.Default.ResolutionHeight;
+                widthtextbox.Text = Properties.Settings.Default.ResolutionHeight;
             }
             if (Properties.Settings.Default.ResolutionWidth != string.Empty)
             {
-                widthtextbox.Text = Properties.Settings.Default.ResolutionWidth;
+                heighttextbox.Text = Properties.Settings.Default.ResolutionWidth;
             }
 
             //versiyon
@@ -167,8 +200,10 @@ namespace Projects_Launcher.MainWindows
                     thread.IsBackground = true;
                     thread.Start();
 
+                    surumt.Text = "Başlatılıyor...";
                     timer1.Enabled = true;
                     this.Enabled = false;
+                    
 
                 }
                 catch
@@ -180,6 +215,12 @@ namespace Projects_Launcher.MainWindows
                      
                     }
                     this.Enabled = true;
+
+                    if (Properties.Settings.Default.SelectedVersion != string.Empty)
+                    {
+                        surumt.Text = Properties.Settings.Default.SelectedVersion;
+                    }
+
                 }
                
 
@@ -219,22 +260,13 @@ namespace Projects_Launcher.MainWindows
 
             foreach (var process in Process.GetProcessesByName("javaw"))
             {
-                oynabutton.Text = "Başlatılıyor...";
+                surumt.Text = "Başlatılıyor...";
                 oynabutton.Enabled = false;
                 this.Visible = false;
+                Environment.Exit(0);
 
-                if (!Process.GetProcessesByName("javaw").Any())
-                {
-                    oynabutton.Text = "Oyna";
-                    oynabutton.Enabled = true;
-                    this.Visible = true;
-                    this.Enabled = true;
-                }
+                
             }
-            
-
-
-           
         }
 
         private void ayarlarbutton_Click(object sender, EventArgs e)
@@ -324,7 +356,7 @@ namespace Projects_Launcher.MainWindows
 
         private void widthtextbox_TextChanged(object sender, EventArgs e)
         {
-            widthbox = widthtextbox.Text;
+            widthbox = heighttextbox.Text;
             Properties.Settings.Default.ResolutionWidth = widthbox;
             Properties.Settings.Default.Save();
             MainWindows.Anamenu.widthlabell = Properties.Settings.Default.ResolutionWidth;
@@ -332,7 +364,7 @@ namespace Projects_Launcher.MainWindows
 
         private void heighttextbox_TextChanged(object sender, EventArgs e)
         {
-            heightbox = widthtextbox.Text;
+            heightbox = heighttextbox.Text;
             Properties.Settings.Default.ResolutionHeight = heightbox;
             Properties.Settings.Default.Save();
             MainWindows.Anamenu.heightlabell = Properties.Settings.Default.ResolutionHeight;
@@ -636,6 +668,11 @@ namespace Projects_Launcher.MainWindows
         private void gamefolder_MouseLeave(object sender, EventArgs e)
         {
             gamefolder.ForeColor = Color.FromArgb(245, 245, 245);
+        }
+
+        private void changelogst_Click(object sender, EventArgs e)
+        {
+
         }
 
         private void oynabutton_MouseEnter(object sender, EventArgs e)

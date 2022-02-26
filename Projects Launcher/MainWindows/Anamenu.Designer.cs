@@ -36,8 +36,6 @@ namespace Projects_Launcher.MainWindows
             this.oynabutton = new System.Windows.Forms.Label();
             this.label2 = new System.Windows.Forms.Label();
             this.surumt = new System.Windows.Forms.Label();
-            this.label4 = new System.Windows.Forms.Label();
-            this.pingsayacc = new System.Windows.Forms.Label();
             this.label6 = new System.Windows.Forms.Label();
             this.nickname1 = new System.Windows.Forms.Label();
             this.ayarlarbutton = new Guna.UI2.WinForms.Guna2PictureBox();
@@ -71,8 +69,8 @@ namespace Projects_Launcher.MainWindows
             this.label3 = new System.Windows.Forms.Label();
             this.ramMbToGbCalc = new System.Windows.Forms.Label();
             this.surumsec = new Guna.UI2.WinForms.Guna2ComboBox();
-            this.heighttextbox = new Guna.UI2.WinForms.Guna2TextBox();
             this.widthtextbox = new Guna.UI2.WinForms.Guna2TextBox();
+            this.heighttextbox = new Guna.UI2.WinForms.Guna2TextBox();
             this.label13 = new System.Windows.Forms.Label();
             this.maxramtext = new Guna.UI2.WinForms.Guna2TextBox();
             this.mbLabel = new System.Windows.Forms.Label();
@@ -115,9 +113,11 @@ namespace Projects_Launcher.MainWindows
             this.oynabutton.ForeColor = System.Drawing.Color.WhiteSmoke;
             this.oynabutton.Location = new System.Drawing.Point(56, 428);
             this.oynabutton.Name = "oynabutton";
+            this.oynabutton.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
             this.oynabutton.Size = new System.Drawing.Size(66, 24);
             this.oynabutton.TabIndex = 1;
             this.oynabutton.Text = "OYNA";
+            this.oynabutton.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             this.oynabutton.Click += new System.EventHandler(this.oynabutton_Click);
             this.oynabutton.MouseEnter += new System.EventHandler(this.oynabutton_MouseEnter);
             this.oynabutton.MouseLeave += new System.EventHandler(this.oynabutton_MouseLeave);
@@ -145,30 +145,6 @@ namespace Projects_Launcher.MainWindows
             this.surumt.Size = new System.Drawing.Size(194, 18);
             this.surumt.TabIndex = 3;
             this.surumt.Text = "fabric-loader-0.13.3-1.18.1";
-            // 
-            // label4
-            // 
-            this.label4.AutoSize = true;
-            this.label4.BackColor = System.Drawing.Color.Transparent;
-            this.label4.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Bold);
-            this.label4.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.label4.Location = new System.Drawing.Point(697, 433);
-            this.label4.Name = "label4";
-            this.label4.Size = new System.Drawing.Size(48, 19);
-            this.label4.TabIndex = 4;
-            this.label4.Text = "PING";
-            // 
-            // pingsayacc
-            // 
-            this.pingsayacc.AutoSize = true;
-            this.pingsayacc.BackColor = System.Drawing.Color.Transparent;
-            this.pingsayacc.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.pingsayacc.ForeColor = System.Drawing.SystemColors.ActiveBorder;
-            this.pingsayacc.Location = new System.Drawing.Point(743, 436);
-            this.pingsayacc.Name = "pingsayacc";
-            this.pingsayacc.Size = new System.Drawing.Size(50, 16);
-            this.pingsayacc.TabIndex = 5;
-            this.pingsayacc.Text = "xxx ms";
             // 
             // label6
             // 
@@ -367,6 +343,7 @@ namespace Projects_Launcher.MainWindows
             this.changelogst.TabIndex = 129;
             this.changelogst.Text = resources.GetString("changelogst.Text");
             this.changelogst.Visible = false;
+            this.changelogst.Click += new System.EventHandler(this.changelogst_Click);
             // 
             // changelogs
             // 
@@ -403,7 +380,7 @@ namespace Projects_Launcher.MainWindows
             this.serverplayer.BackColor = System.Drawing.Color.Transparent;
             this.serverplayer.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.serverplayer.ForeColor = System.Drawing.SystemColors.ActiveBorder;
-            this.serverplayer.Location = new System.Drawing.Point(702, 451);
+            this.serverplayer.Location = new System.Drawing.Point(701, 437);
             this.serverplayer.Name = "serverplayer";
             this.serverplayer.Size = new System.Drawing.Size(85, 16);
             this.serverplayer.TabIndex = 120;
@@ -424,8 +401,8 @@ namespace Projects_Launcher.MainWindows
             this.panel213.Controls.Add(this.label3);
             this.panel213.Controls.Add(this.ramMbToGbCalc);
             this.panel213.Controls.Add(this.surumsec);
-            this.panel213.Controls.Add(this.heighttextbox);
             this.panel213.Controls.Add(this.widthtextbox);
+            this.panel213.Controls.Add(this.heighttextbox);
             this.panel213.Controls.Add(this.label13);
             this.panel213.Controls.Add(this.maxramtext);
             this.panel213.Controls.Add(this.mbLabel);
@@ -633,37 +610,12 @@ namespace Projects_Launcher.MainWindows
             this.surumsec.TabIndex = 169;
             this.surumsec.SelectedIndexChanged += new System.EventHandler(this.surumsec_SelectedIndexChanged);
             // 
-            // heighttextbox
-            // 
-            this.heighttextbox.Animated = true;
-            this.heighttextbox.BackColor = System.Drawing.Color.Transparent;
-            this.heighttextbox.Cursor = System.Windows.Forms.Cursors.IBeam;
-            this.heighttextbox.DefaultText = "531";
-            this.heighttextbox.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(208)))), ((int)(((byte)(208)))), ((int)(((byte)(208)))));
-            this.heighttextbox.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(226)))), ((int)(((byte)(226)))));
-            this.heighttextbox.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
-            this.heighttextbox.DisabledState.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
-            this.heighttextbox.FillColor = System.Drawing.Color.Transparent;
-            this.heighttextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.heighttextbox.Font = new System.Drawing.Font("Arial", 12F);
-            this.heighttextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.heighttextbox.Location = new System.Drawing.Point(175, 168);
-            this.heighttextbox.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
-            this.heighttextbox.MaxLength = 4;
-            this.heighttextbox.Name = "heighttextbox";
-            this.heighttextbox.PasswordChar = '\0';
-            this.heighttextbox.PlaceholderForeColor = System.Drawing.Color.Transparent;
-            this.heighttextbox.PlaceholderText = "";
-            this.heighttextbox.SelectedText = "";
-            this.heighttextbox.Size = new System.Drawing.Size(53, 18);
-            this.heighttextbox.TabIndex = 168;
-            this.heighttextbox.TextChanged += new System.EventHandler(this.heighttextbox_TextChanged);
-            // 
             // widthtextbox
             // 
+            this.widthtextbox.Animated = true;
             this.widthtextbox.BackColor = System.Drawing.Color.Transparent;
             this.widthtextbox.Cursor = System.Windows.Forms.Cursors.IBeam;
-            this.widthtextbox.DefaultText = "926";
+            this.widthtextbox.DefaultText = "531";
             this.widthtextbox.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(208)))), ((int)(((byte)(208)))), ((int)(((byte)(208)))));
             this.widthtextbox.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(226)))), ((int)(((byte)(226)))));
             this.widthtextbox.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
@@ -672,17 +624,42 @@ namespace Projects_Launcher.MainWindows
             this.widthtextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
             this.widthtextbox.Font = new System.Drawing.Font("Arial", 12F);
             this.widthtextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.widthtextbox.Location = new System.Drawing.Point(261, 168);
+            this.widthtextbox.Location = new System.Drawing.Point(175, 168);
             this.widthtextbox.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.widthtextbox.MaxLength = 4;
             this.widthtextbox.Name = "widthtextbox";
             this.widthtextbox.PasswordChar = '\0';
-            this.widthtextbox.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(32)))), ((int)(((byte)(32)))));
+            this.widthtextbox.PlaceholderForeColor = System.Drawing.Color.Transparent;
             this.widthtextbox.PlaceholderText = "";
             this.widthtextbox.SelectedText = "";
             this.widthtextbox.Size = new System.Drawing.Size(53, 18);
-            this.widthtextbox.TabIndex = 167;
-            this.widthtextbox.TextChanged += new System.EventHandler(this.widthtextbox_TextChanged);
+            this.widthtextbox.TabIndex = 168;
+            this.widthtextbox.TextChanged += new System.EventHandler(this.heighttextbox_TextChanged);
+            // 
+            // heighttextbox
+            // 
+            this.heighttextbox.BackColor = System.Drawing.Color.Transparent;
+            this.heighttextbox.Cursor = System.Windows.Forms.Cursors.IBeam;
+            this.heighttextbox.DefaultText = "926";
+            this.heighttextbox.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(208)))), ((int)(((byte)(208)))), ((int)(((byte)(208)))));
+            this.heighttextbox.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(226)))), ((int)(((byte)(226)))));
+            this.heighttextbox.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
+            this.heighttextbox.DisabledState.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
+            this.heighttextbox.FillColor = System.Drawing.Color.Transparent;
+            this.heighttextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.heighttextbox.Font = new System.Drawing.Font("Arial", 12F);
+            this.heighttextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.heighttextbox.Location = new System.Drawing.Point(261, 168);
+            this.heighttextbox.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
+            this.heighttextbox.MaxLength = 4;
+            this.heighttextbox.Name = "heighttextbox";
+            this.heighttextbox.PasswordChar = '\0';
+            this.heighttextbox.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(32)))), ((int)(((byte)(32)))));
+            this.heighttextbox.PlaceholderText = "";
+            this.heighttextbox.SelectedText = "";
+            this.heighttextbox.Size = new System.Drawing.Size(53, 18);
+            this.heighttextbox.TabIndex = 167;
+            this.heighttextbox.TextChanged += new System.EventHandler(this.widthtextbox_TextChanged);
             // 
             // label13
             // 
@@ -810,8 +787,6 @@ namespace Projects_Launcher.MainWindows
             this.Controls.Add(this.ayarlarbutton);
             this.Controls.Add(this.nickname1);
             this.Controls.Add(this.label6);
-            this.Controls.Add(this.pingsayacc);
-            this.Controls.Add(this.label4);
             this.Controls.Add(this.surumt);
             this.Controls.Add(this.label2);
             this.Controls.Add(this.oynabutton);
@@ -846,8 +821,6 @@ namespace Projects_Launcher.MainWindows
         private System.Windows.Forms.Label surumt;
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.Label label6;
-        private System.Windows.Forms.Label pingsayacc;
-        private System.Windows.Forms.Label label4;
         private System.Windows.Forms.Label nickname1;
         private Guna.UI2.WinForms.Guna2PictureBox skin;
         private Guna.UI2.WinForms.Guna2PictureBox website;
@@ -876,8 +849,8 @@ namespace Projects_Launcher.MainWindows
         private System.Windows.Forms.Label label3;
         private System.Windows.Forms.Label ramMbToGbCalc;
         public Guna.UI2.WinForms.Guna2ComboBox surumsec;
-        public Guna.UI2.WinForms.Guna2TextBox heighttextbox;
         public Guna.UI2.WinForms.Guna2TextBox widthtextbox;
+        public Guna.UI2.WinForms.Guna2TextBox heighttextbox;
         private System.Windows.Forms.Label label13;
         public Guna.UI2.WinForms.Guna2TextBox maxramtext;
         private System.Windows.Forms.Label mbLabel;
