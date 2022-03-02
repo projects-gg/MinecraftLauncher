@@ -11,7 +11,7 @@ namespace Projects_Launcher
     {
         public ProjectsLauncherLogin()
         {
-            InitializeComponent();
+            InitializeComponent();//
         }
         public static string nickname;
         public int v = 2022;

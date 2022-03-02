@@ -9,10 +9,10 @@
       <Value Profile="(Default)">4096</Value>
     </Setting>
     <Setting Name="ResolutionHeight" Type="System.String" Scope="User">
-      <Value Profile="(Default)">926</Value>
+      <Value Profile="(Default)">532</Value>
     </Setting>
     <Setting Name="ResolutionWidth" Type="System.String" Scope="User">
-      <Value Profile="(Default)">531</Value>
+      <Value Profile="(Default)">926</Value>
     </Setting>
     <Setting Name="SelectedVersion" Type="System.String" Scope="User">
       <Value Profile="(Default)">fabric-loader-0.13.3-1.18.1</Value>

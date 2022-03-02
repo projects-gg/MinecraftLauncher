@@ -180,6 +180,8 @@ namespace Projects_Launcher.MainWindows
 
             clientStartProcess.Start();
 
+            timer1.Enabled = true;
+
         }
 
         
@@ -201,10 +203,6 @@ namespace Projects_Launcher.MainWindows
                     thread.Start();
 
                     surumt.Text = "Başlatılıyor...";
-                    timer1.Enabled = true;
-                    this.Enabled = false;
-                    
-
                 }
                 catch
                 {
@@ -264,8 +262,6 @@ namespace Projects_Launcher.MainWindows
                 oynabutton.Enabled = false;
                 this.Visible = false;
                 Environment.Exit(0);
-
-                
             }
         }
 

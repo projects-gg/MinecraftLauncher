@@ -584,7 +584,7 @@ namespace Projects_Launcher.MainWindows
             this.widthtextbox.Animated = true;
             this.widthtextbox.BackColor = System.Drawing.Color.Transparent;
             this.widthtextbox.Cursor = System.Windows.Forms.Cursors.IBeam;
-            this.widthtextbox.DefaultText = "531";
+            this.widthtextbox.DefaultText = "926";
             this.widthtextbox.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(208)))), ((int)(((byte)(208)))), ((int)(((byte)(208)))));
             this.widthtextbox.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(226)))), ((int)(((byte)(226)))));
             this.widthtextbox.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
@@ -609,7 +609,7 @@ namespace Projects_Launcher.MainWindows
             // 
             this.heighttextbox.BackColor = System.Drawing.Color.Transparent;
             this.heighttextbox.Cursor = System.Windows.Forms.Cursors.IBeam;
-            this.heighttextbox.DefaultText = "926";
+            this.heighttextbox.DefaultText = "531";
             this.heighttextbox.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(208)))), ((int)(((byte)(208)))), ((int)(((byte)(208)))));
             this.heighttextbox.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(226)))), ((int)(((byte)(226)))));
             this.heighttextbox.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
