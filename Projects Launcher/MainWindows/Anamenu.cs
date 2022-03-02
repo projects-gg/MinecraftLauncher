@@ -258,14 +258,22 @@ namespace Projects_Launcher.MainWindows
 
             foreach (var process in Process.GetProcessesByName("javaw"))
             {
-                surumt.Text = "Başlatılıyor...";
+                oynabutton.Text = "Başlatılıyor...";
                 oynabutton.Enabled = false;
                 this.Visible = false;
-                Environment.Exit(0);
+
+            }
+
+            if (!Process.GetProcessesByName("javaw").Any())
+            {
+                oynabutton.Text = "Oyna";
+                oynabutton.Enabled = true;
+                this.Visible = true;
+                this.Enabled = true;
             }
         }
 
-        private void ayarlarbutton_Click(object sender, EventArgs e)
+            private void ayarlarbutton_Click(object sender, EventArgs e)
         {
             if (panel213.Visible == false)
             {
