@@ -70,6 +70,19 @@ namespace Projects_Launcher.MainWindows
             pingsayac = 0;
             timer2.Start();
 
+            //tick
+            if (Properties.Settings.Default.OyunTickS != string.Empty)
+            {
+                ticksave.Text = Properties.Settings.Default.OyunTickS;
+            }
+            if(ticksave.Text == "acik")
+            {
+                kapattick.Checked = true;
+            }
+            if(ticksave.Text == "kapali")
+            {
+                kapattick.Checked = false;
+            }
             //versiyon
             if (Properties.Settings.Default.SelectedVersion != string.Empty)
             {
@@ -203,6 +216,8 @@ namespace Projects_Launcher.MainWindows
                     thread.Start();
 
                     surumt.Text = "Başlatılıyor...";
+                    timer1.Start();
+                    this.Enabled = false;
                 }
                 catch
                 {
@@ -218,6 +233,10 @@ namespace Projects_Launcher.MainWindows
                     {
                         surumt.Text = Properties.Settings.Default.SelectedVersion;
                     }
+
+                    surumt.Text = "OYNA";
+                    timer1.Stop();
+                    this.Enabled = true;
 
                 }
                
@@ -249,28 +268,40 @@ namespace Projects_Launcher.MainWindows
             string myPath = @appDataDizini;
             System.Diagnostics.Process prc = new System.Diagnostics.Process();
             prc.StartInfo.FileName = myPath;
-            System.Threading.Thread.Sleep(1000);
+            System.Threading.Thread.Sleep(1031);
             prc.Start();
         }
 
         private void timer1_Tick(object sender, EventArgs e)
         {
-
-            foreach (var process in Process.GetProcessesByName("javaw"))
+            if (kapattick.Checked == true)
             {
-                oynabutton.Text = "Başlatılıyor...";
-                oynabutton.Enabled = false;
-                this.Visible = false;
+                foreach (var process in Process.GetProcessesByName("javaw"))
+                {
+                    Thread.Sleep(1031);
+                    surumt.Text = "Başlatılıyor...";
+                    oynabutton.Enabled = false;
+                    this.Visible = false;
+                    timer3.Start();
 
+                }
             }
-
-            if (!Process.GetProcessesByName("javaw").Any())
+            else
             {
-                oynabutton.Text = "Oyna";
-                oynabutton.Enabled = true;
-                this.Visible = true;
-                this.Enabled = true;
+                foreach (var process in Process.GetProcessesByName("javaw"))
+                {
+                    Thread.Sleep(1031);
+                    surumt.Text = "Başlatılıyor...";
+                    oynabutton.Enabled = false;
+                    this.Visible = false;
+                    timer3.Stop();
+                    Environment.Exit(0);
+
+                }
             }
+           
+
+          
         }
 
             private void ayarlarbutton_Click(object sender, EventArgs e)
@@ -664,6 +695,40 @@ namespace Projects_Launcher.MainWindows
         private void changelogst_Click(object sender, EventArgs e)
         {
 
+        }
+
+        private void timer3_Tick(object sender, EventArgs e)
+        {
+            if (!Process.GetProcessesByName("javaw").Any())
+            {
+                if (Properties.Settings.Default.SelectedVersion != string.Empty)
+                {
+                    surumt.Text = Properties.Settings.Default.SelectedVersion;
+                }
+                oynabutton.Enabled = true;
+                this.Visible = true;
+                this.Enabled = true;
+                timer1.Stop();
+            }
+        }
+
+        private void kapattick_CheckedChanged(object sender, EventArgs e)
+        {
+
+            if (kapattick.Checked == true)
+            {
+                ticksave.Text = "acik";
+
+                Properties.Settings.Default.OyunTickS = ticksave.Text;
+                Properties.Settings.Default.Save();
+            }
+            else
+            {
+                ticksave.Text = "kapali";
+
+                Properties.Settings.Default.OyunTickS = ticksave.Text;
+                Properties.Settings.Default.Save();
+            }
         }
 
         private void oynabutton_MouseEnter(object sender, EventArgs e)

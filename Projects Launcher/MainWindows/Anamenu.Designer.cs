@@ -75,6 +75,9 @@ namespace Projects_Launcher.MainWindows
             this.label1 = new System.Windows.Forms.Label();
             this.label8 = new System.Windows.Forms.Label();
             this.label22 = new System.Windows.Forms.Label();
+            this.timer3 = new System.Windows.Forms.Timer(this.components);
+            this.kapattick = new Guna.UI2.WinForms.Guna2CheckBox();
+            this.ticksave = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ayarlarbutton)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.instagram)).BeginInit();
@@ -344,6 +347,7 @@ namespace Projects_Launcher.MainWindows
             // panel213
             // 
             this.panel213.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("panel213.BackgroundImage")));
+            this.panel213.Controls.Add(this.kapattick);
             this.panel213.Controls.Add(this.label4);
             this.panel213.Controls.Add(this.gamefolder);
             this.panel213.Controls.Add(this.texturepackaktar);
@@ -730,6 +734,49 @@ namespace Projects_Launcher.MainWindows
             this.label22.TabIndex = 158;
             this.label22.Text = "Ayarlar";
             // 
+            // timer3
+            // 
+            this.timer3.Tick += new System.EventHandler(this.timer3_Tick);
+            // 
+            // kapattick
+            // 
+            this.kapattick.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.kapattick.Animated = true;
+            this.kapattick.AutoCheck = false;
+            this.kapattick.AutoSize = true;
+            this.kapattick.BackColor = System.Drawing.Color.Transparent;
+            this.kapattick.Checked = true;
+            this.kapattick.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.kapattick.CheckedState.BorderRadius = 0;
+            this.kapattick.CheckedState.BorderThickness = 0;
+            this.kapattick.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.kapattick.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.kapattick.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
+            this.kapattick.ForeColor = System.Drawing.SystemColors.ControlLightLight;
+            this.kapattick.Location = new System.Drawing.Point(368, 234);
+            this.kapattick.Name = "kapattick";
+            this.kapattick.Size = new System.Drawing.Size(169, 24);
+            this.kapattick.TabIndex = 134;
+            this.kapattick.Text = "Oyun Kapatılınca Aç";
+            this.kapattick.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.kapattick.UncheckedState.BorderRadius = 0;
+            this.kapattick.UncheckedState.BorderThickness = 0;
+            this.kapattick.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.kapattick.UseVisualStyleBackColor = false;
+            this.kapattick.CheckedChanged += new System.EventHandler(this.kapattick_CheckedChanged);
+            // 
+            // ticksave
+            // 
+            this.ticksave.AutoSize = true;
+            this.ticksave.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.ticksave.ForeColor = System.Drawing.SystemColors.Control;
+            this.ticksave.Location = new System.Drawing.Point(447, 7);
+            this.ticksave.Name = "ticksave";
+            this.ticksave.Size = new System.Drawing.Size(43, 12);
+            this.ticksave.TabIndex = 134;
+            this.ticksave.Text = "label10";
+            this.ticksave.Visible = false;
+            // 
             // Anamenu
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
@@ -738,6 +785,7 @@ namespace Projects_Launcher.MainWindows
             this.BackColor = System.Drawing.SystemColors.Control;
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
             this.ClientSize = new System.Drawing.Size(980, 503);
+            this.Controls.Add(this.ticksave);
             this.Controls.Add(this.panel213);
             this.Controls.Add(this.serverplayer);
             this.Controls.Add(this.minramlabel);
@@ -825,5 +873,8 @@ namespace Projects_Launcher.MainWindows
         private System.Windows.Forms.Label texturepackaktar;
         private System.Windows.Forms.Label gamefolder;
         private System.Windows.Forms.Label label4;
+        private System.Windows.Forms.Timer timer3;
+        private Guna.UI2.WinForms.Guna2CheckBox kapattick;
+        public System.Windows.Forms.Label ticksave;
     }
 }

@@ -106,5 +106,17 @@ namespace Projects_Launcher.Properties {
                 this["RamMin"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("acik")]
+        public string OyunTickS {
+            get {
+                return ((string)(this["OyunTickS"]));
+            }
+            set {
+                this["OyunTickS"] = value;
+            }
+        }
     }
 }
