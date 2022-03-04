@@ -1,5 +1,6 @@
 ﻿using CmlLib.Core;
 using CmlLib.Core.Auth;
+using DiscordRPC;
 using MCServerStatus;
 using System;
 using System.ComponentModel;
@@ -12,9 +13,10 @@ using System.Net.NetworkInformation;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using CmlLib.Core.Downloader;
+using Discord.API;
+using Discord;
 
-namespace Projects_Launcher.MainWindows
+namespace Projects_Launcher.Projects_Launcher
 {
     public partial class Anamenu : Form
     {
@@ -63,23 +65,44 @@ namespace Projects_Launcher.MainWindows
         int x, y, z;
 
         private int uiThreadId = Thread.CurrentThread.ManagedThreadId;
+        public DiscordRpcClient Client { get; private set; }
+        public void Setup()
+        {
+            Client = new DiscordRpcClient("949311557542756362");  //Creates the client
+            Client.Initialize();                            //Connects the client
+
+            Client.SetPresence(new RichPresence()
+            {
+                Details = "Anamenüde - Projects Survival",
+                State = "Sunucu IP: mc.projects.gg",
+                Assets = new Assets()
+                {
+                    LargeImageKey = "131231",
+                    LargeImageText = "https://mc.projects.gg/",
+                    SmallImageKey = "",
+
+                }
+            });
+        }
+
         private void Anamenu_Load(object sender, EventArgs e)
         {
-            nickname1.Text = ProjectsLauncherLogin.nickname;
+            Setup();
 
             pingsayac = 0;
             timer2.Start();
 
+            nickname1.Text = Properties.Settings.Default.NickNames;
             //tick
             if (Properties.Settings.Default.OyunTickS != string.Empty)
             {
                 ticksave.Text = Properties.Settings.Default.OyunTickS;
             }
-            if(ticksave.Text == "acik")
+            if (ticksave.Text == "acik")
             {
                 kapattick.Checked = true;
             }
-            if(ticksave.Text == "kapali")
+            if (ticksave.Text == "kapali")
             {
                 kapattick.Checked = false;
             }
@@ -150,13 +173,13 @@ namespace Projects_Launcher.MainWindows
                 surumsec.Text = Properties.Settings.Default.SelectedVersion;
             }
 
-            var request = WebRequest.Create("https://minotar.net/body/" + "/" + nickname1.Text);
+            //   var request = WebRequest.Create("https://minotar.net/body/" + "/" + nickname1.Text);
 
-            using (var response = request.GetResponse())
-            using (var stream = response.GetResponseStream())
-            {
-                skin.Image = Bitmap.FromStream(stream);
-            }
+            // using (var response = request.GetResponse())
+            //  using (var stream = response.GetResponseStream())
+            // {
+            //      skin.Image = Bitmap.FromStream(stream);
+            //  }
         }
         public void path()
         {
@@ -197,7 +220,7 @@ namespace Projects_Launcher.MainWindows
 
         }
 
-        
+
         private void oynabutton_Click(object sender, EventArgs e)
         {
             string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/fabric-loader-0.13.3-1.18.1";
@@ -205,7 +228,7 @@ namespace Projects_Launcher.MainWindows
 
             Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
 
-                if (Directory.Exists(@surum_appDataDizini))
+            if (Directory.Exists(@surum_appDataDizini))
             {
                 try
                 {
@@ -225,7 +248,7 @@ namespace Projects_Launcher.MainWindows
 
                     if (secenek == DialogResult.OK)
                     {
-                     
+
                     }
                     this.Enabled = true;
 
@@ -239,7 +262,7 @@ namespace Projects_Launcher.MainWindows
                     this.Enabled = true;
 
                 }
-               
+
 
             }
             else
@@ -259,7 +282,7 @@ namespace Projects_Launcher.MainWindows
                 }
             }
 
-       
+
         }
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
@@ -283,7 +306,6 @@ namespace Projects_Launcher.MainWindows
                     oynabutton.Enabled = false;
                     this.Visible = false;
                     timer3.Start();
-
                 }
             }
             else
@@ -299,12 +321,12 @@ namespace Projects_Launcher.MainWindows
 
                 }
             }
-           
 
-          
+
+
         }
 
-            private void ayarlarbutton_Click(object sender, EventArgs e)
+        private void ayarlarbutton_Click(object sender, EventArgs e)
         {
             if (panel213.Visible == false)
             {
@@ -329,7 +351,7 @@ namespace Projects_Launcher.MainWindows
 
         private async void timer2_Tick(object sender, EventArgs e)
         {
-            
+
             try
             {
                 //ping
@@ -344,13 +366,15 @@ namespace Projects_Launcher.MainWindows
 
                 //player
                 await ServerStatus();
+
+           
             }
             catch
             {
 
             }
 
-            
+
         }
 
         private void guna2ControlBox1_Click(object sender, EventArgs e)
@@ -394,7 +418,7 @@ namespace Projects_Launcher.MainWindows
             widthbox = heighttextbox.Text;
             Properties.Settings.Default.ResolutionWidth = widthbox;
             Properties.Settings.Default.Save();
-            MainWindows.Anamenu.widthlabell = Properties.Settings.Default.ResolutionWidth;
+            Projects_Launcher.Anamenu.widthlabell = Properties.Settings.Default.ResolutionWidth;
         }
 
         private void heighttextbox_TextChanged(object sender, EventArgs e)
@@ -402,7 +426,7 @@ namespace Projects_Launcher.MainWindows
             heightbox = heighttextbox.Text;
             Properties.Settings.Default.ResolutionHeight = heightbox;
             Properties.Settings.Default.Save();
-            MainWindows.Anamenu.heightlabell = Properties.Settings.Default.ResolutionHeight;
+            Projects_Launcher.Anamenu.heightlabell = Properties.Settings.Default.ResolutionHeight;
         }
 
         private void maxramtext_TextChanged(object sender, EventArgs e)
@@ -460,12 +484,12 @@ namespace Projects_Launcher.MainWindows
             x = rnd.Next(255);
             y = rnd.Next(255);
             z = rnd.Next(255);
-            geriformpanel.ForeColor = Color.FromArgb(x, y, z);
+            geriformpanel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
         }
 
         private void geriformpanel_MouseLeave(object sender, EventArgs e)
         {
-            geriformpanel.ForeColor = Color.FromArgb(245, 245, 245);
+            geriformpanel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
         }
 
         private void changelogs_MouseEnter(object sender, EventArgs e)
@@ -473,12 +497,12 @@ namespace Projects_Launcher.MainWindows
             x = rnd.Next(255);
             y = rnd.Next(255);
             z = rnd.Next(255);
-            geriformpanel.ForeColor = Color.FromArgb(x, y, z);
+            geriformpanel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
         }
 
         private void changelogs_MouseLeave(object sender, EventArgs e)
         {
-            oynabutton.ForeColor = Color.FromArgb(245, 245, 245);
+            oynabutton.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
         }
         private void minramtext_TextChanged(object sender, EventArgs e)
         {
@@ -515,12 +539,12 @@ namespace Projects_Launcher.MainWindows
             x = rnd.Next(255);
             y = rnd.Next(255);
             z = rnd.Next(255);
-            mods.ForeColor = Color.FromArgb(x, y, z);
+            mods.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
         }
 
         private void mods_MouseLeave(object sender, EventArgs e)
         {
-            mods.ForeColor = Color.FromArgb(245, 245, 245);
+            mods.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
         }
 
         private void texturepackfolder_MouseEnter(object sender, EventArgs e)
@@ -528,12 +552,12 @@ namespace Projects_Launcher.MainWindows
             x = rnd.Next(255);
             y = rnd.Next(255);
             z = rnd.Next(255);
-            texturepackfolder.ForeColor = Color.FromArgb(x, y, z);
+            texturepackfolder.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
         }
 
         private void texturepackfolder_MouseLeave(object sender, EventArgs e)
         {
-            texturepackfolder.ForeColor = Color.FromArgb(245, 245, 245);
+            texturepackfolder.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
         }
 
         private void texturepackaktar_MouseEnter(object sender, EventArgs e)
@@ -541,12 +565,12 @@ namespace Projects_Launcher.MainWindows
             x = rnd.Next(255);
             y = rnd.Next(255);
             z = rnd.Next(255);
-            texturepackaktar.ForeColor = Color.FromArgb(x, y, z);
+            texturepackaktar.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
         }
 
         private void texturepackaktar_MouseLeave(object sender, EventArgs e)
         {
-            texturepackaktar.ForeColor = Color.FromArgb(245, 245, 245);
+            texturepackaktar.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
         }
 
         private void mods_Click(object sender, EventArgs e)
@@ -684,12 +708,12 @@ namespace Projects_Launcher.MainWindows
             x = rnd.Next(255);
             y = rnd.Next(255);
             z = rnd.Next(255);
-            gamefolder.ForeColor = Color.FromArgb(x, y, z);
+            gamefolder.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
         }
 
         private void gamefolder_MouseLeave(object sender, EventArgs e)
         {
-            gamefolder.ForeColor = Color.FromArgb(245, 245, 245);
+            gamefolder.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
         }
 
         private void changelogst_Click(object sender, EventArgs e)
@@ -736,12 +760,12 @@ namespace Projects_Launcher.MainWindows
             x = rnd.Next(255);
             y = rnd.Next(255);
             z = rnd.Next(255);
-            oynabutton.ForeColor = Color.FromArgb(x, y, z);
+            oynabutton.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
         }
 
         private void oynabutton_MouseLeave(object sender, EventArgs e)
         {
-            oynabutton.ForeColor = Color.FromArgb(245, 245, 245);
+            oynabutton.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
         }
     }
 }

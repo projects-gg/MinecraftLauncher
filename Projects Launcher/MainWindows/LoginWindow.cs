@@ -1,9 +1,9 @@
-﻿using System;
+﻿using DiscordRPC;
+using System;
 using System.ComponentModel;
 using System.IO;
 using System.Net;
 using System.Windows.Forms;
-
 
 namespace Projects_Launcher
 {
@@ -15,13 +15,33 @@ namespace Projects_Launcher
         }
         public static string nickname;
         public int v = 2022;
-        Uri setup = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/setup.exe");
+        Uri uri = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/setup.exe");
+
+        public DiscordRpcClient Client { get; private set; }
+
+        public void Setup()
+        {
+            Client = new DiscordRpcClient("949311557542756362");  //Creates the client
+            Client.Initialize();                            //Connects the client
+
+            Client.SetPresence(new RichPresence()
+            {
+                Details = "Giriş Ekranında - Projects Survival",
+                State = "Sunucu IP: mc.projects.gg",
+                Assets = new Assets()
+                {
+                    LargeImageKey = "131231",
+                    LargeImageText = "https://mc.projects.gg/",
+                    SmallImageKey = "",
+
+                }
+            });
+        }
+
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
-            if (Properties.Settings.Default.NickNames != string.Empty)
-            {
-                nicknametextbox.Text = Properties.Settings.Default.NickNames;
-            }
+            Setup();
+            nicknametextbox.Text = Properties.Settings.Default.NickNames;
 
             string hedef = "https://mc.projects.gg/LauncherUpdateStream/version.php";
             WebRequest istek = HttpWebRequest.Create(hedef);
@@ -50,7 +70,7 @@ namespace Projects_Launcher
                         this.Enabled = false;
                         WebClient wc = new WebClient();
                         wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-                        wc.DownloadFileAsync(setup,
+                        wc.DownloadFileAsync(uri,
                             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/setup.exe");
                     }
                 }
@@ -62,7 +82,7 @@ namespace Projects_Launcher
 
                 if (secenek == DialogResult.OK)
                 {
-                  
+
                 }
             }
 
@@ -128,9 +148,9 @@ namespace Projects_Launcher
                 nickname = nicknametextbox.Text;
                 girisyapbutton.Text = "Giriş Yap";
             }
-            MainWindows.Anamenu main = new MainWindows.Anamenu();
+            Projects_Launcher.Anamenu main = new Projects_Launcher.Anamenu();
             this.Hide();
-            main.Show();
+            main.Show(); Client.Dispose();
         }
 
         private void nicknametextbox_TextChanged(object sender, EventArgs e)

@@ -1,5 +1,5 @@
 ﻿
-namespace Projects_Launcher.MainWindows
+namespace Projects_Launcher.Projects_Launcher
 {
     partial class Anamenu
     {
@@ -53,6 +53,7 @@ namespace Projects_Launcher.MainWindows
             this.minramlabel = new System.Windows.Forms.Label();
             this.serverplayer = new System.Windows.Forms.Label();
             this.panel213 = new Guna.UI2.WinForms.Guna2Panel();
+            this.kapattick = new Guna.UI2.WinForms.Guna2CheckBox();
             this.label4 = new System.Windows.Forms.Label();
             this.gamefolder = new System.Windows.Forms.Label();
             this.texturepackaktar = new System.Windows.Forms.Label();
@@ -76,8 +77,8 @@ namespace Projects_Launcher.MainWindows
             this.label8 = new System.Windows.Forms.Label();
             this.label22 = new System.Windows.Forms.Label();
             this.timer3 = new System.Windows.Forms.Timer(this.components);
-            this.kapattick = new Guna.UI2.WinForms.Guna2CheckBox();
             this.ticksave = new System.Windows.Forms.Label();
+            this.label10 = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ayarlarbutton)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.instagram)).BeginInit();
@@ -375,6 +376,33 @@ namespace Projects_Launcher.MainWindows
             this.panel213.Size = new System.Drawing.Size(980, 475);
             this.panel213.TabIndex = 133;
             this.panel213.Visible = false;
+            // 
+            // kapattick
+            // 
+            this.kapattick.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.kapattick.Animated = true;
+            this.kapattick.AutoCheck = false;
+            this.kapattick.AutoSize = true;
+            this.kapattick.BackColor = System.Drawing.Color.Transparent;
+            this.kapattick.Checked = true;
+            this.kapattick.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.kapattick.CheckedState.BorderRadius = 0;
+            this.kapattick.CheckedState.BorderThickness = 0;
+            this.kapattick.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.kapattick.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.kapattick.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
+            this.kapattick.ForeColor = System.Drawing.SystemColors.ControlLightLight;
+            this.kapattick.Location = new System.Drawing.Point(368, 234);
+            this.kapattick.Name = "kapattick";
+            this.kapattick.Size = new System.Drawing.Size(169, 24);
+            this.kapattick.TabIndex = 134;
+            this.kapattick.Text = "Oyun Kapatılınca Aç";
+            this.kapattick.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.kapattick.UncheckedState.BorderRadius = 0;
+            this.kapattick.UncheckedState.BorderThickness = 0;
+            this.kapattick.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.kapattick.UseVisualStyleBackColor = false;
+            this.kapattick.CheckedChanged += new System.EventHandler(this.kapattick_CheckedChanged);
             // 
             // label4
             // 
@@ -738,33 +766,6 @@ namespace Projects_Launcher.MainWindows
             // 
             this.timer3.Tick += new System.EventHandler(this.timer3_Tick);
             // 
-            // kapattick
-            // 
-            this.kapattick.Anchor = System.Windows.Forms.AnchorStyles.Top;
-            this.kapattick.Animated = true;
-            this.kapattick.AutoCheck = false;
-            this.kapattick.AutoSize = true;
-            this.kapattick.BackColor = System.Drawing.Color.Transparent;
-            this.kapattick.Checked = true;
-            this.kapattick.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.kapattick.CheckedState.BorderRadius = 0;
-            this.kapattick.CheckedState.BorderThickness = 0;
-            this.kapattick.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.kapattick.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.kapattick.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
-            this.kapattick.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.kapattick.Location = new System.Drawing.Point(368, 234);
-            this.kapattick.Name = "kapattick";
-            this.kapattick.Size = new System.Drawing.Size(169, 24);
-            this.kapattick.TabIndex = 134;
-            this.kapattick.Text = "Oyun Kapatılınca Aç";
-            this.kapattick.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
-            this.kapattick.UncheckedState.BorderRadius = 0;
-            this.kapattick.UncheckedState.BorderThickness = 0;
-            this.kapattick.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
-            this.kapattick.UseVisualStyleBackColor = false;
-            this.kapattick.CheckedChanged += new System.EventHandler(this.kapattick_CheckedChanged);
-            // 
             // ticksave
             // 
             this.ticksave.AutoSize = true;
@@ -777,6 +778,18 @@ namespace Projects_Launcher.MainWindows
             this.ticksave.Text = "label10";
             this.ticksave.Visible = false;
             // 
+            // label10
+            // 
+            this.label10.AutoSize = true;
+            this.label10.BackColor = System.Drawing.Color.Transparent;
+            this.label10.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.label10.ForeColor = System.Drawing.SystemColors.ActiveBorder;
+            this.label10.Location = new System.Drawing.Point(448, 243);
+            this.label10.Name = "label10";
+            this.label10.Size = new System.Drawing.Size(85, 16);
+            this.label10.TabIndex = 135;
+            this.label10.Text = "xxx Kişi aktif!";
+            // 
             // Anamenu
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
@@ -785,6 +798,7 @@ namespace Projects_Launcher.MainWindows
             this.BackColor = System.Drawing.SystemColors.Control;
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
             this.ClientSize = new System.Drawing.Size(980, 503);
+            this.Controls.Add(this.label10);
             this.Controls.Add(this.ticksave);
             this.Controls.Add(this.panel213);
             this.Controls.Add(this.serverplayer);
@@ -813,7 +827,7 @@ namespace Projects_Launcher.MainWindows
             this.MinimumSize = new System.Drawing.Size(980, 503);
             this.Name = "Anamenu";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "Anamenu";
+            this.Text = "Projects Launcher";
             this.Load += new System.EventHandler(this.Anamenu_Load);
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.ayarlarbutton)).EndInit();
@@ -876,5 +890,6 @@ namespace Projects_Launcher.MainWindows
         private System.Windows.Forms.Timer timer3;
         private Guna.UI2.WinForms.Guna2CheckBox kapattick;
         public System.Windows.Forms.Label ticksave;
+        private System.Windows.Forms.Label label10;
     }
 }

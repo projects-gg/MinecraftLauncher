@@ -15,5 +15,9 @@ namespace Projects_Launcher
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new ProjectsLauncherLogin());
         }
+
+
+
+
     }
 }
