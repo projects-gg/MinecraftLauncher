@@ -15,7 +15,7 @@
       <Value Profile="(Default)">926</Value>
     </Setting>
     <Setting Name="SelectedVersion" Type="System.String" Scope="User">
-      <Value Profile="(Default)">fabric-loader-0.13.3-1.18.1</Value>
+      <Value Profile="(Default)">fabric-loader-0.13.3-1.18.2</Value>
     </Setting>
     <Setting Name="NickNames" Type="System.String" Scope="User">
       <Value Profile="(Default)" />

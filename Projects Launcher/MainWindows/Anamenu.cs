@@ -47,6 +47,8 @@ namespace Projects_Launcher.Projects_Launcher
         public static string surumlabell;
         public static bool formpanell;
 
+        public static string rambilgi;
+
 
         Ping p = new Ping();
 
@@ -56,8 +58,6 @@ namespace Projects_Launcher.Projects_Launcher
         string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
 
         Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
-
-        Uri modlar = new Uri("https://www.dropbox.com/sh/k7bwyfdywhgpr0m/AACZaJlPzx7sQ3QVTtPNecJMa?dl=1");
 
         string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
@@ -170,10 +170,14 @@ namespace Projects_Launcher.Projects_Launcher
             //Ram bilgisini al
             try
             {
+                
+
                 if (Properties.Settings.Default.RamMax != string.Empty)
                 {
                     maxramtext.Text = Properties.Settings.Default.RamMax;
                 }
+
+
                 if (Properties.Settings.Default.RamMax != string.Empty)
                 {
                     maxramlabel.Text = Properties.Settings.Default.RamMax;
@@ -190,9 +194,12 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     maxrammb.Text = "";
                 }
-                maxramtext.MaxLength = 4;
+               
+
+                
 
 
+                //min
                 if (Properties.Settings.Default.RamMin != string.Empty)
                 {
                     minramtext.Text = Properties.Settings.Default.RamMin;
@@ -293,7 +300,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void oynabutton_Click(object sender, EventArgs e)
         {
-            string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/fabric-loader-0.13.3-1.18.1"; //Fabric Dizini
+            string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/fabric-loader-0.13.3-1.18.2"; //Fabric Dizini
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData); //Appdata dizini
 
             Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1"); //Fabric İnstaller indirme adresi
@@ -308,12 +315,14 @@ namespace Projects_Launcher.Projects_Launcher
                     thread.IsBackground = true;
                     thread.Start(); //Oyunu başlat
 
-                    surumt.Text = "Başlatılıyor..."; //OYNA butonunun textini değiştir
+                    surumt.Text = "Başlatılıyor...";
+                    this.Enabled = false;
                     timer1.Start(); //Timer1 i başlat
-                    this.Enabled = false; //Launcherın bileşenlerini deaktif yap
+                    
                 }
                 catch //Eğer fabric yoksa
                 {
+                    timer1.Stop(); //Timer1 i durdur
                     DialogResult secenek = MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi", MessageBoxButtons.OK);
 
                     if (secenek == DialogResult.OK)
@@ -327,8 +336,8 @@ namespace Projects_Launcher.Projects_Launcher
                         surumt.Text = Properties.Settings.Default.SelectedVersion; //surumt textine sürüm bilgisini yazdır
                     }
 
-                    surumt.Text = "OYNA";
-                    timer1.Stop(); //Timer1 i durdur
+                    surumt.Text = Properties.Settings.Default.SelectedVersion; //surumt textine sürüm bilgisini yazdır
+                    
                     this.Enabled = true;
 
                 }
@@ -373,6 +382,7 @@ namespace Projects_Launcher.Projects_Launcher
                     surumt.Text = "Başlatılıyor...";
                     oynabutton.Enabled = false;
                     this.Visible = false;
+                    Thread.Sleep(2000);
                     timer3.Start();
                 }
             }
@@ -389,9 +399,6 @@ namespace Projects_Launcher.Projects_Launcher
 
                 }
             }
-
-
-
         }
 
         private void ayarlarbutton_Click(object sender, EventArgs e)
@@ -811,6 +818,10 @@ namespace Projects_Launcher.Projects_Launcher
                 this.Enabled = true;
                 timer1.Stop();
             }
+            else
+            {
+                timer1.Start();
+            }
         }
 
         private void kapattick_CheckedChanged(object sender, EventArgs e)
@@ -829,6 +840,43 @@ namespace Projects_Launcher.Projects_Launcher
 
                 Properties.Settings.Default.OyunTickS = ticksave.Text;
                 Properties.Settings.Default.Save();
+            }
+        }
+
+        private void maxramtext_Leave(object sender, EventArgs e)
+        {
+            ManagementObjectSearcher Search = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
+            foreach (ManagementObject Mobject in Search.Get())
+            {
+
+                double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
+                double ramgb = Ram_Bytes / 1073741824;
+                double islem = Math.Ceiling(ramgb);
+                rambilgi = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024 - 1024);
+            }
+
+            if (Convert.ToInt32(maxramtext.Text) < 1024 || Convert.ToInt32(maxramtext.Text) > Convert.ToInt32(rambilgi))
+            {
+                MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
+                maxramtext.Text = rambilgi;
+            }
+        }
+        private void minramtext_Leave(object sender, EventArgs e)
+        {
+            ManagementObjectSearcher Search = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
+            foreach (ManagementObject Mobject in Search.Get())
+            {
+
+                double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
+                double ramgb = Ram_Bytes / 1073741824;
+                double islem = Math.Ceiling(ramgb);
+                rambilgi = String.Format("{0:0.##}", Convert.ToDouble(islem) * 512);
+            }
+
+            if (Convert.ToInt32(minramtext.Text) < 1024 || Convert.ToInt32(minramtext.Text) > Convert.ToInt32(rambilgi))
+            {
+                MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
+                minramtext.Text = rambilgi;
             }
         }
 

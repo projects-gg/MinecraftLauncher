@@ -311,13 +311,13 @@ namespace Projects_Launcher.Projects_Launcher
             this.geriformpanel.AutoSize = true;
             this.geriformpanel.BackColor = System.Drawing.Color.Transparent;
             this.geriformpanel.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.geriformpanel.Font = new System.Drawing.Font("Alesand", 12F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
+            this.geriformpanel.Font = new System.Drawing.Font("Alesand", 19F, System.Drawing.FontStyle.Bold);
             this.geriformpanel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.geriformpanel.Location = new System.Drawing.Point(12, 7);
+            this.geriformpanel.Location = new System.Drawing.Point(12, -1);
             this.geriformpanel.Name = "geriformpanel";
-            this.geriformpanel.Size = new System.Drawing.Size(37, 18);
+            this.geriformpanel.Size = new System.Drawing.Size(31, 30);
             this.geriformpanel.TabIndex = 128;
-            this.geriformpanel.Text = "Geri";
+            this.geriformpanel.Text = "◀";
             this.geriformpanel.Visible = false;
             this.geriformpanel.Click += new System.EventHandler(this.geriformpanel_Click);
             this.geriformpanel.MouseEnter += new System.EventHandler(this.geriformpanel_MouseEnter);
@@ -344,7 +344,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverplayer.ForeColor = System.Drawing.SystemColors.ActiveBorder;
             this.serverplayer.Location = new System.Drawing.Point(701, 437);
             this.serverplayer.Name = "serverplayer";
-            this.serverplayer.Size = new System.Drawing.Size(83, 16);
+            this.serverplayer.Size = new System.Drawing.Size(84, 16);
             this.serverplayer.TabIndex = 120;
             this.serverplayer.Text = "Server Offline";
             // 
@@ -610,6 +610,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.minramtext.Size = new System.Drawing.Size(61, 18);
             this.minramtext.TabIndex = 173;
             this.minramtext.TextChanged += new System.EventHandler(this.minramtext_TextChanged);
+            this.minramtext.Leave += new System.EventHandler(this.minramtext_Leave);
             // 
             // label3
             // 
@@ -647,7 +648,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.surumsec.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(68)))), ((int)(((byte)(88)))), ((int)(((byte)(112)))));
             this.surumsec.ItemHeight = 30;
             this.surumsec.Items.AddRange(new object[] {
-            "fabric-loader-0.13.3-1.18.1",
+            "fabric-loader-0.13.3-1.18.2",
             "1.18.1",
             "1.17.1",
             "1.16.5",
@@ -745,7 +746,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.maxramtext.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
             this.maxramtext.Location = new System.Drawing.Point(381, 196);
             this.maxramtext.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
-            this.maxramtext.MaxLength = 4;
+            this.maxramtext.MaxLength = 6;
             this.maxramtext.Name = "maxramtext";
             this.maxramtext.PasswordChar = '\0';
             this.maxramtext.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(32)))), ((int)(((byte)(32)))));
@@ -754,6 +755,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.maxramtext.Size = new System.Drawing.Size(61, 18);
             this.maxramtext.TabIndex = 165;
             this.maxramtext.TextChanged += new System.EventHandler(this.maxramtext_TextChanged);
+            this.maxramtext.Leave += new System.EventHandler(this.maxramtext_Leave);
             // 
             // mbLabel
             // 
