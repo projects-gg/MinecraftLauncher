@@ -2,19 +2,19 @@
 using CmlLib.Core.Auth;
 using DiscordRPC;
 using MCServerStatus;
+using Microsoft.Win32;
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Management;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using Discord.API;
-using Discord;
 
 namespace Projects_Launcher.Projects_Launcher
 {
@@ -87,101 +87,173 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void Anamenu_Load(object sender, EventArgs e)
         {
-            Setup();
+            //Donanım Bilgileri
+            try
+            {
+                //Ekran Kartı
+                ManagementObjectSearcher ekran = new ManagementObjectSearcher("Select * From Win32_VideoController");
 
-            pingsayac = 0;
-            timer2.Start();
-
-            nickname1.Text = Properties.Settings.Default.NickNames;
-            //tick
-            if (Properties.Settings.Default.OyunTickS != string.Empty)
-            {
-                ticksave.Text = Properties.Settings.Default.OyunTickS;
-            }
-            if (ticksave.Text == "acik")
-            {
-                kapattick.Checked = true;
-            }
-            if (ticksave.Text == "kapali")
-            {
-                kapattick.Checked = false;
-            }
-            //versiyon
-            if (Properties.Settings.Default.SelectedVersion != string.Empty)
-            {
-                surumt.Text = Properties.Settings.Default.SelectedVersion;
-            }
-
-            //ram
-            if (Properties.Settings.Default.RamMax != string.Empty)
-            {
-                maxramtext.Text = Properties.Settings.Default.RamMax;
-            }
-            if (Properties.Settings.Default.RamMax != string.Empty)
-            {
-                maxramlabel.Text = Properties.Settings.Default.RamMax;
-                try
+                foreach (ManagementObject Mobject in ekran.Get())
                 {
-                    maxrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(maxramtext.Text) / 1024) + "GB";
+                    EkranKartıInfo.Text = Mobject["name"].ToString();
                 }
-                catch
+
+                //RAM
+                ManagementObjectSearcher Search = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
+
+                foreach (ManagementObject Mobject in Search.Get())
                 {
-                    maxrammb.Text = "Geçersiz Değer!";
+                    double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
+                    double ramgb = Ram_Bytes / 1073741824;
+                    double islem = Math.Ceiling(ramgb);
+                    RAMInfo.Text = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024) + "MB"  + " = " + islem.ToString() + " GB";
                 }
             }
-            else if (maxrammb.Text != "")
+            catch
             {
-                maxrammb.Text = "";
-            }
-            maxramtext.MaxLength = 4;
 
-
-            if (Properties.Settings.Default.RamMin != string.Empty)
-            {
-                minramtext.Text = Properties.Settings.Default.RamMin;
             }
-            if (Properties.Settings.Default.RamMin != string.Empty)
+            Setup(); //Discord Oynuyor
+
+            pingsayac = 0; //Ping Sayaç
+            timer2.Start(); //Ping Sayaç
+
+            nickname1.Text = Properties.Settings.Default.NickNames; //Nickname Bilgisini Göster
+
+            //Oyun Kapanınca Aç / Tick
+            try
             {
-                try
+                if (Properties.Settings.Default.OyunTickS != string.Empty)
                 {
-                    minrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(minramtext.Text) / 1024) + "GB";
+                    ticksave.Text = Properties.Settings.Default.OyunTickS;
                 }
-                catch
+                if (ticksave.Text == "acik")
                 {
-                    minrammb.Text = "Geçersiz Değer!";
+                    kapattick.Checked = true;
+                }
+                if (ticksave.Text == "kapali")
+                {
+                    kapattick.Checked = false;
                 }
             }
-            else if (maxrammb.Text != "")
+            catch
             {
-                minrammb.Text = "";
-            }
-            minramtext.MaxLength = 4;
 
-            //Resolution
-            if (Properties.Settings.Default.ResolutionHeight != string.Empty)
-            {
-                widthtextbox.Text = Properties.Settings.Default.ResolutionHeight;
-            }
-            if (Properties.Settings.Default.ResolutionWidth != string.Empty)
-            {
-                heighttextbox.Text = Properties.Settings.Default.ResolutionWidth;
             }
 
-            //versiyon
-            if (Properties.Settings.Default.SelectedVersion != string.Empty)
+            //Versiyon bilgisini al
+            try
             {
-                surumsec.Text = Properties.Settings.Default.SelectedVersion;
+                if (Properties.Settings.Default.SelectedVersion != string.Empty)
+                {
+                    surumt.Text = Properties.Settings.Default.SelectedVersion;
+                }
+            }
+            catch
+            {
+
             }
 
-            //   var request = WebRequest.Create("https://minotar.net/body/" + "/" + nickname1.Text);
+            //Versiyon bilgisini al / II
+            try
+            {
+                if (Properties.Settings.Default.SelectedVersion != string.Empty)
+                {
+                    surumsec.Text = Properties.Settings.Default.SelectedVersion;
+                }
+            }
+            catch
+            {
 
-            // using (var response = request.GetResponse())
-            //  using (var stream = response.GetResponseStream())
-            // {
-            //      skin.Image = Bitmap.FromStream(stream);
-            //  }
+            }
+
+            //Ram bilgisini al
+            try
+            {
+                if (Properties.Settings.Default.RamMax != string.Empty)
+                {
+                    maxramtext.Text = Properties.Settings.Default.RamMax;
+                }
+                if (Properties.Settings.Default.RamMax != string.Empty)
+                {
+                    maxramlabel.Text = Properties.Settings.Default.RamMax;
+                    try
+                    {
+                        maxrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(maxramtext.Text) / 1024) + "GB";
+                    }
+                    catch
+                    {
+                        maxrammb.Text = "Geçersiz Değer!";
+                    }
+                }
+                else if (maxrammb.Text != "")
+                {
+                    maxrammb.Text = "";
+                }
+                maxramtext.MaxLength = 4;
+
+
+                if (Properties.Settings.Default.RamMin != string.Empty)
+                {
+                    minramtext.Text = Properties.Settings.Default.RamMin;
+                }
+                if (Properties.Settings.Default.RamMin != string.Empty)
+                {
+                    try
+                    {
+                        minrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(minramtext.Text) / 1024) + "GB";
+                    }
+                    catch
+                    {
+                        minrammb.Text = "Geçersiz Değer!";
+                    }
+                }
+                else if (maxrammb.Text != "")
+                {
+                    minrammb.Text = "";
+                }
+                minramtext.MaxLength = 4;
+            }
+            catch
+            {
+
+            }
+
+            //Resolution bilgisini al
+            try
+            {
+                if (Properties.Settings.Default.ResolutionHeight != string.Empty)
+                {
+                    widthtextbox.Text = Properties.Settings.Default.ResolutionHeight;
+                }
+                if (Properties.Settings.Default.ResolutionWidth != string.Empty)
+                {
+                    heighttextbox.Text = Properties.Settings.Default.ResolutionWidth;
+                }
+            }
+            catch
+            {
+
+            }
+
+
+            //Skin bilgisini al
+            try
+            {
+                var request = WebRequest.Create("https://minotar.net/body" + "/" + nickname1.Text);
+
+                using (var response = request.GetResponse())
+                using (var stream = response.GetResponseStream())
+                {
+                    skin.Image = Bitmap.FromStream(stream);
+                }
+            }
+            catch
+            {
+
+            }
         }
-        public void path()
+        public void path() //Launcher Dizin Ayarları - Connection Limit
         {
             System.Net.ServicePointManager.DefaultConnectionLimit = 256;
 
@@ -195,70 +267,68 @@ namespace Projects_Launcher.Projects_Launcher
                 versiyonselect.Items.Add(item.Name);
             }*/
         }
-        public async void Launch()
+        public async void Launch() //Minecraft Başlatma Ayarları
         {
             var path = new MinecraftPath(launcherdizin);
             var launcher = new CMLauncher(path);
-            //versiyon = versiyonselect.SelectedItem.ToString();
             sessions = ProjectsLauncherLogin.nickname;
-            //var path = new MinecraftPath();
 
             var ayarlar = new MLaunchOption
             {
-                MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax),
-                MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin),
-                Session = MSession.GetOfflineSession(sessions),
-                ServerIp = "mc.projects.gg",
-                ScreenWidth = int.Parse(Properties.Settings.Default.ResolutionWidth),
-                ScreenHeight = int.Parse(Properties.Settings.Default.ResolutionHeight),
+                MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax), //Maksimum RAM bilgisini al
+                MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin), //Minimum RAM bilgisini al
+                Session = MSession.GetOfflineSession(sessions), //Nickname bilgisini al
+                ServerIp = "mc.projects.gg", //Bağlanılacak sunucu IP adresi
+                ScreenWidth = int.Parse(Properties.Settings.Default.ResolutionWidth), //Ekran boyutu bilgisini al
+                ScreenHeight = int.Parse(Properties.Settings.Default.ResolutionHeight), //Ekran boyutu bilgisini al
             };
-            var clientStartProcess = await launcher.CreateProcessAsync(Properties.Settings.Default.SelectedVersion, ayarlar);
+            var clientStartProcess = await launcher.CreateProcessAsync(Properties.Settings.Default.SelectedVersion, ayarlar); //Seçilen versiyon bilgi ve ayarlar ile-
 
-            clientStartProcess.Start();
+            clientStartProcess.Start(); // Oyunu başlat
 
-            timer1.Enabled = true;
+            timer1.Enabled = true; //Timer1 i çalıştır
 
         }
 
 
         private void oynabutton_Click(object sender, EventArgs e)
         {
-            string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/fabric-loader-0.13.3-1.18.1";
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/fabric-loader-0.13.3-1.18.1"; //Fabric Dizini
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData); //Appdata dizini
 
-            Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
+            Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1"); //Fabric İnstaller indirme adresi
 
-            if (Directory.Exists(@surum_appDataDizini))
+            if (Directory.Exists(@surum_appDataDizini)) //Fabric varmı yokmu kontrol et
             {
-                try
+                try //Eğer fabric varsa
                 {
-                    session = MSession.GetOfflineSession(ProjectsLauncherLogin.nickname);
+                    session = MSession.GetOfflineSession(ProjectsLauncherLogin.nickname); //Nickname bilgisini al
 
                     Thread thread = new Thread(() => Launch());
                     thread.IsBackground = true;
-                    thread.Start();
+                    thread.Start(); //Oyunu başlat
 
-                    surumt.Text = "Başlatılıyor...";
-                    timer1.Start();
-                    this.Enabled = false;
+                    surumt.Text = "Başlatılıyor..."; //OYNA butonunun textini değiştir
+                    timer1.Start(); //Timer1 i başlat
+                    this.Enabled = false; //Launcherın bileşenlerini deaktif yap
                 }
-                catch
+                catch //Eğer fabric yoksa
                 {
                     DialogResult secenek = MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi", MessageBoxButtons.OK);
 
                     if (secenek == DialogResult.OK)
                     {
-
+                        //Burada yazanı yap
                     }
-                    this.Enabled = true;
+                    this.Enabled = true; //Launcherın bileşenlerini aktifleştir
 
                     if (Properties.Settings.Default.SelectedVersion != string.Empty)
                     {
-                        surumt.Text = Properties.Settings.Default.SelectedVersion;
+                        surumt.Text = Properties.Settings.Default.SelectedVersion; //surumt textine sürüm bilgisini yazdır
                     }
 
                     surumt.Text = "OYNA";
-                    timer1.Stop();
+                    timer1.Stop(); //Timer1 i durdur
                     this.Enabled = true;
 
                 }
@@ -268,21 +338,19 @@ namespace Projects_Launcher.Projects_Launcher
             else
             {
 
-                DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?", "Projects Launcher", MessageBoxButtons.YesNo);
+                DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?", "Projects Launcher", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
 
-                if (secenek == DialogResult.Yes)
+                if (secenek == DialogResult.Yes) //MessageBox da evete tıklanırsa
                 {
-                    WebClient wc = new WebClient();
-                    wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-                    wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-installer-0.10.2.jar");
+                    WebClient wc = new WebClient(); //Webclient çağır
+                    wc.DownloadFileCompleted += Wc_DownloadFileCompleted; //İndirme işlemi bitince çalıştırılacak kodları çağır
+                    wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-installer-0.10.2.jar"); //fabric dizinine fabric'i indir
                 }
-                else if (secenek == DialogResult.No)
+                else if (secenek == DialogResult.No) //MessageBox da hayıra tıklanırsa
                 {
                     //Hayır seçeneğine tıklandığında çalıştırılacak kodlar
                 }
             }
-
-
         }
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
@@ -343,10 +411,19 @@ namespace Projects_Launcher.Projects_Launcher
 
         private async Task ServerStatus()
         {
-            IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
-            var status = await pinger.RequestAsync();
-            String server = status.Players.Online + "";
-            serverplayer.Text = (server + " Kişi aktif!");
+            try
+            {
+                IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
+                var status = await pinger.RequestAsync();
+                String sses = status.ToString();
+                String server = status.Players.Online + "";
+                serverplayer.Text = (server + " Kişi aktif!");
+            }
+            catch
+            {
+                serverplayer.Text = ("Serverdan Bilgi Alınamadı");
+            }
+
         }
 
         private async void timer2_Tick(object sender, EventArgs e)
@@ -367,7 +444,7 @@ namespace Projects_Launcher.Projects_Launcher
                 //player
                 await ServerStatus();
 
-           
+
             }
             catch
             {

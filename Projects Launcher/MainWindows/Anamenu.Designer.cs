@@ -53,6 +53,10 @@ namespace Projects_Launcher.Projects_Launcher
             this.minramlabel = new System.Windows.Forms.Label();
             this.serverplayer = new System.Windows.Forms.Label();
             this.panel213 = new Guna.UI2.WinForms.Guna2Panel();
+            this.label14 = new System.Windows.Forms.Label();
+            this.label10 = new System.Windows.Forms.Label();
+            this.RAMInfo = new System.Windows.Forms.Label();
+            this.EkranKartıInfo = new System.Windows.Forms.Label();
             this.kapattick = new Guna.UI2.WinForms.Guna2CheckBox();
             this.label4 = new System.Windows.Forms.Label();
             this.gamefolder = new System.Windows.Forms.Label();
@@ -78,7 +82,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.label22 = new System.Windows.Forms.Label();
             this.timer3 = new System.Windows.Forms.Timer(this.components);
             this.ticksave = new System.Windows.Forms.Label();
-            this.label10 = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ayarlarbutton)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.instagram)).BeginInit();
@@ -341,13 +344,17 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverplayer.ForeColor = System.Drawing.SystemColors.ActiveBorder;
             this.serverplayer.Location = new System.Drawing.Point(701, 437);
             this.serverplayer.Name = "serverplayer";
-            this.serverplayer.Size = new System.Drawing.Size(85, 16);
+            this.serverplayer.Size = new System.Drawing.Size(83, 16);
             this.serverplayer.TabIndex = 120;
-            this.serverplayer.Text = "xxx Kişi aktif!";
+            this.serverplayer.Text = "Server Offline";
             // 
             // panel213
             // 
             this.panel213.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("panel213.BackgroundImage")));
+            this.panel213.Controls.Add(this.label14);
+            this.panel213.Controls.Add(this.label10);
+            this.panel213.Controls.Add(this.RAMInfo);
+            this.panel213.Controls.Add(this.EkranKartıInfo);
             this.panel213.Controls.Add(this.kapattick);
             this.panel213.Controls.Add(this.label4);
             this.panel213.Controls.Add(this.gamefolder);
@@ -376,6 +383,54 @@ namespace Projects_Launcher.Projects_Launcher
             this.panel213.Size = new System.Drawing.Size(980, 475);
             this.panel213.TabIndex = 133;
             this.panel213.Visible = false;
+            // 
+            // label14
+            // 
+            this.label14.AutoSize = true;
+            this.label14.BackColor = System.Drawing.Color.Transparent;
+            this.label14.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label14.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(205)))), ((int)(((byte)(185)))), ((int)(((byte)(10)))));
+            this.label14.Location = new System.Drawing.Point(699, 42);
+            this.label14.Name = "label14";
+            this.label14.Size = new System.Drawing.Size(42, 18);
+            this.label14.TabIndex = 191;
+            this.label14.Text = "GPU";
+            // 
+            // label10
+            // 
+            this.label10.AutoSize = true;
+            this.label10.BackColor = System.Drawing.Color.Transparent;
+            this.label10.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label10.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(205)))), ((int)(((byte)(185)))), ((int)(((byte)(10)))));
+            this.label10.Location = new System.Drawing.Point(699, 14);
+            this.label10.Name = "label10";
+            this.label10.Size = new System.Drawing.Size(43, 18);
+            this.label10.TabIndex = 188;
+            this.label10.Text = "RAM";
+            // 
+            // RAMInfo
+            // 
+            this.RAMInfo.AutoSize = true;
+            this.RAMInfo.BackColor = System.Drawing.Color.Transparent;
+            this.RAMInfo.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.RAMInfo.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.RAMInfo.Location = new System.Drawing.Point(748, 15);
+            this.RAMInfo.Name = "RAMInfo";
+            this.RAMInfo.Size = new System.Drawing.Size(139, 18);
+            this.RAMInfo.TabIndex = 187;
+            this.RAMInfo.Text = "00000MB = 00 GB";
+            // 
+            // EkranKartıInfo
+            // 
+            this.EkranKartıInfo.AutoSize = true;
+            this.EkranKartıInfo.BackColor = System.Drawing.Color.Transparent;
+            this.EkranKartıInfo.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.EkranKartıInfo.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.EkranKartıInfo.Location = new System.Drawing.Point(748, 42);
+            this.EkranKartıInfo.Name = "EkranKartıInfo";
+            this.EkranKartıInfo.Size = new System.Drawing.Size(211, 18);
+            this.EkranKartıInfo.TabIndex = 184;
+            this.EkranKartıInfo.Text = "NVIDIA GeForce RTX 3090TI";
             // 
             // kapattick
             // 
@@ -778,18 +833,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.ticksave.Text = "label10";
             this.ticksave.Visible = false;
             // 
-            // label10
-            // 
-            this.label10.AutoSize = true;
-            this.label10.BackColor = System.Drawing.Color.Transparent;
-            this.label10.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.label10.ForeColor = System.Drawing.SystemColors.ActiveBorder;
-            this.label10.Location = new System.Drawing.Point(448, 243);
-            this.label10.Name = "label10";
-            this.label10.Size = new System.Drawing.Size(85, 16);
-            this.label10.TabIndex = 135;
-            this.label10.Text = "xxx Kişi aktif!";
-            // 
             // Anamenu
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
@@ -798,7 +841,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.BackColor = System.Drawing.SystemColors.Control;
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
             this.ClientSize = new System.Drawing.Size(980, 503);
-            this.Controls.Add(this.label10);
             this.Controls.Add(this.ticksave);
             this.Controls.Add(this.panel213);
             this.Controls.Add(this.serverplayer);
@@ -890,6 +932,9 @@ namespace Projects_Launcher.Projects_Launcher
         private System.Windows.Forms.Timer timer3;
         private Guna.UI2.WinForms.Guna2CheckBox kapattick;
         public System.Windows.Forms.Label ticksave;
+        private System.Windows.Forms.Label EkranKartıInfo;
+        private System.Windows.Forms.Label RAMInfo;
+        private System.Windows.Forms.Label label14;
         private System.Windows.Forms.Label label10;
     }
 }
