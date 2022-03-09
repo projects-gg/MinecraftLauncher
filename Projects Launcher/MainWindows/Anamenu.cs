@@ -4,6 +4,7 @@ using DiscordRPC;
 using MCServerStatus;
 using Microsoft.Win32;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
@@ -22,6 +23,8 @@ namespace Projects_Launcher.Projects_Launcher
     {
         public Anamenu()
         {
+            
+
             InitializeComponent();
         }
 
@@ -29,7 +32,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         public static string sessions;
         public static MSession session;
-
+        public static int index;
         public static string rammiktar;
         public static string height;
         public static string width;
@@ -49,7 +52,12 @@ namespace Projects_Launcher.Projects_Launcher
 
         public static string rambilgi;
 
-
+        public static int genislik;
+        public static int yukseklik;
+        private string yukseklikb;
+        private string yukseklikb2;
+        private string genislikb;
+        private string genislikb2;
         Ping p = new Ping();
 
         int pingsayac;
@@ -73,7 +81,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             Client.SetPresence(new RichPresence()
             {
-                Details = "Anamenüde - Projects Survival",
+                Details = "Başlatıcı menüsünde - Projects Survival",
                 State = "Sunucu IP: mc.projects.gg",
                 Assets = new Assets()
                 {
@@ -87,6 +95,11 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void Anamenu_Load(object sender, EventArgs e)
         {
+            var random = new Random();
+            var BackgroundList = new List<string> { "kıs_meydan.png","balık2.png","kıs_meydan2.png", "maden.png", "maden2.png", "meydan.png", "world.png", "world2.png", "world3.png", "world4.png" };
+            index = random.Next(BackgroundList.Count);
+
+
             //Donanım Bilgileri
             try
             {
@@ -259,6 +272,23 @@ namespace Projects_Launcher.Projects_Launcher
             {
 
             }
+
+            //Arkaplan bilgisini al
+            try
+            {
+                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/background" + "/" + (BackgroundList[index]));
+
+                using (var response = request.GetResponse())
+                using (var stream = response.GetResponseStream())
+                {
+                    this.BackgroundImage = Bitmap.FromStream(stream);
+                    panel213.BackgroundImage = this.BackgroundImage;
+                }
+            }
+            catch
+            {
+
+            }
         }
         public void path() //Launcher Dizin Ayarları - Connection Limit
         {
@@ -309,6 +339,23 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 try //Eğer fabric varsa
                 {
+                    Client.Dispose();
+                    Client = new DiscordRpcClient("949311557542756362");  //Creates the client
+                    Client.Initialize();                            //Connects the client
+
+                    Client.SetPresence(new RichPresence()
+                    {
+                        Details = "Şu an oynuyor! - Projects Survival",
+                        State = "Sunucu IP: mc.projects.gg",
+                        Assets = new Assets()
+                        {
+                            LargeImageKey = "131231",
+                            LargeImageText = "https://mc.projects.gg/",
+                            SmallImageKey = "",
+
+                        }
+                    });
+
                     session = MSession.GetOfflineSession(ProjectsLauncherLogin.nickname); //Nickname bilgisini al
 
                     Thread thread = new Thread(() => Launch());
@@ -322,6 +369,23 @@ namespace Projects_Launcher.Projects_Launcher
                 }
                 catch //Eğer fabric yoksa
                 {
+                    Client.Dispose();
+                    Client = new DiscordRpcClient("949311557542756362");  //Creates the client
+                    Client.Initialize();                            //Connects the client
+
+                    Client.SetPresence(new RichPresence()
+                    {
+                        Details = "Başlatıcı menüsünde - Projects Survival",
+                        State = "Sunucu IP: mc.projects.gg",
+                        Assets = new Assets()
+                        {
+                            LargeImageKey = "131231",
+                            LargeImageText = "https://mc.projects.gg/",
+                            SmallImageKey = "",
+
+                        }
+                    });
+
                     timer1.Stop(); //Timer1 i durdur
                     DialogResult secenek = MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi", MessageBoxButtons.OK);
 
@@ -499,7 +563,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void widthtextbox_TextChanged(object sender, EventArgs e)
         {
-            widthbox = heighttextbox.Text;
+            widthbox = widthtextbox.Text;
             Properties.Settings.Default.ResolutionWidth = widthbox;
             Properties.Settings.Default.Save();
             Projects_Launcher.Anamenu.widthlabell = Properties.Settings.Default.ResolutionWidth;
@@ -515,27 +579,34 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void maxramtext_TextChanged(object sender, EventArgs e)
         {
-            maxrambox = maxramtext.Text;
-            Properties.Settings.Default.RamMax = maxrambox;
-            Properties.Settings.Default.Save();
-            maxramlabel.Text = Properties.Settings.Default.RamMax;
-
-            //GB Convert
-            if (Properties.Settings.Default.RamMax != string.Empty)
+            try
             {
+                maxrambox = maxramtext.Text;
+                Properties.Settings.Default.RamMax = maxrambox;
+                Properties.Settings.Default.Save();
                 maxramlabel.Text = Properties.Settings.Default.RamMax;
-                try
+
+                //GB Convert
+                if (Properties.Settings.Default.RamMax != string.Empty)
                 {
-                    maxrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(maxramtext.Text) / 1024) + "GB";
+                    maxramlabel.Text = Properties.Settings.Default.RamMax;
+                    try
+                    {
+                        maxrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(maxramtext.Text) / 1024) + "GB";
+                    }
+                    catch
+                    {
+                        maxrammb.Text = "Geçersiz Değer!";
+                    }
                 }
-                catch
+                else if (maxrammb.Text != "")
                 {
-                    maxrammb.Text = "Geçersiz Değer!";
+                    maxrammb.Text = "";
                 }
             }
-            else if (maxrammb.Text != "")
+            catch
             {
-                maxrammb.Text = "";
+                MessageBox.Show("RAM miktarı ayarlanırken bir hata meydana geldi.");
             }
         }
 
@@ -590,26 +661,33 @@ namespace Projects_Launcher.Projects_Launcher
         }
         private void minramtext_TextChanged(object sender, EventArgs e)
         {
-            minrambox = minramtext.Text;
-            Properties.Settings.Default.RamMin = minrambox;
-            Properties.Settings.Default.Save();
-            minramlabel.Text = Properties.Settings.Default.RamMin;
-
-            //GB Convert
-            if (Properties.Settings.Default.RamMin != string.Empty)
+            try
             {
-                try
+                minrambox = minramtext.Text;
+                Properties.Settings.Default.RamMin = minrambox;
+                Properties.Settings.Default.Save();
+                minramlabel.Text = Properties.Settings.Default.RamMin;
+
+                //GB Convert
+                if (Properties.Settings.Default.RamMin != string.Empty)
                 {
-                    minrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(minramtext.Text) / 1024) + "GB";
+                    try
+                    {
+                        minrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(minramtext.Text) / 1024) + "GB";
+                    }
+                    catch
+                    {
+                        minrammb.Text = "Geçersiz Değer!";
+                    }
                 }
-                catch
+                else if (maxrammb.Text != "")
                 {
-                    minrammb.Text = "Geçersiz Değer!";
+                    minrammb.Text = "";
                 }
             }
-            else if (maxrammb.Text != "")
+            catch
             {
-                minrammb.Text = "";
+                MessageBox.Show("RAM miktarı ayarlanırken bir hata meydana geldi.");
             }
         }
 
@@ -817,6 +895,24 @@ namespace Projects_Launcher.Projects_Launcher
                 this.Visible = true;
                 this.Enabled = true;
                 timer1.Stop();
+
+                Client.Dispose();
+                Client = new DiscordRpcClient("949311557542756362");  //Creates the client
+                Client.Initialize();                            //Connects the client
+
+                Client.SetPresence(new RichPresence()
+                {
+                    Details = "Başlatıcı menüsünde - Projects Survival",
+                    State = "Sunucu IP: mc.projects.gg",
+                    Assets = new Assets()
+                    {
+                        LargeImageKey = "131231",
+                        LargeImageText = "https://mc.projects.gg/",
+                        SmallImageKey = "",
+
+                    }
+                });
+                timer3.Stop();
             }
             else
             {
@@ -845,39 +941,140 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void maxramtext_Leave(object sender, EventArgs e)
         {
-            ManagementObjectSearcher Search = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
-            foreach (ManagementObject Mobject in Search.Get())
+            try
             {
+                ManagementObjectSearcher Search = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
+                foreach (ManagementObject Mobject in Search.Get())
+                {
 
-                double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
-                double ramgb = Ram_Bytes / 1073741824;
-                double islem = Math.Ceiling(ramgb);
-                rambilgi = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024 - 1024);
+                    double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
+                    double ramgb = Ram_Bytes / 1073741824;
+                    double islem = Math.Ceiling(ramgb);
+                    rambilgi = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024 - 1024);
+                }
+
+                maxramtext.Text = (maxramtext.Text).Trim();
+                if (!string.IsNullOrEmpty(maxramtext.Text))
+                {
+
+                }
+                else
+                {
+                    MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
+                    maxramtext.Text = rambilgi;
+                }
+
+                if (Convert.ToInt32(maxramtext.Text) < 1024 || Convert.ToInt32(maxramtext.Text) > Convert.ToInt32(rambilgi))
+                {
+                    MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
+                    maxramtext.Text = rambilgi;
+                }
             }
-
-            if (Convert.ToInt32(maxramtext.Text) < 1024 || Convert.ToInt32(maxramtext.Text) > Convert.ToInt32(rambilgi))
+            catch
             {
-                MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
-                maxramtext.Text = rambilgi;
+                MessageBox.Show("RAM miktarı ayarlanırken bir hata meydana geldi.");
             }
         }
         private void minramtext_Leave(object sender, EventArgs e)
         {
-            ManagementObjectSearcher Search = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
-            foreach (ManagementObject Mobject in Search.Get())
+            try
             {
+                ManagementObjectSearcher Search = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
+                foreach (ManagementObject Mobject in Search.Get())
+                {
 
-                double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
-                double ramgb = Ram_Bytes / 1073741824;
-                double islem = Math.Ceiling(ramgb);
-                rambilgi = String.Format("{0:0.##}", Convert.ToDouble(islem) * 512);
+                    double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
+                    double ramgb = Ram_Bytes / 1073741824;
+                    double islem = Math.Ceiling(ramgb);
+                    rambilgi = String.Format("{0:0.##}", Convert.ToDouble(islem) * 512);
+                }
+
+                minramtext.Text = (minramtext.Text).Trim();
+                if (!string.IsNullOrEmpty(minramtext.Text))
+                {
+
+                }
+                else
+                {
+                    MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
+                    minramtext.Text = rambilgi;
+                }
+
+                if (Convert.ToInt32(minramtext.Text) < 1024 || Convert.ToInt32(minramtext.Text) > Convert.ToInt32(rambilgi))
+                {
+                    MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
+                    minramtext.Text = rambilgi;
+                }
             }
-
-            if (Convert.ToInt32(minramtext.Text) < 1024 || Convert.ToInt32(minramtext.Text) > Convert.ToInt32(rambilgi))
+            catch
             {
-                MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
-                minramtext.Text = rambilgi;
+                MessageBox.Show("RAM miktarı ayarlanırken bir hata meydana geldi.");
             }
+           
+        }
+
+        private void heighttextbox_Leave(object sender, EventArgs e)
+        {
+            try
+            {
+                yukseklik = Screen.PrimaryScreen.Bounds.Height;
+                yukseklikb = String.Format("{0:0.##}", Convert.ToDouble(yukseklik) / 2);
+                yukseklikb2 = String.Format("{0:0.##}", Convert.ToDouble(yukseklikb) / 2);
+
+                heighttextbox.Text = (heighttextbox.Text).Trim();
+                if (!string.IsNullOrEmpty(heighttextbox.Text))
+                {
+
+                }
+                else
+                {
+                    MessageBox.Show("Çözünürlük" + " " + yukseklikb2 + "-" + yukseklikb + " " + "arasında girilmeli.");
+                    heighttextbox.Text = yukseklikb;
+                }
+
+                if (Convert.ToInt32(heighttextbox.Text) < Convert.ToInt32(yukseklikb2) || Convert.ToInt32(heighttextbox.Text) > Convert.ToInt32(yukseklikb))
+                {
+                    MessageBox.Show("Çözünürlük" + " " + yukseklikb2 + "-" + yukseklikb + " " + "arasında girilmeli.");
+                    heighttextbox.Text = yukseklikb2;
+                }
+            }
+            catch
+            {
+                MessageBox.Show("Çözünürlük ayarlanırken bir hata meydana geldi.");
+            }
+           
+        }
+
+        private void widthtextbox_Leave(object sender, EventArgs e)
+        {
+            try
+            {
+                genislik = Screen.PrimaryScreen.Bounds.Width;
+                genislikb = String.Format("{0:0.##}", Convert.ToDouble(genislik) / 2);
+                genislikb2 = String.Format("{0:0.##}", Convert.ToDouble(genislikb) / 2);
+
+                widthtextbox.Text = (widthtextbox.Text).Trim();
+                if (!string.IsNullOrEmpty(widthtextbox.Text))
+                {
+
+                }
+                else
+                {
+                    MessageBox.Show("Çözünürlük" + " " + genislikb2 + "-" + genislikb + " " + "arasında girilmeli.");
+                    widthtextbox.Text = genislikb;
+                }
+
+                if (Convert.ToInt32(widthtextbox.Text) < Convert.ToInt32(genislikb2) || Convert.ToInt32(widthtextbox.Text) > Convert.ToInt32(genislikb))
+                {
+                    MessageBox.Show("Çözünürlük" + " " + genislikb2 + "-" + genislikb + " " + "arasında girilmeli.");
+                    widthtextbox.Text = genislikb;
+                }
+            }
+            catch
+            {
+                MessageBox.Show("Çözünürlük ayarlanırken bir hata meydana geldi.");
+            }
+            
         }
 
         private void oynabutton_MouseEnter(object sender, EventArgs e)

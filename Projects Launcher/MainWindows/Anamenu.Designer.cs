@@ -542,7 +542,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.maxrammb.BackColor = System.Drawing.Color.Transparent;
             this.maxrammb.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.maxrammb.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.maxrammb.Location = new System.Drawing.Point(487, 196);
+            this.maxrammb.Location = new System.Drawing.Point(495, 196);
             this.maxrammb.Name = "maxrammb";
             this.maxrammb.Size = new System.Drawing.Size(42, 18);
             this.maxrammb.TabIndex = 177;
@@ -554,7 +554,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.minrammb.BackColor = System.Drawing.Color.Transparent;
             this.minrammb.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.minrammb.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.minrammb.Location = new System.Drawing.Point(487, 168);
+            this.minrammb.Location = new System.Drawing.Point(495, 168);
             this.minrammb.Name = "minrammb";
             this.minrammb.Size = new System.Drawing.Size(42, 18);
             this.minrammb.TabIndex = 176;
@@ -607,7 +607,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.minramtext.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(32)))), ((int)(((byte)(32)))));
             this.minramtext.PlaceholderText = "";
             this.minramtext.SelectedText = "";
-            this.minramtext.Size = new System.Drawing.Size(61, 18);
+            this.minramtext.Size = new System.Drawing.Size(69, 18);
             this.minramtext.TabIndex = 173;
             this.minramtext.TextChanged += new System.EventHandler(this.minramtext_TextChanged);
             this.minramtext.Leave += new System.EventHandler(this.minramtext_Leave);
@@ -618,7 +618,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.label3.BackColor = System.Drawing.Color.Transparent;
             this.label3.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.label3.ForeColor = System.Drawing.SystemColors.Control;
-            this.label3.Location = new System.Drawing.Point(449, 168);
+            this.label3.Location = new System.Drawing.Point(457, 168);
             this.label3.Name = "label3";
             this.label3.Size = new System.Drawing.Size(32, 18);
             this.label3.TabIndex = 172;
@@ -691,7 +691,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.widthtextbox.SelectedText = "";
             this.widthtextbox.Size = new System.Drawing.Size(53, 18);
             this.widthtextbox.TabIndex = 168;
-            this.widthtextbox.TextChanged += new System.EventHandler(this.heighttextbox_TextChanged);
+            this.widthtextbox.TextChanged += new System.EventHandler(this.widthtextbox_TextChanged);
+            this.widthtextbox.Leave += new System.EventHandler(this.widthtextbox_Leave);
             // 
             // heighttextbox
             // 
@@ -716,7 +717,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.heighttextbox.SelectedText = "";
             this.heighttextbox.Size = new System.Drawing.Size(53, 18);
             this.heighttextbox.TabIndex = 167;
-            this.heighttextbox.TextChanged += new System.EventHandler(this.widthtextbox_TextChanged);
+            this.heighttextbox.TextChanged += new System.EventHandler(this.heighttextbox_TextChanged);
+            this.heighttextbox.Leave += new System.EventHandler(this.heighttextbox_Leave);
             // 
             // label13
             // 
@@ -752,7 +754,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.maxramtext.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(32)))), ((int)(((byte)(32)))));
             this.maxramtext.PlaceholderText = "";
             this.maxramtext.SelectedText = "";
-            this.maxramtext.Size = new System.Drawing.Size(61, 18);
+            this.maxramtext.Size = new System.Drawing.Size(68, 18);
             this.maxramtext.TabIndex = 165;
             this.maxramtext.TextChanged += new System.EventHandler(this.maxramtext_TextChanged);
             this.maxramtext.Leave += new System.EventHandler(this.maxramtext_Leave);
@@ -763,7 +765,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.mbLabel.BackColor = System.Drawing.Color.Transparent;
             this.mbLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.mbLabel.ForeColor = System.Drawing.SystemColors.Control;
-            this.mbLabel.Location = new System.Drawing.Point(449, 196);
+            this.mbLabel.Location = new System.Drawing.Point(457, 196);
             this.mbLabel.Name = "mbLabel";
             this.mbLabel.Size = new System.Drawing.Size(32, 18);
             this.mbLabel.TabIndex = 164;

@@ -1,6 +1,8 @@
 ﻿using DiscordRPC;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Drawing;
 using System.IO;
 using System.Net;
 using System.Windows.Forms;
@@ -14,7 +16,8 @@ namespace Projects_Launcher
             InitializeComponent();//
         }
         public static string nickname;
-        public int v = 2022;
+        public static int index;
+        public int v = 2023;
         Uri uri = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/setup.exe");
 
         public DiscordRpcClient Client { get; private set; }
@@ -56,7 +59,7 @@ namespace Projects_Launcher
 
             try
             {
-                if (v == 2022)
+                if (v == 2023)
                 {
 
                 }
@@ -95,6 +98,29 @@ namespace Projects_Launcher
             {
                 Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects");
             }
+
+
+            //Arkaplan bilgisini al
+            var random = new Random();
+            var BackgroundList = new List<string> { "kıs_meydan.png", "balık2.png", "kıs_meydan2.png", "maden.png", "maden2.png", "meydan.png", "world.png", "world2.png", "world3.png", "world4.png" };
+            index = random.Next(BackgroundList.Count);
+
+
+            try
+            {
+                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/background" + "/" + (BackgroundList[index]));
+
+                using (var response = request.GetResponse())
+                using (var stream = response.GetResponseStream())
+                {
+                    this.BackgroundImage = Bitmap.FromStream(stream);
+                }
+            }
+            catch
+            {
+
+            }
+
 
         }
 
