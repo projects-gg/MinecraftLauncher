@@ -1,6 +1,7 @@
 ﻿using CmlLib.Core;
 using CmlLib.Core.Auth;
 using DiscordRPC;
+using ICSharpCode.SharpZipLib.Zip;
 using MCServerStatus;
 using Microsoft.Win32;
 using System;
@@ -15,6 +16,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Threading;
 using System.Threading.Tasks;
+using System.IO.Compression;
 using System.Windows.Forms;
 
 namespace Projects_Launcher.Projects_Launcher
@@ -65,7 +67,7 @@ namespace Projects_Launcher.Projects_Launcher
         public static string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/resourcepacks";
         string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
 
-        Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1");
+        Uri fabric = new Uri("https://mc.projects.gg/LauncherUpdateStream/fabric-loader-0.13.3-1.18.2.zip");
 
         string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
@@ -99,6 +101,15 @@ namespace Projects_Launcher.Projects_Launcher
             var BackgroundList = new List<string> { "kıs_meydan.png","balık2.png","kıs_meydan2.png", "maden.png", "maden2.png", "meydan.png", "world.png", "world2.png", "world3.png", "world4.png" };
             index = random.Next(BackgroundList.Count);
 
+            //projects kontrol
+            if (Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions"))
+            {
+
+            }
+            else
+            {
+                Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions");
+            }
 
             //Donanım Bilgileri
             try
@@ -282,7 +293,7 @@ namespace Projects_Launcher.Projects_Launcher
                 using (var stream = response.GetResponseStream())
                 {
                     this.BackgroundImage = Bitmap.FromStream(stream);
-                    panel213.BackgroundImage = this.BackgroundImage;
+                   
                 }
             }
             catch
@@ -333,7 +344,7 @@ namespace Projects_Launcher.Projects_Launcher
             string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/fabric-loader-0.13.3-1.18.2"; //Fabric Dizini
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData); //Appdata dizini
 
-            Uri fabric = new Uri("https://www.dropbox.com/s/agaj6ootu3cmvok/fabric-installer-0.10.2.jar?dl=1"); //Fabric İnstaller indirme adresi
+            Uri fabric = new Uri("https://mc.projects.gg/LauncherUpdateStream/fabric-loader-0.13.3-1.18.2.zip"); //Fabric İnstaller indirme adresi
 
             if (Directory.Exists(@surum_appDataDizini)) //Fabric varmı yokmu kontrol et
             {
@@ -417,7 +428,9 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     WebClient wc = new WebClient(); //Webclient çağır
                     wc.DownloadFileCompleted += Wc_DownloadFileCompleted; //İndirme işlemi bitince çalıştırılacak kodları çağır
-                    wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-installer-0.10.2.jar"); //fabric dizinine fabric'i indir
+                    wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-loader-0.13.3-1.18.2.zip"); //fabric dizinine fabric'i indir
+                    this.Enabled = false;
+
                 }
                 else if (secenek == DialogResult.No) //MessageBox da hayıra tıklanırsa
                 {
@@ -427,13 +440,12 @@ namespace Projects_Launcher.Projects_Launcher
         }
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/fabric-installer-0.10.2.jar";
+            string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/fabric-loader-0.13.3-1.18.2.zip";
+            string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions";
 
-            string myPath = @appDataDizini;
-            System.Diagnostics.Process prc = new System.Diagnostics.Process();
-            prc.StartInfo.FileName = myPath;
-            System.Threading.Thread.Sleep(1031);
-            prc.Start();
+            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath);
+
+            this.Enabled = true;
         }
 
         private void timer1_Tick(object sender, EventArgs e)
@@ -448,6 +460,12 @@ namespace Projects_Launcher.Projects_Launcher
                     this.Visible = false;
                     Thread.Sleep(2000);
                     timer3.Start();
+
+                    Process mcjava = Process.Start("javaw.exe");
+                    mcjava.Refresh();
+                    Thread.Sleep(1000);
+                    timer1.Stop();
+
                 }
             }
             else
@@ -497,6 +515,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         }
 
+        public virtual long Speed { get; }
         private async void timer2_Tick(object sender, EventArgs e)
         {
 
@@ -515,8 +534,7 @@ namespace Projects_Launcher.Projects_Launcher
                 //player
                 await ServerStatus();
 
-
-            }
+        }
             catch
             {
 
@@ -524,12 +542,6 @@ namespace Projects_Launcher.Projects_Launcher
 
 
         }
-
-        private void guna2ControlBox1_Click(object sender, EventArgs e)
-        {
-            Environment.Exit(0);
-        }
-
         private void ramlabel_Click(object sender, EventArgs e)
         {
             maxramlabell = maxramlabel.Text;
@@ -1075,6 +1087,16 @@ namespace Projects_Launcher.Projects_Launcher
                 MessageBox.Show("Çözünürlük ayarlanırken bir hata meydana geldi.");
             }
             
+        }
+
+        private void guna2ControlBox3_Click(object sender, EventArgs e)
+        {
+            Environment.Exit(0);
+        }
+
+        private void guna2ControlBox2_Click(object sender, EventArgs e)
+        {
+            this.WindowState = FormWindowState.Minimized;
         }
 
         private void oynabutton_MouseEnter(object sender, EventArgs e)

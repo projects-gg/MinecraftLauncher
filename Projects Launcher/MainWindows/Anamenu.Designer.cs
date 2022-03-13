@@ -48,7 +48,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.maxramlabel = new System.Windows.Forms.Label();
             this.timer1 = new System.Windows.Forms.Timer(this.components);
             this.timer2 = new System.Windows.Forms.Timer(this.components);
-            this.guna2ControlBox1 = new Guna.UI2.WinForms.Guna2ControlBox();
             this.geriformpanel = new System.Windows.Forms.Label();
             this.minramlabel = new System.Windows.Forms.Label();
             this.serverplayer = new System.Windows.Forms.Label();
@@ -82,6 +81,9 @@ namespace Projects_Launcher.Projects_Launcher
             this.label22 = new System.Windows.Forms.Label();
             this.timer3 = new System.Windows.Forms.Timer(this.components);
             this.ticksave = new System.Windows.Forms.Label();
+            this.guna2ControlBox2 = new Guna.UI2.WinForms.Guna2ControlBox();
+            this.guna2ControlBox3 = new Guna.UI2.WinForms.Guna2ControlBox();
+            this.label11 = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.ayarlarbutton)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.instagram)).BeginInit();
@@ -294,18 +296,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.timer2.Interval = 749;
             this.timer2.Tick += new System.EventHandler(this.timer2_Tick);
             // 
-            // guna2ControlBox1
-            // 
-            this.guna2ControlBox1.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.guna2ControlBox1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
-            this.guna2ControlBox1.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
-            this.guna2ControlBox1.IconColor = System.Drawing.Color.White;
-            this.guna2ControlBox1.Location = new System.Drawing.Point(935, 0);
-            this.guna2ControlBox1.Name = "guna2ControlBox1";
-            this.guna2ControlBox1.Size = new System.Drawing.Size(45, 29);
-            this.guna2ControlBox1.TabIndex = 126;
-            this.guna2ControlBox1.Click += new System.EventHandler(this.guna2ControlBox1_Click);
-            // 
             // geriformpanel
             // 
             this.geriformpanel.AutoSize = true;
@@ -344,13 +334,13 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverplayer.ForeColor = System.Drawing.SystemColors.ActiveBorder;
             this.serverplayer.Location = new System.Drawing.Point(701, 437);
             this.serverplayer.Name = "serverplayer";
-            this.serverplayer.Size = new System.Drawing.Size(84, 16);
+            this.serverplayer.Size = new System.Drawing.Size(83, 16);
             this.serverplayer.TabIndex = 120;
             this.serverplayer.Text = "Server Offline";
             // 
             // panel213
             // 
-            this.panel213.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("panel213.BackgroundImage")));
+            this.panel213.BackColor = System.Drawing.Color.Transparent;
             this.panel213.Controls.Add(this.label14);
             this.panel213.Controls.Add(this.label10);
             this.panel213.Controls.Add(this.RAMInfo);
@@ -390,7 +380,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.label14.BackColor = System.Drawing.Color.Transparent;
             this.label14.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.label14.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(205)))), ((int)(((byte)(185)))), ((int)(((byte)(10)))));
-            this.label14.Location = new System.Drawing.Point(699, 42);
+            this.label14.Location = new System.Drawing.Point(181, 406);
             this.label14.Name = "label14";
             this.label14.Size = new System.Drawing.Size(42, 18);
             this.label14.TabIndex = 191;
@@ -402,7 +392,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.label10.BackColor = System.Drawing.Color.Transparent;
             this.label10.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.label10.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(205)))), ((int)(((byte)(185)))), ((int)(((byte)(10)))));
-            this.label10.Location = new System.Drawing.Point(699, 14);
+            this.label10.Location = new System.Drawing.Point(181, 378);
             this.label10.Name = "label10";
             this.label10.Size = new System.Drawing.Size(43, 18);
             this.label10.TabIndex = 188;
@@ -414,7 +404,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.RAMInfo.BackColor = System.Drawing.Color.Transparent;
             this.RAMInfo.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.RAMInfo.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.RAMInfo.Location = new System.Drawing.Point(748, 15);
+            this.RAMInfo.Location = new System.Drawing.Point(230, 379);
             this.RAMInfo.Name = "RAMInfo";
             this.RAMInfo.Size = new System.Drawing.Size(139, 18);
             this.RAMInfo.TabIndex = 187;
@@ -426,7 +416,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.EkranKartıInfo.BackColor = System.Drawing.Color.Transparent;
             this.EkranKartıInfo.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.EkranKartıInfo.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.EkranKartıInfo.Location = new System.Drawing.Point(748, 42);
+            this.EkranKartıInfo.Location = new System.Drawing.Point(230, 406);
             this.EkranKartıInfo.Name = "EkranKartıInfo";
             this.EkranKartıInfo.Size = new System.Drawing.Size(211, 18);
             this.EkranKartıInfo.TabIndex = 184;
@@ -649,6 +639,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.surumsec.ItemHeight = 30;
             this.surumsec.Items.AddRange(new object[] {
             "fabric-loader-0.13.3-1.18.2",
+            "1.18.2",
             "1.18.1",
             "1.17.1",
             "1.16.5",
@@ -837,6 +828,43 @@ namespace Projects_Launcher.Projects_Launcher
             this.ticksave.Text = "label10";
             this.ticksave.Visible = false;
             // 
+            // guna2ControlBox2
+            // 
+            this.guna2ControlBox2.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.guna2ControlBox2.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.guna2ControlBox2.ControlBoxType = Guna.UI2.WinForms.Enums.ControlBoxType.MinimizeBox;
+            this.guna2ControlBox2.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.guna2ControlBox2.IconColor = System.Drawing.Color.White;
+            this.guna2ControlBox2.Location = new System.Drawing.Point(890, 0);
+            this.guna2ControlBox2.Name = "guna2ControlBox2";
+            this.guna2ControlBox2.Size = new System.Drawing.Size(45, 29);
+            this.guna2ControlBox2.TabIndex = 135;
+            this.guna2ControlBox2.Click += new System.EventHandler(this.guna2ControlBox2_Click);
+            // 
+            // guna2ControlBox3
+            // 
+            this.guna2ControlBox3.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.guna2ControlBox3.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.guna2ControlBox3.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.guna2ControlBox3.IconColor = System.Drawing.Color.White;
+            this.guna2ControlBox3.Location = new System.Drawing.Point(935, 0);
+            this.guna2ControlBox3.Name = "guna2ControlBox3";
+            this.guna2ControlBox3.Size = new System.Drawing.Size(45, 29);
+            this.guna2ControlBox3.TabIndex = 136;
+            this.guna2ControlBox3.Click += new System.EventHandler(this.guna2ControlBox3_Click);
+            // 
+            // label11
+            // 
+            this.label11.AutoSize = true;
+            this.label11.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.label11.ForeColor = System.Drawing.SystemColors.Control;
+            this.label11.Location = new System.Drawing.Point(572, 7);
+            this.label11.Name = "label11";
+            this.label11.Size = new System.Drawing.Size(43, 12);
+            this.label11.TabIndex = 137;
+            this.label11.Text = "label10";
+            this.label11.Visible = false;
+            // 
             // Anamenu
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 12F);
@@ -845,12 +873,14 @@ namespace Projects_Launcher.Projects_Launcher
             this.BackColor = System.Drawing.SystemColors.Control;
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
             this.ClientSize = new System.Drawing.Size(980, 503);
+            this.Controls.Add(this.label11);
+            this.Controls.Add(this.guna2ControlBox3);
+            this.Controls.Add(this.guna2ControlBox2);
             this.Controls.Add(this.ticksave);
             this.Controls.Add(this.panel213);
             this.Controls.Add(this.serverplayer);
             this.Controls.Add(this.minramlabel);
             this.Controls.Add(this.geriformpanel);
-            this.Controls.Add(this.guna2ControlBox1);
             this.Controls.Add(this.surumtext);
             this.Controls.Add(this.widthlabel);
             this.Controls.Add(this.heightlabel);
@@ -906,7 +936,6 @@ namespace Projects_Launcher.Projects_Launcher
         public System.Windows.Forms.Label maxramlabel;
         private System.Windows.Forms.Timer timer1;
         private System.Windows.Forms.Timer timer2;
-        private Guna.UI2.WinForms.Guna2ControlBox guna2ControlBox1;
         private System.Windows.Forms.Label geriformpanel;
         public System.Windows.Forms.Label minramlabel;
         private System.Windows.Forms.Label serverplayer;
@@ -940,5 +969,8 @@ namespace Projects_Launcher.Projects_Launcher
         private System.Windows.Forms.Label RAMInfo;
         private System.Windows.Forms.Label label14;
         private System.Windows.Forms.Label label10;
+        private Guna.UI2.WinForms.Guna2ControlBox guna2ControlBox2;
+        private Guna.UI2.WinForms.Guna2ControlBox guna2ControlBox3;
+        public System.Windows.Forms.Label label11;
     }
 }

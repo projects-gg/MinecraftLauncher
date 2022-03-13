@@ -17,7 +17,7 @@ namespace Projects_Launcher
         }
         public static string nickname;
         public static int index;
-        public int v = 2023;
+        public int v = 1;
         Uri uri = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/setup.exe");
 
         public DiscordRpcClient Client { get; private set; }
@@ -59,7 +59,7 @@ namespace Projects_Launcher
 
             try
             {
-                if (v == 2023)
+                if (v == 1)
                 {
 
                 }
@@ -204,6 +204,11 @@ namespace Projects_Launcher
         {
             string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/mods.zip";
             string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
+        }
+
+        private void guna2ControlBox2_Click(object sender, EventArgs e)
+        {
+            this.WindowState = FormWindowState.Minimized;
         }
     }
 }
