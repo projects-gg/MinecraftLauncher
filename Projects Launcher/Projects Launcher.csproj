@@ -27,14 +27,14 @@
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>false</MapFileExtensions>
     <InstallUrl>https://mc.projects.gg/LauncherUpdateStream/versions/</InstallUrl>
-    <SupportUrl>https://mc.projects.gg/</SupportUrl>
+    <SupportUrl>https://projects.gg/</SupportUrl>
     <TargetCulture>tr-TR</TargetCulture>
     <ProductName>Projects Launcher</ProductName>
     <PublisherName>Projects</PublisherName>
     <SuiteName>Projects_Launcher</SuiteName>
     <CreateWebPageOnPublish>true</CreateWebPageOnPublish>
     <WebPage>publish.htm</WebPage>
-    <ApplicationRevision>12</ApplicationRevision>
+    <ApplicationRevision>15</ApplicationRevision>
     <ApplicationVersion>3.3.3.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>
@@ -73,7 +73,7 @@
     <SignManifests>true</SignManifests>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>3A78516742C072C63A2120C792E3CBA1E58DDB06</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>45836765C9CA860EAF48845B1C35E10D9E0F22E0</ManifestCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup>
     <SignAssembly>false</SignAssembly>
@@ -87,8 +87,7 @@
   <PropertyGroup />
   <PropertyGroup />
   <PropertyGroup>
-    <ManifestKeyFile>
-    </ManifestKeyFile>
+    <ManifestKeyFile>ProjectsLauncher.pfx</ManifestKeyFile>
   </PropertyGroup>
   <PropertyGroup>
     <AssemblyOriginatorKeyFile>Projects.snk</AssemblyOriginatorKeyFile>
@@ -411,6 +410,7 @@
     <None Include="packages.config" />
     <None Include="projects.pfx" />
     <None Include="Projects.snk" />
+    <None Include="ProjectsLauncher.pfx" />
     <None Include="Properties\app.manifest" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
@@ -439,12 +439,12 @@
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.7.2">
       <Visible>False</Visible>
-      <ProductName>Microsoft .NET Framework 4.7.2 %28x86 ve x64%29</ProductName>
+      <ProductName>Microsoft .NET Framework 4.7.2 %28x86 and x64%29</ProductName>
       <Install>true</Install>
     </BootstrapperPackage>
     <BootstrapperPackage Include="Microsoft.Net.Framework.3.5.SP1">
       <Visible>False</Visible>
-      <ProductName>.NET Framework 3.5 SP1 </ProductName>
+      <ProductName>.NET Framework 3.5 SP1</ProductName>
       <Install>false</Install>
     </BootstrapperPackage>
   </ItemGroup>

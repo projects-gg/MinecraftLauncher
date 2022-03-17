@@ -17,13 +17,14 @@ using System.Net.NetworkInformation;
 using System.Threading;
 using System.Threading.Tasks;
 using System.IO.Compression;
+using System.Security.Policy;
 using System.Windows.Forms;
 
 namespace Projects_Launcher.Projects_Launcher
 {
-    public partial class Anamenu : Form
+    public partial class mainMenuForm : Form
     {
-        public Anamenu()
+        public mainMenuForm()
         {
             
 
@@ -78,12 +79,14 @@ namespace Projects_Launcher.Projects_Launcher
         public DiscordRpcClient Client { get; private set; }
         public void Setup()
         {
-            Client = new DiscordRpcClient("949311557542756362");  //Creates the client
-            Client.Initialize();                            //Connects the client
 
+            //Client.Dispose();
+            Client = new DiscordRpcClient("949311557542756362");
+            Client.Initialize();
+            
             Client.SetPresence(new RichPresence()
             {
-                Details = "Başlatıcı menüsünde - Projects Survival",
+                Details = "Başlatıcı menüsünde",
                 State = "Sunucu IP: mc.projects.gg",
                 Assets = new Assets()
                 {
@@ -119,7 +122,7 @@ namespace Projects_Launcher.Projects_Launcher
 
                 foreach (ManagementObject Mobject in ekran.Get())
                 {
-                    EkranKartıInfo.Text = Mobject["name"].ToString();
+                    gpuInfo.Text = Mobject["name"].ToString();
                 }
 
                 //RAM
@@ -142,7 +145,7 @@ namespace Projects_Launcher.Projects_Launcher
             pingsayac = 0; //Ping Sayaç
             timer2.Start(); //Ping Sayaç
 
-            nickname1.Text = Properties.Settings.Default.NickNames; //Nickname Bilgisini Göster
+            playerNameStaticLabel.Text = Properties.Settings.Default.NickNames; //Nickname Bilgisini Göster
 
             //Oyun Kapanınca Aç / Tick
             try
@@ -153,11 +156,11 @@ namespace Projects_Launcher.Projects_Launcher
                 }
                 if (ticksave.Text == "acik")
                 {
-                    kapattick.Checked = true;
+                    reopenLauncherCheckBox.Checked = true;
                 }
                 if (ticksave.Text == "kapali")
                 {
-                    kapattick.Checked = false;
+                    reopenLauncherCheckBox.Checked = false;
                 }
             }
             catch
@@ -170,7 +173,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 if (Properties.Settings.Default.SelectedVersion != string.Empty)
                 {
-                    surumt.Text = Properties.Settings.Default.SelectedVersion;
+                    versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
                 }
             }
             catch
@@ -183,7 +186,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 if (Properties.Settings.Default.SelectedVersion != string.Empty)
                 {
-                    surumsec.Text = Properties.Settings.Default.SelectedVersion;
+                    versionSelectComboBox.Text = Properties.Settings.Default.SelectedVersion;
                 }
             }
             catch
@@ -198,7 +201,7 @@ namespace Projects_Launcher.Projects_Launcher
 
                 if (Properties.Settings.Default.RamMax != string.Empty)
                 {
-                    maxramtext.Text = Properties.Settings.Default.RamMax;
+                    maxRamTextBox.Text = Properties.Settings.Default.RamMax;
                 }
 
 
@@ -207,16 +210,16 @@ namespace Projects_Launcher.Projects_Launcher
                     maxramlabel.Text = Properties.Settings.Default.RamMax;
                     try
                     {
-                        maxrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(maxramtext.Text) / 1024) + "GB";
+                        maxRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
                     }
                     catch
                     {
-                        maxrammb.Text = "Geçersiz Değer!";
+                        maxRamDynamicCalculatorLabel.Text = "Geçersiz Değer!";
                     }
                 }
-                else if (maxrammb.Text != "")
+                else if (maxRamDynamicCalculatorLabel.Text != "")
                 {
-                    maxrammb.Text = "";
+                    maxRamDynamicCalculatorLabel.Text = "";
                 }
                
 
@@ -226,24 +229,24 @@ namespace Projects_Launcher.Projects_Launcher
                 //min
                 if (Properties.Settings.Default.RamMin != string.Empty)
                 {
-                    minramtext.Text = Properties.Settings.Default.RamMin;
+                    minRamTextBox.Text = Properties.Settings.Default.RamMin;
                 }
                 if (Properties.Settings.Default.RamMin != string.Empty)
                 {
                     try
                     {
-                        minrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(minramtext.Text) / 1024) + "GB";
+                        minRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
                     }
                     catch
                     {
-                        minrammb.Text = "Geçersiz Değer!";
+                        minRamDynamicCalculatorLabel.Text = "Geçersiz Değer!";
                     }
                 }
-                else if (maxrammb.Text != "")
+                else if (maxRamDynamicCalculatorLabel.Text != "")
                 {
-                    minrammb.Text = "";
+                    minRamDynamicCalculatorLabel.Text = "";
                 }
-                minramtext.MaxLength = 4;
+                minRamTextBox.MaxLength = 4;
             }
             catch
             {
@@ -271,12 +274,12 @@ namespace Projects_Launcher.Projects_Launcher
             //Skin bilgisini al
             try
             {
-                var request = WebRequest.Create("https://minotar.net/body" + "/" + nickname1.Text);
+                var request = WebRequest.Create("https://minotar.net/body" + "/" + playerNameStaticLabel.Text);
 
                 using (var response = request.GetResponse())
                 using (var stream = response.GetResponseStream())
                 {
-                    skin.Image = Bitmap.FromStream(stream);
+                    skinRenderPictureBox.Image = Bitmap.FromStream(stream);
                 }
             }
             catch
@@ -324,26 +327,29 @@ namespace Projects_Launcher.Projects_Launcher
 
             }
         }
-        public async void Launch() //Minecraft Başlatma Ayarları
+        public async void Launch() // Minecraft startup settings
         {
             var path = new MinecraftPath(launcherdizin);
             var launcher = new CMLauncher(path);
-            sessions = ProjectsLauncherLogin.nickname;
+            sessions = loginMenuForm.nickname;
+
+            int MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin);
+            int MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax);
 
             var ayarlar = new MLaunchOption
             {
-                MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax), //Maksimum RAM bilgisini al
-                MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin), //Minimum RAM bilgisini al
-                Session = MSession.GetOfflineSession(sessions), //Nickname bilgisini al
-                ServerIp = "mc.projects.gg", //Bağlanılacak sunucu IP adresi
-                ScreenWidth = int.Parse(Properties.Settings.Default.ResolutionWidth), //Ekran boyutu bilgisini al
-                ScreenHeight = int.Parse(Properties.Settings.Default.ResolutionHeight), //Ekran boyutu bilgisini al
+                MaximumRamMb = MinimumRamMb, // Get maximum ram info
+                MinimumRamMb = MaximumRamMb, // Get minimum ram info
+                Session = MSession.GetOfflineSession(sessions), // Get nickname info
+                ServerIp = "mc.projects.gg", // The server IP which should connected
+                ScreenWidth = int.Parse(Properties.Settings.Default.ResolutionWidth), // Get width resolution info
+                ScreenHeight = int.Parse(Properties.Settings.Default.ResolutionHeight), // Get height resolution info
             };
-            var clientStartProcess = await launcher.CreateProcessAsync(Properties.Settings.Default.SelectedVersion, ayarlar); //Seçilen versiyon bilgi ve ayarlar ile-
+            var clientStartProcess = await launcher.CreateProcessAsync(Properties.Settings.Default.SelectedVersion, ayarlar); // Start client
 
-            clientStartProcess.Start(); // Oyunu başlat
+            clientStartProcess.Start(); // Launch the game
 
-            timer1.Enabled = true; //Timer1 i çalıştır
+            timer1.Enabled = true; // Launch timer1
 
             try
             {
@@ -358,24 +364,47 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void oynabutton_Click(object sender, EventArgs e)
         {
-            string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/fabric-loader-0.13.3-1.18.2"; //Fabric Dizini
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData); //Appdata dizini
+            string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/fabric-loader-0.13.3-1.18.2"; // Fabric directory
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData); // AppData directory
 
-            Uri fabric = new Uri("https://mc.projects.gg/LauncherUpdateStream/fabric-loader-0.13.3-1.18.2.zip"); //Fabric İnstaller indirme adresi
+            int MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin);
+            int MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax);
+
+            if (MaximumRamMb <= MinimumRamMb)
+            {
+                DialogResult ramExceptionResult = MessageBox.Show("Oyunu şu an başlatılamaz:\n\nVerilen azami RAM miktarı asgari\nmiktardan daha düşük.\n\nEşitleme yapılsın mı?\nTamam: Miktarları eşitle, oyunu başlat.\nİptal: Uyarıyı kapat ve oyunu başlatma.", "Bilgi", MessageBoxButtons.OKCancel); //DialogResult secenek = 
+
+                if (ramExceptionResult == DialogResult.OK)
+                {
+                    Properties.Settings.Default.RamMax = Properties.Settings.Default.RamMin;
+                    MaximumRamMb = MinimumRamMb;
+                }
+                else
+                {
+                    return;
+                }
+            }
+
+            Uri fabric = new Uri("https://mc.projects.gg/LauncherUpdateStream/fabric-loader-0.13.3-1.18.2.zip"); // Fabric installer address
             try
             {
-                if (Directory.Exists(@surum_appDataDizini)) //Fabric varmı yokmu kontrol et
+                if (Directory.Exists(@surum_appDataDizini)) //Check fabric is exist
                 {
-                    try //Eğer fabric varsa
+                    try //If fabric exists
                     {
+
                         Client.Dispose();
-                        Client = new DiscordRpcClient("949311557542756362");  //Creates the client
-                        Client.Initialize();                            //Connects the client
+                        Client = new DiscordRpcClient("949311557542756362");
+                        Client.Initialize();
 
                         Client.SetPresence(new RichPresence()
                         {
-                            Details = "Şu an oynuyor! - Projects Survival",
+                            Details = "Şu an oyunda!",
                             State = "Sunucu IP: mc.projects.gg",
+                            Timestamps = new Timestamps()
+                            {
+                                Start = DateTime.UtcNow
+                            },
                             Assets = new Assets()
                             {
                                 LargeImageKey = "131231",
@@ -385,26 +414,26 @@ namespace Projects_Launcher.Projects_Launcher
                             }
                         });
 
-                        session = MSession.GetOfflineSession(ProjectsLauncherLogin.nickname); //Nickname bilgisini al
+                        session = MSession.GetOfflineSession(loginMenuForm.nickname); // Get nickname info
 
                         Thread thread = new Thread(() => Launch());
                         thread.IsBackground = true;
-                        thread.Start(); //Oyunu başlat
+                        thread.Start(); // Launch the game
 
-                        surumt.Text = "Başlatılıyor...";
+                        versionInfoStaticLabel.Text = "Başlatılıyor...";
                         this.Enabled = false;
-                        timer1.Start(); //Timer1 i başlat
+                        timer1.Start(); // Launch timer1
 
                     }
-                    catch //Eğer fabric yoksa
+                    catch //If fabric not exist
                     {
                         Client.Dispose();
-                        Client = new DiscordRpcClient("949311557542756362");  //Creates the client
-                        Client.Initialize();                            //Connects the client
-
+                        Client = new DiscordRpcClient("949311557542756362");
+                        Client.Initialize();
+                        
                         Client.SetPresence(new RichPresence()
                         {
-                            Details = "Başlatıcı menüsünde - Projects Survival",
+                            Details = "Başlatıcı menüsünde",
                             State = "Sunucu IP: mc.projects.gg",
                             Assets = new Assets()
                             {
@@ -415,21 +444,19 @@ namespace Projects_Launcher.Projects_Launcher
                             }
                         });
 
-                        timer1.Stop(); //Timer1 i durdur
-                        DialogResult secenek = MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi", MessageBoxButtons.OK);
+                        timer1.Stop(); //Stop timer1
+                        MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi", MessageBoxButtons.OK); //DialogResult secenek = 
 
-                        if (secenek == DialogResult.OK)
-                        {
-                            //Burada yazanı yap
-                        }
                         this.Enabled = true; //Launcherın bileşenlerini aktifleştir
 
+                        /* Unnecessary boilerplate
                         if (Properties.Settings.Default.SelectedVersion != string.Empty)
                         {
-                            surumt.Text = Properties.Settings.Default.SelectedVersion; //surumt textine sürüm bilgisini yazdır
+                            versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion; // Write version info into versionInfoStaticLabel
                         }
+                        */
 
-                        surumt.Text = Properties.Settings.Default.SelectedVersion; //surumt textine sürüm bilgisini yazdır
+                        versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion; //Write version info into versionInfoStaticLabel
 
                         this.Enabled = true;
 
@@ -442,19 +469,14 @@ namespace Projects_Launcher.Projects_Launcher
 
                     DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?", "Projects Launcher", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
 
-                    if (secenek == DialogResult.Yes) //MessageBox da evete tıklanırsa
+                    if (secenek == DialogResult.Yes)
                     {
-                        WebClient wc = new WebClient(); //Webclient çağır
-                        wc.DownloadFileCompleted += Wc_DownloadFileCompleted; //İndirme işlemi bitince çalıştırılacak kodları çağır
-                        wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-loader-0.13.3-1.18.2.zip"); //fabric dizinine fabric'i indir
+                        WebClient wc = new WebClient();
+                        wc.DownloadFileCompleted += Wc_DownloadFileCompleted; // Call the codes when download process completed
+                        wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-loader-0.13.3-1.18.2.zip"); // Download fabric to directory '.projects'
 
                         this.Enabled = false;
-                        surumt.Text = "İndiriliyor...";
-                        //timer4.Start();
-                    }
-                    else if (secenek == DialogResult.No) //MessageBox da hayıra tıklanırsa
-                    {
-                        //Hayır seçeneğine tıklandığında çalıştırılacak kodlar
+                        versionInfoStaticLabel.Text = "İndiriliyor...";
                     }
                 }
             }
@@ -473,7 +495,7 @@ namespace Projects_Launcher.Projects_Launcher
 
                 System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath);
                 Thread.Sleep(1100);
-                surumt.Text = Properties.Settings.Default.SelectedVersion;
+                versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
                 this.Enabled = true;
             }
             catch
@@ -487,13 +509,13 @@ namespace Projects_Launcher.Projects_Launcher
         {
             try
             {
-                if (kapattick.Checked == true)
+                if (reopenLauncherCheckBox.Checked == true)
                 {
                     foreach (var process in Process.GetProcessesByName("javaw"))
                     {
                         Thread.Sleep(1031);
-                        surumt.Text = "Başlatılıyor...";
-                        oynabutton.Enabled = false;
+                        versionInfoStaticLabel.Text = "Başlatılıyor...";
+                        playButtonStaticLabel.Enabled = false;
                         this.Visible = false;
                         Thread.Sleep(2000);
                         timer3.Start();
@@ -510,8 +532,8 @@ namespace Projects_Launcher.Projects_Launcher
                     foreach (var process in Process.GetProcessesByName("javaw"))
                     {
                         Thread.Sleep(1031);
-                        surumt.Text = "Başlatılıyor...";
-                        oynabutton.Enabled = false;
+                        versionInfoStaticLabel.Text = "Başlatılıyor...";
+                        playButtonStaticLabel.Enabled = false;
                         this.Visible = false;
                         timer3.Stop();
                         Environment.Exit(0);
@@ -530,14 +552,14 @@ namespace Projects_Launcher.Projects_Launcher
         {
             try
             {
-                if (panel213.Visible == false)
+                if (settingsBgPanel.Visible == false)
                 {
-                    geriformpanel.Visible = true;
-                    panel213.Visible = true;
+                    previousPageStaticLabel.Visible = true;
+                    settingsBgPanel.Visible = true;
                 }
                 else
                 {
-                    panel213.Visible = false;
+                    settingsBgPanel.Visible = false;
                 }
             }
             catch
@@ -553,15 +575,20 @@ namespace Projects_Launcher.Projects_Launcher
         {
             try
             {
+                /* I can't figure out how to resolve A record to IPv4 address.
+                IPHostEntry hostEntry = Dns.GetHostEntry("mc.projects.gg");
+
+                string hostIpString = Convert.ToString(hostEntry.AddressList[0].MapToIPv4());
+                */
+
                 IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
                 var status = await pinger.RequestAsync();
-                String sses = status.ToString();
                 String server = status.Players.Online + "";
-                serverplayer.Text = (server + " Kişi aktif!");
+                serverOnlineCountStaticLabel.Text = (server + " oyuncu aktif!");
             }
             catch
             {
-                serverplayer.Text = ("Serverdan Bilgi Alınamadı");
+                serverOnlineCountStaticLabel.Text = ("Sunucu Hatası");
             }
 
         }
@@ -585,13 +612,11 @@ namespace Projects_Launcher.Projects_Launcher
                 //player
                 await ServerStatus();
 
-        }
+            }
             catch
             {
-
+                // Shouldn't happen except no internet connection or server downtime
             }
-
-
         }
         private void ramlabel_Click(object sender, EventArgs e)
         {
@@ -615,13 +640,13 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void formpanel_Paint(object sender, PaintEventArgs e)
         {
-            formpanell = panel213.Visible;
+            formpanell = settingsBgPanel.Visible;
         }
 
         private void geriformpanel_Click(object sender, EventArgs e)
         {
-            panel213.Visible = false;
-            geriformpanel.Visible = false;
+            settingsBgPanel.Visible = false;
+            previousPageStaticLabel.Visible = false;
         }
 
         private void widthtextbox_TextChanged(object sender, EventArgs e)
@@ -629,7 +654,7 @@ namespace Projects_Launcher.Projects_Launcher
             widthbox = widthtextbox.Text;
             Properties.Settings.Default.ResolutionWidth = widthbox;
             Properties.Settings.Default.Save();
-            Projects_Launcher.Anamenu.widthlabell = Properties.Settings.Default.ResolutionWidth;
+            Projects_Launcher.mainMenuForm.widthlabell = Properties.Settings.Default.ResolutionWidth;
         }
 
         private void heighttextbox_TextChanged(object sender, EventArgs e)
@@ -637,14 +662,14 @@ namespace Projects_Launcher.Projects_Launcher
             heightbox = heighttextbox.Text;
             Properties.Settings.Default.ResolutionHeight = heightbox;
             Properties.Settings.Default.Save();
-            Projects_Launcher.Anamenu.heightlabell = Properties.Settings.Default.ResolutionHeight;
+            Projects_Launcher.mainMenuForm.heightlabell = Properties.Settings.Default.ResolutionHeight;
         }
 
         private void maxramtext_TextChanged(object sender, EventArgs e)
         {
             try
             {
-                maxrambox = maxramtext.Text;
+                maxrambox = maxRamTextBox.Text;
                 Properties.Settings.Default.RamMax = maxrambox;
                 Properties.Settings.Default.Save();
                 maxramlabel.Text = Properties.Settings.Default.RamMax;
@@ -655,16 +680,16 @@ namespace Projects_Launcher.Projects_Launcher
                     maxramlabel.Text = Properties.Settings.Default.RamMax;
                     try
                     {
-                        maxrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(maxramtext.Text) / 1024) + "GB";
+                        maxRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
                     }
                     catch
                     {
-                        maxrammb.Text = "Geçersiz Değer!";
+                        maxRamDynamicCalculatorLabel.Text = "Geçersiz Değer!";
                     }
                 }
-                else if (maxrammb.Text != "")
+                else if (maxRamDynamicCalculatorLabel.Text != "")
                 {
-                    maxrammb.Text = "";
+                    maxRamDynamicCalculatorLabel.Text = "";
                 }
             }
             catch
@@ -680,9 +705,9 @@ namespace Projects_Launcher.Projects_Launcher
            
             try
             {
-                Properties.Settings.Default.SelectedVersion = surumsec.Text;
+                Properties.Settings.Default.SelectedVersion = versionSelectComboBox.Text;
                 Properties.Settings.Default.Save();
-                surumt.Text = surumsec.Text;
+                versionInfoStaticLabel.Text = versionSelectComboBox.Text;
             }
             catch
             {
@@ -709,7 +734,7 @@ namespace Projects_Launcher.Projects_Launcher
            
             try
             {
-                System.Diagnostics.Process.Start("https://discord.com/invite/9hxHCTQ");
+                System.Diagnostics.Process.Start("https://projects.gg/discord");
             }
             catch
             {
@@ -737,7 +762,7 @@ namespace Projects_Launcher.Projects_Launcher
                 x = rnd.Next(255);
                 y = rnd.Next(255);
                 z = rnd.Next(255);
-                geriformpanel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+                previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
             }
             catch
             {
@@ -750,7 +775,7 @@ namespace Projects_Launcher.Projects_Launcher
             
             try
             {
-                geriformpanel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+                previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
             }
             catch
             {
@@ -766,7 +791,7 @@ namespace Projects_Launcher.Projects_Launcher
                 x = rnd.Next(255);
                 y = rnd.Next(255);
                 z = rnd.Next(255);
-                geriformpanel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+                previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
             }
             catch
             {
@@ -779,7 +804,7 @@ namespace Projects_Launcher.Projects_Launcher
             
             try
             {
-                oynabutton.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+                playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
             }
             catch
             {
@@ -790,7 +815,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             try
             {
-                minrambox = minramtext.Text;
+                minrambox = minRamTextBox.Text;
                 Properties.Settings.Default.RamMin = minrambox;
                 Properties.Settings.Default.Save();
                 minramlabel.Text = Properties.Settings.Default.RamMin;
@@ -800,16 +825,16 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     try
                     {
-                        minrammb.Text = String.Format("{0:0.##}", Convert.ToDouble(minramtext.Text) / 1024) + "GB";
+                        minRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
                     }
                     catch
                     {
-                        minrammb.Text = "Geçersiz Değer!";
+                        minRamDynamicCalculatorLabel.Text = "Geçersiz Değer!";
                     }
                 }
-                else if (maxrammb.Text != "")
+                else if (maxRamDynamicCalculatorLabel.Text != "")
                 {
-                    minrammb.Text = "";
+                    minRamDynamicCalculatorLabel.Text = "";
                 }
             }
             catch
@@ -839,7 +864,7 @@ namespace Projects_Launcher.Projects_Launcher
                 x = rnd.Next(255);
                 y = rnd.Next(255);
                 z = rnd.Next(255);
-                mods.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+                modsDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
             }
             catch
             {
@@ -852,7 +877,7 @@ namespace Projects_Launcher.Projects_Launcher
             
             try
             {
-                mods.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+                modsDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
             }
             catch
             {
@@ -868,7 +893,7 @@ namespace Projects_Launcher.Projects_Launcher
                 x = rnd.Next(255);
                 y = rnd.Next(255);
                 z = rnd.Next(255);
-                texturepackfolder.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+                resourcePackDirLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
             }
             catch
             {
@@ -881,7 +906,7 @@ namespace Projects_Launcher.Projects_Launcher
             
             try
             {
-                texturepackfolder.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+                resourcePackDirLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
             }
             catch
             {
@@ -897,7 +922,7 @@ namespace Projects_Launcher.Projects_Launcher
                 x = rnd.Next(255);
                 y = rnd.Next(255);
                 z = rnd.Next(255);
-                texturepackaktar.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+                transferResourcepackLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
             }
             catch
             {
@@ -910,7 +935,7 @@ namespace Projects_Launcher.Projects_Launcher
             
             try
             {
-                texturepackaktar.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+                transferResourcepackLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
             }
             catch
             {
@@ -973,12 +998,12 @@ namespace Projects_Launcher.Projects_Launcher
                     {
                         if (File.Exists(TextureDizin + "\\" + DosyaAdi))
                         {
-                            MessageBox.Show(DosyaAdi + " isimli TexturePack zaten mevcut.", "", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            MessageBox.Show(DosyaAdi + " isimli doku paketi zaten mevcut.", "", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         }
                         else
                         {
                             File.Copy(DosyaYolu, TextureDizin + "\\" + DosyaAdi);
-                            MessageBox.Show("TexturePack başarıyla yüklendi.");
+                            MessageBox.Show("Doku paketi başarıyla yüklendi.");
                         }
                     }
                 }
@@ -1001,12 +1026,12 @@ namespace Projects_Launcher.Projects_Launcher
                     {
                         if (File.Exists(TextureDizin + "\\" + DosyaAdi))
                         {
-                            MessageBox.Show(DosyaAdi + " isimli TexturePack zaten mevcut.", "", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            MessageBox.Show(DosyaAdi + " isimli doku paketi zaten mevcut.", "", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                         }
                         else
                         {
                             File.Copy(DosyaYolu, TextureDizin + "\\" + DosyaAdi);
-                            MessageBox.Show("TexturePack başarıyla yüklendi.");
+                            MessageBox.Show("Doku paketi başarıyla yüklendi.");
                         }
                     }
                 }
@@ -1089,7 +1114,7 @@ namespace Projects_Launcher.Projects_Launcher
                 x = rnd.Next(255);
                 y = rnd.Next(255);
                 z = rnd.Next(255);
-                gamefolder.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+                gameDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
             }
             catch
             {
@@ -1102,17 +1127,12 @@ namespace Projects_Launcher.Projects_Launcher
             
             try
             {
-                gamefolder.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+                gameDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
             }
             catch
             {
 
             }
-        }
-
-        private void changelogst_Click(object sender, EventArgs e)
-        {
-
         }
 
         private void timer3_Tick(object sender, EventArgs e)
@@ -1124,20 +1144,20 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     if (Properties.Settings.Default.SelectedVersion != string.Empty)
                     {
-                        surumt.Text = Properties.Settings.Default.SelectedVersion;
+                        versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
                     }
-                    oynabutton.Enabled = true;
+                    playButtonStaticLabel.Enabled = true;
                     this.Visible = true;
                     this.Enabled = true;
                     timer1.Stop();
 
                     Client.Dispose();
-                    Client = new DiscordRpcClient("949311557542756362");  //Creates the client
-                    Client.Initialize();                            //Connects the client
+                    Client = new DiscordRpcClient("949311557542756362");
+                    Client.Initialize();
 
                     Client.SetPresence(new RichPresence()
                     {
-                        Details = "Başlatıcı menüsünde - Projects Survival",
+                        Details = "Başlatıcı menüsünde",
                         State = "Sunucu IP: mc.projects.gg",
                         Assets = new Assets()
                         {
@@ -1166,7 +1186,7 @@ namespace Projects_Launcher.Projects_Launcher
           
             try
             {
-                if (kapattick.Checked == true)
+                if (reopenLauncherCheckBox.Checked == true)
                 {
                     ticksave.Text = "acik";
 
@@ -1201,22 +1221,27 @@ namespace Projects_Launcher.Projects_Launcher
                     rambilgi = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024 - 1024);
                 }
 
-                maxramtext.Text = (maxramtext.Text).Trim();
-                if (!string.IsNullOrEmpty(maxramtext.Text))
+                maxRamTextBox.Text = (maxRamTextBox.Text).Trim();
+                if (!string.IsNullOrEmpty(maxRamTextBox.Text))
                 {
 
                 }
                 else
                 {
                     MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
-                    maxramtext.Text = rambilgi;
                 }
 
-                if (Convert.ToInt32(maxramtext.Text) < 1024 || Convert.ToInt32(maxramtext.Text) > Convert.ToInt32(rambilgi))
+                if (Convert.ToInt32(maxRamTextBox.Text) < 1024 || Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(rambilgi))
                 {
                     MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
-                    maxramtext.Text = rambilgi;
+                } else if (Convert.ToInt32(rambilgi) >= 1024 && Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(rambilgi)-512)
+                {
+                    MessageBox.Show("Yüksek kaynak kullanımı!\n\nYüksek kaynak tüketimi bilgisayarınızdaki\nbazı şeylerin yavaş çalışmasına neden olabilir\nEn yüksek RAM miktarınızı, azami RAM\nmiktarından daha az tutmanız tavsiye\nedilir.", "Kaynak Tüketim Uyarısı");
                 }
+
+                maxRamTextBox.Text = rambilgi;
+
+
             }
             catch
             {
@@ -1237,21 +1262,21 @@ namespace Projects_Launcher.Projects_Launcher
                     rambilgi = String.Format("{0:0.##}", Convert.ToDouble(islem) * 512);
                 }
 
-                minramtext.Text = (minramtext.Text).Trim();
-                if (!string.IsNullOrEmpty(minramtext.Text))
+                minRamTextBox.Text = (minRamTextBox.Text).Trim();
+                if (!string.IsNullOrEmpty(minRamTextBox.Text))
                 {
 
                 }
                 else
                 {
                     MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
-                    minramtext.Text = rambilgi;
+                    minRamTextBox.Text = rambilgi;
                 }
 
-                if (Convert.ToInt32(minramtext.Text) < 1024 || Convert.ToInt32(minramtext.Text) > Convert.ToInt32(rambilgi))
+                if (Convert.ToInt32(minRamTextBox.Text) < 1024 || Convert.ToInt32(minRamTextBox.Text) > Convert.ToInt32(rambilgi))
                 {
                     MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
-                    minramtext.Text = rambilgi;
+                    minRamTextBox.Text = rambilgi;
                 }
             }
             catch
@@ -1348,6 +1373,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             }
         }
+
         private void oynabutton_MouseEnter(object sender, EventArgs e)
         {
             try
@@ -1355,7 +1381,7 @@ namespace Projects_Launcher.Projects_Launcher
                 x = rnd.Next(255);
                 y = rnd.Next(255);
                 z = rnd.Next(255);
-                oynabutton.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+                playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
             }
             catch
             {
@@ -1367,7 +1393,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             try
             {
-                oynabutton.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+                playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
             }
             catch
             {

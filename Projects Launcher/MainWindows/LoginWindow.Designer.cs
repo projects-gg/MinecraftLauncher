@@ -1,7 +1,7 @@
 ﻿
 namespace Projects_Launcher
 {
-    partial class ProjectsLauncherLogin
+    partial class loginMenuForm
     {
         /// <summary>
         ///Gerekli tasarımcı değişkeni.
@@ -30,15 +30,15 @@ namespace Projects_Launcher
         private void InitializeComponent()
         {
             this.components = new System.ComponentModel.Container();
-            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(ProjectsLauncherLogin));
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(loginMenuForm));
             this.guna2BorderlessForm1 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.raminfo = new System.Windows.Forms.Label();
-            this.benihatırla = new Guna.UI2.WinForms.Guna2CheckBox();
-            this.projectslabel = new System.Windows.Forms.Label();
-            this.girisyapbutton = new Guna.UI2.WinForms.Guna2Button();
-            this.nicknametextbox = new Guna.UI2.WinForms.Guna2TextBox();
-            this.guna2ControlBox1 = new Guna.UI2.WinForms.Guna2ControlBox();
-            this.guna2ControlBox2 = new Guna.UI2.WinForms.Guna2ControlBox();
+            this.rememberMeCheckBox = new Guna.UI2.WinForms.Guna2CheckBox();
+            this.serverIpAddressStaticLabel = new System.Windows.Forms.Label();
+            this.loginButton = new Guna.UI2.WinForms.Guna2Button();
+            this.nickNameEnterTextBox = new Guna.UI2.WinForms.Guna2TextBox();
+            this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
+            this.minimizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.SuspendLayout();
             // 
             // guna2BorderlessForm1
@@ -60,122 +60,122 @@ namespace Projects_Launcher
             this.raminfo.TabIndex = 33;
             this.raminfo.Text = "4096";
             // 
-            // benihatırla
+            // rememberMeCheckBox
             // 
-            this.benihatırla.Anchor = System.Windows.Forms.AnchorStyles.Top;
-            this.benihatırla.Animated = true;
-            this.benihatırla.AutoCheck = false;
-            this.benihatırla.AutoSize = true;
-            this.benihatırla.BackColor = System.Drawing.Color.Transparent;
-            this.benihatırla.Checked = true;
-            this.benihatırla.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.benihatırla.CheckedState.BorderRadius = 0;
-            this.benihatırla.CheckedState.BorderThickness = 0;
-            this.benihatırla.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.benihatırla.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.benihatırla.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
-            this.benihatırla.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.benihatırla.Location = new System.Drawing.Point(380, 205);
-            this.benihatırla.Name = "benihatırla";
-            this.benihatırla.Size = new System.Drawing.Size(110, 24);
-            this.benihatırla.TabIndex = 32;
-            this.benihatırla.Text = "Beni Hatırla";
-            this.benihatırla.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
-            this.benihatırla.UncheckedState.BorderRadius = 0;
-            this.benihatırla.UncheckedState.BorderThickness = 0;
-            this.benihatırla.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
-            this.benihatırla.UseVisualStyleBackColor = false;
-            this.benihatırla.CheckedChanged += new System.EventHandler(this.benihatırla_CheckedChanged);
+            this.rememberMeCheckBox.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.rememberMeCheckBox.Animated = true;
+            this.rememberMeCheckBox.AutoCheck = false;
+            this.rememberMeCheckBox.AutoSize = true;
+            this.rememberMeCheckBox.BackColor = System.Drawing.Color.Transparent;
+            this.rememberMeCheckBox.Checked = true;
+            this.rememberMeCheckBox.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.rememberMeCheckBox.CheckedState.BorderRadius = 0;
+            this.rememberMeCheckBox.CheckedState.BorderThickness = 0;
+            this.rememberMeCheckBox.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.rememberMeCheckBox.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.rememberMeCheckBox.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
+            this.rememberMeCheckBox.ForeColor = System.Drawing.SystemColors.ControlLightLight;
+            this.rememberMeCheckBox.Location = new System.Drawing.Point(380, 205);
+            this.rememberMeCheckBox.Name = "rememberMeCheckBox";
+            this.rememberMeCheckBox.Size = new System.Drawing.Size(110, 24);
+            this.rememberMeCheckBox.TabIndex = 32;
+            this.rememberMeCheckBox.Text = "Beni Hatırla";
+            this.rememberMeCheckBox.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.rememberMeCheckBox.UncheckedState.BorderRadius = 0;
+            this.rememberMeCheckBox.UncheckedState.BorderThickness = 0;
+            this.rememberMeCheckBox.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.rememberMeCheckBox.UseVisualStyleBackColor = false;
+            this.rememberMeCheckBox.CheckedChanged += new System.EventHandler(this.benihatırla_CheckedChanged);
             // 
-            // projectslabel
+            // serverIpAddressStaticLabel
             // 
-            this.projectslabel.Anchor = System.Windows.Forms.AnchorStyles.Top;
-            this.projectslabel.AutoSize = true;
-            this.projectslabel.BackColor = System.Drawing.Color.Transparent;
-            this.projectslabel.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.projectslabel.Font = new System.Drawing.Font("Segoe UI", 12F);
-            this.projectslabel.ForeColor = System.Drawing.Color.White;
-            this.projectslabel.Location = new System.Drawing.Point(435, 284);
-            this.projectslabel.Name = "projectslabel";
-            this.projectslabel.Size = new System.Drawing.Size(110, 21);
-            this.projectslabel.TabIndex = 29;
-            this.projectslabel.Text = "mc.projects.gg";
-            this.projectslabel.Click += new System.EventHandler(this.label3_Click);
+            this.serverIpAddressStaticLabel.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.serverIpAddressStaticLabel.AutoSize = true;
+            this.serverIpAddressStaticLabel.BackColor = System.Drawing.Color.Transparent;
+            this.serverIpAddressStaticLabel.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.serverIpAddressStaticLabel.Font = new System.Drawing.Font("Segoe UI", 12F);
+            this.serverIpAddressStaticLabel.ForeColor = System.Drawing.Color.White;
+            this.serverIpAddressStaticLabel.Location = new System.Drawing.Point(435, 284);
+            this.serverIpAddressStaticLabel.Name = "serverIpAddressStaticLabel";
+            this.serverIpAddressStaticLabel.Size = new System.Drawing.Size(110, 21);
+            this.serverIpAddressStaticLabel.TabIndex = 29;
+            this.serverIpAddressStaticLabel.Text = "mc.projects.gg";
+            this.serverIpAddressStaticLabel.Click += new System.EventHandler(this.label3_Click);
             // 
-            // girisyapbutton
+            // loginButton
             // 
-            this.girisyapbutton.Anchor = System.Windows.Forms.AnchorStyles.Top;
-            this.girisyapbutton.Animated = true;
-            this.girisyapbutton.BackColor = System.Drawing.Color.Transparent;
-            this.girisyapbutton.BorderRadius = 5;
-            this.girisyapbutton.BorderThickness = 1;
-            this.girisyapbutton.DisabledState.BorderColor = System.Drawing.Color.DarkGray;
-            this.girisyapbutton.DisabledState.CustomBorderColor = System.Drawing.Color.DarkGray;
-            this.girisyapbutton.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(169)))), ((int)(((byte)(169)))), ((int)(((byte)(169)))));
-            this.girisyapbutton.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(141)))), ((int)(((byte)(141)))), ((int)(((byte)(141)))));
-            this.girisyapbutton.FillColor = System.Drawing.Color.Transparent;
-            this.girisyapbutton.Font = new System.Drawing.Font("Segoe UI", 12F);
-            this.girisyapbutton.ForeColor = System.Drawing.Color.White;
-            this.girisyapbutton.Location = new System.Drawing.Point(405, 248);
-            this.girisyapbutton.Name = "girisyapbutton";
-            this.girisyapbutton.Size = new System.Drawing.Size(170, 33);
-            this.girisyapbutton.TabIndex = 27;
-            this.girisyapbutton.Text = "Kullanıcı Adı Giriniz";
-            this.girisyapbutton.Click += new System.EventHandler(this.girisyapbutton_Click);
+            this.loginButton.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.loginButton.Animated = true;
+            this.loginButton.BackColor = System.Drawing.Color.Transparent;
+            this.loginButton.BorderRadius = 5;
+            this.loginButton.BorderThickness = 1;
+            this.loginButton.DisabledState.BorderColor = System.Drawing.Color.DarkGray;
+            this.loginButton.DisabledState.CustomBorderColor = System.Drawing.Color.DarkGray;
+            this.loginButton.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(169)))), ((int)(((byte)(169)))), ((int)(((byte)(169)))));
+            this.loginButton.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(141)))), ((int)(((byte)(141)))), ((int)(((byte)(141)))));
+            this.loginButton.FillColor = System.Drawing.Color.Transparent;
+            this.loginButton.Font = new System.Drawing.Font("Segoe UI", 12F);
+            this.loginButton.ForeColor = System.Drawing.Color.White;
+            this.loginButton.Location = new System.Drawing.Point(405, 248);
+            this.loginButton.Name = "loginButton";
+            this.loginButton.Size = new System.Drawing.Size(170, 33);
+            this.loginButton.TabIndex = 27;
+            this.loginButton.Text = "Kullanıcı Adı Giriniz";
+            this.loginButton.Click += new System.EventHandler(this.girisyapbutton_Click);
             // 
-            // nicknametextbox
+            // nickNameEnterTextBox
             // 
-            this.nicknametextbox.Anchor = System.Windows.Forms.AnchorStyles.Top;
-            this.nicknametextbox.BackColor = System.Drawing.Color.Tomato;
-            this.nicknametextbox.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
-            this.nicknametextbox.Cursor = System.Windows.Forms.Cursors.IBeam;
-            this.nicknametextbox.DefaultText = "Kullanıcı Adı";
-            this.nicknametextbox.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(208)))), ((int)(((byte)(208)))), ((int)(((byte)(208)))));
-            this.nicknametextbox.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(226)))), ((int)(((byte)(226)))));
-            this.nicknametextbox.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
-            this.nicknametextbox.DisabledState.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
-            this.nicknametextbox.FillColor = System.Drawing.Color.Transparent;
-            this.nicknametextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.nicknametextbox.Font = new System.Drawing.Font("Segoe UI", 14.25F);
-            this.nicknametextbox.ForeColor = System.Drawing.Color.White;
-            this.nicknametextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.nicknametextbox.IconLeft = global::Projects_Launcher.Properties.Resources.projects;
-            this.nicknametextbox.Location = new System.Drawing.Point(380, 171);
-            this.nicknametextbox.Margin = new System.Windows.Forms.Padding(4);
-            this.nicknametextbox.Name = "nicknametextbox";
-            this.nicknametextbox.PasswordChar = '\0';
-            this.nicknametextbox.PlaceholderForeColor = System.Drawing.Color.Black;
-            this.nicknametextbox.PlaceholderText = "";
-            this.nicknametextbox.SelectedText = "";
-            this.nicknametextbox.Size = new System.Drawing.Size(220, 34);
-            this.nicknametextbox.TabIndex = 26;
-            this.nicknametextbox.TextChanged += new System.EventHandler(this.nicknametextbox_TextChanged);
+            this.nickNameEnterTextBox.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.nickNameEnterTextBox.BackColor = System.Drawing.Color.Tomato;
+            this.nickNameEnterTextBox.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
+            this.nickNameEnterTextBox.Cursor = System.Windows.Forms.Cursors.IBeam;
+            this.nickNameEnterTextBox.DefaultText = "Kullanıcı Adı";
+            this.nickNameEnterTextBox.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(208)))), ((int)(((byte)(208)))), ((int)(((byte)(208)))));
+            this.nickNameEnterTextBox.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(226)))), ((int)(((byte)(226)))));
+            this.nickNameEnterTextBox.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
+            this.nickNameEnterTextBox.DisabledState.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
+            this.nickNameEnterTextBox.FillColor = System.Drawing.Color.Transparent;
+            this.nickNameEnterTextBox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.nickNameEnterTextBox.Font = new System.Drawing.Font("Segoe UI", 14.25F);
+            this.nickNameEnterTextBox.ForeColor = System.Drawing.Color.White;
+            this.nickNameEnterTextBox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.nickNameEnterTextBox.IconLeft = global::Projects_Launcher.Properties.Resources.projects;
+            this.nickNameEnterTextBox.Location = new System.Drawing.Point(380, 171);
+            this.nickNameEnterTextBox.Margin = new System.Windows.Forms.Padding(4);
+            this.nickNameEnterTextBox.Name = "nickNameEnterTextBox";
+            this.nickNameEnterTextBox.PasswordChar = '\0';
+            this.nickNameEnterTextBox.PlaceholderForeColor = System.Drawing.Color.Black;
+            this.nickNameEnterTextBox.PlaceholderText = "";
+            this.nickNameEnterTextBox.SelectedText = "";
+            this.nickNameEnterTextBox.Size = new System.Drawing.Size(220, 34);
+            this.nickNameEnterTextBox.TabIndex = 26;
+            this.nickNameEnterTextBox.TextChanged += new System.EventHandler(this.nicknametextbox_TextChanged);
             // 
-            // guna2ControlBox1
+            // maximizeButtonControlBox
             // 
-            this.guna2ControlBox1.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.guna2ControlBox1.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
-            this.guna2ControlBox1.IconColor = System.Drawing.Color.White;
-            this.guna2ControlBox1.Location = new System.Drawing.Point(935, 0);
-            this.guna2ControlBox1.Name = "guna2ControlBox1";
-            this.guna2ControlBox1.Size = new System.Drawing.Size(45, 29);
-            this.guna2ControlBox1.TabIndex = 25;
-            this.guna2ControlBox1.Click += new System.EventHandler(this.guna2ControlBox1_Click);
+            this.maximizeButtonControlBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.maximizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.maximizeButtonControlBox.IconColor = System.Drawing.Color.White;
+            this.maximizeButtonControlBox.Location = new System.Drawing.Point(935, 0);
+            this.maximizeButtonControlBox.Name = "maximizeButtonControlBox";
+            this.maximizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
+            this.maximizeButtonControlBox.TabIndex = 25;
+            this.maximizeButtonControlBox.Click += new System.EventHandler(this.guna2ControlBox1_Click);
             // 
-            // guna2ControlBox2
+            // minimizeButtonControlBox
             // 
-            this.guna2ControlBox2.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.guna2ControlBox2.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
-            this.guna2ControlBox2.ControlBoxType = Guna.UI2.WinForms.Enums.ControlBoxType.MinimizeBox;
-            this.guna2ControlBox2.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
-            this.guna2ControlBox2.IconColor = System.Drawing.Color.White;
-            this.guna2ControlBox2.Location = new System.Drawing.Point(890, 0);
-            this.guna2ControlBox2.Name = "guna2ControlBox2";
-            this.guna2ControlBox2.Size = new System.Drawing.Size(45, 29);
-            this.guna2ControlBox2.TabIndex = 136;
-            this.guna2ControlBox2.Click += new System.EventHandler(this.guna2ControlBox2_Click);
+            this.minimizeButtonControlBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.minimizeButtonControlBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.minimizeButtonControlBox.ControlBoxType = Guna.UI2.WinForms.Enums.ControlBoxType.MinimizeBox;
+            this.minimizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.minimizeButtonControlBox.IconColor = System.Drawing.Color.White;
+            this.minimizeButtonControlBox.Location = new System.Drawing.Point(890, 0);
+            this.minimizeButtonControlBox.Name = "minimizeButtonControlBox";
+            this.minimizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
+            this.minimizeButtonControlBox.TabIndex = 136;
+            this.minimizeButtonControlBox.Click += new System.EventHandler(this.guna2ControlBox2_Click);
             // 
-            // ProjectsLauncherLogin
+            // loginMenuForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
@@ -184,20 +184,20 @@ namespace Projects_Launcher
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
             this.ClientSize = new System.Drawing.Size(980, 503);
-            this.Controls.Add(this.guna2ControlBox2);
+            this.Controls.Add(this.minimizeButtonControlBox);
             this.Controls.Add(this.raminfo);
-            this.Controls.Add(this.benihatırla);
-            this.Controls.Add(this.projectslabel);
-            this.Controls.Add(this.girisyapbutton);
-            this.Controls.Add(this.nicknametextbox);
-            this.Controls.Add(this.guna2ControlBox1);
+            this.Controls.Add(this.rememberMeCheckBox);
+            this.Controls.Add(this.serverIpAddressStaticLabel);
+            this.Controls.Add(this.loginButton);
+            this.Controls.Add(this.nickNameEnterTextBox);
+            this.Controls.Add(this.maximizeButtonControlBox);
             this.DoubleBuffered = true;
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.MaximizeBox = false;
             this.MaximumSize = new System.Drawing.Size(980, 503);
             this.MinimumSize = new System.Drawing.Size(980, 503);
-            this.Name = "ProjectsLauncherLogin";
+            this.Name = "loginMenuForm";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Projects Launcher";
             this.Load += new System.EventHandler(this.ProjectsLauncherLogin_Load);
@@ -209,12 +209,12 @@ namespace Projects_Launcher
         #endregion
         private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm1;
         private System.Windows.Forms.Label raminfo;
-        private Guna.UI2.WinForms.Guna2CheckBox benihatırla;
-        private System.Windows.Forms.Label projectslabel;
-        private Guna.UI2.WinForms.Guna2Button girisyapbutton;
-        private Guna.UI2.WinForms.Guna2TextBox nicknametextbox;
-        private Guna.UI2.WinForms.Guna2ControlBox guna2ControlBox1;
-        private Guna.UI2.WinForms.Guna2ControlBox guna2ControlBox2;
+        private Guna.UI2.WinForms.Guna2CheckBox rememberMeCheckBox;
+        private System.Windows.Forms.Label serverIpAddressStaticLabel;
+        private Guna.UI2.WinForms.Guna2Button loginButton;
+        private Guna.UI2.WinForms.Guna2TextBox nickNameEnterTextBox;
+        private Guna.UI2.WinForms.Guna2ControlBox maximizeButtonControlBox;
+        private Guna.UI2.WinForms.Guna2ControlBox minimizeButtonControlBox;
     }
 }
 

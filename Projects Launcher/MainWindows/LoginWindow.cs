@@ -9,15 +9,15 @@ using System.Windows.Forms;
 
 namespace Projects_Launcher
 {
-    public partial class ProjectsLauncherLogin : Form
+    public partial class loginMenuForm : Form
     {
-        public ProjectsLauncherLogin()
+        public loginMenuForm()
         {
-            InitializeComponent();//
+            InitializeComponent();
         }
         public static string nickname;
         public static int index;
-        public int v = 2;
+        public string currentVersion = "0";
         Uri uri = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/setup.exe");
 
         public DiscordRpcClient Client { get; private set; }
@@ -26,12 +26,12 @@ namespace Projects_Launcher
         {
             try
             {
-                Client = new DiscordRpcClient("949311557542756362");  //Creates the client
-                Client.Initialize();                            //Connects the client
+                Client = new DiscordRpcClient("949311557542756362");
+                Client.Initialize();
 
                 Client.SetPresence(new RichPresence()
                 {
-                    Details = "Giriş Ekranında - Projects Survival",
+                    Details = "Giriş ekranında",
                     State = "Sunucu IP: mc.projects.gg",
                     Assets = new Assets()
                     {
@@ -49,62 +49,63 @@ namespace Projects_Launcher
 
         }
 
+        private void cantGrabVersionInfo()
+        {
+            MessageBox.Show("Güncelleme bilgileri alınamadı!\n\nİnternete bağlı olmayabilirsiniz ya da Projects servislerinde bir kara delik açılmış olabilir.", "Bilgi", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
+            
+        }
+
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
             Setup();
-            nicknametextbox.Text = Properties.Settings.Default.NickNames;
+            nickNameEnterTextBox.Text = Properties.Settings.Default.NickNames;
+            
+            WebRequest currentVersionContent = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/version.php");
 
-            string hedef = "https://mc.projects.gg/LauncherUpdateStream/version.php";
-            WebRequest istek = HttpWebRequest.Create(hedef);
-            WebResponse yanit;
-            yanit = istek.GetResponse();
-            StreamReader bilgiler = new StreamReader(yanit.GetResponseStream());
-            string gelen = bilgiler.ReadToEnd();
-            int baslangic = gelen.IndexOf("<p>") + 3;
-            int bitis = gelen.Substring(baslangic).IndexOf("</p>");
-            string gelenbilgileri = gelen.Substring(baslangic, bitis);
-            v = Convert.ToInt16(gelenbilgileri);
+            string newestVersion = currentVersion;
 
             try
             {
-                if (v == 2)
-                {
+                WebResponse versionContentResponse;
+                versionContentResponse = currentVersionContent.GetResponse();
+                StreamReader versionContentReader = new StreamReader(versionContentResponse.GetResponseStream());
+                string versionContentLine = versionContentReader.ReadToEnd();
+                int formatSplitterStart = versionContentLine.IndexOf("<p>") + 3;
+                int formatSplitterEnd = versionContentLine.Substring(formatSplitterStart).IndexOf("</p>");
+                newestVersion = versionContentLine.Substring(formatSplitterStart, formatSplitterEnd);
+            }
+            catch
+            {
+                cantGrabVersionInfo();
+            }
 
-                }
-                else
+            try
+            {
+                if (!currentVersion.Equals(newestVersion))
                 {
-                    DialogResult secenek = MessageBox.Show($@"Yeni Sürüm: {v}" + "\n" + "" + "\n" + "Yeni sürüme güncellensin mi?", "Güncelleme Mevcut",
+                    DialogResult updateDecision = MessageBox.Show("Projects başlatıcısı için kullanıma\nhazır yeni sürüm yayınlanmış!\n\n" + $@"Güncel sürüm: {newestVersion}" + "\n" + $@"Sizin sürümünüz: {currentVersion}" + "\n" + "" + "\n" + "Yeni sürüme güncellensin mi?", "Güncelleme Mevcut",
                           MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
 
-                    if (secenek == DialogResult.Yes)
+                    if (updateDecision == DialogResult.Yes)
                     {
                         this.Enabled = false;
                         WebClient wc = new WebClient();
                         wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
                         wc.DownloadFileAsync(uri,
-                            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/ProjectsSetup.exe");
+                            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                            "/.projects/ProjectsSetup.exe");
                     }
                 }
             }
             catch
             {
-                DialogResult secenek = MessageBox.Show($@"Güncelleme bilgileri alınamadı.", "Bilgi",
-                          MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
-
-                if (secenek == DialogResult.OK)
-                {
-
-                }
+                cantGrabVersionInfo();
             }
 
             try
             {
-                //projects kontrol
-                if (Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects"))
-                {
-
-                }
-                else
+                // Create new ".projects" directory if not exist
+                if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects"))
                 {
                     Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects");
                 }
@@ -116,7 +117,7 @@ namespace Projects_Launcher
 
             try
             {
-                //Arkaplan bilgisini al
+                // Get background info
                 var random = new Random();
                 var BackgroundList = new List<string> { "kıs_meydan.png", "balık2.png", "kıs_meydan2.png", "maden.png", "maden2.png", "meydan.png", "world.png", "world2.png", "world3.png", "world4.png" };
                 index = random.Next(BackgroundList.Count);
@@ -160,9 +161,9 @@ namespace Projects_Launcher
         {
             try
             {
-                if (benihatırla.Checked == true)
+                if (rememberMeCheckBox.Checked == true)
                 {
-                    Properties.Settings.Default.NickNames = nicknametextbox.Text;
+                    Properties.Settings.Default.NickNames = nickNameEnterTextBox.Text;
                     Properties.Settings.Default.Save();
                 }
             }
@@ -201,22 +202,22 @@ namespace Projects_Launcher
         {
             try
             {
-                if (string.IsNullOrEmpty(nicknametextbox.Text))
+                if (string.IsNullOrEmpty(nickNameEnterTextBox.Text))
                 {
-                    if (benihatırla.Checked == true)
+                    if (rememberMeCheckBox.Checked == true)
                     {
-                        Properties.Settings.Default.NickNames = nicknametextbox.Text;
+                        Properties.Settings.Default.NickNames = nickNameEnterTextBox.Text;
                         Properties.Settings.Default.Save();
                     }
-                    girisyapbutton.Text = "Kullanıcı Adı Giriniz";
+                    loginButton.Text = "Kullanıcı Adı Giriniz";
                     return;
                 }
                 else
                 {
-                    nickname = nicknametextbox.Text;
-                    girisyapbutton.Text = "Giriş Yap";
+                    nickname = nickNameEnterTextBox.Text;
+                    loginButton.Text = "Giriş Yap";
                 }
-                Projects_Launcher.Anamenu main = new Projects_Launcher.Anamenu();
+                Projects_Launcher.mainMenuForm main = new Projects_Launcher.mainMenuForm();
                 this.Hide();
                 main.Show(); Client.Dispose();
             }
@@ -228,25 +229,25 @@ namespace Projects_Launcher
 
         private void nicknametextbox_TextChanged(object sender, EventArgs e)
         {
-            nicknametextbox.Text = (nicknametextbox.Text).Trim();
+            nickNameEnterTextBox.Text = (nickNameEnterTextBox.Text).Trim();
 
             try
             {
-                if (!string.IsNullOrEmpty(nicknametextbox.Text))
+                if (!string.IsNullOrEmpty(nickNameEnterTextBox.Text))
                 {
-                    if (benihatırla.Checked == true)
+                    if (rememberMeCheckBox.Checked == true)
                     {
-                        Properties.Settings.Default.NickNames = nicknametextbox.Text;
+                        Properties.Settings.Default.NickNames = nickNameEnterTextBox.Text;
                         Properties.Settings.Default.Save();
                     }
-                    girisyapbutton.Text = "Giriş Yap";
-                    girisyapbutton.Enabled = true;
+                    loginButton.Text = "Giriş Yap";
+                    loginButton.Enabled = true;
                     return;
                 }
                 else
                 {
-                    girisyapbutton.Text = "Kullanıcı Adı Giriniz";
-                    girisyapbutton.Enabled = false;
+                    loginButton.Text = "Kullanıcı Adı Giriniz";
+                    loginButton.Enabled = false;
                 }
             }
             catch
