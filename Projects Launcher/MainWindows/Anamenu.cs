@@ -314,6 +314,15 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 versiyonselect.Items.Add(item.Name);
             }*/
+
+            try
+            {
+
+            }
+            catch
+            {
+
+            }
         }
         public async void Launch() //Minecraft Başlatma Ayarları
         {
@@ -336,6 +345,14 @@ namespace Projects_Launcher.Projects_Launcher
 
             timer1.Enabled = true; //Timer1 i çalıştır
 
+            try
+            {
+
+            }
+            catch
+            {
+
+            }
         }
 
 
@@ -345,155 +362,189 @@ namespace Projects_Launcher.Projects_Launcher
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData); //Appdata dizini
 
             Uri fabric = new Uri("https://mc.projects.gg/LauncherUpdateStream/fabric-loader-0.13.3-1.18.2.zip"); //Fabric İnstaller indirme adresi
-
-            if (Directory.Exists(@surum_appDataDizini)) //Fabric varmı yokmu kontrol et
+            try
             {
-                try //Eğer fabric varsa
+                if (Directory.Exists(@surum_appDataDizini)) //Fabric varmı yokmu kontrol et
                 {
-                    Client.Dispose();
-                    Client = new DiscordRpcClient("949311557542756362");  //Creates the client
-                    Client.Initialize();                            //Connects the client
-
-                    Client.SetPresence(new RichPresence()
+                    try //Eğer fabric varsa
                     {
-                        Details = "Şu an oynuyor! - Projects Survival",
-                        State = "Sunucu IP: mc.projects.gg",
-                        Assets = new Assets()
+                        Client.Dispose();
+                        Client = new DiscordRpcClient("949311557542756362");  //Creates the client
+                        Client.Initialize();                            //Connects the client
+
+                        Client.SetPresence(new RichPresence()
                         {
-                            LargeImageKey = "131231",
-                            LargeImageText = "https://mc.projects.gg/",
-                            SmallImageKey = "",
+                            Details = "Şu an oynuyor! - Projects Survival",
+                            State = "Sunucu IP: mc.projects.gg",
+                            Assets = new Assets()
+                            {
+                                LargeImageKey = "131231",
+                                LargeImageText = "https://mc.projects.gg/",
+                                SmallImageKey = "",
 
-                        }
-                    });
+                            }
+                        });
 
-                    session = MSession.GetOfflineSession(ProjectsLauncherLogin.nickname); //Nickname bilgisini al
+                        session = MSession.GetOfflineSession(ProjectsLauncherLogin.nickname); //Nickname bilgisini al
 
-                    Thread thread = new Thread(() => Launch());
-                    thread.IsBackground = true;
-                    thread.Start(); //Oyunu başlat
+                        Thread thread = new Thread(() => Launch());
+                        thread.IsBackground = true;
+                        thread.Start(); //Oyunu başlat
 
-                    surumt.Text = "Başlatılıyor...";
-                    this.Enabled = false;
-                    timer1.Start(); //Timer1 i başlat
-                    
-                }
-                catch //Eğer fabric yoksa
-                {
-                    Client.Dispose();
-                    Client = new DiscordRpcClient("949311557542756362");  //Creates the client
-                    Client.Initialize();                            //Connects the client
+                        surumt.Text = "Başlatılıyor...";
+                        this.Enabled = false;
+                        timer1.Start(); //Timer1 i başlat
 
-                    Client.SetPresence(new RichPresence()
-                    {
-                        Details = "Başlatıcı menüsünde - Projects Survival",
-                        State = "Sunucu IP: mc.projects.gg",
-                        Assets = new Assets()
-                        {
-                            LargeImageKey = "131231",
-                            LargeImageText = "https://mc.projects.gg/",
-                            SmallImageKey = "",
-
-                        }
-                    });
-
-                    timer1.Stop(); //Timer1 i durdur
-                    DialogResult secenek = MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi", MessageBoxButtons.OK);
-
-                    if (secenek == DialogResult.OK)
-                    {
-                        //Burada yazanı yap
                     }
-                    this.Enabled = true; //Launcherın bileşenlerini aktifleştir
-
-                    if (Properties.Settings.Default.SelectedVersion != string.Empty)
+                    catch //Eğer fabric yoksa
                     {
+                        Client.Dispose();
+                        Client = new DiscordRpcClient("949311557542756362");  //Creates the client
+                        Client.Initialize();                            //Connects the client
+
+                        Client.SetPresence(new RichPresence()
+                        {
+                            Details = "Başlatıcı menüsünde - Projects Survival",
+                            State = "Sunucu IP: mc.projects.gg",
+                            Assets = new Assets()
+                            {
+                                LargeImageKey = "131231",
+                                LargeImageText = "https://mc.projects.gg/",
+                                SmallImageKey = "",
+
+                            }
+                        });
+
+                        timer1.Stop(); //Timer1 i durdur
+                        DialogResult secenek = MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi", MessageBoxButtons.OK);
+
+                        if (secenek == DialogResult.OK)
+                        {
+                            //Burada yazanı yap
+                        }
+                        this.Enabled = true; //Launcherın bileşenlerini aktifleştir
+
+                        if (Properties.Settings.Default.SelectedVersion != string.Empty)
+                        {
+                            surumt.Text = Properties.Settings.Default.SelectedVersion; //surumt textine sürüm bilgisini yazdır
+                        }
+
                         surumt.Text = Properties.Settings.Default.SelectedVersion; //surumt textine sürüm bilgisini yazdır
+
+                        this.Enabled = true;
+
                     }
 
-                    surumt.Text = Properties.Settings.Default.SelectedVersion; //surumt textine sürüm bilgisini yazdır
-                    
-                    this.Enabled = true;
 
                 }
+                else
+                {
 
+                    DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?", "Projects Launcher", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
 
+                    if (secenek == DialogResult.Yes) //MessageBox da evete tıklanırsa
+                    {
+                        WebClient wc = new WebClient(); //Webclient çağır
+                        wc.DownloadFileCompleted += Wc_DownloadFileCompleted; //İndirme işlemi bitince çalıştırılacak kodları çağır
+                        wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-loader-0.13.3-1.18.2.zip"); //fabric dizinine fabric'i indir
+
+                        this.Enabled = false;
+                        surumt.Text = "İndiriliyor...";
+                        //timer4.Start();
+                    }
+                    else if (secenek == DialogResult.No) //MessageBox da hayıra tıklanırsa
+                    {
+                        //Hayır seçeneğine tıklandığında çalıştırılacak kodlar
+                    }
+                }
             }
-            else
+            catch
             {
 
-                DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?", "Projects Launcher", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
-
-                if (secenek == DialogResult.Yes) //MessageBox da evete tıklanırsa
-                {
-                    WebClient wc = new WebClient(); //Webclient çağır
-                    wc.DownloadFileCompleted += Wc_DownloadFileCompleted; //İndirme işlemi bitince çalıştırılacak kodları çağır
-                    wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-loader-0.13.3-1.18.2.zip"); //fabric dizinine fabric'i indir
-                    this.Enabled = false;
-
-                }
-                else if (secenek == DialogResult.No) //MessageBox da hayıra tıklanırsa
-                {
-                    //Hayır seçeneğine tıklandığında çalıştırılacak kodlar
-                }
             }
+          
         }
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
-            string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/fabric-loader-0.13.3-1.18.2.zip";
-            string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions";
+            try
+            {
+                string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/fabric-loader-0.13.3-1.18.2.zip";
+                string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions";
 
-            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath);
+                System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath);
+                Thread.Sleep(1100);
+                surumt.Text = Properties.Settings.Default.SelectedVersion;
+                this.Enabled = true;
+            }
+            catch
+            {
 
-            this.Enabled = true;
+            }
+            
         }
 
         private void timer1_Tick(object sender, EventArgs e)
         {
-            if (kapattick.Checked == true)
+            try
             {
-                foreach (var process in Process.GetProcessesByName("javaw"))
+                if (kapattick.Checked == true)
                 {
-                    Thread.Sleep(1031);
-                    surumt.Text = "Başlatılıyor...";
-                    oynabutton.Enabled = false;
-                    this.Visible = false;
-                    Thread.Sleep(2000);
-                    timer3.Start();
+                    foreach (var process in Process.GetProcessesByName("javaw"))
+                    {
+                        Thread.Sleep(1031);
+                        surumt.Text = "Başlatılıyor...";
+                        oynabutton.Enabled = false;
+                        this.Visible = false;
+                        Thread.Sleep(2000);
+                        timer3.Start();
 
-                    Process mcjava = Process.Start("javaw.exe");
-                    mcjava.Refresh();
-                    Thread.Sleep(1000);
-                    timer1.Stop();
+                        Process mcjava = Process.Start("javaw.exe");
+                        mcjava.Refresh();
+                        Thread.Sleep(1000);
+                        timer1.Stop();
 
+                    }
+                }
+                else
+                {
+                    foreach (var process in Process.GetProcessesByName("javaw"))
+                    {
+                        Thread.Sleep(1031);
+                        surumt.Text = "Başlatılıyor...";
+                        oynabutton.Enabled = false;
+                        this.Visible = false;
+                        timer3.Stop();
+                        Environment.Exit(0);
+
+                    }
                 }
             }
-            else
+            catch
             {
-                foreach (var process in Process.GetProcessesByName("javaw"))
-                {
-                    Thread.Sleep(1031);
-                    surumt.Text = "Başlatılıyor...";
-                    oynabutton.Enabled = false;
-                    this.Visible = false;
-                    timer3.Stop();
-                    Environment.Exit(0);
 
-                }
             }
+          
         }
 
         private void ayarlarbutton_Click(object sender, EventArgs e)
         {
-            if (panel213.Visible == false)
+            try
             {
-                geriformpanel.Visible = true;
-                panel213.Visible = true;
+                if (panel213.Visible == false)
+                {
+                    geriformpanel.Visible = true;
+                    panel213.Visible = true;
+                }
+                else
+                {
+                    panel213.Visible = false;
+                }
             }
-            else
+            catch
             {
-                panel213.Visible = false;
+
             }
+           
 
 
         }
@@ -626,50 +677,114 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void surumsec_SelectedIndexChanged(object sender, EventArgs e)
         {
-            Properties.Settings.Default.SelectedVersion = surumsec.Text;
-            Properties.Settings.Default.Save();
-            surumt.Text = surumsec.Text;
+           
+            try
+            {
+                Properties.Settings.Default.SelectedVersion = surumsec.Text;
+                Properties.Settings.Default.Save();
+                surumt.Text = surumsec.Text;
+            }
+            catch
+            {
+
+            }
         }
 
         private void website_Click(object sender, EventArgs e)
         {
-            System.Diagnostics.Process.Start("https://mc.projects.gg/");
+            try
+            {
+                System.Diagnostics.Process.Start("https://mc.projects.gg/");
+            }
+            catch
+            {
+
+            }
+            
         }
+
 
         private void discord_Click(object sender, EventArgs e)
         {
-            System.Diagnostics.Process.Start("https://discord.com/invite/9hxHCTQ");
+           
+            try
+            {
+                System.Diagnostics.Process.Start("https://discord.com/invite/9hxHCTQ");
+            }
+            catch
+            {
+
+            }
         }
 
         private void instagram_Click(object sender, EventArgs e)
         {
-            System.Diagnostics.Process.Start("https://www.instagram.com/projects.com.tr/");
+            
+            try
+            {
+                System.Diagnostics.Process.Start("https://www.instagram.com/projects.com.tr/");
+            }
+            catch
+            {
+
+            }
         }
 
         private void geriformpanel_MouseEnter(object sender, EventArgs e)
         {
-            x = rnd.Next(255);
-            y = rnd.Next(255);
-            z = rnd.Next(255);
-            geriformpanel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            try
+            {
+                x = rnd.Next(255);
+                y = rnd.Next(255);
+                z = rnd.Next(255);
+                geriformpanel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            }
+            catch
+            {
+
+            }
         }
 
         private void geriformpanel_MouseLeave(object sender, EventArgs e)
         {
-            geriformpanel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            
+            try
+            {
+                geriformpanel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            }
+            catch
+            {
+
+            }
         }
 
         private void changelogs_MouseEnter(object sender, EventArgs e)
         {
-            x = rnd.Next(255);
-            y = rnd.Next(255);
-            z = rnd.Next(255);
-            geriformpanel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+           
+            try
+            {
+                x = rnd.Next(255);
+                y = rnd.Next(255);
+                z = rnd.Next(255);
+                geriformpanel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            }
+            catch
+            {
+
+            }
         }
 
         private void changelogs_MouseLeave(object sender, EventArgs e)
         {
-            oynabutton.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            
+            try
+            {
+                oynabutton.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            }
+            catch
+            {
+
+            }
         }
         private void minramtext_TextChanged(object sender, EventArgs e)
         {
@@ -705,151 +820,231 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void minramlabel_Click(object sender, EventArgs e)
         {
-            minramlabell = minramlabel.Text;
+            try
+            {
+                minramlabell = minramlabel.Text;
+            }
+            catch
+            {
+
+            }
+           
         }
 
         private void mods_MouseEnter(object sender, EventArgs e)
         {
-            x = rnd.Next(255);
-            y = rnd.Next(255);
-            z = rnd.Next(255);
-            mods.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            
+            try
+            {
+                x = rnd.Next(255);
+                y = rnd.Next(255);
+                z = rnd.Next(255);
+                mods.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            }
+            catch
+            {
+
+            }
         }
 
         private void mods_MouseLeave(object sender, EventArgs e)
         {
-            mods.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            
+            try
+            {
+                mods.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            }
+            catch
+            {
+
+            }
         }
 
         private void texturepackfolder_MouseEnter(object sender, EventArgs e)
         {
-            x = rnd.Next(255);
-            y = rnd.Next(255);
-            z = rnd.Next(255);
-            texturepackfolder.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+           
+            try
+            {
+                x = rnd.Next(255);
+                y = rnd.Next(255);
+                z = rnd.Next(255);
+                texturepackfolder.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            }
+            catch
+            {
+
+            }
         }
 
         private void texturepackfolder_MouseLeave(object sender, EventArgs e)
         {
-            texturepackfolder.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            
+            try
+            {
+                texturepackfolder.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            }
+            catch
+            {
+
+            }
         }
 
         private void texturepackaktar_MouseEnter(object sender, EventArgs e)
         {
-            x = rnd.Next(255);
-            y = rnd.Next(255);
-            z = rnd.Next(255);
-            texturepackaktar.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+          
+            try
+            {
+                x = rnd.Next(255);
+                y = rnd.Next(255);
+                z = rnd.Next(255);
+                texturepackaktar.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            }
+            catch
+            {
+
+            }
         }
 
         private void texturepackaktar_MouseLeave(object sender, EventArgs e)
         {
-            texturepackaktar.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            
+            try
+            {
+                texturepackaktar.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            }
+            catch
+            {
+
+            }
         }
 
         private void mods_Click(object sender, EventArgs e)
         {
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/mods";
 
-            if (Directory.Exists(@appDataDizini))
+
+            try
+            {
+                if (Directory.Exists(@appDataDizini))
+                {
+
+                    string myPath = @appDataDizini;
+                    System.Diagnostics.Process prc = new System.Diagnostics.Process();
+                    prc.StartInfo.FileName = myPath;
+                    System.Threading.Thread.Sleep(1000);
+                    prc.Start();
+                }
+                else
+                {
+                    Directory.CreateDirectory(@appDataDizini);
+                    string myPath = @appDataDizini;
+                    System.Diagnostics.Process prc = new System.Diagnostics.Process();
+                    prc.StartInfo.FileName = myPath;
+                    System.Threading.Thread.Sleep(1000);
+                    prc.Start();
+                }
+            }
+            catch
             {
 
-                string myPath = @appDataDizini;
-                System.Diagnostics.Process prc = new System.Diagnostics.Process();
-                prc.StartInfo.FileName = myPath;
-                System.Threading.Thread.Sleep(1000);
-                prc.Start();
-            }
-            else
-            {
-                Directory.CreateDirectory(@appDataDizini);
-                string myPath = @appDataDizini;
-                System.Diagnostics.Process prc = new System.Diagnostics.Process();
-                prc.StartInfo.FileName = myPath;
-                System.Threading.Thread.Sleep(1000);
-                prc.Start();
             }
         }
 
         private void texturepackaktar_Click(object sender, EventArgs e)
         {
-            if (Directory.Exists(@TextureDizin))
-            {
-                OpenFileDialog file = new OpenFileDialog();
-                file.Filter = "ZIP Dosyası |*.zip";
-                file.FilterIndex = 2;
-                file.RestoreDirectory = true;
-                file.CheckFileExists = false;
-                file.Title = "ZIP Dosyası Seçiniz.";
-                file.ShowDialog();
+           
 
-                string DosyaYolu = file.FileName;
-                string DosyaAdi = file.SafeFileName;
-                System.Threading.Thread.Sleep(500);
-                if (DosyaAdi != "" && DosyaYolu != "")
+            try
+            {
+                if (Directory.Exists(@TextureDizin))
                 {
-                    if (File.Exists(TextureDizin + "\\" + DosyaAdi))
+                    OpenFileDialog file = new OpenFileDialog();
+                    file.Filter = "ZIP Dosyası |*.zip";
+                    file.FilterIndex = 2;
+                    file.RestoreDirectory = true;
+                    file.CheckFileExists = false;
+                    file.Title = "ZIP Dosyası Seçiniz.";
+                    file.ShowDialog();
+
+                    string DosyaYolu = file.FileName;
+                    string DosyaAdi = file.SafeFileName;
+                    System.Threading.Thread.Sleep(500);
+                    if (DosyaAdi != "" && DosyaYolu != "")
                     {
-                        MessageBox.Show(DosyaAdi + " isimli TexturePack zaten mevcut.", "", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        if (File.Exists(TextureDizin + "\\" + DosyaAdi))
+                        {
+                            MessageBox.Show(DosyaAdi + " isimli TexturePack zaten mevcut.", "", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        }
+                        else
+                        {
+                            File.Copy(DosyaYolu, TextureDizin + "\\" + DosyaAdi);
+                            MessageBox.Show("TexturePack başarıyla yüklendi.");
+                        }
                     }
-                    else
+                }
+                else
+                {
+                    Directory.CreateDirectory(@TextureDizin);
+
+                    OpenFileDialog file = new OpenFileDialog();
+                    file.Filter = "ZIP Dosyası |*.zip";
+                    file.FilterIndex = 2;
+                    file.RestoreDirectory = true;
+                    file.CheckFileExists = false;
+                    file.Title = "ZIP Dosyası Seçiniz.";
+                    file.ShowDialog();
+
+                    string DosyaYolu = file.FileName;
+                    string DosyaAdi = file.SafeFileName;
+                    System.Threading.Thread.Sleep(500);
+                    if (DosyaAdi != "" && DosyaYolu != "")
                     {
-                        File.Copy(DosyaYolu, TextureDizin + "\\" + DosyaAdi);
-                        MessageBox.Show("TexturePack başarıyla yüklendi.");
+                        if (File.Exists(TextureDizin + "\\" + DosyaAdi))
+                        {
+                            MessageBox.Show(DosyaAdi + " isimli TexturePack zaten mevcut.", "", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        }
+                        else
+                        {
+                            File.Copy(DosyaYolu, TextureDizin + "\\" + DosyaAdi);
+                            MessageBox.Show("TexturePack başarıyla yüklendi.");
+                        }
                     }
                 }
             }
-            else
+            catch
             {
-                Directory.CreateDirectory(@TextureDizin);
 
-                OpenFileDialog file = new OpenFileDialog();
-                file.Filter = "ZIP Dosyası |*.zip";
-                file.FilterIndex = 2;
-                file.RestoreDirectory = true;
-                file.CheckFileExists = false;
-                file.Title = "ZIP Dosyası Seçiniz.";
-                file.ShowDialog();
-
-                string DosyaYolu = file.FileName;
-                string DosyaAdi = file.SafeFileName;
-                System.Threading.Thread.Sleep(500);
-                if (DosyaAdi != "" && DosyaYolu != "")
-                {
-                    if (File.Exists(TextureDizin + "\\" + DosyaAdi))
-                    {
-                        MessageBox.Show(DosyaAdi + " isimli TexturePack zaten mevcut.", "", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    }
-                    else
-                    {
-                        File.Copy(DosyaYolu, TextureDizin + "\\" + DosyaAdi);
-                        MessageBox.Show("TexturePack başarıyla yüklendi.");
-                    }
-                }
             }
-
-
         }
 
         private void texturepackfolder_Click(object sender, EventArgs e)
         {
-            if (Directory.Exists(@TextureDizin))
+            
+
+            try
+            {
+                if (Directory.Exists(@TextureDizin))
+                {
+
+                    string myPath = @TextureDizin;
+                    System.Diagnostics.Process prc = new System.Diagnostics.Process();
+                    prc.StartInfo.FileName = myPath;
+                    System.Threading.Thread.Sleep(1000);
+                    prc.Start();
+                }
+                else
+                {
+                    Directory.CreateDirectory(@TextureDizin);
+                    string myPath = @TextureDizin;
+                    System.Diagnostics.Process prc = new System.Diagnostics.Process();
+                    prc.StartInfo.FileName = myPath;
+                    System.Threading.Thread.Sleep(1000);
+                    prc.Start();
+                }
+            }
+            catch
             {
 
-                string myPath = @TextureDizin;
-                System.Diagnostics.Process prc = new System.Diagnostics.Process();
-                prc.StartInfo.FileName = myPath;
-                System.Threading.Thread.Sleep(1000);
-                prc.Start();
-            }
-            else
-            {
-                Directory.CreateDirectory(@TextureDizin);
-                string myPath = @TextureDizin;
-                System.Diagnostics.Process prc = new System.Diagnostics.Process();
-                prc.StartInfo.FileName = myPath;
-                System.Threading.Thread.Sleep(1000);
-                prc.Start();
             }
         }
 
@@ -857,37 +1052,62 @@ namespace Projects_Launcher.Projects_Launcher
         {
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
 
-            if (Directory.Exists(@appDataDizini))
+
+
+            try
+            {
+                if (Directory.Exists(@appDataDizini))
+                {
+
+                    string myPath = @appDataDizini;
+                    System.Diagnostics.Process prc = new System.Diagnostics.Process();
+                    prc.StartInfo.FileName = myPath;
+                    System.Threading.Thread.Sleep(1000);
+                    prc.Start();
+                }
+                else
+                {
+                    Directory.CreateDirectory(@appDataDizini);
+                    string myPath = @appDataDizini;
+                    System.Diagnostics.Process prc = new System.Diagnostics.Process();
+                    prc.StartInfo.FileName = myPath;
+                    System.Threading.Thread.Sleep(1000);
+                    prc.Start();
+                }
+            }
+            catch
             {
 
-                string myPath = @appDataDizini;
-                System.Diagnostics.Process prc = new System.Diagnostics.Process();
-                prc.StartInfo.FileName = myPath;
-                System.Threading.Thread.Sleep(1000);
-                prc.Start();
-            }
-            else
-            {
-                Directory.CreateDirectory(@appDataDizini);
-                string myPath = @appDataDizini;
-                System.Diagnostics.Process prc = new System.Diagnostics.Process();
-                prc.StartInfo.FileName = myPath;
-                System.Threading.Thread.Sleep(1000);
-                prc.Start();
             }
         }
 
         private void gamefolder_MouseEnter(object sender, EventArgs e)
         {
-            x = rnd.Next(255);
-            y = rnd.Next(255);
-            z = rnd.Next(255);
-            gamefolder.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+          
+            try
+            {
+                x = rnd.Next(255);
+                y = rnd.Next(255);
+                z = rnd.Next(255);
+                gamefolder.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            }
+            catch
+            {
+
+            }
         }
 
         private void gamefolder_MouseLeave(object sender, EventArgs e)
         {
-            gamefolder.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            
+            try
+            {
+                gamefolder.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            }
+            catch
+            {
+
+            }
         }
 
         private void changelogst_Click(object sender, EventArgs e)
@@ -897,57 +1117,73 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void timer3_Tick(object sender, EventArgs e)
         {
-            if (!Process.GetProcessesByName("javaw").Any())
+
+            try
             {
-                if (Properties.Settings.Default.SelectedVersion != string.Empty)
+                if (!Process.GetProcessesByName("javaw").Any())
                 {
-                    surumt.Text = Properties.Settings.Default.SelectedVersion;
-                }
-                oynabutton.Enabled = true;
-                this.Visible = true;
-                this.Enabled = true;
-                timer1.Stop();
-
-                Client.Dispose();
-                Client = new DiscordRpcClient("949311557542756362");  //Creates the client
-                Client.Initialize();                            //Connects the client
-
-                Client.SetPresence(new RichPresence()
-                {
-                    Details = "Başlatıcı menüsünde - Projects Survival",
-                    State = "Sunucu IP: mc.projects.gg",
-                    Assets = new Assets()
+                    if (Properties.Settings.Default.SelectedVersion != string.Empty)
                     {
-                        LargeImageKey = "131231",
-                        LargeImageText = "https://mc.projects.gg/",
-                        SmallImageKey = "",
-
+                        surumt.Text = Properties.Settings.Default.SelectedVersion;
                     }
-                });
-                timer3.Stop();
+                    oynabutton.Enabled = true;
+                    this.Visible = true;
+                    this.Enabled = true;
+                    timer1.Stop();
+
+                    Client.Dispose();
+                    Client = new DiscordRpcClient("949311557542756362");  //Creates the client
+                    Client.Initialize();                            //Connects the client
+
+                    Client.SetPresence(new RichPresence()
+                    {
+                        Details = "Başlatıcı menüsünde - Projects Survival",
+                        State = "Sunucu IP: mc.projects.gg",
+                        Assets = new Assets()
+                        {
+                            LargeImageKey = "131231",
+                            LargeImageText = "https://mc.projects.gg/",
+                            SmallImageKey = "",
+
+                        }
+                    });
+                    timer3.Stop();
+                }
+                else
+                {
+                    timer1.Start();
+                }
             }
-            else
+            catch
             {
-                timer1.Start();
+
             }
         }
 
         private void kapattick_CheckedChanged(object sender, EventArgs e)
         {
 
-            if (kapattick.Checked == true)
+          
+            try
             {
-                ticksave.Text = "acik";
+                if (kapattick.Checked == true)
+                {
+                    ticksave.Text = "acik";
 
-                Properties.Settings.Default.OyunTickS = ticksave.Text;
-                Properties.Settings.Default.Save();
+                    Properties.Settings.Default.OyunTickS = ticksave.Text;
+                    Properties.Settings.Default.Save();
+                }
+                else
+                {
+                    ticksave.Text = "kapali";
+
+                    Properties.Settings.Default.OyunTickS = ticksave.Text;
+                    Properties.Settings.Default.Save();
+                }
             }
-            else
+            catch
             {
-                ticksave.Text = "kapali";
 
-                Properties.Settings.Default.OyunTickS = ticksave.Text;
-                Properties.Settings.Default.Save();
             }
         }
 
@@ -1091,25 +1327,52 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void guna2ControlBox3_Click(object sender, EventArgs e)
         {
-            Environment.Exit(0);
+            try
+            {
+                Environment.Exit(0);
+            }
+            catch
+            {
+
+            }
         }
 
         private void guna2ControlBox2_Click(object sender, EventArgs e)
-        {
-            this.WindowState = FormWindowState.Minimized;
-        }
+        {  
+            try
+            {
+                this.WindowState = FormWindowState.Minimized;
+            }
+            catch
+            {
 
+            }
+        }
         private void oynabutton_MouseEnter(object sender, EventArgs e)
         {
-            x = rnd.Next(255);
-            y = rnd.Next(255);
-            z = rnd.Next(255);
-            oynabutton.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            try
+            {
+                x = rnd.Next(255);
+                y = rnd.Next(255);
+                z = rnd.Next(255);
+                oynabutton.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            }
+            catch
+            {
+
+            }
         }
 
         private void oynabutton_MouseLeave(object sender, EventArgs e)
         {
-            oynabutton.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            try
+            {
+                oynabutton.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            }
+            catch
+            {
+
+            }
         }
     }
 }

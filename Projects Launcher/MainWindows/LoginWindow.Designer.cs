@@ -34,7 +34,7 @@ namespace Projects_Launcher
             this.guna2BorderlessForm1 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.raminfo = new System.Windows.Forms.Label();
             this.benihatırla = new Guna.UI2.WinForms.Guna2CheckBox();
-            this.label3 = new System.Windows.Forms.Label();
+            this.projectslabel = new System.Windows.Forms.Label();
             this.girisyapbutton = new Guna.UI2.WinForms.Guna2Button();
             this.nicknametextbox = new Guna.UI2.WinForms.Guna2TextBox();
             this.guna2ControlBox1 = new Guna.UI2.WinForms.Guna2ControlBox();
@@ -87,20 +87,20 @@ namespace Projects_Launcher
             this.benihatırla.UseVisualStyleBackColor = false;
             this.benihatırla.CheckedChanged += new System.EventHandler(this.benihatırla_CheckedChanged);
             // 
-            // label3
+            // projectslabel
             // 
-            this.label3.Anchor = System.Windows.Forms.AnchorStyles.Top;
-            this.label3.AutoSize = true;
-            this.label3.BackColor = System.Drawing.Color.Transparent;
-            this.label3.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.label3.Font = new System.Drawing.Font("Segoe UI", 12F);
-            this.label3.ForeColor = System.Drawing.Color.White;
-            this.label3.Location = new System.Drawing.Point(435, 284);
-            this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(110, 21);
-            this.label3.TabIndex = 29;
-            this.label3.Text = "mc.projects.gg";
-            this.label3.Click += new System.EventHandler(this.label3_Click);
+            this.projectslabel.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.projectslabel.AutoSize = true;
+            this.projectslabel.BackColor = System.Drawing.Color.Transparent;
+            this.projectslabel.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.projectslabel.Font = new System.Drawing.Font("Segoe UI", 12F);
+            this.projectslabel.ForeColor = System.Drawing.Color.White;
+            this.projectslabel.Location = new System.Drawing.Point(435, 284);
+            this.projectslabel.Name = "projectslabel";
+            this.projectslabel.Size = new System.Drawing.Size(110, 21);
+            this.projectslabel.TabIndex = 29;
+            this.projectslabel.Text = "mc.projects.gg";
+            this.projectslabel.Click += new System.EventHandler(this.label3_Click);
             // 
             // girisyapbutton
             // 
@@ -187,7 +187,7 @@ namespace Projects_Launcher
             this.Controls.Add(this.guna2ControlBox2);
             this.Controls.Add(this.raminfo);
             this.Controls.Add(this.benihatırla);
-            this.Controls.Add(this.label3);
+            this.Controls.Add(this.projectslabel);
             this.Controls.Add(this.girisyapbutton);
             this.Controls.Add(this.nicknametextbox);
             this.Controls.Add(this.guna2ControlBox1);
@@ -210,7 +210,7 @@ namespace Projects_Launcher
         private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm1;
         private System.Windows.Forms.Label raminfo;
         private Guna.UI2.WinForms.Guna2CheckBox benihatırla;
-        private System.Windows.Forms.Label label3;
+        private System.Windows.Forms.Label projectslabel;
         private Guna.UI2.WinForms.Guna2Button girisyapbutton;
         private Guna.UI2.WinForms.Guna2TextBox nicknametextbox;
         private Guna.UI2.WinForms.Guna2ControlBox guna2ControlBox1;
