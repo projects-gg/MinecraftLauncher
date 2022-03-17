@@ -18,7 +18,7 @@ namespace Projects_Launcher
         public static string nickname;
         public static int index;
         public string currentVersion = "0";
-        Uri uri = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/setup.exe");
+        Uri uri = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
 
         public DiscordRpcClient Client { get; private set; }
 

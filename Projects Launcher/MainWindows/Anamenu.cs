@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Text;
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -63,8 +64,6 @@ namespace Projects_Launcher.Projects_Launcher
         private string genislikb2;
         Ping p = new Ping();
 
-        int pingsayac;
-
         public static string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/resourcepacks";
         string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
 
@@ -74,6 +73,8 @@ namespace Projects_Launcher.Projects_Launcher
 
         Random rnd = new Random();
         int x, y, z;
+
+        public bool alreadyPlayingAnimatedLabel = false;
 
         private int uiThreadId = Thread.CurrentThread.ManagedThreadId;
         public DiscordRpcClient Client { get; private set; }
@@ -141,8 +142,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             }
             Setup(); //Discord Oynuyor
-
-            pingsayac = 0; //Ping Sayaç
+            
             timer2.Start(); //Ping Sayaç
 
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames; //Nickname Bilgisini Göster
@@ -333,15 +333,13 @@ namespace Projects_Launcher.Projects_Launcher
             var launcher = new CMLauncher(path);
             sessions = loginMenuForm.nickname;
 
-            int MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin);
-            int MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax);
-
             var ayarlar = new MLaunchOption
             {
-                MaximumRamMb = MinimumRamMb, // Get maximum ram info
-                MinimumRamMb = MaximumRamMb, // Get minimum ram info
+                MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin), // Get maximum ram info
+                MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax), // Get minimum ram info
                 Session = MSession.GetOfflineSession(sessions), // Get nickname info
                 ServerIp = "mc.projects.gg", // The server IP which should connected
+                GameLauncherName = "Projects Minecraft",
                 ScreenWidth = int.Parse(Properties.Settings.Default.ResolutionWidth), // Get width resolution info
                 ScreenHeight = int.Parse(Properties.Settings.Default.ResolutionHeight), // Get height resolution info
             };
@@ -350,15 +348,8 @@ namespace Projects_Launcher.Projects_Launcher
             clientStartProcess.Start(); // Launch the game
 
             timer1.Enabled = true; // Launch timer1
-
-            try
-            {
-
-            }
-            catch
-            {
-
-            }
+            
+            
         }
 
 
@@ -420,7 +411,7 @@ namespace Projects_Launcher.Projects_Launcher
                         thread.IsBackground = true;
                         thread.Start(); // Launch the game
 
-                        versionInfoStaticLabel.Text = "Başlatılıyor...";
+                        animatedPlayingLabel();
                         this.Enabled = false;
                         timer1.Start(); // Launch timer1
 
@@ -514,7 +505,7 @@ namespace Projects_Launcher.Projects_Launcher
                     foreach (var process in Process.GetProcessesByName("javaw"))
                     {
                         Thread.Sleep(1031);
-                        versionInfoStaticLabel.Text = "Başlatılıyor...";
+                        animatedPlayingLabel();
                         playButtonStaticLabel.Enabled = false;
                         this.Visible = false;
                         Thread.Sleep(2000);
@@ -522,30 +513,57 @@ namespace Projects_Launcher.Projects_Launcher
 
                         Process mcjava = Process.Start("javaw.exe");
                         mcjava.Refresh();
+                        if (alreadyPlayingAnimatedLabel)
+                            alreadyPlayingAnimatedLabel = false;
                         Thread.Sleep(1000);
                         timer1.Stop();
-
+                        break;
                     }
                 }
                 else
                 {
                     foreach (var process in Process.GetProcessesByName("javaw"))
                     {
-                        Thread.Sleep(1031);
-                        versionInfoStaticLabel.Text = "Başlatılıyor...";
+                        Thread.Sleep(1000);
+                        animatedPlayingLabel();
                         playButtonStaticLabel.Enabled = false;
                         this.Visible = false;
+                        if (alreadyPlayingAnimatedLabel)
+                            alreadyPlayingAnimatedLabel = false;
                         timer3.Stop();
                         Environment.Exit(0);
-
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
-
+                MessageBox.Show("Bir hata oluştu! Uygulamayı yeniden başlatmanızı tavsiye ederiz. Hatanın devamı durumunda aşağıdaki hatayı desteğe iletiniz:\n\n" + ex.Message);
             }
           
+        }
+
+        private async void animatedPlayingLabel()
+        {
+            if (alreadyPlayingAnimatedLabel)
+                return;
+
+            alreadyPlayingAnimatedLabel = true;
+
+            do
+            {
+                await Task.Delay(250);
+
+                if (versionInfoStaticLabel.Text.Equals("Başlatılıyor"))
+                    versionInfoStaticLabel.Text = "Başlatılıyor.";
+                else if (versionInfoStaticLabel.Text.Equals("Başlatılıyor."))
+                    versionInfoStaticLabel.Text = "Başlatılıyor..";
+                else if (versionInfoStaticLabel.Text.Equals("Başlatılıyor.."))
+                    versionInfoStaticLabel.Text = "Başlatılıyor...";
+                else
+                    versionInfoStaticLabel.Text = "Başlatılıyor";
+
+                await Task.Delay(250);
+            } while (alreadyPlayingAnimatedLabel);
         }
 
         private void ayarlarbutton_Click(object sender, EventArgs e)
@@ -1222,26 +1240,17 @@ namespace Projects_Launcher.Projects_Launcher
                 }
 
                 maxRamTextBox.Text = (maxRamTextBox.Text).Trim();
-                if (!string.IsNullOrEmpty(maxRamTextBox.Text))
-                {
-
-                }
-                else
+                if (string.IsNullOrEmpty(maxRamTextBox.Text))
+                    MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
+                else if (Convert.ToInt32(maxRamTextBox.Text) < 1024 || Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(rambilgi))
                 {
                     MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
-                }
-
-                if (Convert.ToInt32(maxRamTextBox.Text) < 1024 || Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(rambilgi))
-                {
-                    MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
+                    maxRamTextBox.Text = rambilgi;
                 } else if (Convert.ToInt32(rambilgi) >= 1024 && Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(rambilgi)-512)
                 {
                     MessageBox.Show("Yüksek kaynak kullanımı!\n\nYüksek kaynak tüketimi bilgisayarınızdaki\nbazı şeylerin yavaş çalışmasına neden olabilir\nEn yüksek RAM miktarınızı, azami RAM\nmiktarından daha az tutmanız tavsiye\nedilir.", "Kaynak Tüketim Uyarısı");
+                    maxRamTextBox.Text = rambilgi;
                 }
-
-                maxRamTextBox.Text = rambilgi;
-
-
             }
             catch
             {
