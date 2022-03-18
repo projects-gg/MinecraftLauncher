@@ -24,8 +24,6 @@ namespace Projects_Launcher.Projects_Launcher
         {
             InitializeComponent();
         }
-
-
         public static string sessions;
         public static MSession session;
         public static int index;
@@ -66,9 +64,7 @@ namespace Projects_Launcher.Projects_Launcher
         private int uiThreadId = Thread.CurrentThread.ManagedThreadId;
         public DiscordRpcClient Client { get; private set; }
         public void Setup()
-        {
-
-            //Client.Dispose();
+        {   //Client.Dispose();
             Client = new DiscordRpcClient("949311557542756362");
             Client.Initialize();
 
@@ -125,9 +121,7 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             catch
-            {
-
-            }
+            {}
             Setup(); //Discord Oynuyor
 
             timer2.Start(); //Ping Sayaç
@@ -143,9 +137,7 @@ namespace Projects_Launcher.Projects_Launcher
                     reopenLauncherCheckBox.Checked = false;
             }
             catch
-            {
-
-            }
+            {}
 
             //Versiyon bilgisini al
             try
@@ -156,9 +148,7 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             catch
-            {
-
-            }
+            {}
 
             //Versiyon bilgisini al / II
             try
@@ -169,20 +159,15 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             catch
-            {
-
-            }
+            {}
 
             //Ram bilgisini al
             try
             {
-
-
                 if (Properties.Settings.Default.RamMax != string.Empty)
                 {
                     maxRamTextBox.Text = Properties.Settings.Default.RamMax;
                 }
-
 
                 if (Properties.Settings.Default.RamMax != string.Empty)
                 {
@@ -200,10 +185,6 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     maxRamDynamicCalculatorLabel.Text = "";
                 }
-
-
-
-
 
                 //min
                 if (Properties.Settings.Default.RamMin != string.Empty)
@@ -228,9 +209,7 @@ namespace Projects_Launcher.Projects_Launcher
                 minRamTextBox.MaxLength = 4;
             }
             catch
-            {
-
-            }
+            {}
 
             //Resolution bilgisini al
             try
@@ -245,10 +224,7 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             catch
-            {
-
-            }
-
+            {}
 
             //Skin bilgisini al
             try
@@ -262,9 +238,7 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             catch
-            {
-
-            }
+            {}
 
             //Arkaplan bilgisini al
             try
@@ -275,13 +249,10 @@ namespace Projects_Launcher.Projects_Launcher
                 using (var stream = response.GetResponseStream())
                 {
                     this.BackgroundImage = Bitmap.FromStream(stream);
-
                 }
             }
             catch
-            {
-
-            }
+            {}
         }
         public void path() //Launcher Dizin Ayarları - Connection Limit
         {
@@ -296,15 +267,6 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 versiyonselect.Items.Add(item.Name);
             }*/
-
-            try
-            {
-
-            }
-            catch
-            {
-
-            }
         }
         public async void Launch() // Minecraft startup settings
         {
@@ -327,8 +289,6 @@ namespace Projects_Launcher.Projects_Launcher
             clientStartProcess.Start(); // Launch the game
 
             timer1.Enabled = true; // Launch timer1
-
-
         }
 
 
@@ -362,7 +322,6 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     try //If fabric exists
                     {
-
                         Client.Dispose();
                         Client = new DiscordRpcClient("949311557542756362");
                         Client.Initialize();
@@ -380,7 +339,6 @@ namespace Projects_Launcher.Projects_Launcher
                                 LargeImageKey = "131231",
                                 LargeImageText = "https://mc.projects.gg/",
                                 SmallImageKey = "",
-
                             }
                         });
 
@@ -393,7 +351,6 @@ namespace Projects_Launcher.Projects_Launcher
                         animatedPlayingLabel();
                         this.Enabled = false;
                         timer1.Start(); // Launch timer1
-
                     }
                     catch //If fabric not exist
                     {
@@ -429,14 +386,10 @@ namespace Projects_Launcher.Projects_Launcher
                         versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion; //Write version info into versionInfoStaticLabel
 
                         this.Enabled = true;
-
                     }
-
-
                 }
                 else
                 {
-
                     DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?", "Projects Launcher", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
 
                     if (secenek == DialogResult.Yes)
@@ -451,10 +404,7 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             catch
-            {
-
-            }
-
+            {}
         }
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
@@ -469,9 +419,7 @@ namespace Projects_Launcher.Projects_Launcher
                 this.Enabled = true;
             }
             catch
-            {
-
-            }
+            {}
 
         }
 
@@ -561,12 +509,7 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             catch
-            {
-
-            }
-
-
-
+            {}
         }
 
         private async Task ServerStatus()
@@ -588,13 +531,11 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 serverOnlineCountStaticLabel.Text = ("Sunucu Hatası");
             }
-
         }
 
         public virtual long Speed { get; }
         private async void timer2_Tick(object sender, EventArgs e)
         {
-
             try
             {
                 //ping
@@ -609,12 +550,9 @@ namespace Projects_Launcher.Projects_Launcher
 
                 //player
                 await ServerStatus();
-
             }
             catch
-            {
-                // Shouldn't happen except no internet connection or server downtime
-            }
+            {}
         }
         private void ramlabel_Click(object sender, EventArgs e)
         {
@@ -700,7 +638,6 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void surumsec_SelectedIndexChanged(object sender, EventArgs e)
         {
-
             try
             {
                 Properties.Settings.Default.SelectedVersion = versionSelectComboBox.Text;
@@ -708,9 +645,7 @@ namespace Projects_Launcher.Projects_Launcher
                 versionInfoStaticLabel.Text = versionSelectComboBox.Text;
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void website_Click(object sender, EventArgs e)
@@ -720,37 +655,29 @@ namespace Projects_Launcher.Projects_Launcher
                 System.Diagnostics.Process.Start("https://mc.projects.gg/");
             }
             catch
-            {
-
-            }
+            {}
 
         }
 
 
         private void discord_Click(object sender, EventArgs e)
         {
-
             try
             {
                 System.Diagnostics.Process.Start("https://projects.gg/discord");
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void instagram_Click(object sender, EventArgs e)
         {
-
             try
             {
                 System.Diagnostics.Process.Start("https://www.instagram.com/projects.com.tr/");
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void geriformpanel_MouseEnter(object sender, EventArgs e)
@@ -763,22 +690,17 @@ namespace Projects_Launcher.Projects_Launcher
                 previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void geriformpanel_MouseLeave(object sender, EventArgs e)
         {
-
             try
             {
                 previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
             }
             catch
-            {
-
-            }
+            { }
         }
 
         private void changelogs_MouseEnter(object sender, EventArgs e)
@@ -792,22 +714,17 @@ namespace Projects_Launcher.Projects_Launcher
                 previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void changelogs_MouseLeave(object sender, EventArgs e)
         {
-
             try
             {
                 playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
             }
             catch
-            {
-
-            }
+            {}
         }
         private void minramtext_TextChanged(object sender, EventArgs e)
         {
@@ -848,15 +765,12 @@ namespace Projects_Launcher.Projects_Launcher
                 minramlabell = minramlabel.Text;
             }
             catch
-            {
-
-            }
+            {}
 
         }
 
         private void mods_MouseEnter(object sender, EventArgs e)
         {
-
             try
             {
                 x = rnd.Next(255);
@@ -865,27 +779,21 @@ namespace Projects_Launcher.Projects_Launcher
                 modsDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
             }
             catch
-            {
-
-            }
+            { }
         }
 
         private void mods_MouseLeave(object sender, EventArgs e)
         {
-
             try
             {
                 modsDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void texturepackfolder_MouseEnter(object sender, EventArgs e)
         {
-
             try
             {
                 x = rnd.Next(255);
@@ -894,27 +802,21 @@ namespace Projects_Launcher.Projects_Launcher
                 resourcePackDirLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void texturepackfolder_MouseLeave(object sender, EventArgs e)
         {
-
             try
             {
                 resourcePackDirLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void texturepackaktar_MouseEnter(object sender, EventArgs e)
         {
-
             try
             {
                 x = rnd.Next(255);
@@ -923,34 +825,27 @@ namespace Projects_Launcher.Projects_Launcher
                 transferResourcepackLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void texturepackaktar_MouseLeave(object sender, EventArgs e)
         {
-
             try
             {
                 transferResourcepackLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void mods_Click(object sender, EventArgs e)
         {
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/mods";
 
-
             try
             {
                 if (Directory.Exists(@appDataDizini))
                 {
-
                     string myPath = @appDataDizini;
                     System.Diagnostics.Process prc = new System.Diagnostics.Process();
                     prc.StartInfo.FileName = myPath;
@@ -968,15 +863,11 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void texturepackaktar_Click(object sender, EventArgs e)
         {
-
-
             try
             {
                 if (Directory.Exists(@TextureDizin))
@@ -1035,20 +926,15 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void texturepackfolder_Click(object sender, EventArgs e)
         {
-
-
             try
             {
                 if (Directory.Exists(@TextureDizin))
                 {
-
                     string myPath = @TextureDizin;
                     System.Diagnostics.Process prc = new System.Diagnostics.Process();
                     prc.StartInfo.FileName = myPath;
@@ -1066,17 +952,13 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void gamefolder_Click(object sender, EventArgs e)
         {
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
 
-
-
             try
             {
                 if (Directory.Exists(@appDataDizini))
@@ -1099,14 +981,11 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void gamefolder_MouseEnter(object sender, EventArgs e)
         {
-
             try
             {
                 x = rnd.Next(255);
@@ -1115,22 +994,17 @@ namespace Projects_Launcher.Projects_Launcher
                 gameDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void gamefolder_MouseLeave(object sender, EventArgs e)
         {
-
             try
             {
                 gameDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void timer3_Tick(object sender, EventArgs e)
@@ -1162,7 +1036,6 @@ namespace Projects_Launcher.Projects_Launcher
                             LargeImageKey = "131231",
                             LargeImageText = "https://mc.projects.gg/",
                             SmallImageKey = "",
-
                         }
                     });
                     timer3.Stop();
@@ -1173,9 +1046,7 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void kapattick_CheckedChanged(object sender, EventArgs e)
@@ -1229,7 +1100,6 @@ namespace Projects_Launcher.Projects_Launcher
                 ManagementObjectSearcher Search = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
                 foreach (ManagementObject Mobject in Search.Get())
                 {
-
                     double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
                     double ramgb = Ram_Bytes / 1073741824;
                     double islem = Math.Ceiling(ramgb);
@@ -1238,9 +1108,7 @@ namespace Projects_Launcher.Projects_Launcher
 
                 minRamTextBox.Text = (minRamTextBox.Text).Trim();
                 if (!string.IsNullOrEmpty(minRamTextBox.Text))
-                {
-
-                }
+                {}
                 else
                 {
                     MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
@@ -1257,7 +1125,6 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 MessageBox.Show("RAM miktarı ayarlanırken bir hata meydana geldi.");
             }
-
         }
 
         private void heighttextbox_Leave(object sender, EventArgs e)
@@ -1270,9 +1137,7 @@ namespace Projects_Launcher.Projects_Launcher
 
                 heighttextbox.Text = (heighttextbox.Text).Trim();
                 if (!string.IsNullOrEmpty(heighttextbox.Text))
-                {
-
-                }
+                {}
                 else
                 {
                     MessageBox.Show("Çözünürlük" + " " + yukseklikb2 + "-" + yukseklikb + " " + "arasında girilmeli.");
@@ -1289,7 +1154,6 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 MessageBox.Show("Çözünürlük ayarlanırken bir hata meydana geldi.");
             }
-
         }
 
         private void widthtextbox_Leave(object sender, EventArgs e)
@@ -1302,9 +1166,7 @@ namespace Projects_Launcher.Projects_Launcher
 
                 widthtextbox.Text = (widthtextbox.Text).Trim();
                 if (!string.IsNullOrEmpty(widthtextbox.Text))
-                {
-
-                }
+                {}
                 else
                 {
                     MessageBox.Show("Çözünürlük" + " " + genislikb2 + "-" + genislikb + " " + "arasında girilmeli.");
@@ -1331,9 +1193,7 @@ namespace Projects_Launcher.Projects_Launcher
                 Environment.Exit(0);
             }
             catch
-            {
-
-            }
+            {}
         }
 
         private void guna2ControlBox2_Click(object sender, EventArgs e)
