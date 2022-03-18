@@ -27,7 +27,6 @@ namespace Projects_Launcher.Projects_Launcher
 
         public static string sessions;
         public static MSession session;
-        public static int index;
         public static string minrambox;
         public static string maxrambox;
         public static string widthbox;
@@ -48,50 +47,50 @@ namespace Projects_Launcher.Projects_Launcher
         private string genislikb;
         private string genislikb2;
 
-        Ping p = new Ping();
-
         public static string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                                             "/.projects/resourcepacks";
         string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
-
-        Uri fabric = new Uri("https://mc.projects.gg/LauncherUpdateStream/fabric-loader-0.13.3-1.18.2.zip");
-
-        string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-
+        
         Random rnd = new Random();
+
         int x, y, z;
 
         public bool alreadyPlayingAnimatedLabel = false;
-
-        private int uiThreadId = Thread.CurrentThread.ManagedThreadId;
+        public bool alreadyRelaunchWaiting = false;
+        
         public DiscordRpcClient Client { get; private set; }
 
-        public void Setup()
+        public void DiscordRpcClientSetup()
         {
-            //Client.Dispose();
-            Client = new DiscordRpcClient("949311557542756362");
-            Client.Initialize();
-
-            Client.SetPresence(new RichPresence()
+            try
             {
-                Details = "Başlatıcı menüsünde",
-                State = "Sunucu IP: mc.projects.gg",
-                Assets = new Assets()
+                Client = new DiscordRpcClient("949311557542756362");
+                Client.Initialize();
+
+                Client.SetPresence(new RichPresence()
                 {
-                    LargeImageKey = "131231",
-                    LargeImageText = "https://mc.projects.gg/",
-                    SmallImageKey = "",
-                }
-            });
+                    Details = "Başlatıcı menüsünde",
+                    State = "Sunucu IP: mc.projects.gg",
+                    Assets = new Assets()
+                    {
+                        LargeImageKey = "131231",
+                        LargeImageText = "https://mc.projects.gg/",
+                        SmallImageKey = "",
+                    }
+                });
+            }
+            catch
+            {
+                // Shouldn't happen except no internet connection or server downtime
+            }
         }
 
-        private void Anamenu_Load(object sender, EventArgs e)
+        public void selectBackgroundImage()
         {
             // Grab background image
             try
             {
-                var random = new Random();
-                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + random.Next(10) + ".png"); // Last background image
+                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + rnd.Next(10) + ".png"); // Last background image
 
                 using (var response = request.GetResponse())
                 using (var stream = response.GetResponseStream())
@@ -101,13 +100,10 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 // Shouldn't happen except no internet connection or server downtime
             }
+        }
 
-            // ".projects" directory check
-            if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions"))
-                Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions");
-
-            // Hardware infos
-
+        public void updateHwInfo()
+        {
             // GPU
             ManagementObjectSearcher gpuSearch = new ManagementObjectSearcher("Select * From Win32_VideoController");
 
@@ -127,18 +123,27 @@ namespace Projects_Launcher.Projects_Launcher
                 RAMInfo.Text = string.Format("{0:0.##}", Convert.ToDouble(roundAvailableRamValueInGb) * 1024) + "MB" + " = " + roundAvailableRamValueInGb.ToString() + " GB";
                 break;
             }
+        }
 
-            Setup(); // Discord RPC
+        private void Anamenu_Load(object sender, EventArgs e)
+        {
+            selectBackgroundImage();
+
+            // ".projects" directory check
+            if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions"))
+                Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions");
+
+            // Hardware infos
+
+            updateHwInfo();
+
+            DiscordRpcClientSetup(); // Discord RPC
 
             timer2.Start(); // Ping counter
 
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames; // Show nickname info
 
-            // Open launcher when game is closed / Tick
-            if (Properties.Settings.Default.OyunTickS)
-                reopenLauncherCheckBox.Checked = true;
-            else
-                reopenLauncherCheckBox.Checked = false;
+            reopenLauncherCheckBox.Checked = Properties.Settings.Default.OyunTickS; // Open launcher when game is closed / Tick
 
             // Grab version information
             if (Properties.Settings.Default.SelectedVersion != string.Empty)
@@ -204,7 +209,6 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 // Shouldn't happen except no internet connection or server downtime
             }
-
         }
 
         public void path() //Launcher Dizin Ayarları - Connection Limit
@@ -305,21 +309,7 @@ namespace Projects_Launcher.Projects_Launcher
                 }
                 catch //If fabric not exist
                 {
-                    Client.Dispose();
-                    Client = new DiscordRpcClient("949311557542756362");
-                    Client.Initialize();
-
-                    Client.SetPresence(new RichPresence()
-                    {
-                        Details = "Başlatıcı menüsünde",
-                        State = "Sunucu IP: mc.projects.gg",
-                        Assets = new Assets()
-                        {
-                            LargeImageKey = "131231",
-                            LargeImageText = "https://mc.projects.gg/",
-                            SmallImageKey = "",
-                        }
-                    });
+                    DiscordRpcClientSetup();
 
                     timer1.Stop(); // Stop timer1
                     MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi",
@@ -395,7 +385,7 @@ namespace Projects_Launcher.Projects_Launcher
                             alreadyPlayingAnimatedLabel = false;
                         Thread.Sleep(1000);
                         timer1.Stop();
-                        break;
+                        return;
                     }
                 }
                 else
@@ -835,48 +825,29 @@ namespace Projects_Launcher.Projects_Launcher
             gameDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
         }
 
-        private void timer3_Tick(object sender, EventArgs e)
+        private async void timer3_Tick(object sender, EventArgs e)
         {
-            try
+            if (alreadyRelaunchWaiting)
+                return;
+
+            alreadyRelaunchWaiting = true;
+
+            do
             {
-                if (!Process.GetProcessesByName("javaw").Any())
-                {
-                    if (Properties.Settings.Default.SelectedVersion != string.Empty)
-                    {
-                        versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
-                    }
+                await Task.Delay(5000);
+            } while (Process.GetProcessesByName("javaw").Any());
 
-                    playButtonStaticLabel.Enabled = true;
-                    this.Visible = true;
-                    this.Enabled = true;
-                    timer1.Stop();
+            if (Properties.Settings.Default.SelectedVersion != string.Empty)
+                versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
 
-                    Client.Dispose();
-                    Client = new DiscordRpcClient("949311557542756362");
-                    Client.Initialize();
-
-                    Client.SetPresence(new RichPresence()
-                    {
-                        Details = "Başlatıcı menüsünde",
-                        State = "Sunucu IP: mc.projects.gg",
-                        Assets = new Assets()
-                        {
-                            LargeImageKey = "131231",
-                            LargeImageText = "https://mc.projects.gg/",
-                            SmallImageKey = "",
-                        }
-                    });
-                    timer3.Stop();
-                }
-                else
-                {
-                    timer1.Start();
-                }
-            }
-            catch (Exception ex)
-            {
-                NotificationAboutException(ex);
-            }
+            playButtonStaticLabel.Enabled = true;
+            this.Visible = true;
+            this.Enabled = true;
+            alreadyRelaunchWaiting = false;
+            timer1.Stop();
+            Client.Dispose();
+            DiscordRpcClientSetup();
+            timer3.Stop();
         }
 
         private void kapattick_CheckedChanged(object sender, EventArgs e)

@@ -1,6 +1,5 @@
 ﻿using DiscordRPC;
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Drawing;
 using System.IO;
@@ -17,13 +16,22 @@ namespace Projects_Launcher
         }
 
         public static string nickname;
-        public static int index;
         public string currentVersion = "0";
         Uri uri = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
 
         public DiscordRpcClient Client { get; private set; }
 
-        public void Setup()
+        public DiscordRpcClient GetClient()
+        {
+            return Client;
+        }
+
+        public void SetClient(DiscordRpcClient value)
+        {
+            Client = value;
+        }
+
+        public void DiscordRpcClientSetup()
         {
             try
             {
@@ -47,6 +55,25 @@ namespace Projects_Launcher
                 // Shouldn't happen except no internet connection or server downtime
             }
         }
+
+        public void selectBackgroundImage()
+        {
+            // Grab background image
+            try
+            {
+                var random = new Random();
+                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + random.Next(10) + ".png"); // Last background image
+
+                using (var response = request.GetResponse())
+                using (var stream = response.GetResponseStream())
+                    this.BackgroundImage = Bitmap.FromStream(stream);
+            }
+            catch
+            {
+                // Shouldn't happen except no internet connection or server downtime
+            }
+        }
+
         private void cantGrabVersionInfo()
         {
             MessageBox.Show(
@@ -56,7 +83,7 @@ namespace Projects_Launcher
 
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
-            Setup();
+            DiscordRpcClientSetup();
 
             nickNameEnterTextBox.Text = Properties.Settings.Default.NickNames;
 
@@ -119,20 +146,7 @@ namespace Projects_Launcher
                 // Shouldn't happen except no internet connection or server downtime
             }
 
-            // Grab background image
-            try
-            {
-                var random = new Random();
-                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + random.Next(10) + ".png"); // Last background image
-
-                using (var response = request.GetResponse())
-                using (var stream = response.GetResponseStream())
-                    this.BackgroundImage = Bitmap.FromStream(stream);
-            }
-            catch
-            {
-                // Shouldn't happen except no internet connection or server downtime
-            }
+            selectBackgroundImage();
         }
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
@@ -167,35 +181,30 @@ namespace Projects_Launcher
 
         private void girisyapbutton_Click(object sender, EventArgs e)
         {
-            try
+            if (string.IsNullOrEmpty(nickNameEnterTextBox.Text))
             {
-                if (string.IsNullOrEmpty(nickNameEnterTextBox.Text))
+                if (rememberMeCheckBox.Checked == true)
                 {
-                    if (rememberMeCheckBox.Checked == true)
-                    {
-                        Properties.Settings.Default.NickNames = nickNameEnterTextBox.Text;
-                        Properties.Settings.Default.Save();
-                    }
-
-                    loginButton.Text = "Kullanıcı Adı Giriniz";
-                    return;
-                }
-                else
-                {
-                    nickname = nickNameEnterTextBox.Text;
-                    loginButton.Text = "Giriş Yap";
+                    Properties.Settings.Default.NickNames = nickNameEnterTextBox.Text;
+                    Properties.Settings.Default.Save();
                 }
 
-                Projects_Launcher.mainMenuForm main = new Projects_Launcher.mainMenuForm();
-
-                this.Hide();
-                main.Show();
-                Client.Dispose();
+                loginButton.Text = "Kullanıcı Adı Giriniz";
+                return;
             }
-            catch
+            else
             {
-                MessageBox.Show("Giriş yapılırken bir hata meydana geldi.");
+                nickname = nickNameEnterTextBox.Text;
+                //loginButton.Text = "Giriş Yap";
             }
+
+            Projects_Launcher.mainMenuForm main = new Projects_Launcher.mainMenuForm();
+            
+            Hide();
+
+            main.Show();
+
+            Client.Dispose();
         }
 
         private void nicknametextbox_TextChanged(object sender, EventArgs e)
