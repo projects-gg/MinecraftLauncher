@@ -52,6 +52,9 @@ namespace Projects_Launcher.Projects_Launcher
             this.minramlabel = new System.Windows.Forms.Label();
             this.serverOnlineCountStaticLabel = new System.Windows.Forms.Label();
             this.settingsBgPanel = new Guna.UI2.WinForms.Guna2Panel();
+            this.versionSelectStaticLabel = new System.Windows.Forms.Label();
+            this.navigationStaticLabel = new System.Windows.Forms.Label();
+            this.ramSelectionStaticLabel = new System.Windows.Forms.Label();
             this.gpuStaticLabel = new System.Windows.Forms.Label();
             this.ramStaticLabel = new System.Windows.Forms.Label();
             this.RAMInfo = new System.Windows.Forms.Label();
@@ -74,16 +77,13 @@ namespace Projects_Launcher.Projects_Launcher
             this.heighttextbox = new Guna.UI2.WinForms.Guna2TextBox();
             this.maxRamTextBox = new Guna.UI2.WinForms.Guna2TextBox();
             this.mbLabel = new System.Windows.Forms.Label();
+            this.resolutionSelectStaticLabel = new System.Windows.Forms.Label();
             this.settingsStaticLabel = new System.Windows.Forms.Label();
             this.timer3 = new System.Windows.Forms.Timer(this.components);
             this.ticksave = new System.Windows.Forms.Label();
             this.minimizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.label11 = new System.Windows.Forms.Label();
-            this.resolutionSelectStaticLabel = new System.Windows.Forms.Label();
-            this.ramSelectionStaticLabel = new System.Windows.Forms.Label();
-            this.navigationStaticLabel = new System.Windows.Forms.Label();
-            this.versionSelectStaticLabel = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.settingsStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.instagramStaticPictureBox)).BeginInit();
@@ -130,7 +130,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.playSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.playSplitStaticLabel.Location = new System.Drawing.Point(122, 423);
             this.playSplitStaticLabel.Name = "playSplitStaticLabel";
-            this.playSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
+            this.playSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
             this.playSplitStaticLabel.TabIndex = 2;
             this.playSplitStaticLabel.Text = "|";
             // 
@@ -154,7 +154,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.onlineSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.onlineSplitStaticLabel.Location = new System.Drawing.Point(792, 430);
             this.onlineSplitStaticLabel.Name = "onlineSplitStaticLabel";
-            this.onlineSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
+            this.onlineSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
             this.onlineSplitStaticLabel.TabIndex = 6;
             this.onlineSplitStaticLabel.Text = "|";
             // 
@@ -334,7 +334,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverOnlineCountStaticLabel.ForeColor = System.Drawing.SystemColors.ActiveBorder;
             this.serverOnlineCountStaticLabel.Location = new System.Drawing.Point(693, 440);
             this.serverOnlineCountStaticLabel.Name = "serverOnlineCountStaticLabel";
-            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(93, 16);
+            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(92, 16);
             this.serverOnlineCountStaticLabel.TabIndex = 120;
             this.serverOnlineCountStaticLabel.Text = "Sunucu Hatası";
             // 
@@ -373,6 +373,42 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Size = new System.Drawing.Size(980, 475);
             this.settingsBgPanel.TabIndex = 133;
             this.settingsBgPanel.Visible = false;
+            // 
+            // versionSelectStaticLabel
+            // 
+            this.versionSelectStaticLabel.AutoSize = true;
+            this.versionSelectStaticLabel.BackColor = System.Drawing.Color.Transparent;
+            this.versionSelectStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.versionSelectStaticLabel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.versionSelectStaticLabel.Location = new System.Drawing.Point(352, 202);
+            this.versionSelectStaticLabel.Name = "versionSelectStaticLabel";
+            this.versionSelectStaticLabel.Size = new System.Drawing.Size(128, 24);
+            this.versionSelectStaticLabel.TabIndex = 195;
+            this.versionSelectStaticLabel.Text = "Sürüm Seçimi";
+            // 
+            // navigationStaticLabel
+            // 
+            this.navigationStaticLabel.AutoSize = true;
+            this.navigationStaticLabel.BackColor = System.Drawing.Color.Transparent;
+            this.navigationStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.navigationStaticLabel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.navigationStaticLabel.Location = new System.Drawing.Point(692, 87);
+            this.navigationStaticLabel.Name = "navigationStaticLabel";
+            this.navigationStaticLabel.Size = new System.Drawing.Size(102, 24);
+            this.navigationStaticLabel.TabIndex = 194;
+            this.navigationStaticLabel.Text = "Hızlı Erişim";
+            // 
+            // ramSelectionStaticLabel
+            // 
+            this.ramSelectionStaticLabel.AutoSize = true;
+            this.ramSelectionStaticLabel.BackColor = System.Drawing.Color.Transparent;
+            this.ramSelectionStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.ramSelectionStaticLabel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.ramSelectionStaticLabel.Location = new System.Drawing.Point(352, 87);
+            this.ramSelectionStaticLabel.Name = "ramSelectionStaticLabel";
+            this.ramSelectionStaticLabel.Size = new System.Drawing.Size(177, 24);
+            this.ramSelectionStaticLabel.TabIndex = 193;
+            this.ramSelectionStaticLabel.Text = "RAM Rezervasyonu";
             // 
             // gpuStaticLabel
             // 
@@ -749,6 +785,18 @@ namespace Projects_Launcher.Projects_Launcher
             this.mbLabel.TabIndex = 164;
             this.mbLabel.Text = "MB";
             // 
+            // resolutionSelectStaticLabel
+            // 
+            this.resolutionSelectStaticLabel.AutoSize = true;
+            this.resolutionSelectStaticLabel.BackColor = System.Drawing.Color.Transparent;
+            this.resolutionSelectStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.resolutionSelectStaticLabel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.resolutionSelectStaticLabel.Location = new System.Drawing.Point(124, 87);
+            this.resolutionSelectStaticLabel.Name = "resolutionSelectStaticLabel";
+            this.resolutionSelectStaticLabel.Size = new System.Drawing.Size(106, 24);
+            this.resolutionSelectStaticLabel.TabIndex = 159;
+            this.resolutionSelectStaticLabel.Text = "Çözünürlük";
+            // 
             // settingsStaticLabel
             // 
             this.settingsStaticLabel.AutoSize = true;
@@ -813,54 +861,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.label11.TabIndex = 137;
             this.label11.Text = "label10";
             this.label11.Visible = false;
-            // 
-            // resolutionSelectStaticLabel
-            // 
-            this.resolutionSelectStaticLabel.AutoSize = true;
-            this.resolutionSelectStaticLabel.BackColor = System.Drawing.Color.Transparent;
-            this.resolutionSelectStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.resolutionSelectStaticLabel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.resolutionSelectStaticLabel.Location = new System.Drawing.Point(124, 87);
-            this.resolutionSelectStaticLabel.Name = "resolutionSelectStaticLabel";
-            this.resolutionSelectStaticLabel.Size = new System.Drawing.Size(106, 24);
-            this.resolutionSelectStaticLabel.TabIndex = 159;
-            this.resolutionSelectStaticLabel.Text = "Çözünürlük";
-            // 
-            // ramSelectionStaticLabel
-            // 
-            this.ramSelectionStaticLabel.AutoSize = true;
-            this.ramSelectionStaticLabel.BackColor = System.Drawing.Color.Transparent;
-            this.ramSelectionStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.ramSelectionStaticLabel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.ramSelectionStaticLabel.Location = new System.Drawing.Point(352, 87);
-            this.ramSelectionStaticLabel.Name = "ramSelectionStaticLabel";
-            this.ramSelectionStaticLabel.Size = new System.Drawing.Size(177, 24);
-            this.ramSelectionStaticLabel.TabIndex = 193;
-            this.ramSelectionStaticLabel.Text = "RAM Rezervasyonu";
-            // 
-            // navigationStaticLabel
-            // 
-            this.navigationStaticLabel.AutoSize = true;
-            this.navigationStaticLabel.BackColor = System.Drawing.Color.Transparent;
-            this.navigationStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.navigationStaticLabel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.navigationStaticLabel.Location = new System.Drawing.Point(692, 87);
-            this.navigationStaticLabel.Name = "navigationStaticLabel";
-            this.navigationStaticLabel.Size = new System.Drawing.Size(102, 24);
-            this.navigationStaticLabel.TabIndex = 194;
-            this.navigationStaticLabel.Text = "Hızlı Erişim";
-            // 
-            // versionSelectStaticLabel
-            // 
-            this.versionSelectStaticLabel.AutoSize = true;
-            this.versionSelectStaticLabel.BackColor = System.Drawing.Color.Transparent;
-            this.versionSelectStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.versionSelectStaticLabel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.versionSelectStaticLabel.Location = new System.Drawing.Point(352, 202);
-            this.versionSelectStaticLabel.Name = "versionSelectStaticLabel";
-            this.versionSelectStaticLabel.Size = new System.Drawing.Size(128, 24);
-            this.versionSelectStaticLabel.TabIndex = 195;
-            this.versionSelectStaticLabel.Text = "Sürüm Seçimi";
             // 
             // mainMenuForm
             // 

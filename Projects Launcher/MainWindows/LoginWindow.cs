@@ -58,7 +58,7 @@ namespace Projects_Launcher
         {
             Setup();
             nickNameEnterTextBox.Text = Properties.Settings.Default.NickNames;
-            
+
             WebRequest currentVersionContent = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/version.php");
 
             string newestVersion = currentVersion;
@@ -172,7 +172,7 @@ namespace Projects_Launcher
             }
         }
 
-        private async void label3_Click(object sender, EventArgs e)
+        private void label3_Click(object sender, EventArgs e)
         {
             System.Diagnostics.Process.Start("https://mc.projects.gg/");
         }
@@ -214,7 +214,7 @@ namespace Projects_Launcher
         private void nicknametextbox_TextChanged(object sender, EventArgs e)
         {
             nickNameEnterTextBox.Text = (nickNameEnterTextBox.Text).Trim();
-            
+
             if (!string.IsNullOrEmpty(nickNameEnterTextBox.Text))
             {
                 if (rememberMeCheckBox.Checked == true)
@@ -237,4 +237,5 @@ namespace Projects_Launcher
         {
             this.WindowState = FormWindowState.Minimized;
         }
+    }
 }
