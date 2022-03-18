@@ -15,6 +15,7 @@ namespace Projects_Launcher
         {
             InitializeComponent();
         }
+
         public static string nickname;
         public static int index;
         public string currentVersion = "0";
@@ -51,15 +52,18 @@ namespace Projects_Launcher
 
         private void cantGrabVersionInfo()
         {
-            MessageBox.Show("Güncelleme bilgileri alınamadı!\n\nİnternete bağlı olmayabilirsiniz ya da Projects servislerinde bir kara delik açılmış olabilir.", "Bilgi", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
+            MessageBox.Show(
+                "Güncelleme bilgileri alınamadı!\n\nİnternete bağlı olmayabilirsiniz ya da Projects servislerinde bir kara delik açılmış olabilir.",
+                "Bilgi", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
         }
 
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
             Setup();
             nickNameEnterTextBox.Text = Properties.Settings.Default.NickNames;
-            
-            WebRequest currentVersionContent = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/version.php");
+
+            WebRequest currentVersionContent =
+                HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/version.php");
 
             string newestVersion = currentVersion;
 
@@ -82,8 +86,11 @@ namespace Projects_Launcher
             {
                 if (!currentVersion.Equals(newestVersion))
                 {
-                    DialogResult updateDecision = MessageBox.Show("Projects başlatıcısı için kullanıma\nhazır yeni sürüm yayınlanmış!\n\n" + $@"Güncel sürüm: {newestVersion}" + "\n" + $@"Sizin sürümünüz: {currentVersion}" + "\n" + "" + "\n" + "Yeni sürüme güncellensin mi?", "Güncelleme Mevcut",
-                          MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
+                    DialogResult updateDecision = MessageBox.Show(
+                        "Projects başlatıcısı için kullanıma\nhazır yeni sürüm yayınlanmış!\n\n" +
+                        $@"Güncel sürüm: {newestVersion}" + "\n" + $@"Sizin sürümünüz: {currentVersion}" + "\n" + "" +
+                        "\n" + "Yeni sürüme güncellensin mi?", "Güncelleme Mevcut",
+                        MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
 
                     if (updateDecision == DialogResult.Yes)
                     {
@@ -104,9 +111,11 @@ namespace Projects_Launcher
             try
             {
                 // Create new ".projects" directory if not exist
-                if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects"))
+                if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                      "/.projects"))
                 {
-                    Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects");
+                    Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                              "/.projects");
                 }
             }
             catch
@@ -118,10 +127,15 @@ namespace Projects_Launcher
             {
                 // Get background info
                 var random = new Random();
-                var BackgroundList = new List<string> { "kıs_meydan.png", "balık2.png", "kıs_meydan2.png", "maden.png", "maden2.png", "meydan.png", "world.png", "world2.png", "world3.png", "world4.png" };
+                var BackgroundList = new List<string>
+                {
+                    "kıs_meydan.png", "balık2.png", "kıs_meydan2.png", "maden.png", "maden2.png", "meydan.png",
+                    "world.png", "world2.png", "world3.png", "world4.png"
+                };
                 index = random.Next(BackgroundList.Count);
 
-                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/background" + "/" + (BackgroundList[index]));
+                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/background" + "/" +
+                                                (BackgroundList[index]));
 
                 using (var response = request.GetResponse())
                 using (var stream = response.GetResponseStream())
@@ -139,7 +153,8 @@ namespace Projects_Launcher
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/setup.exe";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                   "/.projects/setup.exe";
 
             try
             {
@@ -172,7 +187,7 @@ namespace Projects_Launcher
             }
         }
 
-        private async void label3_Click(object sender, EventArgs e)
+        private void label3_Click(object sender, EventArgs e)
         {
             System.Diagnostics.Process.Start("https://mc.projects.gg/");
         }
@@ -193,6 +208,7 @@ namespace Projects_Launcher
                         Properties.Settings.Default.NickNames = nickNameEnterTextBox.Text;
                         Properties.Settings.Default.Save();
                     }
+
                     loginButton.Text = "Kullanıcı Adı Giriniz";
                     return;
                 }
@@ -201,9 +217,11 @@ namespace Projects_Launcher
                     nickname = nickNameEnterTextBox.Text;
                     loginButton.Text = "Giriş Yap";
                 }
+
                 Projects_Launcher.mainMenuForm main = new Projects_Launcher.mainMenuForm();
                 this.Hide();
-                main.Show(); Client.Dispose();
+                main.Show();
+                Client.Dispose();
             }
             catch
             {
@@ -214,7 +232,7 @@ namespace Projects_Launcher
         private void nicknametextbox_TextChanged(object sender, EventArgs e)
         {
             nickNameEnterTextBox.Text = (nickNameEnterTextBox.Text).Trim();
-            
+
             if (!string.IsNullOrEmpty(nickNameEnterTextBox.Text))
             {
                 if (rememberMeCheckBox.Checked == true)
@@ -222,6 +240,7 @@ namespace Projects_Launcher
                     Properties.Settings.Default.NickNames = nickNameEnterTextBox.Text;
                     Properties.Settings.Default.Save();
                 }
+
                 loginButton.Text = "Giriş Yap";
                 loginButton.Enabled = true;
                 return;
@@ -237,4 +256,5 @@ namespace Projects_Launcher
         {
             this.WindowState = FormWindowState.Minimized;
         }
+    }
 }

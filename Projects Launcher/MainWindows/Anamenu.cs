@@ -22,8 +22,6 @@ namespace Projects_Launcher.Projects_Launcher
     {
         public mainMenuForm()
         {
-            
-
             InitializeComponent();
         }
         
@@ -35,7 +33,6 @@ namespace Projects_Launcher.Projects_Launcher
         public static string maxrambox;
         public static string widthbox;
         public static string heightbox;
-        public static string sayac;
 
         public static string maxramlabell;
         public static string minramlabell;
