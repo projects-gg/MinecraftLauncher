@@ -44,7 +44,7 @@ namespace Projects_Launcher
             }
             catch
             {
-
+                // Shouldn't happen except no internet connection or server downtime
             }
         }
         private void cantGrabVersionInfo()
@@ -57,10 +57,10 @@ namespace Projects_Launcher
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
             Setup();
+
             nickNameEnterTextBox.Text = Properties.Settings.Default.NickNames;
 
-            WebRequest currentVersionContent =
-                HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/version.php");
+            WebRequest currentVersionContent = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/version.php");
 
             string newestVersion = currentVersion;
 
@@ -111,13 +111,12 @@ namespace Projects_Launcher
                 if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                                       "/.projects"))
                 {
-                    Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                                              "/.projects");
+                    Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects");
                 }
             }
             catch
             {
-
+                // Shouldn't happen except no internet connection or server downtime
             }
 
             try
@@ -142,45 +141,27 @@ namespace Projects_Launcher
             }
             catch
             {
-
+                // Shouldn't happen except no internet connection or server downtime
             }
-
-
         }
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                                   "/.projects/setup.exe";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/setup.exe";
 
-            try
-            {
-                string myPath = @appDataDizini;
-                System.Diagnostics.Process prc = new System.Diagnostics.Process();
-                prc.StartInfo.FileName = myPath;
-                System.Threading.Thread.Sleep(1000);
-                prc.Start();
-                Environment.Exit(0);
-            }
-            catch
-            {
-
-            }
+            string myPath = @appDataDizini;
+            System.Diagnostics.Process prc = new System.Diagnostics.Process();
+            prc.StartInfo.FileName = myPath;
+            System.Threading.Thread.Sleep(1000);
+            prc.Start();
+            Environment.Exit(0);
         }
 
         private void benihatırla_CheckedChanged(object sender, EventArgs e)
         {
-            try
-            {
-                if (rememberMeCheckBox.Checked == true)
-                {
-                    Properties.Settings.Default.NickNames = nickNameEnterTextBox.Text;
-                    Properties.Settings.Default.Save();
-                }
-            }
-            catch
-            {
-
+            if (rememberMeCheckBox.Checked == true) {
+                Properties.Settings.Default.NickNames = nickNameEnterTextBox.Text;
+                Properties.Settings.Default.Save();
             }
         }
 
@@ -216,6 +197,7 @@ namespace Projects_Launcher
                 }
 
                 Projects_Launcher.mainMenuForm main = new Projects_Launcher.mainMenuForm();
+
                 this.Hide();
                 main.Show();
                 Client.Dispose();

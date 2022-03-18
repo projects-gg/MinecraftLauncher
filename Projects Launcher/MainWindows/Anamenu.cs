@@ -102,24 +102,22 @@ namespace Projects_Launcher.Projects_Launcher
             // Hardware infos
 
             // GPU
-            ManagementObjectSearcher ekran = new ManagementObjectSearcher("Select * From Win32_VideoController");
+            ManagementObjectSearcher gpuSearch = new ManagementObjectSearcher("Select * From Win32_VideoController");
 
-            foreach (ManagementObject Mobject in ekran.Get())
+            foreach (ManagementObject gpuObject in gpuSearch.Get())
             {
-                gpuInfo.Text = Mobject["name"].ToString();
+                gpuInfo.Text = gpuObject["name"].ToString();
                 break;
             }
 
             // RAM
-            ManagementObjectSearcher Search = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
+            ManagementObjectSearcher ramSearch = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
 
-            foreach (ManagementObject Mobject in Search.Get())
+            foreach (ManagementObject ramObject in ramSearch.Get())
             {
-                double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
-                double ramInGb = Ram_Bytes / 1073741824;
-                double islem = Math.Ceiling(ramInGb);
-                RAMInfo.Text = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024) + "MB" + " = " +
-                               islem.ToString() + " GB";
+                double ramInBytes = (Convert.ToDouble(ramObject["TotalPhysicalMemory"]));
+                double roundAvailableRamValueInGb = Math.Ceiling(ramInBytes / 1073741824); // <- Byte to GB conversion
+                RAMInfo.Text = string.Format("{0:0.##}", Convert.ToDouble(roundAvailableRamValueInGb) * 1024) + "MB" + " = " + roundAvailableRamValueInGb.ToString() + " GB";
                 break;
             }
 
@@ -144,12 +142,9 @@ namespace Projects_Launcher.Projects_Launcher
 
             // Check RAM value
 
-            if (Properties.Settings.Default.RamMax != string.Empty)
+            if (Properties.Settings.Default.RamMax != string.Empty) {
                 maxRamTextBox.Text = Properties.Settings.Default.RamMax;
-
-            if (Properties.Settings.Default.RamMax != string.Empty)
-            {
-                maxramlabel.Text = Properties.Settings.Default.RamMax;
+                
                 try
                 {
                     maxRamDynamicCalculatorLabel.Text =
