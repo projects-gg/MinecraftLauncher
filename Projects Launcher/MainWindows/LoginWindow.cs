@@ -119,25 +119,15 @@ namespace Projects_Launcher
                 // Shouldn't happen except no internet connection or server downtime
             }
 
+            // Grab background image
             try
             {
-                // Get background info
                 var random = new Random();
-                var BackgroundList = new List<string>
-                {
-                    "kıs_meydan.png", "balık2.png", "kıs_meydan2.png", "maden.png", "maden2.png", "meydan.png",
-                    "world.png", "world2.png", "world3.png", "world4.png"
-                };
-                index = random.Next(BackgroundList.Count);
-
-                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/background" + "/" +
-                                                (BackgroundList[index]));
+                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + random.Next(10) + ".png"); // Last background image
 
                 using (var response = request.GetResponse())
                 using (var stream = response.GetResponseStream())
-                {
                     this.BackgroundImage = Bitmap.FromStream(stream);
-                }
             }
             catch
             {
