@@ -147,7 +147,6 @@ namespace Projects_Launcher.Projects_Launcher
             if (Properties.Settings.Default.RamMax != string.Empty)
                 maxRamTextBox.Text = Properties.Settings.Default.RamMax;
 
-
             if (Properties.Settings.Default.RamMax != string.Empty)
             {
                 maxramlabel.Text = Properties.Settings.Default.RamMax;
@@ -256,7 +255,6 @@ namespace Projects_Launcher.Projects_Launcher
 
             timer1.Enabled = true; // Launch timer1
         }
-
 
         private void oynabutton_Click(object sender, EventArgs e)
         {
@@ -511,7 +509,6 @@ namespace Projects_Launcher.Projects_Launcher
 
         private async void timer2_Tick(object sender, EventArgs e)
         {
-
             try
             {
                 await ServerStatus();
@@ -603,8 +600,6 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-
-
         private void surumsec_SelectedIndexChanged(object sender, EventArgs e)
         {
             Properties.Settings.Default.SelectedVersion = versionSelectComboBox.Text;
@@ -623,7 +618,6 @@ namespace Projects_Launcher.Projects_Launcher
                 // Shouldn't happen except no internet connection or server downtime
             }
         }
-
 
         private void discord_Click(object sender, EventArgs e)
         {
@@ -755,8 +749,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void mods_Click(object sender, EventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                                   "/.projects/mods";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/mods";
 
             if (Directory.Exists(@appDataDizini))
             {
