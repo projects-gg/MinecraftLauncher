@@ -130,7 +130,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.playSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.playSplitStaticLabel.Location = new System.Drawing.Point(122, 423);
             this.playSplitStaticLabel.Name = "playSplitStaticLabel";
-            this.playSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
+            this.playSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
             this.playSplitStaticLabel.TabIndex = 2;
             this.playSplitStaticLabel.Text = "|";
             // 
@@ -154,7 +154,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.onlineSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.onlineSplitStaticLabel.Location = new System.Drawing.Point(792, 430);
             this.onlineSplitStaticLabel.Name = "onlineSplitStaticLabel";
-            this.onlineSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
+            this.onlineSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
             this.onlineSplitStaticLabel.TabIndex = 6;
             this.onlineSplitStaticLabel.Text = "|";
             // 
@@ -334,7 +334,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverOnlineCountStaticLabel.ForeColor = System.Drawing.SystemColors.ActiveBorder;
             this.serverOnlineCountStaticLabel.Location = new System.Drawing.Point(693, 440);
             this.serverOnlineCountStaticLabel.Name = "serverOnlineCountStaticLabel";
-            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(92, 16);
+            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(93, 16);
             this.serverOnlineCountStaticLabel.TabIndex = 120;
             this.serverOnlineCountStaticLabel.Text = "Sunucu Hatası";
             // 
@@ -484,6 +484,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.reopenLauncherCheckBox.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
             this.reopenLauncherCheckBox.UseVisualStyleBackColor = false;
             this.reopenLauncherCheckBox.CheckedChanged += new System.EventHandler(this.kapattick_CheckedChanged);
+            this.reopenLauncherCheckBox.MouseEnter += new System.EventHandler(this.reopenLauncherCheckBox_MouseEnter);
             // 
             // label4
             // 
