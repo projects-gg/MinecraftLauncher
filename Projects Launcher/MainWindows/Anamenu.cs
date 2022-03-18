@@ -192,7 +192,6 @@ namespace Projects_Launcher.Projects_Launcher
             else if (Properties.Settings.Default.ResolutionWidth != string.Empty)
                 heighttextbox.Text = Properties.Settings.Default.ResolutionWidth;
 
-
             // Grab skin render
             try
             {
@@ -206,7 +205,7 @@ namespace Projects_Launcher.Projects_Launcher
             }
             catch
             {
-
+                // Shouldn't happen except no internet connection or server downtime
             }
 
             // Grab background image
@@ -219,21 +218,18 @@ namespace Projects_Launcher.Projects_Launcher
                 using (var stream = response.GetResponseStream())
                 {
                     this.BackgroundImage = Bitmap.FromStream(stream);
-
                 }
             }
             catch
             {
-
+                // Shouldn't happen except no internet connection or server downtime
             }
         }
 
         public void path() //Launcher Dizin Ayarları - Connection Limit
         {
             System.Net.ServicePointManager.DefaultConnectionLimit = 256;
-
             var path = new MinecraftPath(launcherdizin);
-
             var launcher = new CMLauncher(path);
         }
 
@@ -342,7 +338,6 @@ namespace Projects_Launcher.Projects_Launcher
                             LargeImageKey = "131231",
                             LargeImageText = "https://mc.projects.gg/",
                             SmallImageKey = "",
-
                         }
                     });
 
@@ -625,7 +620,7 @@ namespace Projects_Launcher.Projects_Launcher
             }
             catch
             {
-
+                // Shouldn't happen except no internet connection or server downtime
             }
         }
 
@@ -638,13 +633,20 @@ namespace Projects_Launcher.Projects_Launcher
             }
             catch
             {
-
+                // Shouldn't happen except no internet connection or server downtime
             }
         }
 
         private void instagram_Click(object sender, EventArgs e)
         {
-            System.Diagnostics.Process.Start("https://www.instagram.com/projects.com.tr/");
+            try
+            {
+                System.Diagnostics.Process.Start("https://www.instagram.com/projects.com.tr/");
+            }
+            catch
+            {
+                // Shouldn't happen except no internet connection or server downtime
+            }
         }
 
         private void geriformpanel_MouseEnter(object sender, EventArgs e)
@@ -758,7 +760,6 @@ namespace Projects_Launcher.Projects_Launcher
 
             if (Directory.Exists(@appDataDizini))
             {
-
                 string myPath = @appDataDizini;
                 System.Diagnostics.Process prc = new System.Diagnostics.Process();
                 prc.StartInfo.FileName = myPath;
@@ -832,7 +833,6 @@ namespace Projects_Launcher.Projects_Launcher
 
             if (Directory.Exists(@appDataDizini))
             {
-
                 string myPath = @appDataDizini;
                 System.Diagnostics.Process prc = new System.Diagnostics.Process();
                 prc.StartInfo.FileName = myPath;
@@ -865,7 +865,6 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void timer3_Tick(object sender, EventArgs e)
         {
-
             try
             {
                 if (!Process.GetProcessesByName("javaw").Any())
@@ -893,7 +892,6 @@ namespace Projects_Launcher.Projects_Launcher
                             LargeImageKey = "131231",
                             LargeImageText = "https://mc.projects.gg/",
                             SmallImageKey = "",
-
                         }
                     });
                     timer3.Stop();
