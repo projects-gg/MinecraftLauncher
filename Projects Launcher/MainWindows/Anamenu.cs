@@ -103,31 +103,28 @@ namespace Projects_Launcher.Projects_Launcher
             }
 
             //Donanım Bilgileri
-            try
+
+            //Ekran Kartı
+            ManagementObjectSearcher ekran = new ManagementObjectSearcher("Select * From Win32_VideoController");
+
+            foreach (ManagementObject Mobject in ekran.Get())
             {
-                //Ekran Kartı
-                ManagementObjectSearcher ekran = new ManagementObjectSearcher("Select * From Win32_VideoController");
-
-                foreach (ManagementObject Mobject in ekran.Get())
-                {
-                    gpuInfo.Text = Mobject["name"].ToString();
-                }
-
-                //RAM
-                ManagementObjectSearcher Search = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
-
-                foreach (ManagementObject Mobject in Search.Get())
-                {
-                    double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
-                    double ramgb = Ram_Bytes / 1073741824;
-                    double islem = Math.Ceiling(ramgb);
-                    RAMInfo.Text = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024) + "MB" + " = " + islem.ToString() + " GB";
-                }
+                gpuInfo.Text = Mobject["name"].ToString();
+                break;
             }
-            catch
+
+            //RAM
+            ManagementObjectSearcher Search = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
+
+            foreach (ManagementObject Mobject in Search.Get())
             {
-
+                double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
+                double ramInGb = Ram_Bytes / 1073741824;
+                double islem = Math.Ceiling(ramInGb);
+                RAMInfo.Text = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024) + "MB" + " = " + islem.ToString() + " GB";
+                break;
             }
+
             Setup(); //Discord Oynuyor
 
             timer2.Start(); //Ping Sayaç
@@ -135,119 +132,64 @@ namespace Projects_Launcher.Projects_Launcher
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames; //Nickname Bilgisini Göster
 
             //Oyun Kapanınca Aç / Tick
-            try
-            {
-                if (Properties.Settings.Default.OyunTickS)
-                    reopenLauncherCheckBox.Checked = true;
-                else
-                    reopenLauncherCheckBox.Checked = false;
-            }
-            catch
-            {
-
-            }
+            if (Properties.Settings.Default.OyunTickS) 
+                reopenLauncherCheckBox.Checked = true;
+            else
+                reopenLauncherCheckBox.Checked = false;
 
             //Versiyon bilgisini al
-            try
+            if (Properties.Settings.Default.SelectedVersion != string.Empty)
             {
-                if (Properties.Settings.Default.SelectedVersion != string.Empty)
-                {
-                    versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
-                }
-            }
-            catch
-            {
-
+                versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
+                versionSelectComboBox.Text = Properties.Settings.Default.SelectedVersion;
             }
 
-            //Versiyon bilgisini al / II
-            try
+            //Ram Değeri Değiştir
+
+            if (Properties.Settings.Default.RamMax != string.Empty)
+                maxRamTextBox.Text = Properties.Settings.Default.RamMax;
+
+
+            if (Properties.Settings.Default.RamMax != string.Empty)
             {
-                if (Properties.Settings.Default.SelectedVersion != string.Empty)
+                maxramlabel.Text = Properties.Settings.Default.RamMax;
+                try
                 {
-                    versionSelectComboBox.Text = Properties.Settings.Default.SelectedVersion;
+                    maxRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
+                }
+                catch
+                {
+                    maxRamDynamicCalculatorLabel.Text = "Geçersiz Değer!";
                 }
             }
-            catch
+            else if (maxRamDynamicCalculatorLabel.Text != "")
             {
-
+                maxRamDynamicCalculatorLabel.Text = "";
             }
 
-            //Ram bilgisini al
-            try
-            {
-
-
-                if (Properties.Settings.Default.RamMax != string.Empty)
+            //min
+            if (Properties.Settings.Default.RamMin != string.Empty) {
+                minRamTextBox.Text = Properties.Settings.Default.RamMin;
+                try
                 {
-                    maxRamTextBox.Text = Properties.Settings.Default.RamMax;
+                    minRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
                 }
-
-
-                if (Properties.Settings.Default.RamMax != string.Empty)
+                catch
                 {
-                    maxramlabel.Text = Properties.Settings.Default.RamMax;
-                    try
-                    {
-                        maxRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
-                    }
-                    catch
-                    {
-                        maxRamDynamicCalculatorLabel.Text = "Geçersiz Değer!";
-                    }
+                    minRamDynamicCalculatorLabel.Text = "Geçersiz Değer!";
                 }
-                else if (maxRamDynamicCalculatorLabel.Text != "")
-                {
-                    maxRamDynamicCalculatorLabel.Text = "";
-                }
-
-
-
-
-
-                //min
-                if (Properties.Settings.Default.RamMin != string.Empty)
-                {
-                    minRamTextBox.Text = Properties.Settings.Default.RamMin;
-                }
-                if (Properties.Settings.Default.RamMin != string.Empty)
-                {
-                    try
-                    {
-                        minRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
-                    }
-                    catch
-                    {
-                        minRamDynamicCalculatorLabel.Text = "Geçersiz Değer!";
-                    }
-                }
-                else if (maxRamDynamicCalculatorLabel.Text != "")
-                {
-                    minRamDynamicCalculatorLabel.Text = "";
-                }
-                minRamTextBox.MaxLength = 4;
             }
-            catch
+            else if (maxRamDynamicCalculatorLabel.Text != "")
             {
-
+                minRamDynamicCalculatorLabel.Text = "";
             }
+            minRamTextBox.MaxLength = 4;
 
             //Resolution bilgisini al
-            try
-            {
-                if (Properties.Settings.Default.ResolutionHeight != string.Empty)
-                {
-                    widthtextbox.Text = Properties.Settings.Default.ResolutionHeight;
-                }
-                if (Properties.Settings.Default.ResolutionWidth != string.Empty)
-                {
-                    heighttextbox.Text = Properties.Settings.Default.ResolutionWidth;
-                }
-            }
-            catch
-            {
-
-            }
+            if (Properties.Settings.Default.ResolutionHeight != string.Empty)
+                widthtextbox.Text = Properties.Settings.Default.ResolutionHeight;
+            else if (Properties.Settings.Default.ResolutionWidth != string.Empty)
+                heighttextbox.Text = Properties.Settings.Default.ResolutionWidth;
 
 
             //Skin bilgisini al
@@ -1192,9 +1134,10 @@ namespace Projects_Launcher.Projects_Launcher
         {
             try
             {
-                ManagementObjectSearcher getGPU = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
+                
+                ManagementObjectSearcher getRAM = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
 
-                foreach (ManagementObject Mobject in getGPU.Get())
+                foreach (ManagementObject Mobject in getRAM.Get())
                 {
                     double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
                     double ramgb = Ram_Bytes / 1073741824;
@@ -1202,6 +1145,7 @@ namespace Projects_Launcher.Projects_Launcher
                     rambilgi = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024 - 1024);
                     break;
                 }
+                
 
                 maxRamTextBox.Text = (maxRamTextBox.Text).Trim();
                 if (string.IsNullOrEmpty(maxRamTextBox.Text))
@@ -1226,6 +1170,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             try
             {
+                
                 ManagementObjectSearcher Search = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
                 foreach (ManagementObject Mobject in Search.Get())
                 {
@@ -1235,6 +1180,7 @@ namespace Projects_Launcher.Projects_Launcher
                     double islem = Math.Ceiling(ramgb);
                     rambilgi = String.Format("{0:0.##}", Convert.ToDouble(islem) * 512);
                 }
+                
 
                 minRamTextBox.Text = (minRamTextBox.Text).Trim();
                 if (!string.IsNullOrEmpty(minRamTextBox.Text))
