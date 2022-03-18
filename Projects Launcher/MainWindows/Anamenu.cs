@@ -259,8 +259,6 @@ namespace Projects_Launcher.Projects_Launcher
             clientStartProcess.Start(); // Launch the game
 
             timer1.Enabled = true; // Launch timer1
-
-
         }
 
 
@@ -294,107 +292,91 @@ namespace Projects_Launcher.Projects_Launcher
             Uri fabric =
                 new Uri(
                     "https://mc.projects.gg/LauncherUpdateStream/fabric-loader-0.13.3-1.18.2.zip"); // Fabric installer address
-            try
+
+            if (Directory.Exists(@surum_appDataDizini)) //Check fabric is exist
             {
-                if (Directory.Exists(@surum_appDataDizini)) //Check fabric is exist
+                try //If fabric exists
                 {
-                    try //If fabric exists
+                    Client.Dispose();
+                    Client = new DiscordRpcClient("949311557542756362");
+                    Client.Initialize();
+
+                    Client.SetPresence(new RichPresence()
                     {
-
-                        Client.Dispose();
-                        Client = new DiscordRpcClient("949311557542756362");
-                        Client.Initialize();
-
-                        Client.SetPresence(new RichPresence()
+                        Details = "Şu an oyunda!",
+                        State = "Sunucu IP: mc.projects.gg",
+                        Timestamps = new Timestamps()
                         {
-                            Details = "Şu an oyunda!",
-                            State = "Sunucu IP: mc.projects.gg",
-                            Timestamps = new Timestamps()
-                            {
-                                Start = DateTime.UtcNow
-                            },
-                            Assets = new Assets()
-                            {
-                                LargeImageKey = "131231",
-                                LargeImageText = "https://mc.projects.gg/",
-                                SmallImageKey = "",
-                            }
-                        });
-
-                        session = MSession.GetOfflineSession(loginMenuForm.nickname); // Get nickname info
-
-                        Thread thread = new Thread(() => Launch());
-                        thread.IsBackground = true;
-                        thread.Start(); // Launch the game
-
-                        animatedPlayingLabel();
-                        this.Enabled = false;
-                        timer1.Start(); // Launch timer1
-                    }
-                    catch //If fabric not exist
-                    {
-                        Client.Dispose();
-                        Client = new DiscordRpcClient("949311557542756362");
-                        Client.Initialize();
-
-                        Client.SetPresence(new RichPresence()
+                            Start = DateTime.UtcNow
+                        },
+                        Assets = new Assets()
                         {
-                            Details = "Başlatıcı menüsünde",
-                            State = "Sunucu IP: mc.projects.gg",
-                            Assets = new Assets()
-                            {
-                                LargeImageKey = "131231",
-                                LargeImageText = "https://mc.projects.gg/",
-                                SmallImageKey = "",
-
-                            }
-                        });
-
-                        timer1.Stop(); //Stop timer1
-                        MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi",
-                            MessageBoxButtons.OK); //DialogResult secenek = 
-
-                        this.Enabled = true; //Launcherın bileşenlerini aktifleştir
-
-                        /* Unnecessary boilerplate
-                        if (Properties.Settings.Default.SelectedVersion != string.Empty)
-                        {
-                            versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion; // Write version info into versionInfoStaticLabel
+                            LargeImageKey = "131231",
+                            LargeImageText = "https://mc.projects.gg/",
+                            SmallImageKey = "",
                         }
-                        */
+                    });
 
-                        versionInfoStaticLabel.Text =
-                            Properties.Settings.Default
-                                .SelectedVersion; //Write version info into versionInfoStaticLabel
+                    session = MSession.GetOfflineSession(loginMenuForm.nickname); // Get nickname info
 
-                        this.Enabled = true;
-                    }
+                    Thread thread = new Thread(() => Launch());
+                    thread.IsBackground = true;
+                    thread.Start(); // Launch the game
+
+                    animatedPlayingLabel();
+                    this.Enabled = false;
+                    timer1.Start(); // Launch timer1
                 }
-                else
+                catch //If fabric not exist
                 {
+                    Client.Dispose();
+                    Client = new DiscordRpcClient("949311557542756362");
+                    Client.Initialize();
 
-                    DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?",
-                        "Projects Launcher", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
-
-                    if (secenek == DialogResult.Yes)
+                    Client.SetPresence(new RichPresence()
                     {
-                        WebClient wc = new WebClient();
-                        wc.DownloadFileCompleted +=
-                            Wc_DownloadFileCompleted; // Call the codes when download process completed
-                        wc.DownloadFileAsync(fabric,
-                            appDataDizini +
-                            "/.projects/fabric-loader-0.13.3-1.18.2.zip"); // Download fabric to directory '.projects'
+                        Details = "Başlatıcı menüsünde",
+                        State = "Sunucu IP: mc.projects.gg",
+                        Assets = new Assets()
+                        {
+                            LargeImageKey = "131231",
+                            LargeImageText = "https://mc.projects.gg/",
+                            SmallImageKey = "",
 
-                        this.Enabled = false;
-                        versionInfoStaticLabel.Text = "İndiriliyor...";
-                    }
+                        }
+                    });
+
+                    timer1.Stop(); // Stop timer1
+                    MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi",
+                        MessageBoxButtons.OK); //DialogResult secenek = 
+
+                    this.Enabled = true; // Open components of the launcher
+
+                    versionInfoStaticLabel.Text =
+                        Properties.Settings.Default
+                            .SelectedVersion; //Write version info into versionInfoStaticLabel
+
+                    this.Enabled = true;
                 }
             }
-            catch
+            else
             {
+                DialogResult secenek = MessageBox.Show("Fabric bulunamadı! İndirmek ister misiniz?",
+                    "Fabric Dosyası Eksik", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
 
+                if (secenek == DialogResult.Yes)
+                {
+                    WebClient wc = new WebClient();
+                    wc.DownloadFileCompleted +=
+                        Wc_DownloadFileCompleted; // Call the codes when download process completed
+                    wc.DownloadFileAsync(fabric,
+                        appDataDizini +
+                        "/.projects/fabric-loader-0.13.3-1.18.2.zip"); // Download fabric to directory '.projects'
+
+                    this.Enabled = false;
+                    versionInfoStaticLabel.Text = "İndiriliyor...";
+                }
             }
-
         }
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
@@ -411,9 +393,9 @@ namespace Projects_Launcher.Projects_Launcher
                 versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
                 this.Enabled = true;
             }
-            catch
+            catch (Exception ex)
             {
-
+                NotificationAboutException(ex);
             }
 
         }
@@ -466,6 +448,13 @@ namespace Projects_Launcher.Projects_Launcher
 
         }
 
+        private void NotificationAboutException(Exception ex)
+        {
+            MessageBox.Show(
+                "Başlatıcı görevi işlenirken beklenmedik bir hata oluştu.\n\nBu hata önemli olmayabilir ya da programın yanlış çalışmasına neden oluyor olabilir. Eğer sorun yaşıyorsanız uygulamayı yeniden başlatın. Hata devam ederse destek sisteminde hatayı bizimle paylaşın.\n\nHata kodu: " +
+                Convert.ToString(ex), "Başlatıcı Hatası");
+        }
+
         private async void animatedPlayingLabel()
         {
             if (alreadyPlayingAnimatedLabel)
@@ -493,22 +482,13 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void ayarlarbutton_Click(object sender, EventArgs e)
         {
-            try
+            if (settingsBgPanel.Visible == false)
             {
-                if (settingsBgPanel.Visible == false)
-                {
-                    previousPageStaticLabel.Visible = true;
-                    settingsBgPanel.Visible = true;
-                }
-                else
-                {
-                    settingsBgPanel.Visible = false;
-                }
+                previousPageStaticLabel.Visible = true;
+                settingsBgPanel.Visible = true;
             }
-            catch
-            {
-
-            }
+            else
+                settingsBgPanel.Visible = false;
         }
 
         private async Task ServerStatus()
@@ -632,16 +612,9 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void surumsec_SelectedIndexChanged(object sender, EventArgs e)
         {
-            try
-            {
-                Properties.Settings.Default.SelectedVersion = versionSelectComboBox.Text;
-                Properties.Settings.Default.Save();
-                versionInfoStaticLabel.Text = versionSelectComboBox.Text;
-            }
-            catch
-            {
-
-            }
+            Properties.Settings.Default.SelectedVersion = versionSelectComboBox.Text;
+            Properties.Settings.Default.Save();
+            versionInfoStaticLabel.Text = versionSelectComboBox.Text;
         }
 
         private void website_Click(object sender, EventArgs e)
@@ -741,18 +714,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void mods_MouseEnter(object sender, EventArgs e)
         {
-
-            try
-            {
-                x = rnd.Next(255);
-                y = rnd.Next(255);
-                z = rnd.Next(255);
-                modsDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
-            }
-            catch
-            {
-
-            }
+            x = rnd.Next(255);
+            y = rnd.Next(255);
+            z = rnd.Next(255);
+            modsDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
         }
 
         private void mods_MouseLeave(object sender, EventArgs e)
@@ -938,9 +903,9 @@ namespace Projects_Launcher.Projects_Launcher
                     timer1.Start();
                 }
             }
-            catch
+            catch (Exception ex)
             {
-
+                NotificationAboutException(ex);
             }
         }
 
