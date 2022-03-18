@@ -24,7 +24,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             InitializeComponent();
         }
-        
+
 
         public static string sessions;
         public static MSession session;
@@ -71,7 +71,7 @@ namespace Projects_Launcher.Projects_Launcher
             //Client.Dispose();
             Client = new DiscordRpcClient("949311557542756362");
             Client.Initialize();
-            
+
             Client.SetPresence(new RichPresence()
             {
                 Details = "Başlatıcı menüsünde",
@@ -89,7 +89,7 @@ namespace Projects_Launcher.Projects_Launcher
         private void Anamenu_Load(object sender, EventArgs e)
         {
             var random = new Random();
-            var BackgroundList = new List<string> { "kıs_meydan.png","balık2.png","kıs_meydan2.png", "maden.png", "maden2.png", "meydan.png", "world.png", "world2.png", "world3.png", "world4.png" };
+            var BackgroundList = new List<string> { "kıs_meydan.png", "balık2.png", "kıs_meydan2.png", "maden.png", "maden2.png", "meydan.png", "world.png", "world2.png", "world3.png", "world4.png" };
             index = random.Next(BackgroundList.Count);
 
             //projects kontrol
@@ -121,7 +121,7 @@ namespace Projects_Launcher.Projects_Launcher
                     double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
                     double ramgb = Ram_Bytes / 1073741824;
                     double islem = Math.Ceiling(ramgb);
-                    RAMInfo.Text = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024) + "MB"  + " = " + islem.ToString() + " GB";
+                    RAMInfo.Text = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024) + "MB" + " = " + islem.ToString() + " GB";
                 }
             }
             catch
@@ -129,7 +129,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             }
             Setup(); //Discord Oynuyor
-            
+
             timer2.Start(); //Ping Sayaç
 
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames; //Nickname Bilgisini Göster
@@ -176,7 +176,7 @@ namespace Projects_Launcher.Projects_Launcher
             //Ram bilgisini al
             try
             {
-                
+
 
                 if (Properties.Settings.Default.RamMax != string.Empty)
                 {
@@ -200,9 +200,9 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     maxRamDynamicCalculatorLabel.Text = "";
                 }
-               
 
-                
+
+
 
 
                 //min
@@ -275,7 +275,7 @@ namespace Projects_Launcher.Projects_Launcher
                 using (var stream = response.GetResponseStream())
                 {
                     this.BackgroundImage = Bitmap.FromStream(stream);
-                   
+
                 }
             }
             catch
@@ -327,8 +327,8 @@ namespace Projects_Launcher.Projects_Launcher
             clientStartProcess.Start(); // Launch the game
 
             timer1.Enabled = true; // Launch timer1
-            
-            
+
+
         }
 
 
@@ -400,7 +400,7 @@ namespace Projects_Launcher.Projects_Launcher
                         Client.Dispose();
                         Client = new DiscordRpcClient("949311557542756362");
                         Client.Initialize();
-                        
+
                         Client.SetPresence(new RichPresence()
                         {
                             Details = "Başlatıcı menüsünde",
@@ -454,7 +454,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
 
             }
-          
+
         }
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
@@ -472,7 +472,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
 
             }
-            
+
         }
 
         private void timer1_Tick(object sender, EventArgs e)
@@ -518,7 +518,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 MessageBox.Show("Bir hata oluştu! Uygulamayı yeniden başlatmanızı tavsiye ederiz. Hatanın devamı durumunda aşağıdaki hatayı desteğe iletiniz:\n\n" + ex.Message);
             }
-          
+
         }
 
         private async void animatedPlayingLabel()
@@ -564,7 +564,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
 
             }
-           
+
 
 
         }
@@ -700,7 +700,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void surumsec_SelectedIndexChanged(object sender, EventArgs e)
         {
-           
+
             try
             {
                 Properties.Settings.Default.SelectedVersion = versionSelectComboBox.Text;
@@ -723,13 +723,13 @@ namespace Projects_Launcher.Projects_Launcher
             {
 
             }
-            
+
         }
 
 
         private void discord_Click(object sender, EventArgs e)
         {
-           
+
             try
             {
                 System.Diagnostics.Process.Start("https://projects.gg/discord");
@@ -742,7 +742,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void instagram_Click(object sender, EventArgs e)
         {
-            
+
             try
             {
                 System.Diagnostics.Process.Start("https://www.instagram.com/projects.com.tr/");
@@ -770,7 +770,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void geriformpanel_MouseLeave(object sender, EventArgs e)
         {
-            
+
             try
             {
                 previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
@@ -783,7 +783,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void changelogs_MouseEnter(object sender, EventArgs e)
         {
-           
+
             try
             {
                 x = rnd.Next(255);
@@ -799,7 +799,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void changelogs_MouseLeave(object sender, EventArgs e)
         {
-            
+
             try
             {
                 playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
@@ -851,12 +851,12 @@ namespace Projects_Launcher.Projects_Launcher
             {
 
             }
-           
+
         }
 
         private void mods_MouseEnter(object sender, EventArgs e)
         {
-            
+
             try
             {
                 x = rnd.Next(255);
@@ -872,7 +872,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void mods_MouseLeave(object sender, EventArgs e)
         {
-            
+
             try
             {
                 modsDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
@@ -885,7 +885,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void texturepackfolder_MouseEnter(object sender, EventArgs e)
         {
-           
+
             try
             {
                 x = rnd.Next(255);
@@ -901,7 +901,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void texturepackfolder_MouseLeave(object sender, EventArgs e)
         {
-            
+
             try
             {
                 resourcePackDirLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
@@ -914,7 +914,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void texturepackaktar_MouseEnter(object sender, EventArgs e)
         {
-          
+
             try
             {
                 x = rnd.Next(255);
@@ -930,7 +930,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void texturepackaktar_MouseLeave(object sender, EventArgs e)
         {
-            
+
             try
             {
                 transferResourcepackLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
@@ -975,7 +975,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void texturepackaktar_Click(object sender, EventArgs e)
         {
-           
+
 
             try
             {
@@ -1042,7 +1042,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void texturepackfolder_Click(object sender, EventArgs e)
         {
-            
+
 
             try
             {
@@ -1106,7 +1106,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void gamefolder_MouseEnter(object sender, EventArgs e)
         {
-          
+
             try
             {
                 x = rnd.Next(255);
@@ -1122,7 +1122,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void gamefolder_MouseLeave(object sender, EventArgs e)
         {
-            
+
             try
             {
                 gameDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
@@ -1210,7 +1210,8 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
                     maxRamTextBox.Text = rambilgi;
-                } else if (Convert.ToInt32(rambilgi) >= 1024 && Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(rambilgi)-512)
+                }
+                else if (Convert.ToInt32(rambilgi) >= 1024 && Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(rambilgi) - 512)
                 {
                     MessageBox.Show("Yüksek kaynak kullanımı!\n\nYüksek kaynak tüketimi bilgisayarınızdaki\nbazı şeylerin yavaş çalışmasına neden olabilir\nEn yüksek RAM miktarınızı, azami RAM\nmiktarından daha az tutmanız tavsiye\nedilir.", "Kaynak Tüketim Uyarısı");
                     maxRamTextBox.Text = rambilgi;
@@ -1256,7 +1257,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 MessageBox.Show("RAM miktarı ayarlanırken bir hata meydana geldi.");
             }
-           
+
         }
 
         private void heighttextbox_Leave(object sender, EventArgs e)
@@ -1288,7 +1289,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 MessageBox.Show("Çözünürlük ayarlanırken bir hata meydana geldi.");
             }
-           
+
         }
 
         private void widthtextbox_Leave(object sender, EventArgs e)
@@ -1320,7 +1321,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 MessageBox.Show("Çözünürlük ayarlanırken bir hata meydana geldi.");
             }
-            
+
         }
 
         private void guna2ControlBox3_Click(object sender, EventArgs e)
@@ -1336,7 +1337,7 @@ namespace Projects_Launcher.Projects_Launcher
         }
 
         private void guna2ControlBox2_Click(object sender, EventArgs e)
-        {  
+        {
             try
             {
                 this.WindowState = FormWindowState.Minimized;
