@@ -161,9 +161,7 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             else if (maxRamDynamicCalculatorLabel.Text != "")
-            {
                 maxRamDynamicCalculatorLabel.Text = "";
-            }
 
             if (Properties.Settings.Default.RamMin != string.Empty)
             {
@@ -179,10 +177,8 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             else if (maxRamDynamicCalculatorLabel.Text != "")
-            {
                 minRamDynamicCalculatorLabel.Text = "";
-            }
-
+            
             minRamTextBox.MaxLength = 4;
 
             // Grab resolution data
@@ -390,7 +386,6 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 NotificationAboutException(ex);
             }
-
         }
 
         private void timer1_Tick(object sender, EventArgs e)
@@ -438,7 +433,6 @@ namespace Projects_Launcher.Projects_Launcher
                     "Bir hata oluştu! Uygulamayı yeniden başlatmanızı tavsiye ederiz. Hatanın devamı durumunda aşağıdaki hatayı desteğe iletiniz:\n\n" +
                     ex.Message);
             }
-
         }
 
         private void NotificationAboutException(Exception ex)
@@ -796,7 +790,6 @@ namespace Projects_Launcher.Projects_Launcher
                     MessageBox.Show("Doku paketi başarıyla yüklendi.");
                 }
             }
-
         }
 
         private void texturepackfolder_Click(object sender, EventArgs e)
