@@ -39,7 +39,6 @@ namespace Projects_Launcher
                         LargeImageKey = "131231",
                         LargeImageText = "https://mc.projects.gg/",
                         SmallImageKey = "",
-
                     }
                 });
             }
@@ -47,9 +46,7 @@ namespace Projects_Launcher
             {
 
             }
-
         }
-
         private void cantGrabVersionInfo()
         {
             MessageBox.Show(
