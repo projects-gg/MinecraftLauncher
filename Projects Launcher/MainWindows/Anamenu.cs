@@ -51,7 +51,9 @@ namespace Projects_Launcher.Projects_Launcher
 
         Ping p = new Ping();
 
-        public static string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/resourcepacks";
+        public static string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                            "/.projects/resourcepacks";
+
         string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
 
         Uri fabric = new Uri("https://mc.projects.gg/LauncherUpdateStream/fabric-loader-0.13.3-1.18.2.zip");
@@ -65,6 +67,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private int uiThreadId = Thread.CurrentThread.ManagedThreadId;
         public DiscordRpcClient Client { get; private set; }
+
         public void Setup()
         {
 
@@ -89,17 +92,23 @@ namespace Projects_Launcher.Projects_Launcher
         private void Anamenu_Load(object sender, EventArgs e)
         {
             var random = new Random();
-            var BackgroundList = new List<string> { "kıs_meydan.png", "balık2.png", "kıs_meydan2.png", "maden.png", "maden2.png", "meydan.png", "world.png", "world2.png", "world3.png", "world4.png" };
+            var BackgroundList = new List<string>
+            {
+                "kıs_meydan.png", "balık2.png", "kıs_meydan2.png", "maden.png", "maden2.png", "meydan.png", "world.png",
+                "world2.png", "world3.png", "world4.png"
+            };
             index = random.Next(BackgroundList.Count);
 
             //projects kontrol
-            if (Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions"))
+            if (Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                 "/.projects/versions"))
             {
 
             }
             else
             {
-                Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions");
+                Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                          "/.projects/versions");
             }
 
             //Donanım Bilgileri
@@ -121,7 +130,8 @@ namespace Projects_Launcher.Projects_Launcher
                 double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
                 double ramInGb = Ram_Bytes / 1073741824;
                 double islem = Math.Ceiling(ramInGb);
-                RAMInfo.Text = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024) + "MB" + " = " + islem.ToString() + " GB";
+                RAMInfo.Text = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024) + "MB" + " = " +
+                               islem.ToString() + " GB";
                 break;
             }
 
@@ -132,7 +142,7 @@ namespace Projects_Launcher.Projects_Launcher
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames; //Nickname Bilgisini Göster
 
             //Oyun Kapanınca Aç / Tick
-            if (Properties.Settings.Default.OyunTickS) 
+            if (Properties.Settings.Default.OyunTickS)
                 reopenLauncherCheckBox.Checked = true;
             else
                 reopenLauncherCheckBox.Checked = false;
@@ -155,7 +165,8 @@ namespace Projects_Launcher.Projects_Launcher
                 maxramlabel.Text = Properties.Settings.Default.RamMax;
                 try
                 {
-                    maxRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
+                    maxRamDynamicCalculatorLabel.Text =
+                        String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
                 }
                 catch
                 {
@@ -168,11 +179,13 @@ namespace Projects_Launcher.Projects_Launcher
             }
 
             //min
-            if (Properties.Settings.Default.RamMin != string.Empty) {
+            if (Properties.Settings.Default.RamMin != string.Empty)
+            {
                 minRamTextBox.Text = Properties.Settings.Default.RamMin;
                 try
                 {
-                    minRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
+                    minRamDynamicCalculatorLabel.Text =
+                        String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
                 }
                 catch
                 {
@@ -183,6 +196,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 minRamDynamicCalculatorLabel.Text = "";
             }
+
             minRamTextBox.MaxLength = 4;
 
             //Resolution bilgisini al
@@ -211,7 +225,8 @@ namespace Projects_Launcher.Projects_Launcher
             //Arkaplan bilgisini al
             try
             {
-                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/background" + "/" + (BackgroundList[index]));
+                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/background" + "/" +
+                                                (BackgroundList[index]));
 
                 using (var response = request.GetResponse())
                 using (var stream = response.GetResponseStream())
@@ -225,6 +240,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             }
         }
+
         public void path() //Launcher Dizin Ayarları - Connection Limit
         {
             System.Net.ServicePointManager.DefaultConnectionLimit = 256;
@@ -248,6 +264,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             }
         }
+
         public async void Launch() // Minecraft startup settings
         {
             var path = new MinecraftPath(launcherdizin);
@@ -264,7 +281,8 @@ namespace Projects_Launcher.Projects_Launcher
                 ScreenWidth = int.Parse(Properties.Settings.Default.ResolutionWidth), // Get width resolution info
                 ScreenHeight = int.Parse(Properties.Settings.Default.ResolutionHeight), // Get height resolution info
             };
-            var clientStartProcess = await launcher.CreateProcessAsync(Properties.Settings.Default.SelectedVersion, ayarlar); // Start client
+            var clientStartProcess =
+                await launcher.CreateProcessAsync(Properties.Settings.Default.SelectedVersion, ayarlar); // Start client
 
             clientStartProcess.Start(); // Launch the game
 
@@ -276,15 +294,19 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void oynabutton_Click(object sender, EventArgs e)
         {
-            string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions/fabric-loader-0.13.3-1.18.2"; // Fabric directory
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData); // AppData directory
+            string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                         "/.projects/versions/fabric-loader-0.13.3-1.18.2"; // Fabric directory
+            string appDataDizini =
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData); // AppData directory
 
             int MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin);
             int MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax);
 
             if (MaximumRamMb <= MinimumRamMb)
             {
-                DialogResult ramExceptionResult = MessageBox.Show("Oyunu şu an başlatılamaz:\n\nVerilen azami RAM miktarı asgari\nmiktardan daha düşük.\n\nEşitleme yapılsın mı?\nTamam: Miktarları eşitle, oyunu başlat.\nİptal: Uyarıyı kapat ve oyunu başlatma.", "Bilgi", MessageBoxButtons.OKCancel); //DialogResult secenek = 
+                DialogResult ramExceptionResult = MessageBox.Show(
+                    "Oyunu şu an başlatılamaz:\n\nVerilen azami RAM miktarı asgari\nmiktardan daha düşük.\n\nEşitleme yapılsın mı?\nTamam: Miktarları eşitle, oyunu başlat.\nİptal: Uyarıyı kapat ve oyunu başlatma.",
+                    "Bilgi", MessageBoxButtons.OKCancel); //DialogResult secenek = 
 
                 if (ramExceptionResult == DialogResult.OK)
                 {
@@ -297,7 +319,9 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
 
-            Uri fabric = new Uri("https://mc.projects.gg/LauncherUpdateStream/fabric-loader-0.13.3-1.18.2.zip"); // Fabric installer address
+            Uri fabric =
+                new Uri(
+                    "https://mc.projects.gg/LauncherUpdateStream/fabric-loader-0.13.3-1.18.2.zip"); // Fabric installer address
             try
             {
                 if (Directory.Exists(@surum_appDataDizini)) //Check fabric is exist
@@ -357,7 +381,8 @@ namespace Projects_Launcher.Projects_Launcher
                         });
 
                         timer1.Stop(); //Stop timer1
-                        MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi", MessageBoxButtons.OK); //DialogResult secenek = 
+                        MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi",
+                            MessageBoxButtons.OK); //DialogResult secenek = 
 
                         this.Enabled = true; //Launcherın bileşenlerini aktifleştir
 
@@ -368,7 +393,9 @@ namespace Projects_Launcher.Projects_Launcher
                         }
                         */
 
-                        versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion; //Write version info into versionInfoStaticLabel
+                        versionInfoStaticLabel.Text =
+                            Properties.Settings.Default
+                                .SelectedVersion; //Write version info into versionInfoStaticLabel
 
                         this.Enabled = true;
 
@@ -379,13 +406,17 @@ namespace Projects_Launcher.Projects_Launcher
                 else
                 {
 
-                    DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?", "Projects Launcher", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
+                    DialogResult secenek = MessageBox.Show("Bazı Dosyalar Bulunamadı! İndirmek ister misiniz?",
+                        "Projects Launcher", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
 
                     if (secenek == DialogResult.Yes)
                     {
                         WebClient wc = new WebClient();
-                        wc.DownloadFileCompleted += Wc_DownloadFileCompleted; // Call the codes when download process completed
-                        wc.DownloadFileAsync(fabric, appDataDizini + "/.projects/fabric-loader-0.13.3-1.18.2.zip"); // Download fabric to directory '.projects'
+                        wc.DownloadFileCompleted +=
+                            Wc_DownloadFileCompleted; // Call the codes when download process completed
+                        wc.DownloadFileAsync(fabric,
+                            appDataDizini +
+                            "/.projects/fabric-loader-0.13.3-1.18.2.zip"); // Download fabric to directory '.projects'
 
                         this.Enabled = false;
                         versionInfoStaticLabel.Text = "İndiriliyor...";
@@ -398,12 +429,15 @@ namespace Projects_Launcher.Projects_Launcher
             }
 
         }
+
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
             try
             {
-                string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/fabric-loader-0.13.3-1.18.2.zip";
-                string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions";
+                string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                 "/.projects/fabric-loader-0.13.3-1.18.2.zip";
+                string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                     "/.projects/versions";
 
                 System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath);
                 Thread.Sleep(1100);
@@ -458,7 +492,9 @@ namespace Projects_Launcher.Projects_Launcher
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Bir hata oluştu! Uygulamayı yeniden başlatmanızı tavsiye ederiz. Hatanın devamı durumunda aşağıdaki hatayı desteğe iletiniz:\n\n" + ex.Message);
+                MessageBox.Show(
+                    "Bir hata oluştu! Uygulamayı yeniden başlatmanızı tavsiye ederiz. Hatanın devamı durumunda aşağıdaki hatayı desteğe iletiniz:\n\n" +
+                    ex.Message);
             }
 
         }
@@ -534,6 +570,7 @@ namespace Projects_Launcher.Projects_Launcher
         }
 
         public virtual long Speed { get; }
+
         private async void timer2_Tick(object sender, EventArgs e)
         {
 
@@ -558,6 +595,7 @@ namespace Projects_Launcher.Projects_Launcher
                 // Shouldn't happen except no internet connection or server downtime
             }
         }
+
         private void ramlabel_Click(object sender, EventArgs e)
         {
             maxramlabell = maxramlabel.Text;
@@ -620,7 +658,8 @@ namespace Projects_Launcher.Projects_Launcher
                     maxramlabel.Text = Properties.Settings.Default.RamMax;
                     try
                     {
-                        maxRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
+                        maxRamDynamicCalculatorLabel.Text =
+                            String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
                     }
                     catch
                     {
@@ -751,6 +790,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             }
         }
+
         private void minramtext_TextChanged(object sender, EventArgs e)
         {
             try
@@ -765,7 +805,8 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     try
                     {
-                        minRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
+                        minRamDynamicCalculatorLabel.Text =
+                            String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
                     }
                     catch
                     {
@@ -885,7 +926,8 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void mods_Click(object sender, EventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/mods";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                   "/.projects/mods";
 
 
             try
@@ -938,7 +980,8 @@ namespace Projects_Launcher.Projects_Launcher
                     {
                         if (File.Exists(TextureDizin + "\\" + DosyaAdi))
                         {
-                            MessageBox.Show(DosyaAdi + " isimli doku paketi zaten mevcut.", "", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            MessageBox.Show(DosyaAdi + " isimli doku paketi zaten mevcut.", "", MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning);
                         }
                         else
                         {
@@ -966,7 +1009,8 @@ namespace Projects_Launcher.Projects_Launcher
                     {
                         if (File.Exists(TextureDizin + "\\" + DosyaAdi))
                         {
-                            MessageBox.Show(DosyaAdi + " isimli doku paketi zaten mevcut.", "", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                            MessageBox.Show(DosyaAdi + " isimli doku paketi zaten mevcut.", "", MessageBoxButtons.OK,
+                                MessageBoxIcon.Warning);
                         }
                         else
                         {
@@ -1086,6 +1130,7 @@ namespace Projects_Launcher.Projects_Launcher
                     {
                         versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
                     }
+
                     playButtonStaticLabel.Enabled = true;
                     this.Visible = true;
                     this.Enabled = true;
@@ -1134,7 +1179,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             try
             {
-                
+
                 ManagementObjectSearcher getRAM = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
 
                 foreach (ManagementObject Mobject in getRAM.Get())
@@ -1145,19 +1190,23 @@ namespace Projects_Launcher.Projects_Launcher
                     rambilgi = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024 - 1024);
                     break;
                 }
-                
+
 
                 maxRamTextBox.Text = (maxRamTextBox.Text).Trim();
                 if (string.IsNullOrEmpty(maxRamTextBox.Text))
                     MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
-                else if (Convert.ToInt32(maxRamTextBox.Text) < 1024 || Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(rambilgi))
+                else if (Convert.ToInt32(maxRamTextBox.Text) < 1024 ||
+                         Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(rambilgi))
                 {
                     MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
                     maxRamTextBox.Text = rambilgi;
                 }
-                else if (Convert.ToInt32(rambilgi) >= 1024 && Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(rambilgi) - 512)
+                else if (Convert.ToInt32(rambilgi) >= 1024 &&
+                         Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(rambilgi) - 512)
                 {
-                    MessageBox.Show("Yüksek kaynak kullanımı!\n\nYüksek kaynak tüketimi bilgisayarınızdaki\nbazı şeylerin yavaş çalışmasına neden olabilir\nEn yüksek RAM miktarınızı, azami RAM\nmiktarından daha az tutmanız tavsiye\nedilir.", "Kaynak Tüketim Uyarısı");
+                    MessageBox.Show(
+                        "Yüksek kaynak kullanımı!\n\nYüksek kaynak tüketimi bilgisayarınızdaki\nbazı şeylerin yavaş çalışmasına neden olabilir\nEn yüksek RAM miktarınızı, azami RAM\nmiktarından daha az tutmanız tavsiye\nedilir.",
+                        "Kaynak Tüketim Uyarısı");
                     maxRamTextBox.Text = rambilgi;
                 }
             }
@@ -1166,11 +1215,12 @@ namespace Projects_Launcher.Projects_Launcher
                 MessageBox.Show("RAM miktarı ayarlanırken bir hata meydana geldi.");
             }
         }
+
         private void minramtext_Leave(object sender, EventArgs e)
         {
             try
             {
-                
+
                 ManagementObjectSearcher Search = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
                 foreach (ManagementObject Mobject in Search.Get())
                 {
@@ -1180,7 +1230,7 @@ namespace Projects_Launcher.Projects_Launcher
                     double islem = Math.Ceiling(ramgb);
                     rambilgi = String.Format("{0:0.##}", Convert.ToDouble(islem) * 512);
                 }
-                
+
 
                 minRamTextBox.Text = (minRamTextBox.Text).Trim();
                 if (!string.IsNullOrEmpty(minRamTextBox.Text))
@@ -1193,7 +1243,8 @@ namespace Projects_Launcher.Projects_Launcher
                     minRamTextBox.Text = rambilgi;
                 }
 
-                if (Convert.ToInt32(minRamTextBox.Text) < 1024 || Convert.ToInt32(minRamTextBox.Text) > Convert.ToInt32(rambilgi))
+                if (Convert.ToInt32(minRamTextBox.Text) < 1024 ||
+                    Convert.ToInt32(minRamTextBox.Text) > Convert.ToInt32(rambilgi))
                 {
                     MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
                     minRamTextBox.Text = rambilgi;
@@ -1225,7 +1276,8 @@ namespace Projects_Launcher.Projects_Launcher
                     heighttextbox.Text = yukseklikb;
                 }
 
-                if (Convert.ToInt32(heighttextbox.Text) < Convert.ToInt32(yukseklikb2) || Convert.ToInt32(heighttextbox.Text) > Convert.ToInt32(yukseklikb))
+                if (Convert.ToInt32(heighttextbox.Text) < Convert.ToInt32(yukseklikb2) ||
+                    Convert.ToInt32(heighttextbox.Text) > Convert.ToInt32(yukseklikb))
                 {
                     MessageBox.Show("Çözünürlük" + " " + yukseklikb2 + "-" + yukseklikb + " " + "arasında girilmeli.");
                     heighttextbox.Text = yukseklikb2;
@@ -1257,7 +1309,8 @@ namespace Projects_Launcher.Projects_Launcher
                     widthtextbox.Text = genislikb;
                 }
 
-                if (Convert.ToInt32(widthtextbox.Text) < Convert.ToInt32(genislikb2) || Convert.ToInt32(widthtextbox.Text) > Convert.ToInt32(genislikb))
+                if (Convert.ToInt32(widthtextbox.Text) < Convert.ToInt32(genislikb2) ||
+                    Convert.ToInt32(widthtextbox.Text) > Convert.ToInt32(genislikb))
                 {
                     MessageBox.Show("Çözünürlük" + " " + genislikb2 + "-" + genislikb + " " + "arasında girilmeli.");
                     widthtextbox.Text = genislikb;
@@ -1272,53 +1325,35 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void guna2ControlBox3_Click(object sender, EventArgs e)
         {
-            try
-            {
-                Environment.Exit(0);
-            }
-            catch
-            {
-
-            }
+            Environment.Exit(0);
         }
 
         private void guna2ControlBox2_Click(object sender, EventArgs e)
         {
-            try
-            {
-                this.WindowState = FormWindowState.Minimized;
-            }
-            catch
-            {
+            this.WindowState = FormWindowState.Minimized;
+        }
 
-            }
+        private void reopenLauncherCheckBox_MouseEnter(object sender, EventArgs e)
+        {
+            ToolTip discordRpcTip = new ToolTip();
+            discordRpcTip.UseFading = true;
+            discordRpcTip.UseAnimation = true;
+            discordRpcTip.IsBalloon = true;
+            discordRpcTip.ShowAlways = true;
+            discordRpcTip.SetToolTip(this.reopenLauncherCheckBox, "Oyun kapatıldığında yeniden açılıp açılmayacağını seçersiniz.\n\nBu özelliğin kapalı olması durumunda oyundayken, discord oynuyor\nbilginiz oyun durumunuzda gözükmeyecektir.");
         }
 
         private void oynabutton_MouseEnter(object sender, EventArgs e)
         {
-            try
-            {
-                x = rnd.Next(255);
-                y = rnd.Next(255);
-                z = rnd.Next(255);
-                playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
-            }
-            catch
-            {
-
-            }
+            x = rnd.Next(255);
+            y = rnd.Next(255);
+            z = rnd.Next(255);
+            playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
         }
 
         private void oynabutton_MouseLeave(object sender, EventArgs e)
         {
-            try
-            {
-                playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
-            }
-            catch
-            {
-
-            }
+            playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
         }
     }
 }
