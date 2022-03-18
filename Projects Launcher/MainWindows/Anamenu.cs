@@ -1,15 +1,12 @@
 ﻿using CmlLib.Core;
 using CmlLib.Core.Auth;
 using DiscordRPC;
-using ICSharpCode.SharpZipLib.Zip;
 using MCServerStatus;
-using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
-using System.Drawing.Text;
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -17,8 +14,6 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Threading;
 using System.Threading.Tasks;
-using System.IO.Compression;
-using System.Security.Policy;
 using System.Windows.Forms;
 
 namespace Projects_Launcher.Projects_Launcher
@@ -31,16 +26,11 @@ namespace Projects_Launcher.Projects_Launcher
 
             InitializeComponent();
         }
-
-        public static string versiyon;
+        
 
         public static string sessions;
         public static MSession session;
         public static int index;
-        public static string rammiktar;
-        public static string height;
-        public static string width;
-        public static string versiyons;
         public static string minrambox;
         public static string maxrambox;
         public static string widthbox;
@@ -53,7 +43,6 @@ namespace Projects_Launcher.Projects_Launcher
         public static string widthlabell;
         public static string surumlabell;
         public static bool formpanell;
-
         public static string rambilgi;
 
         public static int genislik;
@@ -62,6 +51,7 @@ namespace Projects_Launcher.Projects_Launcher
         private string yukseklikb2;
         private string genislikb;
         private string genislikb2;
+
         Ping p = new Ping();
 
         public static string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/resourcepacks";
@@ -150,18 +140,10 @@ namespace Projects_Launcher.Projects_Launcher
             //Oyun Kapanınca Aç / Tick
             try
             {
-                if (Properties.Settings.Default.OyunTickS != string.Empty)
-                {
-                    ticksave.Text = Properties.Settings.Default.OyunTickS;
-                }
-                if (ticksave.Text == "acik")
-                {
+                if (Properties.Settings.Default.OyunTickS)
                     reopenLauncherCheckBox.Checked = true;
-                }
-                if (ticksave.Text == "kapali")
-                {
+                else
                     reopenLauncherCheckBox.Checked = false;
-                }
             }
             catch
             {
@@ -548,6 +530,7 @@ namespace Projects_Launcher.Projects_Launcher
                 return;
 
             alreadyPlayingAnimatedLabel = true;
+            versionInfoStaticLabel.Text = "Başlatılıyor";
 
             do
             {
@@ -559,7 +542,7 @@ namespace Projects_Launcher.Projects_Launcher
                     versionInfoStaticLabel.Text = "Başlatılıyor..";
                 else if (versionInfoStaticLabel.Text.Equals("Başlatılıyor.."))
                     versionInfoStaticLabel.Text = "Başlatılıyor...";
-                else
+                else if (versionInfoStaticLabel.Text.Equals("Başlatılıyor..."))
                     versionInfoStaticLabel.Text = "Başlatılıyor";
 
                 await Task.Delay(250);
@@ -1200,43 +1183,27 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void kapattick_CheckedChanged(object sender, EventArgs e)
         {
+            if (reopenLauncherCheckBox.Checked)
+                Properties.Settings.Default.OyunTickS = true;
+            else
+                Properties.Settings.Default.OyunTickS = false;
 
-          
-            try
-            {
-                if (reopenLauncherCheckBox.Checked == true)
-                {
-                    ticksave.Text = "acik";
-
-                    Properties.Settings.Default.OyunTickS = ticksave.Text;
-                    Properties.Settings.Default.Save();
-                }
-                else
-                {
-                    ticksave.Text = "kapali";
-
-                    Properties.Settings.Default.OyunTickS = ticksave.Text;
-                    Properties.Settings.Default.Save();
-                }
-            }
-            catch
-            {
-
-            }
+            Properties.Settings.Default.Save();
         }
 
         private void maxramtext_Leave(object sender, EventArgs e)
         {
             try
             {
-                ManagementObjectSearcher Search = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
-                foreach (ManagementObject Mobject in Search.Get())
-                {
+                ManagementObjectSearcher getGPU = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
 
+                foreach (ManagementObject Mobject in getGPU.Get())
+                {
                     double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
                     double ramgb = Ram_Bytes / 1073741824;
                     double islem = Math.Ceiling(ramgb);
                     rambilgi = String.Format("{0:0.##}", Convert.ToDouble(islem) * 1024 - 1024);
+                    break;
                 }
 
                 maxRamTextBox.Text = (maxRamTextBox.Text).Trim();

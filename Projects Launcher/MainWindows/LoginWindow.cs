@@ -52,7 +52,6 @@ namespace Projects_Launcher
         private void cantGrabVersionInfo()
         {
             MessageBox.Show("Güncelleme bilgileri alınamadı!\n\nİnternete bağlı olmayabilirsiniz ya da Projects servislerinde bir kara delik açılmış olabilir.", "Bilgi", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
-            
         }
 
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
@@ -173,29 +172,14 @@ namespace Projects_Launcher
             }
         }
 
-        private void label3_Click(object sender, EventArgs e)
+        private async void label3_Click(object sender, EventArgs e)
         {
-            try
-            {
-                System.Diagnostics.Process.Start("https://mc.projects.gg/");
-            }
-            catch
-            {
-
-            }
+            System.Diagnostics.Process.Start("https://mc.projects.gg/");
         }
 
         private void guna2ControlBox1_Click(object sender, EventArgs e)
         {
-            
-            try
-            {
-                Application.Exit();
-            }
-            catch
-            {
-
-            }
+            Application.Exit();
         }
 
         private void girisyapbutton_Click(object sender, EventArgs e)
@@ -230,43 +214,27 @@ namespace Projects_Launcher
         private void nicknametextbox_TextChanged(object sender, EventArgs e)
         {
             nickNameEnterTextBox.Text = (nickNameEnterTextBox.Text).Trim();
-
-            try
+            
+            if (!string.IsNullOrEmpty(nickNameEnterTextBox.Text))
             {
-                if (!string.IsNullOrEmpty(nickNameEnterTextBox.Text))
+                if (rememberMeCheckBox.Checked == true)
                 {
-                    if (rememberMeCheckBox.Checked == true)
-                    {
-                        Properties.Settings.Default.NickNames = nickNameEnterTextBox.Text;
-                        Properties.Settings.Default.Save();
-                    }
-                    loginButton.Text = "Giriş Yap";
-                    loginButton.Enabled = true;
-                    return;
+                    Properties.Settings.Default.NickNames = nickNameEnterTextBox.Text;
+                    Properties.Settings.Default.Save();
                 }
-                else
-                {
-                    loginButton.Text = "Kullanıcı Adı Giriniz";
-                    loginButton.Enabled = false;
-                }
+                loginButton.Text = "Giriş Yap";
+                loginButton.Enabled = true;
+                return;
             }
-            catch
+            else
             {
-
+                loginButton.Text = "Kullanıcı Adı Giriniz";
+                loginButton.Enabled = false;
             }
         }
 
         private void guna2ControlBox2_Click(object sender, EventArgs e)
         {
-            try
-            {
-                this.WindowState = FormWindowState.Minimized;
-
-            }
-            catch
-            {
-
-            }
+            this.WindowState = FormWindowState.Minimized;
         }
-    }
 }

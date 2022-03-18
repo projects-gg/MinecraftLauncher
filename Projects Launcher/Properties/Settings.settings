@@ -23,8 +23,8 @@
     <Setting Name="RamMin" Type="System.String" Scope="User">
       <Value Profile="(Default)">2048</Value>
     </Setting>
-    <Setting Name="OyunTickS" Type="System.String" Scope="User">
-      <Value Profile="(Default)">acik</Value>
+    <Setting Name="OyunTickS" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">True</Value>
     </Setting>
   </Settings>
 </SettingsFile>
