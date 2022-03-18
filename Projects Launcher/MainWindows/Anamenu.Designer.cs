@@ -46,8 +46,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.widthlabel = new System.Windows.Forms.Label();
             this.heightlabel = new System.Windows.Forms.Label();
             this.maxramlabel = new System.Windows.Forms.Label();
-            this.timer1 = new System.Windows.Forms.Timer(this.components);
-            this.timer2 = new System.Windows.Forms.Timer(this.components);
+            this.prepareGameToLaunch = new System.Windows.Forms.Timer(this.components);
             this.previousPageStaticLabel = new System.Windows.Forms.Label();
             this.minramlabel = new System.Windows.Forms.Label();
             this.serverOnlineCountStaticLabel = new System.Windows.Forms.Label();
@@ -287,14 +286,9 @@ namespace Projects_Launcher.Projects_Launcher
             this.maxramlabel.Visible = false;
             this.maxramlabel.Click += new System.EventHandler(this.ramlabel_Click);
             // 
-            // timer1
+            // prepareGameToLaunch
             // 
-            this.timer1.Tick += new System.EventHandler(this.timer1_Tick);
-            // 
-            // timer2
-            // 
-            this.timer2.Interval = 749;
-            this.timer2.Tick += new System.EventHandler(this.timer2_Tick);
+            this.prepareGameToLaunch.Tick += new System.EventHandler(this.prepareGameToLaunch_Tick);
             // 
             // previousPageStaticLabel
             // 
@@ -932,8 +926,7 @@ namespace Projects_Launcher.Projects_Launcher
         public System.Windows.Forms.Label widthlabel;
         public System.Windows.Forms.Label heightlabel;
         public System.Windows.Forms.Label maxramlabel;
-        private System.Windows.Forms.Timer timer1;
-        private System.Windows.Forms.Timer timer2;
+        private System.Windows.Forms.Timer prepareGameToLaunch;
         private System.Windows.Forms.Label previousPageStaticLabel;
         public System.Windows.Forms.Label minramlabel;
         private System.Windows.Forms.Label serverOnlineCountStaticLabel;

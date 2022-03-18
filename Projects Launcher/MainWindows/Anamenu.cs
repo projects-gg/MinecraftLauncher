@@ -11,7 +11,6 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Net;
-using System.Net.NetworkInformation;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -38,14 +37,14 @@ namespace Projects_Launcher.Projects_Launcher
         public static string widthlabell;
         public static string surumlabell;
         public static bool formpanell;
-        public static string rambilgi;
+        public static string ramInfo;
 
-        public static int genislik;
-        public static int yukseklik;
-        private string yukseklikb;
-        private string yukseklikb2;
-        private string genislikb;
-        private string genislikb2;
+        public static int widthResolution;
+        public static int heightResolution;
+        private string heightResolutionb;
+        private string heightResolutionb2;
+        private string widthResolutionb;
+        private string widthResolutionb2;
 
         public static string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                                             "/.projects/resourcepacks";
@@ -53,7 +52,7 @@ namespace Projects_Launcher.Projects_Launcher
         
         Random rnd = new Random();
 
-        int x, y, z;
+        int colorX, colorY, colorZ;
 
         public bool alreadyPlayingAnimatedLabel = false;
         public bool alreadyRelaunchWaiting = false;
@@ -133,39 +132,25 @@ namespace Projects_Launcher.Projects_Launcher
             if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions"))
                 Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions");
 
-            // Hardware infos
-
             updateHwInfo();
 
-            DiscordRpcClientSetup(); // Discord RPC
+            DiscordRpcClientSetup();
 
-            timer2.Start(); // Ping counter
+            onlineCountUpdater();
 
-            playerNameStaticLabel.Text = Properties.Settings.Default.NickNames; // Show nickname info
+            playerNameStaticLabel.Text = Properties.Settings.Default.NickNames;
 
-            reopenLauncherCheckBox.Checked = Properties.Settings.Default.OyunTickS; // Open launcher when game is closed / Tick
-
-            // Grab version information
+            reopenLauncherCheckBox.Checked = Properties.Settings.Default.OyunTickS;
+            
             if (Properties.Settings.Default.SelectedVersion != string.Empty)
             {
                 versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
                 versionSelectComboBox.Text = Properties.Settings.Default.SelectedVersion;
             }
-
-            // Check RAM value
-
+            
             if (Properties.Settings.Default.RamMax != string.Empty) {
                 maxRamTextBox.Text = Properties.Settings.Default.RamMax;
-                
-                try
-                {
-                    maxRamDynamicCalculatorLabel.Text =
-                        String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
-                }
-                catch
-                {
-                    maxRamDynamicCalculatorLabel.Text = "Geçersiz Değer!";
-                }
+                maxRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
             }
             else if (maxRamDynamicCalculatorLabel.Text != "")
                 maxRamDynamicCalculatorLabel.Text = "";
@@ -239,7 +224,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             clientStartProcess.Start(); // Launch the game
 
-            timer1.Enabled = true; // Launch timer1
+            prepareGameToLaunch.Enabled = true; // Launch prepareGameToLaunch
         }
 
         private void oynabutton_Click(object sender, EventArgs e)
@@ -305,13 +290,13 @@ namespace Projects_Launcher.Projects_Launcher
 
                     animatedPlayingLabel();
                     this.Enabled = false;
-                    timer1.Start(); // Launch timer1
+                    prepareGameToLaunch.Start(); // Launch prepareGameToLaunch
                 }
                 catch //If fabric not exist
                 {
                     DiscordRpcClientSetup();
 
-                    timer1.Stop(); // Stop timer1
+                    prepareGameToLaunch.Stop(); // Stop prepareGameToLaunch
                     MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi",
                         MessageBoxButtons.OK); //DialogResult secenek = 
 
@@ -364,7 +349,7 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        private void timer1_Tick(object sender, EventArgs e)
+        private void prepareGameToLaunch_Tick(object sender, EventArgs e)
         {
             try
             {
@@ -384,7 +369,7 @@ namespace Projects_Launcher.Projects_Launcher
                         if (alreadyPlayingAnimatedLabel)
                             alreadyPlayingAnimatedLabel = false;
                         Thread.Sleep(1000);
-                        timer1.Stop();
+                        prepareGameToLaunch.Stop();
                         return;
                     }
                 }
@@ -454,39 +439,30 @@ namespace Projects_Launcher.Projects_Launcher
                 settingsBgPanel.Visible = false;
         }
 
-        private async Task ServerStatus()
+        private async void onlineCountUpdater()
         {
-            try
+            do
             {
-                /* I can't figure out how to resolve A record to IPv4 address.
-                IPHostEntry hostEntry = Dns.GetHostEntry("mc.projects.gg");
+                try
+                {
+                    /* I can't figure out how to resolve A record to IPv4 address.
+                    IPHostEntry hostEntrcolorY = Dns.GetHostEntry("mc.projects.gg");
+    
+                    string hostIpString = Convert.ToString(hostEntry.AddressList[0].MapToIPv4());
+                    */
 
-                string hostIpString = Convert.ToString(hostEntry.AddressList[0].MapToIPv4());
-                */
+                    IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
+                    var status = await pinger.RequestAsync();
+                    String server = status.Players.Online + "";
+                    serverOnlineCountStaticLabel.Text = (server + " oyuncu aktif!");
+                }
+                catch
+                {
+                    serverOnlineCountStaticLabel.Text = ("Sunucu Hatası");
+                }
 
-                IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
-                var status = await pinger.RequestAsync();
-                String server = status.Players.Online + "";
-                serverOnlineCountStaticLabel.Text = (server + " oyuncu aktif!");
-            }
-            catch
-            {
-                serverOnlineCountStaticLabel.Text = ("Sunucu Hatası");
-            }
-        }
-
-        public virtual long Speed { get; }
-
-        private async void timer2_Tick(object sender, EventArgs e)
-        {
-            try
-            {
-                await ServerStatus();
-            }
-            catch
-            {
-                // Shouldn't happen except no internet connection or server downtime
-            }
+                await Task.Delay(5000);
+            } while (alreadyRelaunchWaiting == false);
         }
 
         private void ramlabel_Click(object sender, EventArgs e)
@@ -615,10 +591,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void geriformpanel_MouseEnter(object sender, EventArgs e)
         {
-            x = rnd.Next(255);
-            y = rnd.Next(255);
-            z = rnd.Next(255);
-            previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            colorX = rnd.Next(255);
+            colorY = rnd.Next(255);
+            colorZ = rnd.Next(255);
+            previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
         }
 
         private void geriformpanel_MouseLeave(object sender, EventArgs e)
@@ -628,10 +604,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void changelogs_MouseEnter(object sender, EventArgs e)
         {
-            x = rnd.Next(255);
-            y = rnd.Next(255);
-            z = rnd.Next(255);
-            previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            colorX = rnd.Next(255);
+            colorY = rnd.Next(255);
+            colorZ = rnd.Next(255);
+            previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
         }
 
         private void changelogs_MouseLeave(object sender, EventArgs e)
@@ -680,10 +656,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void mods_MouseEnter(object sender, EventArgs e)
         {
-            x = rnd.Next(255);
-            y = rnd.Next(255);
-            z = rnd.Next(255);
-            modsDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            colorX = rnd.Next(255);
+            colorY = rnd.Next(255);
+            colorZ = rnd.Next(255);
+            modsDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
         }
 
         private void mods_MouseLeave(object sender, EventArgs e)
@@ -693,10 +669,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void texturepackfolder_MouseEnter(object sender, EventArgs e)
         {
-            x = rnd.Next(255);
-            y = rnd.Next(255);
-            z = rnd.Next(255);
-            resourcePackDirLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            colorX = rnd.Next(255);
+            colorY = rnd.Next(255);
+            colorZ = rnd.Next(255);
+            resourcePackDirLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
         }
 
         private void texturepackfolder_MouseLeave(object sender, EventArgs e)
@@ -706,10 +682,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void texturepackaktar_MouseEnter(object sender, EventArgs e)
         {
-            x = rnd.Next(255);
-            y = rnd.Next(255);
-            z = rnd.Next(255);
-            transferResourcepackLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            colorX = rnd.Next(255);
+            colorY = rnd.Next(255);
+            colorZ = rnd.Next(255);
+            transferResourcepackLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
         }
 
         private void texturepackaktar_MouseLeave(object sender, EventArgs e)
@@ -814,10 +790,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void gamefolder_MouseEnter(object sender, EventArgs e)
         {
-            x = rnd.Next(255);
-            y = rnd.Next(255);
-            z = rnd.Next(255);
-            gameDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            colorX = rnd.Next(255);
+            colorY = rnd.Next(255);
+            colorZ = rnd.Next(255);
+            gameDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
         }
 
         private void gamefolder_MouseLeave(object sender, EventArgs e)
@@ -844,7 +820,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.Visible = true;
             this.Enabled = true;
             alreadyRelaunchWaiting = false;
-            timer1.Stop();
+            onlineCountUpdater();
+            prepareGameToLaunch.Stop();
             Client.Dispose();
             DiscordRpcClientSetup();
             timer3.Stop();
@@ -871,26 +848,26 @@ namespace Projects_Launcher.Projects_Launcher
                     double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
                     double ramgb = Ram_Bytes / 1073741824;
                     double islem = Math.Ceiling(ramgb);
-                    rambilgi = String.Format("{0:0.##}", (Convert.ToDouble(islem) * 1024) - 1024);
+                    ramInfo = String.Format("{0:0.##}", (Convert.ToDouble(islem) * 1024) - 1024);
                     break;
                 }
 
                 maxRamTextBox.Text = (maxRamTextBox.Text).Trim();
                 if (string.IsNullOrEmpty(maxRamTextBox.Text))
-                    MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
+                    MessageBox.Show("Miktar 1024-" + ramInfo + " " + "arasında girilmeli.");
                 else if (Convert.ToInt32(maxRamTextBox.Text) < 1024 ||
-                         Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(rambilgi))
+                         Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(ramInfo))
                 {
-                    MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
-                    maxRamTextBox.Text = rambilgi;
+                    MessageBox.Show("Miktar 1024-" + ramInfo + " " + "arasında girilmeli.");
+                    maxRamTextBox.Text = ramInfo;
                 }
-                else if (Convert.ToInt32(rambilgi) >= 1024 &&
-                         Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(rambilgi) - 512)
+                else if (Convert.ToInt32(ramInfo) >= 1024 &&
+                         Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(ramInfo) - 512)
                 {
                     MessageBox.Show(
                         "Yüksek kaynak kullanımı!\n\nYüksek kaynak tüketimi bilgisayarınızdaki\nbazı şeylerin yavaş çalışmasına neden olabilir\nEn yüksek RAM miktarınızı, azami RAM\nmiktarından daha az tutmanız tavsiye\nedilir.",
                         "Kaynak Tüketim Uyarısı");
-                    maxRamTextBox.Text = rambilgi;
+                    maxRamTextBox.Text = ramInfo;
                 }
             }
             catch
@@ -909,19 +886,19 @@ namespace Projects_Launcher.Projects_Launcher
                     double Ram_Bytes = (Convert.ToDouble(Mobject["TotalPhysicalMemory"]));
                     double ramgb = Ram_Bytes / 1073741824;
                     double islem = Math.Ceiling(ramgb);
-                    rambilgi = String.Format("{0:0.##}", Convert.ToDouble(islem) * 512);
+                    ramInfo = String.Format("{0:0.##}", Convert.ToDouble(islem) * 512);
                 }
 
                 minRamTextBox.Text = (minRamTextBox.Text).Trim();
                 if (string.IsNullOrEmpty(minRamTextBox.Text))
                 {
-                    MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
-                    minRamTextBox.Text = rambilgi;
+                    MessageBox.Show("Miktar 1024-" + ramInfo + " " + "arasında girilmeli.");
+                    minRamTextBox.Text = ramInfo;
                 }
-                else if (Convert.ToInt32(minRamTextBox.Text) < 1024 || Convert.ToInt32(minRamTextBox.Text) > Convert.ToInt32(rambilgi))
+                else if (Convert.ToInt32(minRamTextBox.Text) < 1024 || Convert.ToInt32(minRamTextBox.Text) > Convert.ToInt32(ramInfo))
                 {
-                    MessageBox.Show("Miktar 1024-" + rambilgi + " " + "arasında girilmeli.");
-                    minRamTextBox.Text = rambilgi;
+                    MessageBox.Show("Miktar 1024-" + ramInfo + " " + "arasında girilmeli.");
+                    minRamTextBox.Text = ramInfo;
                 }
             }
             catch
@@ -934,20 +911,20 @@ namespace Projects_Launcher.Projects_Launcher
         {
             try
             {
-                yukseklik = Screen.PrimaryScreen.Bounds.Height;
-                yukseklikb = String.Format("{0:0.##}", Convert.ToDouble(yukseklik) / 2);
-                yukseklikb2 = String.Format("{0:0.##}", Convert.ToDouble(yukseklikb) / 2);
+                heightResolution = Screen.PrimaryScreen.Bounds.Height;
+                heightResolutionb = String.Format("{0:0.##}", Convert.ToDouble(heightResolution) / 2);
+                heightResolutionb2 = String.Format("{0:0.##}", Convert.ToDouble(heightResolutionb) / 2);
 
                 heighttextbox.Text = (heighttextbox.Text).Trim();
                 if (string.IsNullOrEmpty(heighttextbox.Text))
                 {
-                    MessageBox.Show("Çözünürlük" + " " + yukseklikb2 + "-" + yukseklikb + " " + "arasında girilmeli.");
-                    heighttextbox.Text = yukseklikb;
+                    MessageBox.Show("Çözünürlük" + " " + heightResolutionb2 + "-" + heightResolutionb + " " + "arasında girilmeli.");
+                    heighttextbox.Text = heightResolutionb;
                 }
-                else if (Convert.ToInt32(heighttextbox.Text) < Convert.ToInt32(yukseklikb2) || Convert.ToInt32(heighttextbox.Text) > Convert.ToInt32(yukseklikb))
+                else if (Convert.ToInt32(heighttextbox.Text) < Convert.ToInt32(heightResolutionb2) || Convert.ToInt32(heighttextbox.Text) > Convert.ToInt32(heightResolutionb))
                 {
-                    MessageBox.Show("Çözünürlük" + " " + yukseklikb2 + "-" + yukseklikb + " " + "arasında girilmeli.");
-                    heighttextbox.Text = yukseklikb2;
+                    MessageBox.Show("Çözünürlük" + " " + heightResolutionb2 + "-" + heightResolutionb + " " + "arasında girilmeli.");
+                    heighttextbox.Text = heightResolutionb2;
                 }
             }
             catch
@@ -960,22 +937,22 @@ namespace Projects_Launcher.Projects_Launcher
         {
             try
             {
-                genislik = Screen.PrimaryScreen.Bounds.Width;
-                genislikb = String.Format("{0:0.##}", Convert.ToDouble(genislik) / 2);
-                genislikb2 = String.Format("{0:0.##}", Convert.ToDouble(genislikb) / 2);
+                widthResolution = Screen.PrimaryScreen.Bounds.Width;
+                widthResolutionb = String.Format("{0:0.##}", Convert.ToDouble(widthResolution) / 2);
+                widthResolutionb2 = String.Format("{0:0.##}", Convert.ToDouble(widthResolutionb) / 2);
 
                 widthtextbox.Text = (widthtextbox.Text).Trim();
                 if (string.IsNullOrEmpty(widthtextbox.Text))
                 {
-                    MessageBox.Show("Çözünürlük" + " " + genislikb2 + "-" + genislikb + " " + "arasında girilmeli.");
-                    widthtextbox.Text = genislikb;
+                    MessageBox.Show("Çözünürlük" + " " + widthResolutionb2 + "-" + widthResolutionb + " " + "arasında girilmeli.");
+                    widthtextbox.Text = widthResolutionb;
                 }
 
-                if (Convert.ToInt32(widthtextbox.Text) < Convert.ToInt32(genislikb2) ||
-                    Convert.ToInt32(widthtextbox.Text) > Convert.ToInt32(genislikb))
+                if (Convert.ToInt32(widthtextbox.Text) < Convert.ToInt32(widthResolutionb2) ||
+                    Convert.ToInt32(widthtextbox.Text) > Convert.ToInt32(widthResolutionb))
                 {
-                    MessageBox.Show("Çözünürlük" + " " + genislikb2 + "-" + genislikb + " " + "arasında girilmeli.");
-                    widthtextbox.Text = genislikb;
+                    MessageBox.Show("Çözünürlük" + " " + widthResolutionb2 + "-" + widthResolutionb + " " + "arasında girilmeli.");
+                    widthtextbox.Text = widthResolutionb;
                 }
             }
             catch
@@ -1006,10 +983,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void oynabutton_MouseEnter(object sender, EventArgs e)
         {
-            x = rnd.Next(255);
-            y = rnd.Next(255);
-            z = rnd.Next(255);
-            playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(x, y, z);
+            colorX = rnd.Next(255);
+            colorY = rnd.Next(255);
+            colorZ = rnd.Next(255);
+            playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
         }
 
         private void oynabutton_MouseLeave(object sender, EventArgs e)
