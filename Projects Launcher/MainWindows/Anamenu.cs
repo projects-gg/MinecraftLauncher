@@ -139,7 +139,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             DiscordRpcClientSetup();
 
-            onlineCountUpdater();
+            Task task = onlineCountUpdater();
 
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames;
 
@@ -215,7 +215,7 @@ namespace Projects_Launcher.Projects_Launcher
             var launcher = new CMLauncher(path);
         }
 
-        private async void Launch() // Minecraft startup settings
+        private async Task Launch() // Minecraft startup settings
         {
             var path = new MinecraftPath(launcherdizin);
             var launcher = new CMLauncher(path);
@@ -258,7 +258,7 @@ namespace Projects_Launcher.Projects_Launcher
                 if (ramExceptionResult == DialogResult.OK)
                 {
                     Properties.Settings.Default.RamMax = Properties.Settings.Default.RamMin;
-                    MaximumRamMb = MinimumRamMb;
+                    MaximumRamMb += MinimumRamMb;
                 }
                 else
                 {
@@ -300,7 +300,7 @@ namespace Projects_Launcher.Projects_Launcher
                     thread.IsBackground = true;
                     thread.Start(); // Launch the game
 
-                    animatedPlayingLabel();
+                    Task task = animatedPlayingLabel();
                     this.Enabled = false;
                     prepareGameToLaunch.Start(); // Launch prepareGameToLaunch
                 }
@@ -370,7 +370,7 @@ namespace Projects_Launcher.Projects_Launcher
                     foreach (var process in Process.GetProcessesByName("javaw"))
                     {
                         Thread.Sleep(1031);
-                        animatedPlayingLabel();
+                        Task task = animatedPlayingLabel();
                         playButtonStaticLabel.Enabled = false;
                         this.Visible = false;
                         Thread.Sleep(2000);
@@ -392,7 +392,7 @@ namespace Projects_Launcher.Projects_Launcher
                     foreach (var process in Process.GetProcessesByName("javaw"))
                     {
                         Thread.Sleep(1000);
-                        animatedPlayingLabel();
+                        Task task = animatedPlayingLabel();
                         playButtonStaticLabel.Enabled = false;
                         this.Visible = false;
                         if (alreadyPlayingAnimatedLabel)
@@ -419,7 +419,7 @@ namespace Projects_Launcher.Projects_Launcher
                 Convert.ToString(ex), "Başlatıcı Hatası");
         }
 
-        private async void animatedPlayingLabel()
+        private async Task animatedPlayingLabel()
         {
             if (alreadyPlayingAnimatedLabel)
             {
@@ -431,7 +431,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             do
             {
-                await Task.Delay(250);
+                await Task.Delay(250).ConfigureAwait(false);
 
                 if (versionInfoStaticLabel.Text.Equals("Başlatılıyor"))
                 {
@@ -467,7 +467,7 @@ namespace Projects_Launcher.Projects_Launcher
                 
         }
 
-        private async void onlineCountUpdater()
+        private async Task onlineCountUpdater()
         {
             do
             {
@@ -489,7 +489,7 @@ namespace Projects_Launcher.Projects_Launcher
                     serverOnlineCountStaticLabel.Text = ("Sunucu Hatası");
                 }
 
-                await Task.Delay(5000);
+                await Task.Delay(5000).ConfigureAwait(false);
             } while (alreadyRelaunchWaiting == false);
         }
 
@@ -856,7 +856,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.Visible = true;
             this.Enabled = true;
             alreadyRelaunchWaiting = false;
-            onlineCountUpdater();
+            Task task = onlineCountUpdater();
             prepareGameToLaunch.Stop();
             Client.Dispose();
             DiscordRpcClientSetup();
