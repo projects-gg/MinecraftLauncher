@@ -38,11 +38,11 @@ namespace Projects_Launcher
                 Client = new DiscordRpcClient("949311557542756362");
                 Client.Initialize();
 
-                Client.SetPresence(new RichPresence()
+                Client.SetPresence(new RichPresence
                 {
                     Details = "Giriş ekranında",
                     State = "Sunucu IP: mc.projects.gg",
-                    Assets = new Assets()
+                    Assets = new Assets
                     {
                         LargeImageKey = "131231",
                         LargeImageText = "https://mc.projects.gg/",
@@ -195,7 +195,6 @@ namespace Projects_Launcher
             else
             {
                 nickname = nickNameEnterTextBox.Text;
-                //loginButton.Text = "Giriş Yap";
             }
 
             Projects_Launcher.mainMenuForm main = new Projects_Launcher.mainMenuForm();
@@ -221,7 +220,6 @@ namespace Projects_Launcher
 
                 loginButton.Text = "Giriş Yap";
                 loginButton.Enabled = true;
-                return;
             }
             else
             {

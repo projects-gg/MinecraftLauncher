@@ -66,11 +66,11 @@ namespace Projects_Launcher.Projects_Launcher
                 Client = new DiscordRpcClient("949311557542756362");
                 Client.Initialize();
 
-                Client.SetPresence(new RichPresence()
+                Client.SetPresence(new RichPresence
                 {
                     Details = "Başlatıcı menüsünde",
                     State = "Sunucu IP: mc.projects.gg",
-                    Assets = new Assets()
+                    Assets = new Assets
                     {
                         LargeImageKey = "131231",
                         LargeImageText = "https://mc.projects.gg/",
@@ -139,7 +139,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             DiscordRpcClientSetup();
 
-            Task task = onlineCountUpdater();
+            onlineCountUpdater();
 
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames;
 
@@ -282,7 +282,7 @@ namespace Projects_Launcher.Projects_Launcher
                     {
                         Details = "Şu an oyunda!",
                         State = "Sunucu IP: mc.projects.gg",
-                        Timestamps = new Timestamps()
+                        Timestamps = new Timestamps
                         {
                             Start = DateTime.UtcNow
                         },
@@ -370,7 +370,7 @@ namespace Projects_Launcher.Projects_Launcher
                     foreach (var process in Process.GetProcessesByName("javaw"))
                     {
                         Thread.Sleep(1031);
-                        Task task = animatedPlayingLabel();
+                        animatedPlayingLabel();
                         playButtonStaticLabel.Enabled = false;
                         this.Visible = false;
                         Thread.Sleep(2000);
@@ -449,7 +449,7 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     versionInfoStaticLabel.Text = "Başlatılıyor";
                 }
-                await Task.Delay(250);
+                await Task.Delay(250).ConfigureAwait(false);
             } while (alreadyPlayingAnimatedLabel);
         }
 
@@ -473,12 +473,6 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 try
                 {
-                    /* I can't figure out how to resolve A record to IPv4 address.
-                    IPHostEntry hostEntrcolorY = Dns.GetHostEntry("mc.projects.gg");
-    
-                    string hostIpString = Convert.ToString(hostEntry.AddressList[0].MapToIPv4());
-                    */
-
                     IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
                     var status = await pinger.RequestAsync();
                     String server = status.Players.Online + "";
@@ -844,7 +838,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             do
             {
-                await Task.Delay(5000);
+                await Task.Delay(5000).ConfigureAwait(false);
             } while (Process.GetProcessesByName("javaw").Any());
 
             if (Properties.Settings.Default.SelectedVersion != string.Empty)
