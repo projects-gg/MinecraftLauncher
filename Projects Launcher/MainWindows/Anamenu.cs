@@ -24,42 +24,42 @@ namespace Projects_Launcher.Projects_Launcher
             InitializeComponent();
         }
 
-        public static string sessions;
-        public static MSession session;
-        public static string minrambox;
-        public static string maxrambox;
-        public static string widthbox;
-        public static string heightbox;
+        private string sessions;
+        private MSession session;
+        private string minrambox;
+        private string maxrambox;
+        private string widthbox;
+        private string heightbox;
 
-        public static string maxramlabell;
-        public static string minramlabell;
-        public static string heightlabell;
-        public static string widthlabell;
-        public static string surumlabell;
-        public static bool formpanell;
-        public static string ramInfo;
+        private string maxramlabell;
+        private string minramlabell;
+        private string heightlabell;
+        private string widthlabell;
+        private string surumlabell;
+        private bool formpanell;
+        private string ramInfo;
 
-        public static int widthResolution;
-        public static int heightResolution;
+        private int widthResolution;
+        private int heightResolution;
         private string heightResolutionb;
         private string heightResolutionb2;
         private string widthResolutionb;
         private string widthResolutionb2;
 
-        public static string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+        private string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                                             "/.projects/resourcepacks";
-        string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
+        private string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
         
         Random rnd = new Random();
 
-        int colorX, colorY, colorZ;
+        private int colorX, colorY, colorZ;
 
-        public bool alreadyPlayingAnimatedLabel = false;
-        public bool alreadyRelaunchWaiting = false;
+        private bool alreadyPlayingAnimatedLabel = false;
+        private bool alreadyRelaunchWaiting = false;
         
         public DiscordRpcClient Client { get; private set; }
 
-        public void DiscordRpcClientSetup()
+        private void DiscordRpcClientSetup()
         {
             try
             {
@@ -84,7 +84,7 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        public void selectBackgroundImage()
+        private void selectBackgroundImage()
         {
             // Grab background image
             try
@@ -101,7 +101,7 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        public void updateHwInfo()
+        private void updateHwInfo()
         {
             // GPU
             ManagementObjectSearcher gpuSearch = new ManagementObjectSearcher("Select * From Win32_VideoController");
@@ -196,14 +196,14 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        public void path() //Launcher Dizin Ayarları - Connection Limit
+        private void path() //Launcher Dizin Ayarları - Connection Limit
         {
             System.Net.ServicePointManager.DefaultConnectionLimit = 256;
             var path = new MinecraftPath(launcherdizin);
             var launcher = new CMLauncher(path);
         }
 
-        public async void Launch() // Minecraft startup settings
+        private async void Launch() // Minecraft startup settings
         {
             var path = new MinecraftPath(launcherdizin);
             var launcher = new CMLauncher(path);
