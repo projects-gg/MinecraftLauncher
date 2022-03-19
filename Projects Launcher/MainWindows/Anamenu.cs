@@ -46,11 +46,11 @@ namespace Projects_Launcher.Projects_Launcher
         private string widthResolutionb;
         private string widthResolutionb2;
 
-        private string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+        private readonly string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                                             "/.projects/resourcepacks";
-        private string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
-        
-        Random rnd = new Random();
+        private readonly string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
+
+        readonly Random rnd = new Random();
 
         private int colorX, colorY, colorZ;
 
@@ -130,7 +130,10 @@ namespace Projects_Launcher.Projects_Launcher
 
             // ".projects" directory check
             if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions"))
+            {
                 Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions");
+            }
+                
 
             updateHwInfo();
 
@@ -153,7 +156,10 @@ namespace Projects_Launcher.Projects_Launcher
                 maxRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
             }
             else if (maxRamDynamicCalculatorLabel.Text != "")
+            {
                 maxRamDynamicCalculatorLabel.Text = "";
+            }
+                
 
             if (Properties.Settings.Default.RamMin != string.Empty)
             {
@@ -169,15 +175,21 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
             else if (maxRamDynamicCalculatorLabel.Text != "")
+            {
                 minRamDynamicCalculatorLabel.Text = "";
+            }
             
             minRamTextBox.MaxLength = 4;
 
             // Grab resolution data
             if (Properties.Settings.Default.ResolutionHeight != string.Empty)
+            {
                 widthtextbox.Text = Properties.Settings.Default.ResolutionHeight;
+            }
             else if (Properties.Settings.Default.ResolutionWidth != string.Empty)
+            {
                 heighttextbox.Text = Properties.Settings.Default.ResolutionWidth;
+            }
 
             // Grab skin render
             try
@@ -367,7 +379,9 @@ namespace Projects_Launcher.Projects_Launcher
                         Process mcjava = Process.Start("javaw.exe");
                         mcjava.Refresh();
                         if (alreadyPlayingAnimatedLabel)
+                        {
                             alreadyPlayingAnimatedLabel = false;
+                        }  
                         Thread.Sleep(1000);
                         prepareGameToLaunch.Stop();
                         return;
@@ -382,7 +396,9 @@ namespace Projects_Launcher.Projects_Launcher
                         playButtonStaticLabel.Enabled = false;
                         this.Visible = false;
                         if (alreadyPlayingAnimatedLabel)
+                        {
                             alreadyPlayingAnimatedLabel = false;
+                        }
                         timer3.Stop();
                         Environment.Exit(0);
                     }
@@ -406,7 +422,9 @@ namespace Projects_Launcher.Projects_Launcher
         private async void animatedPlayingLabel()
         {
             if (alreadyPlayingAnimatedLabel)
+            {
                 return;
+            }
 
             alreadyPlayingAnimatedLabel = true;
             versionInfoStaticLabel.Text = "Başlatılıyor";
@@ -416,14 +434,21 @@ namespace Projects_Launcher.Projects_Launcher
                 await Task.Delay(250);
 
                 if (versionInfoStaticLabel.Text.Equals("Başlatılıyor"))
+                {
                     versionInfoStaticLabel.Text = "Başlatılıyor.";
+                }
                 else if (versionInfoStaticLabel.Text.Equals("Başlatılıyor."))
-                    versionInfoStaticLabel.Text = "Başlatılıyor..";
+                { 
+                    versionInfoStaticLabel.Text = "Başlatılıyor.."; 
+                }
                 else if (versionInfoStaticLabel.Text.Equals("Başlatılıyor.."))
+                {
                     versionInfoStaticLabel.Text = "Başlatılıyor...";
+                } 
                 else if (versionInfoStaticLabel.Text.Equals("Başlatılıyor..."))
+                {
                     versionInfoStaticLabel.Text = "Başlatılıyor";
-
+                }
                 await Task.Delay(250);
             } while (alreadyPlayingAnimatedLabel);
         }
@@ -436,7 +461,10 @@ namespace Projects_Launcher.Projects_Launcher
                 settingsBgPanel.Visible = true;
             }
             else
+            {
                 settingsBgPanel.Visible = false;
+            }
+                
         }
 
         private async void onlineCountUpdater()
@@ -501,7 +529,7 @@ namespace Projects_Launcher.Projects_Launcher
             widthbox = widthtextbox.Text;
             Properties.Settings.Default.ResolutionWidth = widthbox;
             Properties.Settings.Default.Save();
-            Projects_Launcher.mainMenuForm.widthlabell = Properties.Settings.Default.ResolutionWidth;
+            widthlabell = Properties.Settings.Default.ResolutionWidth;
         }
 
         private void heighttextbox_TextChanged(object sender, EventArgs e)
@@ -509,7 +537,7 @@ namespace Projects_Launcher.Projects_Launcher
             heightbox = heighttextbox.Text;
             Properties.Settings.Default.ResolutionHeight = heightbox;
             Properties.Settings.Default.Save();
-            Projects_Launcher.mainMenuForm.heightlabell = Properties.Settings.Default.ResolutionHeight;
+            heightlabell = Properties.Settings.Default.ResolutionHeight;
         }
 
         private void maxramtext_TextChanged(object sender, EventArgs e)
@@ -651,7 +679,9 @@ namespace Projects_Launcher.Projects_Launcher
         private void minramlabel_Click(object sender, EventArgs e)
         {
             if (!string.IsNullOrEmpty(minramlabel.Text))
+            {
                 minramlabell = minramlabel.Text;
+            }  
         }
 
         private void mods_MouseEnter(object sender, EventArgs e)
@@ -719,8 +749,10 @@ namespace Projects_Launcher.Projects_Launcher
         private void texturepackaktar_Click(object sender, EventArgs e)
         {
             if (!Directory.Exists(@TextureDizin))
+            {
                 Directory.CreateDirectory(@TextureDizin);
-
+            }
+               
             OpenFileDialog file = new OpenFileDialog();
             file.Filter = "ZIP Dosyası |*.zip";
             file.FilterIndex = 2;
@@ -804,7 +836,9 @@ namespace Projects_Launcher.Projects_Launcher
         private async void timer3_Tick(object sender, EventArgs e)
         {
             if (alreadyRelaunchWaiting)
+            {
                 return;
+            }
 
             alreadyRelaunchWaiting = true;
 
@@ -814,7 +848,9 @@ namespace Projects_Launcher.Projects_Launcher
             } while (Process.GetProcessesByName("javaw").Any());
 
             if (Properties.Settings.Default.SelectedVersion != string.Empty)
+            {
                 versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
+            }
 
             playButtonStaticLabel.Enabled = true;
             this.Visible = true;
@@ -830,9 +866,13 @@ namespace Projects_Launcher.Projects_Launcher
         private void kapattick_CheckedChanged(object sender, EventArgs e)
         {
             if (reopenLauncherCheckBox.Checked)
+            {
                 Properties.Settings.Default.OyunTickS = true;
+            }  
             else
+            {
                 Properties.Settings.Default.OyunTickS = false;
+            }  
 
             Properties.Settings.Default.Save();
         }
@@ -854,7 +894,9 @@ namespace Projects_Launcher.Projects_Launcher
 
                 maxRamTextBox.Text = (maxRamTextBox.Text).Trim();
                 if (string.IsNullOrEmpty(maxRamTextBox.Text))
+                {
                     MessageBox.Show("Miktar 1024-" + ramInfo + " " + "arasında girilmeli.");
+                }
                 else if (Convert.ToInt32(maxRamTextBox.Text) < 1024 ||
                          Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(ramInfo))
                 {
