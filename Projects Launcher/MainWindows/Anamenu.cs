@@ -473,7 +473,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 try
                 {
-                    IMinecraftPinger pinger = new MinecraftPinger("mc.projects.gg", 25565);
+                    IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
                     var status = await pinger.RequestAsync();
                     String server = status.Players.Online + "";
                     serverOnlineCountStaticLabel.Text = (server + " oyuncu aktif!");
