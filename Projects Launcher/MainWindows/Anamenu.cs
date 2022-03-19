@@ -54,8 +54,8 @@ namespace Projects_Launcher.Projects_Launcher
 
         private int colorX, colorY, colorZ;
 
-        private bool alreadyPlayingAnimatedLabel = false;
-        private bool alreadyRelaunchWaiting = false;
+        private bool alreadyPlayingAnimatedLabel;
+        private bool alreadyRelaunchWaiting;
         
         public DiscordRpcClient Client { get; private set; }
 
@@ -215,7 +215,7 @@ namespace Projects_Launcher.Projects_Launcher
             var launcher = new CMLauncher(path);
         }
 
-        private async Task Launch() // Minecraft startup settings
+        private async void Launch() // Minecraft startup settings
         {
             var path = new MinecraftPath(launcherdizin);
             var launcher = new CMLauncher(path);
@@ -278,7 +278,7 @@ namespace Projects_Launcher.Projects_Launcher
                     Client = new DiscordRpcClient("949311557542756362");
                     Client.Initialize();
 
-                    Client.SetPresence(new RichPresence()
+                    Client.SetPresence(new RichPresence
                     {
                         Details = "Şu an oyunda!",
                         State = "Sunucu IP: mc.projects.gg",
@@ -286,7 +286,7 @@ namespace Projects_Launcher.Projects_Launcher
                         {
                             Start = DateTime.UtcNow
                         },
-                        Assets = new Assets()
+                        Assets = new Assets
                         {
                             LargeImageKey = "131231",
                             LargeImageText = "https://mc.projects.gg/",
@@ -392,7 +392,7 @@ namespace Projects_Launcher.Projects_Launcher
                     foreach (var process in Process.GetProcessesByName("javaw"))
                     {
                         Thread.Sleep(1000);
-                        Task task = animatedPlayingLabel();
+                        animatedPlayingLabel();
                         playButtonStaticLabel.Enabled = false;
                         this.Visible = false;
                         if (alreadyPlayingAnimatedLabel)
@@ -473,7 +473,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 try
                 {
-                    IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
+                    IMinecraftPinger pinger = new MinecraftPinger("mc.projects.gg", 25565);
                     var status = await pinger.RequestAsync();
                     String server = status.Players.Online + "";
                     serverOnlineCountStaticLabel.Text = (server + " oyuncu aktif!");
@@ -761,7 +761,9 @@ namespace Projects_Launcher.Projects_Launcher
             if (DosyaAdi != "" && DosyaYolu != "")
             {
                 if (File.Exists(TextureDizin + "\\" + DosyaAdi))
+                {
                     MessageBox.Show(DosyaAdi + " isimli doku paketi zaten mevcut.", "", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
                 else
                 {
                     File.Copy(DosyaYolu, TextureDizin + "\\" + DosyaAdi);
@@ -850,7 +852,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.Visible = true;
             this.Enabled = true;
             alreadyRelaunchWaiting = false;
-            Task task = onlineCountUpdater();
+            onlineCountUpdater();
             prepareGameToLaunch.Stop();
             Client.Dispose();
             DiscordRpcClientSetup();
