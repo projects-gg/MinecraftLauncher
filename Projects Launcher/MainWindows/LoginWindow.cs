@@ -3,8 +3,8 @@ using System;
 using System.ComponentModel;
 using System.Drawing;
 using System.IO;
-using System.Linq;
 using System.Net;
+using System.Text;
 using System.Windows.Forms;
 
 namespace Projects_Launcher
@@ -89,7 +89,7 @@ namespace Projects_Launcher
 
             WebRequest currentVersionContent = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/version.php");
 
-            string newestVersion = currentVersion;
+            string newestVersion = "";
 
             try
             {
@@ -97,19 +97,14 @@ namespace Projects_Launcher
                 versionContentResponse = currentVersionContent.GetResponse();
                 StreamReader versionContentReader = new StreamReader(versionContentResponse.GetResponseStream());
                 string versionContentLine = versionContentReader.ReadToEnd();
-
-                /*
-                int formatSplitterStart = versionContentLine.IndexOf("<p>") + 3;
-                int formatSplitterEnd = versionContentLine.Substring(formatSplitterStart).IndexOf("</p>");
-                newestVersion = versionContentLine.Substring(formatSplitterStart, formatSplitterEnd);
-                */
                 bool startWriting = false;
+                StringBuilder bld = new StringBuilder();
 
                 foreach (char character in versionContentLine) //this is hard to read but culture-compatible
                 {
                     if (character.Equals('>'))
                     {
-                        if (startWriting)
+                        if (!startWriting)
                         {
                             startWriting = true;
                         }
@@ -117,7 +112,7 @@ namespace Projects_Launcher
                     {
                         if (!character.Equals('<'))
                         {
-                            newestVersion += character;
+                            bld.Append(character);
                         }
                         else
                         {
@@ -125,10 +120,20 @@ namespace Projects_Launcher
                         }
                     }
                 }
+
+                if (bld.Length >= 0)
+                {
+                    newestVersion = bld.ToString();
+                }
             }
             catch
             {
                 cantGrabVersionInfo();
+            }
+
+            if (newestVersion.Equals(""))
+            {
+                newestVersion = currentVersion;
             }
 
             try

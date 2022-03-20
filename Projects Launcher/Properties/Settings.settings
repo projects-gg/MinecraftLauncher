@@ -26,5 +26,8 @@
     <Setting Name="OyunTickS" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
     </Setting>
+    <Setting Name="ProxyIP" Type="System.String" Scope="Application">
+      <Value Profile="(Default)">193.164.7.43</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

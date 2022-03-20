@@ -118,5 +118,14 @@ namespace Projects_Launcher.Properties {
                 this["OyunTickS"] = value;
             }
         }
+        
+        [global::System.Configuration.ApplicationScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("193.164.7.43")]
+        public string ProxyIP {
+            get {
+                return ((string)(this["ProxyIP"]));
+            }
+        }
     }
 }

@@ -3,6 +3,7 @@ using CmlLib.Core.Auth;
 using DiscordRPC;
 using MCServerStatus;
 using System;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
@@ -135,7 +136,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             DiscordRpcClientSetup();
 
-            onlineCountUpdater();
+            onlineCountUpdater().GetAwaiter();
 
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames;
 
@@ -203,13 +204,6 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        private void path() //Launcher Dizin Ayarları - Connection Limit
-        {
-            System.Net.ServicePointManager.DefaultConnectionLimit = 256;
-            var path = new MinecraftPath(launcherdizin);
-            var launcher = new CMLauncher(path);
-        }
-
         private async void Launch() // Minecraft startup settings
         {
             var path = new MinecraftPath(launcherdizin);
@@ -261,7 +255,6 @@ namespace Projects_Launcher.Projects_Launcher
                 if (ramExceptionResult == DialogResult.OK)
                 {
                     Properties.Settings.Default.RamMax = Properties.Settings.Default.RamMin;
-                    MaximumRamMb = MinimumRamMb;
                 }
                 else
                 {
@@ -302,17 +295,16 @@ namespace Projects_Launcher.Projects_Launcher
                     Thread thread = new Thread(() => Launch());
                     thread.IsBackground = true;
                     thread.Start(); // Launch the game
-                    animatedPlayingLabel();
+                    animatedPlayingLabel().GetAwaiter();
                     this.Enabled = false;
                     prepareGameToLaunch.Start(); // Launch prepareGameToLaunch
                 }
-                catch //If fabric not exist
+                catch (Exception ex) //If fabric not exist
                 {
                     DiscordRpcClientSetup();
 
                     prepareGameToLaunch.Stop(); // Stop prepareGameToLaunch
-                    MessageBox.Show("Oyunu başlatırken bir sorun meydana geldi.", "Bilgi",
-                        MessageBoxButtons.OK); //DialogResult secenek = 
+                    NotificationAboutException(ex);
 
                     this.Enabled = true; // Open components of the launcher
 
@@ -393,7 +385,7 @@ namespace Projects_Launcher.Projects_Launcher
                     foreach (var process in Process.GetProcessesByName("javaw"))
                     {
                         Thread.Sleep(1000);
-                        animatedPlayingLabel();
+                        animatedPlayingLabel().GetAwaiter();
                         playButtonStaticLabel.Enabled = false;
                         this.Visible = false;
                         if (alreadyPlayingAnimatedLabel)
@@ -420,7 +412,7 @@ namespace Projects_Launcher.Projects_Launcher
                 Convert.ToString(ex), "Başlatıcı Hatası");
         }
 
-        private async void animatedPlayingLabel()
+        private async Task animatedPlayingLabel()
         {
             if (alreadyPlayingAnimatedLabel)
             {
@@ -431,7 +423,6 @@ namespace Projects_Launcher.Projects_Launcher
 
             do
             {
-                await Task.Delay(250);
 
                 if (versionInfoStaticLabel.Text.Equals("Başlatılıyor"))
                 {
@@ -450,7 +441,7 @@ namespace Projects_Launcher.Projects_Launcher
                     versionInfoStaticLabel.Text = "Başlatılıyor";
                 }
 
-                await Task.Delay(250);
+                await Task.Delay(500);
             } while (alreadyPlayingAnimatedLabel);
         }
 
@@ -467,13 +458,14 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        private async void onlineCountUpdater()
+        private async Task onlineCountUpdater()
         {
             do
             {
                 try
                 {
-                    IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
+                    var proxyIP = Properties.Settings.Default.ProxyIP;
+                    IMinecraftPinger pinger = new MinecraftPinger(proxyIP, 25565);
                     var status = await pinger.RequestAsync();
                     if (status != null)
                     {
@@ -631,18 +623,6 @@ namespace Projects_Launcher.Projects_Launcher
         {
             previousPageTxt.ForeColor = Color.FromArgb(245, 245, 245);
         }
-
-        /*
-        private void changelogs_MouseEnter(object sender, EventArgs e)
-        {
-            previousPageTxt.ForeColor = RandomColor();
-        }
-
-        private void changelogs_MouseLeave(object sender, EventArgs e)
-        {
-            playButtonStaticLabel.ForeColor = Color.FromArgb(245, 245, 245);
-        }
-        */
 
         private void minramtext_TextChanged(object sender, EventArgs e)
         {
@@ -847,7 +827,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.Visible = true;
             this.Enabled = true;
             alreadyRelaunchWaiting = false;
-            onlineCountUpdater();
+            onlineCountUpdater().GetAwaiter();
             prepareGameToLaunch.Stop();
             Client.Dispose();
             DiscordRpcClientSetup();
