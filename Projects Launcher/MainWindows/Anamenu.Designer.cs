@@ -47,23 +47,23 @@ namespace Projects_Launcher.Projects_Launcher
             this.heightlabel = new System.Windows.Forms.Label();
             this.maxramlabel = new System.Windows.Forms.Label();
             this.prepareGameToLaunch = new System.Windows.Forms.Timer(this.components);
-            this.previousPageStaticLabel = new System.Windows.Forms.Label();
+            this.previousPageTxt = new System.Windows.Forms.Label();
             this.minramlabel = new System.Windows.Forms.Label();
             this.serverOnlineCountStaticLabel = new System.Windows.Forms.Label();
             this.settingsBgPanel = new Guna.UI2.WinForms.Guna2Panel();
-            this.versionSelectStaticLabel = new System.Windows.Forms.Label();
+            this.versionSelectTxt = new System.Windows.Forms.Label();
             this.navigationStaticLabel = new System.Windows.Forms.Label();
-            this.ramSelectionStaticLabel = new System.Windows.Forms.Label();
+            this.ramSelectionTxt = new System.Windows.Forms.Label();
             this.gpuStaticLabel = new System.Windows.Forms.Label();
             this.ramStaticLabel = new System.Windows.Forms.Label();
             this.RAMInfo = new System.Windows.Forms.Label();
             this.gpuInfo = new System.Windows.Forms.Label();
-            this.reopenLauncherCheckBox = new Guna.UI2.WinForms.Guna2CheckBox();
+            this.reopenLauncher = new Guna.UI2.WinForms.Guna2CheckBox();
             this.label4 = new System.Windows.Forms.Label();
-            this.gameDirStaticLabel = new System.Windows.Forms.Label();
-            this.transferResourcepackLabel = new System.Windows.Forms.Label();
-            this.resourcePackDirLabel = new System.Windows.Forms.Label();
-            this.modsDirStaticLabel = new System.Windows.Forms.Label();
+            this.rootLabel = new System.Windows.Forms.Label();
+            this.transferRpLabel = new System.Windows.Forms.Label();
+            this.rpFolder = new System.Windows.Forms.Label();
+            this.modsLabel = new System.Windows.Forms.Label();
             this.maxRamDynamicCalculatorLabel = new System.Windows.Forms.Label();
             this.minRamDynamicCalculatorLabel = new System.Windows.Forms.Label();
             this.maxRamStaticLabel = new System.Windows.Forms.Label();
@@ -71,12 +71,12 @@ namespace Projects_Launcher.Projects_Launcher
             this.minRamTextBox = new Guna.UI2.WinForms.Guna2TextBox();
             this.label3 = new System.Windows.Forms.Label();
             this.ramMbToGbCalc = new System.Windows.Forms.Label();
-            this.versionSelectComboBox = new Guna.UI2.WinForms.Guna2ComboBox();
+            this.versionBox = new Guna.UI2.WinForms.Guna2ComboBox();
             this.widthtextbox = new Guna.UI2.WinForms.Guna2TextBox();
             this.heighttextbox = new Guna.UI2.WinForms.Guna2TextBox();
             this.maxRamTextBox = new Guna.UI2.WinForms.Guna2TextBox();
             this.mbLabel = new System.Windows.Forms.Label();
-            this.resolutionSelectStaticLabel = new System.Windows.Forms.Label();
+            this.resolutionTxt = new System.Windows.Forms.Label();
             this.settingsStaticLabel = new System.Windows.Forms.Label();
             this.timer3 = new System.Windows.Forms.Timer(this.components);
             this.ticksave = new System.Windows.Forms.Label();
@@ -129,7 +129,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.playSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.playSplitStaticLabel.Location = new System.Drawing.Point(122, 423);
             this.playSplitStaticLabel.Name = "playSplitStaticLabel";
-            this.playSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
+            this.playSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
             this.playSplitStaticLabel.TabIndex = 2;
             this.playSplitStaticLabel.Text = "|";
             // 
@@ -153,7 +153,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.onlineSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.onlineSplitStaticLabel.Location = new System.Drawing.Point(792, 430);
             this.onlineSplitStaticLabel.Name = "onlineSplitStaticLabel";
-            this.onlineSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
+            this.onlineSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
             this.onlineSplitStaticLabel.TabIndex = 6;
             this.onlineSplitStaticLabel.Text = "|";
             // 
@@ -290,22 +290,22 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.prepareGameToLaunch.Tick += new System.EventHandler(this.prepareGameToLaunch_Tick);
             // 
-            // previousPageStaticLabel
+            // previousPageTxt
             // 
-            this.previousPageStaticLabel.AutoSize = true;
-            this.previousPageStaticLabel.BackColor = System.Drawing.Color.Transparent;
-            this.previousPageStaticLabel.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.previousPageStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 19F, System.Drawing.FontStyle.Bold);
-            this.previousPageStaticLabel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.previousPageStaticLabel.Location = new System.Drawing.Point(12, -1);
-            this.previousPageStaticLabel.Name = "previousPageStaticLabel";
-            this.previousPageStaticLabel.Size = new System.Drawing.Size(32, 30);
-            this.previousPageStaticLabel.TabIndex = 128;
-            this.previousPageStaticLabel.Text = "◀";
-            this.previousPageStaticLabel.Visible = false;
-            this.previousPageStaticLabel.Click += new System.EventHandler(this.geriformpanel_Click);
-            this.previousPageStaticLabel.MouseEnter += new System.EventHandler(this.geriformpanel_MouseEnter);
-            this.previousPageStaticLabel.MouseLeave += new System.EventHandler(this.geriformpanel_MouseLeave);
+            this.previousPageTxt.AutoSize = true;
+            this.previousPageTxt.BackColor = System.Drawing.Color.Transparent;
+            this.previousPageTxt.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.previousPageTxt.Font = new System.Drawing.Font("Microsoft Sans Serif", 19F, System.Drawing.FontStyle.Bold);
+            this.previousPageTxt.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.previousPageTxt.Location = new System.Drawing.Point(12, -1);
+            this.previousPageTxt.Name = "previousPageTxt";
+            this.previousPageTxt.Size = new System.Drawing.Size(32, 30);
+            this.previousPageTxt.TabIndex = 128;
+            this.previousPageTxt.Text = "◀";
+            this.previousPageTxt.Visible = false;
+            this.previousPageTxt.Click += new System.EventHandler(this.geriformpanel_Click);
+            this.previousPageTxt.MouseEnter += new System.EventHandler(this.geriformpanel_MouseEnter);
+            this.previousPageTxt.MouseLeave += new System.EventHandler(this.geriformpanel_MouseLeave);
             // 
             // minramlabel
             // 
@@ -328,26 +328,26 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverOnlineCountStaticLabel.ForeColor = System.Drawing.SystemColors.ActiveBorder;
             this.serverOnlineCountStaticLabel.Location = new System.Drawing.Point(693, 440);
             this.serverOnlineCountStaticLabel.Name = "serverOnlineCountStaticLabel";
-            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(92, 16);
+            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(93, 16);
             this.serverOnlineCountStaticLabel.TabIndex = 120;
             this.serverOnlineCountStaticLabel.Text = "Sunucu Hatası";
             // 
             // settingsBgPanel
             // 
             this.settingsBgPanel.BackColor = System.Drawing.Color.Transparent;
-            this.settingsBgPanel.Controls.Add(this.versionSelectStaticLabel);
+            this.settingsBgPanel.Controls.Add(this.versionSelectTxt);
             this.settingsBgPanel.Controls.Add(this.navigationStaticLabel);
-            this.settingsBgPanel.Controls.Add(this.ramSelectionStaticLabel);
+            this.settingsBgPanel.Controls.Add(this.ramSelectionTxt);
             this.settingsBgPanel.Controls.Add(this.gpuStaticLabel);
             this.settingsBgPanel.Controls.Add(this.ramStaticLabel);
             this.settingsBgPanel.Controls.Add(this.RAMInfo);
             this.settingsBgPanel.Controls.Add(this.gpuInfo);
-            this.settingsBgPanel.Controls.Add(this.reopenLauncherCheckBox);
+            this.settingsBgPanel.Controls.Add(this.reopenLauncher);
             this.settingsBgPanel.Controls.Add(this.label4);
-            this.settingsBgPanel.Controls.Add(this.gameDirStaticLabel);
-            this.settingsBgPanel.Controls.Add(this.transferResourcepackLabel);
-            this.settingsBgPanel.Controls.Add(this.resourcePackDirLabel);
-            this.settingsBgPanel.Controls.Add(this.modsDirStaticLabel);
+            this.settingsBgPanel.Controls.Add(this.rootLabel);
+            this.settingsBgPanel.Controls.Add(this.transferRpLabel);
+            this.settingsBgPanel.Controls.Add(this.rpFolder);
+            this.settingsBgPanel.Controls.Add(this.modsLabel);
             this.settingsBgPanel.Controls.Add(this.maxRamDynamicCalculatorLabel);
             this.settingsBgPanel.Controls.Add(this.minRamDynamicCalculatorLabel);
             this.settingsBgPanel.Controls.Add(this.maxRamStaticLabel);
@@ -355,12 +355,12 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Controls.Add(this.minRamTextBox);
             this.settingsBgPanel.Controls.Add(this.label3);
             this.settingsBgPanel.Controls.Add(this.ramMbToGbCalc);
-            this.settingsBgPanel.Controls.Add(this.versionSelectComboBox);
+            this.settingsBgPanel.Controls.Add(this.versionBox);
             this.settingsBgPanel.Controls.Add(this.widthtextbox);
             this.settingsBgPanel.Controls.Add(this.heighttextbox);
             this.settingsBgPanel.Controls.Add(this.maxRamTextBox);
             this.settingsBgPanel.Controls.Add(this.mbLabel);
-            this.settingsBgPanel.Controls.Add(this.resolutionSelectStaticLabel);
+            this.settingsBgPanel.Controls.Add(this.resolutionTxt);
             this.settingsBgPanel.Controls.Add(this.settingsStaticLabel);
             this.settingsBgPanel.Location = new System.Drawing.Point(0, 32);
             this.settingsBgPanel.Name = "settingsBgPanel";
@@ -368,17 +368,17 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.TabIndex = 133;
             this.settingsBgPanel.Visible = false;
             // 
-            // versionSelectStaticLabel
+            // versionSelectTxt
             // 
-            this.versionSelectStaticLabel.AutoSize = true;
-            this.versionSelectStaticLabel.BackColor = System.Drawing.Color.Transparent;
-            this.versionSelectStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.versionSelectStaticLabel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.versionSelectStaticLabel.Location = new System.Drawing.Point(352, 202);
-            this.versionSelectStaticLabel.Name = "versionSelectStaticLabel";
-            this.versionSelectStaticLabel.Size = new System.Drawing.Size(128, 24);
-            this.versionSelectStaticLabel.TabIndex = 195;
-            this.versionSelectStaticLabel.Text = "Sürüm Seçimi";
+            this.versionSelectTxt.AutoSize = true;
+            this.versionSelectTxt.BackColor = System.Drawing.Color.Transparent;
+            this.versionSelectTxt.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.versionSelectTxt.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.versionSelectTxt.Location = new System.Drawing.Point(352, 202);
+            this.versionSelectTxt.Name = "versionSelectTxt";
+            this.versionSelectTxt.Size = new System.Drawing.Size(128, 24);
+            this.versionSelectTxt.TabIndex = 195;
+            this.versionSelectTxt.Text = "Sürüm Seçimi";
             // 
             // navigationStaticLabel
             // 
@@ -392,17 +392,17 @@ namespace Projects_Launcher.Projects_Launcher
             this.navigationStaticLabel.TabIndex = 194;
             this.navigationStaticLabel.Text = "Hızlı Erişim";
             // 
-            // ramSelectionStaticLabel
+            // ramSelectionTxt
             // 
-            this.ramSelectionStaticLabel.AutoSize = true;
-            this.ramSelectionStaticLabel.BackColor = System.Drawing.Color.Transparent;
-            this.ramSelectionStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.ramSelectionStaticLabel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.ramSelectionStaticLabel.Location = new System.Drawing.Point(352, 87);
-            this.ramSelectionStaticLabel.Name = "ramSelectionStaticLabel";
-            this.ramSelectionStaticLabel.Size = new System.Drawing.Size(177, 24);
-            this.ramSelectionStaticLabel.TabIndex = 193;
-            this.ramSelectionStaticLabel.Text = "RAM Rezervasyonu";
+            this.ramSelectionTxt.AutoSize = true;
+            this.ramSelectionTxt.BackColor = System.Drawing.Color.Transparent;
+            this.ramSelectionTxt.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.ramSelectionTxt.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.ramSelectionTxt.Location = new System.Drawing.Point(352, 87);
+            this.ramSelectionTxt.Name = "ramSelectionTxt";
+            this.ramSelectionTxt.Size = new System.Drawing.Size(177, 24);
+            this.ramSelectionTxt.TabIndex = 193;
+            this.ramSelectionTxt.Text = "RAM Rezervasyonu";
             // 
             // gpuStaticLabel
             // 
@@ -452,33 +452,33 @@ namespace Projects_Launcher.Projects_Launcher
             this.gpuInfo.TabIndex = 184;
             this.gpuInfo.Text = "Bilinmiyor";
             // 
-            // reopenLauncherCheckBox
+            // reopenLauncher
             // 
-            this.reopenLauncherCheckBox.Anchor = System.Windows.Forms.AnchorStyles.Top;
-            this.reopenLauncherCheckBox.Animated = true;
-            this.reopenLauncherCheckBox.AutoCheck = false;
-            this.reopenLauncherCheckBox.AutoSize = true;
-            this.reopenLauncherCheckBox.BackColor = System.Drawing.Color.Transparent;
-            this.reopenLauncherCheckBox.Checked = true;
-            this.reopenLauncherCheckBox.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.reopenLauncherCheckBox.CheckedState.BorderRadius = 0;
-            this.reopenLauncherCheckBox.CheckedState.BorderThickness = 0;
-            this.reopenLauncherCheckBox.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.reopenLauncherCheckBox.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.reopenLauncherCheckBox.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
-            this.reopenLauncherCheckBox.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.reopenLauncherCheckBox.Location = new System.Drawing.Point(696, 398);
-            this.reopenLauncherCheckBox.Name = "reopenLauncherCheckBox";
-            this.reopenLauncherCheckBox.Size = new System.Drawing.Size(169, 24);
-            this.reopenLauncherCheckBox.TabIndex = 134;
-            this.reopenLauncherCheckBox.Text = "Oyun Kapatılınca Aç";
-            this.reopenLauncherCheckBox.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
-            this.reopenLauncherCheckBox.UncheckedState.BorderRadius = 0;
-            this.reopenLauncherCheckBox.UncheckedState.BorderThickness = 0;
-            this.reopenLauncherCheckBox.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
-            this.reopenLauncherCheckBox.UseVisualStyleBackColor = false;
-            this.reopenLauncherCheckBox.CheckedChanged += new System.EventHandler(this.kapattick_CheckedChanged);
-            this.reopenLauncherCheckBox.MouseEnter += new System.EventHandler(this.reopenLauncherCheckBox_MouseEnter);
+            this.reopenLauncher.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.reopenLauncher.Animated = true;
+            this.reopenLauncher.AutoCheck = false;
+            this.reopenLauncher.AutoSize = true;
+            this.reopenLauncher.BackColor = System.Drawing.Color.Transparent;
+            this.reopenLauncher.Checked = true;
+            this.reopenLauncher.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.reopenLauncher.CheckedState.BorderRadius = 0;
+            this.reopenLauncher.CheckedState.BorderThickness = 0;
+            this.reopenLauncher.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.reopenLauncher.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.reopenLauncher.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
+            this.reopenLauncher.ForeColor = System.Drawing.SystemColors.ControlLightLight;
+            this.reopenLauncher.Location = new System.Drawing.Point(696, 398);
+            this.reopenLauncher.Name = "reopenLauncher";
+            this.reopenLauncher.Size = new System.Drawing.Size(169, 24);
+            this.reopenLauncher.TabIndex = 134;
+            this.reopenLauncher.Text = "Oyun Kapatılınca Aç";
+            this.reopenLauncher.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.reopenLauncher.UncheckedState.BorderRadius = 0;
+            this.reopenLauncher.UncheckedState.BorderThickness = 0;
+            this.reopenLauncher.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.reopenLauncher.UseVisualStyleBackColor = false;
+            this.reopenLauncher.CheckedChanged += new System.EventHandler(this.kapattick_CheckedChanged);
+            this.reopenLauncher.MouseEnter += new System.EventHandler(this.reopenLauncherCheckBox_MouseEnter);
             // 
             // label4
             // 
@@ -493,69 +493,69 @@ namespace Projects_Launcher.Projects_Launcher
             this.label4.TabIndex = 183;
             this.label4.Text = "x";
             // 
-            // gameDirStaticLabel
+            // rootLabel
             // 
-            this.gameDirStaticLabel.AutoSize = true;
-            this.gameDirStaticLabel.BackColor = System.Drawing.Color.Transparent;
-            this.gameDirStaticLabel.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.gameDirStaticLabel.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
-            this.gameDirStaticLabel.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.gameDirStaticLabel.Location = new System.Drawing.Point(692, 160);
-            this.gameDirStaticLabel.Name = "gameDirStaticLabel";
-            this.gameDirStaticLabel.Size = new System.Drawing.Size(111, 21);
-            this.gameDirStaticLabel.TabIndex = 181;
-            this.gameDirStaticLabel.Text = "Oyun Klasörü";
-            this.gameDirStaticLabel.Click += new System.EventHandler(this.gamefolder_Click);
-            this.gameDirStaticLabel.MouseEnter += new System.EventHandler(this.gamefolder_MouseEnter);
-            this.gameDirStaticLabel.MouseLeave += new System.EventHandler(this.gamefolder_MouseLeave);
+            this.rootLabel.AutoSize = true;
+            this.rootLabel.BackColor = System.Drawing.Color.Transparent;
+            this.rootLabel.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.rootLabel.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
+            this.rootLabel.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.rootLabel.Location = new System.Drawing.Point(692, 160);
+            this.rootLabel.Name = "rootLabel";
+            this.rootLabel.Size = new System.Drawing.Size(111, 21);
+            this.rootLabel.TabIndex = 181;
+            this.rootLabel.Text = "Oyun Klasörü";
+            this.rootLabel.Click += new System.EventHandler(this.gamefolder_Click);
+            this.rootLabel.MouseEnter += new System.EventHandler(this.gamefolder_MouseEnter);
+            this.rootLabel.MouseLeave += new System.EventHandler(this.gamefolder_MouseLeave);
             // 
-            // transferResourcepackLabel
+            // transferRpLabel
             // 
-            this.transferResourcepackLabel.AutoSize = true;
-            this.transferResourcepackLabel.BackColor = System.Drawing.Color.Transparent;
-            this.transferResourcepackLabel.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.transferResourcepackLabel.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
-            this.transferResourcepackLabel.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.transferResourcepackLabel.Location = new System.Drawing.Point(692, 222);
-            this.transferResourcepackLabel.Name = "transferResourcepackLabel";
-            this.transferResourcepackLabel.Size = new System.Drawing.Size(148, 21);
-            this.transferResourcepackLabel.TabIndex = 180;
-            this.transferResourcepackLabel.Text = "Doku Paketi Aktar";
-            this.transferResourcepackLabel.Click += new System.EventHandler(this.texturepackaktar_Click);
-            this.transferResourcepackLabel.MouseEnter += new System.EventHandler(this.texturepackaktar_MouseEnter);
-            this.transferResourcepackLabel.MouseLeave += new System.EventHandler(this.texturepackaktar_MouseLeave);
+            this.transferRpLabel.AutoSize = true;
+            this.transferRpLabel.BackColor = System.Drawing.Color.Transparent;
+            this.transferRpLabel.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.transferRpLabel.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
+            this.transferRpLabel.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.transferRpLabel.Location = new System.Drawing.Point(692, 222);
+            this.transferRpLabel.Name = "transferRpLabel";
+            this.transferRpLabel.Size = new System.Drawing.Size(148, 21);
+            this.transferRpLabel.TabIndex = 180;
+            this.transferRpLabel.Text = "Doku Paketi Aktar";
+            this.transferRpLabel.Click += new System.EventHandler(this.texturepackaktar_Click);
+            this.transferRpLabel.MouseEnter += new System.EventHandler(this.texturepackaktar_MouseEnter);
+            this.transferRpLabel.MouseLeave += new System.EventHandler(this.texturepackaktar_MouseLeave);
             // 
-            // resourcePackDirLabel
+            // rpFolder
             // 
-            this.resourcePackDirLabel.AutoSize = true;
-            this.resourcePackDirLabel.BackColor = System.Drawing.Color.Transparent;
-            this.resourcePackDirLabel.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.resourcePackDirLabel.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
-            this.resourcePackDirLabel.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.resourcePackDirLabel.Location = new System.Drawing.Point(692, 191);
-            this.resourcePackDirLabel.Name = "resourcePackDirLabel";
-            this.resourcePackDirLabel.Size = new System.Drawing.Size(165, 21);
-            this.resourcePackDirLabel.TabIndex = 179;
-            this.resourcePackDirLabel.Text = "Doku Paketi Klasörü";
-            this.resourcePackDirLabel.Click += new System.EventHandler(this.texturepackfolder_Click);
-            this.resourcePackDirLabel.MouseEnter += new System.EventHandler(this.texturepackfolder_MouseEnter);
-            this.resourcePackDirLabel.MouseLeave += new System.EventHandler(this.texturepackfolder_MouseLeave);
+            this.rpFolder.AutoSize = true;
+            this.rpFolder.BackColor = System.Drawing.Color.Transparent;
+            this.rpFolder.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.rpFolder.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
+            this.rpFolder.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.rpFolder.Location = new System.Drawing.Point(692, 191);
+            this.rpFolder.Name = "rpFolder";
+            this.rpFolder.Size = new System.Drawing.Size(165, 21);
+            this.rpFolder.TabIndex = 179;
+            this.rpFolder.Text = "Doku Paketi Klasörü";
+            this.rpFolder.Click += new System.EventHandler(this.texturepackfolder_Click);
+            this.rpFolder.MouseEnter += new System.EventHandler(this.texturepackfolder_MouseEnter);
+            this.rpFolder.MouseLeave += new System.EventHandler(this.texturepackfolder_MouseLeave);
             // 
-            // modsDirStaticLabel
+            // modsLabel
             // 
-            this.modsDirStaticLabel.AutoSize = true;
-            this.modsDirStaticLabel.BackColor = System.Drawing.Color.Transparent;
-            this.modsDirStaticLabel.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.modsDirStaticLabel.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
-            this.modsDirStaticLabel.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.modsDirStaticLabel.Location = new System.Drawing.Point(692, 129);
-            this.modsDirStaticLabel.Name = "modsDirStaticLabel";
-            this.modsDirStaticLabel.Size = new System.Drawing.Size(114, 21);
-            this.modsDirStaticLabel.TabIndex = 178;
-            this.modsDirStaticLabel.Text = "Mods Klasörü";
-            this.modsDirStaticLabel.Click += new System.EventHandler(this.mods_Click);
-            this.modsDirStaticLabel.MouseEnter += new System.EventHandler(this.mods_MouseEnter);
-            this.modsDirStaticLabel.MouseLeave += new System.EventHandler(this.mods_MouseLeave);
+            this.modsLabel.AutoSize = true;
+            this.modsLabel.BackColor = System.Drawing.Color.Transparent;
+            this.modsLabel.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.modsLabel.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
+            this.modsLabel.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.modsLabel.Location = new System.Drawing.Point(692, 129);
+            this.modsLabel.Name = "modsLabel";
+            this.modsLabel.Size = new System.Drawing.Size(114, 21);
+            this.modsLabel.TabIndex = 178;
+            this.modsLabel.Text = "Mods Klasörü";
+            this.modsLabel.Click += new System.EventHandler(this.mods_Click);
+            this.modsLabel.MouseEnter += new System.EventHandler(this.mods_MouseEnter);
+            this.modsLabel.MouseLeave += new System.EventHandler(this.mods_MouseLeave);
             // 
             // maxRamDynamicCalculatorLabel
             // 
@@ -657,18 +657,18 @@ namespace Projects_Launcher.Projects_Launcher
             this.ramMbToGbCalc.TabIndex = 171;
             this.ramMbToGbCalc.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
             // 
-            // versionSelectComboBox
+            // versionBox
             // 
-            this.versionSelectComboBox.BackColor = System.Drawing.Color.Transparent;
-            this.versionSelectComboBox.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
-            this.versionSelectComboBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.versionSelectComboBox.FillColor = System.Drawing.Color.Transparent;
-            this.versionSelectComboBox.FocusedColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.versionSelectComboBox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.versionSelectComboBox.Font = new System.Drawing.Font("Arial", 12F);
-            this.versionSelectComboBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(68)))), ((int)(((byte)(88)))), ((int)(((byte)(112)))));
-            this.versionSelectComboBox.ItemHeight = 30;
-            this.versionSelectComboBox.Items.AddRange(new object[] {
+            this.versionBox.BackColor = System.Drawing.Color.Transparent;
+            this.versionBox.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
+            this.versionBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.versionBox.FillColor = System.Drawing.Color.Transparent;
+            this.versionBox.FocusedColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.versionBox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.versionBox.Font = new System.Drawing.Font("Arial", 12F);
+            this.versionBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(68)))), ((int)(((byte)(88)))), ((int)(((byte)(112)))));
+            this.versionBox.ItemHeight = 30;
+            this.versionBox.Items.AddRange(new object[] {
             "fabric-loader-0.13.3-1.18.2",
             "1.18.2",
             "1.18.1",
@@ -683,11 +683,11 @@ namespace Projects_Launcher.Projects_Launcher
             "1.9.4",
             "1.8.9",
             "1.7.10"});
-            this.versionSelectComboBox.Location = new System.Drawing.Point(356, 244);
-            this.versionSelectComboBox.Name = "versionSelectComboBox";
-            this.versionSelectComboBox.Size = new System.Drawing.Size(151, 36);
-            this.versionSelectComboBox.TabIndex = 169;
-            this.versionSelectComboBox.SelectedIndexChanged += new System.EventHandler(this.surumsec_SelectedIndexChanged);
+            this.versionBox.Location = new System.Drawing.Point(356, 244);
+            this.versionBox.Name = "versionBox";
+            this.versionBox.Size = new System.Drawing.Size(151, 36);
+            this.versionBox.TabIndex = 169;
+            this.versionBox.SelectedIndexChanged += new System.EventHandler(this.surumsec_SelectedIndexChanged);
             // 
             // widthtextbox
             // 
@@ -780,17 +780,17 @@ namespace Projects_Launcher.Projects_Launcher
             this.mbLabel.TabIndex = 164;
             this.mbLabel.Text = "MB";
             // 
-            // resolutionSelectStaticLabel
+            // resolutionTxt
             // 
-            this.resolutionSelectStaticLabel.AutoSize = true;
-            this.resolutionSelectStaticLabel.BackColor = System.Drawing.Color.Transparent;
-            this.resolutionSelectStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.resolutionSelectStaticLabel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.resolutionSelectStaticLabel.Location = new System.Drawing.Point(124, 87);
-            this.resolutionSelectStaticLabel.Name = "resolutionSelectStaticLabel";
-            this.resolutionSelectStaticLabel.Size = new System.Drawing.Size(106, 24);
-            this.resolutionSelectStaticLabel.TabIndex = 159;
-            this.resolutionSelectStaticLabel.Text = "Çözünürlük";
+            this.resolutionTxt.AutoSize = true;
+            this.resolutionTxt.BackColor = System.Drawing.Color.Transparent;
+            this.resolutionTxt.Font = new System.Drawing.Font("Microsoft Sans Serif", 14.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.resolutionTxt.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.resolutionTxt.Location = new System.Drawing.Point(124, 87);
+            this.resolutionTxt.Name = "resolutionTxt";
+            this.resolutionTxt.Size = new System.Drawing.Size(106, 24);
+            this.resolutionTxt.TabIndex = 159;
+            this.resolutionTxt.Text = "Çözünürlük";
             // 
             // settingsStaticLabel
             // 
@@ -872,7 +872,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.Controls.Add(this.settingsBgPanel);
             this.Controls.Add(this.serverOnlineCountStaticLabel);
             this.Controls.Add(this.minramlabel);
-            this.Controls.Add(this.previousPageStaticLabel);
+            this.Controls.Add(this.previousPageTxt);
             this.Controls.Add(this.surumtext);
             this.Controls.Add(this.widthlabel);
             this.Controls.Add(this.heightlabel);
@@ -928,7 +928,7 @@ namespace Projects_Launcher.Projects_Launcher
         public System.Windows.Forms.Label heightlabel;
         public System.Windows.Forms.Label maxramlabel;
         private System.Windows.Forms.Timer prepareGameToLaunch;
-        private System.Windows.Forms.Label previousPageStaticLabel;
+        private System.Windows.Forms.Label previousPageTxt;
         public System.Windows.Forms.Label minramlabel;
         private System.Windows.Forms.Label serverOnlineCountStaticLabel;
         private Guna.UI2.WinForms.Guna2Panel settingsBgPanel;
@@ -939,19 +939,19 @@ namespace Projects_Launcher.Projects_Launcher
         public Guna.UI2.WinForms.Guna2TextBox minRamTextBox;
         private System.Windows.Forms.Label label3;
         private System.Windows.Forms.Label ramMbToGbCalc;
-        public Guna.UI2.WinForms.Guna2ComboBox versionSelectComboBox;
+        public Guna.UI2.WinForms.Guna2ComboBox versionBox;
         public Guna.UI2.WinForms.Guna2TextBox widthtextbox;
         public Guna.UI2.WinForms.Guna2TextBox heighttextbox;
         public Guna.UI2.WinForms.Guna2TextBox maxRamTextBox;
         private System.Windows.Forms.Label mbLabel;
         private System.Windows.Forms.Label settingsStaticLabel;
-        private System.Windows.Forms.Label resourcePackDirLabel;
-        private System.Windows.Forms.Label modsDirStaticLabel;
-        private System.Windows.Forms.Label transferResourcepackLabel;
-        private System.Windows.Forms.Label gameDirStaticLabel;
+        private System.Windows.Forms.Label rpFolder;
+        private System.Windows.Forms.Label modsLabel;
+        private System.Windows.Forms.Label transferRpLabel;
+        private System.Windows.Forms.Label rootLabel;
         private System.Windows.Forms.Label label4;
         private System.Windows.Forms.Timer timer3;
-        private Guna.UI2.WinForms.Guna2CheckBox reopenLauncherCheckBox;
+        private Guna.UI2.WinForms.Guna2CheckBox reopenLauncher;
         public System.Windows.Forms.Label ticksave;
         private System.Windows.Forms.Label gpuInfo;
         private System.Windows.Forms.Label RAMInfo;
@@ -960,9 +960,9 @@ namespace Projects_Launcher.Projects_Launcher
         private Guna.UI2.WinForms.Guna2ControlBox minimizeButtonControlBox;
         private Guna.UI2.WinForms.Guna2ControlBox maximizeButtonControlBox;
         public System.Windows.Forms.Label label11;
-        private System.Windows.Forms.Label versionSelectStaticLabel;
+        private System.Windows.Forms.Label versionSelectTxt;
         private System.Windows.Forms.Label navigationStaticLabel;
-        private System.Windows.Forms.Label ramSelectionStaticLabel;
-        private System.Windows.Forms.Label resolutionSelectStaticLabel;
+        private System.Windows.Forms.Label ramSelectionTxt;
+        private System.Windows.Forms.Label resolutionTxt;
     }
 }

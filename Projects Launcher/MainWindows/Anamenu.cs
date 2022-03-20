@@ -139,12 +139,12 @@ namespace Projects_Launcher.Projects_Launcher
 
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames;
 
-            reopenLauncherCheckBox.Checked = Properties.Settings.Default.OyunTickS;
+            reopenLauncher.Checked = Properties.Settings.Default.OyunTickS;
             
             if (Properties.Settings.Default.SelectedVersion != string.Empty)
             {
                 versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
-                versionSelectComboBox.Text = Properties.Settings.Default.SelectedVersion;
+                versionBox.Text = Properties.Settings.Default.SelectedVersion;
             }
             
             if (Properties.Settings.Default.RamMax != string.Empty) {
@@ -360,7 +360,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             try
             {
-                if (reopenLauncherCheckBox.Checked == true)
+                if (reopenLauncher.Checked == true)
                 {
                     foreach (var process in Process.GetProcessesByName("javaw"))
                     {
@@ -450,7 +450,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             if (settingsBgPanel.Visible == false)
             {
-                previousPageStaticLabel.Visible = true;
+                previousPageTxt.Visible = true;
                 settingsBgPanel.Visible = true;
             }
             else
@@ -509,7 +509,7 @@ namespace Projects_Launcher.Projects_Launcher
         private void geriformpanel_Click(object sender, EventArgs e)
         {
             settingsBgPanel.Visible = false;
-            previousPageStaticLabel.Visible = false;
+            previousPageTxt.Visible = false;
         }
 
         private void widthtextbox_TextChanged(object sender, EventArgs e)
@@ -564,9 +564,9 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void surumsec_SelectedIndexChanged(object sender, EventArgs e)
         {
-            Properties.Settings.Default.SelectedVersion = versionSelectComboBox.Text;
+            Properties.Settings.Default.SelectedVersion = versionBox.Text;
             Properties.Settings.Default.Save();
-            versionInfoStaticLabel.Text = versionSelectComboBox.Text;
+            versionInfoStaticLabel.Text = versionBox.Text;
         }
 
         private void website_Click(object sender, EventArgs e)
@@ -612,17 +612,17 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void geriformpanel_MouseEnter(object sender, EventArgs e)
         {
-            previousPageStaticLabel.ForeColor = rndcolor();
+            previousPageTxt.ForeColor = rndcolor();
         }
 
         private void geriformpanel_MouseLeave(object sender, EventArgs e)
         {
-            previousPageStaticLabel.ForeColor = Color.FromArgb(245, 245, 245);
+            previousPageTxt.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void changelogs_MouseEnter(object sender, EventArgs e)
         {
-            previousPageStaticLabel.ForeColor = rndcolor();
+            previousPageTxt.ForeColor = rndcolor();
         }
 
         private void changelogs_MouseLeave(object sender, EventArgs e)
@@ -673,32 +673,32 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void mods_MouseEnter(object sender, EventArgs e)
         {
-            modsDirStaticLabel.ForeColor = rndcolor();
+            modsLabel.ForeColor = rndcolor();
         }
 
         private void mods_MouseLeave(object sender, EventArgs e)
         {
-            modsDirStaticLabel.ForeColor = Color.FromArgb(245, 245, 245);
+            modsLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void texturepackfolder_MouseEnter(object sender, EventArgs e)
         {
-            resourcePackDirLabel.ForeColor = rndcolor();
+            rpFolder.ForeColor = rndcolor();
         }
 
         private void texturepackfolder_MouseLeave(object sender, EventArgs e)
         {
-            resourcePackDirLabel.ForeColor = Color.FromArgb(245, 245, 245);
+            rpFolder.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void texturepackaktar_MouseEnter(object sender, EventArgs e)
         {
-            transferResourcepackLabel.ForeColor = rndcolor();
+            transferRpLabel.ForeColor = rndcolor();
         }
 
         private void texturepackaktar_MouseLeave(object sender, EventArgs e)
         {
-            transferResourcepackLabel.ForeColor = Color.FromArgb(245, 245, 245);
+            transferRpLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void mods_Click(object sender, EventArgs e)
@@ -802,12 +802,12 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void gamefolder_MouseEnter(object sender, EventArgs e)
         {
-            gameDirStaticLabel.ForeColor = rndcolor();
+            rootLabel.ForeColor = rndcolor();
         }
 
         private void gamefolder_MouseLeave(object sender, EventArgs e)
         {
-            gameDirStaticLabel.ForeColor = Color.FromArgb(245, 245, 245);
+            rootLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private async void timer3_Tick(object sender, EventArgs e)
@@ -842,7 +842,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void kapattick_CheckedChanged(object sender, EventArgs e)
         {
-            if (reopenLauncherCheckBox.Checked)
+            if (reopenLauncher.Checked)
             {
                 Properties.Settings.Default.OyunTickS = true;
             }  
@@ -997,7 +997,7 @@ namespace Projects_Launcher.Projects_Launcher
             discordRpcTip.UseAnimation = true;
             discordRpcTip.IsBalloon = true;
             discordRpcTip.ShowAlways = true;
-            discordRpcTip.SetToolTip(this.reopenLauncherCheckBox, "Oyun kapatıldığında yeniden açılıp açılmayacağını seçersiniz.\n\nBu özelliğin kapalı olması durumunda oyundayken, discord oynuyor\nbilginiz oyun durumunuzda gözükmeyecektir.");
+            discordRpcTip.SetToolTip(this.reopenLauncher, "Oyun kapatıldığında yeniden açılıp açılmayacağını seçersiniz.\n\nBu özelliğin kapalı olması durumunda oyundayken, discord oynuyor\nbilginiz oyun durumunuzda gözükmeyecektir.");
         }
 
         private void oynabutton_MouseEnter(object sender, EventArgs e)
