@@ -303,9 +303,9 @@ namespace Projects_Launcher.Projects_Launcher
             this.previousPageTxt.TabIndex = 128;
             this.previousPageTxt.Text = "◀";
             this.previousPageTxt.Visible = false;
-            this.previousPageTxt.Click += new System.EventHandler(this.geriformpanel_Click);
-            this.previousPageTxt.MouseEnter += new System.EventHandler(this.geriformpanel_MouseEnter);
-            this.previousPageTxt.MouseLeave += new System.EventHandler(this.geriformpanel_MouseLeave);
+            this.previousPageTxt.Click += new System.EventHandler(this.previousPage_Click);
+            this.previousPageTxt.MouseEnter += new System.EventHandler(this.previousPage_MouseEnter);
+            this.previousPageTxt.MouseLeave += new System.EventHandler(this.previousPage_MouseLeave);
             // 
             // minramlabel
             // 
@@ -521,9 +521,9 @@ namespace Projects_Launcher.Projects_Launcher
             this.transferRpLabel.Size = new System.Drawing.Size(148, 21);
             this.transferRpLabel.TabIndex = 180;
             this.transferRpLabel.Text = "Doku Paketi Aktar";
-            this.transferRpLabel.Click += new System.EventHandler(this.texturepackaktar_Click);
-            this.transferRpLabel.MouseEnter += new System.EventHandler(this.texturepackaktar_MouseEnter);
-            this.transferRpLabel.MouseLeave += new System.EventHandler(this.texturepackaktar_MouseLeave);
+            this.transferRpLabel.Click += new System.EventHandler(this.rpTransfer_Click);
+            this.transferRpLabel.MouseEnter += new System.EventHandler(this.rpTransfer_MouseEnter);
+            this.transferRpLabel.MouseLeave += new System.EventHandler(this.rpTransfer_MouseLeave);
             // 
             // rpFolder
             // 
@@ -537,9 +537,9 @@ namespace Projects_Launcher.Projects_Launcher
             this.rpFolder.Size = new System.Drawing.Size(165, 21);
             this.rpFolder.TabIndex = 179;
             this.rpFolder.Text = "Doku Paketi Klasörü";
-            this.rpFolder.Click += new System.EventHandler(this.texturepackfolder_Click);
-            this.rpFolder.MouseEnter += new System.EventHandler(this.texturepackfolder_MouseEnter);
-            this.rpFolder.MouseLeave += new System.EventHandler(this.texturepackfolder_MouseLeave);
+            this.rpFolder.Click += new System.EventHandler(this.rpFolder_Click);
+            this.rpFolder.MouseEnter += new System.EventHandler(this.rpFolder_MouseEnter);
+            this.rpFolder.MouseLeave += new System.EventHandler(this.rpFolder_MouseLeave);
             // 
             // modsLabel
             // 
@@ -553,9 +553,9 @@ namespace Projects_Launcher.Projects_Launcher
             this.modsLabel.Size = new System.Drawing.Size(114, 21);
             this.modsLabel.TabIndex = 178;
             this.modsLabel.Text = "Mods Klasörü";
-            this.modsLabel.Click += new System.EventHandler(this.mods_Click);
-            this.modsLabel.MouseEnter += new System.EventHandler(this.mods_MouseEnter);
-            this.modsLabel.MouseLeave += new System.EventHandler(this.mods_MouseLeave);
+            this.modsLabel.Click += new System.EventHandler(this.modsLabel_Click);
+            this.modsLabel.MouseEnter += new System.EventHandler(this.modsLabel_MouseEnter);
+            this.modsLabel.MouseLeave += new System.EventHandler(this.modsLabel_MouseLeave);
             // 
             // maxRamDynamicCalculatorLabel
             // 

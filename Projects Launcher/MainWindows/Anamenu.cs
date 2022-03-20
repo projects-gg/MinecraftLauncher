@@ -506,7 +506,7 @@ namespace Projects_Launcher.Projects_Launcher
             formpanell = settingsBgPanel.Visible;
         }
 
-        private void geriformpanel_Click(object sender, EventArgs e)
+        private void previousPage_Click(object sender, EventArgs e)
         {
             settingsBgPanel.Visible = false;
             previousPageTxt.Visible = false;
@@ -610,16 +610,17 @@ namespace Projects_Launcher.Projects_Launcher
             return Color.FromArgb(rnd.Next(255), rnd.Next(255), rnd.Next(255));
         }
 
-        private void geriformpanel_MouseEnter(object sender, EventArgs e)
+        private void previousPage_MouseEnter(object sender, EventArgs e)
         {
             previousPageTxt.ForeColor = rndcolor();
         }
 
-        private void geriformpanel_MouseLeave(object sender, EventArgs e)
+        private void previousPage_MouseLeave(object sender, EventArgs e)
         {
             previousPageTxt.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
+        /*
         private void changelogs_MouseEnter(object sender, EventArgs e)
         {
             previousPageTxt.ForeColor = rndcolor();
@@ -629,6 +630,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             playButtonStaticLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
+        */
 
         private void minramtext_TextChanged(object sender, EventArgs e)
         {
@@ -671,37 +673,37 @@ namespace Projects_Launcher.Projects_Launcher
             }  
         }
 
-        private void mods_MouseEnter(object sender, EventArgs e)
+        private void modsLabel_MouseEnter(object sender, EventArgs e)
         {
             modsLabel.ForeColor = rndcolor();
         }
 
-        private void mods_MouseLeave(object sender, EventArgs e)
+        private void modsLabel_MouseLeave(object sender, EventArgs e)
         {
             modsLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
-        private void texturepackfolder_MouseEnter(object sender, EventArgs e)
+        private void rpFolder_MouseEnter(object sender, EventArgs e)
         {
             rpFolder.ForeColor = rndcolor();
         }
 
-        private void texturepackfolder_MouseLeave(object sender, EventArgs e)
+        private void rpFolder_MouseLeave(object sender, EventArgs e)
         {
             rpFolder.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
-        private void texturepackaktar_MouseEnter(object sender, EventArgs e)
+        private void rpTransfer_MouseEnter(object sender, EventArgs e)
         {
             transferRpLabel.ForeColor = rndcolor();
         }
 
-        private void texturepackaktar_MouseLeave(object sender, EventArgs e)
+        private void rpTransfer_MouseLeave(object sender, EventArgs e)
         {
             transferRpLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
-        private void mods_Click(object sender, EventArgs e)
+        private void modsLabel_Click(object sender, EventArgs e)
         {
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/mods";
 
@@ -724,7 +726,7 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        private void texturepackaktar_Click(object sender, EventArgs e)
+        private void rpTransfer_Click(object sender, EventArgs e)
         {
             if (!Directory.Exists(@TextureDizin))
             {
@@ -756,7 +758,7 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        private void texturepackfolder_Click(object sender, EventArgs e)
+        private void rpFolder_Click(object sender, EventArgs e)
         {
             if (Directory.Exists(@TextureDizin))
             {
