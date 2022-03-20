@@ -619,27 +619,27 @@ namespace Projects_Launcher.Projects_Launcher
         private void geriformpanel_MouseEnter(object sender, EventArgs e)
         {
             rndcolor();
-            previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX,
-                                                                              colorY,
-                                                                              colorZ);
+            previousPageStaticLabel.ForeColor = Color.FromArgb(colorX,
+                                                               colorY,
+                                                               colorZ);
         }
 
         private void geriformpanel_MouseLeave(object sender, EventArgs e)
         {
-            previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            previousPageStaticLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void changelogs_MouseEnter(object sender, EventArgs e)
         {
             rndcolor();
-            previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX,
-                                                                              colorY,
-                                                                              colorZ);
+            previousPageStaticLabel.ForeColor = Color.FromArgb(colorX,
+                                                               colorY,
+                                                               colorZ);
         }
 
         private void changelogs_MouseLeave(object sender, EventArgs e)
         {
-            playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            playButtonStaticLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void minramtext_TextChanged(object sender, EventArgs e)
@@ -686,40 +686,40 @@ namespace Projects_Launcher.Projects_Launcher
         private void mods_MouseEnter(object sender, EventArgs e)
         {
             rndcolor();
-            modsDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX,
-                                                                         colorY,
-                                                                         colorZ);
+            modsDirStaticLabel.ForeColor = Color.FromArgb(colorX,
+                                                          colorY,
+                                                          colorZ);
         }
 
         private void mods_MouseLeave(object sender, EventArgs e)
         {
-            modsDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            modsDirStaticLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void texturepackfolder_MouseEnter(object sender, EventArgs e)
         {
             rndcolor();
-            resourcePackDirLabel.ForeColor = System.Drawing.Color.FromArgb(colorX,
-                                                                           colorY,
-                                                                           colorZ);
+            resourcePackDirLabel.ForeColor = Color.FromArgb(colorX,
+                                                            colorY,
+                                                            colorZ);
         }
 
         private void texturepackfolder_MouseLeave(object sender, EventArgs e)
         {
-            resourcePackDirLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            resourcePackDirLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void texturepackaktar_MouseEnter(object sender, EventArgs e)
         {
             rndcolor();
-            transferResourcepackLabel.ForeColor = System.Drawing.Color.FromArgb(colorX,
-                                                                                colorY,
-                                                                                colorZ);
+            transferResourcepackLabel.ForeColor = Color.FromArgb(colorX,
+                                                                 colorY,
+                                                                 colorZ);
         }
 
         private void texturepackaktar_MouseLeave(object sender, EventArgs e)
         {
-            transferResourcepackLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            transferResourcepackLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void mods_Click(object sender, EventArgs e)
@@ -824,14 +824,14 @@ namespace Projects_Launcher.Projects_Launcher
         private void gamefolder_MouseEnter(object sender, EventArgs e)
         {
             rndcolor();
-            gameDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX,
-                                                                         colorY,
-                                                                         colorZ);
+            gameDirStaticLabel.ForeColor = Color.FromArgb(colorX,
+                                                          colorY,
+                                                          colorZ);
         }
 
         private void gamefolder_MouseLeave(object sender, EventArgs e)
         {
-            gameDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            gameDirStaticLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private async void timer3_Tick(object sender, EventArgs e)
