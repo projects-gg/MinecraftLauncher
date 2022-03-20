@@ -605,14 +605,14 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        private Color randomColor()
+        private Color RandomColor()
         {
             return Color.FromArgb(rnd.Next(255), rnd.Next(255), rnd.Next(255));
         }
 
         private void previousPage_MouseEnter(object sender, EventArgs e)
         {
-            previousPageTxt.ForeColor = randomColor();
+            previousPageTxt.ForeColor = RandomColor();
         }
 
         private void previousPage_MouseLeave(object sender, EventArgs e)
@@ -623,7 +623,7 @@ namespace Projects_Launcher.Projects_Launcher
         /*
         private void changelogs_MouseEnter(object sender, EventArgs e)
         {
-            previousPageTxt.ForeColor = randomColor();
+            previousPageTxt.ForeColor = RandomColor();
         }
 
         private void changelogs_MouseLeave(object sender, EventArgs e)
@@ -675,7 +675,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void modsLabel_MouseEnter(object sender, EventArgs e)
         {
-            modsLabel.ForeColor = randomColor();
+            modsLabel.ForeColor = RandomColor();
         }
 
         private void modsLabel_MouseLeave(object sender, EventArgs e)
@@ -685,7 +685,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void rpFolder_MouseEnter(object sender, EventArgs e)
         {
-            rpFolder.ForeColor = randomColor();
+            rpFolder.ForeColor = RandomColor();
         }
 
         private void rpFolder_MouseLeave(object sender, EventArgs e)
@@ -695,7 +695,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void rpTransfer_MouseEnter(object sender, EventArgs e)
         {
-            transferRpLabel.ForeColor = randomColor();
+            transferRpLabel.ForeColor = RandomColor();
         }
 
         private void rpTransfer_MouseLeave(object sender, EventArgs e)
@@ -804,7 +804,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void gamefolder_MouseEnter(object sender, EventArgs e)
         {
-            rootLabel.ForeColor = randomColor();
+            rootLabel.ForeColor = RandomColor();
         }
 
         private void gamefolder_MouseLeave(object sender, EventArgs e)
@@ -1004,7 +1004,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void oynabutton_MouseEnter(object sender, EventArgs e)
         {
-            playButtonStaticLabel.ForeColor = randomColor();
+            playButtonStaticLabel.ForeColor = RandomColor();
         }
 
         private void oynabutton_MouseLeave(object sender, EventArgs e)
