@@ -3,7 +3,6 @@ using CmlLib.Core.Auth;
 using DiscordRPC;
 using MCServerStatus;
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
@@ -51,8 +50,6 @@ namespace Projects_Launcher.Projects_Launcher
         private readonly string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
 
         readonly Random rnd = new Random();
-
-        private int colorX, colorY, colorZ;
 
         private bool alreadyPlayingAnimatedLabel;
         private bool alreadyRelaunchWaiting;
@@ -417,19 +414,17 @@ namespace Projects_Launcher.Projects_Launcher
                 Convert.ToString(ex), "Başlatıcı Hatası");
         }
 
-        private async Task animatedPlayingLabel()
+        private void animatedPlayingLabel()
         {
             if (alreadyPlayingAnimatedLabel)
-            {
                 return;
-            }
 
             alreadyPlayingAnimatedLabel = true;
             versionInfoStaticLabel.Text = "Başlatılıyor";
 
             do
             {
-                await Task.Delay(250).ConfigureAwait(false);
+                Task.Delay(250).ConfigureAwait(false);
 
                 if (versionInfoStaticLabel.Text.Equals("Başlatılıyor"))
                 {
@@ -447,7 +442,7 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     versionInfoStaticLabel.Text = "Başlatılıyor";
                 }
-                await Task.Delay(250).ConfigureAwait(false);
+                Task.Delay(250).ConfigureAwait(false);
             } while (alreadyPlayingAnimatedLabel);
         }
 
@@ -472,12 +467,14 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
                     var status = await pinger.RequestAsync();
-                    String server = status.Players.Online + "";
-                    serverOnlineCountStaticLabel.Text = (server + " oyuncu aktif!");
+                    if (status != null)
+                        serverOnlineCountStaticLabel.Text = status.Players.Online + " oyuncu aktif!";
+                    else
+                        serverOnlineCountStaticLabel.Text = "Bağlantı Yok";
                 }
                 catch
                 {
-                    serverOnlineCountStaticLabel.Text = ("Sunucu Hatası");
+                    serverOnlineCountStaticLabel.Text = "Sunucu Hatası";
                 }
 
                 await Task.Delay(5000).ConfigureAwait(false);
@@ -608,20 +605,14 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        private void rndcolor()
+        private Color rndcolor()
         {
-            colorX = rnd.Next(255);
-
-            colorY = rnd.Next(255);
-
-            colorZ = rnd.Next(255);
+            return Color.FromArgb(rnd.Next(255), rnd.Next(255), rnd.Next(255));
         }
+
         private void geriformpanel_MouseEnter(object sender, EventArgs e)
         {
-            rndcolor();
-            previousPageStaticLabel.ForeColor = Color.FromArgb(colorX,
-                                                               colorY,
-                                                               colorZ);
+            previousPageStaticLabel.ForeColor = rndcolor();
         }
 
         private void geriformpanel_MouseLeave(object sender, EventArgs e)
@@ -631,10 +622,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void changelogs_MouseEnter(object sender, EventArgs e)
         {
-            rndcolor();
-            previousPageStaticLabel.ForeColor = Color.FromArgb(colorX,
-                                                               colorY,
-                                                               colorZ);
+            previousPageStaticLabel.ForeColor = rndcolor();
         }
 
         private void changelogs_MouseLeave(object sender, EventArgs e)
@@ -685,10 +673,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void mods_MouseEnter(object sender, EventArgs e)
         {
-            rndcolor();
-            modsDirStaticLabel.ForeColor = Color.FromArgb(colorX,
-                                                          colorY,
-                                                          colorZ);
+            modsDirStaticLabel.ForeColor = rndcolor();
         }
 
         private void mods_MouseLeave(object sender, EventArgs e)
@@ -698,10 +683,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void texturepackfolder_MouseEnter(object sender, EventArgs e)
         {
-            rndcolor();
-            resourcePackDirLabel.ForeColor = Color.FromArgb(colorX,
-                                                            colorY,
-                                                            colorZ);
+            resourcePackDirLabel.ForeColor = rndcolor();
         }
 
         private void texturepackfolder_MouseLeave(object sender, EventArgs e)
@@ -711,10 +693,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void texturepackaktar_MouseEnter(object sender, EventArgs e)
         {
-            rndcolor();
-            transferResourcepackLabel.ForeColor = Color.FromArgb(colorX,
-                                                                 colorY,
-                                                                 colorZ);
+            transferResourcepackLabel.ForeColor = rndcolor();
         }
 
         private void texturepackaktar_MouseLeave(object sender, EventArgs e)
@@ -823,10 +802,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void gamefolder_MouseEnter(object sender, EventArgs e)
         {
-            rndcolor();
-            gameDirStaticLabel.ForeColor = Color.FromArgb(colorX,
-                                                          colorY,
-                                                          colorZ);
+            gameDirStaticLabel.ForeColor = rndcolor();
         }
 
         private void gamefolder_MouseLeave(object sender, EventArgs e)
@@ -1026,10 +1002,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void oynabutton_MouseEnter(object sender, EventArgs e)
         {
-            rndcolor();
-            playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, 
-                                                                            colorY, 
-                                                                            colorZ);
+            playButtonStaticLabel.ForeColor = rndcolor();
         }
 
         private void oynabutton_MouseLeave(object sender, EventArgs e)
