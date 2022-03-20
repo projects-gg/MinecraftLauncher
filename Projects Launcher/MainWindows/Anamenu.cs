@@ -441,7 +441,7 @@ namespace Projects_Launcher.Projects_Launcher
                     versionInfoStaticLabel.Text = "Başlatılıyor";
                 }
 
-                await Task.Delay(500);
+                await Task.Delay(500).ConfigureAwait(true);
             } while (alreadyPlayingAnimatedLabel);
         }
 
