@@ -4,7 +4,7 @@
 ## Projects Launcher
 
 [![GNU](https://img.shields.io/github/license/projects-gg/MinecraftLauncher?&logo=github)](LICENSE)
-[![CodeFactor](https://www.codefactor.io/repository/github/projects-gg/minecraftlauncher/badge)](https://www.codefactor.io/repository/github/projects-gg/minecraftlauncher)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/17980a84919b4fff967e047ba0487517)](https://www.codacy.com/gh/projects-gg/MinecraftLauncher/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=projects-gg/MinecraftLauncher&amp;utm_campaign=Badge_Grade)
 [![Join us on Discord (Turkish)](https://img.shields.io/discord/480094926164590593.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://projects.gg/discord)
 
 [![Projects Launcher's Stars](https://img.shields.io/github/stars/projects-gg/minecraftlauncher?label=stars&logo=github)](https://github.com/projects-gg/minecraftlauncher/stargazers)
@@ -28,7 +28,6 @@ Latest version can obtained from the [dynamic download URL](https://projects.gg/
 All commits are licensed under the GNU license, unless otherwise noted in the patch headers.
 
 ## Building and setting up
-
 ##### Initial setup
 You can build at Visual Studio 2019 (or newer). Project is based on .NET 4.7.2. Packages can obtained from [here](https://mc.projects.gg/LauncherUpdateStream/packages.zip).
 
