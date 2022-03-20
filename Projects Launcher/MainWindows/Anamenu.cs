@@ -608,13 +608,20 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        private void geriformpanel_MouseEnter(object sender, EventArgs e)
+        private void rndcolor()
         {
             colorX = rnd.Next(255);
-            colorY = rnd.Next(255);
-            colorZ = rnd.Next(255);
 
-            previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
+            colorY = rnd.Next(255);
+
+            colorZ = rnd.Next(255);
+        }
+        private void geriformpanel_MouseEnter(object sender, EventArgs e)
+        {
+            rndcolor();
+            previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX,
+                                                                              colorY,
+                                                                              colorZ);
         }
 
         private void geriformpanel_MouseLeave(object sender, EventArgs e)
@@ -624,11 +631,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void changelogs_MouseEnter(object sender, EventArgs e)
         {
-            colorX = rnd.Next(255);
-            colorY = rnd.Next(255);
-            colorZ = rnd.Next(255);
-
-            previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
+            rndcolor();
+            previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX,
+                                                                              colorY,
+                                                                              colorZ);
         }
 
         private void changelogs_MouseLeave(object sender, EventArgs e)
@@ -679,10 +685,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void mods_MouseEnter(object sender, EventArgs e)
         {
-            colorX = rnd.Next(255);
-            colorY = rnd.Next(255);
-            colorZ = rnd.Next(255);
-            modsDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
+            rndcolor();
+            modsDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX,
+                                                                         colorY,
+                                                                         colorZ);
         }
 
         private void mods_MouseLeave(object sender, EventArgs e)
@@ -692,10 +698,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void texturepackfolder_MouseEnter(object sender, EventArgs e)
         {
-            colorX = rnd.Next(255);
-            colorY = rnd.Next(255);
-            colorZ = rnd.Next(255);
-            resourcePackDirLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
+            rndcolor();
+            resourcePackDirLabel.ForeColor = System.Drawing.Color.FromArgb(colorX,
+                                                                           colorY,
+                                                                           colorZ);
         }
 
         private void texturepackfolder_MouseLeave(object sender, EventArgs e)
@@ -705,10 +711,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void texturepackaktar_MouseEnter(object sender, EventArgs e)
         {
-            colorX = rnd.Next(255);
-            colorY = rnd.Next(255);
-            colorZ = rnd.Next(255);
-            transferResourcepackLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
+            rndcolor();
+            transferResourcepackLabel.ForeColor = System.Drawing.Color.FromArgb(colorX,
+                                                                                colorY,
+                                                                                colorZ);
         }
 
         private void texturepackaktar_MouseLeave(object sender, EventArgs e)
@@ -817,10 +823,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void gamefolder_MouseEnter(object sender, EventArgs e)
         {
-            colorX = rnd.Next(255);
-            colorY = rnd.Next(255);
-            colorZ = rnd.Next(255);
-            gameDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
+            rndcolor();
+            gameDirStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX,
+                                                                         colorY,
+                                                                         colorZ);
         }
 
         private void gamefolder_MouseLeave(object sender, EventArgs e)
@@ -1020,10 +1026,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void oynabutton_MouseEnter(object sender, EventArgs e)
         {
-            colorX = rnd.Next(255);
-            colorY = rnd.Next(255);
-            colorZ = rnd.Next(255);
-            playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
+            rndcolor();
+            playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, 
+                                                                            colorY, 
+                                                                            colorZ);
         }
 
         private void oynabutton_MouseLeave(object sender, EventArgs e)
