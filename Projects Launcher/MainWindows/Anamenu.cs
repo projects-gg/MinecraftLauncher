@@ -119,7 +119,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 double ramInBytes = (Convert.ToDouble(ramObject["TotalPhysicalMemory"]));
                 double roundAvailableRamValueInGb = Math.Ceiling(ramInBytes / 1073741824); // <- Byte to GB conversion
-                RAMInfo.Text = string.Format("{0:0.##}", Convert.ToDouble(roundAvailableRamValueInGb) * 1024) + "MB" + " = " + roundAvailableRamValueInGb.ToString() + " GB";
+                RAMInfo.Text = string.Format("{0:0.##}", Convert.ToDouble(roundAvailableRamValueInGb) * 1024) + "MB" + " = " + Convert.ToString(roundAvailableRamValueInGb) + " GB";
                 break;
             }
         }
@@ -132,8 +132,7 @@ namespace Projects_Launcher.Projects_Launcher
             if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions"))
             {
                 Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions");
-            }
-                
+            }  
 
             updateHwInfo();
 
@@ -160,7 +159,6 @@ namespace Projects_Launcher.Projects_Launcher
                 maxRamDynamicCalculatorLabel.Text = "";
             }
                 
-
             if (Properties.Settings.Default.RamMin != string.Empty)
             {
                 minRamTextBox.Text = Properties.Settings.Default.RamMin;
@@ -258,7 +256,7 @@ namespace Projects_Launcher.Projects_Launcher
                 if (ramExceptionResult == DialogResult.OK)
                 {
                     Properties.Settings.Default.RamMax = Properties.Settings.Default.RamMin;
-                    MaximumRamMb += MinimumRamMb;
+                    MaximumRamMb = MinimumRamMb;
                 }
                 else
                 {
@@ -300,7 +298,7 @@ namespace Projects_Launcher.Projects_Launcher
                     thread.IsBackground = true;
                     thread.Start(); // Launch the game
 
-                    Task task = animatedPlayingLabel();
+                    animatedPlayingLabel();
                     this.Enabled = false;
                     prepareGameToLaunch.Start(); // Launch prepareGameToLaunch
                 }
@@ -464,10 +462,9 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 settingsBgPanel.Visible = false;
             }
-                
         }
 
-        private async Task onlineCountUpdater()
+        private async void onlineCountUpdater()
         {
             do
             {
@@ -616,6 +613,7 @@ namespace Projects_Launcher.Projects_Launcher
             colorX = rnd.Next(255);
             colorY = rnd.Next(255);
             colorZ = rnd.Next(255);
+
             previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
         }
 
@@ -629,6 +627,7 @@ namespace Projects_Launcher.Projects_Launcher
             colorX = rnd.Next(255);
             colorY = rnd.Next(255);
             colorZ = rnd.Next(255);
+
             previousPageStaticLabel.ForeColor = System.Drawing.Color.FromArgb(colorX, colorY, colorZ);
         }
 
