@@ -214,7 +214,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             var path = new MinecraftPath(launcherdizin);
             var launcher = new CMLauncher(path);
-            sessions = loginMenuForm.nickname;
+            sessions = Properties.Settings.Default.NickNames;
 
             var ayarlar = new MLaunchOption
             {
@@ -226,12 +226,20 @@ namespace Projects_Launcher.Projects_Launcher
                 ScreenWidth = int.Parse(Properties.Settings.Default.ResolutionWidth), // Get width resolution info
                 ScreenHeight = int.Parse(Properties.Settings.Default.ResolutionHeight), // Get height resolution info
             };
-            var clientStartProcess =
-                await launcher.CreateProcessAsync(Properties.Settings.Default.SelectedVersion, ayarlar); // Start client
+            try
+            {
+                var clientStartProcess =
+                    await launcher.CreateProcessAsync(Properties.Settings.Default.SelectedVersion,
+                        ayarlar); // Start client
 
-            clientStartProcess.Start(); // Launch the game
+                clientStartProcess.Start(); // Launch the game
 
-            prepareGameToLaunch.Enabled = true; // Launch prepareGameToLaunch
+                prepareGameToLaunch.Enabled = true; // Launch prepareGameToLaunch
+            }
+            catch (Exception ex)
+            {
+                NotificationAboutException(ex);
+            }
         }
 
         private void oynabutton_Click(object sender, EventArgs e)
@@ -289,12 +297,11 @@ namespace Projects_Launcher.Projects_Launcher
                         }
                     });
 
-                    session = MSession.GetOfflineSession(loginMenuForm.nickname); // Get nickname info
+                    session = MSession.GetOfflineSession(Properties.Settings.Default.NickNames); // Get nickname info
 
                     Thread thread = new Thread(() => Launch());
                     thread.IsBackground = true;
                     thread.Start(); // Launch the game
-
                     animatedPlayingLabel();
                     this.Enabled = false;
                     prepareGameToLaunch.Start(); // Launch prepareGameToLaunch
@@ -365,7 +372,6 @@ namespace Projects_Launcher.Projects_Launcher
                     foreach (var process in Process.GetProcessesByName("javaw"))
                     {
                         Thread.Sleep(1031);
-                        animatedPlayingLabel();
                         playButtonStaticLabel.Enabled = false;
                         this.Visible = false;
                         Thread.Sleep(2000);
@@ -414,17 +420,18 @@ namespace Projects_Launcher.Projects_Launcher
                 Convert.ToString(ex), "Başlatıcı Hatası");
         }
 
-        private void animatedPlayingLabel()
+        private async void animatedPlayingLabel()
         {
             if (alreadyPlayingAnimatedLabel)
+            {
                 return;
+            }
 
             alreadyPlayingAnimatedLabel = true;
-            versionInfoStaticLabel.Text = "Başlatılıyor";
 
             do
             {
-                Task.Delay(250).ConfigureAwait(false);
+                await Task.Delay(250);
 
                 if (versionInfoStaticLabel.Text.Equals("Başlatılıyor"))
                 {
@@ -437,12 +444,13 @@ namespace Projects_Launcher.Projects_Launcher
                 else if (versionInfoStaticLabel.Text.Equals("Başlatılıyor.."))
                 {
                     versionInfoStaticLabel.Text = "Başlatılıyor...";
-                } 
-                else if (versionInfoStaticLabel.Text.Equals("Başlatılıyor..."))
+                }
+                else
                 {
                     versionInfoStaticLabel.Text = "Başlatılıyor";
                 }
-                Task.Delay(250).ConfigureAwait(false);
+
+                await Task.Delay(250);
             } while (alreadyPlayingAnimatedLabel);
         }
 
@@ -468,9 +476,13 @@ namespace Projects_Launcher.Projects_Launcher
                     IMinecraftPinger pinger = new MinecraftPinger("193.164.7.43", 25565);
                     var status = await pinger.RequestAsync();
                     if (status != null)
+                    {
                         serverOnlineCountStaticLabel.Text = status.Players.Online + " oyuncu aktif!";
+                    }
                     else
+                    {
                         serverOnlineCountStaticLabel.Text = "Bağlantı Yok";
+                    }
                 }
                 catch
                 {
@@ -911,12 +923,7 @@ namespace Projects_Launcher.Projects_Launcher
                 }
 
                 minRamTextBox.Text = (minRamTextBox.Text).Trim();
-                if (string.IsNullOrEmpty(minRamTextBox.Text))
-                {
-                    MessageBox.Show("Miktar 1024-" + ramInfo + " " + "arasında girilmeli.");
-                    minRamTextBox.Text = ramInfo;
-                }
-                else if (Convert.ToInt32(minRamTextBox.Text) < 1024 || Convert.ToInt32(minRamTextBox.Text) > Convert.ToInt32(ramInfo))
+                if (string.IsNullOrEmpty(minRamTextBox.Text) || Convert.ToInt32(minRamTextBox.Text) < 1024 || Convert.ToInt32(minRamTextBox.Text) > Convert.ToInt32(ramInfo))
                 {
                     MessageBox.Show("Miktar 1024-" + ramInfo + " " + "arasında girilmeli.");
                     minRamTextBox.Text = ramInfo;

@@ -3,6 +3,7 @@ using System;
 using System.ComponentModel;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Windows.Forms;
 
@@ -15,7 +16,6 @@ namespace Projects_Launcher
             InitializeComponent();
         }
 
-        public static string nickname;
         private readonly string currentVersion = "0";
         readonly Uri uri = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
 
@@ -97,9 +97,34 @@ namespace Projects_Launcher
                 versionContentResponse = currentVersionContent.GetResponse();
                 StreamReader versionContentReader = new StreamReader(versionContentResponse.GetResponseStream());
                 string versionContentLine = versionContentReader.ReadToEnd();
+
+                /*
                 int formatSplitterStart = versionContentLine.IndexOf("<p>") + 3;
                 int formatSplitterEnd = versionContentLine.Substring(formatSplitterStart).IndexOf("</p>");
                 newestVersion = versionContentLine.Substring(formatSplitterStart, formatSplitterEnd);
+                */
+                bool startWriting = false;
+
+                foreach (char character in versionContentLine) //this is hard to read but culture-compatible
+                {
+                    if (character.Equals('>'))
+                    {
+                        if (startWriting)
+                        {
+                            startWriting = true;
+                        }
+                    } else if (startWriting)
+                    {
+                        if (!character.Equals('<'))
+                        {
+                            newestVersion += character;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                }
             }
             catch
             {
@@ -191,10 +216,6 @@ namespace Projects_Launcher
 
                 loginButton.Text = "Kullanıcı Adı Giriniz";
                 return;
-            }
-            else
-            {
-                nickname = nickNameEnterTextBox.Text;
             }
 
             Projects_Launcher.mainMenuForm main = new Projects_Launcher.mainMenuForm();
