@@ -11,13 +11,14 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace Projects_Launcher.Projects_Launcher
 {
-    public partial class mainMenuForm : Form
+    public partial class mainMenuForm : Form //NOSONAR
     {
         public mainMenuForm()
         {
@@ -204,7 +205,7 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        private async void Launch() // Minecraft startup settings
+        private async Task Launch() // Minecraft startup settings
         {
             var path = new MinecraftPath(launcherdizin);
             var launcher = new CMLauncher(path);
@@ -292,7 +293,7 @@ namespace Projects_Launcher.Projects_Launcher
 
                     session = MSession.GetOfflineSession(Properties.Settings.Default.NickNames); // Get nickname info
 
-                    Thread thread = new Thread(() => Launch());
+                    Thread thread = new Thread(() => Launch().GetAwaiter());
                     thread.IsBackground = true;
                     thread.Start(); // Launch the game
                     animatedPlayingLabel().GetAwaiter();
@@ -804,7 +805,7 @@ namespace Projects_Launcher.Projects_Launcher
             rootLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
-        private async void timer3_Tick(object sender, EventArgs e)
+        private void timer3_Tick(object sender, EventArgs e)
         {
             if (alreadyRelaunchWaiting)
             {
@@ -815,7 +816,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             do
             {
-                await Task.Delay(5000).ConfigureAwait(false);
+                Task.Delay(5000);
             } while (Process.GetProcessesByName("javaw").Any());
 
             if (Properties.Settings.Default.SelectedVersion != string.Empty)

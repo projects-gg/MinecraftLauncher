@@ -9,7 +9,7 @@ using System.Windows.Forms;
 
 namespace Projects_Launcher
 {
-    public partial class loginMenuForm : Form
+    public partial class loginMenuForm : Form //NOSONAR
     {
         public loginMenuForm()
         {

@@ -28,8 +28,9 @@ Latest version can obtained from the [dynamic download URL](https://projects.gg/
 All commits are licensed under the GNU license, unless otherwise noted in the patch headers.
 
 ## Building and setting up
-##### Initial setup
+
+### Initial setup
 You can build at Visual Studio 2019 (or newer). Project is based on .NET 4.7.2. Packages can obtained from [here](https://mc.projects.gg/LauncherUpdateStream/packages.zip).
 
-##### Compiling
+### Compiling
 Open `Projects Launcher.sln` file with Visual Studio and click `Build -> Build Solution` above of the page. Output will save to `./Debug/` folder.
