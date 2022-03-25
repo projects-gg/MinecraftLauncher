@@ -3,7 +3,6 @@ using CmlLib.Core.Auth;
 using DiscordRPC;
 using MCServerStatus;
 using System;
-using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
@@ -11,7 +10,6 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Net;
-using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -39,6 +37,8 @@ namespace Projects_Launcher.Projects_Launcher
         private string surumlabell;
         private bool formpanell;
         private string ramInfo;
+        //public static System.Drawing.Point loginlocation;
+        //public static System.Drawing.Size loginresize;
 
         private int widthResolution;
         private int heightResolution;
@@ -55,7 +55,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private bool alreadyPlayingAnimatedLabel;
         private bool alreadyRelaunchWaiting;
-        
+
         public DiscordRpcClient Client { get; private set; }
 
         private void DiscordRpcClientSetup()
@@ -125,13 +125,15 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void Anamenu_Load(object sender, EventArgs e)
         {
+            //this.Location = loginlocation;
+            //this.Size = loginresize;
             selectBackgroundImage();
 
             // ".projects" directory check
             if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions"))
             {
                 Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions");
-            }  
+            }
 
             updateHwInfo();
 
@@ -142,14 +144,15 @@ namespace Projects_Launcher.Projects_Launcher
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames;
 
             reopenLauncher.Checked = Properties.Settings.Default.OyunTickS;
-            
+
             if (Properties.Settings.Default.SelectedVersion != string.Empty)
             {
                 versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
                 versionBox.Text = Properties.Settings.Default.SelectedVersion;
             }
-            
-            if (Properties.Settings.Default.RamMax != string.Empty) {
+
+            if (Properties.Settings.Default.RamMax != string.Empty)
+            {
                 maxRamTextBox.Text = Properties.Settings.Default.RamMax;
                 maxRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
             }
@@ -157,7 +160,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 maxRamDynamicCalculatorLabel.Text = "";
             }
-                
+
             if (Properties.Settings.Default.RamMin != string.Empty)
             {
                 minRamTextBox.Text = Properties.Settings.Default.RamMin;
@@ -175,7 +178,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 minRamDynamicCalculatorLabel.Text = "";
             }
-            
+
             minRamTextBox.MaxLength = 4;
 
             // Grab resolution data
@@ -375,7 +378,7 @@ namespace Projects_Launcher.Projects_Launcher
                         if (alreadyPlayingAnimatedLabel)
                         {
                             alreadyPlayingAnimatedLabel = false;
-                        }  
+                        }
                         Thread.Sleep(1000);
                         prepareGameToLaunch.Stop();
                         return;
@@ -430,8 +433,8 @@ namespace Projects_Launcher.Projects_Launcher
                     versionInfoStaticLabel.Text = "Başlatılıyor.";
                 }
                 else if (versionInfoStaticLabel.Text.Equals("Başlatılıyor."))
-                { 
-                    versionInfoStaticLabel.Text = "Başlatılıyor.."; 
+                {
+                    versionInfoStaticLabel.Text = "Başlatılıyor..";
                 }
                 else if (versionInfoStaticLabel.Text.Equals("Başlatılıyor.."))
                 {
@@ -450,7 +453,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             if (settingsBgPanel.Visible == false)
             {
-                previousPageTxt.Visible = true;
+                backButton.Visible = true;
                 settingsBgPanel.Visible = true;
             }
             else
@@ -514,7 +517,7 @@ namespace Projects_Launcher.Projects_Launcher
         private void previousPage_Click(object sender, EventArgs e)
         {
             settingsBgPanel.Visible = false;
-            previousPageTxt.Visible = false;
+            backButton.Visible = false;
         }
 
         private void widthtextbox_TextChanged(object sender, EventArgs e)
@@ -578,7 +581,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             try
             {
-                System.Diagnostics.Process.Start("https://mc.projects.gg/");
+                //System.Diagnostics.Process.Start("https://mc.projects.gg/");
             }
             catch
             {
@@ -617,12 +620,12 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void previousPage_MouseEnter(object sender, EventArgs e)
         {
-            previousPageTxt.ForeColor = RandomColor();
+            backButton.ForeColor = RandomColor();
         }
 
         private void previousPage_MouseLeave(object sender, EventArgs e)
         {
-            previousPageTxt.ForeColor = Color.FromArgb(245, 245, 245);
+            backButton.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void minramtext_TextChanged(object sender, EventArgs e)
@@ -663,7 +666,7 @@ namespace Projects_Launcher.Projects_Launcher
             if (!string.IsNullOrEmpty(minramlabel.Text))
             {
                 minramlabell = minramlabel.Text;
-            }  
+            }
         }
 
         private void modsLabel_MouseEnter(object sender, EventArgs e)
@@ -725,7 +728,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 Directory.CreateDirectory(@TextureDizin);
             }
-               
+
             OpenFileDialog file = new OpenFileDialog();
             file.Filter = "ZIP Dosyası |*.zip";
             file.FilterIndex = 2;
@@ -840,11 +843,11 @@ namespace Projects_Launcher.Projects_Launcher
             if (reopenLauncher.Checked)
             {
                 Properties.Settings.Default.OyunTickS = true;
-            }  
+            }
             else
             {
                 Properties.Settings.Default.OyunTickS = false;
-            }  
+            }
 
             Properties.Settings.Default.Save();
         }
@@ -998,6 +1001,11 @@ namespace Projects_Launcher.Projects_Launcher
         private void oynabutton_MouseLeave(object sender, EventArgs e)
         {
             playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+        }
+
+        private void guna2ControlBox1_Resize(object sender, EventArgs e)
+        {
+            settingsBgPanel.Size = this.Size;
         }
     }
 }

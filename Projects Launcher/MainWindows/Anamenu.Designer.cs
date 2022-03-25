@@ -47,7 +47,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.heightlabel = new System.Windows.Forms.Label();
             this.maxramlabel = new System.Windows.Forms.Label();
             this.prepareGameToLaunch = new System.Windows.Forms.Timer(this.components);
-            this.previousPageTxt = new System.Windows.Forms.Label();
             this.minramlabel = new System.Windows.Forms.Label();
             this.serverOnlineCountStaticLabel = new System.Windows.Forms.Label();
             this.settingsBgPanel = new Guna.UI2.WinForms.Guna2Panel();
@@ -81,8 +80,11 @@ namespace Projects_Launcher.Projects_Launcher
             this.timer3 = new System.Windows.Forms.Timer(this.components);
             this.ticksave = new System.Windows.Forms.Label();
             this.minimizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
-            this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
+            this.closeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.label11 = new System.Windows.Forms.Label();
+            this.guna2BorderlessForm1 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
+            this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
+            this.backButton = new Guna.UI2.WinForms.Guna2ImageButton();
             ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.settingsStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.instagramStaticPictureBox)).BeginInit();
@@ -94,6 +96,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             // projectsLogoStaticPictureBox
             // 
+            this.projectsLogoStaticPictureBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.projectsLogoStaticPictureBox.BackColor = System.Drawing.Color.Transparent;
             this.projectsLogoStaticPictureBox.Image = ((System.Drawing.Image)(resources.GetObject("projectsLogoStaticPictureBox.Image")));
             this.projectsLogoStaticPictureBox.ImageRotate = 0F;
@@ -105,6 +108,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             // playButtonStaticLabel
             // 
+            this.playButtonStaticLabel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.playButtonStaticLabel.AutoSize = true;
             this.playButtonStaticLabel.BackColor = System.Drawing.Color.Transparent;
             this.playButtonStaticLabel.Cursor = System.Windows.Forms.Cursors.Hand;
@@ -123,18 +127,20 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             // playSplitStaticLabel
             // 
+            this.playSplitStaticLabel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.playSplitStaticLabel.AutoSize = true;
             this.playSplitStaticLabel.BackColor = System.Drawing.Color.Transparent;
             this.playSplitStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 21F, System.Drawing.FontStyle.Bold);
             this.playSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.playSplitStaticLabel.Location = new System.Drawing.Point(122, 423);
             this.playSplitStaticLabel.Name = "playSplitStaticLabel";
-            this.playSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
+            this.playSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
             this.playSplitStaticLabel.TabIndex = 2;
             this.playSplitStaticLabel.Text = "|";
             // 
             // versionInfoStaticLabel
             // 
+            this.versionInfoStaticLabel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.versionInfoStaticLabel.AutoSize = true;
             this.versionInfoStaticLabel.BackColor = System.Drawing.Color.Transparent;
             this.versionInfoStaticLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
@@ -147,18 +153,20 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             // onlineSplitStaticLabel
             // 
+            this.onlineSplitStaticLabel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.onlineSplitStaticLabel.AutoSize = true;
             this.onlineSplitStaticLabel.BackColor = System.Drawing.Color.Transparent;
             this.onlineSplitStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 21F, System.Drawing.FontStyle.Bold);
             this.onlineSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.onlineSplitStaticLabel.Location = new System.Drawing.Point(792, 430);
             this.onlineSplitStaticLabel.Name = "onlineSplitStaticLabel";
-            this.onlineSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
+            this.onlineSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
             this.onlineSplitStaticLabel.TabIndex = 6;
             this.onlineSplitStaticLabel.Text = "|";
             // 
             // playerNameStaticLabel
             // 
+            this.playerNameStaticLabel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.playerNameStaticLabel.AutoSize = true;
             this.playerNameStaticLabel.BackColor = System.Drawing.Color.Transparent;
             this.playerNameStaticLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Bold);
@@ -171,6 +179,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             // settingsStaticPictureBox
             // 
+            this.settingsStaticPictureBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.settingsStaticPictureBox.BackColor = System.Drawing.Color.Transparent;
             this.settingsStaticPictureBox.Cursor = System.Windows.Forms.Cursors.Hand;
             this.settingsStaticPictureBox.Image = ((System.Drawing.Image)(resources.GetObject("settingsStaticPictureBox.Image")));
@@ -184,6 +193,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             // instagramStaticPictureBox
             // 
+            this.instagramStaticPictureBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.instagramStaticPictureBox.BackColor = System.Drawing.Color.Transparent;
             this.instagramStaticPictureBox.Cursor = System.Windows.Forms.Cursors.Hand;
             this.instagramStaticPictureBox.Image = ((System.Drawing.Image)(resources.GetObject("instagramStaticPictureBox.Image")));
@@ -197,6 +207,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             // discordStaticPictureBox
             // 
+            this.discordStaticPictureBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.discordStaticPictureBox.BackColor = System.Drawing.Color.Transparent;
             this.discordStaticPictureBox.Cursor = System.Windows.Forms.Cursors.Hand;
             this.discordStaticPictureBox.Image = ((System.Drawing.Image)(resources.GetObject("discordStaticPictureBox.Image")));
@@ -210,6 +221,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             // websiteStaticPictureBox
             // 
+            this.websiteStaticPictureBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.websiteStaticPictureBox.BackColor = System.Drawing.Color.Transparent;
             this.websiteStaticPictureBox.Cursor = System.Windows.Forms.Cursors.Hand;
             this.websiteStaticPictureBox.Image = ((System.Drawing.Image)(resources.GetObject("websiteStaticPictureBox.Image")));
@@ -290,23 +302,6 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.prepareGameToLaunch.Tick += new System.EventHandler(this.prepareGameToLaunch_Tick);
             // 
-            // previousPageTxt
-            // 
-            this.previousPageTxt.AutoSize = true;
-            this.previousPageTxt.BackColor = System.Drawing.Color.Transparent;
-            this.previousPageTxt.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.previousPageTxt.Font = new System.Drawing.Font("Microsoft Sans Serif", 19F, System.Drawing.FontStyle.Bold);
-            this.previousPageTxt.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.previousPageTxt.Location = new System.Drawing.Point(12, -1);
-            this.previousPageTxt.Name = "previousPageTxt";
-            this.previousPageTxt.Size = new System.Drawing.Size(32, 30);
-            this.previousPageTxt.TabIndex = 128;
-            this.previousPageTxt.Text = "◀";
-            this.previousPageTxt.Visible = false;
-            this.previousPageTxt.Click += new System.EventHandler(this.previousPage_Click);
-            this.previousPageTxt.MouseEnter += new System.EventHandler(this.previousPage_MouseEnter);
-            this.previousPageTxt.MouseLeave += new System.EventHandler(this.previousPage_MouseLeave);
-            // 
             // minramlabel
             // 
             this.minramlabel.AutoSize = true;
@@ -322,19 +317,21 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             // serverOnlineCountStaticLabel
             // 
+            this.serverOnlineCountStaticLabel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right)));
             this.serverOnlineCountStaticLabel.AutoSize = true;
             this.serverOnlineCountStaticLabel.BackColor = System.Drawing.Color.Transparent;
             this.serverOnlineCountStaticLabel.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.serverOnlineCountStaticLabel.ForeColor = System.Drawing.SystemColors.ActiveBorder;
             this.serverOnlineCountStaticLabel.Location = new System.Drawing.Point(693, 440);
             this.serverOnlineCountStaticLabel.Name = "serverOnlineCountStaticLabel";
-            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(93, 16);
+            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(92, 16);
             this.serverOnlineCountStaticLabel.TabIndex = 120;
             this.serverOnlineCountStaticLabel.Text = "Sunucu Hatası";
             // 
             // settingsBgPanel
             // 
             this.settingsBgPanel.BackColor = System.Drawing.Color.Transparent;
+            this.settingsBgPanel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
             this.settingsBgPanel.Controls.Add(this.versionSelectTxt);
             this.settingsBgPanel.Controls.Add(this.navigationStaticLabel);
             this.settingsBgPanel.Controls.Add(this.ramSelectionTxt);
@@ -364,7 +361,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Controls.Add(this.settingsStaticLabel);
             this.settingsBgPanel.Location = new System.Drawing.Point(0, 32);
             this.settingsBgPanel.Name = "settingsBgPanel";
-            this.settingsBgPanel.Size = new System.Drawing.Size(980, 475);
+            this.settingsBgPanel.Size = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.TabIndex = 133;
             this.settingsBgPanel.Visible = false;
             // 
@@ -827,52 +824,91 @@ namespace Projects_Launcher.Projects_Launcher
             this.minimizeButtonControlBox.ControlBoxType = Guna.UI2.WinForms.Enums.ControlBoxType.MinimizeBox;
             this.minimizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
             this.minimizeButtonControlBox.IconColor = System.Drawing.Color.White;
-            this.minimizeButtonControlBox.Location = new System.Drawing.Point(890, 0);
+            this.minimizeButtonControlBox.Location = new System.Drawing.Point(849, 0);
             this.minimizeButtonControlBox.Name = "minimizeButtonControlBox";
             this.minimizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
             this.minimizeButtonControlBox.TabIndex = 135;
             this.minimizeButtonControlBox.Click += new System.EventHandler(this.guna2ControlBox2_Click);
             // 
-            // maximizeButtonControlBox
+            // closeButtonControlBox
             // 
-            this.maximizeButtonControlBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.maximizeButtonControlBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
-            this.maximizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
-            this.maximizeButtonControlBox.IconColor = System.Drawing.Color.White;
-            this.maximizeButtonControlBox.Location = new System.Drawing.Point(935, 0);
-            this.maximizeButtonControlBox.Name = "maximizeButtonControlBox";
-            this.maximizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
-            this.maximizeButtonControlBox.TabIndex = 136;
-            this.maximizeButtonControlBox.Click += new System.EventHandler(this.guna2ControlBox3_Click);
+            this.closeButtonControlBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.closeButtonControlBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.closeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.closeButtonControlBox.IconColor = System.Drawing.Color.White;
+            this.closeButtonControlBox.Location = new System.Drawing.Point(935, 0);
+            this.closeButtonControlBox.Name = "closeButtonControlBox";
+            this.closeButtonControlBox.Size = new System.Drawing.Size(45, 29);
+            this.closeButtonControlBox.TabIndex = 136;
+            this.closeButtonControlBox.Click += new System.EventHandler(this.guna2ControlBox3_Click);
             // 
             // label11
             // 
             this.label11.AutoSize = true;
             this.label11.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
             this.label11.ForeColor = System.Drawing.SystemColors.Control;
-            this.label11.Location = new System.Drawing.Point(572, 7);
+            this.label11.Location = new System.Drawing.Point(503, 7);
             this.label11.Name = "label11";
             this.label11.Size = new System.Drawing.Size(48, 13);
             this.label11.TabIndex = 137;
             this.label11.Text = "label10";
             this.label11.Visible = false;
             // 
+            // guna2BorderlessForm1
+            // 
+            this.guna2BorderlessForm1.ContainerControl = this;
+            this.guna2BorderlessForm1.DockIndicatorTransparencyValue = 0.6D;
+            this.guna2BorderlessForm1.TransparentWhileDrag = true;
+            // 
+            // maximizeButtonControlBox
+            // 
+            this.maximizeButtonControlBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.maximizeButtonControlBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.maximizeButtonControlBox.ControlBoxType = Guna.UI2.WinForms.Enums.ControlBoxType.MaximizeBox;
+            this.maximizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.maximizeButtonControlBox.IconColor = System.Drawing.Color.White;
+            this.maximizeButtonControlBox.Location = new System.Drawing.Point(893, 0);
+            this.maximizeButtonControlBox.Name = "maximizeButtonControlBox";
+            this.maximizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
+            this.maximizeButtonControlBox.TabIndex = 138;
+            this.maximizeButtonControlBox.Resize += new System.EventHandler(this.guna2ControlBox1_Resize);
+            // 
+            // backButton
+            // 
+            this.backButton.BackColor = System.Drawing.Color.Transparent;
+            this.backButton.CheckedState.ImageSize = new System.Drawing.Size(64, 64);
+            this.backButton.HoverState.ImageOffset = new System.Drawing.Point(32, 32);
+            this.backButton.HoverState.ImageSize = new System.Drawing.Size(32, 32);
+            this.backButton.Image = global::Projects_Launcher.Properties.Resources.back;
+            this.backButton.ImageFlip = Guna.UI2.WinForms.Enums.FlipOrientation.Vertical;
+            this.backButton.ImageOffset = new System.Drawing.Point(0, 0);
+            this.backButton.ImageRotate = 0F;
+            this.backButton.ImageSize = new System.Drawing.Size(32, 32);
+            this.backButton.Location = new System.Drawing.Point(31, 0);
+            this.backButton.Name = "backButton";
+            this.backButton.PressedState.ImageOffset = new System.Drawing.Point(32, 32);
+            this.backButton.PressedState.ImageSize = new System.Drawing.Size(32, 32);
+            this.backButton.Size = new System.Drawing.Size(31, 31);
+            this.backButton.TabIndex = 196;
+            this.backButton.Click += new System.EventHandler(this.previousPage_Click);
+            // 
             // mainMenuForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.AutoSize = true;
             this.BackColor = System.Drawing.SystemColors.Control;
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
+            this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
             this.ClientSize = new System.Drawing.Size(980, 503);
-            this.Controls.Add(this.label11);
+            this.Controls.Add(this.backButton);
             this.Controls.Add(this.maximizeButtonControlBox);
+            this.Controls.Add(this.label11);
+            this.Controls.Add(this.closeButtonControlBox);
             this.Controls.Add(this.minimizeButtonControlBox);
             this.Controls.Add(this.ticksave);
             this.Controls.Add(this.settingsBgPanel);
             this.Controls.Add(this.serverOnlineCountStaticLabel);
             this.Controls.Add(this.minramlabel);
-            this.Controls.Add(this.previousPageTxt);
             this.Controls.Add(this.surumtext);
             this.Controls.Add(this.widthlabel);
             this.Controls.Add(this.heightlabel);
@@ -928,7 +964,6 @@ namespace Projects_Launcher.Projects_Launcher
         public System.Windows.Forms.Label heightlabel;
         public System.Windows.Forms.Label maxramlabel;
         private System.Windows.Forms.Timer prepareGameToLaunch;
-        private System.Windows.Forms.Label previousPageTxt;
         public System.Windows.Forms.Label minramlabel;
         private System.Windows.Forms.Label serverOnlineCountStaticLabel;
         private Guna.UI2.WinForms.Guna2Panel settingsBgPanel;
@@ -958,11 +993,14 @@ namespace Projects_Launcher.Projects_Launcher
         private System.Windows.Forms.Label gpuStaticLabel;
         private System.Windows.Forms.Label ramStaticLabel;
         private Guna.UI2.WinForms.Guna2ControlBox minimizeButtonControlBox;
-        private Guna.UI2.WinForms.Guna2ControlBox maximizeButtonControlBox;
+        private Guna.UI2.WinForms.Guna2ControlBox closeButtonControlBox;
         public System.Windows.Forms.Label label11;
         private System.Windows.Forms.Label versionSelectTxt;
         private System.Windows.Forms.Label navigationStaticLabel;
         private System.Windows.Forms.Label ramSelectionTxt;
         private System.Windows.Forms.Label resolutionTxt;
+        private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm1;
+        private Guna.UI2.WinForms.Guna2ControlBox maximizeButtonControlBox;
+        private Guna.UI2.WinForms.Guna2ImageButton backButton;
     }
 }

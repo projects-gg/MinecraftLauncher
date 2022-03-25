@@ -108,7 +108,8 @@ namespace Projects_Launcher
                         {
                             startWriting = true;
                         }
-                    } else if (startWriting)
+                    }
+                    else if (startWriting)
                     {
                         if (!character.Equals('<'))
                         {
@@ -193,7 +194,8 @@ namespace Projects_Launcher
 
         private void benihatırla_CheckedChanged(object sender, EventArgs e)
         {
-            if (rememberMeCheckBox.Checked == true) {
+            if (rememberMeCheckBox.Checked == true)
+            {
                 Properties.Settings.Default.NickNames = nickNameEnterTextBox.Text;
                 Properties.Settings.Default.Save();
             }
@@ -223,8 +225,10 @@ namespace Projects_Launcher
                 return;
             }
 
+           //Projects_Launcher.mainMenuForm.loginlocation = this.Location;
+            //Projects_Launcher.mainMenuForm.loginresize = this.Size;
             Projects_Launcher.mainMenuForm main = new Projects_Launcher.mainMenuForm();
-            
+
             Hide();
 
             main.Show();

@@ -37,8 +37,10 @@ namespace Projects_Launcher
             this.serverIpAddressStaticLabel = new System.Windows.Forms.Label();
             this.loginButton = new Guna.UI2.WinForms.Guna2Button();
             this.nickNameEnterTextBox = new Guna.UI2.WinForms.Guna2TextBox();
-            this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
+            this.closeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.minimizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
+            this.guna2BorderlessForm2 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
+            this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.SuspendLayout();
             // 
             // guna2BorderlessForm1
@@ -62,7 +64,7 @@ namespace Projects_Launcher
             // 
             // rememberMeCheckBox
             // 
-            this.rememberMeCheckBox.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.rememberMeCheckBox.Anchor = System.Windows.Forms.AnchorStyles.None;
             this.rememberMeCheckBox.Animated = true;
             this.rememberMeCheckBox.AutoCheck = false;
             this.rememberMeCheckBox.AutoSize = true;
@@ -89,7 +91,7 @@ namespace Projects_Launcher
             // 
             // serverIpAddressStaticLabel
             // 
-            this.serverIpAddressStaticLabel.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.serverIpAddressStaticLabel.Anchor = System.Windows.Forms.AnchorStyles.None;
             this.serverIpAddressStaticLabel.AutoSize = true;
             this.serverIpAddressStaticLabel.BackColor = System.Drawing.Color.Transparent;
             this.serverIpAddressStaticLabel.Cursor = System.Windows.Forms.Cursors.Hand;
@@ -104,7 +106,7 @@ namespace Projects_Launcher
             // 
             // loginButton
             // 
-            this.loginButton.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.loginButton.Anchor = System.Windows.Forms.AnchorStyles.None;
             this.loginButton.Animated = true;
             this.loginButton.BackColor = System.Drawing.Color.Transparent;
             this.loginButton.BorderRadius = 5;
@@ -125,7 +127,7 @@ namespace Projects_Launcher
             // 
             // nickNameEnterTextBox
             // 
-            this.nickNameEnterTextBox.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.nickNameEnterTextBox.Anchor = System.Windows.Forms.AnchorStyles.None;
             this.nickNameEnterTextBox.BackColor = System.Drawing.Color.Tomato;
             this.nickNameEnterTextBox.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(64)))), ((int)(((byte)(64)))), ((int)(((byte)(64)))));
             this.nickNameEnterTextBox.Cursor = System.Windows.Forms.Cursors.IBeam;
@@ -151,16 +153,16 @@ namespace Projects_Launcher
             this.nickNameEnterTextBox.TabIndex = 26;
             this.nickNameEnterTextBox.TextChanged += new System.EventHandler(this.nicknametextbox_TextChanged);
             // 
-            // maximizeButtonControlBox
+            // closeButtonControlBox
             // 
-            this.maximizeButtonControlBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.maximizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
-            this.maximizeButtonControlBox.IconColor = System.Drawing.Color.White;
-            this.maximizeButtonControlBox.Location = new System.Drawing.Point(935, 0);
-            this.maximizeButtonControlBox.Name = "maximizeButtonControlBox";
-            this.maximizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
-            this.maximizeButtonControlBox.TabIndex = 25;
-            this.maximizeButtonControlBox.Click += new System.EventHandler(this.guna2ControlBox1_Click);
+            this.closeButtonControlBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.closeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.closeButtonControlBox.IconColor = System.Drawing.Color.White;
+            this.closeButtonControlBox.Location = new System.Drawing.Point(935, 0);
+            this.closeButtonControlBox.Name = "closeButtonControlBox";
+            this.closeButtonControlBox.Size = new System.Drawing.Size(45, 29);
+            this.closeButtonControlBox.TabIndex = 25;
+            this.closeButtonControlBox.Click += new System.EventHandler(this.guna2ControlBox1_Click);
             // 
             // minimizeButtonControlBox
             // 
@@ -169,32 +171,49 @@ namespace Projects_Launcher
             this.minimizeButtonControlBox.ControlBoxType = Guna.UI2.WinForms.Enums.ControlBoxType.MinimizeBox;
             this.minimizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
             this.minimizeButtonControlBox.IconColor = System.Drawing.Color.White;
-            this.minimizeButtonControlBox.Location = new System.Drawing.Point(890, 0);
+            this.minimizeButtonControlBox.Location = new System.Drawing.Point(849, 0);
             this.minimizeButtonControlBox.Name = "minimizeButtonControlBox";
             this.minimizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
             this.minimizeButtonControlBox.TabIndex = 136;
             this.minimizeButtonControlBox.Click += new System.EventHandler(this.guna2ControlBox2_Click);
             // 
+            // guna2BorderlessForm2
+            // 
+            this.guna2BorderlessForm2.ContainerControl = this;
+            this.guna2BorderlessForm2.DockIndicatorTransparencyValue = 0.6D;
+            this.guna2BorderlessForm2.TransparentWhileDrag = true;
+            // 
+            // maximizeButtonControlBox
+            // 
+            this.maximizeButtonControlBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.maximizeButtonControlBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.maximizeButtonControlBox.ControlBoxType = Guna.UI2.WinForms.Enums.ControlBoxType.MaximizeBox;
+            this.maximizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.maximizeButtonControlBox.IconColor = System.Drawing.Color.White;
+            this.maximizeButtonControlBox.Location = new System.Drawing.Point(893, 0);
+            this.maximizeButtonControlBox.Name = "maximizeButtonControlBox";
+            this.maximizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
+            this.maximizeButtonControlBox.TabIndex = 139;
+            // 
             // loginMenuForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.AutoSize = true;
             this.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
             this.ClientSize = new System.Drawing.Size(980, 503);
+            this.Controls.Add(this.maximizeButtonControlBox);
             this.Controls.Add(this.minimizeButtonControlBox);
             this.Controls.Add(this.raminfo);
             this.Controls.Add(this.rememberMeCheckBox);
             this.Controls.Add(this.serverIpAddressStaticLabel);
             this.Controls.Add(this.loginButton);
             this.Controls.Add(this.nickNameEnterTextBox);
-            this.Controls.Add(this.maximizeButtonControlBox);
+            this.Controls.Add(this.closeButtonControlBox);
             this.DoubleBuffered = true;
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
-            this.MaximizeBox = false;
             this.MaximumSize = new System.Drawing.Size(980, 503);
             this.MinimumSize = new System.Drawing.Size(980, 503);
             this.Name = "loginMenuForm";
@@ -213,8 +232,10 @@ namespace Projects_Launcher
         private System.Windows.Forms.Label serverIpAddressStaticLabel;
         private Guna.UI2.WinForms.Guna2Button loginButton;
         private Guna.UI2.WinForms.Guna2TextBox nickNameEnterTextBox;
-        private Guna.UI2.WinForms.Guna2ControlBox maximizeButtonControlBox;
+        private Guna.UI2.WinForms.Guna2ControlBox closeButtonControlBox;
         private Guna.UI2.WinForms.Guna2ControlBox minimizeButtonControlBox;
+        private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm2;
+        private Guna.UI2.WinForms.Guna2ControlBox maximizeButtonControlBox;
     }
 }
 
