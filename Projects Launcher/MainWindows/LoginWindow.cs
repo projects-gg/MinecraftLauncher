@@ -178,6 +178,8 @@ namespace Projects_Launcher
             }
 
             selectBackgroundImage();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
@@ -204,6 +206,8 @@ namespace Projects_Launcher
         private void label3_Click(object sender, EventArgs e)
         {
             System.Diagnostics.Process.Start("https://mc.projects.gg/");
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         private void guna2ControlBox1_Click(object sender, EventArgs e)
@@ -223,15 +227,24 @@ namespace Projects_Launcher
 
                 loginButton.Text = "Kullanıcı Adı Giriniz";
                 return;
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
             }
             
             Projects_Launcher.mainMenuForm main = new Projects_Launcher.mainMenuForm();
 
-            Hide();
+            this.Hide();
 
             main.Show();
 
+            GC.SuppressFinalize(this);
+
+            this.BackgroundImage.Dispose();
+
             Client.Dispose();
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         private void nicknametextbox_TextChanged(object sender, EventArgs e)

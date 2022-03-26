@@ -6,6 +6,7 @@ using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -202,6 +203,14 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 // Shouldn't happen except no internet connection or server downtime
             }
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
+            DataBindings.Clear();
+            GC.SuppressFinalize(this);
+
+            
         }
 
         private async Task Launch() // Minecraft startup settings
@@ -333,6 +342,9 @@ namespace Projects_Launcher.Projects_Launcher
                     versionInfoStaticLabel.Text = "İndiriliyor...";
                 }
             }
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
@@ -353,6 +365,9 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 NotificationAboutException(ex);
             }
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         private void prepareGameToLaunch_Tick(object sender, EventArgs e)
@@ -403,6 +418,9 @@ namespace Projects_Launcher.Projects_Launcher
                     "Bir hata oluştu! Uygulamayı yeniden başlatmanızı tavsiye ederiz. Hatanın devamı durumunda aşağıdaki hatayı desteğe iletiniz:\n\n" +
                     ex.Message);
             }
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         private void NotificationAboutException(Exception ex)
@@ -456,6 +474,8 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 settingsBgPanel.Visible = false;
             }
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         private async Task onlineCountUpdater()
@@ -464,7 +484,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 try
                 {
-                    var proxyIP = Properties.Settings.Default.ProxyIP;
+                    var proxyIP = "193.164.7.43";
                     IMinecraftPinger pinger = new MinecraftPinger(proxyIP, 25565);
                     var status = await pinger.RequestAsync();
                     if (status != null)
@@ -483,6 +503,9 @@ namespace Projects_Launcher.Projects_Launcher
 
                 await Task.Delay(5000).ConfigureAwait(false);
             } while (alreadyRelaunchWaiting == false);
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         private void ramlabel_Click(object sender, EventArgs e)
@@ -716,6 +739,8 @@ namespace Projects_Launcher.Projects_Launcher
                 System.Threading.Thread.Sleep(1000);
                 prc.Start();
             }
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         private void rpTransfer_Click(object sender, EventArgs e)
@@ -748,6 +773,8 @@ namespace Projects_Launcher.Projects_Launcher
                     MessageBox.Show("Doku paketi başarıyla yüklendi.");
                 }
             }
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         private void rpFolder_Click(object sender, EventArgs e)
@@ -769,6 +796,8 @@ namespace Projects_Launcher.Projects_Launcher
                 System.Threading.Thread.Sleep(1000);
                 prc.Start();
             }
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         private void gamefolder_Click(object sender, EventArgs e)
@@ -792,6 +821,8 @@ namespace Projects_Launcher.Projects_Launcher
                 System.Threading.Thread.Sleep(1000);
                 prc.Start();
             }
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         private void gamefolder_MouseEnter(object sender, EventArgs e)
@@ -832,6 +863,9 @@ namespace Projects_Launcher.Projects_Launcher
             Client.Dispose();
             DiscordRpcClientSetup();
             timer3.Stop();
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         private void kapattick_CheckedChanged(object sender, EventArgs e)
@@ -971,12 +1005,16 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void guna2ControlBox3_Click(object sender, EventArgs e)
         {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
             Environment.Exit(0);
         }
 
         private void guna2ControlBox2_Click(object sender, EventArgs e)
         {
             this.WindowState = FormWindowState.Minimized;
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
 
         private void reopenLauncherCheckBox_MouseEnter(object sender, EventArgs e)
@@ -996,7 +1034,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void oynabutton_MouseLeave(object sender, EventArgs e)
         {
-            playButtonStaticLabel.ForeColor = System.Drawing.Color.FromArgb(245, 245, 245);
+            playButtonStaticLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void guna2ControlBox1_Resize(object sender, EventArgs e)

@@ -890,6 +890,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.backButton.PressedState.ImageSize = new System.Drawing.Size(32, 32);
             this.backButton.Size = new System.Drawing.Size(31, 31);
             this.backButton.TabIndex = 196;
+            this.backButton.Visible = false;
             this.backButton.Click += new System.EventHandler(this.previousPage_Click);
             // 
             // mainMenuForm
