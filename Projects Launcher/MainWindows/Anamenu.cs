@@ -36,7 +36,6 @@ namespace Projects_Launcher.Projects_Launcher
         private string heightlabell;
         private string widthlabell;
         private string surumlabell;
-        private bool formpanell;
         private string ramInfo;
 
         private int widthResolution;
@@ -87,7 +86,7 @@ namespace Projects_Launcher.Projects_Launcher
             // Grab background image
             try
             {
-                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + rnd.Next(10) + ".png"); // Last background image
+                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + rnd.Next(4) + ".png"); // Last background image
 
                 using (var response = request.GetResponse())
                 using (var stream = response.GetResponseStream())
@@ -244,7 +243,7 @@ namespace Projects_Launcher.Projects_Launcher
                 NotificationAboutException(ex);
             }
         }
-
+        
         private void oynabutton_Click(object sender, EventArgs e)
         {
             string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
@@ -526,11 +525,6 @@ namespace Projects_Launcher.Projects_Launcher
         private void surumtext_Click(object sender, EventArgs e)
         {
             surumlabell = surumtext.Text;
-        }
-
-        private void formpanel_Paint(object sender, PaintEventArgs e)
-        {
-            formpanell = settingsBgPanel.Visible;
         }
 
         private void previousPage_Click(object sender, EventArgs e)

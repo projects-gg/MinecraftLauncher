@@ -16,7 +16,7 @@ namespace Projects_Launcher
             InitializeComponent();
         }
 
-        private readonly string currentVersion = "0.1.1";
+        public readonly string currentVersion = Properties.Settings.Default.currentVersion;
         readonly Uri uri = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
 
         public DiscordRpcClient Client { get; private set; }
@@ -62,7 +62,7 @@ namespace Projects_Launcher
             try
             {
                 var random = new Random();
-                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + random.Next(10) + ".png"); // Last background image
+                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + random.Next(4) + ".png"); // Last background image
 
                 using (var response = request.GetResponse())
                 using (var stream = response.GetResponseStream())
@@ -227,8 +227,6 @@ namespace Projects_Launcher
 
                 loginButton.Text = "Kullanıcı Adı Giriniz";
                 return;
-                GC.Collect();
-                GC.WaitForPendingFinalizers();
             }
             
             Projects_Launcher.mainMenuForm main = new Projects_Launcher.mainMenuForm();

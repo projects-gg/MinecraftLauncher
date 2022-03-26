@@ -50,6 +50,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.minramlabel = new System.Windows.Forms.Label();
             this.serverOnlineCountStaticLabel = new System.Windows.Forms.Label();
             this.settingsBgPanel = new Guna.UI2.WinForms.Guna2Panel();
+            this.versionLabel = new System.Windows.Forms.Label();
             this.versionSelectTxt = new System.Windows.Forms.Label();
             this.navigationStaticLabel = new System.Windows.Forms.Label();
             this.ramSelectionTxt = new System.Windows.Forms.Label();
@@ -134,7 +135,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.playSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.playSplitStaticLabel.Location = new System.Drawing.Point(122, 423);
             this.playSplitStaticLabel.Name = "playSplitStaticLabel";
-            this.playSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
+            this.playSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
             this.playSplitStaticLabel.TabIndex = 2;
             this.playSplitStaticLabel.Text = "|";
             // 
@@ -160,7 +161,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.onlineSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.onlineSplitStaticLabel.Location = new System.Drawing.Point(792, 430);
             this.onlineSplitStaticLabel.Name = "onlineSplitStaticLabel";
-            this.onlineSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
+            this.onlineSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
             this.onlineSplitStaticLabel.TabIndex = 6;
             this.onlineSplitStaticLabel.Text = "|";
             // 
@@ -324,7 +325,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverOnlineCountStaticLabel.ForeColor = System.Drawing.SystemColors.ActiveBorder;
             this.serverOnlineCountStaticLabel.Location = new System.Drawing.Point(693, 440);
             this.serverOnlineCountStaticLabel.Name = "serverOnlineCountStaticLabel";
-            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(92, 16);
+            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(93, 16);
             this.serverOnlineCountStaticLabel.TabIndex = 120;
             this.serverOnlineCountStaticLabel.Text = "Sunucu Hatası";
             // 
@@ -332,6 +333,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.settingsBgPanel.BackColor = System.Drawing.Color.Transparent;
             this.settingsBgPanel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.settingsBgPanel.Controls.Add(this.versionLabel);
             this.settingsBgPanel.Controls.Add(this.versionSelectTxt);
             this.settingsBgPanel.Controls.Add(this.navigationStaticLabel);
             this.settingsBgPanel.Controls.Add(this.ramSelectionTxt);
@@ -364,6 +366,18 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Size = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.TabIndex = 133;
             this.settingsBgPanel.Visible = false;
+            // 
+            // versionLabel
+            // 
+            this.versionLabel.AutoSize = true;
+            this.versionLabel.BackColor = System.Drawing.Color.Transparent;
+            this.versionLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.versionLabel.ForeColor = System.Drawing.SystemColors.ControlDarkDark;
+            this.versionLabel.Location = new System.Drawing.Point(12, 440);
+            this.versionLabel.Name = "versionLabel";
+            this.versionLabel.Size = new System.Drawing.Size(40, 17);
+            this.versionLabel.TabIndex = 196;
+            this.versionLabel.Text = "v" + global::Projects_Launcher.Properties.Settings.Default.currentVersion;
             // 
             // versionSelectTxt
             // 
@@ -1003,5 +1017,6 @@ namespace Projects_Launcher.Projects_Launcher
         private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm1;
         private Guna.UI2.WinForms.Guna2ControlBox maximizeButtonControlBox;
         private Guna.UI2.WinForms.Guna2ImageButton backButton;
+        private System.Windows.Forms.Label versionLabel;
     }
 }
