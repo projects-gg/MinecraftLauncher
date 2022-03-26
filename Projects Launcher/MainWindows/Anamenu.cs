@@ -16,7 +16,7 @@ using System.Windows.Forms;
 
 namespace Projects_Launcher.Projects_Launcher
 {
-    public partial class mainMenuForm : Form //NOSONAR
+    public partial class mainMenuForm : Form
     {
         public mainMenuForm()
         {
@@ -37,8 +37,6 @@ namespace Projects_Launcher.Projects_Launcher
         private string surumlabell;
         private bool formpanell;
         private string ramInfo;
-        //public static System.Drawing.Point loginlocation;
-        //public static System.Drawing.Size loginresize;
 
         private int widthResolution;
         private int heightResolution;
@@ -125,8 +123,6 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void Anamenu_Load(object sender, EventArgs e)
         {
-            //this.Location = loginlocation;
-            //this.Size = loginresize;
             selectBackgroundImage();
 
             // ".projects" directory check
@@ -581,7 +577,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             try
             {
-                //System.Diagnostics.Process.Start("https://mc.projects.gg/");
+                System.Diagnostics.Process.Start("https://mc.projects.gg/");
             }
             catch
             {

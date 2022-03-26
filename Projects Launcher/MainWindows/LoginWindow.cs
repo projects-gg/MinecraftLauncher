@@ -9,14 +9,14 @@ using System.Windows.Forms;
 
 namespace Projects_Launcher
 {
-    public partial class loginMenuForm : Form //NOSONAR
+    public partial class loginMenuForm : Form
     {
         public loginMenuForm()
         {
             InitializeComponent();
         }
 
-        private readonly string currentVersion = "0";
+        private readonly string currentVersion = "0.1.0";
         readonly Uri uri = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
 
         public DiscordRpcClient Client { get; private set; }
@@ -224,9 +224,7 @@ namespace Projects_Launcher
                 loginButton.Text = "Kullanıcı Adı Giriniz";
                 return;
             }
-
-           //Projects_Launcher.mainMenuForm.loginlocation = this.Location;
-            //Projects_Launcher.mainMenuForm.loginresize = this.Size;
+            
             Projects_Launcher.mainMenuForm main = new Projects_Launcher.mainMenuForm();
 
             Hide();
