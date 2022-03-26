@@ -16,7 +16,7 @@ namespace Projects_Launcher
             InitializeComponent();
         }
 
-        private readonly string currentVersion = "0.1.0";
+        private readonly string currentVersion = "0.1.1";
         readonly Uri uri = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
 
         public DiscordRpcClient Client { get; private set; }
