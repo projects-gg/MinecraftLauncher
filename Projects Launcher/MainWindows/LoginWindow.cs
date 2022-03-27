@@ -62,8 +62,19 @@ namespace Projects_Launcher
             try
             {
                 var random = new Random();
-                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + random.Next(4) + ".png"); // Last background image
+                string imageType;
 
+                if (Properties.Settings.Default.backgroundLite) // Need ternary support instead of this
+                {
+                    imageType = "lite";
+                }
+                else
+                {
+                    imageType = Convert.ToString(random.Next(4));
+                }
+
+                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + imageType + ".png"); // Last background image
+                
                 using (var response = request.GetResponse())
                 using (var stream = response.GetResponseStream())
                     this.BackgroundImage = Bitmap.FromStream(stream);
@@ -71,6 +82,7 @@ namespace Projects_Launcher
             catch
             {
                 // Shouldn't happen except no internet connection or server downtime
+                this.BackgroundImage = Properties.Resources.defaultBg;
             }
         }
 

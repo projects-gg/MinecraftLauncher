@@ -50,6 +50,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.minramlabel = new System.Windows.Forms.Label();
             this.serverOnlineCountStaticLabel = new System.Windows.Forms.Label();
             this.settingsBgPanel = new Guna.UI2.WinForms.Guna2Panel();
+            this.bgSelection = new Guna.UI2.WinForms.Guna2CheckBox();
             this.versionLabel = new System.Windows.Forms.Label();
             this.versionSelectTxt = new System.Windows.Forms.Label();
             this.navigationStaticLabel = new System.Windows.Forms.Label();
@@ -85,7 +86,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.label11 = new System.Windows.Forms.Label();
             this.guna2BorderlessForm1 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
-            this.backButton = new Guna.UI2.WinForms.Guna2ImageButton();
+            this.backButton = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.settingsStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.instagramStaticPictureBox)).BeginInit();
@@ -333,6 +334,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.settingsBgPanel.BackColor = System.Drawing.Color.Transparent;
             this.settingsBgPanel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.settingsBgPanel.Controls.Add(this.bgSelection);
             this.settingsBgPanel.Controls.Add(this.versionLabel);
             this.settingsBgPanel.Controls.Add(this.versionSelectTxt);
             this.settingsBgPanel.Controls.Add(this.navigationStaticLabel);
@@ -367,6 +369,33 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.TabIndex = 133;
             this.settingsBgPanel.Visible = false;
             // 
+            // bgSelection
+            // 
+            this.bgSelection.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.bgSelection.Animated = true;
+            this.bgSelection.AutoCheck = false;
+            this.bgSelection.AutoSize = true;
+            this.bgSelection.BackColor = System.Drawing.Color.Transparent;
+            this.bgSelection.Checked = Properties.Settings.Default.backgroundLite;
+            this.bgSelection.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.bgSelection.CheckedState.BorderRadius = 0;
+            this.bgSelection.CheckedState.BorderThickness = 0;
+            this.bgSelection.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.bgSelection.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.bgSelection.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
+            this.bgSelection.ForeColor = System.Drawing.SystemColors.ControlLightLight;
+            this.bgSelection.Location = new System.Drawing.Point(696, 371);
+            this.bgSelection.Name = "bgSelection";
+            this.bgSelection.Size = new System.Drawing.Size(167, 24);
+            this.bgSelection.TabIndex = 197;
+            this.bgSelection.Text = "Arkaplanı Basitleştir";
+            this.bgSelection.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.bgSelection.UncheckedState.BorderRadius = 0;
+            this.bgSelection.UncheckedState.BorderThickness = 0;
+            this.bgSelection.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.bgSelection.UseVisualStyleBackColor = false;
+            this.bgSelection.CheckedChanged += new System.EventHandler(this.bgSelection_CheckedChanged);
+            // 
             // versionLabel
             // 
             this.versionLabel.AutoSize = true;
@@ -375,9 +404,9 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionLabel.ForeColor = System.Drawing.SystemColors.ControlDarkDark;
             this.versionLabel.Location = new System.Drawing.Point(12, 440);
             this.versionLabel.Name = "versionLabel";
-            this.versionLabel.Size = new System.Drawing.Size(40, 17);
+            this.versionLabel.Size = new System.Drawing.Size(47, 17);
             this.versionLabel.TabIndex = 196;
-            this.versionLabel.Text = "v" + global::Projects_Launcher.Properties.Settings.Default.currentVersion;
+            this.versionLabel.Text = "v0.1.2";
             // 
             // versionSelectTxt
             // 
@@ -889,23 +918,16 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             // backButton
             // 
-            this.backButton.BackColor = System.Drawing.Color.Transparent;
-            this.backButton.CheckedState.ImageSize = new System.Drawing.Size(64, 64);
-            this.backButton.HoverState.ImageOffset = new System.Drawing.Point(32, 32);
-            this.backButton.HoverState.ImageSize = new System.Drawing.Size(32, 32);
-            this.backButton.Image = global::Projects_Launcher.Properties.Resources.back;
-            this.backButton.ImageFlip = Guna.UI2.WinForms.Enums.FlipOrientation.Vertical;
-            this.backButton.ImageOffset = new System.Drawing.Point(0, 0);
-            this.backButton.ImageRotate = 0F;
-            this.backButton.ImageSize = new System.Drawing.Size(32, 32);
-            this.backButton.Location = new System.Drawing.Point(31, 0);
+            this.backButton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.backButton.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.backButton.Location = new System.Drawing.Point(0, 0);
             this.backButton.Name = "backButton";
-            this.backButton.PressedState.ImageOffset = new System.Drawing.Point(32, 32);
-            this.backButton.PressedState.ImageSize = new System.Drawing.Size(32, 32);
-            this.backButton.Size = new System.Drawing.Size(31, 31);
-            this.backButton.TabIndex = 196;
+            this.backButton.Size = new System.Drawing.Size(45, 29);
+            this.backButton.TabIndex = 139;
+            this.backButton.Text = "←";
+            this.backButton.UseVisualStyleBackColor = false;
             this.backButton.Visible = false;
-            this.backButton.Click += new System.EventHandler(this.previousPage_Click);
+            this.backButton.Click += new System.EventHandler(this.button1_Click);
             // 
             // mainMenuForm
             // 
@@ -1016,7 +1038,8 @@ namespace Projects_Launcher.Projects_Launcher
         private System.Windows.Forms.Label resolutionTxt;
         private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm1;
         private Guna.UI2.WinForms.Guna2ControlBox maximizeButtonControlBox;
-        private Guna.UI2.WinForms.Guna2ImageButton backButton;
         private System.Windows.Forms.Label versionLabel;
+        private Guna.UI2.WinForms.Guna2CheckBox bgSelection;
+        private System.Windows.Forms.Button backButton;
     }
 }

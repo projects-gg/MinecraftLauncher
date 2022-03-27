@@ -130,10 +130,22 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.1.2")]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.1.3")]
         public string currentVersion {
             get {
                 return ((string)(this["currentVersion"]));
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("False")]
+        public bool backgroundLite {
+            get {
+                return ((bool)(this["backgroundLite"]));
+            }
+            set {
+                this["backgroundLite"] = value;
             }
         }
     }

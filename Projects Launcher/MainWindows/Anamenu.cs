@@ -81,12 +81,24 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        private void selectBackgroundImage()
+        public void selectBackgroundImage()
         {
             // Grab background image
             try
             {
-                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + rnd.Next(4) + ".png"); // Last background image
+                var random = new Random();
+                string imageType;
+
+                if (Properties.Settings.Default.backgroundLite) // Need ternary support instead of this
+                {
+                    imageType = "lite";
+                }
+                else
+                {
+                    imageType = Convert.ToString(random.Next(4));
+                }
+
+                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + imageType + ".png"); // Last background image
 
                 using (var response = request.GetResponse())
                 using (var stream = response.GetResponseStream())
@@ -95,6 +107,7 @@ namespace Projects_Launcher.Projects_Launcher
             catch
             {
                 // Shouldn't happen except no internet connection or server downtime
+                this.BackgroundImage = Properties.Resources.defaultBg;
             }
         }
 
@@ -1034,6 +1047,18 @@ namespace Projects_Launcher.Projects_Launcher
         private void guna2ControlBox1_Resize(object sender, EventArgs e)
         {
             settingsBgPanel.Size = this.Size;
+        }
+
+        private void bgSelection_CheckedChanged(object sender, EventArgs e)
+        {
+            Properties.Settings.Default.backgroundLite = bgSelection.Checked;
+            selectBackgroundImage();
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            settingsBgPanel.Visible = false;
+            backButton.Visible = false;
         }
     }
 }
