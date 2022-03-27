@@ -1052,6 +1052,7 @@ namespace Projects_Launcher.Projects_Launcher
         private void bgSelection_CheckedChanged(object sender, EventArgs e)
         {
             Properties.Settings.Default.backgroundLite = bgSelection.Checked;
+            Properties.Settings.Default.Save();
             selectBackgroundImage();
         }
 
