@@ -1,7 +1,7 @@
 ﻿using CmlLib.Core;
 using CmlLib.Core.Auth;
 using DiscordRPC;
-using MCServerStatus;
+using MineStatLib;
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -494,23 +494,15 @@ namespace Projects_Launcher.Projects_Launcher
         {
             do
             {
-                try
+                var proxyIP = Properties.Settings.Default.ProxyIP;
+                MineStat pinger = new MineStat(proxyIP, 25565);
+                if (pinger.ServerUp)
                 {
-                    var proxyIP = "193.164.7.43";
-                    IMinecraftPinger pinger = new MinecraftPinger(proxyIP, 25565);
-                    var status = await pinger.RequestAsync();
-                    if (status != null)
-                    {
-                        serverOnlineCountStaticLabel.Text = status.Players.Online + " oyuncu aktif!";
-                    }
-                    else
-                    {
-                        serverOnlineCountStaticLabel.Text = "Bağlantı Yok";
-                    }
+                    serverOnlineCountStaticLabel.Text = pinger.CurrentPlayers + " kişi oynuyor!";
                 }
-                catch
+                else
                 {
-                    serverOnlineCountStaticLabel.Text = "Sunucu Hatası";
+                    serverOnlineCountStaticLabel.Text = "Bağlantı Yok";
                 }
 
                 await Task.Delay(5000).ConfigureAwait(false);
