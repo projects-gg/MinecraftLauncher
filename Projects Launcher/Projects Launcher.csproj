@@ -73,7 +73,7 @@
     <SignManifests>true</SignManifests>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>45836765C9CA860EAF48845B1C35E10D9E0F22E0</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>3A78516742C072C63A2120C792E3CBA1E58DDB06</ManifestCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup>
     <SignAssembly>false</SignAssembly>
@@ -87,7 +87,8 @@
   <PropertyGroup />
   <PropertyGroup />
   <PropertyGroup>
-    <ManifestKeyFile>ProjectsLauncher.pfx</ManifestKeyFile>
+    <ManifestKeyFile>
+    </ManifestKeyFile>
   </PropertyGroup>
   <PropertyGroup>
     <AssemblyOriginatorKeyFile>
@@ -167,6 +168,7 @@
     </Reference>
     <Reference Include="System">
       <Private>True</Private>
+      <HintPath>C:\Program Files (x86)\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2\System.dll</HintPath>
     </Reference>
     <Reference Include="System.AppContext, Version=4.1.1.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>..\packages\System.AppContext.4.3.0\lib\net463\System.AppContext.dll</HintPath>
@@ -361,11 +363,11 @@
     <Reference Include="WindowsBase" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="MainWindows\Anamenu.cs">
+    <Compile Include="MainWindows\MainWindow.cs">
       <SubType>Form</SubType>
     </Compile>
-    <Compile Include="MainWindows\Anamenu.Designer.cs">
-      <DependentUpon>Anamenu.cs</DependentUpon>
+    <Compile Include="MainWindows\MainWindow.Designer.cs">
+      <DependentUpon>MainWindow.cs</DependentUpon>
     </Compile>
     <Compile Include="MainWindows\LoginWindow.cs">
       <SubType>Form</SubType>
@@ -375,8 +377,8 @@
     </Compile>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <EmbeddedResource Include="MainWindows\Anamenu.resx">
-      <DependentUpon>Anamenu.cs</DependentUpon>
+    <EmbeddedResource Include="MainWindows\MainWindow.resx">
+      <DependentUpon>MainWindow.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="MainWindows\LoginWindow.resx">
       <DependentUpon>LoginWindow.cs</DependentUpon>
@@ -392,7 +394,6 @@
       <DesignTime>True</DesignTime>
     </Compile>
     <None Include="packages.config" />
-    <None Include="ProjectsLauncher.pfx" />
     <None Include="Properties\app.manifest" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>

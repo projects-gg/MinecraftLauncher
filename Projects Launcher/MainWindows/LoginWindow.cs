@@ -5,6 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.Net;
 using System.Text;
+using System.Threading;
 using System.Windows.Forms;
 
 namespace Projects_Launcher
@@ -21,6 +22,12 @@ namespace Projects_Launcher
 
         public DiscordRpcClient Client { get; private set; }
 
+        private void cantGrabVersionInfo()
+        {
+            MessageBox.Show(
+                "Güncelleme bilgileri alınamadı!\n\nİnternete bağlı olmayabilirsiniz ya da Projects servislerinde bir kara delik açılmış olabilir.",
+                "Bilgi", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
+        }
         public DiscordRpcClient GetClient()
         {
             return Client;
@@ -86,18 +93,14 @@ namespace Projects_Launcher
             }
         }
 
-        private void cantGrabVersionInfo()
-        {
-            MessageBox.Show(
-                "Güncelleme bilgileri alınamadı!\n\nİnternete bağlı olmayabilirsiniz ya da Projects servislerinde bir kara delik açılmış olabilir.",
-                "Bilgi", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
-        }
-
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
-            DiscordRpcClientSetup();
+            this.Size = new Size(460, 200);
+            this.MaximumSize = new Size(460, 200);
 
-            nickNameEnterTextBox.Text = Properties.Settings.Default.NickNames;
+            updatePanel.Size = new Size(460, 200);
+            updatePanel.MaximumSize = new Size(460, 200);
+            DiscordRpcClientSetup();
 
             WebRequest currentVersionContent = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/version.php");
 
@@ -151,23 +154,27 @@ namespace Projects_Launcher
 
             try
             {
-                if (!currentVersion.Equals(newestVersion))
+                if (currentVersion.Equals(newestVersion))
                 {
-                    DialogResult updateDecision = MessageBox.Show(
-                        "Projects başlatıcısı için kullanıma\nhazır yeni sürüm yayınlanmış!\n\n" +
-                        $@"Güncel sürüm: {newestVersion}" + "\n" + $@"Sizin sürümünüz: {currentVersion}" + "\n" + "" +
-                        "\n" + "Yeni sürüme güncellensin mi?", "Güncelleme Mevcut",
-                        MessageBoxButtons.YesNo, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
+                    newVersionLabel.Visible = false;
+                    updateInfoLabel.Text = "Güncelleme Bulunamadı!";
+                    Thread.Sleep(1000);
 
-                    if (updateDecision == DialogResult.Yes)
-                    {
-                        this.Enabled = false;
-                        WebClient wc = new WebClient();
-                        wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-                        wc.DownloadFileAsync(uri,
-                            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                            "/.projects/ProjectsSetup.exe");
-                    }
+
+                    updatePanel.Visible = false;
+                }
+                else
+                {
+                    updatePanel.Visible = true;
+                    updateInfoLabel.Text = "Yeni versiyon indiriliyor...";
+                    newVersionLabel.Visible = true;
+                    newVersionLabel.Text = $@"{currentVersion} => {newestVersion}";
+                    this.Enabled = true;
+                    WebClient wc = new WebClient();
+                    wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
+                    wc.DownloadFileAsync(uri,
+                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                        "/.projects/ProjectsSetup.exe");
                 }
             }
             catch
@@ -189,6 +196,8 @@ namespace Projects_Launcher
                 // Shouldn't happen except no internet connection or server downtime
             }
 
+            nickNameEnterTextBox.Text = Properties.Settings.Default.NickNames;
+
             selectBackgroundImage();
             GC.Collect();
             GC.WaitForPendingFinalizers();
@@ -196,7 +205,18 @@ namespace Projects_Launcher
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/setup.exe";
+            this.Hide();
+            this.Size = new Size(977, 500);
+            this.MaximumSize = new Size(977, 500);
+
+            updatePanel.Size = new Size(977, 500);
+            updatePanel.MaximumSize = new Size(977, 500);
+            GC.SuppressFinalize(this);
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/ProjectsSetup.exe";
 
             string myPath = @appDataDizini;
             System.Diagnostics.Process prc = new System.Diagnostics.Process();
@@ -205,7 +225,6 @@ namespace Projects_Launcher
             prc.Start();
             Environment.Exit(0);
         }
-
         private void benihatırla_CheckedChanged(object sender, EventArgs e)
         {
             if (rememberMeCheckBox.Checked == true)

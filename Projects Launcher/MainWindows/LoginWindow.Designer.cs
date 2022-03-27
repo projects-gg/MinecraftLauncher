@@ -41,6 +41,12 @@ namespace Projects_Launcher
             this.minimizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.guna2BorderlessForm2 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
+            this.updatePanel = new Guna.UI2.WinForms.Guna2Panel();
+            this.newVersionLabel = new System.Windows.Forms.Label();
+            this.updateInfoLabel = new System.Windows.Forms.Label();
+            this.guna2PictureBox1 = new Guna.UI2.WinForms.Guna2PictureBox();
+            this.updatePanel.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
             this.SuspendLayout();
             // 
             // guna2BorderlessForm1
@@ -195,6 +201,47 @@ namespace Projects_Launcher
             this.maximizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
             this.maximizeButtonControlBox.TabIndex = 139;
             // 
+            // updatePanel
+            // 
+            this.updatePanel.BackColor = System.Drawing.Color.White;
+            this.updatePanel.Controls.Add(this.newVersionLabel);
+            this.updatePanel.Controls.Add(this.updateInfoLabel);
+            this.updatePanel.Controls.Add(this.guna2PictureBox1);
+            this.updatePanel.Location = new System.Drawing.Point(3, 0);
+            this.updatePanel.Name = "updatePanel";
+            this.updatePanel.Size = new System.Drawing.Size(977, 500);
+            this.updatePanel.TabIndex = 140;
+            // 
+            // newVersionLabel
+            // 
+            this.newVersionLabel.AutoSize = true;
+            this.newVersionLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.newVersionLabel.Location = new System.Drawing.Point(123, 122);
+            this.newVersionLabel.Name = "newVersionLabel";
+            this.newVersionLabel.Size = new System.Drawing.Size(81, 16);
+            this.newVersionLabel.TabIndex = 6;
+            this.newVersionLabel.Text = "1.0.0 => 2.0.0";
+            // 
+            // updateInfoLabel
+            // 
+            this.updateInfoLabel.AutoSize = true;
+            this.updateInfoLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.updateInfoLabel.Location = new System.Drawing.Point(123, 106);
+            this.updateInfoLabel.Name = "updateInfoLabel";
+            this.updateInfoLabel.Size = new System.Drawing.Size(222, 16);
+            this.updateInfoLabel.TabIndex = 5;
+            this.updateInfoLabel.Text = "Launcher versiyonu kontrol ediliyor...";
+            // 
+            // guna2PictureBox1
+            // 
+            this.guna2PictureBox1.Image = global::Projects_Launcher.Properties.Resources.pprojectss;
+            this.guna2PictureBox1.ImageRotate = 0F;
+            this.guna2PictureBox1.Location = new System.Drawing.Point(115, 50);
+            this.guna2PictureBox1.Name = "guna2PictureBox1";
+            this.guna2PictureBox1.Size = new System.Drawing.Size(230, 53);
+            this.guna2PictureBox1.TabIndex = 4;
+            this.guna2PictureBox1.TabStop = false;
+            // 
             // loginMenuForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -203,6 +250,7 @@ namespace Projects_Launcher
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
             this.ClientSize = new System.Drawing.Size(980, 503);
+            this.Controls.Add(this.updatePanel);
             this.Controls.Add(this.maximizeButtonControlBox);
             this.Controls.Add(this.minimizeButtonControlBox);
             this.Controls.Add(this.raminfo);
@@ -220,6 +268,9 @@ namespace Projects_Launcher
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Projects Launcher";
             this.Load += new System.EventHandler(this.ProjectsLauncherLogin_Load);
+            this.updatePanel.ResumeLayout(false);
+            this.updatePanel.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -236,6 +287,10 @@ namespace Projects_Launcher
         private Guna.UI2.WinForms.Guna2ControlBox minimizeButtonControlBox;
         private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm2;
         private Guna.UI2.WinForms.Guna2ControlBox maximizeButtonControlBox;
+        private Guna.UI2.WinForms.Guna2Panel updatePanel;
+        private System.Windows.Forms.Label newVersionLabel;
+        private System.Windows.Forms.Label updateInfoLabel;
+        private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox1;
     }
 }
 
