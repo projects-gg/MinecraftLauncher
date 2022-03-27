@@ -41,12 +41,17 @@ namespace Projects_Launcher
             this.minimizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.guna2BorderlessForm2 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
-            this.updatePanel = new Guna.UI2.WinForms.Guna2Panel();
-            this.newVersionLabel = new System.Windows.Forms.Label();
-            this.updateInfoLabel = new System.Windows.Forms.Label();
-            this.guna2PictureBox1 = new Guna.UI2.WinForms.Guna2PictureBox();
-            this.updatePanel.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
+            this.newVersionPanel = new System.Windows.Forms.Panel();
+            this.skipButton = new System.Windows.Forms.Button();
+            this.noUpdateButton = new System.Windows.Forms.Button();
+            this.updateButton = new System.Windows.Forms.Button();
+            this.vLatestLabel = new System.Windows.Forms.Label();
+            this.vCurrentLabel = new System.Windows.Forms.Label();
+            this.updateLabelBottom = new System.Windows.Forms.Label();
+            this.updateLabelTop = new System.Windows.Forms.Label();
+            this.updateHeadline = new System.Windows.Forms.Label();
+            this.updateNowButton = new System.Windows.Forms.Button();
+            this.newVersionPanel.SuspendLayout();
             this.SuspendLayout();
             // 
             // guna2BorderlessForm1
@@ -201,46 +206,129 @@ namespace Projects_Launcher
             this.maximizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
             this.maximizeButtonControlBox.TabIndex = 139;
             // 
-            // updatePanel
+            // newVersionPanel
             // 
-            this.updatePanel.BackColor = System.Drawing.Color.White;
-            this.updatePanel.Controls.Add(this.newVersionLabel);
-            this.updatePanel.Controls.Add(this.updateInfoLabel);
-            this.updatePanel.Controls.Add(this.guna2PictureBox1);
-            this.updatePanel.Location = new System.Drawing.Point(3, 0);
-            this.updatePanel.Name = "updatePanel";
-            this.updatePanel.Size = new System.Drawing.Size(977, 500);
-            this.updatePanel.TabIndex = 140;
+            this.newVersionPanel.Controls.Add(this.skipButton);
+            this.newVersionPanel.Controls.Add(this.noUpdateButton);
+            this.newVersionPanel.Controls.Add(this.updateButton);
+            this.newVersionPanel.Controls.Add(this.vLatestLabel);
+            this.newVersionPanel.Controls.Add(this.vCurrentLabel);
+            this.newVersionPanel.Controls.Add(this.updateLabelBottom);
+            this.newVersionPanel.Controls.Add(this.updateLabelTop);
+            this.newVersionPanel.Controls.Add(this.updateHeadline);
+            this.newVersionPanel.Location = new System.Drawing.Point(177, 113);
+            this.newVersionPanel.Name = "newVersionPanel";
+            this.newVersionPanel.Size = new System.Drawing.Size(633, 288);
+            this.newVersionPanel.TabIndex = 140;
+            this.newVersionPanel.Visible = false;
             // 
-            // newVersionLabel
+            // skipButton
             // 
-            this.newVersionLabel.AutoSize = true;
-            this.newVersionLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.newVersionLabel.Location = new System.Drawing.Point(123, 122);
-            this.newVersionLabel.Name = "newVersionLabel";
-            this.newVersionLabel.Size = new System.Drawing.Size(81, 16);
-            this.newVersionLabel.TabIndex = 6;
-            this.newVersionLabel.Text = "1.0.0 => 2.0.0";
+            this.skipButton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.skipButton.Font = new System.Drawing.Font("Microsoft Sans Serif", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.skipButton.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.skipButton.Location = new System.Drawing.Point(390, 219);
+            this.skipButton.Name = "skipButton";
+            this.skipButton.Size = new System.Drawing.Size(75, 26);
+            this.skipButton.TabIndex = 7;
+            this.skipButton.Text = "Ertele";
+            this.skipButton.UseVisualStyleBackColor = false;
+            this.skipButton.Click += new System.EventHandler(this.button3_Click);
             // 
-            // updateInfoLabel
+            // noUpdateButton
             // 
-            this.updateInfoLabel.AutoSize = true;
-            this.updateInfoLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.updateInfoLabel.Location = new System.Drawing.Point(123, 106);
-            this.updateInfoLabel.Name = "updateInfoLabel";
-            this.updateInfoLabel.Size = new System.Drawing.Size(222, 16);
-            this.updateInfoLabel.TabIndex = 5;
-            this.updateInfoLabel.Text = "Launcher versiyonu kontrol ediliyor...";
+            this.noUpdateButton.AutoSize = true;
+            this.noUpdateButton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.noUpdateButton.Font = new System.Drawing.Font("Microsoft Sans Serif", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.noUpdateButton.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.noUpdateButton.Location = new System.Drawing.Point(290, 219);
+            this.noUpdateButton.Name = "noUpdateButton";
+            this.noUpdateButton.Size = new System.Drawing.Size(75, 26);
+            this.noUpdateButton.TabIndex = 6;
+            this.noUpdateButton.Text = "Hayır";
+            this.noUpdateButton.UseVisualStyleBackColor = false;
+            this.noUpdateButton.Click += new System.EventHandler(this.button2_Click);
             // 
-            // guna2PictureBox1
+            // updateButton
             // 
-            this.guna2PictureBox1.Image = global::Projects_Launcher.Properties.Resources.pprojectss;
-            this.guna2PictureBox1.ImageRotate = 0F;
-            this.guna2PictureBox1.Location = new System.Drawing.Point(115, 50);
-            this.guna2PictureBox1.Name = "guna2PictureBox1";
-            this.guna2PictureBox1.Size = new System.Drawing.Size(230, 53);
-            this.guna2PictureBox1.TabIndex = 4;
-            this.guna2PictureBox1.TabStop = false;
+            this.updateButton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.updateButton.Font = new System.Drawing.Font("Microsoft Sans Serif", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.updateButton.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.updateButton.Location = new System.Drawing.Point(190, 219);
+            this.updateButton.Name = "updateButton";
+            this.updateButton.Size = new System.Drawing.Size(75, 26);
+            this.updateButton.TabIndex = 5;
+            this.updateButton.Text = "Evet";
+            this.updateButton.UseVisualStyleBackColor = false;
+            this.updateButton.Click += new System.EventHandler(this.button1_Click);
+            // 
+            // vLatestLabel
+            // 
+            this.vLatestLabel.AutoSize = true;
+            this.vLatestLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.vLatestLabel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.vLatestLabel.Location = new System.Drawing.Point(27, 145);
+            this.vLatestLabel.Name = "vLatestLabel";
+            this.vLatestLabel.Size = new System.Drawing.Size(116, 20);
+            this.vLatestLabel.TabIndex = 4;
+            this.vLatestLabel.Text = "Güncel sürüm: ";
+            // 
+            // vCurrentLabel
+            // 
+            this.vCurrentLabel.AutoSize = true;
+            this.vCurrentLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.vCurrentLabel.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.vCurrentLabel.Location = new System.Drawing.Point(27, 106);
+            this.vCurrentLabel.Name = "vCurrentLabel";
+            this.vCurrentLabel.Size = new System.Drawing.Size(116, 20);
+            this.vCurrentLabel.TabIndex = 3;
+            this.vCurrentLabel.Text = "Mevcut sürüm: ";
+            // 
+            // updateLabelBottom
+            // 
+            this.updateLabelBottom.AutoSize = true;
+            this.updateLabelBottom.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.updateLabelBottom.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.updateLabelBottom.Location = new System.Drawing.Point(27, 182);
+            this.updateLabelBottom.Name = "updateLabelBottom";
+            this.updateLabelBottom.Size = new System.Drawing.Size(219, 20);
+            this.updateLabelBottom.TabIndex = 2;
+            this.updateLabelBottom.Text = "Yeni sürüme güncellensin mi?";
+            // 
+            // updateLabelTop
+            // 
+            this.updateLabelTop.AutoSize = true;
+            this.updateLabelTop.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.updateLabelTop.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.updateLabelTop.Location = new System.Drawing.Point(27, 68);
+            this.updateLabelTop.Name = "updateLabelTop";
+            this.updateLabelTop.Size = new System.Drawing.Size(441, 20);
+            this.updateLabelTop.TabIndex = 1;
+            this.updateLabelTop.Text = "Projects başlatıcısı için kullanıma hazır yeni sürüm yayınlanmış!";
+            // 
+            // updateHeadline
+            // 
+            this.updateHeadline.AutoSize = true;
+            this.updateHeadline.Font = new System.Drawing.Font("Microsoft Sans Serif", 20.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.updateHeadline.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.updateHeadline.Location = new System.Drawing.Point(250, 17);
+            this.updateHeadline.Name = "updateHeadline";
+            this.updateHeadline.Size = new System.Drawing.Size(154, 31);
+            this.updateHeadline.TabIndex = 0;
+            this.updateHeadline.Text = "Yeni Sürüm";
+            // 
+            // updateNowButton
+            // 
+            this.updateNowButton.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.updateNowButton.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.updateNowButton.Location = new System.Drawing.Point(849, 468);
+            this.updateNowButton.Name = "updateNowButton";
+            this.updateNowButton.Size = new System.Drawing.Size(115, 23);
+            this.updateNowButton.TabIndex = 141;
+            this.updateNowButton.Text = "Şimdi Güncelle";
+            this.updateNowButton.UseVisualStyleBackColor = true;
+            this.updateNowButton.Visible = false;
+            this.updateNowButton.Click += new System.EventHandler(this.updateNowButton_Click);
             // 
             // loginMenuForm
             // 
@@ -250,7 +338,8 @@ namespace Projects_Launcher
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
             this.ClientSize = new System.Drawing.Size(980, 503);
-            this.Controls.Add(this.updatePanel);
+            this.Controls.Add(this.updateNowButton);
+            this.Controls.Add(this.newVersionPanel);
             this.Controls.Add(this.maximizeButtonControlBox);
             this.Controls.Add(this.minimizeButtonControlBox);
             this.Controls.Add(this.raminfo);
@@ -268,9 +357,8 @@ namespace Projects_Launcher
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Projects Launcher";
             this.Load += new System.EventHandler(this.ProjectsLauncherLogin_Load);
-            this.updatePanel.ResumeLayout(false);
-            this.updatePanel.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();
+            this.newVersionPanel.ResumeLayout(false);
+            this.newVersionPanel.PerformLayout();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -287,10 +375,16 @@ namespace Projects_Launcher
         private Guna.UI2.WinForms.Guna2ControlBox minimizeButtonControlBox;
         private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm2;
         private Guna.UI2.WinForms.Guna2ControlBox maximizeButtonControlBox;
-        private Guna.UI2.WinForms.Guna2Panel updatePanel;
-        private System.Windows.Forms.Label newVersionLabel;
-        private System.Windows.Forms.Label updateInfoLabel;
-        private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox1;
+        private System.Windows.Forms.Panel newVersionPanel;
+        private System.Windows.Forms.Label updateLabelTop;
+        private System.Windows.Forms.Label updateHeadline;
+        private System.Windows.Forms.Button skipButton;
+        private System.Windows.Forms.Button noUpdateButton;
+        private System.Windows.Forms.Button updateButton;
+        private System.Windows.Forms.Label vLatestLabel;
+        private System.Windows.Forms.Label vCurrentLabel;
+        private System.Windows.Forms.Label updateLabelBottom;
+        private System.Windows.Forms.Button updateNowButton;
     }
 }
 

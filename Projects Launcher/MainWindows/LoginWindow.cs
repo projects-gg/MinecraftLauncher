@@ -5,7 +5,6 @@ using System.Drawing;
 using System.IO;
 using System.Net;
 using System.Text;
-using System.Threading;
 using System.Windows.Forms;
 
 namespace Projects_Launcher
@@ -18,6 +17,7 @@ namespace Projects_Launcher
         }
 
         public readonly string currentVersion = Properties.Settings.Default.currentVersion;
+        public string newestVersion = "";
         readonly Uri uri = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
 
         public DiscordRpcClient Client { get; private set; }
@@ -95,16 +95,9 @@ namespace Projects_Launcher
 
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
-            this.Size = new Size(460, 200);
-            this.MaximumSize = new Size(460, 200);
-
-            updatePanel.Size = new Size(460, 200);
-            updatePanel.MaximumSize = new Size(460, 200);
             DiscordRpcClientSetup();
 
             WebRequest currentVersionContent = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/version.php");
-
-            string newestVersion = "";
 
             try
             {
@@ -151,35 +144,19 @@ namespace Projects_Launcher
             {
                 newestVersion = currentVersion;
             }
-
-            try
+            
+            if (!currentVersion.Equals(newestVersion))
             {
-                if (currentVersion.Equals(newestVersion))
+                if (Properties.Settings.Default.suppressVersion != newestVersion)
                 {
-                    newVersionLabel.Visible = false;
-                    updateInfoLabel.Text = "Güncelleme Bulunamadı!";
-                    Thread.Sleep(1000);
-
-
-                    updatePanel.Visible = false;
+                    newVersionPanel.Visible = true;
+                    vCurrentLabel.Text = "Mevcut sürüm: " + currentVersion;
+                    vLatestLabel.Text = "Güncel sürüm: " + newestVersion;
                 }
                 else
                 {
-                    updatePanel.Visible = true;
-                    updateInfoLabel.Text = "Yeni versiyon indiriliyor...";
-                    newVersionLabel.Visible = true;
-                    newVersionLabel.Text = $@"{currentVersion} => {newestVersion}";
-                    this.Enabled = true;
-                    WebClient wc = new WebClient();
-                    wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-                    wc.DownloadFileAsync(uri,
-                        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                        "/.projects/ProjectsSetup.exe");
+                    updateNowButton.Visible = true;
                 }
-            }
-            catch
-            {
-                cantGrabVersionInfo();
             }
 
             try
@@ -206,11 +183,6 @@ namespace Projects_Launcher
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
             this.Hide();
-            this.Size = new Size(977, 500);
-            this.MaximumSize = new Size(977, 500);
-
-            updatePanel.Size = new Size(977, 500);
-            updatePanel.MaximumSize = new Size(977, 500);
             GC.SuppressFinalize(this);
 
             GC.Collect();
@@ -301,6 +273,45 @@ namespace Projects_Launcher
         private void guna2ControlBox2_Click(object sender, EventArgs e)
         {
             this.WindowState = FormWindowState.Minimized;
+        }
+
+        private void updateApplication()
+        {
+            this.Enabled = false;
+            WebClient wc = new WebClient();
+            wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
+            wc.DownloadFileAsync(uri,
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                "/.projects/ProjectsSetup.exe");
+        }
+
+        private void button1_Click(object sender, EventArgs e)
+        {
+            updateApplication();
+        }
+
+        private void button2_Click(object sender, EventArgs e)
+        {
+            newVersionPanel.Visible = false;
+        }
+
+        private void button3_Click(object sender, EventArgs e)
+        {
+            DialogResult updateDecision = MessageBox.Show(
+                "Bunun seçilmesi durumunda yeni bir\nsürüm yayınlanana kadar tekrar\ngüncelleme sorulmayacaktır.\n\nEmin misiniz?",
+                "Güncelleme İptali", MessageBoxButtons.YesNo);
+
+            if (updateDecision == DialogResult.Yes)
+            {
+                Properties.Settings.Default.suppressVersion = newestVersion;
+                Properties.Settings.Default.Save();
+                newVersionPanel.Visible = false;
+            }
+        }
+
+        private void updateNowButton_Click(object sender, EventArgs e)
+        {
+            updateApplication();
         }
     }
 }

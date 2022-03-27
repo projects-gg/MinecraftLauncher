@@ -376,7 +376,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.bgSelection.AutoCheck = false;
             this.bgSelection.AutoSize = true;
             this.bgSelection.BackColor = System.Drawing.Color.Transparent;
-            this.bgSelection.Checked = Properties.Settings.Default.backgroundLite;
+            this.bgSelection.Checked = global::Projects_Launcher.Properties.Settings.Default.backgroundLite;
             this.bgSelection.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
             this.bgSelection.CheckedState.BorderRadius = 0;
             this.bgSelection.CheckedState.BorderThickness = 0;
@@ -406,7 +406,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionLabel.Name = "versionLabel";
             this.versionLabel.Size = new System.Drawing.Size(47, 17);
             this.versionLabel.TabIndex = 196;
-            this.versionLabel.Text = "v0.1.2";
+            this.versionLabel.Text = "v" + Properties.Settings.Default.currentVersion;
             // 
             // versionSelectTxt
             // 

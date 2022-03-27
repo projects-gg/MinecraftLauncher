@@ -130,7 +130,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.1.4")]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.1.6")]
         public string currentVersion {
             get {
                 return ((string)(this["currentVersion"]));
@@ -146,6 +146,18 @@ namespace Projects_Launcher.Properties {
             }
             set {
                 this["backgroundLite"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string suppressVersion {
+            get {
+                return ((string)(this["suppressVersion"]));
+            }
+            set {
+                this["suppressVersion"] = value;
             }
         }
     }
