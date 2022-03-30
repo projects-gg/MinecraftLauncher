@@ -376,7 +376,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.bgSelection.AutoCheck = false;
             this.bgSelection.AutoSize = true;
             this.bgSelection.BackColor = System.Drawing.Color.Transparent;
-            this.bgSelection.Checked = global::Projects_Launcher.Properties.Settings.Default.backgroundLite;
             this.bgSelection.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
             this.bgSelection.CheckedState.BorderRadius = 0;
             this.bgSelection.CheckedState.BorderThickness = 0;
@@ -395,6 +394,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.bgSelection.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
             this.bgSelection.UseVisualStyleBackColor = false;
             this.bgSelection.CheckedChanged += new System.EventHandler(this.bgSelection_CheckedChanged);
+            this.bgSelection.Checked = global::Projects_Launcher.Properties.Settings.Default.backgroundLite;
             // 
             // versionLabel
             // 
