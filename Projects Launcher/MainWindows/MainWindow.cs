@@ -267,11 +267,11 @@ namespace Projects_Launcher.Projects_Launcher
             int MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin);
             int MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax);
 
-            if (MaximumRamMb <= MinimumRamMb)
+            if (MinimumRamMb > MaximumRamMb)
             {
                 DialogResult ramExceptionResult = MessageBox.Show(
                     "Oyunu şu an başlatılamaz:\n\nVerilen azami RAM miktarı asgari\nmiktardan daha düşük.\n\nEşitleme yapılsın mı?\nTamam: Miktarları eşitle, oyunu başlat.\nİptal: Uyarıyı kapat ve oyunu başlatma.",
-                    "Bilgi", MessageBoxButtons.OKCancel); //DialogResult secenek = 
+                    "Bilgi", MessageBoxButtons.OKCancel);
 
                 if (ramExceptionResult == DialogResult.OK)
                 {
