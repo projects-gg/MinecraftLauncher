@@ -16,9 +16,9 @@ namespace Projects_Launcher
             InitializeComponent();
         }
 
-        public readonly string currentVersion = Properties.Settings.Default.currentVersion;
-        public string newestVersion = "";
-        readonly Uri uri = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
+        private readonly string currentVersion = Properties.Settings.Default.currentVersion;
+        private string _newestVersion = "";
+        private readonly Uri _setupLocation = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
 
         public DiscordRpcClient Client { get; private set; }
 
@@ -81,7 +81,7 @@ namespace Projects_Launcher
                 }
 
                 var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + imageType + ".png"); // Last background image
-                
+
                 using (var response = request.GetResponse())
                 using (var stream = response.GetResponseStream())
                     this.BackgroundImage = Bitmap.FromStream(stream);
@@ -132,7 +132,7 @@ namespace Projects_Launcher
 
                 if (bld.Length >= 0)
                 {
-                    newestVersion = bld.ToString();
+                    _newestVersion = bld.ToString();
                 }
             }
             catch
@@ -140,18 +140,18 @@ namespace Projects_Launcher
                 cantGrabVersionInfo();
             }
 
-            if (newestVersion.Equals(""))
+            if (_newestVersion.Equals(""))
             {
-                newestVersion = currentVersion;
+                _newestVersion = currentVersion;
             }
-            
-            if (!currentVersion.Equals(newestVersion))
+
+            if (!currentVersion.Equals(_newestVersion))
             {
-                if (Properties.Settings.Default.suppressVersion != newestVersion)
+                if (Properties.Settings.Default.suppressVersion != _newestVersion)
                 {
                     newVersionPanel.Visible = true;
                     vCurrentLabel.Text = "Mevcut sürüm: " + currentVersion;
-                    vLatestLabel.Text = "Güncel sürüm: " + newestVersion;
+                    vLatestLabel.Text = "Güncel sürüm: " + _newestVersion;
                 }
                 else
                 {
@@ -209,7 +209,6 @@ namespace Projects_Launcher
         private void label3_Click(object sender, EventArgs e)
         {
             System.Diagnostics.Process.Start("https://mc.projects.gg/");
-            GC.Collect();
             GC.WaitForPendingFinalizers();
         }
 
@@ -231,7 +230,7 @@ namespace Projects_Launcher
                 loginButton.Text = "Kullanıcı Adı Giriniz";
                 return;
             }
-            
+
             Projects_Launcher.mainMenuForm main = new Projects_Launcher.mainMenuForm();
 
             this.Hide();
@@ -280,7 +279,7 @@ namespace Projects_Launcher
             this.Enabled = false;
             WebClient wc = new WebClient();
             wc.DownloadFileCompleted += Wc_DownloadFileCompleted;
-            wc.DownloadFileAsync(uri,
+            wc.DownloadFileAsync(_setupLocation,
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                 "/.projects/ProjectsSetup.exe");
         }
@@ -303,7 +302,7 @@ namespace Projects_Launcher
 
             if (updateDecision == DialogResult.Yes)
             {
-                Properties.Settings.Default.suppressVersion = newestVersion;
+                Properties.Settings.Default.suppressVersion = _newestVersion;
                 Properties.Settings.Default.Save();
                 newVersionPanel.Visible = false;
             }

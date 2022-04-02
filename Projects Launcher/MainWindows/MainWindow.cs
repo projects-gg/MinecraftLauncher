@@ -221,8 +221,6 @@ namespace Projects_Launcher.Projects_Launcher
 
             DataBindings.Clear();
             GC.SuppressFinalize(this);
-
-            
         }
 
         private async Task Launch() // Minecraft startup settings
@@ -256,7 +254,7 @@ namespace Projects_Launcher.Projects_Launcher
                 NotificationAboutException(ex);
             }
         }
-        
+
         private void oynabutton_Click(object sender, EventArgs e)
         {
             string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
@@ -378,7 +376,6 @@ namespace Projects_Launcher.Projects_Launcher
                 NotificationAboutException(ex);
             }
 
-            GC.Collect();
             GC.WaitForPendingFinalizers();
         }
 
@@ -453,7 +450,6 @@ namespace Projects_Launcher.Projects_Launcher
 
             do
             {
-
                 if (versionInfoStaticLabel.Text.Equals("Başlatılıyor"))
                 {
                     versionInfoStaticLabel.Text = "Başlatılıyor.";
@@ -530,12 +526,6 @@ namespace Projects_Launcher.Projects_Launcher
         private void surumtext_Click(object sender, EventArgs e)
         {
             surumlabell = surumtext.Text;
-        }
-
-        private void previousPage_Click(object sender, EventArgs e)
-        {
-            settingsBgPanel.Visible = false;
-            backButton.Visible = false;
         }
 
         private void widthtextbox_TextChanged(object sender, EventArgs e)
@@ -634,16 +624,6 @@ namespace Projects_Launcher.Projects_Launcher
         private Color RandomColor()
         {
             return Color.FromArgb(rnd.Next(255), rnd.Next(255), rnd.Next(255));
-        }
-
-        private void previousPage_MouseEnter(object sender, EventArgs e)
-        {
-            backButton.ForeColor = RandomColor();
-        }
-
-        private void previousPage_MouseLeave(object sender, EventArgs e)
-        {
-            backButton.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void minramtext_TextChanged(object sender, EventArgs e)
