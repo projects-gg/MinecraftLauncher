@@ -136,7 +136,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.playSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.playSplitStaticLabel.Location = new System.Drawing.Point(122, 423);
             this.playSplitStaticLabel.Name = "playSplitStaticLabel";
-            this.playSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
+            this.playSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
             this.playSplitStaticLabel.TabIndex = 2;
             this.playSplitStaticLabel.Text = "|";
             // 
@@ -162,7 +162,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.onlineSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.onlineSplitStaticLabel.Location = new System.Drawing.Point(792, 430);
             this.onlineSplitStaticLabel.Name = "onlineSplitStaticLabel";
-            this.onlineSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
+            this.onlineSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
             this.onlineSplitStaticLabel.TabIndex = 6;
             this.onlineSplitStaticLabel.Text = "|";
             // 
@@ -326,7 +326,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverOnlineCountStaticLabel.ForeColor = System.Drawing.SystemColors.ActiveBorder;
             this.serverOnlineCountStaticLabel.Location = new System.Drawing.Point(693, 440);
             this.serverOnlineCountStaticLabel.Name = "serverOnlineCountStaticLabel";
-            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(93, 16);
+            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(92, 16);
             this.serverOnlineCountStaticLabel.TabIndex = 120;
             this.serverOnlineCountStaticLabel.Text = "Sunucu Hatası";
             // 
@@ -376,11 +376,11 @@ namespace Projects_Launcher.Projects_Launcher
             this.bgSelection.AutoCheck = false;
             this.bgSelection.AutoSize = true;
             this.bgSelection.BackColor = System.Drawing.Color.Transparent;
+            this.bgSelection.Checked = global::Projects_Launcher.Properties.Settings.Default.backgroundLite;
             this.bgSelection.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
             this.bgSelection.CheckedState.BorderRadius = 0;
             this.bgSelection.CheckedState.BorderThickness = 0;
             this.bgSelection.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.bgSelection.CheckState = System.Windows.Forms.CheckState.Checked;
             this.bgSelection.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
             this.bgSelection.ForeColor = System.Drawing.SystemColors.ControlLightLight;
             this.bgSelection.Location = new System.Drawing.Point(696, 371);
@@ -394,7 +394,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.bgSelection.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
             this.bgSelection.UseVisualStyleBackColor = false;
             this.bgSelection.CheckedChanged += new System.EventHandler(this.bgSelection_CheckedChanged);
-            this.bgSelection.Checked = global::Projects_Launcher.Properties.Settings.Default.backgroundLite;
             // 
             // versionLabel
             // 
@@ -406,7 +405,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionLabel.Name = "versionLabel";
             this.versionLabel.Size = new System.Drawing.Size(47, 17);
             this.versionLabel.TabIndex = 196;
-            this.versionLabel.Text = "v" + Properties.Settings.Default.currentVersion;
+            this.versionLabel.Text = "v0.1.8";
             // 
             // versionSelectTxt
             // 
@@ -527,7 +526,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.label4.Cursor = System.Windows.Forms.Cursors.Hand;
             this.label4.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
             this.label4.ForeColor = System.Drawing.SystemColors.Control;
-            this.label4.Location = new System.Drawing.Point(188, 129);
+            this.label4.Location = new System.Drawing.Point(188, 126);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(19, 21);
             this.label4.TabIndex = 183;
@@ -605,9 +604,9 @@ namespace Projects_Launcher.Projects_Launcher
             this.maxRamDynamicCalculatorLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
             this.maxRamDynamicCalculatorLabel.Location = new System.Drawing.Point(509, 163);
             this.maxRamDynamicCalculatorLabel.Name = "maxRamDynamicCalculatorLabel";
-            this.maxRamDynamicCalculatorLabel.Size = new System.Drawing.Size(42, 18);
+            this.maxRamDynamicCalculatorLabel.Size = new System.Drawing.Size(38, 18);
             this.maxRamDynamicCalculatorLabel.TabIndex = 177;
-            this.maxRamDynamicCalculatorLabel.Text = "x GB";
+            this.maxRamDynamicCalculatorLabel.Text = "xGB";
             // 
             // minRamDynamicCalculatorLabel
             // 
@@ -617,9 +616,9 @@ namespace Projects_Launcher.Projects_Launcher
             this.minRamDynamicCalculatorLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
             this.minRamDynamicCalculatorLabel.Location = new System.Drawing.Point(509, 132);
             this.minRamDynamicCalculatorLabel.Name = "minRamDynamicCalculatorLabel";
-            this.minRamDynamicCalculatorLabel.Size = new System.Drawing.Size(42, 18);
+            this.minRamDynamicCalculatorLabel.Size = new System.Drawing.Size(38, 18);
             this.minRamDynamicCalculatorLabel.TabIndex = 176;
-            this.minRamDynamicCalculatorLabel.Text = "x GB";
+            this.minRamDynamicCalculatorLabel.Text = "xGB";
             // 
             // maxRamStaticLabel
             // 
@@ -743,7 +742,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.widthtextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
             this.widthtextbox.Font = new System.Drawing.Font("Arial", 12F);
             this.widthtextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.widthtextbox.Location = new System.Drawing.Point(128, 129);
+            this.widthtextbox.Location = new System.Drawing.Point(135, 129);
             this.widthtextbox.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.widthtextbox.MaxLength = 4;
             this.widthtextbox.Name = "widthtextbox";
@@ -769,7 +768,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.heighttextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
             this.heighttextbox.Font = new System.Drawing.Font("Arial", 12F);
             this.heighttextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.heighttextbox.Location = new System.Drawing.Point(214, 129);
+            this.heighttextbox.Location = new System.Drawing.Point(207, 129);
             this.heighttextbox.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.heighttextbox.MaxLength = 4;
             this.heighttextbox.Name = "heighttextbox";
@@ -865,7 +864,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.minimizeButtonControlBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.minimizeButtonControlBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
             this.minimizeButtonControlBox.ControlBoxType = Guna.UI2.WinForms.Enums.ControlBoxType.MinimizeBox;
-            this.minimizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.minimizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
             this.minimizeButtonControlBox.IconColor = System.Drawing.Color.White;
             this.minimizeButtonControlBox.Location = new System.Drawing.Point(849, 0);
             this.minimizeButtonControlBox.Name = "minimizeButtonControlBox";
@@ -877,7 +876,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.closeButtonControlBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.closeButtonControlBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
-            this.closeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.closeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
             this.closeButtonControlBox.IconColor = System.Drawing.Color.White;
             this.closeButtonControlBox.Location = new System.Drawing.Point(935, 0);
             this.closeButtonControlBox.Name = "closeButtonControlBox";
@@ -908,7 +907,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.maximizeButtonControlBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.maximizeButtonControlBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
             this.maximizeButtonControlBox.ControlBoxType = Guna.UI2.WinForms.Enums.ControlBoxType.MaximizeBox;
-            this.maximizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.maximizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
             this.maximizeButtonControlBox.IconColor = System.Drawing.Color.White;
             this.maximizeButtonControlBox.Location = new System.Drawing.Point(893, 0);
             this.maximizeButtonControlBox.Name = "maximizeButtonControlBox";
@@ -918,7 +917,8 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             // backButton
             // 
-            this.backButton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            this.backButton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
+            this.backButton.FlatStyle = System.Windows.Forms.FlatStyle.Popup;
             this.backButton.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
             this.backButton.Location = new System.Drawing.Point(0, 0);
             this.backButton.Name = "backButton";

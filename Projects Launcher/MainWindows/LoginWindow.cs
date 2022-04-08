@@ -185,7 +185,6 @@ namespace Projects_Launcher
             this.Hide();
             GC.SuppressFinalize(this);
 
-            GC.Collect();
             GC.WaitForPendingFinalizers();
 
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/ProjectsSetup.exe";

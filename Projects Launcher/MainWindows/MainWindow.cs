@@ -428,7 +428,6 @@ namespace Projects_Launcher.Projects_Launcher
                     ex.Message);
             }
 
-            GC.Collect();
             GC.WaitForPendingFinalizers();
         }
 
