@@ -258,7 +258,7 @@ namespace Projects_Launcher.Projects_Launcher
         private void oynabutton_Click(object sender, EventArgs e)
         {
             string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                                         "/.projects/versions/fabric-loader-0.13.3-1.18.2"; // Fabric directory
+                                         "/.projects/versions/projects-fabric"; // Fabric directory
             string appDataDizini =
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData); // AppData directory
 
@@ -283,7 +283,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             Uri fabric =
                 new Uri(
-                    "https://mc.projects.gg/LauncherUpdateStream/fabric-loader-0.13.3-1.18.2.zip"); // Fabric installer address
+                    "https://mc.projects.gg/LauncherUpdateStream/projects-fabric.zip"); // Fabric installer address
 
             if (Directory.Exists(@surum_appDataDizini)) //Check fabric is exist
             {
@@ -336,8 +336,8 @@ namespace Projects_Launcher.Projects_Launcher
             }
             else
             {
-                DialogResult secenek = MessageBox.Show("Fabric bulunamadı! İndirmek ister misiniz?",
-                    "Fabric Dosyası Eksik", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
+                DialogResult secenek = MessageBox.Show("Projects Fabric bulunamadı! İndirmek ister misiniz?",
+                    "Projects Fabric Dosyası Eksik", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
 
                 if (secenek == DialogResult.Yes)
                 {
@@ -346,7 +346,7 @@ namespace Projects_Launcher.Projects_Launcher
                         Wc_DownloadFileCompleted; // Call the codes when download process completed
                     wc.DownloadFileAsync(fabric,
                         appDataDizini +
-                        "/.projects/fabric-loader-0.13.3-1.18.2.zip"); // Download fabric to directory '.projects'
+                        "/.projects/projects-fabric.zip"); // Download fabric to directory '.projects'
 
                     this.Enabled = false;
                     versionInfoStaticLabel.Text = "İndiriliyor...";
@@ -362,7 +362,7 @@ namespace Projects_Launcher.Projects_Launcher
             try
             {
                 string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                                 "/.projects/fabric-loader-0.13.3-1.18.2.zip";
+                                 "/.projects/projects-fabric.zip";
                 string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                                      "/.projects/versions";
 

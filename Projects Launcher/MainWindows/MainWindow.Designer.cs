@@ -708,7 +708,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(68)))), ((int)(((byte)(88)))), ((int)(((byte)(112)))));
             this.versionBox.ItemHeight = 30;
             this.versionBox.Items.AddRange(new object[] {
-            "fabric-loader-0.13.3-1.18.2",
+            "projects-fabric",
             "1.18.2",
             "1.18.1",
             "1.17.1",
