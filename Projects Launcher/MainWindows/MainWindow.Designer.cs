@@ -364,6 +364,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Controls.Add(this.resolutionTxt);
             this.settingsBgPanel.Controls.Add(this.settingsStaticLabel);
             this.settingsBgPanel.Location = new System.Drawing.Point(0, 32);
+            this.settingsBgPanel.MaximumSize = new System.Drawing.Size(980, 470);
+            this.settingsBgPanel.MinimumSize = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.Name = "settingsBgPanel";
             this.settingsBgPanel.Size = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.TabIndex = 133;

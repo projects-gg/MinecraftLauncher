@@ -18,10 +18,16 @@ namespace Projects_Launcher
 
         private readonly string currentVersion = Properties.Settings.Default.currentVersion;
         private string _newestVersion = "";
+        private string newsTexts = "";
         private readonly Uri _setupLocation = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
 
         public DiscordRpcClient Client { get; private set; }
 
+        readonly Random rnd = new Random();
+        private Color RandomColor()
+        {
+            return Color.FromArgb(rnd.Next(255), rnd.Next(255), rnd.Next(255));
+        }
         private void cantGrabVersionInfo()
         {
             MessageBox.Show(
@@ -93,9 +99,58 @@ namespace Projects_Launcher
             }
         }
 
+        private void newsTextsRead()
+        {
+            WebRequest newsText = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/yenilikler.php");
+            try
+            {
+                WebResponse newsContentResponse;
+                newsContentResponse = newsText.GetResponse();
+                StreamReader versionContentReader = new StreamReader(newsContentResponse.GetResponseStream());
+                string versionContentLine = versionContentReader.ReadToEnd();
+                bool startWriting = false;
+                StringBuilder blds = new StringBuilder();
+
+                foreach (char character in versionContentLine) //this is hard to read but culture-compatible
+                {
+                    if (character.Equals('>'))
+                    {
+                        if (!startWriting)
+                        {
+                            startWriting = true;
+                        }
+                    }
+                    else if (startWriting)
+                    {
+                        if (!character.Equals('<'))
+                        {
+                            blds.Append(character);
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                if (blds.Length >= 0)
+                {
+                    newsTexts = blds.ToString();
+                }
+            }
+            catch
+            {
+                DialogResult secenek = MessageBox.Show("Yeni versiyonun yenilik bilgilerine ulaşılamadı!",
+                    "Dosyaya ulaşılamadı!", MessageBoxButtons.OK);
+            }
+
+            labelYenilikMaddeler.Text = newsTexts;
+        }
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
             DiscordRpcClientSetup();
+
+            versionLabel.Text = "v" + currentVersion;
 
             WebRequest currentVersionContent = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/version.php");
 
@@ -174,6 +229,9 @@ namespace Projects_Launcher
             }
 
             nickNameEnterTextBox.Text = Properties.Settings.Default.NickNames;
+
+            newsTextsRead();
+
 
             selectBackgroundImage();
             GC.Collect();
@@ -310,6 +368,37 @@ namespace Projects_Launcher
         private void updateNowButton_Click(object sender, EventArgs e)
         {
             updateApplication();
+        }
+
+        private void newsLabel_MouseEnter(object sender, EventArgs e)
+        {
+            newsLabel.ForeColor = RandomColor();
+        }
+
+        private void newsLabel_MouseLeave(object sender, EventArgs e)
+        {
+            newsLabel.ForeColor = Color.FromArgb(245, 245, 245);
+        }
+
+        private void backButton_Click(object sender, EventArgs e)
+        {
+            panelYenilikler.Visible = false;
+            backButton.Visible = false;
+        }
+
+        private void newsLabel_Click(object sender, EventArgs e)
+        {
+            if (panelYenilikler.Visible == false)
+            {
+                backButton.Visible = true;
+                panelYenilikler.Visible = true;
+            }
+            else
+            {
+                panelYenilikler.Visible = false;
+            }
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
         }
     }
 }

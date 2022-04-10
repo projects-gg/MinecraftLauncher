@@ -42,6 +42,8 @@ namespace Projects_Launcher
             this.guna2BorderlessForm2 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.newVersionPanel = new System.Windows.Forms.Panel();
+            this.vCurrentLabel = new System.Windows.Forms.Label();
+            this.vLatestLabel = new System.Windows.Forms.Label();
             this.skipButton = new System.Windows.Forms.Button();
             this.noUpdateButton = new System.Windows.Forms.Button();
             this.updateButton = new System.Windows.Forms.Button();
@@ -51,9 +53,16 @@ namespace Projects_Launcher
             this.updateLabelTop = new System.Windows.Forms.Label();
             this.updateHeadline = new System.Windows.Forms.Label();
             this.updateNowButton = new System.Windows.Forms.Button();
-            this.vLatestLabel = new System.Windows.Forms.Label();
-            this.vCurrentLabel = new System.Windows.Forms.Label();
+            this.panelYenilikler = new Guna.UI2.WinForms.Guna2Panel();
+            this.labelYenilikMaddeler = new System.Windows.Forms.Label();
+            this.labelYenilikler = new System.Windows.Forms.Label();
+            this.versionLabel = new System.Windows.Forms.Label();
+            this.newsLabel = new System.Windows.Forms.Label();
+            this.backButton = new System.Windows.Forms.Button();
+            this.projectsLogoStaticPictureBox = new Guna.UI2.WinForms.Guna2PictureBox();
             this.newVersionPanel.SuspendLayout();
+            this.panelYenilikler.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).BeginInit();
             this.SuspendLayout();
             // 
             // guna2BorderlessForm1
@@ -222,11 +231,35 @@ namespace Projects_Launcher
             this.newVersionPanel.Controls.Add(this.updateLabelBottom);
             this.newVersionPanel.Controls.Add(this.updateLabelTop);
             this.newVersionPanel.Controls.Add(this.updateHeadline);
-            this.newVersionPanel.Location = new System.Drawing.Point(177, 113);
+            this.newVersionPanel.Location = new System.Drawing.Point(175, 110);
             this.newVersionPanel.Name = "newVersionPanel";
             this.newVersionPanel.Size = new System.Drawing.Size(633, 288);
             this.newVersionPanel.TabIndex = 140;
             this.newVersionPanel.Visible = false;
+            // 
+            // vCurrentLabel
+            // 
+            this.vCurrentLabel.AutoSize = true;
+            this.vCurrentLabel.BackColor = System.Drawing.Color.Transparent;
+            this.vCurrentLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.vCurrentLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(200)))), ((int)(((byte)(45)))), ((int)(((byte)(35)))));
+            this.vCurrentLabel.Location = new System.Drawing.Point(144, 106);
+            this.vCurrentLabel.Name = "vCurrentLabel";
+            this.vCurrentLabel.Size = new System.Drawing.Size(37, 18);
+            this.vCurrentLabel.TabIndex = 9;
+            this.vCurrentLabel.Text = "x.x.x";
+            // 
+            // vLatestLabel
+            // 
+            this.vLatestLabel.AutoSize = true;
+            this.vLatestLabel.BackColor = System.Drawing.Color.Transparent;
+            this.vLatestLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.vLatestLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(200)))), ((int)(((byte)(35)))));
+            this.vLatestLabel.Location = new System.Drawing.Point(143, 145);
+            this.vLatestLabel.Name = "vLatestLabel";
+            this.vLatestLabel.Size = new System.Drawing.Size(37, 18);
+            this.vLatestLabel.TabIndex = 8;
+            this.vLatestLabel.Text = "x.x.x";
             // 
             // skipButton
             // 
@@ -315,9 +348,9 @@ namespace Projects_Launcher
             this.updateLabelTop.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
             this.updateLabelTop.Location = new System.Drawing.Point(27, 68);
             this.updateLabelTop.Name = "updateLabelTop";
-            this.updateLabelTop.Size = new System.Drawing.Size(397, 18);
+            this.updateLabelTop.Size = new System.Drawing.Size(329, 18);
             this.updateLabelTop.TabIndex = 1;
-            this.updateLabelTop.Text = "Projects başlatıcısı için kullanıma yeni sürüm yayınlanmış!";
+            this.updateLabelTop.Text = "Projects başlatıcısı için yeni sürüm yayınlanmış!";
             // 
             // updateHeadline
             // 
@@ -345,29 +378,101 @@ namespace Projects_Launcher
             this.updateNowButton.Visible = false;
             this.updateNowButton.Click += new System.EventHandler(this.updateNowButton_Click);
             // 
-            // vLatestLabel
+            // panelYenilikler
             // 
-            this.vLatestLabel.AutoSize = true;
-            this.vLatestLabel.BackColor = System.Drawing.Color.Transparent;
-            this.vLatestLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.vLatestLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(200)))), ((int)(((byte)(35)))));
-            this.vLatestLabel.Location = new System.Drawing.Point(143, 145);
-            this.vLatestLabel.Name = "vLatestLabel";
-            this.vLatestLabel.Size = new System.Drawing.Size(37, 18);
-            this.vLatestLabel.TabIndex = 8;
-            this.vLatestLabel.Text = "x.x.x";
+            this.panelYenilikler.BackColor = System.Drawing.Color.Transparent;
+            this.panelYenilikler.Controls.Add(this.projectsLogoStaticPictureBox);
+            this.panelYenilikler.Controls.Add(this.labelYenilikMaddeler);
+            this.panelYenilikler.Controls.Add(this.labelYenilikler);
+            this.panelYenilikler.Controls.Add(this.versionLabel);
+            this.panelYenilikler.Location = new System.Drawing.Point(0, 32);
+            this.panelYenilikler.MaximumSize = new System.Drawing.Size(980, 470);
+            this.panelYenilikler.MinimumSize = new System.Drawing.Size(980, 470);
+            this.panelYenilikler.Name = "panelYenilikler";
+            this.panelYenilikler.Size = new System.Drawing.Size(980, 470);
+            this.panelYenilikler.TabIndex = 142;
+            this.panelYenilikler.Visible = false;
             // 
-            // vCurrentLabel
+            // labelYenilikMaddeler
             // 
-            this.vCurrentLabel.AutoSize = true;
-            this.vCurrentLabel.BackColor = System.Drawing.Color.Transparent;
-            this.vCurrentLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.vCurrentLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(200)))), ((int)(((byte)(45)))), ((int)(((byte)(35)))));
-            this.vCurrentLabel.Location = new System.Drawing.Point(144, 106);
-            this.vCurrentLabel.Name = "vCurrentLabel";
-            this.vCurrentLabel.Size = new System.Drawing.Size(37, 18);
-            this.vCurrentLabel.TabIndex = 9;
-            this.vCurrentLabel.Text = "x.x.x";
+            this.labelYenilikMaddeler.AutoSize = true;
+            this.labelYenilikMaddeler.BackColor = System.Drawing.Color.Transparent;
+            this.labelYenilikMaddeler.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.labelYenilikMaddeler.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.labelYenilikMaddeler.Location = new System.Drawing.Point(22, 78);
+            this.labelYenilikMaddeler.Name = "labelYenilikMaddeler";
+            this.labelYenilikMaddeler.Size = new System.Drawing.Size(74, 252);
+            this.labelYenilikMaddeler.TabIndex = 199;
+            this.labelYenilikMaddeler.Text = "◣ vx.x.x ◢\r\n\r\n⊳ x\r\n\r\n⊳ x\r\n\r\n⊳ x\r\n\r\n⊳ x\r\n\r\n\r\n◣ vx.x.x ◢\r\n\r\n⊳ x\r\n";
+            // 
+            // labelYenilikler
+            // 
+            this.labelYenilikler.AutoSize = true;
+            this.labelYenilikler.BackColor = System.Drawing.Color.Transparent;
+            this.labelYenilikler.Font = new System.Drawing.Font("Arial", 15.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.labelYenilikler.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.labelYenilikler.Location = new System.Drawing.Point(430, 50);
+            this.labelYenilikler.Name = "labelYenilikler";
+            this.labelYenilikler.Size = new System.Drawing.Size(92, 24);
+            this.labelYenilikler.TabIndex = 198;
+            this.labelYenilikler.Text = "Yenilikler";
+            // 
+            // versionLabel
+            // 
+            this.versionLabel.AutoSize = true;
+            this.versionLabel.BackColor = System.Drawing.Color.Transparent;
+            this.versionLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 10F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.versionLabel.ForeColor = System.Drawing.SystemColors.ControlDarkDark;
+            this.versionLabel.Location = new System.Drawing.Point(520, 57);
+            this.versionLabel.Name = "versionLabel";
+            this.versionLabel.Size = new System.Drawing.Size(47, 17);
+            this.versionLabel.TabIndex = 197;
+            this.versionLabel.Text = "v0.1.8";
+            // 
+            // newsLabel
+            // 
+            this.newsLabel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.newsLabel.AutoSize = true;
+            this.newsLabel.BackColor = System.Drawing.Color.Transparent;
+            this.newsLabel.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.newsLabel.Font = new System.Drawing.Font("Arial", 15F, System.Drawing.FontStyle.Bold);
+            this.newsLabel.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.newsLabel.Location = new System.Drawing.Point(429, 439);
+            this.newsLabel.Name = "newsLabel";
+            this.newsLabel.RightToLeft = System.Windows.Forms.RightToLeft.Yes;
+            this.newsLabel.Size = new System.Drawing.Size(125, 24);
+            this.newsLabel.TabIndex = 142;
+            this.newsLabel.Text = "YENİLİKLER";
+            this.newsLabel.TextAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.newsLabel.Click += new System.EventHandler(this.newsLabel_Click);
+            this.newsLabel.MouseEnter += new System.EventHandler(this.newsLabel_MouseEnter);
+            this.newsLabel.MouseLeave += new System.EventHandler(this.newsLabel_MouseLeave);
+            // 
+            // backButton
+            // 
+            this.backButton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
+            this.backButton.FlatStyle = System.Windows.Forms.FlatStyle.Popup;
+            this.backButton.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.backButton.Location = new System.Drawing.Point(0, 0);
+            this.backButton.Name = "backButton";
+            this.backButton.Size = new System.Drawing.Size(45, 29);
+            this.backButton.TabIndex = 200;
+            this.backButton.Text = "←";
+            this.backButton.UseVisualStyleBackColor = false;
+            this.backButton.Visible = false;
+            this.backButton.Click += new System.EventHandler(this.backButton_Click);
+            // 
+            // projectsLogoStaticPictureBox
+            // 
+            this.projectsLogoStaticPictureBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.projectsLogoStaticPictureBox.BackColor = System.Drawing.Color.Transparent;
+            this.projectsLogoStaticPictureBox.Image = ((System.Drawing.Image)(resources.GetObject("projectsLogoStaticPictureBox.Image")));
+            this.projectsLogoStaticPictureBox.ImageRotate = 0F;
+            this.projectsLogoStaticPictureBox.Location = new System.Drawing.Point(904, 15);
+            this.projectsLogoStaticPictureBox.Name = "projectsLogoStaticPictureBox";
+            this.projectsLogoStaticPictureBox.Size = new System.Drawing.Size(64, 59);
+            this.projectsLogoStaticPictureBox.TabIndex = 200;
+            this.projectsLogoStaticPictureBox.TabStop = false;
             // 
             // loginMenuForm
             // 
@@ -377,6 +482,9 @@ namespace Projects_Launcher
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
             this.ClientSize = new System.Drawing.Size(980, 503);
+            this.Controls.Add(this.backButton);
+            this.Controls.Add(this.panelYenilikler);
+            this.Controls.Add(this.newsLabel);
             this.Controls.Add(this.updateNowButton);
             this.Controls.Add(this.newVersionPanel);
             this.Controls.Add(this.maximizeButtonControlBox);
@@ -398,6 +506,9 @@ namespace Projects_Launcher
             this.Load += new System.EventHandler(this.ProjectsLauncherLogin_Load);
             this.newVersionPanel.ResumeLayout(false);
             this.newVersionPanel.PerformLayout();
+            this.panelYenilikler.ResumeLayout(false);
+            this.panelYenilikler.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -426,6 +537,13 @@ namespace Projects_Launcher
         private System.Windows.Forms.Button updateNowButton;
         private System.Windows.Forms.Label vCurrentLabel;
         private System.Windows.Forms.Label vLatestLabel;
+        private Guna.UI2.WinForms.Guna2Panel panelYenilikler;
+        private System.Windows.Forms.Label versionLabel;
+        private System.Windows.Forms.Label labelYenilikMaddeler;
+        private System.Windows.Forms.Label labelYenilikler;
+        private System.Windows.Forms.Label newsLabel;
+        private System.Windows.Forms.Button backButton;
+        private Guna.UI2.WinForms.Guna2PictureBox projectsLogoStaticPictureBox;
     }
 }
 

@@ -54,6 +54,8 @@ namespace Projects_Launcher.Projects_Launcher
         private bool alreadyPlayingAnimatedLabel;
         private bool alreadyRelaunchWaiting;
 
+        private readonly string currentVersion = Properties.Settings.Default.currentVersion;
+
         public DiscordRpcClient Client { get; private set; }
 
         private void DiscordRpcClientSetup()
@@ -137,6 +139,8 @@ namespace Projects_Launcher.Projects_Launcher
         private void Anamenu_Load(object sender, EventArgs e)
         {
             selectBackgroundImage();
+
+            versionLabel.Text = "v" + currentVersion;
 
             // ".projects" directory check
             if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions"))
