@@ -50,6 +50,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.minramlabel = new System.Windows.Forms.Label();
             this.serverOnlineCountStaticLabel = new System.Windows.Forms.Label();
             this.settingsBgPanel = new Guna.UI2.WinForms.Guna2Panel();
+            this.guna2TextBox1 = new Guna.UI2.WinForms.Guna2TextBox();
+            this.label1 = new System.Windows.Forms.Label();
             this.bgSelection = new Guna.UI2.WinForms.Guna2CheckBox();
             this.versionLabel = new System.Windows.Forms.Label();
             this.versionSelectTxt = new System.Windows.Forms.Label();
@@ -87,6 +89,17 @@ namespace Projects_Launcher.Projects_Launcher
             this.guna2BorderlessForm1 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.backButton = new System.Windows.Forms.Button();
+            this.timer1 = new System.Windows.Forms.Timer(this.components);
+            this.label2 = new System.Windows.Forms.Label();
+            this.label5 = new System.Windows.Forms.Label();
+            this.label6 = new System.Windows.Forms.Label();
+            this.label7 = new System.Windows.Forms.Label();
+            this.label8 = new System.Windows.Forms.Label();
+            this.lobiOnline = new System.Windows.Forms.Label();
+            this.krakenOnline = new System.Windows.Forms.Label();
+            this.hadeanOnline = new System.Windows.Forms.Label();
+            this.deadendOnline = new System.Windows.Forms.Label();
+            this.dragonbornOnline = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.settingsStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.instagramStaticPictureBox)).BeginInit();
@@ -334,6 +347,16 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.settingsBgPanel.BackColor = System.Drawing.Color.Transparent;
             this.settingsBgPanel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.settingsBgPanel.Controls.Add(this.dragonbornOnline);
+            this.settingsBgPanel.Controls.Add(this.deadendOnline);
+            this.settingsBgPanel.Controls.Add(this.hadeanOnline);
+            this.settingsBgPanel.Controls.Add(this.krakenOnline);
+            this.settingsBgPanel.Controls.Add(this.lobiOnline);
+            this.settingsBgPanel.Controls.Add(this.label8);
+            this.settingsBgPanel.Controls.Add(this.label7);
+            this.settingsBgPanel.Controls.Add(this.label6);
+            this.settingsBgPanel.Controls.Add(this.label5);
+            this.settingsBgPanel.Controls.Add(this.label2);
             this.settingsBgPanel.Controls.Add(this.bgSelection);
             this.settingsBgPanel.Controls.Add(this.versionLabel);
             this.settingsBgPanel.Controls.Add(this.versionSelectTxt);
@@ -370,6 +393,36 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Size = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.TabIndex = 133;
             this.settingsBgPanel.Visible = false;
+            // 
+            // guna2TextBox1
+            // 
+            this.guna2TextBox1.Cursor = System.Windows.Forms.Cursors.IBeam;
+            this.guna2TextBox1.DefaultText = "";
+            this.guna2TextBox1.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(208)))), ((int)(((byte)(208)))), ((int)(((byte)(208)))));
+            this.guna2TextBox1.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(226)))), ((int)(((byte)(226)))));
+            this.guna2TextBox1.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
+            this.guna2TextBox1.DisabledState.PlaceholderForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(138)))), ((int)(((byte)(138)))), ((int)(((byte)(138)))));
+            this.guna2TextBox1.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.guna2TextBox1.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.guna2TextBox1.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.guna2TextBox1.Location = new System.Drawing.Point(565, 7);
+            this.guna2TextBox1.Name = "guna2TextBox1";
+            this.guna2TextBox1.PasswordChar = '\0';
+            this.guna2TextBox1.PlaceholderText = "";
+            this.guna2TextBox1.SelectedText = "";
+            this.guna2TextBox1.Size = new System.Drawing.Size(229, 14);
+            this.guna2TextBox1.TabIndex = 198;
+            // 
+            // label1
+            // 
+            this.label1.AutoSize = true;
+            this.label1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(36)))), ((int)(((byte)(36)))), ((int)(((byte)(36)))));
+            this.label1.ForeColor = System.Drawing.SystemColors.Control;
+            this.label1.Location = new System.Drawing.Point(53, 9);
+            this.label1.Name = "label1";
+            this.label1.Size = new System.Drawing.Size(48, 13);
+            this.label1.TabIndex = 140;
+            this.label1.Text = "label10";
             // 
             // bgSelection
             // 
@@ -528,7 +581,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.label4.Cursor = System.Windows.Forms.Cursors.Hand;
             this.label4.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
             this.label4.ForeColor = System.Drawing.SystemColors.Control;
-            this.label4.Location = new System.Drawing.Point(188, 126);
+            this.label4.Location = new System.Drawing.Point(182, 126);
             this.label4.Name = "label4";
             this.label4.Size = new System.Drawing.Size(19, 21);
             this.label4.TabIndex = 183;
@@ -744,7 +797,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.widthtextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
             this.widthtextbox.Font = new System.Drawing.Font("Arial", 12F);
             this.widthtextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.widthtextbox.Location = new System.Drawing.Point(135, 129);
+            this.widthtextbox.Location = new System.Drawing.Point(129, 129);
             this.widthtextbox.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.widthtextbox.MaxLength = 4;
             this.widthtextbox.Name = "widthtextbox";
@@ -770,7 +823,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.heighttextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
             this.heighttextbox.Font = new System.Drawing.Font("Arial", 12F);
             this.heighttextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.heighttextbox.Location = new System.Drawing.Point(207, 129);
+            this.heighttextbox.Location = new System.Drawing.Point(201, 129);
             this.heighttextbox.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.heighttextbox.MaxLength = 4;
             this.heighttextbox.Name = "heighttextbox";
@@ -931,6 +984,142 @@ namespace Projects_Launcher.Projects_Launcher
             this.backButton.Visible = false;
             this.backButton.Click += new System.EventHandler(this.button1_Click);
             // 
+            // timer1
+            // 
+            this.timer1.Enabled = true;
+            this.timer1.Interval = 5000;
+            this.timer1.Tick += new System.EventHandler(this.timer1_Tick);
+            // 
+            // label2
+            // 
+            this.label2.AutoSize = true;
+            this.label2.BackColor = System.Drawing.Color.Transparent;
+            this.label2.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.label2.Font = new System.Drawing.Font("Bahnschrift Light", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label2.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.label2.Location = new System.Drawing.Point(125, 362);
+            this.label2.Name = "label2";
+            this.label2.Size = new System.Drawing.Size(40, 19);
+            this.label2.TabIndex = 198;
+            this.label2.Text = "Lobi";
+            // 
+            // label5
+            // 
+            this.label5.AutoSize = true;
+            this.label5.BackColor = System.Drawing.Color.Transparent;
+            this.label5.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.label5.Font = new System.Drawing.Font("Bahnschrift Light", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label5.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.label5.Location = new System.Drawing.Point(125, 381);
+            this.label5.Name = "label5";
+            this.label5.Size = new System.Drawing.Size(61, 19);
+            this.label5.TabIndex = 199;
+            this.label5.Text = "Kraken";
+            // 
+            // label6
+            // 
+            this.label6.AutoSize = true;
+            this.label6.BackColor = System.Drawing.Color.Transparent;
+            this.label6.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.label6.Font = new System.Drawing.Font("Bahnschrift Light", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label6.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.label6.Location = new System.Drawing.Point(125, 400);
+            this.label6.Name = "label6";
+            this.label6.Size = new System.Drawing.Size(65, 19);
+            this.label6.TabIndex = 200;
+            this.label6.Text = "Hadean";
+            // 
+            // label7
+            // 
+            this.label7.AutoSize = true;
+            this.label7.BackColor = System.Drawing.Color.Transparent;
+            this.label7.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.label7.Font = new System.Drawing.Font("Bahnschrift Light", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label7.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.label7.Location = new System.Drawing.Point(125, 419);
+            this.label7.Name = "label7";
+            this.label7.Size = new System.Drawing.Size(75, 19);
+            this.label7.TabIndex = 201;
+            this.label7.Text = "DeadEnd";
+            // 
+            // label8
+            // 
+            this.label8.AutoSize = true;
+            this.label8.BackColor = System.Drawing.Color.Transparent;
+            this.label8.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.label8.Font = new System.Drawing.Font("Bahnschrift Light", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.label8.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.label8.Location = new System.Drawing.Point(125, 438);
+            this.label8.Name = "label8";
+            this.label8.Size = new System.Drawing.Size(97, 19);
+            this.label8.TabIndex = 202;
+            this.label8.Text = "Dragonborn";
+            // 
+            // lobiOnline
+            // 
+            this.lobiOnline.AutoSize = true;
+            this.lobiOnline.BackColor = System.Drawing.Color.Transparent;
+            this.lobiOnline.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.lobiOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.lobiOnline.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(210)))), ((int)(((byte)(65)))), ((int)(((byte)(55)))));
+            this.lobiOnline.Location = new System.Drawing.Point(228, 362);
+            this.lobiOnline.Name = "lobiOnline";
+            this.lobiOnline.Size = new System.Drawing.Size(21, 19);
+            this.lobiOnline.TabIndex = 207;
+            this.lobiOnline.Text = "☉";
+            // 
+            // krakenOnline
+            // 
+            this.krakenOnline.AutoSize = true;
+            this.krakenOnline.BackColor = System.Drawing.Color.Transparent;
+            this.krakenOnline.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.krakenOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.krakenOnline.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(200)))), ((int)(((byte)(35)))));
+            this.krakenOnline.Location = new System.Drawing.Point(228, 381);
+            this.krakenOnline.Name = "krakenOnline";
+            this.krakenOnline.Size = new System.Drawing.Size(21, 19);
+            this.krakenOnline.TabIndex = 208;
+            this.krakenOnline.Text = "☉";
+            // 
+            // hadeanOnline
+            // 
+            this.hadeanOnline.AutoSize = true;
+            this.hadeanOnline.BackColor = System.Drawing.Color.Transparent;
+            this.hadeanOnline.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.hadeanOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.hadeanOnline.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(210)))), ((int)(((byte)(65)))), ((int)(((byte)(55)))));
+            this.hadeanOnline.Location = new System.Drawing.Point(228, 400);
+            this.hadeanOnline.Name = "hadeanOnline";
+            this.hadeanOnline.Size = new System.Drawing.Size(21, 19);
+            this.hadeanOnline.TabIndex = 209;
+            this.hadeanOnline.Text = "☉";
+            // 
+            // deadendOnline
+            // 
+            this.deadendOnline.AutoSize = true;
+            this.deadendOnline.BackColor = System.Drawing.Color.Transparent;
+            this.deadendOnline.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.deadendOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.deadendOnline.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(200)))), ((int)(((byte)(35)))));
+            this.deadendOnline.Location = new System.Drawing.Point(228, 419);
+            this.deadendOnline.Name = "deadendOnline";
+            this.deadendOnline.Size = new System.Drawing.Size(21, 19);
+            this.deadendOnline.TabIndex = 210;
+            this.deadendOnline.Text = "☉";
+            // 
+            // dragonbornOnline
+            // 
+            this.dragonbornOnline.AutoSize = true;
+            this.dragonbornOnline.BackColor = System.Drawing.Color.Transparent;
+            this.dragonbornOnline.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.dragonbornOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.dragonbornOnline.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(210)))), ((int)(((byte)(65)))), ((int)(((byte)(55)))));
+            this.dragonbornOnline.Location = new System.Drawing.Point(228, 438);
+            this.dragonbornOnline.Name = "dragonbornOnline";
+            this.dragonbornOnline.Size = new System.Drawing.Size(21, 19);
+            this.dragonbornOnline.TabIndex = 211;
+            this.dragonbornOnline.Text = "☉";
+            // 
             // mainMenuForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 13F);
@@ -939,6 +1128,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
             this.ClientSize = new System.Drawing.Size(980, 503);
+            this.Controls.Add(this.label1);
+            this.Controls.Add(this.guna2TextBox1);
             this.Controls.Add(this.backButton);
             this.Controls.Add(this.maximizeButtonControlBox);
             this.Controls.Add(this.label11);
@@ -1043,5 +1234,18 @@ namespace Projects_Launcher.Projects_Launcher
         private System.Windows.Forms.Label versionLabel;
         private Guna.UI2.WinForms.Guna2CheckBox bgSelection;
         private System.Windows.Forms.Button backButton;
+        public System.Windows.Forms.Label label1;
+        private System.Windows.Forms.Timer timer1;
+        private Guna.UI2.WinForms.Guna2TextBox guna2TextBox1;
+        private System.Windows.Forms.Label dragonbornOnline;
+        private System.Windows.Forms.Label deadendOnline;
+        private System.Windows.Forms.Label hadeanOnline;
+        private System.Windows.Forms.Label krakenOnline;
+        private System.Windows.Forms.Label lobiOnline;
+        private System.Windows.Forms.Label label8;
+        private System.Windows.Forms.Label label7;
+        private System.Windows.Forms.Label label6;
+        private System.Windows.Forms.Label label5;
+        private System.Windows.Forms.Label label2;
     }
 }

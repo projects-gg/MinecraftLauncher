@@ -2,7 +2,9 @@
 using CmlLib.Core.Auth;
 using DiscordRPC;
 using MineStatLib;
+using Newtonsoft.Json;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
@@ -11,9 +13,12 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Net;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Xml;
+using System.Xml.Linq;
 
 namespace Projects_Launcher.Projects_Launcher
 {
@@ -141,6 +146,8 @@ namespace Projects_Launcher.Projects_Launcher
             selectBackgroundImage();
 
             versionLabel.Text = "v" + currentVersion;
+
+            timer1.Start();
 
             // ".projects" directory check
             if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions"))
@@ -1035,5 +1042,131 @@ namespace Projects_Launcher.Projects_Launcher
             settingsBgPanel.Visible = false;
             backButton.Visible = false;
         }
+
+        public class players
+        {
+            public string list { get; set; }
+        }
+        public class Oyuncular
+        {
+            public players players { get; set; }
+        }
+        public System.Text.Encoding UTF8 { get; }
+        private void timer1_Tick(object sender, EventArgs e)
+        {
+            //Lobi
+            string lobiApi = "https://projectsggapi.vercel.app/api/server1";
+            HttpWebRequest lobiRequest = WebRequest.Create(lobiApi) as HttpWebRequest;
+            string lobiJsonVerisi = "";
+            using (HttpWebResponse response = lobiRequest.GetResponse() as HttpWebResponse)
+            {
+                StreamReader r = new StreamReader(response.GetResponseStream());
+                lobiJsonVerisi = r.ReadToEnd();
+            }
+
+            guna2TextBox1.Text = lobiJsonVerisi;
+
+            if (guna2TextBox1.Text.Contains(Properties.Settings.Default.NickNames) == true)
+            { 
+                label1.Text = "Lobi";
+
+                //Discord RPC
+                Client = new DiscordRpcClient("949311557542756362");
+                Client.Initialize();
+
+                Client.SetPresence(new RichPresence
+                {
+                    Details = "Lobide bekliyor...",
+                    State = "Sunucu IP: mc.projects.gg",
+                    Assets = new Assets
+                    {
+                        LargeImageKey = "projects_logo",
+                        LargeImageText = "https://mc.projects.gg/",
+                        SmallImageKey = "world",
+                    }
+                });
+            }
+            else
+            { 
+                label1.Text = "Yok?"; 
+            }
+
+            //Hadean
+            string hadeanApi = "https://projectsggapi.vercel.app/api/server3";
+            HttpWebRequest hadeanRequest = WebRequest.Create(hadeanApi) as HttpWebRequest;
+            string hadeanJsonVerisi = "";
+            using (HttpWebResponse response = hadeanRequest.GetResponse() as HttpWebResponse)
+            {
+                StreamReader r = new StreamReader(response.GetResponseStream());
+                hadeanJsonVerisi = r.ReadToEnd();
+            }
+
+            guna2TextBox1.Text = hadeanJsonVerisi;
+
+            if (guna2TextBox1.Text.Contains(Properties.Settings.Default.NickNames) == true)
+            { 
+                label1.Text = "Hadean";
+
+                //Discord RPC
+                Client = new DiscordRpcClient("949311557542756362");
+                Client.Initialize();
+
+                Client.SetPresence(new RichPresence
+                {
+                    Details = "Hadean sunucusunda.",
+                    State = "Sunucu IP: mc.projects.gg",
+                    Assets = new Assets
+                    {
+                        LargeImageKey = "projects_logo",
+                        LargeImageText = "https://mc.projects.gg/",
+                        SmallImageKey = "world",
+                    }
+                });
+            }
+            else
+            { 
+                label1.Text = "Yok?"; 
+            }
+
+            //Kraken
+            string krakenApi = "https://projectsggapi.vercel.app/api/server2";
+            HttpWebRequest krakenRequest = WebRequest.Create(krakenApi) as HttpWebRequest;
+            string krakenJsonVerisi = "";
+            using (HttpWebResponse response = krakenRequest.GetResponse() as HttpWebResponse)
+            {
+                StreamReader r = new StreamReader(response.GetResponseStream());
+                hadeanJsonVerisi = r.ReadToEnd();
+            }
+
+            guna2TextBox1.Text = krakenJsonVerisi;
+
+            if (guna2TextBox1.Text.Contains(Properties.Settings.Default.NickNames) == true)
+            { 
+                label1.Text = "Kraken";
+
+                //Discord RPC
+                Client = new DiscordRpcClient("949311557542756362");
+                Client.Initialize();
+
+                Client.SetPresence(new RichPresence
+                {
+                    Details = "Kraken sunucusunda.",
+                    State = "Sunucu IP: mc.projects.gg",
+                    Assets = new Assets
+                    {
+                        LargeImageKey = "projects_logo",
+                        LargeImageText = "https://mc.projects.gg/",
+                        SmallImageKey = "world",
+                    }
+                });
+
+            }
+            else
+            { 
+                label1.Text = "Yok?"; 
+            }
+
+        }
     }
+    
 }
