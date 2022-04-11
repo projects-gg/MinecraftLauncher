@@ -54,12 +54,12 @@ namespace Projects_Launcher
             this.updateHeadline = new System.Windows.Forms.Label();
             this.updateNowButton = new System.Windows.Forms.Button();
             this.panelYenilikler = new Guna.UI2.WinForms.Guna2Panel();
+            this.projectsLogoStaticPictureBox = new Guna.UI2.WinForms.Guna2PictureBox();
             this.labelYenilikMaddeler = new System.Windows.Forms.Label();
             this.labelYenilikler = new System.Windows.Forms.Label();
             this.versionLabel = new System.Windows.Forms.Label();
             this.newsLabel = new System.Windows.Forms.Label();
             this.backButton = new System.Windows.Forms.Button();
-            this.projectsLogoStaticPictureBox = new Guna.UI2.WinForms.Guna2PictureBox();
             this.newVersionPanel.SuspendLayout();
             this.panelYenilikler.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).BeginInit();
@@ -163,7 +163,7 @@ namespace Projects_Launcher
             this.nickNameEnterTextBox.Font = new System.Drawing.Font("Segoe UI", 14.25F);
             this.nickNameEnterTextBox.ForeColor = System.Drawing.Color.White;
             this.nickNameEnterTextBox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.nickNameEnterTextBox.IconLeft = global::Projects_Launcher.Properties.Resources.projects;
+            this.nickNameEnterTextBox.IconLeft = global::Projects_Launcher.Properties.Resources.projects_Logo_64x64;
             this.nickNameEnterTextBox.Location = new System.Drawing.Point(380, 171);
             this.nickNameEnterTextBox.Margin = new System.Windows.Forms.Padding(4);
             this.nickNameEnterTextBox.Name = "nickNameEnterTextBox";
@@ -393,6 +393,18 @@ namespace Projects_Launcher
             this.panelYenilikler.TabIndex = 142;
             this.panelYenilikler.Visible = false;
             // 
+            // projectsLogoStaticPictureBox
+            // 
+            this.projectsLogoStaticPictureBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.projectsLogoStaticPictureBox.BackColor = System.Drawing.Color.Transparent;
+            this.projectsLogoStaticPictureBox.Image = ((System.Drawing.Image)(resources.GetObject("projectsLogoStaticPictureBox.Image")));
+            this.projectsLogoStaticPictureBox.ImageRotate = 0F;
+            this.projectsLogoStaticPictureBox.Location = new System.Drawing.Point(904, 15);
+            this.projectsLogoStaticPictureBox.Name = "projectsLogoStaticPictureBox";
+            this.projectsLogoStaticPictureBox.Size = new System.Drawing.Size(64, 59);
+            this.projectsLogoStaticPictureBox.TabIndex = 200;
+            this.projectsLogoStaticPictureBox.TabStop = false;
+            // 
             // labelYenilikMaddeler
             // 
             this.labelYenilikMaddeler.AutoSize = true;
@@ -461,18 +473,6 @@ namespace Projects_Launcher
             this.backButton.UseVisualStyleBackColor = false;
             this.backButton.Visible = false;
             this.backButton.Click += new System.EventHandler(this.backButton_Click);
-            // 
-            // projectsLogoStaticPictureBox
-            // 
-            this.projectsLogoStaticPictureBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.projectsLogoStaticPictureBox.BackColor = System.Drawing.Color.Transparent;
-            this.projectsLogoStaticPictureBox.Image = ((System.Drawing.Image)(resources.GetObject("projectsLogoStaticPictureBox.Image")));
-            this.projectsLogoStaticPictureBox.ImageRotate = 0F;
-            this.projectsLogoStaticPictureBox.Location = new System.Drawing.Point(904, 15);
-            this.projectsLogoStaticPictureBox.Name = "projectsLogoStaticPictureBox";
-            this.projectsLogoStaticPictureBox.Size = new System.Drawing.Size(64, 59);
-            this.projectsLogoStaticPictureBox.TabIndex = 200;
-            this.projectsLogoStaticPictureBox.TabStop = false;
             // 
             // loginMenuForm
             // 

@@ -71,9 +71,9 @@ namespace Projects_Launcher.Projects_Launcher
                     State = "Sunucu IP: mc.projects.gg",
                     Assets = new Assets
                     {
-                        LargeImageKey = "131231",
+                        LargeImageKey = "projects_logo",
                         LargeImageText = "https://mc.projects.gg/",
-                        SmallImageKey = "",
+                        SmallImageKey = "world",
                     }
                 });
             }
@@ -109,7 +109,7 @@ namespace Projects_Launcher.Projects_Launcher
             catch
             {
                 // Shouldn't happen except no internet connection or server downtime
-                this.BackgroundImage = Properties.Resources.defaultBg;
+                this.BackgroundImage = Properties.Resources._6;
             }
         }
 
@@ -220,7 +220,6 @@ namespace Projects_Launcher.Projects_Launcher
                 // Shouldn't happen except no internet connection or server downtime
             }
 
-            GC.Collect();
             GC.WaitForPendingFinalizers();
 
             DataBindings.Clear();
@@ -307,9 +306,9 @@ namespace Projects_Launcher.Projects_Launcher
                         },
                         Assets = new Assets
                         {
-                            LargeImageKey = "131231",
+                            LargeImageKey = "projects_logo",
                             LargeImageText = "https://mc.projects.gg/",
-                            SmallImageKey = "",
+                            SmallImageKey = "world",
                         }
                     });
 

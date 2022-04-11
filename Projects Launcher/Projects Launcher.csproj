@@ -52,7 +52,7 @@
     <WarningLevel>4</WarningLevel>
     <CodeAnalysisRuleSet>
     </CodeAnalysisRuleSet>
-    <Prefer32Bit>false</Prefer32Bit>
+    <Prefer32Bit>true</Prefer32Bit>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -385,14 +385,9 @@
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
       <Generator>ResXFileCodeGenerator</Generator>
-      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
       <SubType>Designer</SubType>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
-    <Compile Include="Properties\Resources.Designer.cs">
-      <AutoGen>True</AutoGen>
-      <DependentUpon>Resources.resx</DependentUpon>
-      <DesignTime>True</DesignTime>
-    </Compile>
     <None Include="packages.config" />
     <None Include="ProjectsLauncher.pfx" />
     <None Include="Properties\app.manifest" />
@@ -400,6 +395,11 @@
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
     </None>
+    <Compile Include="Properties\Resources.Designer.cs">
+      <AutoGen>True</AutoGen>
+      <DesignTime>True</DesignTime>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
     <Compile Include="Properties\Settings.Designer.cs">
       <AutoGen>True</AutoGen>
       <DependentUpon>Settings.settings</DependentUpon>
@@ -412,16 +412,12 @@
   <ItemGroup>
     <Content Include="logo.ico" />
     <Content Include="projects.ico" />
-    <Content Include="Resources\Browser\back.png" />
-    <Content Include="Resources\Browser\forward.png" />
-    <Content Include="Resources\Browser\refresh.png" />
-    <None Include="Resources\refresh.png" />
-    <None Include="Resources\arrow-right.png" />
-    <None Include="Resources\arrow-left.png" />
-    <None Include="Resources\pprojectss.png" />
-    <None Include="Resources\projects.png" />
-    <None Include="Resources\2022-01-24_23.31.44.png" />
-    <None Include="Resources\info.png" />
+    <None Include="Resources\projects_Logo_64x64.jpg" />
+    <None Include="Resources\projects_Logo.jpg" />
+    <None Include="Resources\projects_logo_icon.ico" />
+    <None Include="Resources\6.png" />
+    <None Include="Resources\2022-01-25_18.38.31.png" />
+    <None Include="Resources\defaultBg" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include=".NETFramework,Version=v4.7.2">
