@@ -205,8 +205,8 @@ namespace Projects_Launcher
                 if (Properties.Settings.Default.suppressVersion != _newestVersion)
                 {
                     newVersionPanel.Visible = true;
-                    vCurrentLabel.Text = "Mevcut sürüm: " + currentVersion;
-                    vLatestLabel.Text = "Güncel sürüm: " + _newestVersion;
+                    vCurrentLabel.Text = currentVersion;
+                    vLatestLabel.Text = _newestVersion;
                 }
                 else
                 {
