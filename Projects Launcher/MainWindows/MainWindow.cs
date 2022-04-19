@@ -1048,7 +1048,7 @@ namespace Projects_Launcher.Projects_Launcher
         public class Oyuncular
         {
             public players players { get; set; }
-        }   
+        }
     }
     
 }
