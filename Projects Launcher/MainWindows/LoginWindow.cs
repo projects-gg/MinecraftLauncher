@@ -19,7 +19,7 @@ namespace Projects_Launcher
         private readonly string currentVersion = Properties.Settings.Default.currentVersion;
         private string _newestVersion = "";
         private string newsTexts = "";
-        private readonly Uri _setupLocation = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
+        private readonly Uri _setupLocation = new Uri("https://projects.gg/MinecraftLauncher/versions/ProjectsSetup.exe");
 
         public DiscordRpcClient Client { get; private set; }
 
@@ -86,7 +86,7 @@ namespace Projects_Launcher
                     imageType = Convert.ToString(random.Next(4));
                 }
 
-                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + imageType + ".png"); // Last background image
+                var request = WebRequest.Create("https://projects.gg/MinecraftLauncher/backgrounds" + "/" + imageType + ".png"); // Last background image
 
                 using (var response = request.GetResponse())
                 using (var stream = response.GetResponseStream())
@@ -101,7 +101,7 @@ namespace Projects_Launcher
 
         private void newsTextsRead()
         {
-            WebRequest newsText = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/yenilikler.php");
+            WebRequest newsText = HttpWebRequest.Create("https://projects.gg/MinecraftLauncher/yenilikler.php");
             try
             {
                 WebResponse newsContentResponse;
@@ -140,8 +140,7 @@ namespace Projects_Launcher
             }
             catch
             {
-                DialogResult = MessageBox.Show("Yeni versiyonun yenilik bilgilerine ulaşılamadı!",
-                    "Dosyaya ulaşılamadı!", MessageBoxButtons.OK);
+                newsLabel.Visible = false;
             }
 
             labelYenilikMaddeler.Text = newsTexts;
@@ -152,7 +151,7 @@ namespace Projects_Launcher
 
             versionLabel.Text = "v" + currentVersion;
 
-            WebRequest currentVersionContent = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/version.php");
+            WebRequest currentVersionContent = HttpWebRequest.Create("https://projects.gg/MinecraftLauncher/version.php");
 
             try
             {

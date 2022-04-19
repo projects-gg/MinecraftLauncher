@@ -105,7 +105,7 @@ namespace Projects_Launcher.Projects_Launcher
                     imageType = Convert.ToString(random.Next(4));
                 }
 
-                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + imageType + ".png"); // Last background image
+                var request = WebRequest.Create("https://projects.gg/MinecraftLauncher/backgrounds" + "/" + imageType + ".png"); // Last background image
 
                 using (var response = request.GetResponse())
                 using (var stream = response.GetResponseStream())
@@ -291,7 +291,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             Uri fabric =
                 new Uri(
-                    "https://mc.projects.gg/LauncherUpdateStream/projects-fabric.zip"); // Fabric installer address
+                    "https://projects.gg/MinecraftLauncher/projects-fabric.zip"); // Fabric installer address
 
             if (Directory.Exists(@surum_appDataDizini)) //Check fabric is exist
             {

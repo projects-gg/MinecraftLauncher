@@ -50,14 +50,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.minramlabel = new System.Windows.Forms.Label();
             this.serverOnlineCountStaticLabel = new System.Windows.Forms.Label();
             this.settingsBgPanel = new Guna.UI2.WinForms.Guna2Panel();
-            this.dragonbornOnline = new System.Windows.Forms.Label();
-            this.deadendOnline = new System.Windows.Forms.Label();
-            this.hadeanOnline = new System.Windows.Forms.Label();
             this.krakenOnline = new System.Windows.Forms.Label();
             this.lobiOnline = new System.Windows.Forms.Label();
-            this.label8 = new System.Windows.Forms.Label();
-            this.label7 = new System.Windows.Forms.Label();
-            this.label6 = new System.Windows.Forms.Label();
             this.label5 = new System.Windows.Forms.Label();
             this.label2 = new System.Windows.Forms.Label();
             this.bgSelection = new Guna.UI2.WinForms.Guna2CheckBox();
@@ -344,14 +338,8 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.settingsBgPanel.BackColor = System.Drawing.Color.Transparent;
             this.settingsBgPanel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.settingsBgPanel.Controls.Add(this.dragonbornOnline);
-            this.settingsBgPanel.Controls.Add(this.deadendOnline);
-            this.settingsBgPanel.Controls.Add(this.hadeanOnline);
             this.settingsBgPanel.Controls.Add(this.krakenOnline);
             this.settingsBgPanel.Controls.Add(this.lobiOnline);
-            this.settingsBgPanel.Controls.Add(this.label8);
-            this.settingsBgPanel.Controls.Add(this.label7);
-            this.settingsBgPanel.Controls.Add(this.label6);
             this.settingsBgPanel.Controls.Add(this.label5);
             this.settingsBgPanel.Controls.Add(this.label2);
             this.settingsBgPanel.Controls.Add(this.bgSelection);
@@ -383,52 +371,13 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Controls.Add(this.mbLabel);
             this.settingsBgPanel.Controls.Add(this.resolutionTxt);
             this.settingsBgPanel.Controls.Add(this.settingsStaticLabel);
-            this.settingsBgPanel.Location = new System.Drawing.Point(0, 119);
+            this.settingsBgPanel.Location = new System.Drawing.Point(0, 35);
             this.settingsBgPanel.MaximumSize = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.MinimumSize = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.Name = "settingsBgPanel";
             this.settingsBgPanel.Size = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.TabIndex = 133;
             this.settingsBgPanel.Visible = false;
-            // 
-            // dragonbornOnline
-            // 
-            this.dragonbornOnline.AutoSize = true;
-            this.dragonbornOnline.BackColor = System.Drawing.Color.Transparent;
-            this.dragonbornOnline.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.dragonbornOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.dragonbornOnline.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(210)))), ((int)(((byte)(65)))), ((int)(((byte)(55)))));
-            this.dragonbornOnline.Location = new System.Drawing.Point(228, 438);
-            this.dragonbornOnline.Name = "dragonbornOnline";
-            this.dragonbornOnline.Size = new System.Drawing.Size(21, 19);
-            this.dragonbornOnline.TabIndex = 211;
-            this.dragonbornOnline.Text = "☉";
-            // 
-            // deadendOnline
-            // 
-            this.deadendOnline.AutoSize = true;
-            this.deadendOnline.BackColor = System.Drawing.Color.Transparent;
-            this.deadendOnline.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.deadendOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.deadendOnline.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(200)))), ((int)(((byte)(35)))));
-            this.deadendOnline.Location = new System.Drawing.Point(228, 419);
-            this.deadendOnline.Name = "deadendOnline";
-            this.deadendOnline.Size = new System.Drawing.Size(21, 19);
-            this.deadendOnline.TabIndex = 210;
-            this.deadendOnline.Text = "☉";
-            // 
-            // hadeanOnline
-            // 
-            this.hadeanOnline.AutoSize = true;
-            this.hadeanOnline.BackColor = System.Drawing.Color.Transparent;
-            this.hadeanOnline.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.hadeanOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.hadeanOnline.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(210)))), ((int)(((byte)(65)))), ((int)(((byte)(55)))));
-            this.hadeanOnline.Location = new System.Drawing.Point(228, 400);
-            this.hadeanOnline.Name = "hadeanOnline";
-            this.hadeanOnline.Size = new System.Drawing.Size(21, 19);
-            this.hadeanOnline.TabIndex = 209;
-            this.hadeanOnline.Text = "☉";
             // 
             // krakenOnline
             // 
@@ -456,45 +405,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.lobiOnline.TabIndex = 207;
             this.lobiOnline.Text = "☉";
             // 
-            // label8
-            // 
-            this.label8.AutoSize = true;
-            this.label8.BackColor = System.Drawing.Color.Transparent;
-            this.label8.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.label8.Font = new System.Drawing.Font("Bahnschrift Light", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label8.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.label8.Location = new System.Drawing.Point(125, 438);
-            this.label8.Name = "label8";
-            this.label8.Size = new System.Drawing.Size(97, 19);
-            this.label8.TabIndex = 202;
-            this.label8.Text = "Dragonborn";
-            // 
-            // label7
-            // 
-            this.label7.AutoSize = true;
-            this.label7.BackColor = System.Drawing.Color.Transparent;
-            this.label7.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.label7.Font = new System.Drawing.Font("Bahnschrift Light", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label7.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.label7.Location = new System.Drawing.Point(125, 419);
-            this.label7.Name = "label7";
-            this.label7.Size = new System.Drawing.Size(75, 19);
-            this.label7.TabIndex = 201;
-            this.label7.Text = "DeadEnd";
-            // 
-            // label6
-            // 
-            this.label6.AutoSize = true;
-            this.label6.BackColor = System.Drawing.Color.Transparent;
-            this.label6.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.label6.Font = new System.Drawing.Font("Bahnschrift Light", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label6.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.label6.Location = new System.Drawing.Point(125, 400);
-            this.label6.Name = "label6";
-            this.label6.Size = new System.Drawing.Size(65, 19);
-            this.label6.TabIndex = 200;
-            this.label6.Text = "Hadean";
-            // 
             // label5
             // 
             this.label5.AutoSize = true;
@@ -504,9 +414,9 @@ namespace Projects_Launcher.Projects_Launcher
             this.label5.ForeColor = System.Drawing.Color.WhiteSmoke;
             this.label5.Location = new System.Drawing.Point(125, 381);
             this.label5.Name = "label5";
-            this.label5.Size = new System.Drawing.Size(61, 19);
+            this.label5.Size = new System.Drawing.Size(105, 19);
             this.label5.TabIndex = 199;
-            this.label5.Text = "Kraken";
+            this.label5.Text = "Survival Gaia";
             // 
             // label2
             // 
@@ -1193,14 +1103,8 @@ namespace Projects_Launcher.Projects_Launcher
         private System.Windows.Forms.Label versionLabel;
         private Guna.UI2.WinForms.Guna2CheckBox bgSelection;
         private System.Windows.Forms.Button backButton;
-        private System.Windows.Forms.Label dragonbornOnline;
-        private System.Windows.Forms.Label deadendOnline;
-        private System.Windows.Forms.Label hadeanOnline;
         private System.Windows.Forms.Label krakenOnline;
         private System.Windows.Forms.Label lobiOnline;
-        private System.Windows.Forms.Label label8;
-        private System.Windows.Forms.Label label7;
-        private System.Windows.Forms.Label label6;
         private System.Windows.Forms.Label label5;
         private System.Windows.Forms.Label label2;
     }
