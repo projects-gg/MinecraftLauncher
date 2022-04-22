@@ -121,7 +121,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("193.164.7.43")]
+        [global::System.Configuration.DefaultSettingValueAttribute("play.projects.gg")]
         public string ProxyIP {
             get {
                 return ((string)(this["ProxyIP"]));
@@ -130,7 +130,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.1.12")]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.1.13")]
         public string currentVersion {
             get {
                 return ((string)(this["currentVersion"]));
