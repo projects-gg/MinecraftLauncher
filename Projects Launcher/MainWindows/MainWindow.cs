@@ -158,6 +158,7 @@ namespace Projects_Launcher.Projects_Launcher
             DiscordRpcClientSetup();
 
             onlineCountUpdater().GetAwaiter();
+            onlineChecker().GetAwaiter();
 
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames;
 
@@ -513,6 +514,70 @@ namespace Projects_Launcher.Projects_Launcher
 
             GC.Collect();
             GC.WaitForPendingFinalizers();
+        }
+
+        public class debug
+        {
+            public string ping { get; set; }
+        }
+
+        public class Xml
+        {
+            public debug debug { get; set; }
+
+        }
+        private async Task onlineChecker()
+        {
+            do
+            {
+                //Lobi onlineCheck
+                string url = "https://projectsggapi.vercel.app/api/server1";
+                HttpWebRequest request = WebRequest.Create(url) as HttpWebRequest;
+                string jsonverisi = "";
+                using (HttpWebResponse response = request.GetResponse() as HttpWebResponse)
+                {
+                    StreamReader r = new StreamReader(response.GetResponseStream());
+                    jsonverisi = r.ReadToEnd();
+                }
+
+                Xml xml = JsonConvert.DeserializeObject<Xml>(jsonverisi);
+
+                if(xml.debug.ping == "false")
+                {
+                    if(lobiOnline.ForeColor != Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55)))
+                    {
+                        lobiOnline.ForeColor = Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55));
+                    }
+                }
+                else
+                {
+                    lobiOnline.ForeColor = Color.FromArgb(rnd.Next(50), rnd.Next(200), rnd.Next(35));
+                }
+
+                //Gaia onlineCheck
+                string url2 = "https://projectsggapi.vercel.app/api/server2";
+                HttpWebRequest request2 = WebRequest.Create(url2) as HttpWebRequest;
+                string jsonverisi2 = "";
+                using (HttpWebResponse response2 = request2.GetResponse() as HttpWebResponse)
+                {
+                    StreamReader r = new StreamReader(response2.GetResponseStream());
+                    jsonverisi2 = r.ReadToEnd();
+                }
+
+                if (xml.debug.ping == "false")
+                {
+                    if (gaiaOnline.ForeColor != Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55)))
+                    {
+                        gaiaOnline.ForeColor = Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55));
+                    }
+                }
+                else
+                {
+                    gaiaOnline.ForeColor = Color.FromArgb(rnd.Next(50), rnd.Next(200), rnd.Next(35));
+                }
+                await Task.Delay(5000).ConfigureAwait(false);
+            } while (alreadyRelaunchWaiting == false);
+
         }
 
         private void ramlabel_Click(object sender, EventArgs e)
@@ -1048,6 +1113,54 @@ namespace Projects_Launcher.Projects_Launcher
         public class Oyuncular
         {
             public players players { get; set; }
+        }
+
+        private void serverOnlineCountStaticLabel_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void timer1_Tick(object sender, EventArgs e)
+        {
+            //Lobi onlineCheck
+            string url = "https://projectsggapi.vercel.app/api/server1";
+            HttpWebRequest request = WebRequest.Create(url) as HttpWebRequest;
+            string jsonverisi = "";
+            using (HttpWebResponse response = request.GetResponse() as HttpWebResponse)
+            {
+                StreamReader r = new StreamReader(response.GetResponseStream());
+                jsonverisi = r.ReadToEnd();
+            }
+
+            Xml xml = JsonConvert.DeserializeObject<Xml>(jsonverisi);
+
+            if (xml.debug.ping == "false")
+            {
+                lobiOnline.ForeColor = Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55));
+            }
+            else
+            {
+                lobiOnline.ForeColor = Color.FromArgb(rnd.Next(50), rnd.Next(200), rnd.Next(35));
+            }
+
+            //Gaia onlineCheck
+            string url2 = "https://projectsggapi.vercel.app/api/server2";
+            HttpWebRequest request2 = WebRequest.Create(url2) as HttpWebRequest;
+            string jsonverisi2 = "";
+            using (HttpWebResponse response2 = request2.GetResponse() as HttpWebResponse)
+            {
+                StreamReader r = new StreamReader(response2.GetResponseStream());
+                jsonverisi2 = r.ReadToEnd();
+            }
+
+            if (xml.debug.ping == "false")
+            {
+                gaiaOnline.ForeColor = Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55));
+            }
+            else
+            {
+                gaiaOnline.ForeColor = Color.FromArgb(rnd.Next(50), rnd.Next(200), rnd.Next(35));
+            }
         }
     }
     

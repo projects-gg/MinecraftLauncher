@@ -50,7 +50,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.minramlabel = new System.Windows.Forms.Label();
             this.serverOnlineCountStaticLabel = new System.Windows.Forms.Label();
             this.settingsBgPanel = new Guna.UI2.WinForms.Guna2Panel();
-            this.krakenOnline = new System.Windows.Forms.Label();
+            this.gaiaOnline = new System.Windows.Forms.Label();
             this.lobiOnline = new System.Windows.Forms.Label();
             this.label5 = new System.Windows.Forms.Label();
             this.label2 = new System.Windows.Forms.Label();
@@ -91,6 +91,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.guna2BorderlessForm1 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.backButton = new System.Windows.Forms.Button();
+            this.serverPing = new System.Windows.Forms.Timer(this.components);
             ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.settingsStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.instagramStaticPictureBox)).BeginInit();
@@ -140,7 +141,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.playSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.playSplitStaticLabel.Location = new System.Drawing.Point(122, 423);
             this.playSplitStaticLabel.Name = "playSplitStaticLabel";
-            this.playSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
+            this.playSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
             this.playSplitStaticLabel.TabIndex = 2;
             this.playSplitStaticLabel.Text = "|";
             // 
@@ -166,7 +167,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.onlineSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.onlineSplitStaticLabel.Location = new System.Drawing.Point(792, 430);
             this.onlineSplitStaticLabel.Name = "onlineSplitStaticLabel";
-            this.onlineSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
+            this.onlineSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
             this.onlineSplitStaticLabel.TabIndex = 6;
             this.onlineSplitStaticLabel.Text = "|";
             // 
@@ -330,15 +331,16 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverOnlineCountStaticLabel.ForeColor = System.Drawing.SystemColors.ActiveBorder;
             this.serverOnlineCountStaticLabel.Location = new System.Drawing.Point(693, 440);
             this.serverOnlineCountStaticLabel.Name = "serverOnlineCountStaticLabel";
-            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(93, 16);
+            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(92, 16);
             this.serverOnlineCountStaticLabel.TabIndex = 120;
             this.serverOnlineCountStaticLabel.Text = "Sunucu Hatası";
+            this.serverOnlineCountStaticLabel.Click += new System.EventHandler(this.serverOnlineCountStaticLabel_Click);
             // 
             // settingsBgPanel
             // 
             this.settingsBgPanel.BackColor = System.Drawing.Color.Transparent;
             this.settingsBgPanel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.settingsBgPanel.Controls.Add(this.krakenOnline);
+            this.settingsBgPanel.Controls.Add(this.gaiaOnline);
             this.settingsBgPanel.Controls.Add(this.lobiOnline);
             this.settingsBgPanel.Controls.Add(this.label5);
             this.settingsBgPanel.Controls.Add(this.label2);
@@ -379,18 +381,18 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.TabIndex = 133;
             this.settingsBgPanel.Visible = false;
             // 
-            // krakenOnline
+            // gaiaOnline
             // 
-            this.krakenOnline.AutoSize = true;
-            this.krakenOnline.BackColor = System.Drawing.Color.Transparent;
-            this.krakenOnline.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.krakenOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.krakenOnline.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(50)))), ((int)(((byte)(200)))), ((int)(((byte)(35)))));
-            this.krakenOnline.Location = new System.Drawing.Point(228, 381);
-            this.krakenOnline.Name = "krakenOnline";
-            this.krakenOnline.Size = new System.Drawing.Size(21, 19);
-            this.krakenOnline.TabIndex = 208;
-            this.krakenOnline.Text = "☉";
+            this.gaiaOnline.AutoSize = true;
+            this.gaiaOnline.BackColor = System.Drawing.Color.Transparent;
+            this.gaiaOnline.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.gaiaOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.gaiaOnline.ForeColor = System.Drawing.Color.White;
+            this.gaiaOnline.Location = new System.Drawing.Point(228, 381);
+            this.gaiaOnline.Name = "gaiaOnline";
+            this.gaiaOnline.Size = new System.Drawing.Size(21, 19);
+            this.gaiaOnline.TabIndex = 208;
+            this.gaiaOnline.Text = "☉";
             // 
             // lobiOnline
             // 
@@ -398,7 +400,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.lobiOnline.BackColor = System.Drawing.Color.Transparent;
             this.lobiOnline.Cursor = System.Windows.Forms.Cursors.Hand;
             this.lobiOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.lobiOnline.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(210)))), ((int)(((byte)(65)))), ((int)(((byte)(55)))));
+            this.lobiOnline.ForeColor = System.Drawing.Color.White;
             this.lobiOnline.Location = new System.Drawing.Point(228, 362);
             this.lobiOnline.Name = "lobiOnline";
             this.lobiOnline.Size = new System.Drawing.Size(21, 19);
@@ -991,6 +993,12 @@ namespace Projects_Launcher.Projects_Launcher
             this.backButton.Visible = false;
             this.backButton.Click += new System.EventHandler(this.button1_Click);
             // 
+            // serverPing
+            // 
+            this.serverPing.Enabled = true;
+            this.serverPing.Interval = 5000;
+            this.serverPing.Tick += new System.EventHandler(this.timer1_Tick);
+            // 
             // mainMenuForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 13F);
@@ -1103,9 +1111,10 @@ namespace Projects_Launcher.Projects_Launcher
         private System.Windows.Forms.Label versionLabel;
         private Guna.UI2.WinForms.Guna2CheckBox bgSelection;
         private System.Windows.Forms.Button backButton;
-        private System.Windows.Forms.Label krakenOnline;
+        private System.Windows.Forms.Label gaiaOnline;
         private System.Windows.Forms.Label lobiOnline;
         private System.Windows.Forms.Label label5;
         private System.Windows.Forms.Label label2;
+        private System.Windows.Forms.Timer serverPing;
     }
 }

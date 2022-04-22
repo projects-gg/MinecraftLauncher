@@ -83,7 +83,7 @@ namespace Projects_Launcher
                 }
                 else
                 {
-                    imageType = Convert.ToString(random.Next(4));
+                    imageType = Convert.ToString(random.Next(10));
                 }
 
                 var request = WebRequest.Create("https://projects.gg/MinecraftLauncher/backgrounds" + "/" + imageType + ".png"); // Last background image
