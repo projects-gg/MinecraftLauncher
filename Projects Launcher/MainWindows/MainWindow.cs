@@ -158,7 +158,6 @@ namespace Projects_Launcher.Projects_Launcher
             DiscordRpcClientSetup();
 
             onlineCountUpdater().GetAwaiter();
-            onlineChecker().GetAwaiter();
 
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames;
 
@@ -243,7 +242,7 @@ namespace Projects_Launcher.Projects_Launcher
                 MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin), // Get maximum ram info
                 MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax), // Get minimum ram info
                 Session = MSession.GetOfflineSession(sessions), // Get nickname info
-                ServerIp = "mc.projects.gg", // The server IP which should connected
+                ServerIp = "45.155.124.21", // The server IP which should connected
                 GameLauncherName = "Projects Minecraft",
                 ScreenWidth = int.Parse(Properties.Settings.Default.ResolutionWidth), // Get width resolution info
                 ScreenHeight = int.Parse(Properties.Settings.Default.ResolutionHeight), // Get height resolution info
@@ -533,59 +532,6 @@ namespace Projects_Launcher.Projects_Launcher
         public class Xml
         {
             public debug debug { get; set; }
-
-        }
-        private async Task onlineChecker()
-        {
-            do
-            {
-                //Lobi onlineCheck
-                string url = "https://projectsggapi.vercel.app/api/server1";
-                HttpWebRequest request = WebRequest.Create(url) as HttpWebRequest;
-                string jsonverisi = "";
-                using (HttpWebResponse response = request.GetResponse() as HttpWebResponse)
-                {
-                    StreamReader r = new StreamReader(response.GetResponseStream());
-                    jsonverisi = r.ReadToEnd();
-                }
-
-                Xml xml = JsonConvert.DeserializeObject<Xml>(jsonverisi);
-
-                if(xml.debug.ping == "false")
-                {
-                    if(lobiOnline.ForeColor != Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55)))
-                    {
-                        lobiOnline.ForeColor = Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55));
-                    }
-                }
-                else
-                {
-                    lobiOnline.ForeColor = Color.FromArgb(rnd.Next(50), rnd.Next(200), rnd.Next(35));
-                }
-
-                //Gaia onlineCheck
-                string url2 = "https://projectsggapi.vercel.app/api/server2";
-                HttpWebRequest request2 = WebRequest.Create(url2) as HttpWebRequest;
-                string jsonverisi2 = "";
-                using (HttpWebResponse response2 = request2.GetResponse() as HttpWebResponse)
-                {
-                    StreamReader r = new StreamReader(response2.GetResponseStream());
-                    jsonverisi2 = r.ReadToEnd();
-                }
-
-                if (xml.debug.ping == "false")
-                {
-                    if (gaiaOnline.ForeColor != Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55)))
-                    {
-                        gaiaOnline.ForeColor = Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55));
-                    }
-                }
-                else
-                {
-                    gaiaOnline.ForeColor = Color.FromArgb(rnd.Next(50), rnd.Next(200), rnd.Next(35));
-                }
-                await Task.Delay(5000).ConfigureAwait(false);
-            } while (alreadyRelaunchWaiting == false);
 
         }
 
