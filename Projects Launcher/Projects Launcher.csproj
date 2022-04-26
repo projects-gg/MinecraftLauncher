@@ -19,7 +19,7 @@
     <PublishUrl>ftp://193.164.7.250/versions/</PublishUrl>
     <Install>true</Install>
     <InstallFrom>Web</InstallFrom>
-    <UpdateEnabled>false</UpdateEnabled>
+    <UpdateEnabled>true</UpdateEnabled>
     <UpdateMode>Foreground</UpdateMode>
     <UpdateInterval>7</UpdateInterval>
     <UpdateIntervalUnits>Days</UpdateIntervalUnits>
@@ -35,7 +35,7 @@
     <CreateWebPageOnPublish>true</CreateWebPageOnPublish>
     <WebPage>publish.htm</WebPage>
     <OpenBrowserOnPublish>false</OpenBrowserOnPublish>
-    <ApplicationRevision>24</ApplicationRevision>
+    <ApplicationRevision>25</ApplicationRevision>
     <ApplicationVersion>0.1.6.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>
