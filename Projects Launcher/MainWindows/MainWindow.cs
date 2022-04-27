@@ -102,7 +102,7 @@ namespace Projects_Launcher.Projects_Launcher
                 }
                 else
                 {
-                    imageType = Convert.ToString(random.Next(4));
+                    imageType = Convert.ToString(random.Next(9) + 1);
                 }
 
                 var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + imageType + ".png"); // Last background image
@@ -242,7 +242,7 @@ namespace Projects_Launcher.Projects_Launcher
                 MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin), // Get maximum ram info
                 MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax), // Get minimum ram info
                 Session = MSession.GetOfflineSession(sessions), // Get nickname info
-                ServerIp = "45.155.124.21", // The server IP which should connected
+                ServerIp = "play.projects.gg", // The server IP which should connected
                 GameLauncherName = "Projects Minecraft",
                 ScreenWidth = int.Parse(Properties.Settings.Default.ResolutionWidth), // Get width resolution info
                 ScreenHeight = int.Parse(Properties.Settings.Default.ResolutionHeight), // Get height resolution info

@@ -19,7 +19,7 @@
     <PublishUrl>ftp://193.164.7.250/versions/</PublishUrl>
     <Install>true</Install>
     <InstallFrom>Web</InstallFrom>
-    <UpdateEnabled>true</UpdateEnabled>
+    <UpdateEnabled>false</UpdateEnabled>
     <UpdateMode>Foreground</UpdateMode>
     <UpdateInterval>7</UpdateInterval>
     <UpdateIntervalUnits>Days</UpdateIntervalUnits>
@@ -74,7 +74,7 @@
     <SignManifests>true</SignManifests>
   </PropertyGroup>
   <PropertyGroup>
-    <ManifestCertificateThumbprint>F783675D08C4699B2B12DD76B798A62602413673</ManifestCertificateThumbprint>
+    <ManifestCertificateThumbprint>3A78516742C072C63A2120C792E3CBA1E58DDB06</ManifestCertificateThumbprint>
   </PropertyGroup>
   <PropertyGroup>
     <SignAssembly>false</SignAssembly>

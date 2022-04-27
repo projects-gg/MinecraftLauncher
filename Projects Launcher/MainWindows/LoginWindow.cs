@@ -83,7 +83,7 @@ namespace Projects_Launcher
                 }
                 else
                 {
-                    imageType = Convert.ToString(random.Next(10));
+                    imageType = Convert.ToString(random.Next(9) + 1);
                 }
 
                 var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + imageType + ".png"); // Last background image
