@@ -54,7 +54,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.lobiOnline = new System.Windows.Forms.Label();
             this.label5 = new System.Windows.Forms.Label();
             this.label2 = new System.Windows.Forms.Label();
-            this.bgSelection = new Guna.UI2.WinForms.Guna2CheckBox();
             this.versionLabel = new System.Windows.Forms.Label();
             this.versionSelectTxt = new System.Windows.Forms.Label();
             this.navigationStaticLabel = new System.Windows.Forms.Label();
@@ -92,6 +91,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.backButton = new System.Windows.Forms.Button();
             this.serverPing = new System.Windows.Forms.Timer(this.components);
+            this.bgSelection = new Guna.UI2.WinForms.Guna2CheckBox();
             ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.settingsStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.instagramStaticPictureBox)).BeginInit();
@@ -432,32 +432,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.label2.Size = new System.Drawing.Size(40, 19);
             this.label2.TabIndex = 198;
             this.label2.Text = "Lobi";
-            // 
-            // bgSelection
-            // 
-            this.bgSelection.Anchor = System.Windows.Forms.AnchorStyles.Top;
-            this.bgSelection.Animated = true;
-            this.bgSelection.AutoCheck = false;
-            this.bgSelection.AutoSize = true;
-            this.bgSelection.BackColor = System.Drawing.Color.Transparent;
-            this.bgSelection.Checked = global::Projects_Launcher.Properties.Settings.Default.backgroundLite;
-            this.bgSelection.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.bgSelection.CheckedState.BorderRadius = 0;
-            this.bgSelection.CheckedState.BorderThickness = 0;
-            this.bgSelection.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.bgSelection.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
-            this.bgSelection.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.bgSelection.Location = new System.Drawing.Point(696, 371);
-            this.bgSelection.Name = "bgSelection";
-            this.bgSelection.Size = new System.Drawing.Size(167, 24);
-            this.bgSelection.TabIndex = 197;
-            this.bgSelection.Text = "Arkaplanı Basitleştir";
-            this.bgSelection.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
-            this.bgSelection.UncheckedState.BorderRadius = 0;
-            this.bgSelection.UncheckedState.BorderThickness = 0;
-            this.bgSelection.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
-            this.bgSelection.UseVisualStyleBackColor = false;
-            this.bgSelection.CheckedChanged += new System.EventHandler(this.bgSelection_CheckedChanged);
             // 
             // versionLabel
             // 
@@ -999,13 +973,39 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverPing.Interval = 5000;
             this.serverPing.Tick += new System.EventHandler(this.timer1_Tick);
             // 
+            // bgSelection
+            // 
+            this.bgSelection.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.bgSelection.Animated = true;
+            this.bgSelection.AutoCheck = false;
+            this.bgSelection.AutoSize = true;
+            this.bgSelection.BackColor = System.Drawing.Color.Transparent;
+            this.bgSelection.Checked = global::Projects_Launcher.Properties.Settings.Default.backgroundLite;
+            this.bgSelection.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.bgSelection.CheckedState.BorderRadius = 0;
+            this.bgSelection.CheckedState.BorderThickness = 0;
+            this.bgSelection.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.bgSelection.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
+            this.bgSelection.ForeColor = System.Drawing.SystemColors.ControlLightLight;
+            this.bgSelection.Location = new System.Drawing.Point(696, 371);
+            this.bgSelection.Name = "bgSelection";
+            this.bgSelection.Size = new System.Drawing.Size(167, 24);
+            this.bgSelection.TabIndex = 197;
+            this.bgSelection.Text = "Arkaplanı Basitleştir";
+            this.bgSelection.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.bgSelection.UncheckedState.BorderRadius = 0;
+            this.bgSelection.UncheckedState.BorderThickness = 0;
+            this.bgSelection.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.bgSelection.UseVisualStyleBackColor = false;
+            this.bgSelection.CheckedChanged += new System.EventHandler(this.bgSelection_CheckedChanged);
+            // 
             // mainMenuForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.SystemColors.Control;
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
-            this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.None;
             this.ClientSize = new System.Drawing.Size(980, 503);
             this.Controls.Add(this.backButton);
             this.Controls.Add(this.maximizeButtonControlBox);

@@ -114,7 +114,7 @@ namespace Projects_Launcher.Projects_Launcher
             catch
             {
                 // Shouldn't happen except no internet connection or server downtime
-                this.BackgroundImage = Properties.Resources._6;
+                this.BackgroundImage = Properties.Resources.Toprak_Arkaplan;
             }
         }
 
@@ -143,7 +143,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void Anamenu_Load(object sender, EventArgs e)
         {
-            selectBackgroundImage();
+            //selectBackgroundImage();
 
             versionLabel.Text = "v" + currentVersion;
 
@@ -225,6 +225,7 @@ namespace Projects_Launcher.Projects_Launcher
                 // Shouldn't happen except no internet connection or server downtime
             }
 
+            GC.Collect();
             GC.WaitForPendingFinalizers();
 
             DataBindings.Clear();
@@ -1053,6 +1054,12 @@ namespace Projects_Launcher.Projects_Launcher
             Properties.Settings.Default.backgroundLite = bgSelection.Checked;
             Properties.Settings.Default.Save();
             selectBackgroundImage();
+
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
+            DataBindings.Clear();
+            GC.SuppressFinalize(this);
         }
 
         private void button1_Click(object sender, EventArgs e)

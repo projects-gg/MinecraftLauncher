@@ -233,6 +233,7 @@ namespace Projects_Launcher
 
 
             selectBackgroundImage();
+            GC.Collect();
             GC.WaitForPendingFinalizers();
         }
 
@@ -300,6 +301,7 @@ namespace Projects_Launcher
 
             GC.Collect();
             GC.WaitForPendingFinalizers();
+            this.BackgroundImage = null;
         }
 
         private void nicknametextbox_TextChanged(object sender, EventArgs e)
