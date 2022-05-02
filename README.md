@@ -30,7 +30,7 @@ All commits are licensed under the GNU license, unless otherwise noted in the pa
 ## Building and setting up
 
 ### Initial setup
-You can build at Visual Studio 2019 (or newer). Project is based on .NET 4.7.2. Packages can obtained from [here](https://projects.gg/ProjectsLauncher/packages.zip).
+You can open the projects in Visual Studio 2019 (or newer). Project is based on .NET 4.7.2.
 
 ### Compiling
 Open `Projects Launcher.sln` file with Visual Studio and click `Build -> Build Solution` above of the page. Output will save to `./Debug/` folder.
