@@ -140,7 +140,6 @@ namespace Projects_Launcher
             }
             catch
             {
-                newsLabel.Visible = false;
             }
 
             labelYenilikMaddeler.Text = newsTexts;
@@ -315,12 +314,12 @@ namespace Projects_Launcher
                     Properties.Settings.Default.Save();
                 }
 
-                loginButton.Text = "Giriş Yap";
+                loginButton.Image = Properties.Resources.girisyap;
                 loginButton.Enabled = true;
             }
             else
             {
-                loginButton.Text = "Kullanıcı Adı Giriniz";
+                loginButton.Image = Properties.Resources.kullaniciadigiriniz;
                 loginButton.Enabled = false;
             }
         }

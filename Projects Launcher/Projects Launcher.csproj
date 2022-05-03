@@ -365,7 +365,7 @@
       <DependentUpon>LoginWindow.cs</DependentUpon>
     </EmbeddedResource>
     <EmbeddedResource Include="Properties\Resources.resx">
-      <Generator>ResXFileCodeGenerator</Generator>
+      <Generator>PublicResXFileCodeGenerator</Generator>
       <SubType>Designer</SubType>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
@@ -392,6 +392,8 @@
   <ItemGroup>
     <Content Include="logo.ico" />
     <Content Include="projects.ico" />
+    <None Include="Resources\girisyap.jpg" />
+    <None Include="Resources\kullaniciadigiriniz.jpg" />
     <None Include="Resources\Toprak_Arkaplan.png" />
     <None Include="Resources\rsz_projectslogo2.png" />
     <None Include="Resources\projectsLogo2.png" />

@@ -4,7 +4,6 @@ using DiscordRPC;
 using MineStatLib;
 using Newtonsoft.Json;
 using System;
-using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
@@ -13,12 +12,9 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Net;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using System.Xml;
-using System.Xml.Linq;
 
 namespace Projects_Launcher.Projects_Launcher
 {
@@ -136,7 +132,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 double ramInBytes = (Convert.ToDouble(ramObject["TotalPhysicalMemory"]));
                 double roundAvailableRamValueInGb = Math.Ceiling(ramInBytes / 1073741824); // <- Byte to GB conversion
-                RAMInfo.Text = string.Format("{0:0.##}", Convert.ToDouble(roundAvailableRamValueInGb) * 1024) + "MB" + " = " + Convert.ToString(roundAvailableRamValueInGb) + " GB";
+                ramInfoLabel.Text = string.Format("{0:0.##}", Convert.ToDouble(roundAvailableRamValueInGb) * 1024) + "MB" + " = " + Convert.ToString(roundAvailableRamValueInGb) + " GB";
                 break;
             }
         }
@@ -212,7 +208,7 @@ namespace Projects_Launcher.Projects_Launcher
             // Grab skin render
             try
             {
-                var request = WebRequest.Create("https://minotar.net/body" + "/" + playerNameStaticLabel.Text);
+                var request = WebRequest.Create("https://minotar.net/avatar" + "/" + playerNameStaticLabel.Text);
 
                 using (var response = request.GetResponse())
                 using (var stream = response.GetResponseStream())
@@ -361,6 +357,9 @@ namespace Projects_Launcher.Projects_Launcher
                     settingsStaticPictureBox.Enabled = false;
                     versionInfoStaticLabel.Text = "İndiriliyor...";
                     downloadCompleteLabel.Visible = true;
+                    downloadCompleteBar.Visible = true;
+                    playSplitStaticLabel.Visible = true;
+
                 }
             }
 
@@ -370,7 +369,9 @@ namespace Projects_Launcher.Projects_Launcher
         private void Wc_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
         {
             downloadCompleteLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(e.BytesReceived) / 1024 / 1024) + "MB"
-                + String.Format("{0:0.##}", Convert.ToDouble(e.TotalBytesToReceive) / 1024 / 1024) + "MB";
+                + "/" + String.Format("{0:0.##}", Convert.ToDouble(e.TotalBytesToReceive) / 1024 / 1024) + "MB";
+
+            downloadCompleteBar.Value = e.ProgressPercentage;
         }
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
@@ -388,6 +389,8 @@ namespace Projects_Launcher.Projects_Launcher
                 playButtonStaticLabel.Enabled = true;
                 settingsStaticPictureBox.Enabled = true;
                 downloadCompleteLabel.Visible = false;
+                downloadCompleteBar.Visible = false;
+                playSplitStaticLabel.Visible = false;
             }
             catch (Exception ex)
             {
@@ -937,15 +940,16 @@ namespace Projects_Launcher.Projects_Launcher
                 maxRamTextBox.Text = (maxRamTextBox.Text).Trim();
                 if (string.IsNullOrEmpty(maxRamTextBox.Text))
                 {
-                    MessageBox.Show("Miktar 1024-" + ramInfo + " " + "arasında girilmeli.");
-                }
-                else if (Convert.ToInt32(maxRamTextBox.Text) < 1024 ||
-                         Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(ramInfo))
-                {
-                    MessageBox.Show("Miktar 1024-" + ramInfo + " " + "arasında girilmeli.");
+                    MessageBox.Show(Convert.ToInt32(minRamTextBox.Text) + "-" + ramInfo + " " + "arasında girilmeli.");
                     maxRamTextBox.Text = ramInfo;
                 }
-                else if (Convert.ToInt32(ramInfo) >= 1024 &&
+                else if (Convert.ToInt32(maxRamTextBox.Text) < Convert.ToInt32(minRamTextBox.Text) ||
+                         Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(ramInfo))
+                {
+                    MessageBox.Show(Convert.ToInt32(minRamTextBox.Text) + "-" + ramInfo + " " + "arasında girilmeli.");
+                    maxRamTextBox.Text = ramInfo;
+                }
+                else if (Convert.ToInt32(ramInfo) >= Convert.ToInt32(minRamTextBox.Text) &&
                          Convert.ToInt32(maxRamTextBox.Text) > Convert.ToInt32(ramInfo) - 512)
                 {
                     MessageBox.Show(
@@ -1147,5 +1151,15 @@ namespace Projects_Launcher.Projects_Launcher
                 gaiaOnline.ForeColor = Color.FromArgb(rnd.Next(50), rnd.Next(200), rnd.Next(35));
             }
         }
-    }  
+
+        private void skinRenderPictureBox_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void guna2ImageButton1_Click(object sender, EventArgs e)
+        {
+
+        }
+    }
 }
