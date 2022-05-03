@@ -54,6 +54,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.lobiOnline = new System.Windows.Forms.Label();
             this.label5 = new System.Windows.Forms.Label();
             this.label2 = new System.Windows.Forms.Label();
+            this.bgSelection = new Guna.UI2.WinForms.Guna2CheckBox();
             this.versionLabel = new System.Windows.Forms.Label();
             this.versionSelectTxt = new System.Windows.Forms.Label();
             this.navigationStaticLabel = new System.Windows.Forms.Label();
@@ -91,7 +92,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.backButton = new System.Windows.Forms.Button();
             this.serverPing = new System.Windows.Forms.Timer(this.components);
-            this.bgSelection = new Guna.UI2.WinForms.Guna2CheckBox();
+            this.downloadCompleteLabel = new System.Windows.Forms.Label();
+            this.projectsfabricDownload = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.settingsStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.instagramStaticPictureBox)).BeginInit();
@@ -340,6 +342,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.settingsBgPanel.BackColor = System.Drawing.Color.Transparent;
             this.settingsBgPanel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.settingsBgPanel.Controls.Add(this.projectsfabricDownload);
             this.settingsBgPanel.Controls.Add(this.gaiaOnline);
             this.settingsBgPanel.Controls.Add(this.lobiOnline);
             this.settingsBgPanel.Controls.Add(this.label5);
@@ -373,12 +376,12 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Controls.Add(this.mbLabel);
             this.settingsBgPanel.Controls.Add(this.resolutionTxt);
             this.settingsBgPanel.Controls.Add(this.settingsStaticLabel);
-            this.settingsBgPanel.Location = new System.Drawing.Point(0, 35);
+            this.settingsBgPanel.Location = new System.Drawing.Point(0, 32);
             this.settingsBgPanel.MaximumSize = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.MinimumSize = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.Name = "settingsBgPanel";
             this.settingsBgPanel.Size = new System.Drawing.Size(980, 470);
-            this.settingsBgPanel.TabIndex = 133;
+            this.settingsBgPanel.TabIndex = 200;
             this.settingsBgPanel.Visible = false;
             // 
             // gaiaOnline
@@ -432,6 +435,32 @@ namespace Projects_Launcher.Projects_Launcher
             this.label2.Size = new System.Drawing.Size(40, 19);
             this.label2.TabIndex = 198;
             this.label2.Text = "Lobi";
+            // 
+            // bgSelection
+            // 
+            this.bgSelection.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.bgSelection.Animated = true;
+            this.bgSelection.AutoCheck = false;
+            this.bgSelection.AutoSize = true;
+            this.bgSelection.BackColor = System.Drawing.Color.Transparent;
+            this.bgSelection.Checked = global::Projects_Launcher.Properties.Settings.Default.backgroundLite;
+            this.bgSelection.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.bgSelection.CheckedState.BorderRadius = 0;
+            this.bgSelection.CheckedState.BorderThickness = 0;
+            this.bgSelection.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.bgSelection.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
+            this.bgSelection.ForeColor = System.Drawing.SystemColors.ControlLightLight;
+            this.bgSelection.Location = new System.Drawing.Point(696, 371);
+            this.bgSelection.Name = "bgSelection";
+            this.bgSelection.Size = new System.Drawing.Size(167, 24);
+            this.bgSelection.TabIndex = 197;
+            this.bgSelection.Text = "Arkaplanı Basitleştir";
+            this.bgSelection.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.bgSelection.UncheckedState.BorderRadius = 0;
+            this.bgSelection.UncheckedState.BorderThickness = 0;
+            this.bgSelection.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.bgSelection.UseVisualStyleBackColor = false;
+            this.bgSelection.CheckedChanged += new System.EventHandler(this.bgSelection_CheckedChanged);
             // 
             // versionLabel
             // 
@@ -593,7 +622,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.transferRpLabel.Cursor = System.Windows.Forms.Cursors.Hand;
             this.transferRpLabel.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
             this.transferRpLabel.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.transferRpLabel.Location = new System.Drawing.Point(692, 222);
+            this.transferRpLabel.Location = new System.Drawing.Point(692, 223);
             this.transferRpLabel.Name = "transferRpLabel";
             this.transferRpLabel.Size = new System.Drawing.Size(148, 21);
             this.transferRpLabel.TabIndex = 180;
@@ -973,31 +1002,32 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverPing.Interval = 5000;
             this.serverPing.Tick += new System.EventHandler(this.timer1_Tick);
             // 
-            // bgSelection
+            // downloadCompleteLabel
             // 
-            this.bgSelection.Anchor = System.Windows.Forms.AnchorStyles.Top;
-            this.bgSelection.Animated = true;
-            this.bgSelection.AutoCheck = false;
-            this.bgSelection.AutoSize = true;
-            this.bgSelection.BackColor = System.Drawing.Color.Transparent;
-            this.bgSelection.Checked = global::Projects_Launcher.Properties.Settings.Default.backgroundLite;
-            this.bgSelection.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.bgSelection.CheckedState.BorderRadius = 0;
-            this.bgSelection.CheckedState.BorderThickness = 0;
-            this.bgSelection.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.bgSelection.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
-            this.bgSelection.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.bgSelection.Location = new System.Drawing.Point(696, 371);
-            this.bgSelection.Name = "bgSelection";
-            this.bgSelection.Size = new System.Drawing.Size(167, 24);
-            this.bgSelection.TabIndex = 197;
-            this.bgSelection.Text = "Arkaplanı Basitleştir";
-            this.bgSelection.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
-            this.bgSelection.UncheckedState.BorderRadius = 0;
-            this.bgSelection.UncheckedState.BorderThickness = 0;
-            this.bgSelection.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
-            this.bgSelection.UseVisualStyleBackColor = false;
-            this.bgSelection.CheckedChanged += new System.EventHandler(this.bgSelection_CheckedChanged);
+            this.downloadCompleteLabel.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.downloadCompleteLabel.AutoSize = true;
+            this.downloadCompleteLabel.BackColor = System.Drawing.Color.Transparent;
+            this.downloadCompleteLabel.Font = new System.Drawing.Font("Arial", 11F);
+            this.downloadCompleteLabel.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.downloadCompleteLabel.Location = new System.Drawing.Point(147, 450);
+            this.downloadCompleteLabel.Name = "downloadCompleteLabel";
+            this.downloadCompleteLabel.Size = new System.Drawing.Size(82, 17);
+            this.downloadCompleteLabel.TabIndex = 165;
+            this.downloadCompleteLabel.Text = "00Mb/10Mb";
+            this.downloadCompleteLabel.Visible = false;
+            // 
+            // projectsfabricDownload
+            // 
+            this.projectsfabricDownload.AutoSize = true;
+            this.projectsfabricDownload.BackColor = System.Drawing.Color.Transparent;
+            this.projectsfabricDownload.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.projectsfabricDownload.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
+            this.projectsfabricDownload.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.projectsfabricDownload.Location = new System.Drawing.Point(692, 255);
+            this.projectsfabricDownload.Name = "projectsfabricDownload";
+            this.projectsfabricDownload.Size = new System.Drawing.Size(161, 21);
+            this.projectsfabricDownload.TabIndex = 209;
+            this.projectsfabricDownload.Text = "projects-fabric İndir";
             // 
             // mainMenuForm
             // 
@@ -1007,6 +1037,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.None;
             this.ClientSize = new System.Drawing.Size(980, 503);
+            this.Controls.Add(this.downloadCompleteLabel);
             this.Controls.Add(this.backButton);
             this.Controls.Add(this.maximizeButtonControlBox);
             this.Controls.Add(this.label11);
@@ -1116,5 +1147,7 @@ namespace Projects_Launcher.Projects_Launcher
         private System.Windows.Forms.Label label5;
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.Timer serverPing;
+        private System.Windows.Forms.Label downloadCompleteLabel;
+        private System.Windows.Forms.Label projectsfabricDownload;
     }
 }

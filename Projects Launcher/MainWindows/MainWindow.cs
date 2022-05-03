@@ -143,7 +143,7 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void Anamenu_Load(object sender, EventArgs e)
         {
-            //selectBackgroundImage();
+            selectBackgroundImage();
 
             versionLabel.Text = "v" + currentVersion;
 
@@ -352,13 +352,16 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     WebClient wc = new WebClient();
                     wc.DownloadFileCompleted +=
-                        Wc_DownloadFileCompleted; // Call the codes when download process completed
+                        Wc_DownloadFileCompleted; // Call the codes when download process complete
+                    wc.DownloadProgressChanged += Wc_DownloadProgressChanged;
                     wc.DownloadFileAsync(fabric,
                         appDataDizini +
                         "/.projects/projects-fabric.zip"); // Download fabric to directory '.projects'
 
-                    this.Enabled = false;
+                    playButtonStaticLabel.Enabled = false;
+                    settingsStaticPictureBox.Enabled = false;
                     versionInfoStaticLabel.Text = "İndiriliyor...";
+                    downloadCompleteLabel.Visible = true;
                 }
             }
 
@@ -366,7 +369,37 @@ namespace Projects_Launcher.Projects_Launcher
             GC.WaitForPendingFinalizers();
         }
 
+        private void Wc_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
+        {
+            downloadCompleteLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(e.BytesReceived) / 1024 / 1024) + "MB"
+                + String.Format("{0:0.##}", Convert.ToDouble(e.TotalBytesToReceive) / 1024 / 1024) + "MB";
+        }
+
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
+        {
+            try
+            {
+                string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                 "/.projects/projects-fabric.zip";
+                string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                     "/.projects/versions";
+
+                System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath);
+                Thread.Sleep(1100);
+                versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
+                playButtonStaticLabel.Enabled = true;
+                settingsStaticPictureBox.Enabled = true;
+                downloadCompleteLabel.Visible = false;
+            }
+            catch (Exception ex)
+            {
+                NotificationAboutException(ex);
+            }
+
+            GC.WaitForPendingFinalizers();
+        }
+
+        private void Wc_DownloadFileProgress(object sender, DownloadProgressChangedEventArgs e)
         {
             try
             {
