@@ -336,7 +336,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(92, 16);
             this.serverOnlineCountStaticLabel.TabIndex = 120;
             this.serverOnlineCountStaticLabel.Text = "Sunucu Hatası";
-            this.serverOnlineCountStaticLabel.Click += new System.EventHandler(this.serverOnlineCountStaticLabel_Click);
             // 
             // settingsBgPanel
             // 

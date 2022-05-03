@@ -225,7 +225,6 @@ namespace Projects_Launcher.Projects_Launcher
                 // Shouldn't happen except no internet connection or server downtime
             }
 
-            GC.Collect();
             GC.WaitForPendingFinalizers();
 
             DataBindings.Clear();
@@ -568,7 +567,6 @@ namespace Projects_Launcher.Projects_Launcher
             public debug debug { get; set; }
 
         }
-
         private void ramlabel_Click(object sender, EventArgs e)
         {
             maxramlabell = maxramlabel.Text;
@@ -1042,7 +1040,6 @@ namespace Projects_Launcher.Projects_Launcher
                 MessageBox.Show("Çözünürlük ayarlanırken bir hata meydana geldi.");
             }
         }
-
         private void guna2ControlBox3_Click(object sender, EventArgs e)
         {
             GC.Collect();
@@ -1109,12 +1106,6 @@ namespace Projects_Launcher.Projects_Launcher
         {
             public players players { get; set; }
         }
-
-        private void serverOnlineCountStaticLabel_Click(object sender, EventArgs e)
-        {
-
-        }
-
         private void timer1_Tick(object sender, EventArgs e)
         {
             //Lobi onlineCheck
@@ -1145,7 +1136,7 @@ namespace Projects_Launcher.Projects_Launcher
             using (HttpWebResponse response2 = request2.GetResponse() as HttpWebResponse)
             {
                 StreamReader r = new StreamReader(response2.GetResponseStream());
-                jsonverisi2 = r.ReadToEnd();
+                jsonverisi2 += r.ReadToEnd();
             }
 
             if (xml.debug.ping == "false")
