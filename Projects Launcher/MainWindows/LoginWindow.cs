@@ -299,7 +299,6 @@ namespace Projects_Launcher
 
             Client.Dispose();
 
-            GC.Collect();
             GC.WaitForPendingFinalizers();
             this.BackgroundImage = null;
         }

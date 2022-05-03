@@ -364,7 +364,6 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
 
-            GC.Collect();
             GC.WaitForPendingFinalizers();
         }
 
@@ -1148,6 +1147,5 @@ namespace Projects_Launcher.Projects_Launcher
                 gaiaOnline.ForeColor = Color.FromArgb(rnd.Next(50), rnd.Next(200), rnd.Next(35));
             }
         }
-    }
-    
+    }  
 }
