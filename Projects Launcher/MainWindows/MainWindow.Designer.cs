@@ -93,7 +93,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.backButton = new System.Windows.Forms.Button();
             this.serverPing = new System.Windows.Forms.Timer(this.components);
             this.downloadCompleteLabel = new System.Windows.Forms.Label();
-            this.projectsfabricDownload = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.settingsStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.instagramStaticPictureBox)).BeginInit();
@@ -341,7 +340,6 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.settingsBgPanel.BackColor = System.Drawing.Color.Transparent;
             this.settingsBgPanel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.settingsBgPanel.Controls.Add(this.projectsfabricDownload);
             this.settingsBgPanel.Controls.Add(this.gaiaOnline);
             this.settingsBgPanel.Controls.Add(this.lobiOnline);
             this.settingsBgPanel.Controls.Add(this.label5);
@@ -1015,19 +1013,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.downloadCompleteLabel.Text = "00Mb/10Mb";
             this.downloadCompleteLabel.Visible = false;
             // 
-            // projectsfabricDownload
-            // 
-            this.projectsfabricDownload.AutoSize = true;
-            this.projectsfabricDownload.BackColor = System.Drawing.Color.Transparent;
-            this.projectsfabricDownload.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.projectsfabricDownload.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
-            this.projectsfabricDownload.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.projectsfabricDownload.Location = new System.Drawing.Point(692, 255);
-            this.projectsfabricDownload.Name = "projectsfabricDownload";
-            this.projectsfabricDownload.Size = new System.Drawing.Size(161, 21);
-            this.projectsfabricDownload.TabIndex = 209;
-            this.projectsfabricDownload.Text = "projects-fabric İndir";
-            // 
             // mainMenuForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 13F);
@@ -1147,6 +1132,5 @@ namespace Projects_Launcher.Projects_Launcher
         private System.Windows.Forms.Label label2;
         private System.Windows.Forms.Timer serverPing;
         private System.Windows.Forms.Label downloadCompleteLabel;
-        private System.Windows.Forms.Label projectsfabricDownload;
     }
 }
