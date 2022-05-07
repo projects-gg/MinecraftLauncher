@@ -383,8 +383,7 @@ namespace Projects_Launcher
             panelYenilikler.Visible = false;
             backButton.Visible = false;
         }
-
-        private void newsLabel_Click(object sender, EventArgs e)
+        private void newsLabel_Click_1(object sender, EventArgs e)
         {
             if (panelYenilikler.Visible == false)
             {

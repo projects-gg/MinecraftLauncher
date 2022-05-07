@@ -39,6 +39,11 @@ namespace Projects_Launcher
             this.minimizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.guna2BorderlessForm2 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
+            this.updateNowButton = new System.Windows.Forms.Button();
+            this.backButton = new System.Windows.Forms.Button();
+            this.guna2PictureBox1 = new Guna.UI2.WinForms.Guna2PictureBox();
+            this.loginButton = new System.Windows.Forms.PictureBox();
+            this.newsLabel = new System.Windows.Forms.PictureBox();
             this.newVersionPanel = new System.Windows.Forms.Panel();
             this.vCurrentLabel = new System.Windows.Forms.Label();
             this.vLatestLabel = new System.Windows.Forms.Label();
@@ -50,21 +55,16 @@ namespace Projects_Launcher
             this.updateLabelBottom = new System.Windows.Forms.Label();
             this.updateLabelTop = new System.Windows.Forms.Label();
             this.updateHeadline = new System.Windows.Forms.Label();
-            this.updateNowButton = new System.Windows.Forms.Button();
             this.panelYenilikler = new Guna.UI2.WinForms.Guna2Panel();
             this.versionLabel = new System.Windows.Forms.Label();
             this.guna2PictureBox2 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.labelYenilikMaddeler = new System.Windows.Forms.Label();
-            this.backButton = new System.Windows.Forms.Button();
-            this.guna2PictureBox1 = new Guna.UI2.WinForms.Guna2PictureBox();
-            this.loginButton = new System.Windows.Forms.PictureBox();
-            this.newsLabel = new System.Windows.Forms.PictureBox();
-            this.newVersionPanel.SuspendLayout();
-            this.panelYenilikler.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.loginButton)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.newsLabel)).BeginInit();
+            this.newVersionPanel.SuspendLayout();
+            this.panelYenilikler.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).BeginInit();
             this.SuspendLayout();
             // 
             // guna2BorderlessForm1
@@ -184,6 +184,66 @@ namespace Projects_Launcher
             this.maximizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
             this.maximizeButtonControlBox.TabIndex = 139;
             // 
+            // updateNowButton
+            // 
+            this.updateNowButton.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.updateNowButton.Font = new System.Drawing.Font("Arial", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.updateNowButton.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.updateNowButton.Location = new System.Drawing.Point(849, 468);
+            this.updateNowButton.Name = "updateNowButton";
+            this.updateNowButton.Size = new System.Drawing.Size(115, 23);
+            this.updateNowButton.TabIndex = 141;
+            this.updateNowButton.Text = "Şimdi Güncelle";
+            this.updateNowButton.UseVisualStyleBackColor = true;
+            this.updateNowButton.Visible = false;
+            this.updateNowButton.Click += new System.EventHandler(this.updateNowButton_Click);
+            // 
+            // backButton
+            // 
+            this.backButton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
+            this.backButton.FlatStyle = System.Windows.Forms.FlatStyle.Popup;
+            this.backButton.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
+            this.backButton.Location = new System.Drawing.Point(0, 0);
+            this.backButton.Name = "backButton";
+            this.backButton.Size = new System.Drawing.Size(45, 29);
+            this.backButton.TabIndex = 200;
+            this.backButton.Text = "←";
+            this.backButton.UseVisualStyleBackColor = false;
+            this.backButton.Visible = false;
+            this.backButton.Click += new System.EventHandler(this.backButton_Click);
+            // 
+            // guna2PictureBox1
+            // 
+            this.guna2PictureBox1.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox1.Image")));
+            this.guna2PictureBox1.ImageRotate = 0F;
+            this.guna2PictureBox1.Location = new System.Drawing.Point(389, 297);
+            this.guna2PictureBox1.Name = "guna2PictureBox1";
+            this.guna2PictureBox1.Size = new System.Drawing.Size(207, 21);
+            this.guna2PictureBox1.TabIndex = 1018;
+            this.guna2PictureBox1.TabStop = false;
+            // 
+            // loginButton
+            // 
+            this.loginButton.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("loginButton.BackgroundImage")));
+            this.loginButton.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.loginButton.Location = new System.Drawing.Point(389, 243);
+            this.loginButton.Name = "loginButton";
+            this.loginButton.Size = new System.Drawing.Size(207, 48);
+            this.loginButton.TabIndex = 1019;
+            this.loginButton.TabStop = false;
+            this.loginButton.Click += new System.EventHandler(this.girisyapbutton_Click);
+            // 
+            // newsLabel
+            // 
+            this.newsLabel.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("newsLabel.BackgroundImage")));
+            this.newsLabel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.newsLabel.Location = new System.Drawing.Point(389, 451);
+            this.newsLabel.Name = "newsLabel";
+            this.newsLabel.Size = new System.Drawing.Size(207, 25);
+            this.newsLabel.TabIndex = 1020;
+            this.newsLabel.TabStop = false;
+            this.newsLabel.Click += new System.EventHandler(this.newsLabel_Click_1);
+            // 
             // newVersionPanel
             // 
             this.newVersionPanel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
@@ -197,10 +257,10 @@ namespace Projects_Launcher
             this.newVersionPanel.Controls.Add(this.updateLabelBottom);
             this.newVersionPanel.Controls.Add(this.updateLabelTop);
             this.newVersionPanel.Controls.Add(this.updateHeadline);
-            this.newVersionPanel.Location = new System.Drawing.Point(194, 99);
+            this.newVersionPanel.Location = new System.Drawing.Point(174, 107);
             this.newVersionPanel.Name = "newVersionPanel";
             this.newVersionPanel.Size = new System.Drawing.Size(633, 288);
-            this.newVersionPanel.TabIndex = 140;
+            this.newVersionPanel.TabIndex = 1021;
             this.newVersionPanel.Visible = false;
             // 
             // vCurrentLabel
@@ -330,32 +390,18 @@ namespace Projects_Launcher
             this.updateHeadline.TabIndex = 0;
             this.updateHeadline.Text = "Yeni Sürüm";
             // 
-            // updateNowButton
-            // 
-            this.updateNowButton.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
-            this.updateNowButton.Font = new System.Drawing.Font("Arial", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.updateNowButton.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.updateNowButton.Location = new System.Drawing.Point(849, 468);
-            this.updateNowButton.Name = "updateNowButton";
-            this.updateNowButton.Size = new System.Drawing.Size(115, 23);
-            this.updateNowButton.TabIndex = 141;
-            this.updateNowButton.Text = "Şimdi Güncelle";
-            this.updateNowButton.UseVisualStyleBackColor = true;
-            this.updateNowButton.Visible = false;
-            this.updateNowButton.Click += new System.EventHandler(this.updateNowButton_Click);
-            // 
             // panelYenilikler
             // 
             this.panelYenilikler.BackColor = System.Drawing.Color.Transparent;
             this.panelYenilikler.Controls.Add(this.versionLabel);
             this.panelYenilikler.Controls.Add(this.guna2PictureBox2);
             this.panelYenilikler.Controls.Add(this.labelYenilikMaddeler);
-            this.panelYenilikler.Location = new System.Drawing.Point(405, 69);
+            this.panelYenilikler.Location = new System.Drawing.Point(0, 32);
             this.panelYenilikler.MaximumSize = new System.Drawing.Size(980, 470);
             this.panelYenilikler.MinimumSize = new System.Drawing.Size(980, 470);
             this.panelYenilikler.Name = "panelYenilikler";
             this.panelYenilikler.Size = new System.Drawing.Size(980, 470);
-            this.panelYenilikler.TabIndex = 142;
+            this.panelYenilikler.TabIndex = 1022;
             this.panelYenilikler.Visible = false;
             // 
             // versionLabel
@@ -372,6 +418,7 @@ namespace Projects_Launcher
             // 
             // guna2PictureBox2
             // 
+            this.guna2PictureBox2.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox2.Image")));
             this.guna2PictureBox2.ImageRotate = 0F;
             this.guna2PictureBox2.Location = new System.Drawing.Point(405, 12);
             this.guna2PictureBox2.Name = "guna2PictureBox2";
@@ -391,51 +438,6 @@ namespace Projects_Launcher
             this.labelYenilikMaddeler.TabIndex = 199;
             this.labelYenilikMaddeler.Text = "◣ vx.x.x ◢\r\n\r\n⊳ x\r\n\r\n⊳ x\r\n\r\n⊳ x\r\n\r\n⊳ x\r\n\r\n\r\n◣ vx.x.x ◢\r\n\r\n⊳ x\r\n";
             // 
-            // backButton
-            // 
-            this.backButton.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.backButton.FlatStyle = System.Windows.Forms.FlatStyle.Popup;
-            this.backButton.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.backButton.Location = new System.Drawing.Point(0, 0);
-            this.backButton.Name = "backButton";
-            this.backButton.Size = new System.Drawing.Size(45, 29);
-            this.backButton.TabIndex = 200;
-            this.backButton.Text = "←";
-            this.backButton.UseVisualStyleBackColor = false;
-            this.backButton.Visible = false;
-            this.backButton.Click += new System.EventHandler(this.backButton_Click);
-            // 
-            // guna2PictureBox1
-            // 
-            this.guna2PictureBox1.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox1.Image")));
-            this.guna2PictureBox1.ImageRotate = 0F;
-            this.guna2PictureBox1.Location = new System.Drawing.Point(389, 297);
-            this.guna2PictureBox1.Name = "guna2PictureBox1";
-            this.guna2PictureBox1.Size = new System.Drawing.Size(207, 21);
-            this.guna2PictureBox1.TabIndex = 1018;
-            this.guna2PictureBox1.TabStop = false;
-            // 
-            // loginButton
-            // 
-            this.loginButton.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("loginButton.BackgroundImage")));
-            this.loginButton.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.loginButton.Location = new System.Drawing.Point(389, 243);
-            this.loginButton.Name = "loginButton";
-            this.loginButton.Size = new System.Drawing.Size(207, 48);
-            this.loginButton.TabIndex = 1019;
-            this.loginButton.TabStop = false;
-            this.loginButton.Click += new System.EventHandler(this.girisyapbutton_Click);
-            // 
-            // newsLabel
-            // 
-            this.newsLabel.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("newsLabel.BackgroundImage")));
-            this.newsLabel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.newsLabel.Location = new System.Drawing.Point(389, 451);
-            this.newsLabel.Name = "newsLabel";
-            this.newsLabel.Size = new System.Drawing.Size(207, 25);
-            this.newsLabel.TabIndex = 1020;
-            this.newsLabel.TabStop = false;
-            // 
             // loginMenuForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
@@ -444,13 +446,13 @@ namespace Projects_Launcher
             this.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("$this.BackgroundImage")));
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
             this.ClientSize = new System.Drawing.Size(980, 503);
+            this.Controls.Add(this.panelYenilikler);
+            this.Controls.Add(this.newVersionPanel);
             this.Controls.Add(this.newsLabel);
             this.Controls.Add(this.loginButton);
             this.Controls.Add(this.guna2PictureBox1);
             this.Controls.Add(this.backButton);
-            this.Controls.Add(this.panelYenilikler);
             this.Controls.Add(this.updateNowButton);
-            this.Controls.Add(this.newVersionPanel);
             this.Controls.Add(this.maximizeButtonControlBox);
             this.Controls.Add(this.minimizeButtonControlBox);
             this.Controls.Add(this.raminfo);
@@ -466,14 +468,14 @@ namespace Projects_Launcher
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Projects Launcher";
             this.Load += new System.EventHandler(this.ProjectsLauncherLogin_Load);
+            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.loginButton)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.newsLabel)).EndInit();
             this.newVersionPanel.ResumeLayout(false);
             this.newVersionPanel.PerformLayout();
             this.panelYenilikler.ResumeLayout(false);
             this.panelYenilikler.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.loginButton)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.newsLabel)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -488,26 +490,26 @@ namespace Projects_Launcher
         private Guna.UI2.WinForms.Guna2ControlBox minimizeButtonControlBox;
         private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm2;
         private Guna.UI2.WinForms.Guna2ControlBox maximizeButtonControlBox;
+        private System.Windows.Forms.Button updateNowButton;
+        private System.Windows.Forms.Button backButton;
+        private System.Windows.Forms.PictureBox newsLabel;
+        private System.Windows.Forms.PictureBox loginButton;
+        private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox1;
+        private Guna.UI2.WinForms.Guna2Panel panelYenilikler;
+        private System.Windows.Forms.Label versionLabel;
+        private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox2;
+        private System.Windows.Forms.Label labelYenilikMaddeler;
         private System.Windows.Forms.Panel newVersionPanel;
-        private System.Windows.Forms.Label updateLabelTop;
-        private System.Windows.Forms.Label updateHeadline;
+        private System.Windows.Forms.Label vCurrentLabel;
+        private System.Windows.Forms.Label vLatestLabel;
         private System.Windows.Forms.Button skipButton;
         private System.Windows.Forms.Button noUpdateButton;
         private System.Windows.Forms.Button updateButton;
         private System.Windows.Forms.Label vLatestLabelT;
         private System.Windows.Forms.Label vCurrentLabelT;
         private System.Windows.Forms.Label updateLabelBottom;
-        private System.Windows.Forms.Button updateNowButton;
-        private System.Windows.Forms.Label vCurrentLabel;
-        private System.Windows.Forms.Label vLatestLabel;
-        private Guna.UI2.WinForms.Guna2Panel panelYenilikler;
-        private System.Windows.Forms.Label labelYenilikMaddeler;
-        private System.Windows.Forms.Button backButton;
-        private System.Windows.Forms.PictureBox newsLabel;
-        private System.Windows.Forms.PictureBox loginButton;
-        private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox1;
-        private System.Windows.Forms.Label versionLabel;
-        private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox2;
+        private System.Windows.Forms.Label updateLabelTop;
+        private System.Windows.Forms.Label updateHeadline;
     }
 }
 
