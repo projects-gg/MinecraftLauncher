@@ -121,14 +121,20 @@
   <data name="girisyap" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\girisyap.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
-  <data name="kullaniciadigiriniz" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\kullaniciadigiriniz.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  <data name="projects_Logo_64x64" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\rsz_projectslogo2.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="Mods Klasörü" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\Mods Klasörü.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="projects_Logo" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\projectsLogo2.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
-  <data name="projects_Logo_64x64" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\rsz_projectslogo2.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  <data name="kullaniciadigiriniz" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\kullaniciadigiriniz.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="Doku paketi klasörü" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\Doku paketi klasörü.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="projects_logo_icon" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\projects_logo_icon.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
@@ -138,5 +144,11 @@
   </data>
   <data name="_6" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\6.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="Oyun Klasörü" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\Oyun Klasörü.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="Doku Paketi Aktar" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\Doku Paketi Aktar.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
 </root>

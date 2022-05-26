@@ -58,15 +58,15 @@ namespace Projects_Launcher.Projects_Launcher
             this.discordStaticPictureBox = new Guna.UI2.WinForms.Guna2ImageButton();
             this.downloadCompleteBar = new Guna.UI2.WinForms.Guna2ProgressBar();
             this.settingsBgPanel = new Guna.UI2.WinForms.Guna2Panel();
+            this.transferRpLabel = new System.Windows.Forms.PictureBox();
+            this.rpFolder = new System.Windows.Forms.PictureBox();
+            this.pictureBox3 = new System.Windows.Forms.PictureBox();
+            this.modsLabel = new System.Windows.Forms.PictureBox();
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.guna2PictureBox5 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.guna2PictureBox4 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.guna2PictureBox3 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.guna2PictureBox1 = new Guna.UI2.WinForms.Guna2PictureBox();
-            this.rootLabel = new Guna.UI2.WinForms.Guna2ImageButton();
-            this.rpFolder = new Guna.UI2.WinForms.Guna2ImageButton();
-            this.transferRpLabel = new Guna.UI2.WinForms.Guna2ImageButton();
-            this.modsLabel = new Guna.UI2.WinForms.Guna2ImageButton();
             this.gaiaOnline = new System.Windows.Forms.Label();
             this.lobiOnline = new System.Windows.Forms.Label();
             this.label7 = new System.Windows.Forms.Label();
@@ -94,6 +94,10 @@ namespace Projects_Launcher.Projects_Launcher
             ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.skinRenderPictureBox)).BeginInit();
             this.settingsBgPanel.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.transferRpLabel)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.rpFolder)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.modsLabel)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox5)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox4)).BeginInit();
@@ -421,15 +425,15 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.settingsBgPanel.BackColor = System.Drawing.Color.Transparent;
             this.settingsBgPanel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.settingsBgPanel.Controls.Add(this.transferRpLabel);
+            this.settingsBgPanel.Controls.Add(this.rpFolder);
+            this.settingsBgPanel.Controls.Add(this.pictureBox3);
+            this.settingsBgPanel.Controls.Add(this.modsLabel);
             this.settingsBgPanel.Controls.Add(this.pictureBox1);
             this.settingsBgPanel.Controls.Add(this.guna2PictureBox5);
             this.settingsBgPanel.Controls.Add(this.guna2PictureBox4);
             this.settingsBgPanel.Controls.Add(this.guna2PictureBox3);
             this.settingsBgPanel.Controls.Add(this.guna2PictureBox1);
-            this.settingsBgPanel.Controls.Add(this.rootLabel);
-            this.settingsBgPanel.Controls.Add(this.rpFolder);
-            this.settingsBgPanel.Controls.Add(this.transferRpLabel);
-            this.settingsBgPanel.Controls.Add(this.modsLabel);
             this.settingsBgPanel.Controls.Add(this.gaiaOnline);
             this.settingsBgPanel.Controls.Add(this.lobiOnline);
             this.settingsBgPanel.Controls.Add(this.label7);
@@ -454,13 +458,57 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Controls.Add(this.heighttextbox);
             this.settingsBgPanel.Controls.Add(this.maxRamTextBox);
             this.settingsBgPanel.Controls.Add(this.maxRamDynamicCalculatorLabel);
-            this.settingsBgPanel.Location = new System.Drawing.Point(949, 102);
+            this.settingsBgPanel.Location = new System.Drawing.Point(0, 32);
             this.settingsBgPanel.MaximumSize = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.MinimumSize = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.Name = "settingsBgPanel";
             this.settingsBgPanel.Size = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.TabIndex = 209;
             this.settingsBgPanel.Visible = false;
+            // 
+            // transferRpLabel
+            // 
+            this.transferRpLabel.BackgroundImage = global::Projects_Launcher.Properties.Resources.Oyun_Klasörü;
+            this.transferRpLabel.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.transferRpLabel.Location = new System.Drawing.Point(651, 195);
+            this.transferRpLabel.Name = "transferRpLabel";
+            this.transferRpLabel.Size = new System.Drawing.Size(143, 27);
+            this.transferRpLabel.TabIndex = 1021;
+            this.transferRpLabel.TabStop = false;
+            this.transferRpLabel.Click += new System.EventHandler(this.gamefolder_Click);
+            // 
+            // rpFolder
+            // 
+            this.rpFolder.BackgroundImage = global::Projects_Launcher.Properties.Resources.Doku_paketi_klasörü;
+            this.rpFolder.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.rpFolder.Location = new System.Drawing.Point(651, 228);
+            this.rpFolder.Name = "rpFolder";
+            this.rpFolder.Size = new System.Drawing.Size(143, 27);
+            this.rpFolder.TabIndex = 1020;
+            this.rpFolder.TabStop = false;
+            this.rpFolder.Click += new System.EventHandler(this.rpFolder_Click);
+            // 
+            // pictureBox3
+            // 
+            this.pictureBox3.BackgroundImage = global::Projects_Launcher.Properties.Resources.Doku_Paketi_Aktar;
+            this.pictureBox3.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.pictureBox3.Location = new System.Drawing.Point(651, 261);
+            this.pictureBox3.Name = "pictureBox3";
+            this.pictureBox3.Size = new System.Drawing.Size(143, 27);
+            this.pictureBox3.TabIndex = 1019;
+            this.pictureBox3.TabStop = false;
+            this.pictureBox3.Click += new System.EventHandler(this.rpTransfer_Click);
+            // 
+            // modsLabel
+            // 
+            this.modsLabel.BackgroundImage = global::Projects_Launcher.Properties.Resources.Mods_Klasörü;
+            this.modsLabel.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.modsLabel.Location = new System.Drawing.Point(651, 162);
+            this.modsLabel.Name = "modsLabel";
+            this.modsLabel.Size = new System.Drawing.Size(143, 27);
+            this.modsLabel.TabIndex = 1018;
+            this.modsLabel.TabStop = false;
+            this.modsLabel.Click += new System.EventHandler(this.modsLabel_Click);
             // 
             // pictureBox1
             // 
@@ -511,66 +559,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.guna2PictureBox1.Size = new System.Drawing.Size(143, 40);
             this.guna2PictureBox1.TabIndex = 1012;
             this.guna2PictureBox1.TabStop = false;
-            // 
-            // rootLabel
-            // 
-            this.rootLabel.CheckedState.ImageSize = new System.Drawing.Size(64, 64);
-            this.rootLabel.HoverState.ImageSize = new System.Drawing.Size(143, 40);
-            this.rootLabel.Image = ((System.Drawing.Image)(resources.GetObject("rootLabel.Image")));
-            this.rootLabel.ImageOffset = new System.Drawing.Point(0, 0);
-            this.rootLabel.ImageRotate = 0F;
-            this.rootLabel.ImageSize = new System.Drawing.Size(143, 27);
-            this.rootLabel.Location = new System.Drawing.Point(651, 198);
-            this.rootLabel.Name = "rootLabel";
-            this.rootLabel.PressedState.ImageSize = new System.Drawing.Size(64, 64);
-            this.rootLabel.Size = new System.Drawing.Size(143, 27);
-            this.rootLabel.TabIndex = 1011;
-            this.rootLabel.Click += new System.EventHandler(this.gamefolder_Click);
-            // 
-            // rpFolder
-            // 
-            this.rpFolder.CheckedState.ImageSize = new System.Drawing.Size(64, 64);
-            this.rpFolder.HoverState.ImageSize = new System.Drawing.Size(143, 40);
-            this.rpFolder.Image = ((System.Drawing.Image)(resources.GetObject("rpFolder.Image")));
-            this.rpFolder.ImageOffset = new System.Drawing.Point(0, 0);
-            this.rpFolder.ImageRotate = 0F;
-            this.rpFolder.ImageSize = new System.Drawing.Size(143, 27);
-            this.rpFolder.Location = new System.Drawing.Point(651, 231);
-            this.rpFolder.Name = "rpFolder";
-            this.rpFolder.PressedState.ImageSize = new System.Drawing.Size(64, 64);
-            this.rpFolder.Size = new System.Drawing.Size(143, 27);
-            this.rpFolder.TabIndex = 1010;
-            this.rpFolder.Click += new System.EventHandler(this.rpFolder_Click);
-            // 
-            // transferRpLabel
-            // 
-            this.transferRpLabel.CheckedState.ImageSize = new System.Drawing.Size(64, 64);
-            this.transferRpLabel.HoverState.ImageSize = new System.Drawing.Size(143, 40);
-            this.transferRpLabel.Image = ((System.Drawing.Image)(resources.GetObject("transferRpLabel.Image")));
-            this.transferRpLabel.ImageOffset = new System.Drawing.Point(0, 0);
-            this.transferRpLabel.ImageRotate = 0F;
-            this.transferRpLabel.ImageSize = new System.Drawing.Size(143, 27);
-            this.transferRpLabel.Location = new System.Drawing.Point(651, 264);
-            this.transferRpLabel.Name = "transferRpLabel";
-            this.transferRpLabel.PressedState.ImageSize = new System.Drawing.Size(64, 64);
-            this.transferRpLabel.Size = new System.Drawing.Size(143, 27);
-            this.transferRpLabel.TabIndex = 1009;
-            this.transferRpLabel.Click += new System.EventHandler(this.rpTransfer_Click);
-            // 
-            // modsLabel
-            // 
-            this.modsLabel.CheckedState.ImageSize = new System.Drawing.Size(64, 64);
-            this.modsLabel.HoverState.ImageSize = new System.Drawing.Size(143, 40);
-            this.modsLabel.Image = ((System.Drawing.Image)(resources.GetObject("modsLabel.Image")));
-            this.modsLabel.ImageOffset = new System.Drawing.Point(0, 0);
-            this.modsLabel.ImageRotate = 0F;
-            this.modsLabel.ImageSize = new System.Drawing.Size(143, 27);
-            this.modsLabel.Location = new System.Drawing.Point(651, 165);
-            this.modsLabel.Name = "modsLabel";
-            this.modsLabel.PressedState.ImageSize = new System.Drawing.Size(64, 64);
-            this.modsLabel.Size = new System.Drawing.Size(143, 27);
-            this.modsLabel.TabIndex = 1008;
-            this.modsLabel.Click += new System.EventHandler(this.modsLabel_Click);
             // 
             // gaiaOnline
             // 
@@ -1018,6 +1006,10 @@ namespace Projects_Launcher.Projects_Launcher
             ((System.ComponentModel.ISupportInitialize)(this.skinRenderPictureBox)).EndInit();
             this.settingsBgPanel.ResumeLayout(false);
             this.settingsBgPanel.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.transferRpLabel)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.rpFolder)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.modsLabel)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox5)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox4)).EndInit();
@@ -1080,14 +1072,14 @@ namespace Projects_Launcher.Projects_Launcher
         public Guna.UI2.WinForms.Guna2TextBox heighttextbox;
         public Guna.UI2.WinForms.Guna2TextBox maxRamTextBox;
         private System.Windows.Forms.Label maxRamDynamicCalculatorLabel;
-        private Guna.UI2.WinForms.Guna2ImageButton rootLabel;
-        private Guna.UI2.WinForms.Guna2ImageButton rpFolder;
-        private Guna.UI2.WinForms.Guna2ImageButton transferRpLabel;
-        private Guna.UI2.WinForms.Guna2ImageButton modsLabel;
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox5;
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox4;
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox3;
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox1;
         private System.Windows.Forms.PictureBox pictureBox1;
+        private System.Windows.Forms.PictureBox transferRpLabel;
+        private System.Windows.Forms.PictureBox rpFolder;
+        private System.Windows.Forms.PictureBox pictureBox3;
+        private System.Windows.Forms.PictureBox modsLabel;
     }
 }

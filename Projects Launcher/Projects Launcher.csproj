@@ -35,7 +35,7 @@
     <CreateWebPageOnPublish>true</CreateWebPageOnPublish>
     <WebPage>publish.htm</WebPage>
     <OpenBrowserOnPublish>false</OpenBrowserOnPublish>
-    <ApplicationRevision>30</ApplicationRevision>
+    <ApplicationRevision>31</ApplicationRevision>
     <ApplicationVersion>0.1.6.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>
@@ -230,6 +230,10 @@
   <ItemGroup>
     <Content Include="logo.ico" />
     <Content Include="projects.ico" />
+    <None Include="Resources\Doku Paketi Aktar.jpg" />
+    <None Include="Resources\Doku paketi klasörü.jpg" />
+    <None Include="Resources\Oyun Klasörü.jpg" />
+    <None Include="Resources\Mods Klasörü.jpg" />
     <None Include="Resources\girisyap.jpg" />
     <None Include="Resources\kullaniciadigiriniz.jpg" />
     <None Include="Resources\Toprak_Arkaplan.png" />

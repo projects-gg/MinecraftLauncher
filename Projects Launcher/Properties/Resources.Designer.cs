@@ -73,6 +73,26 @@ namespace Projects_Launcher.Properties {
         /// <summary>
         ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
         /// </summary>
+        public static System.Drawing.Bitmap Doku_Paketi_Aktar {
+            get {
+                object obj = ResourceManager.GetObject("Doku Paketi Aktar", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
+        public static System.Drawing.Bitmap Doku_paketi_klasörü {
+            get {
+                object obj = ResourceManager.GetObject("Doku paketi klasörü", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
         public static System.Drawing.Bitmap girisyap {
             get {
                 object obj = ResourceManager.GetObject("girisyap", resourceCulture);
@@ -86,6 +106,26 @@ namespace Projects_Launcher.Properties {
         public static System.Drawing.Bitmap kullaniciadigiriniz {
             get {
                 object obj = ResourceManager.GetObject("kullaniciadigiriniz", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
+        public static System.Drawing.Bitmap Mods_Klasörü {
+            get {
+                object obj = ResourceManager.GetObject("Mods Klasörü", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
+        public static System.Drawing.Bitmap Oyun_Klasörü {
+            get {
+                object obj = ResourceManager.GetObject("Oyun Klasörü", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }

@@ -867,12 +867,12 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void gamefolder_MouseEnter(object sender, EventArgs e)
         {
-            rootLabel.ForeColor = RandomColor();
+            transferRpLabel.ForeColor = RandomColor();
         }
 
         private void gamefolder_MouseLeave(object sender, EventArgs e)
         {
-            rootLabel.ForeColor = Color.FromArgb(245, 245, 245);
+            transferRpLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void timer3_Tick(object sender, EventArgs e)
@@ -1111,45 +1111,54 @@ namespace Projects_Launcher.Projects_Launcher
         }
         private void timer1_Tick(object sender, EventArgs e)
         {
-            //Lobi onlineCheck
-            string url = "https://projectsggapi.vercel.app/api/server1";
-            HttpWebRequest request = WebRequest.Create(url) as HttpWebRequest;
-            string jsonverisi = "";
-            using (HttpWebResponse response = request.GetResponse() as HttpWebResponse)
+            try
             {
-                StreamReader r = new StreamReader(response.GetResponseStream());
-                jsonverisi = r.ReadToEnd();
-            }
+                //Lobi onlineCheck
+                string url = "https://projectsggapi.vercel.app/api/server1";
+                HttpWebRequest request = WebRequest.Create(url) as HttpWebRequest;
+                string jsonverisi = "";
+                using (HttpWebResponse response = request.GetResponse() as HttpWebResponse)
+                {
+                    StreamReader r = new StreamReader(response.GetResponseStream());
+                    jsonverisi = r.ReadToEnd();
+                }
 
-            Xml xml = JsonConvert.DeserializeObject<Xml>(jsonverisi);
+                Xml xml = JsonConvert.DeserializeObject<Xml>(jsonverisi);
 
-            if (xml.debug.ping == "false")
-            {
-                lobiOnline.ForeColor = Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55));
-            }
-            else
-            {
-                lobiOnline.ForeColor = Color.FromArgb(rnd.Next(50), rnd.Next(200), rnd.Next(35));
-            }
+                if (xml.debug.ping == "false")
+                {
+                    lobiOnline.ForeColor = Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55));
+                }
+                else
+                {
+                    lobiOnline.ForeColor = Color.FromArgb(rnd.Next(50), rnd.Next(200), rnd.Next(35));
+                }
 
-            //Gaia onlineCheck
-            string url2 = "https://projectsggapi.vercel.app/api/server2";
-            HttpWebRequest request2 = WebRequest.Create(url2) as HttpWebRequest;
-            string jsonverisi2 = "";
-            using (HttpWebResponse response2 = request2.GetResponse() as HttpWebResponse)
-            {
-                StreamReader r = new StreamReader(response2.GetResponseStream());
-                jsonverisi2 += r.ReadToEnd();
-            }
+                //Gaia onlineCheck
+                string url2 = "https://projectsggapi.vercel.app/api/server2";
+                HttpWebRequest request2 = WebRequest.Create(url2) as HttpWebRequest;
+                string jsonverisi2 = "";
+                using (HttpWebResponse response2 = request2.GetResponse() as HttpWebResponse)
+                {
+                    StreamReader r = new StreamReader(response2.GetResponseStream());
+                    jsonverisi2 += r.ReadToEnd();
+                }
 
-            if (xml.debug.ping == "false")
-            {
-                gaiaOnline.ForeColor = Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55));
+                if (xml.debug.ping == "false")
+                {
+                    gaiaOnline.ForeColor = Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55));
+                }
+                else
+                {
+                    gaiaOnline.ForeColor = Color.FromArgb(rnd.Next(50), rnd.Next(200), rnd.Next(35));
+                }
             }
-            else
+            catch
             {
-                gaiaOnline.ForeColor = Color.FromArgb(rnd.Next(50), rnd.Next(200), rnd.Next(35));
+                lobiOnline.Text = "?";
+                gaiaOnline.Text = "?";
             }
+            
         }
 
         private void skinRenderPictureBox_Click(object sender, EventArgs e)
