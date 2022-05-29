@@ -397,5 +397,10 @@ namespace Projects_Launcher
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }
+
+        private void webbutton_Click(object sender, EventArgs e)
+        {
+            System.Diagnostics.Process.Start("https://projects.gg/");
+        }
     }
 }

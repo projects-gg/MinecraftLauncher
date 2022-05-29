@@ -124,7 +124,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.playSplitStaticLabel.BackColor = System.Drawing.Color.Transparent;
             this.playSplitStaticLabel.Font = new System.Drawing.Font("Microsoft Sans Serif", 21F, System.Drawing.FontStyle.Bold);
             this.playSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
-            this.playSplitStaticLabel.Location = new System.Drawing.Point(28, 382);
+            this.playSplitStaticLabel.Location = new System.Drawing.Point(29, 372);
             this.playSplitStaticLabel.Name = "playSplitStaticLabel";
             this.playSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
             this.playSplitStaticLabel.TabIndex = 2;
@@ -246,7 +246,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverOnlineCountStaticLabel.BackColor = System.Drawing.Color.Transparent;
             this.serverOnlineCountStaticLabel.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.serverOnlineCountStaticLabel.ForeColor = System.Drawing.SystemColors.ActiveBorder;
-            this.serverOnlineCountStaticLabel.Location = new System.Drawing.Point(40, 482);
+            this.serverOnlineCountStaticLabel.Location = new System.Drawing.Point(31, 411);
             this.serverOnlineCountStaticLabel.Name = "serverOnlineCountStaticLabel";
             this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(92, 16);
             this.serverOnlineCountStaticLabel.TabIndex = 120;
@@ -351,7 +351,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.downloadCompleteLabel.BackColor = System.Drawing.Color.Transparent;
             this.downloadCompleteLabel.Font = new System.Drawing.Font("Arial", 11F);
             this.downloadCompleteLabel.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.downloadCompleteLabel.Location = new System.Drawing.Point(40, 387);
+            this.downloadCompleteLabel.Location = new System.Drawing.Point(41, 377);
             this.downloadCompleteLabel.Name = "downloadCompleteLabel";
             this.downloadCompleteLabel.Size = new System.Drawing.Size(82, 17);
             this.downloadCompleteLabel.TabIndex = 165;
@@ -410,12 +410,12 @@ namespace Projects_Launcher.Projects_Launcher
             // downloadCompleteBar
             // 
             this.downloadCompleteBar.Font = new System.Drawing.Font("Arial", 7F);
-            this.downloadCompleteBar.Location = new System.Drawing.Point(43, 404);
+            this.downloadCompleteBar.Location = new System.Drawing.Point(44, 394);
             this.downloadCompleteBar.Name = "downloadCompleteBar";
             this.downloadCompleteBar.ProgressColor = System.Drawing.Color.FromArgb(((int)(((byte)(22)))), ((int)(((byte)(163)))), ((int)(((byte)(74)))));
             this.downloadCompleteBar.ProgressColor2 = System.Drawing.Color.FromArgb(((int)(((byte)(22)))), ((int)(((byte)(163)))), ((int)(((byte)(74)))));
             this.downloadCompleteBar.ShowText = true;
-            this.downloadCompleteBar.Size = new System.Drawing.Size(82, 10);
+            this.downloadCompleteBar.Size = new System.Drawing.Size(79, 10);
             this.downloadCompleteBar.TabIndex = 1006;
             this.downloadCompleteBar.Text = "downloadCompleteBar";
             this.downloadCompleteBar.TextRenderingHint = System.Drawing.Text.TextRenderingHint.SystemDefault;
@@ -567,7 +567,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.gaiaOnline.Cursor = System.Windows.Forms.Cursors.Hand;
             this.gaiaOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.gaiaOnline.ForeColor = System.Drawing.Color.White;
-            this.gaiaOnline.Location = new System.Drawing.Point(115, 401);
+            this.gaiaOnline.Location = new System.Drawing.Point(297, 381);
             this.gaiaOnline.Name = "gaiaOnline";
             this.gaiaOnline.Size = new System.Drawing.Size(21, 19);
             this.gaiaOnline.TabIndex = 208;
@@ -580,7 +580,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.lobiOnline.Cursor = System.Windows.Forms.Cursors.Hand;
             this.lobiOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.lobiOnline.ForeColor = System.Drawing.Color.White;
-            this.lobiOnline.Location = new System.Drawing.Point(115, 382);
+            this.lobiOnline.Location = new System.Drawing.Point(297, 362);
             this.lobiOnline.Name = "lobiOnline";
             this.lobiOnline.Size = new System.Drawing.Size(21, 19);
             this.lobiOnline.TabIndex = 207;
@@ -593,7 +593,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.label7.Cursor = System.Windows.Forms.Cursors.Hand;
             this.label7.Font = new System.Drawing.Font("Bahnschrift Light", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.label7.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.label7.Location = new System.Drawing.Point(12, 401);
+            this.label7.Location = new System.Drawing.Point(194, 381);
             this.label7.Name = "label7";
             this.label7.Size = new System.Drawing.Size(105, 19);
             this.label7.TabIndex = 199;
@@ -606,7 +606,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.label8.Cursor = System.Windows.Forms.Cursors.Hand;
             this.label8.Font = new System.Drawing.Font("Bahnschrift Light", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.label8.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.label8.Location = new System.Drawing.Point(12, 382);
+            this.label8.Location = new System.Drawing.Point(194, 362);
             this.label8.Name = "label8";
             this.label8.Size = new System.Drawing.Size(40, 19);
             this.label8.TabIndex = 198;
@@ -626,7 +626,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.bgSelection.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
             this.bgSelection.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
             this.bgSelection.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.bgSelection.Location = new System.Drawing.Point(651, 362);
+            this.bgSelection.Location = new System.Drawing.Point(771, 362);
             this.bgSelection.Name = "bgSelection";
             this.bgSelection.Size = new System.Drawing.Size(167, 24);
             this.bgSelection.TabIndex = 197;
@@ -656,7 +656,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.gpuStaticLabel.BackColor = System.Drawing.Color.Transparent;
             this.gpuStaticLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.gpuStaticLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(205)))), ((int)(((byte)(185)))), ((int)(((byte)(10)))));
-            this.gpuStaticLabel.Location = new System.Drawing.Point(648, 447);
+            this.gpuStaticLabel.Location = new System.Drawing.Point(768, 447);
             this.gpuStaticLabel.Name = "gpuStaticLabel";
             this.gpuStaticLabel.Size = new System.Drawing.Size(42, 18);
             this.gpuStaticLabel.TabIndex = 191;
@@ -668,7 +668,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.ramStaticLabel.BackColor = System.Drawing.Color.Transparent;
             this.ramStaticLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.ramStaticLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(205)))), ((int)(((byte)(185)))), ((int)(((byte)(10)))));
-            this.ramStaticLabel.Location = new System.Drawing.Point(648, 429);
+            this.ramStaticLabel.Location = new System.Drawing.Point(768, 429);
             this.ramStaticLabel.Name = "ramStaticLabel";
             this.ramStaticLabel.Size = new System.Drawing.Size(43, 18);
             this.ramStaticLabel.TabIndex = 188;
@@ -680,7 +680,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.ramInfoLabel.BackColor = System.Drawing.Color.Transparent;
             this.ramInfoLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.ramInfoLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.ramInfoLabel.Location = new System.Drawing.Point(698, 429);
+            this.ramInfoLabel.Location = new System.Drawing.Point(818, 429);
             this.ramInfoLabel.Name = "ramInfoLabel";
             this.ramInfoLabel.Size = new System.Drawing.Size(139, 18);
             this.ramInfoLabel.TabIndex = 187;
@@ -692,7 +692,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.gpuInfo.BackColor = System.Drawing.Color.Transparent;
             this.gpuInfo.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.gpuInfo.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.gpuInfo.Location = new System.Drawing.Point(698, 447);
+            this.gpuInfo.Location = new System.Drawing.Point(818, 447);
             this.gpuInfo.Name = "gpuInfo";
             this.gpuInfo.Size = new System.Drawing.Size(76, 18);
             this.gpuInfo.TabIndex = 184;
@@ -713,7 +713,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.reopenLauncher.CheckState = System.Windows.Forms.CheckState.Checked;
             this.reopenLauncher.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
             this.reopenLauncher.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.reopenLauncher.Location = new System.Drawing.Point(651, 389);
+            this.reopenLauncher.Location = new System.Drawing.Point(771, 389);
             this.reopenLauncher.Name = "reopenLauncher";
             this.reopenLauncher.Size = new System.Drawing.Size(169, 24);
             this.reopenLauncher.TabIndex = 134;

@@ -41,7 +41,7 @@ namespace Projects_Launcher
             this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.updateNowButton = new System.Windows.Forms.Button();
             this.backButton = new System.Windows.Forms.Button();
-            this.guna2PictureBox1 = new Guna.UI2.WinForms.Guna2PictureBox();
+            this.webbutton = new Guna.UI2.WinForms.Guna2PictureBox();
             this.loginButton = new System.Windows.Forms.PictureBox();
             this.newsLabel = new System.Windows.Forms.PictureBox();
             this.newVersionPanel = new System.Windows.Forms.Panel();
@@ -59,7 +59,7 @@ namespace Projects_Launcher
             this.versionLabel = new System.Windows.Forms.Label();
             this.guna2PictureBox2 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.labelYenilikMaddeler = new System.Windows.Forms.Label();
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.webbutton)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.loginButton)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.newsLabel)).BeginInit();
             this.newVersionPanel.SuspendLayout();
@@ -212,20 +212,23 @@ namespace Projects_Launcher
             this.backButton.Visible = false;
             this.backButton.Click += new System.EventHandler(this.backButton_Click);
             // 
-            // guna2PictureBox1
+            // webbutton
             // 
-            this.guna2PictureBox1.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox1.Image")));
-            this.guna2PictureBox1.ImageRotate = 0F;
-            this.guna2PictureBox1.Location = new System.Drawing.Point(389, 297);
-            this.guna2PictureBox1.Name = "guna2PictureBox1";
-            this.guna2PictureBox1.Size = new System.Drawing.Size(207, 21);
-            this.guna2PictureBox1.TabIndex = 1018;
-            this.guna2PictureBox1.TabStop = false;
+            this.webbutton.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.webbutton.Image = ((System.Drawing.Image)(resources.GetObject("webbutton.Image")));
+            this.webbutton.ImageRotate = 0F;
+            this.webbutton.Location = new System.Drawing.Point(389, 297);
+            this.webbutton.Name = "webbutton";
+            this.webbutton.Size = new System.Drawing.Size(207, 21);
+            this.webbutton.TabIndex = 1018;
+            this.webbutton.TabStop = false;
+            this.webbutton.Click += new System.EventHandler(this.webbutton_Click);
             // 
             // loginButton
             // 
             this.loginButton.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("loginButton.BackgroundImage")));
             this.loginButton.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.loginButton.Cursor = System.Windows.Forms.Cursors.Hand;
             this.loginButton.Location = new System.Drawing.Point(389, 243);
             this.loginButton.Name = "loginButton";
             this.loginButton.Size = new System.Drawing.Size(207, 48);
@@ -237,6 +240,7 @@ namespace Projects_Launcher
             // 
             this.newsLabel.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("newsLabel.BackgroundImage")));
             this.newsLabel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.newsLabel.Cursor = System.Windows.Forms.Cursors.Hand;
             this.newsLabel.Location = new System.Drawing.Point(389, 451);
             this.newsLabel.Name = "newsLabel";
             this.newsLabel.Size = new System.Drawing.Size(207, 25);
@@ -257,7 +261,7 @@ namespace Projects_Launcher
             this.newVersionPanel.Controls.Add(this.updateLabelBottom);
             this.newVersionPanel.Controls.Add(this.updateLabelTop);
             this.newVersionPanel.Controls.Add(this.updateHeadline);
-            this.newVersionPanel.Location = new System.Drawing.Point(174, 107);
+            this.newVersionPanel.Location = new System.Drawing.Point(175, 105);
             this.newVersionPanel.Name = "newVersionPanel";
             this.newVersionPanel.Size = new System.Drawing.Size(633, 288);
             this.newVersionPanel.TabIndex = 1021;
@@ -450,7 +454,7 @@ namespace Projects_Launcher
             this.Controls.Add(this.newVersionPanel);
             this.Controls.Add(this.newsLabel);
             this.Controls.Add(this.loginButton);
-            this.Controls.Add(this.guna2PictureBox1);
+            this.Controls.Add(this.webbutton);
             this.Controls.Add(this.backButton);
             this.Controls.Add(this.updateNowButton);
             this.Controls.Add(this.maximizeButtonControlBox);
@@ -468,7 +472,7 @@ namespace Projects_Launcher
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Projects Launcher";
             this.Load += new System.EventHandler(this.ProjectsLauncherLogin_Load);
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.webbutton)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.loginButton)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.newsLabel)).EndInit();
             this.newVersionPanel.ResumeLayout(false);
@@ -494,7 +498,7 @@ namespace Projects_Launcher
         private System.Windows.Forms.Button backButton;
         private System.Windows.Forms.PictureBox newsLabel;
         private System.Windows.Forms.PictureBox loginButton;
-        private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox1;
+        private Guna.UI2.WinForms.Guna2PictureBox webbutton;
         private Guna.UI2.WinForms.Guna2Panel panelYenilikler;
         private System.Windows.Forms.Label versionLabel;
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox2;
