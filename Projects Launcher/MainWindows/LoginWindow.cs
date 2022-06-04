@@ -314,7 +314,7 @@ namespace Projects_Launcher
                     Properties.Settings.Default.Save();
                 }
 
-                loginButton.Image = Properties.Resources.girisyap;
+                loginButton.Image = Properties.Resources.giris;
                 loginButton.Enabled = true;
             }
             else
@@ -400,7 +400,7 @@ namespace Projects_Launcher
 
         private void webbutton_Click(object sender, EventArgs e)
         {
-            System.Diagnostics.Process.Start("https://projects.gg/");
+            System.Diagnostics.Process.Start("https://mc.projects.gg/");
         }
     }
 }

@@ -83,6 +83,16 @@ namespace Projects_Launcher.Properties {
         /// <summary>
         ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
         /// </summary>
+        public static System.Drawing.Bitmap Doku_Paketi_Aktar2 {
+            get {
+                object obj = ResourceManager.GetObject("Doku_Paketi_Aktar2", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
         public static System.Drawing.Bitmap Doku_paketi_klasörü {
             get {
                 object obj = ResourceManager.GetObject("Doku paketi klasörü", resourceCulture);
@@ -93,9 +103,19 @@ namespace Projects_Launcher.Properties {
         /// <summary>
         ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
         /// </summary>
-        public static System.Drawing.Bitmap girisyap {
+        public static System.Drawing.Bitmap Doku_paketi_klasörü2 {
             get {
-                object obj = ResourceManager.GetObject("girisyap", resourceCulture);
+                object obj = ResourceManager.GetObject("Doku_paketi_klasörü2", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
+        public static System.Drawing.Bitmap giris {
+            get {
+                object obj = ResourceManager.GetObject("giris", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }
@@ -123,9 +143,29 @@ namespace Projects_Launcher.Properties {
         /// <summary>
         ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
         /// </summary>
+        public static System.Drawing.Bitmap Mods_Klasörü2 {
+            get {
+                object obj = ResourceManager.GetObject("Mods_Klasörü2", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
         public static System.Drawing.Bitmap Oyun_Klasörü {
             get {
                 object obj = ResourceManager.GetObject("Oyun Klasörü", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
+        public static System.Drawing.Bitmap Oyun_Klasörü2 {
+            get {
+                object obj = ResourceManager.GetObject("Oyun_Klasörü2", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }

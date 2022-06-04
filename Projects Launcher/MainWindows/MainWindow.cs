@@ -132,7 +132,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 double ramInBytes = (Convert.ToDouble(ramObject["TotalPhysicalMemory"]));
                 double roundAvailableRamValueInGb = Math.Ceiling(ramInBytes / 1073741824); // <- Byte to GB conversion
-                ramInfoLabel.Text = string.Format("{0:0.##}", Convert.ToDouble(roundAvailableRamValueInGb) * 1024) + "MB" + " = " + Convert.ToString(roundAvailableRamValueInGb) + " GB";
+                ramInfoLabel.Text = string.Format("{0:0.##}", Convert.ToDouble(roundAvailableRamValueInGb) * 1024) + "MB" + "/" + Convert.ToString(roundAvailableRamValueInGb) + " GB";
                 break;
             }
         }
@@ -728,36 +728,6 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        private void modsLabel_MouseEnter(object sender, EventArgs e)
-        {
-            modsLabel.ForeColor = RandomColor();
-        }
-
-        private void modsLabel_MouseLeave(object sender, EventArgs e)
-        {
-            modsLabel.ForeColor = Color.FromArgb(245, 245, 245);
-        }
-
-        private void rpFolder_MouseEnter(object sender, EventArgs e)
-        {
-            rpFolder.ForeColor = RandomColor();
-        }
-
-        private void rpFolder_MouseLeave(object sender, EventArgs e)
-        {
-            rpFolder.ForeColor = Color.FromArgb(245, 245, 245);
-        }
-
-        private void rpTransfer_MouseEnter(object sender, EventArgs e)
-        {
-            transferRpLabel.ForeColor = RandomColor();
-        }
-
-        private void rpTransfer_MouseLeave(object sender, EventArgs e)
-        {
-            transferRpLabel.ForeColor = Color.FromArgb(245, 245, 245);
-        }
-
         private void modsLabel_Click(object sender, EventArgs e)
         {
             string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/mods";
@@ -863,16 +833,6 @@ namespace Projects_Launcher.Projects_Launcher
             }
             GC.Collect();
             GC.WaitForPendingFinalizers();
-        }
-
-        private void gamefolder_MouseEnter(object sender, EventArgs e)
-        {
-            transferRpLabel.ForeColor = RandomColor();
-        }
-
-        private void gamefolder_MouseLeave(object sender, EventArgs e)
-        {
-            transferRpLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void timer3_Tick(object sender, EventArgs e)
@@ -1158,7 +1118,7 @@ namespace Projects_Launcher.Projects_Launcher
                 lobiOnline.Text = "?";
                 gaiaOnline.Text = "?";
             }
-            
+
         }
 
         private void skinRenderPictureBox_Click(object sender, EventArgs e)

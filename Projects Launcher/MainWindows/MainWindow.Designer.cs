@@ -58,10 +58,10 @@ namespace Projects_Launcher.Projects_Launcher
             this.discordStaticPictureBox = new Guna.UI2.WinForms.Guna2ImageButton();
             this.downloadCompleteBar = new Guna.UI2.WinForms.Guna2ProgressBar();
             this.settingsBgPanel = new Guna.UI2.WinForms.Guna2Panel();
-            this.transferRpLabel = new System.Windows.Forms.PictureBox();
-            this.rpFolder = new System.Windows.Forms.PictureBox();
-            this.pictureBox3 = new System.Windows.Forms.PictureBox();
-            this.modsLabel = new System.Windows.Forms.PictureBox();
+            this.rpFolder = new Guna.UI2.WinForms.Guna2ImageButton();
+            this.modsLabel = new Guna.UI2.WinForms.Guna2ImageButton();
+            this.rpTranfer = new Guna.UI2.WinForms.Guna2ImageButton();
+            this.gamefolder = new Guna.UI2.WinForms.Guna2ImageButton();
             this.pictureBox1 = new System.Windows.Forms.PictureBox();
             this.guna2PictureBox5 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.guna2PictureBox4 = new Guna.UI2.WinForms.Guna2PictureBox();
@@ -94,10 +94,6 @@ namespace Projects_Launcher.Projects_Launcher
             ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.skinRenderPictureBox)).BeginInit();
             this.settingsBgPanel.SuspendLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.transferRpLabel)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.rpFolder)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.modsLabel)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox5)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox4)).BeginInit();
@@ -361,7 +357,8 @@ namespace Projects_Launcher.Projects_Launcher
             // playButtonStaticLabel
             // 
             this.playButtonStaticLabel.CheckedState.ImageSize = new System.Drawing.Size(64, 64);
-            this.playButtonStaticLabel.HoverState.Image = ((System.Drawing.Image)(resources.GetObject("resource.Image2")));
+            this.playButtonStaticLabel.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.playButtonStaticLabel.HoverState.Image = ((System.Drawing.Image)(resources.GetObject("resource.Image5")));
             this.playButtonStaticLabel.HoverState.ImageSize = new System.Drawing.Size(128, 49);
             this.playButtonStaticLabel.Image = ((System.Drawing.Image)(resources.GetObject("playButtonStaticLabel.Image")));
             this.playButtonStaticLabel.ImageOffset = new System.Drawing.Point(0, 0);
@@ -378,15 +375,16 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.settingsStaticPictureBox.BackColor = System.Drawing.Color.Transparent;
             this.settingsStaticPictureBox.CheckedState.ImageSize = new System.Drawing.Size(64, 64);
-            this.settingsStaticPictureBox.HoverState.Image = ((System.Drawing.Image)(resources.GetObject("resource.Image1")));
+            this.settingsStaticPictureBox.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.settingsStaticPictureBox.HoverState.Image = ((System.Drawing.Image)(resources.GetObject("resource.Image4")));
             this.settingsStaticPictureBox.HoverState.ImageSize = new System.Drawing.Size(46, 29);
             this.settingsStaticPictureBox.Image = ((System.Drawing.Image)(resources.GetObject("settingsStaticPictureBox.Image")));
             this.settingsStaticPictureBox.ImageOffset = new System.Drawing.Point(0, 0);
             this.settingsStaticPictureBox.ImageRotate = 0F;
             this.settingsStaticPictureBox.ImageSize = new System.Drawing.Size(46, 29);
-            this.settingsStaticPictureBox.Location = new System.Drawing.Point(840, 450);
+            this.settingsStaticPictureBox.Location = new System.Drawing.Point(858, 450);
             this.settingsStaticPictureBox.Name = "settingsStaticPictureBox";
-            this.settingsStaticPictureBox.PressedState.ImageSize = new System.Drawing.Size(64, 64);
+            this.settingsStaticPictureBox.PressedState.ImageSize = new System.Drawing.Size(46, 29);
             this.settingsStaticPictureBox.Size = new System.Drawing.Size(46, 29);
             this.settingsStaticPictureBox.TabIndex = 1003;
             this.settingsStaticPictureBox.Click += new System.EventHandler(this.ayarlarbutton_Click);
@@ -394,16 +392,17 @@ namespace Projects_Launcher.Projects_Launcher
             // discordStaticPictureBox
             // 
             this.discordStaticPictureBox.CheckedState.ImageSize = new System.Drawing.Size(64, 64);
-            this.discordStaticPictureBox.HoverState.Image = ((System.Drawing.Image)(resources.GetObject("resource.Image")));
-            this.discordStaticPictureBox.HoverState.ImageSize = new System.Drawing.Size(46, 29);
+            this.discordStaticPictureBox.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.discordStaticPictureBox.HoverState.Image = ((System.Drawing.Image)(resources.GetObject("resource.Image3")));
+            this.discordStaticPictureBox.HoverState.ImageSize = new System.Drawing.Size(35, 29);
             this.discordStaticPictureBox.Image = ((System.Drawing.Image)(resources.GetObject("discordStaticPictureBox.Image")));
             this.discordStaticPictureBox.ImageOffset = new System.Drawing.Point(0, 0);
             this.discordStaticPictureBox.ImageRotate = 0F;
-            this.discordStaticPictureBox.ImageSize = new System.Drawing.Size(46, 29);
-            this.discordStaticPictureBox.Location = new System.Drawing.Point(897, 450);
+            this.discordStaticPictureBox.ImageSize = new System.Drawing.Size(35, 29);
+            this.discordStaticPictureBox.Location = new System.Drawing.Point(807, 450);
             this.discordStaticPictureBox.Name = "discordStaticPictureBox";
             this.discordStaticPictureBox.PressedState.ImageSize = new System.Drawing.Size(64, 64);
-            this.discordStaticPictureBox.Size = new System.Drawing.Size(46, 29);
+            this.discordStaticPictureBox.Size = new System.Drawing.Size(35, 29);
             this.discordStaticPictureBox.TabIndex = 1005;
             this.discordStaticPictureBox.Click += new System.EventHandler(this.discord_Click);
             // 
@@ -425,10 +424,10 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.settingsBgPanel.BackColor = System.Drawing.Color.Transparent;
             this.settingsBgPanel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.settingsBgPanel.Controls.Add(this.transferRpLabel);
             this.settingsBgPanel.Controls.Add(this.rpFolder);
-            this.settingsBgPanel.Controls.Add(this.pictureBox3);
             this.settingsBgPanel.Controls.Add(this.modsLabel);
+            this.settingsBgPanel.Controls.Add(this.rpTranfer);
+            this.settingsBgPanel.Controls.Add(this.gamefolder);
             this.settingsBgPanel.Controls.Add(this.pictureBox1);
             this.settingsBgPanel.Controls.Add(this.guna2PictureBox5);
             this.settingsBgPanel.Controls.Add(this.guna2PictureBox4);
@@ -458,7 +457,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Controls.Add(this.heighttextbox);
             this.settingsBgPanel.Controls.Add(this.maxRamTextBox);
             this.settingsBgPanel.Controls.Add(this.maxRamDynamicCalculatorLabel);
-            this.settingsBgPanel.Location = new System.Drawing.Point(0, 32);
+            this.settingsBgPanel.Location = new System.Drawing.Point(0, 34);
             this.settingsBgPanel.MaximumSize = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.MinimumSize = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.Name = "settingsBgPanel";
@@ -466,49 +465,73 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.TabIndex = 209;
             this.settingsBgPanel.Visible = false;
             // 
-            // transferRpLabel
-            // 
-            this.transferRpLabel.BackgroundImage = global::Projects_Launcher.Properties.Resources.Oyun_Klasörü;
-            this.transferRpLabel.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.transferRpLabel.Location = new System.Drawing.Point(651, 195);
-            this.transferRpLabel.Name = "transferRpLabel";
-            this.transferRpLabel.Size = new System.Drawing.Size(143, 27);
-            this.transferRpLabel.TabIndex = 1021;
-            this.transferRpLabel.TabStop = false;
-            this.transferRpLabel.Click += new System.EventHandler(this.gamefolder_Click);
-            // 
             // rpFolder
             // 
-            this.rpFolder.BackgroundImage = global::Projects_Launcher.Properties.Resources.Doku_paketi_klasörü;
+            this.rpFolder.CheckedState.ImageSize = new System.Drawing.Size(64, 64);
             this.rpFolder.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.rpFolder.HoverState.Image = global::Projects_Launcher.Properties.Resources.Doku_paketi_klasörü2;
+            this.rpFolder.HoverState.ImageSize = new System.Drawing.Size(143, 27);
+            this.rpFolder.Image = global::Projects_Launcher.Properties.Resources.Doku_paketi_klasörü;
+            this.rpFolder.ImageOffset = new System.Drawing.Point(0, 0);
+            this.rpFolder.ImageRotate = 0F;
+            this.rpFolder.ImageSize = new System.Drawing.Size(143, 27);
             this.rpFolder.Location = new System.Drawing.Point(651, 228);
             this.rpFolder.Name = "rpFolder";
+            this.rpFolder.PressedState.ImageSize = new System.Drawing.Size(64, 64);
             this.rpFolder.Size = new System.Drawing.Size(143, 27);
-            this.rpFolder.TabIndex = 1020;
-            this.rpFolder.TabStop = false;
+            this.rpFolder.TabIndex = 1026;
             this.rpFolder.Click += new System.EventHandler(this.rpFolder_Click);
-            // 
-            // pictureBox3
-            // 
-            this.pictureBox3.BackgroundImage = global::Projects_Launcher.Properties.Resources.Doku_Paketi_Aktar;
-            this.pictureBox3.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.pictureBox3.Location = new System.Drawing.Point(651, 261);
-            this.pictureBox3.Name = "pictureBox3";
-            this.pictureBox3.Size = new System.Drawing.Size(143, 27);
-            this.pictureBox3.TabIndex = 1019;
-            this.pictureBox3.TabStop = false;
-            this.pictureBox3.Click += new System.EventHandler(this.rpTransfer_Click);
             // 
             // modsLabel
             // 
-            this.modsLabel.BackgroundImage = global::Projects_Launcher.Properties.Resources.Mods_Klasörü;
+            this.modsLabel.CheckedState.ImageSize = new System.Drawing.Size(64, 64);
             this.modsLabel.Cursor = System.Windows.Forms.Cursors.Hand;
-            this.modsLabel.Location = new System.Drawing.Point(651, 162);
+            this.modsLabel.HoverState.Image = global::Projects_Launcher.Properties.Resources.Mods_Klasörü2;
+            this.modsLabel.HoverState.ImageSize = new System.Drawing.Size(143, 27);
+            this.modsLabel.Image = global::Projects_Launcher.Properties.Resources.Mods_Klasörü;
+            this.modsLabel.ImageOffset = new System.Drawing.Point(0, 0);
+            this.modsLabel.ImageRotate = 0F;
+            this.modsLabel.ImageSize = new System.Drawing.Size(143, 27);
+            this.modsLabel.Location = new System.Drawing.Point(651, 164);
             this.modsLabel.Name = "modsLabel";
+            this.modsLabel.PressedState.ImageSize = new System.Drawing.Size(64, 64);
             this.modsLabel.Size = new System.Drawing.Size(143, 27);
-            this.modsLabel.TabIndex = 1018;
-            this.modsLabel.TabStop = false;
+            this.modsLabel.TabIndex = 1025;
             this.modsLabel.Click += new System.EventHandler(this.modsLabel_Click);
+            // 
+            // rpTranfer
+            // 
+            this.rpTranfer.CheckedState.ImageSize = new System.Drawing.Size(64, 64);
+            this.rpTranfer.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.rpTranfer.HoverState.Image = ((System.Drawing.Image)(resources.GetObject("resource.Image1")));
+            this.rpTranfer.HoverState.ImageSize = new System.Drawing.Size(143, 27);
+            this.rpTranfer.Image = global::Projects_Launcher.Properties.Resources.Doku_Paketi_Aktar;
+            this.rpTranfer.ImageOffset = new System.Drawing.Point(0, 0);
+            this.rpTranfer.ImageRotate = 0F;
+            this.rpTranfer.ImageSize = new System.Drawing.Size(143, 27);
+            this.rpTranfer.Location = new System.Drawing.Point(651, 261);
+            this.rpTranfer.Name = "rpTranfer";
+            this.rpTranfer.PressedState.ImageSize = new System.Drawing.Size(64, 64);
+            this.rpTranfer.Size = new System.Drawing.Size(143, 27);
+            this.rpTranfer.TabIndex = 1024;
+            this.rpTranfer.Click += new System.EventHandler(this.rpTransfer_Click);
+            // 
+            // gamefolder
+            // 
+            this.gamefolder.CheckedState.ImageSize = new System.Drawing.Size(64, 64);
+            this.gamefolder.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.gamefolder.HoverState.Image = ((System.Drawing.Image)(resources.GetObject("resource.Image2")));
+            this.gamefolder.HoverState.ImageSize = new System.Drawing.Size(143, 27);
+            this.gamefolder.Image = global::Projects_Launcher.Properties.Resources.Oyun_Klasörü;
+            this.gamefolder.ImageOffset = new System.Drawing.Point(0, 0);
+            this.gamefolder.ImageRotate = 0F;
+            this.gamefolder.ImageSize = new System.Drawing.Size(143, 27);
+            this.gamefolder.Location = new System.Drawing.Point(651, 195);
+            this.gamefolder.Name = "gamefolder";
+            this.gamefolder.PressedState.ImageSize = new System.Drawing.Size(64, 64);
+            this.gamefolder.Size = new System.Drawing.Size(143, 27);
+            this.gamefolder.TabIndex = 1023;
+            this.gamefolder.Click += new System.EventHandler(this.gamefolder_Click);
             // 
             // pictureBox1
             // 
@@ -567,7 +590,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.gaiaOnline.Cursor = System.Windows.Forms.Cursors.Hand;
             this.gaiaOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.gaiaOnline.ForeColor = System.Drawing.Color.White;
-            this.gaiaOnline.Location = new System.Drawing.Point(297, 381);
+            this.gaiaOnline.Location = new System.Drawing.Point(297, 408);
             this.gaiaOnline.Name = "gaiaOnline";
             this.gaiaOnline.Size = new System.Drawing.Size(21, 19);
             this.gaiaOnline.TabIndex = 208;
@@ -580,7 +603,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.lobiOnline.Cursor = System.Windows.Forms.Cursors.Hand;
             this.lobiOnline.Font = new System.Drawing.Font("Bahnschrift", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.lobiOnline.ForeColor = System.Drawing.Color.White;
-            this.lobiOnline.Location = new System.Drawing.Point(297, 362);
+            this.lobiOnline.Location = new System.Drawing.Point(297, 389);
             this.lobiOnline.Name = "lobiOnline";
             this.lobiOnline.Size = new System.Drawing.Size(21, 19);
             this.lobiOnline.TabIndex = 207;
@@ -593,7 +616,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.label7.Cursor = System.Windows.Forms.Cursors.Hand;
             this.label7.Font = new System.Drawing.Font("Bahnschrift Light", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.label7.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.label7.Location = new System.Drawing.Point(194, 381);
+            this.label7.Location = new System.Drawing.Point(194, 408);
             this.label7.Name = "label7";
             this.label7.Size = new System.Drawing.Size(105, 19);
             this.label7.TabIndex = 199;
@@ -606,7 +629,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.label8.Cursor = System.Windows.Forms.Cursors.Hand;
             this.label8.Font = new System.Drawing.Font("Bahnschrift Light", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.label8.ForeColor = System.Drawing.Color.WhiteSmoke;
-            this.label8.Location = new System.Drawing.Point(194, 362);
+            this.label8.Location = new System.Drawing.Point(194, 389);
             this.label8.Name = "label8";
             this.label8.Size = new System.Drawing.Size(40, 19);
             this.label8.TabIndex = 198;
@@ -626,7 +649,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.bgSelection.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
             this.bgSelection.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
             this.bgSelection.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.bgSelection.Location = new System.Drawing.Point(771, 362);
+            this.bgSelection.Location = new System.Drawing.Point(651, 384);
             this.bgSelection.Name = "bgSelection";
             this.bgSelection.Size = new System.Drawing.Size(167, 24);
             this.bgSelection.TabIndex = 197;
@@ -656,7 +679,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.gpuStaticLabel.BackColor = System.Drawing.Color.Transparent;
             this.gpuStaticLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.gpuStaticLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(205)))), ((int)(((byte)(185)))), ((int)(((byte)(10)))));
-            this.gpuStaticLabel.Location = new System.Drawing.Point(768, 447);
+            this.gpuStaticLabel.Location = new System.Drawing.Point(399, 246);
             this.gpuStaticLabel.Name = "gpuStaticLabel";
             this.gpuStaticLabel.Size = new System.Drawing.Size(42, 18);
             this.gpuStaticLabel.TabIndex = 191;
@@ -668,7 +691,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.ramStaticLabel.BackColor = System.Drawing.Color.Transparent;
             this.ramStaticLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.ramStaticLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(205)))), ((int)(((byte)(185)))), ((int)(((byte)(10)))));
-            this.ramStaticLabel.Location = new System.Drawing.Point(768, 429);
+            this.ramStaticLabel.Location = new System.Drawing.Point(399, 228);
             this.ramStaticLabel.Name = "ramStaticLabel";
             this.ramStaticLabel.Size = new System.Drawing.Size(43, 18);
             this.ramStaticLabel.TabIndex = 188;
@@ -680,11 +703,11 @@ namespace Projects_Launcher.Projects_Launcher
             this.ramInfoLabel.BackColor = System.Drawing.Color.Transparent;
             this.ramInfoLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.ramInfoLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.ramInfoLabel.Location = new System.Drawing.Point(818, 429);
+            this.ramInfoLabel.Location = new System.Drawing.Point(442, 228);
             this.ramInfoLabel.Name = "ramInfoLabel";
-            this.ramInfoLabel.Size = new System.Drawing.Size(139, 18);
+            this.ramInfoLabel.Size = new System.Drawing.Size(126, 18);
             this.ramInfoLabel.TabIndex = 187;
-            this.ramInfoLabel.Text = "00000MB = 00 GB";
+            this.ramInfoLabel.Text = "00000MB/00 GB";
             // 
             // gpuInfo
             // 
@@ -692,7 +715,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.gpuInfo.BackColor = System.Drawing.Color.Transparent;
             this.gpuInfo.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.gpuInfo.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.gpuInfo.Location = new System.Drawing.Point(818, 447);
+            this.gpuInfo.Location = new System.Drawing.Point(442, 246);
             this.gpuInfo.Name = "gpuInfo";
             this.gpuInfo.Size = new System.Drawing.Size(76, 18);
             this.gpuInfo.TabIndex = 184;
@@ -713,7 +736,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.reopenLauncher.CheckState = System.Windows.Forms.CheckState.Checked;
             this.reopenLauncher.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
             this.reopenLauncher.ForeColor = System.Drawing.SystemColors.ControlLightLight;
-            this.reopenLauncher.Location = new System.Drawing.Point(771, 389);
+            this.reopenLauncher.Location = new System.Drawing.Point(651, 411);
             this.reopenLauncher.Name = "reopenLauncher";
             this.reopenLauncher.Size = new System.Drawing.Size(169, 24);
             this.reopenLauncher.TabIndex = 134;
@@ -840,14 +863,14 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             // versionBox
             // 
-            this.versionBox.BackColor = System.Drawing.Color.Transparent;
+            this.versionBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(139)))), ((int)(((byte)(12)))));
             this.versionBox.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
             this.versionBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.versionBox.FillColor = System.Drawing.Color.Transparent;
             this.versionBox.FocusedColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
             this.versionBox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
             this.versionBox.Font = new System.Drawing.Font("Arial", 12F);
-            this.versionBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(68)))), ((int)(((byte)(88)))), ((int)(((byte)(112)))));
+            this.versionBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(251)))), ((int)(((byte)(255)))), ((int)(((byte)(255)))));
             this.versionBox.ItemHeight = 30;
             this.versionBox.Items.AddRange(new object[] {
             "projects-fabric",
@@ -1006,10 +1029,6 @@ namespace Projects_Launcher.Projects_Launcher
             ((System.ComponentModel.ISupportInitialize)(this.skinRenderPictureBox)).EndInit();
             this.settingsBgPanel.ResumeLayout(false);
             this.settingsBgPanel.PerformLayout();
-            ((System.ComponentModel.ISupportInitialize)(this.transferRpLabel)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.rpFolder)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.pictureBox3)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.modsLabel)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox5)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox4)).EndInit();
@@ -1077,9 +1096,9 @@ namespace Projects_Launcher.Projects_Launcher
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox3;
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox1;
         private System.Windows.Forms.PictureBox pictureBox1;
-        private System.Windows.Forms.PictureBox transferRpLabel;
-        private System.Windows.Forms.PictureBox rpFolder;
-        private System.Windows.Forms.PictureBox pictureBox3;
-        private System.Windows.Forms.PictureBox modsLabel;
+        private Guna.UI2.WinForms.Guna2ImageButton rpFolder;
+        private Guna.UI2.WinForms.Guna2ImageButton modsLabel;
+        private Guna.UI2.WinForms.Guna2ImageButton rpTranfer;
+        private Guna.UI2.WinForms.Guna2ImageButton gamefolder;
     }
 }

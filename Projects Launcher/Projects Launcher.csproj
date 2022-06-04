@@ -230,6 +230,11 @@
   <ItemGroup>
     <Content Include="logo.ico" />
     <Content Include="projects.ico" />
+    <None Include="Resources\Mods Klasörü2.jpg" />
+    <None Include="Resources\Doku paketi klasörü2.jpg" />
+    <None Include="Resources\Doku Paketi Aktar2.png" />
+    <None Include="Resources\Oyun Klasörü2.jpg" />
+    <None Include="Resources\giriş yap.jpg" />
     <None Include="Resources\Doku Paketi Aktar.jpg" />
     <None Include="Resources\Doku paketi klasörü.jpg" />
     <None Include="Resources\Oyun Klasörü.jpg" />
