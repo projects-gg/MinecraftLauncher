@@ -220,7 +220,7 @@ namespace Projects_Launcher
             this.newsLabel.ImageSize = new System.Drawing.Size(191, 25);
             this.newsLabel.Location = new System.Drawing.Point(389, 457);
             this.newsLabel.Name = "newsLabel";
-            this.newsLabel.PressedState.ImageSize = new System.Drawing.Size(64, 64);
+            this.newsLabel.PressedState.ImageSize = new System.Drawing.Size(191, 25);
             this.newsLabel.Size = new System.Drawing.Size(207, 25);
             this.newsLabel.TabIndex = 1023;
             this.newsLabel.Click += new System.EventHandler(this.newsLabel_Click_1);
@@ -236,7 +236,7 @@ namespace Projects_Launcher
             this.webbutton.ImageSize = new System.Drawing.Size(207, 21);
             this.webbutton.Location = new System.Drawing.Point(389, 325);
             this.webbutton.Name = "webbutton";
-            this.webbutton.PressedState.ImageSize = new System.Drawing.Size(64, 64);
+            this.webbutton.PressedState.ImageSize = new System.Drawing.Size(207, 21);
             this.webbutton.Size = new System.Drawing.Size(207, 21);
             this.webbutton.TabIndex = 1024;
             this.webbutton.Click += new System.EventHandler(this.webbutton_Click);
@@ -252,7 +252,7 @@ namespace Projects_Launcher
             this.loginButton.ImageSize = new System.Drawing.Size(207, 59);
             this.loginButton.Location = new System.Drawing.Point(389, 260);
             this.loginButton.Name = "loginButton";
-            this.loginButton.PressedState.ImageSize = new System.Drawing.Size(64, 64);
+            this.loginButton.PressedState.ImageSize = new System.Drawing.Size(207, 59);
             this.loginButton.Size = new System.Drawing.Size(207, 59);
             this.loginButton.TabIndex = 1025;
             this.loginButton.Click += new System.EventHandler(this.girisyapbutton_Click);
@@ -270,7 +270,7 @@ namespace Projects_Launcher
             this.newVersionPanel.Controls.Add(this.updateLabelBottom);
             this.newVersionPanel.Controls.Add(this.updateLabelTop);
             this.newVersionPanel.Controls.Add(this.updateHeadline);
-            this.newVersionPanel.Location = new System.Drawing.Point(163, 113);
+            this.newVersionPanel.Location = new System.Drawing.Point(165, 115);
             this.newVersionPanel.Name = "newVersionPanel";
             this.newVersionPanel.Size = new System.Drawing.Size(633, 288);
             this.newVersionPanel.TabIndex = 1026;

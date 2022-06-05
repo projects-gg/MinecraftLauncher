@@ -3,7 +3,7 @@
   <Profiles />
   <Settings>
     <Setting Name="BeniHatırla" Type="System.String" Scope="User">
-      <Value Profile="(Default)" />
+      <Value Profile="(Default)">true</Value>
     </Setting>
     <Setting Name="RamMax" Type="System.String" Scope="User">
       <Value Profile="(Default)">4096</Value>
@@ -37,6 +37,9 @@
     </Setting>
     <Setting Name="suppressVersion" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="themeSelected" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Sistem Varsayılanı</Value>
     </Setting>
   </Settings>
 </SettingsFile>

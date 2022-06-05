@@ -231,7 +231,7 @@ namespace Projects_Launcher
             newsTextsRead();
 
 
-            selectBackgroundImage();
+            //selectBackgroundImage();
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }

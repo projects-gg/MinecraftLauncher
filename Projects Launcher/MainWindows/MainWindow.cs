@@ -1,13 +1,13 @@
 ﻿using CmlLib.Core;
 using CmlLib.Core.Auth;
 using DiscordRPC;
+using Microsoft.Win32;
 using MineStatLib;
 using Newtonsoft.Json;
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
-
 using System.IO;
 using System.Linq;
 using System.Management;
@@ -84,46 +84,8 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        public void selectBackgroundImage()
-        {
-            // Grab background image
-            try
-            {
-                var random = new Random();
-                string imageType;
-
-                if (Properties.Settings.Default.backgroundLite) // Need ternary support instead of this
-                {
-                    imageType = "lite";
-                }
-                else
-                {
-                    imageType = Convert.ToString(random.Next(9) + 1);
-                }
-
-                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + imageType + ".png"); // Last background image
-
-                using (var response = request.GetResponse())
-                using (var stream = response.GetResponseStream())
-                    this.BackgroundImage = Bitmap.FromStream(stream);
-            }
-            catch
-            {
-                // Shouldn't happen except no internet connection or server downtime
-                this.BackgroundImage = Properties.Resources.Toprak_Arkaplan;
-            }
-        }
-
         private void updateHwInfo()
         {
-            // GPU
-            ManagementObjectSearcher gpuSearch = new ManagementObjectSearcher("Select * From Win32_VideoController");
-
-            foreach (ManagementObject gpuObject in gpuSearch.Get())
-            {
-                gpuInfo.Text = gpuObject["name"].ToString();
-                break;
-            }
 
             // RAM
             ManagementObjectSearcher ramSearch = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
@@ -139,8 +101,6 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void Anamenu_Load(object sender, EventArgs e)
         {
-            selectBackgroundImage();
-
             versionLabel.Text = "v" + currentVersion;
 
             // ".projects" directory check
@@ -158,6 +118,8 @@ namespace Projects_Launcher.Projects_Launcher
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames;
 
             reopenLauncher.Checked = Properties.Settings.Default.OyunTickS;
+
+            temaSelectBox.Text = Properties.Settings.Default.themeSelected;
 
             if (Properties.Settings.Default.SelectedVersion != string.Empty)
             {
@@ -1042,19 +1004,6 @@ namespace Projects_Launcher.Projects_Launcher
             settingsBgPanel.Size = this.Size;
         }
 
-        private void bgSelection_CheckedChanged(object sender, EventArgs e)
-        {
-            Properties.Settings.Default.backgroundLite = bgSelection.Checked;
-            Properties.Settings.Default.Save();
-            selectBackgroundImage();
-
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
-
-            DataBindings.Clear();
-            GC.SuppressFinalize(this);
-        }
-
         private void button1_Click(object sender, EventArgs e)
         {
             settingsBgPanel.Visible = false;
@@ -1087,11 +1036,11 @@ namespace Projects_Launcher.Projects_Launcher
 
                 if (xml.debug.ping == "false")
                 {
-                    lobiOnline.ForeColor = Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55));
+                    lobiOnline.Image = Properties.Resources.De_Aktif;
                 }
                 else
                 {
-                    lobiOnline.ForeColor = Color.FromArgb(rnd.Next(50), rnd.Next(200), rnd.Next(35));
+                    lobiOnline.Image = Properties.Resources.Aktif;
                 }
 
                 //Gaia onlineCheck
@@ -1106,11 +1055,11 @@ namespace Projects_Launcher.Projects_Launcher
 
                 if (xml.debug.ping == "false")
                 {
-                    gaiaOnline.ForeColor = Color.FromArgb(rnd.Next(210), rnd.Next(65), rnd.Next(55));
+                    gaiaOnline.Image = Properties.Resources.De_Aktif;
                 }
                 else
                 {
-                    gaiaOnline.ForeColor = Color.FromArgb(rnd.Next(50), rnd.Next(200), rnd.Next(35));
+                    gaiaOnline.Image = Properties.Resources.Aktif;
                 }
             }
             catch
@@ -1127,6 +1076,97 @@ namespace Projects_Launcher.Projects_Launcher
         }
 
         private void guna2ImageButton1_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void temaSelectBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (temaSelectBox.Text == "Sistem Varsayılanı")
+            {
+                int res = (int)Registry.GetValue("HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "AppsUseLightTheme", -1);
+                if (res == 1)
+                {
+                    this.BackgroundImage = Properties.Resources.gaia_light;
+
+                    minRamDynamicCalculatorLabel.ForeColor = Color.Black;
+                    maxRamDynamicCalculatorLabel.ForeColor = Color.Black;
+                    ramInfoLabel.ForeColor = Color.FromArgb(64, 0, 0);
+                    reopenLauncher.ForeColor = Color.Black;
+                }
+                if (res == 0)
+                {
+                    this.BackgroundImage = Properties.Resources.gaia_dark;
+
+                    minRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
+                    maxRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
+                    ramInfoLabel.ForeColor = Color.FromArgb(251, 255, 255);
+                    reopenLauncher.ForeColor = Color.FromArgb(251, 255, 255);
+                    versionBox.ForeColor = Color.FromArgb(251, 255, 255);
+                }
+            }
+
+            if (temaSelectBox.Text == "Açık Tema")
+            {
+                this.BackgroundImage = Properties.Resources.gaia_light;
+
+                minRamDynamicCalculatorLabel.ForeColor = Color.Black;
+                maxRamDynamicCalculatorLabel.ForeColor = Color.Black;
+                ramInfoLabel.ForeColor = Color.FromArgb(64, 0, 0);
+                reopenLauncher.ForeColor = Color.Black;
+            }
+
+            if (temaSelectBox.Text == "Koyu Tema")
+            {
+                this.BackgroundImage = Properties.Resources.gaia_dark;
+
+                minRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
+                maxRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
+                ramInfoLabel.ForeColor = Color.FromArgb(251, 255, 255);
+                reopenLauncher.ForeColor = Color.FromArgb(251, 255, 255);
+                versionBox.ForeColor = Color.FromArgb(251, 255, 255);
+            }
+
+            Properties.Settings.Default.themeSelected = temaSelectBox.Text;
+            Properties.Settings.Default.Save();
+        }
+
+        private void label1_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void gaiaOnline_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void lobiOnline_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void guna2PictureBox8_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void guna2PictureBox7_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void guna2PictureBox10_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void gpuInfo_Click(object sender, EventArgs e)
+        {
+
+        }
+
+        private void ramInfoLabel_Click(object sender, EventArgs e)
         {
 
         }

@@ -25,7 +25,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        [global::System.Configuration.DefaultSettingValueAttribute("true")]
         public string BeniHatırla {
             get {
                 return ((string)(this["BeniHatırla"]));
@@ -158,6 +158,18 @@ namespace Projects_Launcher.Properties {
             }
             set {
                 this["suppressVersion"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("Sistem Varsayılanı")]
+        public string themeSelected {
+            get {
+                return ((string)(this["themeSelected"]));
+            }
+            set {
+                this["themeSelected"] = value;
             }
         }
     }

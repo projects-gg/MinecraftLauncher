@@ -163,4 +163,16 @@
   <data name="Oyun_Klasörü2" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\Oyun Klasörü2.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
+  <data name="Aktif" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\Aktif.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="De_Aktif" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\De-Aktif.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="gaia_dark" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\gaia_dark.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
+  <data name="gaia_light" type="System.Resources.ResXFileRef, System.Windows.Forms">
+    <value>..\Resources\gaia_light.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
+  </data>
 </root>

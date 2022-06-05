@@ -73,6 +73,26 @@ namespace Projects_Launcher.Properties {
         /// <summary>
         ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
         /// </summary>
+        public static System.Drawing.Bitmap Aktif {
+            get {
+                object obj = ResourceManager.GetObject("Aktif", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
+        public static System.Drawing.Bitmap De_Aktif {
+            get {
+                object obj = ResourceManager.GetObject("De_Aktif", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
         public static System.Drawing.Bitmap Doku_Paketi_Aktar {
             get {
                 object obj = ResourceManager.GetObject("Doku Paketi Aktar", resourceCulture);
@@ -106,6 +126,26 @@ namespace Projects_Launcher.Properties {
         public static System.Drawing.Bitmap Doku_paketi_klasörü2 {
             get {
                 object obj = ResourceManager.GetObject("Doku_paketi_klasörü2", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
+        public static System.Drawing.Bitmap gaia_dark {
+            get {
+                object obj = ResourceManager.GetObject("gaia_dark", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
+        public static System.Drawing.Bitmap gaia_light {
+            get {
+                object obj = ResourceManager.GetObject("gaia_light", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }

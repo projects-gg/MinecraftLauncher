@@ -230,6 +230,12 @@
   <ItemGroup>
     <Content Include="logo.ico" />
     <Content Include="projects.ico" />
+    <None Include="Resources\Aktif.png" />
+    <None Include="Resources\De-Aktif.png" />
+    <None Include="Resources\gaia_light.jpg" />
+    <None Include="Resources\gaia_dark.jpg" />
+    <None Include="Resources\gaia_light.png" />
+    <None Include="Resources\gaiadark.jpg" />
     <None Include="Resources\Mods Klasörü2.jpg" />
     <None Include="Resources\Doku paketi klasörü2.jpg" />
     <None Include="Resources\Doku Paketi Aktar2.png" />
