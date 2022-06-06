@@ -58,6 +58,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.discordStaticPictureBox = new Guna.UI2.WinForms.Guna2ImageButton();
             this.downloadCompleteBar = new Guna.UI2.WinForms.Guna2ProgressBar();
             this.settingsBgPanel = new Guna.UI2.WinForms.Guna2Panel();
+            this.ramInfoLabel = new System.Windows.Forms.Label();
+            this.guna2PictureBox9 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.gaiaOnline = new Guna.UI2.WinForms.Guna2PictureBox();
             this.lobiOnline = new Guna.UI2.WinForms.Guna2PictureBox();
             this.guna2PictureBox8 = new Guna.UI2.WinForms.Guna2PictureBox();
@@ -89,11 +91,10 @@ namespace Projects_Launcher.Projects_Launcher
             this.heighttextbox = new Guna.UI2.WinForms.Guna2TextBox();
             this.maxRamTextBox = new Guna.UI2.WinForms.Guna2TextBox();
             this.maxRamDynamicCalculatorLabel = new System.Windows.Forms.Label();
-            this.guna2PictureBox9 = new Guna.UI2.WinForms.Guna2PictureBox();
-            this.ramInfoLabel = new System.Windows.Forms.Label();
             ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.skinRenderPictureBox)).BeginInit();
             this.settingsBgPanel.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox9)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.gaiaOnline)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.lobiOnline)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox8)).BeginInit();
@@ -105,7 +106,6 @@ namespace Projects_Launcher.Projects_Launcher
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox4)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox3)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox9)).BeginInit();
             this.SuspendLayout();
             // 
             // projectsLogoStaticPictureBox
@@ -473,6 +473,30 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.TabIndex = 209;
             this.settingsBgPanel.Visible = false;
             // 
+            // ramInfoLabel
+            // 
+            this.ramInfoLabel.AutoSize = true;
+            this.ramInfoLabel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(47)))), ((int)(((byte)(57)))), ((int)(((byte)(71)))));
+            this.ramInfoLabel.Cursor = System.Windows.Forms.Cursors.Default;
+            this.ramInfoLabel.Font = new System.Drawing.Font("Arial", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.ramInfoLabel.ForeColor = System.Drawing.Color.White;
+            this.ramInfoLabel.Location = new System.Drawing.Point(522, 122);
+            this.ramInfoLabel.Name = "ramInfoLabel";
+            this.ramInfoLabel.Size = new System.Drawing.Size(85, 14);
+            this.ramInfoLabel.TabIndex = 1037;
+            this.ramInfoLabel.Text = "00000MB/00 GB";
+            this.ramInfoLabel.Click += new System.EventHandler(this.ramInfoLabel_Click);
+            // 
+            // guna2PictureBox9
+            // 
+            this.guna2PictureBox9.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox9.Image")));
+            this.guna2PictureBox9.ImageRotate = 0F;
+            this.guna2PictureBox9.Location = new System.Drawing.Point(484, 118);
+            this.guna2PictureBox9.Name = "guna2PictureBox9";
+            this.guna2PictureBox9.Size = new System.Drawing.Size(128, 21);
+            this.guna2PictureBox9.TabIndex = 1035;
+            this.guna2PictureBox9.TabStop = false;
+            // 
             // gaiaOnline
             // 
             this.gaiaOnline.Image = ((System.Drawing.Image)(resources.GetObject("gaiaOnline.Image")));
@@ -586,7 +610,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.rpFolder.ImageSize = new System.Drawing.Size(143, 27);
             this.rpFolder.Location = new System.Drawing.Point(795, 122);
             this.rpFolder.Name = "rpFolder";
-            this.rpFolder.PressedState.ImageSize = new System.Drawing.Size(64, 64);
+            this.rpFolder.PressedState.ImageSize = new System.Drawing.Size(143, 27);
             this.rpFolder.Size = new System.Drawing.Size(143, 27);
             this.rpFolder.TabIndex = 1026;
             this.rpFolder.Click += new System.EventHandler(this.rpFolder_Click);
@@ -603,7 +627,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.modsLabel.ImageSize = new System.Drawing.Size(143, 27);
             this.modsLabel.Location = new System.Drawing.Point(795, 58);
             this.modsLabel.Name = "modsLabel";
-            this.modsLabel.PressedState.ImageSize = new System.Drawing.Size(64, 64);
+            this.modsLabel.PressedState.ImageSize = new System.Drawing.Size(143, 27);
             this.modsLabel.Size = new System.Drawing.Size(143, 27);
             this.modsLabel.TabIndex = 1025;
             this.modsLabel.Click += new System.EventHandler(this.modsLabel_Click);
@@ -620,7 +644,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.rpTranfer.ImageSize = new System.Drawing.Size(143, 27);
             this.rpTranfer.Location = new System.Drawing.Point(795, 155);
             this.rpTranfer.Name = "rpTranfer";
-            this.rpTranfer.PressedState.ImageSize = new System.Drawing.Size(64, 64);
+            this.rpTranfer.PressedState.ImageSize = new System.Drawing.Size(143, 27);
             this.rpTranfer.Size = new System.Drawing.Size(143, 27);
             this.rpTranfer.TabIndex = 1024;
             this.rpTranfer.Click += new System.EventHandler(this.rpTransfer_Click);
@@ -637,7 +661,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.gamefolder.ImageSize = new System.Drawing.Size(143, 27);
             this.gamefolder.Location = new System.Drawing.Point(795, 89);
             this.gamefolder.Name = "gamefolder";
-            this.gamefolder.PressedState.ImageSize = new System.Drawing.Size(64, 64);
+            this.gamefolder.PressedState.ImageSize = new System.Drawing.Size(143, 27);
             this.gamefolder.Size = new System.Drawing.Size(143, 27);
             this.gamefolder.TabIndex = 1023;
             this.gamefolder.Click += new System.EventHandler(this.gamefolder_Click);
@@ -964,30 +988,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.maxRamDynamicCalculatorLabel.TabIndex = 164;
             this.maxRamDynamicCalculatorLabel.Text = "MB";
             // 
-            // guna2PictureBox9
-            // 
-            this.guna2PictureBox9.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox9.Image")));
-            this.guna2PictureBox9.ImageRotate = 0F;
-            this.guna2PictureBox9.Location = new System.Drawing.Point(484, 118);
-            this.guna2PictureBox9.Name = "guna2PictureBox9";
-            this.guna2PictureBox9.Size = new System.Drawing.Size(128, 21);
-            this.guna2PictureBox9.TabIndex = 1035;
-            this.guna2PictureBox9.TabStop = false;
-            // 
-            // ramInfoLabel
-            // 
-            this.ramInfoLabel.AutoSize = true;
-            this.ramInfoLabel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(47)))), ((int)(((byte)(57)))), ((int)(((byte)(71)))));
-            this.ramInfoLabel.Cursor = System.Windows.Forms.Cursors.Default;
-            this.ramInfoLabel.Font = new System.Drawing.Font("Arial", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.ramInfoLabel.ForeColor = System.Drawing.Color.White;
-            this.ramInfoLabel.Location = new System.Drawing.Point(522, 122);
-            this.ramInfoLabel.Name = "ramInfoLabel";
-            this.ramInfoLabel.Size = new System.Drawing.Size(85, 14);
-            this.ramInfoLabel.TabIndex = 1037;
-            this.ramInfoLabel.Text = "00000MB/00 GB";
-            this.ramInfoLabel.Click += new System.EventHandler(this.ramInfoLabel_Click);
-            // 
             // mainMenuForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 13F);
@@ -1033,6 +1033,7 @@ namespace Projects_Launcher.Projects_Launcher
             ((System.ComponentModel.ISupportInitialize)(this.skinRenderPictureBox)).EndInit();
             this.settingsBgPanel.ResumeLayout(false);
             this.settingsBgPanel.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox9)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.gaiaOnline)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.lobiOnline)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox8)).EndInit();
@@ -1044,7 +1045,6 @@ namespace Projects_Launcher.Projects_Launcher
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox4)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox3)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox9)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 

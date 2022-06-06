@@ -1091,7 +1091,6 @@ namespace Projects_Launcher.Projects_Launcher
 
                     minRamDynamicCalculatorLabel.ForeColor = Color.Black;
                     maxRamDynamicCalculatorLabel.ForeColor = Color.Black;
-                    ramInfoLabel.ForeColor = Color.FromArgb(64, 0, 0);
                     reopenLauncher.ForeColor = Color.Black;
                 }
                 if (res == 0)
@@ -1100,7 +1099,6 @@ namespace Projects_Launcher.Projects_Launcher
 
                     minRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
                     maxRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
-                    ramInfoLabel.ForeColor = Color.FromArgb(251, 255, 255);
                     reopenLauncher.ForeColor = Color.FromArgb(251, 255, 255);
                     versionBox.ForeColor = Color.FromArgb(251, 255, 255);
                 }
@@ -1112,7 +1110,6 @@ namespace Projects_Launcher.Projects_Launcher
 
                 minRamDynamicCalculatorLabel.ForeColor = Color.Black;
                 maxRamDynamicCalculatorLabel.ForeColor = Color.Black;
-                ramInfoLabel.ForeColor = Color.FromArgb(64, 0, 0);
                 reopenLauncher.ForeColor = Color.Black;
             }
 
@@ -1122,7 +1119,6 @@ namespace Projects_Launcher.Projects_Launcher
 
                 minRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
                 maxRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
-                ramInfoLabel.ForeColor = Color.FromArgb(251, 255, 255);
                 reopenLauncher.ForeColor = Color.FromArgb(251, 255, 255);
                 versionBox.ForeColor = Color.FromArgb(251, 255, 255);
             }
