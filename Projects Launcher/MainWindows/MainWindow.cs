@@ -86,7 +86,6 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void updateHwInfo()
         {
-
             // RAM
             ManagementObjectSearcher ramSearch = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
 
@@ -321,7 +320,6 @@ namespace Projects_Launcher.Projects_Launcher
                     downloadCompleteLabel.Visible = true;
                     downloadCompleteBar.Visible = true;
                     playSplitStaticLabel.Visible = true;
-
                 }
             }
 
@@ -486,7 +484,6 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 settingsBgPanel.Visible = false;
             }
-            GC.Collect(2, GCCollectionMode.Optimized);
             GC.WaitForPendingFinalizers();
         }
 
@@ -517,7 +514,6 @@ namespace Projects_Launcher.Projects_Launcher
                 await Task.Delay(5000).ConfigureAwait(false);
             } while (alreadyRelaunchWaiting == false);
 
-            GC.Collect();
             GC.WaitForPendingFinalizers();
         }
 
@@ -529,7 +525,6 @@ namespace Projects_Launcher.Projects_Launcher
         public class Xml
         {
             public debug debug { get; set; }
-
         }
         private void ramlabel_Click(object sender, EventArgs e)
         {
@@ -1067,7 +1062,6 @@ namespace Projects_Launcher.Projects_Launcher
                 lobiOnline.Text = "?";
                 gaiaOnline.Text = "?";
             }
-
         }
 
         private void temaSelectBox_SelectedIndexChanged(object sender, EventArgs e)

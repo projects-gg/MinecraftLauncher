@@ -231,7 +231,6 @@ namespace Projects_Launcher
 
             newsTextsRead();
 
-            GC.Collect(2, GCCollectionMode.Optimized);
             GC.WaitForPendingFinalizers();
         }
 
@@ -393,7 +392,6 @@ namespace Projects_Launcher
             {
                 panelYenilikler.Visible = false;
             }
-            GC.Collect();
             GC.WaitForPendingFinalizers();
         }
 
