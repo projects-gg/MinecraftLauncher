@@ -171,7 +171,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.skinRenderPictureBox.SizeMode = System.Windows.Forms.PictureBoxSizeMode.StretchImage;
             this.skinRenderPictureBox.TabIndex = 18;
             this.skinRenderPictureBox.TabStop = false;
-            this.skinRenderPictureBox.Click += new System.EventHandler(this.skinRenderPictureBox_Click);
             // 
             // surumtext
             // 
@@ -485,7 +484,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.ramInfoLabel.Size = new System.Drawing.Size(85, 14);
             this.ramInfoLabel.TabIndex = 1037;
             this.ramInfoLabel.Text = "00000MB/00 GB";
-            this.ramInfoLabel.Click += new System.EventHandler(this.ramInfoLabel_Click);
             // 
             // guna2PictureBox9
             // 
@@ -506,7 +504,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.gaiaOnline.Size = new System.Drawing.Size(27, 37);
             this.gaiaOnline.TabIndex = 1034;
             this.gaiaOnline.TabStop = false;
-            this.gaiaOnline.Click += new System.EventHandler(this.gaiaOnline_Click);
             // 
             // lobiOnline
             // 
@@ -517,7 +514,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.lobiOnline.Size = new System.Drawing.Size(27, 37);
             this.lobiOnline.TabIndex = 1033;
             this.lobiOnline.TabStop = false;
-            this.lobiOnline.Click += new System.EventHandler(this.lobiOnline_Click);
             // 
             // guna2PictureBox8
             // 
@@ -528,7 +524,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.guna2PictureBox8.Size = new System.Drawing.Size(43, 37);
             this.guna2PictureBox8.TabIndex = 1032;
             this.guna2PictureBox8.TabStop = false;
-            this.guna2PictureBox8.Click += new System.EventHandler(this.guna2PictureBox8_Click);
             // 
             // guna2PictureBox7
             // 
@@ -539,7 +534,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.guna2PictureBox7.Size = new System.Drawing.Size(43, 37);
             this.guna2PictureBox7.TabIndex = 1031;
             this.guna2PictureBox7.TabStop = false;
-            this.guna2PictureBox7.Click += new System.EventHandler(this.guna2PictureBox7_Click);
             // 
             // versionLabel
             // 
@@ -553,7 +547,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionLabel.Size = new System.Drawing.Size(46, 15);
             this.versionLabel.TabIndex = 1030;
             this.versionLabel.Text = "v0.1.19";
-            this.versionLabel.Click += new System.EventHandler(this.label1_Click);
             // 
             // guna2PictureBox6
             // 

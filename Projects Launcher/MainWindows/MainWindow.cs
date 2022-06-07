@@ -486,7 +486,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 settingsBgPanel.Visible = false;
             }
-            GC.Collect();
+            GC.Collect(2, GCCollectionMode.Optimized);
             GC.WaitForPendingFinalizers();
         }
 
@@ -1070,16 +1070,6 @@ namespace Projects_Launcher.Projects_Launcher
 
         }
 
-        private void skinRenderPictureBox_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void guna2ImageButton1_Click(object sender, EventArgs e)
-        {
-
-        }
-
         private void temaSelectBox_SelectedIndexChanged(object sender, EventArgs e)
         {
             if (temaSelectBox.Text == "Sistem Varsayılanı")
@@ -1125,46 +1115,6 @@ namespace Projects_Launcher.Projects_Launcher
 
             Properties.Settings.Default.themeSelected = temaSelectBox.Text;
             Properties.Settings.Default.Save();
-        }
-
-        private void label1_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void gaiaOnline_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void lobiOnline_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void guna2PictureBox8_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void guna2PictureBox7_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void guna2PictureBox10_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void gpuInfo_Click(object sender, EventArgs e)
-        {
-
-        }
-
-        private void ramInfoLabel_Click(object sender, EventArgs e)
-        {
-
         }
     }
 }

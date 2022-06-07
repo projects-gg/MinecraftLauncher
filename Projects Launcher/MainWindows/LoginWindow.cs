@@ -138,8 +138,9 @@ namespace Projects_Launcher
                     newsTexts = blds.ToString();
                 }
             }
-            catch
+            catch (Exception exc)
             {
+                labelYenilikMaddeler.Text = "Yenilik bilgileri alınamadı.";
             }
 
             labelYenilikMaddeler.Text = newsTexts;
@@ -230,9 +231,7 @@ namespace Projects_Launcher
 
             newsTextsRead();
 
-
-            //selectBackgroundImage();
-            GC.Collect();
+            GC.Collect(2, GCCollectionMode.Optimized);
             GC.WaitForPendingFinalizers();
         }
 
