@@ -79,8 +79,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.guna2PictureBox1 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.reopenLauncher = new Guna.UI2.WinForms.Guna2CheckBox();
             this.label18 = new System.Windows.Forms.Label();
-            this.label23 = new System.Windows.Forms.Label();
-            this.label24 = new System.Windows.Forms.Label();
+            this.maxRamMBtoGBLabel = new System.Windows.Forms.Label();
+            this.minRamMBtoGBLabel = new System.Windows.Forms.Label();
             this.maxRamStaticLabel = new System.Windows.Forms.Label();
             this.minRamStaticLabel = new System.Windows.Forms.Label();
             this.minRamTextBox = new Guna.UI2.WinForms.Guna2TextBox();
@@ -451,8 +451,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Controls.Add(this.guna2PictureBox1);
             this.settingsBgPanel.Controls.Add(this.reopenLauncher);
             this.settingsBgPanel.Controls.Add(this.label18);
-            this.settingsBgPanel.Controls.Add(this.label23);
-            this.settingsBgPanel.Controls.Add(this.label24);
+            this.settingsBgPanel.Controls.Add(this.maxRamMBtoGBLabel);
+            this.settingsBgPanel.Controls.Add(this.minRamMBtoGBLabel);
             this.settingsBgPanel.Controls.Add(this.maxRamStaticLabel);
             this.settingsBgPanel.Controls.Add(this.minRamStaticLabel);
             this.settingsBgPanel.Controls.Add(this.minRamTextBox);
@@ -749,31 +749,31 @@ namespace Projects_Launcher.Projects_Launcher
             this.label18.TabIndex = 183;
             this.label18.Text = "x";
             // 
-            // label23
+            // maxRamMBtoGBLabel
             // 
-            this.label23.AutoSize = true;
-            this.label23.BackColor = System.Drawing.Color.Transparent;
-            this.label23.Cursor = System.Windows.Forms.Cursors.Default;
-            this.label23.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label23.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.label23.Location = new System.Drawing.Point(634, 94);
-            this.label23.Name = "label23";
-            this.label23.Size = new System.Drawing.Size(38, 18);
-            this.label23.TabIndex = 177;
-            this.label23.Text = "xGB";
+            this.maxRamMBtoGBLabel.AutoSize = true;
+            this.maxRamMBtoGBLabel.BackColor = System.Drawing.Color.Transparent;
+            this.maxRamMBtoGBLabel.Cursor = System.Windows.Forms.Cursors.Default;
+            this.maxRamMBtoGBLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.maxRamMBtoGBLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.maxRamMBtoGBLabel.Location = new System.Drawing.Point(634, 94);
+            this.maxRamMBtoGBLabel.Name = "maxRamMBtoGBLabel";
+            this.maxRamMBtoGBLabel.Size = new System.Drawing.Size(38, 18);
+            this.maxRamMBtoGBLabel.TabIndex = 177;
+            this.maxRamMBtoGBLabel.Text = "xGB";
             // 
-            // label24
+            // minRamMBtoGBLabel
             // 
-            this.label24.AutoSize = true;
-            this.label24.BackColor = System.Drawing.Color.Transparent;
-            this.label24.Cursor = System.Windows.Forms.Cursors.Default;
-            this.label24.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.label24.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
-            this.label24.Location = new System.Drawing.Point(634, 61);
-            this.label24.Name = "label24";
-            this.label24.Size = new System.Drawing.Size(38, 18);
-            this.label24.TabIndex = 176;
-            this.label24.Text = "xGB";
+            this.minRamMBtoGBLabel.AutoSize = true;
+            this.minRamMBtoGBLabel.BackColor = System.Drawing.Color.Transparent;
+            this.minRamMBtoGBLabel.Cursor = System.Windows.Forms.Cursors.Default;
+            this.minRamMBtoGBLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.minRamMBtoGBLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.minRamMBtoGBLabel.Location = new System.Drawing.Point(634, 61);
+            this.minRamMBtoGBLabel.Name = "minRamMBtoGBLabel";
+            this.minRamMBtoGBLabel.Size = new System.Drawing.Size(38, 18);
+            this.minRamMBtoGBLabel.TabIndex = 176;
+            this.minRamMBtoGBLabel.Text = "xGB";
             // 
             // maxRamStaticLabel
             // 
@@ -840,6 +840,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.minRamDynamicCalculatorLabel.Size = new System.Drawing.Size(32, 18);
             this.minRamDynamicCalculatorLabel.TabIndex = 172;
             this.minRamDynamicCalculatorLabel.Text = "MB";
+            this.minRamDynamicCalculatorLabel.Click += new System.EventHandler(this.minRamDynamicCalculatorLabel_Click);
             // 
             // label28
             // 
@@ -1073,8 +1074,8 @@ namespace Projects_Launcher.Projects_Launcher
         private Guna.UI2.WinForms.Guna2Panel settingsBgPanel;
         private Guna.UI2.WinForms.Guna2CheckBox reopenLauncher;
         private System.Windows.Forms.Label label18;
-        private System.Windows.Forms.Label label23;
-        private System.Windows.Forms.Label label24;
+        private System.Windows.Forms.Label maxRamMBtoGBLabel;
+        private System.Windows.Forms.Label minRamMBtoGBLabel;
         private System.Windows.Forms.Label maxRamStaticLabel;
         private System.Windows.Forms.Label minRamStaticLabel;
         public Guna.UI2.WinForms.Guna2TextBox minRamTextBox;

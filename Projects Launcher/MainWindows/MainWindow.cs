@@ -98,6 +98,22 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
+        private void thisFalse()
+        {
+            settingsBgPanel.Enabled = false;
+            playButtonStaticLabel.Enabled = false;
+            settingsStaticPictureBox.Enabled = false;
+            discordStaticPictureBox.Enabled = false;
+        }
+
+        private void thisTrue()
+        {
+            settingsBgPanel.Enabled = true;
+            playButtonStaticLabel.Enabled = true;
+            settingsStaticPictureBox.Enabled = true;
+            discordStaticPictureBox.Enabled = true;
+        }
+
         private void Anamenu_Load(object sender, EventArgs e)
         {
             versionLabel.Text = "v" + currentVersion;
@@ -129,11 +145,11 @@ namespace Projects_Launcher.Projects_Launcher
             if (Properties.Settings.Default.RamMax != string.Empty)
             {
                 maxRamTextBox.Text = Properties.Settings.Default.RamMax;
-                maxRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
+                maxRamMBtoGBLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
             }
             else if (maxRamDynamicCalculatorLabel.Text != "")
             {
-                maxRamDynamicCalculatorLabel.Text = "";
+                maxRamMBtoGBLabel.Text = "";
             }
 
             if (Properties.Settings.Default.RamMin != string.Empty)
@@ -141,17 +157,17 @@ namespace Projects_Launcher.Projects_Launcher
                 minRamTextBox.Text = Properties.Settings.Default.RamMin;
                 try
                 {
-                    minRamDynamicCalculatorLabel.Text =
+                    minRamMBtoGBLabel.Text =
                         String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
                 }
                 catch
                 {
-                    minRamDynamicCalculatorLabel.Text = "Geçersiz Değer!";
+                    
                 }
             }
             else if (maxRamDynamicCalculatorLabel.Text != "")
             {
-                minRamDynamicCalculatorLabel.Text = "";
+                minRamMBtoGBLabel.Text = "";
             }
 
             minRamTextBox.MaxLength = 4;
@@ -280,7 +296,7 @@ namespace Projects_Launcher.Projects_Launcher
                     thread.IsBackground = true;
                     thread.Start(); // Launch the game
                     animatedPlayingLabel().GetAwaiter();
-                    this.Enabled = false;
+                    thisFalse();
                     prepareGameToLaunch.Start(); // Launch prepareGameToLaunch
                 }
                 catch (Exception ex) //If fabric not exist
@@ -290,13 +306,13 @@ namespace Projects_Launcher.Projects_Launcher
                     prepareGameToLaunch.Stop(); // Stop prepareGameToLaunch
                     NotificationAboutException(ex);
 
-                    this.Enabled = true; // Open components of the launcher
+                    thisTrue(); // Open components of the launcher
 
                     versionInfoStaticLabel.Text =
                         Properties.Settings.Default
                             .SelectedVersion; //Write version info into versionInfoStaticLabel
 
-                    this.Enabled = true;
+                    thisTrue();
                 }
             }
             else
@@ -372,7 +388,7 @@ namespace Projects_Launcher.Projects_Launcher
                 System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath);
                 Thread.Sleep(1100);
                 versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
-                this.Enabled = true;
+                thisTrue();
             }
             catch (Exception ex)
             {
@@ -577,17 +593,17 @@ namespace Projects_Launcher.Projects_Launcher
                     maxramlabel.Text = Properties.Settings.Default.RamMax;
                     try
                     {
-                        maxRamDynamicCalculatorLabel.Text =
+                        maxRamMBtoGBLabel.Text =
                             String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
                     }
                     catch
                     {
-                        maxRamDynamicCalculatorLabel.Text = "Geçersiz Değer!";
+                        
                     }
                 }
-                else if (maxRamDynamicCalculatorLabel.Text != "")
+                else if (maxRamMBtoGBLabel.Text != "")
                 {
-                    maxRamDynamicCalculatorLabel.Text = "";
+                    maxRamMBtoGBLabel.Text = "";
                 }
             }
             catch
@@ -658,17 +674,17 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     try
                     {
-                        minRamDynamicCalculatorLabel.Text =
+                        minRamMBtoGBLabel.Text =
                             String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
                     }
                     catch
                     {
-                        minRamDynamicCalculatorLabel.Text = "Geçersiz Değer!";
+                        
                     }
                 }
-                else if (maxRamDynamicCalculatorLabel.Text != "")
+                else if (minRamMBtoGBLabel.Text != "")
                 {
-                    minRamDynamicCalculatorLabel.Text = "";
+                    minRamMBtoGBLabel.Text = "";
                 }
             }
             catch
@@ -813,7 +829,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             playButtonStaticLabel.Enabled = true;
             this.Visible = true;
-            this.Enabled = true;
+            thisTrue();
             alreadyRelaunchWaiting = false;
             onlineCountUpdater().GetAwaiter();
             prepareGameToLaunch.Stop();
@@ -1109,6 +1125,11 @@ namespace Projects_Launcher.Projects_Launcher
 
             Properties.Settings.Default.themeSelected = temaSelectBox.Text;
             Properties.Settings.Default.Save();
+        }
+
+        private void minRamDynamicCalculatorLabel_Click(object sender, EventArgs e)
+        {
+
         }
     }
 }
