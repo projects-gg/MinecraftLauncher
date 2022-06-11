@@ -31,7 +31,6 @@ namespace Projects_Launcher.Projects_Launcher
         {
             this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(mainMenuForm));
-            this.projectsLogoStaticPictureBox = new Guna.UI2.WinForms.Guna2PictureBox();
             this.playSplitStaticLabel = new System.Windows.Forms.Label();
             this.versionInfoStaticLabel = new System.Windows.Forms.Label();
             this.playerNameStaticLabel = new System.Windows.Forms.Label();
@@ -91,7 +90,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.heighttextbox = new Guna.UI2.WinForms.Guna2TextBox();
             this.maxRamTextBox = new Guna.UI2.WinForms.Guna2TextBox();
             this.maxRamDynamicCalculatorLabel = new System.Windows.Forms.Label();
-            ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.skinRenderPictureBox)).BeginInit();
             this.settingsBgPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox9)).BeginInit();
@@ -107,18 +105,6 @@ namespace Projects_Launcher.Projects_Launcher
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox3)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox1)).BeginInit();
             this.SuspendLayout();
-            // 
-            // projectsLogoStaticPictureBox
-            // 
-            this.projectsLogoStaticPictureBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.projectsLogoStaticPictureBox.BackColor = System.Drawing.Color.Transparent;
-            this.projectsLogoStaticPictureBox.Image = ((System.Drawing.Image)(resources.GetObject("projectsLogoStaticPictureBox.Image")));
-            this.projectsLogoStaticPictureBox.ImageRotate = 0F;
-            this.projectsLogoStaticPictureBox.Location = new System.Drawing.Point(840, 42);
-            this.projectsLogoStaticPictureBox.Name = "projectsLogoStaticPictureBox";
-            this.projectsLogoStaticPictureBox.Size = new System.Drawing.Size(64, 59);
-            this.projectsLogoStaticPictureBox.TabIndex = 0;
-            this.projectsLogoStaticPictureBox.TabStop = false;
             // 
             // playSplitStaticLabel
             // 
@@ -1012,7 +998,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.Controls.Add(this.playerNameStaticLabel);
             this.Controls.Add(this.versionInfoStaticLabel);
             this.Controls.Add(this.playSplitStaticLabel);
-            this.Controls.Add(this.projectsLogoStaticPictureBox);
             this.DoubleBuffered = true;
             this.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.249999F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
@@ -1023,7 +1008,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Projects Launcher";
             this.Load += new System.EventHandler(this.Anamenu_Load);
-            ((System.ComponentModel.ISupportInitialize)(this.projectsLogoStaticPictureBox)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.skinRenderPictureBox)).EndInit();
             this.settingsBgPanel.ResumeLayout(false);
             this.settingsBgPanel.PerformLayout();
@@ -1045,7 +1029,6 @@ namespace Projects_Launcher.Projects_Launcher
         }
 
         #endregion
-        private Guna.UI2.WinForms.Guna2PictureBox projectsLogoStaticPictureBox;
         private System.Windows.Forms.Label versionInfoStaticLabel;
         private System.Windows.Forms.Label playSplitStaticLabel;
         private System.Windows.Forms.Label playerNameStaticLabel;

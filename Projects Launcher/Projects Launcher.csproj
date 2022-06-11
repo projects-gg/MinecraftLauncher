@@ -230,6 +230,8 @@
   <ItemGroup>
     <Content Include="logo.ico" />
     <Content Include="projects.ico" />
+    <None Include="Resources\ProjectsLauncherLogo_light.ico" />
+    <None Include="Resources\ProjectsLauncherLogo_dark.ico" />
     <None Include="Resources\Aktif.png" />
     <None Include="Resources\De-Aktif.png" />
     <None Include="Resources\gaia_light.jpg" />

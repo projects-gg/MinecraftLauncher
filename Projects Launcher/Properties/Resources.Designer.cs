@@ -241,6 +241,26 @@ namespace Projects_Launcher.Properties {
         }
         
         /// <summary>
+        ///   (Simge) öğesine benzeyen System.Drawing.Icon türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
+        public static System.Drawing.Icon ProjectsLauncherLogo_dark {
+            get {
+                object obj = ResourceManager.GetObject("ProjectsLauncherLogo_dark", resourceCulture);
+                return ((System.Drawing.Icon)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   (Simge) öğesine benzeyen System.Drawing.Icon türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
+        public static System.Drawing.Icon ProjectsLauncherLogo_light {
+            get {
+                object obj = ResourceManager.GetObject("ProjectsLauncherLogo_light", resourceCulture);
+                return ((System.Drawing.Icon)(obj));
+            }
+        }
+        
+        /// <summary>
         ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
         /// </summary>
         public static System.Drawing.Bitmap Toprak_Arkaplan {

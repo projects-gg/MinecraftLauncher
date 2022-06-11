@@ -1,4 +1,5 @@
 ﻿using DiscordRPC;
+using Microsoft.Win32;
 using System;
 using System.ComponentModel;
 using System.Drawing;
@@ -21,13 +22,10 @@ namespace Projects_Launcher
         private string newsTexts = "";
         private readonly Uri _setupLocation = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
 
+        public static Icon loginIcon;
         public DiscordRpcClient Client { get; private set; }
 
         readonly Random rnd = new Random();
-        private Color RandomColor()
-        {
-            return Color.FromArgb(rnd.Next(255), rnd.Next(255), rnd.Next(255));
-        }
         private void cantGrabVersionInfo()
         {
             MessageBox.Show(
@@ -147,6 +145,7 @@ namespace Projects_Launcher
         }
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
+            loginIcon = this.Icon;
             DiscordRpcClientSetup();
 
             versionLabel.Text = "v" + currentVersion;
@@ -229,7 +228,44 @@ namespace Projects_Launcher
 
             nickNameEnterTextBox.Text = Properties.Settings.Default.NickNames;
 
-            newsTextsRead();
+            if (Properties.Settings.Default.themeSelected == "Sistem Varsayılanı")
+            {
+                int res = (int)Registry.GetValue("HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "AppsUseLightTheme", -1);
+                if (res == 1)
+                {
+                    this.BackgroundImage = Properties.Resources.gaia_light;
+
+                    this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
+                    loginMenuForm.loginIcon = Properties.Resources.ProjectsLauncherLogo_dark;
+                }
+                if (res == 0)
+                {
+                    this.BackgroundImage = Properties.Resources.gaia_dark;
+
+                    this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
+                    loginMenuForm.loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
+                }
+            }
+
+            if (Properties.Settings.Default.themeSelected == "Açık Tema")
+            {
+                this.BackgroundImage = Properties.Resources.gaia_light;
+
+                this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
+                loginMenuForm.loginIcon = Properties.Resources.ProjectsLauncherLogo_dark;
+            }
+
+            if (Properties.Settings.Default.themeSelected == "Koyu Tema")
+            {
+                this.BackgroundImage = Properties.Resources.gaia_dark;
+
+                this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
+                loginMenuForm.loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
+            }
+
+        
+
+        newsTextsRead();
 
             GC.WaitForPendingFinalizers();
         }
@@ -364,16 +400,6 @@ namespace Projects_Launcher
         private void updateNowButton_Click(object sender, EventArgs e)
         {
             updateApplication();
-        }
-
-        private void newsLabel_MouseEnter(object sender, EventArgs e)
-        {
-            newsLabel.ForeColor = RandomColor();
-        }
-
-        private void newsLabel_MouseLeave(object sender, EventArgs e)
-        {
-            newsLabel.ForeColor = Color.FromArgb(245, 245, 245);
         }
 
         private void backButton_Click(object sender, EventArgs e)

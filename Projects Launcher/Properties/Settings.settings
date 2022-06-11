@@ -41,5 +41,8 @@
     <Setting Name="themeSelected" Type="System.String" Scope="User">
       <Value Profile="(Default)">Sistem Varsayılanı</Value>
     </Setting>
+    <Setting Name="loginIconSaved" Type="System.Drawing.Imaging.BitmapData" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
   </Settings>
 </SettingsFile>

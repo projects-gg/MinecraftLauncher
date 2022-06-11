@@ -1080,8 +1080,10 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
+        public static string temaSelectBoxx;
         private void temaSelectBox_SelectedIndexChanged(object sender, EventArgs e)
         {
+            temaSelectBoxx = temaSelectBox.Text;
             if (temaSelectBox.Text == "Sistem Varsayılanı")
             {
                 int res = (int)Registry.GetValue("HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "AppsUseLightTheme", -1);
@@ -1092,6 +1094,9 @@ namespace Projects_Launcher.Projects_Launcher
                     minRamDynamicCalculatorLabel.ForeColor = Color.Black;
                     maxRamDynamicCalculatorLabel.ForeColor = Color.Black;
                     reopenLauncher.ForeColor = Color.Black;
+
+                    this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
+                    loginMenuForm.loginIcon = Properties.Resources.ProjectsLauncherLogo_dark;
                 }
                 if (res == 0)
                 {
@@ -1101,6 +1106,9 @@ namespace Projects_Launcher.Projects_Launcher
                     maxRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
                     reopenLauncher.ForeColor = Color.FromArgb(251, 255, 255);
                     versionBox.ForeColor = Color.FromArgb(251, 255, 255);
+
+                    this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
+                    loginMenuForm.loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
                 }
             }
 
@@ -1111,6 +1119,9 @@ namespace Projects_Launcher.Projects_Launcher
                 minRamDynamicCalculatorLabel.ForeColor = Color.Black;
                 maxRamDynamicCalculatorLabel.ForeColor = Color.Black;
                 reopenLauncher.ForeColor = Color.Black;
+
+                this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
+                loginMenuForm.loginIcon = Properties.Resources.ProjectsLauncherLogo_dark;
             }
 
             if (temaSelectBox.Text == "Koyu Tema")
@@ -1121,6 +1132,9 @@ namespace Projects_Launcher.Projects_Launcher
                 maxRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
                 reopenLauncher.ForeColor = Color.FromArgb(251, 255, 255);
                 versionBox.ForeColor = Color.FromArgb(251, 255, 255);
+
+                this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
+                loginMenuForm.loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
             }
 
             Properties.Settings.Default.themeSelected = temaSelectBox.Text;

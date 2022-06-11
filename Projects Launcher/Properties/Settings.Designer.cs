@@ -172,5 +172,16 @@ namespace Projects_Launcher.Properties {
                 this["themeSelected"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        public global::System.Drawing.Imaging.BitmapData loginIconSaved {
+            get {
+                return ((global::System.Drawing.Imaging.BitmapData)(this["loginIconSaved"]));
+            }
+            set {
+                this["loginIconSaved"] = value;
+            }
+        }
     }
 }
