@@ -263,9 +263,7 @@ namespace Projects_Launcher
                 loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
             }
 
-        
-
-        newsTextsRead();
+            newsTextsRead();
 
             GC.WaitForPendingFinalizers();
         }

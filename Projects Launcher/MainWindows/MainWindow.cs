@@ -156,8 +156,8 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 minRamTextBox.Text = Properties.Settings.Default.RamMin;
 
-                    minRamMBtoGBLabel.Text =
-                        String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
+                minRamMBtoGBLabel.Text =
+                    String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
             }
             else if (maxRamDynamicCalculatorLabel.Text != "")
             {
@@ -541,7 +541,6 @@ namespace Projects_Launcher.Projects_Launcher
         {
             maxramlabell = maxramlabel.Text;
         }
-
         private void widthlabel_Click(object sender, EventArgs e)
         {
             widthlabell = widthlabel.Text;
@@ -592,9 +591,7 @@ namespace Projects_Launcher.Projects_Launcher
                             String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
                     }
                     catch
-                    {
-                        
-                    }
+                    { }
                 }
                 else if (maxRamMBtoGBLabel.Text != "")
                 {
@@ -679,9 +676,7 @@ namespace Projects_Launcher.Projects_Launcher
                             String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
                     }
                     catch
-                    {
-                        
-                    }
+                    { }
                 }
                 else if (minRamMBtoGBLabel.Text != "")
                 {
