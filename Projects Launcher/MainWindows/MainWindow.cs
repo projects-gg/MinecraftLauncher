@@ -608,7 +608,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             string testString = versionBox.Text, resultString = "";
 
-            if (testString.IndexOf(" ") == -1)
+            if (testString.IndexOf("") == -1)
             {
                 resultString = testString;
             }
