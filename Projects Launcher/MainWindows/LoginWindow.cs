@@ -138,7 +138,7 @@ namespace Projects_Launcher
             }
             catch (Exception exc)
             {
-                labelYenilikMaddeler.Text = "Yenilik bilgileri alınamadı.";
+                labelYenilikMaddeler.Text = "Yenilik bilgileri alınamadı.\nHata kodu: " + exc;
             }
 
             labelYenilikMaddeler.Text = newsTexts;

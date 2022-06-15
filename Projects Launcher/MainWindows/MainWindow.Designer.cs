@@ -90,6 +90,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.heighttextbox = new Guna.UI2.WinForms.Guna2TextBox();
             this.maxRamTextBox = new Guna.UI2.WinForms.Guna2TextBox();
             this.maxRamDynamicCalculatorLabel = new System.Windows.Forms.Label();
+            this.directorySearcher1 = new System.DirectoryServices.DirectorySearcher();
             ((System.ComponentModel.ISupportInitialize)(this.skinRenderPictureBox)).BeginInit();
             this.settingsBgPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox9)).BeginInit();
@@ -115,7 +116,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.playSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.playSplitStaticLabel.Location = new System.Drawing.Point(29, 372);
             this.playSplitStaticLabel.Name = "playSplitStaticLabel";
-            this.playSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
+            this.playSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
             this.playSplitStaticLabel.TabIndex = 2;
             this.playSplitStaticLabel.Text = "|";
             this.playSplitStaticLabel.Visible = false;
@@ -236,7 +237,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverOnlineCountStaticLabel.ForeColor = System.Drawing.SystemColors.ActiveBorder;
             this.serverOnlineCountStaticLabel.Location = new System.Drawing.Point(31, 411);
             this.serverOnlineCountStaticLabel.Name = "serverOnlineCountStaticLabel";
-            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(92, 16);
+            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(93, 16);
             this.serverOnlineCountStaticLabel.TabIndex = 120;
             this.serverOnlineCountStaticLabel.Text = "Sunucu Hatası";
             // 
@@ -854,7 +855,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionBox.ItemHeight = 30;
             this.versionBox.Items.AddRange(new object[] {
             "projects-fabric",
-            "1.18.2",
+            "1.19",
+            "1.18.2 ✔",
             "1.18.1",
             "1.17.1",
             "1.16.5",
@@ -967,6 +969,12 @@ namespace Projects_Launcher.Projects_Launcher
             this.maxRamDynamicCalculatorLabel.Size = new System.Drawing.Size(32, 18);
             this.maxRamDynamicCalculatorLabel.TabIndex = 164;
             this.maxRamDynamicCalculatorLabel.Text = "MB";
+            // 
+            // directorySearcher1
+            // 
+            this.directorySearcher1.ClientTimeout = System.TimeSpan.Parse("-00:00:01");
+            this.directorySearcher1.ServerPageTimeLimit = System.TimeSpan.Parse("-00:00:01");
+            this.directorySearcher1.ServerTimeLimit = System.TimeSpan.Parse("-00:00:01");
             // 
             // mainMenuForm
             // 
@@ -1088,5 +1096,6 @@ namespace Projects_Launcher.Projects_Launcher
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox7;
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox9;
         private System.Windows.Forms.Label ramInfoLabel;
+        private System.DirectoryServices.DirectorySearcher directorySearcher1;
     }
 }

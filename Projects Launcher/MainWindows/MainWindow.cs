@@ -614,21 +614,27 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void surumsec_SelectedIndexChanged(object sender, EventArgs e)
         {
-            Properties.Settings.Default.SelectedVersion = versionBox.Text;
+            string testString = versionBox.Text, resultString = "";
+
+            if (testString.IndexOf(" ") == -1)
+            {
+                resultString = testString;
+            }
+            else
+            {
+                foreach (char versionTextChars in testString)
+                {
+                    if (versionTextChars.Equals(' '))
+                    {
+                        break;
+                    }
+                    resultString += versionTextChars;
+                }
+            }
+
+            Properties.Settings.Default.SelectedVersion = resultString;
             Properties.Settings.Default.Save();
             versionInfoStaticLabel.Text = versionBox.Text;
-        }
-
-        private void website_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                System.Diagnostics.Process.Start("https://mc.projects.gg/");
-            }
-            catch
-            {
-                // Shouldn't happen except no internet connection or server downtime
-            }
         }
 
         private void discord_Click(object sender, EventArgs e)
