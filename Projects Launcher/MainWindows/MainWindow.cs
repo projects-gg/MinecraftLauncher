@@ -155,15 +155,9 @@ namespace Projects_Launcher.Projects_Launcher
             if (Properties.Settings.Default.RamMin != string.Empty)
             {
                 minRamTextBox.Text = Properties.Settings.Default.RamMin;
-                try
-                {
+
                     minRamMBtoGBLabel.Text =
                         String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
-                }
-                catch
-                {
-                    
-                }
             }
             else if (maxRamDynamicCalculatorLabel.Text != "")
             {
@@ -542,6 +536,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             public debug debug { get; set; }
         }
+
         private void ramlabel_Click(object sender, EventArgs e)
         {
             maxramlabell = maxramlabel.Text;
@@ -762,7 +757,6 @@ namespace Projects_Launcher.Projects_Launcher
                     MessageBox.Show("Doku paketi başarıyla yüklendi.");
                 }
             }
-            GC.Collect();
             GC.WaitForPendingFinalizers();
         }
 
@@ -1086,7 +1080,7 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        public static string temaSelectBoxx;
+        private string temaSelectBoxx;
         private void temaSelectBox_SelectedIndexChanged(object sender, EventArgs e)
         {
             temaSelectBoxx = temaSelectBox.Text;
@@ -1102,7 +1096,6 @@ namespace Projects_Launcher.Projects_Launcher
                     reopenLauncher.ForeColor = Color.Black;
 
                     this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
-                    loginMenuForm.loginIcon = Properties.Resources.ProjectsLauncherLogo_dark;
                 }
                 if (res == 0)
                 {
@@ -1114,7 +1107,6 @@ namespace Projects_Launcher.Projects_Launcher
                     versionBox.ForeColor = Color.FromArgb(251, 255, 255);
 
                     this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
-                    loginMenuForm.loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
                 }
             }
 
@@ -1127,7 +1119,6 @@ namespace Projects_Launcher.Projects_Launcher
                 reopenLauncher.ForeColor = Color.Black;
 
                 this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
-                loginMenuForm.loginIcon = Properties.Resources.ProjectsLauncherLogo_dark;
             }
 
             if (temaSelectBox.Text == "Koyu Tema")
@@ -1140,16 +1131,10 @@ namespace Projects_Launcher.Projects_Launcher
                 versionBox.ForeColor = Color.FromArgb(251, 255, 255);
 
                 this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
-                loginMenuForm.loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
             }
 
             Properties.Settings.Default.themeSelected = temaSelectBox.Text;
             Properties.Settings.Default.Save();
-        }
-
-        private void minRamDynamicCalculatorLabel_Click(object sender, EventArgs e)
-        {
-
         }
     }
 }

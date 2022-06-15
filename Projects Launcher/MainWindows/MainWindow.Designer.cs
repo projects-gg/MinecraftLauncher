@@ -827,7 +827,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.minRamDynamicCalculatorLabel.Size = new System.Drawing.Size(32, 18);
             this.minRamDynamicCalculatorLabel.TabIndex = 172;
             this.minRamDynamicCalculatorLabel.Text = "MB";
-            this.minRamDynamicCalculatorLabel.Click += new System.EventHandler(this.minRamDynamicCalculatorLabel_Click);
             // 
             // label28
             // 
