@@ -362,8 +362,6 @@ namespace Projects_Launcher.Projects_Launcher
             GC.WaitForPendingFinalizers();
         }
 
-
-
         private void NotificationAboutException(Exception ex)
         {
             MessageBox.Show(
@@ -676,9 +674,6 @@ namespace Projects_Launcher.Projects_Launcher
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }
-
-
-
         private void kapattick_CheckedChanged(object sender, EventArgs e)
         {
             if (reopenLauncher.Checked)
