@@ -97,7 +97,6 @@ namespace Projects_Launcher
             }
             else
             {
-                ;
                 loginButton.Enabled = false;
             }
         }
@@ -123,8 +122,6 @@ namespace Projects_Launcher
             main.Show();
 
             GC.SuppressFinalize(this);
-
-            //this.BackgroundImage.Dispose();
 
             Client.Dispose();
 

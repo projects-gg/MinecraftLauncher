@@ -10,6 +10,7 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Net;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -506,6 +507,8 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void surumsec_SelectedIndexChanged(object sender, EventArgs e)
         {
+            StringBuilder bld = new StringBuilder();
+
             string testString = versionBox.Text, resultString = "";
 
             if (testString.IndexOf("") == -1)
@@ -520,7 +523,9 @@ namespace Projects_Launcher.Projects_Launcher
                     {
                         break;
                     }
-                    resultString += versionTextChars;
+                    bld.Append(versionTextChars);
+
+                    resultString += bld.ToString();
                 }
             }
 
@@ -590,7 +595,6 @@ namespace Projects_Launcher.Projects_Launcher
                 System.Threading.Thread.Sleep(1000);
                 prc.Start();
             }
-            GC.Collect();
             GC.WaitForPendingFinalizers();
         }
 
