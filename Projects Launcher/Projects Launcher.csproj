@@ -71,7 +71,7 @@
     <StartupObject>Projects_Launcher.Program</StartupObject>
   </PropertyGroup>
   <PropertyGroup>
-    <SignManifests>true</SignManifests>
+    <SignManifests>false</SignManifests>
   </PropertyGroup>
   <PropertyGroup>
     <ManifestCertificateThumbprint>45836765C9CA860EAF48845B1C35E10D9E0F22E0</ManifestCertificateThumbprint>
@@ -208,7 +208,6 @@
       <SubType>Designer</SubType>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
-    <None Include="ProjectsLauncher.pfx" />
     <None Include="Properties\app.manifest" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
@@ -231,6 +230,14 @@
   <ItemGroup>
     <Content Include="logo.ico" />
     <Content Include="projects.ico" />
+    <None Include="Resources\Settings_YesClick.png" />
+    <None Include="Resources\Discord_YesClick.png" />
+    <None Include="Resources\WebSite_YesClick.png" />
+    <None Include="Resources\Discord_NoClick.png" />
+    <None Include="Resources\WebSite_NoClick.png" />
+    <None Include="Resources\Settings_NoClick.png" />
+    <None Include="Resources\Background1.png" />
+    <None Include="Resources\Background.png" />
     <None Include="Resources\ProjectsLauncherLogo_light.ico" />
     <None Include="Resources\ProjectsLauncherLogo_dark.ico" />
     <None Include="Resources\Aktif.png" />
