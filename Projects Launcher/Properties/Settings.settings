@@ -44,8 +44,5 @@
     <Setting Name="loginIconSaved" Type="System.Drawing.Imaging.BitmapData" Scope="User">
       <Value Profile="(Default)" />
     </Setting>
-    <Setting Name="jvmSave" Type="System.String" Scope="User">
-      <Value Profile="(Default)" />
-    </Setting>
   </Settings>
 </SettingsFile>
