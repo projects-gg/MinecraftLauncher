@@ -13,7 +13,7 @@ namespace Projects_Launcher
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new loginMenuForm());
+            Application.Run(new Form1());
         }
     }
 }

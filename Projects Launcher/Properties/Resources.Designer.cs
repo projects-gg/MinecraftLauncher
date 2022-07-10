@@ -93,30 +93,20 @@ namespace Projects_Launcher.Properties {
         /// <summary>
         ///   (Simge) öğesine benzeyen System.Drawing.Icon türünde yerelleştirilmiş bir kaynak arar.
         /// </summary>
-        public static System.Drawing.Icon projects_logo_icon {
+        public static System.Drawing.Icon ProjectsLauncherLogo_light_1 {
             get {
-                object obj = ResourceManager.GetObject("projects_logo_icon", resourceCulture);
+                object obj = ResourceManager.GetObject("ProjectsLauncherLogo_light_1", resourceCulture);
                 return ((System.Drawing.Icon)(obj));
             }
         }
         
         /// <summary>
-        ///   (Simge) öğesine benzeyen System.Drawing.Icon türünde yerelleştirilmiş bir kaynak arar.
+        ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
         /// </summary>
-        public static System.Drawing.Icon ProjectsLauncherLogo_dark {
+        public static System.Drawing.Bitmap ProjectsLauncherLogo_light_11 {
             get {
-                object obj = ResourceManager.GetObject("ProjectsLauncherLogo_dark", resourceCulture);
-                return ((System.Drawing.Icon)(obj));
-            }
-        }
-        
-        /// <summary>
-        ///   (Simge) öğesine benzeyen System.Drawing.Icon türünde yerelleştirilmiş bir kaynak arar.
-        /// </summary>
-        public static System.Drawing.Icon ProjectsLauncherLogo_light {
-            get {
-                object obj = ResourceManager.GetObject("ProjectsLauncherLogo_light", resourceCulture);
-                return ((System.Drawing.Icon)(obj));
+                object obj = ResourceManager.GetObject("ProjectsLauncherLogo_light_11", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
             }
         }
         
