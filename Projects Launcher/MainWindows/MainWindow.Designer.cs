@@ -261,7 +261,7 @@
             this.serverOnlineCountStaticLabel.BackColor = System.Drawing.Color.Transparent;
             this.serverOnlineCountStaticLabel.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.serverOnlineCountStaticLabel.ForeColor = System.Drawing.Color.White;
-            this.serverOnlineCountStaticLabel.Location = new System.Drawing.Point(29, 336);
+            this.serverOnlineCountStaticLabel.Location = new System.Drawing.Point(27, 332);
             this.serverOnlineCountStaticLabel.Name = "serverOnlineCountStaticLabel";
             this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(314, 18);
             this.serverOnlineCountStaticLabel.TabIndex = 1044;

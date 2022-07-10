@@ -432,7 +432,7 @@ namespace Projects_Launcher.Projects_Launcher
                 MineStat pinger = new MineStat(anyIP, 25565);
                 if (pinger.ServerUp)
                 {
-                    serverOnlineCountStaticLabel.Text = "Ayrıca şuan sunucumuzda toplam " + pinger.CurrentPlayers + " oyuncu aktif!";
+                    serverOnlineCountStaticLabel.Text = "Şuan sunucumuzda toplam " + pinger.CurrentPlayers + " oyuncu aktif!";
                 }
                 else
                 {
