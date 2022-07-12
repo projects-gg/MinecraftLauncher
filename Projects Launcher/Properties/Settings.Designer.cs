@@ -130,7 +130,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.1.21")]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.1.22")]
         public string currentVersion {
             get {
                 return ((string)(this["currentVersion"]));
@@ -163,7 +163,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("Sistem Varsayılanı")]
+        [global::System.Configuration.DefaultSettingValueAttribute("Otomatik")]
         public string themeSelected {
             get {
                 return ((string)(this["themeSelected"]));

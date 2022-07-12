@@ -533,7 +533,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionLabel.Name = "versionLabel";
             this.versionLabel.Size = new System.Drawing.Size(46, 15);
             this.versionLabel.TabIndex = 1030;
-            this.versionLabel.Text = currentVersion;
+            this.versionLabel.Text = Properties.Settings.Default.currentVersion;
             // 
             // guna2PictureBox6
             // 
@@ -559,7 +559,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.temaSelectBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(251)))), ((int)(((byte)(255)))), ((int)(((byte)(255)))));
             this.temaSelectBox.ItemHeight = 30;
             this.temaSelectBox.Items.AddRange(new object[] {
-            "Sistem Varsayılanı",
+            "Otomatik",
             "Açık Tema",
             "Koyu Tema"});
             this.temaSelectBox.Location = new System.Drawing.Point(486, 228);

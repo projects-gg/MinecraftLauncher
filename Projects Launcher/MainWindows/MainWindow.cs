@@ -50,7 +50,7 @@ namespace Projects_Launcher.Projects_Launcher
                                             "/.projects/resourcepacks";
         private readonly string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
 
-        readonly Random rnd = new Random();
+        readonly Random _random = new Random();
 
         private bool alreadyPlayingAnimatedLabel;
         private bool alreadyRelaunchWaiting;
@@ -370,28 +370,6 @@ namespace Projects_Launcher.Projects_Launcher
             GC.WaitForPendingFinalizers();
         }
 
-        private void Wc_DownloadFileProgress(object sender, DownloadProgressChangedEventArgs e)
-        {
-            try
-            {
-                string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                                 "/.projects/projects-fabric.zip";
-                string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                                     "/.projects/versions";
-
-                System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath);
-                Thread.Sleep(1100);
-                versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
-                thisTrue();
-            }
-            catch (Exception ex)
-            {
-                NotificationAboutException(ex);
-            }
-
-            GC.WaitForPendingFinalizers();
-        }
-
         private void prepareGameToLaunch_Tick(object sender, EventArgs e)
         {
             try
@@ -641,23 +619,6 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        private void instagram_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                System.Diagnostics.Process.Start("https://www.instagram.com/projects.com.tr/");
-            }
-            catch
-            {
-                // Shouldn't happen except no internet connection or server downtime
-            }
-        }
-
-        private Color RandomColor()
-        {
-            return Color.FromArgb(rnd.Next(255), rnd.Next(255), rnd.Next(255));
-        }
-
         private void minramtext_TextChanged(object sender, EventArgs e)
         {
             try
@@ -836,20 +797,6 @@ namespace Projects_Launcher.Projects_Launcher
             GC.WaitForPendingFinalizers();
         }
 
-        private void kapattick_CheckedChanged(object sender, EventArgs e)
-        {
-            if (reopenLauncher.Checked)
-            {
-                Properties.Settings.Default.OyunTickS = true;
-            }
-            else
-            {
-                Properties.Settings.Default.OyunTickS = false;
-            }
-
-            Properties.Settings.Default.Save();
-        }
-
         private void maxramtext_Leave(object sender, EventArgs e)
         {
             try
@@ -995,16 +942,6 @@ namespace Projects_Launcher.Projects_Launcher
             discordRpcTip.SetToolTip(this.reopenLauncher, "Oyun kapatıldığında yeniden açılıp açılmayacağını seçersiniz.\n\nBu özelliğin kapalı olması durumunda oyundayken, discord oynuyor\nbilginiz oyun durumunuzda gözükmeyecektir.");
         }
 
-        private void oynabutton_MouseEnter(object sender, EventArgs e)
-        {
-            playButtonStaticLabel.ForeColor = RandomColor();
-        }
-
-        private void oynabutton_MouseLeave(object sender, EventArgs e)
-        {
-            playButtonStaticLabel.ForeColor = Color.FromArgb(245, 245, 245);
-        }
-
         private void guna2ControlBox1_Resize(object sender, EventArgs e)
         {
             settingsBgPanel.Size = this.Size;
@@ -1016,14 +953,6 @@ namespace Projects_Launcher.Projects_Launcher
             backButton.Visible = false;
         }
 
-        public class players
-        {
-            public string list { get; set; }
-        }
-        public class Oyuncular
-        {
-            public players players { get; set; }
-        }
         private void timer1_Tick(object sender, EventArgs e)
         {
             try
@@ -1074,12 +1003,11 @@ namespace Projects_Launcher.Projects_Launcher
                 gaiaOnline.Text = "?";
             }
         }
-
-        private string temaSelectBoxx;
+        
         private void temaSelectBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            temaSelectBoxx = temaSelectBox.Text;
-            if (temaSelectBox.Text == "Sistem Varsayılanı")
+            temaSelectBox.SelectedText = temaSelectBox.Text;
+            if (temaSelectBox.Text == "Otomatik")
             {
                 int res = (int)Registry.GetValue("HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "AppsUseLightTheme", -1);
                 if (res == 1)

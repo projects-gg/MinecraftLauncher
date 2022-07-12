@@ -24,8 +24,7 @@ namespace Projects_Launcher
 
         private Icon loginIcon;
         public DiscordRpcClient Client { get; private set; }
-
-        readonly Random rnd = new Random();
+        
         private void cantGrabVersionInfo()
         {
             MessageBox.Show(
