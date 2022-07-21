@@ -1006,10 +1006,42 @@ namespace Projects_Launcher.Projects_Launcher
         
         private void temaSelectBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            temaSelectBox.SelectedText = temaSelectBox.Text;
-            if (temaSelectBox.Text == "Otomatik")
+            
+            if (temaSelectBox.Text == "Açık Tema")
             {
-                int res = (int)Registry.GetValue("HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "AppsUseLightTheme", -1);
+                this.BackgroundImage = Properties.Resources.gaia_light;
+
+                minRamDynamicCalculatorLabel.ForeColor = Color.Black;
+                maxRamDynamicCalculatorLabel.ForeColor = Color.Black;
+                reopenLauncher.ForeColor = Color.Black;
+
+                this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
+            }  else if (temaSelectBox.Text == "Koyu Tema")
+            {
+                this.BackgroundImage = Properties.Resources.gaia_dark;
+
+                minRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
+                maxRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
+                reopenLauncher.ForeColor = Color.FromArgb(251, 255, 255);
+                versionBox.ForeColor = Color.FromArgb(251, 255, 255);
+
+                this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
+            }
+            else
+            {
+                int res = 1;
+
+                try
+                {
+                    res = (int) Registry.GetValue(
+                        "HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                        "AppsUseLightTheme", -1);
+                }
+                catch
+                {
+                    // res already have a default value.
+                }
+
                 if (res == 1)
                 {
                     this.BackgroundImage = Properties.Resources.gaia_light;
@@ -1020,6 +1052,7 @@ namespace Projects_Launcher.Projects_Launcher
 
                     this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
                 }
+
                 if (res == 0)
                 {
                     this.BackgroundImage = Properties.Resources.gaia_dark;
@@ -1033,30 +1066,6 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
 
-            if (temaSelectBox.Text == "Açık Tema")
-            {
-                this.BackgroundImage = Properties.Resources.gaia_light;
-
-                minRamDynamicCalculatorLabel.ForeColor = Color.Black;
-                maxRamDynamicCalculatorLabel.ForeColor = Color.Black;
-                reopenLauncher.ForeColor = Color.Black;
-
-                this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
-            }
-
-            if (temaSelectBox.Text == "Koyu Tema")
-            {
-                this.BackgroundImage = Properties.Resources.gaia_dark;
-
-                minRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
-                maxRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
-                reopenLauncher.ForeColor = Color.FromArgb(251, 255, 255);
-                versionBox.ForeColor = Color.FromArgb(251, 255, 255);
-
-                this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
-            }
-
-            Properties.Settings.Default.themeSelected = temaSelectBox.Text;
             Properties.Settings.Default.Save();
         }
     }
