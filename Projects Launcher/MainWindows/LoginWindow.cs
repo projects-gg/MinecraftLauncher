@@ -99,11 +99,10 @@ namespace Projects_Launcher
 
         private void newsTextsRead()
         {
-            WebRequest newsText = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/yenilikler.php");
             try
             {
-                WebResponse newsContentResponse;
-                newsContentResponse = newsText.GetResponse();
+                WebRequest newsText = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/yenilikler.php");
+                WebResponse newsContentResponse = newsText.GetResponse();
                 StreamReader versionContentReader = new StreamReader(newsContentResponse.GetResponseStream());
                 string versionContentLine = versionContentReader.ReadToEnd();
                 bool startWriting = false;
@@ -150,12 +149,11 @@ namespace Projects_Launcher
 
             versionLabel.Text = "v" + currentVersion;
 
-            WebRequest currentVersionContent = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/version.php");
-
             try
             {
-                WebResponse versionContentResponse;
-                versionContentResponse = currentVersionContent.GetResponse();
+
+                WebRequest currentVersionContent = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/version.php");
+                WebResponse versionContentResponse = currentVersionContent.GetResponse();
                 StreamReader versionContentReader = new StreamReader(versionContentResponse.GetResponseStream());
                 string versionContentLine = versionContentReader.ReadToEnd();
                 bool startWriting = false;
@@ -291,12 +289,6 @@ namespace Projects_Launcher
                 Properties.Settings.Default.NickNames = nickNameEnterTextBox.Text;
                 Properties.Settings.Default.Save();
             }
-        }
-
-        private void label3_Click(object sender, EventArgs e)
-        {
-            System.Diagnostics.Process.Start("https://mc.projects.gg/");
-            GC.WaitForPendingFinalizers();
         }
 
         private void guna2ControlBox1_Click(object sender, EventArgs e)

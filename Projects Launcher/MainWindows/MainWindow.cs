@@ -226,7 +226,7 @@ namespace Projects_Launcher.Projects_Launcher
             }
             catch (Exception ex)
             {
-                NotificationAboutException(ex);
+                NotificationAboutException(ex, "Minecraft startup settings");
             }
         }
 
@@ -298,7 +298,7 @@ namespace Projects_Launcher.Projects_Launcher
                     DiscordRpcClientSetup();
 
                     prepareGameToLaunch.Stop(); // Stop prepareGameToLaunch
-                    NotificationAboutException(ex);
+                    NotificationAboutException(ex, "Luanch prepareGameToLaunch");
 
                     thisTrue(); // Open components of the launcher
 
@@ -364,7 +364,7 @@ namespace Projects_Launcher.Projects_Launcher
             }
             catch (Exception ex)
             {
-                NotificationAboutException(ex);
+                NotificationAboutException(ex, "DownloadFileCompleted (fabric download process)");
             }
 
             GC.WaitForPendingFinalizers();
@@ -422,10 +422,12 @@ namespace Projects_Launcher.Projects_Launcher
             GC.WaitForPendingFinalizers();
         }
 
-        private void NotificationAboutException(Exception ex)
+        private void NotificationAboutException(Exception ex, string location = "\n")
         {
+            if (!location.Equals("\n"))
+                location = "\n\nHata konumu: " + location;
             MessageBox.Show(
-                "Başlatıcı görevi işlenirken beklenmedik bir hata oluştu.\n\nBu hata önemli olmayabilir ya da programın yanlış çalışmasına neden oluyor olabilir. Eğer sorun yaşıyorsanız uygulamayı yeniden başlatın. Hata devam ederse destek sisteminde hatayı bizimle paylaşın.\n\nHata kodu: " +
+                "Başlatıcı görevi işlenirken beklenmedik bir hata oluştu.\n\nBu hata önemli olmayabilir ya da programın yanlış çalışmasına neden oluyor olabilir. Eğer sorun yaşıyorsanız uygulamayı yeniden başlatın. Hata devam ederse destek sisteminde hatayı bizimle paylaşın." + location + "\nHata kodu: " +
                 Convert.ToString(ex), "Başlatıcı Hatası");
         }
 
