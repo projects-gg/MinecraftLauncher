@@ -213,9 +213,13 @@ namespace Projects_Launcher.Projects_Launcher
             string serverIP;
 
             if (Properties.Settings.Default.autoConnect)
+            {
                 serverIP = "play.projects.gg";
+            }
             else
+            {
                 serverIP = "";
+            }
 
             var ayarlar = new MLaunchOption
             {
