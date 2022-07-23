@@ -216,6 +216,10 @@ namespace Projects_Launcher.Projects_Launcher
             };
             try
             {
+
+                ServicePointManager.Expect100Continue = true;
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+
                 var clientStartProcess =
                     await launcher.CreateProcessAsync(Properties.Settings.Default.SelectedVersion,
                         ayarlar); // Start client

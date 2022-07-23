@@ -23,7 +23,7 @@ namespace Projects_Launcher
         private string newsTexts = "";
         private readonly Uri _setupLocation = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
 
-        private Icon loginIcon;
+        private Icon _loginIcon;
         public DiscordRpcClient Client { get; private set; }
         
         private void cantGrabVersionInfo()
@@ -144,7 +144,7 @@ namespace Projects_Launcher
         }
         private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
-            loginIcon = this.Icon;
+            _loginIcon = this.Icon;
             DiscordRpcClientSetup();
 
             versionLabel.Text = "v" + currentVersion;
@@ -234,14 +234,14 @@ namespace Projects_Launcher
                     this.BackgroundImage = Properties.Resources.gaia_light;
 
                     this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
-                    loginIcon = Properties.Resources.ProjectsLauncherLogo_dark;
+                    _loginIcon = Properties.Resources.ProjectsLauncherLogo_dark;
                 }
                 if (res == 0)
                 {
                     this.BackgroundImage = Properties.Resources.gaia_dark;
 
                     this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
-                    loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
+                    _loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
                 }
             }
 
@@ -250,7 +250,7 @@ namespace Projects_Launcher
                 this.BackgroundImage = Properties.Resources.gaia_light;
 
                 this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
-                loginIcon = Properties.Resources.ProjectsLauncherLogo_dark;
+                _loginIcon = Properties.Resources.ProjectsLauncherLogo_dark;
             }
 
             if (Properties.Settings.Default.themeSelected == "Koyu Tema")
@@ -258,7 +258,7 @@ namespace Projects_Launcher
                 this.BackgroundImage = Properties.Resources.gaia_dark;
 
                 this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
-                loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
+                _loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
             }
 
             newsTextsRead();
