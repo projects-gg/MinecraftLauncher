@@ -202,6 +202,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             var path = new MinecraftPath(launcherdizin);
             var launcher = new CMLauncher(path);
+
             sessions = Properties.Settings.Default.NickNames;
 
             var ayarlar = new MLaunchOption
@@ -216,7 +217,10 @@ namespace Projects_Launcher.Projects_Launcher
             };
             try
             {
+                // Maximize download speed
+                System.Net.ServicePointManager.DefaultConnectionLimit = 256;
 
+                // Added to avoid SSL/TLS bridge error on Windows 7/XP
                 ServicePointManager.Expect100Continue = true;
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
@@ -1009,7 +1013,7 @@ namespace Projects_Launcher.Projects_Launcher
                 gaiaOnline.Text = "?";
             }
         }
-        
+
         private void temaSelectBox_SelectedIndexChanged(object sender, EventArgs e)
         {
             

@@ -533,7 +533,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionLabel.Name = "versionLabel";
             this.versionLabel.Size = new System.Drawing.Size(46, 15);
             this.versionLabel.TabIndex = 1030;
-            this.versionLabel.Text = Properties.Settings.Default.currentVersion;
+            this.versionLabel.Text = global::Projects_Launcher.Properties.Settings.Default.currentVersion;
             // 
             // guna2PictureBox6
             // 
