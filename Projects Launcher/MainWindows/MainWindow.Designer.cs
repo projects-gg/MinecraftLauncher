@@ -57,6 +57,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.discordStaticPictureBox = new Guna.UI2.WinForms.Guna2ImageButton();
             this.downloadCompleteBar = new Guna.UI2.WinForms.Guna2ProgressBar();
             this.settingsBgPanel = new Guna.UI2.WinForms.Guna2Panel();
+            this.autoConnect = new Guna.UI2.WinForms.Guna2CheckBox();
             this.ramInfoLabel = new System.Windows.Forms.Label();
             this.guna2PictureBox9 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.gaiaOnline = new Guna.UI2.WinForms.Guna2PictureBox();
@@ -417,6 +418,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.settingsBgPanel.BackColor = System.Drawing.Color.Transparent;
             this.settingsBgPanel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.settingsBgPanel.Controls.Add(this.autoConnect);
             this.settingsBgPanel.Controls.Add(this.ramInfoLabel);
             this.settingsBgPanel.Controls.Add(this.guna2PictureBox9);
             this.settingsBgPanel.Controls.Add(this.gaiaOnline);
@@ -458,6 +460,34 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Size = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.TabIndex = 209;
             this.settingsBgPanel.Visible = false;
+            // 
+            // autoConnect
+            // 
+            this.autoConnect.Anchor = System.Windows.Forms.AnchorStyles.Top;
+            this.autoConnect.Animated = true;
+            this.autoConnect.AutoCheck = false;
+            this.autoConnect.AutoSize = true;
+            this.autoConnect.BackColor = System.Drawing.Color.Transparent;
+            this.autoConnect.Checked = true;
+            this.autoConnect.CheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.autoConnect.CheckedState.BorderRadius = 0;
+            this.autoConnect.CheckedState.BorderThickness = 0;
+            this.autoConnect.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.autoConnect.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.autoConnect.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
+            this.autoConnect.ForeColor = System.Drawing.Color.Transparent;
+            this.autoConnect.Location = new System.Drawing.Point(795, 391);
+            this.autoConnect.Name = "autoConnect";
+            this.autoConnect.Size = new System.Drawing.Size(154, 24);
+            this.autoConnect.TabIndex = 1038;
+            this.autoConnect.Text = "Otomatik Bağlantı";
+            this.autoConnect.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.autoConnect.UncheckedState.BorderRadius = 0;
+            this.autoConnect.UncheckedState.BorderThickness = 0;
+            this.autoConnect.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
+            this.autoConnect.UseVisualStyleBackColor = false;
+            this.autoConnect.MouseEnter += new System.EventHandler(this.autoConnectCheckBox_MouseEnter);
+            this.autoConnect.CheckedChanged += new System.EventHandler(this.autoConnect_CheckedChanged);
             // 
             // ramInfoLabel
             // 
@@ -531,7 +561,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionLabel.ForeColor = System.Drawing.SystemColors.Control;
             this.versionLabel.Location = new System.Drawing.Point(35, 439);
             this.versionLabel.Name = "versionLabel";
-            this.versionLabel.Size = new System.Drawing.Size(46, 15);
+            this.versionLabel.Size = new System.Drawing.Size(41, 15);
             this.versionLabel.TabIndex = 1030;
             this.versionLabel.Text = global::Projects_Launcher.Properties.Settings.Default.currentVersion;
             // 
@@ -710,8 +740,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.reopenLauncher.CheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
             this.reopenLauncher.CheckState = System.Windows.Forms.CheckState.Checked;
             this.reopenLauncher.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
-            this.reopenLauncher.ForeColor = System.Drawing.Color.Black;
-            this.reopenLauncher.Location = new System.Drawing.Point(785, 423);
+            this.reopenLauncher.ForeColor = System.Drawing.Color.Transparent;
+            this.reopenLauncher.Location = new System.Drawing.Point(795, 421);
             this.reopenLauncher.Name = "reopenLauncher";
             this.reopenLauncher.Size = new System.Drawing.Size(169, 24);
             this.reopenLauncher.TabIndex = 134;
@@ -1096,5 +1126,6 @@ namespace Projects_Launcher.Projects_Launcher
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox9;
         private System.Windows.Forms.Label ramInfoLabel;
         private System.DirectoryServices.DirectorySearcher directorySearcher1;
+        private Guna.UI2.WinForms.Guna2CheckBox autoConnect;
     }
 }

@@ -44,5 +44,8 @@
     <Setting Name="loginIconSaved" Type="System.Drawing.Imaging.BitmapData" Scope="User">
       <Value Profile="(Default)" />
     </Setting>
+    <Setting Name="autoConnect" Type="System.Boolean" Scope="User">
+      <Value Profile="(Default)">True</Value>
+    </Setting>
   </Settings>
 </SettingsFile>

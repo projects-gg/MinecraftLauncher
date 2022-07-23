@@ -183,5 +183,17 @@ namespace Projects_Launcher.Properties {
                 this["loginIconSaved"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool autoConnect {
+            get {
+                return ((bool)(this["autoConnect"]));
+            }
+            set {
+                this["autoConnect"] = value;
+            }
+        }
     }
 }

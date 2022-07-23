@@ -47,8 +47,10 @@ namespace Projects_Launcher.Projects_Launcher
         private string widthResolutionb2;
 
         private readonly string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                                            "/.projects/resourcepacks";
-        private readonly string launcherdizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
+                                               "/.projects/resourcepacks";
+
+        private readonly string launcherdizin =
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
 
         readonly Random _random = new Random();
 
@@ -93,7 +95,8 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 double ramInBytes = (Convert.ToDouble(ramObject["TotalPhysicalMemory"]));
                 double roundAvailableRamValueInGb = Math.Ceiling(ramInBytes / 1073741824); // <- Byte to GB conversion
-                ramInfoLabel.Text = string.Format("{0:0.##}", Convert.ToDouble(roundAvailableRamValueInGb) * 1024) + "MB" + "/" + Convert.ToString(roundAvailableRamValueInGb) + " GB";
+                ramInfoLabel.Text = string.Format("{0:0.##}", Convert.ToDouble(roundAvailableRamValueInGb) * 1024) +
+                                    "MB" + "/" + Convert.ToString(roundAvailableRamValueInGb) + " GB";
                 break;
             }
         }
@@ -119,9 +122,11 @@ namespace Projects_Launcher.Projects_Launcher
             versionLabel.Text = "v" + currentVersion;
 
             // ".projects" directory check
-            if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions"))
+            if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                  "/.projects/versions"))
             {
-                Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/versions");
+                Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                          "/.projects/versions");
             }
 
             updateHwInfo();
@@ -205,12 +210,19 @@ namespace Projects_Launcher.Projects_Launcher
 
             sessions = Properties.Settings.Default.NickNames;
 
+            string serverIP;
+
+            if (Properties.Settings.Default.autoConnect)
+                serverIP = "play.projects.gg";
+            else
+                serverIP = "";
+
             var ayarlar = new MLaunchOption
             {
                 MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin), // Get maximum ram info
                 MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax), // Get minimum ram info
                 Session = MSession.GetOfflineSession(sessions), // Get nickname info
-                ServerIp = "play.projects.gg", // The server IP which should connected
+                ServerIp = serverIP, // The server IP which should connected
                 GameLauncherName = "Projects Minecraft",
                 ScreenWidth = int.Parse(Properties.Settings.Default.ResolutionWidth), // Get width resolution info
                 ScreenHeight = int.Parse(Properties.Settings.Default.ResolutionHeight), // Get height resolution info
@@ -346,8 +358,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void Wc_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
         {
-            downloadCompleteLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(e.BytesReceived) / 1024 / 1024) + "MB"
-                + "/" + String.Format("{0:0.##}", Convert.ToDouble(e.TotalBytesToReceive) / 1024 / 1024) + "MB";
+            downloadCompleteLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(e.BytesReceived) / 1024 / 1024) +
+                                         "MB"
+                                         + "/" + String.Format("{0:0.##}",
+                                             Convert.ToDouble(e.TotalBytesToReceive) / 1024 / 1024) + "MB";
 
             downloadCompleteBar.Value = e.ProgressPercentage;
         }
@@ -398,6 +412,7 @@ namespace Projects_Launcher.Projects_Launcher
                         {
                             alreadyPlayingAnimatedLabel = false;
                         }
+
                         Thread.Sleep(1000);
                         prepareGameToLaunch.Stop();
                         return;
@@ -415,6 +430,7 @@ namespace Projects_Launcher.Projects_Launcher
                         {
                             alreadyPlayingAnimatedLabel = false;
                         }
+
                         timer3.Stop();
                         Environment.Exit(0);
                     }
@@ -435,7 +451,8 @@ namespace Projects_Launcher.Projects_Launcher
             if (!location.Equals("\n"))
                 location = "\n\nHata konumu: " + location;
             MessageBox.Show(
-                "Başlatıcı görevi işlenirken beklenmedik bir hata oluştu.\n\nBu hata önemli olmayabilir ya da programın yanlış çalışmasına neden oluyor olabilir. Eğer sorun yaşıyorsanız uygulamayı yeniden başlatın. Hata devam ederse destek sisteminde hatayı bizimle paylaşın." + location + "\nHata kodu: " +
+                "Başlatıcı görevi işlenirken beklenmedik bir hata oluştu.\n\nBu hata önemli olmayabilir ya da programın yanlış çalışmasına neden oluyor olabilir. Eğer sorun yaşıyorsanız uygulamayı yeniden başlatın. Hata devam ederse destek sisteminde hatayı bizimle paylaşın." +
+                location + "\nHata kodu: " +
                 Convert.ToString(ex), "Başlatıcı Hatası");
         }
 
@@ -482,6 +499,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 settingsBgPanel.Visible = false;
             }
+
             GC.WaitForPendingFinalizers();
         }
 
@@ -529,6 +547,7 @@ namespace Projects_Launcher.Projects_Launcher
         {
             maxramlabell = maxramlabel.Text;
         }
+
         private void widthlabel_Click(object sender, EventArgs e)
         {
             widthlabell = widthlabel.Text;
@@ -579,7 +598,8 @@ namespace Projects_Launcher.Projects_Launcher
                             String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
                     }
                     catch
-                    { }
+                    {
+                    }
                 }
                 else if (maxRamMBtoGBLabel.Text != "")
                 {
@@ -608,6 +628,7 @@ namespace Projects_Launcher.Projects_Launcher
                     {
                         break;
                     }
+
                     resultString += versionTextChars;
                 }
             }
@@ -647,7 +668,8 @@ namespace Projects_Launcher.Projects_Launcher
                             String.Format("{0:0.##}", Convert.ToDouble(minRamTextBox.Text) / 1024) + "GB";
                     }
                     catch
-                    { }
+                    {
+                    }
                 }
                 else if (minRamMBtoGBLabel.Text != "")
                 {
@@ -670,7 +692,8 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void modsLabel_Click(object sender, EventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/mods";
+            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                   "/.projects/mods";
 
             if (Directory.Exists(@appDataDizini))
             {
@@ -689,6 +712,7 @@ namespace Projects_Launcher.Projects_Launcher
                 System.Threading.Thread.Sleep(1000);
                 prc.Start();
             }
+
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }
@@ -715,7 +739,8 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 if (File.Exists(TextureDizin + "\\" + DosyaAdi))
                 {
-                    MessageBox.Show(DosyaAdi + " isimli doku paketi zaten mevcut.", "", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    MessageBox.Show(DosyaAdi + " isimli doku paketi zaten mevcut.", "", MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
                 }
                 else
                 {
@@ -723,6 +748,7 @@ namespace Projects_Launcher.Projects_Launcher
                     MessageBox.Show("Doku paketi başarıyla yüklendi.");
                 }
             }
+
             GC.WaitForPendingFinalizers();
         }
 
@@ -745,6 +771,7 @@ namespace Projects_Launcher.Projects_Launcher
                 System.Threading.Thread.Sleep(1000);
                 prc.Start();
             }
+
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }
@@ -770,6 +797,7 @@ namespace Projects_Launcher.Projects_Launcher
                 System.Threading.Thread.Sleep(1000);
                 prc.Start();
             }
+
             GC.Collect();
             GC.WaitForPendingFinalizers();
         }
@@ -863,7 +891,8 @@ namespace Projects_Launcher.Projects_Launcher
                 }
 
                 minRamTextBox.Text = (minRamTextBox.Text).Trim();
-                if (string.IsNullOrEmpty(minRamTextBox.Text) || Convert.ToInt32(minRamTextBox.Text) < 1024 || Convert.ToInt32(minRamTextBox.Text) > Convert.ToInt32(ramInfo))
+                if (string.IsNullOrEmpty(minRamTextBox.Text) || Convert.ToInt32(minRamTextBox.Text) < 1024 ||
+                    Convert.ToInt32(minRamTextBox.Text) > Convert.ToInt32(ramInfo))
                 {
                     MessageBox.Show("Miktar 1024-" + ramInfo + " " + "arasında girilmeli.");
                     minRamTextBox.Text = ramInfo;
@@ -886,12 +915,15 @@ namespace Projects_Launcher.Projects_Launcher
                 heighttextbox.Text = (heighttextbox.Text).Trim();
                 if (string.IsNullOrEmpty(heighttextbox.Text))
                 {
-                    MessageBox.Show("Çözünürlük" + " " + heightResolutionb2 + "-" + heightResolutionb + " " + "arasında girilmeli.");
+                    MessageBox.Show("Çözünürlük" + " " + heightResolutionb2 + "-" + heightResolutionb + " " +
+                                    "arasında girilmeli.");
                     heighttextbox.Text = heightResolutionb;
                 }
-                else if (Convert.ToInt32(heighttextbox.Text) < Convert.ToInt32(heightResolutionb2) || Convert.ToInt32(heighttextbox.Text) > Convert.ToInt32(heightResolutionb))
+                else if (Convert.ToInt32(heighttextbox.Text) < Convert.ToInt32(heightResolutionb2) ||
+                         Convert.ToInt32(heighttextbox.Text) > Convert.ToInt32(heightResolutionb))
                 {
-                    MessageBox.Show("Çözünürlük" + " " + heightResolutionb2 + "-" + heightResolutionb + " " + "arasında girilmeli.");
+                    MessageBox.Show("Çözünürlük" + " " + heightResolutionb2 + "-" + heightResolutionb + " " +
+                                    "arasında girilmeli.");
                     heighttextbox.Text = heightResolutionb2;
                 }
             }
@@ -912,14 +944,16 @@ namespace Projects_Launcher.Projects_Launcher
                 widthtextbox.Text = (widthtextbox.Text).Trim();
                 if (string.IsNullOrEmpty(widthtextbox.Text))
                 {
-                    MessageBox.Show("Çözünürlük" + " " + widthResolutionb2 + "-" + widthResolutionb + " " + "arasında girilmeli.");
+                    MessageBox.Show("Çözünürlük" + " " + widthResolutionb2 + "-" + widthResolutionb + " " +
+                                    "arasında girilmeli.");
                     widthtextbox.Text = widthResolutionb;
                 }
 
                 if (Convert.ToInt32(widthtextbox.Text) < Convert.ToInt32(widthResolutionb2) ||
                     Convert.ToInt32(widthtextbox.Text) > Convert.ToInt32(widthResolutionb))
                 {
-                    MessageBox.Show("Çözünürlük" + " " + widthResolutionb2 + "-" + widthResolutionb + " " + "arasında girilmeli.");
+                    MessageBox.Show("Çözünürlük" + " " + widthResolutionb2 + "-" + widthResolutionb + " " +
+                                    "arasında girilmeli.");
                     widthtextbox.Text = widthResolutionb;
                 }
             }
@@ -928,6 +962,7 @@ namespace Projects_Launcher.Projects_Launcher
                 MessageBox.Show("Çözünürlük ayarlanırken bir hata meydana geldi.");
             }
         }
+
         private void guna2ControlBox3_Click(object sender, EventArgs e)
         {
             GC.Collect();
@@ -949,7 +984,19 @@ namespace Projects_Launcher.Projects_Launcher
             discordRpcTip.UseAnimation = true;
             discordRpcTip.IsBalloon = true;
             discordRpcTip.ShowAlways = true;
-            discordRpcTip.SetToolTip(this.reopenLauncher, "Oyun kapatıldığında yeniden açılıp açılmayacağını seçersiniz.\n\nBu özelliğin kapalı olması durumunda oyundayken, discord oynuyor\nbilginiz oyun durumunuzda gözükmeyecektir.");
+            discordRpcTip.SetToolTip(this.reopenLauncher,
+                "Oyun kapatıldığında yeniden açılıp açılmayacağını seçersiniz.\n\nBu özelliğin kapalı olması durumunda oyundayken, discord\noynuyor bilginiz oyun durumunuzda gözükmeyecektir.");
+        }
+
+        private void autoConnectCheckBox_MouseEnter(object sender, EventArgs e)
+        {
+            ToolTip autoConnectTip = new ToolTip();
+            autoConnectTip.UseFading = true;
+            autoConnectTip.UseAnimation = true;
+            autoConnectTip.IsBalloon = true;
+            autoConnectTip.ShowAlways = true;
+            autoConnectTip.SetToolTip(this.autoConnect,
+                "Minecraft istemcisi açıldıktan sonra otomatik olarak Projects\nresmi sunucusuna girip girmeyeceğini seçebilirsiniz.\n\nAyarın kapalı olması durumunda Minecraft ana menüsü\naçılacaktır.");
         }
 
         private void guna2ControlBox1_Resize(object sender, EventArgs e)
@@ -1016,17 +1063,20 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void temaSelectBox_SelectedIndexChanged(object sender, EventArgs e)
         {
-            
+
             if (temaSelectBox.Text == "Açık Tema")
             {
                 this.BackgroundImage = Properties.Resources.gaia_light;
 
                 minRamDynamicCalculatorLabel.ForeColor = Color.Black;
                 maxRamDynamicCalculatorLabel.ForeColor = Color.Black;
+
                 reopenLauncher.ForeColor = Color.Black;
+                autoConnect.ForeColor = Color.Black;
 
                 this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
-            }  else if (temaSelectBox.Text == "Koyu Tema")
+            }
+            else if (temaSelectBox.Text == "Koyu Tema")
             {
                 this.BackgroundImage = Properties.Resources.gaia_dark;
 
@@ -1058,7 +1108,9 @@ namespace Projects_Launcher.Projects_Launcher
 
                     minRamDynamicCalculatorLabel.ForeColor = Color.Black;
                     maxRamDynamicCalculatorLabel.ForeColor = Color.Black;
+
                     reopenLauncher.ForeColor = Color.Black;
+                    autoConnect.ForeColor = Color.Black;
 
                     this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
                 }
@@ -1070,6 +1122,7 @@ namespace Projects_Launcher.Projects_Launcher
                     minRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
                     maxRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
                     reopenLauncher.ForeColor = Color.FromArgb(251, 255, 255);
+                    autoConnect.ForeColor = Color.FromArgb(251, 255, 255);
                     versionBox.ForeColor = Color.FromArgb(251, 255, 255);
 
                     this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
@@ -1077,6 +1130,11 @@ namespace Projects_Launcher.Projects_Launcher
             }
 
             Properties.Settings.Default.Save();
+        }
+
+        private void autoConnect_CheckedChanged(object sender, EventArgs e)
+        {
+            Properties.Settings.Default.autoConnect = autoConnect.Checked;
         }
     }
 }
