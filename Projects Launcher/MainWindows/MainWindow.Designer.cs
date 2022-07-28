@@ -884,9 +884,9 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionBox.ItemHeight = 30;
             this.versionBox.Items.AddRange(new object[] {
             "projects-fabric",
+            "1.19.1",
             "1.19",
             "1.18.2 ✔",
-            "1.18.1",
             "1.17.1",
             "1.16.5",
             "1.15.2",
