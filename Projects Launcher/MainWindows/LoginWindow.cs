@@ -32,15 +32,6 @@ namespace Projects_Launcher
                 "Güncelleme bilgileri alınamadı!\n\nİnternete bağlı olmayabilirsiniz ya da Projects servislerinde bir kara delik açılmış olabilir.",
                 "Bilgi", MessageBoxButtons.OK, MessageBoxIcon.Information, MessageBoxDefaultButton.Button1);
         }
-        public DiscordRpcClient GetClient()
-        {
-            return Client;
-        }
-
-        public void SetClient(DiscordRpcClient value)
-        {
-            Client = value;
-        }
 
         public void DiscordRpcClientSetup()
         {
@@ -142,17 +133,13 @@ namespace Projects_Launcher
 
             labelYenilikMaddeler.Text = newsTexts;
         }
-        private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
+
+        public String readPhpContent(String address)
         {
-            _loginIcon = this.Icon;
-            DiscordRpcClientSetup();
-
-            versionLabel.Text = "v" + currentVersion;
-
             try
             {
 
-                WebRequest currentVersionContent = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/version.php");
+                WebRequest currentVersionContent = HttpWebRequest.Create(address);
                 WebResponse versionContentResponse = currentVersionContent.GetResponse();
                 StreamReader versionContentReader = new StreamReader(versionContentResponse.GetResponseStream());
                 string versionContentLine = versionContentReader.ReadToEnd();
@@ -185,11 +172,24 @@ namespace Projects_Launcher
                 {
                     _newestVersion = bld.ToString();
                 }
+
+                return _newestVersion;
             }
             catch
             {
                 cantGrabVersionInfo();
+                return "Veri alınamadı!";
             }
+        }
+
+        private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
+        {
+            _loginIcon = this.Icon;
+            DiscordRpcClientSetup();
+
+            versionLabel.Text = "v" + currentVersion;
+
+            _newestVersion = readPhpContent("https://mc.projects.gg/LauncherUpdateStream/version.php");
 
             if (_newestVersion.Equals(""))
             {

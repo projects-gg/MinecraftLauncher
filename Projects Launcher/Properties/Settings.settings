@@ -30,7 +30,7 @@
       <Value Profile="(Default)">play.projects.gg</Value>
     </Setting>
     <Setting Name="currentVersion" Type="System.String" Scope="Application">
-      <Value Profile="(Default)">0.1.25</Value>
+      <Value Profile="(Default)">0.1.26</Value>
     </Setting>
     <Setting Name="backgroundLite" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
@@ -46,6 +46,12 @@
     </Setting>
     <Setting Name="autoConnect" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">True</Value>
+    </Setting>
+    <Setting Name="latestFabric" Type="System.String" Scope="User">
+      <Value Profile="(Default)">v1</Value>
+    </Setting>
+    <Setting Name="latestRealFabric" Type="System.String" Scope="User">
+      <Value Profile="(Default)">v1</Value>
     </Setting>
   </Settings>
 </SettingsFile>

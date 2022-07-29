@@ -1,4 +1,6 @@
 ﻿
+using System.Linq;
+
 namespace Projects_Launcher.Projects_Launcher
 {
     partial class mainMenuForm
@@ -23,10 +25,15 @@ namespace Projects_Launcher.Projects_Launcher
 
         #region Windows Form Designer generated code
 
+        /*public string latestFabric =
+            readPhpContent("https://mc.projects.gg/LauncherUpdateStream/version-fabric.php");*/
+
         /// <summary>
         /// Required method for Designer support - do not modify
         /// the contents of this method with the code editor.
         /// </summary>
+        ///
+
         private void InitializeComponent()
         {
             this.components = new System.ComponentModel.Container();
@@ -131,9 +138,9 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionInfoStaticLabel.ForeColor = System.Drawing.Color.WhiteSmoke;
             this.versionInfoStaticLabel.Location = new System.Drawing.Point(108, 65);
             this.versionInfoStaticLabel.Name = "versionInfoStaticLabel";
-            this.versionInfoStaticLabel.Size = new System.Drawing.Size(107, 18);
+            this.versionInfoStaticLabel.Size = new System.Drawing.Size(170, 18);
             this.versionInfoStaticLabel.TabIndex = 3;
-            this.versionInfoStaticLabel.Text = "projects-fabric";
+            this.versionInfoStaticLabel.Text = "projects-fabric-" + Properties.Settings.Default.latestRealFabric;
             // 
             // playerNameStaticLabel
             // 
@@ -486,8 +493,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.autoConnect.UncheckedState.BorderThickness = 0;
             this.autoConnect.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
             this.autoConnect.UseVisualStyleBackColor = false;
-            this.autoConnect.MouseEnter += new System.EventHandler(this.autoConnectCheckBox_MouseEnter);
             this.autoConnect.CheckedChanged += new System.EventHandler(this.autoConnect_CheckedChanged);
+            this.autoConnect.MouseEnter += new System.EventHandler(this.autoConnectCheckBox_MouseEnter);
             // 
             // ramInfoLabel
             // 
@@ -594,7 +601,7 @@ namespace Projects_Launcher.Projects_Launcher
             "Koyu Tema"});
             this.temaSelectBox.Location = new System.Drawing.Point(486, 228);
             this.temaSelectBox.Name = "temaSelectBox";
-            this.temaSelectBox.Size = new System.Drawing.Size(133, 36);
+            this.temaSelectBox.Size = new System.Drawing.Size(142, 36);
             this.temaSelectBox.TabIndex = 1028;
             this.temaSelectBox.SelectedIndexChanged += new System.EventHandler(this.temaSelectBox_SelectedIndexChanged);
             // 
@@ -882,25 +889,30 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionBox.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.versionBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(251)))), ((int)(((byte)(255)))), ((int)(((byte)(255)))));
             this.versionBox.ItemHeight = 30;
-            this.versionBox.Items.AddRange(new object[] {
-            "projects-fabric",
-            "1.19.1",
-            "1.19",
-            "1.18.2 ✔",
-            "1.17.1",
-            "1.16.5",
-            "1.15.2",
-            "1.14.4",
-            "1.13.2",
-            "1.12.2",
-            "1.11.2",
-            "1.10.2",
-            "1.9.4",
-            "1.8.9",
-            "1.7.10"});
+
+            string[] versionList = {
+                "projects-fabric-" + Properties.Settings.Default.latestRealFabric,
+                "projects-fabric-" + Properties.Settings.Default.latestFabric,
+                "1.19.1 ✔",
+                "1.19",
+                "1.18.2",
+                "1.17.1",
+                "1.16.5",
+                "1.15.2",
+                "1.14.4",
+                "1.13.2",
+                "1.12.2",
+                "1.11.2",
+                "1.10.2",
+                "1.9.4",
+                "1.8.9",
+                "1.7.10"
+            };
+
+            this.versionBox.Items.AddRange(versionList);
             this.versionBox.Location = new System.Drawing.Point(198, 228);
             this.versionBox.Name = "versionBox";
-            this.versionBox.Size = new System.Drawing.Size(133, 36);
+            this.versionBox.Size = new System.Drawing.Size(143, 36);
             this.versionBox.TabIndex = 169;
             this.versionBox.SelectedIndexChanged += new System.EventHandler(this.surumsec_SelectedIndexChanged);
             // 

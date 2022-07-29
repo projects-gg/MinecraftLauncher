@@ -130,7 +130,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.1.25")]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.1.26")]
         public string currentVersion {
             get {
                 return ((string)(this["currentVersion"]));
@@ -193,6 +193,30 @@ namespace Projects_Launcher.Properties {
             }
             set {
                 this["autoConnect"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("v1")]
+        public string latestFabric {
+            get {
+                return ((string)(this["latestFabric"]));
+            }
+            set {
+                this["latestFabric"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("v1")]
+        public string latestRealFabric {
+            get {
+                return ((string)(this["latestRealFabric"]));
+            }
+            set {
+                this["latestRealFabric"] = value;
             }
         }
     }

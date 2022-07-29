@@ -12,6 +12,7 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Net;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -31,6 +32,9 @@ namespace Projects_Launcher.Projects_Launcher
         private string maxrambox;
         private string widthbox;
         private string heightbox;
+        
+        public string latestFabricVersion =
+            readPhpContent("https://mc.projects.gg/LauncherUpdateStream/version-fabric.php");
 
         private string maxramlabell;
         private string minramlabell;
@@ -45,6 +49,55 @@ namespace Projects_Launcher.Projects_Launcher
         private string heightResolutionb2;
         private string widthResolutionb;
         private string widthResolutionb2;
+
+        public static String readPhpContent(String address)
+        {
+            try
+            {
+                string _newestVersion = "";
+                WebRequest currentVersionContent = HttpWebRequest.Create(address);
+                WebResponse versionContentResponse = currentVersionContent.GetResponse();
+                StreamReader versionContentReader = new StreamReader(versionContentResponse.GetResponseStream());
+                string versionContentLine = versionContentReader.ReadToEnd();
+                bool startWriting = false;
+                StringBuilder bld = new StringBuilder();
+
+                foreach (char character in versionContentLine) //this is hard to read but culture-compatible
+                {
+                    if (character.Equals('>'))
+                    {
+                        if (!startWriting)
+                        {
+                            startWriting = true;
+                        }
+                    }
+                    else if (startWriting)
+                    {
+                        if (!character.Equals('<'))
+                        {
+                            bld.Append(character);
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                if (bld.Length >= 0)
+                {
+                    _newestVersion = bld.ToString();
+                }
+
+                Properties.Settings.Default.latestRealFabric = _newestVersion;
+
+                return _newestVersion;
+            }
+            catch
+            {
+                return Properties.Settings.Default.latestFabric;
+            }
+        }
 
         private readonly string TextureDizin = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                                                "/.projects/resourcepacks";
@@ -257,7 +310,7 @@ namespace Projects_Launcher.Projects_Launcher
         private void oynabutton_Click(object sender, EventArgs e)
         {
             string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                                         "/.projects/versions/projects-fabric"; // Fabric directory
+                                         "/.projects/versions/projects-fabric-" + latestFabricVersion; // Fabric directory
             string appDataDizini =
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData); // AppData directory
 
@@ -282,7 +335,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             Uri fabric =
                 new Uri(
-                    "https://mc.projects.gg/LauncherUpdateStream/projects-fabric.zip"); // Fabric installer address
+                    "https://mc.projects.gg/LauncherUpdateStream/projects-fabric-" + latestFabricVersion + ".zip"); // Fabric installer address
 
             if (Directory.Exists(@surum_appDataDizini)) //Check fabric is exist
             {
@@ -346,7 +399,7 @@ namespace Projects_Launcher.Projects_Launcher
                     wc.DownloadProgressChanged += Wc_DownloadProgressChanged;
                     wc.DownloadFileAsync(fabric,
                         appDataDizini +
-                        "/.projects/projects-fabric.zip"); // Download fabric to directory '.projects'
+                        "/.projects/projects-fabric-" + latestFabricVersion + ".zip"); // Download fabric to directory '.projects'
 
                     playButtonStaticLabel.Enabled = false;
                     settingsStaticPictureBox.Enabled = false;
@@ -375,12 +428,13 @@ namespace Projects_Launcher.Projects_Launcher
             try
             {
                 string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                                 "/.projects/projects-fabric.zip";
+                                 "/.projects/projects-fabric-" + latestFabricVersion + ".zip";
                 string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                                      "/.projects/versions";
 
                 System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath);
                 Thread.Sleep(1100);
+                Properties.Settings.Default.SelectedVersion = "projects-fabric-" + latestFabricVersion;
                 versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
                 playButtonStaticLabel.Enabled = true;
                 settingsStaticPictureBox.Enabled = true;
