@@ -308,7 +308,7 @@ namespace Projects_Launcher
 
                 loginButton.Text = "Kullanıcı Adı Giriniz";
                 return;
-            } else if (!Regex.IsMatch(nickNameEnterTextBox.Text, "^[a-zA-Z0-9]*$"))
+            } else if (!Regex.IsMatch(nickNameEnterTextBox.Text, "^[a-zA-Z0-9_]*$"))
             {
                 // Need invalid nickname image instead of MessageBox
                 MessageBox.Show("Kullanıcı adınızda boşluk veya ? gibi\nözel karakterler bulunmamalıdır!", "Kullanıcı Adı Geçersiz");
