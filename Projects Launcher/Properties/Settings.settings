@@ -15,7 +15,7 @@
       <Value Profile="(Default)">926</Value>
     </Setting>
     <Setting Name="SelectedVersion" Type="System.String" Scope="User">
-      <Value Profile="(Default)">projects-fabric</Value>
+      <Value Profile="(Default)">projects-fabric-v1</Value>
     </Setting>
     <Setting Name="NickNames" Type="System.String" Scope="User">
       <Value Profile="(Default)" />

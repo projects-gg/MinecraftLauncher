@@ -1141,6 +1141,7 @@ namespace Projects_Launcher.Projects_Launcher
                 minRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
                 maxRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
                 reopenLauncher.ForeColor = Color.FromArgb(251, 255, 255);
+                autoConnect.ForeColor = Color.FromArgb(251, 255, 255);
                 versionBox.ForeColor = Color.FromArgb(251, 255, 255);
 
                 this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
