@@ -1,9 +1,10 @@
 ﻿using CmlLib.Core;
 using CmlLib.Core.Auth;
 using DiscordRPC;
-using Microsoft.Win32;
+using Guna.UI2.WinForms;
 using MineStatLib;
 using Newtonsoft.Json;
+using Projects_Launcher.OtherWindows;
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -12,10 +13,13 @@ using System.IO;
 using System.Linq;
 using System.Management;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using ToolTip = System.Windows.Forms.ToolTip;
 
 namespace Projects_Launcher.Projects_Launcher
 {
@@ -32,7 +36,9 @@ namespace Projects_Launcher.Projects_Launcher
         private string maxrambox;
         private string widthbox;
         private string heightbox;
-        
+
+
+
         public string latestFabricVersion =
             readPhpContent("https://mc.projects.gg/LauncherUpdateStream/version-fabric.php");
 
@@ -127,9 +133,9 @@ namespace Projects_Launcher.Projects_Launcher
                     State = "Sunucu IP: mc.projects.gg",
                     Assets = new Assets
                     {
-                        LargeImageKey = "projects_logo",
+                        LargeImageKey = "projects_logo_transparent",
                         LargeImageText = "https://mc.projects.gg/",
-                        SmallImageKey = "world",
+                        SmallImageKey = "red_sword",
                     }
                 });
             }
@@ -148,7 +154,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 double ramInBytes = (Convert.ToDouble(ramObject["TotalPhysicalMemory"]));
                 double roundAvailableRamValueInGb = Math.Ceiling(ramInBytes / 1073741824); // <- Byte to GB conversion
-                ramInfoLabel.Text = string.Format("{0:0.##}", Convert.ToDouble(roundAvailableRamValueInGb) * 1024) +
+                ramInfoLabel.Text = string.Format("Bulunan RAM " + "{0:0.##}", Convert.ToDouble(roundAvailableRamValueInGb) * 1024) +
                                     "MB" + "/" + Convert.ToString(roundAvailableRamValueInGb) + " GB";
                 break;
             }
@@ -169,7 +175,6 @@ namespace Projects_Launcher.Projects_Launcher
             settingsStaticPictureBox.Enabled = true;
             discordStaticPictureBox.Enabled = true;
         }
-
         private void Anamenu_Load(object sender, EventArgs e)
         {
             versionLabel.Text = "v" + currentVersion;
@@ -188,11 +193,9 @@ namespace Projects_Launcher.Projects_Launcher
 
             onlineCountUpdater().GetAwaiter();
 
-            playerNameStaticLabel.Text = Properties.Settings.Default.NickNames;
+            playerNameStaticLabell.Text = Properties.Settings.Default.NickNames;
 
             reopenLauncher.Checked = Properties.Settings.Default.OyunTickS;
-
-            temaSelectBox.Text = Properties.Settings.Default.themeSelected;
 
             if (Properties.Settings.Default.SelectedVersion != string.Empty)
             {
@@ -200,14 +203,16 @@ namespace Projects_Launcher.Projects_Launcher
                 versionBox.Text = Properties.Settings.Default.SelectedVersion;
             }
 
+            jvmTextBox.Text = Properties.Settings.Default.JvmArm;
+
             if (Properties.Settings.Default.RamMax != string.Empty)
             {
                 maxRamTextBox.Text = Properties.Settings.Default.RamMax;
-                maxRamMBtoGBLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
+                maxRamDynamicCalculatorLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
             }
             else if (maxRamDynamicCalculatorLabel.Text != "")
             {
-                maxRamMBtoGBLabel.Text = "";
+                maxRamDynamicCalculatorLabel.Text = "";
             }
 
             if (Properties.Settings.Default.RamMin != string.Empty)
@@ -261,6 +266,10 @@ namespace Projects_Launcher.Projects_Launcher
             var path = new MinecraftPath(launcherdizin);
             var launcher = new CMLauncher(path);
 
+            launcher.FileChanged += PLauncher_FileChanged;
+            launcher.ProgressChanged += PLauncher_ProgressChanged;
+            //downloadCompleteBar.Visible = true;
+
             sessions = Properties.Settings.Default.NickNames;
 
             string serverIP;
@@ -283,7 +292,10 @@ namespace Projects_Launcher.Projects_Launcher
                 GameLauncherName = "Projects Minecraft",
                 ScreenWidth = int.Parse(Properties.Settings.Default.ResolutionWidth), // Get width resolution info
                 ScreenHeight = int.Parse(Properties.Settings.Default.ResolutionHeight), // Get height resolution info
+                FullScreen = fullscreenCheckBox.Checked,
             };
+            if (!string.IsNullOrEmpty(jvmTextBox.Text))
+                ayarlar.JVMArguments = jvmTextBox.Text.Split(' ');
             try
             {
                 // Maximize download speed
@@ -307,8 +319,24 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
+        private void PLauncher_FileChanged(CmlLib.Core.Downloader.DownloadFileChangedEventArgs e)
+        {
+            PLauncherFC.Maximum = e.TotalFileCount;
+            PLauncherFC.Value = e.ProgressedFileCount;
+        }
+
+        private void PLauncher_ProgressChanged(object sender, ProgressChangedEventArgs e)
+        {
+            downloadCompleteBar.Value = e.ProgressPercentage;
+        }
+
         private void oynabutton_Click(object sender, EventArgs e)
         {
+            //PLauncherFC.Visible = true;
+            //downloadCompleteBar.Visible = true;
+            downloadCompleteBar.Show();
+            PLauncherFC.Show();
+
             string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                                          "/.projects/versions/projects-fabric-" + latestFabricVersion; // Fabric directory
             string appDataDizini =
@@ -369,6 +397,8 @@ namespace Projects_Launcher.Projects_Launcher
                     animatedPlayingLabel().GetAwaiter();
                     thisFalse();
                     prepareGameToLaunch.Start(); // Launch prepareGameToLaunch
+                    //downloadCompleteBar.Hide();
+                    //PLauncherFC.Hide();
                 }
                 catch (Exception ex) //If fabric not exist
                 {
@@ -404,7 +434,7 @@ namespace Projects_Launcher.Projects_Launcher
                     playButtonStaticLabel.Enabled = false;
                     settingsStaticPictureBox.Enabled = false;
                     versionInfoStaticLabel.Text = "İndiriliyor...";
-                    downloadCompleteLabel.Visible = true;
+                    //downloadCompleteLabel.Visible = true;
                     downloadCompleteBar.Visible = true;
                     playSplitStaticLabel.Visible = true;
                 }
@@ -415,10 +445,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void Wc_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
         {
-            downloadCompleteLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(e.BytesReceived) / 1024 / 1024) +
-                                         "MB"
-                                         + "/" + String.Format("{0:0.##}",
-                                             Convert.ToDouble(e.TotalBytesToReceive) / 1024 / 1024) + "MB";
+            //downloadCompleteLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(e.BytesReceived) / 1024 / 1024) +
+            //                             "MB"
+            //                             + "/" + String.Format("{0:0.##}",
+            //                                 Convert.ToDouble(e.TotalBytesToReceive) / 1024 / 1024) + "MB";
 
             downloadCompleteBar.Value = e.ProgressPercentage;
         }
@@ -438,7 +468,7 @@ namespace Projects_Launcher.Projects_Launcher
                 versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
                 playButtonStaticLabel.Enabled = true;
                 settingsStaticPictureBox.Enabled = true;
-                downloadCompleteLabel.Visible = false;
+                //downloadCompleteLabel.Visible = false;
                 downloadCompleteBar.Visible = false;
                 playSplitStaticLabel.Visible = false;
             }
@@ -471,10 +501,15 @@ namespace Projects_Launcher.Projects_Launcher
                             alreadyPlayingAnimatedLabel = false;
                         }
 
+                        downloadCompleteBar.Hide();
+                        PLauncherFC.Hide();
+
                         Thread.Sleep(1000);
                         prepareGameToLaunch.Stop();
                         return;
                     }
+
+
                 }
                 else
                 {
@@ -550,11 +585,12 @@ namespace Projects_Launcher.Projects_Launcher
         {
             if (settingsBgPanel.Visible == false)
             {
-                backButton.Visible = true;
+                playButtonStaticLabel.Enabled = false;
                 settingsBgPanel.Visible = true;
             }
             else
             {
+                playButtonStaticLabel.Enabled = true;
                 settingsBgPanel.Visible = false;
             }
 
@@ -578,7 +614,7 @@ namespace Projects_Launcher.Projects_Launcher
                 MineStat pinger = new MineStat(anyIP, 25565);
                 if (pinger.ServerUp)
                 {
-                    serverOnlineCountStaticLabel.Text = pinger.CurrentPlayers + " kişi oynuyor!";
+                    serverOnlineCountStaticLabel.Text = pinger.CurrentPlayers + " Kişi aktif!";
                 }
                 else
                 {
@@ -652,16 +688,16 @@ namespace Projects_Launcher.Projects_Launcher
                     maxramlabel.Text = Properties.Settings.Default.RamMax;
                     try
                     {
-                        maxRamMBtoGBLabel.Text =
+                        maxRamDynamicCalculatorLabel.Text =
                             String.Format("{0:0.##}", Convert.ToDouble(maxRamTextBox.Text) / 1024) + "GB";
                     }
                     catch
                     {
                     }
                 }
-                else if (maxRamMBtoGBLabel.Text != "")
+                else if (maxRamDynamicCalculatorLabel.Text != "")
                 {
-                    maxRamMBtoGBLabel.Text = "";
+                    maxRamDynamicCalculatorLabel.Text = "";
                 }
             }
             catch
@@ -1065,7 +1101,6 @@ namespace Projects_Launcher.Projects_Launcher
         private void button1_Click(object sender, EventArgs e)
         {
             settingsBgPanel.Visible = false;
-            backButton.Visible = false;
         }
 
         private void timer1_Tick(object sender, EventArgs e)
@@ -1086,114 +1121,39 @@ namespace Projects_Launcher.Projects_Launcher
 
                 if (xml.debug.ping == "false")
                 {
-                    lobiOnline.Image = Properties.Resources.De_Aktif;
+                    lobiOnline.ForeColor = Color.Red;
                 }
                 else
                 {
-                    lobiOnline.Image = Properties.Resources.Aktif;
-                }
-
-                //Gaia onlineCheck
-                string url2 = "https://projectsggapi.vercel.app/api/server2";
-                HttpWebRequest request2 = WebRequest.Create(url2) as HttpWebRequest;
-                string jsonverisi2 = "";
-                using (HttpWebResponse response2 = request2.GetResponse() as HttpWebResponse)
-                {
-                    StreamReader r = new StreamReader(response2.GetResponseStream());
-                    jsonverisi2 += r.ReadToEnd();
-                }
-
-                if (xml.debug.ping == "false")
-                {
-                    gaiaOnline.Image = Properties.Resources.De_Aktif;
-                }
-                else
-                {
-                    gaiaOnline.Image = Properties.Resources.Aktif;
+                    lobiOnline.ForeColor = Color.Green;
                 }
             }
             catch
             {
                 lobiOnline.Text = "?";
-                gaiaOnline.Text = "?";
             }
-        }
-
-        private void temaSelectBox_SelectedIndexChanged(object sender, EventArgs e)
-        {
-
-            if (temaSelectBox.Text == "Açık Tema")
-            {
-                this.BackgroundImage = Properties.Resources.gaia_light;
-
-                minRamDynamicCalculatorLabel.ForeColor = Color.Black;
-                maxRamDynamicCalculatorLabel.ForeColor = Color.Black;
-
-                reopenLauncher.ForeColor = Color.Black;
-                autoConnect.ForeColor = Color.Black;
-
-                this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
-            }
-            else if (temaSelectBox.Text == "Koyu Tema")
-            {
-                this.BackgroundImage = Properties.Resources.gaia_dark;
-
-                minRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
-                maxRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
-                reopenLauncher.ForeColor = Color.FromArgb(251, 255, 255);
-                autoConnect.ForeColor = Color.FromArgb(251, 255, 255);
-                versionBox.ForeColor = Color.FromArgb(251, 255, 255);
-
-                this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
-            }
-            else
-            {
-                int res = 1;
-
-                try
-                {
-                    res = (int) Registry.GetValue(
-                        "HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
-                        "AppsUseLightTheme", -1);
-                }
-                catch
-                {
-                    // res already have a default value.
-                }
-
-                if (res == 1)
-                {
-                    this.BackgroundImage = Properties.Resources.gaia_light;
-
-                    minRamDynamicCalculatorLabel.ForeColor = Color.Black;
-                    maxRamDynamicCalculatorLabel.ForeColor = Color.Black;
-
-                    reopenLauncher.ForeColor = Color.Black;
-                    autoConnect.ForeColor = Color.Black;
-
-                    this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
-                }
-
-                if (res == 0)
-                {
-                    this.BackgroundImage = Properties.Resources.gaia_dark;
-
-                    minRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
-                    maxRamDynamicCalculatorLabel.ForeColor = Color.FromArgb(251, 255, 255);
-                    reopenLauncher.ForeColor = Color.FromArgb(251, 255, 255);
-                    autoConnect.ForeColor = Color.FromArgb(251, 255, 255);
-                    versionBox.ForeColor = Color.FromArgb(251, 255, 255);
-
-                    this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
-                }
-            }
-
-            Properties.Settings.Default.Save();
         }
 
         private void autoConnect_CheckedChanged(object sender, EventArgs e)
         {
             Properties.Settings.Default.autoConnect = autoConnect.Checked;
+        }
+        private void closeButtonControlBox_Click(object sender, EventArgs e)
+        {
+            Environment.Exit(0);
+        }
+
+        private void jvmTextBox_TextChanged(object sender, EventArgs e)
+        {
+            Properties.Settings.Default.JvmArm = jvmTextBox.Text;
+            Properties.Settings.Default.Save();
+        }
+
+        private void mailStaticPictureBox_Click(object sender, EventArgs e)
+        {
+            sendMailWindow mail = new sendMailWindow();
+
+            mail.Show();
         }
     }
 }

@@ -121,53 +121,11 @@
   <data name="projects_Logo_64x64" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\rsz_projectslogo2.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
-  <data name="Mods Klasörü" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Mods Klasörü.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
   <data name="projects_Logo" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\projectsLogo2.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
-  <data name="kullaniciadigiriniz" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\kullaniciadigiriniz.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Doku paketi klasörü" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Doku paketi klasörü.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
   <data name="projects_logo_icon" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\projects_logo_icon.ico;System.Drawing.Icon, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Toprak_Arkaplan" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Toprak_Arkaplan.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="_6" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\6.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Oyun Klasörü" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Oyun Klasörü.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Doku Paketi Aktar" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Doku Paketi Aktar.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="giris" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\giriş yap.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Doku_Paketi_Aktar2" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Doku Paketi Aktar2.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Doku_paketi_klasörü2" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Doku paketi klasörü2.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Mods_Klasörü2" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Mods Klasörü2.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Oyun_Klasörü2" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Oyun Klasörü2.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="Aktif" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\Aktif.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
-  </data>
-  <data name="De_Aktif" type="System.Resources.ResXFileRef, System.Windows.Forms">
-    <value>..\Resources\De-Aktif.png;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>
   </data>
   <data name="gaia_dark" type="System.Resources.ResXFileRef, System.Windows.Forms">
     <value>..\Resources\gaia_dark.jpg;System.Drawing.Bitmap, System.Drawing, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a</value>

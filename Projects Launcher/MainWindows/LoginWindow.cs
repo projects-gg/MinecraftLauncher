@@ -6,8 +6,8 @@ using System.Drawing;
 using System.IO;
 using System.Net;
 using System.Text;
-using System.Windows.Forms;
 using System.Text.RegularExpressions;
+using System.Windows.Forms;
 
 namespace Projects_Launcher
 {
@@ -22,10 +22,9 @@ namespace Projects_Launcher
         private string _newestVersion = "";
         private string newsTexts = "";
         private readonly Uri _setupLocation = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
-
         private Icon _loginIcon;
         public DiscordRpcClient Client { get; private set; }
-        
+
         private void cantGrabVersionInfo()
         {
             MessageBox.Show(
@@ -46,9 +45,9 @@ namespace Projects_Launcher
                     State = "Sunucu IP: mc.projects.gg",
                     Assets = new Assets
                     {
-                        LargeImageKey = "projects_logo",
+                        LargeImageKey = "projects_logo_transparent",
                         LargeImageText = "https://mc.projects.gg/",
-                        SmallImageKey = "world",
+                        SmallImageKey = "red_sword",
                     }
                 });
             }
@@ -56,82 +55,6 @@ namespace Projects_Launcher
             {
                 // Shouldn't happen except no internet connection or server downtime
             }
-        }
-
-        public void selectBackgroundImage()
-        {
-            // Grab background image
-            try
-            {
-                var random = new Random();
-                string imageType;
-
-                if (Properties.Settings.Default.backgroundLite) // Need ternary support instead of this
-                {
-                    imageType = "lite";
-                }
-                else
-                {
-                    imageType = Convert.ToString(random.Next(9) + 1);
-                }
-
-                var request = WebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/backgrounds" + "/" + imageType + ".png"); // Last background image
-
-                using (var response = request.GetResponse())
-                using (var stream = response.GetResponseStream())
-                    this.BackgroundImage = Bitmap.FromStream(stream);
-            }
-            catch
-            {
-                // Shouldn't happen except no internet connection or server downtime
-                this.BackgroundImage = Properties.Resources._6;
-            }
-        }
-
-        private void newsTextsRead()
-        {
-            try
-            {
-                WebRequest newsText = HttpWebRequest.Create("https://mc.projects.gg/LauncherUpdateStream/yenilikler.php");
-                WebResponse newsContentResponse = newsText.GetResponse();
-                StreamReader versionContentReader = new StreamReader(newsContentResponse.GetResponseStream());
-                string versionContentLine = versionContentReader.ReadToEnd();
-                bool startWriting = false;
-                StringBuilder blds = new StringBuilder();
-
-                foreach (char character in versionContentLine) //this is hard to read but culture-compatible
-                {
-                    if (character.Equals('>'))
-                    {
-                        if (!startWriting)
-                        {
-                            startWriting = true;
-                        }
-                    }
-                    else if (startWriting)
-                    {
-                        if (!character.Equals('<'))
-                        {
-                            blds.Append(character);
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-                }
-
-                if (blds.Length >= 0)
-                {
-                    newsTexts = blds.ToString();
-                }
-            }
-            catch (Exception exc)
-            {
-                labelYenilikMaddeler.Text = "Yenilik bilgileri alınamadı.\nHata kodu: " + exc;
-            }
-
-            labelYenilikMaddeler.Text = newsTexts;
         }
 
         public String readPhpContent(String address)
@@ -182,12 +105,12 @@ namespace Projects_Launcher
             }
         }
 
-        private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
+        private async void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
             _loginIcon = this.Icon;
             DiscordRpcClientSetup();
 
-            versionLabel.Text = "v" + currentVersion;
+            //sad versionLabel.Text = "v" + currentVersion;
 
             _newestVersion = readPhpContent("https://mc.projects.gg/LauncherUpdateStream/version.php");
 
@@ -261,9 +184,7 @@ namespace Projects_Launcher
                 _loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
             }
 
-            newsTextsRead();
-
-            GC.WaitForPendingFinalizers();
+            // GC.WaitForPendingFinalizers();
         }
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
@@ -308,7 +229,8 @@ namespace Projects_Launcher
 
                 loginButton.Text = "Kullanıcı Adı Giriniz";
                 return;
-            } else if (!Regex.IsMatch(nickNameEnterTextBox.Text, "^[a-zA-Z0-9_]*$"))
+            }
+            else if (!Regex.IsMatch(nickNameEnterTextBox.Text, "^[a-zA-Z0-9_]*$"))
             {
                 // Need invalid nickname image instead of MessageBox
                 MessageBox.Show("Kullanıcı adınızda boşluk veya ? gibi\nözel karakterler bulunmamalıdır!", "Kullanıcı Adı Geçersiz");
@@ -343,12 +265,12 @@ namespace Projects_Launcher
                     Properties.Settings.Default.Save();
                 }
 
-                loginButton.Image = Properties.Resources.giris;
+                loginButton.Text = "GİRİŞ YAP";
                 loginButton.Enabled = true;
             }
             else
             {
-                loginButton.Image = Properties.Resources.kullaniciadigiriniz;
+                loginButton.Text = "Kullanıcı Adı Giriniz";
                 loginButton.Enabled = false;
             }
         }
@@ -396,29 +318,20 @@ namespace Projects_Launcher
         {
             updateApplication();
         }
-
-        private void backButton_Click(object sender, EventArgs e)
-        {
-            panelYenilikler.Visible = false;
-            backButton.Visible = false;
-        }
-        private void newsLabel_Click_1(object sender, EventArgs e)
-        {
-            if (panelYenilikler.Visible == false)
-            {
-                backButton.Visible = true;
-                panelYenilikler.Visible = true;
-            }
-            else
-            {
-                panelYenilikler.Visible = false;
-            }
-            GC.WaitForPendingFinalizers();
-        }
-
         private void webbutton_Click(object sender, EventArgs e)
         {
             System.Diagnostics.Process.Start("https://mc.projects.gg/");
         }
+
+        private void newVersionPanel_Paint(object sender, PaintEventArgs e)
+        {
+
+        }
+
+        private void label6_Click(object sender, EventArgs e)
+        {
+
+        }
+
     }
 }
