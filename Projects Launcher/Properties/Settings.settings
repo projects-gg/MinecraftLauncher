@@ -53,8 +53,5 @@
     <Setting Name="latestRealFabric" Type="System.String" Scope="User">
       <Value Profile="(Default)">v1</Value>
     </Setting>
-    <Setting Name="JvmArm" Type="System.String" Scope="User">
-      <Value Profile="(Default)" />
-    </Setting>
   </Settings>
 </SettingsFile>
