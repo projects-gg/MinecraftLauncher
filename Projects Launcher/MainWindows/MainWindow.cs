@@ -303,6 +303,7 @@ namespace Projects_Launcher.Projects_Launcher
             }
             catch (Exception ex)
             {
+                //ex.Equals(Exception as System.Collections.Generic.KeyNotFoundException)
                 NotificationAboutException(ex, "Minecraft startup settings");
             }
         }
@@ -363,11 +364,19 @@ namespace Projects_Launcher.Projects_Launcher
 
                     session = MSession.GetOfflineSession(Properties.Settings.Default.NickNames); // Get nickname info
 
+                    thisFalse();
+                    if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                           "/.projects/versions/" + Properties.Settings.Default.SelectedVersion.ToString()))
+                    {
+                        MessageBox.Show("Kullandığınız oyun sürümü \"" + Properties.Settings.Default.SelectedVersion + " yüklü değil!\n\nLütfen ayarlardan başka bir oyun sürümü seçin.");
+                        thisTrue();
+                        return;
+                    }
+
                     Thread thread = new Thread(() => Launch().GetAwaiter());
                     thread.IsBackground = true;
                     thread.Start(); // Launch the game
                     animatedPlayingLabel().GetAwaiter();
-                    thisFalse();
                     prepareGameToLaunch.Start(); // Launch prepareGameToLaunch
                 }
                 catch (Exception ex) //If fabric not exist
