@@ -445,7 +445,7 @@ namespace Projects_Launcher
             this.labelYenilikMaddeler.BackColor = System.Drawing.Color.Transparent;
             this.labelYenilikMaddeler.Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.labelYenilikMaddeler.ForeColor = System.Drawing.SystemColors.ButtonHighlight;
-            this.labelYenilikMaddeler.Location = new System.Drawing.Point(22, 78);
+            this.labelYenilikMaddeler.Location = new System.Drawing.Point(12, 60);
             this.labelYenilikMaddeler.Name = "labelYenilikMaddeler";
             this.labelYenilikMaddeler.Size = new System.Drawing.Size(74, 252);
             this.labelYenilikMaddeler.TabIndex = 199;

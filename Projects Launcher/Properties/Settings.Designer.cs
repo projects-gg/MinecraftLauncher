@@ -130,7 +130,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.1.29")]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.1.30")]
         public string currentVersion {
             get {
                 return ((string)(this["currentVersion"]));

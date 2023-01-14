@@ -124,7 +124,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.playSplitStaticLabel.ForeColor = System.Drawing.SystemColors.AppWorkspace;
             this.playSplitStaticLabel.Location = new System.Drawing.Point(29, 372);
             this.playSplitStaticLabel.Name = "playSplitStaticLabel";
-            this.playSplitStaticLabel.Size = new System.Drawing.Size(23, 32);
+            this.playSplitStaticLabel.Size = new System.Drawing.Size(22, 32);
             this.playSplitStaticLabel.TabIndex = 2;
             this.playSplitStaticLabel.Text = "|";
             this.playSplitStaticLabel.Visible = false;
@@ -138,9 +138,9 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionInfoStaticLabel.ForeColor = System.Drawing.Color.WhiteSmoke;
             this.versionInfoStaticLabel.Location = new System.Drawing.Point(108, 65);
             this.versionInfoStaticLabel.Name = "versionInfoStaticLabel";
-            this.versionInfoStaticLabel.Size = new System.Drawing.Size(170, 18);
+            this.versionInfoStaticLabel.Size = new System.Drawing.Size(128, 18);
             this.versionInfoStaticLabel.TabIndex = 3;
-            this.versionInfoStaticLabel.Text = "projects-fabric-" + Properties.Settings.Default.latestRealFabric;
+            this.versionInfoStaticLabel.Text = "projects-fabric-v2";
             // 
             // playerNameStaticLabel
             // 
@@ -245,7 +245,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.serverOnlineCountStaticLabel.ForeColor = System.Drawing.SystemColors.ActiveBorder;
             this.serverOnlineCountStaticLabel.Location = new System.Drawing.Point(31, 411);
             this.serverOnlineCountStaticLabel.Name = "serverOnlineCountStaticLabel";
-            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(93, 16);
+            this.serverOnlineCountStaticLabel.Size = new System.Drawing.Size(92, 16);
             this.serverOnlineCountStaticLabel.TabIndex = 120;
             this.serverOnlineCountStaticLabel.Text = "Sunucu Hatası";
             // 
@@ -460,7 +460,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Controls.Add(this.maxRamTextBox);
             this.settingsBgPanel.Controls.Add(this.maxRamDynamicCalculatorLabel);
             this.settingsBgPanel.Font = new System.Drawing.Font("Microsoft Sans Serif", 6.75F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.settingsBgPanel.Location = new System.Drawing.Point(0, 34);
+            this.settingsBgPanel.Location = new System.Drawing.Point(0, 35);
             this.settingsBgPanel.MaximumSize = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.MinimumSize = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.Name = "settingsBgPanel";
@@ -483,11 +483,11 @@ namespace Projects_Launcher.Projects_Launcher
             this.autoConnect.CheckState = System.Windows.Forms.CheckState.Checked;
             this.autoConnect.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
             this.autoConnect.ForeColor = System.Drawing.Color.Transparent;
-            this.autoConnect.Location = new System.Drawing.Point(795, 391);
+            this.autoConnect.Location = new System.Drawing.Point(749, 231);
             this.autoConnect.Name = "autoConnect";
-            this.autoConnect.Size = new System.Drawing.Size(154, 24);
+            this.autoConnect.Size = new System.Drawing.Size(219, 24);
             this.autoConnect.TabIndex = 1038;
-            this.autoConnect.Text = "Otomatik Bağlantı";
+            this.autoConnect.Text = "Projects\'e Otomatik Bağlan";
             this.autoConnect.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
             this.autoConnect.UncheckedState.BorderRadius = 0;
             this.autoConnect.UncheckedState.BorderThickness = 0;
@@ -599,7 +599,7 @@ namespace Projects_Launcher.Projects_Launcher
             "Otomatik",
             "Açık Tema",
             "Koyu Tema"});
-            this.temaSelectBox.Location = new System.Drawing.Point(486, 228);
+            this.temaSelectBox.Location = new System.Drawing.Point(484, 201);
             this.temaSelectBox.Name = "temaSelectBox";
             this.temaSelectBox.Size = new System.Drawing.Size(142, 36);
             this.temaSelectBox.TabIndex = 1028;
@@ -609,7 +609,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.guna2PictureBox2.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox2.Image")));
             this.guna2PictureBox2.ImageRotate = 0F;
-            this.guna2PictureBox2.Location = new System.Drawing.Point(486, 182);
+            this.guna2PictureBox2.Location = new System.Drawing.Point(484, 155);
             this.guna2PictureBox2.Name = "guna2PictureBox2";
             this.guna2PictureBox2.Size = new System.Drawing.Size(142, 40);
             this.guna2PictureBox2.TabIndex = 1027;
@@ -687,7 +687,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.pictureBox1.BackgroundImage = ((System.Drawing.Image)(resources.GetObject("pictureBox1.BackgroundImage")));
             this.pictureBox1.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
-            this.pictureBox1.Location = new System.Drawing.Point(15, 12);
+            this.pictureBox1.Location = new System.Drawing.Point(12, 12);
             this.pictureBox1.Name = "pictureBox1";
             this.pictureBox1.Size = new System.Drawing.Size(144, 57);
             this.pictureBox1.TabIndex = 1017;
@@ -707,7 +707,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.guna2PictureBox4.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox4.Image")));
             this.guna2PictureBox4.ImageRotate = 0F;
-            this.guna2PictureBox4.Location = new System.Drawing.Point(198, 182);
+            this.guna2PictureBox4.Location = new System.Drawing.Point(198, 155);
             this.guna2PictureBox4.Name = "guna2PictureBox4";
             this.guna2PictureBox4.Size = new System.Drawing.Size(143, 40);
             this.guna2PictureBox4.TabIndex = 1015;
@@ -748,11 +748,11 @@ namespace Projects_Launcher.Projects_Launcher
             this.reopenLauncher.CheckState = System.Windows.Forms.CheckState.Checked;
             this.reopenLauncher.Font = new System.Drawing.Font("Microsoft Sans Serif", 12F);
             this.reopenLauncher.ForeColor = System.Drawing.Color.Transparent;
-            this.reopenLauncher.Location = new System.Drawing.Point(795, 421);
+            this.reopenLauncher.Location = new System.Drawing.Point(749, 201);
             this.reopenLauncher.Name = "reopenLauncher";
-            this.reopenLauncher.Size = new System.Drawing.Size(169, 24);
+            this.reopenLauncher.Size = new System.Drawing.Size(178, 24);
             this.reopenLauncher.TabIndex = 134;
-            this.reopenLauncher.Text = "Oyun Kapatılınca Aç";
+            this.reopenLauncher.Text = "Discord Durum Bilgisi";
             this.reopenLauncher.UncheckedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
             this.reopenLauncher.UncheckedState.BorderRadius = 0;
             this.reopenLauncher.UncheckedState.BorderThickness = 0;
@@ -889,10 +889,14 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionBox.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.versionBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(251)))), ((int)(((byte)(255)))), ((int)(((byte)(255)))));
             this.versionBox.ItemHeight = 30;
-
+            this.versionBox.Location = new System.Drawing.Point(198, 201);
+            this.versionBox.Name = "versionBox";
+            this.versionBox.Size = new System.Drawing.Size(143, 36);
+            this.versionBox.TabIndex = 169;
             string[] versionList = {
                 "projects-fabric-" + Properties.Settings.Default.latestRealFabric,
                 "projects-fabric-" + Properties.Settings.Default.latestFabric,
+                "1.19.3",
                 "1.19.2 ✔",
                 "1.19.1",
                 "1.19",
@@ -909,12 +913,7 @@ namespace Projects_Launcher.Projects_Launcher
                 "1.8.9",
                 "1.7.10"
             };
-
             this.versionBox.Items.AddRange(versionList);
-            this.versionBox.Location = new System.Drawing.Point(198, 228);
-            this.versionBox.Name = "versionBox";
-            this.versionBox.Size = new System.Drawing.Size(143, 36);
-            this.versionBox.TabIndex = 169;
             this.versionBox.SelectedIndexChanged += new System.EventHandler(this.surumsec_SelectedIndexChanged);
             // 
             // widthtextbox

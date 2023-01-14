@@ -368,9 +368,12 @@ namespace Projects_Launcher.Projects_Launcher
                     if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                            "/.projects/versions/" + Properties.Settings.Default.SelectedVersion.ToString()))
                     {
-                        MessageBox.Show("Kullandığınız oyun sürümü \"" + Properties.Settings.Default.SelectedVersion + " yüklü değil!\n\nLütfen ayarlardan başka bir oyun sürümü seçin.");
-                        thisTrue();
-                        return;
+                        if (versionBox.SelectedIndex == -1)
+                        {
+                            MessageBox.Show("Kullandığınız oyun sürümü \"" + Properties.Settings.Default.SelectedVersion + "\" yüklü değil!\n\nLütfen ayarlardan başka bir oyun sürümü seçin.");
+                            thisTrue();
+                            return;
+                        }
                     }
 
                     Thread thread = new Thread(() => Launch().GetAwaiter());
@@ -481,6 +484,7 @@ namespace Projects_Launcher.Projects_Launcher
                         }
 
                         Thread.Sleep(1000);
+
                         prepareGameToLaunch.Stop();
                         return;
                     }
@@ -489,17 +493,15 @@ namespace Projects_Launcher.Projects_Launcher
                 {
                     foreach (var process in Process.GetProcessesByName("javaw"))
                     {
-                        Thread.Sleep(1000);
-                        animatedPlayingLabel().GetAwaiter();
-                        playButtonStaticLabel.Enabled = false;
-                        this.Visible = false;
-                        if (alreadyPlayingAnimatedLabel)
+                        Thread.Sleep(1031);
+                        Process mcjava = Process.Start("javaw.exe");
+                        mcjava.Refresh();
+                        while (true)
                         {
-                            alreadyPlayingAnimatedLabel = false;
+                            Thread.Sleep(15000);
+                            if (mcjava.StartTime.Second < 5) continue;
+                            Environment.Exit(1);
                         }
-
-                        timer3.Stop();
-                        Environment.Exit(0);
                     }
                 }
             }
@@ -878,10 +880,10 @@ namespace Projects_Launcher.Projects_Launcher
 
             alreadyRelaunchWaiting = true;
 
-            do
+            while (Process.GetProcessesByName("javaw").Any())
             {
                 Task.Delay(5000);
-            } while (Process.GetProcessesByName("javaw").Any());
+            }
 
             if (Properties.Settings.Default.SelectedVersion != string.Empty)
             {
