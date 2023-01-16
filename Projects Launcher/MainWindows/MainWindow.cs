@@ -263,16 +263,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             sessions = Properties.Settings.Default.NickNames;
 
-            string serverIP;
-
-            if (Properties.Settings.Default.autoConnect)
-            {
-                serverIP = "play.projects.gg";
-            }
-            else
-            {
-                serverIP = "";
-            }
+            string serverIP = Properties.Settings.Default.autoConnect ? "play.projects.gg" : "";
 
             var ayarlar = new MLaunchOption
             {
@@ -289,7 +280,7 @@ namespace Projects_Launcher.Projects_Launcher
                 // Maximize download speed
                 System.Net.ServicePointManager.DefaultConnectionLimit = 256;
 
-                // Added to avoid SSL/TLS bridge error on Windows 7/XP
+                // Avoid SSL/TLS bridge error on Windows 7/XP
                 ServicePointManager.Expect100Continue = true;
                 ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
@@ -299,7 +290,7 @@ namespace Projects_Launcher.Projects_Launcher
 
                 clientStartProcess.Start(); // Launch the game
 
-                prepareGameToLaunch.Enabled = true; // Launch prepareGameToLaunch
+                //prepareGameToLaunch.Enabled = true; // Launch prepareGameToLaunch
             }
             catch (Exception ex)
             {
@@ -370,9 +361,7 @@ namespace Projects_Launcher.Projects_Launcher
                     {
                         if (versionBox.SelectedIndex == -1)
                         {
-                            MessageBox.Show("Kullandığınız oyun sürümü \"" + Properties.Settings.Default.SelectedVersion + "\" yüklü değil!\n\nLütfen ayarlardan başka bir oyun sürümü seçin.");
-                            thisTrue();
-                            return;
+                            MessageBox.Show("Kullandığınız oyun sürümü \"" + Properties.Settings.Default.SelectedVersion + "\" yüklü değil!\n\nİlk defa yükleneceği için bu işlem\nbirkaç dakika sürebilir. Lütfen başlatıcıyı\nbu süreç içerisinde kapatmayınız.");
                         }
                     }
 
@@ -496,6 +485,13 @@ namespace Projects_Launcher.Projects_Launcher
                         Thread.Sleep(1031);
                         Process mcjava = Process.Start("javaw.exe");
                         mcjava.Refresh();
+                        this.Visible = false;
+                        animatedPlayingLabel().GetAwaiter();
+                        playButtonStaticLabel.Enabled = false;
+                        if (alreadyPlayingAnimatedLabel)
+                        {
+                            alreadyPlayingAnimatedLabel = false;
+                        }
                         while (true)
                         {
                             Thread.Sleep(15000);
@@ -880,10 +876,10 @@ namespace Projects_Launcher.Projects_Launcher
 
             alreadyRelaunchWaiting = true;
 
-            while (Process.GetProcessesByName("javaw").Any())
+            do
             {
                 Task.Delay(5000);
-            }
+            } while (Process.GetProcessesByName("javaw").Any());
 
             if (Properties.Settings.Default.SelectedVersion != string.Empty)
             {

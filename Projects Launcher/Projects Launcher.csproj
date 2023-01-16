@@ -35,8 +35,8 @@
     <CreateWebPageOnPublish>true</CreateWebPageOnPublish>
     <WebPage>publish.htm</WebPage>
     <OpenBrowserOnPublish>false</OpenBrowserOnPublish>
-    <ApplicationRevision>42</ApplicationRevision>
-    <ApplicationVersion>0.1.6.42</ApplicationVersion>
+    <ApplicationRevision>44</ApplicationRevision>
+    <ApplicationVersion>0.1.6.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>
     <PublishWizardCompleted>true</PublishWizardCompleted>
