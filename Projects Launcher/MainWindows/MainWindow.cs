@@ -1,6 +1,7 @@
 ﻿using CmlLib.Core;
 using CmlLib.Core.Auth;
 using DiscordRPC;
+using DiscordRPC.Helper;
 using Microsoft.Win32;
 using MineStatLib;
 using Newtonsoft.Json;
@@ -598,16 +599,6 @@ namespace Projects_Launcher.Projects_Launcher
             GC.WaitForPendingFinalizers();
         }
 
-        public class debug
-        {
-            public string ping { get; set; }
-        }
-
-        public class Xml
-        {
-            public debug debug { get; set; }
-        }
-
         private void ramlabel_Click(object sender, EventArgs e)
         {
             maxramlabell = maxramlabel.Text;
@@ -1089,9 +1080,7 @@ namespace Projects_Launcher.Projects_Launcher
                     jsonverisi = r.ReadToEnd();
                 }
 
-                Xml xml = JsonConvert.DeserializeObject<Xml>(jsonverisi);
-
-                if (xml.debug.ping == "false")
+                if (jsonverisi == "{\"online\":false}")
                 {
                     lobiOnline.Image = Properties.Resources.De_Aktif;
                 }
@@ -1110,7 +1099,7 @@ namespace Projects_Launcher.Projects_Launcher
                     jsonverisi2 += r.ReadToEnd();
                 }
 
-                if (xml.debug.ping == "false")
+                if (jsonverisi2 == "{\"online\":false}")
                 {
                     gaiaOnline.Image = Properties.Resources.De_Aktif;
                 }
