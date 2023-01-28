@@ -326,90 +326,91 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
 
-            Uri fabric =
-                new Uri(
-                    "https://mc.projects.gg/LauncherUpdateStream/projects-fabric-" + latestFabricVersion + ".zip"); // Fabric installer address
-
-            if (Directory.Exists(@surum_appDataDizini)) //Check fabric is exist
+            if (Properties.Settings.Default.SelectedVersion.Contains("projects-fabric-"))
             {
-                try //If fabric exists
-                {
-                    Client.Dispose();
-                    Client = new DiscordRpcClient("949311557542756362");
-                    Client.Initialize();
+                if (!Directory.Exists(@surum_appDataDizini))
+                { //Check fabric is not exist
+                    DialogResult secenek = MessageBox.Show("Fabric sürümü yüklü değil. Ayarlardan sürümü değiştirebilirsiniz\nya da indirme başlatabilirsiniz. Eğer indirmek istiyorsanız\nonaylayınız.", "Eksik Dosya", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
 
-                    Client.SetPresence(new RichPresence
+                    if (secenek == DialogResult.Yes)
                     {
-                        Details = "Şu an oyunda!",
-                        State = "Sunucu IP: mc.projects.gg",
-                        Timestamps = new Timestamps
-                        {
-                            Start = DateTime.UtcNow
-                        },
-                        Assets = new Assets
-                        {
-                            LargeImageKey = "projects_logo",
-                            LargeImageText = "https://mc.projects.gg/",
-                            SmallImageKey = "world",
-                        }
-                    });
-
-                    session = MSession.GetOfflineSession(Properties.Settings.Default.NickNames); // Get nickname info
-
-                    thisFalse();
-                    if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                           "/.projects/versions/" + Properties.Settings.Default.SelectedVersion.ToString()))
+                        WebClient wc = new WebClient();
+                        wc.DownloadFileCompleted +=
+                            Wc_DownloadFileCompleted; // Call the codes when download process complete
+                        wc.DownloadProgressChanged += Wc_DownloadProgressChanged;
+                        Uri fabric = new Uri("https://mc.projects.gg/LauncherUpdateStream/projects-fabric-" + latestFabricVersion + ".zip"); // Fabric installer address
+                        wc.DownloadFileAsync(fabric,
+                            appDataDizini +
+                            "/.projects/projects-fabric-" + latestFabricVersion + ".zip"); // Download fabric to directory '.projects'
+                        playButtonStaticLabel.Enabled = false;
+                        settingsStaticPictureBox.Enabled = false;
+                        versionInfoStaticLabel.Text = "İndiriliyor...";
+                        downloadCompleteLabel.Visible = true;
+                        downloadCompleteBar.Visible = true;
+                        playSplitStaticLabel.Visible = true;
+                        return;
+                    } else
                     {
-                        if (versionBox.SelectedIndex == -1)
-                        {
-                            MessageBox.Show("Kullandığınız oyun sürümü \"" + Properties.Settings.Default.SelectedVersion + "\" yüklü değil!\n\nİlk defa yükleneceği için bu işlem\nbirkaç dakika sürebilir. Lütfen başlatıcıyı\nbu süreç içerisinde kapatmayınız.");
-                        }
+                        Properties.Settings.Default.SelectedVersion = "1.19.3";
+                        versionBox.SelectedIndex = 2;
+                        versionInfoStaticLabel.Text = "1.19.3";
+                        MessageBox.Show("Oyun sürümünüz 1.19.3 olarak ayarlandı.\n\nFabric ile girmek isterseniz ayarlardan\nsürümü seçip oyunu başlatabilirsiniz.", "Sürüm Değiştirildi");
                     }
-
-                    Thread thread = new Thread(() => Launch().GetAwaiter());
-                    thread.IsBackground = true;
-                    thread.Start(); // Launch the game
-                    animatedPlayingLabel().GetAwaiter();
-                    prepareGameToLaunch.Start(); // Launch prepareGameToLaunch
-                }
-                catch (Exception ex) //If fabric not exist
-                {
-                    DiscordRpcClientSetup();
-
-                    prepareGameToLaunch.Stop(); // Stop prepareGameToLaunch
-                    NotificationAboutException(ex, "Luanch prepareGameToLaunch");
-
-                    thisTrue(); // Open components of the launcher
-
-                    versionInfoStaticLabel.Text =
-                        Properties.Settings.Default
-                            .SelectedVersion; //Write version info into versionInfoStaticLabel
-
-                    thisTrue();
                 }
             }
-            else
+
+            try
             {
-                DialogResult secenek = MessageBox.Show("Projects Fabric bulunamadı! İndirmek ister misiniz?",
-                    "Projects Fabric Dosyası Eksik", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
+                Client.Dispose();
+                Client = new DiscordRpcClient("949311557542756362");
+                Client.Initialize();
 
-                if (secenek == DialogResult.Yes)
+                Client.SetPresence(new RichPresence
                 {
-                    WebClient wc = new WebClient();
-                    wc.DownloadFileCompleted +=
-                        Wc_DownloadFileCompleted; // Call the codes when download process complete
-                    wc.DownloadProgressChanged += Wc_DownloadProgressChanged;
-                    wc.DownloadFileAsync(fabric,
-                        appDataDizini +
-                        "/.projects/projects-fabric-" + latestFabricVersion + ".zip"); // Download fabric to directory '.projects'
+                    Details = "Şu an oyunda!",
+                    State = "Sunucu IP: mc.projects.gg",
+                    Timestamps = new Timestamps
+                    {
+                        Start = DateTime.UtcNow
+                    },
+                    Assets = new Assets
+                    {
+                        LargeImageKey = "projects_logo",
+                        LargeImageText = "https://mc.projects.gg/",
+                        SmallImageKey = "world",
+                    }
+                });
 
-                    playButtonStaticLabel.Enabled = false;
-                    settingsStaticPictureBox.Enabled = false;
-                    versionInfoStaticLabel.Text = "İndiriliyor...";
-                    downloadCompleteLabel.Visible = true;
-                    downloadCompleteBar.Visible = true;
-                    playSplitStaticLabel.Visible = true;
+                session = MSession.GetOfflineSession(Properties.Settings.Default.NickNames); // Get nickname info
+
+                thisFalse();
+                if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                "/.projects/versions/" + Properties.Settings.Default.SelectedVersion.ToString()))
+                {
+                    if (versionBox.SelectedIndex == -1)
+                    {
+                        MessageBox.Show("Kullandığınız oyun sürümü \"" + Properties.Settings.Default.SelectedVersion + "\" yüklü değil!\n\nİlk defa yükleneceği için bu işlem\nbirkaç dakika sürebilir. Lütfen başlatıcıyı\nbu süreç içerisinde kapatmayınız.");
+                    }
                 }
+
+                Thread thread = new Thread(() => Launch().GetAwaiter());
+                thread.IsBackground = true;
+                thread.Start(); // Launch the game
+                animatedPlayingLabel().GetAwaiter();
+                prepareGameToLaunch.Start(); // Launch prepareGameToLaunch
+            }
+            catch (Exception ex)
+            {
+                DiscordRpcClientSetup();
+
+                prepareGameToLaunch.Stop(); // Stop prepareGameToLaunch
+                NotificationAboutException(ex, "Luanch prepareGameToLaunch");
+
+                thisTrue(); // Open components of the launcher
+
+                versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion; //Write version info into versionInfoStaticLabel
+
+                thisTrue();
             }
 
             GC.WaitForPendingFinalizers();
