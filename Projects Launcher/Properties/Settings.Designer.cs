@@ -130,7 +130,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.1.32")]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.1.33")]
         public string currentVersion {
             get {
                 return ((string)(this["currentVersion"]));
@@ -217,6 +217,30 @@ namespace Projects_Launcher.Properties {
             }
             set {
                 this["latestRealFabric"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("Manuel")]
+        public string curModVer {
+            get {
+                return ((string)(this["curModVer"]));
+            }
+            set {
+                this["curModVer"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("v1")]
+        public string lastModVer {
+            get {
+                return ((string)(this["lastModVer"]));
+            }
+            set {
+                this["lastModVer"] = value;
             }
         }
     }

@@ -58,6 +58,9 @@ dlldata.c
 # Benchmark Results
 BenchmarkDotNet.Artifacts/
 
+# Certificates
+Projects-Launcher.pfx
+
 # .NET Core
 project.lock.json
 project.fragment.lock.json

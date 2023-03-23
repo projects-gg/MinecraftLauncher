@@ -30,7 +30,7 @@
       <Value Profile="(Default)">play.projects.gg</Value>
     </Setting>
     <Setting Name="currentVersion" Type="System.String" Scope="Application">
-      <Value Profile="(Default)">0.1.32</Value>
+      <Value Profile="(Default)">0.1.33</Value>
     </Setting>
     <Setting Name="backgroundLite" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
@@ -52,6 +52,12 @@
     </Setting>
     <Setting Name="latestRealFabric" Type="System.String" Scope="User">
       <Value Profile="(Default)">v3</Value>
+    </Setting>
+    <Setting Name="curModVer" Type="System.String" Scope="User">
+      <Value Profile="(Default)">Manuel</Value>
+    </Setting>
+    <Setting Name="lastModVer" Type="System.String" Scope="User">
+      <Value Profile="(Default)">v1</Value>
     </Setting>
   </Settings>
 </SettingsFile>

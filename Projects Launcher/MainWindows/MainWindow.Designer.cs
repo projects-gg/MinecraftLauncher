@@ -64,6 +64,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.discordStaticPictureBox = new Guna.UI2.WinForms.Guna2ImageButton();
             this.downloadCompleteBar = new Guna.UI2.WinForms.Guna2ProgressBar();
             this.settingsBgPanel = new Guna.UI2.WinForms.Guna2Panel();
+            this.modSelectionImageBox = new Guna.UI2.WinForms.Guna2PictureBox();
             this.autoConnect = new Guna.UI2.WinForms.Guna2CheckBox();
             this.ramInfoLabel = new System.Windows.Forms.Label();
             this.guna2PictureBox9 = new Guna.UI2.WinForms.Guna2PictureBox();
@@ -99,8 +100,10 @@ namespace Projects_Launcher.Projects_Launcher
             this.maxRamTextBox = new Guna.UI2.WinForms.Guna2TextBox();
             this.maxRamDynamicCalculatorLabel = new System.Windows.Forms.Label();
             this.directorySearcher1 = new System.DirectoryServices.DirectorySearcher();
+            this.modVersionBox = new Guna.UI2.WinForms.Guna2ComboBox();
             ((System.ComponentModel.ISupportInitialize)(this.skinRenderPictureBox)).BeginInit();
             this.settingsBgPanel.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.modSelectionImageBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox9)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.gaiaOnline)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.lobiOnline)).BeginInit();
@@ -140,7 +143,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionInfoStaticLabel.Name = "versionInfoStaticLabel";
             this.versionInfoStaticLabel.Size = new System.Drawing.Size(128, 18);
             this.versionInfoStaticLabel.TabIndex = 3;
-            this.versionInfoStaticLabel.Text = "projects-fabric-v2";
             // 
             // playerNameStaticLabel
             // 
@@ -425,6 +427,8 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.settingsBgPanel.BackColor = System.Drawing.Color.Transparent;
             this.settingsBgPanel.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Stretch;
+            this.settingsBgPanel.Controls.Add(this.modVersionBox);
+            this.settingsBgPanel.Controls.Add(this.modSelectionImageBox);
             this.settingsBgPanel.Controls.Add(this.autoConnect);
             this.settingsBgPanel.Controls.Add(this.ramInfoLabel);
             this.settingsBgPanel.Controls.Add(this.guna2PictureBox9);
@@ -467,6 +471,16 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Size = new System.Drawing.Size(980, 470);
             this.settingsBgPanel.TabIndex = 209;
             this.settingsBgPanel.Visible = false;
+            // 
+            // modSelectionImageBox
+            // 
+            this.modSelectionImageBox.Image = ((System.Drawing.Image)(resources.GetObject("modSelectionImageBox.Image")));
+            this.modSelectionImageBox.ImageRotate = 0F;
+            this.modSelectionImageBox.Location = new System.Drawing.Point(198, 243);
+            this.modSelectionImageBox.Name = "modSelectionImageBox";
+            this.modSelectionImageBox.Size = new System.Drawing.Size(143, 40);
+            this.modSelectionImageBox.TabIndex = 1039;
+            this.modSelectionImageBox.TabStop = false;
             // 
             // autoConnect
             // 
@@ -896,10 +910,9 @@ namespace Projects_Launcher.Projects_Launcher
             string[] versionList = {
                 "projects-fabric-" + Properties.Settings.Default.latestRealFabric,
                 "projects-fabric-" + Properties.Settings.Default.latestFabric,
-                "1.19.3",
-                "1.19.2 ✔",
-                "1.19.1",
-                "1.19",
+                "1.19.4",
+                "1.19.3 ✔",
+                "1.19.2",
                 "1.18.2",
                 "1.17.1",
                 "1.16.5",
@@ -1017,6 +1030,29 @@ namespace Projects_Launcher.Projects_Launcher
             this.directorySearcher1.ServerPageTimeLimit = System.TimeSpan.Parse("-00:00:01");
             this.directorySearcher1.ServerTimeLimit = System.TimeSpan.Parse("-00:00:01");
             // 
+            // modVersionBox
+            // 
+            this.modVersionBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(139)))), ((int)(((byte)(12)))));
+            this.modVersionBox.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(39)))), ((int)(((byte)(40)))), ((int)(((byte)(55)))));
+            this.modVersionBox.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
+            this.modVersionBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.modVersionBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(49)))), ((int)(((byte)(57)))), ((int)(((byte)(72)))));
+            this.modVersionBox.FocusedColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.modVersionBox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.modVersionBox.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.modVersionBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(251)))), ((int)(((byte)(255)))), ((int)(((byte)(255)))));
+            this.modVersionBox.ItemHeight = 36;
+            this.modVersionBox.Location = new System.Drawing.Point(198, 289);
+            this.modVersionBox.Name = "modVersionBox";
+            this.modVersionBox.Size = new System.Drawing.Size(143, 36);
+            this.modVersionBox.TabIndex = 1040;
+            string[] modVersionList = {
+                "projects-mcmod-" + Properties.Settings.Default.lastModVer,
+                "Manuel"
+            };
+            this.modVersionBox.Items.AddRange(modVersionList);
+            this.modVersionBox.SelectedIndexChanged += new System.EventHandler(this.modPickVersion_SelectedIndexChanged);
+            // 
             // mainMenuForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 13F);
@@ -1060,6 +1096,7 @@ namespace Projects_Launcher.Projects_Launcher
             ((System.ComponentModel.ISupportInitialize)(this.skinRenderPictureBox)).EndInit();
             this.settingsBgPanel.ResumeLayout(false);
             this.settingsBgPanel.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.modSelectionImageBox)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox9)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.gaiaOnline)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.lobiOnline)).EndInit();
@@ -1139,5 +1176,7 @@ namespace Projects_Launcher.Projects_Launcher
         private System.Windows.Forms.Label ramInfoLabel;
         private System.DirectoryServices.DirectorySearcher directorySearcher1;
         private Guna.UI2.WinForms.Guna2CheckBox autoConnect;
+        private Guna.UI2.WinForms.Guna2PictureBox modSelectionImageBox;
+        public Guna.UI2.WinForms.Guna2ComboBox modVersionBox;
     }
 }

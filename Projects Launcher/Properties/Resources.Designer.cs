@@ -173,6 +173,16 @@ namespace Projects_Launcher.Properties {
         /// <summary>
         ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
         /// </summary>
+        public static System.Drawing.Bitmap modPaketi {
+            get {
+                object obj = ResourceManager.GetObject("modPaketi", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   System.Drawing.Bitmap türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
         public static System.Drawing.Bitmap Mods_Klasörü {
             get {
                 object obj = ResourceManager.GetObject("Mods Klasörü", resourceCulture);

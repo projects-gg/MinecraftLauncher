@@ -33,9 +33,14 @@ namespace Projects_Launcher.Projects_Launcher
         private string maxrambox;
         private string widthbox;
         private string heightbox;
-        
+
         public string latestFabricVersion =
             readPhpContent("https://mc.projects.gg/LauncherUpdateStream/version-fabric.php");
+
+        public string latestModVersion =
+            readPhpContent("https://mc.projects.gg/LauncherUpdateStream/version-mcmod.php");
+
+        string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
         private string maxramlabell;
         private string minramlabell;
@@ -201,6 +206,8 @@ namespace Projects_Launcher.Projects_Launcher
                 versionBox.Text = Properties.Settings.Default.SelectedVersion;
             }
 
+            modVersionBox.Text = Properties.Settings.Default.curModVer;
+
             if (Properties.Settings.Default.RamMax != string.Empty)
             {
                 maxRamTextBox.Text = Properties.Settings.Default.RamMax;
@@ -262,6 +269,8 @@ namespace Projects_Launcher.Projects_Launcher
             var path = new MinecraftPath(launcherdizin);
             var launcher = new CMLauncher(path);
 
+            launcher.ProgressChanged += launcher_DownloadProgressChanged;
+
             sessions = Properties.Settings.Default.NickNames;
 
             string serverIP = Properties.Settings.Default.autoConnect ? "play.projects.gg" : "";
@@ -304,8 +313,6 @@ namespace Projects_Launcher.Projects_Launcher
         {
             string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                                          "/.projects/versions/projects-fabric-" + latestFabricVersion; // Fabric directory
-            string appDataDizini =
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData); // AppData directory
 
             int MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin);
             int MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax);
@@ -390,6 +397,19 @@ namespace Projects_Launcher.Projects_Launcher
                     if (versionBox.SelectedIndex == -1)
                     {
                         MessageBox.Show("Kullandığınız oyun sürümü \"" + Properties.Settings.Default.SelectedVersion + "\" yüklü değil!\n\nİlk defa yükleneceği için bu işlem\nbirkaç dakika sürebilir. Lütfen başlatıcıyı\nbu süreç içerisinde kapatmayınız.");
+                        downloadCompleteBar.Visible = true;
+
+                    }
+                }
+
+                if (!Properties.Settings.Default.curModVer.Equals("Manuel") && !Properties.Settings.Default.curModVer.Equals(latestModVersion))
+                {
+                    DialogResult askForModPackage = MessageBox.Show("Mod paketi güncel değil. Mod paketimizi kurarak mini harita, gece görüşü (H tuşu) gibi önemli özellikler elde edebilirsiniz. Reddetseniz bile daha sonra istemeniz durumunda ayarlar kısmından mod sürümü seçip mod paketi kurabilirsiniz.\n\nYüklemek istiyor musunuz?", "Mod Paketi", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
+
+                    if (askForModPackage == DialogResult.Yes)
+                    {
+                        updateModPackage();
+                        return;
                     }
                 }
 
@@ -404,7 +424,7 @@ namespace Projects_Launcher.Projects_Launcher
                 DiscordRpcClientSetup();
 
                 prepareGameToLaunch.Stop(); // Stop prepareGameToLaunch
-                NotificationAboutException(ex, "Luanch prepareGameToLaunch");
+                NotificationAboutException(ex, "Launch prepareGameToLaunch");
 
                 thisTrue(); // Open components of the launcher
 
@@ -416,6 +436,42 @@ namespace Projects_Launcher.Projects_Launcher
             GC.WaitForPendingFinalizers();
         }
 
+        private void updateModPackage()
+        {
+            WebClient wc2 = new WebClient();
+
+            if (Directory.Exists(appDataDizini + "/.projects/mods"))
+            {
+                Directory.Delete(appDataDizini + "/.projects/mods", true);
+            }
+
+            wc2.DownloadFileCompleted +=
+                Wc2_DownloadFileCompleted; // Call the codes when download process complete
+
+            wc2.DownloadProgressChanged += Wc_DownloadProgressChanged;
+
+            Uri modVersion = new Uri("https://mc.projects.gg/LauncherUpdateStream/projects-mcmod-" + latestModVersion + ".zip"); // Mod installer address
+
+            Properties.Settings.Default.curModVer = latestModVersion;
+            Properties.Settings.Default.Save();
+
+            playButtonStaticLabel.Enabled = false;
+            settingsStaticPictureBox.Enabled = false;
+            versionInfoStaticLabel.Text = "Mod paketi kuruluyor...";
+            downloadCompleteLabel.Visible = true;
+            downloadCompleteBar.Visible = true;
+            playSplitStaticLabel.Visible = true;
+
+            wc2.DownloadFileAsync(modVersion,
+                appDataDizini +
+                "/.projects/projects-mcmod-" + latestModVersion + ".zip"); // Download fabric to directory '.projects
+        }
+
+        private void launcher_DownloadProgressChanged(object sender, ProgressChangedEventArgs e)
+        {
+            downloadCompleteBar.Value = e.ProgressPercentage;
+        }
+
         private void Wc_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
         {
             downloadCompleteLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(e.BytesReceived) / 1024 / 1024) +
@@ -424,6 +480,34 @@ namespace Projects_Launcher.Projects_Launcher
                                              Convert.ToDouble(e.TotalBytesToReceive) / 1024 / 1024) + "MB";
 
             downloadCompleteBar.Value = e.ProgressPercentage;
+        }
+
+        private void Wc2_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
+        {
+            try
+            {
+                string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                 "/.projects/projects-mcmod-" + latestModVersion + ".zip";
+                string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                                     "/.projects/mods/";
+
+                System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath);
+                Thread.Sleep(1100);
+                Properties.Settings.Default.curModVer = latestModVersion;
+                Properties.Settings.Default.Save();
+                playButtonStaticLabel.Enabled = true;
+                settingsStaticPictureBox.Enabled = true;
+                downloadCompleteLabel.Visible = false;
+                downloadCompleteBar.Visible = false;
+                playSplitStaticLabel.Visible = false;
+                versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
+            }
+            catch (Exception ex)
+            {
+                NotificationAboutException(ex, "DownloadFileCompleted (mod download process)");
+            }
+
+            GC.WaitForPendingFinalizers();
         }
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
@@ -448,6 +532,17 @@ namespace Projects_Launcher.Projects_Launcher
             catch (Exception ex)
             {
                 NotificationAboutException(ex, "DownloadFileCompleted (fabric download process)");
+            }
+
+            if (!Properties.Settings.Default.curModVer.Equals("Manuel")) {
+                if (!Properties.Settings.Default.curModVer.Equals(latestModVersion) || !Directory.Exists(appDataDizini + "/.projects/mods")) {
+                    DialogResult askForModPackage = MessageBox.Show("Mod paketi güncel değil. Mod paketimizi kurarak mini harita, gece görüşü (H tuşu) gibi önemli özellikler elde edebilirsiniz. Reddetseniz bile daha sonra istemeniz durumunda ayarlar kısmından mod sürümü seçip mod paketi kurabilirsiniz.\n\nYüklemek istiyor musunuz?", "Mod Paketi", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
+
+                    if (askForModPackage == DialogResult.Yes) {
+                        updateModPackage();
+                        return;
+                    }
+                }
             }
 
             GC.WaitForPendingFinalizers();
@@ -695,6 +790,31 @@ namespace Projects_Launcher.Projects_Launcher
             versionInfoStaticLabel.Text = versionBox.Text;
         }
 
+        private void modPickVersion_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            string testString = modVersionBox.Text, resultString = "";
+
+            if (testString.IndexOf("") == -1)
+            {
+                resultString = testString;
+            }
+            else
+            {
+                foreach (char versionTextChars in testString)
+                {
+                    if (versionTextChars.Equals(' '))
+                    {
+                        break;
+                    }
+
+                    resultString += versionTextChars;
+                }
+            }
+
+            Properties.Settings.Default.curModVer = resultString;
+            Properties.Settings.Default.Save();
+        }
+
         private void discord_Click(object sender, EventArgs e)
         {
             try
@@ -749,9 +869,6 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void modsLabel_Click(object sender, EventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                                   "/.projects/mods";
-
             if (Directory.Exists(@appDataDizini))
             {
                 string myPath = @appDataDizini;
