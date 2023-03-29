@@ -49,7 +49,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("532")]
+        [global::System.Configuration.DefaultSettingValueAttribute("960")]
         public string ResolutionHeight {
             get {
                 return ((string)(this["ResolutionHeight"]));
@@ -61,7 +61,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("926")]
+        [global::System.Configuration.DefaultSettingValueAttribute("540")]
         public string ResolutionWidth {
             get {
                 return ((string)(this["ResolutionWidth"]));
@@ -73,7 +73,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("1.19.3")]
+        [global::System.Configuration.DefaultSettingValueAttribute("projects-fabric-v3")]
         public string SelectedVersion {
             get {
                 return ((string)(this["SelectedVersion"]));
@@ -110,12 +110,12 @@ namespace Projects_Launcher.Properties {
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
         [global::System.Configuration.DefaultSettingValueAttribute("True")]
-        public bool OyunTickS {
+        public bool reopenLauncher {
             get {
-                return ((bool)(this["OyunTickS"]));
+                return ((bool)(this["reopenLauncher"]));
             }
             set {
-                this["OyunTickS"] = value;
+                this["reopenLauncher"] = value;
             }
         }
         
@@ -130,7 +130,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.1.33")]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.1.34")]
         public string currentVersion {
             get {
                 return ((string)(this["currentVersion"]));
@@ -241,6 +241,18 @@ namespace Projects_Launcher.Properties {
             }
             set {
                 this["lastModVer"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("v0")]
+        public string modDontAsk {
+            get {
+                return ((string)(this["modDontAsk"]));
+            }
+            set {
+                this["modDontAsk"] = value;
             }
         }
     }

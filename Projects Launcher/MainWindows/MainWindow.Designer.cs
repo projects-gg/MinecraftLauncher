@@ -772,7 +772,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.reopenLauncher.UncheckedState.BorderThickness = 0;
             this.reopenLauncher.UncheckedState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(125)))), ((int)(((byte)(137)))), ((int)(((byte)(149)))));
             this.reopenLauncher.UseVisualStyleBackColor = false;
-            this.reopenLauncher.CheckedChanged += new System.EventHandler(this.reopenLauncherCheckBox_MouseEnter);
+            this.reopenLauncher.CheckedChanged += new System.EventHandler(this.reopenLauncherCheckBox_CheckedChanged);
+            this.reopenLauncher.MouseHover += new System.EventHandler(this.reopenLauncherCheckBox_MouseEnter);
             // 
             // label18
             // 

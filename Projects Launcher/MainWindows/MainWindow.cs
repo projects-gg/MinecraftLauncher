@@ -196,7 +196,9 @@ namespace Projects_Launcher.Projects_Launcher
 
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames;
 
-            reopenLauncher.Checked = Properties.Settings.Default.OyunTickS;
+            autoConnect.Checked = Properties.Settings.Default.autoConnect;
+
+            reopenLauncher.Checked = Properties.Settings.Default.reopenLauncher;
 
             temaSelectBox.Text = Properties.Settings.Default.themeSelected;
 
@@ -410,6 +412,14 @@ namespace Projects_Launcher.Projects_Launcher
                     {
                         updateModPackage();
                         return;
+                    } else if (Properties.Settings.Default.modDontAsk != latestModVersion)
+                    {
+                        DialogResult askToDontAsk = MessageBox.Show("Bir sonraki sürüme kadar mod güncelleme bildirimlerini kapatmak ister misiniz?", "Güncelleme Bildirimleri", MessageBoxButtons.YesNo);
+
+                        if (askToDontAsk == DialogResult.Yes)
+                        {
+                            Properties.Settings.Default.modDontAsk = latestModVersion;
+                        }
                     }
                 }
 
@@ -1308,6 +1318,13 @@ namespace Projects_Launcher.Projects_Launcher
         private void autoConnect_CheckedChanged(object sender, EventArgs e)
         {
             Properties.Settings.Default.autoConnect = autoConnect.Checked;
+            Properties.Settings.Default.Save();
+        }
+
+        private void reopenLauncherCheckBox_CheckedChanged(object sender, EventArgs e)
+        {
+            Properties.Settings.Default.reopenLauncher = reopenLauncher.Checked;
+            Properties.Settings.Default.Save();
         }
     }
 }
