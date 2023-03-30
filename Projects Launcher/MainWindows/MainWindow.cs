@@ -339,7 +339,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 if (!Directory.Exists(@surum_appDataDizini))
                 { //Check fabric is not exist
-                    DialogResult secenek = MessageBox.Show("Fabric sürümü yüklü değil. Ayarlardan sürümü değiştirebilirsiniz\nya da indirme başlatabilirsiniz. Eğer indirmek istiyorsanız\nonaylayınız.", "Eksik Dosya", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
+                    DialogResult secenek = MessageBox.Show("Yeni fabric sürümü yüklü değil. Ayarlardan sürümü değiştirebilirsiniz\nya da indirme başlatabilirsiniz. Eğer indirmek istiyorsanız\nonaylayınız.", "Eksik Dosya", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
 
                     if (secenek == DialogResult.Yes)
                     {
@@ -406,7 +406,7 @@ namespace Projects_Launcher.Projects_Launcher
 
                 if (!Properties.Settings.Default.curModVer.Equals("Manuel") && !Properties.Settings.Default.curModVer.Equals(latestModVersion))
                 {
-                    DialogResult askForModPackage = MessageBox.Show("Mod paketi güncel değil. Mod paketimizi kurarak mini harita, gece görüşü (H tuşu) gibi önemli özellikler elde edebilirsiniz. Reddetseniz bile daha sonra istemeniz durumunda ayarlar kısmından mod sürümü seçip mod paketi kurabilirsiniz.\n\nYüklemek istiyor musunuz?", "Mod Paketi", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
+                    DialogResult askForModPackage = MessageBox.Show("Mod paketi güncel değil. Mod paketimizi kurarak mini harita, gece görüşü (H tuşu) gibi önemli özellikler elde edebilirsiniz. Reddetseniz bile daha sonra istemeniz durumunda ayarlar kısmından mod sürümü seçip mod paketi kurabilirsiniz.\n\nYüklemek istiyor musunuz?", "Mod Paketi", MessageBoxButtons.YesNo);
 
                     if (askForModPackage == DialogResult.Yes)
                     {
