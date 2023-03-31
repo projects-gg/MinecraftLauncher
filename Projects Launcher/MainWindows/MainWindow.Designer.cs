@@ -910,7 +910,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionBox.Size = new System.Drawing.Size(143, 36);
             this.versionBox.TabIndex = 169;
             string[] versionList = {
-                "projects-fabric-" + Properties.Settings.Default.latestRealFabric,
+                "projects-fabric-" + latestFabricVersion,
                 "projects-fabric-" + Properties.Settings.Default.latestFabric,
                 "1.19.4 ✔",
                 "1.19.3",
@@ -1049,7 +1049,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.modVersionBox.Size = new System.Drawing.Size(143, 36);
             this.modVersionBox.TabIndex = 1040;
             string[] modVersionList = {
-                "projects-mcmod-" + Properties.Settings.Default.lastModVer,
+                "projects-mcmod-" + latestModVersion,
                 "Manuel"
             };
             this.modVersionBox.Items.AddRange(modVersionList);

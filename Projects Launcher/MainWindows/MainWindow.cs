@@ -95,8 +95,6 @@ namespace Projects_Launcher.Projects_Launcher
                     _newestVersion = bld.ToString();
                 }
 
-                Properties.Settings.Default.latestRealFabric = _newestVersion;
-
                 return _newestVersion;
             }
             catch
