@@ -355,13 +355,14 @@ namespace Projects_Launcher.Projects_Launcher
                         downloadCompleteLabel.Visible = true;
                         downloadCompleteBar.Visible = true;
                         playSplitStaticLabel.Visible = true;
+                        Properties.Settings.Default.SelectedVersion = "projects-fabric-" + latestFabricVersion;
                         return;
                     } else
                     {
-                        Properties.Settings.Default.SelectedVersion = "1.19.3";
+                        Properties.Settings.Default.SelectedVersion = "1.19.4";
                         versionBox.SelectedIndex = 2;
-                        versionInfoStaticLabel.Text = "1.19.3";
-                        MessageBox.Show("Oyun sürümünüz 1.19.3 olarak ayarlandı.\n\nFabric ile girmek isterseniz ayarlardan\nsürümü seçip oyunu başlatabilirsiniz.", "Sürüm Değiştirildi");
+                        versionInfoStaticLabel.Text = "1.19.4";
+                        MessageBox.Show("Oyun sürümünüz 1.19.4 olarak ayarlandı.\n\nFabric ile girmek isterseniz ayarlardan\nsürümü seçip oyunu başlatabilirsiniz.", "Sürüm Değiştirildi");
                     }
                 }
             }
