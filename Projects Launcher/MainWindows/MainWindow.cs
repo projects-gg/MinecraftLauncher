@@ -333,6 +333,15 @@ namespace Projects_Launcher.Projects_Launcher
                 }
             }
 
+            if (!Properties.Settings.Default.curModVer.Equals("Manuel"))
+            {
+                if (!Properties.Settings.Default.SelectedVersion.Contains(Properties.Settings.Default.modCompatibleFabric) && !Properties.Settings.Default.SelectedVersion.Equals(Properties.Settings.Default.modCompatibleVer))
+                {
+                    DialogResult secenek = MessageBox.Show("Mod paketi yalnızca \"" + Properties.Settings.Default.modCompatibleFabric + "\" fabric sürümü ve \"" + Properties.Settings.Default.modCompatibleVer + "\" oyun sürümüyle uyumludur. Ayarlara girip mod seçiminizi Manuel yapmalısınız ya da bu sürümlerden birini seçip oyuna bağlanmalısınız.", "Uyumsuz Sürüm", MessageBoxButtons.OK); // Selected mod not compatible with selected version
+                    return;
+                }
+            }
+
             if (Properties.Settings.Default.SelectedVersion.Contains("projects-fabric-"))
             {
                 if (!Directory.Exists(@surum_appDataDizini))

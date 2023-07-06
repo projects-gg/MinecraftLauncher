@@ -73,7 +73,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("projects-fabric-v4")]
+        [global::System.Configuration.DefaultSettingValueAttribute("1.20.1")]
         public string SelectedVersion {
             get {
                 return ((string)(this["SelectedVersion"]));
@@ -130,7 +130,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.1.37")]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.1.38")]
         public string currentVersion {
             get {
                 return ((string)(this["currentVersion"]));
@@ -253,6 +253,30 @@ namespace Projects_Launcher.Properties {
             }
             set {
                 this["modDontAsk"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("1.19.4")]
+        public string modCompatibleVer {
+            get {
+                return ((string)(this["modCompatibleVer"]));
+            }
+            set {
+                this["modCompatibleVer"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("projects-fabric-v4")]
+        public string modCompatibleFabric {
+            get {
+                return ((string)(this["modCompatibleFabric"]));
+            }
+            set {
+                this["modCompatibleFabric"] = value;
             }
         }
     }

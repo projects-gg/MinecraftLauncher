@@ -15,7 +15,7 @@
       <Value Profile="(Default)">540</Value>
     </Setting>
     <Setting Name="SelectedVersion" Type="System.String" Scope="User">
-      <Value Profile="(Default)">projects-fabric-v4</Value>
+      <Value Profile="(Default)">1.20.1</Value>
     </Setting>
     <Setting Name="NickNames" Type="System.String" Scope="User">
       <Value Profile="(Default)" />
@@ -30,7 +30,7 @@
       <Value Profile="(Default)">play.projects.gg</Value>
     </Setting>
     <Setting Name="currentVersion" Type="System.String" Scope="Application">
-      <Value Profile="(Default)">0.1.37</Value>
+      <Value Profile="(Default)">0.1.38</Value>
     </Setting>
     <Setting Name="backgroundLite" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
@@ -61,6 +61,12 @@
     </Setting>
     <Setting Name="modDontAsk" Type="System.String" Scope="User">
       <Value Profile="(Default)">v0</Value>
+    </Setting>
+    <Setting Name="modCompatibleVer" Type="System.String" Scope="User">
+      <Value Profile="(Default)">1.19.4</Value>
+    </Setting>
+    <Setting Name="modCompatibleFabric" Type="System.String" Scope="User">
+      <Value Profile="(Default)">projects-fabric-v4</Value>
     </Setting>
   </Settings>
 </SettingsFile>
