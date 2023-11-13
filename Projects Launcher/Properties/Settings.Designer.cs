@@ -73,7 +73,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("1.20.1")]
+        [global::System.Configuration.DefaultSettingValueAttribute("1.20.2")]
         public string SelectedVersion {
             get {
                 return ((string)(this["SelectedVersion"]));
@@ -130,7 +130,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.1.38")]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.1.41")]
         public string currentVersion {
             get {
                 return ((string)(this["currentVersion"]));
@@ -198,7 +198,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("v4")]
+        [global::System.Configuration.DefaultSettingValueAttribute("v5")]
         public string latestFabric {
             get {
                 return ((string)(this["latestFabric"]));
@@ -210,7 +210,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("v4")]
+        [global::System.Configuration.DefaultSettingValueAttribute("v5")]
         public string latestRealFabric {
             get {
                 return ((string)(this["latestRealFabric"]));
@@ -258,7 +258,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("1.19.4")]
+        [global::System.Configuration.DefaultSettingValueAttribute("1.20.2")]
         public string modCompatibleVer {
             get {
                 return ((string)(this["modCompatibleVer"]));
@@ -270,7 +270,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("projects-fabric-v4")]
+        [global::System.Configuration.DefaultSettingValueAttribute("projects-fabric-v6")]
         public string modCompatibleFabric {
             get {
                 return ((string)(this["modCompatibleFabric"]));

@@ -17,6 +17,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using static System.Collections.Specialized.BitVector32;
 
 namespace Projects_Launcher.Projects_Launcher
 {
@@ -279,7 +280,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin), // Get maximum ram info
                 MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax), // Get minimum ram info
-                Session = MSession.GetOfflineSession(sessions), // Get nickname info
+                Session = MSession.CreateOfflineSession(sessions), // Get nickname info
                 ServerIp = serverIP, // The server IP which should connected
                 GameLauncherName = "Projects Minecraft",
                 ScreenWidth = int.Parse(Properties.Settings.Default.ResolutionWidth), // Get width resolution info
@@ -398,7 +399,7 @@ namespace Projects_Launcher.Projects_Launcher
                     }
                 });
 
-                session = MSession.GetOfflineSession(Properties.Settings.Default.NickNames); // Get nickname info
+                session = MSession.CreateOfflineSession(Properties.Settings.Default.NickNames); // Get nickname info
 
                 thisFalse();
                 if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
