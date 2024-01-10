@@ -12,7 +12,7 @@ namespace Projects_Launcher.Properties {
     
     
     [global::System.Runtime.CompilerServices.CompilerGeneratedAttribute()]
-    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "17.3.0.0")]
+    [global::System.CodeDom.Compiler.GeneratedCodeAttribute("Microsoft.VisualStudio.Editors.SettingsDesigner.SettingsSingleFileGenerator", "17.8.0.0")]
     internal sealed partial class Settings : global::System.Configuration.ApplicationSettingsBase {
         
         private static Settings defaultInstance = ((Settings)(global::System.Configuration.ApplicationSettingsBase.Synchronized(new Settings())));
@@ -73,7 +73,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("1.20.2")]
+        [global::System.Configuration.DefaultSettingValueAttribute("1.20.4")]
         public string SelectedVersion {
             get {
                 return ((string)(this["SelectedVersion"]));
@@ -130,7 +130,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.1.41")]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.1.42")]
         public string currentVersion {
             get {
                 return ((string)(this["currentVersion"]));
@@ -198,7 +198,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("v5")]
+        [global::System.Configuration.DefaultSettingValueAttribute("v6")]
         public string latestFabric {
             get {
                 return ((string)(this["latestFabric"]));
@@ -210,7 +210,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("v5")]
+        [global::System.Configuration.DefaultSettingValueAttribute("v6")]
         public string latestRealFabric {
             get {
                 return ((string)(this["latestRealFabric"]));
@@ -258,7 +258,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("1.20.2")]
+        [global::System.Configuration.DefaultSettingValueAttribute("1.20.4")]
         public string modCompatibleVer {
             get {
                 return ((string)(this["modCompatibleVer"]));
@@ -270,7 +270,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("projects-fabric-v6")]
+        [global::System.Configuration.DefaultSettingValueAttribute("projects-fabric-v7")]
         public string modCompatibleFabric {
             get {
                 return ((string)(this["modCompatibleFabric"]));

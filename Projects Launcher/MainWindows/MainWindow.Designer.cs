@@ -912,7 +912,8 @@ namespace Projects_Launcher.Projects_Launcher
             string[] versionList = {
                 "projects-fabric-" + latestFabricVersion,
                 "projects-fabric-" + Properties.Settings.Default.latestFabric,
-                "1.20.2 ✔",
+                "1.20.4 ✔",
+                "1.20.2",
                 "1.20.1",
                 "1.19.4",
                 "1.17.1",
