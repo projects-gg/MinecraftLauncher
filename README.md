@@ -22,7 +22,8 @@ Projects Launcher is a Minecraft Launcher that created to make starting the game
 Join us on [Discord](https://projects.gg/discord) (Turkish)
 
 ## Downloads
-Latest version can obtained from the [Projects](https://projects.gg/indir/). And VirusTotal results are [here](https://projects.gg/launchervirustotal).
+Latest version can be obtained from [Projects Landing Page](https://projects.gg/indir/).
+[VirusTotal Results](https://projects.gg/launchervirustotal).
 
 ## License
 [![GNU License](https://img.shields.io/github/license/projects-gg/MinecraftLauncher?&logo=github)](LICENSE)
