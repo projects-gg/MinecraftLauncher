@@ -1,0 +1,17 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+*.publish/
+app.publish/
+
+# Visual Studio
+.vs/
+*.user
+
+# Code-signing private keys
+*.pfx
+*.snk
+*.p12
+
+# Publish script
+publish.ps1

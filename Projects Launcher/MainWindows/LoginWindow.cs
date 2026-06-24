@@ -8,6 +8,7 @@ using System.Net;
 using System.Text;
 using System.Windows.Forms;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace Projects_Launcher
 {
@@ -20,7 +21,6 @@ namespace Projects_Launcher
 
         private readonly string currentVersion = Properties.Settings.Default.currentVersion;
         private string _newestVersion = "";
-        private string newsTexts = "";
         private readonly Uri _setupLocation = new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe");
 
         private Icon _loginIcon;
@@ -88,7 +88,8 @@ namespace Projects_Launcher
             }
         }
 
-        private void newsTextsRead()
+        // Yenilikleri çeker (UI'ye dokunmaz; arka planda çağrılabilsin diye string döner).
+        private string FetchNewsText()
         {
             try
             {
@@ -99,39 +100,28 @@ namespace Projects_Launcher
                 bool startWriting = false;
                 StringBuilder blds = new StringBuilder();
 
-                foreach (char character in versionContentLine) //this is hard to read but culture-compatible
+                foreach (char character in versionContentLine)
                 {
                     if (character.Equals('>'))
                     {
                         if (!startWriting)
-                        {
                             startWriting = true;
-                        }
                     }
                     else if (startWriting)
                     {
                         if (!character.Equals('<'))
-                        {
                             blds.Append(character);
-                        }
                         else
-                        {
                             break;
-                        }
                     }
                 }
 
-                if (blds.Length >= 0)
-                {
-                    newsTexts = blds.ToString();
-                }
+                return blds.ToString();
             }
-            catch (Exception exc)
+            catch
             {
-                labelYenilikMaddeler.Text = "Yenilik bilgileri alınamadı.\nHata kodu: " + exc;
+                return "Yenilik bilgileri alınamadı.";
             }
-
-            labelYenilikMaddeler.Text = newsTexts;
         }
 
         public String readPhpContent(String address)
@@ -177,24 +167,65 @@ namespace Projects_Launcher
             }
             catch
             {
-                cantGrabVersionInfo();
-                return "Veri alınamadı!";
+                return ""; // hata: Load varsayılana düşer, kullanıcı bloklanmaz
             }
         }
 
-        private void ProjectsLauncherLogin_Load(object sender, EventArgs e)
+        private async void ProjectsLauncherLogin_Load(object sender, EventArgs e)
         {
             _loginIcon = this.Icon;
             DiscordRpcClientSetup();
 
             versionLabel.Text = "v" + currentVersion;
+            nickNameEnterTextBox.Text = Properties.Settings.Default.NickNames;
 
-            _newestVersion = readPhpContent("https://mc.projects.gg/LauncherUpdateStream/version.php");
-
-            if (_newestVersion.Equals(""))
+            // ".projects" dizinini oluştur (yoksa)
+            try
             {
-                _newestVersion = currentVersion;
+                Directory.CreateDirectory(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects");
             }
+            catch
+            {
+                // kritik değil
+            }
+
+            // Tema (senkron, hızlı)
+            if (Properties.Settings.Default.themeSelected == "Sistem Varsayılanı")
+            {
+                int res = (int)Registry.GetValue("HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "AppsUseLightTheme", -1);
+                if (res == 1)
+                {
+                    this.BackgroundImage = Properties.Resources.gaia_light;
+                    this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
+                    _loginIcon = Properties.Resources.ProjectsLauncherLogo_dark;
+                }
+                if (res == 0)
+                {
+                    this.BackgroundImage = Properties.Resources.gaia_dark;
+                    this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
+                    _loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
+                }
+            }
+
+            if (Properties.Settings.Default.themeSelected == "Açık Tema")
+            {
+                this.BackgroundImage = Properties.Resources.gaia_light;
+                this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
+                _loginIcon = Properties.Resources.ProjectsLauncherLogo_dark;
+            }
+
+            if (Properties.Settings.Default.themeSelected == "Koyu Tema")
+            {
+                this.BackgroundImage = Properties.Resources.gaia_dark;
+                this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
+                _loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
+            }
+
+            // --- Ağ işleri arka planda; giriş ekranı anında açılır (eskiden senkron HTTP donduruyordu) ---
+            string latest = await Task.Run(() => readPhpContent("https://mc.projects.gg/LauncherUpdateStream/version-v2.php"));
+            if (string.IsNullOrEmpty(latest))
+                latest = currentVersion;
+            _newestVersion = latest;
 
             if (!currentVersion.Equals(_newestVersion))
             {
@@ -210,76 +241,15 @@ namespace Projects_Launcher
                 }
             }
 
-            try
-            {
-                // Create new ".projects" directory if not exist
-                if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                                      "/.projects"))
-                {
-                    Directory.CreateDirectory(@Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects");
-                }
-            }
-            catch
-            {
-                // Shouldn't happen except no internet connection or server downtime
-            }
-
-            nickNameEnterTextBox.Text = Properties.Settings.Default.NickNames;
-
-            if (Properties.Settings.Default.themeSelected == "Sistem Varsayılanı")
-            {
-                int res = (int)Registry.GetValue("HKEY_CURRENT_USER\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "AppsUseLightTheme", -1);
-                if (res == 1)
-                {
-                    this.BackgroundImage = Properties.Resources.gaia_light;
-
-                    this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
-                    _loginIcon = Properties.Resources.ProjectsLauncherLogo_dark;
-                }
-                if (res == 0)
-                {
-                    this.BackgroundImage = Properties.Resources.gaia_dark;
-
-                    this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
-                    _loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
-                }
-            }
-
-            if (Properties.Settings.Default.themeSelected == "Açık Tema")
-            {
-                this.BackgroundImage = Properties.Resources.gaia_light;
-
-                this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
-                _loginIcon = Properties.Resources.ProjectsLauncherLogo_dark;
-            }
-
-            if (Properties.Settings.Default.themeSelected == "Koyu Tema")
-            {
-                this.BackgroundImage = Properties.Resources.gaia_dark;
-
-                this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
-                _loginIcon = Properties.Resources.ProjectsLauncherLogo_light;
-            }
-
-            newsTextsRead();
-
-            GC.WaitForPendingFinalizers();
+            labelYenilikMaddeler.Text = await Task.Run(() => FetchNewsText());
         }
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
             this.Hide();
-            GC.SuppressFinalize(this);
 
-            GC.WaitForPendingFinalizers();
-
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/ProjectsSetup.exe";
-
-            string myPath = @appDataDizini;
-            System.Diagnostics.Process prc = new System.Diagnostics.Process();
-            prc.StartInfo.FileName = myPath;
-            System.Threading.Thread.Sleep(1000);
-            prc.Start();
+            string setupPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects/ProjectsSetup.exe";
+            System.Diagnostics.Process.Start(setupPath); // indirilen güncelleyiciyi çalıştır
             Environment.Exit(0);
         }
         private void benihatırla_CheckedChanged(object sender, EventArgs e)
@@ -321,14 +291,12 @@ namespace Projects_Launcher
 
             main.Show();
 
-            GC.SuppressFinalize(this);
-
-            this.BackgroundImage.Dispose();
-
-            Client.Dispose();
-
-            GC.WaitForPendingFinalizers();
-            this.BackgroundImage = null;
+            Client?.Dispose();
+            if (this.BackgroundImage != null)
+            {
+                this.BackgroundImage.Dispose();
+                this.BackgroundImage = null;
+            }
         }
 
         private void nicknametextbox_TextChanged(object sender, EventArgs e)
@@ -413,7 +381,6 @@ namespace Projects_Launcher
             {
                 panelYenilikler.Visible = false;
             }
-            GC.WaitForPendingFinalizers();
         }
 
         private void webbutton_Click(object sender, EventArgs e)

@@ -65,14 +65,13 @@ namespace Projects_Launcher.Projects_Launcher
             this.discordStaticPictureBox = new Guna.UI2.WinForms.Guna2ImageButton();
             this.downloadCompleteBar = new Guna.UI2.WinForms.Guna2ProgressBar();
             this.settingsBgPanel = new Guna.UI2.WinForms.Guna2Panel();
+            this.modVersionBox = new Guna.UI2.WinForms.Guna2ComboBox();
             this.modSelectionImageBox = new Guna.UI2.WinForms.Guna2PictureBox();
             this.autoConnect = new Guna.UI2.WinForms.Guna2CheckBox();
             this.ramInfoLabel = new System.Windows.Forms.Label();
             this.guna2PictureBox9 = new Guna.UI2.WinForms.Guna2PictureBox();
-            this.gaiaOnline = new Guna.UI2.WinForms.Guna2PictureBox();
             this.lobiOnline = new Guna.UI2.WinForms.Guna2PictureBox();
             this.guna2PictureBox8 = new Guna.UI2.WinForms.Guna2PictureBox();
-            this.guna2PictureBox7 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.versionLabel = new System.Windows.Forms.Label();
             this.guna2PictureBox6 = new Guna.UI2.WinForms.Guna2PictureBox();
             this.temaSelectBox = new Guna.UI2.WinForms.Guna2ComboBox();
@@ -101,15 +100,12 @@ namespace Projects_Launcher.Projects_Launcher
             this.maxRamTextBox = new Guna.UI2.WinForms.Guna2TextBox();
             this.maxRamDynamicCalculatorLabel = new System.Windows.Forms.Label();
             this.directorySearcher1 = new System.DirectoryServices.DirectorySearcher();
-            this.modVersionBox = new Guna.UI2.WinForms.Guna2ComboBox();
             ((System.ComponentModel.ISupportInitialize)(this.skinRenderPictureBox)).BeginInit();
             this.settingsBgPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.modSelectionImageBox)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox9)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.gaiaOnline)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.lobiOnline)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox8)).BeginInit();
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox7)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox6)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).BeginInit();
@@ -142,7 +138,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionInfoStaticLabel.ForeColor = System.Drawing.Color.WhiteSmoke;
             this.versionInfoStaticLabel.Location = new System.Drawing.Point(108, 65);
             this.versionInfoStaticLabel.Name = "versionInfoStaticLabel";
-            this.versionInfoStaticLabel.Size = new System.Drawing.Size(128, 18);
+            this.versionInfoStaticLabel.Size = new System.Drawing.Size(0, 18);
             this.versionInfoStaticLabel.TabIndex = 3;
             // 
             // playerNameStaticLabel
@@ -433,10 +429,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.Controls.Add(this.autoConnect);
             this.settingsBgPanel.Controls.Add(this.ramInfoLabel);
             this.settingsBgPanel.Controls.Add(this.guna2PictureBox9);
-            this.settingsBgPanel.Controls.Add(this.gaiaOnline);
             this.settingsBgPanel.Controls.Add(this.lobiOnline);
             this.settingsBgPanel.Controls.Add(this.guna2PictureBox8);
-            this.settingsBgPanel.Controls.Add(this.guna2PictureBox7);
             this.settingsBgPanel.Controls.Add(this.versionLabel);
             this.settingsBgPanel.Controls.Add(this.guna2PictureBox6);
             this.settingsBgPanel.Controls.Add(this.temaSelectBox);
@@ -473,11 +467,30 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.TabIndex = 209;
             this.settingsBgPanel.Visible = false;
             // 
+            // modVersionBox
+            // 
+            this.modVersionBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(139)))), ((int)(((byte)(12)))));
+            this.modVersionBox.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(39)))), ((int)(((byte)(40)))), ((int)(((byte)(55)))));
+            this.modVersionBox.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
+            this.modVersionBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.modVersionBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(49)))), ((int)(((byte)(57)))), ((int)(((byte)(72)))));
+            this.modVersionBox.FocusedColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.modVersionBox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.modVersionBox.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.modVersionBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(251)))), ((int)(((byte)(255)))), ((int)(((byte)(255)))));
+            this.modVersionBox.ItemHeight = 30;
+            this.modVersionBox.Location = new System.Drawing.Point(161, 136);
+            this.modVersionBox.MaxDropDownItems = 5;
+            this.modVersionBox.Name = "modVersionBox";
+            this.modVersionBox.Size = new System.Drawing.Size(143, 36);
+            this.modVersionBox.TabIndex = 1040;
+            this.modVersionBox.SelectedIndexChanged += new System.EventHandler(this.modPickVersion_SelectedIndexChanged);
+            // 
             // modSelectionImageBox
             // 
             this.modSelectionImageBox.Image = ((System.Drawing.Image)(resources.GetObject("modSelectionImageBox.Image")));
             this.modSelectionImageBox.ImageRotate = 0F;
-            this.modSelectionImageBox.Location = new System.Drawing.Point(198, 243);
+            this.modSelectionImageBox.Location = new System.Drawing.Point(161, 90);
             this.modSelectionImageBox.Name = "modSelectionImageBox";
             this.modSelectionImageBox.Size = new System.Drawing.Size(143, 40);
             this.modSelectionImageBox.TabIndex = 1039;
@@ -534,21 +547,11 @@ namespace Projects_Launcher.Projects_Launcher
             this.guna2PictureBox9.TabIndex = 1035;
             this.guna2PictureBox9.TabStop = false;
             // 
-            // gaiaOnline
-            // 
-            this.gaiaOnline.Image = ((System.Drawing.Image)(resources.GetObject("gaiaOnline.Image")));
-            this.gaiaOnline.ImageRotate = 0F;
-            this.gaiaOnline.Location = new System.Drawing.Point(58, 118);
-            this.gaiaOnline.Name = "gaiaOnline";
-            this.gaiaOnline.Size = new System.Drawing.Size(27, 37);
-            this.gaiaOnline.TabIndex = 1034;
-            this.gaiaOnline.TabStop = false;
-            // 
             // lobiOnline
             // 
             this.lobiOnline.Image = ((System.Drawing.Image)(resources.GetObject("lobiOnline.Image")));
             this.lobiOnline.ImageRotate = 0F;
-            this.lobiOnline.Location = new System.Drawing.Point(57, 75);
+            this.lobiOnline.Location = new System.Drawing.Point(919, 420);
             this.lobiOnline.Name = "lobiOnline";
             this.lobiOnline.Size = new System.Drawing.Size(27, 37);
             this.lobiOnline.TabIndex = 1033;
@@ -558,21 +561,11 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.guna2PictureBox8.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox8.Image")));
             this.guna2PictureBox8.ImageRotate = 0F;
-            this.guna2PictureBox8.Location = new System.Drawing.Point(15, 75);
+            this.guna2PictureBox8.Location = new System.Drawing.Point(876, 420);
             this.guna2PictureBox8.Name = "guna2PictureBox8";
             this.guna2PictureBox8.Size = new System.Drawing.Size(43, 37);
             this.guna2PictureBox8.TabIndex = 1032;
             this.guna2PictureBox8.TabStop = false;
-            // 
-            // guna2PictureBox7
-            // 
-            this.guna2PictureBox7.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox7.Image")));
-            this.guna2PictureBox7.ImageRotate = 0F;
-            this.guna2PictureBox7.Location = new System.Drawing.Point(15, 118);
-            this.guna2PictureBox7.Name = "guna2PictureBox7";
-            this.guna2PictureBox7.Size = new System.Drawing.Size(43, 37);
-            this.guna2PictureBox7.TabIndex = 1031;
-            this.guna2PictureBox7.TabStop = false;
             // 
             // versionLabel
             // 
@@ -615,6 +608,7 @@ namespace Projects_Launcher.Projects_Launcher
             "Açık Tema",
             "Koyu Tema"});
             this.temaSelectBox.Location = new System.Drawing.Point(484, 201);
+            this.temaSelectBox.MaxDropDownItems = 5;
             this.temaSelectBox.Name = "temaSelectBox";
             this.temaSelectBox.Size = new System.Drawing.Size(142, 36);
             this.temaSelectBox.TabIndex = 1028;
@@ -722,7 +716,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.guna2PictureBox4.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox4.Image")));
             this.guna2PictureBox4.ImageRotate = 0F;
-            this.guna2PictureBox4.Location = new System.Drawing.Point(198, 155);
+            this.guna2PictureBox4.Location = new System.Drawing.Point(12, 90);
             this.guna2PictureBox4.Name = "guna2PictureBox4";
             this.guna2PictureBox4.Size = new System.Drawing.Size(143, 40);
             this.guna2PictureBox4.TabIndex = 1015;
@@ -742,7 +736,7 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.guna2PictureBox1.Image = ((System.Drawing.Image)(resources.GetObject("guna2PictureBox1.Image")));
             this.guna2PictureBox1.ImageRotate = 0F;
-            this.guna2PictureBox1.Location = new System.Drawing.Point(198, 12);
+            this.guna2PictureBox1.Location = new System.Drawing.Point(335, 12);
             this.guna2PictureBox1.Name = "guna2PictureBox1";
             this.guna2PictureBox1.Size = new System.Drawing.Size(143, 40);
             this.guna2PictureBox1.TabIndex = 1012;
@@ -783,7 +777,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.label18.Cursor = System.Windows.Forms.Cursors.Hand;
             this.label18.Font = new System.Drawing.Font("Bahnschrift Light", 12.75F);
             this.label18.ForeColor = System.Drawing.SystemColors.Control;
-            this.label18.Location = new System.Drawing.Point(251, 56);
+            this.label18.Location = new System.Drawing.Point(399, 59);
             this.label18.Name = "label18";
             this.label18.Size = new System.Drawing.Size(19, 21);
             this.label18.TabIndex = 183;
@@ -905,32 +899,11 @@ namespace Projects_Launcher.Projects_Launcher
             this.versionBox.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
             this.versionBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(251)))), ((int)(((byte)(255)))), ((int)(((byte)(255)))));
             this.versionBox.ItemHeight = 30;
-            this.versionBox.Location = new System.Drawing.Point(198, 201);
+            this.versionBox.Location = new System.Drawing.Point(12, 136);
+            this.versionBox.MaxDropDownItems = 5;
             this.versionBox.Name = "versionBox";
             this.versionBox.Size = new System.Drawing.Size(143, 36);
             this.versionBox.TabIndex = 169;
-            string[] versionList = {
-                "projects-fabric-" + latestFabricVersion,
-                "projects-fabric-" + Properties.Settings.Default.latestFabric,
-                "26.1.2",
-                "1.21.11",
-                "1.21.8 ✔",
-                "1.21.3",
-                "1.21.1",
-                "1.21",
-                "1.20.4",
-                "1.19.4",
-                "1.18.2",
-                "1.17.1",
-                "1.16.5",
-                "1.15.2",
-                "1.14.4",
-                "1.13.2",
-                "1.12.2",
-                "1.8.9",
-                "1.7.10"
-            };
-            this.versionBox.Items.AddRange(versionList);
             this.versionBox.SelectedIndexChanged += new System.EventHandler(this.surumsec_SelectedIndexChanged);
             // 
             // widthtextbox
@@ -948,7 +921,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.widthtextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
             this.widthtextbox.Font = new System.Drawing.Font("Arial", 12F);
             this.widthtextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.widthtextbox.Location = new System.Drawing.Point(198, 59);
+            this.widthtextbox.Location = new System.Drawing.Point(335, 61);
             this.widthtextbox.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.widthtextbox.MaxLength = 4;
             this.widthtextbox.Name = "widthtextbox";
@@ -975,7 +948,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.heighttextbox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
             this.heighttextbox.Font = new System.Drawing.Font("Arial", 12F);
             this.heighttextbox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.heighttextbox.Location = new System.Drawing.Point(270, 59);
+            this.heighttextbox.Location = new System.Drawing.Point(425, 61);
             this.heighttextbox.Margin = new System.Windows.Forms.Padding(4, 4, 4, 4);
             this.heighttextbox.MaxLength = 4;
             this.heighttextbox.Name = "heighttextbox";
@@ -1034,29 +1007,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.directorySearcher1.ServerPageTimeLimit = System.TimeSpan.Parse("-00:00:01");
             this.directorySearcher1.ServerTimeLimit = System.TimeSpan.Parse("-00:00:01");
             // 
-            // modVersionBox
-            // 
-            this.modVersionBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(139)))), ((int)(((byte)(12)))));
-            this.modVersionBox.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(39)))), ((int)(((byte)(40)))), ((int)(((byte)(55)))));
-            this.modVersionBox.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
-            this.modVersionBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
-            this.modVersionBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(49)))), ((int)(((byte)(57)))), ((int)(((byte)(72)))));
-            this.modVersionBox.FocusedColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.modVersionBox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
-            this.modVersionBox.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
-            this.modVersionBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(251)))), ((int)(((byte)(255)))), ((int)(((byte)(255)))));
-            this.modVersionBox.ItemHeight = 36;
-            this.modVersionBox.Location = new System.Drawing.Point(198, 289);
-            this.modVersionBox.Name = "modVersionBox";
-            this.modVersionBox.Size = new System.Drawing.Size(143, 36);
-            this.modVersionBox.TabIndex = 1040;
-            string[] modVersionList = {
-                "projects-mcmod-" + latestModVersion,
-                "Manuel"
-            };
-            this.modVersionBox.Items.AddRange(modVersionList);
-            this.modVersionBox.SelectedIndexChanged += new System.EventHandler(this.modPickVersion_SelectedIndexChanged);
-            // 
             // mainMenuForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 13F);
@@ -1102,10 +1052,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.settingsBgPanel.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.modSelectionImageBox)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox9)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.gaiaOnline)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.lobiOnline)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox8)).EndInit();
-            ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox7)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox6)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.guna2PictureBox2)).EndInit();
             ((System.ComponentModel.ISupportInitialize)(this.pictureBox1)).EndInit();
@@ -1172,10 +1120,8 @@ namespace Projects_Launcher.Projects_Launcher
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox2;
         private System.Windows.Forms.Label versionLabel;
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox6;
-        private Guna.UI2.WinForms.Guna2PictureBox gaiaOnline;
         private Guna.UI2.WinForms.Guna2PictureBox lobiOnline;
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox8;
-        private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox7;
         private Guna.UI2.WinForms.Guna2PictureBox guna2PictureBox9;
         private System.Windows.Forms.Label ramInfoLabel;
         private System.DirectoryServices.DirectorySearcher directorySearcher1;

@@ -1,23 +1,25 @@
 ﻿using CmlLib.Core;
 using CmlLib.Core.Auth;
+using CmlLib.Core.Installers;
+using CmlLib.Core.ProcessBuilder;
 using DiscordRPC;
-using DiscordRPC.Helper;
+using Guna.UI2.WinForms.Enums;
 using Microsoft.Win32;
 using MineStatLib;
-using Newtonsoft.Json;
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.IO;
 using System.Linq;
 using System.Management;
 using System.Net;
+using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using static System.Collections.Specialized.BitVector32;
 
 namespace Projects_Launcher.Projects_Launcher
 {
@@ -26,6 +28,62 @@ namespace Projects_Launcher.Projects_Launcher
         public mainMenuForm()
         {
             InitializeComponent();
+
+            // TLS + bağlantı limiti bir kez ayarlanır (her indirmede tekrar set etmeye gerek yok).
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            ServicePointManager.Expect100Continue = true;
+            ServicePointManager.DefaultConnectionLimit = 256;
+
+            StyleProgressBar();
+            PopulateDropdowns();
+        }
+
+        // Tüm HTTP istekleri için tek paylaşılan istemci (soket tükenmesini önler, hızlı + asenkron).
+        private static readonly HttpClient _http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+
+        // timer1 (sunucu durumu) için yeniden giriş koruması.
+        private bool _pinging;
+
+        // İndirme çubuğuna modern görünüm: yatay gradyan dolgu, yuvarlatılmış uçlar, yumuşak gölge.
+        private void StyleProgressBar()
+        {
+            downloadCompleteBar.ShowText = false; // eski "downloadCompleteBar" yazısını kaldırır
+            downloadCompleteBar.FillColor = Color.FromArgb(40, 44, 52);        // koyu ray
+            downloadCompleteBar.ProgressColor = Color.FromArgb(34, 197, 94);   // canlı yeşil
+            downloadCompleteBar.ProgressColor2 = Color.FromArgb(16, 185, 129); // teal geçiş
+            downloadCompleteBar.ProgressBrushMode = BrushMode.Gradient;
+            downloadCompleteBar.GradientMode = LinearGradientMode.Horizontal;
+            downloadCompleteBar.AutoRoundedCorners = true;                     // hap (pill) şekli
+            downloadCompleteBar.ShadowDecoration.Enabled = true;
+            downloadCompleteBar.ShadowDecoration.Color = Color.FromArgb(16, 185, 129);
+            downloadCompleteBar.ShadowDecoration.Depth = 6;
+        }
+
+        // Sürüm/mod dropdown öğeleri Designer'da DEĞİL burada doldurulur.
+        // Designer'a elle eklenen Items, form VS tasarımcısında açılınca yeniden üretim sırasında
+        // siliniyor ve dropdown'lar boşalıyordu ("bi ara düzeldi, sonra yine bozuldu").
+        // Kod-arkasında kalıcıdır; tasarımcı buraya dokunmaz.
+        private void PopulateDropdowns()
+        {
+            versionBox.MaxDropDownItems = 5;
+            versionBox.Items.Clear();
+            versionBox.Items.AddRange(new object[]
+            {
+                "projects-fabric-" + latestFabricVersion,
+                "26.1.2 ✔", "1.21.11", "1.21.8", "1.21.3", "1.21.1", "1.21",
+                "1.20.4", "1.19.4", "1.18.2", "1.17.1", "1.16.5", "1.15.2",
+                "1.14.4", "1.13.2", "1.12.2", "1.8.9", "1.7.10"
+            });
+
+            modVersionBox.MaxDropDownItems = 5;
+            modVersionBox.Items.Clear();
+            modVersionBox.Items.AddRange(new object[]
+            {
+                "projects-mcmod-" + latestModVersion,
+                "Manuel"
+            });
+
+            temaSelectBox.MaxDropDownItems = 5;
         }
 
         private string sessions;
@@ -35,11 +93,12 @@ namespace Projects_Launcher.Projects_Launcher
         private string widthbox;
         private string heightbox;
 
-        public string latestFabricVersion =
-            readPhpContent("https://mc.projects.gg/LauncherUpdateStream/version-fabric.php");
+        // Eskiden burada senkron HTTP açılışı donduruyordu. Artık Anamenu_Load arka planda günceller.
+        // Başlangıç değerleri Settings'ten gelir; ağ yanıtı gelmeden ya da boş dönerse de sürüm
+        // dolu kalır (ör. "projects-mcmod-" yerine "projects-mcmod-v12").
+        public string latestFabricVersion = Properties.Settings.Default.latestFabric;
 
-        public string latestModVersion =
-            readPhpContent("https://mc.projects.gg/LauncherUpdateStream/version-mcmod.php");
+        public string latestModVersion = Properties.Settings.Default.lastModVer;
 
         string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
@@ -113,7 +172,6 @@ namespace Projects_Launcher.Projects_Launcher
         readonly Random _random = new Random();
 
         private bool alreadyPlayingAnimatedLabel;
-        private bool alreadyRelaunchWaiting;
 
         private readonly string currentVersion = Properties.Settings.Default.currentVersion;
 
@@ -144,18 +202,31 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
-        private void updateHwInfo()
+        // WMI sorgusu yavaştır; arka planda çalıştırılıp sonuç UI thread'inde yazılır (açılış donmaz).
+        private async Task UpdateHwInfoAsync()
         {
-            // RAM
-            ManagementObjectSearcher ramSearch = new ManagementObjectSearcher("Select * From Win32_ComputerSystem");
-
-            foreach (ManagementObject ramObject in ramSearch.Get())
+            try
             {
-                double ramInBytes = (Convert.ToDouble(ramObject["TotalPhysicalMemory"]));
-                double roundAvailableRamValueInGb = Math.Ceiling(ramInBytes / 1073741824); // <- Byte to GB conversion
-                ramInfoLabel.Text = string.Format("{0:0.##}", Convert.ToDouble(roundAvailableRamValueInGb) * 1024) +
-                                    "MB" + "/" + Convert.ToString(roundAvailableRamValueInGb) + " GB";
-                break;
+                string text = await Task.Run(() =>
+                {
+                    using (var ramSearch = new ManagementObjectSearcher("Select TotalPhysicalMemory From Win32_ComputerSystem"))
+                    {
+                        foreach (ManagementObject ramObject in ramSearch.Get())
+                        {
+                            double ramInBytes = Convert.ToDouble(ramObject["TotalPhysicalMemory"]);
+                            double gb = Math.Ceiling(ramInBytes / 1073741824); // Byte -> GB
+                            return string.Format("{0:0.##}", gb * 1024) + "MB" + "/" + Convert.ToString(gb) + " GB";
+                        }
+                    }
+                    return "";
+                });
+
+                if (!string.IsNullOrEmpty(text))
+                    ramInfoLabel.Text = text;
+            }
+            catch
+            {
+                // Donanım bilgisi alınamadı; kritik değil.
             }
         }
 
@@ -175,7 +246,7 @@ namespace Projects_Launcher.Projects_Launcher
             discordStaticPictureBox.Enabled = true;
         }
 
-        private void Anamenu_Load(object sender, EventArgs e)
+        private async void Anamenu_Load(object sender, EventArgs e)
         {
             versionLabel.Text = "v" + currentVersion;
 
@@ -187,18 +258,12 @@ namespace Projects_Launcher.Projects_Launcher
                                           "/.projects/versions");
             }
 
-            updateHwInfo();
-
             DiscordRpcClientSetup();
 
-            onlineCountUpdater().GetAwaiter();
-
+            // --- Senkron UI kurulumu (hızlı, anında çizilir) ---
             playerNameStaticLabel.Text = Properties.Settings.Default.NickNames;
-
             autoConnect.Checked = Properties.Settings.Default.autoConnect;
-
             reopenLauncher.Checked = Properties.Settings.Default.reopenLauncher;
-
             temaSelectBox.Text = Properties.Settings.Default.themeSelected;
 
             if (Properties.Settings.Default.SelectedVersion != string.Empty)
@@ -243,80 +308,144 @@ namespace Projects_Launcher.Projects_Launcher
                 heighttextbox.Text = Properties.Settings.Default.ResolutionWidth;
             }
 
-            // Grab skin render
+            // --- Ağ/WMI işleri arka planda (UI bloklanmaz) ---
+            _ = UpdateHwInfoAsync();
+            _ = onlineCountUpdater();
+
+            // Sürüm bilgilerini arka planda çek. Yalnızca dolu yanıt gelirse üzerine yaz;
+            // boş dönerse Settings'ten gelen değer korunur (sürüm asla boş kalmaz).
+            await Task.Run(() =>
+            {
+                string fabric = readPhpContent("https://mc.projects.gg/LauncherUpdateStream/version-fabric.php");
+                string mod = readPhpContent("https://mc.projects.gg/LauncherUpdateStream/version-mcmod.php");
+                if (!string.IsNullOrWhiteSpace(fabric)) latestFabricVersion = fabric;
+                if (!string.IsNullOrWhiteSpace(mod)) latestModVersion = mod;
+            });
+
+            // Skin render (asenkron; eskiden senkron GetResponse açılışı donduruyordu).
             try
             {
-                var request = WebRequest.Create("https://minotar.net/avatar" + "/" + playerNameStaticLabel.Text);
-
-                using (var response = request.GetResponse())
-                using (var stream = response.GetResponseStream())
+                using (var stream = await _http.GetStreamAsync("https://minotar.net/avatar/" + playerNameStaticLabel.Text))
+                using (var ms = new MemoryStream())
                 {
-                    skinRenderPictureBox.Image = Bitmap.FromStream(stream);
+                    await stream.CopyToAsync(ms);
+                    ms.Position = 0;
+                    skinRenderPictureBox.Image = Bitmap.FromStream(ms);
                 }
             }
             catch
             {
-                // Shouldn't happen except no internet connection or server downtime
+                // İnternet yoksa veya servis kapalıysa olur; kritik değil.
             }
-
-            GC.WaitForPendingFinalizers();
-
-            DataBindings.Clear();
-            GC.SuppressFinalize(this);
         }
 
-        private async Task Launch() // Minecraft startup settings
+        private async Task LaunchGameAsync() // Minecraft başlatma (CmlLib 4.x)
         {
             var path = new MinecraftPath(launcherdizin);
-            var launcher = new CMLauncher(path);
-
-            launcher.ProgressChanged += launcher_DownloadProgressChanged;
+            var launcher = new MinecraftLauncher(path);
 
             sessions = Properties.Settings.Default.NickNames;
 
             string serverIP = Properties.Settings.Default.autoConnect ? "play.projects.gg" : "";
 
+            // Ayarlar güvenli parse edilir (boş/bozuk değerde çökmesin diye).
+            if (!int.TryParse(Properties.Settings.Default.RamMin, out int minRam) || minRam <= 0)
+                minRam = 1024;
+            if (!int.TryParse(Properties.Settings.Default.RamMax, out int maxRam) || maxRam < minRam)
+                maxRam = Math.Max(minRam, 2048);
+            int.TryParse(Properties.Settings.Default.ResolutionWidth, out int screenWidth);
+            int.TryParse(Properties.Settings.Default.ResolutionHeight, out int screenHeight);
+
             var ayarlar = new MLaunchOption
             {
-                MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin), // Get maximum ram info
-                MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax), // Get minimum ram info
-                Session = MSession.CreateOfflineSession(sessions), // Get nickname info
-                ServerIp = serverIP, // The server IP which should connected
+                MinimumRamMb = minRam,
+                MaximumRamMb = maxRam,
+                Session = MSession.CreateOfflineSession(sessions),
+                ServerIp = serverIP,
                 GameLauncherName = "Projects Minecraft",
-                ScreenWidth = int.Parse(Properties.Settings.Default.ResolutionWidth), // Get width resolution info
-                ScreenHeight = int.Parse(Properties.Settings.Default.ResolutionHeight), // Get height resolution info
+                ScreenWidth = screenWidth,
+                ScreenHeight = screenHeight,
             };
-            try
+
+            // İlerleme UI thread'ine marshal edilir (Progress<T> UI thread'inde oluşturuluyor).
+            // Çubuk indirme yüzdesini (gradyan dolgu) gösterir, etiket dosya ilerlemesini.
+            var fileProgress = new Progress<InstallerProgressChangedEventArgs>(p =>
             {
-                // Maximize download speed
-                System.Net.ServicePointManager.DefaultConnectionLimit = 256;
+                downloadCompleteLabel.Text = p.TotalTasks > 0
+                    ? $"İndiriliyor… {p.ProgressedTasks}/{p.TotalTasks} dosya"
+                    : "Hazırlanıyor…";
+            });
+            var byteProgress = new Progress<ByteProgress>(p =>
+            {
+                if (p.TotalBytes > 0)
+                    downloadCompleteBar.Value = (int)Math.Min(100L, p.ProgressedBytes * 100 / p.TotalBytes);
+            });
 
-                // Avoid SSL/TLS bridge error on Windows 7/XP
-                ServicePointManager.Expect100Continue = true;
-                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            downloadCompleteLabel.Text = "Hazırlanıyor…";
+            downloadCompleteLabel.Visible = true;
+            downloadCompleteBar.Value = 0;
+            downloadCompleteBar.Visible = true;
 
-                var clientStartProcess =
-                    await launcher.CreateProcessAsync(Properties.Settings.Default.SelectedVersion,
-                        ayarlar); // Start client
+            // İndir + derle + başlat. Tamamen asenkron olduğundan UI donmaz.
+            var clientStartProcess = await launcher.InstallAndBuildProcessAsync(
+                Properties.Settings.Default.SelectedVersion, ayarlar, fileProgress, byteProgress, CancellationToken.None);
 
-                clientStartProcess.Start(); // Launch the game
+            clientStartProcess.Start(); // Oyunu başlat
 
-                //prepareGameToLaunch.Enabled = true; // Launch prepareGameToLaunch
+            alreadyPlayingAnimatedLabel = false; // "Başlatılıyor..." animasyonunu durdur
+            downloadCompleteBar.Visible = false;
+            downloadCompleteLabel.Visible = false;
+
+            this.Visible = false; // Oyun açılırken launcher gizlenir
+
+            if (reopenLauncher.Checked)
+            {
+                // Oyun kapanınca launcher geri gelir (eski timer3 yoklaması yerine process.Exited olayı).
+                clientStartProcess.EnableRaisingEvents = true;
+                clientStartProcess.Exited += OnGameProcessExited;
             }
-            catch (Exception ex)
+            else
             {
-                //ex.Equals(Exception as System.Collections.Generic.KeyNotFoundException)
-                NotificationAboutException(ex, "Minecraft startup settings");
+                // Yeniden açma kapalı: oyun başlayınca launcher kapanır (oyundayken Discord durumu gösterilmez).
+                Application.Exit();
             }
         }
 
-        private void oynabutton_Click(object sender, EventArgs e)
+        // Oyun süreci sona erince (yalnızca "yeniden aç" açıkken) launcher'ı geri getirir.
+        private void OnGameProcessExited(object sender, EventArgs e)
+        {
+            if (IsDisposed || !IsHandleCreated)
+                return;
+
+            try
+            {
+                BeginInvoke((Action)(() =>
+                {
+                    if (Properties.Settings.Default.SelectedVersion != string.Empty)
+                        versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
+
+                    playButtonStaticLabel.Enabled = true;
+                    this.Visible = true;
+                    thisTrue();
+
+                    Client?.Dispose();
+                    DiscordRpcClientSetup();
+                }));
+            }
+            catch (ObjectDisposedException)
+            {
+                // Launcher zaten kapanmış.
+            }
+        }
+
+        private async void oynabutton_Click(object sender, EventArgs e)
         {
             string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                                          "/.projects/versions/projects-fabric-" + latestFabricVersion; // Fabric directory
 
-            int MinimumRamMb = int.Parse(Properties.Settings.Default.RamMin);
-            int MaximumRamMb = int.Parse(Properties.Settings.Default.RamMax);
+            // Güvenli parse: ayar boş/bozuksa varsayılan kullanılır (eskiden int.Parse çökerdi).
+            if (!int.TryParse(Properties.Settings.Default.RamMin, out int MinimumRamMb)) MinimumRamMb = 1024;
+            if (!int.TryParse(Properties.Settings.Default.RamMax, out int MaximumRamMb)) MaximumRamMb = 2048;
 
             if (MinimumRamMb > MaximumRamMb)
             {
@@ -432,27 +561,22 @@ namespace Projects_Launcher.Projects_Launcher
                     }
                 }
 
-                Thread thread = new Thread(() => Launch().GetAwaiter());
-                thread.IsBackground = true;
-                thread.Start(); // Launch the game
-                animatedPlayingLabel().GetAwaiter();
-                prepareGameToLaunch.Start(); // Launch prepareGameToLaunch
+                _ = animatedPlayingLabel(); // "Başlatılıyor..." animasyonu
+                await LaunchGameAsync();    // İndir + derle + başlat (UI donmadan)
             }
             catch (Exception ex)
             {
+                alreadyPlayingAnimatedLabel = false; // animasyonu durdur
                 DiscordRpcClientSetup();
 
-                prepareGameToLaunch.Stop(); // Stop prepareGameToLaunch
-                NotificationAboutException(ex, "Launch prepareGameToLaunch");
+                NotificationAboutException(ex, "Oyun başlatma");
 
-                thisTrue(); // Open components of the launcher
+                versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
+                downloadCompleteBar.Visible = false;
+                downloadCompleteLabel.Visible = false;
 
-                versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion; //Write version info into versionInfoStaticLabel
-
-                thisTrue();
+                thisTrue(); // Launcher bileşenlerini tekrar aç
             }
-
-            GC.WaitForPendingFinalizers();
         }
 
         private void updateModPackage()
@@ -486,11 +610,6 @@ namespace Projects_Launcher.Projects_Launcher
                 "/.projects/projects-mcmod-" + latestModVersion + ".zip"); // Download fabric to directory '.projects
         }
 
-        private void launcher_DownloadProgressChanged(object sender, ProgressChangedEventArgs e)
-        {
-            downloadCompleteBar.Value = e.ProgressPercentage;
-        }
-
         private void Wc_DownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
         {
             downloadCompleteLabel.Text = String.Format("{0:0.##}", Convert.ToDouble(e.BytesReceived) / 1024 / 1024) +
@@ -511,7 +630,6 @@ namespace Projects_Launcher.Projects_Launcher
                                      "/.projects/mods/";
 
                 System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath);
-                Thread.Sleep(1100);
                 Properties.Settings.Default.curModVer = latestModVersion;
                 Properties.Settings.Default.Save();
                 playButtonStaticLabel.Enabled = true;
@@ -525,8 +643,6 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 NotificationAboutException(ex, "DownloadFileCompleted (mod download process)");
             }
-
-            GC.WaitForPendingFinalizers();
         }
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
@@ -539,7 +655,6 @@ namespace Projects_Launcher.Projects_Launcher
                                      "/.projects/versions";
 
                 System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath);
-                Thread.Sleep(1100);
                 Properties.Settings.Default.SelectedVersion = "projects-fabric-" + latestFabricVersion;
                 versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
                 playButtonStaticLabel.Enabled = true;
@@ -563,68 +678,14 @@ namespace Projects_Launcher.Projects_Launcher
                     }
                 }
             }
-
-            GC.WaitForPendingFinalizers();
         }
 
         private void prepareGameToLaunch_Tick(object sender, EventArgs e)
         {
-            try
-            {
-                if (reopenLauncher.Checked == true)
-                {
-                    foreach (var process in Process.GetProcessesByName("javaw"))
-                    {
-                        Thread.Sleep(1031);
-                        playButtonStaticLabel.Enabled = false;
-                        this.Visible = false;
-                        Thread.Sleep(2000);
-                        timer3.Start();
-
-                        Process mcjava = Process.Start("javaw.exe");
-                        mcjava.Refresh();
-                        if (alreadyPlayingAnimatedLabel)
-                        {
-                            alreadyPlayingAnimatedLabel = false;
-                        }
-
-                        Thread.Sleep(1000);
-
-                        prepareGameToLaunch.Stop();
-                        return;
-                    }
-                }
-                else
-                {
-                    foreach (var process in Process.GetProcessesByName("javaw"))
-                    {
-                        Thread.Sleep(1031);
-                        Process mcjava = Process.Start("javaw.exe");
-                        mcjava.Refresh();
-                        this.Visible = false;
-                        animatedPlayingLabel().GetAwaiter();
-                        playButtonStaticLabel.Enabled = false;
-                        if (alreadyPlayingAnimatedLabel)
-                        {
-                            alreadyPlayingAnimatedLabel = false;
-                        }
-                        while (true)
-                        {
-                            Thread.Sleep(15000);
-                            if (mcjava.StartTime.Second < 5) continue;
-                            Environment.Exit(1);
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    "Bir hata oluştu! Uygulamayı yeniden başlatmanızı tavsiye ederiz. Hatanın devamı durumunda aşağıdaki hatayı desteğe iletiniz:\n\n" +
-                    ex.Message);
-            }
-
-            GC.WaitForPendingFinalizers();
+            // Eski javaw yoklaması kaldırıldı: Process.Start("javaw.exe") tam yol olmadan çağrılıyordu;
+            // java'yı PATH'e kurmamış kullanıcılarda "Sistem belirtilen dosyayı bulamıyor" (Win32 hata 2)
+            // hatasının kaynağı buydu ve gereksizdi. Oyun süreci artık LaunchGameAsync içinde
+            // process.Exited olayı ile izleniyor; bu zamanlayıcı kullanılmıyor.
         }
 
         private void NotificationAboutException(Exception ex, string location = "\n")
@@ -680,38 +741,35 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 settingsBgPanel.Visible = false;
             }
-
-            GC.WaitForPendingFinalizers();
         }
 
         private async Task onlineCountUpdater()
         {
             do
             {
-                IPHostEntry proxyIP = Dns.GetHostEntry(Properties.Settings.Default.ProxyIP);
-
-                String anyIP = "";
-
-                foreach (IPAddress address in proxyIP.AddressList)
+                string text;
+                try
                 {
-                    anyIP = address.ToString();
-                    break;
+                    // DNS çözümleme + sunucu ping'i bloklayıcıdır; arka planda çalıştırılır.
+                    text = await Task.Run(() =>
+                    {
+                        IPHostEntry proxyIP = Dns.GetHostEntry(Properties.Settings.Default.ProxyIP);
+                        string anyIP = proxyIP.AddressList.FirstOrDefault()?.ToString() ?? "";
+                        var pinger = new MineStat(anyIP, 25565);
+                        return pinger.ServerUp ? pinger.CurrentPlayers + " kişi oynuyor!" : "Bağlantı Yok";
+                    });
+                }
+                catch
+                {
+                    text = "Bağlantı Yok";
                 }
 
-                MineStat pinger = new MineStat(anyIP, 25565);
-                if (pinger.ServerUp)
-                {
-                    serverOnlineCountStaticLabel.Text = pinger.CurrentPlayers + " kişi oynuyor!";
-                }
-                else
-                {
-                    serverOnlineCountStaticLabel.Text = "Bağlantı Yok";
-                }
+                // ConfigureAwait yok: devam UI thread'inde kalır, etiket cross-thread olmadan güncellenir.
+                if (IsDisposed) return; // form kapandıysa döngüyü bitir (sızıntıyı önle)
+                serverOnlineCountStaticLabel.Text = text;
 
-                await Task.Delay(5000).ConfigureAwait(false);
-            } while (alreadyRelaunchWaiting == false);
-
-            GC.WaitForPendingFinalizers();
+                await Task.Delay(5000);
+            } while (!IsDisposed);
         }
 
         private void ramlabel_Click(object sender, EventArgs e)
@@ -888,144 +946,81 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void modsLabel_Click(object sender, EventArgs e)
         {
-            if (Directory.Exists(@appDataDizini))
+            try
             {
-                string myPath = @appDataDizini;
-                System.Diagnostics.Process prc = new System.Diagnostics.Process();
-                prc.StartInfo.FileName = myPath;
-                System.Threading.Thread.Sleep(1000);
-                prc.Start();
+                Directory.CreateDirectory(appDataDizini); // varsa dokunmaz
+                Process.Start(appDataDizini);             // klasörü Gezgin'de aç
             }
-            else
+            catch (Exception ex)
             {
-                Directory.CreateDirectory(@appDataDizini);
-                string myPath = @appDataDizini;
-                System.Diagnostics.Process prc = new System.Diagnostics.Process();
-                prc.StartInfo.FileName = myPath;
-                System.Threading.Thread.Sleep(1000);
-                prc.Start();
+                NotificationAboutException(ex, "Klasör açma");
             }
-
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
         }
 
         private void rpTransfer_Click(object sender, EventArgs e)
         {
-            if (!Directory.Exists(@TextureDizin))
+            Directory.CreateDirectory(TextureDizin); // varsa dokunmaz
+
+            using (OpenFileDialog file = new OpenFileDialog())
             {
-                Directory.CreateDirectory(@TextureDizin);
-            }
+                file.Filter = "ZIP Dosyası |*.zip";
+                file.FilterIndex = 2;
+                file.RestoreDirectory = true;
+                file.CheckFileExists = false;
+                file.Title = "ZIP Dosyası Seçiniz.";
 
-            OpenFileDialog file = new OpenFileDialog();
-            file.Filter = "ZIP Dosyası |*.zip";
-            file.FilterIndex = 2;
-            file.RestoreDirectory = true;
-            file.CheckFileExists = false;
-            file.Title = "ZIP Dosyası Seçiniz.";
-            file.ShowDialog();
+                if (file.ShowDialog() != DialogResult.OK)
+                    return;
 
-            string DosyaYolu = file.FileName;
-            string DosyaAdi = file.SafeFileName;
-            System.Threading.Thread.Sleep(500);
-            if (DosyaAdi != "" && DosyaYolu != "")
-            {
-                if (File.Exists(TextureDizin + "\\" + DosyaAdi))
+                string DosyaYolu = file.FileName;
+                string DosyaAdi = file.SafeFileName;
+                if (!string.IsNullOrEmpty(DosyaAdi) && !string.IsNullOrEmpty(DosyaYolu))
                 {
-                    MessageBox.Show(DosyaAdi + " isimli doku paketi zaten mevcut.", "", MessageBoxButtons.OK,
-                        MessageBoxIcon.Warning);
-                }
-                else
-                {
-                    File.Copy(DosyaYolu, TextureDizin + "\\" + DosyaAdi);
-                    MessageBox.Show("Doku paketi başarıyla yüklendi.");
+                    if (File.Exists(TextureDizin + "\\" + DosyaAdi))
+                    {
+                        MessageBox.Show(DosyaAdi + " isimli doku paketi zaten mevcut.", "", MessageBoxButtons.OK,
+                            MessageBoxIcon.Warning);
+                    }
+                    else
+                    {
+                        File.Copy(DosyaYolu, TextureDizin + "\\" + DosyaAdi);
+                        MessageBox.Show("Doku paketi başarıyla yüklendi.");
+                    }
                 }
             }
-
-            GC.WaitForPendingFinalizers();
         }
 
         private void rpFolder_Click(object sender, EventArgs e)
         {
-            if (Directory.Exists(@TextureDizin))
+            try
             {
-                string myPath = @TextureDizin;
-                System.Diagnostics.Process prc = new System.Diagnostics.Process();
-                prc.StartInfo.FileName = myPath;
-                System.Threading.Thread.Sleep(1000);
-                prc.Start();
+                Directory.CreateDirectory(TextureDizin); // varsa dokunmaz
+                Process.Start(TextureDizin);
             }
-            else
+            catch (Exception ex)
             {
-                Directory.CreateDirectory(@TextureDizin);
-                string myPath = @TextureDizin;
-                System.Diagnostics.Process prc = new System.Diagnostics.Process();
-                prc.StartInfo.FileName = myPath;
-                System.Threading.Thread.Sleep(1000);
-                prc.Start();
+                NotificationAboutException(ex, "Klasör açma");
             }
-
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
         }
 
         private void gamefolder_Click(object sender, EventArgs e)
         {
-            string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
-
-            if (Directory.Exists(@appDataDizini))
+            try
             {
-                string myPath = @appDataDizini;
-                System.Diagnostics.Process prc = new System.Diagnostics.Process();
-                prc.StartInfo.FileName = myPath;
-                System.Threading.Thread.Sleep(1000);
-                prc.Start();
+                string dir = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
+                Directory.CreateDirectory(dir); // varsa dokunmaz
+                Process.Start(dir);
             }
-            else
+            catch (Exception ex)
             {
-                Directory.CreateDirectory(@appDataDizini);
-                string myPath = @appDataDizini;
-                System.Diagnostics.Process prc = new System.Diagnostics.Process();
-                prc.StartInfo.FileName = myPath;
-                System.Threading.Thread.Sleep(1000);
-                prc.Start();
+                NotificationAboutException(ex, "Klasör açma");
             }
-
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
         }
 
         private void timer3_Tick(object sender, EventArgs e)
         {
-            if (alreadyRelaunchWaiting)
-            {
-                return;
-            }
-
-            alreadyRelaunchWaiting = true;
-
-            do
-            {
-                Task.Delay(5000);
-            } while (Process.GetProcessesByName("javaw").Any());
-
-            if (Properties.Settings.Default.SelectedVersion != string.Empty)
-            {
-                versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
-            }
-
-            playButtonStaticLabel.Enabled = true;
-            this.Visible = true;
-            thisTrue();
-            alreadyRelaunchWaiting = false;
-            onlineCountUpdater().GetAwaiter();
-            prepareGameToLaunch.Stop();
-            Client.Dispose();
-            DiscordRpcClientSetup();
-            timer3.Stop();
-
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
+            // Oyun kapanışını izleyen eski yoklama döngüsü kaldırıldı: do/while içinde UI thread'i
+            // bloke ediliyordu (donma). Yeniden açma artık OnGameProcessExited ile olay tabanlı.
         }
 
         private void maxramtext_Leave(object sender, EventArgs e)
@@ -1158,16 +1153,12 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void guna2ControlBox3_Click(object sender, EventArgs e)
         {
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
             Environment.Exit(0);
         }
 
         private void guna2ControlBox2_Click(object sender, EventArgs e)
         {
             this.WindowState = FormWindowState.Minimized;
-            GC.Collect();
-            GC.WaitForPendingFinalizers();
         }
 
         private void reopenLauncherCheckBox_MouseEnter(object sender, EventArgs e)
@@ -1203,52 +1194,23 @@ namespace Projects_Launcher.Projects_Launcher
             backButton.Visible = false;
         }
 
-        private void timer1_Tick(object sender, EventArgs e)
+        private async void timer1_Tick(object sender, EventArgs e)
         {
+            if (_pinging) return; // önceki istek bitmeden tekrar girme (5 sn'lik tick'ler birikmesin)
+            _pinging = true;
             try
             {
-                //Lobi onlineCheck
-                string url = "https://projectsggapi.vercel.app/api/server1";
-                HttpWebRequest request = WebRequest.Create(url) as HttpWebRequest;
-                string jsonverisi = "";
-                using (HttpWebResponse response = request.GetResponse() as HttpWebResponse)
-                {
-                    StreamReader r = new StreamReader(response.GetResponseStream());
-                    jsonverisi = r.ReadToEnd();
-                }
-
-                if (jsonverisi == "{\"online\":false}")
-                {
-                    lobiOnline.Image = Properties.Resources.De_Aktif;
-                }
-                else
-                {
-                    lobiOnline.Image = Properties.Resources.Aktif;
-                }
-
-                //Gaia onlineCheck
-                string url2 = "https://projectsggapi.vercel.app/api/server2";
-                HttpWebRequest request2 = WebRequest.Create(url2) as HttpWebRequest;
-                string jsonverisi2 = "";
-                using (HttpWebResponse response2 = request2.GetResponse() as HttpWebResponse)
-                {
-                    StreamReader r = new StreamReader(response2.GetResponseStream());
-                    jsonverisi2 += r.ReadToEnd();
-                }
-
-                if (jsonverisi2 == "{\"online\":false}")
-                {
-                    gaiaOnline.Image = Properties.Resources.De_Aktif;
-                }
-                else
-                {
-                    gaiaOnline.Image = Properties.Resources.Aktif;
-                }
+                // Sunucu durumları asenkron çekilir; eskiden senkron GetResponse her 5 sn UI'yi donduruyordu.
+                string lobi = await _http.GetStringAsync("https://projectsggapi.vercel.app/api/server1");
+                lobiOnline.Image = lobi.Contains("\"online\":false") ? Properties.Resources.De_Aktif : Properties.Resources.Aktif;
             }
             catch
             {
                 lobiOnline.Text = "?";
-                gaiaOnline.Text = "?";
+            }
+            finally
+            {
+                _pinging = false;
             }
         }
 
