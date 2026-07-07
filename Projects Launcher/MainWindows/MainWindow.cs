@@ -17,6 +17,7 @@ using System.Management;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -25,8 +26,11 @@ namespace Projects_Launcher.Projects_Launcher
 {
     public partial class mainMenuForm : Form
     {
-        public mainMenuForm()
+        // checkForUpdates: giriş ekranı atlanıp uygulama doğrudan ana menüyle açıldığında
+        // launcher güncelleme denetimi burada yapılır (normalde LoginWindow yapar).
+        public mainMenuForm(bool checkForUpdates = false)
         {
+            _checkForUpdates = checkForUpdates;
             InitializeComponent();
 
             // TLS + bağlantı limiti bir kez ayarlanır (her indirmede tekrar set etmeye gerek yok).
@@ -43,6 +47,15 @@ namespace Projects_Launcher.Projects_Launcher
 
         // timer1 (sunucu durumu) için yeniden giriş koruması.
         private bool _pinging;
+
+        // Giriş ekranı atlanarak açıldıysa launcher güncellemesi ana menüden denetlenir.
+        private readonly bool _checkForUpdates;
+
+        // versionBox <-> mainVersionBox karşılıklı senkronizasyonunda olay döngüsünü engeller.
+        private bool _syncingVersionBoxes;
+
+        // Tek tıkla tam kurulum: fabric indirmesi bitince mod paketi sorulmadan otomatik kurulur.
+        private bool _autoInstallModAfterFabric;
 
         // İndirme çubuğuna modern görünüm: yatay gradyan dolgu, yuvarlatılmış uçlar, yumuşak gölge.
         private void StyleProgressBar()
@@ -70,10 +83,15 @@ namespace Projects_Launcher.Projects_Launcher
             versionBox.Items.AddRange(new object[]
             {
                 "projects-fabric-" + latestFabricVersion,
-                "26.1.2 ✔", "1.21.11", "1.21.8", "1.21.3", "1.21.1", "1.21",
+                "26.2", "26.1.2 ✔", "1.21.11", "1.21.8", "1.21.3", "1.21.1", "1.21",
                 "1.20.4", "1.19.4", "1.18.2", "1.17.1", "1.16.5", "1.15.2",
                 "1.14.4", "1.13.2", "1.12.2", "1.8.9", "1.7.10"
             });
+
+            // Ana menüdeki hızlı sürüm seçici ayarlardaki listeyle birebir aynı tutulur.
+            mainVersionBox.MaxDropDownItems = 5;
+            mainVersionBox.Items.Clear();
+            mainVersionBox.Items.AddRange(versionBox.Items.Cast<object>().ToArray());
 
             modVersionBox.MaxDropDownItems = 5;
             modVersionBox.Items.Clear();
@@ -99,6 +117,9 @@ namespace Projects_Launcher.Projects_Launcher
         public string latestFabricVersion = Properties.Settings.Default.latestFabric;
 
         public string latestModVersion = Properties.Settings.Default.lastModVer;
+
+        // Gömülü shader paketi sürümü (varsayılan "v1"); version-shader.php ile güncellenir.
+        public string latestShaderVersion = Properties.Settings.Default.lastShaderVer;
 
         string appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
@@ -236,6 +257,10 @@ namespace Projects_Launcher.Projects_Launcher
             playButtonStaticLabel.Enabled = false;
             settingsStaticPictureBox.Enabled = false;
             discordStaticPictureBox.Enabled = false;
+            mainVersionBox.Enabled = false;
+            modInstallButton.Enabled = false;
+            modDeleteButton.Enabled = false;
+            shaderInstallButton.Enabled = false;
         }
 
         private void thisTrue()
@@ -244,6 +269,8 @@ namespace Projects_Launcher.Projects_Launcher
             playButtonStaticLabel.Enabled = true;
             settingsStaticPictureBox.Enabled = true;
             discordStaticPictureBox.Enabled = true;
+            mainVersionBox.Enabled = true;
+            UpdateModPackageButtons();
         }
 
         private async void Anamenu_Load(object sender, EventArgs e)
@@ -266,11 +293,14 @@ namespace Projects_Launcher.Projects_Launcher
             reopenLauncher.Checked = Properties.Settings.Default.reopenLauncher;
             temaSelectBox.Text = Properties.Settings.Default.themeSelected;
 
+            // Sürüm bilgisi artık ana menüde hızlı erişilebilir bir dropdown (mainVersionBox);
+            // versionInfoStaticLabel yalnızca durum metinleri ("Başlatılıyor..." vb.) için kullanılır.
+            versionInfoStaticLabel.Visible = false;
             if (Properties.Settings.Default.SelectedVersion != string.Empty)
-            {
-                versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
-                versionBox.Text = Properties.Settings.Default.SelectedVersion;
-            }
+                SelectVersionInBoxes(Properties.Settings.Default.SelectedVersion);
+
+            UpdateModPackageButtons();
+            PositionNicknameEditControls();
 
             modVersionBox.Text = Properties.Settings.Default.curModVer;
 
@@ -322,21 +352,19 @@ namespace Projects_Launcher.Projects_Launcher
                 if (!string.IsNullOrWhiteSpace(mod)) latestModVersion = mod;
             });
 
+            // Shader paketi güncel sürümü ayrı uçtan çekilir; hata olursa gömülü sürüm korunur
+            // (readPhpContent'in latestFabric'e düşen fallback'i shader'ı bozmasın diye FetchRemoteTextAsync).
+            string shader = await FetchRemoteTextAsync("https://mc.projects.gg/LauncherUpdateStream/version-shader.php");
+            if (!string.IsNullOrWhiteSpace(shader)) latestShaderVersion = shader;
+
+            // Güncel mod sürümü öğrenildikten sonra buton durumları tazelenir.
+            UpdateModPackageButtons();
+
+            if (_checkForUpdates)
+                _ = CheckLauncherUpdateAsync();
+
             // Skin render (asenkron; eskiden senkron GetResponse açılışı donduruyordu).
-            try
-            {
-                using (var stream = await _http.GetStreamAsync("https://minotar.net/avatar/" + playerNameStaticLabel.Text))
-                using (var ms = new MemoryStream())
-                {
-                    await stream.CopyToAsync(ms);
-                    ms.Position = 0;
-                    skinRenderPictureBox.Image = Bitmap.FromStream(ms);
-                }
-            }
-            catch
-            {
-                // İnternet yoksa veya servis kapalıysa olur; kritik değil.
-            }
+            await LoadSkinAsync();
         }
 
         private async Task LaunchGameAsync() // Minecraft başlatma (CmlLib 4.x)
@@ -421,8 +449,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 BeginInvoke((Action)(() =>
                 {
-                    if (Properties.Settings.Default.SelectedVersion != string.Empty)
-                        versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
+                    ShowVersionSelector();
 
                     playButtonStaticLabel.Enabled = true;
                     this.Visible = true;
@@ -467,8 +494,18 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 if (!Properties.Settings.Default.SelectedVersion.Contains(Properties.Settings.Default.modCompatibleFabric) && !Properties.Settings.Default.SelectedVersion.Equals(Properties.Settings.Default.modCompatibleVer))
                 {
-                    DialogResult secenek = MessageBox.Show("Mod paketi yalnızca \"" + Properties.Settings.Default.modCompatibleFabric + "\" fabric sürümü ve \"" + Properties.Settings.Default.modCompatibleVer + "\" oyun sürümüyle uyumludur. Ayarlara girip mod seçiminizi Manuel yapmalısınız ya da bu sürümlerden birini seçip oyuna bağlanmalısınız.", "Uyumsuz Sürüm", MessageBoxButtons.OK); // Selected mod not compatible with selected version
-                    return;
+                    // Uyarı sürüm başına yalnızca bir kez sorulur; kullanıcı onaylarsa sürüm
+                    // değiştirilene kadar tekrar sorulmaz (ApplySelectedVersion sıfırlar).
+                    if (!Properties.Settings.Default.incompatibleDontAsk.Equals(Properties.Settings.Default.SelectedVersion))
+                    {
+                        DialogResult secenek = MessageBox.Show("Mod paketi yalnızca \"" + Properties.Settings.Default.modCompatibleFabric + "\" fabric sürümü ve \"" + Properties.Settings.Default.modCompatibleVer + "\" oyun sürümüyle uyumludur. Seçili sürümde modlar çalışmayabilir ya da oyun hata verebilir.\n\nYine de devam etmek istiyor musunuz?", "Uyumsuz Sürüm", MessageBoxButtons.YesNo); // Selected mod not compatible with selected version
+
+                        if (secenek != DialogResult.Yes)
+                            return;
+
+                        Properties.Settings.Default.incompatibleDontAsk = Properties.Settings.Default.SelectedVersion;
+                        Properties.Settings.Default.Save();
+                    }
                 }
             }
 
@@ -480,27 +517,11 @@ namespace Projects_Launcher.Projects_Launcher
 
                     if (secenek == DialogResult.Yes)
                     {
-                        WebClient wc = new WebClient();
-                        wc.DownloadFileCompleted +=
-                            Wc_DownloadFileCompleted; // Call the codes when download process complete
-                        wc.DownloadProgressChanged += Wc_DownloadProgressChanged;
-                        Uri fabric = new Uri("https://mc.projects.gg/LauncherUpdateStream/projects-fabric-" + latestFabricVersion + ".zip"); // Fabric installer address
-                        wc.DownloadFileAsync(fabric,
-                            appDataDizini +
-                            "/.projects/projects-fabric-" + latestFabricVersion + ".zip"); // Download fabric to directory '.projects'
-                        playButtonStaticLabel.Enabled = false;
-                        settingsStaticPictureBox.Enabled = false;
-                        versionInfoStaticLabel.Text = "İndiriliyor...";
-                        downloadCompleteLabel.Visible = true;
-                        downloadCompleteBar.Visible = true;
-                        playSplitStaticLabel.Visible = true;
-                        Properties.Settings.Default.SelectedVersion = "projects-fabric-" + latestFabricVersion;
+                        DownloadFabricPackage();
                         return;
                     } else
                     {
-                        Properties.Settings.Default.SelectedVersion = "1.19.4";
-                        versionBox.SelectedIndex = 2;
-                        versionInfoStaticLabel.Text = "1.19.4";
+                        SelectVersionInBoxes("1.19.4");
                         MessageBox.Show("Oyun sürümünüz 1.19.4 olarak ayarlandı.\n\nFabric ile girmek isterseniz ayarlardan\nsürümü seçip oyunu başlatabilirsiniz.", "Sürüm Değiştirildi");
                     }
                 }
@@ -542,7 +563,7 @@ namespace Projects_Launcher.Projects_Launcher
                     }
                 }
 
-                if (!Properties.Settings.Default.curModVer.Equals("Manuel") && !Properties.Settings.Default.curModVer.Equals(latestModVersion))
+                if (!Properties.Settings.Default.curModVer.Equals("Manuel") && !IsModPackInstalled())
                 {
                     DialogResult askForModPackage = MessageBox.Show("Mod paketi güncel değil. Mod paketimizi kurarak mini harita, gece görüşü (H tuşu) gibi önemli özellikler elde edebilirsiniz. Reddetseniz bile daha sonra istemeniz durumunda ayarlar kısmından mod sürümü seçip mod paketi kurabilirsiniz.\n\nYüklemek istiyor musunuz?", "Mod Paketi", MessageBoxButtons.YesNo);
 
@@ -561,6 +582,7 @@ namespace Projects_Launcher.Projects_Launcher
                     }
                 }
 
+                ShowVersionStatus("Başlatılıyor");
                 _ = animatedPlayingLabel(); // "Başlatılıyor..." animasyonu
                 await LaunchGameAsync();    // İndir + derle + başlat (UI donmadan)
             }
@@ -571,7 +593,7 @@ namespace Projects_Launcher.Projects_Launcher
 
                 NotificationAboutException(ex, "Oyun başlatma");
 
-                versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
+                ShowVersionSelector();
                 downloadCompleteBar.Visible = false;
                 downloadCompleteLabel.Visible = false;
 
@@ -579,8 +601,79 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
+        // İndirme sonrası geçici .zip dosyasını siler; hem başarıda hem hatada çağrılır ki
+        // bozuk/artık arşiv diskte kalmasın (silinemezse kritik değil, sessizce geçilir).
+        private static void DeleteLeftoverZip(string zipPath)
+        {
+            try
+            {
+                if (File.Exists(zipPath))
+                    File.Delete(zipPath);
+            }
+            catch
+            {
+                // Dosya kilitliyse vb. silinemeyebilir; kurulum akışını etkilemez.
+            }
+        }
+
+        // Fabric paketini indirir ve UI'yi indirme moduna alır; bitince Wc_DownloadFileCompleted çalışır.
+        private void DownloadFabricPackage()
+        {
+            WebClient wc = new WebClient();
+            wc.DownloadFileCompleted +=
+                Wc_DownloadFileCompleted; // Call the codes when download process complete
+            wc.DownloadProgressChanged += Wc_DownloadProgressChanged;
+            Uri fabric = new Uri("https://mc.projects.gg/LauncherUpdateStream/projects-fabric-" + latestFabricVersion + ".zip"); // Fabric installer address
+            wc.DownloadFileAsync(fabric,
+                appDataDizini +
+                "/.projects/projects-fabric-" + latestFabricVersion + ".zip"); // Download fabric to directory '.projects'
+            playButtonStaticLabel.Enabled = false;
+            settingsStaticPictureBox.Enabled = false;
+            modInstallButton.Enabled = false;
+            modDeleteButton.Enabled = false;
+            ShowVersionStatus("İndiriliyor...");
+            downloadCompleteLabel.Visible = true;
+            downloadCompleteBar.Visible = true;
+            playSplitStaticLabel.Visible = true;
+            Properties.Settings.Default.SelectedVersion = "projects-fabric-" + latestFabricVersion;
+            Properties.Settings.Default.Save();
+        }
+
+        // Tek tıkla tam kurulum: fabric sürümünü seçer, gerekiyorsa indirir, ardından mod paketini
+        // kullanıcıya tekrar sormadan otomatik kurar.
+        private void InstallFullPackage()
+        {
+            string fabricVersion = "projects-fabric-" + latestFabricVersion;
+
+            SelectVersionInBoxes(fabricVersion);
+
+            if (!Directory.Exists(appDataDizini + "/.projects/versions/" + fabricVersion))
+            {
+                _autoInstallModAfterFabric = true;
+                DownloadFabricPackage();
+            }
+            else if (IsModPackInstalled())
+            {
+                // Fabric ve güncel mod paketi zaten kurulu; yalnızca sürüm seçimi değişti.
+                MessageBox.Show(
+                    "Oyun sürümünüz \"" + fabricVersion + "\" olarak ayarlandı.\nMod paketiniz zaten güncel, yeniden kurulum yapılmadı.",
+                    "Mod Paketi");
+            }
+            else
+            {
+                updateModPackage();
+            }
+        }
+
         private void updateModPackage()
         {
+            // Güncel mod paketi zaten kuruluysa yeniden indirme/kurulum başlatılmaz.
+            if (IsModPackInstalled())
+            {
+                UpdateModPackageButtons();
+                return;
+            }
+
             WebClient wc2 = new WebClient();
 
             if (Directory.Exists(appDataDizini + "/.projects/mods"))
@@ -600,7 +693,9 @@ namespace Projects_Launcher.Projects_Launcher
 
             playButtonStaticLabel.Enabled = false;
             settingsStaticPictureBox.Enabled = false;
-            versionInfoStaticLabel.Text = "Mod paketi kuruluyor...";
+            modInstallButton.Enabled = false;
+            modDeleteButton.Enabled = false;
+            ShowVersionStatus("Mod paketi kuruluyor...");
             downloadCompleteLabel.Visible = true;
             downloadCompleteBar.Visible = true;
             playSplitStaticLabel.Visible = true;
@@ -622,41 +717,52 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void Wc2_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
+            string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                             "/.projects/projects-mcmod-" + latestModVersion + ".zip";
+
             try
             {
-                string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                                 "/.projects/projects-mcmod-" + latestModVersion + ".zip";
                 string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                                      "/.projects/mods/";
 
                 System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath);
                 Properties.Settings.Default.curModVer = latestModVersion;
                 Properties.Settings.Default.Save();
+                modVersionBox.Text = latestModVersion; // ayarlar dropdown'ı kurulu paketi gösterir
                 playButtonStaticLabel.Enabled = true;
                 settingsStaticPictureBox.Enabled = true;
                 downloadCompleteLabel.Visible = false;
                 downloadCompleteBar.Visible = false;
                 playSplitStaticLabel.Visible = false;
-                versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
+                ShowVersionSelector();
             }
             catch (Exception ex)
             {
                 NotificationAboutException(ex, "DownloadFileCompleted (mod download process)");
             }
+
+            DeleteLeftoverZip(zipPath);
+            UpdateModPackageButtons();
         }
 
         private void Wc_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
         {
+            bool autoInstallMod = _autoInstallModAfterFabric;
+            _autoInstallModAfterFabric = false;
+            bool fabricReady = false;
+
+            string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
+                             "/.projects/projects-fabric-" + latestFabricVersion + ".zip";
+
             try
             {
-                string zipPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
-                                 "/.projects/projects-fabric-" + latestFabricVersion + ".zip";
                 string extractPath = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                                      "/.projects/versions";
 
                 System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractPath);
-                Properties.Settings.Default.SelectedVersion = "projects-fabric-" + latestFabricVersion;
-                versionInfoStaticLabel.Text = Properties.Settings.Default.SelectedVersion;
+                fabricReady = true;
+                SelectVersionInBoxes("projects-fabric-" + latestFabricVersion);
+                ShowVersionSelector();
                 playButtonStaticLabel.Enabled = true;
                 settingsStaticPictureBox.Enabled = true;
                 downloadCompleteLabel.Visible = false;
@@ -668,8 +774,17 @@ namespace Projects_Launcher.Projects_Launcher
                 NotificationAboutException(ex, "DownloadFileCompleted (fabric download process)");
             }
 
+            DeleteLeftoverZip(zipPath);
+
+            // Tam kurulum akışında mod paketi kullanıcıya tekrar sorulmadan kurulur.
+            if (autoInstallMod && fabricReady)
+            {
+                updateModPackage();
+                return;
+            }
+
             if (!Properties.Settings.Default.curModVer.Equals("Manuel")) {
-                if (!Properties.Settings.Default.curModVer.Equals(latestModVersion) || !Directory.Exists(appDataDizini + "/.projects/mods")) {
+                if (!IsModPackInstalled()) {
                     DialogResult askForModPackage = MessageBox.Show("Mod paketi güncel değil. Mod paketimizi kurarak mini harita, gece görüşü (H tuşu) gibi önemli özellikler elde edebilirsiniz. Reddetseniz bile daha sonra istemeniz durumunda ayarlar kısmından mod sürümü seçip mod paketi kurabilirsiniz.\n\nYüklemek istiyor musunuz?", "Mod Paketi", MessageBoxButtons.YesNo); //Fabric dosyasının olmadığını bildir
 
                     if (askForModPackage == DialogResult.Yes) {
@@ -843,28 +958,91 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void surumsec_SelectedIndexChanged(object sender, EventArgs e)
         {
-            string testString = versionBox.Text, resultString = "";
-
-            if (testString.IndexOf("") == -1)
+            if (_syncingVersionBoxes) return;
+            _syncingVersionBoxes = true;
+            try
             {
-                resultString = testString;
+                ApplySelectedVersion(versionBox.Text);
+                if (mainVersionBox.SelectedIndex != versionBox.SelectedIndex)
+                    mainVersionBox.SelectedIndex = versionBox.SelectedIndex;
             }
-            else
+            finally
             {
-                foreach (char versionTextChars in testString)
-                {
-                    if (versionTextChars.Equals(' '))
-                    {
-                        break;
-                    }
-
-                    resultString += versionTextChars;
-                }
+                _syncingVersionBoxes = false;
             }
+        }
+
+        // Ana menüdeki hızlı sürüm seçici; ayarlardaki versionBox ile aynı davranır ve senkron kalır.
+        private void mainVersionBox_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            if (_syncingVersionBoxes) return;
+            _syncingVersionBoxes = true;
+            try
+            {
+                ApplySelectedVersion(mainVersionBox.Text);
+                if (versionBox.SelectedIndex != mainVersionBox.SelectedIndex)
+                    versionBox.SelectedIndex = mainVersionBox.SelectedIndex;
+            }
+            finally
+            {
+                _syncingVersionBoxes = false;
+            }
+        }
+
+        // Dropdown metnindeki eklerden (ör. "26.1.2 ✔") arındırılmış sürümü ayarlara yazar.
+        private void ApplySelectedVersion(string displayText)
+        {
+            string resultString = displayText;
+            int spaceIndex = displayText.IndexOf(' ');
+            if (spaceIndex >= 0)
+                resultString = displayText.Substring(0, spaceIndex);
+
+            // Sürüm değişince "Uyumsuz Sürüm" uyarısının bir-kez-sor hafızası sıfırlanır.
+            if (!Properties.Settings.Default.SelectedVersion.Equals(resultString))
+                Properties.Settings.Default.incompatibleDontAsk = "";
 
             Properties.Settings.Default.SelectedVersion = resultString;
             Properties.Settings.Default.Save();
-            versionInfoStaticLabel.Text = versionBox.Text;
+            versionInfoStaticLabel.Text = displayText;
+            UpdateModPackageButtons();
+        }
+
+        // Kayıtlı sürümü her iki dropdown'da da seçer; listede yoksa öğe olarak ekler.
+        private void SelectVersionInBoxes(string savedVersion)
+        {
+            int idx = -1;
+            for (int i = 0; i < versionBox.Items.Count; i++)
+            {
+                string item = versionBox.Items[i].ToString();
+                if (item.Equals(savedVersion) || item.StartsWith(savedVersion + " "))
+                {
+                    idx = i;
+                    break;
+                }
+            }
+
+            if (idx == -1)
+            {
+                versionBox.Items.Add(savedVersion);
+                mainVersionBox.Items.Add(savedVersion);
+                idx = versionBox.Items.Count - 1;
+            }
+
+            if (versionBox.SelectedIndex == idx)
+            {
+                // Seçim zaten doğru; yalnızca ayar/etiket/butonlar tazelenir.
+                ApplySelectedVersion(versionBox.Items[idx].ToString());
+                if (mainVersionBox.SelectedIndex != idx)
+                {
+                    _syncingVersionBoxes = true;
+                    try { mainVersionBox.SelectedIndex = idx; }
+                    finally { _syncingVersionBoxes = false; }
+                }
+            }
+            else
+            {
+                versionBox.SelectedIndex = idx; // surumsec_SelectedIndexChanged senkronu tamamlar
+            }
         }
 
         private void modPickVersion_SelectedIndexChanged(object sender, EventArgs e)
@@ -1296,6 +1474,453 @@ namespace Projects_Launcher.Projects_Launcher
         {
             Properties.Settings.Default.reopenLauncher = reopenLauncher.Checked;
             Properties.Settings.Default.Save();
+        }
+
+        // --- Ana menü hızlı erişim: sürüm durum görünümü ---
+
+        // İndirme/başlatma sırasında dropdown gizlenir, durum etiketi gösterilir.
+        private void ShowVersionStatus(string text)
+        {
+            mainVersionBox.Visible = false;
+            versionInfoStaticLabel.Text = text;
+            versionInfoStaticLabel.Visible = true;
+        }
+
+        // İşlem bitince durum etiketi gizlenir, sürüm dropdown'ı geri gelir.
+        private void ShowVersionSelector()
+        {
+            versionInfoStaticLabel.Visible = false;
+            mainVersionBox.Visible = true;
+        }
+
+        // --- Ana menü hızlı erişim: mod paketi butonları ---
+
+        private bool IsModPackInstalled()
+        {
+            string curModVer = Properties.Settings.Default.curModVer;
+            if (curModVer.Equals("Manuel"))
+                return false;
+
+            // curModVer bazen "v12", bazen "projects-mcmod-v12" biçiminde saklanıyor; ikisi de kabul edilir.
+            bool versionMatches = curModVer.Equals(latestModVersion) ||
+                                  curModVer.Equals("projects-mcmod-" + latestModVersion);
+
+            return versionMatches && Directory.Exists(appDataDizini + "/.projects/mods");
+        }
+
+        // Seçili sürüme göre kur/yüklü/sil butonlarının görünürlük ve durumlarını ayarlar.
+        private void UpdateModPackageButtons()
+        {
+            bool fabricSelected = Properties.Settings.Default.SelectedVersion.Contains("projects-fabric");
+
+            if (!fabricSelected)
+            {
+                // Fabric dışı sürümde tek tıkla tam kurulum tuşu gösterilir (sürüm + mod paketi).
+                modInstallButton.Visible = true;
+                modInstallButton.Enabled = true;
+                modInstallButton.Text = "Mod Paketi Kur";
+                modInstallButton.FillColor = Color.FromArgb(34, 197, 94);
+                modInstallButton.ShadowDecoration.Enabled = true;
+
+                modDeleteButton.Visible = Directory.Exists(appDataDizini + "/.projects/mods");
+                modDeleteButton.Enabled = true;
+                UpdateShaderButton();
+                return;
+            }
+
+            bool installed = IsModPackInstalled();
+
+            modInstallButton.Visible = true;
+            modInstallButton.Enabled = !installed;
+            modInstallButton.Text = installed ? "Mod Paketi Yüklü" : "Mod Paketini Kur";
+            modInstallButton.FillColor = installed
+                ? Color.FromArgb(60, 64, 72)
+                : Color.FromArgb(34, 197, 94);
+            modInstallButton.ShadowDecoration.Enabled = !installed;
+
+            modDeleteButton.Visible = Directory.Exists(appDataDizini + "/.projects/mods");
+            modDeleteButton.Enabled = true;
+            UpdateShaderButton();
+        }
+
+        private void modInstallButton_Click(object sender, EventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(latestModVersion) || string.IsNullOrWhiteSpace(latestFabricVersion))
+            {
+                MessageBox.Show(
+                    "Mod paketi sürüm bilgisi alınamadı.\nİnternet bağlantınızı kontrol edip tekrar deneyin.",
+                    "Mod Paketi");
+                return;
+            }
+
+            // Fabric dışı sürümde tam kurulum: sürüm değişikliği tek seferde onaylatılır,
+            // sonrasında oyun sürümü dahil her şey otomatik kurulur.
+            if (!Properties.Settings.Default.SelectedVersion.Contains("projects-fabric"))
+            {
+                DialogResult secenek = MessageBox.Show(
+                    "Mod paketi yalnızca \"projects-fabric-" + latestFabricVersion + "\" sürümüyle çalışır.\n\nDevam ederseniz oyun sürümünüz bu sürüme değiştirilecek ve gerekli tüm dosyalar otomatik olarak kurulacak.\n\nDevam etmek istiyor musunuz?",
+                    "Mod Paketi Kur", MessageBoxButtons.YesNo);
+
+                if (secenek != DialogResult.Yes)
+                    return;
+
+                InstallFullPackage();
+                return;
+            }
+
+            updateModPackage();
+        }
+
+        private void modDeleteButton_Click(object sender, EventArgs e)
+        {
+            DialogResult secenek = MessageBox.Show(
+                "Mod paketi silinecek ve mod seçiminiz \"Manuel\" olarak ayarlanacak.\n\nDevam etmek istiyor musunuz?",
+                "Mod Paketini Sil", MessageBoxButtons.YesNo);
+
+            if (secenek != DialogResult.Yes)
+                return;
+
+            try
+            {
+                string modsDizini = appDataDizini + "/.projects/mods";
+                if (Directory.Exists(modsDizini))
+                    Directory.Delete(modsDizini, true);
+
+                modVersionBox.Text = "Manuel"; // modPickVersion_SelectedIndexChanged ayarı da kaydeder
+                Properties.Settings.Default.curModVer = "Manuel";
+                Properties.Settings.Default.Save();
+            }
+            catch (Exception ex)
+            {
+                NotificationAboutException(ex, "Mod paketi silme");
+            }
+
+            UpdateModPackageButtons();
+        }
+
+        // --- Ana menü hızlı erişim: shader paketi ---
+
+        // Shader paketi kurulu mu? (kayıtlı sürüm boş değilse ve shaderpacks klasörü varsa)
+        private bool IsShaderPackInstalled()
+        {
+            string cur = Properties.Settings.Default.curShaderVer;
+            return !string.IsNullOrEmpty(cur) &&
+                   Directory.Exists(appDataDizini + "/.projects/shaderpacks");
+        }
+
+        // Shader butonu yalnızca mod paketi kuruluyken görünür: kurulu değilse "Kur",
+        // kuruluysa ve güncelse pasif "Yüklü", eski sürümdeyse "Güncelle" olarak gösterilir.
+        private void UpdateShaderButton()
+        {
+            if (!IsModPackInstalled())
+            {
+                shaderInstallButton.Visible = false;
+                return;
+            }
+
+            shaderInstallButton.Visible = true;
+
+            bool installed = IsShaderPackInstalled();
+            bool upToDate = installed &&
+                            Properties.Settings.Default.curShaderVer.Equals(latestShaderVersion);
+
+            if (!installed)
+            {
+                shaderInstallButton.Enabled = true;
+                shaderInstallButton.Text = "Shader Paketi Kur";
+                shaderInstallButton.FillColor = Color.FromArgb(94, 148, 255);
+                shaderInstallButton.ShadowDecoration.Enabled = true;
+            }
+            else if (upToDate)
+            {
+                shaderInstallButton.Enabled = false;
+                shaderInstallButton.Text = "Shader Paketi Yüklü";
+                shaderInstallButton.FillColor = Color.FromArgb(60, 64, 72);
+                shaderInstallButton.ShadowDecoration.Enabled = false;
+            }
+            else
+            {
+                shaderInstallButton.Enabled = true;
+                shaderInstallButton.Text = "Shader Güncelle";
+                shaderInstallButton.FillColor = Color.FromArgb(245, 158, 11);
+                shaderInstallButton.ShadowDecoration.Enabled = true;
+            }
+        }
+
+        private void shaderInstallButton_Click(object sender, EventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(latestShaderVersion))
+            {
+                MessageBox.Show(
+                    "Shader paketi sürüm bilgisi alınamadı.\nİnternet bağlantınızı kontrol edip tekrar deneyin.",
+                    "Shader Paketi");
+                return;
+            }
+
+            updateShaderPackage();
+        }
+
+        // Shader paketini indirir ve UI'yi indirme moduna alır; bitince Wc3_DownloadFileCompleted çalışır.
+        private void updateShaderPackage()
+        {
+            WebClient wc3 = new WebClient();
+            wc3.DownloadFileCompleted += Wc3_DownloadFileCompleted;
+            wc3.DownloadProgressChanged += Wc_DownloadProgressChanged;
+
+            Uri shaderUri = new Uri("https://mc.projects.gg/LauncherUpdateStream/projects-shaders-" + latestShaderVersion + ".zip");
+
+            playButtonStaticLabel.Enabled = false;
+            settingsStaticPictureBox.Enabled = false;
+            modInstallButton.Enabled = false;
+            modDeleteButton.Enabled = false;
+            shaderInstallButton.Enabled = false;
+            ShowVersionStatus("Shader paketi kuruluyor...");
+            downloadCompleteLabel.Visible = true;
+            downloadCompleteBar.Visible = true;
+            playSplitStaticLabel.Visible = true;
+
+            wc3.DownloadFileAsync(shaderUri,
+                appDataDizini + "/.projects/projects-shaders-" + latestShaderVersion + ".zip");
+        }
+
+        private void Wc3_DownloadFileCompleted(object sender, AsyncCompletedEventArgs e)
+        {
+            string zipPath = appDataDizini + "/.projects/projects-shaders-" + latestShaderVersion + ".zip";
+
+            try
+            {
+                if (e.Error != null)
+                    throw e.Error;
+
+                string extractPath = appDataDizini + "/.projects/shaderpacks/";
+                ExtractZipOverwrite(zipPath, extractPath);
+
+                Properties.Settings.Default.curShaderVer = latestShaderVersion;
+                Properties.Settings.Default.Save();
+
+                MessageBox.Show(
+                    "Shader paketi başarıyla kuruldu.\n\nOyun içinde Video Ayarları > Shader Paketleri bölümünden etkinleştirebilirsiniz.",
+                    "Shader Paketi");
+            }
+            catch (Exception ex)
+            {
+                NotificationAboutException(ex, "Shader paketi kurulumu");
+            }
+            finally
+            {
+                playButtonStaticLabel.Enabled = true;
+                settingsStaticPictureBox.Enabled = true;
+                downloadCompleteLabel.Visible = false;
+                downloadCompleteBar.Visible = false;
+                playSplitStaticLabel.Visible = false;
+                ShowVersionSelector();
+                DeleteLeftoverZip(zipPath);
+                UpdateModPackageButtons();
+            }
+        }
+
+        // .NET Framework'te ZipFile.ExtractToDirectory üzerine-yazamaz; güncellemede var olan
+        // dosyaları ezebilmek için elle çıkarılır. Kullanıcının shaderpacks içindeki kendi
+        // paketleri korunur (yalnız arşivdeki dosyalar yazılır). Zip-Slip'e karşı hedef yol denetlenir.
+        private static void ExtractZipOverwrite(string zipPath, string destDir)
+        {
+            Directory.CreateDirectory(destDir);
+            string destRoot = Path.GetFullPath(destDir.TrimEnd('/', '\\')) + Path.DirectorySeparatorChar;
+
+            using (var archive = System.IO.Compression.ZipFile.OpenRead(zipPath))
+            {
+                foreach (var entry in archive.Entries)
+                {
+                    string destPath = Path.GetFullPath(Path.Combine(destRoot, entry.FullName));
+
+                    // Arşiv hedef klasör dışına taşmaya çalışıyorsa (../) atla.
+                    if (!destPath.StartsWith(destRoot, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (string.IsNullOrEmpty(entry.Name)) // klasör girdisi
+                    {
+                        Directory.CreateDirectory(destPath);
+                        continue;
+                    }
+
+                    Directory.CreateDirectory(Path.GetDirectoryName(destPath));
+                    System.IO.Compression.ZipFileExtensions.ExtractToFile(entry, destPath, true);
+                }
+            }
+        }
+
+        // --- Ana menü hızlı erişim: kullanıcı adı düzenleme ---
+
+        // Kalem simgesini ve düzenleme kutusunu isim etiketine göre hizalar (isim uzunluğu değişken).
+        private void PositionNicknameEditControls()
+        {
+            editNicknameButton.Location = new Point(playerNameStaticLabel.Right + 2, playerNameStaticLabel.Top - 2);
+            nicknameEditTextBox.Location = new Point(playerNameStaticLabel.Left, playerNameStaticLabel.Top - 6);
+        }
+
+        private void editNicknameButton_Click(object sender, EventArgs e)
+        {
+            nicknameEditTextBox.Text = Properties.Settings.Default.NickNames;
+            nicknameEditTextBox.Visible = true;
+            playerNameStaticLabel.Visible = false;
+            editNicknameButton.Visible = false;
+            nicknameEditTextBox.Focus();
+        }
+
+        private void nicknameEditTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                e.SuppressKeyPress = true;
+                CommitNicknameEdit(true);
+            }
+            else if (e.KeyCode == Keys.Escape)
+            {
+                e.SuppressKeyPress = true;
+                CancelNicknameEdit();
+            }
+        }
+
+        private void nicknameEditTextBox_Leave(object sender, EventArgs e)
+        {
+            if (nicknameEditTextBox.Visible)
+                CommitNicknameEdit(false);
+        }
+
+        private void CancelNicknameEdit()
+        {
+            nicknameEditTextBox.Visible = false;
+            playerNameStaticLabel.Visible = true;
+            editNicknameButton.Visible = true;
+        }
+
+        // Yeni kullanıcı adını doğrular, kaydeder ve skin görselini tazeler.
+        private void CommitNicknameEdit(bool warnIfInvalid)
+        {
+            string newName = nicknameEditTextBox.Text.Trim();
+
+            if (string.IsNullOrEmpty(newName) || !Regex.IsMatch(newName, "^[a-zA-Z0-9_]+$"))
+            {
+                CancelNicknameEdit();
+                if (warnIfInvalid)
+                    MessageBox.Show(
+                        "Kullanıcı adınızda boşluk veya ? gibi\nözel karakterler bulunmamalıdır!",
+                        "Kullanıcı Adı Geçersiz");
+                return;
+            }
+
+            Properties.Settings.Default.NickNames = newName;
+            Properties.Settings.Default.Save();
+
+            playerNameStaticLabel.Text = newName;
+            CancelNicknameEdit();
+            PositionNicknameEditControls();
+            _ = LoadSkinAsync();
+        }
+
+        // Skin görselini minotar servisinden asenkron indirir.
+        private async Task LoadSkinAsync()
+        {
+            try
+            {
+                using (var stream = await _http.GetStreamAsync("https://minotar.net/avatar/" + Properties.Settings.Default.NickNames))
+                using (var ms = new MemoryStream())
+                {
+                    await stream.CopyToAsync(ms);
+                    ms.Position = 0;
+                    skinRenderPictureBox.Image = Bitmap.FromStream(ms);
+                }
+            }
+            catch
+            {
+                // İnternet yoksa veya servis kapalıysa olur; kritik değil.
+            }
+        }
+
+        // --- Giriş ekranı atlanınca launcher güncelleme denetimi ---
+
+        private async Task CheckLauncherUpdateAsync()
+        {
+            string newest = await FetchRemoteTextAsync("https://mc.projects.gg/LauncherUpdateStream/version-v2.php");
+
+            if (string.IsNullOrWhiteSpace(newest) || newest.Equals(currentVersion) ||
+                Properties.Settings.Default.suppressVersion == newest)
+                return;
+
+            DialogResult update = MessageBox.Show(
+                "Başlatıcının yeni bir sürümü mevcut. (v" + newest + ")\n\nŞimdi güncellemek ister misiniz?",
+                "Güncelleme Mevcut", MessageBoxButtons.YesNo);
+
+            if (update == DialogResult.Yes)
+                StartLauncherUpdate();
+        }
+
+        // Uzak PHP çıktısındaki ilk etiket içeriğini döndürür; hatada boş döner
+        // (readPhpContent'in latestFabric'e düşen hatalı fallback'i burada kullanılamaz).
+        private static async Task<string> FetchRemoteTextAsync(string address)
+        {
+            try
+            {
+                string content = await _http.GetStringAsync(address);
+                bool startWriting = false;
+                StringBuilder bld = new StringBuilder();
+
+                foreach (char character in content)
+                {
+                    if (character.Equals('>'))
+                    {
+                        if (!startWriting)
+                            startWriting = true;
+                    }
+                    else if (startWriting)
+                    {
+                        if (!character.Equals('<'))
+                            bld.Append(character);
+                        else
+                            break;
+                    }
+                }
+
+                return bld.ToString();
+            }
+            catch
+            {
+                return "";
+            }
+        }
+
+        // Kurulum dosyasını indirir ve çalıştırıp launcher'ı kapatır (LoginWindow'daki akışın taşınmışı).
+        private void StartLauncherUpdate()
+        {
+            try
+            {
+                this.Enabled = false;
+                WebClient wc = new WebClient();
+                string setupPath = appDataDizini + "/.projects/ProjectsSetup.exe";
+
+                wc.DownloadFileCompleted += (s, args) =>
+                {
+                    try
+                    {
+                        Process.Start(setupPath);
+                        Environment.Exit(0);
+                    }
+                    catch (Exception ex)
+                    {
+                        this.Enabled = true;
+                        NotificationAboutException(ex, "Başlatıcı güncelleme");
+                    }
+                };
+
+                wc.DownloadFileAsync(
+                    new Uri("https://mc.projects.gg/LauncherUpdateStream/versions/ProjectsSetup.exe"),
+                    setupPath);
+            }
+            catch (Exception ex)
+            {
+                this.Enabled = true;
+                NotificationAboutException(ex, "Başlatıcı güncelleme");
+            }
         }
     }
 }

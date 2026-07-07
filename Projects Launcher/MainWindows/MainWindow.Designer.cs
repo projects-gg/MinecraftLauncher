@@ -100,6 +100,12 @@ namespace Projects_Launcher.Projects_Launcher
             this.maxRamTextBox = new Guna.UI2.WinForms.Guna2TextBox();
             this.maxRamDynamicCalculatorLabel = new System.Windows.Forms.Label();
             this.directorySearcher1 = new System.DirectoryServices.DirectorySearcher();
+            this.editNicknameButton = new System.Windows.Forms.Label();
+            this.nicknameEditTextBox = new Guna.UI2.WinForms.Guna2TextBox();
+            this.mainVersionBox = new Guna.UI2.WinForms.Guna2ComboBox();
+            this.modInstallButton = new Guna.UI2.WinForms.Guna2Button();
+            this.modDeleteButton = new Guna.UI2.WinForms.Guna2Button();
+            this.shaderInstallButton = new Guna.UI2.WinForms.Guna2Button();
             ((System.ComponentModel.ISupportInitialize)(this.skinRenderPictureBox)).BeginInit();
             this.settingsBgPanel.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.modSelectionImageBox)).BeginInit();
@@ -1006,7 +1012,135 @@ namespace Projects_Launcher.Projects_Launcher
             this.directorySearcher1.ClientTimeout = System.TimeSpan.Parse("-00:00:01");
             this.directorySearcher1.ServerPageTimeLimit = System.TimeSpan.Parse("-00:00:01");
             this.directorySearcher1.ServerTimeLimit = System.TimeSpan.Parse("-00:00:01");
-            // 
+            //
+            // editNicknameButton
+            //
+            this.editNicknameButton.AutoSize = true;
+            this.editNicknameButton.BackColor = System.Drawing.Color.Transparent;
+            this.editNicknameButton.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.editNicknameButton.Font = new System.Drawing.Font("Segoe UI Symbol", 12F);
+            this.editNicknameButton.ForeColor = System.Drawing.Color.Silver;
+            this.editNicknameButton.Location = new System.Drawing.Point(205, 40);
+            this.editNicknameButton.Name = "editNicknameButton";
+            this.editNicknameButton.Size = new System.Drawing.Size(25, 21);
+            this.editNicknameButton.TabIndex = 2001;
+            this.editNicknameButton.Text = "✎";
+            this.editNicknameButton.Click += new System.EventHandler(this.editNicknameButton_Click);
+            //
+            // nicknameEditTextBox
+            //
+            this.nicknameEditTextBox.BackColor = System.Drawing.Color.Transparent;
+            this.nicknameEditTextBox.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(39)))), ((int)(((byte)(40)))), ((int)(((byte)(55)))));
+            this.nicknameEditTextBox.BorderRadius = 4;
+            this.nicknameEditTextBox.Cursor = System.Windows.Forms.Cursors.IBeam;
+            this.nicknameEditTextBox.DefaultText = "";
+            this.nicknameEditTextBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(49)))), ((int)(((byte)(57)))), ((int)(((byte)(72)))));
+            this.nicknameEditTextBox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.nicknameEditTextBox.Font = new System.Drawing.Font("Arial", 11F);
+            this.nicknameEditTextBox.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.nicknameEditTextBox.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.nicknameEditTextBox.Location = new System.Drawing.Point(108, 38);
+            this.nicknameEditTextBox.MaxLength = 16;
+            this.nicknameEditTextBox.Name = "nicknameEditTextBox";
+            this.nicknameEditTextBox.PasswordChar = '\0';
+            this.nicknameEditTextBox.PlaceholderText = "";
+            this.nicknameEditTextBox.SelectedText = "";
+            this.nicknameEditTextBox.Size = new System.Drawing.Size(150, 28);
+            this.nicknameEditTextBox.TabIndex = 2002;
+            this.nicknameEditTextBox.Visible = false;
+            this.nicknameEditTextBox.KeyDown += new System.Windows.Forms.KeyEventHandler(this.nicknameEditTextBox_KeyDown);
+            this.nicknameEditTextBox.Leave += new System.EventHandler(this.nicknameEditTextBox_Leave);
+            //
+            // mainVersionBox
+            //
+            this.mainVersionBox.BackColor = System.Drawing.Color.Transparent;
+            this.mainVersionBox.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(39)))), ((int)(((byte)(40)))), ((int)(((byte)(55)))));
+            this.mainVersionBox.DrawMode = System.Windows.Forms.DrawMode.OwnerDrawFixed;
+            this.mainVersionBox.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
+            this.mainVersionBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(49)))), ((int)(((byte)(57)))), ((int)(((byte)(72)))));
+            this.mainVersionBox.FocusedColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.mainVersionBox.FocusedState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.mainVersionBox.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.mainVersionBox.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(251)))), ((int)(((byte)(255)))), ((int)(((byte)(255)))));
+            this.mainVersionBox.ItemHeight = 30;
+            this.mainVersionBox.Location = new System.Drawing.Point(108, 64);
+            this.mainVersionBox.MaxDropDownItems = 5;
+            this.mainVersionBox.Name = "mainVersionBox";
+            this.mainVersionBox.Size = new System.Drawing.Size(170, 36);
+            this.mainVersionBox.TabIndex = 2003;
+            this.mainVersionBox.SelectedIndexChanged += new System.EventHandler(this.mainVersionBox_SelectedIndexChanged);
+            //
+            // modInstallButton
+            //
+            this.modInstallButton.BackColor = System.Drawing.Color.Transparent;
+            this.modInstallButton.BorderRadius = 8;
+            this.modInstallButton.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.modInstallButton.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(64)))), ((int)(((byte)(72)))));
+            this.modInstallButton.DisabledState.CustomBorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(64)))), ((int)(((byte)(72)))));
+            this.modInstallButton.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(64)))), ((int)(((byte)(72)))));
+            this.modInstallButton.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(170)))), ((int)(((byte)(170)))), ((int)(((byte)(170)))));
+            this.modInstallButton.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(34)))), ((int)(((byte)(197)))), ((int)(((byte)(94)))));
+            this.modInstallButton.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Bold);
+            this.modInstallButton.ForeColor = System.Drawing.Color.White;
+            this.modInstallButton.HoverState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(22)))), ((int)(((byte)(163)))), ((int)(((byte)(74)))));
+            this.modInstallButton.Location = new System.Drawing.Point(34, 116);
+            this.modInstallButton.Name = "modInstallButton";
+            this.modInstallButton.ShadowDecoration.BorderRadius = 8;
+            this.modInstallButton.ShadowDecoration.Color = System.Drawing.Color.FromArgb(((int)(((byte)(34)))), ((int)(((byte)(197)))), ((int)(((byte)(94)))));
+            this.modInstallButton.ShadowDecoration.Depth = 8;
+            this.modInstallButton.ShadowDecoration.Enabled = true;
+            this.modInstallButton.Size = new System.Drawing.Size(170, 40);
+            this.modInstallButton.TabIndex = 2004;
+            this.modInstallButton.Text = "Mod Paketini Kur";
+            this.modInstallButton.Visible = false;
+            this.modInstallButton.Click += new System.EventHandler(this.modInstallButton_Click);
+            //
+            // modDeleteButton
+            //
+            this.modDeleteButton.BackColor = System.Drawing.Color.Transparent;
+            this.modDeleteButton.BorderRadius = 8;
+            this.modDeleteButton.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.modDeleteButton.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(64)))), ((int)(((byte)(72)))));
+            this.modDeleteButton.DisabledState.CustomBorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(64)))), ((int)(((byte)(72)))));
+            this.modDeleteButton.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(64)))), ((int)(((byte)(72)))));
+            this.modDeleteButton.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(170)))), ((int)(((byte)(170)))), ((int)(((byte)(170)))));
+            this.modDeleteButton.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(220)))), ((int)(((byte)(53)))), ((int)(((byte)(69)))));
+            this.modDeleteButton.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Bold);
+            this.modDeleteButton.ForeColor = System.Drawing.Color.White;
+            this.modDeleteButton.HoverState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(185)))), ((int)(((byte)(28)))), ((int)(((byte)(28)))));
+            this.modDeleteButton.Location = new System.Drawing.Point(34, 164);
+            this.modDeleteButton.Name = "modDeleteButton";
+            this.modDeleteButton.Size = new System.Drawing.Size(170, 36);
+            this.modDeleteButton.TabIndex = 2005;
+            this.modDeleteButton.Text = "Mod Paketini Sil";
+            this.modDeleteButton.Visible = false;
+            this.modDeleteButton.Click += new System.EventHandler(this.modDeleteButton_Click);
+            //
+            // shaderInstallButton
+            //
+            this.shaderInstallButton.BackColor = System.Drawing.Color.Transparent;
+            this.shaderInstallButton.BorderRadius = 8;
+            this.shaderInstallButton.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.shaderInstallButton.DisabledState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(64)))), ((int)(((byte)(72)))));
+            this.shaderInstallButton.DisabledState.CustomBorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(64)))), ((int)(((byte)(72)))));
+            this.shaderInstallButton.DisabledState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(60)))), ((int)(((byte)(64)))), ((int)(((byte)(72)))));
+            this.shaderInstallButton.DisabledState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(170)))), ((int)(((byte)(170)))), ((int)(((byte)(170)))));
+            this.shaderInstallButton.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.shaderInstallButton.Font = new System.Drawing.Font("Arial", 9.75F, System.Drawing.FontStyle.Bold);
+            this.shaderInstallButton.ForeColor = System.Drawing.Color.White;
+            this.shaderInstallButton.HoverState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(59)))), ((int)(((byte)(110)))), ((int)(((byte)(220)))));
+            this.shaderInstallButton.Location = new System.Drawing.Point(214, 116);
+            this.shaderInstallButton.Name = "shaderInstallButton";
+            this.shaderInstallButton.ShadowDecoration.BorderRadius = 8;
+            this.shaderInstallButton.ShadowDecoration.Color = System.Drawing.Color.FromArgb(((int)(((byte)(94)))), ((int)(((byte)(148)))), ((int)(((byte)(255)))));
+            this.shaderInstallButton.ShadowDecoration.Depth = 8;
+            this.shaderInstallButton.ShadowDecoration.Enabled = true;
+            this.shaderInstallButton.Size = new System.Drawing.Size(170, 40);
+            this.shaderInstallButton.TabIndex = 2006;
+            this.shaderInstallButton.Text = "Shader Paketi Kur";
+            this.shaderInstallButton.Visible = false;
+            this.shaderInstallButton.Click += new System.EventHandler(this.shaderInstallButton_Click);
+            //
             // mainMenuForm
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 13F);
@@ -1016,6 +1150,12 @@ namespace Projects_Launcher.Projects_Launcher
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.None;
             this.ClientSize = new System.Drawing.Size(980, 503);
             this.Controls.Add(this.settingsBgPanel);
+            this.Controls.Add(this.nicknameEditTextBox);
+            this.Controls.Add(this.editNicknameButton);
+            this.Controls.Add(this.mainVersionBox);
+            this.Controls.Add(this.modInstallButton);
+            this.Controls.Add(this.modDeleteButton);
+            this.Controls.Add(this.shaderInstallButton);
             this.Controls.Add(this.downloadCompleteBar);
             this.Controls.Add(this.discordStaticPictureBox);
             this.Controls.Add(this.settingsStaticPictureBox);
@@ -1128,5 +1268,11 @@ namespace Projects_Launcher.Projects_Launcher
         private Guna.UI2.WinForms.Guna2CheckBox autoConnect;
         private Guna.UI2.WinForms.Guna2PictureBox modSelectionImageBox;
         public Guna.UI2.WinForms.Guna2ComboBox modVersionBox;
+        private System.Windows.Forms.Label editNicknameButton;
+        private Guna.UI2.WinForms.Guna2TextBox nicknameEditTextBox;
+        public Guna.UI2.WinForms.Guna2ComboBox mainVersionBox;
+        private Guna.UI2.WinForms.Guna2Button modInstallButton;
+        private Guna.UI2.WinForms.Guna2Button modDeleteButton;
+        private Guna.UI2.WinForms.Guna2Button shaderInstallButton;
     }
 }

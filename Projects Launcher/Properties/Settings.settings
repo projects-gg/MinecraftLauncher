@@ -30,7 +30,7 @@
       <Value Profile="(Default)">play.projects.gg</Value>
     </Setting>
     <Setting Name="currentVersion" Type="System.String" Scope="Application">
-      <Value Profile="(Default)">0.1.49</Value>
+      <Value Profile="(Default)">0.1.51</Value>
     </Setting>
     <Setting Name="backgroundLite" Type="System.Boolean" Scope="User">
       <Value Profile="(Default)">False</Value>
@@ -67,6 +67,15 @@
     </Setting>
     <Setting Name="modCompatibleFabric" Type="System.String" Scope="User">
       <Value Profile="(Default)">projects-fabric-v12</Value>
+    </Setting>
+    <Setting Name="incompatibleDontAsk" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="curShaderVer" Type="System.String" Scope="User">
+      <Value Profile="(Default)" />
+    </Setting>
+    <Setting Name="lastShaderVer" Type="System.String" Scope="User">
+      <Value Profile="(Default)">v1</Value>
     </Setting>
   </Settings>
 </SettingsFile>

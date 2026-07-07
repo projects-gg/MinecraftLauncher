@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
 namespace Projects_Launcher
@@ -13,7 +14,18 @@ namespace Projects_Launcher
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new loginMenuForm());
+
+            // Kullanıcı adı daha önce kaydedildiyse giriş ekranı atlanır, ana menü doğrudan açılır.
+            // Güncelleme denetimi normalde giriş ekranında yapıldığından ana menüye devredilir.
+            string savedNick = Properties.Settings.Default.NickNames;
+            if (!string.IsNullOrEmpty(savedNick) && Regex.IsMatch(savedNick, "^[a-zA-Z0-9_]+$"))
+            {
+                Application.Run(new Projects_Launcher.mainMenuForm(checkForUpdates: true));
+            }
+            else
+            {
+                Application.Run(new loginMenuForm());
+            }
         }
     }
 }

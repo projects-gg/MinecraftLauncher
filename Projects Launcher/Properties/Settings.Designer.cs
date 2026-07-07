@@ -130,7 +130,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.1.49")]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.1.51")]
         public string currentVersion {
             get {
                 return ((string)(this["currentVersion"]));
@@ -277,6 +277,42 @@ namespace Projects_Launcher.Properties {
             }
             set {
                 this["modCompatibleFabric"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string incompatibleDontAsk {
+            get {
+                return ((string)(this["incompatibleDontAsk"]));
+            }
+            set {
+                this["incompatibleDontAsk"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("")]
+        public string curShaderVer {
+            get {
+                return ((string)(this["curShaderVer"]));
+            }
+            set {
+                this["curShaderVer"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("v1")]
+        public string lastShaderVer {
+            get {
+                return ((string)(this["lastShaderVer"]));
+            }
+            set {
+                this["lastShaderVer"] = value;
             }
         }
     }
