@@ -6,7 +6,9 @@ using DiscordRPC;
 using Guna.UI2.WinForms.Enums;
 using Microsoft.Win32;
 using MineStatLib;
+using Projects_Launcher.Afk;
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
@@ -40,10 +42,26 @@ namespace Projects_Launcher.Projects_Launcher
 
             StyleProgressBar();
             PopulateDropdowns();
+
+            // İpucu metinleri bir kez atanır; eskiden her MouseEnter'da yeni ToolTip
+            // oluşturuluyordu ve her biri kapatılamayan bir pencere tanıtıcısı sızdırıyordu.
+            _hoverTips.SetToolTip(reopenLauncher,
+                "Oyun kapatıldığında yeniden açılıp açılmayacağını seçersiniz.\n\nBu özelliğin kapalı olması durumunda oyundayken, discord\noynuyor bilginiz oyun durumunuzda gözükmeyecektir.");
+            _hoverTips.SetToolTip(autoConnect,
+                "Minecraft istemcisi açıldıktan sonra otomatik olarak Projects\nresmi sunucusuna girip girmeyeceğini seçebilirsiniz.\n\nAyarın kapalı olması durumunda Minecraft ana menüsü\naçılacaktır.");
         }
 
         // Tüm HTTP istekleri için tek paylaşılan istemci (soket tükenmesini önler, hızlı + asenkron).
         private static readonly HttpClient _http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+
+        // Onay kutularının balon ipuçları için tek paylaşılan ToolTip bileşeni.
+        private readonly ToolTip _hoverTips = new ToolTip
+        {
+            UseFading = true,
+            UseAnimation = true,
+            IsBalloon = true,
+            ShowAlways = true,
+        };
 
         // timer1 (sunucu durumu) için yeniden giriş koruması.
         private bool _pinging;
@@ -257,6 +275,7 @@ namespace Projects_Launcher.Projects_Launcher
             playButtonStaticLabel.Enabled = false;
             settingsStaticPictureBox.Enabled = false;
             discordStaticPictureBox.Enabled = false;
+            afkAccountsButton.Enabled = false;
             mainVersionBox.Enabled = false;
             modInstallButton.Enabled = false;
             modDeleteButton.Enabled = false;
@@ -269,6 +288,7 @@ namespace Projects_Launcher.Projects_Launcher
             playButtonStaticLabel.Enabled = true;
             settingsStaticPictureBox.Enabled = true;
             discordStaticPictureBox.Enabled = true;
+            afkAccountsButton.Enabled = true;
             mainVersionBox.Enabled = true;
             UpdateModPackageButtons();
         }
@@ -365,6 +385,8 @@ namespace Projects_Launcher.Projects_Launcher
 
             // Skin render (asenkron; eskiden senkron GetResponse açılışı donduruyordu).
             await LoadSkinAsync();
+
+            StartAfkAutoConnect();
         }
 
         private async Task LaunchGameAsync() // Minecraft başlatma (CmlLib 4.x)
@@ -424,17 +446,27 @@ namespace Projects_Launcher.Projects_Launcher
             downloadCompleteBar.Visible = false;
             downloadCompleteLabel.Visible = false;
 
-            this.Visible = false; // Oyun açılırken launcher gizlenir
+            // Çalışan bir AFK oturumu varsa launcher hiçbir koşulda kapanmaz: kullanıcı ana hesabıyla
+            // oyuna girse bile AFK hesaplarını (kartlar, konsol, ayarlar) yönetmeye devam edebilsin.
+            bool afkSessionsActive = AfkManager.Instance.Sessions.Any(s => s.IsRunning);
 
-            if (reopenLauncher.Checked)
+            if (reopenLauncher.Checked || afkSessionsActive)
             {
-                // Oyun kapanınca launcher geri gelir (eski timer3 yoklaması yerine process.Exited olayı).
+                // AFK oturumu varken launcher görünür kalır (hesaplar yönetilebilsin). Yalnızca
+                // "yeniden aç" açık ve hiç AFK oturumu yokken oyun süresince gizlenir.
+                if (reopenLauncher.Checked && !afkSessionsActive)
+                    this.Visible = false; // Oyun açılırken launcher gizlenir
+
+                // Oyun kapanınca launcher tam haline döner (oynabutton, sürüm seçici, Discord).
+                // Eski timer3 yoklaması yerine process.Exited olayı kullanılır.
                 clientStartProcess.EnableRaisingEvents = true;
                 clientStartProcess.Exited += OnGameProcessExited;
             }
             else
             {
-                // Yeniden açma kapalı: oyun başlayınca launcher kapanır (oyundayken Discord durumu gösterilmez).
+                this.Visible = false; // Oyun açılırken launcher gizlenir
+                // Yeniden açma kapalı ve AFK oturumu yok: oyun başlayınca launcher kapanır
+                // (oyundayken Discord durumu gösterilmez).
                 Application.Exit();
             }
         }
@@ -849,13 +881,111 @@ namespace Projects_Launcher.Projects_Launcher
         {
             if (settingsBgPanel.Visible == false)
             {
+                HideAfkPanel(); // iki tam ekran panel aynı anda açık kalmasın
                 backButton.Visible = true;
                 settingsBgPanel.Visible = true;
+                settingsBgPanel.BringToFront();
             }
             else
             {
                 settingsBgPanel.Visible = false;
+                backButton.Visible = false;
             }
+        }
+
+        // --- AFK Hesapları ekranı ---
+
+        // Panel ilk açılışta kurulur: hesabı olmayan kullanıcı için avatar indirme ve kart çizimi maliyeti doğmasın.
+        private AfkPanel afkPanel;
+
+        private void EnsureAfkPanel()
+        {
+            if (afkPanel != null)
+                return;
+
+            afkPanel = new AfkPanel
+            {
+                Location = new Point(0, 35),
+                Size = new Size(980, ClientSize.Height - 35),
+                Visible = false,
+            };
+
+            Controls.Add(afkPanel);
+        }
+
+        // Aynı buton iki rol üstlenir: panel kapalıyken "AFK Hesaplar", açıkken "Ana Sayfa".
+        private void afkAccountsButton_Click(object sender, EventArgs e)
+        {
+            if (afkPanel != null && afkPanel.Visible)
+                HideAfkPanel();
+            else
+                ShowAfkPanel();
+        }
+
+        private void ShowAfkPanel()
+        {
+            EnsureAfkPanel();
+
+            settingsBgPanel.Visible = false;
+
+            afkPanel.Visible = true;
+            afkPanel.BringToFront();
+            afkPanel.OnShown();
+
+            // Panel tüm istemci alanını kapladığı için çıkış yolları onun üstünde kalmalı.
+            afkAccountsButton.Text = "Ana Sayfa";
+            afkAccountsButton.BringToFront();
+            backButton.Visible = true;
+            backButton.BringToFront();
+        }
+
+        private void HideAfkPanel()
+        {
+            if (afkPanel == null || !afkPanel.Visible)
+                return;
+
+            afkPanel.OnHidden();
+            afkPanel.Visible = false;
+            afkAccountsButton.Text = "AFK Hesaplar";
+            backButton.Visible = false;
+        }
+
+        // "Otomatik bağlan" işaretli hesaplar başlatıcı açılırken ayağa kaldırılır.
+        private void StartAfkAutoConnect()
+        {
+            List<AfkAccount> accounts = AfkStore.Load();
+            if (!accounts.Exists(a => a.AutoStart))
+                return;
+
+            EnsureAfkPanel();
+            _ = afkPanel.StartAutoConnectAccountsAsync();
+        }
+
+        // Bağlı AFK hesabı varken kapanış onaylatılır. Oyun başlatılırken tetiklenen
+        // Application.Exit() gibi kullanıcı kaynaklı olmayan kapanışlarda sorulmaz.
+        private bool ConfirmAfkShutdown()
+        {
+            if (!AfkManager.Instance.Sessions.Any(s => s.IsRunning))
+                return true;
+
+            DialogResult answer = MessageBox.Show(
+                "Bağlı AFK hesaplarınız var. Başlatıcıyı kapatırsanız bu hesapların bağlantısı kesilecek.\n\nKapatılsın mı?",
+                "AFK Hesapları", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+            return answer == DialogResult.Yes;
+        }
+
+        protected override void OnFormClosing(FormClosingEventArgs e)
+        {
+            // AFK süreçleri başlatıcının çocuğudur: biz kapanırsak onları yöneten kimse kalmaz.
+            if (e.CloseReason == CloseReason.UserClosing && !ConfirmAfkShutdown())
+            {
+                e.Cancel = true;
+                return;
+            }
+
+            AfkManager.Instance.StopAll(5000);
+            base.OnFormClosing(e);
         }
 
         private async Task onlineCountUpdater()
@@ -1331,6 +1461,12 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void guna2ControlBox3_Click(object sender, EventArgs e)
         {
+            // Giriş ekranı gizli ana form olarak yaşadığı için Close() uygulamayı kapatmaz;
+            // süreçten çıkmadan önce AFK alt süreçlerini elle sonlandırmak gerekir.
+            if (!ConfirmAfkShutdown())
+                return;
+
+            AfkManager.Instance.StopAll(5000);
             Environment.Exit(0);
         }
 
@@ -1341,24 +1477,12 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void reopenLauncherCheckBox_MouseEnter(object sender, EventArgs e)
         {
-            ToolTip discordRpcTip = new ToolTip();
-            discordRpcTip.UseFading = true;
-            discordRpcTip.UseAnimation = true;
-            discordRpcTip.IsBalloon = true;
-            discordRpcTip.ShowAlways = true;
-            discordRpcTip.SetToolTip(this.reopenLauncher,
-                "Oyun kapatıldığında yeniden açılıp açılmayacağını seçersiniz.\n\nBu özelliğin kapalı olması durumunda oyundayken, discord\noynuyor bilginiz oyun durumunuzda gözükmeyecektir.");
+            // İpucu artık kurucuda bir kez atanıyor; Designer bu olayı bağlamaya devam ettiği için gövde boş.
         }
 
         private void autoConnectCheckBox_MouseEnter(object sender, EventArgs e)
         {
-            ToolTip autoConnectTip = new ToolTip();
-            autoConnectTip.UseFading = true;
-            autoConnectTip.UseAnimation = true;
-            autoConnectTip.IsBalloon = true;
-            autoConnectTip.ShowAlways = true;
-            autoConnectTip.SetToolTip(this.autoConnect,
-                "Minecraft istemcisi açıldıktan sonra otomatik olarak Projects\nresmi sunucusuna girip girmeyeceğini seçebilirsiniz.\n\nAyarın kapalı olması durumunda Minecraft ana menüsü\naçılacaktır.");
+            // İpucu artık kurucuda bir kez atanıyor; Designer bu olayı bağlamaya devam ettiği için gövde boş.
         }
 
         private void guna2ControlBox1_Resize(object sender, EventArgs e)
@@ -1366,8 +1490,15 @@ namespace Projects_Launcher.Projects_Launcher
             settingsBgPanel.Size = this.Size;
         }
 
+        // Sol üstteki geri tuşu: hangi tam ekran panel açıksa onu kapatır.
         private void button1_Click(object sender, EventArgs e)
         {
+            if (afkPanel != null && afkPanel.Visible)
+            {
+                HideAfkPanel();
+                return;
+            }
+
             settingsBgPanel.Visible = false;
             backButton.Visible = false;
         }

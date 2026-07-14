@@ -13,5 +13,6 @@ app.publish/
 *.snk
 *.p12
 
-# Publish script
+# Publish scripts (FTP sifresi duz metin icerir)
 publish.ps1
+publish-mod.ps1

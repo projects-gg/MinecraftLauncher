@@ -58,6 +58,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.guna2BorderlessForm1 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
             this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.backButton = new System.Windows.Forms.Button();
+            this.afkAccountsButton = new Guna.UI2.WinForms.Guna2Button();
             this.serverPing = new System.Windows.Forms.Timer(this.components);
             this.downloadCompleteLabel = new System.Windows.Forms.Label();
             this.playButtonStaticLabel = new Guna.UI2.WinForms.Guna2ImageButton();
@@ -287,6 +288,9 @@ namespace Projects_Launcher.Projects_Launcher
             // 
             this.closeButtonControlBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
             this.closeButtonControlBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
+            // Yerleşik kapatma davranışı kapatıldı: kapanış onayı ve AFK süreçlerinin durdurulması
+            // guna2ControlBox3_Click içinde yapılır, kontrolün kendisi araya girmemeli.
+            this.closeButtonControlBox.CustomClick = true;
             this.closeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
             this.closeButtonControlBox.IconColor = System.Drawing.Color.White;
             this.closeButtonControlBox.Location = new System.Drawing.Point(935, 0);
@@ -339,9 +343,25 @@ namespace Projects_Launcher.Projects_Launcher
             this.backButton.UseVisualStyleBackColor = false;
             this.backButton.Visible = false;
             this.backButton.Click += new System.EventHandler(this.button1_Click);
-            // 
+            //
+            // afkAccountsButton
+            //
+            this.afkAccountsButton.BackColor = System.Drawing.Color.Transparent;
+            this.afkAccountsButton.BorderRadius = 6;
+            this.afkAccountsButton.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.afkAccountsButton.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(32)))), ((int)(((byte)(36)))), ((int)(((byte)(44)))));
+            this.afkAccountsButton.Font = new System.Drawing.Font("Segoe UI", 8.25F, System.Drawing.FontStyle.Bold);
+            this.afkAccountsButton.ForeColor = System.Drawing.Color.WhiteSmoke;
+            this.afkAccountsButton.HoverState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(52)))), ((int)(((byte)(58)))), ((int)(((byte)(70)))));
+            this.afkAccountsButton.Location = new System.Drawing.Point(658, 450);
+            this.afkAccountsButton.Name = "afkAccountsButton";
+            this.afkAccountsButton.Size = new System.Drawing.Size(140, 29);
+            this.afkAccountsButton.TabIndex = 1004;
+            this.afkAccountsButton.Text = "AFK Hesaplar";
+            this.afkAccountsButton.Click += new System.EventHandler(this.afkAccountsButton_Click);
+            //
             // serverPing
-            // 
+            //
             this.serverPing.Enabled = true;
             this.serverPing.Interval = 5000;
             this.serverPing.Tick += new System.EventHandler(this.timer1_Tick);
@@ -1159,6 +1179,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.Controls.Add(this.downloadCompleteBar);
             this.Controls.Add(this.discordStaticPictureBox);
             this.Controls.Add(this.settingsStaticPictureBox);
+            this.Controls.Add(this.afkAccountsButton);
             this.Controls.Add(this.playButtonStaticLabel);
             this.Controls.Add(this.downloadCompleteLabel);
             this.Controls.Add(this.backButton);
@@ -1226,6 +1247,7 @@ namespace Projects_Launcher.Projects_Launcher
         private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm1;
         private Guna.UI2.WinForms.Guna2ControlBox maximizeButtonControlBox;
         private System.Windows.Forms.Button backButton;
+        private Guna.UI2.WinForms.Guna2Button afkAccountsButton;
         private System.Windows.Forms.Timer serverPing;
         private System.Windows.Forms.Label downloadCompleteLabel;
         private Guna.UI2.WinForms.Guna2ImageButton playButtonStaticLabel;
