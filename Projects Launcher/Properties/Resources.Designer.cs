@@ -259,6 +259,16 @@ namespace Projects_Launcher.Properties {
                 return ((System.Drawing.Icon)(obj));
             }
         }
+
+        /// <summary>
+        ///   (Simge) öğesine benzeyen System.Drawing.Icon türünde yerelleştirilmiş bir kaynak arar.
+        /// </summary>
+        public static System.Drawing.Icon projects {
+            get {
+                object obj = ResourceManager.GetObject("projects", resourceCulture);
+                return ((System.Drawing.Icon)(obj));
+            }
+        }
         
         /// <summary>
         ///   (Simge) öğesine benzeyen System.Drawing.Icon türünde yerelleştirilmiş bir kaynak arar.

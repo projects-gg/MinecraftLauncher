@@ -7,6 +7,7 @@ using Guna.UI2.WinForms.Enums;
 using Microsoft.Win32;
 using MineStatLib;
 using Projects_Launcher.Afk;
+using Projects_Launcher.Auth;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -30,9 +31,11 @@ namespace Projects_Launcher.Projects_Launcher
     {
         // checkForUpdates: giriş ekranı atlanıp uygulama doğrudan ana menüyle açıldığında
         // launcher güncelleme denetimi burada yapılır (normalde LoginWindow yapar).
-        public mainMenuForm(bool checkForUpdates = false)
+        // loginForm: bu menüyü açan giriş ekranı; "hesap değiştir" ile ona geri dönülür.
+        public mainMenuForm(bool checkForUpdates = false, loginMenuForm loginForm = null)
         {
             _checkForUpdates = checkForUpdates;
+            _loginForm = loginForm;
             InitializeComponent();
 
             // TLS + bağlantı limiti bir kez ayarlanır (her indirmede tekrar set etmeye gerek yok).
@@ -49,6 +52,8 @@ namespace Projects_Launcher.Projects_Launcher
                 "Oyun kapatıldığında yeniden açılıp açılmayacağını seçersiniz.\n\nBu özelliğin kapalı olması durumunda oyundayken, discord\noynuyor bilginiz oyun durumunuzda gözükmeyecektir.");
             _hoverTips.SetToolTip(autoConnect,
                 "Minecraft istemcisi açıldıktan sonra otomatik olarak Projects\nresmi sunucusuna girip girmeyeceğini seçebilirsiniz.\n\nAyarın kapalı olması durumunda Minecraft ana menüsü\naçılacaktır.");
+            _hoverTips.SetToolTip(logoutButton,
+                "Hesaptan çık ve giriş ekranına dön.");
         }
 
         // Tüm HTTP istekleri için tek paylaşılan istemci (soket tükenmesini önler, hızlı + asenkron).
@@ -68,6 +73,16 @@ namespace Projects_Launcher.Projects_Launcher
 
         // Giriş ekranı atlanarak açıldıysa launcher güncellemesi ana menüden denetlenir.
         private readonly bool _checkForUpdates;
+
+        // "Hesap değiştir" ile dönülecek giriş ekranı. Ana menü doğrudan açıldıysa (kayıtlı
+        // kullanıcı) başlangıçta boştur ve ilk dönüşte oluşturulur.
+        private loginMenuForm _loginForm;
+
+        // Oyuncu adı düzenleniyorken ad satırındaki simgeler gizlenir (düzenleme kutusu üstlerine biner).
+        private bool _editingNickname;
+
+        // Oyun başlatma sürerken doludur; hem "başlatma devam ediyor mu" göstergesi hem iptal anahtarı.
+        private CancellationTokenSource _launchCancellation;
 
         // versionBox <-> mainVersionBox karşılıklı senkronizasyonunda olay döngüsünü engeller.
         private bool _syncingVersionBoxes;
@@ -122,8 +137,6 @@ namespace Projects_Launcher.Projects_Launcher
             temaSelectBox.MaxDropDownItems = 5;
         }
 
-        private string sessions;
-        private MSession session;
         private string minrambox;
         private string maxrambox;
         private string widthbox;
@@ -269,10 +282,10 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
+        // Başlatma sırasında oyna tuşu bilerek açık bırakılır: ikinci tıklama işlemi iptal eder.
         private void thisFalse()
         {
             settingsBgPanel.Enabled = false;
-            playButtonStaticLabel.Enabled = false;
             settingsStaticPictureBox.Enabled = false;
             discordStaticPictureBox.Enabled = false;
             afkAccountsButton.Enabled = false;
@@ -280,6 +293,7 @@ namespace Projects_Launcher.Projects_Launcher
             modInstallButton.Enabled = false;
             modDeleteButton.Enabled = false;
             shaderInstallButton.Enabled = false;
+            logoutButton.Enabled = false;
         }
 
         private void thisTrue()
@@ -290,6 +304,7 @@ namespace Projects_Launcher.Projects_Launcher
             discordStaticPictureBox.Enabled = true;
             afkAccountsButton.Enabled = true;
             mainVersionBox.Enabled = true;
+            logoutButton.Enabled = true;
             UpdateModPackageButtons();
         }
 
@@ -320,7 +335,7 @@ namespace Projects_Launcher.Projects_Launcher
                 SelectVersionInBoxes(Properties.Settings.Default.SelectedVersion);
 
             UpdateModPackageButtons();
-            PositionNicknameEditControls();
+            ApplyPremiumState();
 
             modVersionBox.Text = Properties.Settings.Default.curModVer;
 
@@ -389,12 +404,29 @@ namespace Projects_Launcher.Projects_Launcher
             StartAfkAutoConnect();
         }
 
-        private async Task LaunchGameAsync() // Minecraft başlatma (CmlLib 4.x)
+        // Oyuna hangi kimlikle girileceğini belirler. Premium oturum açıksa Microsoft hesabının
+        // gerçek oturumu kullanılır (çevrimiçi mod); aksi halde kullanıcı adıyla çevrimdışı oturum.
+        private async Task<MSession> BuildSessionAsync(CancellationToken cancellationToken)
+        {
+            if (!PremiumSession.IsActive)
+                return MSession.CreateOfflineSession(Properties.Settings.Default.NickNames);
+
+            downloadCompleteLabel.Text = "Premium oturum doğrulanıyor…";
+            downloadCompleteLabel.Visible = true;
+
+            // Anahtarın süresi dolmuşsa kullanıcıya sorulmadan tazelenir; tazelenemezse
+            // PremiumAuthException fırlar ve oynabutton_Click kullanıcıyı yönlendirir.
+            PremiumAccount account = await PremiumSession.EnsureValidAsync(cancellationToken);
+
+            return PremiumSession.ToMSession(account);
+        }
+
+        private async Task LaunchGameAsync(CancellationToken cancellationToken) // Minecraft başlatma (CmlLib 4.x)
         {
             var path = new MinecraftPath(launcherdizin);
             var launcher = new MinecraftLauncher(path);
 
-            sessions = Properties.Settings.Default.NickNames;
+            MSession gameSession = await BuildSessionAsync(cancellationToken);
 
             string serverIP = Properties.Settings.Default.autoConnect ? "play.projects.gg" : "";
 
@@ -410,7 +442,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 MinimumRamMb = minRam,
                 MaximumRamMb = maxRam,
-                Session = MSession.CreateOfflineSession(sessions),
+                Session = gameSession,
                 ServerIp = serverIP,
                 GameLauncherName = "Projects Minecraft",
                 ScreenWidth = screenWidth,
@@ -438,7 +470,10 @@ namespace Projects_Launcher.Projects_Launcher
 
             // İndir + derle + başlat. Tamamen asenkron olduğundan UI donmaz.
             var clientStartProcess = await launcher.InstallAndBuildProcessAsync(
-                Properties.Settings.Default.SelectedVersion, ayarlar, fileProgress, byteProgress, CancellationToken.None);
+                Properties.Settings.Default.SelectedVersion, ayarlar, fileProgress, byteProgress, cancellationToken);
+
+            // İndirme bittikten sonra iptal edilmişse oyun yine de açılmasın.
+            cancellationToken.ThrowIfCancellationRequested();
 
             clientStartProcess.Start(); // Oyunu başlat
 
@@ -499,6 +534,14 @@ namespace Projects_Launcher.Projects_Launcher
 
         private async void oynabutton_Click(object sender, EventArgs e)
         {
+            // Başlatma sürerken oyna tuşuna tekrar basmak işlemi iptal eder. Böylece arka arkaya
+            // basan kullanıcı üst üste indirme/başlatma tetikleyip makinesini yormaz.
+            if (_launchCancellation != null)
+            {
+                CancelLaunch();
+                return;
+            }
+
             string surum_appDataDizini = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                                          "/.projects/versions/projects-fabric-" + latestFabricVersion; // Fabric directory
 
@@ -581,8 +624,6 @@ namespace Projects_Launcher.Projects_Launcher
                     }
                 });
 
-                session = MSession.CreateOfflineSession(Properties.Settings.Default.NickNames); // Get nickname info
-
                 thisFalse();
                 if (!Directory.Exists(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) +
                 "/.projects/versions/" + Properties.Settings.Default.SelectedVersion.ToString()))
@@ -616,7 +657,38 @@ namespace Projects_Launcher.Projects_Launcher
 
                 ShowVersionStatus("Başlatılıyor");
                 _ = animatedPlayingLabel(); // "Başlatılıyor..." animasyonu
-                await LaunchGameAsync();    // İndir + derle + başlat (UI donmadan)
+
+                // İptal belirteci başlatmadan hemen önce kurulur: bu satıra kadar hiçbir bekleme
+                // yok, dolayısıyla kullanıcının ikinci tıklaması işlenemez ve boşluk oluşmaz.
+                _launchCancellation = new CancellationTokenSource();
+                _hoverTips.SetToolTip(playButtonStaticLabel, "Başlatmayı iptal etmek için tekrar tıklayın.");
+
+                await LaunchGameAsync(_launchCancellation.Token); // İndir + derle + başlat (UI donmadan)
+            }
+            catch (OperationCanceledException)
+            {
+                // Kullanıcının kendi iptali: hata değil, sessizce eski duruma dönülür.
+                alreadyPlayingAnimatedLabel = false;
+
+                ShowVersionSelector();
+                downloadCompleteBar.Visible = false;
+                downloadCompleteLabel.Visible = false;
+
+                thisTrue();
+            }
+            catch (PremiumAuthException premiumException)
+            {
+                // Premium oturum tazelenemedi: kullanıcıya teknik döküm yerine ne yapması
+                // gerektiğini anlatan mesaj gösterilir.
+                alreadyPlayingAnimatedLabel = false;
+                DiscordRpcClientSetup();
+
+                ShowVersionSelector();
+                downloadCompleteBar.Visible = false;
+                downloadCompleteLabel.Visible = false;
+                thisTrue();
+
+                HandlePremiumFailure(premiumException);
             }
             catch (Exception ex)
             {
@@ -631,6 +703,38 @@ namespace Projects_Launcher.Projects_Launcher
 
                 thisTrue(); // Launcher bileşenlerini tekrar aç
             }
+            finally
+            {
+                // Yalnızca başlatma aşamasına geçildiyse temizlik yapılır; mod/fabric indirmesine
+                // sapılan erken çıkışlarda belirteç hiç kurulmadığı için buraya dokunulmaz
+                // (o akışlar buton durumlarını kendileri yönetir).
+                if (_launchCancellation != null)
+                {
+                    _launchCancellation.Dispose();
+                    _launchCancellation = null;
+
+                    _hoverTips.SetToolTip(playButtonStaticLabel, string.Empty);
+                    playButtonStaticLabel.Enabled = true;
+                }
+            }
+        }
+
+        // Başlatma sürerken iptal isteği. Buton temizlik bitene kadar kapatılır: kullanıcı
+        // "başlat → iptal → başlat" döngüsünü hızlıca kuramasın.
+        private void CancelLaunch()
+        {
+            try
+            {
+                _launchCancellation.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                return; // başlatma bu arada tamamlanmış
+            }
+
+            playButtonStaticLabel.Enabled = false;
+            alreadyPlayingAnimatedLabel = false;
+            ShowVersionStatus("İptal ediliyor...");
         }
 
         // İndirme sonrası geçici .zip dosyasını siler; hem başarıda hem hatada çağrılır ki
@@ -663,6 +767,7 @@ namespace Projects_Launcher.Projects_Launcher
             settingsStaticPictureBox.Enabled = false;
             modInstallButton.Enabled = false;
             modDeleteButton.Enabled = false;
+            logoutButton.Enabled = false;
             ShowVersionStatus("İndiriliyor...");
             downloadCompleteLabel.Visible = true;
             downloadCompleteBar.Visible = true;
@@ -727,6 +832,7 @@ namespace Projects_Launcher.Projects_Launcher
             settingsStaticPictureBox.Enabled = false;
             modInstallButton.Enabled = false;
             modDeleteButton.Enabled = false;
+            logoutButton.Enabled = false;
             ShowVersionStatus("Mod paketi kuruluyor...");
             downloadCompleteLabel.Visible = true;
             downloadCompleteBar.Visible = true;
@@ -763,6 +869,7 @@ namespace Projects_Launcher.Projects_Launcher
                 modVersionBox.Text = latestModVersion; // ayarlar dropdown'ı kurulu paketi gösterir
                 playButtonStaticLabel.Enabled = true;
                 settingsStaticPictureBox.Enabled = true;
+                logoutButton.Enabled = true;
                 downloadCompleteLabel.Visible = false;
                 downloadCompleteBar.Visible = false;
                 playSplitStaticLabel.Visible = false;
@@ -797,6 +904,7 @@ namespace Projects_Launcher.Projects_Launcher
                 ShowVersionSelector();
                 playButtonStaticLabel.Enabled = true;
                 settingsStaticPictureBox.Enabled = true;
+                logoutButton.Enabled = true;
                 downloadCompleteLabel.Visible = false;
                 downloadCompleteBar.Visible = false;
                 playSplitStaticLabel.Visible = false;
@@ -986,6 +1094,15 @@ namespace Projects_Launcher.Projects_Launcher
 
             AfkManager.Instance.StopAll(5000);
             base.OnFormClosing(e);
+        }
+
+        protected override void OnFormClosed(FormClosedEventArgs e)
+        {
+            base.OnFormClosed(e);
+
+            // Ana menünün kapanması "başlatıcıdan çık" demektir. Giriş ekranı gizli duruyor
+            // olabileceğinden süreç arkada görünmez biçimde ayakta kalmasın.
+            Environment.Exit(0);
         }
 
         private async Task onlineCountUpdater()
@@ -1523,6 +1640,7 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
+        // Tema yalnizca arka plani ve yazi renklerini degistirir; pencere simgesi her zaman projects.ico'dur.
         private void temaSelectBox_SelectedIndexChanged(object sender, EventArgs e)
         {
 
@@ -1535,8 +1653,6 @@ namespace Projects_Launcher.Projects_Launcher
 
                 reopenLauncher.ForeColor = Color.Black;
                 autoConnect.ForeColor = Color.Black;
-
-                this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
             }
             else if (temaSelectBox.Text == "Koyu Tema")
             {
@@ -1547,8 +1663,6 @@ namespace Projects_Launcher.Projects_Launcher
                 reopenLauncher.ForeColor = Color.FromArgb(251, 255, 255);
                 autoConnect.ForeColor = Color.FromArgb(251, 255, 255);
                 versionBox.ForeColor = Color.FromArgb(251, 255, 255);
-
-                this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
             }
             else
             {
@@ -1574,8 +1688,6 @@ namespace Projects_Launcher.Projects_Launcher
 
                     reopenLauncher.ForeColor = Color.Black;
                     autoConnect.ForeColor = Color.Black;
-
-                    this.Icon = Properties.Resources.ProjectsLauncherLogo_dark;
                 }
 
                 if (res == 0)
@@ -1587,8 +1699,6 @@ namespace Projects_Launcher.Projects_Launcher
                     reopenLauncher.ForeColor = Color.FromArgb(251, 255, 255);
                     autoConnect.ForeColor = Color.FromArgb(251, 255, 255);
                     versionBox.ForeColor = Color.FromArgb(251, 255, 255);
-
-                    this.Icon = Properties.Resources.ProjectsLauncherLogo_light;
                 }
             }
 
@@ -1805,6 +1915,7 @@ namespace Projects_Launcher.Projects_Launcher
             modInstallButton.Enabled = false;
             modDeleteButton.Enabled = false;
             shaderInstallButton.Enabled = false;
+            logoutButton.Enabled = false;
             ShowVersionStatus("Shader paketi kuruluyor...");
             downloadCompleteLabel.Visible = true;
             downloadCompleteBar.Visible = true;
@@ -1841,6 +1952,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 playButtonStaticLabel.Enabled = true;
                 settingsStaticPictureBox.Enabled = true;
+                logoutButton.Enabled = true;
                 downloadCompleteLabel.Visible = false;
                 downloadCompleteBar.Visible = false;
                 playSplitStaticLabel.Visible = false;
@@ -1882,19 +1994,201 @@ namespace Projects_Launcher.Projects_Launcher
 
         // --- Ana menü hızlı erişim: kullanıcı adı düzenleme ---
 
-        // Kalem simgesini ve düzenleme kutusunu isim etiketine göre hizalar (isim uzunluğu değişken).
-        private void PositionNicknameEditControls()
+        /// <summary>
+        /// Oyuncu adı satırının tek düzen noktası: ad etiketi, düzenleme kutusu, kalem simgesi,
+        /// premium rozeti ve çıkış simgesi soldan sağa dizilir. Görünürlük iki duruma bağlıdır —
+        /// ad düzenleniyor mu ve premium oturum açık mı. Ad uzunluğu değişken olduğundan her ad
+        /// değişiminde yeniden çağrılır.
+        /// </summary>
+        private void UpdateIdentityBar()
         {
-            editNicknameButton.Location = new Point(playerNameStaticLabel.Right + 2, playerNameStaticLabel.Top - 2);
+            bool premium = PremiumSession.IsActive;
+
+            nicknameEditTextBox.Visible = _editingNickname;
+            playerNameStaticLabel.Visible = !_editingNickname;
+            // Premium adı Microsoft profilinden gelir; elle değiştirilemez.
+            editNicknameButton.Visible = !_editingNickname && !premium;
+            logoutButton.Visible = !_editingNickname;
+
+            if (premiumBadge != null)
+                premiumBadge.Visible = !_editingNickname && premium;
+
             nicknameEditTextBox.Location = new Point(playerNameStaticLabel.Left, playerNameStaticLabel.Top - 6);
+
+            int nextLeft = playerNameStaticLabel.Right + 2;
+
+            if (editNicknameButton.Visible)
+            {
+                editNicknameButton.Location = new Point(nextLeft, playerNameStaticLabel.Top - 2);
+                nextLeft = editNicknameButton.Right + 2;
+            }
+
+            if (premiumBadge != null && premiumBadge.Visible)
+            {
+                premiumBadge.Location = new Point(
+                    nextLeft + 6,
+                    playerNameStaticLabel.Top + ((playerNameStaticLabel.Height - premiumBadge.Height) / 2));
+                nextLeft = premiumBadge.Right + 6;
+            }
+
+            logoutButton.Location = new Point(nextLeft + 2, playerNameStaticLabel.Top - 2);
+        }
+
+        // --- Premium hesap durumu ---
+
+        private Guna.UI2.WinForms.Guna2Button premiumBadge;
+
+        /// <summary>
+        /// Premium oturum açıkken oyuncu adı Microsoft hesabından gelir: elle değiştirilemez,
+        /// adın yanında rozet gösterilir ve oyun çevrimiçi modda başlatılır.
+        /// </summary>
+        private void ApplyPremiumState()
+        {
+            PremiumAccount account = PremiumSession.Current;
+            bool premium = account != null;
+
+            if (premium)
+            {
+                // Oyuncu adını Microsoft profili belirler; ayarlardaki ad geride kalmışsa tazelenir.
+                if (!string.Equals(Properties.Settings.Default.NickNames, account.Name, StringComparison.Ordinal))
+                {
+                    Properties.Settings.Default.NickNames = account.Name;
+                    Properties.Settings.Default.Save();
+
+                    playerNameStaticLabel.Text = account.Name;
+                    _ = LoadSkinAsync();
+                }
+
+                EnsurePremiumBadge();
+            }
+
+            UpdateIdentityBar();
+        }
+
+        // Rozet yalnızca premium oturumda gerekir; hesabı olmayan kullanıcı için hiç oluşturulmaz.
+        private void EnsurePremiumBadge()
+        {
+            if (premiumBadge != null)
+                return;
+
+            premiumBadge = new Guna.UI2.WinForms.Guna2Button
+            {
+                Text = "PREMİUM",
+                Font = new Font("Segoe UI Semibold", 7.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(248, 148, 35),
+                FillColor = Color.FromArgb(46, 37, 24),
+                BackColor = Color.Transparent,
+                BorderColor = Color.FromArgb(248, 148, 35),
+                BorderThickness = 1,
+                BorderRadius = 10,
+                Size = new Size(80, 20),
+                Cursor = Cursors.Hand,
+            };
+
+            premiumBadge.HoverState.FillColor = Color.FromArgb(248, 148, 35);
+            premiumBadge.HoverState.ForeColor = Color.FromArgb(26, 29, 35);
+            premiumBadge.Click += premiumBadge_Click;
+
+            _hoverTips.SetToolTip(premiumBadge, "Premium hesabınızla giriş yapıldı.\nÇıkış yapmak için tıklayın.");
+
+            Controls.Add(premiumBadge);
+            premiumBadge.BringToFront();
+        }
+
+        private void premiumBadge_Click(object sender, EventArgs e)
+        {
+            PremiumAccount account = PremiumSession.Current;
+            if (account == null)
+                return;
+
+            DialogResult answer = MessageBox.Show(
+                "Premium hesabınız: " + account.Name + "\n\n" +
+                "Çıkış yaparsanız oyuna yeniden kullanıcı adınızla (çevrimdışı) girersiniz.\n\nÇıkış yapılsın mı?",
+                "Premium Hesap", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+
+            if (answer != DialogResult.Yes)
+                return;
+
+            PremiumSession.SignOut();
+            ApplyPremiumState();
+        }
+
+        // Oyun başlatılırken premium oturum tazelenemediğinde kullanıcıyı yönlendirir.
+        private void HandlePremiumFailure(PremiumAuthException exception)
+        {
+            if (exception.RequiresSignIn)
+            {
+                DialogResult answer = MessageBox.Show(
+                    exception.Message + "\n\nŞimdi yeniden giriş yapmak ister misiniz?",
+                    "Premium Giriş", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+
+                if (answer == DialogResult.Yes)
+                    PremiumLoginForm.Prompt(this);
+            }
+            else
+            {
+                MessageBox.Show(exception.Message, "Premium Giriş", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
+
+            ApplyPremiumState();
+        }
+
+        // --- Hesap değiştir: giriş ekranına dönüş ---
+
+        private void logoutButton_MouseEnter(object sender, EventArgs e)
+        {
+            logoutButton.ForeColor = Color.FromArgb(239, 68, 68);
+        }
+
+        private void logoutButton_MouseLeave(object sender, EventArgs e)
+        {
+            logoutButton.ForeColor = Color.Silver;
+        }
+
+        private void logoutButton_Click(object sender, EventArgs e)
+        {
+            bool confirmed = AfkConfirm.Ask(
+                this,
+                "Hesaptan Çık",
+                "Giriş ekranına döneceksiniz.\nÇalışan AFK hesaplarınız bundan etkilenmez.\n\nDevam etmek istiyor musunuz?",
+                "Giriş Ekranına Dön",
+                false);
+
+            if (!confirmed)
+                return;
+
+            ReturnToLoginScreen();
+        }
+
+        // Ana menü kapatılmaz, yalnızca gizlenir: Discord bağlantısı, zamanlayıcılar ve AFK paneli
+        // tek örnek kalsın diye giriş ekranından dönüldüğünde aynı pencere yeniden gösterilir.
+        private void ReturnToLoginScreen()
+        {
+            // Ana menü doğrudan açılmışsa (kayıtlı kullanıcı) giriş ekranı henüz hiç oluşturulmamıştır.
+            if (_loginForm == null || _loginForm.IsDisposed)
+                _loginForm = new loginMenuForm();
+
+            _loginForm.PrepareForReturn(this);
+            _loginForm.Show();
+            _loginForm.BringToFront();
+            _loginForm.Activate();
+
+            Hide();
+        }
+
+        /// <summary>Giriş ekranından bu menüye geri dönüldüğünde çağrılır: kimlik bilgileri tazelenir.</summary>
+        public void OnReturnedFromLogin()
+        {
+            playerNameStaticLabel.Text = Properties.Settings.Default.NickNames;
+            ApplyPremiumState();
+            _ = LoadSkinAsync();
         }
 
         private void editNicknameButton_Click(object sender, EventArgs e)
         {
             nicknameEditTextBox.Text = Properties.Settings.Default.NickNames;
-            nicknameEditTextBox.Visible = true;
-            playerNameStaticLabel.Visible = false;
-            editNicknameButton.Visible = false;
+            _editingNickname = true;
+            UpdateIdentityBar();
             nicknameEditTextBox.Focus();
         }
 
@@ -1920,9 +2214,8 @@ namespace Projects_Launcher.Projects_Launcher
 
         private void CancelNicknameEdit()
         {
-            nicknameEditTextBox.Visible = false;
-            playerNameStaticLabel.Visible = true;
-            editNicknameButton.Visible = true;
+            _editingNickname = false;
+            UpdateIdentityBar();
         }
 
         // Yeni kullanıcı adını doğrular, kaydeder ve skin görselini tazeler.
@@ -1945,7 +2238,6 @@ namespace Projects_Launcher.Projects_Launcher
 
             playerNameStaticLabel.Text = newName;
             CancelNicknameEdit();
-            PositionNicknameEditControls();
             _ = LoadSkinAsync();
         }
 

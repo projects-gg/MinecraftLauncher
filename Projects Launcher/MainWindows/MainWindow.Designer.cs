@@ -102,6 +102,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.maxRamDynamicCalculatorLabel = new System.Windows.Forms.Label();
             this.directorySearcher1 = new System.DirectoryServices.DirectorySearcher();
             this.editNicknameButton = new System.Windows.Forms.Label();
+            this.logoutButton = new System.Windows.Forms.Label();
             this.nicknameEditTextBox = new Guna.UI2.WinForms.Guna2TextBox();
             this.mainVersionBox = new Guna.UI2.WinForms.Guna2ComboBox();
             this.modInstallButton = new Guna.UI2.WinForms.Guna2Button();
@@ -1047,6 +1048,22 @@ namespace Projects_Launcher.Projects_Launcher
             this.editNicknameButton.Text = "✎";
             this.editNicknameButton.Click += new System.EventHandler(this.editNicknameButton_Click);
             //
+            // logoutButton
+            //
+            this.logoutButton.AutoSize = true;
+            this.logoutButton.BackColor = System.Drawing.Color.Transparent;
+            this.logoutButton.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.logoutButton.Font = new System.Drawing.Font("Segoe UI Symbol", 12F);
+            this.logoutButton.ForeColor = System.Drawing.Color.Silver;
+            this.logoutButton.Location = new System.Drawing.Point(232, 40);
+            this.logoutButton.Name = "logoutButton";
+            this.logoutButton.Size = new System.Drawing.Size(25, 21);
+            this.logoutButton.TabIndex = 2003;
+            this.logoutButton.Text = "⏻";
+            this.logoutButton.Click += new System.EventHandler(this.logoutButton_Click);
+            this.logoutButton.MouseEnter += new System.EventHandler(this.logoutButton_MouseEnter);
+            this.logoutButton.MouseLeave += new System.EventHandler(this.logoutButton_MouseLeave);
+            //
             // nicknameEditTextBox
             //
             this.nicknameEditTextBox.BackColor = System.Drawing.Color.Transparent;
@@ -1171,6 +1188,7 @@ namespace Projects_Launcher.Projects_Launcher
             this.ClientSize = new System.Drawing.Size(980, 503);
             this.Controls.Add(this.settingsBgPanel);
             this.Controls.Add(this.nicknameEditTextBox);
+            this.Controls.Add(this.logoutButton);
             this.Controls.Add(this.editNicknameButton);
             this.Controls.Add(this.mainVersionBox);
             this.Controls.Add(this.modInstallButton);
@@ -1201,7 +1219,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.DoubleBuffered = true;
             this.Font = new System.Drawing.Font("Microsoft Sans Serif", 8.249999F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
-            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            // Başlatıcı simgesi her koşulda projects.ico'dur (tema bunu değiştirmez).
+            this.Icon = global::Projects_Launcher.Properties.Resources.projects;
             this.MaximumSize = new System.Drawing.Size(980, 503);
             this.MinimumSize = new System.Drawing.Size(980, 503);
             this.Name = "mainMenuForm";
@@ -1291,6 +1310,7 @@ namespace Projects_Launcher.Projects_Launcher
         private Guna.UI2.WinForms.Guna2PictureBox modSelectionImageBox;
         public Guna.UI2.WinForms.Guna2ComboBox modVersionBox;
         private System.Windows.Forms.Label editNicknameButton;
+        private System.Windows.Forms.Label logoutButton;
         private Guna.UI2.WinForms.Guna2TextBox nicknameEditTextBox;
         public Guna.UI2.WinForms.Guna2ComboBox mainVersionBox;
         private Guna.UI2.WinForms.Guna2Button modInstallButton;

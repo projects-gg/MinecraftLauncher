@@ -38,7 +38,7 @@
     <CreateWebPageOnPublish>true</CreateWebPageOnPublish>
     <WebPage>publish.htm</WebPage>
     <OpenBrowserOnPublish>false</OpenBrowserOnPublish>
-    <ApplicationRevision>74</ApplicationRevision>
+    <ApplicationRevision>75</ApplicationRevision>
     <ApplicationVersion>0.1.6.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>
@@ -150,6 +150,8 @@
     <Reference Include="System.Runtime.Serialization">
       <Private>True</Private>
     </Reference>
+    <!-- Premium oturumun yenileme anahtarı DPAPI (ProtectedData) ile şifrelenir. -->
+    <Reference Include="System.Security" />
     <Reference Include="System.Web">
       <Private>True</Private>
     </Reference>
@@ -204,6 +206,12 @@
     <Compile Include="Afk\AfkSettings.cs" />
     <Compile Include="Afk\AfkStore.cs" />
     <Compile Include="Afk\AfkUi.cs" />
+    <Compile Include="Auth\MicrosoftAuth.cs" />
+    <Compile Include="Auth\MicrosoftBrand.cs" />
+    <Compile Include="Auth\PremiumLoginForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Auth\PremiumSession.cs" />
     <Compile Include="MainWindows\MainWindow.cs">
       <SubType>Form</SubType>
     </Compile>

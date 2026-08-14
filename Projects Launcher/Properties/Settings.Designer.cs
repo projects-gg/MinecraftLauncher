@@ -130,7 +130,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.ApplicationScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("0.1.52")]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.1.53")]
         public string currentVersion {
             get {
                 return ((string)(this["currentVersion"]));
@@ -313,6 +313,15 @@ namespace Projects_Launcher.Properties {
             }
             set {
                 this["lastShaderVer"] = value;
+            }
+        }
+
+        [global::System.Configuration.ApplicationScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("True")]
+        public bool enablePremiumLoginMethod {
+            get {
+                return ((bool)(this["enablePremiumLoginMethod"]));
             }
         }
     }

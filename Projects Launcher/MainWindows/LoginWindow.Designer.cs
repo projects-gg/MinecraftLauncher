@@ -44,6 +44,9 @@ namespace Projects_Launcher
             this.newsLabel = new Guna.UI2.WinForms.Guna2ImageButton();
             this.webbutton = new Guna.UI2.WinForms.Guna2ImageButton();
             this.loginButton = new Guna.UI2.WinForms.Guna2ImageButton();
+            this.loginSeparatorLabel = new System.Windows.Forms.Label();
+            this.premiumLoginButton = new Guna.UI2.WinForms.Guna2Button();
+            this.premiumHintLabel = new System.Windows.Forms.Label();
             this.newVersionPanel = new System.Windows.Forms.Panel();
             this.vCurrentLabel = new System.Windows.Forms.Label();
             this.vLatestLabel = new System.Windows.Forms.Label();
@@ -234,7 +237,7 @@ namespace Projects_Launcher
             this.webbutton.ImageOffset = new System.Drawing.Point(0, 0);
             this.webbutton.ImageRotate = 0F;
             this.webbutton.ImageSize = new System.Drawing.Size(207, 21);
-            this.webbutton.Location = new System.Drawing.Point(389, 325);
+            this.webbutton.Location = new System.Drawing.Point(389, 417);
             this.webbutton.Name = "webbutton";
             this.webbutton.PressedState.ImageSize = new System.Drawing.Size(207, 21);
             this.webbutton.Size = new System.Drawing.Size(207, 21);
@@ -256,9 +259,58 @@ namespace Projects_Launcher
             this.loginButton.Size = new System.Drawing.Size(207, 59);
             this.loginButton.TabIndex = 1025;
             this.loginButton.Click += new System.EventHandler(this.girisyapbutton_Click);
-            // 
+            //
+            // loginSeparatorLabel
+            //
+            this.loginSeparatorLabel.BackColor = System.Drawing.Color.Transparent;
+            this.loginSeparatorLabel.Font = new System.Drawing.Font("Segoe UI", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.loginSeparatorLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(232)))), ((int)(((byte)(235)))), ((int)(((byte)(242)))));
+            this.loginSeparatorLabel.Location = new System.Drawing.Point(389, 325);
+            this.loginSeparatorLabel.Name = "loginSeparatorLabel";
+            this.loginSeparatorLabel.Size = new System.Drawing.Size(207, 18);
+            this.loginSeparatorLabel.TabIndex = 1026;
+            this.loginSeparatorLabel.Text = "— veya —";
+            this.loginSeparatorLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            //
+            // premiumLoginButton
+            //
+            this.premiumLoginButton.BackColor = System.Drawing.Color.Transparent;
+            this.premiumLoginButton.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.premiumLoginButton.BorderRadius = 10;
+            this.premiumLoginButton.BorderThickness = 1;
+            this.premiumLoginButton.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.premiumLoginButton.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(28)))), ((int)(((byte)(32)))), ((int)(((byte)(42)))));
+            this.premiumLoginButton.Font = new System.Drawing.Font("Segoe UI Semibold", 10.5F, System.Drawing.FontStyle.Bold);
+            this.premiumLoginButton.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(245)))), ((int)(((byte)(247)))), ((int)(((byte)(250)))));
+            this.premiumLoginButton.HoverState.BorderColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(178)))), ((int)(((byte)(80)))));
+            this.premiumLoginButton.HoverState.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(248)))), ((int)(((byte)(148)))), ((int)(((byte)(35)))));
+            this.premiumLoginButton.HoverState.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(26)))), ((int)(((byte)(29)))), ((int)(((byte)(35)))));
+            this.premiumLoginButton.ImageAlign = System.Windows.Forms.HorizontalAlignment.Left;
+            this.premiumLoginButton.ImageOffset = new System.Drawing.Point(14, 0);
+            this.premiumLoginButton.ImageSize = new System.Drawing.Size(18, 18);
+            this.premiumLoginButton.Location = new System.Drawing.Point(389, 347);
+            this.premiumLoginButton.Name = "premiumLoginButton";
+            this.premiumLoginButton.PressedColor = System.Drawing.Color.FromArgb(((int)(((byte)(226)))), ((int)(((byte)(132)))), ((int)(((byte)(24)))));
+            this.premiumLoginButton.Size = new System.Drawing.Size(207, 44);
+            this.premiumLoginButton.TabIndex = 1027;
+            this.premiumLoginButton.Text = "Premium Giriş";
+            this.premiumLoginButton.TextOffset = new System.Drawing.Point(12, 0);
+            this.premiumLoginButton.Click += new System.EventHandler(this.premiumLoginButton_Click);
+            //
+            // premiumHintLabel
+            //
+            this.premiumHintLabel.BackColor = System.Drawing.Color.Transparent;
+            this.premiumHintLabel.Font = new System.Drawing.Font("Segoe UI", 8.25F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(162)));
+            this.premiumHintLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(255)))), ((int)(((byte)(206)))), ((int)(((byte)(138)))));
+            this.premiumHintLabel.Location = new System.Drawing.Point(389, 393);
+            this.premiumHintLabel.Name = "premiumHintLabel";
+            this.premiumHintLabel.Size = new System.Drawing.Size(207, 18);
+            this.premiumHintLabel.TabIndex = 1028;
+            this.premiumHintLabel.Text = "Satın alınmış Minecraft hesabı gerekir";
+            this.premiumHintLabel.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            //
             // newVersionPanel
-            // 
+            //
             this.newVersionPanel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(40)))), ((int)(((byte)(40)))), ((int)(((byte)(40)))));
             this.newVersionPanel.Controls.Add(this.vCurrentLabel);
             this.newVersionPanel.Controls.Add(this.vLatestLabel);
@@ -461,6 +513,9 @@ namespace Projects_Launcher
             this.ClientSize = new System.Drawing.Size(980, 503);
             this.Controls.Add(this.panelYenilikler);
             this.Controls.Add(this.newVersionPanel);
+            this.Controls.Add(this.premiumHintLabel);
+            this.Controls.Add(this.premiumLoginButton);
+            this.Controls.Add(this.loginSeparatorLabel);
             this.Controls.Add(this.loginButton);
             this.Controls.Add(this.webbutton);
             this.Controls.Add(this.newsLabel);
@@ -474,7 +529,8 @@ namespace Projects_Launcher
             this.Controls.Add(this.closeButtonControlBox);
             this.DoubleBuffered = true;
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.None;
-            this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
+            // Başlatıcı simgesi her koşulda projects.ico'dur (tema bunu değiştirmez).
+            this.Icon = global::Projects_Launcher.Properties.Resources.projects;
             this.MaximumSize = new System.Drawing.Size(980, 503);
             this.MinimumSize = new System.Drawing.Size(980, 503);
             this.Name = "loginMenuForm";
@@ -503,6 +559,9 @@ namespace Projects_Launcher
         private System.Windows.Forms.Button updateNowButton;
         private System.Windows.Forms.Button backButton;
         private Guna.UI2.WinForms.Guna2ImageButton loginButton;
+        private System.Windows.Forms.Label loginSeparatorLabel;
+        private Guna.UI2.WinForms.Guna2Button premiumLoginButton;
+        private System.Windows.Forms.Label premiumHintLabel;
         private Guna.UI2.WinForms.Guna2ImageButton webbutton;
         private Guna.UI2.WinForms.Guna2ImageButton newsLabel;
         private Guna.UI2.WinForms.Guna2Panel panelYenilikler;
