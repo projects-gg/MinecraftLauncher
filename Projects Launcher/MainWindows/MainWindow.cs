@@ -8,6 +8,7 @@ using Microsoft.Win32;
 using MineStatLib;
 using Projects_Launcher.Afk;
 using Projects_Launcher.Auth;
+using Projects_Launcher.Diagnostics;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -220,6 +221,10 @@ namespace Projects_Launcher.Projects_Launcher
 
         private readonly string launcherdizin =
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + "/.projects";
+
+        // "Yeniden aç" kapalıyken başlatıcı oyun başlar başlamaz kapanıyordu; oyun ilk
+        // saniyelerde çökerse kullanıcı sebebini hiç göremiyordu. Kapanmadan önce bu kadar beklenir.
+        private const int GameStartupGraceMs = 12000;
 
         readonly Random _random = new Random();
 
@@ -475,7 +480,12 @@ namespace Projects_Launcher.Projects_Launcher
             // İndirme bittikten sonra iptal edilmişse oyun yine de açılmasın.
             cancellationToken.ThrowIfCancellationRequested();
 
-            clientStartProcess.Start(); // Oyunu başlat
+            // Oyun süreci izlenerek başlatılır: standart çıktı/hata akışları diske yazılır ve
+            // beklenmedik bir kapanış normal çıkıştan ayırt edilir.
+            GameProcessWatcher gameWatcher = new GameProcessWatcher(
+                clientStartProcess, launcherdizin, Properties.Settings.Default.SelectedVersion);
+            gameWatcher.Crashed += OnGameCrashed;
+            gameWatcher.Start(); // Oyunu başlat
 
             alreadyPlayingAnimatedLabel = false; // "Başlatılıyor..." animasyonunu durdur
             downloadCompleteBar.Visible = false;
@@ -496,12 +506,30 @@ namespace Projects_Launcher.Projects_Launcher
                 // Eski timer3 yoklaması yerine process.Exited olayı kullanılır.
                 clientStartProcess.EnableRaisingEvents = true;
                 clientStartProcess.Exited += OnGameProcessExited;
+
+                // Oyun bu satıra gelinmeden kapanmış olabilir; o durumda Exited olayı kaçırılır
+                // ve başlatıcı gizli kalırdı. Kapandığı görülüyorsa geri getirme elle tetiklenir.
+                if (clientStartProcess.HasExited)
+                    OnGameProcessExited(clientStartProcess, EventArgs.Empty);
             }
             else
             {
                 this.Visible = false; // Oyun açılırken launcher gizlenir
+
                 // Yeniden açma kapalı ve AFK oturumu yok: oyun başlayınca launcher kapanır
-                // (oyundayken Discord durumu gösterilmez).
+                // (oyundayken Discord durumu gösterilmez). Ancak oyun daha açılamadan kapanırsa
+                // başlatıcı da kapandığından kullanıcıya hiçbir şey gösterilemiyordu; bu yüzden
+                // kısa bir süre beklenir ve yalnızca oyun ayakta kaldıysa çıkılır.
+                bool exitedEarly = await gameWatcher.WaitForExitAsync(GameStartupGraceMs);
+
+                if (exitedEarly && gameWatcher.Failed)
+                {
+                    ShowVersionSelector();
+                    this.Visible = true;
+                    thisTrue();
+                    return;
+                }
+
                 Application.Exit();
             }
         }
@@ -943,14 +971,37 @@ namespace Projects_Launcher.Projects_Launcher
             // process.Exited olayı ile izleniyor; bu zamanlayıcı kullanılmıyor.
         }
 
+        // Oyun beklenmedik şekilde kapandığında ortak hata penceresini açar. Olay süreç
+        // izleyicinin kendi thread'inden gelir; pencere her zaman arayüz thread'inde gösterilir.
+        private void OnGameCrashed(object sender, GameCrashEventArgs e)
+        {
+            Action show = () => LauncherDiagnostics.ShowReport(
+                "Oyun açılamadı",
+                "Oyun başlatıldı ama beklenmedik şekilde kapandı. Aşağıdaki bilgileri kopyalayıp " +
+                "destek talebi açarsanız sorunu birlikte çözebiliriz.",
+                e.Hint,
+                e.Details,
+                this);
+
+            try
+            {
+                if (IsHandleCreated && !IsDisposed)
+                    BeginInvoke(show);
+                else
+                    show();
+            }
+            catch (Exception)
+            {
+                // Pencere kapanmışsa rapor zaten kayıt dosyasına yazıldı.
+            }
+        }
+
+        // Bütün başlatıcı hataları tek noktadan geçer: diske yazılır ve kullanıcının
+        // kopyalayıp destek talebine ekleyebileceği bir pencereyle gösterilir.
         private void NotificationAboutException(Exception ex, string location = "\n")
         {
-            if (!location.Equals("\n"))
-                location = "\n\nHata konumu: " + location;
-            MessageBox.Show(
-                "Başlatıcı görevi işlenirken beklenmedik bir hata oluştu.\n\nBu hata önemli olmayabilir ya da programın yanlış çalışmasına neden oluyor olabilir. Eğer sorun yaşıyorsanız uygulamayı yeniden başlatın. Hata devam ederse destek sisteminde hatayı bizimle paylaşın." +
-                location + "\nHata kodu: " +
-                Convert.ToString(ex), "Başlatıcı Hatası");
+            LauncherDiagnostics.ReportException(
+                location.Equals("\n") ? "Başlatıcı" : location, ex, this);
         }
 
         private async Task animatedPlayingLabel()

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
@@ -14,6 +14,10 @@ namespace Projects_Launcher
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
+            // Yakalanmamış hatalar da dahil bütün hatalar kayda alınır ve kullanıcıya
+            // kopyalanabilir tek bir pencereyle gösterilir (bkz. LauncherDiagnostics).
+            Diagnostics.LauncherDiagnostics.Install();
 
             // Kullanıcı adı daha önce kaydedildiyse giriş ekranı atlanır, ana menü doğrudan açılır.
             // Güncelleme denetimi normalde giriş ekranında yapıldığından ana menüye devredilir.

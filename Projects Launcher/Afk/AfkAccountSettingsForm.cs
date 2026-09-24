@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
@@ -736,7 +736,7 @@ namespace Projects_Launcher.Afk
                 "En çok (saniye)", 1, 3600, 90, out antiAfkDelayMaxUpDown);
 
             antiAfkCommandBox = AddTextRow(page, ref y,
-                "Her turda gönderilecek komut (boş bırakılabilir)", 260, "/ping");
+                "Her turda gönderilecek komut (boş bırakılabilir)", 260, string.Empty);
 
             antiAfkSneakToggle = AddToggleRow(page, ref y, "Çömelerek hareket et", null);
 

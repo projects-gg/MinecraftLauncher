@@ -38,7 +38,7 @@
     <CreateWebPageOnPublish>true</CreateWebPageOnPublish>
     <WebPage>publish.htm</WebPage>
     <OpenBrowserOnPublish>false</OpenBrowserOnPublish>
-    <ApplicationRevision>75</ApplicationRevision>
+    <ApplicationRevision>76</ApplicationRevision>
     <ApplicationVersion>0.1.6.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <CreateDesktopShortcut>true</CreateDesktopShortcut>
@@ -212,6 +212,11 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Auth\PremiumSession.cs" />
+    <Compile Include="Diagnostics\ErrorReportForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Diagnostics\GameProcessWatcher.cs" />
+    <Compile Include="Diagnostics\LauncherDiagnostics.cs" />
     <Compile Include="MainWindows\MainWindow.cs">
       <SubType>Form</SubType>
     </Compile>
