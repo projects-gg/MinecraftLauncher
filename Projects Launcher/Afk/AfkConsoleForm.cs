@@ -194,6 +194,7 @@ namespace Projects_Launcher.Afk
             logBox.DetectUrls = false;
             logBox.TabStop = false;
             logPanel.Controls.Add(logBox);
+            AfkUi.UseDarkScrollbars(logBox);
 
             // --- Alt: komut/sohbet girişi ---
             Panel bottomBar = new Panel();

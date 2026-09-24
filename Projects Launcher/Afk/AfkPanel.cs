@@ -106,10 +106,12 @@ namespace Projects_Launcher.Afk
                 FillColor = BorderTone,
             };
 
+            // Liste, ana penceredeki "Ana Sayfa" tuşunun (panel koordinatında y=415) üstünde biter;
+            // eskiden 320 px yüksekliğiyle tuşun altına girip son satırın kenarını örtüyordu.
             accountFlow = new FlowLayoutPanel
             {
                 Location = new Point(40, 100),
-                Size = new Size(900, 320),
+                Size = new Size(900, 305),
                 FlowDirection = FlowDirection.TopDown,
                 WrapContents = false,
                 AutoScroll = true,
@@ -202,6 +204,7 @@ namespace Projects_Launcher.Afk
             Controls.Add(disconnectAllButton);
             Controls.Add(separator);
             Controls.Add(accountFlow);
+            AfkUi.UseDarkScrollbars(accountFlow);
             Controls.Add(downloadBar);
             Controls.Add(footerLabel);
 
@@ -554,12 +557,11 @@ namespace Projects_Launcher.Afk
             return AfkManager.Instance.TryGetSession(account.Id, out session) && session.IsRunning;
         }
 
-        // Süreç çalışıyor ya da geri çekilme beklerken yeniden bağlanmayı sürdürüyor. İkinci durumda
-        // süreç ölüdür (IsRunning=false) ama kullanıcı için oturum hâlâ etkindir: "Tümünü Bağla" onu
-        // atlamalı, "Tümünü Kes" ve kart düğmesi ise bekleyen yeniden başlatmayı durdurabilmeli.
+        // Yeniden bağlanmayı bekleyen oturum da etkin sayılır: "Tümünü Bağla" onu atlamalı,
+        // "Tümünü Kes" ve kart düğmesi ise bekleyen yeniden başlatmayı durdurabilmeli.
         private static bool IsSessionActive(AfkSession session)
         {
-            return session != null && (session.IsRunning || session.State == AfkState.Reconnecting);
+            return session != null && session.IsActive;
         }
 
         /// <summary>

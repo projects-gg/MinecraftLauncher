@@ -46,11 +46,13 @@ namespace Projects_Launcher.Projects_Launcher
 
             StyleProgressBar();
             PopulateDropdowns();
+            BindShadowToEnabled(modInstallButton);
+            BindShadowToEnabled(shaderInstallButton);
 
             // İpucu metinleri bir kez atanır; eskiden her MouseEnter'da yeni ToolTip
             // oluşturuluyordu ve her biri kapatılamayan bir pencere tanıtıcısı sızdırıyordu.
             _hoverTips.SetToolTip(reopenLauncher,
-                "Oyun kapatıldığında yeniden açılıp açılmayacağını seçersiniz.\n\nBu özelliğin kapalı olması durumunda oyundayken, discord\noynuyor bilginiz oyun durumunuzda gözükmeyecektir.");
+                "Oyun kapatıldığında yeniden açılıp açılmayacağını seçersiniz.\n\nBu özelliğin kapalı olması durumunda oyundayken, discord\noynuyor bilginiz oyun durumunuzda gözükmeyecektir.\n\nBağlı bir AFK hesabınız varsa başlatıcı oyun sırasında\nher durumda açık kalır; hesaplarınızı yönetmeye devam edebilirsiniz.");
             _hoverTips.SetToolTip(autoConnect,
                 "Minecraft istemcisi açıldıktan sonra otomatik olarak Projects\nresmi sunucusuna girip girmeyeceğini seçebilirsiniz.\n\nAyarın kapalı olması durumunda Minecraft ana menüsü\naçılacaktır.");
             _hoverTips.SetToolTip(logoutButton,
@@ -90,6 +92,22 @@ namespace Projects_Launcher.Projects_Launcher
 
         // Tek tıkla tam kurulum: fabric indirmesi bitince mod paketi sorulmadan otomatik kurulur.
         private bool _autoInstallModAfterFabric;
+
+        // Launcher'ın izlediği, hâlâ çalışan oyun süreçleri. Oyun açıkken AFK hesapları, ayarlar ve
+        // sürüm seçimi kullanılabilir kalır; yalnızca mod/shader dosyalarına dokunan işlemler bekletilir.
+        private readonly HashSet<Process> _runningGames = new HashSet<Process>();
+
+        // Launcher oyun süresince kendini gizlediyse ("yeniden aç" açık, AFK oturumu yok) oyun kapanınca
+        // yeniden gösterilir. Kullanıcı bu arada giriş ekranına döndüyse ana menü kendiliğinden açılmaz.
+        private bool _hiddenForGame;
+
+        private bool IsGameRunning
+        {
+            get { return _runningGames.Count > 0; }
+        }
+
+        // Oyun açıkken oyna tuşunun üstünde gösterilen durum etiketi; ilk ihtiyaçta oluşturulur.
+        private Label gameStatusLabel;
 
         // İndirme çubuğuna modern görünüm: yatay gradyan dolgu, yuvarlatılmış uçlar, yumuşak gölge.
         private void StyleProgressBar()
@@ -161,13 +179,6 @@ namespace Projects_Launcher.Projects_Launcher
         private string widthlabell;
         private string surumlabell;
         private string ramInfo;
-
-        private int widthResolution;
-        private int heightResolution;
-        private string heightResolutionb;
-        private string heightResolutionb2;
-        private string widthResolutionb;
-        private string widthResolutionb2;
 
         public static String readPhpContent(String address)
         {
@@ -288,12 +299,12 @@ namespace Projects_Launcher.Projects_Launcher
         }
 
         // Başlatma sırasında oyna tuşu bilerek açık bırakılır: ikinci tıklama işlemi iptal eder.
+        // AFK hesapları ve Discord tuşu da açık kalır; ikisi de oyunun kurulumundan bağımsızdır ve
+        // indirme dakikalar sürebilir.
         private void thisFalse()
         {
             settingsBgPanel.Enabled = false;
             settingsStaticPictureBox.Enabled = false;
-            discordStaticPictureBox.Enabled = false;
-            afkAccountsButton.Enabled = false;
             mainVersionBox.Enabled = false;
             modInstallButton.Enabled = false;
             modDeleteButton.Enabled = false;
@@ -368,15 +379,7 @@ namespace Projects_Launcher.Projects_Launcher
 
             minRamTextBox.MaxLength = 4;
 
-            // Grab resolution data
-            if (Properties.Settings.Default.ResolutionHeight != string.Empty)
-            {
-                widthtextbox.Text = Properties.Settings.Default.ResolutionHeight;
-            }
-            else if (Properties.Settings.Default.ResolutionWidth != string.Empty)
-            {
-                heighttextbox.Text = Properties.Settings.Default.ResolutionWidth;
-            }
+            LoadResolution();
 
             // --- Ağ/WMI işleri arka planda (UI bloklanmaz) ---
             _ = UpdateHwInfoAsync();
@@ -487,32 +490,24 @@ namespace Projects_Launcher.Projects_Launcher
             gameWatcher.Crashed += OnGameCrashed;
             gameWatcher.Start(); // Oyunu başlat
 
+            await OnGameStartedAsync(clientStartProcess, gameWatcher);
+        }
+
+        /// <summary>
+        /// Oyun süreci başladıktan sonra launcher'ın ne yapacağına karar verir. Çalışan bir AFK oturumu
+        /// varsa launcher hiçbir koşulda kapanmaz ve tuşlar hemen kullanılabilir olur: oyuncu ana
+        /// hesabıyla oyundayken AFK hesaplarını (kartlar, konsol, ayarlar) yönetmeye devam edebilsin.
+        /// </summary>
+        private async Task OnGameStartedAsync(Process gameProcess, GameProcessWatcher gameWatcher)
+        {
             alreadyPlayingAnimatedLabel = false; // "Başlatılıyor..." animasyonunu durdur
             downloadCompleteBar.Visible = false;
             downloadCompleteLabel.Visible = false;
 
-            // Çalışan bir AFK oturumu varsa launcher hiçbir koşulda kapanmaz: kullanıcı ana hesabıyla
-            // oyuna girse bile AFK hesaplarını (kartlar, konsol, ayarlar) yönetmeye devam edebilsin.
-            bool afkSessionsActive = AfkManager.Instance.Sessions.Any(s => s.IsRunning);
+            // Yeniden bağlanmayı bekleyen hesap da sayılır: launcher kapanırsa o bekleme de kaybolur.
+            bool afkSessionsActive = AfkManager.Instance.HasActiveSessions;
 
-            if (reopenLauncher.Checked || afkSessionsActive)
-            {
-                // AFK oturumu varken launcher görünür kalır (hesaplar yönetilebilsin). Yalnızca
-                // "yeniden aç" açık ve hiç AFK oturumu yokken oyun süresince gizlenir.
-                if (reopenLauncher.Checked && !afkSessionsActive)
-                    this.Visible = false; // Oyun açılırken launcher gizlenir
-
-                // Oyun kapanınca launcher tam haline döner (oynabutton, sürüm seçici, Discord).
-                // Eski timer3 yoklaması yerine process.Exited olayı kullanılır.
-                clientStartProcess.EnableRaisingEvents = true;
-                clientStartProcess.Exited += OnGameProcessExited;
-
-                // Oyun bu satıra gelinmeden kapanmış olabilir; o durumda Exited olayı kaçırılır
-                // ve başlatıcı gizli kalırdı. Kapandığı görülüyorsa geri getirme elle tetiklenir.
-                if (clientStartProcess.HasExited)
-                    OnGameProcessExited(clientStartProcess, EventArgs.Empty);
-            }
-            else
+            if (!reopenLauncher.Checked && !afkSessionsActive)
             {
                 this.Visible = false; // Oyun açılırken launcher gizlenir
 
@@ -531,12 +526,37 @@ namespace Projects_Launcher.Projects_Launcher
                 }
 
                 Application.Exit();
+                return;
             }
+
+            // Oyun kapanınca launcher tam haline döner (oynabutton, sürüm seçici, Discord).
+            _runningGames.Add(gameProcess);
+            gameProcess.EnableRaisingEvents = true;
+            gameProcess.Exited += OnGameProcessExited;
+
+            if (!afkSessionsActive)
+            {
+                // "Yeniden aç" açık ve hiç AFK oturumu yok: launcher oyun süresince gizlenir.
+                _hiddenForGame = true;
+                this.Visible = false;
+            }
+
+            // Eskiden tuşlar oyun kapanana kadar kapalı, durum da "Başlatılıyor..." olarak kalıyordu.
+            ShowVersionSelector();
+            thisTrue();
+            UpdateGameStatus();
+
+            // Oyun bu satıra gelinmeden kapanmış olabilir; o durumda Exited olayı kaçırılır
+            // ve başlatıcı gizli kalırdı. Kapandığı görülüyorsa geri getirme elle tetiklenir.
+            if (gameProcess.HasExited)
+                OnGameProcessExited(gameProcess, EventArgs.Empty);
         }
 
-        // Oyun süreci sona erince (yalnızca "yeniden aç" açıkken) launcher'ı geri getirir.
+        // Oyun süreci kapanınca launcher'ı tam haline döndürür; oyun süresince gizlendiyse yeniden gösterir.
         private void OnGameProcessExited(object sender, EventArgs e)
         {
+            Process exited = sender as Process;
+
             if (IsDisposed || !IsHandleCreated)
                 return;
 
@@ -544,11 +564,23 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 BeginInvoke((Action)(() =>
                 {
-                    ShowVersionSelector();
+                    // Aynı kapanış hem Exited olayından hem HasExited denetiminden gelebilir;
+                    // süreç listeden bir kez düşer, ikinci bildirim yok sayılır.
+                    if (exited == null || !_runningGames.Remove(exited))
+                        return;
 
-                    playButtonStaticLabel.Enabled = true;
-                    this.Visible = true;
+                    if (IsGameRunning)
+                        return;
+
+                    if (_hiddenForGame)
+                    {
+                        _hiddenForGame = false;
+                        this.Visible = true;
+                    }
+
+                    ShowVersionSelector();
                     thisTrue();
+                    UpdateGameStatus();
 
                     Client?.Dispose();
                     DiscordRpcClientSetup();
@@ -558,6 +590,44 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 // Launcher zaten kapanmış.
             }
+            catch (InvalidOperationException)
+            {
+                // Pencere tanıtıcısı bu arada yok edilmiş.
+            }
+        }
+
+        /// <summary>
+        /// Oyun açıkken oyna tuşunun üstünde durum etiketi ve ipucu gösterir; oyun kapanınca kaldırır.
+        /// Mod/shader tuşları da oyunun durumuna göre tazelenir.
+        /// </summary>
+        private void UpdateGameStatus()
+        {
+            bool running = IsGameRunning;
+
+            if (running && gameStatusLabel == null)
+            {
+                gameStatusLabel = new Label
+                {
+                    AutoSize = true,
+                    BackColor = Color.Transparent,
+                    Font = new Font("Arial", 11f, FontStyle.Bold),
+                    ForeColor = Color.FromArgb(34, 197, 94),
+                    Location = new Point(downloadCompleteLabel.Left - 7, downloadCompleteLabel.Top + 2),
+                    Anchor = downloadCompleteLabel.Anchor,
+                    Text = "● Oyun açık",
+                };
+
+                _hoverTips.SetToolTip(gameStatusLabel,
+                    "Oyun kapanana kadar mod ve shader paketi işlemleri bekletilir.\nAFK hesaplarınızı bu sırada yönetebilirsiniz.");
+                // Z sırasında en altta kalır: ayarlar ve AFK paneli açıldığında etiketin üstünü örter.
+                Controls.Add(gameStatusLabel);
+            }
+
+            if (gameStatusLabel != null)
+                gameStatusLabel.Visible = running;
+
+            _hoverTips.SetToolTip(playButtonStaticLabel, running ? "Oyun şu anda açık." : string.Empty);
+            UpdateModPackageButtons();
         }
 
         private async void oynabutton_Click(object sender, EventArgs e)
@@ -567,6 +637,16 @@ namespace Projects_Launcher.Projects_Launcher
             if (_launchCancellation != null)
             {
                 CancelLaunch();
+                return;
+            }
+
+            // Oyun zaten açıkken ikinci kez başlatılmaz: aynı hesapla yeniden girmek açık oyunu sunucudan
+            // düşürür, mod paketi sorusu da oyunun kullandığı mods klasörünü silmeye kalkardı.
+            if (IsGameRunning)
+            {
+                MessageBox.Show(
+                    "Minecraft şu anda açık.\n\nYeniden başlatmak için önce açık olan oyunu kapatın.",
+                    "Oyun Açık", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
@@ -741,8 +821,8 @@ namespace Projects_Launcher.Projects_Launcher
                     _launchCancellation.Dispose();
                     _launchCancellation = null;
 
-                    _hoverTips.SetToolTip(playButtonStaticLabel, string.Empty);
                     playButtonStaticLabel.Enabled = true;
+                    UpdateGameStatus(); // iptal ipucunu kaldırır; oyun açıldıysa "oyun açık" durumunu gösterir
                 }
             }
         }
@@ -1092,7 +1172,10 @@ namespace Projects_Launcher.Projects_Launcher
             afkPanel.OnShown();
 
             // Panel tüm istemci alanını kapladığı için çıkış yolları onun üstünde kalmalı.
+            // Tuşun ebeveyni form olduğundan saydam köşeleri panelin değil arka plan görselinin
+            // rengini alıyordu; panel açıkken köşeler panel zeminine sabitlenir.
             afkAccountsButton.Text = "Ana Sayfa";
+            afkAccountsButton.BackColor = afkPanel.FillColor;
             afkAccountsButton.BringToFront();
             backButton.Visible = true;
             backButton.BringToFront();
@@ -1106,6 +1189,7 @@ namespace Projects_Launcher.Projects_Launcher
             afkPanel.OnHidden();
             afkPanel.Visible = false;
             afkAccountsButton.Text = "AFK Hesaplar";
+            afkAccountsButton.BackColor = Color.Transparent;
             backButton.Visible = false;
         }
 
@@ -1124,7 +1208,7 @@ namespace Projects_Launcher.Projects_Launcher
         // Application.Exit() gibi kullanıcı kaynaklı olmayan kapanışlarda sorulmaz.
         private bool ConfirmAfkShutdown()
         {
-            if (!AfkManager.Instance.Sessions.Any(s => s.IsRunning))
+            if (!AfkManager.Instance.HasActiveSessions)
                 return true;
 
             DialogResult answer = MessageBox.Show(
@@ -1568,63 +1652,61 @@ namespace Projects_Launcher.Projects_Launcher
             }
         }
 
+        /// <summary>
+        /// Kayıtlı oyun penceresi boyutunu kutulara yükler. Eski sürüm yüksekliği genişlik kutusuna
+        /// yazıyor, kutunun TextChanged'i de bunu genişlik olarak kaydediyordu; her açılışta boyut
+        /// bozuluyor (ör. 960x960) ve yükseklik kutusu hiç doldurulmuyordu. Kutuların Leave
+        /// denetimiyle aynı aralığın (ekranın dörtte biri ile yarısı) dışına düşmüş değer ekranın
+        /// yarısına çekilir; böylece daha önce bozulmuş ayarlar da kendiliğinden düzelir.
+        /// </summary>
+        private void LoadResolution()
+        {
+            Rectangle screen = Screen.PrimaryScreen.Bounds;
+
+            widthtextbox.Text = SanitizeResolution(Properties.Settings.Default.ResolutionWidth, screen.Width);
+            heighttextbox.Text = SanitizeResolution(Properties.Settings.Default.ResolutionHeight, screen.Height);
+        }
+
+        private static string SanitizeResolution(string saved, int screenSize)
+        {
+            int max = screenSize / 2;
+            int min = screenSize / 4;
+
+            if (int.TryParse(saved, out int value) && value >= min && value <= max)
+                return value.ToString();
+
+            return max.ToString();
+        }
+
         private void heighttextbox_Leave(object sender, EventArgs e)
         {
-            try
-            {
-                heightResolution = Screen.PrimaryScreen.Bounds.Height;
-                heightResolutionb = String.Format("{0:0.##}", Convert.ToDouble(heightResolution) / 2);
-                heightResolutionb2 = String.Format("{0:0.##}", Convert.ToDouble(heightResolutionb) / 2);
-
-                heighttextbox.Text = (heighttextbox.Text).Trim();
-                if (string.IsNullOrEmpty(heighttextbox.Text))
-                {
-                    MessageBox.Show("Çözünürlük" + " " + heightResolutionb2 + "-" + heightResolutionb + " " +
-                                    "arasında girilmeli.");
-                    heighttextbox.Text = heightResolutionb;
-                }
-                else if (Convert.ToInt32(heighttextbox.Text) < Convert.ToInt32(heightResolutionb2) ||
-                         Convert.ToInt32(heighttextbox.Text) > Convert.ToInt32(heightResolutionb))
-                {
-                    MessageBox.Show("Çözünürlük" + " " + heightResolutionb2 + "-" + heightResolutionb + " " +
-                                    "arasında girilmeli.");
-                    heighttextbox.Text = heightResolutionb2;
-                }
-            }
-            catch
-            {
-                MessageBox.Show("Çözünürlük ayarlanırken bir hata meydana geldi.");
-            }
+            ValidateResolutionBox(heighttextbox, Screen.PrimaryScreen.Bounds.Height);
         }
 
         private void widthtextbox_Leave(object sender, EventArgs e)
         {
-            try
-            {
-                widthResolution = Screen.PrimaryScreen.Bounds.Width;
-                widthResolutionb = String.Format("{0:0.##}", Convert.ToDouble(widthResolution) / 2);
-                widthResolutionb2 = String.Format("{0:0.##}", Convert.ToDouble(widthResolutionb) / 2);
+            ValidateResolutionBox(widthtextbox, Screen.PrimaryScreen.Bounds.Width);
+        }
 
-                widthtextbox.Text = (widthtextbox.Text).Trim();
-                if (string.IsNullOrEmpty(widthtextbox.Text))
-                {
-                    MessageBox.Show("Çözünürlük" + " " + widthResolutionb2 + "-" + widthResolutionb + " " +
-                                    "arasında girilmeli.");
-                    widthtextbox.Text = widthResolutionb;
-                }
+        // Pencere boyutu ekranın dörtte biri ile yarısı arasında olmalı. Sınırlar tam sayı bölmeyle
+        // hesaplanır: eskiden "{0:0.##}" biçimi 1366/4 için "341,5" üretiyor, Convert.ToInt32 da
+        // bunu okuyamadığı için 1366 px genişliğindeki ekranlarda kutudan her çıkışta hata çıkıyordu.
+        // Aralık dışındaki değer en yakın sınıra, boş/geçersiz değer ekranın yarısına çekilir.
+        private static void ValidateResolutionBox(Guna.UI2.WinForms.Guna2TextBox box, int screenSize)
+        {
+            int max = screenSize / 2;
+            int min = screenSize / 4;
 
-                if (Convert.ToInt32(widthtextbox.Text) < Convert.ToInt32(widthResolutionb2) ||
-                    Convert.ToInt32(widthtextbox.Text) > Convert.ToInt32(widthResolutionb))
-                {
-                    MessageBox.Show("Çözünürlük" + " " + widthResolutionb2 + "-" + widthResolutionb + " " +
-                                    "arasında girilmeli.");
-                    widthtextbox.Text = widthResolutionb;
-                }
-            }
-            catch
-            {
-                MessageBox.Show("Çözünürlük ayarlanırken bir hata meydana geldi.");
-            }
+            box.Text = box.Text.Trim();
+            if (int.TryParse(box.Text, out int value) && value >= min && value <= max)
+                return;
+
+            MessageBox.Show("Çözünürlük " + min + "-" + max + " arasında girilmeli.");
+
+            if (int.TryParse(box.Text, out value) && value < min)
+                box.Text = min.ToString();
+            else
+                box.Text = max.ToString();
         }
 
         private void guna2ControlBox3_Click(object sender, EventArgs e)
@@ -1651,11 +1733,6 @@ namespace Projects_Launcher.Projects_Launcher
         private void autoConnectCheckBox_MouseEnter(object sender, EventArgs e)
         {
             // İpucu artık kurucuda bir kez atanıyor; Designer bu olayı bağlamaya devam ettiği için gövde boş.
-        }
-
-        private void guna2ControlBox1_Resize(object sender, EventArgs e)
-        {
-            settingsBgPanel.Size = this.Size;
         }
 
         // Sol üstteki geri tuşu: hangi tam ekran panel açıksa onu kapatır.
@@ -1801,38 +1878,32 @@ namespace Projects_Launcher.Projects_Launcher
         }
 
         // Seçili sürüme göre kur/yüklü/sil butonlarının görünürlük ve durumlarını ayarlar.
+        // Oyun açıkken mods/shaderpacks klasörleri oyun tarafından kullanıldığından bu tuşlar kapalı kalır.
         private void UpdateModPackageButtons()
         {
             bool fabricSelected = Properties.Settings.Default.SelectedVersion.Contains("projects-fabric");
 
-            if (!fabricSelected)
-            {
-                // Fabric dışı sürümde tek tıkla tam kurulum tuşu gösterilir (sürüm + mod paketi).
-                modInstallButton.Visible = true;
-                modInstallButton.Enabled = true;
-                modInstallButton.Text = "Mod Paketi Kur";
-                modInstallButton.FillColor = Color.FromArgb(34, 197, 94);
-                modInstallButton.ShadowDecoration.Enabled = true;
-
-                modDeleteButton.Visible = Directory.Exists(appDataDizini + "/.projects/mods");
-                modDeleteButton.Enabled = true;
-                UpdateShaderButton();
-                return;
-            }
-
-            bool installed = IsModPackInstalled();
+            // Fabric dışı sürümde tek tıkla tam kurulum tuşu gösterilir (sürüm + mod paketi).
+            bool installed = fabricSelected && IsModPackInstalled();
 
             modInstallButton.Visible = true;
-            modInstallButton.Enabled = !installed;
+            modInstallButton.Enabled = !installed && !IsGameRunning;
             modInstallButton.Text = installed ? "Mod Paketi Yüklü" : "Mod Paketini Kur";
             modInstallButton.FillColor = installed
                 ? Color.FromArgb(60, 64, 72)
                 : Color.FromArgb(34, 197, 94);
-            modInstallButton.ShadowDecoration.Enabled = !installed;
 
             modDeleteButton.Visible = Directory.Exists(appDataDizini + "/.projects/mods");
-            modDeleteButton.Enabled = true;
+            modDeleteButton.Enabled = !IsGameRunning;
             UpdateShaderButton();
+        }
+
+        // Kapalı bir tuşun yeşil/mavi parıltısı kalırsa gri tuş hâlâ tıklanabilir gibi görünüyordu;
+        // gölge her durumda tuşun etkinliğini izler.
+        private static void BindShadowToEnabled(Guna.UI2.WinForms.Guna2Button button)
+        {
+            button.ShadowDecoration.Enabled = button.Enabled;
+            button.EnabledChanged += (sender, e) => button.ShadowDecoration.Enabled = button.Enabled;
         }
 
         private void modInstallButton_Click(object sender, EventArgs e)
@@ -1851,7 +1922,7 @@ namespace Projects_Launcher.Projects_Launcher
             {
                 DialogResult secenek = MessageBox.Show(
                     "Mod paketi yalnızca \"projects-fabric-" + latestFabricVersion + "\" sürümüyle çalışır.\n\nDevam ederseniz oyun sürümünüz bu sürüme değiştirilecek ve gerekli tüm dosyalar otomatik olarak kurulacak.\n\nDevam etmek istiyor musunuz?",
-                    "Mod Paketi Kur", MessageBoxButtons.YesNo);
+                    "Mod Paketini Kur", MessageBoxButtons.YesNo);
 
                 if (secenek != DialogResult.Yes)
                     return;
@@ -1918,25 +1989,22 @@ namespace Projects_Launcher.Projects_Launcher
 
             if (!installed)
             {
-                shaderInstallButton.Enabled = true;
                 shaderInstallButton.Text = "Shader Paketi Kur";
                 shaderInstallButton.FillColor = Color.FromArgb(94, 148, 255);
-                shaderInstallButton.ShadowDecoration.Enabled = true;
             }
             else if (upToDate)
             {
-                shaderInstallButton.Enabled = false;
                 shaderInstallButton.Text = "Shader Paketi Yüklü";
                 shaderInstallButton.FillColor = Color.FromArgb(60, 64, 72);
-                shaderInstallButton.ShadowDecoration.Enabled = false;
             }
             else
             {
-                shaderInstallButton.Enabled = true;
                 shaderInstallButton.Text = "Shader Güncelle";
                 shaderInstallButton.FillColor = Color.FromArgb(245, 158, 11);
-                shaderInstallButton.ShadowDecoration.Enabled = true;
             }
+
+            // Oyun açıkken shaderpacks klasörüne yazılmaz; güncel paket zaten pasif "Yüklü" görünür.
+            shaderInstallButton.Enabled = !upToDate && !IsGameRunning;
         }
 
         private void shaderInstallButton_Click(object sender, EventArgs e)

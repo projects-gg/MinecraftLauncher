@@ -125,6 +125,16 @@ namespace Projects_Launcher.Afk
             }
         }
 
+        /// <summary>
+        /// Süreç çalışıyor ya da geri çekilme beklerken yeniden bağlanmayı sürdürüyor. İkinci durumda
+        /// süreç ölüdür (IsRunning=false) ama kullanıcı için oturum hâlâ etkindir: başlatıcı kapanırsa
+        /// bekleyen yeniden bağlanma da kaybolur.
+        /// </summary>
+        public bool IsActive
+        {
+            get { return IsRunning || State == AfkState.Reconnecting; }
+        }
+
         public bool IsBusy
         {
             get

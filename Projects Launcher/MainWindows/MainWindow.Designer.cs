@@ -56,7 +56,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.closeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.label11 = new System.Windows.Forms.Label();
             this.guna2BorderlessForm1 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
-            this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.backButton = new System.Windows.Forms.Button();
             this.afkAccountsButton = new Guna.UI2.WinForms.Guna2Button();
             this.serverPing = new System.Windows.Forms.Timer(this.components);
@@ -279,7 +278,8 @@ namespace Projects_Launcher.Projects_Launcher
             this.minimizeButtonControlBox.ControlBoxType = Guna.UI2.WinForms.Enums.ControlBoxType.MinimizeBox;
             this.minimizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
             this.minimizeButtonControlBox.IconColor = System.Drawing.Color.White;
-            this.minimizeButtonControlBox.Location = new System.Drawing.Point(849, 0);
+            // Pencere sabit boyutlu olduğundan büyütme tuşu yoktur; küçültme kapatmanın yanına oturur.
+            this.minimizeButtonControlBox.Location = new System.Drawing.Point(890, 0);
             this.minimizeButtonControlBox.Name = "minimizeButtonControlBox";
             this.minimizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
             this.minimizeButtonControlBox.TabIndex = 135;
@@ -315,21 +315,10 @@ namespace Projects_Launcher.Projects_Launcher
             // guna2BorderlessForm1
             // 
             this.guna2BorderlessForm1.ContainerControl = this;
+            // Sabit boyutlu pencere ekran kenarına sürüklenince yarım ekrana yaslanmaya çalışmasın.
+            this.guna2BorderlessForm1.DockForm = false;
             this.guna2BorderlessForm1.DockIndicatorTransparencyValue = 0.6D;
             this.guna2BorderlessForm1.TransparentWhileDrag = true;
-            // 
-            // maximizeButtonControlBox
-            // 
-            this.maximizeButtonControlBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.maximizeButtonControlBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(30)))), ((int)(((byte)(45)))));
-            this.maximizeButtonControlBox.ControlBoxType = Guna.UI2.WinForms.Enums.ControlBoxType.MaximizeBox;
-            this.maximizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.maximizeButtonControlBox.IconColor = System.Drawing.Color.White;
-            this.maximizeButtonControlBox.Location = new System.Drawing.Point(893, 0);
-            this.maximizeButtonControlBox.Name = "maximizeButtonControlBox";
-            this.maximizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
-            this.maximizeButtonControlBox.TabIndex = 138;
-            this.maximizeButtonControlBox.Resize += new System.EventHandler(this.guna2ControlBox1_Resize);
             // 
             // backButton
             // 
@@ -1201,7 +1190,6 @@ namespace Projects_Launcher.Projects_Launcher
             this.Controls.Add(this.playButtonStaticLabel);
             this.Controls.Add(this.downloadCompleteLabel);
             this.Controls.Add(this.backButton);
-            this.Controls.Add(this.maximizeButtonControlBox);
             this.Controls.Add(this.label11);
             this.Controls.Add(this.closeButtonControlBox);
             this.Controls.Add(this.minimizeButtonControlBox);
@@ -1264,7 +1252,6 @@ namespace Projects_Launcher.Projects_Launcher
         private Guna.UI2.WinForms.Guna2ControlBox closeButtonControlBox;
         public System.Windows.Forms.Label label11;
         private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm1;
-        private Guna.UI2.WinForms.Guna2ControlBox maximizeButtonControlBox;
         private System.Windows.Forms.Button backButton;
         private Guna.UI2.WinForms.Guna2Button afkAccountsButton;
         private System.Windows.Forms.Timer serverPing;

@@ -49,7 +49,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("960")]
+        [global::System.Configuration.DefaultSettingValueAttribute("540")]
         public string ResolutionHeight {
             get {
                 return ((string)(this["ResolutionHeight"]));
@@ -61,7 +61,7 @@ namespace Projects_Launcher.Properties {
         
         [global::System.Configuration.UserScopedSettingAttribute()]
         [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
-        [global::System.Configuration.DefaultSettingValueAttribute("540")]
+        [global::System.Configuration.DefaultSettingValueAttribute("960")]
         public string ResolutionWidth {
             get {
                 return ((string)(this["ResolutionWidth"]));

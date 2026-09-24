@@ -33,6 +33,12 @@ namespace Projects_Launcher.Auth
         private static readonly Color BrandColor = Color.FromArgb(248, 148, 35);
 
         private const int CardWidth = 470;
+
+        // Kartın çevresindeki 1px çerçeve payı. Guna2Elipse'in bölgesi (CreateRoundRectRgn) sağdaki ve
+        // alttaki son piksel satırını dışarıda bırakır; o kenarlarda da çerçeve görünsün diye pay 3'tür
+        // (sol/üst 1px çerçeve, sağ/alt 1px çerçeve + kırpılan 1px).
+        private const int FrameSize = 3;
+
         private const int Gutter = 28;
         private const int StepRowHeight = 33;
 
@@ -117,7 +123,7 @@ namespace Projects_Launcher.Auth
             DoubleBuffered = true;
             // Form yüzeyi kenarlık rengiyle boyanır; 1px içerideki panel kartı oluşturur.
             BackColor = BorderColor;
-            ClientSize = new Size(CardWidth + 2, 100); // yükseklik içerik yerleştikten sonra kesinleşir
+            ClientSize = new Size(CardWidth + FrameSize, 100); // yükseklik içerik yerleştikten sonra kesinleşir
 
             Guna2Elipse formElipse = new Guna2Elipse();
             formElipse.TargetControl = this;
@@ -318,7 +324,7 @@ namespace Projects_Launcher.Auth
             int centerY = onScreen ? Top + (Height / 2) : 0;
 
             _content.Height = cardHeight;
-            ClientSize = new Size(CardWidth + 2, cardHeight + 2);
+            ClientSize = new Size(CardWidth + FrameSize, cardHeight + FrameSize);
 
             if (onScreen)
                 Top = centerY - (Height / 2);

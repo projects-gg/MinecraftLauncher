@@ -37,8 +37,6 @@ namespace Projects_Launcher
             this.nickNameEnterTextBox = new Guna.UI2.WinForms.Guna2TextBox();
             this.closeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.minimizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
-            this.guna2BorderlessForm2 = new Guna.UI2.WinForms.Guna2BorderlessForm(this.components);
-            this.maximizeButtonControlBox = new Guna.UI2.WinForms.Guna2ControlBox();
             this.updateNowButton = new System.Windows.Forms.Button();
             this.backButton = new System.Windows.Forms.Button();
             this.newsLabel = new Guna.UI2.WinForms.Guna2ImageButton();
@@ -69,7 +67,10 @@ namespace Projects_Launcher
             // 
             // guna2BorderlessForm1
             // 
+            // Formu tek bir BorderlessForm yönetir; aynı pencereye ikinci kez bağlanan kopya kaldırıldı.
             this.guna2BorderlessForm1.ContainerControl = this;
+            // Sabit boyutlu pencere ekran kenarına sürüklenince yarım ekrana yaslanmaya çalışmasın.
+            this.guna2BorderlessForm1.DockForm = false;
             this.guna2BorderlessForm1.DockIndicatorTransparencyValue = 0.6D;
             this.guna2BorderlessForm1.TransparentWhileDrag = true;
             // 
@@ -160,29 +161,12 @@ namespace Projects_Launcher
             this.minimizeButtonControlBox.ControlBoxType = Guna.UI2.WinForms.Enums.ControlBoxType.MinimizeBox;
             this.minimizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
             this.minimizeButtonControlBox.IconColor = System.Drawing.Color.White;
-            this.minimizeButtonControlBox.Location = new System.Drawing.Point(849, 0);
+            // Pencere sabit boyutlu olduğundan büyütme tuşu yoktur; küçültme kapatmanın yanına oturur.
+            this.minimizeButtonControlBox.Location = new System.Drawing.Point(890, 0);
             this.minimizeButtonControlBox.Name = "minimizeButtonControlBox";
             this.minimizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
             this.minimizeButtonControlBox.TabIndex = 136;
             this.minimizeButtonControlBox.Click += new System.EventHandler(this.guna2ControlBox2_Click);
-            // 
-            // guna2BorderlessForm2
-            // 
-            this.guna2BorderlessForm2.ContainerControl = this;
-            this.guna2BorderlessForm2.DockIndicatorTransparencyValue = 0.6D;
-            this.guna2BorderlessForm2.TransparentWhileDrag = true;
-            // 
-            // maximizeButtonControlBox
-            // 
-            this.maximizeButtonControlBox.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.maximizeButtonControlBox.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.maximizeButtonControlBox.ControlBoxType = Guna.UI2.WinForms.Enums.ControlBoxType.MaximizeBox;
-            this.maximizeButtonControlBox.FillColor = System.Drawing.Color.FromArgb(((int)(((byte)(25)))), ((int)(((byte)(25)))), ((int)(((byte)(25)))));
-            this.maximizeButtonControlBox.IconColor = System.Drawing.Color.White;
-            this.maximizeButtonControlBox.Location = new System.Drawing.Point(893, 0);
-            this.maximizeButtonControlBox.Name = "maximizeButtonControlBox";
-            this.maximizeButtonControlBox.Size = new System.Drawing.Size(45, 29);
-            this.maximizeButtonControlBox.TabIndex = 139;
             // 
             // updateNowButton
             // 
@@ -521,7 +505,6 @@ namespace Projects_Launcher
             this.Controls.Add(this.newsLabel);
             this.Controls.Add(this.backButton);
             this.Controls.Add(this.updateNowButton);
-            this.Controls.Add(this.maximizeButtonControlBox);
             this.Controls.Add(this.minimizeButtonControlBox);
             this.Controls.Add(this.raminfo);
             this.Controls.Add(this.rememberMeCheckBox);
@@ -554,8 +537,6 @@ namespace Projects_Launcher
         private Guna.UI2.WinForms.Guna2TextBox nickNameEnterTextBox;
         private Guna.UI2.WinForms.Guna2ControlBox closeButtonControlBox;
         private Guna.UI2.WinForms.Guna2ControlBox minimizeButtonControlBox;
-        private Guna.UI2.WinForms.Guna2BorderlessForm guna2BorderlessForm2;
-        private Guna.UI2.WinForms.Guna2ControlBox maximizeButtonControlBox;
         private System.Windows.Forms.Button updateNowButton;
         private System.Windows.Forms.Button backButton;
         private Guna.UI2.WinForms.Guna2ImageButton loginButton;

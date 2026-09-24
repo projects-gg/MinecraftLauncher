@@ -131,6 +131,12 @@ namespace Projects_Launcher.Afk
             }
         }
 
+        /// <summary>Bağlı ya da yeniden bağlanmayı bekleyen en az bir hesap var mı?</summary>
+        public bool HasActiveSessions
+        {
+            get { return Sessions.Any(s => s.IsActive); }
+        }
+
         /// <summary>Açık oturumların anlık bir kopyası (numaralandırma sırasında kilit tutulmaz).</summary>
         public IEnumerable<AfkSession> Sessions
         {

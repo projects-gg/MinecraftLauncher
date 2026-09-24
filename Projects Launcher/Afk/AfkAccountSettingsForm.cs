@@ -319,6 +319,7 @@ namespace Projects_Launcher.Afk
             page.AutoScroll = true;
             page.Visible = false;
             Controls.Add(page);
+            AfkUi.UseDarkScrollbars(page);
             pages.Add(page);
 
             y = 18;

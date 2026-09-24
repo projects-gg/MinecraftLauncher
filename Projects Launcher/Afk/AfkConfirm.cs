@@ -20,7 +20,10 @@ namespace Projects_Launcher.Afk
                 form.FormBorderStyle = FormBorderStyle.None;
                 form.StartPosition = FormStartPosition.CenterParent;
                 form.ShowInTaskbar = false;
-                form.Size = new Size(420, 210);
+                // Guna2Elipse'in bölgesi (CreateRoundRectRgn) sağdaki ve alttaki son piksel satırını
+                // dışarıda bırakır; form bu yüzden bir piksel geniş/uzun tutulur, yoksa çerçeve
+                // yalnızca üstte ve solda görünüyordu.
+                form.Size = new Size(421, 211);
                 // Form'un kendisi kenarlık rengiyle boyanır; 1px içeride oturan panel kart yüzeyini
                 // oluşturur. Böylece Guna2Elipse ile yuvarlatılan köşede ince bir çerçeve görünür.
                 form.BackColor = Color.FromArgb(52, 58, 70);
@@ -32,7 +35,7 @@ namespace Projects_Launcher.Afk
 
                 Panel content = new Panel();
                 content.Location = new Point(1, 1);
-                content.Size = new Size(form.ClientSize.Width - 2, form.ClientSize.Height - 2);
+                content.Size = new Size(form.ClientSize.Width - 3, form.ClientSize.Height - 3);
                 content.BackColor = Color.FromArgb(32, 36, 44);
                 form.Controls.Add(content);
 

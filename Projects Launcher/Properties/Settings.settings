@@ -9,10 +9,10 @@
       <Value Profile="(Default)">4096</Value>
     </Setting>
     <Setting Name="ResolutionHeight" Type="System.String" Scope="User">
-      <Value Profile="(Default)">960</Value>
+      <Value Profile="(Default)">540</Value>
     </Setting>
     <Setting Name="ResolutionWidth" Type="System.String" Scope="User">
-      <Value Profile="(Default)">540</Value>
+      <Value Profile="(Default)">960</Value>
     </Setting>
     <Setting Name="SelectedVersion" Type="System.String" Scope="User">
       <Value Profile="(Default)">26.1.2</Value>
