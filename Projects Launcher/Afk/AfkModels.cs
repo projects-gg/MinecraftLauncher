@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 
 namespace Projects_Launcher.Afk
 {
@@ -12,8 +13,108 @@ namespace Projects_Launcher.Afk
     {
         public const string ServerHost = "play.projects.gg";
 
+        // Yeni hesapların ve bu alanı hiç kaydetmemiş eski hesapların oyun sürümü.
+        public const string MinecraftVersion = "26.3";
+
         // Hesap adı doğrulaması ana menüdeki kural ile aynı tutulur.
         public const string NicknamePattern = "^[a-zA-Z0-9_]{3,16}$";
+    }
+
+    /// <summary>Oyun sürümü listesindeki tek bir seçenek. ComboBox metni için ToString kullanılır.</summary>
+    public sealed class AfkVersionOption
+    {
+        public AfkVersionOption(string value, string label)
+        {
+            Value = value;
+            Label = label;
+        }
+
+        // MCC'ye aynen yazılan değer: "auto" ya da MCC'nin tanıdığı bir sürüm metni.
+        public string Value { get; private set; }
+
+        public string Label { get; private set; }
+
+        public override string ToString()
+        {
+            return Label;
+        }
+    }
+
+    /// <summary>
+    /// AFK istemcisinin bağlanabileceği oyun sürümleri. Aynı protokolü paylaşan sürümler tek satırda
+    /// gösterilir (ör. 1.21.9 – 1.21.10); değer olarak MCC'nin kabul ettiği ilk sürüm metni yazılır.
+    /// "auto" seçilirse MCC bağlanmadan önce sunucuya sorar; sunucu istemcinin henüz desteklemediği
+    /// bir sürüm bildirirse bağlantı kurulamaz, bu yüzden varsayılan sabit bir sürümdür.
+    /// </summary>
+    public static class AfkVersions
+    {
+        public const string Auto = "auto";
+
+        public static readonly ReadOnlyCollection<AfkVersionOption> Options = new ReadOnlyCollection<AfkVersionOption>(
+            new List<AfkVersionOption>
+            {
+                new AfkVersionOption(AfkDefaults.MinecraftVersion, AfkDefaults.MinecraftVersion + " (önerilen)"),
+                new AfkVersionOption(Auto, "Otomatik (sunucudan algıla)"),
+                new AfkVersionOption("26.2", "26.2"),
+                new AfkVersionOption("26.1", "26.1"),
+                new AfkVersionOption("1.21.11", "1.21.11"),
+                new AfkVersionOption("1.21.9", "1.21.9 – 1.21.10"),
+                new AfkVersionOption("1.21.7", "1.21.7 – 1.21.8"),
+                new AfkVersionOption("1.21.6", "1.21.6"),
+                new AfkVersionOption("1.21.5", "1.21.5"),
+                new AfkVersionOption("1.21.4", "1.21.4"),
+                new AfkVersionOption("1.21.2", "1.21.2 – 1.21.3"),
+                new AfkVersionOption("1.21", "1.21 – 1.21.1"),
+                new AfkVersionOption("1.20.5", "1.20.5 – 1.20.6"),
+                new AfkVersionOption("1.20.3", "1.20.3 – 1.20.4"),
+                new AfkVersionOption("1.20.2", "1.20.2"),
+                new AfkVersionOption("1.20", "1.20 – 1.20.1"),
+                new AfkVersionOption("1.19.4", "1.19.4"),
+                new AfkVersionOption("1.19.3", "1.19.3"),
+                new AfkVersionOption("1.19.1", "1.19.1 – 1.19.2"),
+                new AfkVersionOption("1.19", "1.19"),
+                new AfkVersionOption("1.18.2", "1.18.2"),
+                new AfkVersionOption("1.18", "1.18 – 1.18.1"),
+                new AfkVersionOption("1.17.1", "1.17.1"),
+                new AfkVersionOption("1.17", "1.17"),
+                new AfkVersionOption("1.16.4", "1.16.4 – 1.16.5"),
+                new AfkVersionOption("1.16.3", "1.16.3"),
+                new AfkVersionOption("1.16.2", "1.16.2"),
+                new AfkVersionOption("1.16.1", "1.16.1"),
+                new AfkVersionOption("1.16", "1.16"),
+                new AfkVersionOption("1.15.2", "1.15.2"),
+                new AfkVersionOption("1.14.4", "1.14.4"),
+                new AfkVersionOption("1.13.2", "1.13.2"),
+                new AfkVersionOption("1.12.2", "1.12.2"),
+                new AfkVersionOption("1.11.1", "1.11.1 – 1.11.2"),
+                new AfkVersionOption("1.10", "1.10 – 1.10.2"),
+                new AfkVersionOption("1.9.3", "1.9.3 – 1.9.4"),
+                new AfkVersionOption("1.8", "1.8 – 1.8.9"),
+            });
+
+        /// <summary>Listede olmayan ya da boş değerler varsayılana düşer; elle bozulmuş kayıt bağlantıyı engellemesin.</summary>
+        public static string Normalize(string value)
+        {
+            return Options[IndexOf(value)].Value;
+        }
+
+        public static int IndexOf(string value)
+        {
+            string trimmed = value == null ? string.Empty : value.Trim();
+
+            for (int i = 0; i < Options.Count; i++)
+            {
+                if (string.Equals(Options[i].Value, trimmed, StringComparison.OrdinalIgnoreCase))
+                    return i;
+            }
+
+            return DefaultIndex;
+        }
+
+        public static int DefaultIndex
+        {
+            get { return 0; }
+        }
     }
 
     public class AfkAccount
@@ -30,6 +131,10 @@ namespace Projects_Launcher.Afk
 
         // Başlatıcı açılır açılmaz bu hesabı bağla.
         public bool AutoStart { get; set; }
+
+        // "auto" ya da AfkVersions listesindeki bir sürüm. accounts.json'da alan hiç yoksa (eski kayıt)
+        // bu varsayılan kullanılır.
+        public string MinecraftVersion { get; set; } = AfkDefaults.MinecraftVersion;
 
         public AntiAfkOptions AntiAfk { get; set; } = new AntiAfkOptions();
         public AutoRelogOptions AutoRelog { get; set; } = new AutoRelogOptions();

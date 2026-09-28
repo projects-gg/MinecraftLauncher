@@ -68,7 +68,9 @@ namespace Projects_Launcher.Afk
             sb.AppendLine("ShowGithubStarReminder = false");
             // Etkileşimli olmayan kip: hata anında konsoldan giriş beklemek yerine çıkış kodu ile kapanır.
             sb.AppendLine("ExitOnFailure = true");
-            sb.AppendLine("MinecraftVersion = \"auto\"");
+            // "auto" sunucunun ping'te bildirdiği sürümü kullanır; sunucu istemcinin henüz desteklemediği
+            // bir sürüm bildirirse bağlantı kurulamaz. Bu yüzden hesap bazında sabit sürüm seçilebilir.
+            sb.AppendLine("MinecraftVersion = " + Str(AfkVersions.Normalize(account.MinecraftVersion)));
             sb.AppendLine("AutoRespawn = true");
             sb.AppendLine("TerrainAndMovements = " + Bool(terrainAndMovements));
             sb.AppendLine("InventoryHandling = " + Bool(inventoryHandling));

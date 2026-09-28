@@ -30,7 +30,17 @@ namespace Projects_Launcher.Afk
         private static readonly Color GreenTone = Color.FromArgb(34, 197, 94);
         private static readonly Color RedTone = Color.FromArgb(239, 68, 68);
         private static readonly Color BlueTone = Color.FromArgb(94, 148, 255);
+        private static readonly Color AmberTone = Color.FromArgb(245, 158, 11);
         private static readonly Color GrayFill = Color.FromArgb(71, 76, 88);
+
+        // Oyun sürümü seçimine göre değişen açıklamalar.
+        private const string VersionHintDefault =
+            "Sunucunun güncel sürümüyle bağlanır. Çoğu durumda doğru seçim budur.";
+        private const string VersionHintAuto =
+            "Bağlanmadan önce sunucuya sorulur ve bildirdiği sürüm kullanılır. Sunucu, istemcinin henüz " +
+            "desteklemediği bir sürüm bildirirse bağlantı kurulamaz.";
+        private const string VersionHintPinned =
+            "Yalnızca sunucu bu sürümü özellikle istiyorsa seçin. Sunucu bu sürümü kabul etmezse bağlantı reddedilir.";
 
         private const int FormWidth = 780;
         private const int FormHeight = 640;
@@ -62,6 +72,9 @@ namespace Projects_Launcher.Afk
         // --- Sunucu ---
         private Guna2TextBox serverHostBox;
         private Guna2NumericUpDown serverPortUpDown;
+        private Guna2ComboBox minecraftVersionCombo;
+        private Guna2Button minecraftVersionResetButton;
+        private Label minecraftVersionHint;
         private Guna2ToggleSwitch autoStartToggle;
 
         // --- Giriş Komutları ---
@@ -527,6 +540,16 @@ namespace Projects_Launcher.Afk
             combo.BorderColor = BorderTone;
             combo.ForeColor = TextTone;
             combo.DropDownStyle = ComboBoxStyle.DropDownList;
+
+            // Açılan liste de koyu temada kalsın; seçili satır gezinmedeki seçili tonla vurgulanır.
+            combo.ItemsAppearance.BackColor = FieldFill;
+            combo.ItemsAppearance.ForeColor = TextTone;
+            combo.ItemsAppearance.SelectedBackColor = NavSelected;
+            combo.ItemsAppearance.SelectedForeColor = TextTone;
+            combo.FocusedColor = BlueTone;
+            combo.FocusedState.BorderColor = BlueTone;
+            AfkUi.FixDropDownList(combo);
+
             page.Controls.Add(combo);
             combo.Location = new Point(PageMarginX, y);
             combo.Size = new Size(width, 36);
@@ -667,8 +690,50 @@ namespace Projects_Launcher.Afk
 
             serverPortUpDown = AddNumericRow(page, ref y, "Port (0 = otomatik)", 0, 65535, 0);
 
+            BuildVersionRow(page, ref y);
+
             autoStartToggle = AddToggleRow(page, ref y,
                 "Başlatıcı açılınca bu hesabı otomatik bağla", null);
+        }
+
+        /// <summary>
+        /// Oyun sürümü listesi, varsayılana dönme düğmesi ve seçime göre değişen açıklama.
+        /// Açıklamanın yüksekliği en uzun metne göre sabitlenir; metin değiştiğinde alttaki satırlar kaymaz.
+        /// </summary>
+        private void BuildVersionRow(Guna2Panel page, ref int y)
+        {
+            const int comboWidth = 260;
+
+            minecraftVersionCombo = AddComboRow(page, ref y, "Oyun sürümü", comboWidth);
+            minecraftVersionCombo.IntegralHeight = false;
+            minecraftVersionCombo.DropDownHeight = 330;
+            foreach (AfkVersionOption option in AfkVersions.Options)
+                minecraftVersionCombo.Items.Add(option);
+
+            minecraftVersionResetButton = AddSmallButton(page, "Varsayılana dön",
+                PageMarginX + comboWidth + 12, minecraftVersionCombo.Top + 2, 132, GrayFill);
+            minecraftVersionResetButton.Click += delegate
+            {
+                minecraftVersionCombo.SelectedIndex = AfkVersions.DefaultIndex;
+            };
+
+            Font hintFont = new Font("Segoe UI", 8.25f);
+            int hintHeight = 0;
+            foreach (string text in new[] { VersionHintDefault, VersionHintAuto, VersionHintPinned })
+            {
+                Size measured = TextRenderer.MeasureText(text, hintFont,
+                    new Size(PageContentWidth, int.MaxValue), TextFormatFlags.WordBreak);
+                hintHeight = Math.Max(hintHeight, measured.Height);
+            }
+
+            // AddComboRow alt boşluğu satırlar arası içindir; açıklama listeye yakın dursun.
+            y -= 10;
+            minecraftVersionHint = MakeWrapLabel(page, VersionHintDefault, hintFont, MutedTone,
+                PageMarginX, y, PageContentWidth);
+            minecraftVersionHint.Height = hintHeight + 2;
+            y += minecraftVersionHint.Height + 20;
+
+            minecraftVersionCombo.SelectedIndexChanged += UpdateVersionDependents;
         }
 
         private void BuildLoginCommandsPage()
@@ -926,6 +991,23 @@ namespace Projects_Launcher.Afk
 
         // --- Bağımlı kontrollerin etkin/pasif durumu ---
 
+        private void UpdateVersionDependents(object sender, EventArgs e)
+        {
+            string value = SelectedMinecraftVersion();
+            bool isDefault = value == AfkDefaults.MinecraftVersion;
+            bool isAuto = value == AfkVersions.Auto;
+
+            minecraftVersionHint.Text = isDefault ? VersionHintDefault : isAuto ? VersionHintAuto : VersionHintPinned;
+            minecraftVersionHint.ForeColor = isDefault ? MutedTone : AmberTone;
+            minecraftVersionResetButton.Visible = !isDefault;
+        }
+
+        private string SelectedMinecraftVersion()
+        {
+            AfkVersionOption selected = minecraftVersionCombo.SelectedItem as AfkVersionOption;
+            return selected != null ? selected.Value : AfkDefaults.MinecraftVersion;
+        }
+
         private void UpdateLoginCommandsDependents(object sender, EventArgs e)
         {
             bool enabled = loginCommandsToggle.Checked;
@@ -1006,6 +1088,7 @@ namespace Projects_Launcher.Afk
         {
             serverHostBox.Text = account.ServerHost;
             serverPortUpDown.Value = Clamp(account.ServerPort, 0, 65535);
+            minecraftVersionCombo.SelectedIndex = AfkVersions.IndexOf(account.MinecraftVersion);
             autoStartToggle.Checked = account.AutoStart;
 
             LoginCommandsOptions login = account.LoginCommands ?? new LoginCommandsOptions();
@@ -1082,6 +1165,7 @@ namespace Projects_Launcher.Afk
             }
 
             // Bağımlı kontrollerin ilk etkin/pasif durumu; sonrasında ilgili CheckedChanged olayları devralır.
+            UpdateVersionDependents(null, EventArgs.Empty);
             UpdateLoginCommandsDependents(null, EventArgs.Empty);
             UpdateSchedulerDependents(null, EventArgs.Empty);
             UpdateAntiAfkDependents(null, EventArgs.Empty);
@@ -1144,6 +1228,7 @@ namespace Projects_Launcher.Afk
         {
             account.ServerHost = serverHostBox.Text.Trim();
             account.ServerPort = (int)serverPortUpDown.Value;
+            account.MinecraftVersion = SelectedMinecraftVersion();
             account.AutoStart = autoStartToggle.Checked;
 
             if (account.LoginCommands == null)
