@@ -130,7 +130,12 @@ namespace Projects_Launcher.Projects_Launcher
         // Kod-arkasında kalıcıdır; tasarımcı buraya dokunmaz.
         private void PopulateDropdowns()
         {
-            versionBox.MaxDropDownItems = 5;
+            // Koyu liste görünümü, düzgün kaydırma ve sürüm listelerinde daha fazla görünür satır.
+            AfkUi.StyleDropDown(versionBox, 8);
+            AfkUi.StyleDropDown(mainVersionBox, 8);
+            AfkUi.StyleDropDown(modVersionBox, 5);
+            AfkUi.StyleDropDown(temaSelectBox, 5);
+
             versionBox.Items.Clear();
             versionBox.Items.AddRange(new object[]
             {
@@ -141,19 +146,15 @@ namespace Projects_Launcher.Projects_Launcher
             });
 
             // Ana menüdeki hızlı sürüm seçici ayarlardaki listeyle birebir aynı tutulur.
-            mainVersionBox.MaxDropDownItems = 5;
             mainVersionBox.Items.Clear();
             mainVersionBox.Items.AddRange(versionBox.Items.Cast<object>().ToArray());
 
-            modVersionBox.MaxDropDownItems = 5;
             modVersionBox.Items.Clear();
             modVersionBox.Items.AddRange(new object[]
             {
                 "projects-mcmod-" + latestModVersion,
                 "Manuel"
             });
-
-            temaSelectBox.MaxDropDownItems = 5;
         }
 
         private string minrambox;
