@@ -16,3 +16,5 @@ app.publish/
 # Publish scripts (FTP sifresi duz metin icerir)
 publish.ps1
 publish-mod.ps1
+# Son AFK yayininin surumu ve kaynak commit'i (publish-mod.ps1 yazar, makineye ozel)
+afk-publish-state.json
