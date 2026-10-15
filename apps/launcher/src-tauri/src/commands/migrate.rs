@@ -45,21 +45,39 @@ fn tree_size(path: &Path) -> u64 {
 /// The v1 launcher kept the nickname in a .NET `user.config` under LocalAppData.
 fn legacy_nickname() -> Option<String> {
     let local = dirs::data_local_dir()?;
-    let re = regex::Regex::new(r#"(?s)<setting name="NickNames"[^>]*>\s*<value>([^<]*)</value>"#).ok()?;
+    let re = regex::Regex::new(r#"(?s)<setting name="NickNames"[^>]*>\s*<value>([^<]*)</value>"#)
+        .ok()?;
     let mut best: Option<(std::time::SystemTime, String)> = None;
-    for root in [local.join("Apps").join("2.0").join("Data"), local.join("Projects")] {
-        for entry in walkdir::WalkDir::new(&root).max_depth(8).into_iter().flatten() {
+    for root in [
+        local.join("Apps").join("2.0").join("Data"),
+        local.join("Projects"),
+    ] {
+        for entry in walkdir::WalkDir::new(&root)
+            .max_depth(8)
+            .into_iter()
+            .flatten()
+        {
             if entry.file_name() != "user.config" {
                 continue;
             }
-            let Ok(text) = std::fs::read_to_string(entry.path()) else { continue };
-            let Some(name) = re.captures(&text).and_then(|c| c.get(1)).map(|m| m.as_str().trim().to_owned()) else {
+            let Ok(text) = std::fs::read_to_string(entry.path()) else {
+                continue;
+            };
+            let Some(name) = re
+                .captures(&text)
+                .and_then(|c| c.get(1))
+                .map(|m| m.as_str().trim().to_owned())
+            else {
                 continue;
             };
             if !pl_auth::validate_offline_name(&name).is_ok() {
                 continue;
             }
-            let modified = entry.metadata().ok().and_then(|m| m.modified().ok()).unwrap_or(std::time::UNIX_EPOCH);
+            let modified = entry
+                .metadata()
+                .ok()
+                .and_then(|m| m.modified().ok())
+                .unwrap_or(std::time::UNIX_EPOCH);
             if best.as_ref().is_none_or(|(t, _)| modified > *t) {
                 best = Some((modified, name));
             }
@@ -115,7 +133,11 @@ pub async fn legacy_scan(state: State<'_, AppState>) -> CmdResult<LegacyScan> {
             has_premium: root.join("premium.dat").is_file(),
             nickname: legacy_nickname(),
             afk_accounts,
-            has_afk_client: root.join("afk").join("bin").join(pl_afk::CLIENT_EXE_NAME).is_file(),
+            has_afk_client: root
+                .join("afk")
+                .join("bin")
+                .join(pl_afk::CLIENT_EXE_NAME)
+                .is_file(),
             worlds,
             worlds_bytes,
             screenshots: dir_stats(&root.join("screenshots")).0,
@@ -180,7 +202,9 @@ fn link_tree(from: &Path, to: &Path, linked: &mut u32) {
         if !entry.file_type().is_file() {
             continue;
         }
-        let Ok(rel) = entry.path().strip_prefix(from) else { continue };
+        let Ok(rel) = entry.path().strip_prefix(from) else {
+            continue;
+        };
         let target = to.join(rel);
         if target.exists() {
             continue;
@@ -201,7 +225,11 @@ pub async fn legacy_import(
     request: LegacyImportRequest,
 ) -> CmdResult<LegacyImportReport> {
     let root = legacy_root().ok_or_else(|| {
-        CmdError::new("ESKI-YOK", "Eski Projects Launcher verisi bulunamadı.", "no %APPDATA%\\.projects")
+        CmdError::new(
+            "ESKI-YOK",
+            "Eski Projects Launcher verisi bulunamadı.",
+            "no %APPDATA%\\.projects",
+        )
     })?;
     let mut report = LegacyImportReport::default();
 
@@ -210,9 +238,10 @@ pub async fn legacy_import(
     if request.premium && root.join("premium.dat").is_file() {
         match state.auth.import_legacy_premium().await {
             Ok(pl_auth::LegacyImport::Imported { .. }) => report.premium_imported = true,
-            Ok(_) => report
-                .notes
-                .push("Premium oturum okunamadı; Ayarlar > Hesaplar'dan tekrar giriş yapabilirsin.".into()),
+            Ok(_) => report.notes.push(
+                "Premium oturum okunamadı; Ayarlar > Hesaplar'dan tekrar giriş yapabilirsin."
+                    .into(),
+            ),
             Err(error) => {
                 tracing::warn!(%error, "legacy premium import failed");
                 report
@@ -243,9 +272,15 @@ pub async fn legacy_import(
         {
             let store = state.afk.store();
             for legacy in list {
-                let Ok(mut created) = store.add_account(&legacy.account.nickname) else { continue };
+                let Ok(mut created) = store.add_account(&legacy.account.nickname) else {
+                    continue;
+                };
                 let id = created.id.clone();
-                created = pl_afk::AfkAccount { id: id.clone(), nickname: created.nickname, ..legacy.account };
+                created = pl_afk::AfkAccount {
+                    id: id.clone(),
+                    nickname: created.nickname,
+                    ..legacy.account
+                };
                 let _ = store.update_account(created);
                 if !legacy.login_commands.is_empty() {
                     let _ = store.set_login_commands(&id, &legacy.login_commands);
@@ -260,23 +295,36 @@ pub async fn legacy_import(
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| "legacy".to_owned());
         let runtime = state.afk.runtime().clone();
-        let adopted = tauri::async_runtime::spawn_blocking(move || runtime.adopt_folder(&version, &bin))
-            .await
-            .map_err(CmdError::internal)?;
+        let adopted =
+            tauri::async_runtime::spawn_blocking(move || runtime.adopt_folder(&version, &bin))
+                .await
+                .map_err(CmdError::internal)?;
         report.afk_client = adopted.is_ok();
     }
 
     // Game data into a "Projects" instance.
     if request.game_data {
-        let instance = match state.instances.list().await.unwrap_or_default().into_iter().find(|i| i.name == "Projects") {
+        let instance = match state
+            .instances
+            .list()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .find(|i| i.name == "Projects")
+        {
             Some(existing) => existing,
             None => state
                 .instances
                 .create(NewInstance {
                     name: "Projects".to_owned(),
                     mc_version: "26.1.2".to_owned(),
-                    loader: InstanceLoader { kind: LoaderKind::Fabric, version: None },
-                    icon: Some(InstanceIcon::Builtin { key: "dragon-egg".to_owned() }),
+                    loader: InstanceLoader {
+                        kind: LoaderKind::Fabric,
+                        version: None,
+                    },
+                    icon: Some(InstanceIcon::Builtin {
+                        key: "dragon-egg".to_owned(),
+                    }),
                     group: None,
                     memory: None,
                     managed_pack: None,
@@ -284,13 +332,23 @@ pub async fn legacy_import(
                 .await
                 .map_err(CmdError::from)?,
         };
-        let game_dir = state.instances.game_dir(&instance.id).map_err(CmdError::from)?;
+        let game_dir = state
+            .instances
+            .game_dir(&instance.id)
+            .map_err(CmdError::from)?;
         let data_root = state.root.clone();
         let copy_worlds = request.worlds;
         let (copied, linked, skipped_worlds) = tauri::async_runtime::spawn_blocking(move || {
             let mut copied = 0u32;
             let mut linked = 0u32;
-            for item in ["options.txt", "optionsof.txt", "servers.dat", "resourcepacks", "shaderpacks", "screenshots"] {
+            for item in [
+                "options.txt",
+                "optionsof.txt",
+                "servers.dat",
+                "resourcepacks",
+                "shaderpacks",
+                "screenshots",
+            ] {
                 let _ = copy_tree(&root.join(item), &game_dir.join(item), &mut copied);
             }
             let saves_bytes = tree_size(&root.join("saves"));
@@ -301,7 +359,11 @@ pub async fn legacy_import(
             }
             // Shared files: link instead of downloading again.
             link_tree(&root.join("assets"), &data_root.join("assets"), &mut linked);
-            link_tree(&root.join("libraries"), &data_root.join("libraries"), &mut linked);
+            link_tree(
+                &root.join("libraries"),
+                &data_root.join("libraries"),
+                &mut linked,
+            );
             (copied, linked, skipped)
         })
         .await

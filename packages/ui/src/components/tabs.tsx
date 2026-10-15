@@ -41,7 +41,9 @@ export function Tabs<T extends string>({
           >
             {item.label}
             {typeof item.count === "number" ? (
-              <span className="rounded bg-white/8 px-1.5 text-[11px] text-ash-300 tabular-nums">{item.count}</span>
+              <span className="rounded bg-white/8 px-1.5 text-[11px] text-ash-300 tabular-nums">
+                {item.count}
+              </span>
             ) : null}
             {value === item.value ? (
               <motion.span
@@ -58,9 +60,20 @@ export function Tabs<T extends string>({
   );
 }
 
-export function TabPanel({ value, children, className }: { value: string; children: ReactNode; className?: string }) {
+export function TabPanel({
+  value,
+  children,
+  className,
+}: {
+  value: string;
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <RadixTabs.Content value={value} className={cn("min-h-0 flex-1 overflow-y-auto pt-5 outline-none", className)}>
+    <RadixTabs.Content
+      value={value}
+      className={cn("min-h-0 flex-1 overflow-y-auto pt-5 outline-none", className)}
+    >
       {children}
     </RadixTabs.Content>
   );

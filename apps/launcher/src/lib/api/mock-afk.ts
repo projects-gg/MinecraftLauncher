@@ -10,16 +10,49 @@ let lineId = 0;
 const now = () => new Date().toISOString();
 
 const accounts: AfkAccount[] = [
-  { id: "afk1", nickname: "KasaBekcisi", server: "play.projects.gg", autoStart: true, mcVersion: "26.3", state: { kind: "connected", since: new Date(Date.now() - 65 * 60_000).toISOString() }, health: 20, food: 18, players: 214 },
-  { id: "afk2", nickname: "TarlaBot_1", server: "play.projects.gg", autoStart: true, mcVersion: "26.3", state: { kind: "reconnecting", attempt: 2, nextAttemptAt: new Date(Date.now() + 22_000).toISOString() } },
-  { id: "afk3", nickname: "Madenci07", server: "play.projects.gg", autoStart: false, mcVersion: "auto", state: { kind: "stopped" } },
+  {
+    id: "afk1",
+    nickname: "KasaBekcisi",
+    server: "play.projects.gg",
+    autoStart: true,
+    mcVersion: "26.3",
+    state: { kind: "connected", since: new Date(Date.now() - 65 * 60_000).toISOString() },
+    health: 20,
+    food: 18,
+    players: 214,
+  },
+  {
+    id: "afk2",
+    nickname: "TarlaBot_1",
+    server: "play.projects.gg",
+    autoStart: true,
+    mcVersion: "26.3",
+    state: {
+      kind: "reconnecting",
+      attempt: 2,
+      nextAttemptAt: new Date(Date.now() + 22_000).toISOString(),
+    },
+  },
+  {
+    id: "afk3",
+    nickname: "Madenci07",
+    server: "play.projects.gg",
+    autoStart: false,
+    mcVersion: "auto",
+    state: { kind: "stopped" },
+  },
 ];
 
 const logs = new Map<string, AfkLogLine[]>([
   [
     "afk1",
     [
-      { id: ++lineId, time: now(), text: "Sunucuya bağlanılıyor: play.projects.gg", kind: "system" },
+      {
+        id: ++lineId,
+        time: now(),
+        text: "Sunucuya bağlanılıyor: play.projects.gg",
+        kind: "system",
+      },
       { id: ++lineId, time: now(), text: "/login ********", kind: "script" },
       { id: ++lineId, time: now(), text: "Başarıyla giriş yaptın.", kind: "chat" },
       { id: ++lineId, time: now(), text: "<AlevKanat> akşam boss'a gelen var mı?", kind: "chat" },
@@ -58,7 +91,14 @@ export const mockAfk = {
     return accounts.map((a) => ({ ...a }));
   },
   async afkAdd(nickname: string) {
-    const account: AfkAccount = { id: `afk-${nickname}`, nickname, server: "play.projects.gg", autoStart: false, mcVersion: "26.3", state: { kind: "stopped" } };
+    const account: AfkAccount = {
+      id: `afk-${nickname}`,
+      nickname,
+      server: "play.projects.gg",
+      autoStart: false,
+      mcVersion: "26.3",
+      state: { kind: "stopped" },
+    };
     accounts.push(account);
     notify();
     return account;

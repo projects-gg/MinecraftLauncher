@@ -49,10 +49,15 @@ pub enum LaunchEventView {
     /// The network is unreachable: continuing with installed files only.
     Offline,
     Launching,
-    Started { pid: Option<u32> },
+    Started {
+        pid: Option<u32>,
+    },
     WindowShown,
     #[serde(rename_all = "camelCase")]
-    Exited { code: Option<i32>, runtime_secs: u64 },
+    Exited {
+        code: Option<i32>,
+        runtime_secs: u64,
+    },
     Crashed(CrashView),
     Error(CmdError),
 }
@@ -113,13 +118,23 @@ fn crash_view(d: &pl_mc::launch::CrashDiagnosis) -> CrashView {
             .map(|a| {
                 serde_json::to_value(a)
                     .ok()
-                    .and_then(|v| v.as_str().map(str::to_owned).or_else(|| Some(v.to_string())))
+                    .and_then(|v| {
+                        v.as_str()
+                            .map(str::to_owned)
+                            .or_else(|| Some(v.to_string()))
+                    })
                     .unwrap_or_default()
             })
             .collect(),
         mods: d.mods.clone(),
-        log_file: d.log_file.as_ref().map(|p| p.to_string_lossy().into_owned()),
-        crash_report: d.crash_report.as_ref().map(|p| p.to_string_lossy().into_owned()),
+        log_file: d
+            .log_file
+            .as_ref()
+            .map(|p| p.to_string_lossy().into_owned()),
+        crash_report: d
+            .crash_report
+            .as_ref()
+            .map(|p| p.to_string_lossy().into_owned()),
     }
 }
 
@@ -185,9 +200,19 @@ async fn prepare_and_spawn(
     on_event: &Channel<LaunchEventView>,
     cancel: &CancellationToken,
 ) -> CmdResult<()> {
-    let instance = state.instances.get(instance_id).await.map_err(CmdError::from)?;
-    let instance_dir = state.instances.instance_dir(instance_id).map_err(CmdError::from)?;
-    let game_dir = state.instances.game_dir(instance_id).map_err(CmdError::from)?;
+    let instance = state
+        .instances
+        .get(instance_id)
+        .await
+        .map_err(CmdError::from)?;
+    let instance_dir = state
+        .instances
+        .instance_dir(instance_id)
+        .map_err(CmdError::from)?;
+    let game_dir = state
+        .instances
+        .game_dir(instance_id)
+        .map_err(CmdError::from)?;
 
     let marker = read_marker(&instance_dir);
     let first_install = marker.as_ref().is_none_or(|m| {
@@ -203,7 +228,9 @@ async fn prepare_and_spawn(
         Err(e) if e.is_offline() => {
             offline = true;
             let _ = on_event.send(LaunchEventView::Offline);
-            pl_mc::version::manifest::load_manifest(&state.mc, true).await.ok()
+            pl_mc::version::manifest::load_manifest(&state.mc, true)
+                .await
+                .ok()
         }
         Err(e) => return Err(e.into()),
     };
@@ -247,16 +274,21 @@ async fn prepare_and_spawn(
                 &instance.mc_version,
                 kind,
                 &loader_version,
-                install_options(if first_install { VerifyMode::Full } else { VerifyMode::Size }),
+                install_options(if first_install {
+                    VerifyMode::Full
+                } else {
+                    VerifyMode::Size
+                }),
             )
             .await
             .map_err(CmdError::from)?
         }
     };
 
-    let resolved = pl_mc::version::resolve::resolve_version(&state.mc, &version_id, manifest.as_ref())
-        .await
-        .map_err(CmdError::from)?;
+    let resolved =
+        pl_mc::version::resolve::resolve_version(&state.mc, &version_id, manifest.as_ref())
+            .await
+            .map_err(CmdError::from)?;
 
     // 2. Install / verify files. Full hashing only on first install; size checks otherwise
     //    (loader installs above already verified their files, so a size check suffices then).
@@ -329,15 +361,24 @@ async fn prepare_and_spawn(
         ("INST_ID", instance.id.clone()),
         ("INST_DIR", instance_dir.to_string_lossy().into_owned()),
         ("INST_MC_DIR", game_dir.to_string_lossy().into_owned()),
-        ("INST_JAVA", installed.java.path.to_string_lossy().into_owned()),
+        (
+            "INST_JAVA",
+            installed.java.path.to_string_lossy().into_owned(),
+        ),
     ]
     .into_iter()
     .map(|(k, v)| (k.to_owned(), v))
     .collect();
     if let Some(pre) = &instance.hooks.pre_launch {
-        run_hook(pre, &hook_env, &game_dir).await.map_err(|detail| {
-            CmdError::new("ON-KOMUT", "Başlatmadan önceki komut başarısız oldu.", detail)
-        })?;
+        run_hook(pre, &hook_env, &game_dir)
+            .await
+            .map_err(|detail| {
+                CmdError::new(
+                    "ON-KOMUT",
+                    "Başlatmadan önceki komut başarısız oldu.",
+                    detail,
+                )
+            })?;
     }
 
     // 5. Spawn and supervise.

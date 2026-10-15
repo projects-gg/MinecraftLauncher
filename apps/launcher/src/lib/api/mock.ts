@@ -268,10 +268,25 @@ const mod = (
 
 const projectsMods: ModEntry[] = [
   mod("Fabric API", "0.119.2", "FabricMC", "Core API library for the Fabric toolchain."),
-  mod("Sodium", "0.6.13", "CaffeineMC", "The fastest and most compatible rendering optimization mod."),
-  mod("Lithium", "0.15.1", "CaffeineMC", "General-purpose optimization mod with no gameplay changes."),
+  mod(
+    "Sodium",
+    "0.6.13",
+    "CaffeineMC",
+    "The fastest and most compatible rendering optimization mod.",
+  ),
+  mod(
+    "Lithium",
+    "0.15.1",
+    "CaffeineMC",
+    "General-purpose optimization mod with no gameplay changes.",
+  ),
   mod("Iris Shaders", "1.8.11", "IrisShaders", "Shader pack loader compatible with Sodium."),
-  mod("Xaero's Minimap", "25.2.10", "xaero96", "Displays a minimap with waypoints and entity radar."),
+  mod(
+    "Xaero's Minimap",
+    "25.2.10",
+    "xaero96",
+    "Displays a minimap with waypoints and entity radar.",
+  ),
   mod("Mod Menu", "13.0.3", "Prospector", "Adds a mod menu to view and configure mods."),
   mod("Entity Culling", "1.7.4", "tr7zw", "Skips rendering entities you cannot see."),
   mod("FerriteCore", "7.0.3", "malte0811", "Reduces memory usage."),
@@ -297,23 +312,67 @@ function detailFor(summary: InstanceSummary): InstanceDetail {
       preLaunch: "",
       postExit: "",
       wrapper: "",
-      notes: summary.managed ? "Resmi paket. Mod listesi otomatik güncellenir; eklediğin modlara dokunulmaz." : "",
+      notes: summary.managed
+        ? "Resmi paket. Mod listesi otomatik güncellenir; eklediğin modlara dokunulmaz."
+        : "",
     },
     mods: modded ? (summary.managed ? projectsMods : projectsMods.slice(0, 5)) : [],
     resourcePacks: [
-      { fileName: "Faithful 32x.zip", name: "Faithful 32x", description: "Klasik dokuların iki kat çözünürlüklü hâli.", enabled: true, sizeBytes: 8_400_000 },
-      { fileName: "FreshAnimations.zip", name: "Fresh Animations", description: "Yaratıklara yeni animasyonlar.", enabled: false, sizeBytes: 2_100_000 },
+      {
+        fileName: "Faithful 32x.zip",
+        name: "Faithful 32x",
+        description: "Klasik dokuların iki kat çözünürlüklü hâli.",
+        enabled: true,
+        sizeBytes: 8_400_000,
+      },
+      {
+        fileName: "FreshAnimations.zip",
+        name: "Fresh Animations",
+        description: "Yaratıklara yeni animasyonlar.",
+        enabled: false,
+        sizeBytes: 2_100_000,
+      },
     ],
     shaderPacks: modded
       ? [
-          { fileName: "ComplementaryReimagined_r5.4.zip", name: "Complementary Reimagined", description: "r5.4", enabled: true, sizeBytes: 3_400_000 },
-          { fileName: "BSL_v10.0.zip", name: "BSL Shaders", description: "v10.0", enabled: false, sizeBytes: 1_900_000 },
+          {
+            fileName: "ComplementaryReimagined_r5.4.zip",
+            name: "Complementary Reimagined",
+            description: "r5.4",
+            enabled: true,
+            sizeBytes: 3_400_000,
+          },
+          {
+            fileName: "BSL_v10.0.zip",
+            name: "BSL Shaders",
+            description: "v10.0",
+            enabled: false,
+            sizeBytes: 1_900_000,
+          },
         ]
       : [],
     worlds: [
-      { folder: "Yeni Dünya", name: "Yeni Dünya", gameMode: "survival", lastPlayedAt: hoursAgo(30), sizeBytes: 182_000_000 },
-      { folder: "Yaratıcı test", name: "Yaratıcı test", gameMode: "creative", lastPlayedAt: hoursAgo(200), sizeBytes: 44_000_000 },
-      { folder: "Hardcore 2", name: "Hardcore 2", gameMode: "hardcore", lastPlayedAt: hoursAgo(900), sizeBytes: 96_000_000 },
+      {
+        folder: "Yeni Dünya",
+        name: "Yeni Dünya",
+        gameMode: "survival",
+        lastPlayedAt: hoursAgo(30),
+        sizeBytes: 182_000_000,
+      },
+      {
+        folder: "Yaratıcı test",
+        name: "Yaratıcı test",
+        gameMode: "creative",
+        lastPlayedAt: hoursAgo(200),
+        sizeBytes: 44_000_000,
+      },
+      {
+        folder: "Hardcore 2",
+        name: "Hardcore 2",
+        gameMode: "hardcore",
+        lastPlayedAt: hoursAgo(900),
+        sizeBytes: 96_000_000,
+      },
     ],
     screenshots: [coverSpawn, coverBuild, coverPvp, coverWinter].map((url, i) => ({
       fileName: `2026-10-${12 - i}_21.4${i}.12.png`,
@@ -321,8 +380,20 @@ function detailFor(summary: InstanceSummary): InstanceDetail {
       takenAt: hoursAgo(24 * (i + 1)),
     })),
     servers: [
-      { name: "Projects", address: "play.projects.gg", online: true, players: 214, maxPlayers: 500 },
-      { name: "Hypixel", address: "mc.hypixel.net", online: true, players: 31_402, maxPlayers: 100_000 },
+      {
+        name: "Projects",
+        address: "play.projects.gg",
+        online: true,
+        players: 214,
+        maxPlayers: 500,
+      },
+      {
+        name: "Hypixel",
+        address: "mc.hypixel.net",
+        online: true,
+        players: 31_402,
+        maxPlayers: 100_000,
+      },
     ],
   };
 }
@@ -381,7 +452,9 @@ export const mockApi: LauncherApi = {
     await delay(200);
   },
   async setModEnabled(_instanceId, fileName, enabled) {
-    const entry = projectsMods.find((m) => m.fileName.replace(/\.disabled$/, "") === fileName.replace(/\.disabled$/, ""));
+    const entry = projectsMods.find(
+      (m) => m.fileName.replace(/\.disabled$/, "") === fileName.replace(/\.disabled$/, ""),
+    );
     if (entry) entry.enabled = enabled;
     await delay(120);
   },
@@ -389,7 +462,12 @@ export const mockApi: LauncherApi = {
   async duplicateInstance(id: string) {
     const source = instances.find((i) => i.id === id);
     if (!source) throw new Error("not found");
-    const copy = { ...source, id: `${source.id}-kopya`, name: `${source.name} (kopya)`, managed: false };
+    const copy = {
+      ...source,
+      id: `${source.id}-kopya`,
+      name: `${source.name} (kopya)`,
+      managed: false,
+    };
     instances.push(copy);
     return copy;
   },
@@ -411,13 +489,26 @@ export const mockApi: LauncherApi = {
   async addOfflineAccount(name: string) {
     await delay(200);
     for (const a of accounts) a.active = false;
-    const account: AccountSummary = { id: `off-${name}`, kind: "offline", username: name, active: true };
+    const account: AccountSummary = {
+      id: `off-${name}`,
+      kind: "offline",
+      username: name,
+      active: true,
+    };
     accounts.push(account);
     return account;
   },
   async loginMicrosoft(onStep: (step: LoginStep) => void) {
     microsoftCancelled = false;
-    const steps: LoginStep[] = ["openingBrowser", "waitingForBrowser", "microsoft", "xboxLive", "xsts", "minecraft", "profile"];
+    const steps: LoginStep[] = [
+      "openingBrowser",
+      "waitingForBrowser",
+      "microsoft",
+      "xboxLive",
+      "xsts",
+      "minecraft",
+      "profile",
+    ];
     for (const step of steps) {
       if (microsoftCancelled) throw new Error("cancelled");
       onStep(step);
@@ -425,7 +516,12 @@ export const mockApi: LauncherApi = {
     }
     onStep("done");
     for (const a of accounts) a.active = false;
-    const account: AccountSummary = { id: "ms-new", kind: "microsoft", username: "AlevKanat", active: true };
+    const account: AccountSummary = {
+      id: "ms-new",
+      kind: "microsoft",
+      username: "AlevKanat",
+      active: true,
+    };
     accounts.push(account);
     return account;
   },
@@ -438,7 +534,8 @@ export const mockApi: LauncherApi = {
   async removeAccount(id: string) {
     const index = accounts.findIndex((a) => a.id === id);
     if (index >= 0) accounts.splice(index, 1);
-    if (accounts.length && !accounts.some((a) => a.active) && accounts[0]) accounts[0].active = true;
+    if (accounts.length && !accounts.some((a) => a.active) && accounts[0])
+      accounts[0].active = true;
   },
   async launch(instanceId: string, onEvent: (e: LaunchEvent) => void) {
     const job = { cancelled: false };

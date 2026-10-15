@@ -19,7 +19,11 @@ function Featured({ item }: { item: NewsItem }) {
     >
       <div className="aspect-[21/8] w-full overflow-hidden bg-obsidian-800">
         {item.coverUrl ? (
-          <img src={item.coverUrl} alt="" className="size-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]" />
+          <img
+            src={item.coverUrl}
+            alt=""
+            className="size-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
+          />
         ) : null}
       </div>
       <div className="absolute inset-0 bg-[linear-gradient(to_top,rgb(10_9_12/0.92),rgb(10_9_12/0.25)_55%,transparent)]" />
@@ -52,7 +56,12 @@ function Card({ item, index }: { item: NewsItem; index: number }) {
       >
         <div className="aspect-video overflow-hidden bg-obsidian-800">
           {item.coverUrl ? (
-            <img src={item.coverUrl} alt="" loading="lazy" className="size-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.05]" />
+            <img
+              src={item.coverUrl}
+              alt=""
+              loading="lazy"
+              className="size-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.05]"
+            />
           ) : null}
         </div>
         <div className="p-4">
@@ -60,7 +69,9 @@ function Card({ item, index }: { item: NewsItem; index: number }) {
             <Chip>{t(`categories.${item.category}`)}</Chip>
             <span className="text-[12px] text-ash-400">{formatRelative(item.publishedAt)}</span>
           </div>
-          <h3 className="mt-2 line-clamp-2 font-display text-[16px] leading-snug font-semibold text-bone-50">{item.title}</h3>
+          <h3 className="mt-2 line-clamp-2 font-display text-[16px] leading-snug font-semibold text-bone-50">
+            {item.title}
+          </h3>
           <p className="mt-1.5 line-clamp-2 text-[13px] text-ash-400">{item.summary}</p>
         </div>
       </Link>
@@ -71,7 +82,10 @@ function Card({ item, index }: { item: NewsItem; index: number }) {
 export function NewsPage() {
   const { t } = useTranslation();
   const [filter, setFilter] = useState<Filter>("all");
-  const { data, isPending } = useQuery({ queryKey: ["home-content"], queryFn: () => api.homeContent() });
+  const { data, isPending } = useQuery({
+    queryKey: ["home-content"],
+    queryFn: () => api.homeContent(),
+  });
 
   const items = useMemo(
     () => (data?.news ?? []).filter((n) => filter === "all" || n.category === filter),
@@ -82,7 +96,9 @@ export function NewsPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col px-10 pt-4">
       <header className="flex flex-wrap items-end justify-between gap-4 pb-5">
-        <h1 className="font-display text-[32px] leading-tight font-semibold text-bone-50">{t("nav.news")}</h1>
+        <h1 className="font-display text-[32px] leading-tight font-semibold text-bone-50">
+          {t("nav.news")}
+        </h1>
         <Segmented<Filter>
           value={filter}
           onValueChange={setFilter}

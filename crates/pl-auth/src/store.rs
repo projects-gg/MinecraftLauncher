@@ -60,11 +60,10 @@ impl AccountStore {
             Err(error) => return Err(AuthError::storage("read", &path, error)),
         };
         state.version = FILE_VERSION;
-        if let Some(active) = state.active_account_id {
-            if !state.accounts.iter().any(|account| account.id == active) {
+        if let Some(active) = state.active_account_id
+            && !state.accounts.iter().any(|account| account.id == active) {
                 state.active_account_id = None;
             }
-        }
         Ok(Self {
             path,
             state: Mutex::new(state),
@@ -188,11 +187,10 @@ impl AccountStore {
     /// Selects the active account (`None` clears it).
     pub fn set_active(&self, id: Option<Uuid>) -> Result<()> {
         self.mutate(|file| {
-            if let Some(id) = id {
-                if !file.accounts.iter().any(|saved| saved.id == id) {
+            if let Some(id) = id
+                && !file.accounts.iter().any(|saved| saved.id == id) {
                     return Err(AuthError::AccountNotFound { id });
                 }
-            }
             file.active_account_id = id;
             Ok(())
         })
@@ -212,12 +210,11 @@ impl AccountStore {
 fn write_atomic(path: &Path, file: &AccountsFile) -> Result<()> {
     let json = serde_json::to_vec_pretty(file)
         .map_err(|error| AuthError::storage("write", path, io::Error::other(error)))?;
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent)
                 .map_err(|error| AuthError::storage("write", parent, error))?;
         }
-    }
     let tmp = sibling_path(path, ".tmp");
     if let Err(error) = write_then_rename(&tmp, path, &json) {
         let _ = fs::remove_file(&tmp);

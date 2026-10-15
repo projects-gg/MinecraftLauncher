@@ -33,7 +33,10 @@ interface PrefsState {
   setPerformanceMode: (on: boolean) => void;
 }
 
-export type PrefValues = Omit<PrefsState, "set" | "selectInstance" | "setAutoJoin" | "setPerformanceMode">;
+export type PrefValues = Omit<
+  PrefsState,
+  "set" | "selectInstance" | "setAutoJoin" | "setPerformanceMode"
+>;
 
 export const usePrefs = create<PrefsState>()(
   persist(

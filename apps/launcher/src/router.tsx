@@ -7,8 +7,8 @@ import {
 import { AfkPage } from "./features/afk/afk-page";
 import { HomePage } from "./features/home/home-page";
 import { InstancePage } from "./features/library/instance-page";
-import { NewsPage } from "./features/news/news-page";
 import { LibraryPage } from "./features/library/library-page";
+import { NewsPage } from "./features/news/news-page";
 import { SettingsPage } from "./features/settings/settings-page";
 import { AppShell } from "./shell/app-shell";
 
@@ -75,7 +75,11 @@ const routeTree = rootRoute.addChildren([
 ]);
 
 // Hash history: the webview serves static files, so deep paths must not hit the asset server.
-export const router = createRouter({ routeTree, history: createHashHistory(), defaultPreload: "intent" });
+export const router = createRouter({
+  routeTree,
+  history: createHashHistory(),
+  defaultPreload: "intent",
+});
 
 declare module "@tanstack/react-router" {
   interface Register {

@@ -69,13 +69,21 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         aria-hidden
         className="chamfer absolute -inset-[3px] -z-20 bg-gold-300 opacity-0 transition-opacity group-focus-visible:opacity-100"
       />
-      <span aria-hidden className={cn("chamfer absolute inset-0 -z-10 transition-colors", layer.border)} />
       <span
         aria-hidden
-        className={cn("chamfer absolute inset-px -z-10 transition-[background-color,filter]", layer.fill)}
+        className={cn("chamfer absolute inset-0 -z-10 transition-colors", layer.border)}
+      />
+      <span
+        aria-hidden
+        className={cn(
+          "chamfer absolute inset-px -z-10 transition-[background-color,filter]",
+          layer.fill,
+        )}
       />
       {icon ? <span className={cn("flex shrink-0", layer.text)}>{icon}</span> : null}
-      {children ? <span className={cn("leading-none transition-colors", layer.text)}>{children}</span> : null}
+      {children ? (
+        <span className={cn("leading-none transition-colors", layer.text)}>{children}</span>
+      ) : null}
       {iconRight ? <span className={cn("flex shrink-0", layer.text)}>{iconRight}</span> : null}
     </button>
   );

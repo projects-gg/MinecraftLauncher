@@ -1,11 +1,4 @@
-import {
-  type Icon,
-  GearSix,
-  House,
-  Newspaper,
-  Robot,
-  SquaresFour,
-} from "@phosphor-icons/react";
+import { GearSix, House, type Icon, Newspaper, Robot, SquaresFour } from "@phosphor-icons/react";
 import { cn, PlayerHead, Tooltip } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
@@ -82,7 +75,11 @@ export function NavRail() {
         mac ? "pt-11" : "pt-3",
       )}
     >
-      <Link to="/" aria-label={t("nav.home")} className="group mb-5 flex size-12 items-center justify-center">
+      <Link
+        to="/"
+        aria-label={t("nav.home")}
+        className="group mb-5 flex size-12 items-center justify-center"
+      >
         <img
           src={logo}
           alt=""
@@ -96,7 +93,10 @@ export function NavRail() {
         ))}
       </div>
       <div className="mt-auto flex flex-col items-center gap-2">
-        <RailLink item={{ to: "/settings", icon: GearSix, label: t("nav.settings") }} active={isActive("/settings")} />
+        <RailLink
+          item={{ to: "/settings", icon: GearSix, label: t("nav.settings") }}
+          active={isActive("/settings")}
+        />
         {active ? (
           <Tooltip content={active.username} side="right">
             <Link

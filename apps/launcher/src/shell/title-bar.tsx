@@ -4,10 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { UpdatePill } from "@/features/updates/update-ui";
 import { api } from "@/lib/api";
 import { formatCount } from "@/lib/format";
 import { detectOs, isTauri } from "@/lib/platform";
-import { UpdatePill } from "@/features/updates/update-ui";
 
 function ServerPill() {
   const { t } = useTranslation();
@@ -25,12 +25,22 @@ function ServerPill() {
       : t("server.offline");
 
   return (
-    <Tooltip content={data?.latencyMs ? `${data.address} · ${t("server.latency", { ms: data.latencyMs })}` : (data?.address ?? "")}>
+    <Tooltip
+      content={
+        data?.latencyMs
+          ? `${data.address} · ${t("server.latency", { ms: data.latencyMs })}`
+          : (data?.address ?? "")
+      }
+    >
       <div className="flex h-7 items-center gap-2 rounded-full bg-obsidian-950/45 px-3 text-[12.5px] ring-1 ring-white/8 backdrop-blur-md">
         <span
           className={cn(
             "size-2 rounded-full",
-            isPending ? "bg-ash-500" : online ? "bg-jade-400 shadow-[0_0_8px_var(--color-jade-400)]" : "bg-flare-400",
+            isPending
+              ? "bg-ash-500"
+              : online
+                ? "bg-jade-400 shadow-[0_0_8px_var(--color-jade-400)]"
+                : "bg-flare-400",
           )}
         />
         <span className="font-display font-semibold text-bone-50">{data?.name ?? "Projects"}</span>
@@ -67,7 +77,12 @@ function WindowControls() {
     "flex h-10 w-12 items-center justify-center text-ash-300 transition-colors duration-150 hover:text-bone-50";
   return (
     <div className="flex">
-      <button type="button" aria-label={t("window.minimize")} className={cn(base, "hover:bg-white/8")} onClick={call((w) => w.minimize())}>
+      <button
+        type="button"
+        aria-label={t("window.minimize")}
+        className={cn(base, "hover:bg-white/8")}
+        onClick={call((w) => w.minimize())}
+      >
         <Minus size={16} />
       </button>
       <button
@@ -78,7 +93,12 @@ function WindowControls() {
       >
         {maximized ? <CopySimple size={15} /> : <Square size={14} />}
       </button>
-      <button type="button" aria-label={t("window.close")} className={cn(base, "hover:bg-flare-400/85 hover:text-white")} onClick={call((w) => w.close())}>
+      <button
+        type="button"
+        aria-label={t("window.close")}
+        className={cn(base, "hover:bg-flare-400/85 hover:text-white")}
+        onClick={call((w) => w.close())}
+      >
         <X size={16} />
       </button>
     </div>
@@ -89,7 +109,10 @@ function WindowControls() {
 export function TitleBar() {
   const mac = detectOs() === "macos";
   return (
-    <header data-tauri-drag-region className="relative z-30 flex h-10 shrink-0 items-center justify-between pl-4">
+    <header
+      data-tauri-drag-region
+      className="relative z-30 flex h-10 shrink-0 items-center justify-between pl-4"
+    >
       <div data-tauri-drag-region className="flex items-center gap-3">
         <ServerPill />
       </div>

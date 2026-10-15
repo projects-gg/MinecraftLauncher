@@ -46,7 +46,9 @@ export function Switch({
       {hideLabel ? null : (
         <label htmlFor={id} className="cursor-pointer select-none">
           <span className="block text-[13px] font-medium text-bone-100">{label}</span>
-          {description ? <span className="block text-[12px] text-ash-400">{description}</span> : null}
+          {description ? (
+            <span className="block text-[12px] text-ash-400">{description}</span>
+          ) : null}
         </label>
       )}
     </div>

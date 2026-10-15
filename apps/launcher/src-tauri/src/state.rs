@@ -125,7 +125,10 @@ impl AppState {
                 downloader: Some(downloader.clone()),
                 download_progress: None,
                 spawner: None,
-                launcher_nickname: auth.active_account().map(|a| a.username).unwrap_or_default(),
+                launcher_nickname: auth
+                    .active_account()
+                    .map(|a| a.username)
+                    .unwrap_or_default(),
             },
         );
 

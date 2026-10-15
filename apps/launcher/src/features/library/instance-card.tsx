@@ -35,8 +35,7 @@ export function InstanceCard({
   index: number;
 }) {
   const { t } = useTranslation();
-  const loader =
-    instance.loader === "vanilla" ? "Minecraft" : t(`loaders.${instance.loader}`);
+  const loader = instance.loader === "vanilla" ? "Minecraft" : t(`loaders.${instance.loader}`);
 
   return (
     <motion.article
@@ -55,7 +54,9 @@ export function InstanceCard({
         <div className="flex flex-col items-end gap-1.5">
           {instance.managed ? <Chip tone="gold">{t("instances.managed")}</Chip> : null}
           {instance.state === "needsInstall" ? <Chip>{t("instances.needsInstall")}</Chip> : null}
-          {instance.state === "needsUpdate" ? <Chip tone="jade">{t("instances.needsUpdate")}</Chip> : null}
+          {instance.state === "needsUpdate" ? (
+            <Chip tone="jade">{t("instances.needsUpdate")}</Chip>
+          ) : null}
         </div>
       </div>
 
@@ -64,7 +65,9 @@ export function InstanceCard({
         params={{ instanceId: instance.id }}
         className="mt-4 block rounded-sm outline-none after:absolute after:inset-0 after:rounded-[var(--radius-panel)] focus-visible:after:ring-2 focus-visible:after:ring-gold-300"
       >
-        <h3 className="truncate font-display text-[17px] font-semibold text-bone-50">{instance.name}</h3>
+        <h3 className="truncate font-display text-[17px] font-semibold text-bone-50">
+          {instance.name}
+        </h3>
       </Link>
       <p className="mt-0.5 truncate text-[13px] text-ash-400">
         {loader} {instance.mcVersion}
@@ -86,11 +89,29 @@ export function InstanceCard({
           <Play size={14} weight="fill" /> {t("instance.play")}
         </button>
         <Menu
-          trigger={<IconButton label={t("library.card.more")} icon={<DotsThreeVertical size={18} weight="bold" />} size="sm" />}
+          trigger={
+            <IconButton
+              label={t("library.card.more")}
+              icon={<DotsThreeVertical size={18} weight="bold" />}
+              size="sm"
+            />
+          }
           items={[
-            { label: t("library.actions.folder"), icon: <FolderOpen size={16} />, onSelect: () => actions.openFolder(instance) },
-            { label: t("library.actions.duplicate"), icon: <Copy size={16} />, onSelect: () => actions.duplicate(instance) },
-            { label: t("library.actions.export"), icon: <Export size={16} />, onSelect: () => actions.exportPack(instance) },
+            {
+              label: t("library.actions.folder"),
+              icon: <FolderOpen size={16} />,
+              onSelect: () => actions.openFolder(instance),
+            },
+            {
+              label: t("library.actions.duplicate"),
+              icon: <Copy size={16} />,
+              onSelect: () => actions.duplicate(instance),
+            },
+            {
+              label: t("library.actions.export"),
+              icon: <Export size={16} />,
+              onSelect: () => actions.exportPack(instance),
+            },
             null,
             {
               label: t("library.actions.delete"),

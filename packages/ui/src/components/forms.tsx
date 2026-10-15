@@ -36,23 +36,24 @@ export function Field({
   );
 }
 
-export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }>(
-  function Input({ className, invalid, ...props }, ref) {
-    return (
-      <input
-        ref={ref}
-        aria-invalid={invalid || undefined}
-        className={cn(
-          "h-10 w-full rounded-md border border-white/10 bg-obsidian-800/80 px-3 text-[14px] text-bone-50 transition-colors placeholder:text-ash-500",
-          "hover:border-white/18 focus:border-gold-400/70 focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-gold-400/25",
-          invalid && "border-flare-400/70 focus:border-flare-400 focus:ring-flare-400/25",
-          className,
-        )}
-        {...props}
-      />
-    );
-  },
-);
+export const Input = forwardRef<
+  HTMLInputElement,
+  InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }
+>(function Input({ className, invalid, ...props }, ref) {
+  return (
+    <input
+      ref={ref}
+      aria-invalid={invalid || undefined}
+      className={cn(
+        "h-10 w-full rounded-md border border-white/10 bg-obsidian-800/80 px-3 text-[14px] text-bone-50 transition-colors placeholder:text-ash-500",
+        "hover:border-white/18 focus:border-gold-400/70 focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-gold-400/25",
+        invalid && "border-flare-400/70 focus:border-flare-400 focus:ring-flare-400/25",
+        className,
+      )}
+      {...props}
+    />
+  );
+});
 
 export function SearchInput({
   value,
@@ -106,7 +107,11 @@ export function Select<T extends string>({
   disabled?: boolean;
 }) {
   return (
-    <RadixSelect.Root value={value} onValueChange={(v) => onValueChange(v as T)} disabled={disabled}>
+    <RadixSelect.Root
+      value={value}
+      onValueChange={(v) => onValueChange(v as T)}
+      disabled={disabled}
+    >
       <RadixSelect.Trigger
         aria-label={label}
         className={cn(
@@ -169,7 +174,10 @@ export function Segmented<T extends string>({
       value={value}
       onValueChange={(v) => v && onValueChange(v as T)}
       aria-label={label}
-      className={cn("inline-flex rounded-md border border-white/10 bg-obsidian-850/80 p-1", className)}
+      className={cn(
+        "inline-flex rounded-md border border-white/10 bg-obsidian-850/80 p-1",
+        className,
+      )}
     >
       {options.map((o) => (
         <ToggleGroup.Item
@@ -214,15 +222,14 @@ export function Slider({
   return (
     <div className={cn("flex flex-col gap-2", className)}>
       <div className="flex items-baseline justify-between">
-        <label id={id} className="text-[13px] font-medium text-bone-100">
+        <span id={id} className="text-[13px] font-medium text-bone-100">
           {label}
-        </label>
+        </span>
         <span className="font-display text-[15px] font-semibold text-gold-300 tabular-nums">
           {format ? format(value) : value}
         </span>
       </div>
       <RadixSlider.Root
-        aria-labelledby={id}
         value={[value]}
         min={min}
         max={max}
@@ -233,14 +240,21 @@ export function Slider({
         <RadixSlider.Track className="relative h-1.5 grow overflow-hidden rounded-full bg-white/10">
           <RadixSlider.Range className="absolute h-full bg-[linear-gradient(90deg,var(--color-gold-600),var(--color-gold-400))]" />
         </RadixSlider.Track>
-        <RadixSlider.Thumb className="block size-[18px] rounded-full border-2 border-gold-300 bg-obsidian-900 shadow-[0_2px_8px_rgb(34_6_6/0.6)] transition-transform hover:scale-110 focus-visible:ring-4 focus-visible:ring-gold-400/30 focus-visible:outline-none" />
+        <RadixSlider.Thumb
+          aria-labelledby={id}
+          aria-valuetext={format ? format(value) : undefined}
+          className="block size-[18px] rounded-full border-2 border-gold-300 bg-obsidian-900 shadow-[0_2px_8px_rgb(34_6_6/0.6)] transition-transform hover:scale-110 focus-visible:ring-4 focus-visible:ring-gold-400/30 focus-visible:outline-none"
+        />
       </RadixSlider.Root>
       {marks ? (
         <div className="relative h-4 text-[11px] text-ash-400">
           {marks.map((m) => (
             <span
               key={m.value}
-              className={cn("absolute -translate-x-1/2 tabular-nums", m.tone === "warn" && "text-flare-400")}
+              className={cn(
+                "absolute -translate-x-1/2 tabular-nums",
+                m.tone === "warn" && "text-flare-400",
+              )}
               style={{ left: `${((m.value - min) / (max - min)) * 100}%` }}
             >
               {m.label}

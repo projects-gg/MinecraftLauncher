@@ -58,7 +58,11 @@ fn channel_urls(channel: &str) -> Vec<String> {
 
 async fn fetch_channel(state: &AppState, channel: &str) -> Option<(ReleaseChannel, String)> {
     let urls = channel_urls(channel);
-    match state.http.get_json_from_mirrors::<ReleaseChannel>(&urls).await {
+    match state
+        .http
+        .get_json_from_mirrors::<ReleaseChannel>(&urls)
+        .await
+    {
         Ok((release, index)) => Some((release, urls[index].clone())),
         Err(error) => {
             tracing::info!(%error, "update channel unavailable");
@@ -69,7 +73,11 @@ async fn fetch_channel(state: &AppState, channel: &str) -> Option<(ReleaseChanne
 
 #[tauri::command]
 #[specta::specta]
-pub async fn update_check(app: AppHandle, state: State<'_, AppState>, channel: String) -> CmdResult<UpdateStatus> {
+pub async fn update_check(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    channel: String,
+) -> CmdResult<UpdateStatus> {
     let current_text = app.package_info().version.to_string();
     let current = semver::Version::parse(&current_text).map_err(CmdError::internal)?;
     let Some((release, _)) = fetch_channel(&state, &channel).await else {
@@ -135,7 +143,11 @@ pub async fn update_download(
             move |chunk, total| {
                 let done = counter.fetch_add(chunk as u64, std::sync::atomic::Ordering::Relaxed)
                     + chunk as u64;
-                let _ = progress.send(UpdateProgress { downloaded: done, total, done: false });
+                let _ = progress.send(UpdateProgress {
+                    downloaded: done,
+                    total,
+                    done: false,
+                });
             },
             move || {
                 let _ = on_progress.send(UpdateProgress {
@@ -146,7 +158,13 @@ pub async fn update_download(
             },
         )
         .await
-        .map_err(|e| CmdError::new("GUNCELLEME-INDIR", "Güncelleme indirilemedi.", e.to_string()))?;
+        .map_err(|e| {
+            CmdError::new(
+                "GUNCELLEME-INDIR",
+                "Güncelleme indirilemedi.",
+                e.to_string(),
+            )
+        })?;
     *state.pending_update.lock() = Some((update, bytes));
     Ok(true)
 }
@@ -157,7 +175,11 @@ pub async fn update_download(
 #[specta::specta]
 pub fn update_apply(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
     let Some((update, bytes)) = state.pending_update.lock().take() else {
-        return Err(CmdError::new("GUNCELLEME-HAZIR-DEGIL", "Hazır bir güncelleme yok.", "no pending update"));
+        return Err(CmdError::new(
+            "GUNCELLEME-HAZIR-DEGIL",
+            "Hazır bir güncelleme yok.",
+            "no pending update",
+        ));
     };
     if state.afk.any_active() || state.running.lock().is_some() {
         // Keep it for later rather than killing a game or AFK sessions.
@@ -168,9 +190,13 @@ pub fn update_apply(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()>
             "busy",
         ));
     }
-    update
-        .install(bytes)
-        .map_err(|e| CmdError::new("GUNCELLEME-KURULUM", "Güncelleme kurulamadı.", e.to_string()))?;
+    update.install(bytes).map_err(|e| {
+        CmdError::new(
+            "GUNCELLEME-KURULUM",
+            "Güncelleme kurulamadı.",
+            e.to_string(),
+        )
+    })?;
     app.restart();
 }
 

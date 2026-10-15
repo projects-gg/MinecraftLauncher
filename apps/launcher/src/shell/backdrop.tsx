@@ -40,7 +40,10 @@ export function Backdrop({
   const home = variant === "home";
 
   return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-obsidian-950">
+    <div
+      aria-hidden
+      className="pointer-events-none fixed inset-0 -z-10 overflow-hidden bg-obsidian-950"
+    >
       {/* Sharp art (Home) */}
       <motion.div
         className="absolute -inset-6"

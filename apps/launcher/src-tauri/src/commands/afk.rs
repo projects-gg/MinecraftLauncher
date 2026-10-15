@@ -148,7 +148,12 @@ fn line_view(line: ConsoleLine) -> Option<ConsoleLineView> {
 #[tauri::command]
 #[specta::specta]
 pub fn afk_console(state: State<'_, AppState>, id: String) -> Vec<ConsoleLineView> {
-    state.afk.console(&id).into_iter().filter_map(line_view).collect()
+    state
+        .afk
+        .console(&id)
+        .into_iter()
+        .filter_map(line_view)
+        .collect()
 }
 
 #[tauri::command]

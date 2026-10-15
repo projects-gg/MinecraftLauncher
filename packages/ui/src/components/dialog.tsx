@@ -45,7 +45,11 @@ export function Dialog({
               />
             </RadixDialog.Overlay>
             <div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-6">
-              <RadixDialog.Content asChild forceMount aria-describedby={description ? undefined : undefined}>
+              <RadixDialog.Content
+                asChild
+                forceMount
+                aria-describedby={description ? undefined : undefined}
+              >
                 <motion.div
                   className={cn(
                     "glass-strong pointer-events-auto flex max-h-[86vh] w-full flex-col overflow-hidden rounded-[14px] shadow-[0_40px_120px_rgb(34_6_6/0.6)] outline-none",

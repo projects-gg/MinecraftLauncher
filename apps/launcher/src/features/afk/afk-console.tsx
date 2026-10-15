@@ -8,7 +8,13 @@ import { useTranslation } from "react-i18next";
 import { type AfkAccount, api } from "@/lib/api";
 
 /** Live console for one AFK account in a side sheet. Closing it never stops the session. */
-export function AfkConsole({ account, onClose }: { account: AfkAccount | undefined; onClose: () => void }) {
+export function AfkConsole({
+  account,
+  onClose,
+}: {
+  account: AfkAccount | undefined;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [line, setLine] = useState("");
@@ -23,7 +29,10 @@ export function AfkConsole({ account, onClose }: { account: AfkAccount | undefin
   });
 
   useEffect(
-    () => api.onAfkChange(() => void queryClient.invalidateQueries({ queryKey: ["afk-log", account?.id] })),
+    () =>
+      api.onAfkChange(
+        () => void queryClient.invalidateQueries({ queryKey: ["afk-log", account?.id] }),
+      ),
     [queryClient, account?.id],
   );
 
@@ -48,7 +57,12 @@ export function AfkConsole({ account, onClose }: { account: AfkAccount | undefin
         {open && account ? (
           <Dialog.Portal forceMount>
             <Dialog.Overlay asChild forceMount>
-              <motion.div className="fixed inset-0 z-40 bg-obsidian-950/50" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} />
+              <motion.div
+                className="fixed inset-0 z-40 bg-obsidian-950/50"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              />
             </Dialog.Overlay>
             <Dialog.Content asChild forceMount aria-describedby={undefined}>
               <motion.aside
@@ -63,13 +77,23 @@ export function AfkConsole({ account, onClose }: { account: AfkAccount | undefin
                     {t("afk.consoleTitle", { name: account.nickname })}
                   </Dialog.Title>
                   <div className="flex items-center gap-3">
-                    <Switch checked={showScript} onCheckedChange={setShowScript} label={t("afk.showScript")} />
+                    <Switch
+                      checked={showScript}
+                      onCheckedChange={setShowScript}
+                      label={t("afk.showScript")}
+                    />
                     <Dialog.Close asChild>
                       <IconButton label={t("common.close")} icon={<X size={18} />} size="sm" />
                     </Dialog.Close>
                   </div>
                 </header>
-                <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-3 font-mono text-[12.5px] leading-relaxed" data-selectable role="log" aria-live="polite">
+                <div
+                  ref={listRef}
+                  className="min-h-0 flex-1 overflow-y-auto px-5 py-3 font-mono text-[12.5px] leading-relaxed"
+                  data-selectable
+                  role="log"
+                  aria-live="polite"
+                >
                   {visible.map((l) => (
                     <p
                       key={l.id}
@@ -83,7 +107,11 @@ export function AfkConsole({ account, onClose }: { account: AfkAccount | undefin
                       )}
                     >
                       <span className="mr-2 text-ash-500">
-                        {new Date(l.time).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                        {new Date(l.time).toLocaleTimeString("tr-TR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
                       </span>
                       {l.text}
                     </p>
@@ -105,7 +133,12 @@ export function AfkConsole({ account, onClose }: { account: AfkAccount | undefin
                     autoComplete="off"
                     className="font-mono text-[13px]"
                   />
-                  <IconButton label={t("afk.send")} icon={<PaperPlaneRight size={18} weight="fill" />} type="submit" className="bg-gold-500 text-gold-ink hover:bg-gold-400 hover:text-gold-ink" />
+                  <IconButton
+                    label={t("afk.send")}
+                    icon={<PaperPlaneRight size={18} weight="fill" />}
+                    type="submit"
+                    className="bg-gold-500 text-gold-ink hover:bg-gold-400 hover:text-gold-ink"
+                  />
                 </form>
               </motion.aside>
             </Dialog.Content>

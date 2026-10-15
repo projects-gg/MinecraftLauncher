@@ -28,7 +28,8 @@ export const tr = {
     patchVersion: "{{pack}} {{version}}",
     seeAll: "Tamamını gör",
     nextEvent: "Sıradaki etkinlik",
-    offlineBanner: "Çevrimdışısın. Haberler son kaydedilen hâliyle gösteriliyor; kurulu oyunları oynayabilirsin.",
+    offlineBanner:
+      "Çevrimdışısın. Haberler son kaydedilen hâliyle gösteriliyor; kurulu oyunları oynayabilirsin.",
   },
   categories: {
     update: "Güncelleme",
@@ -136,6 +137,16 @@ export const tr = {
     name: "İsim",
     nameRequired: "Kuruluma bir isim ver.",
     icon: "Simge",
+    iconNames: {
+      grass: "Çimen bloğu",
+      swords: "Kılıçlar",
+      pickaxe: "Kazma",
+      potion: "İksir",
+      "dragon-egg": "Ejderha yumurtası",
+      tower: "Kule",
+      map: "Harita",
+      compass: "Pusula",
+    },
     version: "Minecraft sürümü",
     filterRelease: "Kararlı",
     filterSnapshot: "Snapshot",
@@ -154,7 +165,8 @@ export const tr = {
   update: {
     ready: "Güncelleme hazır, yeniden başlat",
     mandatoryTitle: "Yeni sürüm gerekli",
-    mandatoryBody: "Devam etmek için launcher'ın {{version}} sürümüne güncellenmesi gerekiyor. Ayarların ve kurulumların korunur.",
+    mandatoryBody:
+      "Devam etmek için launcher'ın {{version}} sürümüne güncellenmesi gerekiyor. Ayarların ve kurulumların korunur.",
     downloading: "Güncelleme indiriliyor",
     installNow: "Şimdi güncelle",
     whatsNew: "Yenilikler: {{version}}",
@@ -162,7 +174,8 @@ export const tr = {
   },
   migrate: {
     title: "Eski launcher'dan içe aktar",
-    description: "Eski Projects Launcher'daki verilerin bulundu. Seçtiklerin yeni launcher'a taşınır; eski launcher'a dokunulmaz.",
+    description:
+      "Eski Projects Launcher'daki verilerin bulundu. Seçtiklerin yeni launcher'a taşınır; eski launcher'a dokunulmaz.",
     premium: "Premium (Microsoft) oturumu",
     nickname: "Oyuncu adı: {{name}}",
     afk: "{{count}} AFK hesabı ve AFK istemcisi",
@@ -176,7 +189,8 @@ export const tr = {
     donePremium: "Premium oturum aktarıldı.",
     doneNickname: "{{name}} hesabı eklendi.",
     doneAfk: "{{count}} AFK hesabı aktarıldı.",
-    doneFiles: "{{count}} dosya kopyalandı; {{linked}} oyun dosyası yeniden indirilmeden kullanıldı.",
+    doneFiles:
+      "{{count}} dosya kopyalandı; {{linked}} oyun dosyası yeniden indirilmeden kullanıldı.",
     close: "Tamam",
     notFound: "Bu bilgisayarda eski launcher verisi bulunamadı.",
   },
@@ -223,7 +237,8 @@ export const tr = {
     consoleInput: "Komut ya da sohbet mesajı",
     send: "Gönder",
     showScript: "Giriş komutlarını göster",
-    invalidName: "Oyuncu adı 3-16 karakter olmalı ve yalnızca harf, rakam ya da alt çizgi içermeli.",
+    invalidName:
+      "Oyuncu adı 3-16 karakter olmalı ve yalnızca harf, rakam ya da alt çizgi içermeli.",
     duplicate: "Bu isimde bir AFK hesabı zaten var.",
   },
   settings: {
@@ -253,14 +268,16 @@ export const tr = {
     },
     appearance: {
       performance: "Performans modu",
-      performanceHelp: "Video, parçacık ve bulanıklık efektlerini kapatır. Zayıf bilgisayarlarda önerilir.",
+      performanceHelp:
+        "Video, parçacık ve bulanıklık efektlerini kapatır. Zayıf bilgisayarlarda önerilir.",
       particles: "Ana sayfada kıvılcım efekti",
       sounds: "Arayüz sesleri",
       volume: "Ses düzeyi",
     },
     game: {
       memory: "Varsayılan bellek",
-      memoryHelp: "Yeni kurulumlar bu değerle başlar. Her kurulumun ayarlarından değiştirebilirsin.",
+      memoryHelp:
+        "Yeni kurulumlar bu değerle başlar. Her kurulumun ayarlarından değiştirebilirsin.",
       resolution: "Varsayılan pencere boyutu",
     },
     accounts: {
@@ -268,18 +285,21 @@ export const tr = {
       makeActive: "Aktif yap",
       remove: "Kaldır",
       addMicrosoft: "Microsoft ile giriş yap",
-      addMicrosoftHelp: "Satın alınmış Minecraft hesabı gerekir. Şifren launcher'a değil, Microsoft'a girilir.",
+      addMicrosoftHelp:
+        "Satın alınmış Minecraft hesabı gerekir. Şifren launcher'a değil, Microsoft'a girilir.",
       addOffline: "Çevrimdışı hesap ekle",
       offlineName: "Oyuncu adı",
       offlineHelp: "3-16 karakter; harf, rakam ve alt çizgi.",
       add: "Ekle",
-      invalidName: "Oyuncu adı 3-16 karakter olmalı ve yalnızca harf, rakam ya da alt çizgi içermeli.",
+      invalidName:
+        "Oyuncu adı 3-16 karakter olmalı ve yalnızca harf, rakam ya da alt çizgi içermeli.",
       removed: "{{name}} kaldırıldı",
       added: "{{name}} hesabı eklendi",
       empty: "Henüz hesap yok. Oynamak için bir hesap ekle.",
       login: {
         title: "Microsoft ile giriş",
-        description: "Giriş tarayıcında, Microsoft'un kendi sayfasında yapılır. Şifren launcher'a hiç girilmez.",
+        description:
+          "Giriş tarayıcında, Microsoft'un kendi sayfasında yapılır. Şifren launcher'a hiç girilmez.",
         steps: {
           openingBrowser: "Tarayıcı açılıyor",
           waitingForBrowser: "Tarayıcıda Microsoft hesabınla giriş yap",
@@ -326,7 +346,8 @@ export const tr = {
       cacheHelp: "Haber görselleri ve geçici dosyalar. Silmek kurulumlara dokunmaz.",
       clear: "Önbelleği temizle",
       legacy: "Eski launcher'dan içe aktar",
-      legacyHelp: "Eski Projects Launcher'daki dünyalar, ayarlar, AFK hesapları ve premium oturum taşınır.",
+      legacyHelp:
+        "Eski Projects Launcher'daki dünyalar, ayarlar, AFK hesapları ve premium oturum taşınır.",
       import: "İçe aktar",
       support: "Destek paketi oluştur",
       supportHelp: "Log dosyalarını ve sistem bilgisini tek bir zip olarak hazırlar.",
@@ -361,7 +382,8 @@ export const tr = {
       version: "Sürüm",
       loader: "Mod yükleyici",
       notes: "Notlar",
-      managedNote: "Bu kurulum resmi paketi takip eder. Paket güncellendiğinde değişiklikler bir sonraki Oyna'da uygulanır.",
+      managedNote:
+        "Bu kurulum resmi paketi takip eder. Paket güncellendiğinde değişiklikler bir sonraki Oyna'da uygulanır.",
     },
     mods: {
       search: "Modlarda ara",
@@ -371,7 +393,8 @@ export const tr = {
       toggle: "{{name}} açık/kapalı",
       emptyTitle: "Bu kurulumda mod yok",
       emptyBody: "Modrinth'te ara ya da .jar dosyasını pencereye sürükle.",
-      vanilla: "Vanilla kurulumlar mod çalıştırmaz. Mod eklemek için Fabric, Quilt, Forge ya da NeoForge ile bir kurulum oluştur.",
+      vanilla:
+        "Vanilla kurulumlar mod çalıştırmaz. Mod eklemek için Fabric, Quilt, Forge ya da NeoForge ile bir kurulum oluştur.",
       summary: "{{enabled}} / {{total}} mod açık",
     },
     packs: {
@@ -392,7 +415,10 @@ export const tr = {
       },
       empty: "Bu kurulumda henüz dünya yok.",
     },
-    screenshots: { empty: "Oyunda F2'ye basarak ekran görüntüsü alabilirsin.", copy: "Panoya kopyala" },
+    screenshots: {
+      empty: "Oyunda F2'ye basarak ekran görüntüsü alabilirsin.",
+      copy: "Panoya kopyala",
+    },
     servers: { add: "Sunucu ekle", players: "{{players}} / {{max}} oyuncu", offline: "Çevrimdışı" },
     settings: {
       java: "Java",

@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/bindings.ts", "!**/src-tauri/**", "!**/dist/**"]
+    "includes": ["**", "!**/bindings.ts", "!**/src-tauri", "!**/dist"]
   },
   "formatter": {
     "enabled": true,
@@ -24,7 +24,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "preset": "recommended"
     }
   },
   "assist": {
@@ -33,5 +33,22 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "css": {
+    "parser": {
+      "tailwindDirectives": true
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["**/styles.css"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
+          }
+        }
+      }
+    }
+  ]
 }

@@ -72,7 +72,9 @@ export const useUpdate = create<UpdateState>()((set, get) => ({
 }));
 
 /** Notes of the version we just updated to, consumed once. */
-export function takePendingNotes(currentVersion: string): { version: string; notes: string } | null {
+export function takePendingNotes(
+  currentVersion: string,
+): { version: string; notes: string } | null {
   try {
     const raw = localStorage.getItem(NOTES_KEY);
     if (!raw) return null;

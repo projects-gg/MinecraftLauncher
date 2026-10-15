@@ -58,7 +58,10 @@ function HeroCopy({ content }: { content: HomeContent }) {
 
 export function HomePage() {
   const { t } = useTranslation();
-  const { data, isPending } = useQuery({ queryKey: ["home-content"], queryFn: () => api.homeContent() });
+  const { data, isPending } = useQuery({
+    queryKey: ["home-content"],
+    queryFn: () => api.homeContent(),
+  });
 
   return (
     <div className="flex min-h-0 flex-1 gap-6 px-10 pt-2 pb-6">

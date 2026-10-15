@@ -16,7 +16,8 @@ export function Toaster() {
           description: "mt-0.5 text-ash-300",
           actionButton:
             "ml-auto shrink-0 rounded-md bg-gold-500 px-2.5 py-1 text-[12px] font-semibold text-gold-ink",
-          cancelButton: "ml-auto shrink-0 rounded-md bg-white/8 px-2.5 py-1 text-[12px] text-bone-100",
+          cancelButton:
+            "ml-auto shrink-0 rounded-md bg-white/8 px-2.5 py-1 text-[12px] text-bone-100",
           error: "[&_[data-title]]:text-flare-400",
           success: "[&_[data-title]]:text-jade-400",
         },

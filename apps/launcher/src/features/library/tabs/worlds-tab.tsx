@@ -10,10 +10,17 @@ export function WorldsTab({ worlds }: { worlds: WorldEntry[] }) {
   return (
     <ul className="max-w-[980px] space-y-1">
       {worlds.map((w) => (
-        <li key={w.folder} className="flex items-center gap-4 rounded-[var(--radius-panel)] px-3 py-3 hover:bg-white/5">
+        <li
+          key={w.folder}
+          className="flex items-center gap-4 rounded-[var(--radius-panel)] px-3 py-3 hover:bg-white/5"
+        >
           <span className="chamfer flex size-12 shrink-0 items-center justify-center bg-obsidian-800 [--cut:6px]">
             {w.iconUrl ? (
-              <img src={w.iconUrl} alt="" className="size-full object-cover [image-rendering:pixelated]" />
+              <img
+                src={w.iconUrl}
+                alt=""
+                className="size-full object-cover [image-rendering:pixelated]"
+              />
             ) : (
               <Globe size={22} weight="duotone" className="text-gold-400/80" />
             )}
@@ -21,7 +28,9 @@ export function WorldsTab({ worlds }: { worlds: WorldEntry[] }) {
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <span className="truncate text-[14px] font-semibold text-bone-50">{w.name}</span>
-              <Chip tone={w.gameMode === "hardcore" ? "flare" : "neutral"}>{t(`instance.worlds.modes.${w.gameMode}`)}</Chip>
+              <Chip tone={w.gameMode === "hardcore" ? "flare" : "neutral"}>
+                {t(`instance.worlds.modes.${w.gameMode}`)}
+              </Chip>
             </div>
             <p className="text-[12.5px] text-ash-400">
               {t("instance.worlds.lastPlayed", { when: formatRelative(w.lastPlayedAt) })}

@@ -227,14 +227,13 @@ impl AuthManager {
             fresh.xuid = stored.xuid;
         }
         self.save_secrets(id, fresh.clone()).await?;
-        if let Some(profile) = refreshed.profile {
-            if let Err(error) = self
+        if let Some(profile) = refreshed.profile
+            && let Err(error) = self
                 .accounts
                 .update(id, |account| account.apply_profile(&profile))
             {
                 tracing::warn!(account = %id, code = %error.code(), "profile update not saved");
             }
-        }
         Ok(fresh)
     }
 

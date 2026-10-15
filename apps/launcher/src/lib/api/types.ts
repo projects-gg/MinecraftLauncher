@@ -135,7 +135,14 @@ export type LaunchEvent =
   | { type: "started"; pid: number | null }
   | { type: "windowShown" }
   | { type: "exited"; code: number | null; runtimeSecs: number }
-  | { type: "crashed"; title: string; hint: string; actions: string[]; mods: string[]; logFile: string | null }
+  | {
+      type: "crashed";
+      title: string;
+      hint: string;
+      actions: string[];
+      mods: string[];
+      logFile: string | null;
+    }
   | { type: "error"; message: string; details: string };
 
 export interface McVersion {

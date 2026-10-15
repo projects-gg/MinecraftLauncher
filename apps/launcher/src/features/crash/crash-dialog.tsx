@@ -15,7 +15,12 @@ export function CrashDialog() {
   const dismiss = useLaunch((s) => s.dismissCrash);
 
   const details = crash
-    ? [crash.title, crash.hint, crash.mods.length ? `mods: ${crash.mods.join(", ")}` : "", crash.logFile ?? ""]
+    ? [
+        crash.title,
+        crash.hint,
+        crash.mods.length ? `mods: ${crash.mods.join(", ")}` : "",
+        crash.logFile ?? "",
+      ]
         .filter(Boolean)
         .join("\n")
     : "";
@@ -38,13 +43,19 @@ export function CrashDialog() {
             variant="ghost"
             icon={<Copy size={16} />}
             onClick={() => {
-              void navigator.clipboard.writeText(details).then(() => toast.success(t("crash.copied")));
+              void navigator.clipboard
+                .writeText(details)
+                .then(() => toast.success(t("crash.copied")));
             }}
           >
             {t("crash.copy")}
           </Button>
           {crash?.logFile && isTauri() ? (
-            <Button variant="secondary" icon={<FileText size={16} />} onClick={() => crash.logFile && void openPath(crash.logFile)}>
+            <Button
+              variant="secondary"
+              icon={<FileText size={16} />}
+              onClick={() => crash.logFile && void openPath(crash.logFile)}
+            >
               {t("crash.openLog")}
             </Button>
           ) : null}
@@ -54,7 +65,11 @@ export function CrashDialog() {
               icon={<GearSix size={16} weight="fill" />}
               onClick={() => {
                 dismiss();
-                void navigate({ to: "/library/$instanceId", params: { instanceId }, search: { tab: "settings" } });
+                void navigate({
+                  to: "/library/$instanceId",
+                  params: { instanceId },
+                  search: { tab: "settings" },
+                });
               }}
             >
               {t("crash.settings")}

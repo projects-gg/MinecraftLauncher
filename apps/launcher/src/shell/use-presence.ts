@@ -14,8 +14,16 @@ export function usePresenceSync() {
   const enabled = usePrefs((s) => s.discordEnabled);
   const showServer = usePrefs((s) => s.discordShowServer);
   const autoJoin = usePrefs((s) => s.autoJoin);
-  const { data: instances } = useQuery({ queryKey: ["instances"], queryFn: () => api.instances(), enabled: isTauri() });
-  const { data: server } = useQuery({ queryKey: ["server-status"], queryFn: () => api.serverStatus(), enabled: isTauri() });
+  const { data: instances } = useQuery({
+    queryKey: ["instances"],
+    queryFn: () => api.instances(),
+    enabled: isTauri(),
+  });
+  const { data: server } = useQuery({
+    queryKey: ["server-status"],
+    queryFn: () => api.serverStatus(),
+    enabled: isTauri(),
+  });
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -28,7 +36,7 @@ export function usePresenceSync() {
 
   useEffect(() => {
     if (!isTauri() || !enabled) return;
-    const page = pathname === "/" ? "home" : pathname.split("/")[1] ?? "home";
+    const page = pathname === "/" ? "home" : (pathname.split("/")[1] ?? "home");
     const activity = since !== null ? "playing" : percent !== null ? "downloading" : page;
     const joinsServer = Boolean(since !== null && autoJoin && instance?.autoJoin);
     void api.updatePresence({

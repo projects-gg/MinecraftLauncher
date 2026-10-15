@@ -10,7 +10,18 @@ import {
   UserPlus,
   UsersThree,
 } from "@phosphor-icons/react";
-import { Button, Chip, cn, EmptyState, Field, IconButton, Input, Menu, PlayerHead, toast } from "@pl/ui";
+import {
+  Button,
+  Chip,
+  cn,
+  EmptyState,
+  Field,
+  IconButton,
+  Input,
+  Menu,
+  PlayerHead,
+  toast,
+} from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
@@ -49,7 +60,9 @@ function StateLine({ state }: { state: AfkState }) {
   let text: string;
   switch (state.kind) {
     case "connected":
-      text = t("afk.states.connected", { uptime: formatDuration((now - new Date(state.since).getTime()) / 1000) });
+      text = t("afk.states.connected", {
+        uptime: formatDuration((now - new Date(state.since).getTime()) / 1000),
+      });
       break;
     case "reconnecting":
       text = t("afk.states.reconnecting", {
@@ -77,12 +90,22 @@ function StateLine({ state }: { state: AfkState }) {
           tone === "ash" && "bg-ash-500",
         )}
       />
-      <span className={cn("truncate", tone === "flare" ? "text-flare-400" : "text-ash-300")}>{text}</span>
+      <span className={cn("truncate", tone === "flare" ? "text-flare-400" : "text-ash-300")}>
+        {text}
+      </span>
     </p>
   );
 }
 
-function AfkCard({ account, onConsole, index }: { account: AfkAccount; onConsole: () => void; index: number }) {
+function AfkCard({
+  account,
+  onConsole,
+  index,
+}: {
+  account: AfkAccount;
+  onConsole: () => void;
+  index: number;
+}) {
   const { t } = useTranslation();
   const running = account.state.kind !== "stopped" && account.state.kind !== "error";
   const connected = account.state.kind === "connected";
@@ -99,10 +122,16 @@ function AfkCard({ account, onConsole, index }: { account: AfkAccount; onConsole
       )}
     >
       <div className="flex items-start gap-3.5">
-        <PlayerHead name={account.nickname} src={`https://mc-heads.net/avatar/${account.nickname}/64`} size={48} />
+        <PlayerHead
+          name={account.nickname}
+          src={`https://mc-heads.net/avatar/${account.nickname}/64`}
+          size={48}
+        />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="truncate font-display text-[16px] font-semibold text-bone-50">{account.nickname}</h3>
+            <h3 className="truncate font-display text-[16px] font-semibold text-bone-50">
+              {account.nickname}
+            </h3>
             {account.autoStart ? <Chip>{t("afk.autoStart")}</Chip> : null}
           </div>
           <p className="truncate text-[12.5px] text-ash-400" data-selectable>
@@ -110,11 +139,26 @@ function AfkCard({ account, onConsole, index }: { account: AfkAccount; onConsole
           </p>
         </div>
         <Menu
-          trigger={<IconButton label={t("afk.more")} icon={<DotsThreeVertical size={18} weight="bold" />} size="sm" />}
+          trigger={
+            <IconButton
+              label={t("afk.more")}
+              icon={<DotsThreeVertical size={18} weight="bold" />}
+              size="sm"
+            />
+          }
           items={[
-            { label: t("afk.settings"), icon: <GearSix size={16} />, onSelect: () => toast(t("common.comingSoon")) },
+            {
+              label: t("afk.settings"),
+              icon: <GearSix size={16} />,
+              onSelect: () => toast(t("common.comingSoon")),
+            },
             null,
-            { label: t("afk.remove"), icon: <Trash size={16} />, danger: true, onSelect: () => void api.afkRemove(account.id) },
+            {
+              label: t("afk.remove"),
+              icon: <Trash size={16} />,
+              danger: true,
+              onSelect: () => void api.afkRemove(account.id),
+            },
           ]}
         />
       </div>
@@ -142,11 +186,23 @@ function AfkCard({ account, onConsole, index }: { account: AfkAccount; onConsole
 
       <div className="mt-4 flex gap-2">
         {running ? (
-          <Button size="sm" variant="secondary" icon={<Stop size={14} weight="fill" />} onClick={() => void api.afkStop(account.id)} className="flex-1">
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<Stop size={14} weight="fill" />}
+            onClick={() => void api.afkStop(account.id)}
+            className="flex-1"
+          >
             {t("afk.stop")}
           </Button>
         ) : (
-          <Button size="sm" variant="primary" icon={<Play size={14} weight="fill" />} onClick={() => void api.afkConnect(account.id)} className="flex-1">
+          <Button
+            size="sm"
+            variant="primary"
+            icon={<Play size={14} weight="fill" />}
+            onClick={() => void api.afkConnect(account.id)}
+            className="flex-1"
+          >
             {t("afk.connect")}
           </Button>
         )}
@@ -161,12 +217,18 @@ function AfkCard({ account, onConsole, index }: { account: AfkAccount; onConsole
 export function AfkPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { data: accounts = [], isPending } = useQuery({ queryKey: ["afk"], queryFn: () => api.afkAccounts() });
+  const { data: accounts = [], isPending } = useQuery({
+    queryKey: ["afk"],
+    queryFn: () => api.afkAccounts(),
+  });
   const [consoleId, setConsoleId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
 
-  useEffect(() => api.onAfkChange(() => void queryClient.invalidateQueries({ queryKey: ["afk"] })), [queryClient]);
+  useEffect(
+    () => api.onAfkChange(() => void queryClient.invalidateQueries({ queryKey: ["afk"] })),
+    [queryClient],
+  );
 
   const anyRunning = accounts.some((a) => a.state.kind !== "stopped" && a.state.kind !== "error");
   const consoleAccount = accounts.find((a) => a.id === consoleId);
@@ -174,7 +236,8 @@ export function AfkPage() {
   const add = () => {
     const trimmed = name.trim();
     if (!NAME.test(trimmed)) return setNameError(t("afk.invalidName"));
-    if (accounts.some((a) => a.nickname.toLowerCase() === trimmed.toLowerCase())) return setNameError(t("afk.duplicate"));
+    if (accounts.some((a) => a.nickname.toLowerCase() === trimmed.toLowerCase()))
+      return setNameError(t("afk.duplicate"));
     void api.afkAdd(trimmed).then(() => setName(""));
   };
 
@@ -182,16 +245,27 @@ export function AfkPage() {
     <div className="flex min-h-0 flex-1 flex-col px-10 pt-4">
       <header className="flex flex-wrap items-end justify-between gap-4 pb-6">
         <div>
-          <h1 className="font-display text-[32px] leading-tight font-semibold text-bone-50">{t("afk.title")}</h1>
+          <h1 className="font-display text-[32px] leading-tight font-semibold text-bone-50">
+            {t("afk.title")}
+          </h1>
           <p className="mt-1 max-w-[60ch] text-ash-400">{t("afk.subtitle")}</p>
         </div>
         <div className="flex gap-2.5">
           {anyRunning ? (
-            <Button variant="ghost" icon={<Stop size={15} weight="fill" />} onClick={() => void api.afkStopAll()}>
+            <Button
+              variant="ghost"
+              icon={<Stop size={15} weight="fill" />}
+              onClick={() => void api.afkStopAll()}
+            >
               {t("afk.stopAll")}
             </Button>
           ) : null}
-          <Button variant="secondary" icon={<Play size={15} weight="fill" className="text-gold-300" />} onClick={() => void api.afkConnectAll()} disabled={!accounts.length}>
+          <Button
+            variant="secondary"
+            icon={<Play size={15} weight="fill" className="text-gold-300" />}
+            onClick={() => void api.afkConnectAll()}
+            disabled={!accounts.length}
+          >
             {t("afk.connectAll")}
           </Button>
         </div>
@@ -215,7 +289,12 @@ export function AfkPage() {
             add();
           }}
         >
-          <Field label={t("afk.add")} help={t("afk.nicknameHelp")} error={nameError} htmlFor="afk-name">
+          <Field
+            label={t("afk.add")}
+            help={t("afk.nicknameHelp")}
+            error={nameError}
+            htmlFor="afk-name"
+          >
             <div className="flex gap-2">
               <Input
                 id="afk-name"

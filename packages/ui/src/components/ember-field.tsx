@@ -70,7 +70,11 @@ export function EmberField({
             : height + 10,
         vx: (Math.random() - 0.5) * (snow ? 14 : 10),
         vy: snow ? 18 + Math.random() * 26 : -(18 + Math.random() * 46),
-        size: snow ? 1 + Math.random() * 2.2 : kind === "sparks" ? 0.6 + Math.random() * 1.2 : 0.8 + Math.random() * 1.9,
+        size: snow
+          ? 1 + Math.random() * 2.2
+          : kind === "sparks"
+            ? 0.6 + Math.random() * 1.2
+            : 0.8 + Math.random() * 1.9,
         life: initial ? Math.random() * maxLife : 0,
         maxLife,
         hue: 28 + Math.random() * 18,
@@ -136,7 +140,11 @@ export function EmberField({
     <canvas
       ref={canvasRef}
       aria-hidden
-      className={cn("pointer-events-none absolute inset-0 size-full", !enabled && "hidden", className)}
+      className={cn(
+        "pointer-events-none absolute inset-0 size-full",
+        !enabled && "hidden",
+        className,
+      )}
     />
   );
 }

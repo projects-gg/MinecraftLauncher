@@ -50,7 +50,10 @@ export function LibraryPage() {
   const search = useSearch({ strict: false }) as { create?: boolean };
   const [query, setQuery] = useState("");
   const [pendingDelete, setPendingDelete] = useState<InstanceSummary | null>(null);
-  const { data: instances, isPending } = useQuery({ queryKey: ["instances"], queryFn: () => api.instances() });
+  const { data: instances, isPending } = useQuery({
+    queryKey: ["instances"],
+    queryFn: () => api.instances(),
+  });
   const selectedId = usePrefs((s) => s.selectedInstanceId) ?? instances?.[0]?.id;
   const selectInstance = usePrefs((s) => s.selectInstance);
   const play = useLaunch((s) => s.play);
@@ -100,17 +103,33 @@ export function LibraryPage() {
     <div className="flex min-h-0 flex-1 flex-col px-10 pt-4">
       <header className="flex flex-wrap items-end justify-between gap-4 pb-6">
         <div>
-          <h1 className="font-display text-[32px] leading-tight font-semibold text-bone-50">{t("library.title")}</h1>
+          <h1 className="font-display text-[32px] leading-tight font-semibold text-bone-50">
+            {t("library.title")}
+          </h1>
           <p className="mt-1 text-ash-400">
             {instances ? t("library.count", { count: instances.length }) : t("common.loading")}
           </p>
         </div>
         <div className="flex items-center gap-2.5">
-          <SearchInput value={query} onChange={setQuery} placeholder={t("library.search")} label={t("library.search")} className="w-64" />
-          <Button variant="ghost" icon={<DownloadSimple size={17} />} onClick={() => setCreateOpen(true)}>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder={t("library.search")}
+            label={t("library.search")}
+            className="w-64"
+          />
+          <Button
+            variant="ghost"
+            icon={<DownloadSimple size={17} />}
+            onClick={() => setCreateOpen(true)}
+          >
             {t("library.import")}
           </Button>
-          <Button variant="secondary" icon={<Plus size={17} weight="bold" className="text-gold-300" />} onClick={() => setCreateOpen(true)}>
+          <Button
+            variant="secondary"
+            icon={<Plus size={17} weight="bold" className="text-gold-300" />}
+            onClick={() => setCreateOpen(true)}
+          >
             {t("library.create")}
           </Button>
         </div>
@@ -129,7 +148,11 @@ export function LibraryPage() {
             title={t("library.empty.title")}
             body={t("library.empty.body")}
             action={
-              <Button variant="primary" icon={<Plus size={16} weight="bold" />} onClick={() => setCreateOpen(true)}>
+              <Button
+                variant="primary"
+                icon={<Plus size={16} weight="bold" />}
+                onClick={() => setCreateOpen(true)}
+              >
                 {t("library.empty.action")}
               </Button>
             }
@@ -138,8 +161,20 @@ export function LibraryPage() {
           <p className="pt-10 text-center text-ash-400">{t("library.noResults")}</p>
         ) : (
           <>
-            <Section title={t("library.official")} items={official} selectedId={selectedId} actions={actions} offset={0} />
-            <Section title={t("library.mine")} items={mine} selectedId={selectedId} actions={actions} offset={official.length} />
+            <Section
+              title={t("library.official")}
+              items={official}
+              selectedId={selectedId}
+              actions={actions}
+              offset={0}
+            />
+            <Section
+              title={t("library.mine")}
+              items={mine}
+              selectedId={selectedId}
+              actions={actions}
+              offset={official.length}
+            />
           </>
         )}
       </div>

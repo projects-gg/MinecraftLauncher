@@ -32,7 +32,8 @@ export function PlayButton({ state, onPlay, onCancel, labels, className }: PlayB
 
   const isGold = state.kind === "ready" || state.kind === "update";
   const isWorking = state.kind === "working";
-  const disabled = state.kind === "launching" || state.kind === "running" || state.kind === "unavailable";
+  const disabled =
+    state.kind === "launching" || state.kind === "running" || state.kind === "unavailable";
 
   let text: ReactNode;
   let key: string;

@@ -37,10 +37,20 @@ function Check({
 }
 
 /** One-time import from the v1 launcher. Offered on first start; also in Settings > Data. */
-export function MigrationDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function MigrationDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { data: scan, isPending } = useQuery({ queryKey: ["legacy-scan"], queryFn: () => api.legacyScan(), enabled: open });
+  const { data: scan, isPending } = useQuery({
+    queryKey: ["legacy-scan"],
+    queryFn: () => api.legacyScan(),
+    enabled: open,
+  });
   const [premium, setPremium] = useState(true);
   const [nickname, setNickname] = useState(true);
   const [afk, setAfk] = useState(true);
@@ -54,7 +64,8 @@ export function MigrationDialog({ open, onOpenChange }: { open: boolean; onOpenC
   }, [scan, worldsFit]);
 
   const run = useMutation({
-    mutationFn: () => api.legacyImport({ premium, nickname, afk, gameData, worlds: worlds && gameData }),
+    mutationFn: () =>
+      api.legacyImport({ premium, nickname, afk, gameData, worlds: worlds && gameData }),
     onSuccess: (result) => {
       setReport(result);
       void queryClient.invalidateQueries();
@@ -126,12 +137,22 @@ export function MigrationDialog({ open, onOpenChange }: { open: boolean; onOpenC
         <p className="text-ash-300">{t("migrate.notFound")}</p>
       ) : (
         <div className="space-y-0.5 pt-1">
-          {scan.hasPremium ? <Check checked={premium} onChange={setPremium} label={t("migrate.premium")} /> : null}
+          {scan.hasPremium ? (
+            <Check checked={premium} onChange={setPremium} label={t("migrate.premium")} />
+          ) : null}
           {scan.nickname ? (
-            <Check checked={nickname} onChange={setNickname} label={t("migrate.nickname", { name: scan.nickname })} />
+            <Check
+              checked={nickname}
+              onChange={setNickname}
+              label={t("migrate.nickname", { name: scan.nickname })}
+            />
           ) : null}
           {scan.afkAccounts > 0 || scan.hasAfkClient ? (
-            <Check checked={afk} onChange={setAfk} label={t("migrate.afk", { count: scan.afkAccounts })} />
+            <Check
+              checked={afk}
+              onChange={setAfk}
+              label={t("migrate.afk", { count: scan.afkAccounts })}
+            />
           ) : null}
           <Check checked={gameData} onChange={setGameData} label={t("migrate.gameData")} />
           {scan.worlds > 0 ? (
@@ -139,7 +160,10 @@ export function MigrationDialog({ open, onOpenChange }: { open: boolean; onOpenC
               checked={worlds && gameData}
               onChange={setWorlds}
               disabled={!gameData || !worldsFit}
-              label={t("migrate.worlds", { count: scan.worlds, size: formatBytes(scan.worldsBytes) })}
+              label={t("migrate.worlds", {
+                count: scan.worlds,
+                size: formatBytes(scan.worldsBytes),
+              })}
               hint={worldsFit ? undefined : t("migrate.worldsNoSpace")}
             />
           ) : null}

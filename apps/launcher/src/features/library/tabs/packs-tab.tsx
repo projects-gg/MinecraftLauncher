@@ -9,7 +9,10 @@ export function PacksTab({ packs, emptyText }: { packs: PackEntry[]; emptyText: 
   return (
     <div className="max-w-[980px]">
       <div className="mb-4 flex justify-end">
-        <Button variant="secondary" icon={<Plus size={16} weight="bold" className="text-gold-300" />}>
+        <Button
+          variant="secondary"
+          icon={<Plus size={16} weight="bold" className="text-gold-300" />}
+        >
           {t("instance.packs.add")}
         </Button>
       </div>
@@ -20,11 +23,18 @@ export function PacksTab({ packs, emptyText }: { packs: PackEntry[]; emptyText: 
           {packs.map((p) => (
             <li
               key={p.fileName}
-              className={cn("glass flex items-center gap-3 rounded-[var(--radius-panel)] p-3", !p.enabled && "opacity-60")}
+              className={cn(
+                "glass flex items-center gap-3 rounded-[var(--radius-panel)] p-3",
+                !p.enabled && "opacity-60",
+              )}
             >
               <span className="chamfer flex size-12 shrink-0 items-center justify-center bg-obsidian-800 [--cut:6px]">
                 {p.iconUrl ? (
-                  <img src={p.iconUrl} alt="" className="size-full object-cover [image-rendering:pixelated]" />
+                  <img
+                    src={p.iconUrl}
+                    alt=""
+                    className="size-full object-cover [image-rendering:pixelated]"
+                  />
                 ) : (
                   <Images size={22} weight="duotone" className="text-gold-400/80" />
                 )}
@@ -33,7 +43,9 @@ export function PacksTab({ packs, emptyText }: { packs: PackEntry[]; emptyText: 
                 <p className="truncate text-[14px] font-semibold text-bone-50">{p.name}</p>
                 <p className="truncate text-[12.5px] text-ash-400">{p.description}</p>
               </div>
-              <span className="shrink-0 text-[12px] text-ash-500 tabular-nums">{formatBytes(p.sizeBytes)}</span>
+              <span className="shrink-0 text-[12px] text-ash-500 tabular-nums">
+                {formatBytes(p.sizeBytes)}
+              </span>
             </li>
           ))}
         </ul>

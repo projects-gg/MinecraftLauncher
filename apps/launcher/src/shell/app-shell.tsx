@@ -68,7 +68,12 @@ export function AppShell() {
       <MigrationDialog open={migrationOpen} onOpenChange={setMigrationOpen} />
       <NewsReader
         newsId={search.news}
-        onClose={() => void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, news: undefined }) })}
+        onClose={() =>
+          void navigate({
+            to: ".",
+            search: (prev: Record<string, unknown>) => ({ ...prev, news: undefined }),
+          })
+        }
       />
     </div>
   );

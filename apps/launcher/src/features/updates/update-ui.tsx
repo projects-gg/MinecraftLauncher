@@ -3,8 +3,8 @@ import { Button, Dialog, Progress, toast } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
-import Markdown from "react-markdown";
 import { useTranslation } from "react-i18next";
+import Markdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import { api } from "@/lib/api";
 import { isTauri } from "@/lib/platform";
@@ -48,7 +48,11 @@ export function UpdatePill() {
       disabled={phase === "applying"}
       className="chamfer flex h-7 cursor-pointer items-center gap-2 bg-gold-500 px-3 text-[12.5px] font-semibold text-gold-ink [--cut:5px] hover:brightness-110 disabled:opacity-70"
     >
-      <ArrowsClockwise size={14} weight="bold" className={phase === "applying" ? "animate-spin" : undefined} />
+      <ArrowsClockwise
+        size={14}
+        weight="bold"
+        className={phase === "applying" ? "animate-spin" : undefined}
+      />
       {t("update.ready", { version: version ?? "" })}
     </motion.button>
   );
@@ -63,12 +67,20 @@ export function MandatoryUpdate() {
     <div className="fixed inset-0 z-[60] grid place-items-center bg-obsidian-950/92 backdrop-blur-md">
       <div className="w-[min(460px,90vw)] text-center">
         <Sparkle size={40} weight="duotone" className="mx-auto text-gold-400" />
-        <h2 className="mt-4 font-display text-[26px] font-semibold text-bone-50">{t("update.mandatoryTitle")}</h2>
+        <h2 className="mt-4 font-display text-[26px] font-semibold text-bone-50">
+          {t("update.mandatoryTitle")}
+        </h2>
         <p className="mt-2 text-ash-300">{t("update.mandatoryBody", { version: version ?? "" })}</p>
         {phase === "downloading" ? (
           <Progress value={percent} label={t("update.downloading")} className="mt-6" />
         ) : (
-          <Button className="mt-6" variant="primary" size="lg" onClick={() => void apply()} disabled={phase === "applying"}>
+          <Button
+            className="mt-6"
+            variant="primary"
+            size="lg"
+            onClick={() => void apply()}
+            disabled={phase === "applying"}
+          >
             {t("update.installNow")}
           </Button>
         )}
@@ -80,7 +92,11 @@ export function MandatoryUpdate() {
 /** "What's new" once after an update. */
 export function WhatsNew() {
   const { t } = useTranslation();
-  const { data: info } = useQuery({ queryKey: ["app-info"], queryFn: () => api.appInfo(), enabled: isTauri() });
+  const { data: info } = useQuery({
+    queryKey: ["app-info"],
+    queryFn: () => api.appInfo(),
+    enabled: isTauri(),
+  });
   const [notes, setNotes] = useState<{ version: string; notes: string } | null>(null);
   useEffect(() => {
     if (info) setNotes(takePendingNotes(info.version));

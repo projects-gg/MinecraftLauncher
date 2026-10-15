@@ -6,13 +6,13 @@ import {
   type AccountView,
   type AfkAccountView,
   type AfkEvent,
+  type LoginStep as BindingLoginStep,
   type CmdError,
   commands,
   type FailureReason,
   type HomeView,
   type InstanceView,
   type LaunchEventView,
-  type LoginStep as BindingLoginStep,
 } from "@/bindings";
 import type { LauncherApi } from "./index";
 import { mockApi } from "./mock";
@@ -122,7 +122,14 @@ function launchEvent(e: LaunchEventView): LaunchEvent {
         etaSecs: e.etaSecs ?? undefined,
       };
     case "crashed":
-      return { type: "crashed", title: e.title, hint: e.hint, actions: e.actions, mods: e.mods, logFile: e.logFile };
+      return {
+        type: "crashed",
+        title: e.title,
+        hint: e.hint,
+        actions: e.actions,
+        mods: e.mods,
+        logFile: e.logFile,
+      };
     case "error":
       return { type: "error", message: e.message, details: `${e.code}\n${e.details}` };
     case "exited":
@@ -288,7 +295,11 @@ export const tauriApi: LauncherApi = {
         gameMode: w.gameMode as "survival",
         iconUrl: w.iconUrl ?? undefined,
       })),
-      screenshots: d.screenshots.map((s) => ({ fileName: s.fileName, url: convertFileSrc(s.path), takenAt: s.takenAt })),
+      screenshots: d.screenshots.map((s) => ({
+        fileName: s.fileName,
+        url: convertFileSrc(s.path),
+        takenAt: s.takenAt,
+      })),
       servers: d.servers,
       systemMemoryMb: d.systemMemoryMb,
     };
@@ -327,7 +338,10 @@ export const tauriApi: LauncherApi = {
     await ok(commands.instanceDelete(id));
   },
   async loaderVersions(loader, mcVersion) {
-    return (await ok(commands.loaderVersions(loader, mcVersion))).map((v) => ({ version: v.version, stable: v.stable }));
+    return (await ok(commands.loaderVersions(loader, mcVersion))).map((v) => ({
+      version: v.version,
+      stable: v.stable,
+    }));
   },
   async updatePresence(context) {
     await commands.discordUpdate(context);

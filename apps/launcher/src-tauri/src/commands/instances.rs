@@ -67,14 +67,11 @@ fn icon_key(icon: &InstanceIcon) -> String {
 
 pub fn view(state: &AppState, instance: &Instance) -> InstanceView {
     let dir = state.instances.instance_dir(&instance.id).ok();
-    let ready = dir
-        .as_deref()
-        .and_then(read_marker)
-        .is_some_and(|m| {
-            m.mc_version == instance.mc_version
-                && m.loader == instance.loader.kind
-                && m.loader_version == instance.loader.version
-        });
+    let ready = dir.as_deref().and_then(read_marker).is_some_and(|m| {
+        m.mc_version == instance.mc_version
+            && m.loader == instance.loader.kind
+            && m.loader_version == instance.loader.version
+    });
     InstanceView {
         id: instance.id.clone(),
         name: instance.name.clone(),
@@ -316,7 +313,10 @@ fn settings_view(i: &Instance) -> InstanceSettingsView {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn instance_detail(state: State<'_, AppState>, id: String) -> CmdResult<InstanceDetailView> {
+pub async fn instance_detail(
+    state: State<'_, AppState>,
+    id: String,
+) -> CmdResult<InstanceDetailView> {
     let instance = state.instances.get(&id).await.map_err(CmdError::from)?;
     let game_dir = state.instances.game_dir(&id).map_err(CmdError::from)?;
     let pack_files = pack_owned_files(&game_dir);
@@ -407,7 +407,10 @@ pub async fn instance_detail(state: State<'_, AppState>, id: String) -> CmdResul
         .map(|list| {
             list.servers
                 .into_iter()
-                .map(|s| ServerView { name: s.name, address: s.ip })
+                .map(|s| ServerView {
+                    name: s.name,
+                    address: s.ip,
+                })
                 .collect()
         })
         .unwrap_or_default();
@@ -431,7 +434,11 @@ fn pack_owned_files(game_dir: &Path) -> Vec<String> {
     std::fs::read(path)
         .ok()
         .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
-        .and_then(|v| v.get("files").and_then(|f| f.as_object()).map(|o| o.keys().cloned().collect()))
+        .and_then(|v| {
+            v.get("files")
+                .and_then(|f| f.as_object())
+                .map(|o| o.keys().cloned().collect())
+        })
         .unwrap_or_default()
 }
 
@@ -472,7 +479,11 @@ pub async fn instance_update_settings(
         wrapper: non_empty(settings.wrapper),
     };
     instance.notes = settings.notes;
-    state.instances.update(&instance).await.map_err(CmdError::from)
+    state
+        .instances
+        .update(&instance)
+        .await
+        .map_err(CmdError::from)
 }
 
 #[tauri::command]
@@ -555,10 +566,15 @@ pub async fn loader_versions(
     if loader == LoaderKind::Vanilla {
         return Ok(Vec::new());
     }
-    Ok(pl_mc::loaders::list_loader_versions(&state.mc, loader, &mc_version)
-        .await
-        .map_err(CmdError::from)?
-        .into_iter()
-        .map(|v| LoaderVersionView { version: v.version, stable: v.stable })
-        .collect())
+    Ok(
+        pl_mc::loaders::list_loader_versions(&state.mc, loader, &mc_version)
+            .await
+            .map_err(CmdError::from)?
+            .into_iter()
+            .map(|v| LoaderVersionView {
+                version: v.version,
+                stable: v.stable,
+            })
+            .collect(),
+    )
 }

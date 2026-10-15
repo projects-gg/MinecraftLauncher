@@ -78,7 +78,14 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
       instanceId,
       offline: false,
       crash: null,
-      phase: { kind: "working", stage: "metadata", percent: 0, doneFiles: 0, totalFiles: 0, bytesPerSec: 0 },
+      phase: {
+        kind: "working",
+        stage: "metadata",
+        percent: 0,
+        doneFiles: 0,
+        totalFiles: 0,
+        bytesPerSec: 0,
+      },
     });
     const onEvent = (event: LaunchEvent) => {
       switch (event.type) {
@@ -99,7 +106,15 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
           void applyGameStartBehavior();
           break;
         case "crashed":
-          set({ crash: { title: event.title, hint: event.hint, actions: event.actions, mods: event.mods, logFile: event.logFile } });
+          set({
+            crash: {
+              title: event.title,
+              hint: event.hint,
+              actions: event.actions,
+              mods: event.mods,
+              logFile: event.logFile,
+            },
+          });
           break;
         case "exited":
           set({ phase: { kind: "idle" } });

@@ -38,7 +38,15 @@ const sections = [
 
 type SectionId = (typeof sections)[number]["id"];
 
-export function Row({ title, help, children }: { title: string; help?: string; children: ReactNode }) {
+export function Row({
+  title,
+  help,
+  children,
+}: {
+  title: string;
+  help?: string;
+  children: ReactNode;
+}) {
   return (
     <div className="flex items-center justify-between gap-8 border-b border-white/6 py-4 last:border-b-0">
       <div className="min-w-0">
@@ -85,10 +93,20 @@ function General() {
         </div>
       </Row>
       <Row title={t("settings.general.startOnBoot")} help={t("settings.general.startOnBootHelp")}>
-        <Switch checked={p.startOnBoot} onCheckedChange={(v) => p.set("startOnBoot", v)} label={t("settings.general.startOnBoot")} hideLabel />
+        <Switch
+          checked={p.startOnBoot}
+          onCheckedChange={(v) => p.set("startOnBoot", v)}
+          label={t("settings.general.startOnBoot")}
+          hideLabel
+        />
       </Row>
       <Row title={t("settings.general.closeToTray")}>
-        <Switch checked={p.closeToTray} onCheckedChange={(v) => p.set("closeToTray", v)} label={t("settings.general.closeToTray")} hideLabel />
+        <Switch
+          checked={p.closeToTray}
+          onCheckedChange={(v) => p.set("closeToTray", v)}
+          label={t("settings.general.closeToTray")}
+          hideLabel
+        />
       </Row>
     </>
   );
@@ -99,14 +117,33 @@ function Appearance() {
   const p = usePrefs();
   return (
     <>
-      <Row title={t("settings.appearance.performance")} help={t("settings.appearance.performanceHelp")}>
-        <Switch checked={p.performanceMode} onCheckedChange={p.setPerformanceMode} label={t("settings.appearance.performance")} hideLabel />
+      <Row
+        title={t("settings.appearance.performance")}
+        help={t("settings.appearance.performanceHelp")}
+      >
+        <Switch
+          checked={p.performanceMode}
+          onCheckedChange={p.setPerformanceMode}
+          label={t("settings.appearance.performance")}
+          hideLabel
+        />
       </Row>
       <Row title={t("settings.appearance.particles")}>
-        <Switch checked={p.particles} onCheckedChange={(v) => p.set("particles", v)} label={t("settings.appearance.particles")} hideLabel disabled={p.performanceMode} />
+        <Switch
+          checked={p.particles}
+          onCheckedChange={(v) => p.set("particles", v)}
+          label={t("settings.appearance.particles")}
+          hideLabel
+          disabled={p.performanceMode}
+        />
       </Row>
       <Row title={t("settings.appearance.sounds")}>
-        <Switch checked={p.sounds} onCheckedChange={(v) => p.set("sounds", v)} label={t("settings.appearance.sounds")} hideLabel />
+        <Switch
+          checked={p.sounds}
+          onCheckedChange={(v) => p.set("sounds", v)}
+          label={t("settings.appearance.sounds")}
+          hideLabel
+        />
       </Row>
       {p.sounds ? (
         <div className="py-4">
@@ -142,7 +179,12 @@ function Downloads() {
         <p className="mt-2 text-[12.5px] text-ash-400">{t("settings.downloads.concurrentHelp")}</p>
       </div>
       <Row title={t("settings.downloads.verify")} help={t("settings.downloads.verifyHelp")}>
-        <Switch checked={p.verifyOnLaunch} onCheckedChange={(v) => p.set("verifyOnLaunch", v)} label={t("settings.downloads.verify")} hideLabel />
+        <Switch
+          checked={p.verifyOnLaunch}
+          onCheckedChange={(v) => p.set("verifyOnLaunch", v)}
+          label={t("settings.downloads.verify")}
+          hideLabel
+        />
       </Row>
     </>
   );
@@ -154,7 +196,10 @@ function Updates() {
   const { data: info } = useQuery({ queryKey: ["app-info"], queryFn: () => api.appInfo() });
   return (
     <>
-      <Row title={t("settings.updates.channel")} help={p.updateChannel === "beta" ? t("settings.updates.betaHelp") : undefined}>
+      <Row
+        title={t("settings.updates.channel")}
+        help={p.updateChannel === "beta" ? t("settings.updates.betaHelp") : undefined}
+      >
         <Segmented
           value={p.updateChannel}
           onValueChange={(v) => p.set("updateChannel", v)}
@@ -166,10 +211,19 @@ function Updates() {
         />
       </Row>
       <Row title={t("settings.updates.autoDownload")}>
-        <Switch checked={p.autoDownloadUpdates} onCheckedChange={(v) => p.set("autoDownloadUpdates", v)} label={t("settings.updates.autoDownload")} hideLabel />
+        <Switch
+          checked={p.autoDownloadUpdates}
+          onCheckedChange={(v) => p.set("autoDownloadUpdates", v)}
+          label={t("settings.updates.autoDownload")}
+          hideLabel
+        />
       </Row>
       <Row title={t("settings.updates.current", { version: info?.version ?? "" })}>
-        <Button variant="secondary" icon={<ArrowsClockwise size={16} />} onClick={() => toast.success(t("settings.updates.upToDate"))}>
+        <Button
+          variant="secondary"
+          icon={<ArrowsClockwise size={16} />}
+          onClick={() => toast.success(t("settings.updates.upToDate"))}
+        >
           {t("settings.updates.check")}
         </Button>
       </Row>
@@ -183,7 +237,12 @@ function Discord() {
   return (
     <>
       <Row title={t("settings.discord.enabled")}>
-        <Switch checked={p.discordEnabled} onCheckedChange={(v) => p.set("discordEnabled", v)} label={t("settings.discord.enabled")} hideLabel />
+        <Switch
+          checked={p.discordEnabled}
+          onCheckedChange={(v) => p.set("discordEnabled", v)}
+          label={t("settings.discord.enabled")}
+          hideLabel
+        />
       </Row>
       <Row title={t("settings.discord.showServer")}>
         <Switch
@@ -237,7 +296,11 @@ function Data() {
         </Button>
       </Row>
       <Row title={t("settings.data.legacy")} help={t("settings.data.legacyHelp")}>
-        <Button variant="secondary" size="sm" onClick={() => useUi.getState().setMigrationOpen(true)}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => useUi.getState().setMigrationOpen(true)}
+        >
           {t("settings.data.import")}
         </Button>
       </Row>
@@ -271,7 +334,10 @@ function About() {
         <Button variant="secondary" onClick={() => void api.openUrl("https://projects.gg/discord")}>
           {t("settings.about.discord")}
         </Button>
-        <Button variant="ghost" onClick={() => void api.openUrl("https://github.com/projects-gg/MinecraftLauncher")}>
+        <Button
+          variant="ghost"
+          onClick={() => void api.openUrl("https://github.com/projects-gg/MinecraftLauncher")}
+        >
           {t("settings.about.source")}
         </Button>
       </div>
@@ -310,7 +376,9 @@ export function SettingsPage() {
   return (
     <div className="flex min-h-0 flex-1 gap-8 px-10 pt-4 pb-6">
       <nav aria-label={t("settings.title")} className="w-56 shrink-0">
-        <h1 className="mb-5 font-display text-[32px] leading-tight font-semibold text-bone-50">{t("settings.title")}</h1>
+        <h1 className="mb-5 font-display text-[32px] leading-tight font-semibold text-bone-50">
+          {t("settings.title")}
+        </h1>
         <ul className="space-y-0.5">
           {sections.map((s) => {
             const Icon = s.icon;
@@ -320,13 +388,21 @@ export function SettingsPage() {
                 <button
                   type="button"
                   aria-current={on ? "page" : undefined}
-                  onClick={() => void navigate({ to: "/settings", search: { section: s.id }, replace: true })}
+                  onClick={() =>
+                    void navigate({ to: "/settings", search: { section: s.id }, replace: true })
+                  }
                   className={cn(
                     "flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left text-[13.5px] font-medium transition-colors",
-                    on ? "bg-white/8 text-bone-50" : "text-ash-300 hover:bg-white/5 hover:text-bone-50",
+                    on
+                      ? "bg-white/8 text-bone-50"
+                      : "text-ash-300 hover:bg-white/5 hover:text-bone-50",
                   )}
                 >
-                  <Icon size={18} weight={on ? "duotone" : "regular"} className={on ? "text-gold-300" : undefined} />
+                  <Icon
+                    size={18}
+                    weight={on ? "duotone" : "regular"}
+                    className={on ? "text-gold-300" : undefined}
+                  />
                   {t(`settings.sections.${s.id}`)}
                 </button>
               </li>
@@ -335,7 +411,9 @@ export function SettingsPage() {
         </ul>
       </nav>
       <section className="glass min-h-0 max-w-[760px] flex-1 overflow-y-auto rounded-[var(--radius-panel)] px-7 py-5">
-        <h2 className="mb-2 font-display text-[20px] font-semibold text-bone-50">{t(`settings.sections.${active}`)}</h2>
+        <h2 className="mb-2 font-display text-[20px] font-semibold text-bone-50">
+          {t(`settings.sections.${active}`)}
+        </h2>
         {body[active]}
       </section>
     </div>

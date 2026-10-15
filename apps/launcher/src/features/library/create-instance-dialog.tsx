@@ -12,7 +12,13 @@ type VersionFilter = "release" | "snapshot" | "old";
 
 const loaderOptions: LoaderKind[] = ["vanilla", "fabric", "quilt", "forge", "neoForge"];
 
-export function CreateInstanceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function CreateInstanceDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -25,17 +31,26 @@ export function CreateInstanceDialog({ open, onOpenChange }: { open: boolean; on
   const [loader, setLoader] = useState<LoaderKind>("fabric");
   const [loaderVersion, setLoaderVersion] = useState<string>("");
 
-  const versionsQuery = useQuery({ queryKey: ["mc-versions"], queryFn: () => api.minecraftVersions(), enabled: open });
+  const versionsQuery = useQuery({
+    queryKey: ["mc-versions"],
+    queryFn: () => api.minecraftVersions(),
+    enabled: open,
+  });
   const filtered = useMemo(
     () =>
       (versionsQuery.data ?? []).filter((v) =>
-        filter === "release" ? v.kind === "release" : filter === "snapshot" ? v.kind === "snapshot" : v.kind === "oldBeta" || v.kind === "oldAlpha",
+        filter === "release"
+          ? v.kind === "release"
+          : filter === "snapshot"
+            ? v.kind === "snapshot"
+            : v.kind === "oldBeta" || v.kind === "oldAlpha",
       ),
     [versionsQuery.data, filter],
   );
 
   useEffect(() => {
-    if (filtered.length && !filtered.some((v) => v.id === mcVersion)) setMcVersion(filtered[0]?.id ?? "");
+    if (filtered.length && !filtered.some((v) => v.id === mcVersion))
+      setMcVersion(filtered[0]?.id ?? "");
   }, [filtered, mcVersion]);
 
   const loaderQuery = useQuery({
@@ -96,7 +111,12 @@ export function CreateInstanceDialog({ open, onOpenChange }: { open: boolean; on
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
               {t("create.cancel")}
             </Button>
-            <Button variant="primary" icon={<Sparkle size={16} weight="fill" />} onClick={submit} disabled={create.isPending || !mcVersion}>
+            <Button
+              variant="primary"
+              icon={<Sparkle size={16} weight="fill" />}
+              onClick={submit}
+              disabled={create.isPending || !mcVersion}
+            >
               {t("create.submit")}
             </Button>
           </>
@@ -136,20 +156,24 @@ export function CreateInstanceDialog({ open, onOpenChange }: { open: boolean; on
           <Field label={t("create.icon")}>
             <div role="radiogroup" aria-label={t("create.icon")} className="flex flex-wrap gap-2">
               {(Object.keys(instanceIcons) as IconKey[]).map((key) => (
-                <button
+                <label
                   key={key}
-                  type="button"
-                  role="radio"
-                  aria-checked={icon === key}
-                  aria-label={key}
-                  onClick={() => setIcon(key)}
                   className={cn(
-                    "rounded-md p-1 transition-[background-color,box-shadow] hover:bg-white/8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300",
+                    "cursor-pointer rounded-md p-1 transition-[background-color,box-shadow] hover:bg-white/8 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-gold-300",
                     icon === key && "bg-white/8 ring-2 ring-gold-400",
                   )}
                 >
+                  <input
+                    type="radio"
+                    name="instance-icon"
+                    value={key}
+                    checked={icon === key}
+                    onChange={() => setIcon(key)}
+                    className="sr-only"
+                  />
                   <InstanceIcon icon={key} size={40} />
-                </button>
+                  <span className="sr-only">{t(`create.iconNames.${key}`)}</span>
+                </label>
               ))}
             </div>
           </Field>
@@ -206,7 +230,9 @@ export function CreateInstanceDialog({ open, onOpenChange }: { open: boolean; on
       ) : (
         <div className="flex flex-col items-center justify-center rounded-[var(--radius-panel)] border-2 border-dashed border-white/12 px-6 py-12 text-center">
           <FileArrowUp size={40} weight="duotone" className="text-gold-400" />
-          <p className="mt-3 font-display text-[16px] font-semibold text-bone-50">{t("create.drop")}</p>
+          <p className="mt-3 font-display text-[16px] font-semibold text-bone-50">
+            {t("create.drop")}
+          </p>
           <p className="mt-1 text-[13px] text-ash-400">{t("create.dropHint")}</p>
           <Button className="mt-5" variant="secondary">
             {t("create.chooseFile")}

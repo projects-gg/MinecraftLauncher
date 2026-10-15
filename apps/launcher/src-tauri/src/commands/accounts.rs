@@ -117,7 +117,9 @@ pub async fn account_remove(state: State<'_, AppState>, id: String) -> CmdResult
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum LegacyAccountImport {
-    Imported { account: AccountView },
+    Imported {
+        account: AccountView,
+    },
     NotFound,
     Unreadable,
     #[cfg_attr(windows, allow(dead_code))]

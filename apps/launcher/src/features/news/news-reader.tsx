@@ -3,8 +3,8 @@ import { Button, Chip, IconButton } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { Dialog } from "radix-ui";
-import Markdown from "react-markdown";
 import { useTranslation } from "react-i18next";
+import Markdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { api } from "@/lib/api";
@@ -14,7 +14,13 @@ import { formatRelative } from "@/lib/format";
  * Full news article over the current page. Markdown is sanitized; links open in the
  * system browser, never inside the launcher.
  */
-export function NewsReader({ newsId, onClose }: { newsId: string | undefined; onClose: () => void }) {
+export function NewsReader({
+  newsId,
+  onClose,
+}: {
+  newsId: string | undefined;
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
   const { data } = useQuery({ queryKey: ["home-content"], queryFn: () => api.homeContent() });
   const item = data?.news.find((n) => n.id === newsId);
@@ -44,7 +50,12 @@ export function NewsReader({ newsId, onClose }: { newsId: string | undefined; on
               >
                 {item.coverUrl ? (
                   <div className="relative h-[280px] shrink-0 overflow-hidden">
-                    <img src={item.coverUrl} alt="" className="size-full object-cover" draggable={false} />
+                    <img
+                      src={item.coverUrl}
+                      alt=""
+                      className="size-full object-cover"
+                      draggable={false}
+                    />
                     <div className="absolute inset-0 bg-[linear-gradient(to_top,var(--color-obsidian-900),transparent_65%)]" />
                   </div>
                 ) : null}
@@ -60,7 +71,9 @@ export function NewsReader({ newsId, onClose }: { newsId: string | undefined; on
                 <div className="-mt-16 overflow-y-auto px-10 pb-10">
                   <div className="relative flex items-center gap-2.5">
                     <Chip tone="gold">{t(`categories.${item.category}`)}</Chip>
-                    <span className="text-[12.5px] text-ash-300">{formatRelative(item.publishedAt)}</span>
+                    <span className="text-[12.5px] text-ash-300">
+                      {formatRelative(item.publishedAt)}
+                    </span>
                   </div>
                   <Dialog.Title className="relative mt-3 font-display text-[34px] leading-[1.05] font-semibold text-bone-50 [text-wrap:balance]">
                     {item.title}

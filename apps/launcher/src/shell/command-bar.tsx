@@ -1,5 +1,5 @@
 import { CaretUpDown, Check, FolderOpen, Plus } from "@phosphor-icons/react";
-import { cn, PlayButton, type PlayState, PlayerHead, Progress, Switch, toast } from "@pl/ui";
+import { cn, PlayButton, PlayerHead, type PlayState, Progress, Switch, toast } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { DropdownMenu } from "radix-ui";
@@ -34,7 +34,11 @@ function InstancePicker({
           aria-label={t("instances.pickerLabel")}
           className="group flex h-[60px] w-[290px] shrink-0 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] px-2.5 text-left transition-colors duration-150 hover:bg-white/6 data-[state=open]:bg-white/8"
         >
-          {selected ? <InstanceIcon icon={selected.icon} size={44} /> : <span className="size-11" />}
+          {selected ? (
+            <InstanceIcon icon={selected.icon} size={44} />
+          ) : (
+            <span className="size-11" />
+          )}
           <span className="min-w-0 flex-1">
             <span className="block truncate font-display text-[16px] font-semibold text-bone-50">
               {selected?.name ?? t("common.loading")}
@@ -43,7 +47,10 @@ function InstancePicker({
               {selected ? loaderLine(selected, t(`loaders.${selected.loader}`)) : ""}
             </span>
           </span>
-          <CaretUpDown size={16} className="shrink-0 text-ash-400 transition-colors group-hover:text-bone-100" />
+          <CaretUpDown
+            size={16}
+            className="shrink-0 text-ash-400 transition-colors group-hover:text-bone-100"
+          />
         </button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
@@ -61,7 +68,9 @@ function InstancePicker({
             >
               <InstanceIcon icon={i.icon} size={36} />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13.5px] font-semibold text-bone-50">{i.name}</span>
+                <span className="block truncate text-[13.5px] font-semibold text-bone-50">
+                  {i.name}
+                </span>
                 <span className="block truncate text-[12px] text-ash-400">
                   {loaderLine(i, t(`loaders.${i.loader}`))}
                   {i.managed ? ` / ${t("instances.managed")}` : ""}
@@ -99,18 +108,29 @@ function StatusArea({ selected }: { selected: InstanceSummary | undefined }) {
     return (
       <div className="min-w-0 flex-1" aria-live="polite">
         <div className="flex items-baseline justify-between gap-4 text-[12.5px]">
-          <span className="truncate font-medium text-bone-100">{t(`play.stages.${phase.stage}`)}</span>
+          <span className="truncate font-medium text-bone-100">
+            {t(`play.stages.${phase.stage}`)}
+          </span>
           <span className="flex shrink-0 gap-4 text-ash-400 tabular-nums">
             {phase.totalFiles > 0 ? (
               <span>
-                {t("play.files", { done: formatCount(phase.doneFiles), total: formatCount(phase.totalFiles) })}
+                {t("play.files", {
+                  done: formatCount(phase.doneFiles),
+                  total: formatCount(phase.totalFiles),
+                })}
               </span>
             ) : null}
             {phase.bytesPerSec > 0 ? <span>{formatSpeed(phase.bytesPerSec)}</span> : null}
-            {phase.etaSecs ? <span>{t("play.eta", { time: formatDuration(phase.etaSecs) })}</span> : null}
+            {phase.etaSecs ? (
+              <span>{t("play.eta", { time: formatDuration(phase.etaSecs) })}</span>
+            ) : null}
           </span>
         </div>
-        <Progress value={phase.percent} label={t(`play.stages.${phase.stage}`)} className="mt-2.5" />
+        <Progress
+          value={phase.percent}
+          label={t(`play.stages.${phase.stage}`)}
+          className="mt-2.5"
+        />
       </div>
     );
   }
@@ -126,7 +146,9 @@ function StatusArea({ selected }: { selected: InstanceSummary | undefined }) {
                 : t("play.neverPlayed")}
             </span>
             {selected.playTimeSecs > 0 ? (
-              <span className="block truncate">{t("play.playTime", { time: formatDuration(selected.playTimeSecs) })}</span>
+              <span className="block truncate">
+                {t("play.playTime", { time: formatDuration(selected.playTimeSecs) })}
+              </span>
             ) : null}
           </>
         ) : null}
@@ -165,7 +187,10 @@ function AccountChip() {
 /** Bottom command bar: what to play, as whom, progress, and the OYNA button. */
 export function CommandBar() {
   const { t } = useTranslation();
-  const { data: instances = [] } = useQuery({ queryKey: ["instances"], queryFn: () => api.instances() });
+  const { data: instances = [] } = useQuery({
+    queryKey: ["instances"],
+    queryFn: () => api.instances(),
+  });
   const selectedId = usePrefs((s) => s.selectedInstanceId);
   const selectInstance = usePrefs((s) => s.selectInstance);
   const { phase, play, cancel, reset } = useLaunch();

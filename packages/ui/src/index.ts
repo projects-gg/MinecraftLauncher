@@ -1,7 +1,15 @@
 // Shared design system for Projects Launcher and Projects Studio (rules: docs/design.md).
 import "./fonts";
 
-export { Chip, EmptyState, Kbd, PixelBrackets, PlayerHead, Progress, Skeleton } from "./components/bits";
+export {
+  Chip,
+  EmptyState,
+  Kbd,
+  PixelBrackets,
+  PlayerHead,
+  Progress,
+  Skeleton,
+} from "./components/bits";
 export { Button, type ButtonProps, IconButton, type IconButtonProps } from "./components/button";
 export { Countdown } from "./components/countdown";
 export { Dialog } from "./components/dialog";

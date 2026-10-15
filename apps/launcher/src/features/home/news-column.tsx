@@ -88,7 +88,9 @@ export function NewsColumn({ content, loading }: { content?: HomeContent; loadin
       aria-label={t("home.newsTitle")}
     >
       <header className="flex items-center justify-between px-4 pt-4 pb-2">
-        <h2 className="font-display text-[18px] font-semibold text-bone-50">{t("home.newsTitle")}</h2>
+        <h2 className="font-display text-[18px] font-semibold text-bone-50">
+          {t("home.newsTitle")}
+        </h2>
         <Link
           to="/news"
           className="flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium text-ash-300 transition-colors hover:text-gold-300"
@@ -121,7 +123,9 @@ export function NewsColumn({ content, loading }: { content?: HomeContent; loadin
         {notes ? (
           <section className={cn("mt-2 border-t border-white/7 px-2 pt-4 pb-3")}>
             <div className="flex items-baseline justify-between">
-              <h3 className="font-display text-[15px] font-semibold text-bone-50">{t("home.patchNotes")}</h3>
+              <h3 className="font-display text-[15px] font-semibold text-bone-50">
+                {t("home.patchNotes")}
+              </h3>
               <span className="text-[12px] text-gold-300">
                 {t("home.patchVersion", { pack: notes.packName, version: notes.version })}
               </span>

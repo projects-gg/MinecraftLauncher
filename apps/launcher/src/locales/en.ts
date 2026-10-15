@@ -73,7 +73,13 @@ export const en: DeepPartial<Strings> = {
     needsInstall: "Not downloaded",
     needsUpdate: "Update available",
   },
-  loaders: { vanilla: "Vanilla", fabric: "Fabric", quilt: "Quilt", forge: "Forge", neoForge: "NeoForge" },
+  loaders: {
+    vanilla: "Vanilla",
+    fabric: "Fabric",
+    quilt: "Quilt",
+    forge: "Forge",
+    neoForge: "NeoForge",
+  },
   accounts: {
     microsoft: "Microsoft account",
     offline: "Offline account",

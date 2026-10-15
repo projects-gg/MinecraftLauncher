@@ -8,7 +8,10 @@ export function ScreenshotsTab({ shots }: { shots: ScreenshotEntry[] }) {
   return (
     <ul className="grid grid-cols-[repeat(auto-fill,minmax(260px,1fr))] gap-3">
       {shots.map((s) => (
-        <li key={s.fileName} className="group relative overflow-hidden rounded-[var(--radius-panel)] bg-obsidian-800">
+        <li
+          key={s.fileName}
+          className="group relative overflow-hidden rounded-[var(--radius-panel)] bg-obsidian-800"
+        >
           <img
             src={s.url}
             alt={s.fileName}

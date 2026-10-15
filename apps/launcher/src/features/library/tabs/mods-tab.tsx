@@ -6,7 +6,15 @@ import { useTranslation } from "react-i18next";
 import { api, type InstanceDetail, type ModEntry } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 
-function ModToggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) {
+function ModToggle({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
   return (
     <button
       type="button"
@@ -40,7 +48,11 @@ function ModRow({ mod, onToggle }: { mod: ModEntry; onToggle: (enabled: boolean)
     >
       <span className="chamfer flex size-10 shrink-0 items-center justify-center bg-obsidian-800 [--cut:6px]">
         {mod.iconUrl ? (
-          <img src={mod.iconUrl} alt="" className="size-full object-cover [image-rendering:pixelated]" />
+          <img
+            src={mod.iconUrl}
+            alt=""
+            className="size-full object-cover [image-rendering:pixelated]"
+          />
         ) : (
           <Package size={20} weight="duotone" className="text-gold-400/80" />
         )}
@@ -56,7 +68,11 @@ function ModRow({ mod, onToggle }: { mod: ModEntry; onToggle: (enabled: boolean)
       <span className="hidden w-20 shrink-0 text-right text-[12px] text-ash-500 tabular-nums lg:block">
         {formatBytes(mod.sizeBytes)}
       </span>
-      <ModToggle checked={mod.enabled} onChange={onToggle} label={t("instance.mods.toggle", { name: mod.name })} />
+      <ModToggle
+        checked={mod.enabled}
+        onChange={onToggle}
+        label={t("instance.mods.toggle", { name: mod.name })}
+      />
     </li>
   );
 }
@@ -72,7 +88,10 @@ export function ModsTab({ instance }: { instance: InstanceDetail }) {
     onMutate: async ({ mod, enabled }) => {
       queryClient.setQueryData<InstanceDetail>(["instance", instance.id], (prev) =>
         prev
-          ? { ...prev, mods: prev.mods.map((m) => (m.fileName === mod.fileName ? { ...m, enabled } : m)) }
+          ? {
+              ...prev,
+              mods: prev.mods.map((m) => (m.fileName === mod.fileName ? { ...m, enabled } : m)),
+            }
           : prev,
       );
     },
@@ -92,12 +111,21 @@ export function ModsTab({ instance }: { instance: InstanceDetail }) {
   return (
     <div className="max-w-[980px]">
       <div className="mb-4 flex items-center gap-2.5">
-        <SearchInput value={query} onChange={setQuery} placeholder={t("instance.mods.search")} label={t("instance.mods.search")} className="w-72" />
+        <SearchInput
+          value={query}
+          onChange={setQuery}
+          placeholder={t("instance.mods.search")}
+          label={t("instance.mods.search")}
+          className="w-72"
+        />
         <span className="flex-1" />
         <Button variant="ghost" icon={<FilePlus size={17} />}>
           {t("instance.mods.addFile")}
         </Button>
-        <Button variant="secondary" icon={<MagnifyingGlassPlus size={17} className="text-gold-300" />}>
+        <Button
+          variant="secondary"
+          icon={<MagnifyingGlassPlus size={17} className="text-gold-300" />}
+        >
           {t("instance.mods.browse")}
         </Button>
       </div>
@@ -106,7 +134,11 @@ export function ModsTab({ instance }: { instance: InstanceDetail }) {
       ) : (
         <ul className="space-y-0.5">
           {mods.map((mod) => (
-            <ModRow key={mod.fileName} mod={mod} onToggle={(enabled) => toggle.mutate({ mod, enabled })} />
+            <ModRow
+              key={mod.fileName}
+              mod={mod}
+              onToggle={(enabled) => toggle.mutate({ mod, enabled })}
+            />
           ))}
         </ul>
       )}

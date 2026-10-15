@@ -12,11 +12,26 @@ const OFFLINE_NAME = /^[A-Za-z0-9_]{3,16}$/;
 const visibleSteps: LoginStep[] = ["waitingForBrowser", "xboxLive", "minecraft", "profile"];
 
 function stepIndex(step: LoginStep | null): number {
-  const order: LoginStep[] = ["openingBrowser", "waitingForBrowser", "microsoft", "xboxLive", "xsts", "minecraft", "profile", "done"];
+  const order: LoginStep[] = [
+    "openingBrowser",
+    "waitingForBrowser",
+    "microsoft",
+    "xboxLive",
+    "xsts",
+    "minecraft",
+    "profile",
+    "done",
+  ];
   return step ? order.indexOf(step) : -1;
 }
 
-function MicrosoftLoginDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+function MicrosoftLoginDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<LoginStep | null>(null);
@@ -50,7 +65,9 @@ function MicrosoftLoginDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const current = stepIndex(step);
   // The first visible step that is not finished yet is the one in progress.
   const activeStep =
-    step === null || step === "done" ? null : (visibleSteps.find((s) => stepIndex(s) >= current) ?? null);
+    step === null || step === "done"
+      ? null
+      : (visibleSteps.find((s) => stepIndex(s) >= current) ?? null);
 
   return (
     <Dialog
@@ -88,16 +105,29 @@ function MicrosoftLoginDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               <span
                 className={cn(
                   "flex size-7 items-center justify-center rounded-full ring-1 transition-colors duration-300",
-                  done ? "bg-jade-400/15 text-jade-400 ring-jade-400/40" : active ? "text-gold-300 ring-gold-400/60" : "text-ash-500 ring-white/10",
+                  done
+                    ? "bg-jade-400/15 text-jade-400 ring-jade-400/40"
+                    : active
+                      ? "text-gold-300 ring-gold-400/60"
+                      : "text-ash-500 ring-white/10",
                 )}
               >
                 <AnimatePresence mode="wait" initial={false}>
                   {done ? (
-                    <motion.span key="done" initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+                    <motion.span
+                      key="done"
+                      initial={{ scale: 0.4, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                    >
                       <Check size={14} weight="bold" />
                     </motion.span>
                   ) : active ? (
-                    <motion.span key="spin" className="flex animate-spin" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                    <motion.span
+                      key="spin"
+                      className="flex animate-spin"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                    >
                       <CircleNotch size={15} weight="bold" />
                     </motion.span>
                   ) : (
@@ -105,7 +135,12 @@ function MicrosoftLoginDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                   )}
                 </AnimatePresence>
               </span>
-              <span className={cn("text-[14px]", done ? "text-ash-300" : active ? "font-medium text-bone-50" : "text-ash-500")}>
+              <span
+                className={cn(
+                  "text-[14px]",
+                  done ? "text-ash-300" : active ? "font-medium text-bone-50" : "text-ash-500",
+                )}
+              >
                 {t(`settings.accounts.login.steps.${s}`)}
               </span>
             </li>
@@ -119,7 +154,10 @@ function MicrosoftLoginDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 export function AccountsSection() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { data: accounts = [] } = useQuery({ queryKey: ["accounts"], queryFn: () => api.accounts() });
+  const { data: accounts = [] } = useQuery({
+    queryKey: ["accounts"],
+    queryFn: () => api.accounts(),
+  });
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
@@ -145,14 +183,24 @@ export function AccountsSection() {
 
   return (
     <div className="pt-2">
-      {accounts.length === 0 ? <p className="py-3 text-ash-400">{t("settings.accounts.empty")}</p> : null}
+      {accounts.length === 0 ? (
+        <p className="py-3 text-ash-400">{t("settings.accounts.empty")}</p>
+      ) : null}
       <ul className="space-y-1.5">
         {accounts.map((a) => (
-          <li key={a.id} className={cn("flex items-center gap-3.5 rounded-[var(--radius-panel)] px-3 py-2.5", a.active ? "bg-white/6 ring-1 ring-gold-400/30" : "hover:bg-white/4")}>
+          <li
+            key={a.id}
+            className={cn(
+              "flex items-center gap-3.5 rounded-[var(--radius-panel)] px-3 py-2.5",
+              a.active ? "bg-white/6 ring-1 ring-gold-400/30" : "hover:bg-white/4",
+            )}
+          >
             <PlayerHead name={a.username} src={a.headUrl} size={40} />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="truncate text-[14.5px] font-semibold text-bone-50">{a.username}</span>
+                <span className="truncate text-[14.5px] font-semibold text-bone-50">
+                  {a.username}
+                </span>
                 {a.active ? <Chip tone="gold">{t("settings.accounts.active")}</Chip> : null}
               </div>
               <p className="text-[12.5px] text-ash-400">
@@ -187,9 +235,18 @@ export function AccountsSection() {
 
       <div className="mt-6 grid grid-cols-2 gap-5 border-t border-white/7 pt-5">
         <div>
-          <p className="text-[14px] font-medium text-bone-50">{t("settings.accounts.addMicrosoft")}</p>
-          <p className="mt-1 text-[12.5px] text-ash-400">{t("settings.accounts.addMicrosoftHelp")}</p>
-          <Button className="mt-3" variant="secondary" icon={<MicrosoftMark size={15} />} onClick={() => setLoginOpen(true)}>
+          <p className="text-[14px] font-medium text-bone-50">
+            {t("settings.accounts.addMicrosoft")}
+          </p>
+          <p className="mt-1 text-[12.5px] text-ash-400">
+            {t("settings.accounts.addMicrosoftHelp")}
+          </p>
+          <Button
+            className="mt-3"
+            variant="secondary"
+            icon={<MicrosoftMark size={15} />}
+            onClick={() => setLoginOpen(true)}
+          >
             {t("settings.accounts.addMicrosoft")}
           </Button>
         </div>
@@ -199,7 +256,12 @@ export function AccountsSection() {
             submitOffline();
           }}
         >
-          <Field label={t("settings.accounts.offlineName")} help={t("settings.accounts.offlineHelp")} error={nameError} htmlFor="offline-name">
+          <Field
+            label={t("settings.accounts.offlineName")}
+            help={t("settings.accounts.offlineHelp")}
+            error={nameError}
+            htmlFor="offline-name"
+          >
             <div className="flex gap-2">
               <Input
                 id="offline-name"
@@ -213,7 +275,12 @@ export function AccountsSection() {
                   setNameError(null);
                 }}
               />
-              <Button type="submit" variant="secondary" icon={<UserPlus size={16} />} disabled={addOffline.isPending}>
+              <Button
+                type="submit"
+                variant="secondary"
+                icon={<UserPlus size={16} />}
+                disabled={addOffline.isPending}
+              >
                 {t("settings.accounts.add")}
               </Button>
             </div>
