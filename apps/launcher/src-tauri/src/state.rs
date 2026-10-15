@@ -39,7 +39,6 @@ pub struct RunningGame {
 pub struct AppState {
     pub root: PathBuf,
     pub http: Http,
-    pub downloader: Downloader,
     pub auth: AuthManager,
     pub content: ContentClient,
     pub presence: PresenceManager,
@@ -48,6 +47,8 @@ pub struct AppState {
     pub instances: InstanceStore,
     pub running: Mutex<Option<RunningGame>>,
     pub launch_cancel: Mutex<Option<CancellationToken>>,
+    /// Downloaded, signature-verified launcher update waiting for "restart to update".
+    pub pending_update: Mutex<Option<(tauri_plugin_updater::Update, Vec<u8>)>>,
     /// True when the OS keychain is unavailable and secrets only live for this session.
     pub ephemeral_secrets: bool,
     pub login_cancel: Mutex<Option<CancellationToken>>,
@@ -136,7 +137,6 @@ impl AppState {
         Ok(Self {
             root,
             http,
-            downloader,
             auth,
             content,
             presence,
@@ -145,6 +145,7 @@ impl AppState {
             instances,
             running: Mutex::new(None),
             launch_cancel: Mutex::new(None),
+            pending_update: Mutex::new(None),
             ephemeral_secrets,
             login_cancel: Mutex::new(None),
             content_refreshing: AtomicBool::new(false),

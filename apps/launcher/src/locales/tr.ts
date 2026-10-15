@@ -151,6 +151,15 @@ export const tr = {
     submit: "Kurulum oluştur",
     cancel: "Vazgeç",
   },
+  update: {
+    ready: "Güncelleme hazır, yeniden başlat",
+    mandatoryTitle: "Yeni sürüm gerekli",
+    mandatoryBody: "Devam etmek için launcher'ın {{version}} sürümüne güncellenmesi gerekiyor. Ayarların ve kurulumların korunur.",
+    downloading: "Güncelleme indiriliyor",
+    installNow: "Şimdi güncelle",
+    whatsNew: "Yenilikler: {{version}}",
+    great: "Harika",
+  },
   migrate: {
     title: "Eski launcher'dan içe aktar",
     description: "Eski Projects Launcher'daki verilerin bulundu. Seçtiklerin yeni launcher'a taşınır; eski launcher'a dokunulmaz.",

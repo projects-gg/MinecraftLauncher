@@ -120,6 +120,7 @@ pub enum LegacyAccountImport {
     Imported { account: AccountView },
     NotFound,
     Unreadable,
+    #[cfg_attr(windows, allow(dead_code))]
     Unsupported,
 }
 

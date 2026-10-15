@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { formatCount } from "@/lib/format";
 import { detectOs, isTauri } from "@/lib/platform";
+import { UpdatePill } from "@/features/updates/update-ui";
 
 function ServerPill() {
   const { t } = useTranslation();
@@ -92,7 +93,10 @@ export function TitleBar() {
       <div data-tauri-drag-region className="flex items-center gap-3">
         <ServerPill />
       </div>
-      {mac ? null : <WindowControls />}
+      <div className="flex items-center gap-3">
+        <UpdatePill />
+        {mac ? null : <WindowControls />}
+      </div>
     </header>
   );
 }

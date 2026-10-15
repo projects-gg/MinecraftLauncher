@@ -30,6 +30,7 @@ pub fn run() {
                     )
                     .build(),
             )
+            .plugin(tauri_plugin_updater::Builder::new().build())
             .plugin(tauri_plugin_autostart::init(
                 tauri_plugin_autostart::MacosLauncher::LaunchAgent,
                 Some(vec!["--minimized"]),
@@ -105,6 +106,10 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::afk::afk_any_active,
             commands::migrate::legacy_scan,
             commands::migrate::legacy_import,
+            commands::updates::update_check,
+            commands::updates::update_download,
+            commands::updates::update_apply,
+            commands::updates::app_restart,
         ])
 }
 

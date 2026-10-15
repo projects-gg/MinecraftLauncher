@@ -9,3 +9,4 @@ pub mod instances;
 pub mod launch;
 pub mod migrate;
 pub mod server;
+pub mod updates;

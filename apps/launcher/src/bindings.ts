@@ -62,6 +62,18 @@ export const commands = {
 	afkAnyActive: () => __TAURI_INVOKE<boolean>("afk_any_active"),
 	legacyScan: () => typedError<LegacyScan, CmdError>(__TAURI_INVOKE("legacy_scan")),
 	legacyImport: (request: LegacyImportRequest) => typedError<LegacyImportReport, CmdError>(__TAURI_INVOKE("legacy_import", { request })),
+	updateCheck: (channel: string) => typedError<UpdateStatus, CmdError>(__TAURI_INVOKE("update_check", { channel })),
+	/**
+	 *  Download the update of `channel` in the background (signature verified by the updater) and
+	 *  keep it ready; `update_apply` installs it. Progress streams over `on_progress`.
+	 */
+	updateDownload: (channel: string, onProgress: Channel<UpdateProgress>) => typedError<boolean, CmdError>(__TAURI_INVOKE("update_download", { channel, onProgress })),
+	/**
+	 *  Install the downloaded update. On Windows the installer takes over and the app exits; on
+	 *  macOS/Linux the app restarts itself.
+	 */
+	updateApply: () => typedError<null, CmdError>(__TAURI_INVOKE("update_apply")),
+	appRestart: () => __TAURI_INVOKE<void>("app_restart"),
 };
 
 /* Types */
@@ -112,6 +124,12 @@ export type AppInfo = {
 	os: string,
 	arch: string,
 	debug: boolean,
+	/**
+	 *  False when the OS keychain is unavailable (Linux without Secret Service): account
+	 *  sign-ins then last only for this session.
+	 */
+	secureStorage: boolean,
+	dataDir: string,
 };
 
 export type BannerView = {
@@ -453,6 +471,20 @@ export type SessionStats = {
 	hp: number | null,
 	food: number | null,
 	players: number | null,
+};
+
+export type UpdateProgress = {
+	downloaded: number,
+	total: number | null,
+	done: boolean,
+};
+
+export type UpdateStatus = {
+	/**  "upToDate" | "available" | "mandatory" | "heldBack" | "unavailable" */
+	state: string,
+	current: string,
+	version: string | null,
+	notes: string | null,
 };
 
 export type WorldView = {

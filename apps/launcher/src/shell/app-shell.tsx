@@ -6,6 +6,7 @@ import heroFallback from "@/assets/art/hero-dragon-1.webp";
 import { CrashDialog } from "@/features/crash/crash-dialog";
 import { MigrationDialog } from "@/features/migrate/migration-dialog";
 import { NewsReader } from "@/features/news/news-reader";
+import { MandatoryUpdate, useUpdateChecks, WhatsNew } from "@/features/updates/update-ui";
 import { api } from "@/lib/api";
 import { isTauri } from "@/lib/platform";
 import { usePrefs } from "@/stores/prefs";
@@ -27,6 +28,7 @@ export function AppShell() {
   const legacyOffered = usePrefs((s) => s.legacyOffered);
   const setPref = usePrefs((s) => s.set);
   usePresenceSync();
+  useUpdateChecks();
 
   // First start: offer the v1 import once if old data exists.
   useEffect(() => {
@@ -61,6 +63,8 @@ export function AppShell() {
         <CommandBar />
       </div>
       <CrashDialog />
+      <WhatsNew />
+      <MandatoryUpdate />
       <MigrationDialog open={migrationOpen} onOpenChange={setMigrationOpen} />
       <NewsReader
         newsId={search.news}
