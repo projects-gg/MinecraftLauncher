@@ -1,0 +1,121 @@
+{
+  "Id": "22222222222222222222222222222222",
+  "Nickname": "Yanitci",
+  "ServerHost": "",
+  "ServerPort": 0,
+  "AutoStart": false,
+  "MinecraftVersion": "26.3",
+  "AllowResourcePacks": false,
+  "AntiAfk": {
+    "Enabled": true,
+    "DelayMin": 60.0,
+    "DelayMax": 90.0,
+    "Command": "",
+    "UseSneak": true,
+    "UseTerrainHandling": false,
+    "WalkRange": 5,
+    "WalkRetries": 20
+  },
+  "AutoRelog": {
+    "Enabled": true,
+    "DelayMin": 5.0,
+    "DelayMax": 10.0,
+    "Retries": -1,
+    "IgnoreKickMessage": true,
+    "KickMessages": [
+      "Connection has been lost",
+      "Server is restarting",
+      "Server is full",
+      "Too Many people"
+    ]
+  },
+  "AutoEat": {
+    "Enabled": false,
+    "Threshold": 6
+  },
+  "AutoRespond": {
+    "Enabled": true,
+    "MatchColors": true,
+    "SoundEnabled": false,
+    "Matches": [
+      {
+        "Pattern": "^\\[Özel\\] (\\w+) -> sen: (.*)$",
+        "IsRegex": true,
+        "Action": "",
+        "PrivateAction": "send /msg $u Şu an AFK'yım.",
+        "OtherAction": "",
+        "OwnersOnly": false,
+        "CooldownSeconds": 5
+      },
+      {
+        "Pattern": "  !gel  ",
+        "IsRegex": false,
+        "Action": "  send /tpa Hazar  ",
+        "PrivateAction": "",
+        "OtherAction": "",
+        "OwnersOnly": true,
+        "CooldownSeconds": -10
+      },
+      {
+        "Pattern": "   ",
+        "IsRegex": false,
+        "Action": "send boş desen",
+        "PrivateAction": "",
+        "OtherAction": "",
+        "OwnersOnly": false,
+        "CooldownSeconds": 0
+      },
+      {
+        "Pattern": "eylemsiz",
+        "IsRegex": false,
+        "Action": " ",
+        "PrivateAction": "",
+        "OwnersOnly": false,
+        "CooldownSeconds": 0
+      },
+      {
+        "Pattern": "duyuru \"önemli\"",
+        "IsRegex": false,
+        "Action": "",
+        "PrivateAction": "",
+        "OtherAction": "log Duyuru görüldü",
+        "OwnersOnly": false,
+        "CooldownSeconds": 0
+      },
+      {
+        "Pattern": "(?i)satıyorum\\s+\\d+",
+        "IsRegex": true,
+        "Action": "script cevap.txt",
+        "PrivateAction": "send /r ilgilenmiyorum",
+        "OtherAction": "log ilan",
+        "OwnersOnly": true,
+        "CooldownSeconds": 120
+      }
+    ]
+  },
+  "ChatLog": {
+    "Enabled": false,
+    "AddDateTime": true,
+    "ShowDate": false,
+    "Filter": "messages"
+  },
+  "Alerts": {
+    "Enabled": false,
+    "BeepEnabled": false,
+    "TriggerByWords": true,
+    "LogToFile": true,
+    "Matches": [],
+    "Excludes": []
+  },
+  "Scheduler": {
+    "Enabled": false,
+    "Tasks": []
+  },
+  "LoginCommands": {
+    "Enabled": false,
+    "OnlyFirstLogin": false,
+    "DelaySeconds": 2.0,
+    "Commands": []
+  },
+  "EffectiveHost": "play.projects.gg"
+}

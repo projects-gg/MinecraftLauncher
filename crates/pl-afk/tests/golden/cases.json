@@ -1,0 +1,12 @@
+[
+  { "name": "defaults", "launcherNickname": "Hazar" },
+  { "name": "everything_enabled", "launcherNickname": "Hazar" },
+  { "name": "autorespond_regex_owners", "launcherNickname": "  Ömer_K  " },
+  { "name": "scheduler_tasks", "launcherNickname": "Hazar" },
+  { "name": "login_first_only", "launcherNickname": "Hazar" },
+  { "name": "login_every_login_rounding", "launcherNickname": "Hazar" },
+  { "name": "custom_host_port", "launcherNickname": "Hazar" },
+  { "name": "auto_version", "launcherNickname": null },
+  { "name": "unknown_version_no_owner", "launcherNickname": "   " },
+  { "name": "turkish_quotes", "launcherNickname": "Çağrı" }
+]

@@ -1,0 +1,22 @@
+{
+  "name": "projects-launcher-workspace",
+  "private": true,
+  "packageManager": "pnpm@10.34.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @pl/launcher tauri dev",
+    "dev:web": "pnpm --filter @pl/launcher dev",
+    "dev:studio": "pnpm --filter @pl/studio tauri dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "biome check .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "typescript": "7.0.2"
+  }
+}

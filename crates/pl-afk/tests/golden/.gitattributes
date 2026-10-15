@@ -1,0 +1,3 @@
+# Golden outputs of the legacy C# AfkConfigWriter (CRLF, UTF-8 without BOM).
+# Byte-exact comparisons: never let git normalize line endings here.
+* -text

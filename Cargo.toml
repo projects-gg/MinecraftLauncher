@@ -1,0 +1,106 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/launcher/src-tauri", "apps/studio/src-tauri"]
+
+[workspace.package]
+version = "2.0.0"
+edition = "2024"
+rust-version = "1.88"
+license = "GPL-3.0-only"
+authors = ["Projects.gg"]
+repository = "https://github.com/projects-gg/MinecraftLauncher"
+homepage = "https://projects.gg"
+
+[workspace.dependencies]
+# Internal crates
+pl-net = { path = "crates/pl-net" }
+pl-mc = { path = "crates/pl-mc" }
+pl-auth = { path = "crates/pl-auth" }
+pl-content = { path = "crates/pl-content" }
+pl-afk = { path = "crates/pl-afk" }
+pl-discord = { path = "crates/pl-discord" }
+
+# Async runtime
+tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "fs", "process", "io-util", "sync", "time", "net"] }
+tokio-util = { version = "0.7", features = ["io", "rt"] }
+futures = "0.3"
+bytes = "1"
+
+# HTTP
+reqwest = { version = "0.13", features = ["json", "stream", "gzip", "brotli"] }
+url = { version = "2.5", features = ["serde"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+quick-xml = "0.42"
+fastnbt = "2.6"
+
+# Errors and logging
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+tracing-appender = "0.2"
+
+# Hashing and crypto
+sha1 = "0.11"
+sha2 = "0.11"
+md-5 = "0.11"
+hex = "0.4"
+base64 = "0.23"
+ed25519-dalek = { version = "3", features = ["rand_core"] }
+rand = "0.10"
+
+# Archives
+zip = { version = "9", default-features = false, features = ["deflate"] }
+
+# Utilities
+uuid = { version = "1.28", features = ["v3", "v4", "serde"] }
+semver = { version = "1", features = ["serde"] }
+jiff = { version = "0.2", features = ["serde"] }
+regex = "1"
+walkdir = "2"
+tempfile = "3"
+dirs = "7"
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+keyring = "4"
+parking_lot = "0.12"
+dashmap = "6"
+which = "8"
+os_info = "3"
+interprocess = { version = "2.4", features = ["tokio"] }
+
+# Tauri
+tauri = { version = "2.12", features = [] }
+tauri-build = { version = "2.7", features = [] }
+tauri-plugin-single-instance = { version = "2.5", features = ["deep-link"] }
+tauri-plugin-deep-link = "2.6"
+tauri-plugin-window-state = "2.5"
+tauri-plugin-notification = "2.7"
+tauri-plugin-opener = "2.7"
+tauri-plugin-dialog = "2.8"
+tauri-plugin-autostart = "2.7"
+tauri-plugin-process = "2.4"
+tauri-plugin-os = "2.4"
+tauri-plugin-clipboard-manager = "2.5"
+tauri-plugin-updater = "2.14"
+specta = { version = "=2.0.0-rc.25", features = ["derive", "serde_json", "url", "uuid", "jiff", "semver"] }
+specta-typescript = "0.0.12"
+tauri-specta = { version = "=2.0.0-rc.25", features = ["derive", "typescript"] }
+
+[profile.dev]
+# Line tables keep backtraces useful while shrinking the target dir a lot.
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+# Dependencies (hashing, zip, TLS) run noticeably faster in dev with light optimization.
+debug = false
+opt-level = 2
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+opt-level = 3
+strip = true

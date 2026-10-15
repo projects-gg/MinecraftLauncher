@@ -1,0 +1,82 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Projects Launcher",
+  "mainBinaryName": "projects-launcher",
+  "identifier": "gg.projects.launcher",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Projects Launcher",
+        "width": 1280,
+        "height": 760,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "center": true,
+        "decorations": false,
+        "visible": false,
+        "resizable": true,
+        "dragDropEnabled": true,
+        "backgroundColor": "#0b0907"
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self'",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self' data:",
+        "img-src": "'self' asset: http://asset.localhost data: blob: https://cdn.projects.gg https://raw.githubusercontent.com https://cdn.modrinth.com https://mc-heads.net https://textures.minecraft.net",
+        "media-src": "'self' asset: http://asset.localhost blob: https://cdn.projects.gg",
+        "connect-src": "'self' ipc: http://ipc.localhost",
+        "worker-src": "'self' blob:"
+      },
+      "assetProtocol": {
+        "enable": true,
+        "scope": []
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "app", "dmg", "appimage", "deb", "rpm"],
+    "publisher": "Projects.gg",
+    "homepage": "https://projects.gg",
+    "copyright": "© Projects.gg",
+    "license": "GPL-3.0-only",
+    "category": "Game",
+    "shortDescription": "Projects.gg Minecraft launcher",
+    "longDescription": "Projects.gg için Minecraft launcher: tüm sürümler, mod yükleyiciler, resmi mod paketi, haberler ve AFK hesapları.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["Turkish", "English"],
+        "displayLanguageSelector": false
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-"
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["projects"]
+      }
+    }
+  }
+}

@@ -1,0 +1,5 @@
+# Projects Launcher tarafından üretildi. Elle yapılan değişiklikler kaybolur.
+wait 40
+send /login gizliSifre123
+wait 40
+send /spawn

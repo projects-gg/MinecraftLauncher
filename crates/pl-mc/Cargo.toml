@@ -1,0 +1,42 @@
+[package]
+name = "pl-mc"
+description = "Minecraft version metadata, installation, mod loaders, Java runtimes and launching"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+pl-net = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+reqwest = { workspace = true }
+url = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+toml = { workspace = true }
+quick-xml = { workspace = true }
+fastnbt = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+sha1 = { workspace = true }
+hex = { workspace = true }
+md-5 = { workspace = true }
+uuid = { workspace = true }
+jiff = { workspace = true }
+regex = { workspace = true }
+zip = { workspace = true }
+walkdir = { workspace = true }
+dirs = { workspace = true }
+sysinfo = { workspace = true }
+parking_lot = { workspace = true }
+which = { workspace = true }
+specta = { workspace = true }
+flate2 = "1.1"
+hickory-resolver = "0.26"
+trash = "5.2"
+base64 = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }

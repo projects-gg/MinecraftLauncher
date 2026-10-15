@@ -1,0 +1,7 @@
+# Projects Launcher tarafından üretildi. Elle yapılan değişiklikler kaybolur.
+wait 30
+send /login şifre123
+wait 30
+send /kit başlangıç
+wait 30
+send merhaba herkese

@@ -1,0 +1,469 @@
+//! AFK account model.
+//!
+//! These are the in-memory and UI-facing types (camelCase, `specta::Type`). Their defaults are the
+//! legacy C# initializers (`AfkModels.cs`); persistence in the legacy PascalCase `accounts.json`
+//! shape lives in [`crate::legacy`]. Login commands are deliberately *not* part of the model: they
+//! may contain passwords and live in the OS keychain (see [`crate::store::AccountStore`]).
+
+use serde::{Deserialize, Serialize};
+
+use crate::util::eq_ignore_case;
+
+/// Server used when an account leaves its host empty.
+pub const DEFAULT_SERVER_HOST: &str = "play.projects.gg";
+/// Game version of new accounts and of legacy records that never stored one.
+pub const DEFAULT_MINECRAFT_VERSION: &str = "26.3";
+/// "Ask the server" version value understood by MCC.
+pub const AUTO_MINECRAFT_VERSION: &str = "auto";
+/// Name given to scheduler tasks without one.
+pub const DEFAULT_TASK_NAME: &str = "Görev";
+
+/// One entry of the game version picker. Versions sharing a protocol are listed once; `value` is
+/// written to MCC as-is, `label` is the range shown to the user (the UI localizes the
+/// recommended/auto entries).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionOption {
+    pub value: String,
+    pub label: String,
+    pub recommended: bool,
+    pub auto: bool,
+}
+
+/// `AfkVersions.Options` in legacy order: index 0 is the default.
+const VERSION_TABLE: &[(&str, &str)] = &[
+    (DEFAULT_MINECRAFT_VERSION, DEFAULT_MINECRAFT_VERSION),
+    (AUTO_MINECRAFT_VERSION, AUTO_MINECRAFT_VERSION),
+    ("26.2", "26.2"),
+    ("26.1", "26.1"),
+    ("1.21.11", "1.21.11"),
+    ("1.21.9", "1.21.9 – 1.21.10"),
+    ("1.21.7", "1.21.7 – 1.21.8"),
+    ("1.21.6", "1.21.6"),
+    ("1.21.5", "1.21.5"),
+    ("1.21.4", "1.21.4"),
+    ("1.21.2", "1.21.2 – 1.21.3"),
+    ("1.21", "1.21 – 1.21.1"),
+    ("1.20.5", "1.20.5 – 1.20.6"),
+    ("1.20.3", "1.20.3 – 1.20.4"),
+    ("1.20.2", "1.20.2"),
+    ("1.20", "1.20 – 1.20.1"),
+    ("1.19.4", "1.19.4"),
+    ("1.19.3", "1.19.3"),
+    ("1.19.1", "1.19.1 – 1.19.2"),
+    ("1.19", "1.19"),
+    ("1.18.2", "1.18.2"),
+    ("1.18", "1.18 – 1.18.1"),
+    ("1.17.1", "1.17.1"),
+    ("1.17", "1.17"),
+    ("1.16.4", "1.16.4 – 1.16.5"),
+    ("1.16.3", "1.16.3"),
+    ("1.16.2", "1.16.2"),
+    ("1.16.1", "1.16.1"),
+    ("1.16", "1.16"),
+    ("1.15.2", "1.15.2"),
+    ("1.14.4", "1.14.4"),
+    ("1.13.2", "1.13.2"),
+    ("1.12.2", "1.12.2"),
+    ("1.11.1", "1.11.1 – 1.11.2"),
+    ("1.10", "1.10 – 1.10.2"),
+    ("1.9.3", "1.9.3 – 1.9.4"),
+    ("1.8", "1.8 – 1.8.9"),
+];
+
+/// The game versions the AFK client can join, in picker order.
+pub fn minecraft_versions() -> Vec<VersionOption> {
+    VERSION_TABLE
+        .iter()
+        .enumerate()
+        .map(|(i, (value, label))| VersionOption {
+            value: (*value).to_owned(),
+            label: (*label).to_owned(),
+            recommended: i == 0,
+            auto: *value == AUTO_MINECRAFT_VERSION,
+        })
+        .collect()
+}
+
+/// `AfkVersions.IndexOf`: position of a stored value in the picker; unknown or empty values map to
+/// the default entry (index 0) so a hand-edited record can never block a connection.
+pub fn minecraft_version_index(value: &str) -> usize {
+    let trimmed = value.trim();
+    VERSION_TABLE
+        .iter()
+        .position(|(v, _)| eq_ignore_case(v, trimmed))
+        .unwrap_or(0)
+}
+
+/// `AfkVersions.Normalize`: the value MCC receives for a stored version.
+pub fn normalize_minecraft_version(value: &str) -> &'static str {
+    VERSION_TABLE[minecraft_version_index(value)].0
+}
+
+/// Same rule as the main menu nickname: 3-16 characters of `[A-Za-z0-9_]`.
+pub fn is_valid_nickname(nickname: &str) -> bool {
+    (3..=16).contains(&nickname.len())
+        && nickname
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+}
+
+/// A fresh account id in the legacy `Guid.ToString("N")` format (32 lowercase hex digits).
+pub fn new_account_id() -> String {
+    uuid::Uuid::new_v4().simple().to_string()
+}
+
+/// Ids name per-account folders, so anything that could escape `accounts/` is rejected.
+pub(crate) fn is_safe_account_id(id: &str) -> bool {
+    !id.is_empty()
+        && id.len() <= 64
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AfkAccount {
+    pub id: String,
+    pub nickname: String,
+    /// Empty means [`DEFAULT_SERVER_HOST`].
+    pub server_host: String,
+    /// 0 (or out of range) means "not set": MCC resolves the SRV record, then falls back to 25565.
+    pub server_port: i32,
+    /// Connect this account when the launcher starts.
+    pub auto_start: bool,
+    /// [`AUTO_MINECRAFT_VERSION`] or a value from [`minecraft_versions`].
+    pub minecraft_version: String,
+    /// When false the server resource pack is not downloaded (the server is still told it loaded).
+    pub allow_resource_packs: bool,
+    pub anti_afk: AntiAfkOptions,
+    pub auto_relog: AutoRelogOptions,
+    pub auto_eat: AutoEatOptions,
+    pub auto_respond: AutoRespondOptions,
+    pub chat_log: ChatLogOptions,
+    pub alerts: AlertsOptions,
+    pub scheduler: SchedulerOptions,
+    pub login_commands: LoginCommandsOptions,
+}
+
+impl Default for AfkAccount {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            nickname: String::new(),
+            server_host: String::new(),
+            server_port: 0,
+            auto_start: false,
+            minecraft_version: DEFAULT_MINECRAFT_VERSION.to_owned(),
+            allow_resource_packs: false,
+            anti_afk: AntiAfkOptions::default(),
+            auto_relog: AutoRelogOptions::default(),
+            auto_eat: AutoEatOptions::default(),
+            auto_respond: AutoRespondOptions::default(),
+            chat_log: ChatLogOptions::default(),
+            alerts: AlertsOptions::default(),
+            scheduler: SchedulerOptions::default(),
+            login_commands: LoginCommandsOptions::default(),
+        }
+    }
+}
+
+impl AfkAccount {
+    /// A new account with a fresh id and legacy defaults.
+    pub fn new(nickname: impl Into<String>) -> Self {
+        Self {
+            id: new_account_id(),
+            nickname: nickname.into(),
+            ..Self::default()
+        }
+    }
+
+    /// `AfkAccount.EffectiveHost`.
+    pub fn effective_host(&self) -> &str {
+        let host = self.server_host.trim();
+        if host.is_empty() {
+            DEFAULT_SERVER_HOST
+        } else {
+            host
+        }
+    }
+}
+
+/// Periodic movement/command that keeps the server from flagging the account as AFK.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AntiAfkOptions {
+    pub enabled: bool,
+    /// Seconds; MCC picks a random delay in `[delay_min, delay_max]`.
+    pub delay_min: f64,
+    pub delay_max: f64,
+    /// Sent every round; empty means "move only".
+    pub command: String,
+    pub use_sneak: bool,
+    /// Random walking; forces MCC terrain handling on (see the config writer).
+    pub use_terrain_handling: bool,
+    pub walk_range: i32,
+    pub walk_retries: i32,
+}
+
+impl Default for AntiAfkOptions {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            delay_min: 60.0,
+            delay_max: 90.0,
+            command: String::new(),
+            use_sneak: true,
+            use_terrain_handling: false,
+            walk_range: 5,
+            walk_retries: 20,
+        }
+    }
+}
+
+/// Reconnect after a disconnect. With the launcher bridge MCC exits on every failure, so these
+/// settings drive the launcher-side restart loop (retry limit and kick-message filter).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AutoRelogOptions {
+    pub enabled: bool,
+    pub delay_min: f64,
+    pub delay_max: f64,
+    /// -1 means unlimited.
+    pub retries: i32,
+    /// True: reconnect whatever the kick message says.
+    pub ignore_kick_message: bool,
+    pub kick_messages: Vec<String>,
+}
+
+/// Kick messages of a new account.
+pub fn default_kick_messages() -> Vec<String> {
+    [
+        "Connection has been lost",
+        "Server is restarting",
+        "Server is full",
+        "Too Many people",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
+}
+
+impl Default for AutoRelogOptions {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            delay_min: 5.0,
+            delay_max: 10.0,
+            retries: -1,
+            ignore_kick_message: true,
+            kick_messages: default_kick_messages(),
+        }
+    }
+}
+
+/// Eat when the food bar drops below the threshold; forces MCC inventory handling on.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AutoEatOptions {
+    pub enabled: bool,
+    /// Food bar value, 0-20.
+    pub threshold: i32,
+}
+
+impl Default for AutoEatOptions {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            threshold: 6,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AutoRespondOptions {
+    pub enabled: bool,
+    pub match_colors: bool,
+    /// Play a notification sound when the account answers someone.
+    pub sound_enabled: bool,
+    pub matches: Vec<AutoRespondMatch>,
+}
+
+/// One `[Match]` block of `matches.ini`. Actions are raw MCC actions (`send /home`, `log hi`).
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AutoRespondMatch {
+    pub pattern: String,
+    /// The pattern is a regular expression (`regex=` instead of `match=`).
+    pub is_regex: bool,
+    pub action: String,
+    /// Used instead of `action` when the trigger came as a private message.
+    pub private_action: String,
+    /// Used for messages that do not come from a player (server announcements).
+    pub other_action: String,
+    pub owners_only: bool,
+    pub cooldown_seconds: i32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ChatLogOptions {
+    pub enabled: bool,
+    pub add_date_time: bool,
+    /// Show the date next to the time in the live console (does not affect the file).
+    pub show_date: bool,
+    /// MCC values: `all`, `messages`, `chat`.
+    pub filter: String,
+}
+
+impl Default for ChatLogOptions {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            add_date_time: true,
+            show_date: false,
+            filter: "messages".to_owned(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AlertsOptions {
+    pub enabled: bool,
+    pub beep_enabled: bool,
+    pub trigger_by_words: bool,
+    pub log_to_file: bool,
+    pub matches: Vec<String>,
+    pub excludes: Vec<String>,
+}
+
+impl Default for AlertsOptions {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            beep_enabled: false,
+            trigger_by_words: true,
+            log_to_file: true,
+            matches: Vec::new(),
+            excludes: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct SchedulerOptions {
+    pub enabled: bool,
+    pub tasks: Vec<ScheduledTask>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct ScheduledTask {
+    pub name: String,
+    /// Raw MCC action: `send /kit`, `log hello`, `script file.cs`.
+    pub action: String,
+    pub on_login: bool,
+    pub on_first_login: bool,
+    pub interval_enabled: bool,
+    /// Seconds; MCC waits a random time in `[min_seconds, max_seconds]` between runs.
+    pub min_seconds: f64,
+    pub max_seconds: f64,
+}
+
+impl Default for ScheduledTask {
+    fn default() -> Self {
+        Self {
+            name: DEFAULT_TASK_NAME.to_owned(),
+            action: String::new(),
+            on_login: false,
+            on_first_login: false,
+            interval_enabled: true,
+            min_seconds: 300.0,
+            max_seconds: 600.0,
+        }
+    }
+}
+
+/// Account-independent AFK preferences (`settings.json`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct AfkSettings {
+    /// Show login-script lines in the console. Lines with passwords stay hidden (and are masked
+    /// at the source) either way.
+    pub show_script_commands: bool,
+}
+
+/// Lines typed after joining. The command list itself is a secret kept in the OS keychain.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LoginCommandsOptions {
+    pub enabled: bool,
+    /// True: first login of a client process only; false: every login, reconnects included.
+    pub only_first_login: bool,
+    /// Wait before the first command and between commands (anti-spam).
+    pub delay_seconds: f64,
+}
+
+impl Default for LoginCommandsOptions {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            only_first_login: false,
+            delay_seconds: 2.0,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_lookup_is_trimmed_and_case_insensitive() {
+        assert_eq!(normalize_minecraft_version("  AUTO "), "auto");
+        assert_eq!(normalize_minecraft_version("1.21.9"), "1.21.9");
+        assert_eq!(
+            normalize_minecraft_version("1.2.3"),
+            DEFAULT_MINECRAFT_VERSION
+        );
+        assert_eq!(normalize_minecraft_version(""), DEFAULT_MINECRAFT_VERSION);
+        let versions = minecraft_versions();
+        assert_eq!(versions.len(), 37);
+        assert!(versions[0].recommended && !versions[0].auto);
+        assert!(versions[1].auto);
+        assert_eq!(
+            versions.last().map(|v| v.label.as_str()),
+            Some("1.8 – 1.8.9")
+        );
+    }
+
+    #[test]
+    fn nickname_rule() {
+        assert!(is_valid_nickname("Afk_01"));
+        assert!(!is_valid_nickname("ab"));
+        assert!(!is_valid_nickname("seventeen_chars_x"));
+        assert!(!is_valid_nickname("Çılgın"));
+        assert!(!is_valid_nickname("with space"));
+    }
+
+    #[test]
+    fn ids_are_guid_n_format_and_validated() {
+        let id = new_account_id();
+        assert_eq!(id.len(), 32);
+        assert!(is_safe_account_id(&id));
+        assert!(!is_safe_account_id("../evil"));
+        assert!(!is_safe_account_id(""));
+    }
+
+    #[test]
+    fn effective_host_falls_back_to_default() {
+        let mut account = AfkAccount::new("Test");
+        assert_eq!(account.effective_host(), DEFAULT_SERVER_HOST);
+        account.server_host = "  mc.example.org ".into();
+        assert_eq!(account.effective_host(), "mc.example.org");
+    }
+}

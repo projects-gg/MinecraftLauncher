@@ -1,0 +1,95 @@
+{
+  "Id": "11111111111111111111111111111111",
+  "Nickname": "Tam_Donanim",
+  "ServerHost": "  mc.example.org  ",
+  "ServerPort": 25570,
+  "AutoStart": true,
+  "MinecraftVersion": "1.21.9",
+  "AllowResourcePacks": true,
+  "AntiAfk": {
+    "Enabled": true,
+    "DelayMin": 45.5,
+    "DelayMax": 120.25,
+    "Command": "/afk",
+    "UseSneak": false,
+    "UseTerrainHandling": true,
+    "WalkRange": 8,
+    "WalkRetries": 30
+  },
+  "AutoRelog": {
+    "Enabled": true,
+    "DelayMin": 3.0,
+    "DelayMax": 12.0,
+    "Retries": 7,
+    "IgnoreKickMessage": false,
+    "KickMessages": [
+      "Server is restarting",
+      "   ",
+      " Sunucu dolu ",
+      "Bağlantı koptu"
+    ]
+  },
+  "AutoEat": {
+    "Enabled": true,
+    "Threshold": 10
+  },
+  "AutoRespond": {
+    "Enabled": true,
+    "MatchColors": false,
+    "SoundEnabled": true,
+    "Matches": [
+      {
+        "Pattern": "selam",
+        "IsRegex": false,
+        "Action": "send Merhaba $u, şu an klavye başında değilim!",
+        "PrivateAction": "",
+        "OtherAction": "",
+        "OwnersOnly": false,
+        "CooldownSeconds": 30
+      }
+    ]
+  },
+  "ChatLog": {
+    "Enabled": true,
+    "AddDateTime": false,
+    "ShowDate": true,
+    "Filter": "all"
+  },
+  "Alerts": {
+    "Enabled": true,
+    "BeepEnabled": true,
+    "TriggerByWords": true,
+    "LogToFile": false,
+    "Matches": [
+      "Hazar",
+      "admin"
+    ],
+    "Excludes": [
+      "spam"
+    ]
+  },
+  "Scheduler": {
+    "Enabled": true,
+    "Tasks": [
+      {
+        "Name": "Kit",
+        "Action": "send /kit günlük",
+        "OnLogin": true,
+        "OnFirstLogin": false,
+        "IntervalEnabled": true,
+        "MinSeconds": 3600.0,
+        "MaxSeconds": 7200.0
+      }
+    ]
+  },
+  "LoginCommands": {
+    "Enabled": true,
+    "OnlyFirstLogin": false,
+    "DelaySeconds": 2.0,
+    "Commands": [
+      "/login gizliSifre123",
+      "/spawn"
+    ]
+  },
+  "EffectiveHost": "mc.example.org"
+}

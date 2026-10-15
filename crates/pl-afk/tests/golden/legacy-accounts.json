@@ -1,0 +1,230 @@
+[
+  {
+    "Id": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+    "Nickname": "Ana_Hesap",
+    "ServerHost": "",
+    "ServerPort": 0,
+    "AutoStart": false,
+    "MinecraftVersion": "26.3",
+    "AllowResourcePacks": false,
+    "AntiAfk": {
+      "Enabled": true,
+      "DelayMin": 60.0,
+      "DelayMax": 90.0,
+      "Command": "",
+      "UseSneak": true,
+      "UseTerrainHandling": false,
+      "WalkRange": 5,
+      "WalkRetries": 20
+    },
+    "AutoRelog": {
+      "Enabled": true,
+      "DelayMin": 5.0,
+      "DelayMax": 10.0,
+      "Retries": -1,
+      "IgnoreKickMessage": true,
+      "KickMessages": [
+        "Connection has been lost",
+        "Server is restarting",
+        "Server is full",
+        "Too Many people",
+        "Connection has been lost",
+        "Server is restarting",
+        "Server is full",
+        "Too Many people",
+        "Connection has been lost",
+        "Server is restarting",
+        "Server is full",
+        "Too Many people"
+      ]
+    },
+    "AutoEat": {
+      "Enabled": false,
+      "Threshold": 6
+    },
+    "AutoRespond": {
+      "Enabled": false,
+      "MatchColors": false,
+      "SoundEnabled": false,
+      "Matches": []
+    },
+    "ChatLog": {
+      "Enabled": false,
+      "AddDateTime": true,
+      "ShowDate": false,
+      "Filter": "messages"
+    },
+    "Alerts": {
+      "Enabled": false,
+      "BeepEnabled": false,
+      "TriggerByWords": true,
+      "LogToFile": true,
+      "Matches": [],
+      "Excludes": []
+    },
+    "Scheduler": {
+      "Enabled": false,
+      "Tasks": []
+    },
+    "LoginCommands": {
+      "Enabled": true,
+      "OnlyFirstLogin": false,
+      "DelaySeconds": 2.0,
+      "Commands": [
+        "/login çokGizli123",
+        "/kit"
+      ]
+    },
+    "EffectiveHost": "play.projects.gg"
+  },
+  {
+    "Id": "",
+    "Nickname": "Kimliksiz",
+    "ServerHost": "oyun.sunucu.net",
+    "ServerPort": 25566,
+    "AutoStart": false,
+    "MinecraftVersion": "26.3",
+    "AllowResourcePacks": false,
+    "AntiAfk": {
+      "Enabled": true,
+      "DelayMin": 60.0,
+      "DelayMax": 90.0,
+      "Command": "",
+      "UseSneak": true,
+      "UseTerrainHandling": false,
+      "WalkRange": 5,
+      "WalkRetries": 20
+    },
+    "AutoRelog": {
+      "Enabled": true,
+      "DelayMin": 5.0,
+      "DelayMax": 10.0,
+      "Retries": -1,
+      "IgnoreKickMessage": true,
+      "KickMessages": [
+        "Connection has been lost",
+        "Server is restarting",
+        "Server is full",
+        "Too Many people",
+        "Connection has been lost",
+        "Server is restarting",
+        "Server is full",
+        "Too Many people",
+        "Connection has been lost",
+        "Server is restarting",
+        "Server is full",
+        "Too Many people"
+      ]
+    },
+    "AutoEat": {
+      "Enabled": false,
+      "Threshold": 6
+    },
+    "AutoRespond": {
+      "Enabled": false,
+      "MatchColors": false,
+      "SoundEnabled": false,
+      "Matches": []
+    },
+    "ChatLog": {
+      "Enabled": false,
+      "AddDateTime": true,
+      "ShowDate": false,
+      "Filter": "messages"
+    },
+    "Alerts": {
+      "Enabled": false,
+      "BeepEnabled": false,
+      "TriggerByWords": true,
+      "LogToFile": true,
+      "Matches": [],
+      "Excludes": []
+    },
+    "Scheduler": {
+      "Enabled": false,
+      "Tasks": []
+    },
+    "LoginCommands": {
+      "Enabled": false,
+      "OnlyFirstLogin": false,
+      "DelaySeconds": 2.0,
+      "Commands": []
+    },
+    "EffectiveHost": "oyun.sunucu.net"
+  },
+  {
+    "Id": "0123456789abcdef0123456789abcdef",
+    "Nickname": "Ozel",
+    "ServerHost": "",
+    "ServerPort": 0,
+    "AutoStart": true,
+    "MinecraftVersion": "auto",
+    "AllowResourcePacks": true,
+    "AntiAfk": {
+      "Enabled": true,
+      "DelayMin": 60.0,
+      "DelayMax": 90.0,
+      "Command": "",
+      "UseSneak": true,
+      "UseTerrainHandling": false,
+      "WalkRange": 5,
+      "WalkRetries": 20
+    },
+    "AutoRelog": {
+      "Enabled": true,
+      "DelayMin": 5.0,
+      "DelayMax": 10.0,
+      "Retries": 5,
+      "IgnoreKickMessage": false,
+      "KickMessages": [
+        "Connection has been lost",
+        "Server is restarting",
+        "Server is full",
+        "Too Many people",
+        "Connection has been lost",
+        "Server is restarting",
+        "Server is full",
+        "Too Many people",
+        "Connection has been lost",
+        "Server is restarting",
+        "Server is full",
+        "Too Many people"
+      ]
+    },
+    "AutoEat": {
+      "Enabled": false,
+      "Threshold": 6
+    },
+    "AutoRespond": {
+      "Enabled": false,
+      "MatchColors": false,
+      "SoundEnabled": false,
+      "Matches": []
+    },
+    "ChatLog": {
+      "Enabled": false,
+      "AddDateTime": true,
+      "ShowDate": false,
+      "Filter": "messages"
+    },
+    "Alerts": {
+      "Enabled": false,
+      "BeepEnabled": false,
+      "TriggerByWords": true,
+      "LogToFile": true,
+      "Matches": [],
+      "Excludes": []
+    },
+    "Scheduler": {
+      "Enabled": false,
+      "Tasks": []
+    },
+    "LoginCommands": {
+      "Enabled": false,
+      "OnlyFirstLogin": false,
+      "DelaySeconds": 2.0,
+      "Commands": []
+    },
+    "EffectiveHost": "play.projects.gg"
+  }
+]

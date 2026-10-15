@@ -1,0 +1,235 @@
+/* Projects design system. Rules live in docs/design.md. */
+@import "tailwindcss";
+
+/* Scan this package's components for class names. */
+@source "./";
+
+@theme {
+  --color-obsidian-950: #0a090c;
+  --color-obsidian-900: #121016;
+  --color-obsidian-850: #16131a;
+  --color-obsidian-800: #1b1820;
+  --color-obsidian-700: #27222c;
+  --color-obsidian-600: #3a3340;
+  --color-ash-500: #7d7586;
+  --color-ash-400: #9b93a3;
+  --color-ash-300: #bdb6c3;
+  --color-bone-100: #f3ebdd;
+  --color-bone-50: #fbf6ec;
+  --color-gold-200: #fae5b3;
+  --color-gold-300: #f6d58e;
+  --color-gold-400: #f0b849;
+  --color-gold-500: #e89a2c;
+  --color-gold-600: #c9741a;
+  --color-gold-700: #8e4a12;
+  --color-gold-ink: #1a0f05;
+  --color-ember-950: #220606;
+  --color-ember-900: #3f0a0a;
+  --color-ember-700: #7a2416;
+  --color-jade-400: #5fcb8e;
+  --color-flare-400: #f0624d;
+
+  --font-display: "Tektur Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-panel: 10px;
+  --radius-head: 4px;
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-quart: cubic-bezier(0.76, 0, 0.24, 1);
+
+  --animate-shimmer: shimmer 1.8s linear infinite;
+  --animate-kenburns: kenburns 48s ease-in-out infinite alternate;
+
+  @keyframes shimmer {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+
+  @keyframes kenburns {
+    from {
+      transform: scale(1.06) translate3d(0, 0, 0);
+    }
+    to {
+      transform: scale(1.13) translate3d(-1.5%, -1%, 0);
+    }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    background: var(--color-obsidian-950);
+    color: var(--color-bone-100);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Text people may want to copy stays selectable. */
+  [data-selectable],
+  input,
+  textarea,
+  .prose-news {
+    user-select: text;
+    -webkit-user-select: text;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-gold-500) 45%, transparent);
+    color: var(--color-bone-50);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-gold-300);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-obsidian-600) transparent;
+  }
+}
+
+/* Diagonal "hextech" cut on the top-left and bottom-right corners. Set --cut to resize. */
+@utility chamfer {
+  clip-path: polygon(
+    var(--cut, 8px) 0,
+    100% 0,
+    100% calc(100% - var(--cut, 8px)),
+    calc(100% - var(--cut, 8px)) 100%,
+    0 100%,
+    0 var(--cut, 8px)
+  );
+}
+
+/* Translucent obsidian over the art. Falls back to solid in Performance mode. */
+@utility glass {
+  background: color-mix(in oklab, var(--color-obsidian-900) 74%, transparent);
+  backdrop-filter: blur(20px) saturate(135%);
+  -webkit-backdrop-filter: blur(20px) saturate(135%);
+  border: 1px solid rgb(255 255 255 / 0.06);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
+}
+
+@utility glass-strong {
+  background: color-mix(in oklab, var(--color-obsidian-900) 88%, transparent);
+  backdrop-filter: blur(24px) saturate(130%);
+  -webkit-backdrop-filter: blur(24px) saturate(130%);
+  border: 1px solid rgb(255 255 255 / 0.07);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+@utility text-shadow-art {
+  text-shadow:
+    0 1px 2px rgb(10 9 12 / 0.65),
+    0 6px 28px rgb(34 6 6 / 0.55);
+}
+
+@layer components {
+  html[data-perf="on"] .glass,
+  html[data-perf="on"] .glass-strong {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    background: var(--color-obsidian-900);
+  }
+
+  @media (prefers-reduced-transparency: reduce) {
+    .glass,
+    .glass-strong {
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+      background: var(--color-obsidian-900);
+    }
+  }
+
+  /* Long-form news text. */
+  .prose-news {
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--color-bone-100);
+    max-width: 68ch;
+  }
+  .prose-news h2 {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 600;
+    margin: 1.6em 0 0.5em;
+    color: var(--color-bone-50);
+  }
+  .prose-news h3 {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 600;
+    margin: 1.4em 0 0.4em;
+  }
+  .prose-news p {
+    margin: 0.75em 0;
+  }
+  .prose-news a {
+    color: var(--color-gold-300);
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .prose-news ul,
+  .prose-news ol {
+    margin: 0.75em 0;
+    padding-left: 1.3em;
+  }
+  .prose-news ul {
+    list-style: square;
+  }
+  .prose-news ol {
+    list-style: decimal;
+  }
+  .prose-news li {
+    margin: 0.3em 0;
+  }
+  .prose-news li::marker {
+    color: var(--color-gold-500);
+  }
+  .prose-news strong {
+    color: var(--color-bone-50);
+    font-weight: 650;
+  }
+  .prose-news code {
+    font-size: 0.9em;
+    background: var(--color-obsidian-800);
+    padding: 0.1em 0.35em;
+    border-radius: 4px;
+  }
+  .prose-news img {
+    border-radius: var(--radius-panel);
+    margin: 1em 0;
+  }
+  .prose-news blockquote {
+    border-left: 3px solid var(--color-gold-600);
+    padding-left: 1em;
+    color: var(--color-ash-300);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+html[data-perf="on"] .ambient-motion {
+  animation: none !important;
+}

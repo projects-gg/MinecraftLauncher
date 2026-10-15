@@ -1,0 +1,4 @@
+@import "@pl/ui/styles.css";
+
+/* Scan the app's own sources (the ui package scans itself). */
+@source "./";

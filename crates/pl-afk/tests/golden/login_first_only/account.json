@@ -1,0 +1,83 @@
+{
+  "Id": "44444444444444444444444444444444",
+  "Nickname": "Girisci",
+  "ServerHost": "",
+  "ServerPort": 0,
+  "AutoStart": false,
+  "MinecraftVersion": "26.3",
+  "AllowResourcePacks": false,
+  "AntiAfk": {
+    "Enabled": true,
+    "DelayMin": 60.0,
+    "DelayMax": 90.0,
+    "Command": "",
+    "UseSneak": true,
+    "UseTerrainHandling": false,
+    "WalkRange": 5,
+    "WalkRetries": 20
+  },
+  "AutoRelog": {
+    "Enabled": true,
+    "DelayMin": 5.0,
+    "DelayMax": 10.0,
+    "Retries": -1,
+    "IgnoreKickMessage": true,
+    "KickMessages": [
+      "Connection has been lost",
+      "Server is restarting",
+      "Server is full",
+      "Too Many people"
+    ]
+  },
+  "AutoEat": {
+    "Enabled": false,
+    "Threshold": 6
+  },
+  "AutoRespond": {
+    "Enabled": false,
+    "MatchColors": false,
+    "SoundEnabled": false,
+    "Matches": []
+  },
+  "ChatLog": {
+    "Enabled": false,
+    "AddDateTime": true,
+    "ShowDate": false,
+    "Filter": "messages"
+  },
+  "Alerts": {
+    "Enabled": false,
+    "BeepEnabled": false,
+    "TriggerByWords": true,
+    "LogToFile": true,
+    "Matches": [],
+    "Excludes": []
+  },
+  "Scheduler": {
+    "Enabled": false,
+    "Tasks": [
+      {
+        "Name": "Yok sayılır",
+        "Action": "send /yoksay",
+        "OnLogin": false,
+        "OnFirstLogin": false,
+        "IntervalEnabled": true,
+        "MinSeconds": 300.0,
+        "MaxSeconds": 600.0
+      }
+    ]
+  },
+  "LoginCommands": {
+    "Enabled": true,
+    "OnlyFirstLogin": true,
+    "DelaySeconds": 1.5,
+    "Commands": [
+      "",
+      "  /login şifre123  ",
+      "   ",
+      "/kit başlangıç",
+      "merhaba herkese"
+    ]
+  },
+  "EffectiveHost": "play.projects.gg"
+}

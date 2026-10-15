@@ -1,0 +1,5 @@
+# Projects Launcher tarafından üretildi. Elle yapılan değişiklikler kaybolur.
+wait 2
+send /register Parola1 Parola1
+wait 2
+send /login Parola1
