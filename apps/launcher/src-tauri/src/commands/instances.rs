@@ -537,3 +537,28 @@ pub async fn minecraft_versions(state: State<'_, AppState>) -> CmdResult<Vec<McV
         })
         .collect())
 }
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LoaderVersionView {
+    pub version: String,
+    pub stable: bool,
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn loader_versions(
+    state: State<'_, AppState>,
+    loader: LoaderKind,
+    mc_version: String,
+) -> CmdResult<Vec<LoaderVersionView>> {
+    if loader == LoaderKind::Vanilla {
+        return Ok(Vec::new());
+    }
+    Ok(pl_mc::loaders::list_loader_versions(&state.mc, loader, &mc_version)
+        .await
+        .map_err(CmdError::from)?
+        .into_iter()
+        .map(|v| LoaderVersionView { version: v.version, stable: v.stable })
+        .collect())
+}

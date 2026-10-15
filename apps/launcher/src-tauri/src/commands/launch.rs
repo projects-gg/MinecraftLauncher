@@ -208,14 +208,49 @@ async fn prepare_and_spawn(
         Err(e) => return Err(e.into()),
     };
 
+    let events = on_event.clone();
+    let progress: pl_mc::install::InstallProgressFn = Arc::new(move |p: InstallProgress| {
+        let _ = events.send(LaunchEventView::Progress(progress_view(&p)));
+    });
+    let install_options = |verify: VerifyMode| InstallOptions {
+        java: instance.java.clone(),
+        offline,
+        verify: if offline { VerifyMode::Exists } else { verify },
+        game_dir: Some(game_dir.clone()),
+        concurrency: 16,
+        cancel: cancel.clone(),
+        progress: Some(progress.clone()),
+    };
+
+    // Mod loaders install their profile (and run Forge/NeoForge installer steps) first.
     let version_id = match instance.loader.kind {
         LoaderKind::Vanilla => instance.mc_version.clone(),
-        _ => {
-            return Err(CmdError::new(
-                "YUKLEYICI",
-                "Mod yükleyici kurulumu bu sürümde henüz hazır değil.",
-                format!("loader {:?} not wired yet", instance.loader.kind),
-            ));
+        kind => {
+            let loader_version = match &instance.loader.version {
+                Some(v) if !v.trim().is_empty() => v.clone(),
+                _ => pl_mc::loaders::list_loader_versions(&state.mc, kind, &instance.mc_version)
+                    .await
+                    .map_err(CmdError::from)?
+                    .into_iter()
+                    .find(|v| v.stable)
+                    .map(|v| v.version)
+                    .ok_or_else(|| {
+                        CmdError::new(
+                            "YUKLEYICI-YOK",
+                            "Bu Minecraft sürümü için seçilen mod yükleyici bulunamadı.",
+                            format!("{kind:?} for {}", instance.mc_version),
+                        )
+                    })?,
+            };
+            pl_mc::loaders::install_loader(
+                &state.mc,
+                &instance.mc_version,
+                kind,
+                &loader_version,
+                install_options(if first_install { VerifyMode::Full } else { VerifyMode::Size }),
+            )
+            .await
+            .map_err(CmdError::from)?
         }
     };
 
@@ -223,32 +258,16 @@ async fn prepare_and_spawn(
         .await
         .map_err(CmdError::from)?;
 
-    // 2. Install / verify files. Full hashing only on first install; size checks otherwise.
-    let events = on_event.clone();
-    let progress: pl_mc::install::InstallProgressFn = Arc::new(move |p: InstallProgress| {
-        let _ = events.send(LaunchEventView::Progress(progress_view(&p)));
-    });
-    let installed = install_version(
-        &state.mc,
-        &resolved,
-        InstallOptions {
-            java: instance.java.clone(),
-            offline,
-            verify: if offline {
-                VerifyMode::Exists
-            } else if first_install {
-                VerifyMode::Full
-            } else {
-                VerifyMode::Size
-            },
-            game_dir: Some(game_dir.clone()),
-            concurrency: 16,
-            cancel: cancel.clone(),
-            progress: Some(progress),
-        },
-    )
-    .await
-    .map_err(CmdError::from)?;
+    // 2. Install / verify files. Full hashing only on first install; size checks otherwise
+    //    (loader installs above already verified their files, so a size check suffices then).
+    let verify = if first_install && instance.loader.kind == LoaderKind::Vanilla {
+        VerifyMode::Full
+    } else {
+        VerifyMode::Size
+    };
+    let installed = install_version(&state.mc, &resolved, install_options(verify))
+        .await
+        .map_err(CmdError::from)?;
 
     let _ = write_marker(
         &instance_dir,

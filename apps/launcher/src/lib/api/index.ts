@@ -1,6 +1,7 @@
 import { isTauri } from "../platform";
 import { mockApi } from "./mock";
 import { tauriApi } from "./tauri";
+import type { LegacyImportReport, LegacyImportRequest, LegacyScan, PresenceContext } from "@/bindings";
 import type {
   AccountSummary,
   AfkAccount,
@@ -54,7 +55,13 @@ export interface LauncherApi {
   launch(instanceId: string, onEvent: (event: LaunchEvent) => void): Promise<void>;
   cancelLaunch(instanceId: string): Promise<void>;
   openUrl(url: string): Promise<void>;
+  updatePresence(context: PresenceContext): Promise<void>;
+  setPresenceEnabled(enabled: boolean): Promise<void>;
+  legacyScan(): Promise<LegacyScan>;
+  legacyImport(request: LegacyImportRequest): Promise<LegacyImportReport>;
 }
+
+export type { LegacyImportReport, LegacyImportRequest, LegacyScan, PresenceContext } from "@/bindings";
 
 export const api: LauncherApi = isTauri() ? tauriApi : mockApi;
 

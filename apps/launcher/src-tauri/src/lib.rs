@@ -48,7 +48,7 @@ pub fn run() {
         .setup(move |app| {
             specta.mount_events(app);
             let version = app.package_info().version.to_string();
-            let state = state::AppState::init(&version)?;
+            let state = state::AppState::init(app.handle(), &version)?;
             // Cached news art and instance files are shown through the asset protocol.
             app.asset_protocol_scope()
                 .allow_directory(state.root.join("cache"), true)?;
@@ -64,6 +64,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new()
         // Byte counts, timestamps and play time are u64 but stay far below 2^53.
         .dangerously_cast_bigints_to_number()
+        // Emitted as plain Tauri events ("afk-event"), so export the payload type explicitly.
+        .typ::<pl_afk::AfkEvent>()
         .commands(tauri_specta::collect_commands![
             commands::app::app_info,
             commands::accounts::accounts_list,
@@ -85,11 +87,24 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::instances::instance_update_settings,
             commands::instances::mod_set_enabled,
             commands::instances::minecraft_versions,
+            commands::instances::loader_versions,
             commands::launch::launch_instance,
             commands::launch::launch_cancel,
             commands::launch::game_kill,
             commands::launch::game_running,
             commands::server::server_status,
+            commands::afk::afk_overview,
+            commands::afk::afk_add,
+            commands::afk::afk_remove,
+            commands::afk::afk_connect,
+            commands::afk::afk_disconnect,
+            commands::afk::afk_connect_all,
+            commands::afk::afk_stop_all,
+            commands::afk::afk_send,
+            commands::afk::afk_console,
+            commands::afk::afk_any_active,
+            commands::migrate::legacy_scan,
+            commands::migrate::legacy_import,
         ])
 }
 

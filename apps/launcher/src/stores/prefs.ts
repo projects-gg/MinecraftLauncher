@@ -25,6 +25,8 @@ interface PrefsState {
   discordShowServer: boolean;
   concurrentDownloads: number;
   verifyOnLaunch: boolean;
+  /** The v1 import was offered once (first start). */
+  legacyOffered: boolean;
   set: <K extends keyof PrefValues>(key: K, value: PrefValues[K]) => void;
   selectInstance: (id: string) => void;
   setAutoJoin: (on: boolean) => void;
@@ -52,6 +54,7 @@ export const usePrefs = create<PrefsState>()(
       discordShowServer: true,
       concurrentDownloads: 16,
       verifyOnLaunch: false,
+      legacyOffered: false,
       set: (key, value) => set({ [key]: value } as Partial<PrefsState>),
       selectInstance: (selectedInstanceId) => set({ selectedInstanceId }),
       setAutoJoin: (autoJoin) => set({ autoJoin }),

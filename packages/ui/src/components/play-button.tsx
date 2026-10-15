@@ -46,7 +46,16 @@ export function PlayButton({ state, onPlay, onCancel, labels, className }: PlayB
       key = "update";
       break;
     case "working":
-      text = hover && onCancel ? labels.cancel : `%${Math.floor(state.percent)}`;
+      // Turkish puts the percent sign first; Tektur's % glyph is ornate, so it is set in Figtree.
+      text =
+        hover && onCancel ? (
+          labels.cancel
+        ) : (
+          <>
+            <span className="mr-0.5 font-sans text-[19px] font-bold">%</span>
+            {Math.floor(state.percent)}
+          </>
+        );
       key = hover && onCancel ? "cancel" : "percent";
       break;
     case "launching":
@@ -89,7 +98,13 @@ export function PlayButton({ state, onPlay, onCancel, labels, className }: PlayB
         onClick={handleClick}
         onPointerEnter={() => setHover(true)}
         onPointerLeave={() => setHover(false)}
-        aria-label={typeof text === "string" ? text : undefined}
+        aria-label={
+          typeof text === "string"
+            ? text
+            : isWorking
+              ? `${state.label} %${Math.floor(state.percent)}`
+              : undefined
+        }
         className={cn(
           "group relative block size-full cursor-pointer select-none focus-visible:outline-none",
           "transition-transform duration-150 enabled:active:scale-[0.98] enabled:hover:scale-[1.015]",
@@ -149,9 +164,6 @@ export function PlayButton({ state, onPlay, onCancel, labels, className }: PlayB
               {text}
             </motion.span>
           </AnimatePresence>
-          {isWorking && key !== "cancel" ? (
-            <span className="mt-1 text-[11px] font-medium text-ash-300">{state.label}</span>
-          ) : null}
         </span>
       </button>
       <style>{`@keyframes play-sheen { 0%, 72% { transform: translateX(0) skewX(-18deg); } 100% { transform: translateX(560%) skewX(-18deg); } }`}</style>

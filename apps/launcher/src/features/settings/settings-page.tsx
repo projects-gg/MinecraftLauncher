@@ -21,6 +21,7 @@ import logo from "@/assets/brand/logo-96.webp";
 import { api } from "@/lib/api";
 import { setLanguage } from "@/lib/i18n";
 import { type GameStartBehavior, usePrefs } from "@/stores/prefs";
+import { useUi } from "@/stores/ui";
 import { AccountsSection } from "./accounts-section";
 
 const sections = [
@@ -236,7 +237,7 @@ function Data() {
         </Button>
       </Row>
       <Row title={t("settings.data.legacy")} help={t("settings.data.legacyHelp")}>
-        <Button variant="secondary" size="sm">
+        <Button variant="secondary" size="sm" onClick={() => useUi.getState().setMigrationOpen(true)}>
           {t("settings.data.import")}
         </Button>
       </Row>

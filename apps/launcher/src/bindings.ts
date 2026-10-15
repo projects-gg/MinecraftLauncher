@@ -38,6 +38,7 @@ export const commands = {
 	instanceUpdateSettings: (id: string, settings: InstanceSettingsView) => typedError<null, CmdError>(__TAURI_INVOKE("instance_update_settings", { id, settings })),
 	modSetEnabled: (instanceId: string, fileName: string, enabled: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("mod_set_enabled", { instanceId, fileName, enabled })),
 	minecraftVersions: () => typedError<McVersionView[], CmdError>(__TAURI_INVOKE("minecraft_versions")),
+	loaderVersions: (loader: LoaderKind, mcVersion: string) => typedError<LoaderVersionView[], CmdError>(__TAURI_INVOKE("loader_versions", { loader, mcVersion })),
 	launchInstance: (instanceId: string, autoJoin: boolean, onEvent: Channel<LaunchEventView>) => typedError<null, CmdError>(__TAURI_INVOKE("launch_instance", { instanceId, autoJoin, onEvent })),
 	launchCancel: () => __TAURI_INVOKE<void>("launch_cancel"),
 	gameKill: () => __TAURI_INVOKE<void>("game_kill"),
@@ -45,6 +46,22 @@ export const commands = {
 	gameRunning: () => __TAURI_INVOKE<string | null>("game_running"),
 	/**  Server List Ping. Never fails: an unreachable server is reported as offline. */
 	serverStatus: (name: string | null, address: string | null) => __TAURI_INVOKE<ServerStatusView>("server_status", { name, address }),
+	afkOverview: () => __TAURI_INVOKE<AfkAccountView[]>("afk_overview"),
+	afkAdd: (nickname: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_add", { nickname })),
+	afkRemove: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_remove", { id })),
+	afkConnect: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_connect", { id })),
+	afkDisconnect: (id: string) => __TAURI_INVOKE<void>("afk_disconnect", { id }),
+	/**
+	 *  Staggered connect of every idle account. Runs in the background (15 s between accounts);
+	 *  progress arrives as AFK events.
+	 */
+	afkConnectAll: () => __TAURI_INVOKE<void>("afk_connect_all"),
+	afkStopAll: () => typedError<null, CmdError>(__TAURI_INVOKE("afk_stop_all")),
+	afkSend: (id: string, line: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_send", { id, line })),
+	afkConsole: (id: string) => __TAURI_INVOKE<ConsoleLineView[]>("afk_console", { id }),
+	afkAnyActive: () => __TAURI_INVOKE<boolean>("afk_any_active"),
+	legacyScan: () => typedError<LegacyScan, CmdError>(__TAURI_INVOKE("legacy_scan")),
+	legacyImport: (request: LegacyImportRequest) => typedError<LegacyImportReport, CmdError>(__TAURI_INVOKE("legacy_import", { request })),
 };
 
 /* Types */
@@ -60,6 +77,35 @@ export type AccountView = {
 	active: boolean,
 	skinUrl: string | null,
 };
+
+export type AfkAccountView = {
+	id: string,
+	nickname: string,
+	server: string,
+	autoStart: boolean,
+	mcVersion: string,
+	state: SessionState,
+	stats: SessionStats,
+	running: boolean,
+};
+
+export type AfkEvent = {
+	accountId: string,
+	kind: AfkEventKind,
+};
+
+export type AfkEventKind = { type: "state"; data: SessionState } | 
+/**  A console line (already masked). */
+{ type: "line"; data: ConsoleLine } | { type: "stats"; data: SessionStats } | 
+/**  The account auto-responded to `user`; `sound` mirrors the account's notification setting. */
+{ type: "autoRespond"; data: {
+	user: string | null,
+	sound: boolean,
+} } | 
+/**  Bulk connect: seconds until this account connects; 0 clears the countdown. */
+{ type: "countdown"; data: {
+	secs: number,
+} };
 
 export type AppInfo = {
 	version: string,
@@ -85,6 +131,43 @@ export type CmdError = {
 	details: string,
 };
 
+export type ConsoleLine = {
+	/**
+	 *  When the line arrived (shown as local time; the date only if the account's chat log
+	 *  settings ask for it).
+	 */
+	at: string,
+	/**  Masked text. */
+	text: string,
+	kind: ConsoleLineKind,
+	origin: ConsoleOrigin,
+};
+
+/**  Visibility class of a console line. */
+export type ConsoleLineKind = 
+/**  Always visible. */
+"normal" | 
+/**  Output of a login command: visible only when "show script commands" is on. */
+"script" | 
+/**  Output of a login/register/password command: never visible (already masked anyway). */
+"sensitive";
+
+export type ConsoleLineView = {
+	time: string,
+	text: string,
+	/**  "normal" | "script" (sensitive lines never reach the UI) */
+	kind: string,
+};
+
+/**  Where a console line came from. */
+export type ConsoleOrigin = 
+/**  Client stdout. */
+"client" | 
+/**  Client stderr (text starts with `[hata] `). */
+"clientError" | 
+/**  Typed by the user (text starts with `> `). */
+"user";
+
 export type CrashView = {
 	title: string,
 	hint: string,
@@ -100,6 +183,30 @@ export type EventView = {
 	startsAt: string,
 	endsAt: string,
 };
+
+/**
+ *  Why a session stopped or is reconnecting. Messages come from the server or the client
+ *  (formatting codes removed, flattened to one line) and are meant for display.
+ */
+export type FailureReason = 
+/**  Kicked by the server while in game. */
+{ kind: "kicked"; message: string | null } | 
+/**  The server refused the login. */
+{ kind: "loginRejected"; message: string | null } | { kind: "connectionLost"; message: string | null } | { kind: "loggedOut"; message: string | null } | 
+/**  The client reported a disconnect reason this launcher does not know. */
+{ kind: "disconnected"; message: string | null } | 
+/**  The server's version is not supported by the client (pick a version in the settings). */
+{ kind: "unsupportedVersion"; message: string | null } | 
+/**  The client reported a failure without a reason. */
+{ kind: "failed"; message: string | null } | 
+/**  The client exited without reporting anything (crash, killed, unknown exit code). */
+{ kind: "unexpectedExit"; code: number | null } | 
+/**  The client could not be started. */
+{ kind: "launchFailed"; message: string } | 
+/**  No client build is installed. */
+{ kind: "clientMissing" } | 
+/**  The login commands could not be read from the OS keychain. */
+{ kind: "secretsUnavailable" };
 
 export type HeroView = {
 	/**  Local file path of the cached art (convert with `convertFileSrc`); `None` = bundled art. */
@@ -178,7 +285,46 @@ export type LaunchEventView = {
 /**  Result of importing the old launcher's premium session (Windows only). */
 export type LegacyAccountImport = { kind: "imported"; account: AccountView } | { kind: "notFound" } | { kind: "unreadable" } | { kind: "unsupported" };
 
+export type LegacyImportReport = {
+	premiumImported: boolean,
+	nickname: string | null,
+	afkAccounts: number,
+	afkClient: boolean,
+	instanceId: string | null,
+	copiedFiles: number,
+	linkedFiles: number,
+	/**  Turkish notes for the summary screen (things skipped and why). */
+	notes: string[],
+};
+
+export type LegacyImportRequest = {
+	premium: boolean,
+	nickname: boolean,
+	afk: boolean,
+	gameData: boolean,
+	worlds: boolean,
+};
+
+export type LegacyScan = {
+	found: boolean,
+	hasPremium: boolean,
+	nickname: string | null,
+	afkAccounts: number,
+	hasAfkClient: boolean,
+	worlds: number,
+	worldsBytes: number,
+	screenshots: number,
+	resourcePacks: number,
+	shaderPacks: number,
+	freeBytes: number | null,
+};
+
 export type LoaderKind = "vanilla" | "fabric" | "quilt" | "forge" | "neoForge";
+
+export type LoaderVersionView = {
+	version: string,
+	stable: boolean,
+};
 
 /**  Steps of the Microsoft sign-in, for the UI's animated step list. */
 export type LoginStep = "openingBrowser" | "waitingForBrowser" | "microsoft" | "xboxLive" | "xsts" | "minecraft" | "profile" | "done";
@@ -282,6 +428,31 @@ export type ServerStatusView = {
 export type ServerView = {
 	name: string,
 	address: string,
+};
+
+/**  Session lifecycle. */
+export type SessionState = { state: "stopped" } | 
+/**  Preparing the first launch (settings, config, client). */
+{ state: "starting" } | 
+/**  The client runs and is connecting. */
+{ state: "connecting" } | 
+/**  In game since `since`. */
+{ state: "connected"; since: string } | 
+/**
+ *  Waiting for (or performing) automatic restart number `attempt`. `next_attempt_at` is set
+ *  while waiting; `reason` is why the previous client stopped.
+ */
+{ state: "reconnecting"; attempt: number; nextAttemptAt: string | null; reason: FailureReason | null } | 
+/**  `/quit` sent, waiting for the client to exit (killed after the grace period). */
+{ state: "stopping" } | { state: "error"; reason: FailureReason; 
+/**  The AutoRelog retry limit stopped further restarts. */
+retryLimitReached: boolean };
+
+/**  Live numbers from the bridge; cleared when the client exits. */
+export type SessionStats = {
+	hp: number | null,
+	food: number | null,
+	players: number | null,
 };
 
 export type WorldView = {

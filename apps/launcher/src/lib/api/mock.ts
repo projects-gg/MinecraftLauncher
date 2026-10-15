@@ -487,6 +487,36 @@ export const mockApi: LauncherApi = {
     const job = running.get(instanceId);
     if (job) job.cancelled = true;
   },
+  async updatePresence() {},
+  async setPresenceEnabled() {},
+  async legacyScan() {
+    return {
+      found: true,
+      hasPremium: false,
+      nickname: "EjderAvcisi",
+      afkAccounts: 3,
+      hasAfkClient: true,
+      worlds: 4,
+      worldsBytes: 812_000_000,
+      screenshots: 37,
+      resourcePacks: 2,
+      shaderPacks: 1,
+      freeBytes: 6_700_000_000,
+    };
+  },
+  async legacyImport() {
+    await delay(1800);
+    return {
+      premiumImported: false,
+      nickname: "EjderAvcisi",
+      afkAccounts: 3,
+      afkClient: true,
+      instanceId: "projects",
+      copiedFiles: 214,
+      linkedFiles: 3912,
+      notes: [],
+    };
+  },
   async openUrl(url: string) {
     window.open(url, "_blank", "noopener");
   },

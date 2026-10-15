@@ -169,6 +169,40 @@ impl AfkRuntime {
         write_atomic(&path, text.as_bytes(), false).map_err(|e| AfkError::io(&path, e))
     }
 
+    /// Copies an already extracted client folder (the v1 launcher's `.projects/afk/bin`) in as
+    /// `version`. It is selected only when no version is selected yet, so a published release
+    /// still wins. Blocking: call it from a blocking task.
+    pub fn adopt_folder(&self, version: &str, source: &Path) -> Result<ClientExe> {
+        if !is_valid_version(version) {
+            return Err(AfkError::io(
+                source,
+                std::io::Error::new(std::io::ErrorKind::InvalidInput, "invalid version name"),
+            ));
+        }
+        if let Some(existing) = self.installed(version) {
+            return Ok(existing);
+        }
+        if !source.join(CLIENT_EXE_NAME).is_file() {
+            return Err(AfkError::ClientNotInstalled);
+        }
+        let staging = self.bin_dir.join(STAGING_DIR).join(format!("{version}-adopt"));
+        let _ = std::fs::remove_dir_all(&staging);
+        copy_dir(source, &staging).map_err(|e| AfkError::io(&staging, e))?;
+        let marker = serde_json::to_vec(&Marker {
+            version: version.to_owned(),
+            sha256: "adopted".to_owned(),
+        })
+        .map_err(|e| AfkError::json(INSTALL_MARKER, e))?;
+        std::fs::write(staging.join(INSTALL_MARKER), marker)
+            .map_err(|e| AfkError::io(&staging, e))?;
+        let target = self.bin_dir.join(version);
+        std::fs::rename(&staging, &target).map_err(|e| AfkError::io(&target, e))?;
+        if self.current_version().is_none() {
+            self.select(version)?;
+        }
+        self.installed(version).ok_or(AfkError::ClientNotInstalled)
+    }
+
     /// Makes `release` available (installing it when needed) and selects it. When that fails for
     /// any reason but cancellation and some version is installed, that version is used instead
     /// (offline start). Without a release the installed client is used.
@@ -450,6 +484,20 @@ fn run_tool(tool: &str, args: &[&std::ffi::OsStr]) {
 fn prepare_macos(_dir: &Path) {}
 
 /// Version names become folder names: short, no separators, no dot-only names.
+fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &target)?;
+        } else {
+            std::fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
+}
+
 fn is_valid_version(version: &str) -> bool {
     !version.is_empty()
         && version.len() <= 64

@@ -43,6 +43,7 @@ pub struct AppState {
     pub auth: AuthManager,
     pub content: ContentClient,
     pub presence: PresenceManager,
+    pub afk: pl_afk::AfkManager,
     pub mc: McContext,
     pub instances: InstanceStore,
     pub running: Mutex<Option<RunningGame>>,
@@ -63,7 +64,7 @@ pub fn default_root() -> PathBuf {
 }
 
 impl AppState {
-    pub fn init(version: &str) -> anyhow::Result<Self> {
+    pub fn init(app: &tauri::AppHandle, version: &str) -> anyhow::Result<Self> {
         let root = default_root();
         std::fs::create_dir_all(&root)?;
 
@@ -100,6 +101,33 @@ impl AppState {
         let tauri::async_runtime::RuntimeHandle::Tokio(handle) = tauri::async_runtime::handle();
         let presence = PresenceManager::start_on(&handle, PresenceConfig::new(DISCORD_CLIENT_ID));
 
+        // AFK accounts (Projects Console Client sessions). Events go straight to the UI.
+        let afk_paths = pl_afk::AfkPaths::new(root.join("afk"));
+        let afk_secrets: Arc<dyn pl_afk::SecretStore> = if ephemeral_secrets {
+            Arc::new(pl_afk::MemorySecretStore::new())
+        } else {
+            Arc::new(pl_afk::KeyringSecretStore::new())
+        };
+        let (afk_store, report) = pl_afk::AccountStore::open(afk_paths.clone(), afk_secrets)?;
+        tracing::info!(?report, "AFK accounts loaded");
+        let emitter = app.clone();
+        let afk_events: pl_afk::EventSink = Arc::new(move |event| {
+            use tauri::Emitter;
+            let _ = emitter.emit("afk-event", &event);
+        });
+        let afk = pl_afk::AfkManager::new(
+            Arc::new(afk_store),
+            Arc::new(pl_afk::AfkRuntime::new(afk_paths.bin_dir())),
+            afk_events,
+            pl_afk::ManagerOptions {
+                config: pl_afk::ManagerConfig::default(),
+                downloader: Some(downloader.clone()),
+                download_progress: None,
+                spawner: None,
+                launcher_nickname: auth.active_account().map(|a| a.username).unwrap_or_default(),
+            },
+        );
+
         let data_dirs = DataDirs::new(&root);
         data_dirs.ensure()?;
         let instances = InstanceStore::new(&data_dirs);
@@ -112,6 +140,7 @@ impl AppState {
             auth,
             content,
             presence,
+            afk,
             mc,
             instances,
             running: Mutex::new(None),
