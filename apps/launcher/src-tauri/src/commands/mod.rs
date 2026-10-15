@@ -4,3 +4,6 @@ pub mod accounts;
 pub mod app;
 pub mod content;
 pub mod discord;
+pub mod instances;
+pub mod launch;
+pub mod server;

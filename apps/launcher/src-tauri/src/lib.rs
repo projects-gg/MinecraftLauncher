@@ -76,6 +76,20 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::content::content_home,
             commands::discord::discord_update,
             commands::discord::discord_set_enabled,
+            commands::instances::instances_list,
+            commands::instances::instance_create,
+            commands::instances::instance_delete,
+            commands::instances::instance_duplicate,
+            commands::instances::instance_open_folder,
+            commands::instances::instance_detail,
+            commands::instances::instance_update_settings,
+            commands::instances::mod_set_enabled,
+            commands::instances::minecraft_versions,
+            commands::launch::launch_instance,
+            commands::launch::launch_cancel,
+            commands::launch::game_kill,
+            commands::launch::game_running,
+            commands::server::server_status,
         ])
 }
 

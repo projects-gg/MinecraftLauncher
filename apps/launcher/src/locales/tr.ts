@@ -65,6 +65,7 @@ export const tr = {
     started: "Oyun açıldı",
     exited: "Oyun kapandı",
     crashed: "Oyun beklenmedik şekilde kapandı",
+    offlineMode: "İnternete ulaşılamadı. Kurulu dosyalarla devam ediliyor.",
   },
   instances: {
     pickerLabel: "Kurulum seç",

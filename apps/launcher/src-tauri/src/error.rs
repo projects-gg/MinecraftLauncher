@@ -52,4 +52,32 @@ impl From<pl_content::Error> for CmdError {
     }
 }
 
+impl From<pl_mc::Error> for CmdError {
+    fn from(error: pl_mc::Error) -> Self {
+        use pl_mc::Error as E;
+        let details = error.to_string();
+        let (code, message) = match &error {
+            _ if error.is_cancelled() => ("IPTAL", "İşlem iptal edildi."),
+            _ if error.is_offline() => (
+                "AG-YOK",
+                "İnternete bağlanılamadı ve gereken oyun dosyaları bilgisayarında yok. Bağlantını kontrol edip tekrar dene.",
+            ),
+            E::VersionNotFound(_) => ("SURUM-YOK", "Bu Minecraft sürümü bulunamadı."),
+            E::Java(_) => (
+                "JAVA",
+                "Bu sürüm için uygun Java hazırlanamadı. Kurulum ayarlarından Java'yı Otomatik'e al.",
+            ),
+            E::Net(_) => ("AG", "İndirme sırasında bağlantı sorunu oldu. Tekrar dene."),
+            E::Io { .. } => (
+                "DISK",
+                "Dosyalara yazılamadı. Diskte yer olduğundan ve antivirüsün engellemediğinden emin ol.",
+            ),
+            E::Process(_) => ("SUREC", "Oyun başlatılamadı."),
+            E::NotFound(_) => ("BULUNAMADI", "Gereken bir dosya bulunamadı."),
+            _ => ("OYUN", "Oyun hazırlanırken bir sorun oluştu."),
+        };
+        Self::new(code, message, details)
+    }
+}
+
 pub type CmdResult<T> = Result<T, CmdError>;

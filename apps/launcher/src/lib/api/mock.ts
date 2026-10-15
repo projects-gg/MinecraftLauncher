@@ -481,7 +481,7 @@ export const mockApi: LauncherApi = {
     onEvent({ type: "started", pid: 4242 });
     if (instance) instance.state = "ready";
     await delay(25_000);
-    onEvent({ type: "exited", code: 0, crashed: false });
+    onEvent({ type: "exited", code: 0, runtimeSecs: 25 });
   },
   async cancelLaunch(instanceId: string) {
     const job = running.get(instanceId);

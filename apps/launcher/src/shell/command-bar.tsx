@@ -168,7 +168,7 @@ export function CommandBar() {
   const { data: instances = [] } = useQuery({ queryKey: ["instances"], queryFn: () => api.instances() });
   const selectedId = usePrefs((s) => s.selectedInstanceId);
   const selectInstance = usePrefs((s) => s.selectInstance);
-  const { phase, play, cancel } = useLaunch();
+  const { phase, play, cancel, reset } = useLaunch();
 
   const selected = useMemo(
     () => instances.find((i) => i.id === selectedId) ?? instances[0],
@@ -176,8 +176,16 @@ export function CommandBar() {
   );
 
   useEffect(() => {
-    if (phase.kind === "error") toast.error(phase.message);
-  }, [phase]);
+    if (phase.kind === "error") {
+      toast.error(phase.message, {
+        action: {
+          label: t("common.copyDetails"),
+          onClick: () => void navigator.clipboard.writeText(phase.details),
+        },
+      });
+      reset();
+    }
+  }, [phase, reset, t]);
 
   const state: PlayState = (() => {
     switch (phase.kind) {

@@ -130,9 +130,12 @@ export type LaunchEvent =
       bytesPerSec: number;
       etaSecs?: number;
     }
+  | { type: "offline" }
   | { type: "launching" }
-  | { type: "started"; pid: number }
-  | { type: "exited"; code: number; crashed: boolean }
+  | { type: "started"; pid: number | null }
+  | { type: "windowShown" }
+  | { type: "exited"; code: number | null; runtimeSecs: number }
+  | { type: "crashed"; title: string; hint: string; actions: string[]; mods: string[]; logFile: string | null }
   | { type: "error"; message: string; details: string };
 
 export interface McVersion {

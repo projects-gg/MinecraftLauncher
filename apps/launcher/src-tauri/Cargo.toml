@@ -36,11 +36,12 @@ dirs = { workspace = true }
 uuid = { workspace = true }
 jiff = { workspace = true }
 parking_lot = { workspace = true }
+base64 = { workspace = true }
 specta = { workspace = true }
 specta-typescript = { workspace = true }
 tauri-specta = { workspace = true }
 pl-net = { workspace = true }
-# pl-mc = { workspace = true }  # wired during integration
+pl-mc = { workspace = true }
 pl-auth = { workspace = true }
 pl-content = { workspace = true }
 # pl-afk = { workspace = true }  # wired during integration
