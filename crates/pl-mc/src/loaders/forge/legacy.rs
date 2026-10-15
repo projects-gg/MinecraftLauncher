@@ -80,7 +80,9 @@ pub(crate) fn convert(profile: &LegacyProfile, id: &str, mc: &str) -> Result<Con
     let universal_path = universal_coord.path();
     let entry = profile.install.file_path.trim_start_matches('/').to_owned();
     if entry.is_empty() {
-        return Err(Error::Invalid("legacy install profile has no filePath".into()));
+        return Err(Error::Invalid(
+            "legacy install profile has no filePath".into(),
+        ));
     }
 
     let mut info = profile.version_info.clone();
@@ -92,9 +94,7 @@ pub(crate) fn convert(profile: &LegacyProfile, id: &str, mc: &str) -> Result<Con
         _ => Vec::new(),
     };
 
-    let universal_artifact = |path: &str| {
-        json!({"artifact": {"path": path, "url": ""}})
-    };
+    let universal_artifact = |path: &str| json!({"artifact": {"path": path, "url": ""}});
     let mut libraries: Vec<Value> = Vec::with_capacity(raw_libraries.len());
     let mut universal_index = None;
     let mut checked = Vec::new();
@@ -102,7 +102,11 @@ pub(crate) fn convert(profile: &LegacyProfile, id: &str, mc: &str) -> Result<Con
         let Value::Object(mut library) = raw else {
             continue;
         };
-        let Some(name) = library.get("name").and_then(Value::as_str).map(str::to_owned) else {
+        let Some(name) = library
+            .get("name")
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+        else {
             continue;
         };
         if library.get("clientreq").and_then(Value::as_bool) == Some(false) {
@@ -123,9 +127,7 @@ pub(crate) fn convert(profile: &LegacyProfile, id: &str, mc: &str) -> Result<Con
         let index = libraries.len();
         let coord = MavenCoord::parse(&name).ok();
         let is_universal = name == profile.install.path
-            || coord
-                .as_ref()
-                .is_some_and(|c| c.path() == universal_path);
+            || coord.as_ref().is_some_and(|c| c.path() == universal_path);
         if is_universal && universal_index.is_none() {
             library.remove("url");
             library.insert("downloads".into(), universal_artifact(&universal_path));
@@ -217,10 +219,7 @@ async fn matching_sha1(path: &Path, checksums: &[String]) -> Option<(String, u64
         return None;
     }
     let actual = hash_file(path, HashAlgo::Sha1).await.ok()?;
-    checksums
-        .iter()
-        .any(|c| *c == actual)
-        .then_some((actual, meta.len()))
+    checksums.contains(&actual).then_some((actual, meta.len()))
 }
 
 /// Run the legacy install: universal jar from the installer, checksum-listed libraries. Returns
@@ -377,7 +376,10 @@ mod tests {
             akka.urls[0],
             "https://maven.minecraftforge.net/com/typesafe/akka/akka-actor_2.11/2.3.3/akka-actor_2.11-2.3.3.jar"
         );
-        assert_eq!(akka.checksums[0], "ed62e9fc709ca0f2ff1a3220daa8b70a2870078e");
+        assert_eq!(
+            akka.checksums[0],
+            "ed62e9fc709ca0f2ff1a3220daa8b70a2870078e"
+        );
 
         // Verified checksums end up where the core installer reads them.
         let mut profile = conversion.profile.clone();
@@ -405,11 +407,17 @@ mod tests {
         let info = legacy.version_info.as_object_mut().unwrap();
         info.remove("inheritsFrom");
         info.remove("jar");
-        info.insert("libraries".into(), json!([{"name": "net.sf.jopt-simple:jopt-simple:4.5", "checksums": ["bb"]}]));
+        info.insert(
+            "libraries".into(),
+            json!([{"name": "net.sf.jopt-simple:jopt-simple:4.5", "checksums": ["bb"]}]),
+        );
         let conversion = convert(&legacy, "1.6.4-forge-9.11.1.1345", "1.6.4").unwrap();
         assert_eq!(conversion.profile["inheritsFrom"], "1.6.4");
         assert_eq!(conversion.profile["jar"], "1.6.4");
-        assert_eq!(conversion.universal.index, 0, "missing universal entry is added");
+        assert_eq!(
+            conversion.universal.index, 0,
+            "missing universal entry is added"
+        );
         assert_eq!(conversion.checked[0].index, 1);
         assert_eq!(
             conversion.checked[0].urls[0],

@@ -138,7 +138,10 @@ pub(super) async fn existing_profile(ctx: &McContext, id: &str, mc: &str) -> Opt
         Ok(Some(json))
             if json.id == id
                 && json.inherits_from.as_deref() == Some(mc)
-                && json.main_class.as_deref().is_some_and(|m| !m.trim().is_empty()) =>
+                && json
+                    .main_class
+                    .as_deref()
+                    .is_some_and(|m| !m.trim().is_empty()) =>
         {
             Some(json)
         }
@@ -172,7 +175,11 @@ pub(super) fn prepare_profile(mut value: Value, id: &str, mc: &str, what: &str) 
     object.insert("inheritsFrom".into(), Value::from(mc));
     let parsed: VersionJson =
         serde_json::from_value(value.clone()).map_err(|e| Error::json(what, e))?;
-    if parsed.main_class.as_deref().is_none_or(|m| m.trim().is_empty()) {
+    if parsed
+        .main_class
+        .as_deref()
+        .is_none_or(|m| m.trim().is_empty())
+    {
         return Err(Error::Invalid(format!("{what} has no mainClass")));
     }
     Ok(value)

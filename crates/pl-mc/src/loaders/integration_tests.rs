@@ -154,7 +154,10 @@ async fn install_loaders() {
             case.loader.version,
             case.mc
         );
-        println!("\n== {label} (listed {} versions in {:.2}s)", case.listed, case.list_secs);
+        println!(
+            "\n== {label} (listed {} versions in {:.2}s)",
+            case.listed, case.list_secs
+        );
 
         let stages: Arc<Mutex<Option<InstallStage>>> = Arc::new(Mutex::new(None));
         let stage_log = Arc::clone(&stages);
@@ -226,7 +229,10 @@ async fn install_loaders() {
         // Launch command built offline from the installed files.
         let resolved = resolve_version(&ctx, &id, None).await.unwrap();
         assert_eq!(resolved.main_class, case.main_class, "{label}: main class");
-        assert_eq!(resolved.chain.last().map(String::as_str), Some(case.mc.as_str()));
+        assert_eq!(
+            resolved.chain.last().map(String::as_str),
+            Some(case.mc.as_str())
+        );
         let installed = install_version(
             &ctx,
             &resolved,
@@ -252,11 +258,17 @@ async fn install_loaders() {
         let classpath = option_entries(&command.args, "-cp", separator);
         assert!(!classpath.is_empty(), "{label}: no -cp");
         for entry in &classpath {
-            assert!(Path::new(entry).is_file(), "{label}: classpath entry missing: {entry}");
+            assert!(
+                Path::new(entry).is_file(),
+                "{label}: classpath entry missing: {entry}"
+            );
         }
         let module_path = option_entries(&command.args, "-p", separator);
         for entry in &module_path {
-            assert!(Path::new(entry).is_file(), "{label}: module path entry missing: {entry}");
+            assert!(
+                Path::new(entry).is_file(),
+                "{label}: module path entry missing: {entry}"
+            );
         }
         assert!(command.args.contains(&resolved.main_class));
         assert!(
@@ -273,7 +285,11 @@ async fn install_loaders() {
                 serde_json::from_slice(&std::fs::read(&marker).unwrap()).unwrap();
             for file in value["files"].as_array().unwrap() {
                 let path = root.join(file["path"].as_str().unwrap());
-                assert!(path.is_file(), "{label}: installer output missing: {}", path.display());
+                assert!(
+                    path.is_file(),
+                    "{label}: installer output missing: {}",
+                    path.display()
+                );
                 produced += 1;
             }
         }

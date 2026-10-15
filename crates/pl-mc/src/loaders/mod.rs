@@ -117,7 +117,11 @@ fn normalize_loader_version(kind: LoaderKind, mc: &str, loader: &str) -> Result<
 /// Version id [`install_loader`] installs and returns for this loader:
 /// `fabric-loader-<loader>-<mc>`, `quilt-loader-<loader>-<mc>`, `<mc>-forge-<loader>`,
 /// `neoforge-<loader>` (`1.20.1-neoforge-<loader>` for NeoForge on 1.20.1), or `mc` for vanilla.
-pub fn loader_profile_id(kind: LoaderKind, mc_version: &str, loader_version: &str) -> Result<String> {
+pub fn loader_profile_id(
+    kind: LoaderKind,
+    mc_version: &str,
+    loader_version: &str,
+) -> Result<String> {
     let mc = mc_version.trim();
     safe_name(mc)?;
     let loader = normalize_loader_version(kind, mc, loader_version)?;
@@ -214,7 +218,10 @@ mod tests {
             id(LoaderKind::Quilt, "1.21.1", " 0.29.2 "),
             "quilt-loader-0.29.2-1.21.1"
         );
-        assert_eq!(id(LoaderKind::Forge, "1.20.1", "47.4.10"), "1.20.1-forge-47.4.10");
+        assert_eq!(
+            id(LoaderKind::Forge, "1.20.1", "47.4.10"),
+            "1.20.1-forge-47.4.10"
+        );
         assert_eq!(
             id(LoaderKind::Forge, "1.20.1", "1.20.1-47.4.10"),
             "1.20.1-forge-47.4.10",
@@ -228,8 +235,14 @@ mod tests {
             id(LoaderKind::Forge, "1.7.10", "10.13.4.1614-1.7.10"),
             "1.7.10-forge-10.13.4.1614"
         );
-        assert_eq!(id(LoaderKind::NeoForge, "1.21.1", "21.1.262"), "neoforge-21.1.262");
-        assert_eq!(id(LoaderKind::NeoForge, "26.3", "26.3.0.83"), "neoforge-26.3.0.83");
+        assert_eq!(
+            id(LoaderKind::NeoForge, "1.21.1", "21.1.262"),
+            "neoforge-21.1.262"
+        );
+        assert_eq!(
+            id(LoaderKind::NeoForge, "26.3", "26.3.0.83"),
+            "neoforge-26.3.0.83"
+        );
         assert_eq!(
             id(LoaderKind::NeoForge, "1.20.1", "1.20.1-47.1.106"),
             "1.20.1-neoforge-47.1.106"
@@ -310,7 +323,10 @@ mod tests {
                 "downloads": {"client": {"sha1": "00", "url": "https://example.invalid/client.jar"}},
                 "libraries": [{"name": "com.example:lib:1.0"}]}"#,
         );
-        write(&dirs.asset_index_file("1.12").unwrap(), br#"{"objects": {}}"#);
+        write(
+            &dirs.asset_index_file("1.12").unwrap(),
+            br#"{"objects": {}}"#,
+        );
         write(
             &dirs
                 .library_file("com/example/lib/1.0/lib-1.0.jar")
@@ -357,7 +373,8 @@ mod tests {
 
         // Forge: the profile alone is not enough, the install marker must verify too.
         let forge_id = loader_profile_id(LoaderKind::Forge, "1.12.2", "14.23.5.2859").unwrap();
-        let forge_path = "net/minecraftforge/forge/1.12.2-14.23.5.2859/forge-1.12.2-14.23.5.2859.jar";
+        let forge_path =
+            "net/minecraftforge/forge/1.12.2-14.23.5.2859/forge-1.12.2-14.23.5.2859.jar";
         let forge_jar = dirs.library_file(forge_path).unwrap();
         write(&forge_jar, b"forge");
         let sha1 = pl_net::hash_bytes(b"forge", pl_net::HashAlgo::Sha1);
@@ -398,7 +415,10 @@ mod tests {
             .unwrap(),
             forge_id
         );
-        assert!(dirs.version_jar(&forge_id).unwrap().is_file(), "client jar linked");
+        assert!(
+            dirs.version_jar(&forge_id).unwrap().is_file(),
+            "client jar linked"
+        );
 
         std::fs::remove_file(&forge_jar).unwrap();
         assert!(matches!(

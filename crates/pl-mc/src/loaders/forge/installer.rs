@@ -163,8 +163,8 @@ pub(crate) fn parse_install_profile(
         .unwrap_or("/version.json")
         .trim_start_matches('/')
         .to_owned();
-    let version_bytes = read_entry(&entry)?
-        .ok_or_else(|| Error::Invalid(format!("installer has no `{entry}`")))?;
+    let version_bytes =
+        read_entry(&entry)?.ok_or_else(|| Error::Invalid(format!("installer has no `{entry}`")))?;
     profile.version_json =
         serde_json::from_slice(&version_bytes).map_err(|e| Error::json(&entry, e))?;
     Ok(InstallProfile::Modern(Box::new(profile)))
@@ -196,12 +196,13 @@ fn read_entry<R: Read + Seek>(
 
 fn read_installer_blocking(path: &Path) -> Result<InstallerContents> {
     let mut archive = open(path)?;
-    let profile_bytes = read_entry(&mut archive, path, "install_profile.json")?.ok_or_else(|| {
-        Error::Unsupported(format!(
-            "{} has no install_profile.json (installer too old)",
-            path.display()
-        ))
-    })?;
+    let profile_bytes =
+        read_entry(&mut archive, path, "install_profile.json")?.ok_or_else(|| {
+            Error::Unsupported(format!(
+                "{} has no install_profile.json (installer too old)",
+                path.display()
+            ))
+        })?;
     let profile =
         parse_install_profile(&profile_bytes, |name| read_entry(&mut archive, path, name))?;
     let maven = archive
@@ -348,7 +349,10 @@ pub(crate) mod tests {
             Some("net.minecraftforge.installertools.ConsoleTool")
         );
         assert_eq!(manifest_main_class("Manifest-Version: 1.0\n"), None);
-        assert_eq!(manifest_main_class("main-class:  a.B \n").as_deref(), Some("a.B"));
+        assert_eq!(
+            manifest_main_class("main-class:  a.B \n").as_deref(),
+            Some("a.B")
+        );
     }
 
     #[test]

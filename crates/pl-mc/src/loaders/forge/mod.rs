@@ -46,8 +46,7 @@ use installer::{
 };
 use marker::Marker;
 use processors::{
-    DataValue, Environment, Invocation, build_tokens, client_data, plan_invocation,
-    run_invocation,
+    DataValue, Environment, Invocation, build_tokens, client_data, plan_invocation, run_invocation,
 };
 
 /// What is being installed.
@@ -189,7 +188,8 @@ pub(super) async fn install(
     let manifest = load_manifest(ctx, false).await?;
     let maven_version = target.maven_version(ctx).await?;
     let coord = target.installer_coord(&maven_version)?;
-    let (installer_path, fresh) = fetch_installer(ctx, &dirs, &target, &coord, false, options).await?;
+    let (installer_path, fresh) =
+        fetch_installer(ctx, &dirs, &target, &coord, false, options).await?;
     let contents = match read_installer(installer_path.clone()).await {
         Ok(contents) => contents,
         Err(error @ (Error::Archive { .. } | Error::Json { .. })) if !fresh => {
@@ -298,6 +298,12 @@ async fn install_modern(
             target.mc
         )));
     }
+    tracing::debug!(
+        id = %target.id,
+        spec = profile.spec,
+        processors = profile.processors.len(),
+        "installer profile"
+    );
     let what = "installer version.json";
     let profile_value =
         prepare_profile(profile.version_json.clone(), &target.id, &target.mc, what)?;
@@ -619,9 +625,7 @@ mod tests {
             id: "x".into(),
         };
         let forge = target(LoaderKind::Forge, "1.7.10", "10.13.4.1614");
-        let coord = forge
-            .installer_coord("1.7.10-10.13.4.1614-1.7.10")
-            .unwrap();
+        let coord = forge.installer_coord("1.7.10-10.13.4.1614-1.7.10").unwrap();
         assert_eq!(
             coord.url(forge.maven_base()),
             "https://maven.minecraftforge.net/net/minecraftforge/forge/1.7.10-10.13.4.1614-1.7.10/forge-1.7.10-10.13.4.1614-1.7.10-installer.jar"

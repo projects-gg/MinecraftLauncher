@@ -140,7 +140,10 @@ mod tests {
         newer("21.1.262", "21.1.259");
         newer("47.4.10", "47.4.9");
         newer("10.13.4.1614", "10.13.4.1558");
-        newer("26.1.0.0-alpha.10+snapshot-6", "26.1.0.0-alpha.9+snapshot-6");
+        newer(
+            "26.1.0.0-alpha.10+snapshot-6",
+            "26.1.0.0-alpha.9+snapshot-6",
+        );
         newer("26.1.0.1-beta", "26.1.0.0-alpha.15+pre-3");
         newer("26.1.2.121", "26.1.2.120");
         newer("21.0.1-beta", "21.0.0-beta");
@@ -148,7 +151,11 @@ mod tests {
         newer("1.0-rc.1", "1.0-beta.2");
         newer("1.0-beta", "1.0-alpha.5");
         assert_eq!(compare_versions("1.0", "1.0"), Ordering::Equal);
-        assert_ne!(compare_versions("1.0", "1.0.0"), Ordering::Equal, "total order");
+        assert_ne!(
+            compare_versions("1.0", "1.0.0"),
+            Ordering::Equal,
+            "total order"
+        );
     }
 
     #[test]

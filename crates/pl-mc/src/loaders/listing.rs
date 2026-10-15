@@ -374,7 +374,10 @@ pub(crate) fn parse_promotions(bytes: &[u8]) -> Result<BTreeMap<String, String>>
 
 /// Split a Forge Maven version of `mc` into its loader part and branch suffix:
 /// `1.7.10-10.13.4.1614-1.7.10` → (`10.13.4.1614`, `Some("1.7.10")`).
-pub(crate) fn split_forge_version<'a>(mc: &str, maven: &'a str) -> Option<(&'a str, Option<&'a str>)> {
+pub(crate) fn split_forge_version<'a>(
+    mc: &str,
+    maven: &'a str,
+) -> Option<(&'a str, Option<&'a str>)> {
     let rest = maven.strip_prefix(mc)?.strip_prefix('-')?;
     let (loader, branch) = match rest.split_once('-') {
         Some((loader, branch)) => (loader, Some(branch)),
@@ -549,8 +552,13 @@ mod tests {
         assert_eq!(v.len(), 11);
         assert_eq!(v[0], "1.21-51.0.33");
         assert_eq!(v[10], "26.1.2-64.1.0");
-        assert!(!v.iter().any(|x| x == "1.20.4-49.2.13"), "<latest> is not a version entry");
-        assert!(parse_maven_versions("<metadata><versioning><versions><version>1</version>").is_ok());
+        assert!(
+            !v.iter().any(|x| x == "1.20.4-49.2.13"),
+            "<latest> is not a version entry"
+        );
+        assert!(
+            parse_maven_versions("<metadata><versioning><versions><version>1</version>").is_ok()
+        );
         assert!(parse_maven_versions("<a></b>").is_err());
         let escaped = parse_maven_versions(
             "<m><versioning><versions><version>a&amp;b</version></versions></versioning></m>",
@@ -647,8 +655,14 @@ mod tests {
         assert!(v1211[0].recommended && v1211[0].stable);
         assert_eq!(names(&neoforge_entries(&all, "1.21")), ["21.0.167"]);
         assert_eq!(names(&neoforge_entries(&all, "1.21.10")), ["21.10.64"]);
-        assert_eq!(names(&neoforge_entries(&all, "1.20.2")), ["20.2.93", "20.2.3-beta"]);
-        assert!(neoforge_entries(&all, "1.20.1").is_empty(), "legacy artifact");
+        assert_eq!(
+            names(&neoforge_entries(&all, "1.20.2")),
+            ["20.2.93", "20.2.3-beta"]
+        );
+        assert!(
+            neoforge_entries(&all, "1.20.1").is_empty(),
+            "legacy artifact"
+        );
         assert!(neoforge_entries(&all, "1.19.2").is_empty());
 
         // Year-based releases: `26.1` → `26.1.0.*` without snapshot builds.
@@ -659,7 +673,10 @@ mod tests {
         let v2612 = neoforge_entries(&all, "26.1.2");
         assert_eq!(names(&v2612), ["26.1.2.121", "26.1.2.120", "26.1.2.0-beta"]);
         assert!(v2612[0].recommended);
-        assert_eq!(names(&neoforge_entries(&all, "26.3")), ["26.3.0.83", "26.3.0.75-beta"]);
+        assert_eq!(
+            names(&neoforge_entries(&all, "26.3")),
+            ["26.3.0.83", "26.3.0.75-beta"]
+        );
         // Snapshots map through build metadata.
         assert_eq!(
             names(&neoforge_entries(&all, "26.1-snapshot-1")),
@@ -701,7 +718,10 @@ mod tests {
                 {"loader": {"version": "0.30.1"}}, {"loader": {"version": "0.31.0-beta.1"}}]"#,
         )
         .unwrap();
-        assert_eq!(names(&quilt), ["0.31.0-beta.1", "0.30.1", "0.24.0", "0.20.0-beta.9"]);
+        assert_eq!(
+            names(&quilt),
+            ["0.31.0-beta.1", "0.30.1", "0.24.0", "0.20.0-beta.9"]
+        );
         assert!(!quilt[0].stable);
         assert!(quilt[1].recommended);
         assert_eq!(quilt.iter().filter(|e| e.recommended).count(), 1);
@@ -714,8 +734,11 @@ mod tests {
             "https://meta.fabricmc.net/v2/versions/loader/1.21.1"
         );
         assert_eq!(
-            meta_url(QUILT_META_URL, &["versions", "loader", "1.14 Pre-Release 1", "0.1+b/2"])
-                .unwrap(),
+            meta_url(
+                QUILT_META_URL,
+                &["versions", "loader", "1.14 Pre-Release 1", "0.1+b/2"]
+            )
+            .unwrap(),
             "https://meta.quiltmc.org/v3/versions/loader/1.14%20Pre-Release%201/0.1+b%2F2"
         );
     }
@@ -758,12 +781,7 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(entries, cached);
-        assert!(
-            ctx.dirs
-                .meta()
-                .join("loaders/fabric/1.21.1.json")
-                .is_file()
-        );
+        assert!(ctx.dirs.meta().join("loaders/fabric/1.21.1.json").is_file());
         // Minecraft versions without NeoForge need no request at all.
         let none = loader_entries(&ctx, &endpoints, LoaderKind::NeoForge, "1.16.5")
             .await

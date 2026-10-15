@@ -399,7 +399,10 @@ mod tests {
             minecraft_version: "1.20.1",
         };
         let tokens = build_tokens(&client, &files, &env).unwrap();
-        assert_eq!(tokens["BINPATCH"], path_string(Path::new("/work/data/client.lzma")));
+        assert_eq!(
+            tokens["BINPATCH"],
+            path_string(Path::new("/work/data/client.lzma"))
+        );
         assert_eq!(tokens["MCP_VERSION"], "20230612.114412");
         assert_eq!(
             PathBuf::from(&tokens["PATCHED"]),
