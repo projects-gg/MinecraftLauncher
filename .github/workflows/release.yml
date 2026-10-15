@@ -1,0 +1,536 @@
+# Builds Projects Launcher for Windows, macOS (universal) and Linux, attaches the bundles and
+# latest.json to a DRAFT GitHub release, and (when the R2 secrets exist) publishes them to
+# https://cdn.projects.gg/v1/releases/<version>/ plus the beta channel file.
+# Projects Studio is built alongside and kept as workflow artifacts (it is not for players).
+# How to cut a release, secrets and channels: docs/release.md. Code signing: docs/signing.md.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Sürüm, ör. 2.1.0 veya 2.1.0-beta.1 (etiket v<sürüm> olur)"
+        required: true
+        type: string
+      notes:
+        description: "Sürüm notları (Markdown). Etiketle yayında etiket mesajı kullanılır."
+        required: false
+        type: string
+        default: ""
+      channel:
+        description: "R2'de güncellenecek kanal (stable için Release promote iş akışı)"
+        type: choice
+        options: [beta, none]
+        default: beta
+      dry_run:
+        description: "Yalnız derle: GitHub Release oluşturma, R2'ye yükleme"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  PRODUCT_NAME: Projects Launcher
+  # Updater entries every release must have (a missing one means a build leg produced nothing).
+  REQUIRED_PLATFORMS: windows-x86_64,darwin-aarch64,darwin-x86_64,linux-x86_64
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+      channel: ${{ steps.meta.outputs.channel }}
+      dry_run: ${{ steps.meta.outputs.dry_run }}
+      release_id: ${{ steps.release.outputs.id }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      signpath: ${{ steps.plan.outputs.signpath }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Version and release notes
+        id: meta
+        env:
+          EVENT: ${{ github.event_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_NOTES: ${{ inputs.notes }}
+          INPUT_CHANNEL: ${{ inputs.channel }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$EVENT" = "push" ]; then raw="$GITHUB_REF_NAME"; else raw="$INPUT_VERSION"; fi
+          node scripts/release/version-info.mjs "$raw" | tee -a "$GITHUB_OUTPUT" > version.env
+          . ./version.env
+          echo "channel=${INPUT_CHANNEL:-beta}" >> "$GITHUB_OUTPUT"
+          echo "dry_run=${INPUT_DRY_RUN:-false}" >> "$GITHUB_OUTPUT"
+
+          # Release notes: the dispatch input, else the annotated tag's message.
+          : > notes.md
+          if [ -n "$INPUT_NOTES" ]; then
+            printf '%s\n' "$INPUT_NOTES" > notes.md
+          elif [ "$EVENT" = "push" ]; then
+            git fetch --no-tags --depth=1 origin "+refs/tags/$tag:refs/tags/$tag"
+            if [ "$(git cat-file -t "$tag")" = "tag" ]; then
+              git tag -l --format='%(contents:subject)%0a%0a%(contents:body)' "$tag" > notes.md
+            fi
+          fi
+          { echo "## Projects Launcher $version"; echo; cat notes.md; } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: notes.md
+          retention-days: 30
+
+      - name: Plan the builds
+        id: plan
+        env:
+          DRY_RUN: ${{ steps.meta.outputs.dry_run }}
+          SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+          SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+        run: |
+          windows='{"os":"windows-latest","key":"windows","args":"","targets":""}'
+          macos='{"os":"macos-latest","key":"macos","args":"--target universal-apple-darwin","targets":"aarch64-apple-darwin,x86_64-apple-darwin"}'
+          linux='{"os":"ubuntu-22.04","key":"linux","args":"","targets":""}'
+          # With SignPath configured, Windows is built by the launcher-windows-signed job instead.
+          # Dry runs stay unsigned so they do not ask SignPath approvers for throwaway builds.
+          if [ "$DRY_RUN" != "true" ] && [ -n "$SIGNPATH_API_TOKEN" ] && [ -n "$SIGNPATH_ORGANIZATION_ID" ]; then
+            echo "signpath=true" >> "$GITHUB_OUTPUT"
+            echo "matrix=[$macos,$linux]" >> "$GITHUB_OUTPUT"
+            echo "Windows: signed through SignPath" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "signpath=false" >> "$GITHUB_OUTPUT"
+            echo "matrix=[$windows,$macos,$linux]" >> "$GITHUB_OUTPUT"
+            echo "Windows: unsigned (no SignPath secrets)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Create or reuse the draft release
+        id: release
+        if: steps.meta.outputs.dry_run != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.meta.outputs.tag }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          PRERELEASE: ${{ steps.meta.outputs.prerelease }}
+        run: |
+          existing="$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq ".[] | select(.tag_name == \"$TAG\") | \"\(.id) \(.draft)\"" | head -n 1)"
+          if [ -n "$existing" ]; then
+            read -r id draft <<< "$existing"
+            if [ "$draft" != "true" ]; then
+              echo "::error::Release $TAG is already published. Published files never change; release a new version."
+              exit 1
+            fi
+            echo "Reusing draft release $id"
+          else
+            id="$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
+              -f tag_name="$TAG" -f target_commitish="$GITHUB_SHA" \
+              -f name="Projects Launcher $VERSION" -F body=@notes.md \
+              -F draft=true -F prerelease="$PRERELEASE" --jq .id)"
+            echo "Created draft release $id"
+          fi
+          echo "id=$id" >> "$GITHUB_OUTPUT"
+
+  launcher:
+    name: Launcher (${{ matrix.key }})
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          targets: ${{ matrix.targets }}
+          cache: "false"
+
+      - name: Stamp the version
+        run: node scripts/release/set-version.mjs "$VERSION"
+
+      - name: Check the updater signing key
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::Secret TAURI_SIGNING_PRIVATE_KEY is missing (docs/release.md)."
+            exit 1
+          fi
+
+      # Developer ID signing + notarization when the Apple secrets exist (docs/signing.md);
+      # otherwise the bundle keeps the ad-hoc signature from tauri.conf.json.
+      - name: Apple signing (optional)
+        if: runner.os == 'macOS'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
+        run: |
+          if [ -z "$APPLE_CERTIFICATE" ] || [ -z "$APPLE_SIGNING_IDENTITY" ]; then
+            echo "No Apple Developer ID secrets: keeping the ad-hoc signature."
+            exit 0
+          fi
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_API_ISSUER APPLE_API_KEY; do
+            if [ -n "${!name}" ]; then
+              delimiter="EOF_$(openssl rand -hex 12)"
+              printf '%s<<%s\n%s\n%s\n' "$name" "$delimiter" "${!name}" "$delimiter" >> "$GITHUB_ENV"
+            fi
+          done
+          if [ -n "$APPLE_API_KEY_P8" ]; then
+            printf '%s\n' "$APPLE_API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
+            echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build and attach to the draft release
+        id: tauri
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/launcher
+          # Empty on dry runs: build only. latest.json is written once by the finalize job.
+          releaseId: ${{ needs.prepare.outputs.release_id }}
+          uploadUpdaterJson: false
+          args: ${{ matrix.args }}
+
+      - name: Collect the bundles
+        env:
+          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+        run: node scripts/release/collect-artifacts.mjs --out release-files --version "$VERSION" --product "$PRODUCT_NAME"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: launcher-${{ matrix.key }}
+          path: release-files/
+          if-no-files-found: error
+          retention-days: 30
+
+  # Only when SignPath is configured. The executable has to be signed after Tauri writes the
+  # bundle type into it and before NSIS packs it, and SignPath's origin verification needs a
+  # GitHub artifact per signing request, so the build is split: build, patch, sign the app,
+  # bundle, sign the installer, then re-create the updater signature over the signed installer.
+  launcher-windows-signed:
+    name: Launcher (windows, signed)
+    needs: prepare
+    if: needs.prepare.outputs.signpath == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 180
+    permissions:
+      contents: write
+      actions: read
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      RELEASE_ID: ${{ needs.prepare.outputs.release_id }}
+      APP_EXE: target/release/projects-launcher.exe
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache: "false"
+
+      - name: Stamp the version
+        run: node scripts/release/set-version.mjs "$VERSION"
+
+      - name: Check the updater signing key
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::Secret TAURI_SIGNING_PRIVATE_KEY is missing (docs/release.md)."
+            exit 1
+          fi
+
+      - name: Build the app
+        run: pnpm --filter @pl/launcher tauri build --no-bundle
+
+      - name: Mark the executable as an NSIS build
+        run: node scripts/release/patch-bundle-type.mjs "$APP_EXE" nsis
+
+      - name: Upload the unsigned executable
+        id: unsigned-app
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signpath-app
+          path: ${{ env.APP_EXE }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Sign the executable (SignPath)
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'projects-launcher' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned-app.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed/app
+
+      - name: Bundle the installer with the signed executable
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          cp signed/app/projects-launcher.exe "$APP_EXE"
+          pnpm --filter @pl/launcher tauri bundle --bundles nsis
+          installer="$(ls target/release/bundle/nsis/*-setup.exe)"
+          echo "INSTALLER=$installer" >> "$GITHUB_ENV"
+
+      - name: Upload the unsigned installer
+        id: unsigned-installer
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: signpath-installer
+          path: ${{ env.INSTALLER }}
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Sign the installer (SignPath)
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG || 'projects-launcher' }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.unsigned-installer.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: signed/installer
+
+      - name: Re-sign the signed installer for the updater
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          cp "signed/installer/$(basename "$INSTALLER")" "$INSTALLER"
+          rm -f "$INSTALLER.sig"
+          pnpm --dir apps/launcher exec tauri signer sign --app-version "$VERSION" "$(cygpath -m "$PWD/$INSTALLER")"
+          test -s "$INSTALLER.sig"
+
+      - name: Verify the Authenticode signatures
+        shell: pwsh
+        run: |
+          foreach ($file in @($env:APP_EXE, $env:INSTALLER)) {
+            $sig = Get-AuthenticodeSignature -FilePath $file
+            if ($sig.Status -ne 'Valid') { throw "$file is not validly signed: $($sig.StatusMessage)" }
+            Write-Host "$file signed by $($sig.SignerCertificate.Subject)"
+          }
+
+      - name: Collect the bundles
+        run: node scripts/release/collect-artifacts.mjs --out release-files --version "$VERSION" --product "$PRODUCT_NAME" "$INSTALLER" "$INSTALLER.sig"
+
+      - name: Attach to the draft release
+        if: env.RELEASE_ID != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" release-files/* --clobber --repo "$GITHUB_REPOSITORY"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: launcher-windows
+          path: release-files/
+          if-no-files-found: error
+          retention-days: 30
+
+  finalize:
+    name: Draft release (latest.json)
+    needs: [prepare, launcher, launcher-windows-signed]
+    if: >-
+      always() && needs.prepare.result == 'success' && needs.prepare.outputs.dry_run != 'true'
+      && needs.launcher.result == 'success'
+      && contains(fromJSON('["success","skipped"]'), needs.launcher-windows-signed.result)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: launcher-*
+          path: release-files
+          merge-multiple: true
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: notes
+
+      # Tauri's static updater file for the GitHub fallback; R2's channel files are separate.
+      - name: Write latest.json
+        run: >-
+          node scripts/release/channel.mjs --dir release-files --version "$VERSION"
+          --base-url "https://github.com/$GITHUB_REPOSITORY/releases/download/$TAG/"
+          --notes-file notes/notes.md --require "$REQUIRED_PLATFORMS" --out latest.json
+
+      - name: Attach latest.json
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$TAG" latest.json --clobber --repo "$GITHUB_REPOSITORY"
+          {
+            echo "Draft release: https://github.com/$GITHUB_REPOSITORY/releases (publish it by hand)"
+            echo
+            echo '```'
+            ls -l release-files
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  publish-r2:
+    name: Publish to R2
+    needs: [prepare, finalize]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Add required reviewers to this environment to approve CDN publishes by hand.
+    environment: cdn
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      CHANNEL: ${{ needs.prepare.outputs.channel }}
+      CDN_BASE_URL: ${{ vars.CDN_BASE_URL || 'https://cdn.projects.gg' }}
+      R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+      R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      R2_BUCKET: ${{ secrets.R2_BUCKET }}
+    steps:
+      - name: Check the R2 secrets
+        id: r2
+        run: |
+          if [ -n "$R2_ACCOUNT_ID" ] && [ -n "$R2_ACCESS_KEY_ID" ] && [ -n "$R2_SECRET_ACCESS_KEY" ] && [ -n "$R2_BUCKET" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::R2 secrets are not set; skipping the CDN publish (docs/release.md)."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.r2.outputs.enabled == 'true'
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.r2.outputs.enabled == 'true'
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.r2.outputs.enabled == 'true'
+        with:
+          pattern: launcher-*
+          path: release-files
+          merge-multiple: true
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: steps.r2.outputs.enabled == 'true'
+        with:
+          name: release-notes
+          path: notes
+
+      - name: Upload to v1/releases/<version>/ and write the channel file
+        if: steps.r2.outputs.enabled == 'true'
+        run: >-
+          node scripts/release/publish-r2.mjs publish --dir release-files --version "$VERSION"
+          --channel "$CHANNEL" --notes-file notes/notes.md --require "$REQUIRED_PLATFORMS"
+
+  studio:
+    name: Studio (${{ matrix.key }})
+    needs: prepare
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, key: windows, args: "", targets: "" }
+          - os: macos-latest
+            key: macos
+            args: --target universal-apple-darwin
+            targets: aarch64-apple-darwin,x86_64-apple-darwin
+          - { os: ubuntu-22.04, key: linux, args: "", targets: "" }
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          targets: ${{ matrix.targets }}
+          cache: "false"
+
+      - name: Stamp the version
+        run: node scripts/release/set-version.mjs "$VERSION"
+
+      # Studio is for the team only: no updater, no public release; the installers stay on the
+      # workflow run as artifacts (Actions > this run > Artifacts).
+      - name: Build
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
+        with:
+          projectPath: apps/studio
+          args: ${{ matrix.args }}
+          uploadWorkflowArtifacts: true
+          workflowArtifactNamePattern: studio-[platform]-[arch]-[bundle]

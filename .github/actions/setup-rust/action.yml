@@ -1,0 +1,37 @@
+name: Set up Rust
+description: >-
+  Stable Rust (see rust-toolchain.toml) with rustfmt and clippy, optional extra targets,
+  the Linux system packages Tauri needs, and the cargo cache.
+
+inputs:
+  targets:
+    description: Comma-separated extra targets, e.g. `aarch64-apple-darwin,x86_64-apple-darwin`.
+    default: ""
+  cache:
+    description: >-
+      `true` restores the cargo cache (saved only by pushes to v2/main), `false` skips it.
+      Release builds skip it: their target folders would push the CI caches out of the 10 GB limit.
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Tauri system packages
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf \
+          libdbus-1-dev pkg-config build-essential file
+
+    - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master
+      with:
+        toolchain: stable
+        components: rustfmt, clippy
+        targets: ${{ inputs.targets }}
+
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      if: inputs.cache == 'true'
+      with:
+        save-if: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/v2' || github.ref == 'refs/heads/main') }}

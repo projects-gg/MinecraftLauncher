@@ -46,6 +46,7 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "app", "dmg", "appimage", "deb", "rpm"],
+    "createUpdaterArtifacts": true,
     "publisher": "Projects.gg",
     "homepage": "https://projects.gg",
     "copyright": "© Projects.gg",
@@ -64,7 +65,14 @@
       "nsis": {
         "installMode": "currentUser",
         "languages": ["Turkish", "English"],
-        "displayLanguageSelector": false
+        "displayLanguageSelector": false,
+        "customLanguageFiles": {
+          "Turkish": "nsis/Turkish.nsh"
+        },
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "headerImage": "nsis/header.bmp",
+        "sidebarImage": "nsis/sidebar.bmp"
       }
     },
     "macOS": {
@@ -76,6 +84,14 @@
     "deep-link": {
       "desktop": {
         "schemes": ["projects"]
+      }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc1ODE3OEQ4MjQ3MEJEODIKUldTQ3ZYQWsySGlCZFo0M0dJWFZ4L285M1RWWU9PTXNjTVBoYlI2emI4dWNHTDFPc1BvcU5YRUkK",
+      "endpoints": [],
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

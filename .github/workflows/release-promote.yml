@@ -1,0 +1,83 @@
+# Moves a published launcher release between update channels on R2 (beta -> stable), or changes
+# the rollout / mandatory / minVersion of a channel (stable -> stable). docs/release.md.
+
+name: Release promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Sürüm (kaynak kanalın duyurduğu sürüm olmalı), ör. 2.1.0"
+        required: true
+        type: string
+      from:
+        description: "Kaynak kanal"
+        type: choice
+        options: [beta, stable]
+        default: beta
+      to:
+        description: "Hedef kanal"
+        type: choice
+        options: [stable, beta]
+        default: stable
+      rollout:
+        description: "Yayın yüzdesi 0-100 (boş: yeni kanalda 100, aynı kanalda mevcut değer)"
+        type: string
+        default: ""
+      mandatory:
+        description: "Zorunlu güncelleme (default: yeni kanalda hayır, aynı kanalda mevcut değer)"
+        type: choice
+        options: [default, "true", "false"]
+        default: default
+      min_version:
+        description: "minVersion: bunun altındaki kurulumlar hemen güncellenir (none: kaldır, boş: koru)"
+        type: string
+        default: ""
+      dry_run:
+        description: "Yalnız göster, yazma"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: Promote ${{ inputs.version }} (${{ inputs.from }} -> ${{ inputs.to }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: cdn
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Write the channel file
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          CDN_BASE_URL: ${{ vars.CDN_BASE_URL || 'https://cdn.projects.gg' }}
+          VERSION: ${{ inputs.version }}
+          FROM: ${{ inputs.from }}
+          TO: ${{ inputs.to }}
+          ROLLOUT: ${{ inputs.rollout }}
+          MANDATORY: ${{ inputs.mandatory }}
+          MIN_VERSION: ${{ inputs.min_version }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=(promote --version "$VERSION" --from "$FROM" --to "$TO")
+          if [ -n "$ROLLOUT" ]; then args+=(--rollout "$ROLLOUT"); fi
+          if [ "$MANDATORY" != "default" ]; then args+=("--mandatory=$MANDATORY"); fi
+          if [ -n "$MIN_VERSION" ]; then args+=(--min-version "$MIN_VERSION"); fi
+          if [ "$DRY_RUN" = "true" ]; then args+=(--dry-run); fi
+          node scripts/release/publish-r2.mjs "${args[@]}"

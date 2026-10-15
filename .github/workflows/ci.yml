@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [v2, main]
+  pull_request:
+    branches: [v2, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: short
+
+jobs:
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-node-pnpm
+
+      - name: Typecheck
+        run: pnpm -r typecheck
+
+      - name: Lint (Biome)
+        run: pnpm lint
+
+      - name: Test
+        run: pnpm -r test
+
+      - name: Release scripts self-test
+        run: node --test "scripts/release/*.test.mjs"
+
+  rust:
+    name: Rust (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup-rust
+
+      # tauri::generate_context!() embeds `frontendDist` at compile time, so the app crates only
+      # compile when the folder exists. Lints and tests do not need the real UI build.
+      - name: Placeholder frontend builds
+        shell: bash
+        run: |
+          for app in launcher studio; do
+            mkdir -p "apps/$app/dist"
+            [ -f "apps/$app/dist/index.html" ] || echo '<!doctype html><title>ci</title>' > "apps/$app/dist/index.html"
+          done
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace
