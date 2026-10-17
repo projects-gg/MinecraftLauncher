@@ -40,9 +40,12 @@ function Check({
 export function MigrationDialog({
   open,
   onOpenChange,
+  onFinished,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Called when the dialog closes: whether an import ran (the welcome flow moves on then). */
+  onFinished?: (imported: boolean) => void;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -75,6 +78,7 @@ export function MigrationDialog({
 
   const close = () => {
     onOpenChange(false);
+    onFinished?.(report !== null);
     setReport(null);
   };
 
@@ -86,6 +90,8 @@ export function MigrationDialog({
       description={report ? undefined : t("migrate.description")}
       closeLabel={t("common.close")}
       width={540}
+      // Choices imported as a whole: a stray click beside the dialog keeps them.
+      dismissOnOutsideClick={false}
       footer={
         report ? (
           <Button variant="primary" onClick={close}>
@@ -115,7 +121,7 @@ export function MigrationDialog({
             report.nickname ? t("migrate.doneNickname", { name: report.nickname }) : null,
             report.afkAccounts > 0 ? t("migrate.doneAfk", { count: report.afkAccounts }) : null,
             report.copiedFiles + report.linkedFiles > 0
-              ? t("migrate.doneFiles", { count: report.copiedFiles, linked: report.linkedFiles })
+              ? t("migrate.doneFiles", { count: report.copiedFiles + report.linkedFiles })
               : null,
             ...report.notes,
           ]
