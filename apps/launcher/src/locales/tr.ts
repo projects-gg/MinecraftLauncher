@@ -1346,11 +1346,6 @@ export const tr = {
       },
     },
     overview: {
-      playTime: "Oynama süresi",
-      noPlayTime: "0 dk",
-      lastPlayed: "Son oynama",
-      version: "Sürüm",
-      loader: "Mod yükleyici",
       notes: "Notlar",
     },
     mods: {

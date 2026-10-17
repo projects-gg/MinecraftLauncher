@@ -1622,11 +1622,6 @@ export const en: DeepPartial<Strings> = {
       },
     },
     overview: {
-      playTime: "Play time",
-      noPlayTime: "0 min",
-      lastPlayed: "Last played",
-      version: "Version",
-      loader: "Mod loader",
       notes: "Notes",
     },
     mods: {
