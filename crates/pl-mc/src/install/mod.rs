@@ -3,13 +3,15 @@
 //!
 //! [`install_version`] is idempotent: files that already verify are skipped, so it doubles as
 //! the "repair" and the pre-launch check. Offline mode never touches the network and fails with
-//! [`Error::Offline`] when something is missing.
+//! [`Error::Offline`] when something is missing. [`space`] tells beforehand whether the disk can
+//! hold what an install still downloads.
 
 pub mod assets;
 pub mod bar;
 pub mod context;
 pub mod libraries;
 pub mod natives;
+pub mod space;
 
 #[cfg(test)]
 mod integration_tests;
