@@ -3,6 +3,7 @@ import {
   ariaKeyShortcuts,
   type FocusedElement,
   hasOpenOverlay,
+  isBrowserKey,
   isPageShortcut,
   isTypingTarget,
   type KeyPress,
@@ -180,6 +181,36 @@ describe("shortcutAllowed", () => {
       expect(shortcutAllowed(id, when({ paletteOpen: true, typing: true }))).toBe(true);
       expect(shortcutAllowed(id, when({ handled: true }))).toBe(false);
     }
+  });
+});
+
+describe("isBrowserKey", () => {
+  const plain = { ctrlKey: false };
+
+  it("swallows reload, print and caret browsing", () => {
+    expect(isBrowserKey(press("F5", "F5", plain), "windows")).toBe(true);
+    expect(isBrowserKey(press("F5", "F5", { ctrlKey: false, shiftKey: true }), "windows")).toBe(
+      true,
+    );
+    expect(isBrowserKey(press("F5", "F5"), "windows")).toBe(true);
+    expect(isBrowserKey(press("r", "KeyR"), "windows")).toBe(true);
+    expect(isBrowserKey(press("R", "KeyR", { shiftKey: true }), "windows")).toBe(true);
+    expect(isBrowserKey(press("p", "KeyP"), "windows")).toBe(true);
+    expect(isBrowserKey(press("F7", "F7", plain), "windows")).toBe(true);
+    expect(isBrowserKey(press("r", "KeyR", { ctrlKey: false, metaKey: true }), "macos")).toBe(true);
+  });
+
+  it("keeps typing, find and the keys pages use", () => {
+    expect(isBrowserKey(press("r", "KeyR", plain), "windows")).toBe(false);
+    expect(isBrowserKey(press("p", "KeyP", plain), "windows")).toBe(false);
+    expect(isBrowserKey(press("f", "KeyF"), "windows")).toBe(false);
+    expect(isBrowserKey(press("F3", "F3", plain), "windows")).toBe(false);
+    expect(isBrowserKey(press("F2", "F2", plain), "windows")).toBe(false);
+    expect(isBrowserKey(press("c", "KeyC"), "windows")).toBe(false);
+    expect(isBrowserKey(press("Delete", "Delete", plain), "windows")).toBe(false);
+    // AltGr+R and AltGr+P type letters on some layouts.
+    expect(isBrowserKey(altGr("r", "KeyR"), "windows")).toBe(false);
+    expect(isBrowserKey(altGr("p", "KeyP"), "windows")).toBe(false);
   });
 });
 

@@ -21,6 +21,7 @@ import { api } from "@/lib/api";
 import { detectOs } from "@/lib/platform";
 import {
   hasOpenOverlay,
+  isBrowserKey,
   isTypingTarget,
   matchShortcut,
   pressPlayButton,
@@ -54,13 +55,18 @@ function TaskbarProgress() {
 /**
  * Global keyboard shortcuts (lib/shortcuts.ts): Ctrl+K the palette, Ctrl+Enter OYNA, Ctrl+1 to
  * Ctrl+4 the rail's pages, Ctrl+, Settings; nothing while the welcome flow runs. The state is
- * read at the key press, so a shortcut never renders the app from here.
+ * read at the key press, so a shortcut never renders the app from here. Outside development
+ * WebView2's reload, print and caret browsing keys do nothing.
  */
 function GlobalShortcuts({ disabled }: { disabled: boolean }) {
   const navigate = useNavigate();
   useEffect(() => {
     const os = detectOs();
     const onKey = (event: KeyboardEvent) => {
+      if (isBrowserKey(event, os)) {
+        if (!import.meta.env.DEV) event.preventDefault();
+        return;
+      }
       const id = matchShortcut(event, os);
       if (!id) return;
       const ui = useUi.getState();

@@ -127,6 +127,19 @@ export function shortcutAllowed(id: ShortcutId, context: ShortcutContext): boole
   return true;
 }
 
+/**
+ * WebView2's browser keys that only break a launcher: reload (F5 or Ctrl+R, also with Shift or
+ * Ctrl) would start the whole interface over, Ctrl+P prints the window, F7 asks about caret
+ * browsing. Find (Ctrl+F) stays: pages with a search field use it, the others show WebView2's
+ * find bar, which works.
+ */
+export function isBrowserKey(event: KeyPress, os: DesktopOs): boolean {
+  const key = event.key.toLowerCase();
+  if (key === "f5" || key === "f7") return true;
+  const modifier = os === "macos" ? event.metaKey : event.ctrlKey;
+  return modifier && !event.altKey && (key === "r" || key === "p");
+}
+
 /** What `isTypingTarget` reads from the focused element (an `Element` in the app). */
 export interface FocusedElement {
   tagName: string;
