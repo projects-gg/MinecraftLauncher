@@ -39,6 +39,14 @@ export function windowAway(): boolean {
   return isWindowAway() || !document.hasFocus();
 }
 
+/** A brief taskbar flash (informational), alongside a notification. Never throws. */
+export function requestAttention() {
+  if (!isTauri()) return;
+  getCurrentWindow()
+    .requestUserAttention(UserAttentionType.Informational)
+    .catch(() => undefined);
+}
+
 /**
  * Tell a player who is elsewhere that something they waited for is done: only when it took at
  * least `LONG_TASK_MS` and the window is not in front.
@@ -46,9 +54,5 @@ export function windowAway(): boolean {
 export async function notifyWhenAway(durationMs: number, title: string, body: string) {
   if (durationMs < LONG_TASK_MS || !windowAway()) return;
   await notify(title, body);
-  if (isTauri()) {
-    getCurrentWindow()
-      .requestUserAttention(UserAttentionType.Informational)
-      .catch(() => undefined);
-  }
+  requestAttention();
 }

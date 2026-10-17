@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
 import heroFallback from "@/assets/art/hero-dragon-1.webp";
 import { DropHost } from "@/features/drop/drop-host";
+import { EventReminders } from "@/features/home/event-reminders";
 import { JavaPromptDialog } from "@/features/java/java-prompt";
 import { ScreenshotNotice } from "@/features/library/screenshot-notice";
 import { MigrationDialog } from "@/features/migrate/migration-dialog";
@@ -59,6 +60,7 @@ export function AppShell() {
     <div className="flex h-dvh w-dvw overflow-hidden text-bone-100">
       <PresenceSync />
       <TaskbarProgress />
+      <EventReminders />
       <Backdrop
         imageUrl={data?.hero.imageUrl ?? heroFallback}
         variant={home ? "home" : "page"}

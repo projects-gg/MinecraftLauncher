@@ -204,9 +204,9 @@ const feedNews: NewsItem[] = [
 ];
 
 /**
- * A preview switch: `?event=next|open|none|overlay` (or localStorage `pl.mock.event`),
- * `?notes=pack`, `?banners=none|two`, `?status=outage|major|degraded|notice|expiring`,
- * `?maintenance=1`.
+ * A preview switch: `?event=next|soon|imminent|open|none|overlay` (or localStorage
+ * `pl.mock.event`), `?notes=pack`, `?banners=none|two`,
+ * `?status=outage|major|degraded|notice|expiring`, `?maintenance=1`.
  */
 function mockFlag(key: string): string {
   try {
@@ -219,6 +219,9 @@ function mockFlag(key: string): string {
     return "";
   }
 }
+
+/** When the preview loaded: the reminder previews start relative to it, refetch or not. */
+const previewLoadedAt = Date.now();
 
 /** Events in event card order, relative to now: a live feed event leads by default. */
 function mockEvents(): HomeContent["events"] {
@@ -245,6 +248,21 @@ function mockEvents(): HomeContent["events"] {
       return [];
     case "next":
       return [pvp];
+    // A reminder set now rings in a minute (soon), or at once (imminent: under five minutes).
+    case "soon":
+    case "imminent": {
+      const startsAt = previewLoadedAt + (mockFlag("event") === "soon" ? 6 : 3) * 60_000;
+      return [
+        {
+          id: "baskin",
+          title: "Ejderha baskını",
+          startsAt: new Date(startsAt).toISOString(),
+          endsAt: new Date(startsAt + 3_600_000).toISOString(),
+          newsId: "sezon-5",
+        },
+        pvp,
+      ];
+    }
     case "overlay":
       return [
         {
