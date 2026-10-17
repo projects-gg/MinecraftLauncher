@@ -92,6 +92,22 @@ export interface Maintenance {
   until?: string;
 }
 
+/**
+ * An active problem on the server's status page, from the Discord bot's feed: shown where the
+ * maintenance notice goes while there is none. It never blocks anything.
+ */
+export interface HomeStatus {
+  /** Services down, reachable only in part, or a warning posted on the status page. */
+  level: "outage" | "degraded" | "notice";
+  title: string;
+  /** May be empty. */
+  message: string;
+  /** The status page (https:// only). */
+  url?: string;
+  /** It leaves the screen at this moment, refreshed or not. */
+  expiresAt: string;
+}
+
 /** Studio's links (Settings → Hakkında): only https:// and projects:// ones arrive here. */
 export interface ContentLinks {
   website?: string;
@@ -111,6 +127,8 @@ export interface HomeContent {
   links?: ContentLinks;
   /** The server is in maintenance (published by Studio). */
   maintenance?: Maintenance;
+  /** An active problem on the status page; never set while `maintenance` is. */
+  status?: HomeStatus;
   /** True when the content came from the local cache because the network failed. */
   offline: boolean;
 }

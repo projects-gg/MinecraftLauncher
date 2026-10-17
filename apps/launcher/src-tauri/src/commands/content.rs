@@ -149,6 +149,22 @@ pub struct MaintenanceView {
     pub until: Option<String>,
 }
 
+/// The news feed's status notice (`pl_content::home_status`): an active problem on the status
+/// page, shown where the maintenance notice goes while there is no maintenance notice.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusView {
+    /// `outage`, `degraded` or `notice`.
+    pub level: String,
+    pub title: String,
+    /// May be empty.
+    pub message: String,
+    /// The status page (`https://` only).
+    pub url: Option<String>,
+    /// When it stops being shown (the UI drops it then without a refresh).
+    pub expires_at: String,
+}
+
 /// Latest release of the official pack, for the patch notes card.
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -171,6 +187,8 @@ pub struct HomeView {
     /// Studio's news and the news feed's items, merged (Studio wins on the same id).
     pub news: Vec<NewsView>,
     pub maintenance: Option<MaintenanceView>,
+    /// The news feed's status notice; `None` while `maintenance` is shown.
+    pub status: Option<StatusView>,
     pub pack_notes: Option<PackNotesView>,
     /// The newest patch notes in `news` (the patch notes box; `pack_notes` when there is none).
     pub patch_notes_id: Option<String>,
@@ -311,6 +329,21 @@ async fn home_view(state: &AppState, snapshot: &ContentSnapshot) -> HomeView {
         news.push(news_view(state, entry).await);
     }
     let events = pl_content::merge_events(&snapshot.config.events, feed, &merged, now);
+    let maintenance = Some(&snapshot.config.maintenance)
+        .filter(|m| m.is_active(now))
+        .map(|m| MaintenanceView {
+            title: m.title.clone(),
+            message: m.message.clone(),
+            until: m.until.map(|t| t.to_string()),
+        });
+    let status =
+        pl_content::home_status(feed, maintenance.is_some(), now).map(|status| StatusView {
+            level: enum_str(&status.level),
+            title: status.title.clone(),
+            message: status.message.clone(),
+            url: status.url.clone(),
+            expires_at: status.expires_at.to_string(),
+        });
     let video = hero
         .media
         .as_ref()
@@ -360,13 +393,8 @@ async fn home_view(state: &AppState, snapshot: &ContentSnapshot) -> HomeView {
             .collect(),
         patch_notes_id: pl_content::newest_patch_notes(&merged).map(|n| n.item.id.clone()),
         news,
-        maintenance: Some(&snapshot.config.maintenance)
-            .filter(|m| m.is_active(now))
-            .map(|m| MaintenanceView {
-                title: m.title.clone(),
-                message: m.message.clone(),
-                until: m.until.map(|t| t.to_string()),
-            }),
+        maintenance,
+        status,
         pack_notes: pack_notes(state, snapshot).await,
         links: LinksView::from_config(&snapshot.config.links),
         offline: snapshot.offline,

@@ -66,6 +66,8 @@ export const commands = {
 	/**  Studio's news and the news feed's items, merged (Studio wins on the same id). */
 	news: NewsView[],
 	maintenance: MaintenanceView | null,
+	/**  The news feed's status notice; `None` while `maintenance` is shown. */
+	status: StatusView | null,
 	packNotes: PackNotesView | null,
 	/**  The newest patch notes in `news` (the patch notes box; `pack_notes` when there is none). */
 	patchNotesId: string | null,
@@ -1455,6 +1457,8 @@ export type HomeView = {
 	/**  Studio's news and the news feed's items, merged (Studio wins on the same id). */
 	news: NewsView[],
 	maintenance: MaintenanceView | null,
+	/**  The news feed's status notice; `None` while `maintenance` is shown. */
+	status: StatusView | null,
 	packNotes: PackNotesView | null,
 	/**  The newest patch notes in `news` (the patch notes box; `pack_notes` when there is none). */
 	patchNotesId: string | null,
@@ -3342,6 +3346,22 @@ export type StatusMode = "online" |
 "dnd" | 
 /**  Friends see the player as offline; the player still sees friends. */
 "invisible";
+
+/**
+ *  The news feed's status notice (`pl_content::home_status`): an active problem on the status
+ *  page, shown where the maintenance notice goes while there is no maintenance notice.
+ */
+export type StatusView = {
+	/**  `outage`, `degraded` or `notice`. */
+	level: string,
+	title: string,
+	/**  May be empty. */
+	message: string,
+	/**  The status page (`https://` only). */
+	url: string | null,
+	/**  When it stops being shown (the UI drops it then without a refresh). */
+	expiresAt: string,
+};
 
 /**  Why a step ended as it did. */
 export type StepNote = 

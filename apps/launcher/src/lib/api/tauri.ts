@@ -43,6 +43,7 @@ import type {
   DeepLink,
   DroppedFile,
   HomeContent,
+  HomeStatus,
   InstanceIcon,
   InstanceSummary,
   LaunchEvent,
@@ -194,6 +195,18 @@ function home(v: HomeView): HomeContent {
           title: v.maintenance.title,
           message: v.maintenance.message,
           until: v.maintenance.until ?? undefined,
+        }
+      : undefined,
+    status: v.status
+      ? {
+          // A level added by a newer bot reads like a notice.
+          level: (["outage", "degraded", "notice"].includes(v.status.level)
+            ? v.status.level
+            : "notice") as HomeStatus["level"],
+          title: v.status.title,
+          message: v.status.message,
+          url: v.status.url ?? undefined,
+          expiresAt: v.status.expiresAt,
         }
       : undefined,
     patchNotes: notesItem

@@ -22,6 +22,7 @@ import { mockSocial } from "./mock-social";
 import { mockTrashedInstances } from "./mock-trash";
 import type {
   HomeContent,
+  HomeStatus,
   InstanceDetail,
   InstanceSummary,
   LaunchEvent,
@@ -204,7 +205,8 @@ const feedNews: NewsItem[] = [
 
 /**
  * A preview switch: `?event=next|open|none|overlay` (or localStorage `pl.mock.event`),
- * `?notes=pack`, `?banners=none|two`.
+ * `?notes=pack`, `?banners=none|two`, `?status=outage|major|degraded|notice|expiring`,
+ * `?maintenance=1`.
  */
 function mockFlag(key: string): string {
   try {
@@ -282,6 +284,57 @@ function mockEvents(): HomeContent["events"] {
   }
 }
 
+/** The status notices the bot writes (its default wording), by preview switch. */
+function mockStatus(): HomeStatus | undefined {
+  const inMinutes = (minutes: number) => new Date(Date.now() + minutes * 60_000).toISOString();
+  const page = "https://status.projects.gg";
+  switch (mockFlag("status")) {
+    case "outage":
+      return {
+        level: "outage",
+        title: "Bazı hizmetlerde sorun var",
+        message: "Şu an erişilemiyor: Survival Zephyr",
+        url: page,
+        expiresAt: inMinutes(15),
+      };
+    case "major":
+      return {
+        level: "outage",
+        title: "Hizmetlerde büyük bir kesinti var",
+        message: "Şu an erişilemiyor: Ana Sunucu, Lobi, SMP ve 2 hizmet daha",
+        url: page,
+        expiresAt: inMinutes(15),
+      };
+    case "degraded":
+      return {
+        level: "degraded",
+        title: "Bazı hizmetlerde aksaklık var",
+        message: "Bağlanırken sorun yaşanabilir: SMP",
+        url: page,
+        expiresAt: inMinutes(15),
+      };
+    case "notice":
+      return {
+        level: "notice",
+        title: "Bu gece kısa bir bakım var",
+        message: "Sunucular 03.00 ile 03.30 arasında kapalı olacak.",
+        url: page,
+        expiresAt: inMinutes(15),
+      };
+    case "expiring":
+      // Leaves by itself after 12 seconds (to watch the exit).
+      return {
+        level: "degraded",
+        title: "Bazı hizmetlerde aksaklık var",
+        message: "Bağlanırken sorun yaşanabilir: SMP",
+        url: page,
+        expiresAt: new Date(Date.now() + 12_000).toISOString(),
+      };
+    default:
+      return undefined;
+  }
+}
+
 /** The home content as the backend merges it: the newest patch notes news leads the box. */
 function mockHome(): HomeContent {
   const news = [...content.news, ...feedNews].sort(
@@ -294,8 +347,18 @@ function mockHome(): HomeContent {
     .filter((item) => item.category === "patchNotes")
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))[0];
   const banners = mockFlag("banners");
+  const maintenance = mockFlag("maintenance")
+    ? {
+        title: "Bakım çalışması",
+        message: "Sunucular kısa bir süre bakımda olacak.",
+        until: new Date(Date.now() + 45 * 60_000).toISOString(),
+      }
+    : content.maintenance;
   return {
     ...content,
+    maintenance,
+    // Like the backend: Studio's maintenance notice wins over the status notice.
+    status: maintenance ? undefined : mockStatus(),
     links: {
       website: "https://projects.gg",
       discord: "https://discord.gg/projects",
@@ -892,8 +955,12 @@ export const mockApi: LauncherApi = {
     instances.unshift(created);
     return created;
   },
-  onContentChanged() {
-    return () => {};
+  onContentChanged(listener) {
+    // Preview: `dispatchEvent(new Event("pl-mock-content-changed"))` acts like newly published
+    // content (e.g. after changing localStorage `pl.mock.status`), to watch the home transitions.
+    const handler = () => listener();
+    window.addEventListener("pl-mock-content-changed", handler);
+    return () => window.removeEventListener("pl-mock-content-changed", handler);
   },
   // Previews show the offline strip with `?offline` in the address.
   async contentStatus() {

@@ -1,15 +1,16 @@
-import { ArrowSquareOut, BookOpenText, WifiHigh, WifiSlash, Wrench } from "@phosphor-icons/react";
-import { Button, Chip, Skeleton } from "@pl/ui";
+import { ArrowSquareOut, BookOpenText, WifiHigh, WifiSlash } from "@phosphor-icons/react";
+import { Button, Chip, easeOutExpo, Skeleton, useMotionPrefs } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FriendsInGameStrip } from "@/features/social/home-strip";
-import { api, type HomeContent, type Maintenance } from "@/lib/api";
+import { api, type HomeContent } from "@/lib/api";
 import { isWebLink, openLink } from "@/lib/links";
 import { HomeBanners } from "./banners";
 import { NewsColumn } from "./news-column";
+import { HomeNotice, NOTICE_ENTER, useActiveStatus } from "./notice";
 
 /** The hero and news column rise in once per start (the boot moment); later visits to Home
  * arrive with the page cross-fade only. */
@@ -88,36 +89,6 @@ function HeroCopy({ content }: { content: HomeContent }) {
   );
 }
 
-/** Published from Studio while the server is down for maintenance. */
-function MaintenanceNotice({ maintenance }: { maintenance: Maintenance }) {
-  const { t } = useTranslation();
-  const until = maintenance.until
-    ? new Intl.DateTimeFormat("tr-TR", {
-        day: "numeric",
-        month: "long",
-        hour: "2-digit",
-        minute: "2-digit",
-      }).format(new Date(maintenance.until))
-    : null;
-  return (
-    <div
-      role="status"
-      className="glass flex max-w-[540px] gap-3 rounded-[var(--radius-panel)] px-3.5 py-3"
-    >
-      <Wrench size={18} weight="duotone" className="mt-0.5 shrink-0 text-gold-300" />
-      <div className="min-w-0">
-        <p className="text-[14px] font-semibold text-bone-50">{maintenance.title}</p>
-        <p className="mt-1 text-[13px] leading-relaxed text-bone-100/90">{maintenance.message}</p>
-        {until ? (
-          <p className="mt-1.5 text-[12.5px] text-ash-300">
-            {t("home.maintenanceUntil", { when: until })}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-}
-
 /** How long "Yeniden çevrimiçisin" stays before the strip leaves. */
 const BACK_ONLINE_MS = 2400;
 
@@ -182,16 +153,29 @@ export function HomePage() {
   const { data, isPending } = useQuery({
     queryKey: ["home-content"],
     queryFn: () => api.homeContent(),
+    // Back from the tray or a minimized window: look again, so the notice and the news are
+    // current when the player does (the network check behind it keeps its five-minute pace).
+    refetchOnWindowFocus: true,
   });
+  const { layout } = useMotionPrefs();
+  // Read here, not in the notice: when the notice comes, goes or changes size, this render also
+  // moves the strips below, so they glide instead of jumping.
+  const status = useActiveStatus(data?.status);
 
   return (
     <div className="flex min-h-0 flex-1 gap-5 px-page pt-2 pb-5">
       <section className="flex min-w-0 flex-1 flex-col justify-end pb-2">
-        <div className="mb-auto space-y-2">
-          {data?.maintenance ? <MaintenanceNotice maintenance={data.maintenance} /> : null}
-          <HomeBanners banners={data?.banners} />
-          <FriendsInGameStrip />
-          <ConnectionStrip />
+        <div className="mb-auto">
+          <HomeNotice maintenance={data?.maintenance} status={status} />
+          <motion.div
+            layout={layout ? "position" : false}
+            transition={{ layout: { duration: NOTICE_ENTER, ease: easeOutExpo } }}
+            className="space-y-2"
+          >
+            <HomeBanners banners={data?.banners} />
+            <FriendsInGameStrip />
+            <ConnectionStrip />
+          </motion.div>
         </div>
         {isPending || !data ? (
           // Shaped like the hero (chip, headline, subtitle, button), so nothing moves when the
