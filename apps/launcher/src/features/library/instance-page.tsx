@@ -22,6 +22,7 @@ import { InstanceIcon } from "@/shell/instance-icon";
 import { settingsChanged, useDrafts } from "@/stores/drafts";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
+import { type InstanceTab, instanceTab } from "./instance-tab";
 import { OverviewTab } from "./overview/overview-tab";
 import { createDesktopShortcut } from "./shortcut";
 import { LogsTab } from "./tabs/logs-tab";
@@ -32,17 +33,7 @@ import { ServersTab } from "./tabs/servers-tab";
 import { SettingsTab } from "./tabs/settings-tab";
 import { WorldsTab } from "./tabs/worlds-tab";
 
-export type InstanceTab =
-  | "overview"
-  | "modcenter"
-  | "mods"
-  | "resourcePacks"
-  | "shaders"
-  | "worlds"
-  | "screenshots"
-  | "servers"
-  | "logs"
-  | "settings";
+export type { InstanceTab } from "./instance-tab";
 
 const browseKinds: ContentKind[] = ["mod", "resourcePack", "shaderPack"];
 /** The tab the browser of each kind returns to. */
@@ -57,7 +48,6 @@ export function InstancePage() {
   const navigate = useNavigate();
   const { instanceId } = useParams({ from: "/library/$instanceId" });
   const search = useSearch({ from: "/library/$instanceId" });
-  const tab = (search.tab ?? "overview") as InstanceTab;
   const browse = browseKinds.find((k) => k === search.browse);
   const [exporting, setExporting] = useState(false);
   const [versionsOpen, setVersionsOpen] = useState(false);
@@ -113,6 +103,8 @@ export function InstancePage() {
   }
 
   const loader = data.loader === "vanilla" ? "Minecraft" : t(`loaders.${data.loader}`);
+  // The tab a link asked for, when this instance has it (else the overview).
+  const tab = instanceTab(search.tab, data.loader === "vanilla");
 
   return (
     <div className="flex min-h-0 flex-1 flex-col px-page pt-2">

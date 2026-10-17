@@ -1,16 +1,12 @@
 import { observeSkippedViewTransitions } from "@pl/ui";
-import {
-  createHashHistory,
-  createRootRoute,
-  createRoute,
-  createRouter,
-} from "@tanstack/react-router";
+import { createRootRoute, createRoute, createRouter } from "@tanstack/react-router";
 import { AfkPage } from "./features/afk/afk-page";
 import { HomePage } from "./features/home/home-page";
 import { InstancePage } from "./features/library/instance-page";
 import { LibraryPage } from "./features/library/library-page";
 import { NewsPage } from "./features/news/news-page";
 import { SettingsPage } from "./features/settings/settings-page";
+import { createHashRouteHistory } from "./lib/hash-history";
 import { AppShell } from "./shell/app-shell";
 
 interface RootSearch {
@@ -120,9 +116,10 @@ function pageTransition(): false | { types: (change: LocationChange) => string[]
 observeSkippedViewTransitions();
 
 // Hash history: the webview serves static files, so deep paths must not hit the asset server.
+// The route is read from the hash alone (lib/hash-history.ts): deep links to a tab work on load.
 export const router = createRouter({
   routeTree,
-  history: createHashHistory(),
+  history: createHashRouteHistory(),
   defaultPreload: "intent",
   defaultViewTransition: pageTransition(),
 });
