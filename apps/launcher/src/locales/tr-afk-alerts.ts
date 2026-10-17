@@ -7,4 +7,13 @@ export const trAfkAlerts = {
   // Several stopped for the same reason.
   sameReason: "{{reason}}: {{names}}",
   show: "Göster",
+  // The mandatory update screen while AFK accounts or the game are open.
+  update: {
+    running: "Açık AFK hesapların",
+    more: "+{{count}}",
+    stopAndUpdate: "Durdur ve güncelle",
+    stopping: "AFK hesapları durduruluyor",
+    installing: "Güncelleme kuruluyor",
+    quitGame: "Güncellemek için oyundan çık",
+  },
 };

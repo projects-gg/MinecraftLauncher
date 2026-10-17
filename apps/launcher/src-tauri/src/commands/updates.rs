@@ -170,7 +170,8 @@ pub async fn update_download(
 }
 
 /// Install the downloaded update. On Windows the installer takes over and the app exits; on
-/// macOS/Linux the app restarts itself.
+/// macOS/Linux the app restarts itself. The update is kept when it cannot be installed now, so
+/// "try again" works (the mandatory update screen has no other way forward).
 #[tauri::command]
 #[specta::specta]
 pub fn update_apply(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
@@ -190,13 +191,14 @@ pub fn update_apply(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()>
             "busy",
         ));
     }
-    update.install(bytes).map_err(|e| {
-        CmdError::new(
+    if let Err(error) = update.install(&bytes) {
+        *state.pending_update.lock() = Some((update, bytes));
+        return Err(CmdError::new(
             "GUNCELLEME-KURULUM",
-            "Güncelleme kurulamadı.",
-            e.to_string(),
-        )
-    })?;
+            "Güncelleme kurulamadı. Tekrar dene.",
+            error.to_string(),
+        ));
+    }
     app.restart();
 }
 
