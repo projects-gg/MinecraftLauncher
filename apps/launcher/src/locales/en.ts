@@ -1,4 +1,6 @@
 import { enAfkAlerts } from "./en-afk-alerts";
+import { enDisk } from "./en-disk";
+import { enGraphics } from "./en-graphics";
 import { enReminders } from "./en-reminders";
 import { enTuning } from "./en-tuning";
 import type { Strings } from "./tr";
@@ -17,6 +19,8 @@ export const en: DeepPartial<Strings> = {
   reminders: enReminders,
   tuning: enTuning,
   afkAlerts: enAfkAlerts,
+  graphics: enGraphics,
+  disk: enDisk,
   social: {
     title: "Friends",
     pill: {

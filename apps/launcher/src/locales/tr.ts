@@ -1,5 +1,7 @@
 // Turkish is the primary language. Keep strings plain, sentence case, no em dashes.
 import { trAfkAlerts } from "./tr-afk-alerts";
+import { trDisk } from "./tr-disk";
+import { trGraphics } from "./tr-graphics";
 import { trReminders } from "./tr-reminders";
 import { trSocial } from "./tr-social";
 import { trTuning } from "./tr-tuning";
@@ -8,6 +10,8 @@ export const tr = {
   reminders: trReminders,
   tuning: trTuning,
   afkAlerts: trAfkAlerts,
+  graphics: trGraphics,
+  disk: trDisk,
   social: trSocial,
   nav: {
     home: "Ana Sayfa",
