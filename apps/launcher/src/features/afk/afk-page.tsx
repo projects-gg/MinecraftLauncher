@@ -8,6 +8,7 @@ import {
   Play,
   Robot,
   Stop,
+  StopCircle,
   Terminal,
   Trash,
   UserPlus,
@@ -401,9 +402,10 @@ export function AfkPage() {
         {accounts.length ? (
           <div className="flex gap-2">
             {anyActive ? (
+              // On a ghost button a filled square reads as a checkbox: the outlined stop sign.
               <Button
                 variant="ghost"
-                icon={<Stop size={15} weight="fill" />}
+                icon={<StopCircle size={16} />}
                 onClick={() => runAfk(api.afkStopAll(), t("afk.stopFailed"))}
               >
                 {t("afk.stopAll")}
