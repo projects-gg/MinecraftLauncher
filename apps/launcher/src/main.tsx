@@ -8,7 +8,13 @@ import { commands } from "@/bindings";
 import { setLanguage } from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
 import { prepareSounds } from "@/lib/sound";
-import { refreshWindowAway, trackWindowAway, useWindowAway } from "@/lib/window-away";
+import {
+  isWindowAway,
+  onWindowAwayChange,
+  refreshWindowAway,
+  trackWindowAway,
+  useWindowAway,
+} from "@/lib/window-away";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { router } from "./router";
@@ -17,30 +23,16 @@ import "./styles.css";
 // The saved language (always Turkish while English is hidden, see ENGLISH_ENABLED).
 setLanguage(usePrefs.getState().language);
 
-// Polling (server status and the like) pauses while the window is unfocused, minimized or in the
-// tray. WebView2 keeps reporting the page as visible then, so follow the native window focus.
+// Polling (server status and the like) and ambient motion pause while the window is in the tray
+// or minimized (lib/window-away.ts). WebView2 keeps reporting the page as visible then, and the
+// native focus is no guide either: on Windows a blur arrives about a second after the window is
+// shown, while it is still in front (G6-R), and polls stopped while the player looked at them.
 if (isTauri()) {
-  focusManager.setEventListener((handleFocus) => {
-    const win = getCurrentWindow();
-    let heard = false;
-    const unlisten = win.onFocusChanged(({ payload }) => {
-      heard = true;
-      handleFocus(payload);
-    });
-    // Started at login straight into the tray, the window never gains or loses focus, so no
-    // event ever says it is in the background: ask once.
-    void win
-      .isFocused()
-      .then((focused) => {
-        if (!heard) handleFocus(focused);
-      })
-      .catch(() => undefined);
-    return () => {
-      void unlisten.then((fn) => fn());
-    };
-  });
-  // Ambient motion stops while the window is in the tray or minimized (lib/window-away.ts).
   trackWindowAway(getCurrentWindow());
+  focusManager.setEventListener((handleFocus) => {
+    handleFocus(!isWindowAway());
+    return onWindowAwayChange((away) => handleFocus(!away));
+  });
 }
 
 const queryClient = new QueryClient({

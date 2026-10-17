@@ -2,7 +2,7 @@
 // reporting the page as visible then (`document.hidden` stays false; measured in the release app,
 // G6-R), so decorative motion (embers, Ken Burns, the OYNA sheen) kept drawing at the screen's
 // refresh rate behind the tray icon, at about 70 % of a CPU core. main.tsx pauses ambient motion
-// while this is true.
+// and polling while this is true.
 import { useSyncExternalStore } from "react";
 
 /** The window calls the tracker needs: a subset of Tauri's `Window`, so tests can stand in. */
@@ -70,6 +70,15 @@ export function trackWindowAway(win: AwayWindow): () => void {
 /** Asks the window again (after the launcher showed, hid or minimized it). */
 export function refreshWindowAway(): Promise<void> {
   return check?.() ?? Promise.resolve();
+}
+
+/** Calls `listener` with the new answer each time it changes. Returns the unsubscribe function. */
+export function onWindowAwayChange(listener: (away: boolean) => void): () => void {
+  const notify = () => listener(away);
+  listeners.add(notify);
+  return () => {
+    listeners.delete(notify);
+  };
 }
 
 export function useWindowAway(): boolean {

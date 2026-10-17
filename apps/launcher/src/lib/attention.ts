@@ -9,6 +9,7 @@ import {
 } from "@tauri-apps/plugin-notification";
 import { usePrefs } from "@/stores/prefs";
 import { isTauri } from "./platform";
+import { isWindowAway } from "./window-away";
 
 /** Installs at least this long are worth a notification when they end in the background. */
 export const LONG_TASK_MS = 20_000;
@@ -28,20 +29,14 @@ export async function notify(title: string, body: string) {
   }
 }
 
-/** True when the window is not in front: unfocused, minimized or in the tray. */
-export async function windowAway(): Promise<boolean> {
-  if (!isTauri()) return typeof document !== "undefined" && !document.hasFocus();
-  try {
-    const win = getCurrentWindow();
-    const [focused, visible, minimized] = await Promise.all([
-      win.isFocused(),
-      win.isVisible(),
-      win.isMinimized(),
-    ]);
-    return !focused || !visible || minimized;
-  } catch {
-    return false;
-  }
+/**
+ * True when the window is not in front: in the tray or minimized (lib/window-away.ts), or behind
+ * another window (the page has lost the focus). Not Tauri's window focus: on Windows it is
+ * unreliable while the page holds the keyboard focus (G6-R).
+ */
+export function windowAway(): boolean {
+  if (typeof document === "undefined") return false;
+  return isWindowAway() || !document.hasFocus();
 }
 
 /**
@@ -49,7 +44,7 @@ export async function windowAway(): Promise<boolean> {
  * least `LONG_TASK_MS` and the window is not in front.
  */
 export async function notifyWhenAway(durationMs: number, title: string, body: string) {
-  if (durationMs < LONG_TASK_MS || !(await windowAway())) return;
+  if (durationMs < LONG_TASK_MS || !windowAway()) return;
   await notify(title, body);
   if (isTauri()) {
     getCurrentWindow()

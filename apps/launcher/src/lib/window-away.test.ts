@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   type AwayWindow,
   isWindowAway,
+  onWindowAwayChange,
   RESIZE_SETTLE_MS,
   refreshWindowAway,
   trackWindowAway,
@@ -129,6 +130,28 @@ describe("trackWindowAway", () => {
     w.release();
     await settle();
     expect(isWindowAway()).toBe(false);
+    stop();
+  });
+
+  it("tells subscribers (polling follows it) each change until they unsubscribe", async () => {
+    const w = fakeWindow();
+    const stop = trackWindowAway(w.win);
+    w.focus(true);
+    const seen: boolean[] = [];
+    const unsubscribe = onWindowAwayChange((away) => seen.push(away));
+    // The blur Windows sends right after a show changes nothing.
+    w.focus(false);
+    await settle();
+    w.state.visible = false;
+    await refreshWindowAway();
+    w.state.visible = true;
+    w.focus(true);
+    unsubscribe();
+    w.state.minimized = true;
+    w.focus(false);
+    await settle();
+    expect(seen).toEqual([true, false]);
+    expect(isWindowAway()).toBe(true);
     stop();
   });
 });

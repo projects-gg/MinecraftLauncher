@@ -24,8 +24,8 @@ function ServerPill() {
   const { t } = useTranslation();
   const reduce = useReducedMotion() ?? false;
   // Every open launcher pings the game server, so keep it light: once a minute, only while the
-  // window is in front (react-query pauses intervals otherwise, see main.tsx) and never while
-  // the player is already in the game.
+  // window is on screen (react-query pauses intervals in the tray or minimized, see main.tsx)
+  // and never while the player is already in the game.
   const inGame = useLaunch((s) => s.phase.kind === "running");
   const { data, isPending } = useQuery({
     queryKey: ["server-status"],
