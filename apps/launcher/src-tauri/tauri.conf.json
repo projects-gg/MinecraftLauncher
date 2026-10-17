@@ -65,7 +65,7 @@
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["Turkish", "English"],
+        "languages": ["Turkish"],
         "displayLanguageSelector": false,
         "customLanguageFiles": {
           "Turkish": "nsis/Turkish.nsh"
