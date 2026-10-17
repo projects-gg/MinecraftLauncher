@@ -36,6 +36,10 @@ Thumbs.db
 graphify-out/
 .claude/worktrees/
 
+# Cloudflare Workers local state and local secrets (services/social)
+.wrangler/
+.dev.vars
+
 # Internal development notes stay on the maintainers' machines. The content format spec stays
 # tracked: pl-content and Studio tests check its JSON examples.
 /CLAUDE.md
