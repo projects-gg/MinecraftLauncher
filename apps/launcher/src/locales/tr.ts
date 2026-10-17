@@ -2,6 +2,7 @@
 import { trAfkAlerts } from "./tr-afk-alerts";
 import { trDisk } from "./tr-disk";
 import { trGraphics } from "./tr-graphics";
+import { trOverview } from "./tr-overview";
 import { trReminders } from "./tr-reminders";
 import { trSocial } from "./tr-social";
 import { trTuning } from "./tr-tuning";
@@ -12,6 +13,7 @@ export const tr = {
   afkAlerts: trAfkAlerts,
   graphics: trGraphics,
   disk: trDisk,
+  overview: trOverview,
   social: trSocial,
   nav: {
     home: "Ana Sayfa",
