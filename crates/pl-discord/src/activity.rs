@@ -463,7 +463,7 @@ mod tests {
             .large_image("logo")
             .large_text("Projects Launcher")
             .large_url("https://projects.gg")
-            .small_image("https://mc-heads.net/avatar/Steve/64")
+            .small_image("https://img.example/steve.png")
             .small_text("Steve")
             .party("lobby-1", 3, 10)
             .button("Sunucuya katıl", "https://projects.gg/oyna")
@@ -482,7 +482,7 @@ mod tests {
                     "large_image": "logo",
                     "large_text": "Projects Launcher",
                     "large_url": "https://projects.gg",
-                    "small_image": "https://mc-heads.net/avatar/Steve/64",
+                    "small_image": "https://img.example/steve.png",
                     "small_text": "Steve"
                 },
                 "party": { "id": "lobby-1", "size": [3, 10] },

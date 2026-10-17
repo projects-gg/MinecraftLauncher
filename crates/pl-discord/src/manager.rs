@@ -708,7 +708,7 @@ mod tests {
     #[tokio::test]
     #[ignore = "needs a running Discord desktop client"]
     async fn live_presence() {
-        const CLIENT_ID: &str = "949311557542756362";
+        const CLIENT_ID: &str = "1560400835589181552";
         let activity = Activity::new()
             .details("Projects Launcher v2")
             .details_url("https://projects.gg")
