@@ -263,7 +263,7 @@ function MandatoryScreen() {
 
   return (
     <motion.div
-      className="fixed inset-0 z-[60] grid place-items-center"
+      className="fixed inset-x-0 top-titlebar bottom-0 z-[60] grid place-items-center"
       exit={{ opacity: 0, transition: { duration: 0.18, ease: easeOutExpo } }}
     >
       <GatedMotion.div

@@ -17,6 +17,7 @@ import { detectOs, isTauri } from "@/lib/platform";
 import { ariaKeyShortcuts } from "@/lib/shortcuts";
 import { useLaunch } from "@/stores/launch";
 import { useUi } from "@/stores/ui";
+import { useUpdate } from "@/stores/update";
 import { ShortcutKeys } from "./shortcut-keys";
 
 /** The address the pill copies until the status says otherwise. */
@@ -206,25 +207,34 @@ function PaletteButton() {
  */
 export function TitleBar({ search = true }: { search?: boolean }) {
   const mac = detectOs() === "macos";
+  // The mandatory update screen sits below the bar so the window can still be moved, minimized
+  // or closed; everything else on the bar steps out of the way meanwhile.
+  const updateLocked = useUpdate((s) => s.mandatory && s.phase !== "idle");
+  const aside = cn(
+    "flex items-center transition-opacity duration-200",
+    updateLocked && "pointer-events-none opacity-0",
+  );
   return (
     <header
       data-tauri-drag-region
       className="relative z-30 flex h-titlebar shrink-0 items-center justify-between pl-3"
     >
-      <div data-tauri-drag-region className="flex items-center gap-3">
+      <div data-tauri-drag-region inert={updateLocked} className={cn(aside, "gap-3")}>
         <ServerPill />
       </div>
       <div className="flex items-center gap-2.5">
-        {search ? (
-          <>
-            <FriendsPill />
-            <AccountSwitcher />
-            <AccountsHost />
-            <SocialHost />
-          </>
-        ) : null}
-        {search ? <PaletteButton /> : null}
-        <UpdatePill />
+        <div inert={updateLocked} className={cn(aside, "gap-2.5")}>
+          {search ? (
+            <>
+              <FriendsPill />
+              <AccountSwitcher />
+              <AccountsHost />
+              <SocialHost />
+            </>
+          ) : null}
+          {search ? <PaletteButton /> : null}
+          <UpdatePill />
+        </div>
         {mac ? null : <WindowControls />}
       </div>
     </header>
