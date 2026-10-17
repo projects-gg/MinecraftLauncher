@@ -11,6 +11,10 @@ pub struct AppInfo {
     /// sign-ins then last only for this session.
     pub secure_storage: bool,
     pub data_dir: String,
+    /// Started at login: the window stays in the tray until the user opens it.
+    pub start_minimized: bool,
+    /// Installed RAM, for memory sliders.
+    pub system_memory_mb: u64,
 }
 
 /// Basic facts about the running launcher, shown in Settings → About.
@@ -24,5 +28,7 @@ pub fn app_info(app: tauri::AppHandle, state: tauri::State<'_, crate::state::App
         debug: cfg!(debug_assertions),
         secure_storage: !state.ephemeral_secrets,
         data_dir: state.root.to_string_lossy().into_owned(),
+        start_minimized: crate::shell::start_minimized(),
+        system_memory_mb: pl_mc::instance::system_memory_mb(),
     }
 }

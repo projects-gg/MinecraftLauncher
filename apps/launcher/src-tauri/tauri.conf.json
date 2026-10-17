@@ -14,8 +14,8 @@
       {
         "label": "main",
         "title": "Projects Launcher",
-        "width": 1280,
-        "height": 760,
+        "width": 1200,
+        "height": 712,
         "minWidth": 1024,
         "minHeight": 640,
         "center": true,
@@ -32,11 +32,12 @@
         "script-src": "'self'",
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self' data:",
-        "img-src": "'self' asset: http://asset.localhost data: blob: https://cdn.projects.gg https://raw.githubusercontent.com https://cdn.modrinth.com https://mc-heads.net https://textures.minecraft.net",
+        "img-src": "'self' asset: http://asset.localhost data: blob: https://cdn.projects.gg https://raw.githubusercontent.com https://cdn.modrinth.com https://cdn.discordapp.com https://textures.minecraft.net",
         "media-src": "'self' asset: http://asset.localhost blob: https://cdn.projects.gg",
         "connect-src": "'self' ipc: http://ipc.localhost",
         "worker-src": "'self' blob:"
       },
+      "dangerousDisableAssetCspModification": ["style-src"],
       "assetProtocol": {
         "enable": true,
         "scope": []
@@ -87,7 +88,7 @@
       }
     },
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc1ODE3OEQ4MjQ3MEJEODIKUldTQ3ZYQWsySGlCZFo0M0dJWFZ4L285M1RWWU9PTXNjTVBoYlI2emI4dWNHTDFPc1BvcU5YRUkK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDI2MDY3NjQzNEUxQTUzNTkKUldSWlV4cE9RM1lHSnJBUHhhaDJhS2o2NmdlS2lydU9YcHppTmNZZnA4aS9GcjFDemIrWEphMk4K",
       "endpoints": [],
       "requireSignedVersion": true,
       "windows": {

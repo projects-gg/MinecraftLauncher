@@ -80,4 +80,69 @@ impl From<pl_mc::Error> for CmdError {
     }
 }
 
+impl From<pl_social::SocialError> for CmdError {
+    /// Friends service failures: a short Turkish sentence; the code stays in the details.
+    fn from(error: pl_social::SocialError) -> Self {
+        use pl_social::{ErrorCode as C, SocialError as E};
+        let details = error.to_string();
+        let unavailable = "Arkadaşlar şu an kullanılamıyor. Biraz sonra yeniden dene.";
+        let (code, message) = match &error {
+            E::Unauthorized => ("SOSYAL-OTURUM", "Oturumun sona erdi. Yeniden giriş yap."),
+            E::RateLimited { .. } => (
+                "SOSYAL-SINIR",
+                "Bunu çok sık denedin. Biraz sonra yeniden dene.",
+            ),
+            E::Unavailable { .. } | E::Network(_) => ("SOSYAL-YOK", unavailable),
+            E::SettingsConflict { .. } => (
+                "SOSYAL-YEDEK",
+                "Ayarların başka bir bilgisayarda değişti. Yeniden dene.",
+            ),
+            E::InvalidInput("not a friend code") => ("SOSYAL-KOD", "Bu bir arkadaşlık kodu değil."),
+            E::InvalidInput(_) | E::Protocol(_) => {
+                ("SOSYAL", "Bir sorun oluştu. Biraz sonra yeniden dene.")
+            }
+            E::Refused { code, .. } => match code {
+                C::InvalidCode | C::BadRequest => ("SOSYAL-KOD", "Bu bir arkadaşlık kodu değil."),
+                C::CodeNotFound | C::UserNotFound => {
+                    ("SOSYAL-KOD-YOK", "Bu koda ait kimse bulunamadı.")
+                }
+                C::SelfTarget => ("SOSYAL-KENDIN", "Bu senin kodun."),
+                C::AlreadyFriends => ("SOSYAL-ZATEN", "Zaten arkadaşsınız."),
+                C::AlreadyRequested => ("SOSYAL-ISTEK-VAR", "İsteğin zaten gönderildi."),
+                C::Blocked => (
+                    "SOSYAL-ENGEL",
+                    "Bu kişiyi engellemişsin. Önce engeli kaldır.",
+                ),
+                C::LimitFriends => ("SOSYAL-LISTE-DOLU", "Arkadaş listen dolu."),
+                C::LimitFriendsTarget => ("SOSYAL-LISTE-DOLU", "Bu kişinin arkadaş listesi dolu."),
+                C::LimitOutgoingRequests => (
+                    "SOSYAL-ISTEK-SINIR",
+                    "Bekleyen çok isteğin var. Bazıları yanıtlanınca yeniden dene.",
+                ),
+                C::LimitIncomingRequests => (
+                    "SOSYAL-ISTEK-SINIR",
+                    "Bu kişinin bekleyen çok isteği var. Sonra yeniden dene.",
+                ),
+                C::RequestNotFound => ("SOSYAL-ISTEK-YOK", "Bu istek artık geçerli değil."),
+                C::FriendNotFound => (
+                    "SOSYAL-ARKADAS-YOK",
+                    "Bu kişi artık arkadaş listende değil.",
+                ),
+                C::SessionNotFound => ("SOSYAL-OTURUM-YOK", "Bu oturum zaten kapanmış."),
+                C::Unauthorized => ("SOSYAL-OTURUM", "Oturumun sona erdi. Yeniden giriş yap."),
+                C::RateLimited => (
+                    "SOSYAL-SINIR",
+                    "Bunu çok sık denedin. Biraz sonra yeniden dene.",
+                ),
+                C::Unavailable => (
+                    "SOSYAL-YOK",
+                    "Bu şu an yapılamıyor. Biraz sonra yeniden dene.",
+                ),
+                _ => ("SOSYAL", "Bir sorun oluştu. Biraz sonra yeniden dene."),
+            },
+        };
+        Self::new(code, message, details)
+    }
+}
+
 pub type CmdResult<T> = Result<T, CmdError>;

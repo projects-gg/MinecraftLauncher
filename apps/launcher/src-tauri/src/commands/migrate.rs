@@ -233,21 +233,25 @@ pub async fn legacy_import(
     })?;
     let mut report = LegacyImportReport::default();
 
-    // Premium session (DPAPI-encrypted on Windows).
+    // Premium session (DPAPI-encrypted on Windows). Never in an end-to-end test run: it is a
+    // real Microsoft account.
     #[cfg(windows)]
     if request.premium && root.join("premium.dat").is_file() {
-        match state.auth.import_legacy_premium().await {
-            Ok(pl_auth::LegacyImport::Imported { .. }) => report.premium_imported = true,
-            Ok(_) => report.notes.push(
-                "Premium oturum okunamadı; Ayarlar > Hesaplar'dan tekrar giriş yapabilirsin."
-                    .into(),
-            ),
-            Err(error) => {
-                tracing::warn!(%error, "legacy premium import failed");
-                report
-                    .notes
-                    .push("Premium oturum aktarılamadı; Microsoft ile yeniden giriş yap.".into());
-            }
+        match crate::commands::accounts::refuse_microsoft_in_tests() {
+            Err(refused) => report.notes.push(refused.message),
+            Ok(()) => match state.auth.import_legacy_premium().await {
+                Ok(pl_auth::LegacyImport::Imported { .. }) => report.premium_imported = true,
+                Ok(_) => report.notes.push(
+                    "Premium oturum okunamadı; Ayarlar > Hesaplar'dan tekrar giriş yapabilirsin."
+                        .into(),
+                ),
+                Err(error) => {
+                    tracing::warn!(%error, "legacy premium import failed");
+                    report.notes.push(
+                        "Premium oturum aktarılamadı; Microsoft ile yeniden giriş yap.".into(),
+                    );
+                }
+            },
         }
     }
 
@@ -272,8 +276,19 @@ pub async fn legacy_import(
         {
             let store = state.afk.store();
             for legacy in list {
-                let Ok(mut created) = store.add_account(&legacy.account.nickname) else {
-                    continue;
+                // Whatever does not come over is said in the summary, never dropped silently.
+                let nickname = legacy.account.nickname.clone();
+                let mut created = match store.add_account(&nickname) {
+                    Ok(created) => created,
+                    // Imported before, or added by hand: it is there already.
+                    Err(pl_afk::AfkError::DuplicateNickname) => continue,
+                    Err(error) => {
+                        tracing::warn!(%error, "legacy AFK account not imported");
+                        report
+                            .notes
+                            .push(format!("{nickname} AFK hesabı aktarılamadı."));
+                        continue;
+                    }
                 };
                 let id = created.id.clone();
                 created = pl_afk::AfkAccount {
@@ -281,9 +296,19 @@ pub async fn legacy_import(
                     nickname: created.nickname,
                     ..legacy.account
                 };
-                let _ = store.update_account(created);
-                if !legacy.login_commands.is_empty() {
-                    let _ = store.set_login_commands(&id, &legacy.login_commands);
+                if let Err(error) = store.update_account(created) {
+                    tracing::warn!(%error, "legacy AFK account settings not imported");
+                    report.notes.push(format!(
+                        "{nickname} AFK hesabının ayarları aktarılamadı; AFK sayfasından kontrol et."
+                    ));
+                }
+                if !legacy.login_commands.is_empty()
+                    && let Err(error) = store.set_login_commands(&id, &legacy.login_commands)
+                {
+                    tracing::warn!(%error, "legacy AFK login commands not imported");
+                    report.notes.push(format!(
+                        "{nickname} AFK hesabının giriş komutları aktarılamadı; AFK ayarlarından yeniden gir."
+                    ));
                 }
                 report.afk_accounts += 1;
             }
@@ -370,6 +395,9 @@ pub async fn legacy_import(
         .map_err(CmdError::internal)?;
         report.copied_files = copied;
         report.linked_files = linked;
+        // The old launcher's server list wins; an empty one gets the Projects server.
+        let mut instance = instance;
+        crate::commands::instances::seed_default_server_once(&state, &mut instance).await;
         report.instance_id = Some(instance.id);
         if skipped_worlds {
             report.notes.push(

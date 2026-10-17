@@ -14,7 +14,7 @@ use pl_mc::paths::DataDirs;
 use pl_net::{CancellationToken, Downloader, Http, HttpConfig};
 
 /// Discord application of the Projects launcher (public id).
-pub const DISCORD_CLIENT_ID: &str = "949311557542756362";
+pub const DISCORD_CLIENT_ID: &str = "1560400835589181552";
 
 /// Content mirrors, tried in order (see docs/content-format.md).
 pub const CONTENT_MIRRORS: &[&str] = &[
@@ -22,12 +22,44 @@ pub const CONTENT_MIRRORS: &[&str] = &[
     "https://raw.githubusercontent.com/projects-gg/launcher-content/main/v1/",
 ];
 
-/// Public keys trusted to sign the content index (base64, Ed25519). Studio prints the key it
-/// generates; add it here and keep old keys during a rotation.
-pub const CONTENT_PUBLIC_KEYS: &[&str] = &[
-    // key id 5125c0d365b019ce (generated 2026-10-15)
-    "muj3CSu3m9jpB7fUP5TbkRSnISGEH13XbTt6agmIK68=",
-];
+/// Content mirrors in use. Debug builds accept `PROJECTS_CONTENT_MIRRORS` (comma-separated base
+/// URLs) for local end-to-end tests; the content must still carry a trusted signature.
+pub fn content_mirrors() -> Vec<String> {
+    #[cfg(debug_assertions)]
+    if let Ok(list) = std::env::var("PROJECTS_CONTENT_MIRRORS") {
+        let mirrors: Vec<String> = list
+            .split(',')
+            .map(str::trim)
+            .filter(|m| !m.is_empty())
+            .map(|m| {
+                if m.ends_with('/') {
+                    m.to_owned()
+                } else {
+                    format!("{m}/")
+                }
+            })
+            .collect();
+        if !mirrors.is_empty() {
+            return mirrors;
+        }
+    }
+    CONTENT_MIRRORS.iter().map(|m| (*m).to_owned()).collect()
+}
+
+/// Keys trusted to sign the content index: `pl_content::CONTENT_PUBLIC_KEYS` (the list Studio
+/// checks its key against too). Debug builds also trust `PROJECTS_CONTENT_TEST_KEY` (base64 public
+/// key) so a throwaway key can sign test content; release builds never do.
+fn trusted_content_keys() -> Vec<pl_content::VerifyingKey> {
+    #[allow(unused_mut)]
+    let mut keys = pl_content::content_public_keys();
+    #[cfg(debug_assertions)]
+    if let Ok(key) = std::env::var("PROJECTS_CONTENT_TEST_KEY")
+        && let Ok(key) = pl_content::decode_verifying_key(key.trim())
+    {
+        keys.push(key);
+    }
+    keys
+}
 
 /// The game currently running (one at a time).
 pub struct RunningGame {
@@ -46,20 +78,30 @@ pub struct AppState {
     pub mc: McContext,
     pub instances: InstanceStore,
     pub running: Mutex<Option<RunningGame>>,
-    pub launch_cancel: Mutex<Option<CancellationToken>>,
+    /// The launch being prepared, if any (`commands::launch`).
+    pub launch_cancel: Mutex<Option<crate::commands::launch::PreparingLaunch>>,
     /// Downloaded, signature-verified launcher update waiting for "restart to update".
     pub pending_update: Mutex<Option<(tauri_plugin_updater::Update, Vec<u8>)>>,
     /// True when the OS keychain is unavailable and secrets only live for this session.
     pub ephemeral_secrets: bool,
     pub login_cancel: Mutex<Option<CancellationToken>>,
     pub content_refreshing: AtomicBool,
+    /// The optional friends feature (off until the signed config turns it on).
+    pub social: pl_social::SocialService,
+    /// The Discord bot's news feed (`<data>/cache/feed/`); used only while the signed config
+    /// enables it (`commands::feed`).
+    pub feed: pl_content::FeedClient,
 }
 
 /// Data root. `PROJECTS_LAUNCHER_DATA_DIR` overrides the per-OS default (portable installs,
-/// development on a second disk).
+/// development on a second disk); after that, a folder chosen with Settings → Veri → Taşı
+/// (pointer file outside the data root, see `commands::data`).
 pub fn default_root() -> PathBuf {
     if let Some(dir) = std::env::var_os("PROJECTS_LAUNCHER_DATA_DIR").filter(|d| !d.is_empty()) {
         return PathBuf::from(dir);
+    }
+    if let Some(dir) = crate::commands::data::relocated_root() {
+        return dir;
     }
     DataDirs::default_root().unwrap_or_else(|| PathBuf::from("ProjectsLauncher"))
 }
@@ -84,23 +126,25 @@ impl AppState {
                 (Arc::new(MemoryStore::new()), true)
             };
         let accounts = AccountStore::open(root.join("accounts.json"))?;
-        let auth = AuthManager::new(MicrosoftAuth::new(http.clone()), accounts, secrets);
+        // Skins of Microsoft accounts, kept on this computer for "Önceki skinler".
+        let auth = AuthManager::new(MicrosoftAuth::new(http.clone()), accounts, secrets)
+            .with_skin_history(pl_auth::SkinHistory::new(root.join("skins")));
 
-        let trusted = CONTENT_PUBLIC_KEYS
-            .iter()
-            .filter_map(|key| pl_content::decode_verifying_key(key).ok())
-            .collect();
         let content = ContentClient::new(
             http.clone(),
-            CONTENT_MIRRORS,
+            &content_mirrors(),
             root.join("cache").join("content"),
-            trusted,
+            trusted_content_keys(),
         )?
         .with_request_timeout(Duration::from_secs(4));
+        let feed = pl_content::FeedClient::new(http.clone(), root.join("cache").join("feed"))
+            .with_request_timeout(Duration::from_secs(4));
 
         // Setup runs outside the async runtime, so hand the actor Tauri's tokio handle.
         let tauri::async_runtime::RuntimeHandle::Tokio(handle) = tauri::async_runtime::handle();
         let presence = PresenceManager::start_on(&handle, PresenceConfig::new(DISCORD_CLIENT_ID));
+        let social =
+            crate::commands::social::create(app, &http, version, handle.clone(), ephemeral_secrets);
 
         // AFK accounts (Projects Console Client sessions). Events go straight to the UI.
         let afk_paths = pl_afk::AfkPaths::new(root.join("afk"));
@@ -152,6 +196,8 @@ impl AppState {
             ephemeral_secrets,
             login_cancel: Mutex::new(None),
             content_refreshing: AtomicBool::new(false),
+            social,
+            feed,
         })
     }
 }

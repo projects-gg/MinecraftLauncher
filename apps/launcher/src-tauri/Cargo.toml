@@ -30,7 +30,6 @@ tokio = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-tracing-appender = { workspace = true }
 anyhow = { workspace = true }
 dirs = { workspace = true }
 uuid = { workspace = true }
@@ -50,6 +49,9 @@ pl-auth = { workspace = true }
 pl-content = { workspace = true }
 pl-afk = { workspace = true }
 pl-discord = { workspace = true }
+pl-data = { workspace = true }
+pl-social = { workspace = true }
+pl-desktop = { workspace = true }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = { workspace = true }

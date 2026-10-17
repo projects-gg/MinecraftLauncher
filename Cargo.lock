@@ -3731,9 +3731,11 @@ dependencies = [
  "keyring",
  "parking_lot",
  "pl-net",
+ "regex-syntax",
  "serde",
  "serde_json",
  "specta",
+ "sysinfo",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",
@@ -3752,6 +3754,7 @@ dependencies = [
  "md-5 0.11.0",
  "parking_lot",
  "pl-net",
+ "png 0.18.1",
  "rand 0.10.3",
  "reqwest",
  "serde",
@@ -3765,6 +3768,7 @@ dependencies = [
  "url",
  "uuid",
  "windows",
+ "zip 9.0.3",
 ]
 
 [[package]]
@@ -3788,6 +3792,39 @@ dependencies = [
  "tracing",
  "url",
  "zeroize",
+]
+
+[[package]]
+name = "pl-data"
+version = "2.0.0"
+dependencies = [
+ "dirs 7.0.0",
+ "fs4",
+ "jiff",
+ "pl-mc",
+ "regex",
+ "serde",
+ "serde_json",
+ "sysinfo",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio-util",
+ "tracing",
+ "walkdir",
+ "windows",
+ "zip 9.0.3",
+]
+
+[[package]]
+name = "pl-desktop"
+version = "2.0.0"
+dependencies = [
+ "serde",
+ "specta",
+ "tempfile",
+ "thiserror 2.0.21",
+ "url",
+ "windows",
 ]
 
 [[package]]
@@ -3815,6 +3852,7 @@ dependencies = [
  "futures",
  "hex",
  "hickory-resolver",
+ "image",
  "jiff",
  "md-5 0.11.0",
  "parking_lot",
@@ -3822,6 +3860,7 @@ dependencies = [
  "quick-xml 0.42.0",
  "regex",
  "reqwest",
+ "same-file",
  "serde",
  "serde_json",
  "sha1",
@@ -3857,6 +3896,29 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tokio-util",
+ "tracing",
+ "url",
+]
+
+[[package]]
+name = "pl-social"
+version = "2.0.0"
+dependencies = [
+ "base64 0.23.1",
+ "futures",
+ "keyring",
+ "qrcode",
+ "rand 0.10.3",
+ "reqwest",
+ "rustls",
+ "rustls-platform-verifier",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "specta",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-tungstenite",
  "tracing",
  "url",
 ]
@@ -4045,9 +4107,12 @@ dependencies = [
  "pl-afk",
  "pl-auth",
  "pl-content",
+ "pl-data",
+ "pl-desktop",
  "pl-discord",
  "pl-mc",
  "pl-net",
+ "pl-social",
  "regex",
  "semver",
  "serde",
@@ -4071,7 +4136,6 @@ dependencies = [
  "thiserror 2.0.21",
  "tokio",
  "tracing",
- "tracing-appender",
  "tracing-subscriber",
  "uuid",
  "walkdir",
@@ -4127,6 +4191,12 @@ name = "pxfm"
 version = "0.1.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
+
+[[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
 
 [[package]]
 name = "quick-error"
@@ -5201,12 +5271,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "symlink"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7973cce6668464ea31f176d85b13c7ab3bba2cb3b77a2ed26abd7801688010a"
-
-[[package]]
 name = "syn"
 version = "1.0.109"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6072,6 +6136,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-tungstenite"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17a073bfed563fa236697a068031408a93cd9522e08abf9933ead3e73411bd71"
+dependencies = [
+ "futures-util",
+ "log",
+ "rustls",
+ "rustls-native-certs",
+ "rustls-pki-types",
+ "tokio",
+ "tokio-rustls",
+ "tungstenite",
+]
+
+[[package]]
 name = "tokio-util"
 version = "0.7.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6244,19 +6324,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-appender"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "050686193eb999b4bb3bc2acfa891a13da00f79734704c4b8b4ef1a10b368a3c"
-dependencies = [
- "crossbeam-channel",
- "symlink",
- "thiserror 2.0.21",
- "time",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "tracing-attributes"
 version = "0.1.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6362,6 +6429,24 @@ name = "try-lock"
 version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
+
+[[package]]
+name = "tungstenite"
+version = "0.30.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e48ac77174b19c110a50ab2128b24215ac9cb40e0e12e093fb602d175c569d22"
+dependencies = [
+ "bytes",
+ "data-encoding",
+ "http",
+ "httparse",
+ "log",
+ "rand 0.10.3",
+ "rustls",
+ "rustls-pki-types",
+ "sha1",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "typed-path"

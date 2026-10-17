@@ -2,6 +2,7 @@
 
 mod commands;
 mod error;
+mod shell;
 mod state;
 
 use tauri::Manager;
@@ -20,14 +21,17 @@ pub fn run() {
         use tauri_plugin_window_state::StateFlags;
         // Single instance must be the first plugin so a second launch only focuses us.
         builder = builder
+            // A second launch only focuses us; `projects://` links it carried reach the
+            // deep-link handler through the plugin's deep-link feature.
             .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-                focus_main_window(app);
+                shell::focus_main_window(app);
             }))
             .plugin(
                 tauri_plugin_window_state::Builder::new()
                     .with_state_flags(
                         StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED,
                     )
+                    .with_filename(shell::window_state_file())
                     .build(),
             )
             .plugin(tauri_plugin_updater::Builder::new().build())
@@ -54,7 +58,26 @@ pub fn run() {
             app.asset_protocol_scope()
                 .allow_directory(state.root.join("cache"), true)?;
             app.manage(state);
-            reveal_window_fallback(app.handle().clone());
+            // A data folder move finishes once this start succeeded: the old folder goes.
+            commands::data::finish_pending_move(app.handle());
+            shell::setup_deep_links(app);
+            #[cfg(desktop)]
+            shell::setup_tray(app)?;
+            // First start: a window size that suits the screen; later starts: the player's own
+            // size, set exactly (shell::fit_main_window).
+            #[cfg(desktop)]
+            shell::fit_main_window(app);
+            start_auto_afk(app.handle().clone());
+            // A version switch a crash interrupted is finished before anything uses the folders.
+            commands::versions::recover_unfinished_switches(app.handle().clone());
+            // Trash limits and leftovers: shortly after start, then daily (pl_data::housekeeping).
+            commands::cleanup::start_housekeeping(app.handle());
+            // The launcher's Java runtimes: newer builds staged and swapped in while no game runs.
+            commands::java::start_java_updates(app.handle());
+            // Started at login: stay in the tray until the user opens the launcher.
+            if !shell::start_minimized() {
+                reveal_window_fallback(app.handle().clone());
+            }
             Ok(())
         })
         .run(tauri::generate_context!())
@@ -67,6 +90,15 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .dangerously_cast_bigints_to_number()
         // Emitted as plain Tauri events ("afk-event"), so export the payload type explicitly.
         .typ::<pl_afk::AfkEvent>()
+        // Emitted as the plain "deep-link" event (tray actions and projects:// links).
+        .typ::<shell::DeepLink>()
+        // Emitted as the plain "game-log" event (live log of the running game).
+        .typ::<commands::launch::GameLogEvent>()
+        // Emitted as the plain "java-progress" event (a Java runtime update downloading).
+        .typ::<commands::java::JavaProgressEvent>()
+        // Emitted as the plain "social-view" / "social-notice" events (friends feature).
+        .typ::<pl_social::SocialView>()
+        .typ::<pl_social::SocialNotice>()
         .commands(tauri_specta::collect_commands![
             commands::app::app_info,
             commands::accounts::accounts_list,
@@ -75,18 +107,30 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::accounts::account_cancel_login,
             commands::accounts::account_set_active,
             commands::accounts::account_remove,
+            commands::accounts::account_undo_remove,
+            commands::accounts::account_forget_removed,
+            commands::accounts::account_rename,
+            commands::accounts::account_set_pinned,
+            commands::accounts::accounts_reorder_pinned,
+            commands::accounts::account_set_avatar,
+            commands::accounts::account_check_session,
+            commands::accounts::accounts_ensure_heads,
             commands::accounts::account_import_legacy,
             commands::content::content_home,
+            commands::content::content_status,
+            commands::content::content_recheck,
             commands::discord::discord_update,
             commands::discord::discord_set_enabled,
             commands::instances::instances_list,
             commands::instances::instance_create,
             commands::instances::instance_delete,
+            commands::instances::instance_restore,
             commands::instances::instance_duplicate,
             commands::instances::instance_open_folder,
             commands::instances::instance_detail,
             commands::instances::instance_update_settings,
             commands::instances::mod_set_enabled,
+            commands::instances::instance_servers_edit,
             commands::instances::minecraft_versions,
             commands::instances::loader_versions,
             commands::launch::launch_instance,
@@ -104,12 +148,161 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::afk::afk_send,
             commands::afk::afk_console,
             commands::afk::afk_any_active,
+            commands::afk::afk_reconnect,
+            commands::afk::afk_settings,
+            commands::afk::afk_save_settings,
+            commands::afk::afk_check_pattern,
+            commands::afk::afk_global_settings,
+            commands::afk::afk_set_show_script_commands,
+            commands::afk::afk_open_folder,
             commands::migrate::legacy_scan,
             commands::migrate::legacy_import,
             commands::updates::update_check,
             commands::updates::update_download,
             commands::updates::update_apply,
             commands::updates::app_restart,
+            // official pack & desktop shell
+            commands::official::official_status,
+            commands::official::official_instance_ensure,
+            shell::deep_link_pending,
+            shell::app_quit,
+            // small conveniences: dropped files, "Devam et", desktop shortcuts
+            commands::drop::files_classify,
+            commands::drop::files_drop,
+            commands::resume::resume_target,
+            commands::shortcut::instance_shortcut_create,
+            // mods & modpacks
+            commands::modrinth::modrinth_search,
+            commands::modrinth::modrinth_categories,
+            commands::modrinth::modrinth_project,
+            commands::modrinth::modrinth_versions,
+            commands::modrinth::content_scan,
+            commands::modrinth::content_install,
+            commands::modrinth::content_update,
+            commands::modrinth::content_remove,
+            commands::modrinth::content_add_files,
+            commands::modrinth::content_cancel,
+            commands::modpack::modpack_preview,
+            commands::modpack::modpack_import,
+            commands::modpack::modpack_install,
+            commands::modpack::modpack_export,
+            commands::modpack_update::modpack_info,
+            commands::modpack_update::modpack_update_check,
+            commands::modpack_update::modpack_update_plan,
+            commands::modpack_update::modpack_update_apply,
+            commands::modpack_update::modrinth_project_briefs,
+            commands::datapacks::datapacks_list,
+            commands::datapacks::datapack_install,
+            commands::datapacks::datapack_remove,
+            // mod center and per-version sets
+            commands::modcenter::mod_center,
+            commands::modcenter::mod_center_preview,
+            commands::modcenter::mod_center_apply,
+            commands::modcenter::mod_center_mark_seen,
+            commands::versions::instance_versions,
+            commands::versions::instance_switch_preview,
+            commands::versions::instance_switch_version,
+            commands::versions::instance_restore_trashed_set,
+            commands::versions::mods_migration_plan,
+            commands::versions::mods_migration_check,
+            commands::versions::mods_migrate,
+            // mod health: pre-launch check, repairs, set reinstall
+            commands::modhealth::mods_check,
+            commands::modhealth::mods_repair,
+            commands::modhealth::mods_reinstall_preview,
+            commands::modhealth::mods_reinstall,
+            commands::modhealth::instance_set_max_memory,
+            commands::modhealth::instance_set_jvm_args,
+            // Java: Settings → Java, runtime updates (the pre-launch check is part of the launch)
+            commands::java::java_overview,
+            commands::java::java_runtime_update,
+            commands::java::java_runtime_remove,
+            commands::java::java_use_auto,
+            commands::java::java_open_folder,
+            commands::java::java_check,
+            // skins
+            commands::skins::skin_appearance,
+            commands::skins::skin_texture,
+            commands::skins::skin_file_preview,
+            commands::skins::skin_upload,
+            commands::skins::skin_set_variant,
+            commands::skins::skin_set_cape,
+            commands::skins::skin_reset,
+            commands::skins::skin_history,
+            commands::skins::skin_history_prepare,
+            commands::skins::skin_history_wear,
+            commands::skins::skin_history_set_favorite,
+            commands::skins::skin_history_remove,
+            commands::skins::skin_history_restore,
+            // data folder (Settings → Veri)
+            commands::data::data_overview,
+            commands::data::data_open_folder,
+            commands::data::data_support_bundle,
+            commands::data::data_move_plan,
+            commands::data::data_move_start,
+            commands::data::data_move_cancel,
+            // cleanup (Settings → Veri → Temizlik)
+            commands::cleanup::cleanup_status,
+            commands::cleanup::cleanup_old_sets,
+            commands::cleanup::cleanup_remove_sets,
+            commands::cleanup::cleanup_restore_sets,
+            commands::cleanup::cleanup_shared_files,
+            commands::cleanup::cleanup_delete_shared,
+            commands::cleanup::cleanup_leftovers,
+            commands::cleanup::cleanup_clean_leftovers,
+            commands::cleanup::cleanup_trash,
+            commands::cleanup::cleanup_empty_trash,
+            commands::cleanup::cleanup_delete_trashed_set,
+            commands::cleanup::cleanup_summary,
+            // instance page: logs, worlds, screenshots; library groups
+            commands::library::game_logs,
+            commands::library::game_log_read,
+            commands::library::game_log_share,
+            commands::library::game_log_reveal,
+            commands::library::worlds_list,
+            commands::library::world_backups,
+            commands::library::world_backup,
+            commands::library::world_restore,
+            commands::library::world_delete,
+            commands::library::world_backup_delete,
+            commands::library::library_cancel,
+            commands::library::trash_list,
+            commands::library::trash_restore,
+            commands::library::trash_delete,
+            commands::library::screenshots_list,
+            commands::library::screenshot_thumbnail,
+            commands::library::screenshot_copy,
+            commands::library::screenshot_open,
+            commands::library::screenshot_delete,
+            commands::library::instance_reveal_file,
+            commands::library::instance_set_group,
+            // friends (optional feature, off until the signed config turns it on)
+            commands::social::social_state,
+            commands::social::social_sign_in,
+            commands::social::social_sign_in_cancel,
+            commands::social::social_sign_out,
+            commands::social::social_refresh,
+            commands::social::social_lookup,
+            commands::social::social_send_request,
+            commands::social::social_accept,
+            commands::social::social_decline,
+            commands::social::social_cancel_request,
+            commands::social::social_remove_friend,
+            commands::social::social_block,
+            commands::social::social_unblock,
+            commands::social::social_rotate_code,
+            commands::social::social_set_status,
+            commands::social::social_set_privacy,
+            commands::social::social_set_avatar,
+            commands::social::social_invite,
+            commands::social::social_dismiss_invite,
+            commands::social::social_sessions,
+            commands::social::social_revoke_session,
+            commands::social::social_revoke_other_sessions,
+            commands::social::social_delete_account,
+            commands::social::social_backup_upload,
+            commands::social::social_backup_download,
+            commands::social::social_backup_delete,
         ])
 }
 
@@ -132,19 +325,65 @@ fn export_bindings(_builder: &tauri_specta::Builder<tauri::Wry>) {
     }
 }
 
+/// Logs go to daily files in `<data root>/logs` (`launcher.<local date>.log`, the last 7 kept;
+/// support bundles include them, see `pl_data::logfile`) and, in debug builds, to the terminal.
 fn init_logging() {
-    use tracing_subscriber::EnvFilter;
+    use tracing_subscriber::prelude::*;
+    use tracing_subscriber::{EnvFilter, fmt};
+
     let filter = EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| EnvFilter::new("info,projects_launcher_lib=debug,pl_=debug"));
-    let _ = tracing_subscriber::fmt().with_env_filter(filter).try_init();
+    // Written synchronously: the last lines before a crash are the ones support needs.
+    let file = pl_data::logfile::DailyLog::new(state::default_root().join("logs"))
+        .map_err(|error| eprintln!("launcher log file unavailable: {error}"))
+        .ok()
+        .map(|log| {
+            fmt::layer()
+                .with_ansi(false)
+                .with_timer(LocalTime)
+                .with_writer(std::sync::Mutex::new(log))
+        });
+    let stdout = cfg!(debug_assertions).then(fmt::layer);
+    let _ = tracing_subscriber::registry()
+        .with(filter)
+        .with(file)
+        .with(stdout)
+        .try_init();
+
+    // Panics reach the log file too (the default hook only prints to stderr).
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        tracing::error!(panic = %info, "the launcher panicked");
+        default_hook(info);
+    }));
 }
 
-fn focus_main_window(app: &tauri::AppHandle) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.unminimize();
-        let _ = window.show();
-        let _ = window.set_focus();
+/// Local time in log files: what players and support talk in.
+struct LocalTime;
+
+impl tracing_subscriber::fmt::time::FormatTime for LocalTime {
+    fn format_time(&self, w: &mut tracing_subscriber::fmt::format::Writer<'_>) -> std::fmt::Result {
+        write!(
+            w,
+            "{}",
+            jiff::Zoned::now().strftime("%Y-%m-%d %H:%M:%S%.3f")
+        )
     }
+}
+
+/// AFK accounts marked "start automatically" connect when the launcher starts (staggered), with
+/// the client build and game versions of the cached content index (the UI may not have asked for
+/// content yet, for example when the launcher starts minimized).
+fn start_auto_afk(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<state::AppState>();
+        if let Ok(cached) = state.content.load_cached().await {
+            commands::content::apply_snapshot(&state, &cached);
+        }
+        if let Err(error) = state.afk.auto_start().await {
+            tracing::warn!(%error, "AFK auto-start failed");
+        }
+    });
 }
 
 /// The window starts hidden and the frontend reveals it after first paint.

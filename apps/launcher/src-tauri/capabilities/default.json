@@ -13,15 +13,19 @@
     "core:window:allow-hide",
     "core:window:allow-set-focus",
     "core:window:allow-unminimize",
-    "opener:default",
+    "core:window:allow-set-progress-bar",
+    "core:window:allow-request-user-attention",
+    "core:window:allow-is-focused",
+    "core:window:allow-is-minimized",
+    "core:window:allow-is-visible",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://*" }]
+    },
+    "opener:allow-reveal-item-in-dir",
     "dialog:default",
     "notification:default",
-    "process:default",
-    "os:default",
     "clipboard-manager:allow-write-text",
-    "deep-link:default",
-    "window-state:default",
-    "autostart:default",
-    "updater:default"
+    "autostart:default"
   ]
 }

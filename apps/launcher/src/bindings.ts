@@ -8,43 +8,127 @@ export const commands = {
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
 	accountsList: () => __TAURI_INVOKE<AccountView[]>("accounts_list"),
 	accountAddOffline: (name: string) => typedError<AccountView, CmdError>(__TAURI_INVOKE("account_add_offline", { name })),
-	/**  Browser sign-in. Progress steps stream over `on_step`; the result is the new active account. */
-	accountLoginMicrosoft: (onStep: Channel<LoginStep>) => typedError<AccountView, CmdError>(__TAURI_INVOKE("account_login_microsoft", { onStep })),
+	/**
+	 *  Browser sign-in. Progress steps stream over `on_step`. Without `relogin` the account is added
+	 *  (or renewed) and becomes active; with `relogin` (an account id) the sign-in renews that
+	 *  account's session and keeps the current selection.
+	 */
+	accountLoginMicrosoft: (onStep: Channel<LoginStep>, relogin: string | null) => typedError<MicrosoftLoginResult, CmdError>(__TAURI_INVOKE("account_login_microsoft", { onStep, relogin })),
 	accountCancelLogin: () => __TAURI_INVOKE<void>("account_cancel_login"),
 	accountSetActive: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("account_set_active", { id })),
-	accountRemove: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("account_remove", { id })),
+	/**
+	 *  Removes an account; its sign-in leaves the keychain at once. `account_undo_remove` can bring
+	 *  it back for a while, `account_forget_removed` makes it final sooner.
+	 */
+	accountRemove: (id: string) => typedError<AccountRemoval, CmdError>(__TAURI_INVOKE("account_remove", { id })),
+	accountUndoRemove: (id: string) => typedError<AccountView, CmdError>(__TAURI_INVOKE("account_undo_remove", { id })),
+	/**  The undo window of a removal ended: drop the copy kept for it. */
+	accountForgetRemoved: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("account_forget_removed", { id })),
+	/**  Renames an offline account (its UUID follows the name). */
+	accountRename: (id: string, name: string) => typedError<AccountView, CmdError>(__TAURI_INVOKE("account_rename", { id, name })),
+	/**  Pins an account to the top of the list (it joins the end of the pinned ones) or unpins it. */
+	accountSetPinned: (id: string, pinned: boolean) => typedError<AccountView, CmdError>(__TAURI_INVOKE("account_set_pinned", { id, pinned })),
+	/**  Saves the player's order of the pinned accounts (unpinned ids are ignored). */
+	accountsReorderPinned: (ids: string[]) => typedError<null, CmdError>(__TAURI_INVOKE("accounts_reorder_pinned", { ids })),
+	/**
+	 *  Shows a bundled picture (`preset:<slug>`) instead of an offline account's head; `None`
+	 *  goes back to the head.
+	 */
+	accountSetAvatar: (id: string, avatar: string | null) => typedError<AccountView, CmdError>(__TAURI_INVOKE("account_set_avatar", { id, avatar })),
+	/**
+	 *  Whether a Microsoft account's saved session still works (refreshes it when it is about to
+	 *  expire, like a launch would). A working session also re-reads the profile when it was not
+	 *  read in the last quarter of an hour, so a skin or name changed elsewhere reaches the list
+	 *  and the skin history.
+	 */
+	accountCheckSession: (id: string) => typedError<SessionCheck, CmdError>(__TAURI_INVOKE("account_check_session", { id })),
+	/**
+	 *  Cuts and caches the heads that are missing: Mojang textures for Microsoft accounts, default
+	 *  skins from local client jars for offline ones. Returns how many were added; the list
+	 *  (`accounts_list`) then carries them.
+	 */
+	accountsEnsureHeads: () => typedError<number, CmdError>(__TAURI_INVOKE("accounts_ensure_heads")),
 	accountImportLegacy: () => typedError<LegacyAccountImport, CmdError>(__TAURI_INVOKE("account_import_legacy")),
 	/**
 	 *  Home content. Returns the cached snapshot immediately (refreshing in the background and
 	 *  emitting `content-changed` when something new arrives); without a cache it waits for the
-	 *  network. `None` means "nothing yet": the UI shows its bundled welcome content.
+	 *  network. `None` means "nothing yet": the UI shows its bundled welcome content. Whether the
+	 *  mirrors could be reached is [`content_status`] (and the `content-status` event).
 	 */
 	contentHome: () => typedError<{
 	hero: HeroView,
 	banners: BannerView[],
+	/**
+	 *  Studio's and the news feed's events that have not ended, in event card order (the card
+	 *  shows the first): live ones first, ending soonest leading, then the soonest upcoming.
+	 */
 	events: EventView[],
+	/**  Studio's news and the news feed's items, merged (Studio wins on the same id). */
 	news: NewsView[],
+	maintenance: MaintenanceView | null,
+	packNotes: PackNotesView | null,
+	/**  The newest patch notes in `news` (the patch notes box; `pack_notes` when there is none). */
+	patchNotesId: string | null,
+	/**  Studio's links (Settings → Hakkında). */
+	links: LinksView,
 	offline: boolean,
 	fromCache: boolean,
 } | null, CmdError>(__TAURI_INVOKE("content_home")),
+	/**  Whether the last refresh reached a mirror. */
+	contentStatus: () => __TAURI_INVOKE<ContentStatusView>("content_status"),
+	/**
+	 *  Checks the mirrors again right away (the UI calls it when the system reports the network gone
+	 *  or back, so the offline strip does not wait for the next scheduled refresh). The outcome
+	 *  arrives as `content-status` and, when there is something new, `content-changed`.
+	 */
+	contentRecheck: () => __TAURI_INVOKE<void>("content_recheck"),
 	discordUpdate: (context: PresenceContext) => __TAURI_INVOKE<void>("discord_update", { context }),
 	discordSetEnabled: (enabled: boolean) => __TAURI_INVOKE<void>("discord_set_enabled", { enabled }),
 	instancesList: () => typedError<InstanceView[], CmdError>(__TAURI_INVOKE("instances_list")),
 	instanceCreate: (request: NewInstanceRequest) => typedError<InstanceView, CmdError>(__TAURI_INVOKE("instance_create", { request })),
-	instanceDelete: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("instance_delete", { id })),
+	instanceDelete: (id: string) => typedError<string, CmdError>(__TAURI_INVOKE("instance_delete", { id })),
+	/**
+	 *  "Geri al" of a deleted instance (the toast, or Settings → Veri → Çöp kutusu): it comes back
+	 *  from the launcher trash, under its old id when that is free and with a numbered name when
+	 *  another instance has taken its name meanwhile.
+	 */
+	instanceRestore: (trashId: string) => typedError<InstanceView, CmdError>(__TAURI_INVOKE("instance_restore", { trashId })),
 	instanceDuplicate: (id: string) => typedError<InstanceView, CmdError>(__TAURI_INVOKE("instance_duplicate", { id })),
 	instanceOpenFolder: (id: string, sub: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("instance_open_folder", { id, sub })),
 	instanceDetail: (id: string) => typedError<InstanceDetailView, CmdError>(__TAURI_INVOKE("instance_detail", { id })),
 	instanceUpdateSettings: (id: string, settings: InstanceSettingsView) => typedError<null, CmdError>(__TAURI_INVOKE("instance_update_settings", { id, settings })),
+	/**
+	 *  Switches a mod on or off. A recommended mod of the official pack changes the mod center
+	 *  selection (its file is installed or removed by the pack sync); other mods are renamed
+	 *  (`x.jar` ↔ `x.jar.disabled`).
+	 */
 	modSetEnabled: (instanceId: string, fileName: string, enabled: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("mod_set_enabled", { instanceId, fileName, enabled })),
+	/**
+	 *  Adds, changes, removes or puts back one server of the instance's `servers.dat` (positions
+	 *  count listed servers only; see `pl_mc::server::ServerEdit`). Refused while the instance's
+	 *  game runs: the game keeps the list in memory and writes it back over any change.
+	 */
+	instanceServersEdit: (instanceId: string, edit: ServerEdit) => typedError<ServerEditView, CmdError>(__TAURI_INVOKE("instance_servers_edit", { instanceId, edit })),
+	/**
+	 *  Mojang's version list, newest first, with the launcher's recommended version marked (a
+	 *  recommendation Mojang does not list marks nothing).
+	 */
 	minecraftVersions: () => typedError<McVersionView[], CmdError>(__TAURI_INVOKE("minecraft_versions")),
 	loaderVersions: (loader: LoaderKind, mcVersion: string) => typedError<LoaderVersionView[], CmdError>(__TAURI_INVOKE("loader_versions", { loader, mcVersion })),
-	launchInstance: (instanceId: string, autoJoin: boolean, onEvent: Channel<LaunchEventView>) => typedError<null, CmdError>(__TAURI_INVOKE("launch_instance", { instanceId, autoJoin, onEvent })),
+	launchInstance: (instanceId: string, autoJoin: boolean, settings: LaunchSettings, onEvent: Channel<LaunchEventView>) => typedError<null, CmdError>(__TAURI_INVOKE("launch_instance", { instanceId, autoJoin, settings, onEvent })),
+	/**
+	 *  Stops the launch being prepared: downloads and installs end within a second and the launch
+	 *  reports `Cancelled`. Its entry stays until it has really stopped (cleanup and data moves keep
+	 *  waiting until then).
+	 */
 	launchCancel: () => __TAURI_INVOKE<void>("launch_cancel"),
 	gameKill: () => __TAURI_INVOKE<void>("game_kill"),
 	/**  Instance id of the running game, if any (used after a UI reload). */
 	gameRunning: () => __TAURI_INVOKE<string | null>("game_running"),
-	/**  Server List Ping. Never fails: an unreachable server is reported as offline. */
+	/**
+	 *  Server List Ping. Never fails: an unreachable server is reported as offline. Without a name
+	 *  and address it pings the featured server Studio published (else `play.projects.gg`).
+	 */
 	serverStatus: (name: string | null, address: string | null) => __TAURI_INVOKE<ServerStatusView>("server_status", { name, address }),
 	afkOverview: () => __TAURI_INVOKE<AfkAccountView[]>("afk_overview"),
 	afkAdd: (nickname: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_add", { nickname })),
@@ -60,6 +144,37 @@ export const commands = {
 	afkSend: (id: string, line: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_send", { id, line })),
 	afkConsole: (id: string) => __TAURI_INVOKE<ConsoleLineView[]>("afk_console", { id }),
 	afkAnyActive: () => __TAURI_INVOKE<boolean>("afk_any_active"),
+	/**  Stops the account's client (if any) and connects it again, so saved settings apply. */
+	afkReconnect: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_reconnect", { id })),
+	/**  Reads one account's settings (blocks on the keychain, so it runs off the async workers). */
+	afkSettings: (id: string) => typedError<AfkSettingsView, CmdError>(__TAURI_INVOKE("afk_settings", { id })),
+	/**
+	 *  Validates and saves one account's settings. The UI's checks are only a convenience: the same
+	 *  rules (and the clamping of every number) run here before anything is written.
+	 */
+	afkSaveSettings: (id: string, settings: SettingsPage) => typedError<AfkSettingsSaveResult, CmdError>(__TAURI_INVOKE("afk_save_settings", { id, settings })),
+	/**
+	 *  Checks an auto-respond pattern as it is typed (the same check runs again on save). `None`: the
+	 *  client can use it.
+	 */
+	afkCheckPattern: (pattern: string, isRegex: boolean) => __TAURI_INVOKE<
+/**  Longer than [`MAX_PATTERN_CHARS`] characters. */
+"tooLong" | 
+/**  Not a regular expression the client reads (or a control character in the text). */
+"invalid" | 
+/**
+ *  A repetition inside a repetition, a repetition that can split a line more than one way
+ *  (rounds that may be empty or start like each other), more than three loops that can hand
+ *  characters to what follows them, or a count above 1000: the client could take forever on
+ *  some chat lines.
+ */
+"tooComplex" | null>("afk_check_pattern", { pattern, isRegex }),
+	/**  Account-independent AFK preferences. */
+	afkGlobalSettings: () => __TAURI_INVOKE<AfkSettings>("afk_global_settings"),
+	/**  Shows or hides login-script lines in every console (lines with passwords stay hidden). */
+	afkSetShowScriptCommands: (show: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("afk_set_show_script_commands", { show })),
+	/**  Opens the account's folder in the file manager: its chat log, alerts and console log are there. */
+	afkOpenFolder: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_open_folder", { id })),
 	legacyScan: () => typedError<LegacyScan, CmdError>(__TAURI_INVOKE("legacy_scan")),
 	legacyImport: (request: LegacyImportRequest) => typedError<LegacyImportReport, CmdError>(__TAURI_INVOKE("legacy_import", { request })),
 	updateCheck: (channel: string) => typedError<UpdateStatus, CmdError>(__TAURI_INVOKE("update_check", { channel })),
@@ -74,10 +189,487 @@ export const commands = {
 	 */
 	updateApply: () => typedError<null, CmdError>(__TAURI_INVOKE("update_apply")),
 	appRestart: () => __TAURI_INVOKE<void>("app_restart"),
+	officialStatus: () => typedError<OfficialStatus, CmdError>(__TAURI_INVOKE("official_status")),
+	/**
+	 *  The Projects instance, created on first use. It follows the official pack family when one
+	 *  is published (new installs get the family's default member); until then it is vanilla on the
+	 *  newest release. Files are installed by the first launch.
+	 */
+	officialInstanceEnsure: () => typedError<InstanceView, CmdError>(__TAURI_INVOKE("official_instance_ensure")),
+	/**  The link that started the app, if any (taken once). */
+	deepLinkPending: () => __TAURI_INVOKE<{ kind: "home" } | 
+/**  Start the selected instance (`projects://play`, `projects://join`). */
+{ kind: "play" } | 
+/**  Start one instance (`projects://play/<instance>`, used by desktop shortcuts). */
+{ kind: "playInstance"; id: string } | { kind: "news"; id: string } | { kind: "instance"; id: string } | { kind: "afk" } | 
+/**
+ *  Add a friend by code (`projects://friend/PRJ-XXXX-XXXX`, from the QR page): the friends
+ *  panel shows who it is; nothing is sent until the player confirms.
+ */
+{ kind: "friend"; code: string } | null>("deep_link_pending"),
+	/**  Leaves for real: AFK sessions are stopped cleanly first. */
+	appQuit: () => __TAURI_INVOKE<void>("app_quit"),
+	/**  What the dragged files are (called as soon as a drag enters the window). */
+	filesClassify: (paths: string[]) => __TAURI_INVOKE<DroppedFileView[]>("files_classify", { paths }),
+	/**
+	 *  Copy dropped files into `instance_id`. Mods wait briefly for a running version switch or mod
+	 *  change of the instance (they would land in the wrong set); packs are shared by all versions
+	 *  and go in at once.
+	 */
+	filesDrop: (instanceId: string, paths: string[]) => typedError<DropResultView, CmdError>(__TAURI_INVOKE("files_drop", { instanceId, paths })),
+	/**
+	 *  The world or server "Devam et" joins for `instance_id`; `None` before 1.20, before the
+	 *  first world or server, and while the version was never installed.
+	 */
+	resumeTarget: (instanceId: string) => typedError<{
+	kind: ResumeKind,
+	/**  The world's or the server's name. */
+	name: string,
+	/**  When it was played (ISO time). */
+	lastPlayedAt: string | null,
+	/**  The world's or the server's icon (data URL). */
+	iconUrl: string | null,
+	/**  Handed back to `launch_instance` (`settings.quickPlay`). */
+	quickPlay: QuickPlay,
+} | null, CmdError>(__TAURI_INVOKE("resume_target", { instanceId })),
+	/**
+	 *  Create (or refresh) the desktop shortcut of `instance_id`. `icon_png` is the instance's icon
+	 *  tile as base64 PNG (at most 256×256); without it the launcher's own icon is used.
+	 */
+	instanceShortcutCreate: (instanceId: string, iconPng: string | null) => typedError<ShortcutView, CmdError>(__TAURI_INVOKE("instance_shortcut_create", { instanceId, iconPng })),
+	/**  Search Modrinth. With an instance, results are limited to what runs on it. */
+	modrinthSearch: (request: ContentSearchRequest) => typedError<ModrinthSearchResults, CmdError>(__TAURI_INVOKE("modrinth_search", { request })),
+	/**  Search categories of every project type. */
+	modrinthCategories: () => typedError<CategoryView[], CmdError>(__TAURI_INVOKE("modrinth_categories")),
+	/**  A project page (Markdown description, gallery, links). */
+	modrinthProject: (id: string) => typedError<ModrinthProject, CmdError>(__TAURI_INVOKE("modrinth_project", { id })),
+	/**  Versions of a project, newest first. With an instance, only versions that run on it. */
+	modrinthVersions: (projectId: string, instanceId: string | null, kind: "mod" | "resourcePack" | "shaderPack" | null) => typedError<ModrinthVersion[], CmdError>(__TAURI_INVOKE("modrinth_versions", { projectId, instanceId, kind })),
+	/**
+	 *  The add-ons of one kind in an instance and the Modrinth projects they belong to, optionally
+	 *  with available updates. Offline it answers from the local index.
+	 */
+	contentScan: (instanceId: string, kind: ImportKind, checkUpdates: boolean) => typedError<ContentScanView, CmdError>(__TAURI_INVOKE("content_scan", { instanceId, kind, checkUpdates })),
+	/**
+	 *  Install a project into an instance: `version_id`, or else the best version for the instance.
+	 *  Mods bring their required dependencies. An older version of the project is replaced.
+	 */
+	contentInstall: (instanceId: string, kind: ImportKind, projectId: string, versionId: string | null, jobId: string, onProgress: Channel<JobProgressView>) => typedError<AddonInstallReport, CmdError>(__TAURI_INVOKE("content_install", { instanceId, kind, projectId, versionId, jobId, onProgress })),
+	/**
+	 *  Update add-ons to their newest compatible versions (`file_names` empty = every update).
+	 *  Files of the official pack are left alone.
+	 */
+	contentUpdate: (instanceId: string, kind: ImportKind, fileNames: string[], jobId: string, onProgress: Channel<JobProgressView>) => typedError<AddonInstallReport, CmdError>(__TAURI_INVOKE("content_update", { instanceId, kind, fileNames, jobId, onProgress })),
+	/**  Remove an add-on file (to the OS trash when possible). */
+	contentRemove: (instanceId: string, kind: ImportKind, fileName: string) => typedError<null, CmdError>(__TAURI_INVOKE("content_remove", { instanceId, kind, fileName })),
+	/**
+	 *  Copy files chosen by the player into the instance (`mods/`, `resourcepacks/`,
+	 *  `shaderpacks/`). Existing files are never overwritten.
+	 */
+	contentAddFiles: (instanceId: string, kind: ImportKind, paths: string[]) => typedError<ContentAddView, CmdError>(__TAURI_INVOKE("content_add_files", { instanceId, kind, paths })),
+	/**  Cancel a running content or modpack job. */
+	contentCancel: (jobId: string) => __TAURI_INVOKE<void>("content_cancel", { jobId }),
+	/**  What a pack file would create (read without extracting it). */
+	modpackPreview: (path: string) => typedError<PackPreview, CmdError>(__TAURI_INVOKE("modpack_preview", { path })),
+	/**  Import a pack file as a new instance. */
+	modpackImport: (request: ModpackImportRequest, jobId: string, onProgress: Channel<JobProgressView>) => typedError<ModpackImportView, CmdError>(__TAURI_INVOKE("modpack_import", { request, jobId, onProgress })),
+	/**
+	 *  Download a Modrinth modpack (`version_id`, else its newest release) and import it as a new
+	 *  instance.
+	 */
+	modpackInstall: (projectId: string, versionId: string | null, name: string | null, icon: string, jobId: string, onProgress: Channel<JobProgressView>) => typedError<ModpackImportView, CmdError>(__TAURI_INVOKE("modpack_install", { projectId, versionId, name, icon, jobId, onProgress })),
+	/**
+	 *  Export an instance as a Modrinth `.mrpack`. Mods, resource packs and shader packs Modrinth
+	 *  hosts are referenced by download link; everything else chosen is bundled.
+	 */
+	modpackExport: (instanceId: string, request: ModpackExportRequest, jobId: string, onProgress: Channel<JobProgressView>) => typedError<ModpackExportView, CmdError>(__TAURI_INVOKE("modpack_export", { instanceId, request, jobId, onProgress })),
+	/**  The Modrinth modpack the instance was made from (`None` for other instances). */
+	modpackInfo: (instanceId: string) => typedError<{
+	projectId: string,
+	versionId: string,
+	versionNumber: string | null,
+	title: string | null,
+	iconUrl: string | null,
+} | null, CmdError>(__TAURI_INVOKE("modpack_info", { instanceId })),
+	/**
+	 *  The newest version of the instance's modpack for its Minecraft version and loader, when it is
+	 *  newer than the installed one (one request).
+	 */
+	modpackUpdateCheck: (instanceId: string) => typedError<{
+	versionId: string,
+	versionNumber: string,
+	name: string,
+	/**  ISO 8601. */
+	publishedAt: string,
+} | null, CmdError>(__TAURI_INVOKE("modpack_update_check", { instanceId })),
+	/**
+	 *  Downloads the target version's `.mrpack` and tells what updating to it would change; nothing
+	 *  in the instance changes. Stoppable with `content_cancel`.
+	 */
+	modpackUpdatePlan: (instanceId: string, versionId: string, jobId: string, onProgress: Channel<JobProgressView>) => typedError<ModpackUpdatePlanView, CmdError>(__TAURI_INVOKE("modpack_update_plan", { instanceId, versionId, jobId, onProgress })),
+	/**
+	 *  Updates the instance to a newer version of its pack: files the player did not touch follow
+	 *  the pack, everything the player changed or added stays. Refused while the game runs.
+	 */
+	modpackUpdateApply: (instanceId: string, versionId: string, jobId: string, onProgress: Channel<JobProgressView>) => typedError<ModpackUpdateResultView, CmdError>(__TAURI_INVOKE("modpack_update_apply", { instanceId, versionId, jobId, onProgress })),
+	/**
+	 *  Titles and icons of Modrinth projects (one request for up to 100; unknown ids are left out).
+	 *  The import preview names a pack's optional files with it.
+	 */
+	modrinthProjectBriefs: (ids: string[]) => typedError<ProjectBriefView[], CmdError>(__TAURI_INVOKE("modrinth_project_briefs", { ids })),
+	/**  The data packs of a world, by name. */
+	datapacksList: (instanceId: string, world: string) => typedError<DatapackView[], CmdError>(__TAURI_INVOKE("datapacks_list", { instanceId, world })),
+	/**
+	 *  Adds a Modrinth data pack to a world: the newest version made for the instance's Minecraft
+	 *  version. Stoppable with `content_cancel`.
+	 */
+	datapackInstall: (instanceId: string, world: string, projectId: string, jobId: string, onProgress: Channel<JobProgressView>) => typedError<DatapackView, CmdError>(__TAURI_INVOKE("datapack_install", { instanceId, world, projectId, jobId, onProgress })),
+	/**  Removes a data pack from a world (to the system's trash when there is one). */
+	datapackRemove: (instanceId: string, world: string, fileName: string) => typedError<null, CmdError>(__TAURI_INVOKE("datapack_remove", { instanceId, world, fileName })),
+	/**
+	 *  The mod center of an instance (a dry run of the next sync: adopted changes and issues show
+	 *  up before the next launch).
+	 */
+	modCenter: (instanceId: string) => typedError<ModCenterView, CmdError>(__TAURI_INVOKE("mod_center", { instanceId })),
+	/**  What applying `selection` would download and remove (nothing changes on disk). */
+	modCenterPreview: (instanceId: string, selection: ModSelectionInput) => typedError<ModCenterPreviewView, CmdError>(__TAURI_INVOKE("mod_center_preview", { instanceId, selection })),
+	/**
+	 *  Applies a selection: downloads, renames back and removals, with progress. Refused while the
+	 *  instance's game is running.
+	 */
+	modCenterApply: (instanceId: string, selection: ModSelectionInput, jobId: string, onProgress: Channel<JobProgressView>) => typedError<ModCenterApplyView, CmdError>(__TAURI_INVOKE("mod_center_apply", { instanceId, selection, jobId, onProgress })),
+	/**
+	 *  The player saw the mod center: new mods are no longer flagged and adopted changes are
+	 *  acknowledged (no files change).
+	 */
+	modCenterMarkSeen: (instanceId: string) => typedError<null, CmdError>(__TAURI_INVOKE("mod_center_mark_seen", { instanceId })),
+	/**
+	 *  The Minecraft versions an instance can move to: the official pack's versions, or for other
+	 *  instances the releases its loader supports (and snapshots when `include_snapshots`; the
+	 *  recommended version even when it is a snapshot), plus the current version and every version
+	 *  it keeps a set for. Newest first.
+	 */
+	instanceVersions: (instanceId: string, includeSnapshots: boolean) => typedError<VersionOptionsView, CmdError>(__TAURI_INVOKE("instance_versions", { instanceId, includeSnapshots })),
+	/**  What switching to `minecraft` would put aside, bring back and download. */
+	instanceSwitchPreview: (instanceId: string, minecraft: string) => typedError<SwitchPreviewView, CmdError>(__TAURI_INVOKE("instance_switch_preview", { instanceId, minecraft })),
+	/**
+	 *  Moves an instance to another Minecraft version: the current set is put aside, the target's
+	 *  set comes back (or starts, carrying the choices over and copying `config/`), and for the
+	 *  official pack the new set's files are installed right away when the network allows.
+	 */
+	instanceSwitchVersion: (instanceId: string, minecraft: string, jobId: string, onProgress: Channel<JobProgressView>) => typedError<SwitchResultView, CmdError>(__TAURI_INVOKE("instance_switch_version", { instanceId, minecraft, jobId, onProgress })),
+	/**
+	 *  "Eski seti geri getir": puts the version's set that cleanup moved to the launcher trash back
+	 *  as its parked set, so the switch that follows brings it back exactly instead of starting
+	 *  fresh. Runs under the instance lock and the switch lock (never during a switch, and only
+	 *  after an unfinished one completed); refused while the game runs or when the version has a
+	 *  set again (it then stays in the trash). Remembered like cleanup's "Geri al".
+	 */
+	instanceRestoreTrashedSet: (instanceId: string, trashId: string) => typedError<null, CmdError>(__TAURI_INVOKE("instance_restore_trashed_set", { instanceId, trashId })),
+	/**
+	 *  Which of the player's own mods in `from`'s set (the active one by default) have a version
+	 *  for `to` on Modrinth: by project when known, else identified by the file's hash.
+	 */
+	modsMigrationPlan: (instanceId: string, fromMinecraft: string | null, toMinecraft: string) => typedError<MigrationPlanView, CmdError>(__TAURI_INVOKE("mods_migration_plan", { instanceId, fromMinecraft, toMinecraft })),
+	/**
+	 *  The page after a first visit: which of the player's own mods in `from`'s set have a version
+	 *  for `to`, with one Modrinth request (`version_files/update`) for all files at once.
+	 */
+	modsMigrationCheck: (instanceId: string, fromMinecraft: string, toMinecraft: string) => typedError<MigrationCheckView, CmdError>(__TAURI_INVOKE("mods_migration_check", { instanceId, fromMinecraft, toMinecraft })),
+	/**
+	 *  Installs the given Modrinth versions (from [`mods_migration_plan`]) into `to`'s set: the
+	 *  active `mods/`, a parked set, or a version the instance has not visited yet (prepared so
+	 *  the first switch brings them).
+	 */
+	modsMigrate: (instanceId: string, toMinecraft: string, versionIds: string[], jobId: string, onProgress: Channel<JobProgressView>) => typedError<MigrationResultView, CmdError>(__TAURI_INVOKE("mods_migrate", { instanceId, toMinecraft, versionIds, jobId, onProgress })),
+	/**
+	 *  The mod check of an instance's active set (the mod center's issues). Cheap: jars are read
+	 *  once and cached by size and time.
+	 */
+	modsCheck: (instanceId: string) => typedError<ModCheckView, CmdError>(__TAURI_INVOKE("mods_check", { instanceId })),
+	/**
+	 *  "Onar": carries out the repair plan for `scope` with progress (cancel with `content_cancel`).
+	 *  Refused while the instance's game runs.
+	 */
+	modsRepair: (instanceId: string, scope: RepairScope, jobId: string, onProgress: Channel<RepairProgressView>) => typedError<RepairResultView, CmdError>(__TAURI_INVOKE("mods_repair", { instanceId, scope, jobId, onProgress })),
+	/**  What "Yeniden yükle" would do (shown before asking). */
+	modsReinstallPreview: (instanceId: string) => typedError<ReinstallPreviewView, CmdError>(__TAURI_INVOKE("mods_reinstall_preview", { instanceId })),
+	/**
+	 *  "Yeniden yükle": the version's set starts again (old folders to the launcher trash, the
+	 *  pack's selection and the player's Modrinth mods installed again, unknown jars kept aside).
+	 */
+	modsReinstall: (instanceId: string, jobId: string, onProgress: Channel<ReinstallProgressView>) => typedError<ReinstallResultView, CmdError>(__TAURI_INVOKE("mods_reinstall", { instanceId, jobId, onProgress })),
+	/**
+	 *  Sets the instance's maximum memory (kept within what the computer allows; the minimum
+	 *  follows when it would be higher). Returns the maximum that was saved.
+	 */
+	instanceSetMaxMemory: (instanceId: string, maxMb: number) => typedError<number, CmdError>(__TAURI_INVOKE("instance_set_max_memory", { instanceId, maxMb })),
+	/**
+	 *  Sets the instance's own JVM arguments ("Argümanları sıfırla" in the crash dialog sends an
+	 *  empty text, its "Geri al" the previous one). Returns the arguments it replaced.
+	 */
+	instanceSetJvmArgs: (instanceId: string, jvmArgs: string) => typedError<string, CmdError>(__TAURI_INVOKE("instance_set_jvm_args", { instanceId, jvmArgs })),
+	/**
+	 *  Settings → Java: the launcher's runtimes, then the Javas on the computer, then custom paths
+	 *  that are neither, each with the instances that use it. `rescan` looks for system Javas again.
+	 */
+	javaOverview: (rescan: boolean) => typedError<JavaOverviewView, CmdError>(__TAURI_INVOKE("java_overview", { rescan })),
+	/**  "Güncelle": the runtime is updated as soon as no game runs (now, usually). */
+	javaRuntimeUpdate: (component: string, platform: string) => typedError<null, CmdError>(__TAURI_INVOKE("java_runtime_update", { component, platform })),
+	/**  "Kaldır": removes a launcher runtime no instance uses. Returns the bytes freed. */
+	javaRuntimeRemove: (component: string, platform: string) => typedError<number, CmdError>(__TAURI_INVOKE("java_runtime_remove", { component, platform })),
+	/**  "Otomatik'e geç": these instances use automatic Java from now on. Returns how many changed. */
+	javaUseAuto: (instanceIds: string[]) => typedError<number, CmdError>(__TAURI_INVOKE("java_use_auto", { instanceIds })),
+	/**  Opens the folder of a Java from the overview. */
+	javaOpenFolder: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("java_open_folder", { id })),
+	/**
+	 *  Instance settings → Java → "Özel": checks a picked file or folder (the same probe and cache as
+	 *  the check before a launch), so the settings say at once what the launch would ask about.
+	 */
+	javaCheck: (instanceId: string, path: string) => typedError<JavaCheckView, CmdError>(__TAURI_INVOKE("java_check", { instanceId, path })),
+	/**
+	 *  Skin and capes of a Microsoft account, fresh from Minecraft Services, or the saved copy
+	 *  (`stale`) when they cannot be reached. Offline accounts get an error: skins need Microsoft.
+	 */
+	skinAppearance: (accountId: string) => typedError<AppearanceView, CmdError>(__TAURI_INVOKE("skin_appearance", { accountId })),
+	/**
+	 *  A skin or cape texture from textures.minecraft.net as a PNG data URL, for the 3D preview.
+	 *  Skins the history keeps come from their local copy.
+	 */
+	skinTexture: (url: string) => typedError<string, CmdError>(__TAURI_INVOKE("skin_texture", { url })),
+	/**
+	 *  Reads and checks a skin PNG (64×64, or legacy 64×32, at most 1 MiB) so the panel can preview
+	 *  it before anything is sent to Mojang.
+	 */
+	skinFilePreview: (path: string) => typedError<SkinFilePreview, CmdError>(__TAURI_INVOKE("skin_file_preview", { path })),
+	/**  Uploads the skin PNG at `path` (read and checked again here) with the chosen arm model. */
+	skinUpload: (accountId: string, path: string, variant: SkinVariant) => typedError<AppearanceView, CmdError>(__TAURI_INVOKE("skin_upload", { accountId, path, variant })),
+	/**  Switches the arm model of the current skin (classic or slim), keeping its texture. */
+	skinSetVariant: (accountId: string, variant: SkinVariant) => typedError<AppearanceView, CmdError>(__TAURI_INVOKE("skin_set_variant", { accountId, variant })),
+	/**  Shows an owned cape, or hides the cape when `cape_id` is `None`. */
+	skinSetCape: (accountId: string, capeId: string | null) => typedError<AppearanceView, CmdError>(__TAURI_INVOKE("skin_set_cape", { accountId, capeId })),
+	/**  Back to Mojang's default skin. */
+	skinReset: (accountId: string) => typedError<AppearanceView, CmdError>(__TAURI_INVOKE("skin_reset", { accountId })),
+	/**
+	 *  The skins a Microsoft account wore while the launcher knew it (kept on this computer only).
+	 *  Pictures that are not drawn yet come with `skin_history_prepare`.
+	 */
+	skinHistory: (accountId: string) => typedError<SkinHistoryView, CmdError>(__TAURI_INVOKE("skin_history", { accountId })),
+	/**
+	 *  Downloads the history's missing textures from Mojang's public texture host (no credentials)
+	 *  and draws the missing pictures. Returns how many were drawn; the panel reads the history
+	 *  again afterwards either way.
+	 */
+	skinHistoryPrepare: (accountId: string) => typedError<number, CmdError>(__TAURI_INVOKE("skin_history_prepare", { accountId })),
+	/**  Puts a skin of the history back on, with the arm model it was last worn with. */
+	skinHistoryWear: (accountId: string, entryId: string) => typedError<AppearanceView, CmdError>(__TAURI_INVOKE("skin_history_wear", { accountId, entryId })),
+	/**  Marks a skin of the history as a favourite (listed first, never pruned) or unmarks it. */
+	skinHistorySetFavorite: (accountId: string, entryId: string, favorite: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("skin_history_set_favorite", { accountId, entryId, favorite })),
+	/**  Removes a skin from the history; `skin_history_restore` brings it back for a few minutes. */
+	skinHistoryRemove: (accountId: string, entryId: string) => typedError<null, CmdError>(__TAURI_INVOKE("skin_history_remove", { accountId, entryId })),
+	/**  Undo of `skin_history_remove`. */
+	skinHistoryRestore: (accountId: string, entryId: string) => typedError<null, CmdError>(__TAURI_INVOKE("skin_history_restore", { accountId, entryId })),
+	/**
+	 *  Where the data lives and how much the caches and logs take (sizes are computed off the UI
+	 *  thread).
+	 */
+	dataOverview: () => typedError<DataOverview, CmdError>(__TAURI_INVOKE("data_overview")),
+	dataOpenFolder: () => typedError<null, CmdError>(__TAURI_INVOKE("data_open_folder")),
+	/**
+	 *  A zip for the support team in the user's Downloads (else Desktop): launcher logs of the last
+	 *  three days, the last five game logs, recent crash reports, `sistem.txt` and `kurulumlar.txt`.
+	 *  Everything is masked; accounts, AFK data and keychain contents are never included.
+	 */
+	dataSupportBundle: () => typedError<SupportBundleView, CmdError>(__TAURI_INVOKE("data_support_bundle")),
+	/**
+	 *  Checks the folder the user picked and estimates the move (size, free space). Nothing is
+	 *  written yet.
+	 */
+	dataMovePlan: (picked: string) => typedError<MovePlanView, CmdError>(__TAURI_INVOKE("data_move_plan", { picked })),
+	/**
+	 *  Copies the data folder into the picked place with progress, verifies the copy, points the
+	 *  launcher at it and restarts. Until the restart nothing in the old folder changes; on any
+	 *  failure (or `data_move_cancel`) the partial copy is removed.
+	 */
+	dataMoveStart: (picked: string, onProgress: Channel<MoveProgressView>) => typedError<null, CmdError>(__TAURI_INVOKE("data_move_start", { picked, onProgress })),
+	/**  Stops a running move; its partial copy is removed and the data stays where it was. */
+	dataMoveCancel: () => __TAURI_INVOKE<void>("data_move_cancel"),
+	/**  Whether cleaning is possible right now, and the data folder's disk. */
+	cleanupStatus: () => typedError<CleanupStatusView, CmdError>(__TAURI_INVOKE("cleanup_status")),
+	/**  Version sets not played for `older_than_days` days, across every instance. */
+	cleanupOldSets: (olderThanDays: number) => typedError<OldSetsView, CmdError>(__TAURI_INVOKE("cleanup_old_sets", { olderThanDays })),
+	/**
+	 *  Moves the chosen old sets into the launcher trash (recoverable for 30 days). Each set is
+	 *  checked again under the instance's lock: still not played for `older_than_days` days, not the
+	 *  active version, no unfinished switch. Refused while a game runs or is being prepared.
+	 */
+	cleanupRemoveSets: (sets: SetRef[], olderThanDays: number) => typedError<RemovedSetsView, CmdError>(__TAURI_INVOKE("cleanup_remove_sets", { sets, olderThanDays })),
+	/**
+	 *  "Geri al" (after a set cleanup, or from the trash list): puts version sets back from the
+	 *  trash. A set whose version was started again meanwhile (a new set exists, or it is active)
+	 *  stays in the trash. Sets that come back are not offered as old sets again until they go
+	 *  unused for the threshold since then ([`KeptSets`]).
+	 */
+	cleanupRestoreSets: (trashIds: string[]) => typedError<RestoredSetsView, CmdError>(__TAURI_INVOKE("cleanup_restore_sets", { trashIds })),
+	/**
+	 *  Game versions, loader profiles, Java runtimes, libraries and assets no instance (and no
+	 *  parked set) uses, with the bytes each frees.
+	 */
+	cleanupSharedFiles: () => typedError<SharedFilesView, CmdError>(__TAURI_INVOKE("cleanup_shared_files")),
+	/**
+	 *  Deletes the chosen shared items (judged again first: an item something started using
+	 *  meanwhile stays). They download again when needed.
+	 */
+	cleanupDeleteShared: (ids: string[], onProgress: Channel<CleanupProgressView>) => typedError<CleanupResultView, CmdError>(__TAURI_INVOKE("cleanup_delete_shared", { ids, onProgress })),
+	/**  What cleaning caches, old logs, crash reports and unfinished downloads would free. */
+	cleanupLeftovers: () => typedError<LeftoverView[], CmdError>(__TAURI_INVOKE("cleanup_leftovers")),
+	/**  Cleans the chosen leftover groups. With the cache, unused news media go too. */
+	cleanupCleanLeftovers: (kinds: LeftoverKindView[]) => typedError<CleanupResultView, CmdError>(__TAURI_INVOKE("cleanup_clean_leftovers", { kinds })),
+	/**  What the launcher trash holds: the version sets, deleted instances and everything else in it. */
+	cleanupTrash: () => typedError<TrashSummaryView, CmdError>(__TAURI_INVOKE("cleanup_trash")),
+	/**  Deletes everything in the launcher trash for good. */
+	cleanupEmptyTrash: () => typedError<CleanupResultView, CmdError>(__TAURI_INVOKE("cleanup_empty_trash")),
+	/**  Deletes one item of the launcher trash for good (frees its space now). */
+	cleanupDeleteTrashedSet: (trashId: string) => typedError<CleanupResultView, CmdError>(__TAURI_INVOKE("cleanup_delete_trashed_set", { trashId })),
+	/**  How much a cleanup could free, for the occasional reminder. */
+	cleanupSummary: (olderThanDays: number) => typedError<CleanupSummaryView, CmdError>(__TAURI_INVOKE("cleanup_summary", { olderThanDays })),
+	/**
+	 *  The instance's logs, newest first: the sessions the launcher captured, then the game's own
+	 *  files (`latest.log`, `debug.log` and their archives). The game's folder is optional: when it
+	 *  cannot be read, the captured sessions still come.
+	 */
+	gameLogs: (instanceId: string) => typedError<GameLogSessionView[], CmdError>(__TAURI_INVOKE("game_logs", { instanceId })),
+	/**  One log for the viewer (access tokens and similar secrets masked; archives inflated). */
+	gameLogRead: (instanceId: string, fileName: string, source: 
+/**  Captured by the launcher from the game's output (`<root>/logs/game-<instance>-….log`). */
+"launcher" | 
+/**
+ *  Written by the game itself into its `logs/` folder (`latest.log`, `debug.log` and their
+ *  `.log.gz` archives).
+ */
+"game" | null) => typedError<GameLogView, CmdError>(__TAURI_INVOKE("game_log_read", { instanceId, fileName, source })),
+	/**
+	 *  Upload a session's log to mclo.gs (masked and shortened to its limits) and return the link.
+	 *  The UI asks first: the log becomes public.
+	 */
+	gameLogShare: (instanceId: string, fileName: string, source: 
+/**  Captured by the launcher from the game's output (`<root>/logs/game-<instance>-….log`). */
+"launcher" | 
+/**
+ *  Written by the game itself into its `logs/` folder (`latest.log`, `debug.log` and their
+ *  `.log.gz` archives).
+ */
+"game" | null) => typedError<SharedLogView, CmdError>(__TAURI_INVOKE("game_log_share", { instanceId, fileName, source })),
+	/**  Show a log file in the file manager (or its logs folder). */
+	gameLogReveal: (instanceId: string, fileName: string | null, source: 
+/**  Captured by the launcher from the game's output (`<root>/logs/game-<instance>-….log`). */
+"launcher" | 
+/**
+ *  Written by the game itself into its `logs/` folder (`latest.log`, `debug.log` and their
+ *  `.log.gz` archives).
+ */
+"game" | null) => typedError<null, CmdError>(__TAURI_INVOKE("game_log_reveal", { instanceId, fileName, source })),
+	/**  Worlds of the instance (`saves/`), most recently played first. */
+	worldsList: (instanceId: string) => typedError<WorldDetailView[], CmdError>(__TAURI_INVOKE("worlds_list", { instanceId })),
+	/**  Backups in the instance's `backups/` folder, newest first. */
+	worldBackups: (instanceId: string) => typedError<WorldBackupView[], CmdError>(__TAURI_INVOKE("world_backups", { instanceId })),
+	/**  Zip a world into `backups/<time>_<folder>.zip` (the game's own backup layout). */
+	worldBackup: (instanceId: string, folder: string, jobId: string, onProgress: Channel<BackupProgress>) => typedError<WorldBackupView, CmdError>(__TAURI_INVOKE("world_backup", { instanceId, folder, jobId, onProgress })),
+	/**
+	 *  Unpack a backup into `saves/`: as a new world, or in place of the world it was made from
+	 *  (`replace`; that world goes to the launcher trash).
+	 */
+	worldRestore: (instanceId: string, fileName: string, replace: boolean, jobId: string, onProgress: Channel<BackupProgress>) => typedError<RestoredWorldView, CmdError>(__TAURI_INVOKE("world_restore", { instanceId, fileName, replace, jobId, onProgress })),
+	/**  Move a world to the launcher trash (recoverable for 30 days). */
+	worldDelete: (instanceId: string, folder: string) => typedError<TrashItemView, CmdError>(__TAURI_INVOKE("world_delete", { instanceId, folder })),
+	/**  Move a backup to the launcher trash. */
+	worldBackupDelete: (instanceId: string, fileName: string) => typedError<TrashItemView, CmdError>(__TAURI_INVOKE("world_backup_delete", { instanceId, fileName })),
+	/**  Cancel a running backup or restore. */
+	libraryCancel: (jobId: string) => __TAURI_INVOKE<void>("library_cancel", { jobId }),
+	/**  The instance's items in the launcher trash, newest first. */
+	trashList: (instanceId: string) => typedError<TrashItemView[], CmdError>(__TAURI_INVOKE("trash_list", { instanceId })),
+	/**
+	 *  Put an item from the launcher trash back where it was. Returns its file or folder name
+	 *  (numbered when the old name was taken meanwhile).
+	 */
+	trashRestore: (instanceId: string, id: string) => typedError<string, CmdError>(__TAURI_INVOKE("trash_restore", { instanceId, id })),
+	/**  Delete an item of the launcher trash for good. */
+	trashDelete: (instanceId: string, id: string) => typedError<null, CmdError>(__TAURI_INVOKE("trash_delete", { instanceId, id })),
+	/**
+	 *  Screenshots of the instance, newest first, with the thumbnails made so far. Allows the
+	 *  screenshots and thumbnail folders in the asset protocol so the gallery can show them, and
+	 *  prunes thumbnails no picture needs any more in the background.
+	 */
+	screenshotsList: (instanceId: string) => typedError<ScreenshotFileView[], CmdError>(__TAURI_INVOKE("screenshots_list", { instanceId })),
+	/**
+	 *  The thumbnail of a screenshot, made now when missing (two at a time). `None` when the
+	 *  picture cannot be read as an image: the gallery shows the original then.
+	 */
+	screenshotThumbnail: (instanceId: string, fileName: string) => typedError<string | null, CmdError>(__TAURI_INVOKE("screenshot_thumbnail", { instanceId, fileName })),
+	/**
+	 *  Copy a screenshot to the clipboard as a picture; when the clipboard does not take it, copy
+	 *  the file path instead (the UI says which happened).
+	 */
+	screenshotCopy: (instanceId: string, fileName: string) => typedError<ClipboardCopy, CmdError>(__TAURI_INVOKE("screenshot_copy", { instanceId, fileName })),
+	/**  Open a screenshot in the system's image viewer. */
+	screenshotOpen: (instanceId: string, fileName: string) => typedError<null, CmdError>(__TAURI_INVOKE("screenshot_open", { instanceId, fileName })),
+	/**  Move a screenshot to the launcher trash. */
+	screenshotDelete: (instanceId: string, fileName: string) => typedError<TrashItemView, CmdError>(__TAURI_INVOKE("screenshot_delete", { instanceId, fileName })),
+	/**  Show a file of the instance (`screenshots/`, `backups/`) in the file manager. */
+	instanceRevealFile: (instanceId: string, folder: string, fileName: string) => typedError<null, CmdError>(__TAURI_INVOKE("instance_reveal_file", { instanceId, folder, fileName })),
+	/**  Put an instance in a library group (`None` or blank: no group). */
+	instanceSetGroup: (instanceId: string, group: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("instance_set_group", { instanceId, group })),
+	socialState: () => __TAURI_INVOKE<SocialView_Serialize>("social_state"),
+	/**
+	 *  Opens Discord's sign-in page in the browser; the page comes back through
+	 *  `projects://auth/done`. Returns the page so the UI can open it again.
+	 */
+	socialSignIn: () => typedError<string, CmdError>(__TAURI_INVOKE("social_sign_in")),
+	socialSignInCancel: () => __TAURI_INVOKE<void>("social_sign_in_cancel"),
+	socialSignOut: () => typedError<null, CmdError>(__TAURI_INVOKE("social_sign_out")),
+	/**  "Tekrar dene" after an outage or when another device took over. */
+	socialRefresh: () => typedError<null, CmdError>(__TAURI_INVOKE("social_refresh")),
+	socialLookup: (code: string) => typedError<LookupView, CmdError>(__TAURI_INVOKE("social_lookup", { code })),
+	socialSendRequest: (code: string) => typedError<SendOutcome, CmdError>(__TAURI_INVOKE("social_send_request", { code })),
+	socialAccept: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_accept", { id })),
+	socialDecline: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_decline", { id })),
+	socialCancelRequest: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_cancel_request", { id })),
+	socialRemoveFriend: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_remove_friend", { id })),
+	socialBlock: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_block", { id })),
+	socialUnblock: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_unblock", { id })),
+	socialRotateCode: () => typedError<string, CmdError>(__TAURI_INVOKE("social_rotate_code")),
+	/**  Çevrimiçi / Rahatsız etmeyin / Görünmez. */
+	socialSetStatus: (status: StatusMode) => typedError<null, CmdError>(__TAURI_INVOKE("social_set_status", { status })),
+	socialSetPrivacy: (shareServer: boolean | null, shareLastSeen: boolean | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_set_privacy", { shareServer, shareLastSeen })),
+	/**  `discord`, `preset:<slug>` or `minecraft:<texture hash>`. */
+	socialSetAvatar: (avatar: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_set_avatar", { avatar })),
+	/**  "Birlikte oyna". */
+	socialInvite: (id: string) => typedError<InviteResult, CmdError>(__TAURI_INVOKE("social_invite", { id })),
+	socialDismissInvite: (id: string) => __TAURI_INVOKE<void>("social_dismiss_invite", { id }),
+	socialSessions: () => typedError<SessionInfo[], CmdError>(__TAURI_INVOKE("social_sessions")),
+	socialRevokeSession: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_revoke_session", { id })),
+	socialRevokeOtherSessions: () => typedError<number, CmdError>(__TAURI_INVOKE("social_revoke_other_sessions")),
+	/**  "Verilerimi sil". */
+	socialDeleteAccount: () => typedError<null, CmdError>(__TAURI_INVOKE("social_delete_account")),
+	/**
+	 *  Saves launcher preferences: a JSON object the UI builds from an allow-list (never secrets).
+	 *  JSON travels as text: specta cannot describe an arbitrary JSON value.
+	 */
+	socialBackupUpload: (data: string) => typedError<SettingsMeta, CmdError>(__TAURI_INVOKE("social_backup_upload", { data })),
+	/**  The saved preferences as JSON text, or None when there is no backup. */
+	socialBackupDownload: () => typedError<string | null, CmdError>(__TAURI_INVOKE("social_backup_download")),
+	/**  Turns the backup off and deletes the stored copy. */
+	socialBackupDelete: () => typedError<null, CmdError>(__TAURI_INVOKE("social_backup_delete")),
 };
 
 /* Types */
 export type AccountKind = "microsoft" | "offline";
+
+/**  After a removal: which account is active now. */
+export type AccountRemoval = {
+	/**  Another account when the removed one was active; `None` when none is left. */
+	activeId: string | null,
+};
 
 /**  Account as the UI shows it (no secrets ever cross this boundary). */
 export type AccountView = {
@@ -88,6 +680,77 @@ export type AccountView = {
 	uuid: string,
 	active: boolean,
 	skinUrl: string | null,
+	/**  The player's head (8×8 PNG data URL) once it is cached; see `accounts_ensure_heads`. */
+	headUrl: string | null,
+	/**  When the account was added (RFC 3339). */
+	addedAt: string,
+	/**  Last time the game was started with it (RFC 3339). */
+	lastUsedAt: string | null,
+	/**  Microsoft refused the saved session: a new sign-in is needed. */
+	needsRelogin: boolean,
+	/**  Pinned: listed first, in the player's order. */
+	pinned: boolean,
+	/**  Bundled picture shown instead of the head (`preset:<slug>`, offline accounts). */
+	avatar: string | null,
+};
+
+/**  What this launcher tells friends (the player's own card). */
+export type ActivityView = { state: "launcher" } | { state: "playing"; host: string | null } | { state: "singleplayer" };
+
+/**  An add-on file and what is known about it. */
+export type AddonEntry = {
+	kind: ImportKind,
+	/**  File name in its folder (with `.disabled` when disabled). */
+	fileName: string,
+	enabled: boolean,
+	size: number,
+	/**  Lowercase hex SHA-1. */
+	sha1: string,
+	source: AddonSource | null,
+	/**  Set by [`Addons::check_updates`] when a newer compatible version exists. */
+	update: AddonUpdate | null,
+};
+
+export type AddonInstallReport = {
+	/**  New files, the requested versions first, then dependencies. */
+	installed: AddonInstalled[],
+	/**  Requested versions that were already installed. */
+	alreadyInstalled: AddonInstalled[],
+	/**  Older files of the same projects that were removed. */
+	replaced: string[],
+	/**  Required dependencies that could not be installed. */
+	unresolved: ModrinthUnresolvedDependency[],
+	/**  Installed projects that a new version declares incompatible. */
+	conflicts: ModrinthDependencyConflict[],
+};
+
+/**  A file [`Addons::install`] put in place (or found already there). */
+export type AddonInstalled = {
+	kind: ImportKind,
+	projectId: string,
+	versionId: string,
+	versionNumber: string,
+	title: string | null,
+	fileName: string,
+	/**  Installed because another project requires it. */
+	dependency: boolean,
+};
+
+/**  The Modrinth project and version a file belongs to. */
+export type AddonSource = {
+	projectId: string,
+	versionId: string,
+	versionNumber?: string | null,
+	title?: string | null,
+	iconUrl?: string | null,
+};
+
+/**  A newer compatible version of an installed add-on. */
+export type AddonUpdate = {
+	versionId: string,
+	versionNumber: string,
+	versionType: ModrinthVersionType,
+	datePublished: string,
 };
 
 export type AfkAccountView = {
@@ -95,10 +758,20 @@ export type AfkAccountView = {
 	nickname: string,
 	server: string,
 	autoStart: boolean,
+	/**
+	 *  The game version the client connects with: `auto` or a listed value (the recommended one
+	 *  when the account follows it or stored a version the list does not know).
+	 */
 	mcVersion: string,
+	/**  `mc_version` is the recommended version (no version chip then). */
+	mcVersionRecommended: boolean,
 	state: SessionState,
 	stats: SessionStats,
 	running: boolean,
+	/**  The running client was launched with older settings; they apply after a reconnect. */
+	settingsChanged: boolean,
+	/**  Show the date next to the time in the live console (chat log settings). */
+	showDate: boolean,
 };
 
 export type AfkEvent = {
@@ -119,6 +792,77 @@ export type AfkEventKind = { type: "state"; data: SessionState } |
 	secs: number,
 } };
 
+/**  Account-independent AFK preferences (`settings.json`). */
+export type AfkSettings = {
+	/**
+	 *  Show login-script lines in the console. Lines with passwords stay hidden (and are masked
+	 *  at the source) either way.
+	 */
+	showScriptCommands?: boolean,
+};
+
+/**  Outcome of saving the settings sheet. Incomplete settings are an expected outcome, not an error. */
+export type AfkSettingsSaveResult = 
+/**  Saved. `settings` is the stored page (normalized; passwords still left out). */
+{ status: "saved"; settings: SettingsPage; 
+/**  The running client keeps its old settings until it reconnects. */
+reconnectNeeded: boolean } | 
+/**  Nothing was saved. */
+{ status: "invalid"; issues: ValidationIssue[] };
+
+/**  Everything the settings sheet of one account needs. */
+export type AfkSettingsView = {
+	/**
+	 *  Login commands that carry a password are listed by name only; the password stays in the
+	 *  OS keychain.
+	 */
+	settings: SettingsPage,
+	/**
+	 *  Game versions the AFK client can join, in picker order: `auto` first, then the versions
+	 *  newest first; one is flagged recommended (the content index's list, else the built-in one).
+	 */
+	versions: VersionOption[],
+	/**
+	 *  The account stored a version the list does not know: the page shows (and the client uses)
+	 *  the recommended one instead.
+	 */
+	unknownVersion: string | null,
+	/**
+	 *  False when the OS keychain is unavailable: login commands then only last until the launcher
+	 *  closes.
+	 */
+	keychainAvailable: boolean,
+	/**
+	 *  Command names whose arguments are passwords (lowercase): the sheet masks such lines while
+	 *  they are typed, and saved ones come back as stored lines.
+	 */
+	sensitiveCommands: string[],
+};
+
+export type AlertsOptions = {
+	enabled?: boolean,
+	beepEnabled?: boolean,
+	triggerByWords?: boolean,
+	logToFile?: boolean,
+	matches?: string[],
+	excludes?: string[],
+};
+
+/**  Periodic movement/command that keeps the server from flagging the account as AFK. */
+export type AntiAfkOptions = {
+	enabled?: boolean,
+	/**  Seconds; MCC picks a random delay in `[delay_min, delay_max]`. */
+	delayMin?: number | null,
+	delayMax?: number | null,
+	/**  Sent every round; empty means "move only". */
+	command?: string,
+	useSneak?: boolean,
+	/**  Random walking; forces MCC terrain handling on (see the config writer). */
+	useTerrainHandling?: boolean,
+	walkRange?: number,
+	walkRetries?: number,
+};
+
 export type AppInfo = {
 	version: string,
 	os: string,
@@ -130,6 +874,90 @@ export type AppInfo = {
 	 */
 	secureStorage: boolean,
 	dataDir: string,
+	/**  Started at login: the window stays in the tray until the user opens it. */
+	startMinimized: boolean,
+	/**  Installed RAM, for memory sliders. */
+	systemMemoryMb: number,
+};
+
+/**  The active skin of an account. */
+export type AppearanceSkin = {
+	/**  Texture on textures.minecraft.net (HTTPS). */
+	url: string,
+	variant: SkinVariant,
+	/**  One of Mojang's default skins (Steve, Alex and the others) rather than an upload. */
+	isDefault: boolean,
+};
+
+/**  What the appearance panel shows for a Microsoft account. */
+export type AppearanceView = {
+	accountId: string,
+	username: string,
+	skin: AppearanceSkin | null,
+	/**  Capes the profile owns; at most one is `active`. */
+	capes: Cape[],
+	/**  Minecraft Services could not be reached: this is the saved copy and may be out of date. */
+	stale: boolean,
+};
+
+/**  Sign-in state of this launcher. */
+export type AuthPhase = "signedOut" | 
+/**  The browser is open on Discord; waiting for the `projects://auth/done` link. */
+"signingIn" | 
+/**  A saved session is being checked at start. */
+"restoring" | "signedIn";
+
+/**  Eat when the food bar drops below the threshold; forces MCC inventory handling on. */
+export type AutoEatOptions = {
+	enabled?: boolean,
+	/**  Food bar value, 0-20. */
+	threshold?: number,
+};
+
+/**
+ *  Reconnect after a disconnect. With the launcher bridge MCC exits on every failure, so these
+ *  settings drive the launcher-side restart loop (delays, retry limit and kick-message filter; see
+ *  [`crate::RestartSchedule`]).
+ */
+export type AutoRelogOptions = {
+	enabled?: boolean,
+	/**  Seconds before the first restart; later restarts wait longer, up to `delay_max`. */
+	delayMin?: number | null,
+	delayMax?: number | null,
+	/**  -1 means unlimited. */
+	retries?: number,
+	/**  True: reconnect whatever the kick message says. */
+	ignoreKickMessage?: boolean,
+	kickMessages?: string[],
+};
+
+/**
+ *  One row of the auto-respond grid. Replies are what the user types (`selam`, `/home`); the
+ *  `send ` prefix MCC needs is added on save (see [`display_to_action`]).
+ */
+export type AutoRespondRule = {
+	pattern?: string,
+	reply?: string,
+	privateReply?: string,
+	otherReply?: string,
+	ownersOnly?: boolean,
+	cooldownSeconds?: number,
+	isRegex?: boolean,
+};
+
+export type AutoRespondSettings = {
+	enabled?: boolean,
+	soundEnabled?: boolean,
+	matchColors?: boolean,
+	rules?: AutoRespondRule[],
+};
+
+/**  Progress of a world backup. */
+export type BackupProgress = {
+	filesDone: number,
+	filesTotal: number,
+	bytesDone: number,
+	bytesTotal: number,
 };
 
 export type BannerView = {
@@ -137,7 +965,87 @@ export type BannerView = {
 	level: string,
 	text: string,
 	url: string | null,
+	/**  The player may close it (and it stays closed). */
+	dismissible: boolean,
+	/**  When it stops being shown (the UI drops it then without a refresh). */
+	endsAt: string | null,
 };
+
+/**  A cape the profile owns. */
+export type Cape = {
+	id: string,
+	/**  Mojang's alias, e.g. "Migrator". */
+	name: string,
+	url: string,
+	active: boolean,
+};
+
+/**  Per-category counts for one action. */
+export type CategoryCounts = {
+	mods: number,
+	resourcePacks: number,
+	shaderPacks: number,
+	configs: number,
+	other: number,
+};
+
+export type CategoryView = {
+	name: string,
+	projectType: ModrinthProjectType,
+	/**  `categories`, `features`, `resolutions`, `performance impact`. */
+	header: string,
+};
+
+export type ChatLogFilter = "all" | "messages" | "chat";
+
+export type ChatLogSettings = {
+	enabled?: boolean,
+	addDateTime?: boolean,
+	showDate?: boolean,
+	filter?: ChatLogFilter,
+};
+
+export type CleanupBlock = 
+/**  A game runs. */
+"gameRunning" | 
+/**  A game is being prepared (downloads, loader install). */
+"preparing" | 
+/**  An install, version switch, repair or world backup runs. */
+"busy" | 
+/**  The data folder is being moved (or an earlier move finishes). */
+"dataJob";
+
+export type CleanupProgressView = {
+	done: number,
+	total: number,
+};
+
+export type CleanupResultView = {
+	freedBytes: number,
+	removedFiles: number,
+};
+
+export type CleanupStatusView = {
+	/**  Why cleaning is not possible right now (the lists can still be shown). */
+	blocked: CleanupBlock | null,
+	/**  Free space on the data folder's disk. */
+	freeBytes: number | null,
+	/**  Size of that disk. */
+	diskBytes: number | null,
+};
+
+export type CleanupSummaryView = {
+	/**  Old sets + unused shared files + leftovers (the trash empties itself). */
+	reclaimableBytes: number,
+	freeBytes: number | null,
+};
+
+/**  How a screenshot reached the clipboard. */
+export type ClipboardCopy = 
+/**  The picture itself. */
+"image" | 
+/**  Only the file path (the clipboard did not take the picture). */
+"path";
 
 /**
  *  Error returned by every command. `message` is friendly Turkish text for the UI; `code` and
@@ -148,6 +1056,17 @@ export type CmdError = {
 	message: string,
 	details: string,
 };
+
+/**  The presence connection as the player should understand it. */
+export type Connection = 
+/**  No connection (signed out, or the feature is off). */
+"idle" | "connecting" | "online" | 
+/**  Dropped a moment ago; coming back by itself. */
+"reconnecting" | 
+/**  The service cannot be reached or reached a daily limit; retried in the background. */
+"unavailable" | 
+/**  Another device of the account took over this connection. */
+"replaced";
 
 export type ConsoleLine = {
 	/**
@@ -186,6 +1105,66 @@ export type ConsoleOrigin =
 /**  Typed by the user (text starts with `> `). */
 "user";
 
+export type ContentAddView = {
+	added: string[],
+	/**  Files that were not added (wrong type or a file with that name exists). */
+	skipped: string[],
+};
+
+export type ContentEntryView = {
+	/**  Installed by the official pack: it is updated with the pack, not from here. */
+	fromPack: boolean,
+	/**  Cached project icon (local path; the UI converts it with `convertFileSrc`). */
+	iconPath: string | null,
+} & AddonEntry;
+
+export type ContentScanView = {
+	entries: ContentEntryView[],
+	/**  Modrinth could not be reached; entries only carry what was known locally. */
+	offline: boolean,
+};
+
+export type ContentSearchRequest = {
+	projectType: ModrinthProjectType,
+	query: string,
+	sort: ModrinthSortIndex,
+	category: string | null,
+	offset: number,
+	/**  1–50. */
+	limit: number,
+	/**  Show only what runs on this instance (its game version, and its loader for mods). */
+	instanceId: string | null,
+};
+
+/**
+ *  Whether the content mirrors could be reached, for the home screen's offline strip. Changes
+ *  arrive as the `content-status` event.
+ */
+export type ContentStatusView = {
+	/**  The last refresh reached no mirror: the cached (or bundled) content is shown. */
+	offline: boolean,
+};
+
+export type CrashKind = 
+/**  The JVM could not reserve the requested heap. */
+"memoryReserve" | "outOfMemory" | 
+/**  A user-supplied JVM option was rejected. */
+"invalidJvmArgument" | "javaTooOld" | "javaTooNew" | "graphicsDriver" | "incompatibleMods" | "missingDependency" | "duplicateMods" | 
+/**  Mixin failures and other mod crashes. */
+"modError" | "corruptedFiles" | "accessDenied" | 
+/**  Exited without printing anything (often security software). */
+"noOutput" | "unknown";
+
+/**  A mod the crash points at, for the UI. */
+export type CrashSuspectView = {
+	name: string,
+	reason: SuspectReason,
+	/**  The other mod involved, by name. */
+	related: string | null,
+	/**  Strong evidence (weak: only seen in the stack trace). */
+	strong: boolean,
+};
+
 export type CrashView = {
 	title: string,
 	hint: string,
@@ -193,13 +1172,129 @@ export type CrashView = {
 	mods: string[],
 	logFile: string | null,
 	crashReport: string | null,
+	kind: CrashKind,
+	instanceId: string,
+	/**  Mods the crash points at, strongest evidence first. */
+	suspects: CrashSuspectView[],
+	/**  "Onar" has something to do. */
+	repairable: boolean,
+	/**  The first strongly suspected mod that can be turned off ("Bu modu kapat"). */
+	turnOff: TurnOffView | null,
+	/**  "Yeniden yükle" makes sense (a mod crash in a set with mods). */
+	reinstall: boolean,
+	/**  Memory crashes: the maximum memory to retry with. */
+	memory: MemoryAdviceView | null,
+	/**
+	 *  The JVM did not start because of the instance's own JVM arguments, and it has some:
+	 *  "Argümanları sıfırla ve yeniden dene" (`instance_set_jvm_args`).
+	 */
+	resetJvmArgs: boolean,
+};
+
+/**  A mod name and page from `modlist.html`, to show the user what is missing. */
+export type CurseForgeModLink = {
+	name: string,
+	url: string,
+};
+
+export type DataOverview = {
+	/**  The data folder. */
+	root: string,
+	cacheBytes: number,
+	logsBytes: number,
+	/**  Free space on the data folder's disk. */
+	freeBytes: number | null,
+	/**  "Taşı" is possible (the folder is not pinned by the launch environment). */
+	movable: boolean,
+	/**
+	 *  A moved data folder that was not found at start (an unplugged disk): the default folder
+	 *  is used until it is back.
+	 */
+	unreachable: string | null,
+};
+
+/**  One data pack of a world. */
+export type DatapackView = {
+	fileName: string,
+	/**  The file name without `.zip`. */
+	name: string,
+	/**  `pack.mcmeta` description as plain text. */
+	description: string | null,
+	sizeBytes: number,
+	folder: boolean,
+	/**  `pack.png` as a data URL. */
+	icon: string | null,
+};
+
+/**
+ *  Where a `projects://` link (or a tray action) sends the user. Emitted to the UI as the
+ *  `deep-link` event.
+ */
+export type DeepLink = { kind: "home" } | 
+/**  Start the selected instance (`projects://play`, `projects://join`). */
+{ kind: "play" } | 
+/**  Start one instance (`projects://play/<instance>`, used by desktop shortcuts). */
+{ kind: "playInstance"; id: string } | { kind: "news"; id: string } | { kind: "instance"; id: string } | { kind: "afk" } | 
+/**
+ *  Add a friend by code (`projects://friend/PRJ-XXXX-XXXX`, from the QR page): the friends
+ *  panel shows who it is; nothing is sent until the player confirms.
+ */
+{ kind: "friend"; code: string };
+
+/**  What happened to the files of a drop. */
+export type DropResultView = {
+	/**  Copied into the instance. */
+	added: DroppedFileView[],
+	/**  A file of the same name is already there; nothing was replaced. */
+	existing: DroppedFileView[],
+	/**  Not a mod, resource pack, shader pack or modpack. */
+	unknown: DroppedFileView[],
+	/**  Mods dropped onto an instance without a mod loader (not copied). */
+	needsLoader: DroppedFileView[],
+	/**  Mods not copied because the instance's mods were being changed (version switch, update). */
+	busy: DroppedFileView[],
+	/**  Modpacks: the UI opens the import flow with them. */
+	modpacks: DroppedFileView[],
+	/**  Copies that failed (disk full, file locked); details in the log. */
+	failed: DroppedFileView[],
+};
+
+/**  One dropped file and what it is. */
+export type DroppedFileView = {
+	path: string,
+	name: string,
+	kind: DroppedKind,
+};
+
+/**  What a dropped file turned out to be. */
+export type DroppedKind = "mod" | "resourcePack" | "shaderPack" | 
+/**  A modpack the import flow reads (Modrinth `.mrpack`, Prism/MultiMC or CurseForge zip). */
+"modpack" | 
+/**  Folders, data packs, installers, archives without a known layout, other files. */
+"unknown";
+
+/**  The pack no longer offers the instance's Minecraft version. */
+export type DroppedVersionView = {
+	minecraft: string,
+	/**  The family's recommended Minecraft version. */
+	recommended: string | null,
 };
 
 export type EventView = {
 	id: string,
 	title: string,
 	startsAt: string,
+	/**  When it ends; for an `open_ended` feed event, three hours after the start. */
 	endsAt: string,
+	/**  The feed did not say when it ends: shown as started, without time left. */
+	openEnded: boolean,
+	url: string | null,
+	/**  The news item about the event (on the home screen). */
+	newsId: string | null,
+	/**  Among live events the highest leads the card (`pl_content::card_order`). */
+	priority: number,
+	/**  From the Discord bot's feed (config events win ties). */
+	fromFeed: boolean,
 };
 
 /**
@@ -224,7 +1319,118 @@ export type FailureReason =
 /**  No client build is installed. */
 { kind: "clientMissing" } | 
 /**  The login commands could not be read from the OS keychain. */
-{ kind: "secretsUnavailable" };
+{ kind: "secretsUnavailable" } | 
+/**
+ *  The server turned the account away for a reason reconnecting does not fix (a ban, the
+ *  whitelist, ...): the session stopped instead of trying again.
+ */
+{ kind: "refused"; cause: KickCause; message: string | null };
+
+/**  What the button of an issue says. */
+export type FixLabel = 
+/**  "Düzelt". */
+"fix" | 
+/**  "Bu modu kapat". */
+"disable" | 
+/**  "<ad> modunu kapat" (the issue names several mods). */
+"disableNamed" | 
+/**  "Eski kopyayı kapat". */
+"disableOld" | 
+/**  "Aç". */
+"enable";
+
+export type FixOfferView = {
+	label: FixLabel,
+	/**  The mod the button acts on, for `disableNamed`. */
+	name: string | null,
+	/**  Files it changes (older copies of a duplicate can be several). */
+	count: number,
+};
+
+export type FriendView = FriendView_Serialize | FriendView_Deserialize;
+
+export type FriendView_Deserialize = {
+	id: string,
+	name: string,
+	username: string,
+	avatar: string,
+	avatarUrl: string | null,
+	/**  `YYYY-MM-DD`; empty when not known yet. */
+	since: string,
+	/**  Coarse "last seen" (`today`, `yesterday`, `week`, `long`); None when hidden. */
+	lastSeen: LastSeen | null,
+	state: PresenceState,
+	/**  On do-not-disturb (only while online). */
+	dnd: boolean,
+	/**  Where they play; `projects` means "Katıl". `host` of another server only when shared. */
+	game: Game_Deserialize | null,
+	/**  Their Discord profile, for "Discord'dan mesaj at". */
+	discordUrl: string,
+};
+
+export type FriendView_Serialize = {
+	id: string,
+	name: string,
+	username: string,
+	avatar: string,
+	avatarUrl: string | null,
+	/**  `YYYY-MM-DD`; empty when not known yet. */
+	since: string,
+	/**  Coarse "last seen" (`today`, `yesterday`, `week`, `long`); None when hidden. */
+	lastSeen: LastSeen | null,
+	state: PresenceState,
+	/**  On do-not-disturb (only while online). */
+	dnd: boolean,
+	/**  Where they play; `projects` means "Katıl". `host` of another server only when shared. */
+	game: Game_Serialize | null,
+	/**  Their Discord profile, for "Discord'dan mesaj at". */
+	discordUrl: string,
+};
+
+export type Game = Game_Serialize | Game_Deserialize;
+
+export type GameLocation = 
+/**  projects.gg (or a subdomain): show "Katıl". */
+"projects" | 
+/**  Another server; `host` is set only when the friend shares it. */
+"other" | "singleplayer";
+
+/**  One line of the running game's log, emitted as the `game-log` event. */
+export type GameLogEvent = {
+	instanceId: string,
+	line: LogLine,
+};
+
+/**  One log of an instance: a session the launcher captured, or one of the game's own files. */
+export type GameLogSessionView = {
+	fileName: string,
+	source: LogSource,
+	/**  When the session started (ISO 8601); for the game's dated archives, the day's start. */
+	startedAt: string | null,
+	/**  Last write to the log (the end of a finished session). */
+	updatedAt: string | null,
+	sizeBytes: number,
+	/**  The running game is writing this log right now (captured sessions only). */
+	live: boolean,
+};
+
+/**  A session log, parsed and with secrets masked. */
+export type GameLogView = {
+	lines: LogLine[],
+	/**  Only the end of a very large log was read. */
+	truncated: boolean,
+	sizeBytes: number,
+};
+
+export type Game_Deserialize = {
+	where: GameLocation,
+	host?: string | null,
+};
+
+export type Game_Serialize = {
+	where: GameLocation,
+	host?: string | null,
+};
 
 export type HeroView = {
 	/**  Local file path of the cached art (convert with `convertFileSrc`); `None` = bundled art. */
@@ -241,11 +1447,25 @@ export type HeroView = {
 export type HomeView = {
 	hero: HeroView,
 	banners: BannerView[],
+	/**
+	 *  Studio's and the news feed's events that have not ended, in event card order (the card
+	 *  shows the first): live ones first, ending soonest leading, then the soonest upcoming.
+	 */
 	events: EventView[],
+	/**  Studio's news and the news feed's items, merged (Studio wins on the same id). */
 	news: NewsView[],
+	maintenance: MaintenanceView | null,
+	packNotes: PackNotesView | null,
+	/**  The newest patch notes in `news` (the patch notes box; `pack_notes` when there is none). */
+	patchNotesId: string | null,
+	/**  Studio's links (Settings → Hakkında). */
+	links: LinksView,
 	offline: boolean,
 	fromCache: boolean,
 };
+
+/**  What kind of file is being imported into a game directory. */
+export type ImportKind = "mod" | "resourcePack" | "shaderPack";
 
 export type InstanceDetailView = {
 	settings: InstanceSettingsView,
@@ -256,6 +1476,8 @@ export type InstanceDetailView = {
 	screenshots: ScreenshotView[],
 	servers: ServerView[],
 	systemMemoryMb: number,
+	/**  The maximum memory "Otomatik" gives this instance now. */
+	autoMemoryMb: number,
 } & InstanceView;
 
 export type InstanceSettingsView = {
@@ -264,6 +1486,11 @@ export type InstanceSettingsView = {
 	javaPath: string | null,
 	minMemoryMb: number,
 	maxMemoryMb: number,
+	/**
+	 *  "Otomatik": the memory follows the machine and the enabled mods (the values above are
+	 *  kept for "Özel").
+	 */
+	memoryAuto?: boolean,
 	jvmArgs: string,
 	width: number,
 	height: number,
@@ -287,18 +1514,351 @@ export type InstanceView = {
 	/**  "ready" | "needsInstall" | "needsUpdate" */
 	state: string,
 	autoJoin: string | null,
+	/**  Library group (`None`: no group). */
+	group: string | null,
+	createdAt: string,
 };
+
+/**  Result of a "Birlikte oyna" invite. */
+export type InviteResult = 
+/**  They saw it right away. */
+"delivered" | 
+/**  Offline or on do-not-disturb: it waits for them (up to an hour). */
+"queued";
+
+export type InviteView = InviteView_Serialize | InviteView_Deserialize;
+
+export type InviteView_Deserialize = {
+	id: string,
+	/**  The friend who sent it. */
+	from: string,
+	/**  Their name and picture when they are in the friend list. */
+	name: string | null,
+	avatar: string | null,
+	avatarUrl: string | null,
+	/**  Unix seconds. */
+	at: number,
+	/**  Their server when it can be shared (`projects` = "Katıl"). */
+	server: Game_Deserialize | null,
+	/**  It waited (offline or do-not-disturb): shown quietly in the list, never as a toast. */
+	quiet: boolean,
+};
+
+export type InviteView_Serialize = {
+	id: string,
+	/**  The friend who sent it. */
+	from: string,
+	/**  Their name and picture when they are in the friend list. */
+	name: string | null,
+	avatar: string | null,
+	avatarUrl: string | null,
+	/**  Unix seconds. */
+	at: number,
+	/**  Their server when it can be shared (`projects` = "Katıl"). */
+	server: Game_Serialize | null,
+	/**  It waited (offline or do-not-disturb): shown quietly in the list, never as a toast. */
+	quiet: boolean,
+};
+
+export type IssueKind = 
+/**  The file is not a readable jar (an interrupted download, an empty file). */
+"corrupt" | 
+/**  The file could not be opened (locked by another program, no permission). */
+"unreadable" | 
+/**  A mod uses an id the loader itself provides (`minecraft`, `fabricloader`, ...). */
+"providedByLoader" | 
+/**  The same mod is installed more than once. */
+"duplicate" | 
+/**  A mod needs another mod that is not installed. */
+"missingDependency" | 
+/**  A mod needs another mod in a version other than the installed one. */
+"dependencyVersion" | 
+/**  A mod does not support this Minecraft version. */
+"incompatibleMinecraft" | 
+/**  A mod needs another mod loader version. */
+"incompatibleLoader" | 
+/**  A mod needs a newer Java. */
+"javaVersion" | 
+/**  A mod is made for another mod loader. */
+"wrongLoader" | 
+/**  A mod declares itself incompatible with another installed mod. */
+"breaks" | 
+/**  A mod advises against another installed mod (the loader only warns). */
+"conflicts" | 
+/**  The jar's mod description cannot be read. */
+"brokenMetadata" | 
+/**  A jar without a mod description (a library, or not a mod for this loader). */
+"noMetadata";
+
+/**
+ *  A Java the player picks in an instance's settings ("Özel"): what it is and whether it suits
+ *  the instance's game and mods.
+ */
+export type JavaCheckView = {
+	/**  The program the launcher would run (a Java folder or its `bin` folder leads to it). */
+	executable: string,
+	major: number | null,
+	/**  Full version (`21.0.7`, `1.8.0_51`). */
+	version: string | null,
+	/**  A familiar vendor name (`Eclipse Temurin`, `Microsoft`). */
+	vendor: string | null,
+	/**  A 32-bit Java on a 64-bit computer (the game gets little memory with it). */
+	bits32: boolean,
+	/**  Gone or not working. */
+	problem: JavaProblem | null,
+	/**  Too old or too new for the instance's game or its mods. */
+	fit: JavaFit | null,
+	/**  What the game needs: the lowest Java when this one is too old, the highest when too new. */
+	need: number | null,
+	/**  The mods raised the lowest Java above the game's own. */
+	forMods: boolean,
+};
+
+/**  The answer to the Java question, for the next launch. */
+export type JavaChoice = 
+/**  "Kur ve oyna": switch the instance to a Java that fits (downloaded if needed) and play. */
+"install" | 
+/**  "Yine de dene": launch with the custom Java; not asked again this session. */
+"tryAnyway";
+
+/**  Why a Java does not suit an instance's game. */
+export type JavaFit = "tooOld" | "tooNew";
+
+export type JavaOverviewView = {
+	runtimes: JavaRuntimeView[],
+	/**  Looking for Javas on the computer did not finish in time. */
+	systemIncomplete: boolean,
+	/**  When Mojang was last asked for runtime updates (ms), if ever. */
+	checkedAt: number | null,
+	/**  A game runs or is being prepared: updates wait and nothing is removed. */
+	gameActive: boolean,
+};
+
+export type JavaProblem = 
+/**  The file is gone. */
+"missing" | 
+/**  The file does not run as Java. */
+"broken";
+
+/**  `java-progress`: a launcher runtime update is downloading. */
+export type JavaProgressEvent = {
+	id: string,
+	percent: number | null,
+};
+
+export type JavaPromptProblem = "tooOld" | "tooNew" | "missing" | "broken";
+
+/**  The Java question before a launch. */
+export type JavaPromptView = {
+	instanceId: string,
+	instanceName: string,
+	problem: JavaPromptProblem,
+	/**  The custom Java's version, when it runs. */
+	have: number | null,
+	/**  The Java the game needs: the minimum (too old, missing, broken) or the maximum (too new). */
+	need: number,
+	/**  The mods raised the minimum above the game's own. */
+	forMods: boolean,
+	/**  "Kur ve oyna" can fix it (a launcher runtime fits). */
+	fixable: boolean,
+	/**
+	 *  "Kur ve oyna" switches the instance to "Otomatik" (else to a launcher runtime of `need`,
+	 *  for mods that need more than the game's own runtime).
+	 */
+	automatic: boolean,
+};
+
+export type JavaRuntimeKind = 
+/**  Downloaded and kept current by the launcher. */
+"managed" | 
+/**  Installed on the computer. */
+"system" | 
+/**  A path an instance points at that is not among the above. */
+"custom";
+
+export type JavaRuntimeView = {
+	/**  `managed:<component>/<platform>` or `path:<executable>`. */
+	id: string,
+	kind: JavaRuntimeKind,
+	major: number | null,
+	/**  Full version (`21.0.7`, `1.8.0_51`). */
+	version: string | null,
+	/**  A familiar vendor name (`Eclipse Temurin`, `Microsoft`, `Mojang`). */
+	vendor: string | null,
+	/**  The Java folder (launcher runtimes: their folder in the data folder). */
+	location: string,
+	executable: string,
+	/**  A 32-bit Java on a 64-bit computer (the game gets little memory with it). */
+	bits32: boolean,
+	users: JavaUserView[],
+	/**  Launcher runtimes: Mojang's component and platform key. */
+	component: string | null,
+	platform: string | null,
+	/**  Launcher runtimes: the newer build Mojang offers. */
+	update: string | null,
+	/**  Launcher runtimes: the update is downloaded and waits for the game to close. */
+	staged: boolean,
+	/**  Launcher runtimes: the player asked for the update; it starts once no game runs. */
+	queued: boolean,
+	/**  Launcher runtimes: the update downloading now (percent). */
+	updating: number | null,
+	/**  Launcher runtimes: the last update failed. */
+	updateFailed: boolean,
+	/**  Custom paths: gone or not working. */
+	problem: JavaProblem | null,
+	/**  Launcher runtimes no instance uses: "Kaldır" frees this much. */
+	removableBytes: number | null,
+};
+
+export type JavaUserView = {
+	instanceId: string,
+	name: string,
+	/**  Uses it through "Otomatik". */
+	automatic: boolean,
+	/**  The Java does not suit the instance's game (custom paths only). */
+	fit: JavaFit | null,
+};
+
+/**  Progress of a content or modpack job. */
+export type JobProgressView = {
+	/**
+	 *  resolving | downloading | finishing (add-ons);
+	 *  pack | extracting | downloading | finishing (imports); identifying | writing (exports)
+	 */
+	stage: string,
+	/**  0–100; `None` while the amount of work is unknown. */
+	percent: number | null,
+	doneFiles: number,
+	totalFiles: number,
+	bytesPerSec: number,
+};
+
+export type KeptChangeView = {
+	item: PackChangeView,
+	reason: KeptReason,
+};
+
+/**  Why a pack file is left as it is. */
+export type KeptReason = 
+/**  The player changed the pack's file. */
+"changed" | 
+/**  The player deleted it. */
+"removed" | 
+/**  The player turned it off. */
+"disabled" | 
+/**  A file of the player's sits where the new version puts one. */
+"theirs";
+
+/**
+ *  Why the server keeps turning an account away, read from its kick message (English, Turkish,
+ *  and the ASCII spelling AuthMe's Turkish messages use).
+ */
+export type KickCause = "banned" | "notWhitelisted" | 
+/**  The login plugin refused the password the login commands sent. */
+"wrongPassword" | 
+/**  The server only lets in Microsoft (premium) accounts. */
+"premiumOnly" | 
+/**
+ *  Someone joined with this name from elsewhere (the player's own game, another computer):
+ *  reconnecting would kick them in turn.
+ */
+"loggedInElsewhere" | 
+/**
+ *  The name is still connected. The server may hold a dropped session for a few seconds, so
+ *  this stops the session only after [`REPEATED_KICKS`] in a row.
+ */
+"alreadyConnected" | 
+/**
+ *  The login plugin's time ran out (no or wrong login commands). Can be a slow server once,
+ *  so it stops the session only after [`REPEATED_KICKS`] in a row.
+ */
+"loginTimeout";
+
+export type LastSeen = "today" | "yesterday" | 
+/**  Within the last 7 days. */
+"week" | 
+/**  Longer ago. */
+"long";
 
 /**  Everything that happens between pressing OYNA and the game closing. */
 export type LaunchEventView = {
 	type: "progress",
 } & ProgressView | 
 /**  The network is unreachable: continuing with installed files only. */
-({ type: "offline" }) & { code?: never; pid?: never; runtimeSecs?: never } | ({ type: "launching" }) & { code?: never; pid?: never; runtimeSecs?: never } | ({ type: "started"; pid: number | null }) & { code?: never; runtimeSecs?: never } | ({ type: "windowShown" }) & { code?: never; pid?: never; runtimeSecs?: never } | ({ type: "exited"; code: number | null; runtimeSecs: number }) & { pid?: never } | {
+({ type: "offline" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "launching" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "started"; pid: number | null }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; name?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "windowShown" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "exited"; code: number | null; runtimeSecs: number }) & { changedFiles?: never; changelog?: never; count?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; version?: never } | {
 	type: "crashed",
 } & CrashView | {
 	type: "error",
-} & CmdError;
+} & CmdError | 
+/**
+ *  `launch_cancel` stopped the launch before the game started (downloads and installs end,
+ *  partial files go); the command bar simply returns to idle.
+ */
+({ type: "cancelled" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+/**  The official pack moved to a new version during this launch. */
+({ type: "packUpdated"; name: string; version: string; changelog: string | null; changedFiles: number }) & { code?: never; count?: never; minecraft?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never } | 
+/**
+ *  Changes the player made in the mods folder were adopted, files could not be read, or the
+ *  mods folder was installed again (a non-blocking notice; details in the mod center).
+ */
+{
+	type: "modsNotice",
+} & ModsNoticeView | 
+/**
+ *  The pack no longer offers this Minecraft version: the installed set was launched as it
+ *  is. `recommended` is the version the pack recommends now.
+ */
+({ type: "packVersionDropped"; minecraft: string; recommended: string | null }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; name?: never; pid?: never; recent?: never; runtimeSecs?: never; version?: never } | 
+/**
+ *  The mods would certainly stop the game: it was not started (the player chooses
+ *  "Onar", "Yine de başlat" or "İptal").
+ */
+{
+	type: "modsBlocked",
+} & ModCheckView | 
+/**
+ *  The instance's custom Java does not suit this game (too old for it or its mods, too new
+ *  for a LaunchWrapper game, gone, not working): it was not started (the player chooses
+ *  "Kur ve oyna", "Yine de dene" or cancels).
+ */
+{
+	type: "javaMismatch",
+} & JavaPromptView | 
+/**  Some mods will not work; the game starts anyway (shown once per set of warnings). */
+{
+	type: "modsWarning",
+} & ModCheckView | 
+/**
+ *  The session took screenshots (sent right before `Exited`). `recent` are the newest
+ *  files (at most three, newest first) for thumbnails; their folder is allowed in the asset
+ *  protocol.
+ */
+({ type: "newScreenshots"; count: number; recent: string[] }) & { changedFiles?: never; changelog?: never; code?: never; minecraft?: never; name?: never; pid?: never; recommended?: never; runtimeSecs?: never; version?: never };
+
+/**  Download preferences from Settings → İndirmeler, and how this launch starts. */
+export type LaunchSettings = {
+	/**  Files downloaded in parallel (clamped to 4..=48). */
+	concurrentDownloads: number,
+	/**  Hash every game file before each launch (slower; catches corrupted files). */
+	verifyFiles: boolean,
+	/**  Start even when the mod check finds problems that stop the game ("Yine de başlat"). */
+	ignoreModIssues?: boolean,
+	/**
+	 *  "Devam et": join this world or server right away (1.20+; ignored by older versions).
+	 *  Wins over the instance's auto-join server.
+	 */
+	quickPlay?: QuickPlay | null,
+	/**  The answer to the Java question of the previous attempt ("Kur ve oyna", "Yine de dene"). */
+	java?: JavaChoice | null,
+};
+
+export type LeftoverKindView = "cache" | "downloads" | "logs" | "crashReports";
+
+export type LeftoverView = {
+	kind: LeftoverKindView,
+	bytes: number,
+	files: number,
+};
 
 /**  Result of importing the old launcher's premium session (Windows only). */
 export type LegacyAccountImport = { kind: "imported"; account: AccountView } | { kind: "notFound" } | { kind: "unreadable" } | { kind: "unsupported" };
@@ -337,6 +1897,26 @@ export type LegacyScan = {
 	freeBytes: number | null,
 };
 
+export type Limits = {
+	friends: number,
+	outgoingRequests: number,
+};
+
+/**  A link Studio publishes (`LauncherConfig.links.custom`). */
+export type LinkView = {
+	label: string,
+	url: string,
+};
+
+/**  Studio's links (`LauncherConfig.links`), only `https://` and `projects://` ones. */
+export type LinksView = {
+	website: string | null,
+	discord: string | null,
+	store: string | null,
+	support: string | null,
+	custom: LinkView[],
+};
+
 export type LoaderKind = "vanilla" | "fabric" | "quilt" | "forge" | "neoForge";
 
 export type LoaderVersionView = {
@@ -344,14 +1924,351 @@ export type LoaderVersionView = {
 	stable: boolean,
 };
 
+export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
+
+/**  One parsed log entry (a stack trace stays inside `message`). */
+export type LogLine = {
+	/**  Local wall-clock time `HH:MM:SS` when known. */
+	time: string | null,
+	level: LogLevel,
+	thread: string | null,
+	logger: string | null,
+	message: string,
+};
+
+/**  Where a log comes from. */
+export type LogSource = 
+/**  Captured by the launcher from the game's output (`<root>/logs/game-<instance>-….log`). */
+"launcher" | 
+/**
+ *  Written by the game itself into its `logs/` folder (`latest.log`, `debug.log` and their
+ *  `.log.gz` archives).
+ */
+"game";
+
+/**  One line of the login commands list. */
+export type LoginCommandLine = 
+/**  Shown and saved as typed (commands without secrets, and every new or edited line). */
+{ kind: "text"; text: string } | 
+/**
+ *  A stored command that carries a secret (`/login …`): only `command` (`/login`) is shown.
+ *  Sent back as it is, it keeps stored command number `index` of the list the page was built
+ *  from.
+ */
+{ kind: "stored"; index: number; command: string };
+
+export type LoginCommandsPage = {
+	enabled?: boolean,
+	onlyFirstLogin?: boolean,
+	delaySeconds?: number | null,
+	commands?: LoginCommandLine[],
+};
+
 /**  Steps of the Microsoft sign-in, for the UI's animated step list. */
 export type LoginStep = "openingBrowser" | "waitingForBrowser" | "microsoft" | "xboxLive" | "xsts" | "minecraft" | "profile" | "done";
+
+/**  Who owns a friend code, and how they relate to the player. */
+export type LookupView = {
+	profile: ProfileView,
+	relation: Relation,
+	/**  The code as the service knows it (`PRJ-XXXX-XXXX`), for sending the request. */
+	code: string,
+};
+
+export type MaintenanceView = {
+	title: string,
+	message: string,
+	until: string | null,
+};
 
 export type McVersionView = {
 	id: string,
 	/**  "release" | "snapshot" | "oldBeta" | "oldAlpha" */
 	kind: string,
 	releaseTime: string,
+	/**
+	 *  The launcher's recommended version ("Önerilen", preselected for new instances; listed
+	 *  with the releases even when it is a snapshot).
+	 */
+	recommended: boolean,
+};
+
+export type MeView = {
+	id: string,
+	name: string,
+	username: string,
+	/**  `discord`, `preset:<slug>` or `minecraft:<texture hash>`. */
+	avatar: string,
+	/**  Discord picture URL when `avatar` is `discord`. */
+	avatarUrl: string | null,
+	/**  The Discord picture (or Discord's default one), for the picker's Discord choice. */
+	discordAvatarUrl: string,
+	/**  `PRJ-XXXX-XXXX` */
+	friendCode: string,
+	/**  What the QR points to: `<service>/f/PRJ-XXXX-XXXX`. */
+	shareLink: string | null,
+	qr: QrPath | null,
+	status: StatusMode,
+	privacy: Privacy,
+	/**  The settings backup, when there is one. */
+	backup: SettingsMeta | null,
+};
+
+/**  "Belleği artır/düşür ve yeniden dene". */
+export type MemoryAdviceView = {
+	currentMb: number,
+	suggestedMb: number,
+	increase: boolean,
+};
+
+/**  What a Microsoft sign-in did, so the UI can say it plainly. */
+export type MicrosoftLoginOutcome = 
+/**  A new account, now active. */
+"added" | 
+/**  The account was already saved: its session was renewed and it is active. */
+"alreadyAdded" | 
+/**  The account asked for (`relogin`) has a working session again. */
+"relogged" | 
+/**
+ *  A sign-in for `relogin` came back with another Microsoft account, which was saved
+ *  (or updated) on its own; the selection did not change.
+ */
+"otherAccount";
+
+export type MicrosoftLoginResult = {
+	account: AccountView,
+	outcome: MicrosoftLoginOutcome,
+};
+
+export type MigrationCheckView = {
+	from: string,
+	to: string,
+	/**  The player's own mods in `from`'s set. */
+	own: number,
+	/**  The own mods with a version for `to` (one entry per mod). */
+	compatible: MigrationMoveView[],
+	/**  Own mods the target set already has. */
+	alreadyThere: number,
+	/**  Modrinth could not be reached: the full search ([`mods_migration_plan`]) stays on demand. */
+	offline: boolean,
+};
+
+export type MigrationModView = {
+	fileName: string,
+	title: string,
+	projectId: string | null,
+	currentVersion: string | null,
+	/**  The version installed in the target set when moving. */
+	targetVersionId: string | null,
+	targetVersionNumber: string | null,
+	sizeBytes: number,
+	status: MigrationStatus,
+};
+
+export type MigrationMoveView = {
+	title: string,
+	/**  The Modrinth version that moves the mod ([`mods_migrate`]). */
+	versionId: string,
+};
+
+export type MigrationPlanView = {
+	from: string,
+	to: string,
+	mods: MigrationModView[],
+	/**  Modrinth could not be reached: nothing can be checked now. */
+	offline: boolean,
+};
+
+export type MigrationResultView = {
+	installed: number,
+	alreadyInstalled: number,
+	/**  Required dependencies that could not be found for the target. */
+	unresolved: number,
+};
+
+export type MigrationStatus = 
+/**  Modrinth has a version for the target: it can be moved. */
+"compatible" | 
+/**  The target set already has this mod. */
+"alreadyThere" | 
+/**  Modrinth knows the mod but has no version for the target. */
+"noVersion" | 
+/**  Modrinth does not know the file (added by hand from elsewhere). */
+"unknown";
+
+/**  Section of an item in the mod center (mirrors `pl_content::ItemCategory`). */
+export type ModCategory = "performance" | "visual" | "interface" | "gameplay" | "library" | "other";
+
+export type ModCenterApplyView = {
+	downloaded: number,
+	restored: number,
+	removed: number,
+	/**  Files that could not be changed (they stay; the next sync tries again). */
+	issues: number,
+};
+
+/**  One recommended mod (pack item). */
+export type ModCenterItemView = {
+	id: string,
+	title: string,
+	summary: string | null,
+	category: ModCategory,
+	iconUrl: string | null,
+	/**  The mod's official page (`https://` only), opened in the browser ("Mod sayfası"). */
+	pageUrl: string | null,
+	/**  Modrinth project, when the pack names it (opens the project page). */
+	projectId: string | null,
+	/**  File name in its folder. */
+	fileName: string,
+	/**  Folder of the file: `mods`, `resourcepacks`, `shaderpacks`, … */
+	folder: string,
+	/**  Installed only because other mods need it; never a choice. */
+	library: boolean,
+	defaultEnabled: boolean,
+	/**  Ids of the items installed together with this one. */
+	requires: string[],
+	/**  The player's choice. */
+	selected: boolean,
+	/**  Installed after applying: selected, or needed by an enabled item. */
+	enabled: boolean,
+	/**  Added to the pack after the player's set was made and not confirmed yet ("Yeni"). */
+	isNew: boolean,
+	/**  Ids of enabled items that need this one. */
+	requiredBy: string[],
+	installed: boolean,
+	/**  Installed, and the pack has a newer file for it ("Güncelleme var"). */
+	updateAvailable: boolean,
+	sizeBytes: number,
+	/**  A change the player made in the mods folder that the launcher adopted. */
+	manual: ModChange | null,
+	/**  The player replaced the file: it is kept until "Önerilene döndür". */
+	modified: boolean,
+	/**  Switched off and kept as a disabled copy. */
+	disabledCopy: boolean,
+};
+
+export type ModCenterPackView = {
+	id: string,
+	name: string,
+	/**  Newest version of the pack. */
+	version: string,
+	/**  The version the instance has installed (`None` before the first sync). */
+	installedVersion: string | null,
+	minecraft: string,
+};
+
+/**  What applying a selection would do. */
+export type ModCenterPreviewView = {
+	items: ModCenterItemView[],
+	summary: SyncSummary,
+	/**  Files would be downloaded, renamed or deleted. */
+	changesFiles: boolean,
+	/**  Applying records something even without file changes (choices, new mods seen). */
+	recordsChoices: boolean,
+};
+
+export type ModCenterView = {
+	instanceId: string,
+	mcVersion: string,
+	loader: LoaderKind,
+	/**  The instance follows a pack, so it has recommended mods. */
+	managed: boolean,
+	pack: ModCenterPackView | null,
+	items: ModCenterItemView[],
+	/**  The mods folder looked wiped: the next sync installs the selection again. */
+	reset: boolean,
+	issues: ModIssueView[],
+	dropped: DroppedVersionView | null,
+	/**  The recommended mods could not be loaded (no network and nothing cached). */
+	unavailable: boolean,
+	/**  The game of this instance is running: changes wait until it is closed. */
+	gameRunning: boolean,
+};
+
+/**
+ *  A change the player made to a pack mod outside the launcher (mirrors
+ *  `pl_content::ManualChange`).
+ */
+export type ModChange = 
+/**  Deleted: switched off. */
+"removed" | 
+/**  Renamed to `.disabled`: switched off, the copy is kept. */
+"disabled" | 
+/**  A disabled copy renamed back: switched on. */
+"enabled" | 
+/**  Replaced by another file: kept until "Önerilene döndür". */
+"replaced";
+
+export type ModChangeView = {
+	itemId: string,
+	title: string,
+	change: ModChange,
+	/**  Titles of enabled mods that need it (why it came back). */
+	requiredBy: string[],
+};
+
+export type ModCheckView = {
+	instanceId: string,
+	minecraft: string,
+	loader: LoaderKind,
+	/**  Blocking and warning issues, worst first (information is left out). */
+	issues: ModHealthIssueView[],
+	blocking: number,
+	checkedFiles: number,
+	/**  "Onar" has something to do. */
+	repairable: boolean,
+	/**  The set has mods ("Yeniden yükle" makes sense). */
+	hasMods: boolean,
+};
+
+/**  One problem of the check, for the UI. */
+export type ModHealthIssueView = {
+	/**  Stable key (kind, files, other side). */
+	key: string,
+	severity: Severity,
+	kind: IssueKind,
+	/**  Display names of the mods it is about. */
+	mods: string[],
+	/**  The other side: the dependency, the incompatible mod, the mod that bundles a copy. */
+	target: string | null,
+	/**  For a mod made for another loader: that loader's name. */
+	madeFor: string | null,
+	/**  For a mod that needs a newer Java: the version it needs. */
+	java: number | null,
+	/**  A copy is bundled inside another mod. */
+	bundled: boolean,
+	/**  The files involved ("copy details" only). */
+	files: string[],
+	offer: FixOfferView | null,
+};
+
+export type ModIssueKind = 
+/**  The file could not be read. */
+"unreadable" | 
+/**  A folder is where a file belongs. */
+"notAFile" | 
+/**  The file could not be renamed or deleted (another program has it open). */
+"busy";
+
+/**  A file the sync left alone because it could not handle it. */
+export type ModIssueView = {
+	/**  File name ("copy details" only). */
+	fileName: string,
+	/**  The game folder it is in (`mods`, `config`, …). */
+	folder: string,
+	/**  The recommended item the file belongs to, by its title (what the UI names it by). */
+	title: string | null,
+	kind: ModIssueKind,
+	/**  Technical details, for "copy details" only. */
+	detail: string,
+};
+
+/**  Choices from the mod center. */
+export type ModSelectionInput = {
+	/**  Item id → selected (items not listed keep their choice). */
+	items?: { [key in string]: boolean },
+	/**  Items whose replaced file goes back to the pack's ("Önerilene döndür"). */
+	revert?: string[],
 };
 
 export type ModView = {
@@ -364,7 +2281,323 @@ export type ModView = {
 	/**  PNG as a data URL, when the jar has an icon. */
 	iconUrl: string | null,
 	fromPack: boolean,
+	/**
+	 *  The official pack's recommended mod (mod center item) this file is; toggling it changes
+	 *  the mod center selection instead of renaming the file.
+	 */
+	itemId: string | null,
 	sizeBytes: number,
+	/**  Modrinth project of the file, when known (local add-on index, no network). */
+	projectId: string | null,
+	/**  Cached Modrinth project icon (local path) for files without an icon of their own. */
+	iconPath: string | null,
+};
+
+export type ModpackExportRequest = {
+	/**  Destination file (`.mrpack` is added when missing). */
+	path: string,
+	name: string,
+	version: string,
+	summary: string | null,
+	/**  Bundle the worlds (`saves/`). */
+	includeWorlds: boolean,
+	/**  Bundle mod settings (`config/`, `defaultconfigs/`, `kubejs/`). */
+	includeConfig: boolean,
+	/**  Bundle game options and the server list. */
+	includeOptions: boolean,
+};
+
+export type ModpackExportView = {
+	path: string,
+	/**  Files referenced by their Modrinth download (not bundled). */
+	hostedFiles: number,
+	bundledFiles: number,
+	bundledBytes: number,
+	/**  Modrinth was unreachable: every mod was bundled into the file. */
+	offline: boolean,
+};
+
+export type ModpackFormat = 
+/**  Modrinth `.mrpack`. */
+"mrpack" | 
+/**  Prism Launcher / MultiMC instance export. */
+"prism" | 
+/**  CurseForge modpack zip. */
+"curseForge";
+
+export type ModpackImportRequest = {
+	path: string,
+	/**  Instance name; the pack's own name when empty. */
+	name: string | null,
+	/**  Built-in icon key. */
+	icon: string,
+	/**  Optional files of an `.mrpack` (their `path`) the player leaves out. */
+	skipOptional?: string[],
+};
+
+export type ModpackImportView = {
+	instance: InstanceView,
+	/**
+	 *  CurseForge mods that have to be downloaded by hand (name and page), when the pack lists
+	 *  them.
+	 */
+	manualMods: CurseForgeModLink[],
+	manualCount: number,
+	/**  Files written into the new instance (bundled and downloaded). */
+	files: number,
+	/**  Archive entries left out because their paths were unsafe. */
+	skipped: number,
+	/**  Parts of the source instance the launcher cannot reproduce. */
+	unsupported: string[],
+};
+
+/**  The Modrinth modpack an instance was made from. */
+export type ModpackInfoView = {
+	projectId: string,
+	versionId: string,
+	versionNumber: string | null,
+	title: string | null,
+	iconUrl: string | null,
+};
+
+/**  What updating the pack to a version would do. */
+export type ModpackUpdatePlanView = {
+	fromVersion: string | null,
+	toVersion: string,
+	added: PackChangeView[],
+	updated: PackChangeView[],
+	removed: PackChangeView[],
+	/**
+	 *  Pack files the player changed, turned off or deleted (and files of theirs where the pack
+	 *  puts one): they stay as they are.
+	 */
+	kept: KeptChangeView[],
+	downloadBytes: number,
+	/**  The mod loader's version before and after, when it changes. */
+	loaderFrom: string | null,
+	loaderTo: string | null,
+};
+
+/**  What an update did. */
+export type ModpackUpdateResultView = {
+	versionNumber: string,
+	added: number,
+	updated: number,
+	removed: number,
+	kept: number,
+};
+
+/**  A newer version of an instance's modpack. */
+export type ModpackUpdateView = {
+	versionId: string,
+	versionNumber: string,
+	name: string,
+	/**  ISO 8601. */
+	publishedAt: string,
+};
+
+export type ModrinthDependency = {
+	versionId: string | null,
+	projectId: string | null,
+	/**  Set for dependencies outside Modrinth. */
+	fileName: string | null,
+	dependencyType: ModrinthDependencyType,
+};
+
+export type ModrinthDependencyConflict = {
+	/**  The installed project that is incompatible. */
+	projectId: string,
+	title: string | null,
+	/**  Project id of the version that declares the incompatibility. */
+	declaredBy: string,
+};
+
+export type ModrinthDependencyType = "required" | "optional" | "incompatible" | "embedded" | 
+/**  A value this launcher does not know (yet). */
+"unknown";
+
+export type ModrinthDonationUrl = {
+	id: string,
+	platform: string,
+	url: string,
+};
+
+export type ModrinthFile = {
+	hashes: ModrinthHashes,
+	url: string,
+	filename: string,
+	primary: boolean,
+	size: number,
+	/**  `required-resource-pack`, `optional-resource-pack`, … (mostly unset). */
+	fileType: string | null,
+};
+
+export type ModrinthGalleryImage = {
+	/**  Compressed image (for thumbnails). */
+	url: string,
+	/**  The original upload, when the API provides it. */
+	rawUrl?: string | null,
+	featured: boolean,
+	title: string | null,
+	description: string | null,
+	created: string | null,
+	ordering: number | null,
+};
+
+export type ModrinthHashes = {
+	sha1: string | null,
+	sha512: string | null,
+};
+
+export type ModrinthLicense = {
+	id: string,
+	name: string,
+	url: string | null,
+};
+
+export type ModrinthProject = {
+	id: string,
+	slug: string | null,
+	projectType: ModrinthProjectType,
+	team: string,
+	title: string,
+	description: string,
+	/**  Long description (Markdown). */
+	body: string,
+	published: string,
+	updated: string,
+	status: string | null,
+	license: ModrinthLicense | null,
+	clientSide: ModrinthSideSupport,
+	serverSide: ModrinthSideSupport,
+	downloads: number,
+	followers: number,
+	categories: string[],
+	additionalCategories: string[] | null,
+	gameVersions: string[],
+	loaders: string[],
+	/**  Version ids. */
+	versions: string[],
+	iconUrl: string | null,
+	issuesUrl: string | null,
+	sourceUrl: string | null,
+	wikiUrl: string | null,
+	discordUrl: string | null,
+	donationUrls: ModrinthDonationUrl[] | null,
+	gallery: ModrinthGalleryImage[] | null,
+	color: number | null,
+};
+
+export type ModrinthProjectType = "mod" | "modpack" | "resourcepack" | "shader" | "datapack" | "plugin" | 
+/**  A value this launcher does not know (yet). */
+"unknown";
+
+export type ModrinthSearchHit = {
+	projectId: string,
+	projectType: ModrinthProjectType,
+	slug: string | null,
+	author: string,
+	title: string,
+	description: string,
+	categories: string[],
+	displayCategories: string[] | null,
+	/**  Supported game versions. */
+	versions: string[],
+	downloads: number,
+	follows: number,
+	iconUrl: string | null,
+	dateCreated: string,
+	dateModified: string,
+	latestVersion: string | null,
+	license: string,
+	clientSide: ModrinthSideSupport,
+	serverSide: ModrinthSideSupport,
+	gallery: string[] | null,
+	featuredGallery: string | null,
+	color: number | null,
+};
+
+export type ModrinthSearchResults = {
+	hits: ModrinthSearchHit[],
+	offset: number,
+	limit: number,
+	totalHits: number,
+};
+
+/**  Whether a project is needed on the client or server side. */
+export type ModrinthSideSupport = "required" | "optional" | "unsupported" | 
+/**  A value this launcher does not know (yet). */
+"unknown";
+
+/**  Search sort order (`index` parameter). */
+export type ModrinthSortIndex = "relevance" | "downloads" | "follows" | "newest" | "updated";
+
+export type ModrinthUnresolvedDependency = {
+	projectId: string | null,
+	versionId: string | null,
+	fileName: string | null,
+	title: string | null,
+	requiredBy: string,
+	reason: ModrinthUnresolvedReason,
+};
+
+export type ModrinthUnresolvedReason = 
+/**  The project has no version for this loader/game version. */
+"noCompatibleVersion" | 
+/**  The project or version does not exist (anymore). */
+"notFound" | 
+/**  The dependency is a file outside Modrinth. */
+"external";
+
+export type ModrinthVersion = {
+	id: string,
+	projectId: string,
+	authorId: string | null,
+	name: string,
+	versionNumber: string,
+	changelog: string | null,
+	dependencies: ModrinthDependency[],
+	gameVersions: string[],
+	versionType: ModrinthVersionType,
+	loaders: string[],
+	featured: boolean,
+	status: string | null,
+	datePublished: string,
+	downloads: number,
+	files: ModrinthFile[],
+};
+
+export type ModrinthVersionType = "release" | "beta" | "alpha" | 
+/**  A value this launcher does not know (yet). */
+"unknown";
+
+/**  Changes the launcher adopted, shown as a non-blocking notice after a launch sync. */
+export type ModsNoticeView = {
+	changes: ModChangeView[],
+	/**  The mods folder looked wiped and the selection was installed again. */
+	reset: boolean,
+	/**  Files that could not be read or changed (details in the mod center). */
+	issues: number,
+};
+
+export type MovePlanView = {
+	from: string,
+	/**  The folder the data goes into (a `ProjectsLauncher` folder inside the picked one). */
+	target: string,
+	totalBytes: number,
+	fileCount: number,
+	/**  Free space on the target disk. */
+	freeBytes: number | null,
+	enoughSpace: boolean,
+};
+
+export type MoveProgressView = {
+	/**  "scanning" | "copying" | "verifying" */
+	stage: string,
+	doneBytes: number,
+	totalBytes: number,
+	doneFiles: number,
+	totalFiles: number,
 };
 
 export type NewInstanceRequest = {
@@ -373,6 +2606,10 @@ export type NewInstanceRequest = {
 	mcVersion: string,
 	loader: LoaderKind,
 	loaderVersion: string | null,
+	/**  Settings → Oyun defaults: maximum memory (`None` = recommended for this machine). */
+	maxMemoryMb?: number | null,
+	/**  Settings → Oyun defaults: extra JVM arguments. */
+	jvmArgs?: string | null,
 };
 
 export type NewsView = {
@@ -387,6 +2624,112 @@ export type NewsView = {
 	featured: boolean,
 	ctaLabel: string | null,
 	ctaUrl: string | null,
+	/**  From the Discord bot's news feed (without a cover the UI shows the season art). */
+	fromFeed: boolean,
+	/**  The original Discord message of a feed item (`https://` only), for "Discord'da aç". */
+	sourceUrl: string | null,
+};
+
+export type OfficialPackView = {
+	id: string,
+	name: string,
+	version: string,
+	mcVersion: string,
+	loader: LoaderKind,
+	summary: string | null,
+};
+
+export type OfficialStatus = {
+	/**
+	 *  The pack the official instance follows (or, before it exists, the one new installs get);
+	 *  `None` until one is published (or while offline without a cache).
+	 */
+	pack: OfficialPackView | null,
+	/**
+	 *  The instance following that pack family, or the "Projects" instance when none is
+	 *  published.
+	 */
+	instanceId: string | null,
+};
+
+export type OldSetView = {
+	/**  `<instance id>/<minecraft>`, unique in the list. */
+	key: string,
+	instanceId: string,
+	instanceName: string,
+	minecraft: string,
+	loader: LoaderKind | null,
+	/**  When the set was last played (else parked or prepared). */
+	lastUsedAt: string | null,
+	sizeBytes: number,
+};
+
+export type OldSetsView = {
+	/**  Longest unused first. */
+	sets: OldSetView[],
+	totalBytes: number,
+	olderThanDays: number,
+};
+
+/**  One file an update adds, changes, removes or leaves alone. */
+export type PackChangeView = {
+	/**  Game-relative path. */
+	path: string,
+	/**  The Modrinth project's title when known, else the file name. */
+	name: string,
+	/**
+	 *  First folder of the path (`mods`, `resourcepacks`, `shaderpacks`, `config`, …; empty at
+	 *  the top).
+	 */
+	folder: string,
+	iconUrl: string | null,
+};
+
+/**  Latest release of the official pack, for the patch notes card. */
+export type PackNotesView = {
+	name: string,
+	version: string,
+	publishedAt: string,
+	/**  Markdown. */
+	changelog: string,
+};
+
+/**  A file of an `.mrpack` the pack marks optional on the client. */
+export type PackOptionalFile = {
+	/**  Where it goes in the game folder (`mods/x.jar`): what an import names to leave it out. */
+	path: string,
+	fileName: string,
+	/**  `mods`, `resourcepacks`, `shaderpacks` or another folder. */
+	folder: string,
+	size: number,
+	/**  Its Modrinth project (from the download link), for a name and an icon. */
+	projectId: string | null,
+};
+
+/**  What importing a pack archive would create. */
+export type PackPreview = {
+	format: ModpackFormat,
+	name: string,
+	packVersion: string | null,
+	summary: string | null,
+	author: string | null,
+	mcVersion: string,
+	loader: LoaderKind,
+	loaderVersion: string | null,
+	/**  Files downloaded during the import (Modrinth-hosted files of an `.mrpack`). */
+	downloadFiles: number,
+	downloadBytes: number,
+	/**  Files bundled in the archive (overrides or the exported game folder). */
+	bundledFiles: number,
+	/**  Mods of a CurseForge pack that have to be downloaded by hand. */
+	manualFiles: number,
+	/**  Parts of the source instance the launcher cannot reproduce. */
+	unsupported: string[],
+	/**
+	 *  Files of an `.mrpack` the pack marks optional on the client (counted in the downloads);
+	 *  the player may leave them out.
+	 */
+	optional: PackOptionalFile[],
 };
 
 export type PackView = {
@@ -396,7 +2739,25 @@ export type PackView = {
 	enabled: boolean,
 	iconUrl: string | null,
 	sizeBytes: number,
+	/**  Modrinth project of the file, when known (local add-on index, no network). */
+	projectId: string | null,
+	/**  Cached Modrinth project icon (local path) for packs without an icon of their own. */
+	iconPath: string | null,
 };
+
+/**  Why an auto-respond pattern can not be used. */
+export type PatternProblem = 
+/**  Longer than [`MAX_PATTERN_CHARS`] characters. */
+"tooLong" | 
+/**  Not a regular expression the client reads (or a control character in the text). */
+"invalid" | 
+/**
+ *  A repetition inside a repetition, a repetition that can split a line more than one way
+ *  (rounds that may be empty or start like each other), more than three loops that can hand
+ *  characters to what follows them, or a count above 1000: the client could take forever on
+ *  some chat lines.
+ */
+"tooComplex";
 
 /**
  *  What the player is doing, sent by the UI whenever it changes. The backend turns it into a
@@ -416,9 +2777,28 @@ export type PresenceContext = {
 	showServer: boolean,
 };
 
+export type PresenceState = "offline" | "launcher" | "playing";
+
+export type Privacy = {
+	/**  Show a server other than projects.gg to friends (default off: "başka sunucuda"). */
+	shareServer: boolean,
+	/**  Show a coarse "last seen" to friends (default on). */
+	shareLastSeen: boolean,
+};
+
+/**  Someone shown with name and picture (requests, blocked users, code lookups). */
+export type ProfileView = {
+	id: string,
+	name: string,
+	username: string,
+	avatar: string,
+	avatarUrl: string | null,
+};
+
 export type ProgressView = {
 	/**  metadata | java | libraries | assets | client | natives | loader | pack */
 	stage: string,
+	/**  The whole launch, 0–100, never going back (the stage's own figures are the fields below). */
 	percent: number | null,
 	doneFiles: number,
 	totalFiles: number,
@@ -426,11 +2806,253 @@ export type ProgressView = {
 	etaSecs: number | null,
 };
 
+/**  A Modrinth project's title and icon. */
+export type ProjectBriefView = {
+	id: string,
+	title: string,
+	iconUrl: string | null,
+};
+
+/**
+ *  Dark modules of a QR code. Draw with `viewBox="0 0 size size"` (no quiet zone included:
+ *  leave at least 2 modules of light margin around it).
+ */
+export type QrPath = {
+	/**  Modules per side. */
+	size: number,
+	/**  `d` of a single path covering every dark module (one rectangle per horizontal run). */
+	path: string,
+};
+
+/**  Join a world or server directly after start. */
+export type QuickPlay = 
+/**  Uses 1.20+ quick play when supported, else `--server`/`--port`. */
+{ kind: "multiplayer"; host: string; port: number | null } | 
+/**  1.20+ only (world folder name). */
+{ kind: "singleplayer"; world: string } | 
+/**  1.20+ only. */
+{ kind: "realms"; realm_id: string };
+
+/**  A phase of "Yeniden yükle". */
+export type ReinstallPhase = 
+/**  Jars of unknown origin are copied aside. */
+"keepAside" | 
+/**  The set's `mods/` and `config/` go to the launcher trash. */
+"trash" | 
+/**  The official pack's selection is installed again. */
+"pack" | 
+/**  The player's Modrinth mods are installed again. */
+"modrinth" | 
+/**  The new set is checked. */
+"check";
+
+export type ReinstallPreviewView = {
+	minecraft: string,
+	/**  `config/` has files: mod settings go back to their defaults. */
+	resetsSettings: boolean,
+	/**  Names of jars of unknown origin, kept aside. */
+	kept: string[],
+	packMods: number,
+	modrinthMods: number,
+	/**  The official pack is needed but cannot be loaded now. */
+	needsNetwork: boolean,
+};
+
+export type ReinstallProgressView = {
+	phases: ReinstallPhase[],
+	phase: ReinstallPhase,
+	percent: number | null,
+	cancellable: boolean,
+};
+
+export type ReinstallResultView = {
+	/**  Names of the jars kept aside. */
+	kept: string[],
+	/**  Their folder, relative to the game folder (for "Klasörü aç"). */
+	keptFolder: string | null,
+	packSynced: boolean,
+	reinstalled: number,
+	/**  Mods without a version for this game version: their old files came back. */
+	restored: string[],
+	settingsReset: boolean,
+	check: ModCheckView,
+	cancelled: boolean,
+};
+
+export type Relation = "none" | "friend" | 
+/**  You already sent them a request. */
+"outgoing" | 
+/**  They sent you a request. */
+"incoming" | 
+/**  You blocked them. */
+"blocked" | 
+/**  Your own code. */
+"self";
+
+export type RemovedSetView = {
+	instanceId: string,
+	minecraft: string,
+	/**  The launcher trash item ("Geri al" puts it back). */
+	trashId: string,
+	sizeBytes: number,
+};
+
+export type RemovedSetsView = {
+	removed: RemovedSetView[],
+	/**  Bytes moved into the trash. */
+	movedBytes: number,
+	/**  Sets left alone (played meanwhile, now active, part of a switch, or in use). */
+	skipped: number,
+};
+
+export type RepairProgressView = {
+	steps: RepairStepView[],
+	percent: number | null,
+	checking: boolean,
+};
+
+export type RepairResultView = {
+	steps: RepairStepView[],
+	/**  The check after the repair. */
+	check: ModCheckView,
+	cancelled: boolean,
+};
+
+/**  What "Onar" repairs. */
+export type RepairScope = 
+/**  Every issue of the check. */
+{ kind: "all" } | 
+/**  The check's issues and the last crash's findings. */
+{ kind: "crash" } | 
+/**  One issue (its offered fix). */
+{ kind: "issue"; key: string };
+
+export type RepairStepKind = "verifyPack" | "redownloadPack" | "revertPack" | "redownload" | "enable" | "disable" | "disableOld" | "loader" | "java" | "update" | "fetch";
+
+export type RepairStepView = {
+	key: string,
+	kind: RepairStepKind,
+	/**  The mod (display name), the loader or "Java 21"; empty for the pack check. */
+	name: string,
+	status: StepStatus,
+	note: StepNote | null,
+};
+
+export type RequestView = {
+	id: string,
+	name: string,
+	username: string,
+	avatar: string,
+	avatarUrl: string | null,
+	/**  Unix seconds. */
+	sentAt: number,
+};
+
+export type RestoredSetsView = {
+	/**  Back where they were. */
+	restored: number,
+	/**  Left in the trash: that version has a new set now (or is the active one). */
+	taken: number,
+	/**  Not put back: gone from the trash, instance deleted, or a file error. */
+	failed: number,
+};
+
+export type RestoredWorldView = {
+	/**  Folder in `saves/` the world now lives in. */
+	folder: string,
+	/**  The world it replaced, now in the launcher trash. */
+	replaced: TrashItemView | null,
+};
+
+export type ResumeKind = "world" | "server";
+
+/**  Where "Devam et" goes. */
+export type ResumeView = {
+	kind: ResumeKind,
+	/**  The world's or the server's name. */
+	name: string,
+	/**  When it was played (ISO time). */
+	lastPlayedAt: string | null,
+	/**  The world's or the server's icon (data URL). */
+	iconUrl: string | null,
+	/**  Handed back to `launch_instance` (`settings.quickPlay`). */
+	quickPlay: QuickPlay,
+};
+
+export type ScheduledTask = {
+	name?: string,
+	/**  Raw MCC action: `send /kit`, `log hello`, `script file.cs`. */
+	action?: string,
+	onLogin?: boolean,
+	onFirstLogin?: boolean,
+	intervalEnabled?: boolean,
+	/**  Seconds; MCC waits a random time in `[min_seconds, max_seconds]` between runs. */
+	minSeconds?: number | null,
+	maxSeconds?: number | null,
+};
+
+export type SchedulerOptions = {
+	enabled?: boolean,
+	tasks?: ScheduledTask[],
+};
+
+export type ScreenshotFileView = {
+	fileName: string,
+	/**  Local path; the UI loads it with `convertFileSrc` (the folder is allowed on listing). */
+	path: string,
+	sizeBytes: number,
+	takenAt: string | null,
+	/**  Local path of its thumbnail when one was made already (else `screenshot_thumbnail`). */
+	thumb: string | null,
+};
+
 export type ScreenshotView = {
 	fileName: string,
 	/**  Local path; the UI converts it with `convertFileSrc`. */
 	path: string,
 	takenAt: string,
+};
+
+/**  Result of sending a request by code. */
+export type SendOutcome = 
+/**  The request waits for them. */
+"requested" | 
+/**  They had asked first: friends now. */
+"friends";
+
+/**  One change to the listed servers. */
+export type ServerEdit = 
+/**
+ *  A new server at the end of the list, as the game adds them. An empty name takes the
+ *  address.
+ */
+{ kind: "add"; name: string; address: string } | 
+/**  A listed server's name and address (a new address drops the old server's icon). */
+{ kind: "update"; index: number; 
+/**  The address the player saw at `index`. */
+was: string; name: string; address: string } | 
+/**  Takes a listed server off; [`ServerList::apply`] returns it for "Geri al". */
+{ kind: "remove"; index: number; was: string } | 
+/**  Puts a removed server back at its listed position (clamped to the end). */
+{ kind: "restore"; index: number; server: ServerListEntry };
+
+export type ServerEditView = {
+	/**  The listed servers after the edit. */
+	servers: ServerView[],
+	/**  The server a removal took off, handed back for "Geri al". */
+	removed: ServerListEntry | null,
+};
+
+/**  One entry of the in-game server list. */
+export type ServerListEntry = {
+	name: string,
+	ip: string,
+	/**  Base64 PNG without a data-URL prefix, exactly as the game stores it. */
+	icon: string | null,
+	/**  Server resource pack choice: `None` = ask, `Some(true)` = accept, `Some(false)` = decline. */
+	acceptTextures: boolean | null,
+	/**  Hidden entries (added via "Direct Connection") are kept by the game but not listed. */
+	hidden: boolean,
 };
 
 export type ServerStatusView = {
@@ -441,11 +3063,35 @@ export type ServerStatusView = {
 	maxPlayers: number,
 	latencyMs: number | null,
 	motd: string | null,
+	/**  The server's own icon from the ping (a PNG data URL), when it sends one. */
+	iconUrl: string | null,
 };
 
+/**  A server of the instance's in-game server list (hidden "Direct Connection" entries left out). */
 export type ServerView = {
 	name: string,
 	address: string,
+	/**  The icon the game saved for it (a PNG data URL). */
+	iconUrl: string | null,
+};
+
+/**  What a session check of a Microsoft account found ([`crate::AuthManager::check_session`]). */
+export type SessionCheck = 
+/**  The saved session works: the game starts online. */
+"valid" | 
+/**  Microsoft refused the saved session, or it is gone: sign in again. */
+"expired" | 
+/**  Could not be checked right now (no internet, service outage). */
+"unknown";
+
+export type SessionInfo = {
+	/**  Public id, for revoking. */
+	id: string,
+	device: string,
+	createdOn: string,
+	lastUsedOn: string,
+	/**  This device. */
+	current: boolean,
 };
 
 /**  Session lifecycle. */
@@ -473,6 +3119,471 @@ export type SessionStats = {
 	players: number | null,
 };
 
+export type SetRef = {
+	instanceId: string,
+	minecraft: string,
+};
+
+/**  Settings backup metadata, enough for "Bu bilgisayara ayarlarını getireyim mi?". */
+export type SettingsMeta = {
+	version: number,
+	/**  Unix seconds. */
+	updatedAt: number,
+	/**  Label of the device that saved it. */
+	device: string,
+	/**  Bytes. */
+	size: number,
+};
+
+/**
+ *  [`AccountSettings`] with the login commands' secrets left in the keychain. Same fields, same
+ *  meaning; see the field docs there.
+ */
+export type SettingsPage = {
+	serverHost?: string,
+	serverPort?: number,
+	minecraftVersion?: string,
+	autoStart?: boolean,
+	allowResourcePacks?: boolean,
+	loginCommands?: LoginCommandsPage,
+	scheduler?: SchedulerOptions,
+	antiAfk?: AntiAfkOptions,
+	autoRelog?: AutoRelogOptions,
+	autoEat?: AutoEatOptions,
+	autoRespond?: AutoRespondSettings,
+	chatLog?: ChatLogSettings,
+	alerts?: AlertsOptions,
+};
+
+export type Severity = 
+/**  The game will certainly fail to start. */
+"blocking" | 
+/**  The game starts, but something will not work (a mod will not load). */
+"warning" | 
+/**  Worth knowing; nothing has to be done. */
+"info";
+
+export type SharedFilesView = {
+	items: SharedItem[],
+	/**  Bytes freed only when all of a group's items go (files hard-linked into each). */
+	groups: SharedGroup[],
+	totalBytes: number,
+};
+
+/**  Bytes freed only when every listed item is deleted (files hard-linked into all of them). */
+export type SharedGroup = {
+	items: string[],
+	bytes: number,
+};
+
+/**  Something no instance uses. */
+export type SharedItem = {
+	/**  `version:<id>`, `runtime:<component>`, `libraries` or `assets`. */
+	id: string,
+	kind: SharedKind,
+	/**  Version id or runtime component (empty for libraries and assets). */
+	name: string,
+	/**  The game version (of a profile: the one it builds on). */
+	minecraft: string | null,
+	loader: LoaderKind | null,
+	loaderVersion: string | null,
+	/**  Java runtimes: the Java version. */
+	javaMajor: number | null,
+	/**  Bytes freed when only this item is deleted. */
+	bytes: number,
+	files: number,
+};
+
+export type SharedKind = "gameVersion" | "loaderProfile" | "javaRuntime" | "libraries" | "assets";
+
+/**  A log published on mclo.gs. */
+export type SharedLogView = {
+	id: string,
+	url: string,
+};
+
+export type ShortcutView = {
+	/**  File name of the shortcut on the desktop. */
+	fileName: string,
+};
+
+/**  Why a sign-in did not finish. */
+export type SignInFailure = 
+/**  The browser step took too long, or the link was already used: start again. */
+"expired" | 
+/**  The service could not be reached. */
+"unavailable" | "failed";
+
+/**  A skin PNG the player picked or dropped, checked and ready for the preview. */
+export type SkinFilePreview = {
+	path: string,
+	/**  File name, for the UI. */
+	name: string,
+	/**  `data:image/png;base64,…` */
+	dataUrl: string,
+	width: number,
+	height: number,
+};
+
+/**  One skin of the history, as the "Önceki skinler" grid shows it. */
+export type SkinHistoryEntryView = {
+	/**  Key for the history commands; never shown. */
+	id: string,
+	/**
+	 *  The texture on textures.minecraft.net, for the 3D preview (`skin_texture` serves the local
+	 *  copy).
+	 */
+	url: string,
+	/**  The arm model it was last worn with (and is worn with again). */
+	variant: SkinVariant,
+	/**  When the launcher first saw it (RFC 3339). */
+	firstSeen: string,
+	/**  The last time it was seen worn or put on (RFC 3339). */
+	lastWorn: string,
+	favorite: boolean,
+	/**  The whole player from the front (PNG data URL) once drawn; see `skin_history_prepare`. */
+	thumbUrl: string | null,
+};
+
+/**  The skin history of a Microsoft account. */
+export type SkinHistoryView = {
+	/**  Favourites first, then the most recently worn. */
+	entries: SkinHistoryEntryView[],
+	/**  `id` of the skin the account wears now, when the history has it. */
+	currentId: string | null,
+};
+
+/**  Player model of a skin: classic (Steve, 4 px arms) or slim (Alex, 3 px arms). */
+export type SkinVariant = "classic" | "slim";
+
+/**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
+export type SocialNotice = SocialNotice_Serialize | SocialNotice_Deserialize;
+
+/**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
+export type SocialNotice_Deserialize = 
+/**  A live invite (never while on do-not-disturb: those wait as quiet invites). */
+({ kind: "invite"; invite: InviteView_Deserialize }) & { friend?: never; id?: never; reason?: never; request?: never; restore?: never } | 
+/**  Someone sent a friend request. */
+({ kind: "request"; request: RequestView }) & { friend?: never; id?: never; invite?: never; reason?: never; restore?: never } | 
+/**  A request was accepted (by them, or on another device): a new friend. */
+({ kind: "friendAdded"; friend: FriendView_Deserialize }) & { id?: never; invite?: never; reason?: never; request?: never; restore?: never } | 
+/**  A friend came online. */
+({ kind: "friendOnline"; id: string }) & { friend?: never; invite?: never; reason?: never; request?: never; restore?: never } | 
+/**  A friend started playing on projects.gg. */
+({ kind: "friendOnProjects"; id: string }) & { friend?: never; invite?: never; reason?: never; request?: never; restore?: never } | 
+/**  Signed in. `restore` is a settings backup saved by another computer, worth offering. */
+({ kind: "signedIn"; restore: SettingsMeta | null }) & { friend?: never; id?: never; invite?: never; reason?: never; request?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { friend?: never; id?: never; invite?: never; request?: never; restore?: never } | 
+/**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
+({ kind: "signedOutRemotely" }) & { friend?: never; id?: never; invite?: never; reason?: never; request?: never; restore?: never };
+
+/**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
+export type SocialNotice_Serialize = 
+/**  A live invite (never while on do-not-disturb: those wait as quiet invites). */
+({ kind: "invite"; invite: InviteView_Serialize }) & { friend?: never; id?: never; reason?: never; request?: never; restore?: never } | 
+/**  Someone sent a friend request. */
+({ kind: "request"; request: RequestView }) & { friend?: never; id?: never; invite?: never; reason?: never; restore?: never } | 
+/**  A request was accepted (by them, or on another device): a new friend. */
+({ kind: "friendAdded"; friend: FriendView_Serialize }) & { id?: never; invite?: never; reason?: never; request?: never; restore?: never } | 
+/**  A friend came online. */
+({ kind: "friendOnline"; id: string }) & { friend?: never; invite?: never; reason?: never; request?: never; restore?: never } | 
+/**  A friend started playing on projects.gg. */
+({ kind: "friendOnProjects"; id: string }) & { friend?: never; invite?: never; reason?: never; request?: never; restore?: never } | 
+/**  Signed in. `restore` is a settings backup saved by another computer, worth offering. */
+({ kind: "signedIn"; restore: SettingsMeta | null }) & { friend?: never; id?: never; invite?: never; reason?: never; request?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { friend?: never; id?: never; invite?: never; request?: never; restore?: never } | 
+/**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
+({ kind: "signedOutRemotely" }) & { friend?: never; id?: never; invite?: never; reason?: never; request?: never; restore?: never };
+
+export type SocialView = SocialView_Serialize | SocialView_Deserialize;
+
+export type SocialView_Deserialize = {
+	/**  Grows with every view; a view older than the one shown is ignored. */
+	seq: number,
+	/**  False while the feature is off: the launcher shows nothing of it. */
+	enabled: boolean,
+	auth: AuthPhase,
+	connection: Connection,
+	me: MeView | null,
+	/**  The friend list arrived since sign-in (skeletons until then). */
+	loaded: boolean,
+	friends: FriendView_Deserialize[],
+	incoming: RequestView[],
+	outgoing: RequestView[],
+	blocked: ProfileView[],
+	/**  "Birlikte oyna" invites still worth answering, newest first. */
+	invites: InviteView_Deserialize[],
+	limits: Limits | null,
+	/**  What this launcher tells friends right now. */
+	activity: ActivityView,
+};
+
+export type SocialView_Serialize = {
+	/**  Grows with every view; a view older than the one shown is ignored. */
+	seq: number,
+	/**  False while the feature is off: the launcher shows nothing of it. */
+	enabled: boolean,
+	auth: AuthPhase,
+	connection: Connection,
+	me: MeView | null,
+	/**  The friend list arrived since sign-in (skeletons until then). */
+	loaded: boolean,
+	friends: FriendView_Serialize[],
+	incoming: RequestView[],
+	outgoing: RequestView[],
+	blocked: ProfileView[],
+	/**  "Birlikte oyna" invites still worth answering, newest first. */
+	invites: InviteView_Serialize[],
+	limits: Limits | null,
+	/**  What this launcher tells friends right now. */
+	activity: ActivityView,
+};
+
+export type StatusMode = "online" | 
+/**  Do not disturb: friends see it; the launcher shows no notifications and invites wait. */
+"dnd" | 
+/**  Friends see the player as offline; the player still sees friends. */
+"invisible";
+
+/**  Why a step ended as it did. */
+export type StepNote = 
+/**  No version fits; the file was turned off instead. */
+"disabledInstead" | 
+/**  No version fits this Minecraft version, loader and requirements. */
+"noVersion" | 
+/**  Modrinth does not have the mod. */
+"notFound" | 
+/**  The official pack provides it: it was switched on there. */
+"fromPack" | 
+/**  An earlier step made it unnecessary. */
+"notNeeded" | 
+/**  Modrinth or the pack could not be reached. */
+"offline" | 
+/**  The file is in use by another program (or could not be changed). */
+"busy" | 
+/**  The official pack chooses the loader version of this instance. */
+"packDecides" | 
+/**  Not possible for this instance (e.g. the game's own Java is older than a mod needs). */
+"notPossible" | 
+/**  Another enabled pack mod needs this one, so the pack keeps it. */
+"keptByPack" | 
+/**  The repair was stopped before this step. */
+"cancelled";
+
+export type StepStatus = "pending" | "running" | "done" | "failed" | 
+/**  Not run (not needed any more, or the repair was stopped). */
+"skipped";
+
+export type SupportBundleView = {
+	path: string,
+	fileName: string,
+	/**  Where it was saved: "downloads" | "desktop" | "home". */
+	folder: string,
+};
+
+/**  What the logs say a suspected mod did. */
+export type SuspectReason = 
+/**  Needs a mod that is not installed (`related` names it). */
+"requiresMissing" | 
+/**  Not installed, but another mod (`related`) needs it. */
+"missing" | 
+/**  Needs another version of a mod (`related`). */
+"requiresOtherVersion" | 
+/**  Installed in a version another mod (`related`) does not accept. */
+"wrongVersion" | 
+/**  Does not support this Minecraft version. */
+"incompatibleMinecraft" | 
+/**  Needs another mod loader version. */
+"needsNewerLoader" | 
+/**  Compiled for, or asking for, a newer Java than the one that ran the game. */
+"needsNewerJava" | 
+/**  Declares itself incompatible with an installed mod (`related`). */
+"declaresIncompatible" | 
+/**  Installed although another mod (`related`) declares itself incompatible with it. */
+"incompatible" | 
+/**  Installed more than once. */
+"duplicate" | 
+/**  One of its mixins failed to apply or clashed with another mod's mixin. */
+"mixinFailed" | 
+/**  The mod loader reported that it failed while loading. */
+"loadingFailed" | 
+/**  The crash report's own "Suspected Mods" guess. */
+"namedInReport" | 
+/**
+ *  Its code is in the crashing stack trace (weak evidence, used only when nothing else is
+ *  found).
+ */
+"inStackTrace" | 
+/**  A jar the loader could not open. */
+"corruptFile";
+
+export type SwitchPreviewView = {
+	from: string,
+	to: string,
+	/**  The instance never was on `to`: its mods start fresh and the settings are copied. */
+	firstVisit: boolean,
+	/**  Mods put aside with the current set. */
+	parkedMods: number,
+	/**  Size of the current set's mods and settings. */
+	parkedBytes: number,
+	/**  The current set has a config folder (copied on a first visit). */
+	hasConfig: boolean,
+	/**  Mods that come back with `to`'s set (or that were moved into it in advance). */
+	restoredMods: number,
+	restoredLastPlayedAt: string | null,
+	/**  Official pack files the switch downloads. */
+	downloadFiles: number,
+	downloadBytes: number,
+	/**  Recommended mods that stay on because they were on before (first visit). */
+	carriedChoices: number,
+	/**  Recommended mods `to` offers that the player has not seen yet. */
+	newItems: number,
+	/**  The player's own mods in the current set (they stay with it). */
+	ownMods: number,
+	/**  Minecraft `to` is not downloaded yet: it comes with the first launch. */
+	gameDownload: boolean,
+	loader: LoaderKind,
+	loaderVersion: string | null,
+	/**
+	 *  `to` has no set, but cleanup moved its old one to the launcher trash: "Eski seti geri
+	 *  getir" (`instance_restore_trashed_set`, then the switch) brings it back instead of a
+	 *  first visit.
+	 */
+	trashedSet: SwitchTrashedSetView | null,
+};
+
+export type SwitchResultView = {
+	from: string,
+	to: string,
+	firstVisit: boolean,
+	/**  Recommended mods that stayed on because the player had them on before (first visit). */
+	carried: string[],
+	/**  Recommended mods the new version offers that the player has not seen yet. */
+	newItems: string[],
+	/**  The player's own mods in the set that was put aside (candidates for "Taşı"). */
+	ownModsLeft: number,
+	/**  The official pack's files are in place (false: they come with the first launch). */
+	synced: boolean,
+};
+
+/**  A version's set in the launcher trash, as the switch would bring it back. */
+export type SwitchTrashedSetView = {
+	trashId: string,
+	/**  Mods in it. */
+	mods: number,
+	/**  Its mods and settings, in bytes. */
+	sizeBytes: number,
+	lastPlayedAt: string | null,
+	/**  Official pack files bringing it back would download. */
+	downloadFiles: number,
+	downloadBytes: number,
+};
+
+/**  Dry-run summary for the UI (the mod center's "Uygula" and update notifications). */
+export type SyncSummary = {
+	/**  Files that appear (downloads of new files and re-enabled items). */
+	added: CategoryCounts,
+	/**  Files replaced by a newer version (including an item's new file name). */
+	updated: CategoryCounts,
+	/**  Files that disappear (updates are not counted here). */
+	removed: CategoryCounts,
+	kept: number,
+	unchanged: number,
+	/**  Bytes to download. */
+	downloadBytes: number,
+	/**  Bytes deleted from the disk (removals and the old files of updated items). */
+	removeBytes: number,
+};
+
+/**  Something in the launcher trash. */
+export type TrashItemView = {
+	id: string,
+	kind: TrashKind,
+	name: string,
+	fileName: string,
+	deletedAt: string,
+	/**  When it is deleted for good. */
+	expiresAt: string,
+	sizeBytes: number,
+};
+
+export type TrashKind = "world" | "backup" | "screenshot" | 
+/**  A version set's `mods/` or `config/` folder, set aside by "Yeniden yükle". */
+"modSet" | 
+/**
+ *  A whole parked version set (`.projects/versions/<minecraft>/`), cleaned up because the
+ *  instance had not played that version for a long time.
+ */
+"versionSet" | 
+/**
+ *  A whole instance folder (settings and game files), deleted from the library; `instance_id`
+ *  is its id, `name` its display name.
+ */
+"instance";
+
+export type TrashSummaryView = {
+	/**  Everything listed below (expired items about to go are left out). */
+	items: number,
+	bytes: number,
+	/**  The size cap: over it, the oldest items go first. */
+	capBytes: number,
+	/**  When the oldest item is deleted by itself. */
+	nextExpiryAt: string | null,
+	/**  Version sets in the trash (of instances that still exist), newest first. */
+	sets: TrashedSetView[],
+	/**  Deleted instances, newest first (their pages are gone, so they are listed here). */
+	instances: TrashedInstanceView[],
+	/**
+	 *  Everything else, newest first (the instance pages list their own worlds, backups and
+	 *  screenshots too).
+	 */
+	files: TrashedFileView[],
+};
+
+/**
+ *  Anything else in the launcher trash: a world, a backup, a screenshot, the folders "Yeniden
+ *  yükle" set aside, or a version set whose instance is itself in the trash.
+ */
+export type TrashedFileView = {
+	trashId: string,
+	instanceId: string,
+	/**  The instance it came from (also when that instance waits in the trash too). */
+	instanceName: string | null,
+	kind: TrashKind,
+	/**  A world's own name; a file name for the others (the UI words them). */
+	name: string,
+	fileName: string,
+	deletedAt: string | null,
+	sizeBytes: number,
+	/**
+	 *  "Geri al" can put it back here (worlds, backups and screenshots of an existing
+	 *  instance, through `trash_restore`).
+	 */
+	restorable: boolean,
+};
+
+/**  An instance deleted from the library, in the launcher trash ("Geri al": `instance_restore`). */
+export type TrashedInstanceView = {
+	trashId: string,
+	name: string,
+	deletedAt: string | null,
+	sizeBytes: number,
+};
+
+/**  A version set in the launcher trash. */
+export type TrashedSetView = {
+	trashId: string,
+	instanceId: string,
+	instanceName: string,
+	minecraft: string,
+	deletedAt: string | null,
+	sizeBytes: number,
+};
+
+/**  A mod the crash dialog can turn off. */
+export type TurnOffView = {
+	file: string,
+	name: string,
+};
+
 export type UpdateProgress = {
 	downloaded: number,
 	total: number | null,
@@ -485,6 +3596,102 @@ export type UpdateStatus = {
 	current: string,
 	version: string | null,
 	notes: string | null,
+};
+
+/**
+ *  Why the settings could not be saved: the server address check, then the legacy form's
+ *  "Eksik Bilgi" warnings in its order, with the pattern checks next to the auto-respond one.
+ */
+export type ValidationIssue = 
+/**  The server address is not a host name or IP address (see [`is_valid_server_host`]). */
+"invalidServerHost" | 
+/**  Login commands are on but the list is empty. */
+"loginCommandsEmpty" | 
+/**  Auto-respond is on but no rule has both a pattern and a reply. */
+"autoRespondNoRules" | 
+/**
+ *  Auto-respond is on and rule number `rule` (0-based, in the order sent) has a pattern the
+ *  client can not use (see [`check_pattern`]).
+ */
+{ autoRespondPattern: {
+	rule: number,
+	problem: PatternProblem,
+} } | 
+/**  The scheduler is on but no task has an action. */
+"schedulerNoTasks";
+
+/**
+ *  One entry of the game version picker (see [`crate::VersionCatalog::options`]). Versions sharing
+ *  a protocol are listed once; `value` is written to MCC as-is, `label` is the range shown to the
+ *  user (the UI words the `auto` entry and marks the recommended one).
+ */
+export type VersionOption = {
+	value: string,
+	label: string,
+	recommended: boolean,
+	auto: boolean,
+};
+
+export type VersionOptionView = {
+	minecraft: string,
+	current: boolean,
+	/**
+	 *  The launcher's recommended Minecraft version (signed config, else the built-in default);
+	 *  for the official instance, the family's default member when the pack is not published for
+	 *  that version.
+	 */
+	recommended: boolean,
+	/**  The instance can move to it (the pack publishes it, or the loader supports it). */
+	available: boolean,
+	/**  A set is kept for it: switching back brings its mods and settings back exactly. */
+	hasSet: boolean,
+	/**  Mods were moved into it ahead of the first visit. */
+	prepared: boolean,
+	/**  A snapshot (development) version. */
+	snapshot: boolean,
+	lastPlayedAt: string | null,
+	/**  Size of its mods and settings, in bytes. */
+	sizeBytes: number,
+};
+
+export type VersionOptionsView = {
+	current: string,
+	managed: boolean,
+	loader: LoaderKind,
+	/**  Newest first. */
+	options: VersionOptionView[],
+	/**  The list could only be partly loaded (no network and nothing cached). */
+	partial: boolean,
+	gameRunning: boolean,
+};
+
+export type WorldBackupView = {
+	fileName: string,
+	sizeBytes: number,
+	createdAt: string | null,
+	/**  Folder name of the backed-up world. */
+	worldFolder: string | null,
+	/**  The world's own name. */
+	worldName: string | null,
+	/**  False when the archive does not hold a world. */
+	valid: boolean,
+};
+
+export type WorldDetailView = {
+	folder: string,
+	name: string,
+	/**  survival | creative | adventure | spectator | unknown */
+	gameMode: string,
+	hardcore: boolean,
+	cheats: boolean,
+	lastPlayedAt: string | null,
+	sizeBytes: number,
+	/**  `icon.png` as a data URL. */
+	iconUrl: string | null,
+	/**  Game version that last saved the world. */
+	version: string | null,
+	/**  False when `level.dat` could not be read (the other fields are then guesses). */
+	readable: boolean,
 };
 
 export type WorldView = {
