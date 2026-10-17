@@ -13,6 +13,12 @@ export {
 export { Button, type ButtonProps, IconButton, type IconButtonProps } from "./components/button";
 export { Countdown } from "./components/countdown";
 export { Dialog } from "./components/dialog";
+export {
+  DropZone,
+  type DropZoneProps,
+  type DropZoneState,
+  type DropZoneVariant,
+} from "./components/drop-zone";
 export { EmberField, type ParticleKind } from "./components/ember-field";
 export {
   Field,
