@@ -4,8 +4,9 @@
 //!   The caller records on the instance that this happened ([`Instance::default_server_seeded`])
 //!   and never does it again, so a server the player removed stays removed;
 //! - first-launch options when there is no `options.txt` yet ([`seed_options`]): Turkish as the
-//!   game language and GUI scale 2. An existing `options.txt` (the player's or a modpack's) is
-//!   never touched.
+//!   game language, GUI scale 2 and a graphics preset (the player's pick or the computer's, see
+//!   [`super::options`]). An existing `options.txt` (the player's or a modpack's) is never
+//!   touched, except for a preset the player picked before the first launch.
 //!
 //! Files that cannot be read are left alone; the error is returned for logging.
 //!
@@ -14,6 +15,10 @@
 use std::io::Read;
 use std::path::Path;
 
+use super::options::{
+    GraphicsPreset, apply_preset, clear_pending, pending_preset, preset_lines, this_machine_preset,
+    write_options,
+};
 use crate::error::{Error, Result};
 use crate::gamefiles::fsops::blocking;
 use crate::server::{ServerList, ServerListEntry};
@@ -26,7 +31,7 @@ pub const DEFAULT_SERVER_ADDRESS: &str = "play.projects.gg";
 /// 1080p screen, which feels too big.
 pub const DEFAULT_GUI_SCALE: u32 = 2;
 const SERVERS_FILE: &str = "servers.dat";
-const OPTIONS_FILE: &str = "options.txt";
+pub(crate) const OPTIONS_FILE: &str = "options.txt";
 /// `version.json` inside a client jar is a few hundred bytes; anything far bigger is not it.
 const MAX_VERSION_JSON: u64 = 64 * 1024;
 
@@ -122,7 +127,7 @@ fn era(version: &str) -> Era {
 
 /// True for versions from `release` on, given the first snapshot (`year`, `week`) of that
 /// release.
-fn at_least(version: &str, release: (u32, u32, u32), snapshot: (u32, u32)) -> bool {
+pub(crate) fn at_least(version: &str, release: (u32, u32, u32), snapshot: (u32, u32)) -> bool {
     match era(version) {
         Era::Ancient => false,
         Era::Release(a, b, c) => (a, b, c) >= release,
@@ -177,9 +182,12 @@ pub enum OptionsSeed {
     Skipped,
 }
 
-/// Right before the first launch, when `<game_dir>/options.txt` does not exist: writes
-/// `version:<data version>` (read from `client_jar`), `lang:<Turkish>` and `guiScale:2`, and
-/// nothing else; the game fills in the rest. An existing file is never touched.
+/// Right before every launch, when `<game_dir>/options.txt` does not exist: writes
+/// `version:<data version>` (read from `client_jar`), `lang:<Turkish>`, `guiScale:2` and a
+/// graphics preset ([`super::options`]): the one the player picked before the first launch, or
+/// the one that suits the computer. The game fills in the rest. An existing file is left as it
+/// is, except that a preset the player picked while there was none is applied to it (a pack's
+/// `options.txt` arrived since).
 ///
 /// The `version` line matters: without it the game runs its options data fixers from version 0
 /// and one of them (1.19.3 on) turns the accessibility onboarding off for a new player. When the
@@ -190,11 +198,41 @@ pub async fn seed_options(
     minecraft: &str,
     client_jar: &Path,
 ) -> Result<OptionsSeed> {
+    seed_options_with(game_dir, minecraft, client_jar, this_machine_preset).await
+}
+
+/// [`seed_options`] with the computer's preset given.
+async fn seed_options_with(
+    game_dir: &Path,
+    minecraft: &str,
+    client_jar: &Path,
+    machine: impl FnOnce() -> GraphicsPreset,
+) -> Result<OptionsSeed> {
+    // A preset picked while there was no options.txt is used at this launch or never: a later
+    // launch must not change what the player set in the game meanwhile.
+    let picked = pending_preset(game_dir).await;
+    let seeded = write_first_options(game_dir, minecraft, client_jar, picked, machine).await;
+    if picked.is_some() && seeded.is_ok() {
+        clear_pending(game_dir).await;
+    }
+    seeded
+}
+
+async fn write_first_options(
+    game_dir: &Path,
+    minecraft: &str,
+    client_jar: &Path,
+    picked: Option<GraphicsPreset>,
+    machine: impl FnOnce() -> GraphicsPreset,
+) -> Result<OptionsSeed> {
     let path = game_dir.join(OPTIONS_FILE);
     if tokio::fs::try_exists(&path)
         .await
         .map_err(|e| Error::io(&path, e))?
     {
+        if let Some(preset) = picked {
+            apply_picked(&path, minecraft, preset).await?;
+        }
         return Ok(OptionsSeed::Exists);
     }
     let jar = client_jar.to_path_buf();
@@ -208,27 +246,50 @@ pub async fn seed_options(
     }
     content.push_str(&format!("lang:{}\n", turkish_language(minecraft)));
     content.push_str(&format!("guiScale:{DEFAULT_GUI_SCALE}\n"));
-    blocking(move || {
-        if let Some(parent) = path.parent() {
+    content.push_str(&preset_lines(minecraft, picked.unwrap_or_else(machine)));
+    let target = path.clone();
+    let created = blocking(move || {
+        if let Some(parent) = target.parent() {
             std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
         }
         // `create_new` fails when the file exists: one appearing meanwhile is never replaced.
         match std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&path)
+            .open(&target)
         {
             Ok(mut file) => {
                 use std::io::Write;
                 file.write_all(content.as_bytes())
-                    .map_err(|e| Error::io(&path, e))?;
-                Ok(OptionsSeed::Written { data_version })
+                    .map_err(|e| Error::io(&target, e))?;
+                Ok(true)
             }
-            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(OptionsSeed::Exists),
-            Err(e) => Err(Error::io(&path, e)),
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Ok(false),
+            Err(e) => Err(Error::io(&target, e)),
         }
     })
-    .await
+    .await?;
+    if created {
+        return Ok(OptionsSeed::Written { data_version });
+    }
+    if let Some(preset) = picked {
+        apply_picked(&path, minecraft, preset).await?;
+    }
+    Ok(OptionsSeed::Exists)
+}
+
+/// Applies a preset the player picked before the first launch to an `options.txt` that came
+/// from elsewhere (only the preset's keys change).
+async fn apply_picked(path: &Path, minecraft: &str, preset: GraphicsPreset) -> Result<()> {
+    let content = tokio::fs::read(path)
+        .await
+        .map_err(|e| Error::io(path, e))?;
+    write_options(path, apply_preset(&content, minecraft, preset)).await?;
+    tracing::info!(
+        preset = preset.as_str(),
+        "graphics preset picked before the first launch applied"
+    );
+    Ok(())
 }
 
 #[cfg(test)]
@@ -236,6 +297,7 @@ mod tests {
     use std::io::Write;
 
     use super::*;
+    use crate::instance::options::{detect_preset, set_graphics_preset};
 
     async fn list_with(servers: Vec<ServerListEntry>, game: &Path) {
         let mut list = ServerList::default();
@@ -377,17 +439,111 @@ mod tests {
         assert_eq!(client_data_version(&jar), Some(3955));
         let game = dir.path().join("minecraft");
         assert_eq!(
-            seed_options(&game, "1.21.1", &jar).await.unwrap(),
+            seed_options_with(&game, "1.21.1", &jar, || GraphicsPreset::Balanced)
+                .await
+                .unwrap(),
             OptionsSeed::Written {
                 data_version: Some(3955)
             }
         );
-        assert_eq!(options(&game), "version:3955\nlang:tr_tr\nguiScale:2\n");
+        // The computer's graphics preset comes with it.
+        assert_eq!(
+            options(&game),
+            "version:3955\nlang:tr_tr\nguiScale:2\nrenderDistance:12\nsimulationDistance:8\n\
+             graphicsMode:1\nparticles:0\nrenderClouds:\"fast\"\nentityShadows:true\n\
+             entityDistanceScaling:1.0\nbiomeBlendRadius:2\nmipmapLevels:4\n"
+        );
+        assert_eq!(
+            detect_preset(options(&game).as_bytes(), "1.21.1"),
+            Some(GraphicsPreset::Balanced)
+        );
         // Only once: from now on the file is the game's.
         assert_eq!(
             seed_options(&game, "1.21.1", &jar).await.unwrap(),
             OptionsSeed::Exists
         );
+    }
+
+    #[tokio::test]
+    async fn the_first_launch_writes_the_players_pick_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let jar = client_jar(dir.path(), Some(r#"{"world_version":4790}"#));
+        let game = dir.path().join("minecraft");
+        // Picked in the launcher before the game ever ran.
+        set_graphics_preset(&game, "26.1.2", GraphicsPreset::Quality)
+            .await
+            .unwrap();
+        assert_eq!(
+            seed_options_with(&game, "26.1.2", &jar, || GraphicsPreset::Smooth)
+                .await
+                .unwrap(),
+            OptionsSeed::Written {
+                data_version: Some(4790)
+            }
+        );
+        assert_eq!(
+            options(&game),
+            format!(
+                "version:4790\nlang:tr_tr\nguiScale:2\n{}",
+                preset_lines("26.1.2", GraphicsPreset::Quality)
+            )
+        );
+        assert_eq!(pending_preset(&game).await, None);
+        // What the player then sets in the game stays.
+        std::fs::write(game.join(OPTIONS_FILE), "renderDistance:20\n").unwrap();
+        assert_eq!(
+            seed_options_with(&game, "26.1.2", &jar, || GraphicsPreset::Smooth)
+                .await
+                .unwrap(),
+            OptionsSeed::Exists
+        );
+        assert_eq!(options(&game), "renderDistance:20\n");
+    }
+
+    #[tokio::test]
+    async fn a_pick_goes_onto_a_packs_options_at_the_first_launch() {
+        let dir = tempfile::tempdir().unwrap();
+        let jar = client_jar(dir.path(), Some(r#"{"world_version":3955}"#));
+        let game = dir.path().join("minecraft");
+        set_graphics_preset(&game, "1.21.1", GraphicsPreset::Smooth)
+            .await
+            .unwrap();
+        // The pack put its own options.txt in place during the same launch.
+        std::fs::create_dir_all(&game).unwrap();
+        std::fs::write(game.join(OPTIONS_FILE), "version:3955\nfov:0.25\n").unwrap();
+        assert_eq!(
+            seed_options_with(&game, "1.21.1", &jar, || GraphicsPreset::Balanced)
+                .await
+                .unwrap(),
+            OptionsSeed::Exists
+        );
+        let written = options(&game);
+        assert!(written.starts_with("version:3955\nfov:0.25\n"));
+        assert_eq!(
+            detect_preset(written.as_bytes(), "1.21.1"),
+            Some(GraphicsPreset::Smooth)
+        );
+        assert_eq!(pending_preset(&game).await, None);
+    }
+
+    #[tokio::test]
+    async fn a_pick_the_first_launch_cannot_write_is_dropped() {
+        // No data version from 1.19.3 on: the game makes its own file, and the pick must not
+        // change it at a later launch.
+        let dir = tempfile::tempdir().unwrap();
+        let no_json = client_jar(dir.path(), None);
+        let game = dir.path().join("minecraft");
+        set_graphics_preset(&game, "1.21.4", GraphicsPreset::Quality)
+            .await
+            .unwrap();
+        assert_eq!(
+            seed_options_with(&game, "1.21.4", &no_json, || GraphicsPreset::Smooth)
+                .await
+                .unwrap(),
+            OptionsSeed::Skipped
+        );
+        assert_eq!(pending_preset(&game).await, None);
+        assert!(!game.join(OPTIONS_FILE).exists());
     }
 
     #[tokio::test]
@@ -400,7 +556,9 @@ mod tests {
         // 1.19.3 and newer: no file, so the game's own first start keeps the onboarding.
         let new = dir.path().join("new");
         assert_eq!(
-            seed_options(&new, "1.21.4", &no_json).await.unwrap(),
+            seed_options_with(&new, "1.21.4", &no_json, || GraphicsPreset::Smooth)
+                .await
+                .unwrap(),
             OptionsSeed::Skipped
         );
         assert!(!new.join(OPTIONS_FILE).exists());
@@ -408,10 +566,16 @@ mod tests {
         // Older versions have no onboarding: written without the version line.
         let old = dir.path().join("old");
         assert_eq!(
-            seed_options(&old, "1.8.9", &no_json).await.unwrap(),
+            seed_options_with(&old, "1.8.9", &no_json, || GraphicsPreset::Smooth)
+                .await
+                .unwrap(),
             OptionsSeed::Written { data_version: None }
         );
-        assert_eq!(options(&old), "lang:tr_TR\nguiScale:2\n");
+        assert_eq!(
+            options(&old),
+            "lang:tr_TR\nguiScale:2\nrenderDistance:8\nfancyGraphics:false\nparticles:1\n\
+             renderClouds:false\nentityShadows:false\nmipmapLevels:2\n"
+        );
 
         // A jar whose version.json has no world_version counts as unknown.
         let other = tempfile::tempdir().unwrap();

@@ -4,6 +4,7 @@
 pub mod defaults;
 pub mod memory;
 pub mod model;
+pub mod options;
 pub mod store;
 
 pub use defaults::{
@@ -19,5 +20,9 @@ pub use memory::{
 pub use model::{
     Hooks, INSTANCE_SCHEMA_VERSION, Instance, InstanceIcon, InstanceLoader, ManagedPack,
     MemorySettings, NewInstance, ServerAddress, WindowSettings,
+};
+pub use options::{
+    GraphicsPreset, GraphicsState, apply_preset, detect_preset, graphics_state, preset_for_machine,
+    set_graphics_preset, supports_presets, this_machine_preset,
 };
 pub use store::{GAME_DIR_NAME, INSTANCE_FILE, InstanceStore, slugify};
