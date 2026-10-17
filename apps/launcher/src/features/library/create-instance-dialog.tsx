@@ -1,13 +1,25 @@
-import { FileArrowUp, Sparkle } from "@phosphor-icons/react";
-import { Button, cn, Dialog, Field, Input, Segmented, Select, toast } from "@pl/ui";
+import { Sparkle } from "@phosphor-icons/react";
+import { Button, cn, Dialog, Field, Input, Segmented, Select, toast, useMotionPrefs } from "@pl/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type InstanceIcon as IconKey, type LoaderKind } from "@/lib/api";
+import { showError } from "@/features/content/jobs";
+import { ManualModsDialog } from "@/features/content/manual-mods-dialog";
+import { useModpackBrowser } from "@/features/content/modpack-browser";
+import { useModpackImport } from "@/features/content/modpack-import";
+import { useDrop } from "@/features/drop/store";
+import {
+  api,
+  type InstanceIcon as IconKey,
+  type LoaderKind,
+  type ModpackImportResult,
+} from "@/lib/api";
 import { InstanceIcon, instanceIcons } from "@/shell/instance-icon";
+import { usePrefs } from "@/stores/prefs";
+import { defaultInstanceName } from "./default-name";
 
-type Source = "new" | "import";
+type Source = "new" | "browse" | "import";
 type VersionFilter = "release" | "snapshot" | "old";
 
 const loaderOptions: LoaderKind[] = ["vanilla", "fabric", "quilt", "forge", "neoForge"];
@@ -15,19 +27,35 @@ const loaderOptions: LoaderKind[] = ["vanilla", "fabric", "quilt", "forge", "neo
 export function CreateInstanceDialog({
   open,
   onOpenChange,
+  initialSource,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Where the dialog opens ("İçe aktar" opens the file import); "Sıfırdan" otherwise. */
+  initialSource?: Exclude<Source, "new">;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [source, setSource] = useState<Source>("new");
+  const motionPrefs = useMotionPrefs();
+  const [source, setSource] = useState<Source>(initialSource ?? "new");
+  // Set while rendering, not in an effect: the panel opens at the right size, no first frame of
+  // "Sıfırdan" that the morph would then glide away from.
+  const [shownFor, setShownFor] = useState(open);
+  if (open !== shownFor) {
+    setShownFor(open);
+    if (open && initialSource) setSource(initialSource);
+  }
   const [name, setName] = useState("");
-  const [nameError, setNameError] = useState<string | null>(null);
   const [icon, setIcon] = useState<IconKey>("grass");
   const [filter, setFilter] = useState<VersionFilter>("release");
-  const [mcVersion, setMcVersion] = useState<string>("");
+  const showSnapshots = usePrefs((s) => s.showSnapshots);
+  useEffect(() => {
+    if (!showSnapshots && filter === "snapshot") setFilter("release");
+  }, [showSnapshots, filter]);
+  // The version the player picked. Until then (or while the filter hides it) the recommended
+  // version is selected, else the newest one in the list.
+  const [pickedVersion, setPickedVersion] = useState<string>("");
   const [loader, setLoader] = useState<LoaderKind>("fabric");
   const [loaderVersion, setLoaderVersion] = useState<string>("");
 
@@ -40,18 +68,17 @@ export function CreateInstanceDialog({
     () =>
       (versionsQuery.data ?? []).filter((v) =>
         filter === "release"
-          ? v.kind === "release"
+          ? // The recommended version stays listed even when it is a snapshot.
+            v.kind === "release" || v.recommended
           : filter === "snapshot"
             ? v.kind === "snapshot"
             : v.kind === "oldBeta" || v.kind === "oldAlpha",
       ),
     [versionsQuery.data, filter],
   );
-
-  useEffect(() => {
-    if (filtered.length && !filtered.some((v) => v.id === mcVersion))
-      setMcVersion(filtered[0]?.id ?? "");
-  }, [filtered, mcVersion]);
+  const mcVersion = filtered.some((v) => v.id === pickedVersion)
+    ? pickedVersion
+    : ((filtered.find((v) => v.recommended) ?? filtered[0])?.id ?? "");
 
   const loaderQuery = useQuery({
     queryKey: ["loader-versions", loader, mcVersion],
@@ -64,18 +91,75 @@ export function CreateInstanceDialog({
     setLoaderVersion(first?.version ?? "");
   }, [loaderQuery.data]);
 
+  // An empty name is fine: the instance is named after its loader and version ("Fabric
+  // 1.21.4"), numbered when that name is taken. The field shows it as its placeholder.
+  const instancesQuery = useQuery({
+    queryKey: ["instances"],
+    queryFn: () => api.instances(),
+    enabled: open,
+  });
+  const defaultName = defaultInstanceName(
+    `${loader === "vanilla" ? "Minecraft" : t(`loaders.${loader}`)} ${mcVersion}`,
+    (instancesQuery.data ?? []).map((i) => i.name),
+  );
+
   useEffect(() => {
     if (!open) {
       setName("");
-      setNameError(null);
       setSource("new");
+      setPickedVersion("");
+      setFilter("release");
     }
   }, [open]);
+  // A modpack dropped onto the window opens the import step (it takes the file from there); the
+  // file is forgotten once the dialog closes.
+  const pendingPack = useDrop((s) => s.pendingPack);
+  useEffect(() => {
+    if (open && pendingPack) setSource("import");
+  }, [open, pendingPack]);
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    if (wasOpen.current && !open) useDrop.getState().setPendingPack(null);
+    wasOpen.current = open;
+  }, [open]);
+
+  const [manual, setManual] = useState<ModpackImportResult | null>(null);
+  const finishPack = (
+    result: ModpackImportResult,
+    key: "modpack.import.done" | "modpack.browse.done",
+  ) => {
+    void queryClient.invalidateQueries({ queryKey: ["instances"] });
+    toast.success(t(key, { name: result.instance.name }));
+    if (result.skipped > 0) toast(t("modpack.import.skipped", { count: result.skipped }));
+    onOpenChange(false);
+    // The new instance is the one on screen: OYNA plays it, not the previous choice.
+    usePrefs.getState().selectInstance(result.instance.id);
+    void navigate({ to: "/library/$instanceId", params: { instanceId: result.instance.id } });
+    if (result.manualCount > 0) setManual(result);
+  };
+  const importFlow = useModpackImport({
+    active: open && source === "import",
+    onCancel: () => onOpenChange(false),
+    onDone: (result) => finishPack(result, "modpack.import.done"),
+  });
+  const browseFlow = useModpackBrowser({
+    active: open && source === "browse",
+    onCancel: () => onOpenChange(false),
+    onDone: (result) => finishPack(result, "modpack.browse.done"),
+  });
+  const close = (next: boolean) => {
+    if (!next) {
+      // Closing the dialog stops a running import or install.
+      importFlow.cancelJob();
+      browseFlow.cancelJob();
+    }
+    onOpenChange(next);
+  };
 
   const create = useMutation({
     mutationFn: () =>
       api.createInstance({
-        name: name.trim(),
+        name: name.trim() || defaultName,
         icon,
         mcVersion,
         loader,
@@ -85,160 +169,185 @@ export function CreateInstanceDialog({
       void queryClient.invalidateQueries({ queryKey: ["instances"] });
       toast.success(t("library.created", { name: created.name }));
       onOpenChange(false);
+      // The new instance is the one on screen: OYNA plays it, not the previous choice.
+      usePrefs.getState().selectInstance(created.id);
       void navigate({ to: "/library/$instanceId", params: { instanceId: created.id } });
     },
+    onError: (error) => showError(error),
   });
-
-  const submit = () => {
-    if (!name.trim()) {
-      setNameError(t("create.nameRequired"));
-      return;
-    }
-    create.mutate();
+  const canCreate = !create.isPending && Boolean(mcVersion);
+  const versionSearch = {
+    searchLabel: t("modCenter.versions.search"),
+    emptyText: t("create.noMatch"),
   };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={onOpenChange}
-      title={t("create.title")}
-      description={t("create.description")}
-      closeLabel={t("common.close")}
-      width={620}
-      footer={
-        source === "new" ? (
-          <>
-            <Button variant="ghost" onClick={() => onOpenChange(false)}>
-              {t("create.cancel")}
-            </Button>
-            <Button
-              variant="primary"
-              icon={<Sparkle size={16} weight="fill" />}
-              onClick={submit}
-              disabled={create.isPending || !mcVersion}
-            >
-              {t("create.submit")}
-            </Button>
-          </>
-        ) : undefined
-      }
-    >
-      <Segmented
-        value={source}
-        onValueChange={setSource}
-        label={t("create.title")}
-        options={[
-          { value: "new", label: t("create.sourceNew") },
-          { value: "import", label: t("create.sourceImport") },
-        ]}
-        className="mb-5"
-      />
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={close}
+        title={t("create.title")}
+        description={t("create.description")}
+        closeLabel={t("common.close")}
+        width={680}
+        // The three sources and the modpack steps differ a lot in height: the panel glides.
+        morph={motionPrefs.layout}
+        // A form (and a modpack search) made as a whole: a stray click beside it keeps it.
+        dismissOnOutsideClick={false}
+        footer={
+          source === "browse" ? (
+            browseFlow.footer
+          ) : source === "import" ? (
+            importFlow.footer
+          ) : source === "new" ? (
+            <>
+              <Button variant="ghost" onClick={() => onOpenChange(false)}>
+                {t("create.cancel")}
+              </Button>
+              <Button
+                variant="primary"
+                icon={<Sparkle size={16} weight="fill" />}
+                onClick={() => create.mutate()}
+                disabled={!canCreate}
+              >
+                {create.isPending ? t("create.creating") : t("create.submit")}
+              </Button>
+            </>
+          ) : undefined
+        }
+      >
+        <Segmented
+          value={source}
+          onValueChange={setSource}
+          label={t("create.title")}
+          options={[
+            { value: "new", label: t("create.sourceNew") },
+            { value: "browse", label: t("modpack.sourceBrowse") },
+            { value: "import", label: t("create.sourceImport") },
+          ]}
+          className="mb-5"
+        />
 
-      {source === "new" ? (
-        <div className="grid gap-5">
-          <div className="grid grid-cols-[1fr_auto] items-start gap-4">
-            <Field label={t("create.name")} htmlFor="instance-name" error={nameError}>
-              <Input
-                id="instance-name"
-                value={name}
-                invalid={Boolean(nameError)}
-                onChange={(e) => {
-                  setName(e.target.value);
-                  setNameError(null);
-                }}
-                maxLength={48}
-                autoFocus
-              />
-            </Field>
-            <InstanceIcon icon={icon} size={64} className="mt-6" />
-          </div>
-
-          <Field label={t("create.icon")}>
-            <div role="radiogroup" aria-label={t("create.icon")} className="flex flex-wrap gap-2">
-              {(Object.keys(instanceIcons) as IconKey[]).map((key) => (
-                <label
-                  key={key}
-                  className={cn(
-                    "cursor-pointer rounded-md p-1 transition-[background-color,box-shadow] hover:bg-white/8 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-gold-300",
-                    icon === key && "bg-white/8 ring-2 ring-gold-400",
-                  )}
-                >
-                  <input
-                    type="radio"
-                    name="instance-icon"
-                    value={key}
-                    checked={icon === key}
-                    onChange={() => setIcon(key)}
-                    className="sr-only"
-                  />
-                  <InstanceIcon icon={key} size={40} />
-                  <span className="sr-only">{t(`create.iconNames.${key}`)}</span>
-                </label>
-              ))}
+        {source === "new" ? (
+          <div className="grid gap-5">
+            <div className="grid grid-cols-[1fr_auto] items-start gap-4">
+              <Field label={t("create.name")} htmlFor="instance-name">
+                <Input
+                  id="instance-name"
+                  value={name}
+                  // The default name is what the instance really gets: legible, not a hint.
+                  placeholder={defaultName}
+                  className="placeholder:text-ash-400"
+                  onChange={(e) => setName(e.target.value)}
+                  // Enter creates it, like the button (the defaults are a complete choice).
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.nativeEvent.isComposing && canCreate) {
+                      e.preventDefault();
+                      create.mutate();
+                    }
+                  }}
+                  maxLength={48}
+                  autoFocus
+                />
+              </Field>
+              <InstanceIcon icon={icon} size={64} className="mt-6" />
             </div>
-          </Field>
 
-          <div className="grid grid-cols-2 gap-4">
-            <Field label={t("create.version")}>
-              <div className="flex flex-col gap-2">
-                <Segmented
-                  value={filter}
-                  onValueChange={setFilter}
-                  label={t("create.version")}
-                  options={[
-                    { value: "release", label: t("create.filterRelease") },
-                    { value: "snapshot", label: t("create.filterSnapshot") },
-                    { value: "old", label: t("create.filterOld") },
-                  ]}
-                />
-                <Select
-                  value={mcVersion}
-                  onValueChange={setMcVersion}
-                  label={t("create.version")}
-                  options={filtered.map((v) => ({ value: v.id, label: v.id }))}
-                  disabled={!filtered.length}
-                />
+            <Field label={t("create.icon")}>
+              <div role="radiogroup" aria-label={t("create.icon")} className="flex flex-wrap gap-2">
+                {(Object.keys(instanceIcons) as IconKey[]).map((key) => (
+                  <label
+                    key={key}
+                    className={cn(
+                      "cursor-pointer rounded-md p-1 transition-[background-color,box-shadow] hover:bg-white/8 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-gold-300",
+                      icon === key && "bg-white/8 ring-2 ring-gold-400",
+                    )}
+                  >
+                    <input
+                      type="radio"
+                      name="instance-icon"
+                      value={key}
+                      checked={icon === key}
+                      onChange={() => setIcon(key)}
+                      className="sr-only"
+                    />
+                    <InstanceIcon icon={key} size={40} />
+                    <span className="sr-only">{t(`create.iconNames.${key}`)}</span>
+                  </label>
+                ))}
               </div>
             </Field>
-            <Field
-              label={t("create.loader")}
-              help={loader === "vanilla" ? t("create.loaderHelpVanilla") : t("create.loaderHelp")}
-            >
-              <div className="flex flex-col gap-2">
-                <Select
-                  value={loader}
-                  onValueChange={setLoader}
-                  label={t("create.loader")}
-                  options={loaderOptions.map((l) => ({ value: l, label: t(`loaders.${l}`) }))}
-                />
-                {loader !== "vanilla" ? (
-                  <Select
-                    value={loaderVersion}
-                    onValueChange={setLoaderVersion}
-                    label={t("create.loaderVersion")}
-                    disabled={!loaderQuery.data?.length}
-                    options={(loaderQuery.data ?? []).map((v) => ({
-                      value: v.version,
-                      label: v.stable ? v.version : `${v.version} (${t("create.unstable")})`,
-                    }))}
+
+            <div className="grid grid-cols-2 gap-4">
+              <Field label={t("create.version")}>
+                <div className="flex flex-col gap-2">
+                  <Segmented
+                    value={filter}
+                    onValueChange={setFilter}
+                    label={t("create.version")}
+                    options={[
+                      { value: "release" as VersionFilter, label: t("create.filterRelease") },
+                      ...(showSnapshots
+                        ? [
+                            {
+                              value: "snapshot" as VersionFilter,
+                              label: t("create.filterSnapshot"),
+                            },
+                          ]
+                        : []),
+                      { value: "old" as VersionFilter, label: t("create.filterOld") },
+                    ]}
                   />
-                ) : null}
-              </div>
-            </Field>
+                  {/* A hundred releases (hundreds of snapshots): the searchable list. */}
+                  <Select
+                    value={mcVersion}
+                    onValueChange={setPickedVersion}
+                    label={t("create.version")}
+                    options={filtered.map((v) => ({
+                      value: v.id,
+                      label: v.id,
+                      badge: v.recommended ? t("create.recommended") : undefined,
+                    }))}
+                    disabled={!filtered.length}
+                    searchable={versionSearch}
+                  />
+                </div>
+              </Field>
+              <Field
+                label={t("create.loader")}
+                help={loader === "vanilla" ? t("create.loaderHelpVanilla") : t("create.loaderHelp")}
+              >
+                <div className="flex flex-col gap-2">
+                  <Select
+                    value={loader}
+                    onValueChange={setLoader}
+                    label={t("create.loader")}
+                    options={loaderOptions.map((l) => ({ value: l, label: t(`loaders.${l}`) }))}
+                  />
+                  {loader !== "vanilla" ? (
+                    <Select
+                      value={loaderVersion}
+                      onValueChange={setLoaderVersion}
+                      label={t("create.loaderVersion")}
+                      disabled={!loaderQuery.data?.length}
+                      options={(loaderQuery.data ?? []).map((v) => ({
+                        value: v.version,
+                        label: v.stable ? v.version : `${v.version} (${t("create.unstable")})`,
+                      }))}
+                      searchable={versionSearch}
+                    />
+                  ) : null}
+                </div>
+              </Field>
+            </div>
           </div>
-        </div>
-      ) : (
-        <div className="flex flex-col items-center justify-center rounded-[var(--radius-panel)] border-2 border-dashed border-white/12 px-6 py-12 text-center">
-          <FileArrowUp size={40} weight="duotone" className="text-gold-400" />
-          <p className="mt-3 font-display text-[16px] font-semibold text-bone-50">
-            {t("create.drop")}
-          </p>
-          <p className="mt-1 text-[13px] text-ash-400">{t("create.dropHint")}</p>
-          <Button className="mt-5" variant="secondary">
-            {t("create.chooseFile")}
-          </Button>
-        </div>
-      )}
-    </Dialog>
+        ) : source === "browse" ? (
+          browseFlow.body
+        ) : (
+          importFlow.body
+        )}
+      </Dialog>
+      <ManualModsDialog result={manual} onClose={() => setManual(null)} />
+    </>
   );
 }
