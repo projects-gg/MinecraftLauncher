@@ -23,6 +23,7 @@ import {
   type LaunchEventView,
 } from "@/bindings";
 import { highlights, newsHighlights } from "@/lib/news";
+import { fileNameOf } from "@/lib/paths";
 import type { AfkSettingsSaveResult, AfkSettingsView } from "./afk-settings";
 import { tauriCleanup } from "./cleanup-tauri";
 import { tauriContentApi } from "./content-tauri";
@@ -310,6 +311,7 @@ function launchEvent(e: LaunchEventView): LaunchEvent {
         type: "newScreenshots",
         count: e.count,
         recent: e.recent.map((path) => convertFileSrc(path)),
+        newest: fileNameOf(e.recent[0] ?? ""),
       };
     default:
       return { type: e.type };

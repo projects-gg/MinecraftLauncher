@@ -41,8 +41,10 @@ export interface PackNotes {
 export interface NewScreenshots {
   instanceId: string;
   count: number;
-  /** Image URLs of the newest ones (at most three). */
+  /** Image URLs of the newest ones (at most three, newest first). */
   recent: string[];
+  /** File name of the newest one, for "Kopyala". */
+  newest: string;
   /** Tells announcements of two sessions apart. */
   at: number;
 }
@@ -228,7 +230,12 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
           break;
         }
         case "newScreenshots":
-          shots = { instanceId, count: event.count, recent: event.recent };
+          shots = {
+            instanceId,
+            count: event.count,
+            recent: event.recent,
+            newest: event.newest,
+          };
           break;
         case "exited":
           set({ phase: { kind: "idle" }, newShots: shots ? { ...shots, at: Date.now() } : null });

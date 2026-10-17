@@ -130,10 +130,14 @@ function file(path: string): DroppedFile {
 }
 
 /** Thumbnails of the screenshots the next mock session takes (empty when none). */
-export function mockNewScreenshots(): { count: number; recent: string[] } | null {
+export function mockNewScreenshots(): { count: number; recent: string[]; newest: string } | null {
   const count = Number.parseInt(flag("pl.mock.shots"), 10);
   if (!Number.isFinite(count) || count <= 0) return null;
-  return { count, recent: [coverSpawn, coverPvp, coverBuild].slice(0, Math.min(3, count)) };
+  return {
+    count,
+    recent: [coverSpawn, coverPvp, coverBuild].slice(0, Math.min(3, count)),
+    newest: "2026-10-17_14.20.11.png",
+  };
 }
 
 /** How long a mock game session runs. */

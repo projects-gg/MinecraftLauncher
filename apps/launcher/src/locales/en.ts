@@ -321,6 +321,8 @@ export const en: DeepPartial<Strings> = {
     title: "{{count}} new screenshots",
     title_one: "{{count}} new screenshot",
     show: "Show",
+    copy: "Copy",
+    copied: "Copied",
   },
   drop: {
     zone: {

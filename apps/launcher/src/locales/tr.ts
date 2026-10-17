@@ -108,6 +108,8 @@ export const tr = {
   shots: {
     title: "{{count}} yeni ekran görüntüsü",
     show: "Göster",
+    copy: "Kopyala",
+    copied: "Kopyalandı",
   },
   drop: {
     zone: {

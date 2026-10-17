@@ -1,11 +1,14 @@
 // "N yeni ekran görüntüsü": after a game session that took screenshots, a toast with the newest
-// ones fanned out like prints; "Göster" opens that instance's gallery.
-import { Button, toast } from "@pl/ui";
+// ones fanned out like prints. "Kopyala" puts the newest on the clipboard (straight into Discord
+// or WhatsApp); "Göster" opens that instance's gallery.
+import { Check, CopySimple } from "@phosphor-icons/react";
+import { Button, easeOutExpo, toast } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { motion, useReducedMotion } from "motion/react";
-import { useEffect } from "react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { api } from "@/lib/api";
 import { type NewScreenshots, useLaunch } from "@/stores/launch";
 
 /** Where each print rests in the fan, back to front, by how many there are. */
@@ -54,6 +57,90 @@ function Prints({ urls }: { urls: string[] }) {
   );
 }
 
+/**
+ * "Kopyala": the newest screenshot goes on the clipboard and the label turns into "Kopyalandı"
+ * in place for a moment, as on the server pill. The button keeps the longer label's width, so
+ * "Göster" beside it never moves.
+ */
+function CopyNewest({ instanceId, fileName }: { instanceId: string; fileName: string }) {
+  const { t } = useTranslation();
+  const reduce = useReducedMotion() ?? false;
+  const [copied, setCopied] = useState(false);
+  const busy = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const copy = async () => {
+    // A double click copies once.
+    if (busy.current) return;
+    busy.current = true;
+    try {
+      const result = await api.library.copyScreenshot(instanceId, fileName);
+      if (result === "path") {
+        // Only the file's path reached the clipboard: say so rather than "Kopyalandı".
+        toast(t("instance.screenshots.copiedPath"));
+        return;
+      }
+      setCopied(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 1600);
+    } catch {
+      toast.error(t("common.copyFailed"));
+    } finally {
+      busy.current = false;
+    }
+  };
+
+  return (
+    <Button size="sm" variant="ghost" onClick={() => void copy()}>
+      <span className="grid justify-items-center *:[grid-area:1/1]">
+        <motion.span
+          className="flex items-center gap-1.5"
+          initial={false}
+          animate={{
+            opacity: copied ? 0 : 1,
+            transition: { duration: copied ? 0.1 : 0.2, ease: easeOutExpo },
+          }}
+        >
+          <CopySimple size={14} aria-hidden />
+          {t("shots.copy")}
+        </motion.span>
+        {/* Holds the width of the longer label. */}
+        <span aria-hidden className="invisible flex items-center gap-1.5">
+          <Check size={14} weight="bold" />
+          {t("shots.copied")}
+        </span>
+        <AnimatePresence>
+          {copied ? (
+            <motion.span
+              key="copied"
+              aria-hidden
+              className="flex items-center gap-1.5 text-jade-400"
+              initial={{ opacity: 0, transform: reduce ? "none" : "translateY(5px)" }}
+              animate={{
+                opacity: 1,
+                transform: reduce ? "none" : "translateY(0px)",
+                transition: { duration: 0.22, ease: easeOutExpo, delay: 0.05 },
+              }}
+              exit={{
+                opacity: 0,
+                transform: reduce ? "none" : "translateY(-4px)",
+                transition: { duration: 0.14, ease: easeOutExpo },
+              }}
+            >
+              <Check size={14} weight="bold" />
+              {t("shots.copied")}
+            </motion.span>
+          ) : null}
+        </AnimatePresence>
+      </span>
+      <span className="sr-only" aria-live="polite">
+        {copied ? t("shots.copied") : ""}
+      </span>
+    </Button>
+  );
+}
+
 function ShotsToast({
   toastId,
   shots,
@@ -67,19 +154,26 @@ function ShotsToast({
   return (
     <div className="flex w-full items-center gap-3 font-normal">
       <Prints urls={shots.recent} />
-      <p className="min-w-0 flex-1 text-[13.5px] leading-snug font-semibold text-bone-50">
-        {t("shots.title", { count: shots.count })}
-      </p>
-      <Button
-        size="sm"
-        variant="secondary"
-        onClick={() => {
-          toast.dismiss(toastId);
-          onOpen();
-        }}
-      >
-        {t("shots.show")}
-      </Button>
+      <div className="flex min-w-0 flex-1 flex-col gap-2">
+        <p className="text-[13.5px] leading-snug font-semibold text-bone-50">
+          {t("shots.title", { count: shots.count })}
+        </p>
+        <div className="flex items-center justify-end gap-1.5">
+          {shots.newest ? (
+            <CopyNewest instanceId={shots.instanceId} fileName={shots.newest} />
+          ) : null}
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              toast.dismiss(toastId);
+              onOpen();
+            }}
+          >
+            {t("shots.show")}
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
