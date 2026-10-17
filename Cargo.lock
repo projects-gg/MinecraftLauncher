@@ -4177,6 +4177,7 @@ dependencies = [
  "pl-content",
  "pl-mc",
  "pl-net",
+ "pl-team",
  "reqwest",
  "rusty-s3",
  "semver",
