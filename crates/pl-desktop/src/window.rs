@@ -1,0 +1,82 @@
+//! Default size of the main window, chosen from the screen it first opens on.
+//!
+//! The launcher opens at about 62% of the screen's width (a calm size next to other windows),
+//! never smaller than the layout's minimum and never larger than the old fixed default. After
+//! that the player's own size and position are remembered (the window-state plugin).
+
+/// The smallest size the layout is designed for; also the window's minimum size.
+pub const MIN_SIZE: (u32, u32) = (1024, 640);
+
+/// The largest default size. Players can still make the window bigger or maximize it.
+pub const MAX_SIZE: (u32, u32) = (1280, 760);
+
+/// Share of the work area's width the default window takes.
+const WIDTH_SHARE: f64 = 0.625;
+
+/// At most this share of the work area's height (short, wide screens).
+const HEIGHT_SHARE_MAX: f64 = 0.92;
+
+/// The default window size, in logical pixels, for a monitor whose work area (the screen without
+/// the taskbar or dock) is `work_width` × `work_height` logical pixels.
+///
+/// Width is 62.5% of the work area's width; height follows the layout's aspect ratio
+/// (1280 × 760). Both stay between [`MIN_SIZE`] and [`MAX_SIZE`], and the height stays inside
+/// the work area unless that would go below the minimum. Sizes are even numbers.
+///
+/// A 1920 × 1080 screen at 100% (work area 1920 × 1032) gets 1200 × 712; 1600 × 900 and
+/// 1366 × 768 screens get the minimum; 2560 × 1440 gets 1280 × 760.
+pub fn default_window_size(work_width: f64, work_height: f64) -> (u32, u32) {
+    let known = |value: f64| value.is_finite() && value > 0.0;
+    if !known(work_width) || !known(work_height) {
+        // No usable monitor information: assume the most common desktop, 1920 × 1080 at 100%.
+        return default_window_size(1920.0, 1032.0);
+    }
+    let (min_w, min_h) = (f64::from(MIN_SIZE.0), f64::from(MIN_SIZE.1));
+    let (max_w, max_h) = (f64::from(MAX_SIZE.0), f64::from(MAX_SIZE.1));
+    let even = |value: f64| (value / 2.0).round() * 2.0;
+
+    let width = even(work_width * WIDTH_SHARE).clamp(min_w, max_w);
+    let height = even(width * max_h / max_w)
+        .min(even(work_height * HEIGHT_SHARE_MAX))
+        .clamp(min_h, max_h);
+    // Both values are clamped to small positive ranges above, so the casts are exact.
+    (width as u32, height as u32)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn common_screens() {
+        // 1920 × 1080 at 100% with a 48 px taskbar: the owner's main screen.
+        assert_eq!(default_window_size(1920.0, 1032.0), (1200, 712));
+        // 1600 × 900 and 1366 × 768: the minimum.
+        assert_eq!(default_window_size(1600.0, 852.0), (1024, 640));
+        assert_eq!(default_window_size(1366.0, 728.0), (1024, 640));
+        // 1920 × 1080 at 125% is 1536 × 826 logical.
+        assert_eq!(default_window_size(1536.0, 826.0), (1024, 640));
+        // 1680 × 1050: wider than the minimum, height at the minimum.
+        assert_eq!(default_window_size(1680.0, 1002.0), (1050, 640));
+        // 2560 × 1440 and 4K at 150%: the old default, never more.
+        assert_eq!(default_window_size(2560.0, 1392.0), (1280, 760));
+        assert_eq!(default_window_size(2560.0, 1400.0), (1280, 760));
+    }
+
+    #[test]
+    fn short_or_odd_screens() {
+        // Ultrawide 2560 × 1080: width capped, height follows.
+        assert_eq!(default_window_size(2560.0, 1032.0), (1280, 760));
+        // A short wide work area keeps the window inside it.
+        assert_eq!(default_window_size(1920.0, 760.0), (1200, 700));
+        // Smaller than the minimum: the minimum (the window enforces it anyway).
+        assert_eq!(default_window_size(800.0, 560.0), (1024, 640));
+    }
+
+    #[test]
+    fn unknown_work_area_assumes_a_1080p_screen() {
+        assert_eq!(default_window_size(0.0, 0.0), (1200, 712));
+        assert_eq!(default_window_size(f64::NAN, f64::INFINITY), (1200, 712));
+        assert_eq!(default_window_size(-5.0, 900.0), (1200, 712));
+    }
+}

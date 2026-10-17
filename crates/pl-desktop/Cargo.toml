@@ -1,0 +1,23 @@
+[package]
+name = "pl-desktop"
+description = "Desktop integration without Tauri: projects:// links, desktop shortcuts, shortcut icons"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+url = { workspace = true }
+# DeepLink is exported to TypeScript by the launcher (tauri-specta).
+specta = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+# Shell links through IShellLinkW. Only features Tauri's window layer already enables, so the
+# shared `windows` build is reused.
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
