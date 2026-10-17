@@ -13,6 +13,8 @@
 //!   it: copy with progress and cancel, flush, verify, switch, and delete the old folders only
 //!   after the next start succeeded. Links inside it (junctions, symbolic links) are made again
 //!   in the copy, never copied through.
+//! - [`restart`]: the one-shot note an update leaves for the next start (AFK accounts to bring
+//!   back, the window, the page, the release notes).
 //!
 //! Everything here is blocking file work; the app runs it on a blocking thread.
 
@@ -23,6 +25,7 @@ mod links;
 pub mod logfile;
 pub mod mask;
 pub mod relocate;
+pub mod restart;
 pub mod usage;
 
 pub use error::{Error, Result, TargetProblem};

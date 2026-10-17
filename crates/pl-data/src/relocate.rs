@@ -107,7 +107,7 @@ pub fn pointed_root(file: &Path) -> Option<PathBuf> {
 
 /// Writes JSON atomically and durably: the temporary file is flushed to disk before it replaces
 /// the old one (the pointer and the move markers decide which folder is deleted).
-fn write_json_atomic(file: &Path, value: &impl Serialize) -> Result<()> {
+pub(crate) fn write_json_atomic(file: &Path, value: &impl Serialize) -> Result<()> {
     if let Some(parent) = file.parent() {
         std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
     }
