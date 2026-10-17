@@ -1,6 +1,7 @@
 import { enAfkAlerts } from "./en-afk-alerts";
 import { enDisk } from "./en-disk";
 import { enGraphics } from "./en-graphics";
+import { enLibraryDrop } from "./en-library-drop";
 import { enOverview } from "./en-overview";
 import { enReminders } from "./en-reminders";
 import { enTuning } from "./en-tuning";
@@ -23,6 +24,7 @@ export const en: DeepPartial<Strings> = {
   graphics: enGraphics,
   disk: enDisk,
   overview: enOverview,
+  libraryDrop: enLibraryDrop,
   social: {
     title: "Friends",
     pill: {
