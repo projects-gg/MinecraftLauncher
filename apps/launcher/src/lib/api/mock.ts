@@ -487,7 +487,22 @@ const projectsMods: ModEntry[] = [
   mod("Continuity", "3.0.0", "PepperCode1", "Connected textures support.", false, false),
 ];
 
+/**
+ * `?emptyContent=1`: instances other than the official one start without mods and packs (the
+ * empty tabs' drop zones); mods dropped onto the window are listed.
+ */
 function detailFor(summary: InstanceSummary): InstanceDetail {
+  const detail = fullDetailFor(summary);
+  if (summary.managed || mockFlag("emptyContent") !== "1") return detail;
+  return {
+    ...detail,
+    mods: mockExtraMods.get(summary.id) ?? [],
+    resourcePacks: [],
+    shaderPacks: [],
+  };
+}
+
+function fullDetailFor(summary: InstanceSummary): InstanceDetail {
   const modded = summary.loader !== "vanilla";
   return {
     ...summary,
@@ -594,7 +609,23 @@ const running = new Map<string, { cancelled: boolean }>();
 
 export const mockApi: LauncherApi = {
   ...mockAfk,
-  ...createMockConveniences((id) => instances.find((i) => i.id === id)?.loader),
+  ...createMockConveniences(
+    (id) => instances.find((i) => i.id === id)?.loader,
+    (id, files) =>
+      mockExtraMods.set(id, [
+        ...(mockExtraMods.get(id) ?? []),
+        ...files.map((f) => ({
+          fileName: f.name,
+          name: f.name.replace(/\.jar$/i, ""),
+          version: "1.0.0",
+          authors: [],
+          description: "",
+          enabled: true,
+          fromPack: false,
+          sizeBytes: 380_000,
+        })),
+      ]),
+  ),
   content: createMockContent({ createInstance: (spec) => mockApi.createInstance(spec) }),
   ...mockAccounts,
   skins: createMockSkins(mockAccountName),
