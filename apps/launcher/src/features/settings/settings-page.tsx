@@ -448,14 +448,21 @@ function GameDefaults() {
   const glides = useMotionPrefs().layout;
   return (
     <>
+      {/* The same control as an instance's memory, so "Otomatik" reads the same everywhere. */}
       <Row
         title={t("settings.game.memory")}
         help={auto ? t("settings.game.memoryAutoHelp") : t("settings.game.memoryHelp")}
       >
-        <Switch
-          checked={auto}
-          onCheckedChange={(v) => p.set("defaultMaxMemoryMb", v ? null : Math.min(4096, ceiling))}
-          label={t("settings.game.memoryAuto")}
+        <Segmented
+          value={auto ? "auto" : "custom"}
+          onValueChange={(v) =>
+            p.set("defaultMaxMemoryMb", v === "auto" ? null : Math.min(4096, ceiling))
+          }
+          label={t("settings.game.memory")}
+          options={[
+            { value: "auto", label: t("instance.settings.memoryAuto") },
+            { value: "custom", label: t("instance.settings.memoryCustom") },
+          ]}
         />
       </Row>
       <AnimatePresence initial={false}>
