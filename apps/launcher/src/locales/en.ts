@@ -1,3 +1,6 @@
+import { enAfkAlerts } from "./en-afk-alerts";
+import { enReminders } from "./en-reminders";
+import { enTuning } from "./en-tuning";
 import type { Strings } from "./tr";
 
 /**
@@ -11,6 +14,9 @@ type DeepPartial<T> = {
 
 // English is secondary: missing keys fall back to Turkish. Keep the key order of tr.ts.
 export const en: DeepPartial<Strings> = {
+  reminders: enReminders,
+  tuning: enTuning,
+  afkAlerts: enAfkAlerts,
   social: {
     title: "Friends",
     pill: {
