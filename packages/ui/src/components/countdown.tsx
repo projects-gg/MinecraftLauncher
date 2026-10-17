@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { cn } from "../lib/cn";
+import { usePerf } from "../perf";
 
 function parts(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -13,7 +14,8 @@ function parts(ms: number) {
 
 /**
  * Event countdown in Tektur digits. Units are localized by the caller. The day cell shows only
- * while there are days left ("00 gün" said nothing); hours stay even at zero.
+ * while there are days left ("00 gün" said nothing); hours stay even at zero. It stops ticking
+ * while nobody can see it (`usePerf().unseen`) and is right again the moment it is back.
  */
 export function Countdown({
   to,
@@ -25,10 +27,13 @@ export function Countdown({
   className?: string;
 }) {
   const [now, setNow] = useState(() => Date.now());
+  const { unseen } = usePerf();
   useEffect(() => {
+    if (unseen) return;
+    setNow(Date.now());
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [unseen]);
   const p = parts(to.getTime() - now);
   const cells: Array<[number, string]> = [
     ...(p.days > 0 ? [[p.days, units.days] as [number, string]] : []),

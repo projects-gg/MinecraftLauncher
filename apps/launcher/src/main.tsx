@@ -53,6 +53,7 @@ function Providers() {
     <PerfProvider
       performanceMode={performanceMode}
       ambientPaused={gameRunning || away || updateLocked}
+      unseen={away}
     >
       <TooltipProvider>
         <QueryClientProvider client={queryClient}>

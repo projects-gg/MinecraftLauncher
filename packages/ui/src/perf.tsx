@@ -17,17 +17,31 @@ interface PerfState {
   performanceMode: boolean;
   /** Ambient motion is additionally paused while the game runs or the window is hidden. */
   ambientPaused: boolean;
+  /**
+   * Nobody can see the page (the window is in the tray or minimized, or the page is hidden):
+   * live readouts such as a countdown stop ticking. Every change on screen keeps WebView2
+   * drawing frames for about a second, so a once-a-second tick nobody saw cost ~1.5 % of a CPU
+   * core in the tray (OPT1).
+   */
+  unseen: boolean;
 }
 
-const PerfContext = createContext<PerfState>({ performanceMode: false, ambientPaused: false });
+const PerfContext = createContext<PerfState>({
+  performanceMode: false,
+  ambientPaused: false,
+  unseen: false,
+});
 
 export function PerfProvider({
   performanceMode,
   ambientPaused = false,
+  unseen = false,
   children,
 }: {
   performanceMode: boolean;
   ambientPaused?: boolean;
+  /** The window is out of sight (the page being hidden is added here). */
+  unseen?: boolean;
   children: ReactNode;
 }) {
   const [hidden, setHidden] = useState(() =>
@@ -46,8 +60,12 @@ export function PerfProvider({
   }, [performanceMode]);
 
   const value = useMemo(
-    () => ({ performanceMode, ambientPaused: ambientPaused || hidden }),
-    [performanceMode, ambientPaused, hidden],
+    () => ({
+      performanceMode,
+      ambientPaused: ambientPaused || hidden,
+      unseen: unseen || hidden,
+    }),
+    [performanceMode, ambientPaused, unseen, hidden],
   );
   // `reducedMotion="user"`: under the OS setting, transform and layout animations that a
   // component did not already calm down itself jump to their end, while fades still play.
