@@ -28,10 +28,11 @@ const layers: Record<Variant, { border: string; fill: string; text: string }> = 
   },
 };
 
+// docs/design.md §6: 28 / 32 / 38 px tall (P1; were 28 / 35 / 42).
 const sizes: Record<Size, { box: string; cut: string }> = {
-  sm: { box: "h-8 px-3 text-[13px] gap-1.5", cut: "[--cut:6px]" },
-  md: { box: "h-10 px-4 text-sm gap-2", cut: "[--cut:7px]" },
-  lg: { box: "h-12 px-6 text-[15px] gap-2.5", cut: "[--cut:9px]" },
+  sm: { box: "h-8 px-3 text-[12.5px] gap-1.5", cut: "[--cut:6px]" },
+  md: { box: "h-[32px] px-3.5 text-[13px] gap-2", cut: "[--cut:6px]" },
+  lg: { box: "h-[38px] px-5 text-[14px] gap-2", cut: "[--cut:8px]" },
 };
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -57,7 +58,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       type={type ?? "button"}
       className={cn(
         "group relative isolate inline-flex shrink-0 cursor-pointer items-center justify-center whitespace-nowrap select-none",
-        "transition-transform duration-100 active:translate-y-px focus-visible:outline-none",
+        // Press feedback: a quick 97% squeeze (released at the same speed, interruptible).
+        "transition-transform duration-150 ease-out active:scale-[0.97] focus-visible:outline-none",
         "disabled:pointer-events-none disabled:opacity-45",
         dims.box,
         dims.cut,
@@ -110,9 +112,11 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
         type={type ?? "button"}
         aria-label={label}
         className={cn(
-          "inline-flex cursor-pointer items-center justify-center rounded-md text-ash-300 transition-colors duration-150",
-          "hover:bg-white/7 hover:text-bone-100 active:translate-y-px disabled:pointer-events-none disabled:opacity-45",
-          size === "sm" ? "size-8" : "size-10",
+          // Drawn at 28 / 32 px; the hit area reaches 4 px further on every side.
+          "hit-area relative inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md text-ash-300",
+          "transition-[background-color,color,transform] duration-150 ease-out",
+          "hover:bg-white/7 hover:text-bone-100 active:scale-[0.94] disabled:pointer-events-none disabled:opacity-45",
+          size === "sm" ? "size-8" : "size-[32px]",
           active && "bg-white/8 text-gold-300",
           className,
         )}

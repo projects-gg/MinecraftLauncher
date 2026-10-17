@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from "motion/react";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn";
 import { easeOutExpo } from "../motion";
 import { useAmbientMotion, useInteractionMotion } from "../perf";
@@ -29,11 +29,23 @@ export function PlayButton({ state, onPlay, onCancel, labels, className }: PlayB
   const ambient = useAmbientMotion();
   const animate = useInteractionMotion();
   const [hover, setHover] = useState(false);
+  // "İptal" waits after OYNA: until the pointer has left the button once (or, from the keyboard,
+  // a moment), so a double click or a resting pointer never cancels the launch it just started.
+  const [cancelArmed, setCancelArmed] = useState(true);
+  const pointerInside = useRef(false);
+  useEffect(() => {
+    if (cancelArmed) return;
+    const id = window.setTimeout(() => {
+      if (!pointerInside.current) setCancelArmed(true);
+    }, 800);
+    return () => window.clearTimeout(id);
+  }, [cancelArmed]);
 
   const isGold = state.kind === "ready" || state.kind === "update";
   const isWorking = state.kind === "working";
   const disabled =
     state.kind === "launching" || state.kind === "running" || state.kind === "unavailable";
+  const showCancel = hover && Boolean(onCancel) && cancelArmed;
 
   let text: ReactNode;
   let key: string;
@@ -48,16 +60,15 @@ export function PlayButton({ state, onPlay, onCancel, labels, className }: PlayB
       break;
     case "working":
       // Turkish puts the percent sign first; Tektur's % glyph is ornate, so it is set in Figtree.
-      text =
-        hover && onCancel ? (
-          labels.cancel
-        ) : (
-          <>
-            <span className="mr-0.5 font-sans text-[19px] font-bold">%</span>
-            {Math.floor(state.percent)}
-          </>
-        );
-      key = hover && onCancel ? "cancel" : "percent";
+      text = showCancel ? (
+        labels.cancel
+      ) : (
+        <>
+          <span className="mr-0.5 font-sans text-[16px] font-bold">%</span>
+          {Math.floor(state.percent)}
+        </>
+      );
+      key = showCancel ? "cancel" : "percent";
       break;
     case "launching":
       text = state.label;
@@ -74,16 +85,20 @@ export function PlayButton({ state, onPlay, onCancel, labels, className }: PlayB
   }
 
   const handleClick = () => {
-    if (isWorking) onCancel?.();
-    else if (isGold) onPlay();
+    if (isWorking) {
+      if (cancelArmed) onCancel?.();
+    } else if (isGold) {
+      setCancelArmed(false);
+      onPlay();
+    }
   };
 
   return (
-    <div className={cn("relative isolate h-16 w-[236px]", className)}>
+    <div className={cn("relative isolate h-[48px] w-[204px]", className)}>
       {/* Glow: not clipped, so it can bloom past the chamfered edges. */}
       <motion.div
         aria-hidden
-        className="pointer-events-none absolute -inset-x-6 -inset-y-4 -z-20 rounded-[50%] bg-[radial-gradient(closest-side,rgb(240_184_73/0.55),rgb(232_154_44/0.18)_55%,transparent)] blur-xl"
+        className="pointer-events-none absolute -inset-x-5 -inset-y-3 -z-20 rounded-[50%] bg-[radial-gradient(closest-side,rgb(240_184_73/0.55),rgb(232_154_44/0.18)_55%,transparent)] blur-xl"
         initial={false}
         animate={{ opacity: isGold ? (hover ? 1 : 0.7) : isWorking ? 0.35 : 0 }}
         transition={{ duration: 0.3 }}
@@ -91,14 +106,21 @@ export function PlayButton({ state, onPlay, onCancel, labels, className }: PlayB
       {/* Socket plate */}
       <div
         aria-hidden
-        className="chamfer absolute -inset-[5px] -z-10 bg-[linear-gradient(180deg,rgb(63_10_10/0.9),rgb(10_9_12/0.95))] [--cut:17px]"
+        className="chamfer absolute -inset-[4px] -z-10 bg-[linear-gradient(180deg,rgb(63_10_10/0.9),rgb(10_9_12/0.95))] [--cut:15px]"
       />
       <button
         type="button"
         disabled={disabled}
         onClick={handleClick}
-        onPointerEnter={() => setHover(true)}
-        onPointerLeave={() => setHover(false)}
+        onPointerEnter={() => {
+          pointerInside.current = true;
+          setHover(true);
+        }}
+        onPointerLeave={() => {
+          pointerInside.current = false;
+          setHover(false);
+          setCancelArmed(true);
+        }}
         aria-label={
           typeof text === "string"
             ? text
@@ -114,12 +136,12 @@ export function PlayButton({ state, onPlay, onCancel, labels, className }: PlayB
       >
         <span
           aria-hidden
-          className="chamfer absolute -inset-[4px] bg-gold-200 opacity-0 transition-opacity [--cut:16px] group-focus-visible:opacity-100"
+          className="chamfer absolute -inset-[4px] bg-gold-200 opacity-0 transition-opacity [--cut:14px] group-focus-visible:opacity-100"
         />
         <span
           aria-hidden
           className={cn(
-            "chamfer absolute inset-0 overflow-hidden [--cut:14px] transition-[background,filter] duration-300",
+            "chamfer absolute inset-0 overflow-hidden [--cut:12px] transition-[background,filter] duration-300",
             isGold &&
               "bg-[linear-gradient(180deg,var(--color-gold-200),var(--color-gold-400)_38%,var(--color-gold-500)_62%,var(--color-gold-600))] group-hover:brightness-[1.07]",
             isWorking && "bg-obsidian-800",
@@ -131,12 +153,15 @@ export function PlayButton({ state, onPlay, onCancel, labels, className }: PlayB
           )}
         >
           {/* Inner bevel */}
-          <span className="chamfer absolute inset-[2px] [--cut:13px] shadow-[inset_0_1px_0_rgb(255_255_255/0.55),inset_0_-2px_0_rgb(63_10_10/0.35)]" />
+          <span className="chamfer absolute inset-[2px] [--cut:11px] shadow-[inset_0_1px_0_rgb(255_255_255/0.55),inset_0_-2px_0_rgb(63_10_10/0.35)]" />
           {isWorking ? (
+            // The fill slides in from the left (transform only, no layout work per step).
             <motion.span
-              className="absolute inset-y-0 left-0 bg-[linear-gradient(180deg,var(--color-gold-400),var(--color-gold-600))]"
+              className="absolute inset-0 bg-[linear-gradient(180deg,var(--color-gold-400),var(--color-gold-600))]"
               initial={false}
-              animate={{ width: `${Math.min(100, Math.max(0, state.percent))}%` }}
+              animate={{
+                transform: `translateX(${Math.min(100, Math.max(0, state.percent)) - 100}%)`,
+              }}
               transition={{ duration: 0.35, ease: easeOutExpo }}
             />
           ) : null}
@@ -148,18 +173,19 @@ export function PlayButton({ state, onPlay, onCancel, labels, className }: PlayB
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.span
               key={key}
-              initial={animate ? { opacity: 0, y: 8 } : false}
+              // Reduced motion keeps the cross-fade, without the rise.
+              initial={{ opacity: 0, y: animate ? 8 : 0 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={animate ? { opacity: 0, y: -6 } : undefined}
-              transition={{ duration: 0.22, ease: easeOutExpo }}
+              exit={{ opacity: 0, y: animate ? -6 : 0 }}
+              transition={{ duration: animate ? 0.22 : 0.14, ease: easeOutExpo }}
               className={cn(
                 "font-display leading-none font-bold tracking-[0.08em] uppercase",
-                isGold && "text-[26px] text-gold-ink",
-                state.kind === "launching" && "text-[18px] tracking-[0.06em] text-gold-ink",
-                !isGold && state.kind !== "launching" && "text-[22px]",
+                isGold && "text-[23px] text-gold-ink",
+                state.kind === "launching" && "text-[16px] tracking-[0.06em] text-gold-ink",
+                !isGold && state.kind !== "launching" && "text-[19px]",
                 isWorking && (key === "cancel" ? "text-flare-400" : "text-bone-50 tabular-nums"),
                 state.kind === "running" && "text-jade-400",
-                state.kind === "unavailable" && "text-[16px] text-ash-400",
+                state.kind === "unavailable" && "text-[14px] text-ash-300",
               )}
             >
               {text}

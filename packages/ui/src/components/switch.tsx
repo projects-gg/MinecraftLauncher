@@ -32,14 +32,15 @@ export function Switch({
         onCheckedChange={onCheckedChange}
         disabled={disabled}
         className={cn(
-          "relative h-[22px] w-[38px] shrink-0 cursor-pointer rounded-full bg-obsidian-700 ring-1 ring-white/10 transition-colors duration-200",
+          "group relative h-[20px] w-[34px] shrink-0 cursor-pointer rounded-full bg-obsidian-700 ring-1 ring-white/10 transition-colors duration-200",
           "data-[state=checked]:bg-gold-500 data-[state=checked]:ring-gold-400/60 disabled:cursor-not-allowed disabled:opacity-50",
         )}
       >
+        {/* The thumb stretches toward its travel while pressed, like a physical switch. */}
         <RadixSwitch.Thumb
           className={cn(
-            "block size-[16px] translate-x-[3px] rounded-full bg-bone-100 shadow-[0_1px_3px_rgb(10_9_12/0.6)] transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
-            "data-[state=checked]:translate-x-[19px] data-[state=checked]:bg-gold-ink",
+            "block size-[14px] origin-left translate-x-[3px] rounded-full bg-bone-100 shadow-[0_1px_3px_rgb(10_9_12/0.6)] transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
+            "group-active:scale-x-[1.18] data-[state=checked]:origin-right data-[state=checked]:translate-x-[17px] data-[state=checked]:bg-gold-ink",
           )}
         />
       </RadixSwitch.Root>

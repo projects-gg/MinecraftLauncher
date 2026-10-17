@@ -23,12 +23,21 @@ export {
   type SelectOption,
   Slider,
 } from "./components/forms";
-export { Menu, type MenuItem } from "./components/menu";
+export { ContextMenu, Menu, type MenuItem } from "./components/menu";
 export { PlayButton, type PlayState } from "./components/play-button";
 export { Switch } from "./components/switch";
 export { type TabItem, TabPanel, Tabs } from "./components/tabs";
 export { Toaster, toast } from "./components/toaster";
 export { Tooltip, TooltipProvider } from "./components/tooltip";
+export {
+  EntranceGate,
+  GatedMotion,
+  gateEntrance,
+  prewarmImages,
+  useEntranceReady,
+} from "./entrance";
 export { cn } from "./lib/cn";
 export * from "./motion";
 export { PerfProvider, useAmbientMotion, useInteractionMotion, usePerf } from "./perf";
+export { fold, matchesQuery } from "./search";
+export { observeSkippedViewTransitions } from "./view-transitions";

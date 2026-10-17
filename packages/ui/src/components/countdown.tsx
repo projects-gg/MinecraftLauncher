@@ -34,13 +34,13 @@ export function Countdown({
     [p.seconds, units.seconds],
   ];
   return (
-    <div className={cn("flex items-end gap-3", className)} role="timer">
+    <div className={cn("flex items-end gap-2.5", className)} role="timer">
       {cells.map(([value, unit]) => (
         <div key={unit} className="flex flex-col items-start">
-          <span className="font-display text-[26px] leading-none font-semibold text-bone-50 tabular-nums">
+          <span className="font-display text-[22px] leading-none font-semibold text-bone-50 tabular-nums">
             {String(value).padStart(2, "0")}
           </span>
-          <span className="mt-1 text-[11px] font-medium text-ash-400">{unit}</span>
+          <span className="mt-1 text-[11px] font-medium text-ash-300">{unit}</span>
         </div>
       ))}
     </div>

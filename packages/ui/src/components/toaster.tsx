@@ -5,21 +5,26 @@ export function Toaster() {
   return (
     <Sonner
       position="bottom-right"
-      offset={{ bottom: 104, right: 24 }}
+      offset={{ bottom: 88, right: 20 }}
       gap={10}
       toastOptions={{
         unstyled: true,
         classNames: {
+          // Not `glass-strong`: see `toast-surface` in styles.css.
           toast:
-            "glass-strong flex w-[340px] items-start gap-3 rounded-[var(--radius-panel)] p-3.5 text-[13px] text-bone-100 shadow-[0_18px_48px_rgb(34_6_6/0.5)]",
+            "toast-surface flex w-[320px] items-start gap-3 rounded-[var(--radius-panel)] p-3 text-[13px] text-bone-100",
           title: "font-semibold text-bone-50",
           description: "mt-0.5 text-ash-300",
+          // `pointer-events-auto`: a modal sheet turns pointer events off outside itself, the
+          // toasts included; their buttons must still work (the sheet ignores those clicks).
           actionButton:
-            "ml-auto shrink-0 rounded-md bg-gold-500 px-2.5 py-1 text-[12px] font-semibold text-gold-ink",
+            "pointer-events-auto ml-auto shrink-0 cursor-pointer rounded-md bg-gold-500 px-2.5 py-1 text-[12px] font-semibold text-gold-ink transition-[filter,transform] duration-150 ease-out hover:brightness-110 active:scale-[0.97]",
           cancelButton:
-            "ml-auto shrink-0 rounded-md bg-white/8 px-2.5 py-1 text-[12px] text-bone-100",
-          error: "[&_[data-title]]:text-flare-400",
-          success: "[&_[data-title]]:text-jade-400",
+            "pointer-events-auto ml-auto shrink-0 cursor-pointer rounded-md bg-white/8 px-2.5 py-1 text-[12px] text-bone-100 transition-[background-color,transform] duration-150 ease-out hover:bg-white/12 active:scale-[0.97]",
+          // The state is the icon's colour; the sentence stays legible bone (a whole line of green
+          // or red text shouts).
+          error: "[&_[data-icon]]:text-flare-400",
+          success: "[&_[data-icon]]:text-jade-400",
         },
       }}
     />

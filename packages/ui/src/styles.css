@@ -27,19 +27,62 @@
   --color-ember-900: #3f0a0a;
   --color-ember-700: #7a2416;
   --color-jade-400: #5fcb8e;
+  --color-flare-300: #f6836f;
   --color-flare-400: #f0624d;
 
   --font-display: "Tektur Variable", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Figtree Variable", ui-sans-serif, system-ui, sans-serif;
+
+  /* Type scale (docs/design.md §3). Display sizes are Tektur, the rest Figtree. The hero follows
+     the window: 40 px at 1024 wide, 44 px at the 1200 px default, 54 px at most. */
+  --text-hero: clamp(40px, calc(2.4vw + 15px), 54px);
+  --text-hero--line-height: 1;
+  --text-page: 24px;
+  --text-page--line-height: 1.15;
+  --text-section: 17px;
+  --text-section--line-height: 1.25;
+  --text-title: 15px;
+  --text-title--line-height: 1.3;
+  --text-body: 13.5px;
+  --text-body--line-height: 1.5;
+  --text-ui: 13px;
+  --text-ui--line-height: 1.45;
+  --text-meta: 12.5px;
+  --text-meta--line-height: 1.4;
+  --text-caption: 12px;
+  --text-caption--line-height: 1.35;
+  --text-micro: 11px;
+  --text-micro--line-height: 1.3;
+
+  /* Shell and page metrics (docs/design.md §4). `px-page` follows the window: 22 px at
+     1024 wide, 26 px at 1200, 40 px at most. */
+  --spacing-titlebar: 34px;
+  --spacing-rail: 60px;
+  --spacing-commandbar: 72px;
+  --spacing-page: clamp(20px, 2.2vw, 40px);
+  --spacing-news: clamp(280px, 24vw, 320px);
 
   --radius-panel: 10px;
   --radius-head: 4px;
 
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out-quart: cubic-bezier(0.76, 0, 0.24, 1);
+  /* iOS-like drawer curve: sheets and the page cross-fade. */
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 
   --animate-shimmer: shimmer 1.8s linear infinite;
   --animate-kenburns: kenburns 48s ease-in-out infinite alternate;
+  --animate-indeterminate: indeterminate 1.5s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+
+  /* A 35%-wide fill sweeping across its track. */
+  @keyframes indeterminate {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(300%);
+    }
+  }
 
   @keyframes shimmer {
     from {
@@ -60,6 +103,38 @@
   }
 }
 
+/* Motion keyframes used by the utilities below (outside @theme so they are always emitted). */
+/* Popovers, menus, tooltips: grow from 96% near their trigger, never from nothing. */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+@keyframes pop-out {
+  to {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+}
+/* Tab panels and swapped content: rise 4 px into place. */
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
 @layer base {
   html {
     color-scheme: dark;
@@ -75,6 +150,18 @@
     overflow: hidden;
     user-select: none;
     -webkit-user-select: none;
+    /* Long Turkish words break instead of pushing a layout wider (only when a word cannot fit). */
+    overflow-wrap: break-word;
+  }
+
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
   }
 
   /* Text people may want to copy stays selectable. */
@@ -114,11 +201,11 @@
   );
 }
 
-/* Translucent obsidian over the art. Falls back to solid in Performance mode. */
+/* Translucent obsidian over the art. Falls back to solid in Performance mode.
+   Write only `backdrop-filter`: the build adds the -webkit- prefix where a target needs it. */
 @utility glass {
   background: color-mix(in oklab, var(--color-obsidian-900) 74%, transparent);
   backdrop-filter: blur(20px) saturate(135%);
-  -webkit-backdrop-filter: blur(20px) saturate(135%);
   border: 1px solid rgb(255 255 255 / 0.06);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
 }
@@ -126,9 +213,22 @@
 @utility glass-strong {
   background: color-mix(in oklab, var(--color-obsidian-900) 88%, transparent);
   backdrop-filter: blur(24px) saturate(130%);
-  -webkit-backdrop-filter: blur(24px) saturate(130%);
   border: 1px solid rgb(255 255 255 / 0.07);
   box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06);
+}
+
+/* Toasts. Inside Sonner's list `backdrop-filter` never reaches the page (Chromium/WebView2: no
+   blur, the switches and text behind a toast showed through its tint; a copy of the toast
+   outside the list blurs fine). So a toast is nearly solid obsidian with the glass edge, the
+   inner highlight and a faint sheen at the top: legible over anything, still of the glass family. */
+@utility toast-surface {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.045), transparent 60%),
+    color-mix(in oklab, var(--color-obsidian-900) 99%, transparent);
+  border: 1px solid rgb(255 255 255 / 0.08);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.07),
+    0 18px 48px rgb(34 6 6 / 0.5);
 }
 
 @utility text-shadow-art {
@@ -137,11 +237,60 @@
     0 6px 28px rgb(34 6 6 / 0.55);
 }
 
+/* Page titles: one size on every page (docs/design.md §3). */
+@utility page-title {
+  font-family: var(--font-display);
+  font-size: var(--text-page);
+  line-height: var(--text-page--line-height);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  color: var(--color-bone-50);
+}
+
+/* A hit area larger than the drawn control (small icon buttons stay ≥ 40 px to the pointer).
+   The element must be positioned (`relative`); set --hit to change the extension (4 px). */
+@utility hit-area {
+  &:not(.sr-only)::after {
+    content: "";
+    position: absolute;
+    inset: calc(var(--hit, 4px) * -1);
+  }
+}
+
+/* Radix popovers, menus, selects and tooltips: grow from their trigger, leave a little faster.
+   Tooltips that open instantly after another one (data-state="instant-open") do not animate. */
+@utility pop-motion {
+  transform-origin: var(
+    --radix-dropdown-menu-content-transform-origin,
+    var(
+      --radix-context-menu-content-transform-origin,
+      var(
+        --radix-select-content-transform-origin,
+        var(
+          --radix-popover-content-transform-origin,
+          var(--radix-tooltip-content-transform-origin, center)
+        )
+      )
+    )
+  );
+  &[data-state="open"],
+  &[data-state="delayed-open"] {
+    animation: pop-in 160ms var(--ease-out-expo);
+  }
+  &[data-state="closed"] {
+    animation: pop-out 110ms var(--ease-out-expo) forwards;
+  }
+}
+
+/* Content that replaces other content in place (tab panels, steps without a direction). */
+@utility panel-in {
+  animation: panel-in 220ms var(--ease-out-expo);
+}
+
 @layer components {
   html[data-perf="on"] .glass,
   html[data-perf="on"] .glass-strong {
     backdrop-filter: none;
-    -webkit-backdrop-filter: none;
     background: var(--color-obsidian-900);
   }
 
@@ -149,28 +298,28 @@
     .glass,
     .glass-strong {
       backdrop-filter: none;
-      -webkit-backdrop-filter: none;
       background: var(--color-obsidian-900);
     }
   }
 
   /* Long-form news text. */
   .prose-news {
-    font-size: 16px;
+    font-size: 15.5px;
     line-height: 1.65;
     color: var(--color-bone-100);
     max-width: 68ch;
+    hyphens: auto;
   }
   .prose-news h2 {
     font-family: var(--font-display);
-    font-size: 22px;
+    font-size: 20px;
     font-weight: 600;
     margin: 1.6em 0 0.5em;
     color: var(--color-bone-50);
   }
   .prose-news h3 {
     font-family: var(--font-display);
-    font-size: 17px;
+    font-size: 16.5px;
     font-weight: 600;
     margin: 1.4em 0 0.4em;
   }
@@ -227,6 +376,16 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* Reduced motion keeps fades (docs/design.md §5): these surfaces still fade, without moving. */
+  .pop-motion[data-state="open"],
+  .pop-motion[data-state="delayed-open"],
+  .panel-in {
+    animation: fade-in 140ms ease-out !important;
+  }
+  .pop-motion[data-state="closed"] {
+    animation: fade-out 100ms ease-out forwards !important;
   }
 }
 

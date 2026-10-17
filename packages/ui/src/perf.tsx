@@ -1,5 +1,16 @@
-import { useReducedMotion } from "motion/react";
+import { MotionConfig, useReducedMotion } from "motion/react";
 import { createContext, type ReactNode, useContext, useEffect, useMemo, useState } from "react";
+
+/**
+ * The page's CSP nonce (Tauri puts one on its own styles). Motion injects a style sheet for
+ * AnimatePresence's `popLayout`; under the app's CSP an injected sheet without the nonce is
+ * blocked and leaving elements stay in the flow, so motion gets the nonce.
+ */
+function styleNonce(): string | undefined {
+  if (typeof document === "undefined") return undefined;
+  const element = document.querySelector<HTMLElement>("style[nonce], script[nonce]");
+  return element?.nonce || undefined;
+}
 
 interface PerfState {
   /** User-chosen Performance mode: no ambient motion, no blur, no video. */
@@ -22,6 +33,7 @@ export function PerfProvider({
   const [hidden, setHidden] = useState(() =>
     typeof document === "undefined" ? false : document.hidden,
   );
+  const [nonce] = useState(styleNonce);
 
   useEffect(() => {
     const onChange = () => setHidden(document.hidden);
@@ -37,7 +49,15 @@ export function PerfProvider({
     () => ({ performanceMode, ambientPaused: ambientPaused || hidden }),
     [performanceMode, ambientPaused, hidden],
   );
-  return <PerfContext.Provider value={value}>{children}</PerfContext.Provider>;
+  // `reducedMotion="user"`: under the OS setting, transform and layout animations that a
+  // component did not already calm down itself jump to their end, while fades still play.
+  return (
+    <PerfContext.Provider value={value}>
+      <MotionConfig nonce={nonce} reducedMotion="user">
+        {children}
+      </MotionConfig>
+    </PerfContext.Provider>
+  );
 }
 
 export function usePerf() {

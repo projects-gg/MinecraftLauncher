@@ -1,15 +1,25 @@
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { Tabs as RadixTabs } from "radix-ui";
-import { type ReactNode, useId } from "react";
+import { type ReactNode, useEffect, useId, useRef, type WheelEvent } from "react";
 import { cn } from "../lib/cn";
+import { enter, leave } from "../motion";
 
 export interface TabItem<T extends string> {
   value: T;
   label: string;
   count?: number;
+  /**
+   * Something waits in the tab (unsaved changes): a small gold dot by the label, read out as
+   * this text. It sits in the tab's padding, so it never moves the other tabs.
+   */
+  marker?: string;
 }
 
-/** Underline tabs with a gold indicator that slides between items. */
+/**
+ * Underline tabs with a gold indicator that slides between items. Labels never wrap: when the
+ * row is wider than its room it scrolls sideways (the mouse wheel scrolls it too) and the
+ * chosen tab is kept in view.
+ */
 export function Tabs<T extends string>({
   value,
   onValueChange,
@@ -26,18 +36,42 @@ export function Tabs<T extends string>({
   className?: string;
 }) {
   const layoutId = useId();
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the chosen tab changes
+  useEffect(() => {
+    const list = listRef.current;
+    if (!list || list.scrollWidth <= list.clientWidth) return;
+    const active = list.querySelector<HTMLElement>("[data-state=active]");
+    active?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [value]);
+
+  const onWheel = (event: WheelEvent<HTMLDivElement>) => {
+    const list = event.currentTarget;
+    if (list.scrollWidth <= list.clientWidth || Math.abs(event.deltaX) > Math.abs(event.deltaY)) {
+      return;
+    }
+    list.scrollLeft += event.deltaY;
+  };
+
   return (
     <RadixTabs.Root
       value={value}
       onValueChange={(v) => onValueChange(v as T)}
       className={cn("flex min-h-0 flex-1 flex-col", className)}
     >
-      <RadixTabs.List aria-label={label} className="flex shrink-0 gap-1 border-b border-white/8">
+      <RadixTabs.List
+        ref={listRef}
+        aria-label={label}
+        onWheel={onWheel}
+        // The divider is an inset shadow so the indicator can sit on it inside the scroll box.
+        className="flex shrink-0 gap-0.5 overflow-x-auto overflow-y-hidden shadow-[inset_0_-1px_0_rgb(255_255_255/0.08)] [scrollbar-width:none]"
+      >
         {items.map((item) => (
           <RadixTabs.Trigger
             key={item.value}
             value={item.value}
-            className="group relative flex h-10 cursor-pointer items-center gap-1.5 px-3 text-[13.5px] font-medium text-ash-400 transition-colors hover:text-bone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300 data-[state=active]:text-bone-50"
+            className="group relative flex h-[34px] shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-[13px] font-medium whitespace-nowrap text-ash-300 transition-colors duration-150 hover:text-bone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:ring-inset data-[state=active]:text-bone-50"
           >
             {item.label}
             {typeof item.count === "number" ? (
@@ -45,10 +79,24 @@ export function Tabs<T extends string>({
                 {item.count}
               </span>
             ) : null}
+            <AnimatePresence initial={false}>
+              {item.marker ? (
+                <motion.span
+                  key="marker"
+                  className="pointer-events-none absolute top-[7px] right-[3px] flex"
+                  initial={{ opacity: 0, transform: "scale(0.6)" }}
+                  animate={{ opacity: 1, transform: "scale(1)", transition: enter(0.2) }}
+                  exit={{ opacity: 0, transform: "scale(0.6)", transition: leave(0.2) }}
+                >
+                  <span aria-hidden className="size-1.5 rounded-full bg-gold-400" />
+                  <span className="sr-only">{item.marker}</span>
+                </motion.span>
+              ) : null}
+            </AnimatePresence>
             {value === item.value ? (
               <motion.span
                 layoutId={layoutId}
-                className="absolute inset-x-2 -bottom-px h-[2px] bg-gold-400"
+                className="absolute inset-x-2 bottom-0 h-[2px] bg-gold-400"
                 transition={{ type: "spring", stiffness: 480, damping: 38 }}
               />
             ) : null}
@@ -72,7 +120,7 @@ export function TabPanel({
   return (
     <RadixTabs.Content
       value={value}
-      className={cn("min-h-0 flex-1 overflow-y-auto pt-5 outline-none", className)}
+      className={cn("panel-in min-h-0 flex-1 overflow-y-auto pt-4 outline-none", className)}
     >
       {children}
     </RadixTabs.Content>

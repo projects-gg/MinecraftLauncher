@@ -1,21 +1,26 @@
 import type { HTMLAttributes, ReactNode } from "react";
 import { cn } from "../lib/cn";
 
-/** Small chamfered label for real categories (news category, loader, channel). */
+/**
+ * Small chamfered label for real categories (news category, loader, channel). `onArt`: the gold
+ * label over key art, on a dark base so it reads on any season's picture.
+ */
 export function Chip({
   tone = "neutral",
   className,
   children,
   ...props
-}: HTMLAttributes<HTMLSpanElement> & { tone?: "neutral" | "gold" | "jade" | "flare" }) {
+}: HTMLAttributes<HTMLSpanElement> & { tone?: "neutral" | "gold" | "jade" | "flare" | "onArt" }) {
   return (
     <span
       className={cn(
-        "chamfer inline-flex h-[22px] items-center gap-1 px-2 text-[11.5px] font-semibold [--cut:5px]",
+        "chamfer inline-flex h-[20px] shrink-0 items-center gap-1 px-[7px] text-[11.5px] font-semibold whitespace-nowrap [--cut:5px]",
         tone === "neutral" && "bg-white/9 text-bone-100",
         tone === "gold" && "bg-gold-500/28 text-gold-200",
         tone === "jade" && "bg-jade-400/15 text-jade-400",
-        tone === "flare" && "bg-flare-400/15 text-flare-400",
+        tone === "flare" && "bg-flare-400/15 text-flare-300",
+        tone === "onArt" &&
+          "bg-[linear-gradient(rgb(232_154_44/0.3),rgb(232_154_44/0.3)),linear-gradient(rgb(10_9_12/0.78),rgb(10_9_12/0.78))] text-gold-200",
         className,
       )}
       {...props}
@@ -25,7 +30,10 @@ export function Chip({
   );
 }
 
-/** Thin progress bar. Omit `value` for an indeterminate shimmer. */
+/**
+ * Thin progress bar. Omit `value` for an indeterminate sweep. The fill moves with `transform`
+ * only (no layout work per update), easing between the steps a job reports.
+ */
 export function Progress({
   value,
   className,
@@ -36,18 +44,24 @@ export function Progress({
   label: string;
 }) {
   const determinate = typeof value === "number";
+  const percent = determinate ? Math.min(100, Math.max(0, value)) : 0;
   return (
     <div
       role="progressbar"
       aria-label={label}
       aria-valuemin={0}
       aria-valuemax={100}
-      aria-valuenow={determinate ? Math.round(value) : undefined}
+      aria-valuenow={determinate ? Math.round(percent) : undefined}
       className={cn("relative h-1.5 overflow-hidden rounded-full bg-white/8", className)}
     >
       <div
-        className="absolute inset-y-0 left-0 rounded-full bg-[linear-gradient(90deg,var(--color-gold-600),var(--color-gold-400))] transition-[width] duration-300 ease-out"
-        style={{ width: determinate ? `${Math.min(100, Math.max(0, value))}%` : "35%" }}
+        className={cn(
+          "absolute inset-y-0 left-0 rounded-full bg-[linear-gradient(90deg,var(--color-gold-600),var(--color-gold-400))]",
+          determinate
+            ? "w-full transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)]"
+            : "w-[35%] animate-indeterminate",
+        )}
+        style={determinate ? { transform: `translateX(${percent - 100}%)` } : undefined}
       >
         <div className="absolute inset-0 overflow-hidden rounded-full">
           <div className="h-full w-full animate-shimmer bg-[linear-gradient(90deg,transparent,rgb(255_255_255/0.35),transparent)]" />
@@ -138,28 +152,40 @@ export function PlayerHead({
   );
 }
 
-/** Empty states invite an action; illustration optional. */
+/**
+ * Empty states invite an action. A picture (`illustration`) for page-sized states, or the small
+ * chamfered mark (`icon`) the instance tabs use for their own.
+ */
 export function EmptyState({
   title,
   body,
   action,
   illustration,
+  icon,
   className,
 }: {
   title: string;
   body?: string;
   action?: ReactNode;
   illustration?: string;
+  icon?: ReactNode;
   className?: string;
 }) {
   return (
-    <div className={cn("flex flex-col items-center px-6 py-10 text-center", className)}>
+    <div className={cn("flex flex-col items-center px-6 py-8 text-center", className)}>
       {illustration ? (
-        <img src={illustration} alt="" className="mb-4 size-36 object-contain" draggable={false} />
+        <img src={illustration} alt="" className="mb-3 size-28 object-contain" draggable={false} />
+      ) : icon ? (
+        <span
+          aria-hidden
+          className="chamfer mb-4 flex size-14 items-center justify-center bg-obsidian-800 text-gold-400/85 [--cut:8px]"
+        >
+          {icon}
+        </span>
       ) : null}
-      <p className="font-display text-lg font-semibold text-bone-50">{title}</p>
-      {body ? <p className="mt-1.5 max-w-[42ch] text-ash-400">{body}</p> : null}
-      {action ? <div className="mt-5">{action}</div> : null}
+      <p className="font-display text-[16px] font-semibold text-bone-50">{title}</p>
+      {body ? <p className="mt-1.5 max-w-[42ch] text-[13px] text-ash-300">{body}</p> : null}
+      {action ? <div className="mt-4">{action}</div> : null}
     </div>
   );
 }
