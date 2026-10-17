@@ -1,0 +1,31 @@
+[package]
+name = "pl-data"
+description = "Data folder housekeeping for Projects Launcher: usage, cleanup policy, support bundles, launcher log files and moving the folder"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+pl-mc = { workspace = true }
+tokio-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+regex = { workspace = true }
+walkdir = { workspace = true }
+zip = { workspace = true }
+jiff = { workspace = true }
+dirs = { workspace = true }
+sysinfo = { workspace = true }
+fs4 = "1.1.0"
+
+[target.'cfg(windows)'.dependencies]
+# Junctions (folder links that need no extra rights) when the data folder moves; the same
+# `windows` build pl-auth and pl-desktop use.
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_IO"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
