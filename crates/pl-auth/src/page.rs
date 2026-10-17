@@ -53,17 +53,17 @@ pub(crate) fn result_page(success: bool, reason: Option<&str>) -> String {
     let (class, title, lead, icon) = if success {
         (
             "ok",
-            "Hesabınız onaylandı",
-            "Girişiniz Projects Launcher&#39;da birkaç saniye içinde tamamlanacak.".to_owned(),
+            "Hesabın onaylandı",
+            "Girişin Projects Launcher&#39;da birkaç saniye içinde tamamlanacak.".to_owned(),
             r#"<path d="M9 18.5l6 6L27 12"/>"#,
         )
     } else {
         let lead = match reason {
             Some(reason) => format!(
-                "{} Projects Launcher&#39;da yeniden deneyebilirsiniz.",
+                "{} Projects Launcher&#39;da tekrar dene.",
                 escape_html(reason)
             ),
-            None => "Projects Launcher&#39;da yeniden deneyebilirsiniz.".to_owned(),
+            None => "Projects Launcher&#39;da tekrar dene.".to_owned(),
         };
         (
             "fail",
@@ -83,7 +83,7 @@ pub(crate) fn result_page(success: bool, reason: Option<&str>) -> String {
             "<div class=\"brand\"><i aria-hidden=\"true\"></i>Projects Launcher</div>",
             "<div class=\"mark\" aria-hidden=\"true\"><svg viewBox=\"0 0 36 36\">{icon}</svg></div>",
             "<h1>{title}</h1><p class=\"lead\">{lead}</p>",
-            "<p class=\"hint\">Bu sekmeyi kapatıp <b>Projects Launcher</b>&#39;a dönebilirsiniz.</p>",
+            "<p class=\"hint\">Bu sekmeyi kapatıp <b>Projects Launcher</b>&#39;a dönebilirsin.</p>",
             "</main></body></html>"
         ),
         title = title,
@@ -120,18 +120,19 @@ mod tests {
         assert!(ok.contains("lang=\"tr\""));
         assert!(ok.contains("#0b0907"));
         assert!(ok.contains("#E8B040"));
-        assert!(ok.contains("Hesabınız onaylandı"));
+        assert!(ok.contains("Hesabın onaylandı"));
         assert!(ok.contains("card ok"));
         assert!(ok.contains("birkaç saniye içinde tamamlanacak"));
         assert!(ok.contains("Bu sekmeyi kapatıp"));
+        assert!(ok.contains("dönebilirsin."));
         assert!(!ok.contains("<script"));
 
         let fail = result_page(false, Some("Giriş izni <verilmedi>."));
         assert!(fail.contains("Giriş tamamlanamadı"));
         assert!(fail.contains("card fail"));
-        assert!(fail.contains("Giriş izni &lt;verilmedi&gt;. Projects Launcher&#39;da yeniden"));
         assert!(
-            result_page(false, None).contains("Projects Launcher&#39;da yeniden deneyebilirsiniz.")
+            fail.contains("Giriş izni &lt;verilmedi&gt;. Projects Launcher&#39;da tekrar dene.")
         );
+        assert!(result_page(false, None).contains("Projects Launcher&#39;da tekrar dene."));
     }
 }

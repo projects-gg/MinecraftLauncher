@@ -268,7 +268,7 @@ fn page_reason(error: &AuthError) -> &'static str {
         }
         AuthError::Authorize { .. } => "Microsoft giriş isteğini tamamlamadı.",
         AuthError::StateMismatch { .. } => {
-            "Giriş yanıtı doğrulanamadı; güvenliğiniz için işlem durduruldu."
+            "Giriş yanıtı doğrulanamadı, güvenliğin için giriş durduruldu."
         }
         _ => "Microsoft'tan giriş onayı alınamadı.",
     }
@@ -339,7 +339,7 @@ mod tests {
         let response = browser_get(v4(port), "/?code=M.C123-abc&state=st4te").await;
         assert!(response.starts_with("HTTP/1.1 200 OK"), "{response}");
         assert!(response.contains("Content-Type: text/html; charset=utf-8"));
-        assert!(response.contains("Hesabınız onaylandı"));
+        assert!(response.contains("Hesabın onaylandı"));
         assert!(response.contains("Cache-Control: no-store"));
         assert_eq!(task.await.unwrap().unwrap(), "M.C123-abc");
     }

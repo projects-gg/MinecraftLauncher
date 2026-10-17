@@ -1803,7 +1803,7 @@ mod tests {
         assert!(
             invalid_grant
                 .user_message_tr()
-                .contains("Kayıtlı oturumunuzun süresi dolmuş")
+                .contains("Oturumunun süresi doldu")
         );
 
         let xbox_down = refresh_error(|request| {

@@ -989,8 +989,8 @@ fn describe(
         CrashKind::MemoryReserve => (
             s("Ayrılan bellek çok yüksek"),
             s(
-                "Oyuna ayrılan en yüksek bellek, bilgisayarınızın şu anda verebileceğinden fazla. \
-               Kurulum ayarlarından en yüksek bellek değerini düşürüp yeniden deneyin.",
+                "Oyuna ayrılan en yüksek bellek, bilgisayarının şu an verebileceğinden fazla. \
+               Kurulum ayarlarından en yüksek belleği düşürüp tekrar dene.",
             ),
             vec![SuggestedAction::LowerMaxMemory {
                 suggested_mb: input.max_memory_mb.map(|m| round_mb(m / 2).max(1024)),
@@ -999,8 +999,8 @@ fn describe(
         CrashKind::OutOfMemory => (
             s("Oyunun belleği yetmedi"),
             s(
-                "Oyun, kendisine ayrılan bellek dolduğu için kapandı. Kurulum ayarlarından ayrılan \
-               belleği artırın ya da arka planda açık uygulamaları kapatıp yeniden deneyin.",
+                "Oyun, kendisine ayrılan bellek dolduğu için kapandı. Kurulum ayarlarından belleği \
+               artır ya da arka planda açık uygulamaları kapatıp tekrar dene.",
             ),
             vec![SuggestedAction::IncreaseMaxMemory {
                 suggested_mb: input.max_memory_mb.map(|m| round_mb(m + m / 2)),
@@ -1010,7 +1010,7 @@ fn describe(
             s("Java ayarlarında geçersiz bir değer var"),
             s(
                 "Kurulumun Java argümanlarından biri oyunun açılmasını engelledi. Java \
-               argümanlarını varsayılana döndürüp yeniden deneyin.",
+               argümanlarını varsayılana döndürüp tekrar dene.",
             ),
             vec![SuggestedAction::ResetJvmArguments],
         ),
@@ -1022,7 +1022,7 @@ fn describe(
             (
                 s("Java sürümü bu oyun için eski"),
                 format!(
-                    "{need}Kurulum ayarlarında Java seçimini otomatik yapın; uygun Java sizin \
+                    "{need}Kurulum ayarlarında Java seçimini Otomatik yap; uygun Java senin \
                      için indirilir."
                 ),
                 vec![SuggestedAction::UseAutomaticJava {
@@ -1040,7 +1040,7 @@ fn describe(
             (
                 s("Java sürümü bu oyun için çok yeni"),
                 format!(
-                    "{need}Kurulum ayarlarında Java seçimini otomatik yapın; uygun Java sizin \
+                    "{need}Kurulum ayarlarında Java seçimini Otomatik yap; uygun Java senin \
                      için indirilir."
                 ),
                 vec![SuggestedAction::UseAutomaticJava {
@@ -1051,9 +1051,9 @@ fn describe(
         CrashKind::GraphicsDriver => (
             s("Ekran kartı hazırlanamadı"),
             s(
-                "Oyun ekran kartınızı hazırlayamadan kapandı. Bu genellikle eski bir ekran kartı \
-               sürücüsünden kaynaklanır: sürücünüzü güncelleyip yeniden deneyin. Sorun sürerse \
-               modsuz (vanilla) bir kurulumla deneyin.",
+                "Oyun ekran kartını hazırlayamadan kapandı. Bu çoğu zaman eski bir ekran kartı \
+               sürücüsünden olur: sürücünü güncelleyip tekrar dene. Sorun sürerse modsuz \
+               (vanilla) bir kurulumla dene.",
             ),
             vec![
                 SuggestedAction::UpdateGraphicsDriver,
@@ -1064,13 +1064,13 @@ fn describe(
             let hint = if mods.is_empty() {
                 s(
                     "Kurulu modlardan bazıları bu Minecraft sürümüyle ya da birbirleriyle uyumlu \
-                   değil. Modlarınızı güncelleyin ya da sorunlu olanları kaldırın; oyun modsuz \
+                   değil. Modlarını güncelle ya da sorunlu olanları kaldır; oyun modsuz \
                    açılıyorsa sorun modlardadır.",
                 )
             } else {
                 format!(
                     "Şu modlar bu Minecraft sürümüyle ya da birbirleriyle uyumlu değil: {}. Bu \
-                     modları güncelleyin ya da kaldırın, ardından yeniden deneyin.",
+                     modları güncelle ya da kaldır, sonra tekrar dene.",
                     list(mods)
                 )
             };
@@ -1090,12 +1090,12 @@ fn describe(
             let hint = if mods.is_empty() {
                 s(
                     "Bazı modların çalışması için gereken başka modlar eksik. Eksik modları kurup \
-                   yeniden deneyin.",
+                   tekrar dene.",
                 )
             } else {
                 format!(
                     "Bazı modların çalışması için başka modlar gerekiyor. Eksik olanlar: {}. \
-                     Bunları kurup yeniden deneyin.",
+                     Bunları kurup tekrar dene.",
                     list(mods)
                 )
             };
@@ -1111,12 +1111,12 @@ fn describe(
             let hint = if mods.is_empty() {
                 s(
                     "Mod klasöründe aynı modun birden fazla kopyası var. Fazla kopyaları kaldırıp \
-                   yeniden deneyin.",
+                   tekrar dene.",
                 )
             } else {
                 format!(
                     "Mod klasöründe aynı modun birden fazla kopyası var: {}. Fazla kopyaları \
-                     kaldırıp yeniden deneyin.",
+                     kaldırıp tekrar dene.",
                     list(mods)
                 )
             };
@@ -1132,17 +1132,17 @@ fn describe(
             let hint = match mods.len() {
                 0 => s(
                     "Kurulu modlardan biri bu sürümle uyuşmuyor ya da hatalı çalışıyor. \
-                        Modlarınızı güncelleyin; oyun modsuz (vanilla) açılıyorsa sorun mod \
+                        Modlarını güncelle; oyun modsuz (vanilla) açılıyorsa sorun mod \
                         tarafındadır.",
                 ),
                 1 => format!(
-                    "Şu mod oyunun açılmasını engelledi: {}. Modu güncelleyin ya da kaldırıp \
-                     yeniden deneyin.",
+                    "Şu mod oyunun açılmasını engelledi: {}. Modu güncelle ya da kaldırıp \
+                     tekrar dene.",
                     mods[0]
                 ),
                 _ => format!(
-                    "Şu modlar oyunun açılmasını engelledi: {}. Bu modları güncelleyin ya da \
-                     kaldırıp yeniden deneyin.",
+                    "Şu modlar oyunun açılmasını engelledi: {}. Bu modları güncelle ya da \
+                     kaldırıp tekrar dene.",
                     list(mods)
                 ),
             };
@@ -1160,24 +1160,23 @@ fn describe(
         }
         CrashKind::CorruptedFiles => (
             s("Oyun dosyaları bozuk görünüyor"),
-            s("Oyunun bazı dosyaları eksik ya da bozuk. Kurulumu onarıp yeniden deneyin."),
+            s("Oyunun bazı dosyaları eksik ya da bozuk. Kurulumu onarıp tekrar dene."),
             vec![SuggestedAction::RepairInstallation],
         ),
         CrashKind::AccessDenied => (
             s("Oyun dosyalarına erişilemedi"),
             s(
-                "Oyun bazı dosyalara erişemediği için kapandı. Güvenlik yazılımınız başlatıcıyı ya \
-               da Java'yı engelliyor olabilir; başlatıcıyı güvenlik yazılımının istisnalarına \
-               ekleyip yeniden deneyin.",
+                "Oyun bazı dosyalara erişemediği için kapandı. Güvenlik yazılımın launcher'ı ya da \
+               Java'yı engelliyor olabilir; launcher'ı güvenlik yazılımının istisnalarına ekleyip \
+               tekrar dene.",
             ),
             vec![SuggestedAction::AddAntivirusException],
         ),
         CrashKind::NoOutput => (
             s("Oyun hiç açılmadan kapandı"),
             s(
-                "Oyun hiçbir çıktı üretmeden kapandı. Güvenlik yazılımınız Java'yı engelliyor \
-               olabilir; başlatıcıyı istisnalara ekleyip yeniden deneyin. Sorun sürerse kurulumu \
-               onarın.",
+                "Güvenlik yazılımın Java'yı engelliyor olabilir. Launcher'ı istisnalara ekleyip \
+               tekrar dene; sorun sürerse kurulumu onar.",
             ),
             vec![
                 SuggestedAction::AddAntivirusException,
@@ -1187,8 +1186,8 @@ fn describe(
         CrashKind::Unknown => (
             s("Oyun beklenmedik şekilde kapandı"),
             s(
-                "Oyun bir hata nedeniyle kapandı. Ayrıntılar çökme raporunda ve oyun kaydında yer \
-               alıyor; sorun sürerse kaydı destek ekibiyle paylaşabilirsiniz.",
+                "Oyun bir hata yüzünden kapandı. Ayrıntılar çökme raporunda ve oyun kaydında; \
+               sorun sürerse kaydı destek ekibiyle paylaşabilirsin.",
             ),
             Vec::new(),
         ),

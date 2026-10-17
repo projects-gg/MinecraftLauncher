@@ -98,14 +98,14 @@ pub enum OfflineNameProblem {
 impl OfflineNameProblem {
     pub fn user_message_tr(self) -> &'static str {
         match self {
-            Self::Empty => "Bir kullanıcı adı girin.",
-            Self::TooShort => "Kullanıcı adı en az 3 karakter olmalıdır.",
-            Self::TooLong => "Kullanıcı adı en fazla 16 karakter olabilir.",
+            Self::Empty => "Bir oyuncu adı yaz.",
+            Self::TooShort => "Oyuncu adı en az 3 karakter olmalı.",
+            Self::TooLong => "Oyuncu adı en fazla 16 karakter olabilir.",
             Self::InvalidCharacters => {
-                "Kullanıcı adında yalnızca A–Z harfleri, rakamlar ve alt çizgi (_) kullanılabilir. \
-                 Boşluk, Türkçe karakter ve diğer simgeler kullanılamaz."
+                "Oyuncu adında yalnızca İngilizce harf, rakam ve alt çizgi (_) kullanılabilir. \
+                 Boşluk ve Türkçe harf kullanılamaz."
             }
-            Self::Taken => "Bu adla bir çevrimdışı hesap zaten var.",
+            Self::Taken => "Bu adla bir hesabın zaten var.",
         }
     }
 }
@@ -368,37 +368,32 @@ impl AuthError {
 
     /// Friendly Turkish explanation that tells the player what to do. Contains no error codes.
     pub fn user_message_tr(&self) -> String {
-        const RELOGIN: &str = "Kayıtlı oturumunuzun süresi dolmuş. Lütfen Microsoft hesabınızla \
-                               yeniden giriş yapın.";
+        const RELOGIN: &str = "Oturumunun süresi doldu. Microsoft hesabınla yeniden giriş yap.";
         const RATE_LIMITED: &str =
-            "Kısa sürede çok fazla deneme yapıldı. Birkaç dakika bekleyip yeniden deneyin.";
-        const MC_DOWN: &str =
-            "Minecraft sunucuları şu anda yanıt vermiyor. Biraz sonra yeniden deneyin.";
-        const XBOX_DOWN: &str = "Xbox Live şu anda yanıt vermiyor. Biraz sonra yeniden deneyin.";
+            "Kısa sürede çok fazla deneme yapıldı. Birkaç dakika bekleyip tekrar dene.";
+        const MC_DOWN: &str = "Minecraft sunucuları şu an yanıt vermiyor. Biraz sonra tekrar dene.";
+        const XBOX_DOWN: &str = "Xbox Live şu an yanıt vermiyor. Biraz sonra tekrar dene.";
 
         let text = match self {
             Self::Cancelled => "Giriş iptal edildi.",
             Self::BrowserTimeout { .. } => {
-                "Giriş süresi doldu. Tarayıcıdaki adımları beş dakika içinde tamamlayıp yeniden \
-                 deneyin."
+                "Giriş süresi doldu. Tarayıcıdaki adımları beş dakika içinde tamamlayıp tekrar \
+                 dene."
             }
             Self::Loopback { .. } => {
-                "Tarayıcıdan gelecek yanıt için yerel bağlantı açılamadı. Güvenlik yazılımınızın \
-                 başlatıcıyı engellemediğinden emin olup yeniden deneyin."
+                "Giriş yanıtı tarayıcıdan alınamadı. Güvenlik yazılımın launcher'ı engelliyor \
+                 olabilir; izin verip tekrar dene."
             }
             Self::StateMismatch { .. } => {
-                "Giriş yanıtı doğrulanamadı ve güvenliğiniz için işlem durduruldu. Lütfen yeniden \
-                 deneyin."
+                "Giriş yanıtı doğrulanamadı, güvenliğin için giriş durduruldu. Tekrar dene."
             }
-            Self::MissingCode { .. } => {
-                "Microsoft'tan giriş onayı alınamadı. Lütfen yeniden deneyin."
-            }
+            Self::MissingCode { .. } => "Microsoft'tan giriş onayı alınamadı. Tekrar dene.",
             Self::Authorize { error, .. } => {
                 if error.eq_ignore_ascii_case("access_denied") {
                     "Giriş izni verilmedi. Devam etmek için Microsoft sayfasında istenen izni \
-                     onaylamanız gerekir."
+                     onayla."
                 } else {
-                    "Microsoft giriş sayfası isteği reddetti. Lütfen yeniden deneyin."
+                    "Microsoft giriş sayfası isteği reddetti. Tekrar dene."
                 }
             }
             Self::MicrosoftToken {
@@ -412,30 +407,30 @@ impl AuthError {
                     if *step == AuthStep::Refresh {
                         RELOGIN
                     } else {
-                        "Giriş onayı geçersiz ya da süresi dolmuş. Lütfen yeniden giriş yapın."
+                        "Giriş onayı geçersiz ya da süresi dolmuş. Yeniden giriş yap."
                     }
                 } else if matches!(error, "unauthorized_client" | "invalid_client") {
-                    "Microsoft ile giriş şu anda kullanılamıyor. Başlatıcıyı güncelleyin; sorun \
-                     sürerse destek ekibimize ulaşın."
+                    "Microsoft ile giriş şu an kullanılamıyor. Launcher'ı güncelle; sorun sürerse \
+                     destek ekibimize yaz."
                 } else if is_transient_status(*status) {
-                    "Microsoft giriş hizmetine şu anda ulaşılamıyor. Biraz sonra yeniden deneyin."
+                    "Microsoft giriş hizmetine şu an ulaşılamıyor. Biraz sonra tekrar dene."
                 } else {
-                    "Microsoft girişi tamamlanamadı. Lütfen yeniden deneyin."
+                    "Microsoft girişi tamamlanamadı. Tekrar dene."
                 }
             }
             Self::NoRefreshToken { .. } => RELOGIN,
             Self::DeviceCodeExpired { .. } => {
-                "Giriş kodunun süresi doldu. Yeni bir kod alıp yeniden deneyin."
+                "Giriş kodunun süresi doldu. Yeni bir kod alıp tekrar dene."
             }
             Self::DeviceCodeDeclined { .. } => {
-                "Giriş isteği reddedildi. Devam etmek için isteği onaylamanız gerekir."
+                "Giriş isteği reddedildi. Devam etmek için isteği onayla."
             }
             Self::XboxLive { status, .. } => {
                 if is_transient_status(*status) {
                     XBOX_DOWN
                 } else {
-                    "Xbox Live oturumu açılamadı. Microsoft hesabınızın bir Xbox profili \
-                     olduğundan emin olup yeniden deneyin."
+                    "Xbox Live oturumu açılamadı. Microsoft hesabının bir Xbox profili olduğundan \
+                     emin olup tekrar dene."
                 }
             }
             Self::Xsts { xerr, status, .. } => {
@@ -449,25 +444,24 @@ impl AuthError {
                 app_registration: true,
                 ..
             } => {
-                "Microsoft ile giriş şu anda kullanılamıyor. Sorun hesabınızda değil, başlatıcının \
-                 yetkilendirmesinde. Bu sürede çevrim dışı hesapla oynayabilirsiniz."
+                "Microsoft ile giriş şu an kullanılamıyor. Sorun hesabında değil, launcher'da. Bu \
+                 sürede çevrimdışı hesapla oynayabilirsin."
             }
             Self::MinecraftLogin { status, .. } => match status {
                 401 | 403 => {
-                    "Minecraft hesabınız doğrulanamadı. Oyunun bu Microsoft hesabıyla satın \
-                     alındığından emin olun."
+                    "Minecraft hesabın doğrulanamadı. Oyunu bu Microsoft hesabıyla satın \
+                     aldığından emin ol."
                 }
                 429 => RATE_LIMITED,
                 _ => MC_DOWN,
             },
             Self::NoLicense { .. } => {
-                "Bu Microsoft hesabında Minecraft: Java Edition bulunamadı. Oyunu satın aldığınız \
-                 hesapla giriş yaptığınızdan emin olun."
+                "Bu Microsoft hesabında Minecraft: Java Edition yok. Oyunu satın aldığın hesapla \
+                 giriş yap."
             }
             Self::NoProfile { .. } => {
-                "Bu hesapta Minecraft: Java Edition var ancak henüz bir oyuncu profili \
-                 oluşturulmamış. minecraft.net adresinde oturum açıp oyuncu adınızı belirledikten \
-                 sonra yeniden deneyin."
+                "Bu hesapta Minecraft: Java Edition var ama henüz oyuncu profili yok. \
+                 minecraft.net'te giriş yapıp oyuncu adını seç, sonra tekrar dene."
             }
             Self::MinecraftApi { step, status, .. } => {
                 if *status == 429 {
@@ -477,75 +471,67 @@ impl AuthError {
                 } else {
                     match (step, status) {
                         (AuthStep::Skin, 400) => {
-                            "Skin, Minecraft tarafından kabul edilmedi. 64×64 veya 64×32 \
-                             boyutunda bir PNG dosyası seçin."
+                            "Minecraft bu skini kabul etmedi. 64×64 ya da 64×32 boyutunda bir \
+                             PNG dosyası seç."
                         }
-                        (AuthStep::Skin, _) => "Skin güncellenemedi. Lütfen yeniden deneyin.",
-                        (AuthStep::Cape, _) => "Pelerin değiştirilemedi. Lütfen yeniden deneyin.",
-                        (AuthStep::Texture, _) => {
-                            "Skin görüntüsü indirilemedi. Lütfen yeniden deneyin."
-                        }
-                        (AuthStep::Entitlements, _) => {
-                            "Oyun lisansı denetlenemedi. Lütfen yeniden deneyin."
-                        }
-                        _ => "Minecraft profili alınamadı. Lütfen yeniden deneyin.",
+                        (AuthStep::Skin, _) => "Skin güncellenemedi. Tekrar dene.",
+                        (AuthStep::Cape, _) => "Pelerin değiştirilemedi. Tekrar dene.",
+                        (AuthStep::Texture, _) => "Skin görüntüsü indirilemedi. Tekrar dene.",
+                        (AuthStep::Entitlements, _) => "Oyun lisansı denetlenemedi. Tekrar dene.",
+                        _ => "Minecraft profili alınamadı. Tekrar dene.",
                     }
                 }
             }
             Self::InvalidSkinFile { problem } => match problem {
                 SkinFileProblem::NotPng => {
-                    "Seçilen dosya bir PNG görüntüsü değil. Skin olarak 64×64 veya 64×32 \
-                     boyutunda bir PNG dosyası seçin."
+                    "Bu dosya PNG değil. Skin olarak 64×64 ya da 64×32 boyutunda bir PNG dosyası \
+                     seç."
                 }
-                SkinFileProblem::BadDimensions { .. } => {
-                    "Skin görüntüsü 64×64 veya 64×32 piksel boyutunda olmalıdır."
-                }
+                SkinFileProblem::BadDimensions { .. } => "Skin 64×64 ya da 64×32 piksel olmalı.",
                 SkinFileProblem::TooLarge => {
-                    "Skin dosyası çok büyük. Lütfen daha küçük bir PNG dosyası seçin."
+                    "Skin dosyası çok büyük. Daha küçük bir PNG dosyası seç."
                 }
                 SkinFileProblem::InvalidUrl => {
-                    "Girilen skin bağlantısı geçerli değil. Lütfen bir görsel bağlantısı girin."
+                    "Bu skin bağlantısı geçerli değil. Bir görsel bağlantısı yaz."
                 }
                 SkinFileProblem::Unreadable { .. } => {
-                    "Skin dosyası okunamadı. Dosyanın yerinde durduğundan emin olup yeniden \
-                     deneyin."
+                    "Skin dosyası okunamadı. Dosyanın yerinde olduğundan emin olup tekrar dene."
                 }
             },
             Self::NotInSkinHistory => "Bu skin artık geçmişte yok.",
             Self::Network { .. } => {
-                "Sunuculara ulaşılamadı. İnternet bağlantınızı kontrol edip yeniden deneyin."
+                "Sunuculara ulaşılamadı. İnternet bağlantını kontrol edip tekrar dene."
             }
             Self::UnexpectedResponse { .. } => {
-                "Sunucudan beklenmedik bir yanıt geldi. Lütfen yeniden deneyin."
+                "Sunucudan beklenmedik bir yanıt geldi. Tekrar dene."
             }
             Self::InvalidOfflineName { problem } => problem.user_message_tr(),
             Self::AccountNotFound { .. } => {
-                "Hesap bulunamadı. Hesap listesi değişmiş olabilir; lütfen yeniden deneyin."
+                "Hesap bulunamadı. Hesap listesi değişmiş olabilir, tekrar dene."
             }
             Self::NotMicrosoftAccount { .. } => {
                 "Bu işlem yalnızca Microsoft hesaplarında kullanılabilir."
             }
             Self::MissingSecrets { .. } => {
-                "Bu hesabın oturum bilgileri bulunamadı. Lütfen Microsoft hesabınızla yeniden \
-                 giriş yapın."
+                "Bu hesabın oturum bilgileri bulunamadı. Microsoft hesabınla yeniden giriş yap."
             }
             Self::Keychain {
                 unavailable: true, ..
             } => {
-                "Sistemin güvenli parola deposuna erişilemedi. Depo kilitliyse kilidini açıp \
-                 yeniden deneyin. Linux'ta GNOME Keyring veya KWallet gibi bir parola deposunun \
-                 çalıştığından emin olun."
+                "Sistemin güvenli parola deposuna erişilemedi. Kilitliyse kilidini açıp tekrar \
+                 dene. Linux'ta GNOME Keyring ya da KWallet gibi bir parola deposunun \
+                 çalıştığından emin ol."
             }
             Self::Keychain { .. } => {
-                "Sistemin güvenli parola deposunda bir sorun oluştu. Lütfen yeniden deneyin."
+                "Sistemin güvenli parola deposunda bir sorun oluştu. Tekrar dene."
             }
             Self::Storage { op, .. } => {
                 if *op == "read" {
                     "Hesap bilgileri okunamadı. Veri klasörüne erişim izni olduğundan emin olup \
-                     yeniden deneyin."
+                     tekrar dene."
                 } else {
                     "Hesap bilgileri kaydedilemedi. Diskte yer olduğundan ve veri klasörüne yazma \
-                     izni bulunduğundan emin olun."
+                     izni bulunduğundan emin ol."
                 }
             }
         };
@@ -753,15 +739,15 @@ pub(crate) fn is_transient_status(status: u16) -> bool {
 pub(crate) fn xsts_message(xerr: Option<u64>) -> &'static str {
     match xerr {
         Some(2_148_916_233) => {
-            "Bu Microsoft hesabına bağlı bir Xbox profili yok. xbox.com adresinden ücretsiz bir \
-             profil oluşturup yeniden deneyin."
+            "Bu Microsoft hesabına bağlı bir Xbox profili yok. xbox.com'dan ücretsiz bir profil \
+             oluşturup tekrar dene."
         }
         Some(2_148_916_235) => {
-            "Xbox Live, hesabınızın kayıtlı olduğu ülkede veya bölgede kullanılamıyor."
+            "Xbox Live, hesabının kayıtlı olduğu ülkede veya bölgede kullanılamıyor."
         }
         Some(2_148_916_236 | 2_148_916_237) => {
-            "Hesabınız için yetişkin doğrulaması gerekiyor. xbox.com üzerinden doğrulamayı \
-             tamamlayıp yeniden deneyin."
+            "Hesabın için yetişkin doğrulaması gerekiyor. xbox.com'da doğrulamayı tamamlayıp \
+             tekrar dene."
         }
         Some(2_148_916_238) => {
             "Bu hesap bir çocuk hesabı. Xbox Live'a girebilmesi için bir yetişkinin bu hesabı \
@@ -771,14 +757,14 @@ pub(crate) fn xsts_message(xerr: Option<u64>) -> &'static str {
             "Bu Microsoft hesabı Xbox tarafından engellendiği için Minecraft'a giriş yapılamıyor."
         }
         Some(2_148_916_229) => {
-            "Hesabınızda çevrim içi oyun izni kısıtlanmış. Ebeveyniniz bu izni Microsoft aile \
-             ayarlarından verebilir."
+            "Hesabında çevrimiçi oyun izni kısıtlanmış. Ailen bu izni Microsoft aile \
+             ayarlarından açabilir."
         }
         Some(2_148_916_234) => {
-            "Xbox kullanım koşulları henüz kabul edilmemiş. xbox.com adresinde oturum açıp \
-             koşulları kabul ettikten sonra yeniden deneyin."
+            "Xbox kullanım koşulları henüz kabul edilmemiş. xbox.com'da giriş yapıp koşulları \
+             kabul et, sonra tekrar dene."
         }
-        _ => "Xbox Live doğrulaması tamamlanamadı. Lütfen yeniden deneyin.",
+        _ => "Xbox Live doğrulaması tamamlanamadı. Tekrar dene.",
     }
 }
 
@@ -865,7 +851,7 @@ mod tests {
             (2_148_916_237, "yetişkin doğrulaması"),
             (2_148_916_238, "çocuk hesabı"),
             (2_148_916_227, "engellendiği"),
-            (2_148_916_229, "Ebeveyniniz"),
+            (2_148_916_229, "aile ayarlarından"),
             (2_148_916_234, "kullanım koşulları"),
         ];
         for (xerr, needle) in cases {
@@ -972,10 +958,14 @@ mod tests {
             at: now(),
         };
         let refresh = token(AuthStep::Refresh);
-        assert!(refresh.user_message_tr().contains("Kayıtlı oturumunuzun"));
+        assert!(
+            refresh
+                .user_message_tr()
+                .contains("Oturumunun süresi doldu")
+        );
         assert!(refresh.details().contains("Adım: microsoft-refresh"));
         let sign_in = token(AuthStep::Microsoft);
-        assert!(!sign_in.user_message_tr().contains("Kayıtlı oturumunuzun"));
+        assert!(!sign_in.user_message_tr().contains("Oturumunun"));
         assert_eq!(sign_in.class(), FailureClass::NeedsRelogin);
     }
 

@@ -1021,7 +1021,7 @@ mod tests {
             .await
             .unwrap_err();
         assert_eq!(error.code(), "MC-APPREG");
-        assert!(error.user_message_tr().contains("hesabınızda değil"));
+        assert!(error.user_message_tr().contains("hesabında değil"));
     }
 
     async fn login_with_profile_404(entitlements: serde_json::Value) -> AuthError {

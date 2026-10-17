@@ -35,5 +35,7 @@ pub mod platform;
 pub mod server;
 pub mod shared_files;
 pub mod version;
+#[cfg(test)]
+mod wording;
 
 pub use error::{Error, Result};

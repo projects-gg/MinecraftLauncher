@@ -37,6 +37,8 @@ mod skins;
 mod store;
 #[cfg(test)]
 mod testutil;
+#[cfg(test)]
+mod wording;
 
 pub use avatar::{
     DEFAULT_SKIN_NAMES, DefaultSkin, HeadCache, HeadError, HeadSource, client_jars, front_png,
