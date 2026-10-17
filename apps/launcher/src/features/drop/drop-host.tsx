@@ -3,8 +3,9 @@
 // instance, else the one selected in the command bar. Mods go into its active set, resource and
 // shader packs into their folders, a modpack opens the import flow; unknown files get one short
 // notice. Places with their own drop handling (skin panel, the import step) take drops
-// themselves and empty tabs show the zone in place (`useDropZone`); otherwise the zone below
-// covers the window.
+// themselves and empty tabs show the zone in place (`useDropZone`); in the library the files go
+// onto the instance card they are dropped on (card-zone.tsx). Otherwise the zone below covers
+// the window.
 import { Package, Palette, PuzzlePiece, Question, SunHorizon } from "@phosphor-icons/react";
 import { Chip, cn, DropZone, EntranceGate, easeOutExpo, GatedMotion, toast, usePerf } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
@@ -19,11 +20,12 @@ import {
   type DropPlan,
   dropChips,
   dropNotices,
+  isCopy,
   leftOut,
   planDrop,
   type RowKind,
 } from "./model";
-import { startDragSource, useDrop, useDropAnnouncement } from "./store";
+import { type Landing, startDragSource, useDrop, useDropAnnouncement } from "./store";
 import { toTarget, useDropPlan, useDropTarget } from "./target";
 import { announcementOf, windowHint, zoneTitle } from "./text";
 import { WINDOW_INSET, WINDOW_ZONE, zoneState } from "./zones";
@@ -102,14 +104,18 @@ export function DropHost({ disabled = false }: { disabled?: boolean }) {
       }
     };
 
-    const finish = async (paths: string[], known: DroppedFile[] | null) => {
-      const into = live.current.target;
+    const finish = async (paths: string[], known: DroppedFile[] | null, landing: Landing) => {
+      // A card's own instance (the library), else the window's target; none between cards.
+      const into =
+        landing.kind === "card"
+          ? landing.into
+          : landing.kind === "window"
+            ? live.current.target
+            : undefined;
       const files = known ?? (await api.classifyFiles(paths).catch(() => [] as DroppedFile[]));
       const modpack = files.find((f) => f.kind === "modpack");
-      const copies = files.some(
-        (f) => f.kind === "mod" || f.kind === "resourcePack" || f.kind === "shaderPack",
-      );
-      if (copies && into) {
+      const copies = files.filter((f) => isCopy(f.kind)).length;
+      if (copies > 0 && into) {
         try {
           const result = await api.dropFiles(into.id, paths);
           announce(into, dropNotices(result));
@@ -133,7 +139,11 @@ export function DropHost({ disabled = false }: { disabled?: boolean }) {
         } else if (unknown.length > 1) {
           toast(t("drop.notices.unknownMany", { count: unknown.length }));
         }
-        if (copies && !into) toast(t("drop.blocked.noInstance"));
+        if (copies > 0 && landing.kind === "missed") {
+          toast(t("libraryDrop.missed", { count: copies }));
+        } else if (copies > 0) {
+          toast(t("drop.blocked.noInstance"));
+        }
       }
       if (modpack) {
         useDrop.getState().setPendingPack(modpack.path);
@@ -145,7 +155,7 @@ export function DropHost({ disabled = false }: { disabled?: boolean }) {
       windowEnabled: () => !live.current.disabled,
       windowAccepts: (drag) =>
         drag.files ? planDrop(drag.files, toTarget(live.current.target)).acceptable : true,
-      onWindowDrop: (paths, files) => void finish(paths, files),
+      onWindowDrop: (paths, files, landing) => void finish(paths, files, landing),
     });
   }, [navigate, queryClient, t]);
 

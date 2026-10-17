@@ -31,7 +31,8 @@ export interface DropPlan {
   importOnly: boolean;
 }
 
-const isCopy = (kind: RowKind): kind is CopyKind =>
+/** Files an instance takes in (a modpack becomes an instance of its own). */
+export const isCopy = (kind: RowKind): kind is CopyKind =>
   kind === "mod" || kind === "resourcePack" || kind === "shaderPack";
 
 export function planDrop(files: DroppedFile[], target: DropTarget | null): DropPlan {

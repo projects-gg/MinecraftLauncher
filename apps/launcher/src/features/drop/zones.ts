@@ -60,6 +60,51 @@ export function zoneAt(point: Point | null, zones: ZoneBox[]): string | null {
   return best?.id ?? null;
 }
 
+/** How far past its edge the zone under the cursor stays under it (CSS pixels). */
+export const HOVER_SLACK = 4;
+
+/** A box grown by `by` on every side. */
+export function grow(box: Box, by: number): Box {
+  return { left: box.left - by, top: box.top - by, right: box.right + by, bottom: box.bottom + by };
+}
+
+/**
+ * Where the cursor finds a zone: its box reaching `reach` further (instance cards meet in the
+ * middle of the gaps between them), cut to the scroll area that shows it; null when it is
+ * scrolled out of that area.
+ */
+export function hitBox(box: Box, reach: number, clip: Box | null): Box | null {
+  const grown = grow(box, reach);
+  if (!clip) return grown;
+  const cut = {
+    left: Math.max(grown.left, clip.left),
+    top: Math.max(grown.top, clip.top),
+    right: Math.min(grown.right, clip.right),
+    bottom: Math.min(grown.bottom, clip.bottom),
+  };
+  return cut.right > cut.left && cut.bottom > cut.top ? cut : null;
+}
+
+/**
+ * The zone under the cursor as `zoneAt` finds it, except that the zone already under it stays
+ * while the cursor is within `slack` of its edge and nothing in front of it takes over: a card
+ * that lifts toward the cursor, or a cursor resting on the line between two cards, never makes
+ * them flicker.
+ */
+export function hoveredZone(
+  point: Point | null,
+  zones: ZoneBox[],
+  current: string | null,
+  slack = HOVER_SLACK,
+): string | null {
+  const next = zoneAt(point, zones);
+  if (!point || current === null || next === current) return next;
+  const held = zones.find((z) => z.id === current);
+  if (!held || !contains(grow(held.box, slack), point)) return next;
+  const ahead = next === null ? undefined : zones.find((z) => z.id === next);
+  return ahead && ahead.depth > held.depth ? next : current;
+}
+
 /** The window-wide zone's box: the whole window less a comfortable inset. */
 export function windowBox(width: number, height: number, inset = WINDOW_INSET): Box {
   return { left: inset, top: inset, right: width - inset, bottom: height - inset };

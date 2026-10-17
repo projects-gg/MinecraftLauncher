@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import emptyArt from "@/assets/art/empty-library.webp";
 import { ExportDialog } from "@/features/content/export-dialog";
 import { showError } from "@/features/content/jobs";
+import { CardsDropGuide } from "@/features/drop/card-zone";
 import { api, type InstanceSummary } from "@/lib/api";
 import { matchesQuery } from "@/lib/search";
 import { useLaunch } from "@/stores/launch";
@@ -234,9 +235,11 @@ export function LibraryPage() {
       <header className="flex flex-wrap items-end justify-between gap-3 pb-4">
         <div>
           <h1 className="page-title">{t("library.title")}</h1>
-          <p className="mt-0.5 text-[13px] text-ash-300">
-            {instances ? t("library.count", { count: instances.length }) : t("common.loading")}
-          </p>
+          {/* While files are dragged over the cards it says how to drop them. */}
+          <CardsDropGuide
+            rest={instances ? t("library.count", { count: instances.length }) : t("common.loading")}
+            className="mt-0.5 text-[13px] text-ash-300"
+          />
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
           <SearchInput
@@ -271,7 +274,8 @@ export function LibraryPage() {
         </div>
       </header>
 
-      <div className="-mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-5">
+      {/* Cards scrolled out of this area are not under the cursor while files are dragged. */}
+      <div data-drop-clip className="-mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-5">
         {isPending ? (
           // A section title and cards, as the library will look.
           <div aria-busy>
