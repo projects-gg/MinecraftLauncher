@@ -22,7 +22,7 @@ import { InstanceIcon } from "@/shell/instance-icon";
 import { settingsChanged, useDrafts } from "@/stores/drafts";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
-import { ModpackCard } from "./modpack-update";
+import { OverviewTab } from "./overview/overview-tab";
 import { createDesktopShortcut } from "./shortcut";
 import { LogsTab } from "./tabs/logs-tab";
 import { ModsTab } from "./tabs/mods-tab";
@@ -90,7 +90,8 @@ export function InstancePage() {
     });
 
   if (isPending || !data) {
-    // Shaped like the page: back link, the header (icon, name, meta, actions), the tab row.
+    // Shaped like the page: back link, the header (icon, name, meta, actions), the tab row and
+    // the overview's two columns (its card, its side panel).
     return (
       <div className="flex min-h-0 flex-1 flex-col px-page pt-2" aria-busy>
         <Skeleton className="mb-2 h-[26px] w-24" />
@@ -103,17 +104,15 @@ export function InstancePage() {
           <Skeleton className="h-8 w-64 shrink-0" />
         </div>
         <Skeleton className="mt-3.5 h-[34px] w-full max-w-[880px]" />
-        <div className="mt-5 grid max-w-[880px] grid-cols-4 gap-3">
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-[72px] rounded-[var(--radius-panel)]" />
-          ))}
+        <div className="mt-4 grid max-w-[980px] items-start gap-x-6 md:grid-cols-[minmax(0,1fr)_clamp(264px,32%,320px)]">
+          <Skeleton className="h-[83px] rounded-[var(--radius-panel)]" />
+          <Skeleton className="hidden h-[245px] rounded-[var(--radius-panel)] md:block" />
         </div>
       </div>
     );
   }
 
   const loader = data.loader === "vanilla" ? "Minecraft" : t(`loaders.${data.loader}`);
-  const enabledMods = data.mods.filter((m) => m.enabled).length;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col px-page pt-2">
@@ -260,54 +259,10 @@ export function InstancePage() {
             },
           ]}
         >
+          {/* Play time and the last session are the header's; the tab says where to play next
+              and what the instance is (overview/overview-tab.tsx). */}
           <TabPanel value="overview" className="pb-8">
-            <div className="grid max-w-[880px] grid-cols-4 gap-3">
-              {[
-                [
-                  t("instance.overview.playTime"),
-                  data.playTimeSecs > 0
-                    ? formatDuration(data.playTimeSecs)
-                    : t("instance.overview.noPlayTime"),
-                ],
-                [
-                  t("instance.overview.lastPlayed"),
-                  data.lastPlayedAt ? formatRelative(data.lastPlayedAt) : t("play.neverPlayed"),
-                ],
-                [t("instance.overview.version"), data.mcVersion],
-                [
-                  t("instance.overview.loader"),
-                  data.loader === "vanilla"
-                    ? t("loaders.vanilla")
-                    : `${loader} ${data.loaderVersion ?? ""}`,
-                ],
-              ].map(([label, value]) => (
-                <div key={label} className="glass rounded-[var(--radius-panel)] px-4 py-3.5">
-                  <p className="text-[12px] text-ash-400">{label}</p>
-                  <p className="mt-1 truncate font-display text-[18px] font-semibold text-bone-50">
-                    {value}
-                  </p>
-                </div>
-              ))}
-            </div>
-            <ModpackCard instance={data} />
-            {data.loader !== "vanilla" ? (
-              <p className="mt-5 text-[13px] text-ash-300">
-                {t("instance.mods.summary", { enabled: enabledMods, total: data.mods.length })}
-              </p>
-            ) : null}
-            {data.settings.notes ? (
-              <div className="mt-6 max-w-[70ch]">
-                <h3 className="font-display text-[15px] font-semibold text-bone-50">
-                  {t("instance.overview.notes")}
-                </h3>
-                <p
-                  className="mt-1.5 text-[13.5px] whitespace-pre-wrap text-ash-300"
-                  data-selectable
-                >
-                  {data.settings.notes}
-                </p>
-              </div>
-            ) : null}
+            <OverviewTab instance={data} onOpenTab={setTab} onBrowse={openBrowser} />
           </TabPanel>
           <TabPanel
             value="modcenter"
