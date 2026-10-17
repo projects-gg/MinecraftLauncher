@@ -1,5 +1,5 @@
 # Moves a published launcher release between update channels on R2 (beta -> stable), or changes
-# the rollout / mandatory / minVersion of a channel (stable -> stable). docs/release.md.
+# the rollout / mandatory / minVersion of a channel (stable -> stable).
 
 name: Release promote
 

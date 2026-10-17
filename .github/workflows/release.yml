@@ -2,7 +2,7 @@
 # latest.json to a DRAFT GitHub release, and (when the R2 secrets exist) publishes them to
 # https://cdn.projects.gg/v1/releases/<version>/ plus the beta channel file.
 # Projects Studio is built alongside and kept as workflow artifacts (it is not for players).
-# How to cut a release, secrets and channels: docs/release.md. Code signing: docs/signing.md.
+# Secrets: TAURI_SIGNING_PRIVATE_KEY (required), R2_* (CDN publish), SIGNPATH_* and APPLE_* (code signing).
 
 name: Release
 
@@ -185,11 +185,11 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            echo "::error::Secret TAURI_SIGNING_PRIVATE_KEY is missing (docs/release.md)."
+            echo "::error::Secret TAURI_SIGNING_PRIVATE_KEY is missing (see the secrets list at the top of this file)."
             exit 1
           fi
 
-      # Developer ID signing + notarization when the Apple secrets exist (docs/signing.md);
+      # Developer ID signing + notarization when the Apple secrets exist;
       # otherwise the bundle keeps the ad-hoc signature from tauri.conf.json.
       - name: Apple signing (optional)
         if: runner.os == 'macOS'
@@ -282,7 +282,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
           if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
-            echo "::error::Secret TAURI_SIGNING_PRIVATE_KEY is missing (docs/release.md)."
+            echo "::error::Secret TAURI_SIGNING_PRIVATE_KEY is missing (see the secrets list at the top of this file)."
             exit 1
           fi
 
@@ -457,7 +457,7 @@ jobs:
           if [ -n "$R2_ACCOUNT_ID" ] && [ -n "$R2_ACCESS_KEY_ID" ] && [ -n "$R2_SECRET_ACCESS_KEY" ] && [ -n "$R2_BUCKET" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
-            echo "::notice::R2 secrets are not set; skipping the CDN publish (docs/release.md)."
+            echo "::notice::R2 secrets are not set; skipping the CDN publish (see the secrets list at the top of this file)."
             echo "enabled=false" >> "$GITHUB_OUTPUT"
           fi
 

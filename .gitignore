@@ -35,3 +35,11 @@ Thumbs.db
 # Local tooling
 graphify-out/
 .claude/worktrees/
+
+# Internal development notes stay on the maintainers' machines. The content format spec stays
+# tracked: pl-content and Studio tests check its JSON examples.
+/CLAUDE.md
+/todo.md
+/docs/*
+!/docs/content-format.md
+/scripts/secrets-sync.mjs
