@@ -13,7 +13,7 @@ mod hash;
 pub use client::{Http, HttpConfig};
 pub use download::{
     DownloadItem, DownloadOptions, DownloadProgress, DownloadSummary, Downloader, ProgressFn,
-    VerifyMode,
+    VerifyMode, until_cancelled,
 };
 pub use error::{NetError, Result};
 pub use hash::{Checksum, HashAlgo, hash_bytes, hash_file, verify_file};

@@ -124,6 +124,23 @@ impl std::fmt::Debug for DownloadOptions {
     }
 }
 
+/// Runs `future` until it finishes or `cancel` fires. A cancelled future is dropped (a request
+/// in flight is aborted) and [`NetError::Cancelled`] comes back. For single requests (metadata,
+/// listings) that do not take a token themselves; downloads check the token on their own.
+pub async fn until_cancelled<T, E>(
+    cancel: &CancellationToken,
+    future: impl std::future::Future<Output = std::result::Result<T, E>>,
+) -> std::result::Result<T, E>
+where
+    E: From<NetError>,
+{
+    tokio::select! {
+        biased;
+        () = cancel.cancelled() => Err(NetError::Cancelled.into()),
+        result = future => result,
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct DownloadSummary {
     pub total: usize,
@@ -198,7 +215,8 @@ impl Downloader {
             done_bytes: AtomicU64::new(0),
         });
 
-        let ticker_stop = CancellationToken::new();
+        // Stops with the batch, and at once when the batch is cancelled (no progress after that).
+        let ticker_stop = options.cancel.child_token();
         let ticker = options.progress.clone().map(|progress| {
             tokio::spawn(run_ticker(
                 Arc::clone(&counters),
@@ -229,12 +247,11 @@ impl Downloader {
         if let Some(handle) = ticker {
             let _ = handle.await;
         }
-        if let Some(progress) = &options.progress {
-            progress(counters.snapshot(0));
-        }
-
         if options.cancel.is_cancelled() {
             return Err(NetError::Cancelled);
+        }
+        if let Some(progress) = &options.progress {
+            progress(counters.snapshot(0));
         }
 
         let mut summary = DownloadSummary {
@@ -277,17 +294,14 @@ impl Downloader {
         options: &DownloadOptions,
         counters: &Counters,
     ) -> Result<Outcome> {
-        if options.cancel.is_cancelled() {
-            return Err(NetError::Cancelled);
-        }
-        if verify_file(
-            &item.dest,
-            item.checksum.as_ref(),
-            item.size,
-            options.verify,
-        )
-        .await
-        {
+        // Hashing a big existing file (a Java runtime's `lib/modules`) must not hold up a cancel:
+        // the check is dropped (it only reads).
+        let valid = tokio::select! {
+            biased;
+            () = options.cancel.cancelled() => return Err(NetError::Cancelled),
+            valid = verify_file(&item.dest, item.checksum.as_ref(), item.size, options.verify) => valid,
+        };
+        if valid {
             if let Some(size) = item.size {
                 counters.done_bytes.fetch_add(size, Ordering::Relaxed);
             }
@@ -383,9 +397,12 @@ impl Downloader {
                 if let Some(hasher) = hasher.as_mut() {
                     hasher.update(&chunk);
                 }
-                file.write_all(&chunk)
-                    .await
-                    .map_err(|e| NetError::io(&tmp, e))?;
+                // A slow disk (a busy USB drive) must not hold up a cancel either.
+                tokio::select! {
+                    biased;
+                    _ = options.cancel.cancelled() => return Err(NetError::Cancelled),
+                    result = file.write_all(&chunk) => result.map_err(|e| NetError::io(&tmp, e))?,
+                }
                 written += chunk.len() as u64;
                 counters
                     .done_bytes
@@ -548,5 +565,159 @@ mod tests {
         assert_eq!(summary.total, 1, "duplicate destinations are merged");
         assert_eq!(summary.skipped, 1);
         assert_eq!(summary.downloaded, 0);
+    }
+
+    /// A local HTTP server that answers every request with `size` bytes, sent slowly (1 KiB
+    /// every 20 ms), and counts the requests it got.
+    async fn slow_server(size: usize) -> (String, Arc<AtomicUsize>) {
+        use tokio::io::AsyncReadExt;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let requests = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&requests);
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let counter = Arc::clone(&counter);
+                tokio::spawn(async move {
+                    let mut head = Vec::new();
+                    let mut buf = [0u8; 1024];
+                    while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                        match socket.read(&mut buf).await {
+                            Ok(0) | Err(_) => return,
+                            Ok(n) => head.extend_from_slice(&buf[..n]),
+                        }
+                    }
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    let header = format!(
+                        "HTTP/1.1 200 OK\r\nContent-Length: {size}\r\nContent-Type: application/octet-stream\r\n\r\n"
+                    );
+                    if socket.write_all(header.as_bytes()).await.is_err() {
+                        return;
+                    }
+                    let chunk = [b'x'; 1024];
+                    let mut sent = 0;
+                    while sent < size {
+                        let n = chunk.len().min(size - sent);
+                        if socket.write_all(&chunk[..n]).await.is_err() {
+                            return;
+                        }
+                        sent += n;
+                        tokio::time::sleep(Duration::from_millis(20)).await;
+                    }
+                });
+            }
+        });
+        (format!("http://{address}"), requests)
+    }
+
+    fn leftovers(dir: &Path) -> Vec<String> {
+        std::fs::read_dir(dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect()
+    }
+
+    /// Cancelling a running batch: the request in flight is aborted, queued files never start,
+    /// the partial file goes, no progress is reported afterwards, and it all takes well under a
+    /// second.
+    #[tokio::test]
+    async fn cancelling_stops_a_batch_at_once() {
+        let dir = tempfile::tempdir().unwrap();
+        let size = 4 * 1024 * 1024;
+        let (base, requests) = slow_server(size).await;
+        let items: Vec<DownloadItem> = (0..4)
+            .map(|i| {
+                DownloadItem::new(
+                    format!("{base}/file{i}"),
+                    dir.path().join(format!("file{i}")),
+                )
+                .size(Some(size as u64))
+            })
+            .collect();
+        let downloader = Downloader::new(Http::new(crate::HttpConfig::new("pl-net-test")).unwrap());
+        let cancel = CancellationToken::new();
+        let reports = Arc::new(parking_lot::Mutex::new(Vec::<Instant>::new()));
+        let seen = Arc::clone(&reports);
+        let options = DownloadOptions {
+            concurrency: 1,
+            cancel: cancel.clone(),
+            progress: Some(Arc::new(move |_| seen.lock().push(Instant::now()))),
+            progress_interval: Duration::from_millis(20),
+            ..DownloadOptions::default()
+        };
+        let run = tokio::spawn({
+            let downloader = downloader.clone();
+            async move { downloader.download_all(items, &options).await }
+        });
+        // Wait until the first file is being written.
+        let part = dir.path().join("file0.part");
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !(part.is_file() && std::fs::metadata(&part).unwrap().len() > 0) {
+            assert!(Instant::now() < deadline, "the download never started");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let cancelled_at = Instant::now();
+        cancel.cancel();
+        let result = tokio::time::timeout(Duration::from_secs(5), run)
+            .await
+            .expect("the batch kept running")
+            .unwrap();
+        let took = cancelled_at.elapsed();
+        assert!(matches!(result, Err(NetError::Cancelled)), "{result:?}");
+        assert!(took < Duration::from_secs(1), "cancel took {took:?}");
+        // Give a stray request or tick the chance to show up.
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_eq!(requests.load(Ordering::SeqCst), 1, "queued files started");
+        assert!(
+            leftovers(dir.path()).is_empty(),
+            "{:?}",
+            leftovers(dir.path())
+        );
+        assert!(
+            reports.lock().iter().all(|at| *at <= cancelled_at + took),
+            "progress was reported after the cancel"
+        );
+    }
+
+    /// A batch cancelled before it starts makes no request at all.
+    #[tokio::test]
+    async fn a_cancelled_batch_makes_no_requests() {
+        let dir = tempfile::tempdir().unwrap();
+        let (base, requests) = slow_server(1024).await;
+        let downloader = Downloader::new(Http::new(crate::HttpConfig::new("pl-net-test")).unwrap());
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+        let options = DownloadOptions {
+            cancel,
+            ..DownloadOptions::default()
+        };
+        let items = vec![DownloadItem::new(format!("{base}/a"), dir.path().join("a"))];
+        let result = downloader.download_all(items, &options).await;
+        assert!(matches!(result, Err(NetError::Cancelled)), "{result:?}");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(requests.load(Ordering::SeqCst), 0);
+        assert!(leftovers(dir.path()).is_empty());
+    }
+
+    /// A single request that takes no token is dropped as soon as the token fires.
+    #[tokio::test]
+    async fn until_cancelled_aborts_a_request() {
+        let (base, requests) = slow_server(4 * 1024 * 1024).await;
+        let http = Http::new(crate::HttpConfig::new("pl-net-test")).unwrap();
+        let cancel = CancellationToken::new();
+        let trigger = cancel.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            trigger.cancel();
+        });
+        let started = Instant::now();
+        let result = until_cancelled(&cancel, http.get_bytes(&format!("{base}/big"))).await;
+        assert!(matches!(result, Err(NetError::Cancelled)), "{result:?}");
+        assert!(started.elapsed() < Duration::from_secs(1));
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+        // A finished future wins over a token cancelled later.
+        let done: Result<u8> = until_cancelled(&CancellationToken::new(), async { Ok(7) }).await;
+        assert_eq!(done.unwrap(), 7);
     }
 }
