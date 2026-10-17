@@ -67,15 +67,18 @@ pub fn run() {
             // size, set exactly (shell::fit_main_window).
             #[cfg(desktop)]
             shell::fit_main_window(app);
-            start_auto_afk(app.handle().clone());
+            // After an update restart, the AFK accounts it stopped come back (commands::updates).
+            let resumed_afk = commands::updates::take_restart_note(app.handle());
+            start_auto_afk(app.handle().clone(), resumed_afk);
             // A version switch a crash interrupted is finished before anything uses the folders.
             commands::versions::recover_unfinished_switches(app.handle().clone());
             // Trash limits and leftovers: shortly after start, then daily (pl_data::housekeeping).
             commands::cleanup::start_housekeeping(app.handle());
             // The launcher's Java runtimes: newer builds staged and swapped in while no game runs.
             commands::java::start_java_updates(app.handle());
-            // Started at login: stay in the tray until the user opens the launcher.
-            if !shell::start_minimized() {
+            // Started at login: stay in the tray until the user opens the launcher (not after an
+            // update the player installed from the open window).
+            if !commands::updates::start_hidden() {
                 reveal_window_fallback(app.handle().clone());
             }
             Ok(())
@@ -163,6 +166,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::updates::update_download,
             commands::updates::update_apply,
             commands::updates::app_restart,
+            commands::updates::update_restart_info,
             // official pack & desktop shell
             commands::official::official_status,
             commands::official::official_instance_ensure,
@@ -376,14 +380,15 @@ impl tracing_subscriber::fmt::time::FormatTime for LocalTime {
 
 /// AFK accounts marked "start automatically" connect when the launcher starts (staggered), with
 /// the client build and game versions of the cached content index (the UI may not have asked for
-/// content yet, for example when the launcher starts minimized).
-fn start_auto_afk(app: tauri::AppHandle) {
+/// content yet, for example when the launcher starts minimized). `resumed`: the accounts an update
+/// restart stopped, which join the same queue.
+fn start_auto_afk(app: tauri::AppHandle, resumed: Vec<String>) {
     tauri::async_runtime::spawn(async move {
         let state = app.state::<state::AppState>();
         if let Ok(cached) = state.content.load_cached().await {
             commands::content::apply_snapshot(&state, &cached);
         }
-        if let Err(error) = state.afk.auto_start().await {
+        if let Err(error) = state.afk.auto_start_with(&resumed).await {
             tracing::warn!(%error, "AFK auto-start failed");
         }
     });

@@ -28,7 +28,7 @@ pub fn app_info(app: tauri::AppHandle, state: tauri::State<'_, crate::state::App
         debug: cfg!(debug_assertions),
         secure_storage: !state.ephemeral_secrets,
         data_dir: state.root.to_string_lossy().into_owned(),
-        start_minimized: crate::shell::start_minimized(),
+        start_minimized: crate::commands::updates::start_hidden(),
         system_memory_mb: pl_mc::instance::system_memory_mb(),
     }
 }

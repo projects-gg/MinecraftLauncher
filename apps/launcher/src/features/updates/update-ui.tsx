@@ -10,20 +10,25 @@ import {
   toast,
   useMotionPrefs,
 } from "@pl/ui";
-import { useQuery } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import Markdown, { type Components } from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
-import { commands } from "@/bindings";
 import { useAfkSessions } from "@/features/accounts/use-accounts";
 import { AfkHead } from "@/features/afk/afk-head";
 import { type AfkAccount, api } from "@/lib/api";
+import i18n from "@/lib/i18n";
 import { canOpenLink, openLink } from "@/lib/links";
 import { isTauri } from "@/lib/platform";
 import { useLaunch } from "@/stores/launch";
 import { takePendingNotes, useUpdate } from "@/stores/update";
+import { chooseNotes, landingRoute, loadAfterUpdate, type ReleaseNotes } from "./after-update";
+import { cancelInstall, isAfkOpen, isGameBusy, requestInstall } from "./install";
+
+export { UpdatePill } from "./update-pill";
 
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 
@@ -49,36 +54,99 @@ const noteComponents: Components = {
     ),
 };
 
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
- * Browser preview of the mandatory update screen (the browser has no updater): `?update=mandatory`
- * over a downloaded update, `?update=failed` after a failed download, `&game=running` with a game
- * open. Installing only pretends, and like on Windows (where the launcher quits) never returns.
+ * Pretend install for the browser preview: like the backend, open AFK accounts stop first
+ * (`afkOpen`), then the installer "starts" and, as on Windows where the launcher quits, nothing
+ * comes back; `fails` brings the error of an install that did not work instead.
+ */
+function previewApply(fails: boolean) {
+  return async (options?: { afkOpen?: boolean }) => {
+    if (useUpdate.getState().phase !== "ready") return;
+    const afkOpen = Boolean(options?.afkOpen);
+    useUpdate.setState({
+      phase: "applying",
+      step: afkOpen ? "stoppingAfk" : "installing",
+      asking: null,
+      error: null,
+    });
+    if (afkOpen) {
+      await api.afkStopAll();
+      await wait(1600);
+      useUpdate.setState({ step: "installing" });
+    }
+    if (!fails) return new Promise<never>(() => {});
+    await wait(1200);
+    useUpdate.setState({
+      phase: "ready",
+      step: null,
+      error: "Güncelleme kurulamadı. Tekrar dene.",
+    });
+  };
+}
+
+const PREVIEW_NOTES =
+  "- Güncelleme artık AFK hesaplarını kendisi durdurup sonra yeniden bağlıyor\n- Oyun açıkken güncelleme oyundan sonraya kalıyor\n- Daha hızlı indirmeler";
+
+/**
+ * Browser previews (the browser has no updater): `?update=mandatory` over a downloaded update,
+ * `?update=failed` after a failed download, `?update=ready` (the title bar pill),
+ * `?update=installfail`, `?update=available`, `?update=downloading`, `?update=whatsnew`. With
+ * `&game=running` a game is open; `&game=closing` closes it after 2.5 s.
  */
 function previewUpdate() {
   const params = new URLSearchParams(window.location.search);
   const kind = params.get("update");
-  if (kind !== "mandatory" && kind !== "failed") return;
-  const failed = kind === "failed";
-  useUpdate.setState({
-    mandatory: true,
-    version: "2.5.0",
-    phase: failed ? "error" : "ready",
-    // The backend's words for a failed download.
-    error: failed ? "Güncelleme indirilemedi." : null,
-    apply: () => {
-      useUpdate.setState({ phase: "applying" });
-      return new Promise<never>(() => {});
-    },
-  });
-  if (params.get("game") === "running") {
+  const game = params.get("game");
+  const base = { version: "2.5.0", notes: PREVIEW_NOTES, mandatory: false, error: null };
+  switch (kind) {
+    case "mandatory":
+    case "failed": {
+      const failed = kind === "failed";
+      useUpdate.setState({
+        ...base,
+        mandatory: true,
+        phase: failed ? "error" : "ready",
+        // The backend's words for a failed download.
+        error: failed ? "Güncelleme indirilemedi." : null,
+        apply: previewApply(false),
+      });
+      break;
+    }
+    case "ready":
+    case "installfail":
+      useUpdate.setState({ ...base, phase: "ready", apply: previewApply(kind === "installfail") });
+      break;
+    case "available":
+      useUpdate.setState({ ...base, phase: "available" });
+      break;
+    case "downloading":
+      useUpdate.setState({ ...base, phase: "downloading", manual: true, percent: 42 });
+      break;
+  }
+  if (game === "running" || game === "closing") {
     useLaunch.setState({ phase: { kind: "running", since: Date.now() } });
   }
+  if (game === "closing") {
+    window.setTimeout(() => useLaunch.setState({ phase: { kind: "idle" } }), 2500);
+  }
+}
+
+/** Once the game closes with an update waiting for it: say so, with the restart at hand. */
+function offerAfterGame() {
+  toast.success(i18n.t("updates.readyAfterGame"), {
+    id: "update-after-game",
+    duration: 10_000,
+    action: { label: i18n.t("updates.restart"), onClick: () => void requestInstall("pill") },
+  });
 }
 
 /**
  * Starts the background update checks: the first 10–60 s after start, then every 6 hours plus up
  * to 30 minutes. The random part spreads thousands of launchers over time instead of having them
- * all ask the CDN in the same minute.
+ * all ask the CDN in the same minute. An update that waited for a game is offered when it closes
+ * (a store subscription: nothing renders again and nothing polls).
  */
 export function useUpdateChecks() {
   const check = useUpdate((s) => s.check);
@@ -97,79 +165,27 @@ export function useUpdateChecks() {
       window.clearInterval(every);
     };
   }, [check]);
-}
-
-/** Title-bar pill once an update is downloaded. */
-export function UpdatePill() {
-  const { t } = useTranslation();
-  const phase = useUpdate((s) => s.phase);
-  const version = useUpdate((s) => s.version);
-  const apply = useUpdate((s) => s.apply);
-  const error = useUpdate((s) => s.error);
-  const mandatory = useUpdate((s) => s.mandatory);
-
-  useEffect(() => {
-    // The mandatory update screen says it under its button instead.
-    if (error && phase === "ready" && !mandatory) toast.error(error);
-  }, [error, phase, mandatory]);
-
-  if (phase !== "ready" && phase !== "applying") return null;
-  return (
-    <motion.button
-      type="button"
-      initial={{ opacity: 0, y: -6 }}
-      animate={{ opacity: 1, y: 0 }}
-      onClick={() => void apply()}
-      disabled={phase === "applying"}
-      className="chamfer flex h-7 cursor-pointer items-center gap-2 bg-gold-500 px-3 text-[12.5px] font-semibold text-gold-ink [--cut:5px] hover:brightness-110 disabled:opacity-70"
-    >
-      <ArrowsClockwise
-        size={14}
-        weight="bold"
-        className={phase === "applying" ? "animate-spin" : undefined}
-      />
-      {t("update.ready", { version: version ?? "" })}
-    </motion.button>
+  useEffect(
+    () =>
+      useLaunch.subscribe((state, previous) => {
+        const { phase, mandatory, asking } = useUpdate.getState();
+        // A game starting closes the AFK question: the update waits for the game now.
+        if (asking && isGameBusy(state.phase.kind)) cancelInstall();
+        if (previous.phase.kind !== "running" || state.phase.kind === "running") return;
+        if (phase === "ready" && !mandatory) offerAfterGame();
+      }),
+    [],
   );
 }
 
-/** An AFK account that keeps the update from installing: its client runs, connects or waits. */
-const isOpen = (account: AfkAccount) =>
-  account.state.kind !== "stopped" && account.state.kind !== "error";
-
-/** How long "Durdur ve güncelle" waits for the AFK clients to exit before installing anyway. */
-const AFK_STOP_WAIT_MS = 10_000;
 /** AFK names shown on the mandatory update screen; the rest are counted. */
 const ROSTER_MAX = 6;
-
-/** True while an AFK client runs or a staggered "connect all" is under way. */
-async function afkBusy(): Promise<boolean> {
-  if (isTauri()) return commands.afkAnyActive();
-  return (await api.afkAccounts()).some(isOpen);
-}
-
-/**
- * Stops every AFK account (a running "connect all" too) and waits until their clients have exited,
- * at most `AFK_STOP_WAIT_MS`: installing quits the launcher at once, and a client left behind would
- * keep the account on the server without anyone watching it.
- */
-async function stopAfkForUpdate() {
-  try {
-    await api.afkStopAll();
-  } catch {
-    // The wait below decides; the install refuses if something still runs.
-  }
-  const deadline = Date.now() + AFK_STOP_WAIT_MS;
-  while ((await afkBusy()) && Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-}
 
 /**
  * Blocking screen when the running version is below the published minimum. It covers the whole
  * launcher, so it must offer every way forward itself: open AFK accounts are listed and stopped by
- * "Durdur ve güncelle", a running game asks to be closed first, and a failed download or install
- * can be tried again (docs/tasks/q2.md §3, item 1).
+ * "Durdur ve güncelle" (they connect again after the restart), a running game asks to be closed
+ * first, and a failed download or install can be tried again (docs/tasks/q2.md §3, item 1).
  */
 export function MandatoryUpdate() {
   const shown = useUpdate((s) => s.mandatory && s.phase !== "idle");
@@ -191,11 +207,11 @@ function MandatoryScreen() {
   const percent = useUpdate((s) => s.percent);
   const version = useUpdate((s) => s.version);
   const error = useUpdate((s) => s.error);
+  const step = useUpdate((s) => s.step);
   const apply = useUpdate((s) => s.apply);
   const check = useUpdate((s) => s.check);
-  const gameOpen = useLaunch((s) => s.phase.kind === "launching" || s.phase.kind === "running");
-  const open = useAfkSessions().filter(isOpen);
-  const [stopping, setStopping] = useState(false);
+  const gameOpen = useLaunch((s) => isGameBusy(s.phase.kind));
+  const open = useAfkSessions().filter(isAfkOpen);
   // The accounts at the press: listed until the install starts, each one dimming as it stops.
   const [roster, setRoster] = useState<AfkAccount[] | null>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -203,31 +219,29 @@ function MandatoryScreen() {
   // The screen takes over: focus moves to it, never to the button (Enter would stop the AFK).
   useEffect(() => panel.current?.focus(), []);
 
-  const busy = stopping || phase === "applying";
+  const busy = phase === "applying";
   const listed = roster ?? open;
   const stillOpen = new Set(open.map((account) => account.id));
 
   const install = async () => {
     if (busy || gameOpen) return;
+    const afkOpen = open.length > 0;
+    setRoster(afkOpen ? open : null);
     try {
-      if (open.length > 0) {
-        setRoster(open);
-        setStopping(true);
-        await stopAfkForUpdate();
-      }
-      // On Windows the installer takes over and the launcher quits; a failure lands below.
-      await apply();
+      // The backend stops the AFK accounts first (and brings them back after the restart). On
+      // Windows the installer then takes over and the launcher quits; a failure lands below.
+      await apply({ afkOpen });
     } finally {
-      setStopping(false);
       setRoster(null);
     }
   };
 
   let label: string;
   let onPress: (() => void) | undefined;
-  if (phase === "applying") label = t("afkAlerts.update.installing");
-  else if (stopping) label = t("afkAlerts.update.stopping");
-  else if (phase === "error") {
+  if (phase === "applying") {
+    label =
+      step === "stoppingAfk" ? t("afkAlerts.update.stopping") : t("afkAlerts.update.installing");
+  } else if (phase === "error") {
     label = t("common.retry");
     onPress = () => void check(true);
   } else if (gameOpen) label = t("afkAlerts.update.quitGame");
@@ -290,7 +304,9 @@ function MandatoryScreen() {
 
         {listed.length > 0 ? (
           <div className="mt-5">
-            <p className="text-[12px] font-medium text-ash-300">{t("afkAlerts.update.running")}</p>
+            <p className="text-[12px] font-medium text-ash-300">
+              {t("updates.afkComeBack", { count: listed.length })}
+            </p>
             <ul className="mt-2 flex flex-wrap justify-center gap-1.5">
               <AnimatePresence initial={false}>
                 {listed.slice(0, ROSTER_MAX).map((account) => (
@@ -373,18 +389,48 @@ function MandatoryScreen() {
   );
 }
 
-/** "What's new" once after an update. */
+/** Set once the restart's leftovers were used: a later render or refetch never repeats them. */
+let afterUpdateHandled = false;
+
+/**
+ * The first moments after an update restart: back on the page the player left, and "Yenilikler"
+ * with the new version's notes, once.
+ */
 export function WhatsNew() {
   const { t } = useTranslation();
-  const { data: info } = useQuery({
-    queryKey: ["app-info"],
-    queryFn: () => api.appInfo(),
-    enabled: isTauri(),
-  });
-  const [notes, setNotes] = useState<{ version: string; notes: string } | null>(null);
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [notes, setNotes] = useState<ReleaseNotes | null>(null);
+
   useEffect(() => {
-    if (info) setNotes(takePendingNotes(info.version));
-  }, [info]);
+    if (afterUpdateHandled) return;
+    if (!isTauri()) {
+      afterUpdateHandled = true;
+      if (new URLSearchParams(window.location.search).get("update") === "whatsnew") {
+        setNotes({ version: "2.5.0", notes: PREVIEW_NOTES });
+      }
+      return;
+    }
+    // Two runs in development (StrictMode) share one backend call; the live one uses it.
+    let live = true;
+    void Promise.all([
+      loadAfterUpdate(),
+      queryClient
+        .fetchQuery({ queryKey: ["app-info"], queryFn: () => api.appInfo() })
+        .catch(() => null),
+    ]).then(([after, info]) => {
+      if (!live || afterUpdateHandled) return;
+      afterUpdateHandled = true;
+      const route = landingRoute(after, router.state.location.pathname);
+      if (route) router.history.replace(route);
+      const shown = chooseNotes(after, info ? takePendingNotes(info.version) : null);
+      if (shown) setNotes(shown);
+    });
+    return () => {
+      live = false;
+    };
+  }, [router, queryClient]);
+
   return (
     <Dialog
       open={Boolean(notes)}

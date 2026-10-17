@@ -198,12 +198,25 @@ export const commands = {
 	 */
 	updateDownload: (channel: string, onProgress: Channel<UpdateProgress>) => typedError<boolean, CmdError>(__TAURI_INVOKE("update_download", { channel, onProgress })),
 	/**
-	 *  Install the downloaded update. On Windows the installer takes over and the app exits; on
-	 *  macOS/Linux the app restarts itself. The update is kept when it cannot be installed now, so
-	 *  "try again" works (the mandatory update screen has no other way forward).
+	 *  Install the downloaded update and restart into it. Never under a running game; open AFK accounts
+	 *  are stopped first (`on_step` says so) and connect again after the restart, as does the window
+	 *  and `route`, the page the player is on. When installing fails the update is kept ("Tekrar dene"
+	 *  works) and the AFK accounts connect again at once.
 	 */
-	updateApply: () => typedError<null, CmdError>(__TAURI_INVOKE("update_apply")),
+	updateApply: (route: string | null, onStep: Channel<UpdateStep>) => typedError<null, CmdError>(__TAURI_INVOKE("update_apply", { route, onStep })),
 	appRestart: () => __TAURI_INVOKE<void>("app_restart"),
+	/**
+	 *  What the update restart left for the UI: the new version's notes and the page to return to.
+	 *  Taken once.
+	 */
+	updateRestartInfo: () => __TAURI_INVOKE<{
+	/**  The version the update installed. */
+	version: string,
+	/**  Its release notes, set when this start runs that version ("Yenilikler", shown once). */
+	notes: string | null,
+	/**  The page the player was on, set right after the restart. */
+	route: string | null,
+} | null>("update_restart_info"),
 	officialStatus: () => typedError<OfficialStatus, CmdError>(__TAURI_INVOKE("official_status")),
 	/**
 	 *  The Projects instance, created on first use. It follows the official pack family when one
@@ -2991,6 +3004,16 @@ export type RequestView = {
 	sentAt: number,
 };
 
+/**  What the update restart left for the UI (`update_restart_info`). */
+export type RestartInfo = {
+	/**  The version the update installed. */
+	version: string,
+	/**  Its release notes, set when this start runs that version ("Yenilikler", shown once). */
+	notes: string | null,
+	/**  The page the player was on, set right after the restart. */
+	route: string | null,
+};
+
 export type RestoredSetsView = {
 	/**  Back where they were. */
 	restored: number,
@@ -3656,6 +3679,13 @@ export type UpdateStatus = {
 	version: string | null,
 	notes: string | null,
 };
+
+/**  Where `update_apply` is (streamed over its channel; it only returns when installing failed). */
+export type UpdateStep = 
+/**  Open AFK accounts are being stopped; they connect again after the restart. */
+"stoppingAfk" | 
+/**  The installer starts: the launcher closes and opens again. */
+"installing";
 
 /**
  *  Why the settings could not be saved: the server address check, then the legacy form's

@@ -32,13 +32,13 @@ import { useTranslation } from "react-i18next";
 import logo from "@/assets/brand/logo-96.webp";
 import { FriendsSettingsSection } from "@/features/social/settings-section";
 import { useSocialUi } from "@/features/social/store";
+import { UpdateSettingsAction } from "@/features/updates/update-settings";
 import { api } from "@/lib/api";
 import { applyStartOnBoot } from "@/lib/autostart";
 import { ENGLISH_ENABLED, setLanguage } from "@/lib/i18n";
 import { openLink } from "@/lib/links";
 import { playSound } from "@/lib/sound";
 import { type GameStartBehavior, usePrefs } from "@/stores/prefs";
-import { useUpdate } from "@/stores/update";
 import { AccountsSection } from "./accounts-section";
 import { DataSection } from "./data-section";
 import { JavaSection } from "./java-section";
@@ -246,11 +246,6 @@ function Updates() {
   const { t } = useTranslation();
   const p = usePrefs();
   const { data: info } = useQuery({ queryKey: ["app-info"], queryFn: () => api.appInfo() });
-  const phase = useUpdate((s) => s.phase);
-  const percent = useUpdate((s) => s.percent);
-  const check = useUpdate((s) => s.check);
-  const apply = useUpdate((s) => s.apply);
-  const busy = phase === "checking" || phase === "downloading" || phase === "applying";
   return (
     <>
       <Row
@@ -282,38 +277,7 @@ function Updates() {
             : t("settings.about.version")
         }
       >
-        {phase === "ready" ? (
-          <Button
-            variant="primary"
-            icon={<ArrowsClockwise size={16} />}
-            onClick={() => void apply()}
-          >
-            {t("settings.updates.restart")}
-          </Button>
-        ) : (
-          <Button
-            variant="secondary"
-            icon={
-              <ArrowsClockwise
-                size={16}
-                className={busy ? "animate-spin motion-reduce:animate-none" : undefined}
-              />
-            }
-            disabled={busy}
-            onClick={async () => {
-              const result = await check(true);
-              if (result === "upToDate") toast.success(t("settings.updates.upToDate"));
-              else if (result === "ready") toast.success(t("settings.updates.ready"));
-              else if (result === "unavailable") toast.error(t("settings.updates.unavailable"));
-            }}
-          >
-            {phase === "downloading"
-              ? t("settings.updates.downloading", { percent: Math.round(percent) })
-              : busy
-                ? t("settings.updates.checking")
-                : t("settings.updates.check")}
-          </Button>
-        )}
+        <UpdateSettingsAction />
       </Row>
     </>
   );

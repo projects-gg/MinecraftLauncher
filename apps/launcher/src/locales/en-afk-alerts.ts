@@ -5,7 +5,6 @@ export const enAfkAlerts = {
   sameReason: "{{reason}}: {{names}}",
   show: "Show",
   update: {
-    running: "Your open AFK accounts",
     more: "+{{count}}",
     stopAndUpdate: "Stop and update",
     stopping: "Stopping AFK accounts",

@@ -7,9 +7,9 @@ export const trAfkAlerts = {
   // Several stopped for the same reason.
   sameReason: "{{reason}}: {{names}}",
   show: "Göster",
-  // The mandatory update screen while AFK accounts or the game are open.
+  // The mandatory update screen while AFK accounts or the game are open (its caption over the
+  // accounts is updates.afkComeBack). Stopping and installing also label the title bar pill.
   update: {
-    running: "Açık AFK hesapların",
     more: "+{{count}}",
     stopAndUpdate: "Durdur ve güncelle",
     stopping: "AFK hesapları durduruluyor",
