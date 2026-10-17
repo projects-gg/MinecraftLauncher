@@ -13,7 +13,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence } from "motion/react";
 import { Dialog } from "radix-ui";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import Markdown from "react-markdown";
 import rehypeSanitize from "rehype-sanitize";
@@ -22,6 +22,7 @@ import { DiscordTile } from "@/features/social/discord-button";
 import { api } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
 import { canOpenLink, isWebLink, openLink, openWebLink } from "@/lib/links";
+import { useNewsSeen } from "@/stores/news-seen";
 
 /** The Discord message a feed post summarizes, opened in the browser. */
 function DiscordSourceLink({ url }: { url: string }) {
@@ -45,7 +46,8 @@ function DiscordSourceLink({ url }: { url: string }) {
  * Full news article over the current page. Markdown is sanitized; links open in the
  * system browser, never inside the launcher. It opens like every dialog (its entrance waits for
  * the frame that draws it, the cover picture included) and takes the keyboard focus on its text,
- * so the arrow keys, Page Down and Space scroll the article at once.
+ * so the arrow keys, Page Down and Space scroll the article at once. An opened article is no
+ * longer new (its gold dot in the lists fades out).
  */
 export function NewsReader({
   newsId,
@@ -60,6 +62,10 @@ export function NewsReader({
   const { data } = useQuery({ queryKey: ["home-content"], queryFn: () => api.homeContent() });
   const item = data?.news.find((n) => n.id === newsId);
   const open = Boolean(newsId && item);
+  const openedId = open ? item?.id : undefined;
+  useEffect(() => {
+    if (openedId) useNewsSeen.getState().markRead(openedId);
+  }, [openedId]);
 
   return (
     <Dialog.Root open={open} onOpenChange={(next) => !next && onClose()}>

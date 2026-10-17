@@ -9,20 +9,27 @@ import { AccountFace } from "@/features/accounts/account-face";
 import { useAccountsUi } from "@/features/accounts/store";
 import { api } from "@/lib/api";
 import { detectOs } from "@/lib/platform";
+import { isNewsNew, useNewsSeen } from "@/stores/news-seen";
 
 interface Item {
   to: "/" | "/library" | "/news" | "/afk" | "/settings";
   icon: Icon;
   label: string;
+  /**
+   * Something new waits behind the link: a small, still gold dot at the icon's corner (it fades
+   * in and out), and this name for screen readers while it shows.
+   */
+  marker?: { on: boolean; label: string };
 }
 
 function RailLink({ item, active }: { item: Item; active: boolean }) {
   const IconCmp = item.icon;
+  const marked = item.marker?.on === true;
   return (
     <Tooltip content={item.label} side="right">
       <Link
         to={item.to}
-        aria-label={item.label}
+        aria-label={marked && item.marker ? item.marker.label : item.label}
         aria-current={active ? "page" : undefined}
         className="group relative flex size-[40px] items-center justify-center rounded-lg outline-none transition-transform duration-150 ease-out focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.94]"
       >
@@ -49,9 +56,28 @@ function RailLink({ item, active }: { item: Item; active: boolean }) {
             active ? "text-gold-300" : "text-ash-400 group-hover:text-bone-100",
           )}
         />
+        {item.marker ? (
+          <span
+            aria-hidden
+            className={cn(
+              "absolute top-[6px] right-[6px] size-1.5 rounded-full bg-gold-400 transition-opacity duration-200 ease-out",
+              marked ? "opacity-100" : "opacity-0",
+            )}
+          />
+        ) : null}
       </Link>
     </Tooltip>
   );
+}
+
+/** Whether news the player has not seen waits (not while the news page is open). */
+function useNewsWaiting(onNewsPage: boolean): boolean {
+  const { data } = useQuery({ queryKey: ["home-content"], queryFn: () => api.homeContent() });
+  const watermark = useNewsSeen((s) => s.watermark);
+  const read = useNewsSeen((s) => s.read);
+  if (onNewsPage || !data) return false;
+  const now = Date.now();
+  return data.news.some((item) => isNewsNew(item, { watermark, read }, now));
 }
 
 export function NavRail() {
@@ -61,18 +87,24 @@ export function NavRail() {
   const active = accounts?.find((a) => a.active);
   const openCenter = useAccountsUi((s) => s.openCenter);
   const mac = detectOs() === "macos";
+  const isActive = (to: string) => (to === "/" ? pathname === "/" : pathname.startsWith(to));
+  const newsWaiting = useNewsWaiting(isActive("/news"));
 
   const top: Item[] = [
     { to: "/", icon: House, label: t("nav.home") },
     { to: "/library", icon: SquaresFour, label: t("nav.library") },
-    { to: "/news", icon: Newspaper, label: t("nav.news") },
+    {
+      to: "/news",
+      icon: Newspaper,
+      label: t("nav.news"),
+      marker: { on: newsWaiting, label: t("reminders.railNews", { label: t("nav.news") }) },
+    },
     { to: "/afk", icon: Robot, label: t("nav.afk") },
   ];
-  const isActive = (to: string) => (to === "/" ? pathname === "/" : pathname.startsWith(to));
 
   return (
     <nav
-      aria-label="Ana menü"
+      aria-label={t("reminders.mainMenu")}
       className={cn(
         "glass relative z-20 flex w-rail shrink-0 flex-col items-center border-y-0 border-l-0 pb-3",
         mac ? "pt-10" : "pt-2.5",

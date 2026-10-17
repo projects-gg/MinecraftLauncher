@@ -2,14 +2,16 @@ import { Button, Chip, cn, EmptyState, Segmented, Skeleton, useMotionPrefs } fro
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { type Ref, useMemo, useState } from "react";
+import { type Ref, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, type NewsCategory, type NewsItem } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
+import { isNewsNew, newestPublished, useNewsSeen } from "@/stores/news-seen";
+import { NewDot, NewLabel } from "./new-dot";
 
 type Filter = "all" | NewsCategory;
 
-function Featured({ item }: { item: NewsItem }) {
+function Featured({ item, isNew }: { item: NewsItem; isNew: boolean }) {
   const { t } = useTranslation();
   return (
     <Link
@@ -30,14 +32,18 @@ function Featured({ item }: { item: NewsItem }) {
       <div className="absolute inset-x-0 bottom-0 p-5">
         <div className="flex items-center gap-2.5">
           <Chip tone="onArt">{t(`categories.${item.category}`)}</Chip>
-          <span className="text-shadow-art text-[12.5px] text-bone-100/90">
-            {formatRelative(item.publishedAt)}
+          <span className="flex items-center gap-1.5">
+            <NewDot on={isNew} />
+            <span className="text-shadow-art text-[12.5px] text-bone-100/90">
+              {formatRelative(item.publishedAt)}
+            </span>
           </span>
         </div>
         <h2 className="text-shadow-art mt-2 max-w-[26ch] font-display text-[26px] leading-[1.05] font-semibold text-bone-50">
           {item.title}
         </h2>
         <p className="mt-1.5 max-w-[60ch] text-[13.5px] text-bone-100/90">{item.summary}</p>
+        <NewLabel on={isNew} />
       </div>
     </Link>
   );
@@ -47,7 +53,7 @@ function Featured({ item }: { item: NewsItem }) {
  * A news card. The page arrives with the page cross-fade; cards that a filter change brings in
  * fade in place and the others glide to their new spots (no rise on every visit).
  */
-function Card({ item, ref }: { item: NewsItem; ref?: Ref<HTMLLIElement> }) {
+function Card({ item, isNew, ref }: { item: NewsItem; isNew: boolean; ref?: Ref<HTMLLIElement> }) {
   const { t } = useTranslation();
   const { layout } = useMotionPrefs();
   return (
@@ -77,18 +83,39 @@ function Card({ item, ref }: { item: NewsItem; ref?: Ref<HTMLLIElement> }) {
         <div className="p-3.5">
           <div className="flex items-center gap-2">
             <Chip>{t(`categories.${item.category}`)}</Chip>
-            <span className="truncate text-[12px] text-ash-300">
-              {formatRelative(item.publishedAt)}
+            <span className="flex min-w-0 items-center gap-1.5">
+              <NewDot on={isNew} />
+              <span className="truncate text-[12px] text-ash-300">
+                {formatRelative(item.publishedAt)}
+              </span>
             </span>
           </div>
           <h3 className="mt-1.5 line-clamp-2 font-display text-[15px] leading-snug font-semibold text-bone-50">
             {item.title}
           </h3>
           <p className="mt-1 line-clamp-2 text-[12.5px] text-ash-300">{item.summary}</p>
+          <NewLabel on={isNew} />
         </div>
       </Link>
     </motion.li>
   );
+}
+
+/**
+ * New news keeps its dot for the whole visit: the page judges by the watermark it arrived with
+ * (an opened article loses its dot at once). Everything the page shows counts as seen from the
+ * moment it shows it, so the dots are gone on the next visit, and Home, rendered as the player
+ * leaves, already draws its list without them (counting them at unmount came a render too late:
+ * the dots faded out on arrival and left gaps).
+ */
+function useVisitSeen(news: NewsItem[] | undefined) {
+  const [watermark] = useState(() => useNewsSeen.getState().watermark);
+  const read = useNewsSeen((s) => s.read);
+  useEffect(() => {
+    const newest = newestPublished(news ?? []);
+    if (newest) useNewsSeen.getState().advance(newest);
+  }, [news]);
+  return { watermark, read };
 }
 
 export function NewsPage() {
@@ -98,12 +125,14 @@ export function NewsPage() {
     queryKey: ["home-content"],
     queryFn: () => api.homeContent(),
   });
+  const seen = useVisitSeen(data?.news);
 
   const items = useMemo(
     () => (data?.news ?? []).filter((n) => filter === "all" || n.category === filter),
     [data, filter],
   );
   const [featured, ...rest] = items;
+  const now = Date.now();
 
   return (
     <div className="flex min-h-0 flex-1 flex-col px-page pt-3">
@@ -135,11 +164,11 @@ export function NewsPage() {
           </>
         ) : featured ? (
           <>
-            <Featured item={featured} />
+            <Featured key={featured.id} item={featured} isNew={isNewsNew(featured, seen, now)} />
             <ul className="relative mt-4 grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3">
               <AnimatePresence initial={false} mode="popLayout">
                 {rest.map((item) => (
-                  <Card key={item.id} item={item} />
+                  <Card key={item.id} item={item} isNew={isNewsNew(item, seen, now)} />
                 ))}
               </AnimatePresence>
             </ul>
