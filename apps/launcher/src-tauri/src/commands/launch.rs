@@ -6,6 +6,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use pl_auth::FailureClass;
+use pl_content::{PackManifest, PackState, SyncPolicy, plan_sync};
+use pl_mc::install::space::{self, GameFiles, Target};
 use pl_mc::install::{
     InstallOptions, InstallProgress, InstallStage, LaunchBar, LaunchPart, install_version,
 };
@@ -348,10 +350,162 @@ pub async fn launch_instance(
             Ok(())
         }
         Err(error) => {
+            let error = out_of_room(error, &state, &instance_id);
             let _ = on_event.send(LaunchEventView::Error(error.clone()));
             Err(error)
         }
         Ok(()) => Ok(()),
+    }
+}
+
+/// Launch failures a full disk can be behind: a write, a mod loader installer's step, a file
+/// its installer should have made, Java, the pack's files.
+const ROOM_SENSITIVE: [&str; 6] = ["DISK", "OYUN", "SUREC", "BULUNAMADI", "JAVA", "PAKET"];
+
+/// A full disk shows up in many ways (a batch of downloads, a write deep in a mod loader's
+/// installer, a step that only kept the text of what failed). A failure that says so, or one
+/// that could come from it while the disk is (nearly) full now, tells the player to make room
+/// ("Yer aç") instead.
+fn out_of_room(error: CmdError, state: &AppState, instance_id: &str) -> CmdError {
+    if error.code == CmdError::DISK_FULL || error.code == "IPTAL" {
+        return error;
+    }
+    let said = pl_net::mentions_disk_full(&error.details);
+    let full_now = || {
+        let game_dir = state.instances.game_dir(instance_id).ok();
+        [Some(state.mc.dirs.root().to_path_buf()), game_dir]
+            .into_iter()
+            .flatten()
+            .any(|dir| free_space(&dir).is_some_and(space::nearly_full))
+    };
+    if said || (ROOM_SENSITIVE.contains(&error.code.as_str()) && full_now()) {
+        tracing::warn!(code = %error.code, "launch failed on a full disk");
+        CmdError::disk_full(error.details)
+    } else {
+        error
+    }
+}
+
+/// Free space where a launch writes (or the end-to-end stand-in of debug builds).
+fn free_space(path: &Path) -> Option<u64> {
+    space::free_bytes_override().or_else(|| pl_data::usage::free_space(path))
+}
+
+/// Stops the launch before anything big is downloaded when a disk cannot hold what it still
+/// needs: the game, its mod loader and Java in the data folder, the pack's files in the
+/// instance folder (`DISK-DOLU`: how much is needed and how much is free; the command bar
+/// offers "Yer aç"). A roomy disk costs one look at the version's file list; the files are only
+/// checked when room is tight. A guess that fails (an unreadable file list, no answer from
+/// Mojang) never stops a launch: a disk that fills up anyway is reported when it happens.
+async fn ensure_room(
+    state: &AppState,
+    instance: &pl_mc::instance::Instance,
+    loader_version: Option<&str>,
+    manifest: Option<&pl_mc::version::VersionManifest>,
+    pack: Option<&PackManifest>,
+    game_dir: &Path,
+    cancel: &CancellationToken,
+) -> CmdResult<()> {
+    let ctx = &state.mc;
+    let shared_free = free_space(ctx.dirs.root());
+    let game_free = free_space(game_dir);
+    if shared_free.is_none() && game_free.is_none() {
+        return Ok(());
+    }
+    let files = match GameFiles::for_launch(
+        ctx,
+        &instance.mc_version,
+        instance.loader.kind,
+        loader_version,
+        &instance.java,
+        manifest,
+    )
+    .await
+    {
+        Ok(files) => files,
+        Err(error) => {
+            tracing::warn!(%error, "room check skipped: the version's files are unknown");
+            return Ok(());
+        }
+    };
+    let roomy = files.upper_bound(ctx).await.is_some_and(|upper| {
+        space::shortfall(
+            Target {
+                free: shared_free,
+                missing: upper,
+            },
+            Target {
+                free: game_free,
+                missing: pack.map_or(0, pack_upper_bound),
+            },
+        )
+        .is_none()
+    });
+    if roomy {
+        return Ok(());
+    }
+    let shared = match files.missing(ctx, cancel).await {
+        Ok(bytes) => bytes,
+        Err(_) if cancel.is_cancelled() => return Err(cancelled()),
+        Err(error) => {
+            tracing::warn!(%error, "room check skipped: the missing files are unknown");
+            return Ok(());
+        }
+    };
+    let game = match pack {
+        Some(manifest) => pack_missing(manifest, game_dir).await,
+        None => 0,
+    };
+    let short = space::shortfall(
+        Target {
+            free: shared_free,
+            missing: shared,
+        },
+        Target {
+            free: game_free,
+            missing: game,
+        },
+    );
+    tracing::info!(
+        shared,
+        game,
+        ?shared_free,
+        ?game_free,
+        short = short.is_some(),
+        "room on the disk checked"
+    );
+    match short {
+        Some(short) => Err(CmdError::disk_short(
+            short.needed,
+            short.free,
+            format!(
+                "not enough room: {} bytes needed for {} bytes to download, {} bytes free",
+                short.needed, short.missing, short.free
+            ),
+        )),
+        None => Ok(()),
+    }
+}
+
+/// The pack's files as if none were installed (no file is read).
+fn pack_upper_bound(manifest: &PackManifest) -> u64 {
+    manifest.files.iter().map(|file| file.file_size).sum()
+}
+
+/// The pack files the coming sync downloads, planned as `official::sync_pack_files` plans them
+/// (planning only reads). Nothing when the folder cannot be read: the sync reports that itself.
+async fn pack_missing(manifest: &PackManifest, game_dir: &Path) -> u64 {
+    let previous = PackState::load(game_dir).await.ok().flatten();
+    let policy = SyncPolicy {
+        repair: false,
+        quick_check: true,
+    };
+    match plan_sync(manifest, game_dir, previous.as_ref(), None, &policy).await {
+        Ok(plan) => plan.downloads.iter().map(|download| download.size).sum(),
+        Err(error) => {
+            tracing::debug!(%error, "pack files not counted for the room check");
+            0
+        }
     }
 }
 
@@ -489,38 +643,60 @@ async fn prepare_and_spawn(
         progress: Some(progress.clone()),
     };
 
+    // The mod loader version to install: the instance's, else the newest stable one.
+    let loader_version = match instance.loader.kind {
+        LoaderKind::Vanilla => None,
+        kind => Some(match &instance.loader.version {
+            Some(v) if !v.trim().is_empty() => v.clone(),
+            _ => step(cancel, async {
+                pl_mc::loaders::list_loader_versions(&state.mc, kind, &instance.mc_version)
+                    .await
+                    .map_err(CmdError::from)
+            })
+            .await?
+            .into_iter()
+            .find(|v| v.stable)
+            .map(|v| v.version)
+            .ok_or_else(|| {
+                CmdError::new(
+                    "YUKLEYICI-YOK",
+                    "Bu Minecraft sürümü için seçilen mod yükleyici bulunamadı.",
+                    format!("{kind:?} for {}", instance.mc_version),
+                )
+            })?,
+        }),
+    };
+
+    // Before anything big is downloaded: room on the disk for what this launch still needs.
+    if !offline {
+        step(
+            cancel,
+            ensure_room(
+                state,
+                &instance,
+                loader_version.as_deref(),
+                manifest.as_ref(),
+                pack.as_ref(),
+                &game_dir,
+                cancel,
+            ),
+        )
+        .await?;
+    }
+
     // Mod loaders install their profile (and run Forge/NeoForge installer steps) first.
     if modded {
         bar.enter(LaunchPart::Loader);
     }
-    let version_id = match instance.loader.kind {
-        LoaderKind::Vanilla => instance.mc_version.clone(),
-        kind => {
-            let loader_version = match &instance.loader.version {
-                Some(v) if !v.trim().is_empty() => v.clone(),
-                _ => step(cancel, async {
-                    pl_mc::loaders::list_loader_versions(&state.mc, kind, &instance.mc_version)
-                        .await
-                        .map_err(CmdError::from)
-                })
-                .await?
-                .into_iter()
-                .find(|v| v.stable)
-                .map(|v| v.version)
-                .ok_or_else(|| {
-                    CmdError::new(
-                        "YUKLEYICI-YOK",
-                        "Bu Minecraft sürümü için seçilen mod yükleyici bulunamadı.",
-                        format!("{kind:?} for {}", instance.mc_version),
-                    )
-                })?,
-            };
+    let version_id = match &loader_version {
+        None => instance.mc_version.clone(),
+        Some(loader_version) => {
             step(cancel, async {
                 pl_mc::loaders::install_loader(
                     &state.mc,
                     &instance.mc_version,
-                    kind,
-                    &loader_version,
+                    instance.loader.kind,
+                    loader_version,
                     install_options(if first_install {
                         VerifyMode::Full
                     } else {

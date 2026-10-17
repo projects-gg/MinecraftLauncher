@@ -2,6 +2,7 @@ import { toast } from "@pl/ui";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { create } from "zustand";
 import { confirmAfkBeforePlay } from "@/features/accounts/afk-guard";
+import { launchErrorCode } from "@/features/disk/launch-error";
 import { useJavaPrompt } from "@/features/java/prompt-store";
 import { announceModsNotice, announceVersionDropped } from "@/features/modcenter/notices";
 import { announceModWarnings, useModFlow } from "@/features/modhealth/flow";
@@ -26,7 +27,8 @@ export type LaunchPhase =
     }
   | { kind: "launching" }
   | { kind: "running"; since: number }
-  | { kind: "error"; message: string; details: string };
+  /** `code` picks the toast's action ("DISK-DOLU": "Yer aç"); it is never shown. */
+  | { kind: "error"; code: string; message: string; details: string };
 
 /** The diagnosis of a crash with its suspects and one-click actions (mod health flow). */
 export type CrashInfo = Omit<Extract<LaunchEvent, { type: "crashed" }>, "type">;
@@ -247,7 +249,14 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
           }
           break;
         case "error":
-          set({ phase: { kind: "error", message: event.message, details: event.details } });
+          set({
+            phase: {
+              kind: "error",
+              code: launchErrorCode(event.details),
+              message: event.message,
+              details: event.details,
+            },
+          });
           playSound("error");
           tellIfAway(i18n.t("attention.failed.title"), event.message);
           break;

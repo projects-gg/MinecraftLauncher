@@ -11,6 +11,10 @@ pub struct CmdError {
 }
 
 impl CmdError {
+    /// The disk cannot hold what is being downloaded or written: the command bar offers "Yer aç"
+    /// (Settings → Veri, the cleanup) instead of copying the details.
+    pub const DISK_FULL: &str = "DISK-DOLU";
+
     pub fn new(
         code: impl Into<String>,
         message: impl Into<String>,
@@ -28,6 +32,32 @@ impl CmdError {
             "GENEL",
             "Beklenmeyen bir sorun oluştu. Tekrar dene; sürerse ayrıntıları destek ekibine gönder.",
             details.to_string(),
+        )
+    }
+
+    /// The disk filled up during a download or an install.
+    pub fn disk_full(details: impl Into<String>) -> Self {
+        Self::new(
+            Self::DISK_FULL,
+            "Diskte yer kalmadı. Biraz yer açıp tekrar dene.",
+            details,
+        )
+    }
+
+    /// Before a launch downloads anything: the disk cannot hold it (`needed` with the margin).
+    pub fn disk_short(needed: u64, free: u64, details: impl Into<String>) -> Self {
+        // A figure and its unit stay on one line of the toast ("1,2 GB").
+        let size = |bytes| {
+            pl_mc::install::space::format_size(bytes).replace(' ', &char::from(0xA0_u8).to_string())
+        };
+        Self::new(
+            Self::DISK_FULL,
+            format!(
+                "Diskte yeterli yer yok. Oyun için {} gerekiyor, {} boş.",
+                size(needed),
+                size(free)
+            ),
+            details,
         )
     }
 }
@@ -58,6 +88,7 @@ impl From<pl_mc::Error> for CmdError {
         let details = error.to_string();
         let (code, message) = match &error {
             _ if error.is_cancelled() => ("IPTAL", "İşlem iptal edildi."),
+            _ if error.is_disk_full() => return Self::disk_full(details),
             _ if error.is_offline() => (
                 "AG-YOK",
                 "İnternete bağlanılamadı ve gereken oyun dosyaları bilgisayarında yok. Bağlantını kontrol edip tekrar dene.",

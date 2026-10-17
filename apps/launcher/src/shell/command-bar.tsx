@@ -7,6 +7,7 @@ import { DropdownMenu } from "radix-ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountFace } from "@/features/accounts/account-face";
+import { launchErrorAction } from "@/features/disk/launch-error";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
 import { ResumeButton, useResumeTarget } from "@/features/resume/resume-button";
 import { api, type InstanceSummary } from "@/lib/api";
@@ -302,16 +303,28 @@ export function CommandBar() {
   }, [phase.kind, queryClient]);
 
   useEffect(() => {
-    if (phase.kind === "error") {
+    if (phase.kind !== "error") return;
+    if (launchErrorAction(phase.code) === "makeSpace") {
+      // The disk cannot hold the download: nothing was fetched yet (or the half-done file went).
+      // Settings → Veri shows what can go and how much room it makes; OYNA tries again after.
+      toast.error(phase.message, {
+        id: "launch-disk",
+        duration: 10_000,
+        action: {
+          label: t("disk.makeSpace"),
+          onClick: () => void navigate({ to: "/settings", search: { section: "data" } }),
+        },
+      });
+    } else {
       toast.error(phase.message, {
         action: {
           label: t("common.copyDetails"),
           onClick: () => void copyDetails(phase.details),
         },
       });
-      reset();
     }
-  }, [phase, reset, t]);
+    reset();
+  }, [phase, reset, t, navigate]);
 
   const state: PlayState = (() => {
     switch (phase.kind) {

@@ -14,6 +14,7 @@ import { createMockContent, mockExtraMods } from "./mock-content";
 import { createMockConveniences, mockNewScreenshots, mockSessionMs } from "./mock-conveniences";
 import { createMockData } from "./mock-data";
 import { mockCustomJava, mockJava, mockJavaPrompt } from "./mock-java";
+import { mockLaunchStop } from "./mock-launch-stop";
 import { createMockLibrary, mockServers } from "./mock-library";
 import { createMockModCenter } from "./mock-modcenter";
 import { mockCrash, mockCrashScenario, mockModHealth } from "./mock-modhealth";
@@ -836,6 +837,8 @@ export const mockApi: LauncherApi = {
       onEvent({ type: "javaMismatch", ...javaQuestion });
       return;
     }
+    // Preview switches (mock-launch-stop.ts): no room on the disk, the launch errors' texts.
+    if (await mockLaunchStop(onEvent, job)) return;
     // "Kur ve oyna" downloads Java first.
     const heavy = instance?.state !== "ready" || options?.java === "install";
     const modded = instance?.loader !== "vanilla";
