@@ -20,6 +20,48 @@ pub use ed25519_dalek::{SigningKey, VerifyingKey};
 use crate::error::{Error, Result};
 use crate::fsutil::sha256_hex;
 
+/// A public key launchers trust to sign the content index.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TrustedKey {
+    /// [`key_id`] of the key.
+    pub id: &'static str,
+    /// Base64 of its 32 raw bytes ([`encode_verifying_key`]).
+    pub public_key: &'static str,
+}
+
+/// The keys released launchers trust to sign the content index, primary first. This is the one
+/// list: the launcher verifies with it and Studio tells whether its own key is in it. Rotation:
+/// add the new key here, ship a launcher, sign with the new key, later drop the old one. The
+/// Android app (separate repository) keeps its own copy of this list.
+pub const CONTENT_PUBLIC_KEYS: &[TrustedKey] = &[
+    // Primary, generated 2026-10-15.
+    TrustedKey {
+        id: "5125c0d365b019ce",
+        public_key: "muj3CSu3m9jpB7fUP5TbkRSnISGEH13XbTt6agmIK68=",
+    },
+    // Offline backup, generated 2026-10-16: not used for everyday publishing.
+    TrustedKey {
+        id: "b63fd046213136eb",
+        public_key: "qTmm+6djdFYCmoHKop6DuvVMgUsHk1EzdZZ9wDhXdOM=",
+    },
+];
+
+/// [`CONTENT_PUBLIC_KEYS`] decoded, in order (a test keeps every entry decodable).
+pub fn content_public_keys() -> Vec<VerifyingKey> {
+    CONTENT_PUBLIC_KEYS
+        .iter()
+        .filter_map(|key| decode_verifying_key(key.public_key).ok())
+        .collect()
+}
+
+/// Whether `key` is one of [`CONTENT_PUBLIC_KEYS`].
+pub fn is_content_public_key(key: &VerifyingKey) -> bool {
+    let encoded = encode_verifying_key(key);
+    CONTENT_PUBLIC_KEYS
+        .iter()
+        .any(|trusted| trusted.public_key == encoded)
+}
+
 /// Contents of `index.json.sig`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -237,6 +279,24 @@ mod tests {
         assert_eq!(key_id(&key), key_id(&key));
         assert_eq!(key_id(&key), sha256_hex(key.as_bytes())[..16]);
         assert!(key_id(&key).bytes().all(|b| b.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn content_public_keys_decode_to_their_ids() {
+        let ids: Vec<&str> = CONTENT_PUBLIC_KEYS.iter().map(|key| key.id).collect();
+        assert_eq!(
+            ids,
+            ["5125c0d365b019ce", "b63fd046213136eb"],
+            "primary first"
+        );
+        let keys = content_public_keys();
+        assert_eq!(keys.len(), CONTENT_PUBLIC_KEYS.len(), "every key decodes");
+        for (key, trusted) in keys.iter().zip(CONTENT_PUBLIC_KEYS) {
+            assert_eq!(key_id(key), trusted.id);
+            assert_eq!(encode_verifying_key(key), trusted.public_key);
+            assert!(is_content_public_key(key));
+        }
+        assert!(!is_content_public_key(&fixed_key(5).verifying_key()));
     }
 
     #[test]

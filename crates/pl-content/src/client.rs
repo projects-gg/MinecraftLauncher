@@ -746,7 +746,7 @@ fn parse_base(text: &str) -> Result<Url> {
     Ok(url)
 }
 
-fn resource_url(base: &Url, name: &str, cache_buster: Option<&str>) -> Result<Url> {
+pub(crate) fn resource_url(base: &Url, name: &str, cache_buster: Option<&str>) -> Result<Url> {
     let mut url = base
         .join(name)
         .map_err(|e| Error::Invalid(format!("bad content URL: {e}")))?;
@@ -756,7 +756,7 @@ fn resource_url(base: &Url, name: &str, cache_buster: Option<&str>) -> Result<Ur
     Ok(url)
 }
 
-fn ensure_success(response: reqwest::Response, url: &Url) -> Result<reqwest::Response> {
+pub(crate) fn ensure_success(response: reqwest::Response, url: &Url) -> Result<reqwest::Response> {
     if response.status().is_success() {
         Ok(response)
     } else {
@@ -769,7 +769,11 @@ fn ensure_success(response: reqwest::Response, url: &Url) -> Result<reqwest::Res
 }
 
 /// Reads a response body, refusing anything larger than `limit` bytes.
-async fn read_limited(mut response: reqwest::Response, limit: u64, url: &Url) -> Result<Vec<u8>> {
+pub(crate) async fn read_limited(
+    mut response: reqwest::Response,
+    limit: u64,
+    url: &Url,
+) -> Result<Vec<u8>> {
     if response.content_length().is_some_and(|len| len > limit) {
         return Err(Error::Invalid(format!(
             "{url} is larger than {limit} bytes"
@@ -790,7 +794,7 @@ async fn read_limited(mut response: reqwest::Response, limit: u64, url: &Url) ->
     Ok(body)
 }
 
-fn parse_json<T: DeserializeOwned>(bytes: &[u8], what: &str) -> Result<T> {
+pub(crate) fn parse_json<T: DeserializeOwned>(bytes: &[u8], what: &str) -> Result<T> {
     serde_json::from_slice(bytes).map_err(|e| Error::json(what, e))
 }
 
@@ -808,7 +812,7 @@ fn parse_documents(
 
 /// Deletes content-addressed files (`<sha256>.<ext>`) not in `keep`, plus temporary files
 /// older than a day. Unrelated files are left alone.
-async fn sweep(dir: &Path, keep: &BTreeSet<String>) -> Result<usize> {
+pub(crate) async fn sweep(dir: &Path, keep: &BTreeSet<String>) -> Result<usize> {
     let mut entries = match tokio::fs::read_dir(dir).await {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(0),

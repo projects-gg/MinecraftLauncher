@@ -3,8 +3,9 @@
 //! `cargo run -p pl-content --example keygen -- <private-key-output-path>`
 //!
 //! Writes the private key (base64) to the given path, which must not exist yet, and prints the
-//! public key and key id. Put the public key into the launcher's `CONTENT_PUBLIC_KEYS` and import
-//! the private key into Projects Studio. Never commit the private key.
+//! public key and key id. Put the public key into `pl_content::CONTENT_PUBLIC_KEYS`
+//! (`src/signing.rs`, read by the launcher and Studio) and import the private key into Projects
+//! Studio. Never commit the private key.
 
 use std::io::Write;
 
@@ -31,6 +32,9 @@ fn main() {
     file.write_all(pl_content::encode_signing_key(&signing).as_bytes())
         .expect("write key file");
     println!("private key written to {}", path.display());
-    println!("public key: {}", pl_content::encode_verifying_key(&verifying));
+    println!(
+        "public key: {}",
+        pl_content::encode_verifying_key(&verifying)
+    );
     println!("key id:     {}", pl_content::key_id(&verifying));
 }

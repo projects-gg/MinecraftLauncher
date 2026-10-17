@@ -1,11 +1,19 @@
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 
-use super::{Cta, MediaRef, check_schema, default_true};
+use super::{
+    Cta, FeedOverride, MediaRef, NewsFeedConfig, check_schema, default_true,
+    is_valid_minecraft_version,
+};
 use crate::error::Result;
 
 /// Highest `LauncherConfig.schema` this build understands.
 pub const LAUNCHER_CONFIG_SCHEMA: u32 = 1;
+
+/// The Minecraft version this launcher recommends while the signed config names none (or an
+/// invalid one): see [`LauncherConfig::recommended_minecraft`]. Studio shows it as the default of
+/// its setting. Change it only together with the release notes of a launcher version.
+pub const DEFAULT_RECOMMENDED_MINECRAFT_VERSION: &str = "26.1.2";
 
 /// `config/launcher.<sha256>.json`: home screen, banners, servers, links, Discord templates,
 /// feature flags and the minimum launcher version. Every field is optional.
@@ -28,6 +36,15 @@ pub struct LauncherConfig {
     /// Pack id suggested for new installs.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recommended_pack: Option<String>,
+    /// The Minecraft version launchers recommend ("Önerilen" in their version lists, preselected
+    /// for new custom instances); read it through [`Self::recommended_minecraft`]. Written only
+    /// when set, so configs without it keep their exact shape.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recommended_minecraft_version: Option<String>,
+    /// The Discord bot's news feed. Missing or disabled: launchers never fetch it. Published only
+    /// while enabled, so configs without it keep their exact shape.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub news_feed: Option<NewsFeedConfig>,
 }
 
 impl Default for LauncherConfig {
@@ -45,6 +62,8 @@ impl Default for LauncherConfig {
             discord: DiscordConfig::default(),
             features: Features::default(),
             recommended_pack: None,
+            recommended_minecraft_version: None,
+            news_feed: None,
         }
     }
 }
@@ -52,6 +71,38 @@ impl Default for LauncherConfig {
 impl LauncherConfig {
     pub fn check_schema(&self) -> Result<()> {
         check_schema("launcher config", self.schema, LAUNCHER_CONFIG_SCHEMA)
+    }
+
+    /// The news feed settings when the feed is enabled.
+    pub fn active_news_feed(&self) -> Option<&NewsFeedConfig> {
+        self.news_feed.as_ref().filter(|feed| feed.enabled)
+    }
+
+    /// The Minecraft version the launcher recommends: `recommendedMinecraftVersion` when it is a
+    /// valid version id ([`is_valid_minecraft_version`]), else
+    /// [`DEFAULT_RECOMMENDED_MINECRAFT_VERSION`]. Whether Mojang lists it is up to the caller (a
+    /// version list marks it only where it appears).
+    pub fn recommended_minecraft(&self) -> &str {
+        self.recommended_minecraft_version
+            .as_deref()
+            .filter(|version| is_valid_minecraft_version(version))
+            .unwrap_or(DEFAULT_RECOMMENDED_MINECRAFT_VERSION)
+    }
+
+    /// Drops what writers leave out of a published config: a `newsFeed` that is not enabled
+    /// (Studio keeps it in its workspace so turning the feed back on loses nothing) and an empty
+    /// `recommendedMinecraftVersion` (launchers then use their built-in default).
+    pub fn normalize_for_publish(&mut self) {
+        if self.news_feed.as_ref().is_some_and(|feed| !feed.enabled) {
+            self.news_feed = None;
+        }
+        if self
+            .recommended_minecraft_version
+            .as_deref()
+            .is_some_and(|version| version.trim().is_empty())
+        {
+            self.recommended_minecraft_version = None;
+        }
     }
 
     /// True when `current` is below `minLauncherVersion`.
@@ -66,12 +117,12 @@ impl LauncherConfig {
         self.banners.iter().filter(|b| b.is_active(now)).collect()
     }
 
-    /// Events that have not ended yet, soonest first.
+    /// Events that are not hidden and have not ended yet, soonest first.
     pub fn visible_events(&self, now: Timestamp) -> Vec<&EventCountdown> {
         let mut events: Vec<_> = self
             .events
             .iter()
-            .filter(|e| e.phase(now) != EventPhase::Ended)
+            .filter(|e| !e.hidden && e.phase(now) != EventPhase::Ended)
             .collect();
         events.sort_by(|a, b| a.starts_at.cmp(&b.starts_at).then_with(|| a.id.cmp(&b.id)));
         events
@@ -222,6 +273,20 @@ pub struct EventCountdown {
     pub image: Option<MediaRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub url: Option<String>,
+    /// The news item the event card opens (while that item is on the home screen).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub news_id: Option<String>,
+    /// Among events live at the same time, the card shows the highest priority first (then the
+    /// one that started last). Default 0.
+    #[serde(default, skip_serializing_if = "super::is_default")]
+    pub priority: i32,
+    /// Never shown. Studio publishes a hidden event to take the feed event with its id off the
+    /// event card (Studio wins on a shared id).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub hidden: bool,
+    /// Studio's record of the feed event this one replaces or hides; launchers ignore it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub feed_override: Option<FeedOverride>,
 }
 
 impl EventCountdown {
@@ -401,7 +466,8 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
     out.trim().to_owned()
 }
 
-/// Feature flags; everything is on unless Studio turns it off.
+/// Feature flags; everything is on unless Studio turns it off, except `friends`, which stays
+/// off until Studio turns it on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -409,6 +475,11 @@ pub struct Features {
     pub premium_login: bool,
     pub offline_accounts: bool,
     pub modrinth_browser: bool,
+    /// The optional friends feature (Discord sign-in, friend list, presence). Off by default:
+    /// launchers show nothing of it until the service is live. Written only when on, so
+    /// configs without it keep their exact shape.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub friends: bool,
 }
 
 impl Default for Features {
@@ -418,6 +489,7 @@ impl Default for Features {
             premium_login: true,
             offline_accounts: true,
             modrinth_browser: true,
+            friends: false,
         }
     }
 }
@@ -428,6 +500,40 @@ mod tests {
 
     fn ts(text: &str) -> Timestamp {
         text.parse().unwrap()
+    }
+
+    fn event(id: &str, start: &str, end: &str) -> EventCountdown {
+        EventCountdown {
+            id: id.into(),
+            title: id.into(),
+            starts_at: ts(start),
+            ends_at: ts(end),
+            image: None,
+            url: None,
+            news_id: None,
+            priority: 0,
+            hidden: false,
+            feed_override: None,
+        }
+    }
+
+    #[test]
+    fn event_additions_keep_the_old_shape() {
+        let plain: EventCountdown = serde_json::from_str(
+            r#"{"id":"cup","title":"Kupa","startsAt":"2026-10-20T18:00:00Z","endsAt":"2026-10-20T21:00:00Z"}"#,
+        )
+        .unwrap();
+        assert!(!plain.hidden && plain.news_id.is_none() && plain.feed_override.is_none());
+        assert_eq!(plain.priority, 0);
+        let written = serde_json::to_value(&plain).unwrap();
+        for key in ["hidden", "newsId", "feedOverride", "priority"] {
+            assert!(written.get(key).is_none(), "{key} is left out when unused");
+        }
+        let raised = EventCountdown {
+            priority: -2,
+            ..plain
+        };
+        assert_eq!(serde_json::to_value(&raised).unwrap()["priority"], -2);
     }
 
     #[test]
@@ -459,6 +565,99 @@ mod tests {
         assert_eq!(config.theme.season, Season::Unknown);
         assert!(!config.features.afk);
         assert!(config.features.modrinth_browser);
+    }
+
+    #[test]
+    fn friends_flag_is_off_unless_turned_on() {
+        let config: LauncherConfig = serde_json::from_str("{}").unwrap();
+        assert!(!config.features.friends);
+        // Off is not written, so older configs keep their exact shape.
+        let written = serde_json::to_value(&config).unwrap();
+        assert!(written["features"].get("friends").is_none());
+        let on: LauncherConfig =
+            serde_json::from_str(r#"{"features": {"friends": true}}"#).unwrap();
+        assert!(on.features.friends);
+        assert!(on.features.afk, "other flags keep their defaults");
+        assert_eq!(
+            serde_json::to_value(&on).unwrap()["features"]["friends"],
+            serde_json::Value::Bool(true)
+        );
+    }
+
+    #[test]
+    fn news_feed_is_published_only_while_enabled() {
+        let config: LauncherConfig = serde_json::from_str("{}").unwrap();
+        assert!(config.news_feed.is_none() && config.active_news_feed().is_none());
+        let written = serde_json::to_value(&config).unwrap();
+        assert!(
+            written.get("newsFeed").is_none(),
+            "older configs keep their shape"
+        );
+
+        let mut on: LauncherConfig = serde_json::from_str(
+            r#"{"newsFeed": {"enabled": true, "mirrors": ["https://projects.gg/launcher-feed/v1/"]}}"#,
+        )
+        .unwrap();
+        let feed = on.active_news_feed().unwrap();
+        assert_eq!(feed.max_age_days, 60, "default");
+        assert!(feed.keys.is_empty());
+        on.normalize_for_publish();
+        assert!(on.news_feed.is_some(), "an enabled feed is published");
+
+        let mut off = on.clone();
+        off.news_feed.as_mut().unwrap().enabled = false;
+        assert!(off.active_news_feed().is_none());
+        off.normalize_for_publish();
+        assert_eq!(off, LauncherConfig::default());
+    }
+
+    #[test]
+    fn recommended_minecraft_version_falls_back_to_the_built_in_default() {
+        let config: LauncherConfig = serde_json::from_str("{}").unwrap();
+        assert_eq!(
+            config.recommended_minecraft(),
+            DEFAULT_RECOMMENDED_MINECRAFT_VERSION
+        );
+        assert_eq!(DEFAULT_RECOMMENDED_MINECRAFT_VERSION, "26.1.2");
+        // Not written while unset, so existing configs keep their exact shape.
+        let written = serde_json::to_value(&config).unwrap();
+        assert!(written.get("recommendedMinecraftVersion").is_none());
+
+        let set: LauncherConfig =
+            serde_json::from_str(r#"{"recommendedMinecraftVersion": "1.21.11"}"#).unwrap();
+        assert_eq!(set.recommended_minecraft(), "1.21.11");
+        assert_eq!(
+            serde_json::to_value(&set).unwrap()["recommendedMinecraftVersion"],
+            "1.21.11"
+        );
+
+        let with = |version: &str| LauncherConfig {
+            recommended_minecraft_version: Some(version.to_owned()),
+            ..LauncherConfig::default()
+        };
+        // Snapshots and pre-releases are version ids too.
+        for good in ["26w41a", "1.21.4-pre1", "26.2-snapshot-3", &"9".repeat(32)] {
+            assert_eq!(with(good).recommended_minecraft(), good);
+        }
+        // A broken value never reaches a version list: the built-in default stands in.
+        for bad in ["", " ", "1.21 4", "1.21.4\n", "1.21\u{7}", &"9".repeat(33)] {
+            assert_eq!(
+                with(bad).recommended_minecraft(),
+                DEFAULT_RECOMMENDED_MINECRAFT_VERSION,
+                "{bad:?}"
+            );
+        }
+
+        // Writers leave an empty value out.
+        let mut empty = with("  ");
+        empty.normalize_for_publish();
+        assert_eq!(empty, LauncherConfig::default());
+        let mut kept = with("26.1.2");
+        kept.normalize_for_publish();
+        assert_eq!(
+            kept.recommended_minecraft_version.as_deref(),
+            Some("26.1.2")
+        );
     }
 
     #[test]
@@ -506,29 +705,12 @@ mod tests {
                 ),
             ],
             events: vec![
+                event("later", "2026-11-01T18:00:00Z", "2026-11-01T20:00:00Z"),
+                event("live", "2026-10-15T11:00:00Z", "2026-10-15T14:00:00Z"),
+                event("over", "2026-10-01T11:00:00Z", "2026-10-01T14:00:00Z"),
                 EventCountdown {
-                    id: "later".into(),
-                    title: "Later".into(),
-                    starts_at: ts("2026-11-01T18:00:00Z"),
-                    ends_at: ts("2026-11-01T20:00:00Z"),
-                    image: None,
-                    url: None,
-                },
-                EventCountdown {
-                    id: "live".into(),
-                    title: "Live".into(),
-                    starts_at: ts("2026-10-15T11:00:00Z"),
-                    ends_at: ts("2026-10-15T14:00:00Z"),
-                    image: None,
-                    url: None,
-                },
-                EventCountdown {
-                    id: "over".into(),
-                    title: "Over".into(),
-                    starts_at: ts("2026-10-01T11:00:00Z"),
-                    ends_at: ts("2026-10-01T14:00:00Z"),
-                    image: None,
-                    url: None,
+                    hidden: true,
+                    ..event("hidden", "2026-10-15T11:00:00Z", "2026-10-15T14:00:00Z")
                 },
             ],
             ..LauncherConfig::default()

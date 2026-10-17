@@ -125,7 +125,8 @@ impl IndexBuilder {
 
     /// Adds or replaces a pack (id = `manifest.projects.packId`) with its manifest at
     /// `packs/<id>/<versionId>.json`. Manifests are immutable per version: publish changes
-    /// under a new `versionId`.
+    /// under a new `versionId`. The reference copies the manifest's family (omitted when it is
+    /// the pack id) and Minecraft version; a replaced pack keeps its `default` flag.
     pub fn set_pack(
         &mut self,
         name: impl Into<String>,
@@ -135,22 +136,42 @@ impl IndexBuilder {
         let id = manifest.projects.pack_id.clone();
         let path = pack_manifest_path(&id, &manifest.version_id)?;
         let doc = PublishedDoc::new(path, to_canonical_json(manifest)?);
-        let previous = self
-            .packs
-            .iter()
-            .find(|p| p.id == id)
-            .map(|p| p.manifest.clone());
+        let existing = self.packs.iter().find(|p| p.id == id);
+        let previous = existing.map(|p| p.manifest.clone());
+        let default = existing.is_some_and(|p| p.default);
+        let family = manifest.projects.family_id();
+        let minecraft = manifest.dependencies.minecraft.trim();
         let pack = PackRef {
             id: id.clone(),
             name: name.into(),
             latest: manifest.version_id.clone(),
             manifest: self.add_document(doc, previous),
+            family: (family != id).then(|| family.to_owned()),
+            minecraft: (!minecraft.is_empty()).then(|| minecraft.to_owned()),
+            default,
         };
         match self.packs.iter_mut().find(|p| p.id == id) {
             Some(existing) => *existing = pack.clone(),
             None => self.packs.push(pack.clone()),
         }
         Ok(pack)
+    }
+
+    /// Makes `id` the member of its family that new installs use (and clears the flag on the
+    /// other members of that family).
+    pub fn set_family_default(&mut self, id: &str) -> Result<()> {
+        let family = self
+            .packs
+            .iter()
+            .find(|pack| pack.id == id)
+            .map(|pack| pack.family_id().to_owned())
+            .ok_or_else(|| Error::Invalid(format!("pack {id} is not in the index")))?;
+        for pack in &mut self.packs {
+            if pack.family_id() == family {
+                pack.default = pack.id == id;
+            }
+        }
+        Ok(())
     }
 
     /// Removes a pack from the index; returns whether it was listed.
@@ -376,6 +397,83 @@ mod tests {
         let paths: Vec<_> = built.documents.iter().map(|d| d.path.clone()).collect();
         assert_eq!(paths.len(), 2);
         assert!(paths.contains(&current.path));
+    }
+
+    #[test]
+    fn pack_families() {
+        let member = |id: &str, family: Option<&str>, minecraft: &str| {
+            let mut manifest = sample_manifest_offline(id);
+            manifest.projects.family = family.map(str::to_owned);
+            manifest.dependencies.minecraft = minecraft.into();
+            manifest
+        };
+        let mut builder = IndexBuilder::new();
+        builder.set_config(&sample_config(None)).unwrap();
+        builder.set_news(&sample_news(None)).unwrap();
+        let first = builder
+            .set_pack("Projects", &member("projects", None, "1.21.1"))
+            .unwrap();
+        assert_eq!(first.family, None, "a pack is its own family");
+        assert_eq!(first.minecraft.as_deref(), Some("1.21.1"));
+        let second = builder
+            .set_pack(
+                "Projects",
+                &member("projects-1.21.4", Some("projects"), "1.21.4"),
+            )
+            .unwrap();
+        assert_eq!(second.family.as_deref(), Some("projects"));
+        builder.set_family_default("projects").unwrap();
+        assert!(builder.set_family_default("missing").is_err());
+        // A new version of the default member stays the default.
+        let mut update = member("projects", Some("projects"), "1.21.1");
+        update.version_id = "1.0.1".into();
+        let updated = builder.set_pack("Projects", &update).unwrap();
+        assert!(updated.default && updated.family.is_none());
+
+        let built = builder.build(at("2026-10-15T12:00:00Z")).unwrap();
+        let index = &built.index;
+        assert_eq!(index.family_default("projects").unwrap().id, "projects");
+        assert_eq!(
+            index.family_member("projects", "1.21.4").unwrap().id,
+            "projects-1.21.4"
+        );
+
+        let mut next = IndexBuilder::from_previous(index);
+        next.set_family_default("projects-1.21.4").unwrap();
+        let next = next.build(at("2026-10-15T12:01:00Z")).unwrap();
+        assert_eq!(
+            next.index.family_default("projects").unwrap().id,
+            "projects-1.21.4"
+        );
+        assert_eq!(next.index.packs.iter().filter(|p| p.default).count(), 1);
+
+        // Two members on the same Minecraft version are refused at build time.
+        let mut clash = IndexBuilder::from_previous(&next.index);
+        clash
+            .set_pack(
+                "Projects",
+                &member("projects-copy", Some("projects"), "1.21.4"),
+            )
+            .unwrap();
+        assert!(clash.build(at("2026-10-15T12:02:00Z")).is_err());
+    }
+
+    /// A small valid manifest for `id` (files are never downloaded here).
+    fn sample_manifest_offline(id: &str) -> PackManifest {
+        serde_json::from_value(serde_json::json!({
+            "formatVersion": 1,
+            "versionId": "1.0.0",
+            "name": "Projects",
+            "files": [{
+                "path": "mods/a.jar",
+                "hashes": { "sha1": "a".repeat(40) },
+                "downloads": ["https://cdn.modrinth.com/data/x/versions/y/a.jar"],
+                "fileSize": 1
+            }],
+            "dependencies": { "minecraft": "1.21.1" },
+            "projects": { "packId": id }
+        }))
+        .unwrap()
     }
 
     #[test]

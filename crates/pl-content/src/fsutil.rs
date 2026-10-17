@@ -39,6 +39,40 @@ pub(crate) async fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// [`write_atomic`] that also flushes the temporary file to disk before the rename, so a power
+/// cut never leaves an empty file in place of the old one. For state that cannot be rebuilt
+/// (pack states, set metadata, the version switch journal).
+pub(crate) async fn write_durable(path: &Path, bytes: &[u8]) -> Result<()> {
+    use tokio::io::AsyncWriteExt;
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .map_err(|e| Error::io(parent, e))?;
+    }
+    let tmp = tmp_path(path);
+    let written = async {
+        let mut file = tokio::fs::File::create(&tmp).await?;
+        file.write_all(bytes).await?;
+        file.sync_all().await
+    }
+    .await;
+    if let Err(e) = written {
+        let _ = tokio::fs::remove_file(&tmp).await;
+        return Err(Error::io(&tmp, e));
+    }
+    if let Err(e) = tokio::fs::rename(&tmp, path).await {
+        let _ = tokio::fs::remove_file(&tmp).await;
+        return Err(Error::io(path, e));
+    }
+    #[cfg(unix)]
+    if let Some(parent) = path.parent()
+        && let Ok(dir) = tokio::fs::File::open(parent).await
+    {
+        let _ = dir.sync_all().await;
+    }
+    Ok(())
+}
+
 fn tmp_path(path: &Path) -> PathBuf {
     let mut name = path
         .file_name()
@@ -75,6 +109,8 @@ mod tests {
         write_atomic(&path, b"one").await.unwrap();
         write_atomic(&path, b"two").await.unwrap();
         assert_eq!(std::fs::read(&path).unwrap(), b"two");
+        write_durable(&path, b"three").await.unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"three");
         let entries: Vec<_> = std::fs::read_dir(path.parent().unwrap())
             .unwrap()
             .map(|e| e.unwrap().file_name())

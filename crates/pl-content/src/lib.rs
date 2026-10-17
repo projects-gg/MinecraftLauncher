@@ -5,21 +5,33 @@
 //!
 //! - [`model`]: wire formats (root index, launcher config, news, pack manifest, release
 //!   channel) with forward-compatible defaults.
-//! - [`signing`]: Ed25519 keys, `index.json.sig` signing and verification.
+//! - [`signing`]: Ed25519 keys, `index.json.sig` signing and verification, and the trusted key
+//!   list ([`CONTENT_PUBLIC_KEYS`]) the launcher and Studio share.
 //! - [`ContentClient`]: mirror fallback, signature + rollback checks, document and media
 //!   cache, offline snapshots, cache garbage collection.
+//! - [`items`]: the mod center's item selection ([`resolve_items`]): defaults, new items,
+//!   `requires` closure, libraries and adopted manual changes.
 //! - [`sync`]: modpack diff ([`plan_sync`]) and application ([`apply_sync`]) with ownership
-//!   tracking, config policies, optional groups and path safety.
+//!   tracking, config policies, items, manual changes, optional groups and path safety.
+//! - [`sets`]: per-version sets of a game directory ([`VersionSets`]): parking, restoring and
+//!   starting `mods/` + `config/` per Minecraft version with a crash-safe switch.
 //! - [`studio`]: [`IndexBuilder`] and helpers to publish content; [`json`] gives the
 //!   deterministic serialization Studio uploads.
+//! - [`feed`]: the Discord bot's news feed ([`FeedClient`]: delegated-key verification,
+//!   rollback checks, cache, covers) and the home screen merge rules ([`merge_news`],
+//!   [`newest_patch_notes`], [`merge_events`]).
 
 pub mod client;
 pub mod error;
+pub mod feed;
 mod fsutil;
 mod glob;
+pub mod images;
+pub mod items;
 pub mod json;
 pub mod model;
 pub mod path;
+pub mod sets;
 pub mod signing;
 pub mod studio;
 pub mod sync;
@@ -30,18 +42,29 @@ pub use client::{
     ContentClient, ContentSnapshot, GITHUB_MIRROR, GcReport, MediaPrefetch, PRIMARY_MIRROR,
 };
 pub use error::{Error, Result};
+pub use feed::{
+    FeedClient, FeedMediaReport, FeedSettings, FeedSnapshot, HomeEvent, HomeNewsItem, MirrorProbe,
+    NewsOrigin, card_order, feed_age_floor, merge_events, merge_news, newest_patch_notes,
+};
 pub use glob::glob_match;
+pub use images::{LAUNCHER_IMAGE_HOSTS, is_launcher_image_url};
+pub use items::{
+    AdoptedChange, ItemResolution, ItemStatus, ManualChange, PackSelection, resolve_items,
+};
 pub use model::*;
+pub use sets::{ParkedSet, SetInfo, SwitchJournal, SwitchRequest, SwitchStep, VersionSets};
 pub use signing::{
-    SignatureFile, SigningKey, VerifyingKey, decode_signing_key, decode_verifying_key,
-    decode_verifying_keys, encode_signing_key, encode_verifying_key, generate_signing_key, key_id,
-    sign_index, verify_index,
+    CONTENT_PUBLIC_KEYS, SignatureFile, SigningKey, TrustedKey, VerifyingKey, content_public_keys,
+    decode_signing_key, decode_verifying_key, decode_verifying_keys, encode_signing_key,
+    encode_verifying_key, generate_signing_key, is_content_public_key, key_id, sign_index,
+    verify_index,
 };
 pub use studio::{BuiltIndex, IndexBuilder, PublishedDoc};
 pub use sync::{
-    CategoryCounts, DownloadAction, FileCategory, InstalledFile, KeepReason, KeptFile, PackState,
-    PlannedDelete, PlannedDownload, SyncPhase, SyncPlan, SyncPolicy, SyncProgress, SyncProgressFn,
-    SyncReport, SyncSummary, apply_sync, plan_sync,
+    COPIED_DIRS, CategoryCounts, DownloadAction, DownloadEstimate, FileCategory, InstalledFile,
+    KeepReason, KeptFile, PARKED_DIRS, PackState, PlannedDelete, PlannedDownload, PlannedRestore,
+    SyncIssue, SyncIssueKind, SyncPhase, SyncPlan, SyncPolicy, SyncProgress, SyncProgressFn,
+    SyncReport, SyncSummary, VersionSwitch, apply_sync, estimate_downloads, plan_sync,
 };
 
 #[cfg(test)]
@@ -132,11 +155,36 @@ mod doc_examples {
         );
         for (name, json) in &examples {
             match name.as_str() {
-                "RootIndex" => check::<RootIndex>(name, json),
+                "RootIndex" => {
+                    check::<RootIndex>(name, json);
+                    let index: RootIndex = serde_json::from_str(json).unwrap();
+                    index.validate().unwrap_or_else(|e| panic!("{name}: {e}"));
+                }
                 "SignatureFile" => check::<SignatureFile>(name, json),
-                "LauncherConfig" => check::<LauncherConfig>(name, json),
+                "LauncherConfig" => {
+                    check::<LauncherConfig>(name, json);
+                    let config: LauncherConfig = serde_json::from_str(json).unwrap();
+                    if let Some(feed) = &config.news_feed {
+                        assert!(feed.problems().is_empty(), "{name}: {:?}", feed.problems());
+                    }
+                    if let Some(version) = &config.recommended_minecraft_version {
+                        assert!(is_valid_minecraft_version(version), "{name}: {version:?}");
+                    }
+                }
                 "NewsFeed" => check::<NewsFeed>(name, json),
-                "PackManifest" => check::<PackManifest>(name, json),
+                "BotFeed" => {
+                    check::<BotFeed>(name, json);
+                    let (_, problems) =
+                        BotFeed::parse(json.as_bytes()).unwrap_or_else(|e| panic!("{name}: {e}"));
+                    assert!(problems.is_empty(), "{name}: {problems:?}");
+                }
+                "PackManifest" => {
+                    check::<PackManifest>(name, json);
+                    let manifest: PackManifest = serde_json::from_str(json).unwrap();
+                    manifest
+                        .validate()
+                        .unwrap_or_else(|e| panic!("{name}: {e}"));
+                }
                 "ReleaseChannel" => check::<ReleaseChannel>(name, json),
                 "PackState" => check::<PackState>(name, json),
                 "MediaRef" => check::<MediaRef>(name, json),

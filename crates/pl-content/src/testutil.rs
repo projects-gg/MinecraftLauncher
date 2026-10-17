@@ -196,9 +196,12 @@ pub(crate) fn sample_news(cover: Option<MediaRef>) -> NewsFeed {
             published_at: "2026-01-01T00:00:00Z".parse().unwrap(),
             expires_at: None,
             pinned: false,
+            pin_order: None,
             featured: true,
+            hidden: false,
             cta: None,
             author: Some("Projects".into()),
+            feed_override: None,
         }],
     }
 }
