@@ -57,7 +57,9 @@ crates/pl-discord Discord Rich Presence
 crates/pl-data    Data folder: usage, cleanup policy, support bundles, logs, moving the folder
 crates/pl-desktop Desktop integration: projects:// links, desktop shortcuts and their icons
 crates/pl-social  Client for the optional friends service (HTTP API, presence WebSocket)
+crates/pl-team    Client for the Studio team gate (Discord sign-in, invites, staff proposals)
 services/social   Friends service: Cloudflare Worker, D1 and a presence Durable Object
+services/studio-team  Studio team gate: Cloudflare Worker, D1 and a private R2 bucket
 packages/ui       Shared design system
 docs/             Content format specification
 ```
