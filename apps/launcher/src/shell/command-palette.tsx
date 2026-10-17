@@ -2,6 +2,8 @@ import {
   ArrowsClockwise,
   BookOpenText,
   Broom,
+  CaretLeft,
+  CaretRight,
   Coffee,
   CopySimple,
   FolderOpen,
@@ -11,6 +13,7 @@ import {
   House,
   ImageSquare,
   Images,
+  Keyboard,
   Lifebuoy,
   Lightning,
   MagnifyingGlass,
@@ -18,6 +21,7 @@ import {
   Mountains,
   Newspaper,
   Package,
+  Play,
   Plus,
   Robot,
   Scroll,
@@ -29,12 +33,13 @@ import {
   UserPlus,
   UsersFour,
   UsersThree,
+  X,
 } from "@phosphor-icons/react";
-import { Kbd, toast } from "@pl/ui";
+import { Button, Kbd, toast } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Command } from "cmdk";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountFace } from "@/features/accounts/account-face";
 import { sortAccounts } from "@/features/accounts/account-order";
@@ -46,6 +51,15 @@ import type { InstanceTab } from "@/features/library/instance-page";
 import { useSocialUi } from "@/features/social/store";
 import { api, type ServerStatus } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
+import { detectOs } from "@/lib/platform";
+import {
+  ESCAPE_KEYS,
+  type PageShortcut,
+  pressPlayButton,
+  SHORTCUT_PAGES,
+  type ShortcutId,
+  shortcutKeys,
+} from "@/lib/shortcuts";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { useUi } from "@/stores/ui";
@@ -61,6 +75,7 @@ import {
   rankGroups,
   updateReport,
 } from "./palette-actions";
+import { KeyCaps } from "./shortcut-keys";
 
 const itemClass =
   "flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-[13.5px] text-bone-100 data-[selected=true]:bg-white/8 data-[selected=true]:text-bone-50";
@@ -73,6 +88,10 @@ interface Entry {
   keywords: string[];
   icon: ReactNode;
   hint?: string;
+  /** Key caps at the row's end: the shortcut that does the same from anywhere. */
+  keys?: readonly string[];
+  /** The row opens a list inside the palette (a caret at its end). */
+  opens?: boolean;
   onSelect: () => void;
 }
 
@@ -82,12 +101,22 @@ interface Group {
   entries: Entry[];
 }
 
+/** What the palette lists: the commands, or the keyboard shortcuts. */
+type View = "commands" | "shortcuts";
+
 function entry(
   value: string,
   label: string,
   icon: ReactNode,
   onSelect: () => void,
-  more: { words?: PaletteWords; extra?: string[]; hint?: string } = {},
+  more: {
+    words?: PaletteWords;
+    extra?: string[];
+    hint?: string;
+    shortcut?: ShortcutId;
+    keys?: readonly string[];
+    opens?: boolean;
+  } = {},
 ): Entry {
   return {
     value,
@@ -95,6 +124,8 @@ function entry(
     icon,
     onSelect,
     hint: more.hint,
+    keys: more.shortcut ? shortcutKeys(more.shortcut, detectOs()) : more.keys,
+    opens: more.opens,
     keywords: paletteKeywords(label, more.words, more.extra),
   };
 }
@@ -102,7 +133,9 @@ function entry(
 /**
  * Ctrl+K: play, jump anywhere, open news, run common actions, and find a setting by the problem
  * ("kasıyor", "ram", "ip"). The selected instance's shortcuts join only while searching, so the
- * first view stays short; while searching, the group with the best match comes first.
+ * first view stays short; while searching, the group with the best match comes first. Rows with
+ * a global shortcut show its keys, and "Klavye kısayolları" lists them all (Backspace in the
+ * empty field goes back). The key itself is handled with the others in app-shell.tsx.
  */
 export function CommandPalette({ disabled }: { disabled?: boolean }) {
   const { t } = useTranslation();
@@ -117,6 +150,12 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
   const performanceMode = usePrefs((s) => s.performanceMode);
   const setPerformanceMode = usePrefs((s) => s.setPerformanceMode);
   const [search, setSearch] = useState("");
+  const [view, setView] = useState<View>("commands");
+  // cmdk keeps its selection when every row changes at once (it picks the first row again only
+  // when the search changes), so a new list would start with no row selected. For one render
+  // the selection is emptied, cmdk selects the first row, and its answer ends the override.
+  const [freshList, setFreshList] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const searching = search.trim().length > 0;
   const { data: instances = [] } = useQuery({
     queryKey: ["instances"],
@@ -148,25 +187,23 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
   const friendsSignedIn = useSocialUi((s) => s.view.auth === "signedIn");
 
   useEffect(() => {
-    if (disabled) return;
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setOpen(!useUi.getState().paletteOpen);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [disabled, setOpen]);
-
-  useEffect(() => {
     if (!open) {
-      // Every opening starts empty.
+      // Every opening starts empty, on the commands.
       setSearch("");
+      setView("commands");
+      setFreshList(false);
       return;
     }
     return api.onAfkChange(() => void queryClient.invalidateQueries({ queryKey: ["afk"] }));
   }, [open, queryClient]);
+
+  const showView = (next: View) => {
+    setView(next);
+    setSearch("");
+    setFreshList(true);
+    // The field keeps the keys (the back chip may have taken the focus).
+    inputRef.current?.focus();
+  };
 
   const run = (action: () => void) => {
     setOpen(false);
@@ -235,6 +272,8 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
             {
               extra: [instance.mcVersion, t(`loaders.${instance.loader}`)],
               hint: instance.mcVersion,
+              // Ctrl+Enter presses OYNA: the command bar's instance, while nothing runs.
+              shortcut: !busy && instance.id === selected?.id ? "play" : undefined,
             },
           ),
         ),
@@ -250,6 +289,7 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
             () => run(() => void navigate({ to: "/" })),
             {
               words: PALETTE_WORDS.home,
+              shortcut: "home",
             },
           ),
           entry(
@@ -257,14 +297,14 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
             t("nav.library"),
             <SquaresFour size={18} />,
             () => run(() => void navigate({ to: "/library" })),
-            { words: PALETTE_WORDS.library },
+            { words: PALETTE_WORDS.library, shortcut: "library" },
           ),
           entry(
             "go:/news",
             t("nav.news"),
             <Newspaper size={18} />,
             () => run(() => void navigate({ to: "/news" })),
-            { words: PALETTE_WORDS.news },
+            { words: PALETTE_WORDS.news, shortcut: "news" },
           ),
           entry(
             "go:/afk",
@@ -273,6 +313,7 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
             () => run(() => void navigate({ to: "/afk" })),
             {
               words: PALETTE_WORDS.afk,
+              shortcut: "afk",
             },
           ),
           entry(
@@ -280,7 +321,7 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
             t("nav.settings"),
             <Gear size={18} />,
             () => run(() => void navigate({ to: "/settings" })),
-            { words: PALETTE_WORDS.settings },
+            { words: PALETTE_WORDS.settings, shortcut: "settings" },
           ),
           ...instances.map((instance) =>
             entry(
@@ -552,6 +593,13 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
             () => run(() => void checkUpdates()),
             { words: PALETTE_WORDS.updates },
           ),
+          entry(
+            "action:shortcuts",
+            t("shortcuts.title"),
+            <Keyboard size={18} />,
+            () => showView("shortcuts"),
+            { words: PALETTE_WORDS.shortcuts, opens: true },
+          ),
         ],
       },
       {
@@ -574,8 +622,56 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
     ];
   };
 
+  // Every global shortcut with its keys (lib/shortcuts.ts); a row does what its keys do.
+  const shortcutGroups = (): Group[] => {
+    const keysOf = (id: ShortcutId) => shortcutKeys(id, detectOs());
+    const goTo = (id: PageShortcut, label: string, icon: ReactNode, words: PaletteWords) =>
+      entry(
+        `shortcut:${id}`,
+        label,
+        icon,
+        () => run(() => void navigate({ to: SHORTCUT_PAGES[id] })),
+        { words, shortcut: id, extra: keysOf(id) },
+      );
+    return [
+      {
+        id: "shortcuts",
+        heading: t("shortcuts.title"),
+        entries: [
+          entry(
+            "shortcut:palette",
+            t("palette.label"),
+            <MagnifyingGlass size={18} />,
+            () => showView("commands"),
+            { shortcut: "palette", extra: [t("palette.open"), ...keysOf("palette")] },
+          ),
+          entry(
+            "shortcut:play",
+            t("play.play"),
+            <Play size={18} />,
+            () => run(() => pressPlayButton(document)),
+            { shortcut: "play", extra: keysOf("play") },
+          ),
+          goTo("home", t("nav.home"), <House size={18} />, PALETTE_WORDS.home),
+          goTo("library", t("nav.library"), <SquaresFour size={18} />, PALETTE_WORDS.library),
+          goTo("news", t("nav.news"), <Newspaper size={18} />, PALETTE_WORDS.news),
+          goTo("afk", t("nav.afk"), <Robot size={18} />, PALETTE_WORDS.afk),
+          goTo("settings", t("nav.settings"), <Gear size={18} />, PALETTE_WORDS.settings),
+          entry("shortcut:close", t("common.close"), <X size={18} />, () => setOpen(false), {
+            keys: ESCAPE_KEYS,
+            extra: [...ESCAPE_KEYS, "escape"],
+          }),
+        ],
+      },
+    ];
+  };
+
   // Nothing to build while closed: the dialog renders no content then.
-  const shown = open ? rankGroups(groups(), search).filter((g) => g.entries.length > 0) : [];
+  const shown = open
+    ? rankGroups(view === "shortcuts" ? shortcutGroups() : groups(), search).filter(
+        (g) => g.entries.length > 0,
+      )
+    : [];
 
   return (
     <Command.Dialog
@@ -584,15 +680,38 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
       label={t("palette.label")}
       filter={paletteFilter}
       loop
+      value={freshList ? "" : undefined}
+      onValueChange={freshList ? () => setFreshList(false) : undefined}
+      onKeyDown={(event) => {
+        // Backspace in the empty field leaves a list (Esc closes the palette, as everywhere).
+        if (view !== "commands" && event.key === "Backspace" && search === "") {
+          event.preventDefault();
+          showView("commands");
+        }
+      }}
       overlayClassName="fixed inset-0 z-50 bg-obsidian-950/55"
       contentClassName="fixed top-[13vh] left-1/2 z-50 w-[min(600px,92vw)] -translate-x-1/2 overflow-hidden rounded-[var(--radius-panel)] bg-obsidian-900/96 shadow-[0_24px_64px_rgb(63_10_10/0.45)] ring-1 ring-white/10 backdrop-blur-xl [html[data-perf=on]_&]:backdrop-blur-none"
     >
       <div className="flex items-center gap-3 border-b border-white/8 px-4">
         <MagnifyingGlass size={18} className="shrink-0 text-ash-400" aria-hidden />
+        {view === "shortcuts" ? (
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<CaretLeft size={12} weight="bold" />}
+            aria-label={t("shortcuts.back")}
+            // A click leaves the focus in the field.
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => showView("commands")}
+          >
+            {t("shortcuts.page")}
+          </Button>
+        ) : null}
         <Command.Input
+          ref={inputRef}
           value={search}
           onValueChange={setSearch}
-          placeholder={t("palette.placeholder")}
+          placeholder={view === "shortcuts" ? t("shortcuts.placeholder") : t("palette.placeholder")}
           className="h-12 min-w-0 flex-1 bg-transparent text-[14.5px] text-bone-50 outline-none placeholder:text-ash-400"
         />
         <Kbd>Esc</Kbd>
@@ -617,6 +736,10 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
                 <span className="min-w-0 flex-1 truncate">{item.label}</span>
                 {item.hint ? (
                   <span className="shrink-0 text-[12px] text-ash-400">{item.hint}</span>
+                ) : null}
+                {item.keys ? <KeyCaps keys={item.keys} /> : null}
+                {item.opens ? (
+                  <CaretRight size={14} aria-hidden className="shrink-0 text-ash-400" />
                 ) : null}
               </Command.Item>
             ))}

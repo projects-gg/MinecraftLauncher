@@ -13,6 +13,8 @@ import { ResumeButton, useResumeTarget } from "@/features/resume/resume-button";
 import { api, type InstanceSummary } from "@/lib/api";
 import { copyDetails } from "@/lib/clipboard";
 import { formatCount, formatDuration, formatRelative, formatSpeed } from "@/lib/format";
+import { detectOs } from "@/lib/platform";
+import { ariaKeyShortcuts } from "@/lib/shortcuts";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { InstanceIcon, prewarmInstanceIcons } from "./instance-icon";
@@ -362,6 +364,8 @@ export function CommandBar() {
           else if (!instancesLoading) void navigate({ to: "/library", search: { create: true } });
         }}
         onCancel={() => void cancel()}
+        // Ctrl+Enter presses it (app-shell.tsx), only when a press starts a game.
+        keyShortcuts={ariaKeyShortcuts("play", detectOs())}
         labels={{
           play: t("play.play"),
           update: t("play.update"),

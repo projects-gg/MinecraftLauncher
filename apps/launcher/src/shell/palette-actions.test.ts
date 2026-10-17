@@ -86,6 +86,7 @@ const palette: { id: string; entries: Candidate[] }[] = [
       item("action:copy-address", tr.tuning.palette.copyAddress, PALETTE_WORDS.copyAddress),
       item("action:afk-all", tr.palette.afkConnectAll, PALETTE_WORDS.afkConnectAll),
       item("action:updates", tr.palette.checkUpdates, PALETTE_WORDS.updates),
+      item("action:shortcuts", tr.shortcuts.title, PALETTE_WORDS.shortcuts),
     ],
   },
   {
@@ -159,6 +160,12 @@ describe("palette search", () => {
     ["optifine", "instance:mods"],
     ["hesap ekle", "action:add-account"],
     ["güncelle", "action:updates"],
+    ["kısayol", "action:shortcuts"],
+    ["kisayollar", "action:shortcuts"],
+    ["klavye kısayolları", "action:shortcuts"],
+    ["tuşlar", "action:shortcuts"],
+    ["ctrl", "action:shortcuts"],
+    ["shortcuts", "action:shortcuts"],
   ])("%s finds %s first", (query, expected) => {
     expect(rank(query)[0]).toBe(expected);
   });

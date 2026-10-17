@@ -219,6 +219,23 @@ export const PALETTE_WORDS = {
   afkConnectAll: { keywords: ["afk", "bot", "bağla", "başlat", "connect"] },
   afkStopAll: { keywords: ["afk", "bot", "durdur", "kapat", "stop"] },
   updates: { keywords: ["güncelleme", "güncelle", "update", "yeni sürüm", "sürüm", "launcher"] },
+  // The palette's own list of keyboard shortcuts.
+  shortcuts: {
+    keywords: [
+      "kısayol",
+      "kısayollar",
+      "klavye",
+      "tuş",
+      "tuşlar",
+      "tuş kombinasyonu",
+      "ctrl",
+      "shortcut",
+      "shortcuts",
+      "keyboard",
+      "hotkey",
+      "keybind",
+    ],
+  },
 } satisfies Record<string, PaletteWords>;
 
 export type PaletteWordsId = keyof typeof PALETTE_WORDS;

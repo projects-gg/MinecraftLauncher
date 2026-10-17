@@ -26,6 +26,8 @@ interface PlayButtonProps {
   onCancel?: () => void;
   labels: PlayButtonLabels;
   className?: string;
+  /** `aria-keyshortcuts` of the app's shortcut that presses the button (the launcher's Ctrl+Enter). */
+  keyShortcuts?: string;
 }
 
 /**
@@ -60,7 +62,14 @@ export function playButtonName(
  * The one loud element: a gold, chamfered PLAY button on a darker socket, with a soft glow
  * and a periodic sheen when ready. Ambient effects respect reduced motion and Performance mode.
  */
-export function PlayButton({ state, onPlay, onCancel, labels, className }: PlayButtonProps) {
+export function PlayButton({
+  state,
+  onPlay,
+  onCancel,
+  labels,
+  className,
+  keyShortcuts,
+}: PlayButtonProps) {
   const ambient = useAmbientMotion();
   const animate = useInteractionMotion();
   const [hover, setHover] = useState(false);
@@ -157,6 +166,9 @@ export function PlayButton({ state, onPlay, onCancel, labels, className }: PlayB
           setCancelArmed(true);
         }}
         aria-label={playButtonName(state, labels, cancelArmed && Boolean(onCancel))}
+        aria-keyshortcuts={keyShortcuts}
+        // What a press does now: the app's shortcut presses only "ready" and "update".
+        data-play-state={state.kind}
         className={cn(
           "group relative block size-full cursor-pointer select-none focus-visible:outline-none",
           "transition-transform duration-150 enabled:active:scale-[0.98] enabled:hover:scale-[1.015]",

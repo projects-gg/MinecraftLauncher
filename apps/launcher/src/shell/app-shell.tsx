@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
+import { useEffect } from "react";
 import heroFallback from "@/assets/art/hero-dragon-1.webp";
 import { DropHost } from "@/features/drop/drop-host";
 import { EventReminders } from "@/features/home/event-reminders";
@@ -17,6 +18,15 @@ import {
   WhatsNew,
 } from "@/features/updates/update-ui";
 import { api } from "@/lib/api";
+import { detectOs } from "@/lib/platform";
+import {
+  hasOpenOverlay,
+  isTypingTarget,
+  matchShortcut,
+  pressPlayButton,
+  SHORTCUT_PAGES,
+  shortcutAllowed,
+} from "@/lib/shortcuts";
 import { usePrefs } from "@/stores/prefs";
 import { useUi } from "@/stores/ui";
 import { Backdrop } from "./backdrop";
@@ -41,6 +51,44 @@ function TaskbarProgress() {
   return null;
 }
 
+/**
+ * Global keyboard shortcuts (lib/shortcuts.ts): Ctrl+K the palette, Ctrl+Enter OYNA, Ctrl+1 to
+ * Ctrl+4 the rail's pages, Ctrl+, Settings; nothing while the welcome flow runs. The state is
+ * read at the key press, so a shortcut never renders the app from here.
+ */
+function GlobalShortcuts({ disabled }: { disabled: boolean }) {
+  const navigate = useNavigate();
+  useEffect(() => {
+    const os = detectOs();
+    const onKey = (event: KeyboardEvent) => {
+      const id = matchShortcut(event, os);
+      if (!id) return;
+      const ui = useUi.getState();
+      const allowed = shortcutAllowed(id, {
+        blocked: disabled,
+        overlay: hasOpenOverlay(document),
+        paletteOpen: ui.paletteOpen,
+        typing: isTypingTarget(event.target),
+        handled: event.defaultPrevented,
+      });
+      if (!allowed) return;
+      // Ctrl+Enter on a focused button or link would press it as well.
+      event.preventDefault();
+      if (id === "palette") {
+        ui.setPaletteOpen(!ui.paletteOpen);
+      } else if (id === "play") {
+        pressPlayButton(document);
+      } else {
+        if (ui.paletteOpen) ui.setPaletteOpen(false);
+        void navigate({ to: SHORTCUT_PAGES[id] });
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [disabled, navigate]);
+  return null;
+}
+
 export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const search = useSearch({ strict: false }) as { news?: string };
@@ -60,6 +108,7 @@ export function AppShell() {
     <div className="flex h-dvh w-dvw overflow-hidden text-bone-100">
       <PresenceSync />
       <TaskbarProgress />
+      <GlobalShortcuts disabled={onboarding} />
       <EventReminders />
       <Backdrop
         imageUrl={data?.hero.imageUrl ?? heroFallback}
