@@ -307,7 +307,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
 }
 
 /// Writes the typed command/event bindings used by the React app. Runs automatically in debug
-/// builds; `cargo run -p projects-launcher --bin export-bindings` does it without a window.
+/// builds; `cargo run -p projects-launcher --features export-bindings --bin export-bindings` does
+/// it without a window.
 pub fn export_typescript_bindings(path: &std::path::Path) -> Result<(), String> {
     specta_builder()
         .export(specta_typescript::Typescript::default(), path)

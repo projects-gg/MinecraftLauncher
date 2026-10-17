@@ -12,6 +12,16 @@ default-run = "projects-launcher"
 name = "projects_launcher_lib"
 crate-type = ["rlib"]
 
+# A developer tool: the feature keeps it out of release builds, so `tauri build` does not bundle
+# it into the installers. `cargo run -p projects-launcher --features export-bindings --bin export-bindings`
+[[bin]]
+name = "export-bindings"
+path = "src/bin/export-bindings.rs"
+required-features = ["export-bindings"]
+
+[features]
+export-bindings = []
+
 [build-dependencies]
 tauri-build = { workspace = true }
 

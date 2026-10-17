@@ -63,7 +63,8 @@ The signed content tree that Studio publishes and the launcher reads is specifie
 
 Conventions: crates never depend on Tauri; the app crates expose typed commands
 (tauri-specta generates `apps/*/src/bindings.ts`, regenerate with
-`cargo run -p projects-launcher --bin export-bindings`). Runtime secrets live in the OS keychain,
+`cargo run -p projects-launcher --features export-bindings --bin export-bindings`; the feature keeps
+the tool out of the installers). Runtime secrets live in the OS keychain,
 never in files or in the repository. User-facing text is Turkish; code, comments, commit messages
 and developer documentation are English.
 
