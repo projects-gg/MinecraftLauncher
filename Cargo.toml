@@ -108,3 +108,10 @@ codegen-units = 1
 lto = "thin"
 opt-level = 3
 strip = true
+
+# Measurement builds, never shipped: release code generation with debug assertions, so a
+# release-like exe still runs under its debug identity (pl_desktop::identity) with the e2e guards
+# and test overrides of debug builds. Output in `<target>/e2e-release/`.
+[profile.e2e-release]
+inherits = "release"
+debug-assertions = true
