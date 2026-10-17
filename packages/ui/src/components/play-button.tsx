@@ -206,9 +206,7 @@ export function PlayButton({
               transition={{ duration: 0.35, ease: easeOutExpo }}
             />
           ) : null}
-          {isGold && ambient ? (
-            <span className="ambient-motion pointer-events-none absolute inset-y-0 -left-1/2 w-1/3 -skew-x-[18deg] bg-[linear-gradient(90deg,transparent,rgb(255_255_255/0.55),transparent)] animate-[play-sheen_7s_ease-in-out_infinite]" />
-          ) : null}
+          {isGold && ambient ? <PlaySheen /> : null}
         </span>
         <span className="relative z-10 flex size-full flex-col items-center justify-center">
           <AnimatePresence mode="popLayout" initial={false}>
@@ -234,7 +232,50 @@ export function PlayButton({
           </AnimatePresence>
         </span>
       </button>
-      <style>{`@keyframes play-sheen { 0%, 72% { transform: translateX(0) skewX(-18deg); } 100% { transform: translateX(560%) skewX(-18deg); } }`}</style>
     </div>
+  );
+}
+
+/** The sheen crosses the button in the last 28 % of every 7 s; the rest of the time it waits. */
+const SHEEN_CYCLE_MS = 7000;
+const SHEEN_SWEEP_MS = 1960;
+
+/**
+ * The periodic sheen across a ready OYNA. Each crossing is a short animation of its own and
+ * nothing runs in between: as one endless keyframe animation that stood still for 5 s of every
+ * 7, it kept the compositor drawing a frame per display refresh on every page, about 6 % of a
+ * CPU core for a picture that did not change (OPT1).
+ */
+function PlaySheen() {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const sheen = ref.current;
+    if (!sheen || typeof sheen.animate !== "function") return;
+    let crossing: Animation | undefined;
+    const cross = () => {
+      crossing = sheen.animate(
+        [
+          { transform: "translateX(0) skewX(-18deg)" },
+          { transform: "translateX(560%) skewX(-18deg)" },
+        ],
+        { duration: SHEEN_SWEEP_MS, easing: "ease-in-out" },
+      );
+    };
+    let every: number | undefined;
+    const first = window.setTimeout(() => {
+      cross();
+      every = window.setInterval(cross, SHEEN_CYCLE_MS);
+    }, SHEEN_CYCLE_MS - SHEEN_SWEEP_MS);
+    return () => {
+      window.clearTimeout(first);
+      window.clearInterval(every);
+      crossing?.cancel();
+    };
+  }, []);
+  return (
+    <span
+      ref={ref}
+      className="ambient-motion pointer-events-none absolute inset-y-0 -left-1/2 w-1/3 -skew-x-[18deg] bg-[linear-gradient(90deg,transparent,rgb(255_255_255/0.55),transparent)]"
+    />
   );
 }
