@@ -8,7 +8,7 @@ import {
   Play,
   Trash,
 } from "@phosphor-icons/react";
-import { Chip, cn, IconButton, Menu, PixelBrackets, useMotionPrefs } from "@pl/ui";
+import { Chip, cn, easeOutExpo, IconButton, Menu, PixelBrackets, useMotionPrefs } from "@pl/ui";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import type { Ref } from "react";
@@ -28,6 +28,9 @@ export interface InstanceActions {
   shortcut: (i: InstanceSummary) => void;
   remove: (i: InstanceSummary) => void;
 }
+
+/** Where a card rests; its entrance and exit move from and to the same function list. */
+const REST = "translateY(0px) scale(1)";
 
 export function InstanceCard({
   instance,
@@ -50,7 +53,7 @@ export function InstanceCard({
   ref?: Ref<HTMLElement>;
 }) {
   const { t } = useTranslation();
-  const motionPrefs = useMotionPrefs();
+  const { layout, reduce } = useMotionPrefs();
   const loader = instance.loader === "vanilla" ? "Minecraft" : t(`loaders.${instance.loader}`);
 
   return (
@@ -58,13 +61,20 @@ export function InstanceCard({
       ref={ref}
       // Cards glide into a removed card's place; the size never animates (no stretched text),
       // and Performance mode drops the glide.
-      layout={motionPrefs.layout ? "position" : false}
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.97, transition: { duration: 0.18 } }}
-      transition={{ duration: 0.4, delay: Math.min(index, 8) * 0.035, ease: [0.16, 1, 0.3, 1] }}
+      layout={layout ? "position" : false}
+      // A new card rises in, a removed one settles to 97% as it fades: transform strings run on
+      // the compositor (smooth while the library renders). Reduced motion keeps the fades only.
+      initial={{ opacity: 0, transform: reduce ? REST : "translateY(12px) scale(1)" }}
+      animate={{ opacity: 1, transform: REST }}
+      exit={{
+        opacity: 0,
+        transform: reduce ? REST : "translateY(0px) scale(0.97)",
+        transition: { duration: 0.18, ease: easeOutExpo },
+      }}
+      transition={{ duration: 0.4, delay: Math.min(index, 8) * 0.035, ease: easeOutExpo }}
       className={cn(
-        "group glass relative flex flex-col rounded-[var(--radius-panel)] p-3.5 transition-[transform,box-shadow] duration-200",
+        // The hover lift is the `translate` property (Tailwind 4), apart from motion's transform.
+        "group glass relative flex flex-col rounded-[var(--radius-panel)] p-3.5 transition-[translate,box-shadow] duration-200",
         "hover:-translate-y-0.5 hover:shadow-[0_18px_40px_rgb(34_6_6/0.45),inset_0_0_0_1px_rgb(240_184_73/0.25)]",
       )}
     >

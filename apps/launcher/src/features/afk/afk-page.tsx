@@ -45,6 +45,8 @@ const NAME = /^[A-Za-z0-9_]{3,16}$/;
 
 /** Cards gliding when one before them leaves or grows. */
 const glide: Transition = { type: "spring", stiffness: 420, damping: 36, mass: 0.9 };
+/** Where a card rests; its entrance and exit move from and to the same function list. */
+const REST = "translateY(0px) scale(1)";
 
 /** Anything but stopped: a stop makes sense (queued and reconnecting included). */
 const isActive = (account: AfkAccount) =>
@@ -142,14 +144,19 @@ function AfkCard({
       ref={ref}
       layout={layout ? "position" : false}
       transition={{ layout: glide }}
-      initial={{ opacity: 0, y: 10 }}
+      // Transform strings, as on the library's cards; reduced motion keeps the fades only.
+      initial={{ opacity: 0, transform: reduce ? REST : "translateY(10px) scale(1)" }}
       animate={{
         opacity: 1,
-        y: 0,
+        transform: REST,
         transition: { duration: 0.35, delay: Math.min(index, 8) * 0.04, ease: easeOutExpo },
       }}
       // Removed: fades (and settles to 97%) in place while the cards after it glide over.
-      exit={{ opacity: 0, scale: reduce ? 1 : 0.97, transition: { duration: 0.18 } }}
+      exit={{
+        opacity: 0,
+        transform: reduce ? REST : "translateY(0px) scale(0.97)",
+        transition: { duration: 0.18, ease: easeOutExpo },
+      }}
       className="flex"
     >
       <ContextMenu items={items}>
