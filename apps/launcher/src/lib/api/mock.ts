@@ -331,11 +331,6 @@ function mockHome(): HomeContent {
   };
 }
 
-/** What the launcher shows before anything is published or cached (no feed, no live events). */
-export function welcomeHome(): HomeContent {
-  return { ...content, offline: false };
-}
-
 const instances: InstanceSummary[] = [
   {
     id: "projects",

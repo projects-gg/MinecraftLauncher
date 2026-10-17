@@ -30,7 +30,7 @@ import { tauriData } from "./data-tauri";
 import type { LauncherApi } from "./index";
 import { javaPrompt, tauriJava } from "./java-tauri";
 import { tauriLibrary } from "./library-tauri";
-import { mockApi, welcomeHome } from "./mock";
+import { mockApi } from "./mock";
 import { tauriModCenter } from "./modcenter-tauri";
 import { modCheck, tauriModHealth } from "./modhealth-tauri";
 import { tauriSkins } from "./skins-tauri";
@@ -48,6 +48,7 @@ import type {
   NewsCategory,
   ParticleKind,
 } from "./types";
+import { welcomeHome } from "./welcome";
 
 /** A command failed: carries the friendly message plus details for "copy details". */
 export class CommandError extends Error {

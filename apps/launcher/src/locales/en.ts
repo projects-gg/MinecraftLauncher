@@ -254,6 +254,8 @@ export const en: DeepPartial<Strings> = {
     eventEndsIn: "{{when}} left",
     eventStartsAt: "{{when}}",
     noNews: "No news yet.",
+    welcomeTitle: "Welcome to Projects",
+    welcomeSubtitle: "Press Play and see you on the server.",
     newsEmpty: "No news yet",
     newsEmptyCategory: "No news in this category",
     showAllNews: "Show all news",

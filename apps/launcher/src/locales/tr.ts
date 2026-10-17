@@ -47,6 +47,8 @@ export const tr = {
     eventEndsIn: "{{when}} kaldı",
     eventStartsAt: "{{when}}",
     noNews: "Henüz haber yok.",
+    welcomeTitle: "Projects'e hoş geldin",
+    welcomeSubtitle: "Oyna'ya bas, sunucuda görüşürüz.",
     newsEmpty: "Henüz haber yok",
     newsEmptyCategory: "Bu kategoride haber yok",
     showAllNews: "Tüm haberleri göster",
