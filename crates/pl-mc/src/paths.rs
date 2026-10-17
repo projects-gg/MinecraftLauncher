@@ -233,9 +233,11 @@ pub async fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
             .map_err(|e| Error::io(parent, e))?;
     }
     let tmp = temp_sibling(path);
-    tokio::fs::write(&tmp, bytes)
-        .await
-        .map_err(|e| Error::io(&tmp, e))?;
+    if let Err(error) = tokio::fs::write(&tmp, bytes).await {
+        // A half-written file on a full disk would only take more of the room.
+        let _ = tokio::fs::remove_file(&tmp).await;
+        return Err(Error::io(&tmp, error));
+    }
     if let Err(error) = tokio::fs::rename(&tmp, path).await {
         let _ = tokio::fs::remove_file(&tmp).await;
         return Err(Error::io(path, error));
@@ -249,7 +251,10 @@ pub fn write_atomic_blocking(path: &Path, bytes: &[u8]) -> Result<()> {
         std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
     }
     let tmp = temp_sibling(path);
-    std::fs::write(&tmp, bytes).map_err(|e| Error::io(&tmp, e))?;
+    if let Err(error) = std::fs::write(&tmp, bytes) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(Error::io(&tmp, error));
+    }
     if let Err(error) = std::fs::rename(&tmp, path) {
         let _ = std::fs::remove_file(&tmp);
         return Err(Error::io(path, error));

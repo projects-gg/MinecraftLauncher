@@ -88,6 +88,53 @@ impl NetError {
             _ => false,
         }
     }
+
+    /// True when the disk (or the user's disk quota) is full: nothing more can be written until
+    /// room is made. Failures that only kept a text (a batch, all mirrors) are read too.
+    pub fn is_disk_full(&self) -> bool {
+        match self {
+            Self::Io { source, .. } => is_disk_full(source),
+            Self::Batch { first: text, .. } | Self::AllMirrorsFailed { last: text, .. } => {
+                mentions_disk_full(text)
+            }
+            _ => false,
+        }
+    }
+}
+
+/// OS error codes for a full disk or a used-up disk quota (the same numbers mean other things on
+/// other systems: 28 is "out of paper" on Windows).
+#[cfg(windows)]
+const DISK_FULL_CODES: &[i32] = &[
+    39,   // ERROR_HANDLE_DISK_FULL
+    112,  // ERROR_DISK_FULL
+    1295, // ERROR_DISK_QUOTA_EXCEEDED
+];
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const DISK_FULL_CODES: &[i32] = &[28 /* ENOSPC */, 122 /* EDQUOT */];
+#[cfg(all(unix, not(any(target_os = "linux", target_os = "android"))))]
+const DISK_FULL_CODES: &[i32] = &[28 /* ENOSPC */, 69 /* EDQUOT */];
+#[cfg(not(any(windows, unix)))]
+const DISK_FULL_CODES: &[i32] = &[];
+
+/// True when `error` means the disk (or the user's disk quota) is full.
+pub fn is_disk_full(error: &std::io::Error) -> bool {
+    use std::io::ErrorKind;
+    matches!(
+        error.kind(),
+        ErrorKind::StorageFull | ErrorKind::QuotaExceeded
+    ) || error
+        .raw_os_error()
+        .is_some_and(|code| DISK_FULL_CODES.contains(&code))
+}
+
+/// True when an error's text carries a full-disk OS error (`… (os error 112)`; the sentence before
+/// it is in the system's language, the number is not). For failures that only kept their text: a
+/// batch of downloads, a step that ran in another process.
+pub fn mentions_disk_full(text: &str) -> bool {
+    DISK_FULL_CODES
+        .iter()
+        .any(|code| text.contains(&format!("(os error {code})")))
 }
 
 pub(crate) fn looks_offline(message: &str) -> bool {
@@ -103,4 +150,59 @@ pub(crate) fn looks_offline(message: &str) -> bool {
     ]
     .iter()
     .any(|needle| m.contains(needle))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io;
+
+    use super::*;
+
+    #[test]
+    fn full_disks_are_recognised() {
+        assert!(is_disk_full(&io::Error::from(io::ErrorKind::StorageFull)));
+        assert!(is_disk_full(&io::Error::from(io::ErrorKind::QuotaExceeded)));
+        assert!(!is_disk_full(&io::Error::from(
+            io::ErrorKind::PermissionDenied
+        )));
+        for &code in DISK_FULL_CODES {
+            assert!(is_disk_full(&io::Error::from_raw_os_error(code)), "{code}");
+        }
+        #[cfg(windows)]
+        {
+            assert!(is_disk_full(&io::Error::from_raw_os_error(112)));
+            assert!(is_disk_full(&io::Error::from_raw_os_error(39)));
+            // ERROR_OUT_OF_PAPER, ENOSPC's number elsewhere.
+            assert!(!is_disk_full(&io::Error::from_raw_os_error(28)));
+        }
+        #[cfg(unix)]
+        assert!(is_disk_full(&io::Error::from_raw_os_error(28)));
+    }
+
+    #[test]
+    fn a_batch_that_hit_a_full_disk_says_so() {
+        let full = io::Error::from_raw_os_error(DISK_FULL_CODES[0]);
+        let first = NetError::io("/data/assets/objects/ab/abc.part", full);
+        assert!(first.is_disk_full());
+        let batch = NetError::Batch {
+            failed: 3,
+            total: 40,
+            first: first.to_string(),
+            offline: false,
+        };
+        assert!(batch.is_disk_full(), "{batch}");
+        assert!(mentions_disk_full(&format!("download failed: {batch}")));
+
+        let reset = NetError::Batch {
+            failed: 1,
+            total: 40,
+            first: "connection reset by peer".to_owned(),
+            offline: true,
+        };
+        assert!(!reset.is_disk_full());
+        assert!(!mentions_disk_full(
+            "I/O error at /x: Access is denied. (os error 5)"
+        ));
+        assert!(!NetError::Cancelled.is_disk_full());
+    }
 }

@@ -152,6 +152,10 @@ pub struct DownloadSummary {
 #[derive(Debug, Clone)]
 pub struct Downloader {
     http: Http,
+    /// Tests only: a write that would take a file past this many bytes fails as if the disk were
+    /// full.
+    #[cfg(test)]
+    disk_full_after: Option<u64>,
 }
 
 struct Counters {
@@ -180,7 +184,11 @@ enum Outcome {
 
 impl Downloader {
     pub fn new(http: Http) -> Self {
-        Self { http }
+        Self {
+            http,
+            #[cfg(test)]
+            disk_full_after: None,
+        }
     }
 
     pub fn http(&self) -> &Http {
@@ -197,6 +205,10 @@ impl Downloader {
     /// Download many items in parallel. Items sharing a destination are fetched once.
     /// Fails with [`NetError::Batch`] if any item could not be fetched, after all
     /// other items have been attempted, so a retry only redoes the failures.
+    ///
+    /// A full disk stops the batch at once instead ([`NetError::is_disk_full`], the I/O error
+    /// itself): every other file would fail the same way, each after a request of its own. The
+    /// files already finished stay (verified, skipped by the next attempt) and partial files go.
     pub async fn download_all(
         &self,
         items: Vec<DownloadItem>,
@@ -226,19 +238,32 @@ impl Downloader {
             ))
         });
 
+        // The files' own token: a full disk stops the files still running or queued, while
+        // the caller's token keeps its meaning (a cancel of the whole batch).
+        let disk_full = options.cancel.child_token();
+        let file_options = DownloadOptions {
+            cancel: disk_full.clone(),
+            ..options.clone()
+        };
+
         // Futures are built eagerly: a mapping closure inside the stream would make this
         // future higher-ranked and not `Send` for callers that spawn it (Tauri commands).
         let jobs: Vec<_> = items
             .iter()
             .map(|item| {
                 let counters = Arc::clone(&counters);
+                let file_options = &file_options;
+                let disk_full = &disk_full;
                 async move {
-                    let outcome = self.fetch_one(item, options, &counters).await;
+                    let outcome = self.fetch_one(item, file_options, &counters).await;
+                    if outcome.as_ref().is_err_and(NetError::is_disk_full) {
+                        disk_full.cancel();
+                    }
                     (item.dest.clone(), outcome)
                 }
             })
             .collect();
-        let results: Vec<(PathBuf, Result<Outcome>)> = futures::stream::iter(jobs)
+        let mut results: Vec<(PathBuf, Result<Outcome>)> = futures::stream::iter(jobs)
             .buffer_unordered(options.concurrency.max(1))
             .collect()
             .await;
@@ -252,6 +277,16 @@ impl Downloader {
         }
         if let Some(progress) = &options.progress {
             progress(counters.snapshot(0));
+        }
+        // The files it stopped report a cancel; the batch reports the full disk.
+        let full = results
+            .iter()
+            .position(|(_, result)| result.as_ref().is_err_and(NetError::is_disk_full));
+        if let Some(index) = full
+            && let (dest, Err(error)) = results.swap_remove(index)
+        {
+            tracing::warn!(dest = %dest.display(), %error, "downloads stopped: the disk is full");
+            return Err(error);
         }
 
         let mut summary = DownloadSummary {
@@ -328,6 +363,8 @@ impl Downloader {
                         return Ok(Outcome::Downloaded(bytes));
                     }
                     Err(NetError::Cancelled) => return Err(NetError::Cancelled),
+                    // No mirror can write to a full disk.
+                    Err(error) if error.is_disk_full() => return Err(error),
                     Err(error) => {
                         let transient = is_transient(&error);
                         tracing::debug!(%url, attempt, %error, transient, "download attempt failed");
@@ -396,6 +433,14 @@ impl Downloader {
                 let chunk = chunk.map_err(request_error)?;
                 if let Some(hasher) = hasher.as_mut() {
                     hasher.update(&chunk);
+                }
+                #[cfg(test)]
+                if self
+                    .disk_full_after
+                    .is_some_and(|limit| written + chunk.len() as u64 > limit)
+                {
+                    let full = std::io::Error::from(std::io::ErrorKind::StorageFull);
+                    return Err(NetError::io(&tmp, full));
                 }
                 // A slow disk (a busy USB drive) must not hold up a cancel either.
                 tokio::select! {
@@ -698,6 +743,54 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(100)).await;
         assert_eq!(requests.load(Ordering::SeqCst), 0);
         assert!(leftovers(dir.path()).is_empty());
+    }
+
+    /// A full disk stops a batch at once: the file being written goes, its mirror and the queued
+    /// files are never asked for, files finished before stay, and the batch reports the full disk
+    /// itself rather than a batch of failures.
+    #[tokio::test]
+    async fn a_full_disk_stops_the_batch() {
+        let dir = tempfile::tempdir().unwrap();
+        let size = 16 * 1024;
+        let (base, requests) = slow_server(size).await;
+        let done = dir.path().join("done");
+        std::fs::write(&done, vec![b'x'; size]).unwrap();
+        let mut items = vec![
+            DownloadItem::new(format!("{base}/done"), &done).size(Some(size as u64)),
+            DownloadItem::new(format!("{base}/file0"), dir.path().join("file0"))
+                .mirror(format!("{base}/mirror0"))
+                .size(Some(size as u64)),
+        ];
+        items.extend((1..4).map(|i| {
+            DownloadItem::new(
+                format!("{base}/file{i}"),
+                dir.path().join(format!("file{i}")),
+            )
+            .size(Some(size as u64))
+        }));
+        let mut downloader =
+            Downloader::new(Http::new(crate::HttpConfig::new("pl-net-test")).unwrap());
+        downloader.disk_full_after = Some(4 * 1024);
+        let options = DownloadOptions {
+            concurrency: 1,
+            ..DownloadOptions::default()
+        };
+        let result = tokio::time::timeout(
+            Duration::from_secs(10),
+            downloader.download_all(items, &options),
+        )
+        .await
+        .expect("the batch kept running");
+        let error = result.unwrap_err();
+        assert!(error.is_disk_full(), "{error:?}");
+        assert!(matches!(error, NetError::Io { .. }), "{error:?}");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert_eq!(
+            requests.load(Ordering::SeqCst),
+            1,
+            "more files were asked for"
+        );
+        assert_eq!(leftovers(dir.path()), ["done"]);
     }
 
     /// A single request that takes no token is dropped as soon as the token fires.

@@ -107,4 +107,17 @@ impl Error {
             _ => false,
         }
     }
+
+    /// True when the disk (or the user's disk quota) is full. Steps that ran elsewhere (an
+    /// archive, a mod loader installer's process) only kept the text of what failed.
+    pub fn is_disk_full(&self) -> bool {
+        match self {
+            Self::Io { source, .. } => pl_net::is_disk_full(source),
+            Self::Net(e) => e.is_disk_full(),
+            Self::Archive { message, .. } | Self::Process(message) => {
+                pl_net::mentions_disk_full(message)
+            }
+            _ => false,
+        }
+    }
 }
