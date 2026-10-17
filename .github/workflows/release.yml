@@ -104,12 +104,16 @@ jobs:
         id: plan
         env:
           DRY_RUN: ${{ steps.meta.outputs.dry_run }}
+          VERSION: ${{ steps.meta.outputs.version }}
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
           SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
         run: |
           windows='{"os":"windows-latest","key":"windows","args":"","targets":""}'
           macos='{"os":"macos-latest","key":"macos","args":"--target universal-apple-darwin","targets":"aarch64-apple-darwin,x86_64-apple-darwin"}'
-          linux='{"os":"ubuntu-22.04","key":"linux","args":"","targets":""}'
+          # RPM versions cannot contain "-", so prereleases (2.1.0-beta.1) ship AppImage and deb only.
+          linux_args=""
+          case "$VERSION" in *-*) linux_args="--bundles appimage,deb" ;; esac
+          linux="{\"os\":\"ubuntu-22.04\",\"key\":\"linux\",\"args\":\"$linux_args\",\"targets\":\"\"}"
           # With SignPath configured, Windows is built by the launcher-windows-signed job instead.
           # Dry runs stay unsigned so they do not ask SignPath approvers for throwaway builds.
           if [ "$DRY_RUN" != "true" ] && [ -n "$SIGNPATH_API_TOKEN" ] && [ -n "$SIGNPATH_ORGANIZATION_ID" ]; then
