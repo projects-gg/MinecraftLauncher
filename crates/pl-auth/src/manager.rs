@@ -1126,6 +1126,8 @@ impl AuthManager {
     }
 
     /// Account list mutations for the legacy import (same rules as [`Self::add_microsoft`]).
+    /// The import exists on Windows only (`legacy`).
+    #[cfg(windows)]
     pub(crate) async fn membership_lock(&self) -> tokio::sync::MutexGuard<'_, ()> {
         self.membership.lock().await
     }
