@@ -1,0 +1,300 @@
+{
+  "version": 1,
+  "idPrefix": "preset:",
+  "categories": {
+    "dragon": "Ejderhalar",
+    "creature": "Yaratıklar",
+    "character": "Karakterler",
+    "object": "Eşyalar"
+  },
+  "avatars": [
+    {
+      "slug": "golden-dragon",
+      "name": "Altın Ejderha",
+      "alt": "Bordo boynuzlu, gülümseyen altın pullu genç bir ejderha",
+      "category": "dragon",
+      "tags": ["ejderha", "altın", "sarı"],
+      "accent": "#F5A453",
+      "files": {
+        "256": "golden-dragon.webp",
+        "128": "golden-dragon-128.webp"
+      }
+    },
+    {
+      "slug": "ninja",
+      "name": "Ninja",
+      "alt": "Mor kapüşonlu ve maskeli, kırmızı alın bantlı bir ninja",
+      "category": "character",
+      "tags": ["karakter", "ninja", "gizem", "mor"],
+      "accent": "#F5535E",
+      "files": {
+        "256": "ninja.webp",
+        "128": "ninja-128.webp"
+      }
+    },
+    {
+      "slug": "van-cat",
+      "name": "Van Kedisi",
+      "alt": "Bir gözü mavi, diğeri kehribar rengi olan, altın çıngıraklı beyaz bir Van kedisi",
+      "category": "creature",
+      "tags": ["hayvan", "kedi", "beyaz", "sevimli"],
+      "accent": "#53ACF5",
+      "files": {
+        "256": "van-cat.webp",
+        "128": "van-cat-128.webp"
+      }
+    },
+    {
+      "slug": "baby-dragon",
+      "name": "Yavru Ejderha",
+      "alt": "Altın yumurta kabuğundan çıkan, kocaman gözlü mor bir yavru ejderha",
+      "category": "dragon",
+      "tags": ["ejderha", "yavru", "mor", "sevimli"],
+      "accent": "#BD53F5",
+      "files": {
+        "256": "baby-dragon.webp",
+        "128": "baby-dragon-128.webp"
+      }
+    },
+    {
+      "slug": "fox",
+      "name": "Kurnaz Tilki",
+      "alt": "Turkuaz boyun bağı takan, yeşil gözlü kızıl bir tilki",
+      "category": "creature",
+      "tags": ["hayvan", "tilki", "turuncu"],
+      "accent": "#F58B53",
+      "files": {
+        "256": "fox.webp",
+        "128": "fox-128.webp"
+      }
+    },
+    {
+      "slug": "knight",
+      "name": "Şövalye",
+      "alt": "Siperliği açık gümüş miğfer takan, gülümseyen genç bir kadın şövalye",
+      "category": "character",
+      "tags": ["karakter", "şövalye", "zırh", "kadın"],
+      "accent": "#537AF5",
+      "files": {
+        "256": "knight.webp",
+        "128": "knight-128.webp"
+      }
+    },
+    {
+      "slug": "panda",
+      "name": "Panda",
+      "alt": "Ağzında yeşil bambu dalı tutan, sevimli bir yavru panda",
+      "category": "creature",
+      "tags": ["hayvan", "panda", "sevimli", "bambu"],
+      "accent": "#F5537E",
+      "files": {
+        "256": "panda.webp",
+        "128": "panda-128.webp"
+      }
+    },
+    {
+      "slug": "frost-dragon",
+      "name": "Buz Ejderhası",
+      "alt": "Kristal boynuzlu, buz mavisi ve beyaz pullu genç bir ejderha",
+      "category": "dragon",
+      "tags": ["ejderha", "buz", "mavi"],
+      "accent": "#539FF5",
+      "files": {
+        "256": "frost-dragon.webp",
+        "128": "frost-dragon-128.webp"
+      }
+    },
+    {
+      "slug": "inventor",
+      "name": "Mucit",
+      "alt": "Alnında yeşil camlı pirinç gözlük duran, kızıl kıvırcık saçlı, çilli genç bir kız mucit",
+      "category": "character",
+      "tags": ["karakter", "mucit", "kadın", "gözlük"],
+      "accent": "#53F5C7",
+      "files": {
+        "256": "inventor.webp",
+        "128": "inventor-128.webp"
+      }
+    },
+    {
+      "slug": "owl",
+      "name": "Bilge Baykuş",
+      "alt": "Pirinç gözlüklü, kocaman altın gözlü kahverengi bir baykuş",
+      "category": "creature",
+      "tags": ["hayvan", "baykuş", "kuş", "kahverengi"],
+      "accent": "#538EF5",
+      "files": {
+        "256": "owl.webp",
+        "128": "owl-128.webp"
+      }
+    },
+    {
+      "slug": "wizard",
+      "name": "Büyücü",
+      "alt": "Yıldızlı mavi şapkalı, uzun beyaz sakallı yaşlı bir büyücü",
+      "category": "character",
+      "tags": ["karakter", "büyücü", "büyü", "erkek"],
+      "accent": "#8653F5",
+      "files": {
+        "256": "wizard.webp",
+        "128": "wizard-128.webp"
+      }
+    },
+    {
+      "slug": "potion",
+      "name": "İksir",
+      "alt": "İçinde parlayan yeşil sıvı köpüren, mantar tıpalı cam bir iksir şişesi",
+      "category": "object",
+      "tags": ["eşya", "iksir", "büyü", "yeşil"],
+      "accent": "#CCF553",
+      "files": {
+        "256": "potion.webp",
+        "128": "potion-128.webp"
+      }
+    },
+    {
+      "slug": "robot",
+      "name": "Robot",
+      "alt": "Kocaman parlayan mavi gözlü, antenli, sevimli beyaz bir robot",
+      "category": "character",
+      "tags": ["karakter", "robot", "teknoloji", "mavi"],
+      "accent": "#53B7F5",
+      "files": {
+        "256": "robot.webp",
+        "128": "robot-128.webp"
+      }
+    },
+    {
+      "slug": "axolotl",
+      "name": "Aksolotl",
+      "alt": "Pembe solungaçlı, kocaman gülümseyen bir aksolotl",
+      "category": "creature",
+      "tags": ["hayvan", "aksolotl", "pembe", "sevimli"],
+      "accent": "#F55399",
+      "files": {
+        "256": "axolotl.webp",
+        "128": "axolotl-128.webp"
+      }
+    },
+    {
+      "slug": "ember-dragon",
+      "name": "Kor Ejderhası",
+      "alt": "Pulları arasından kor ışığı sızan kızıl bir ejderha",
+      "category": "dragon",
+      "tags": ["ejderha", "ateş", "kırmızı"],
+      "accent": "#F56D53",
+      "files": {
+        "256": "ember-dragon.webp",
+        "128": "ember-dragon-128.webp"
+      }
+    },
+    {
+      "slug": "pirate",
+      "name": "Korsan Kaptan",
+      "alt": "Altın şeritli siyah üç köşeli şapka takan, gülümseyen genç bir kadın korsan",
+      "category": "character",
+      "tags": ["karakter", "korsan", "kadın", "deniz"],
+      "accent": "#53F5D5",
+      "files": {
+        "256": "pirate.webp",
+        "128": "pirate-128.webp"
+      }
+    },
+    {
+      "slug": "lantern",
+      "name": "Fener",
+      "alt": "İçinde sıcak bir alev yanan pirinç bir fener",
+      "category": "object",
+      "tags": ["eşya", "fener", "ışık", "turuncu"],
+      "accent": "#F59053",
+      "files": {
+        "256": "lantern.webp",
+        "128": "lantern-128.webp"
+      }
+    },
+    {
+      "slug": "wolf",
+      "name": "Gümüş Kurt",
+      "alt": "Mavi taşlı deri tasma takan, buz mavisi gözlü gri bir kurt",
+      "category": "creature",
+      "tags": ["hayvan", "kurt", "gri", "mavi"],
+      "accent": "#53A6F5",
+      "files": {
+        "256": "wolf.webp",
+        "128": "wolf-128.webp"
+      }
+    },
+    {
+      "slug": "crystal",
+      "name": "Zümrüt Kristal",
+      "alt": "İçten parlayan yeşil zümrüt kristallerden oluşan bir küme",
+      "category": "object",
+      "tags": ["eşya", "kristal", "zümrüt", "yeşil"],
+      "accent": "#53F5A7",
+      "files": {
+        "256": "crystal.webp",
+        "128": "crystal-128.webp"
+      }
+    },
+    {
+      "slug": "dwarf-miner",
+      "name": "Cüce Madenci",
+      "alt": "Fenerli pirinç baret takan, örgülü bakır rengi sakallı neşeli bir cüce madenci",
+      "category": "character",
+      "tags": ["karakter", "madenci", "cüce", "erkek"],
+      "accent": "#F5BF53",
+      "files": {
+        "256": "dwarf-miner.webp",
+        "128": "dwarf-miner-128.webp"
+      }
+    },
+    {
+      "slug": "compass",
+      "name": "Pusula",
+      "alt": "Lacivert kadranlı, parlayan turkuaz ibreli altın bir cep pusulası",
+      "category": "object",
+      "tags": ["eşya", "pusula", "keşif", "altın"],
+      "accent": "#53F5B4",
+      "files": {
+        "256": "compass.webp",
+        "128": "compass-128.webp"
+      }
+    },
+    {
+      "slug": "bunny",
+      "name": "Pilot Tavşan",
+      "alt": "Başında pilot gözlüğü, boynunda kırmızı atkı olan kahverengi bir tavşan",
+      "category": "creature",
+      "tags": ["hayvan", "tavşan", "sevimli", "pilot"],
+      "accent": "#7CF553",
+      "files": {
+        "256": "bunny.webp",
+        "128": "bunny-128.webp"
+      }
+    },
+    {
+      "slug": "spellbook",
+      "name": "Büyü Kitabı",
+      "alt": "Mor deri kaplı, altın köşeli ve mor taşlı bir büyü kitabı",
+      "category": "object",
+      "tags": ["eşya", "kitap", "büyü", "mor"],
+      "accent": "#F553E9",
+      "files": {
+        "256": "spellbook.webp",
+        "128": "spellbook-128.webp"
+      }
+    },
+    {
+      "slug": "elf-ranger",
+      "name": "Elf Okçu",
+      "alt": "Yeşil kapüşonlu, uzun gümüş saçlı, sivri kulaklı genç bir elf okçu",
+      "category": "character",
+      "tags": ["karakter", "elf", "okçu", "erkek"],
+      "accent": "#53F57C",
+      "files": {
+        "256": "elf-ranger.webp",
+        "128": "elf-ranger-128.webp"
+      }
+    }
+  ]
+}
