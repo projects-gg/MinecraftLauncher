@@ -3,6 +3,7 @@ import { enDisk } from "./en-disk";
 import { enGraphics } from "./en-graphics";
 import { enLibraryDrop } from "./en-library-drop";
 import { enOverview } from "./en-overview";
+import { enPrepare } from "./en-prepare";
 import { enReminders } from "./en-reminders";
 import { enShortcuts } from "./en-shortcuts";
 import { enTuning } from "./en-tuning";
@@ -29,6 +30,7 @@ export const en: DeepPartial<Strings> = {
   libraryDrop: enLibraryDrop,
   updates: enUpdates,
   shortcuts: enShortcuts,
+  prepare: enPrepare,
   social: {
     title: "Friends",
     pill: {

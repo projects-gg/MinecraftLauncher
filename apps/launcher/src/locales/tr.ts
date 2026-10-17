@@ -4,6 +4,7 @@ import { trDisk } from "./tr-disk";
 import { trGraphics } from "./tr-graphics";
 import { trLibraryDrop } from "./tr-library-drop";
 import { trOverview } from "./tr-overview";
+import { trPrepare } from "./tr-prepare";
 import { trReminders } from "./tr-reminders";
 import { trShortcuts } from "./tr-shortcuts";
 import { trSocial } from "./tr-social";
@@ -20,6 +21,7 @@ export const tr = {
   libraryDrop: trLibraryDrop,
   updates: trUpdates,
   shortcuts: trShortcuts,
+  prepare: trPrepare,
   social: trSocial,
   nav: {
     home: "Ana Sayfa",
