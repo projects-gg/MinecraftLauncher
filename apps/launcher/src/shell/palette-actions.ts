@@ -23,6 +23,42 @@ export const PALETTE_WORDS = {
   settings: { keywords: ["seçenekler", "ayar", "settings", "options"] },
 
   // The selected instance (shown only while searching)
+  // In-game lag is what the graphics preset fixes, so the lag words lead here first; the
+  // launcher's own Performance mode keeps "launcher", effects and blur.
+  graphics: {
+    keywords: [
+      "grafik",
+      "grafikler",
+      "görüntü ayarı",
+      "görüntü ayarları",
+      "video ayarları",
+      "görüş mesafesi",
+      "render",
+      "render distance",
+      "chunk",
+      "kalite",
+      "ultra",
+      "akıcı",
+      "dengeli",
+      "güzel",
+      "bulut",
+      "parçacık",
+      "fps",
+      "kasma",
+      "kasıyor",
+      "kasılma",
+      "lag",
+      "donma",
+      "donuyor",
+      "takılma",
+      "takılıyor",
+      "yavaş",
+      "düşük",
+      "graphics",
+      "quality",
+      "stutter",
+    ],
+  },
   memory: {
     keywords: [
       "ram",

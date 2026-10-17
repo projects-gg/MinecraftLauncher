@@ -15,6 +15,7 @@ import {
   Lightning,
   MagnifyingGlass,
   Memory,
+  Mountains,
   Newspaper,
   Package,
   Plus,
@@ -177,11 +178,12 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
   const openFriends = (page: "list" | "add") =>
     afterClose(() => useSocialUi.getState().openPanel({ page }));
   const openSettings = (section: string) => void navigate({ to: "/settings", search: { section } });
-  const openInstance = (instanceId: string, tab?: InstanceTab) =>
+  // `focus`: the settings group to land on (its control takes the focus).
+  const openInstance = (instanceId: string, tab?: InstanceTab, focus?: "graphics" | "memory") =>
     void navigate({
       to: "/library/$instanceId",
       params: { instanceId },
-      search: tab ? { tab } : {},
+      search: tab ? { tab, focus } : {},
     });
 
   const copyAddress = () => {
@@ -212,6 +214,8 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
       instances[0];
     const activeAccount = accounts.find((a) => a.active);
     const tab = (id: InstanceTab) => () => selected && run(() => openInstance(selected.id, id));
+    const setting = (focus: "graphics" | "memory") => () =>
+      selected && run(() => openInstance(selected.id, "settings", focus));
 
     return [
       {
@@ -297,10 +301,17 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
           searching && selected
             ? [
                 entry(
+                  "instance:graphics",
+                  t("graphics.palette"),
+                  <Mountains size={18} />,
+                  setting("graphics"),
+                  { words: PALETTE_WORDS.graphics },
+                ),
+                entry(
                   "instance:memory",
                   t("tuning.palette.memory"),
                   <Memory size={18} />,
-                  tab("settings"),
+                  setting("memory"),
                   {
                     words: PALETTE_WORDS.memory,
                   },

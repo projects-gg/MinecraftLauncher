@@ -45,6 +45,7 @@ const palette: { id: string; entries: Candidate[] }[] = [
   {
     id: "instance",
     entries: [
+      item("instance:graphics", tr.graphics.palette, PALETTE_WORDS.graphics),
       item("instance:memory", tr.tuning.palette.memory, PALETTE_WORDS.memory),
       item("instance:mods", tr.instance.tabs.mods, PALETTE_WORDS.mods),
       item("instance:resource-packs", tr.instance.tabs.resourcePacks, PALETTE_WORDS.resourcePacks),
@@ -122,12 +123,19 @@ function rank(query: string): string[] {
 
 describe("palette search", () => {
   it.each([
-    ["kasiyor", "setting:performance"],
-    ["kasıyor", "setting:performance"],
-    ["KASIYOR", "setting:performance"],
-    ["fps", "setting:performance"],
-    ["fps düşük", "setting:performance"],
-    ["lag", "setting:performance"],
+    // In-game lag: the graphics preset is the fix; the launcher's Performance mode follows.
+    ["kasiyor", "instance:graphics"],
+    ["kasıyor", "instance:graphics"],
+    ["KASIYOR", "instance:graphics"],
+    ["fps", "instance:graphics"],
+    ["fps düşük", "instance:graphics"],
+    ["lag", "instance:graphics"],
+    ["grafik", "instance:graphics"],
+    ["görüş mesafesi", "instance:graphics"],
+    ["render", "instance:graphics"],
+    ["akıcı", "instance:graphics"],
+    ["launcher kasıyor", "setting:performance"],
+    ["performans modu", "setting:performance"],
     ["ip", "action:copy-address"],
     ["İP", "action:copy-address"],
     ["sunucu ip", "action:copy-address"],
@@ -158,16 +166,20 @@ describe("palette search", () => {
   it("keeps the other fixes for a problem below the main one", () => {
     const results = rank("kasıyor");
     expect(results.indexOf("instance:memory")).toBeGreaterThan(0);
+    expect(results.indexOf("setting:performance")).toBeGreaterThan(0);
     expect(rank("çöküyor").slice(0, 2)).toEqual(["instance:logs", "instance:memory"]);
+    // Screenshots stay screenshots, though the graphics item knows "görüntü".
+    expect(rank("ekran görüntüleri")[0]).toBe("instance:screenshots");
   });
 
   it("reads past the filler and the Turkish endings players type", () => {
-    expect(rank("oyun neden kasıyor")[0]).toBe("setting:performance");
+    expect(rank("oyun neden kasıyor")[0]).toBe("instance:graphics");
     expect(rank("ram nasıl arttırılır")[0]).toBe("instance:memory");
     expect(rank("skinimi değiştir")[0]).toBe("action:appearance");
     expect(rank("loglar")[0]).toBe("instance:logs");
     expect(rank("shader yükle")[0]).toBe("instance:shaders");
-    expect(rank("bilgisayar donuyor")[0]).toBe("setting:performance");
+    expect(rank("bilgisayar donuyor")[0]).toBe("instance:graphics");
+    expect(rank("grafik ayarları")[0]).toBe("instance:graphics");
   });
 
   it("folds Turkish letters both ways", () => {
@@ -200,7 +212,7 @@ describe("palette search", () => {
 describe("rankGroups", () => {
   it("leads with the group holding the best match, not the first one that matches", () => {
     expect(
-      rankGroups(palette, "kasıyor")
+      rankGroups(palette, "launcher kasıyor")
         .map((group) => group.id)
         .slice(0, 2),
     ).toEqual(["settings", "instance"]);
