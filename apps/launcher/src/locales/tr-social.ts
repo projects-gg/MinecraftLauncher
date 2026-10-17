@@ -18,7 +18,7 @@ export const trSocial = {
     reopen: "Tarayıcıyı yeniden aç",
     cancel: "Vazgeç",
     expired: "Giriş tamamlanamadı. Yeniden dene.",
-    unavailable: "Arkadaşlar şu an kullanılamıyor. Biraz sonra yeniden dene.",
+    unavailable: "Arkadaşlar şu an kullanılamıyor. Biraz sonra tekrar dene.",
     failed: "Giriş tamamlanamadı. Yeniden dene.",
   },
   status: {
