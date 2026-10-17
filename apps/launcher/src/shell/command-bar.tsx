@@ -1,11 +1,16 @@
 import { CaretUpDown, Check, FolderOpen, Plus } from "@phosphor-icons/react";
-import { cn, PlayButton, PlayerHead, type PlayState, Progress, Switch, toast } from "@pl/ui";
-import { useQuery } from "@tanstack/react-query";
+import { Chip, cn, easeOutExpo, PlayButton, type PlayState, Progress, Switch, toast } from "@pl/ui";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { AccountFace } from "@/features/accounts/account-face";
+import { sortInstances, useLibraryView } from "@/features/library/library-view";
+import { ResumeButton, useResumeTarget } from "@/features/resume/resume-button";
 import { api, type InstanceSummary } from "@/lib/api";
+import { copyDetails } from "@/lib/clipboard";
 import { formatCount, formatDuration, formatRelative, formatSpeed } from "@/lib/format";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
@@ -18,32 +23,40 @@ function loaderLine(i: InstanceSummary, loaderName: string) {
 function InstancePicker({
   instances,
   selected,
+  loading,
+  locked,
   onSelect,
 }: {
   instances: InstanceSummary[];
   selected: InstanceSummary | undefined;
+  /** Still loading the list (an empty list then reads "Kurulum seç", not "Yükleniyor"). */
+  loading: boolean;
+  /** A game is being prepared or played: the bar stays on it until it ends. */
+  locked: boolean;
   onSelect: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  // The library's order (official packs first), so both lists read the same way.
+  const sort = useLibraryView((s) => s.sort);
+  const ordered = useMemo(() => {
+    const sorted = sortInstances(instances, sort);
+    return [...sorted.filter((i) => i.managed), ...sorted.filter((i) => !i.managed)];
+  }, [instances, sort]);
   return (
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
           aria-label={t("instances.pickerLabel")}
-          className="group flex h-[60px] w-[290px] shrink-0 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] px-2.5 text-left transition-colors duration-150 hover:bg-white/6 data-[state=open]:bg-white/8"
+          className="group flex h-[52px] w-[clamp(200px,20vw,264px)] shrink-0 cursor-pointer items-center gap-2.5 rounded-[var(--radius-panel)] px-2 text-left transition-[background-color,transform] duration-150 ease-out hover:bg-white/6 active:scale-[0.985] data-[state=open]:bg-white/8"
         >
-          {selected ? (
-            <InstanceIcon icon={selected.icon} size={44} />
-          ) : (
-            <span className="size-11" />
-          )}
+          {selected ? <InstanceIcon icon={selected.icon} size={36} /> : <span className="size-9" />}
           <span className="min-w-0 flex-1">
-            <span className="block truncate font-display text-[16px] font-semibold text-bone-50">
-              {selected?.name ?? t("common.loading")}
+            <span className="block truncate font-display text-[15px] font-semibold text-bone-50">
+              {selected?.name ?? (loading ? t("common.loading") : t("instances.pickerLabel"))}
             </span>
-            <span className="block truncate text-[12.5px] text-ash-400">
+            <span className="block truncate text-[12px] text-ash-300">
               {selected ? loaderLine(selected, t(`loaders.${selected.loader}`)) : ""}
             </span>
           </span>
@@ -58,39 +71,47 @@ function InstancePicker({
           side="top"
           align="start"
           sideOffset={10}
-          className="glass-strong z-50 w-[320px] rounded-[var(--radius-panel)] p-1.5 shadow-[0_24px_60px_rgb(34_6_6/0.55)]"
+          className="glass-strong pop-motion z-50 w-[300px] rounded-[var(--radius-panel)] p-1 shadow-[0_24px_60px_rgb(34_6_6/0.55)]"
         >
-          {instances.map((i) => (
-            <DropdownMenu.Item
-              key={i.id}
-              onSelect={() => onSelect(i.id)}
-              className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 outline-none data-[highlighted]:bg-white/8"
-            >
-              <InstanceIcon icon={i.icon} size={36} />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13.5px] font-semibold text-bone-50">
-                  {i.name}
+          {/* A long library scrolls here; the two actions below always stay in view. */}
+          <div className="max-h-[min(392px,calc(var(--radix-dropdown-menu-content-available-height)-88px))] overflow-y-auto">
+            {ordered.map((i) => (
+              <DropdownMenu.Item
+                key={i.id}
+                disabled={locked && selected?.id !== i.id}
+                onSelect={() => onSelect(i.id)}
+                className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 outline-none data-[disabled]:cursor-default data-[disabled]:opacity-45 data-[highlighted]:bg-white/8"
+              >
+                <InstanceIcon icon={i.icon} size={32} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-semibold text-bone-50">
+                    {i.name}
+                  </span>
+                  <span className="block truncate text-[12px] text-ash-300">
+                    {loaderLine(i, t(`loaders.${i.loader}`))}
+                  </span>
                 </span>
-                <span className="block truncate text-[12px] text-ash-400">
-                  {loaderLine(i, t(`loaders.${i.loader}`))}
-                  {i.managed ? ` / ${t("instances.managed")}` : ""}
-                </span>
-              </span>
-              {selected?.id === i.id ? <Check size={16} className="text-gold-400" /> : null}
-            </DropdownMenu.Item>
-          ))}
-          <DropdownMenu.Separator className="my-1.5 h-px bg-white/8" />
+                {i.managed ? <Chip tone="gold">{t("instances.managed")}</Chip> : null}
+                {selected?.id === i.id ? (
+                  <Check size={16} className="shrink-0 text-gold-400" />
+                ) : (
+                  <span aria-hidden className="size-4 shrink-0" />
+                )}
+              </DropdownMenu.Item>
+            ))}
+          </div>
+          <DropdownMenu.Separator className="my-1 h-px bg-white/8" />
           <DropdownMenu.Item
             onSelect={() => void navigate({ to: "/library" })}
-            className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-ash-300 outline-none data-[highlighted]:bg-white/8 data-[highlighted]:text-bone-50"
+            className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] text-ash-300 outline-none data-[highlighted]:bg-white/8 data-[highlighted]:text-bone-50"
           >
-            <FolderOpen size={17} /> {t("instances.openLibrary")}
+            <FolderOpen size={16} /> {t("instances.openLibrary")}
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() => void navigate({ to: "/library", search: { create: true } })}
-            className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-2 text-[13px] text-ash-300 outline-none data-[highlighted]:bg-white/8 data-[highlighted]:text-bone-50"
+            className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] text-ash-300 outline-none data-[highlighted]:bg-white/8 data-[highlighted]:text-bone-50"
           >
-            <Plus size={17} /> {t("instances.create")}
+            <Plus size={16} /> {t("instances.create")}
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
@@ -98,60 +119,108 @@ function InstancePicker({
   );
 }
 
+/** In-place swap of the status line and "Devam et" (fades only under reduced motion). */
+function swapIn(reduce: boolean) {
+  return {
+    initial: { opacity: 0, transform: reduce ? "none" : "translateY(4px)" },
+    animate: {
+      opacity: 1,
+      transform: reduce ? "none" : "translateY(0px)",
+      transition: { duration: 0.24, ease: easeOutExpo, delay: 0.04 },
+    },
+    exit: { opacity: 0, transition: { duration: 0.12, ease: easeOutExpo } },
+  };
+}
+
+/**
+ * "Oturum: 12 dk" while the game runs. It renders only when the shown text changes: every second
+ * in the first minute ("45 sn"), then once a minute.
+ */
+function SessionTime({ since }: { since: number }) {
+  const { t } = useTranslation();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const elapsed = now - since;
+    const wait = elapsed < 60_000 ? 1000 - (elapsed % 1000) : 60_000 - (elapsed % 60_000);
+    const timer = setTimeout(() => setNow(Date.now()), Math.max(50, wait));
+    return () => clearTimeout(timer);
+  }, [now, since]);
+  return <>{t("play.session", { time: formatDuration((now - since) / 1000) })}</>;
+}
+
 function StatusArea({ selected }: { selected: InstanceSummary | undefined }) {
   const { t } = useTranslation();
+  const reduce = useReducedMotion() ?? false;
   const phase = useLaunch((s) => s.phase);
   const autoJoin = usePrefs((s) => s.autoJoin);
   const setAutoJoin = usePrefs((s) => s.setAutoJoin);
+  // "Devam et" only while nothing runs (a click would start nothing otherwise).
+  const target = useResumeTarget(selected);
+  const resume = phase.kind === "idle" ? target : target === undefined ? undefined : null;
 
   if (phase.kind === "working") {
+    const filesLabel = (done: number) =>
+      t("play.files", { done: formatCount(done), total: formatCount(phase.totalFiles) });
     return (
       <div className="min-w-0 flex-1" aria-live="polite">
-        <div className="flex items-baseline justify-between gap-4 text-[12.5px]">
+        <div className="flex items-baseline justify-between gap-4 text-[12px]">
           <span className="truncate font-medium text-bone-100">
             {t(`play.stages.${phase.stage}`)}
           </span>
-          <span className="flex shrink-0 gap-4 text-ash-400 tabular-nums">
-            {phase.totalFiles > 0 ? (
-              <span>
-                {t("play.files", {
-                  done: formatCount(phase.doneFiles),
-                  total: formatCount(phase.totalFiles),
-                })}
-              </span>
-            ) : null}
-            {phase.bytesPerSec > 0 ? <span>{formatSpeed(phase.bytesPerSec)}</span> : null}
-            {phase.etaSecs ? (
-              <span>{t("play.eta", { time: formatDuration(phase.etaSecs) })}</span>
-            ) : null}
+          {/* Fixed, right-aligned slots: the figures change every tick and come and go between
+              stages, so the line never slides sideways. */}
+          <span className="flex shrink-0 gap-3 text-ash-300 tabular-nums *:text-right">
+            {/* As wide as the count gets in this stage ("402 / 402 dosya"). */}
+            <span style={{ minWidth: `${filesLabel(phase.totalFiles).length}ch` }}>
+              {phase.totalFiles > 0 ? filesLabel(phase.doneFiles) : null}
+            </span>
+            <span className="min-w-[10.5ch]">
+              {phase.bytesPerSec > 0 ? formatSpeed(phase.bytesPerSec) : null}
+            </span>
+            <span className="min-w-[11ch]">
+              {phase.etaSecs ? t("play.eta", { time: formatDuration(phase.etaSecs) }) : null}
+            </span>
           </span>
         </div>
-        <Progress
-          value={phase.percent}
-          label={t(`play.stages.${phase.stage}`)}
-          className="mt-2.5"
-        />
+        <Progress value={phase.percent} label={t(`play.stages.${phase.stage}`)} className="mt-2" />
       </div>
     );
   }
 
   return (
     <div className="flex min-w-0 flex-1 items-center justify-between gap-6">
-      <div className="min-w-0 text-[12.5px] text-ash-400">
-        {selected ? (
-          <>
-            <span className="block truncate">
-              {selected.lastPlayedAt
-                ? t("play.lastPlayed", { when: formatRelative(selected.lastPlayedAt) })
-                : t("play.neverPlayed")}
-            </span>
-            {selected.playTimeSecs > 0 ? (
-              <span className="block truncate">
-                {t("play.playTime", { time: formatDuration(selected.playTimeSecs) })}
+      {/* "Devam et" and the last-played line share one cell and cross-fade in place. */}
+      <div className="grid min-w-0 flex-1 *:[grid-area:1/1]">
+        <AnimatePresence initial={false}>
+          {selected && resume ? (
+            <motion.div key="resume" className="min-w-0" {...swapIn(reduce)}>
+              <ResumeButton instance={selected} target={resume} />
+            </motion.div>
+          ) : selected && resume === null ? (
+            <motion.div
+              key="status"
+              className="min-w-0 text-[12px] text-ash-300"
+              {...swapIn(reduce)}
+            >
+              <span className="block truncate tabular-nums">
+                {phase.kind === "running" ? (
+                  <SessionTime since={phase.since} />
+                ) : selected.lastPlayedAt ? (
+                  t("play.lastPlayed", { when: formatRelative(selected.lastPlayedAt) })
+                ) : // The session is recorded when the game closes: no "Henüz oynanmadı" while
+                // the first one starts.
+                phase.kind === "idle" ? (
+                  t("play.neverPlayed")
+                ) : null}
               </span>
-            ) : null}
-          </>
-        ) : null}
+              {selected.playTimeSecs > 0 ? (
+                <span className="block truncate">
+                  {t("play.playTime", { time: formatDuration(selected.playTimeSecs) })}
+                </span>
+              ) : null}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </div>
       {selected?.autoJoin ? (
         <Switch
@@ -172,11 +241,14 @@ function AccountChip() {
   const active = accounts?.find((a) => a.active);
   if (!active) return null;
   return (
-    <div className="flex shrink-0 items-center gap-2.5 border-l border-white/8 pl-5">
-      <PlayerHead name={active.username} src={active.headUrl} size={34} />
+    // The title bar shows the account too: below 1180 px the bar keeps its room for play status.
+    <div className="hidden shrink-0 items-center gap-2 border-l border-white/8 pl-4 min-[1180px]:flex">
+      <AccountFace account={active} size={32} />
       <div className="leading-tight">
-        <span className="block text-[13.5px] font-semibold text-bone-50">{active.username}</span>
-        <span className="block text-[11.5px] text-ash-400">
+        <span className="block max-w-[140px] truncate text-[13px] font-semibold text-bone-50">
+          {active.username}
+        </span>
+        <span className="block text-[11.5px] text-ash-300">
           {active.kind === "microsoft" ? t("accounts.microsoft") : t("accounts.offline")}
         </span>
       </div>
@@ -187,25 +259,52 @@ function AccountChip() {
 /** Bottom command bar: what to play, as whom, progress, and the OYNA button. */
 export function CommandBar() {
   const { t } = useTranslation();
-  const { data: instances = [] } = useQuery({
+  const { data: instances = [], isPending: instancesLoading } = useQuery({
     queryKey: ["instances"],
     queryFn: () => api.instances(),
   });
   const selectedId = usePrefs((s) => s.selectedInstanceId);
   const selectInstance = usePrefs((s) => s.selectInstance);
-  const { phase, play, cancel, reset } = useLaunch();
+  const navigate = useNavigate();
+  // Only what the bar shows: the rest of the launch store (crash, notes, screenshots) changes
+  // without it.
+  const phase = useLaunch((s) => s.phase);
+  const launchId = useLaunch((s) => s.instanceId);
+  const play = useLaunch((s) => s.play);
+  const cancel = useLaunch((s) => s.cancel);
+  const reset = useLaunch((s) => s.reset);
+  const queryClient = useQueryClient();
+  // While a game is prepared or played the bar shows that one: its progress, its session.
+  const busy = phase.kind === "working" || phase.kind === "launching" || phase.kind === "running";
 
   const selected = useMemo(
-    () => instances.find((i) => i.id === selectedId) ?? instances[0],
-    [instances, selectedId],
+    () =>
+      (busy ? instances.find((i) => i.id === launchId) : undefined) ??
+      instances.find((i) => i.id === selectedId) ??
+      instances[0],
+    [instances, selectedId, busy, launchId],
   );
+
+  // A launch installs the instance and records when and how long it was played: once the game
+  // starts and once the launch or the game ends, the bar, the library and "Devam et" read it
+  // again instead of keeping "Henüz oynanmadı" until their next refresh.
+  const lastKind = useRef(phase.kind);
+  useEffect(() => {
+    const was = lastKind.current;
+    lastKind.current = phase.kind;
+    if (was === phase.kind || was === "idle") return;
+    if (phase.kind !== "running" && phase.kind !== "idle") return;
+    for (const queryKey of [["instances"], ["instance"], ["resume"]]) {
+      void queryClient.invalidateQueries({ queryKey });
+    }
+  }, [phase.kind, queryClient]);
 
   useEffect(() => {
     if (phase.kind === "error") {
       toast.error(phase.message, {
         action: {
           label: t("common.copyDetails"),
-          onClick: () => void navigator.clipboard.writeText(phase.details),
+          onClick: () => void copyDetails(phase.details),
         },
       });
       reset();
@@ -221,21 +320,31 @@ export function CommandBar() {
       case "running":
         return { kind: "running" };
       default:
-        return selected?.state === "ready" || !selected ? { kind: "ready" } : { kind: "update" };
+        // "Güncelle" only for an installed game whose version or loader changed; a first
+        // install is still "Oyna" (it downloads, then plays), as the welcome flow promises.
+        return selected?.state === "needsUpdate" ? { kind: "update" } : { kind: "ready" };
     }
   })();
 
   return (
-    <footer className="glass-strong relative z-20 flex h-[88px] shrink-0 items-center gap-5 border-x-0 border-b-0 pr-6 pl-4">
-      <InstancePicker instances={instances} selected={selected} onSelect={selectInstance} />
+    <footer className="glass-strong relative z-20 flex h-commandbar shrink-0 items-center gap-4 border-x-0 border-b-0 pr-4 pl-3">
+      <InstancePicker
+        instances={instances}
+        selected={selected}
+        loading={instancesLoading}
+        locked={busy}
+        onSelect={selectInstance}
+      />
       <AccountChip />
-      <div className={cn("flex min-w-0 flex-1 items-center border-l border-white/8 pl-5")}>
+      <div className={cn("flex min-w-0 flex-1 items-center border-l border-white/8 pl-4")}>
         <StatusArea selected={selected} />
       </div>
       <PlayButton
         state={state}
         onPlay={() => {
           if (selected) void play(selected.id);
+          // Nothing to play yet: OYNA leads to the one thing that helps.
+          else if (!instancesLoading) void navigate({ to: "/library", search: { create: true } });
         }}
         onCancel={() => void cancel()}
         labels={{

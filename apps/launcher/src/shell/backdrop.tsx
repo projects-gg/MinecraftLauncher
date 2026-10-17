@@ -63,9 +63,11 @@ export function Backdrop({
         />
       </motion.div>
 
-      {/* Blurred, dimmed art (other pages) */}
+      {/* Blurred, dimmed art (other pages). A quarter-size copy is blurred and then scaled up
+          4.4×: it looks like a 40 px blur of the full image but costs a sixteenth of the paint,
+          which matters because this layer appears on every change from Home to another page. */}
       <motion.div
-        className="absolute -inset-16"
+        className="absolute -inset-16 overflow-hidden"
         initial={false}
         animate={{ opacity: home ? 0 : 1 }}
         transition={{ duration: 0.45 }}
@@ -74,7 +76,7 @@ export function Backdrop({
           src={imageUrl}
           alt=""
           draggable={false}
-          className="size-full scale-110 object-cover blur-[38px] brightness-[0.38] saturate-[1.15] [html[data-perf=on]_&]:blur-none [html[data-perf=on]_&]:brightness-[0.22]"
+          className="absolute top-0 left-0 h-1/4 w-1/4 origin-top-left scale-[4.4] object-cover blur-[9px] brightness-[0.34] saturate-[1.15] will-change-transform [html[data-perf=on]_&]:blur-none [html[data-perf=on]_&]:brightness-[0.22]"
         />
       </motion.div>
 

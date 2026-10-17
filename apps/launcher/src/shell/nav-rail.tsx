@@ -1,10 +1,12 @@
 import { GearSix, House, type Icon, Newspaper, Robot, SquaresFour } from "@phosphor-icons/react";
-import { cn, PlayerHead, Tooltip } from "@pl/ui";
+import { cn, Tooltip } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import logo from "@/assets/brand/logo-192.webp";
+import { AccountFace } from "@/features/accounts/account-face";
+import { useAccountsUi } from "@/features/accounts/store";
 import { api } from "@/lib/api";
 import { detectOs } from "@/lib/platform";
 
@@ -22,25 +24,25 @@ function RailLink({ item, active }: { item: Item; active: boolean }) {
         to={item.to}
         aria-label={item.label}
         aria-current={active ? "page" : undefined}
-        className="group relative flex size-12 items-center justify-center rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+        className="group relative flex size-[40px] items-center justify-center rounded-lg outline-none transition-transform duration-150 ease-out focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.94]"
       >
         {active ? (
           <motion.span
             layoutId="rail-active"
-            className="chamfer absolute -left-[13px] h-7 w-[5px] bg-gold-400 [--cut:3px]"
+            className="chamfer absolute -left-[10px] h-6 w-[4px] bg-gold-400 [--cut:3px]"
             transition={{ type: "spring", stiffness: 420, damping: 34 }}
           />
         ) : null}
         <span
           className={cn(
-            "absolute inset-1 rounded-lg transition-colors duration-150",
+            "absolute inset-[3px] rounded-lg transition-colors duration-150",
             active
               ? "bg-[radial-gradient(circle_at_50%_50%,rgb(232_154_44/0.22),transparent_70%)]"
               : "group-hover:bg-white/6",
           )}
         />
         <IconCmp
-          size={24}
+          size={22}
           weight={active ? "duotone" : "regular"}
           className={cn(
             "relative transition-colors duration-150",
@@ -57,6 +59,7 @@ export function NavRail() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { data: accounts } = useQuery({ queryKey: ["accounts"], queryFn: () => api.accounts() });
   const active = accounts?.find((a) => a.active);
+  const openCenter = useAccountsUi((s) => s.openCenter);
   const mac = detectOs() === "macos";
 
   const top: Item[] = [
@@ -71,42 +74,47 @@ export function NavRail() {
     <nav
       aria-label="Ana menü"
       className={cn(
-        "glass relative z-20 flex w-[72px] shrink-0 flex-col items-center border-y-0 border-l-0 pb-4",
-        mac ? "pt-11" : "pt-3",
+        "glass relative z-20 flex w-rail shrink-0 flex-col items-center border-y-0 border-l-0 pb-3",
+        mac ? "pt-10" : "pt-2.5",
       )}
     >
+      {/* The logo goes home too, but the house link is the keyboard's stop (no second "Ana
+          Sayfa" in the tab order). */}
       <Link
         to="/"
         aria-label={t("nav.home")}
-        className="group mb-5 flex size-12 items-center justify-center"
+        tabIndex={-1}
+        className="group mb-4 flex size-10 items-center justify-center"
       >
         <img
           src={logo}
           alt=""
-          className="size-11 drop-shadow-[0_0_10px_rgb(232_154_44/0.35)] transition-[filter,transform] duration-300 group-hover:scale-105 group-hover:drop-shadow-[0_0_16px_rgb(240_184_73/0.7)]"
+          className="size-[34px] drop-shadow-[0_0_10px_rgb(232_154_44/0.35)] transition-[filter,transform] duration-300 group-hover:scale-105 group-hover:drop-shadow-[0_0_16px_rgb(240_184_73/0.7)]"
           draggable={false}
         />
       </Link>
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         {top.map((item) => (
           <RailLink key={item.to} item={item} active={isActive(item.to)} />
         ))}
       </div>
-      <div className="mt-auto flex flex-col items-center gap-2">
+      <div className="mt-auto flex flex-col items-center gap-1.5">
         <RailLink
           item={{ to: "/settings", icon: GearSix, label: t("nav.settings") }}
           active={isActive("/settings")}
         />
         {active ? (
           <Tooltip content={active.username} side="right">
-            <Link
-              to="/settings"
-              search={{ section: "accounts" }}
-              aria-label={t("nav.accounts")}
-              className="mt-1 rounded-[6px] p-0.5 ring-1 ring-white/10 transition hover:ring-gold-400/60"
+            {/* The account center opens over the page (as from the title bar), the page stays. */}
+            <button
+              type="button"
+              aria-label={t("accounts.center.open")}
+              onClick={(event) => openCenter({ from: event.currentTarget })}
+              className="mt-1 cursor-pointer rounded-[6px] p-[3px] ring-1 ring-white/10 transition-[box-shadow,transform] duration-150 ease-out hover:ring-gold-400/60 active:scale-[0.94]"
             >
-              <PlayerHead name={active.username} src={active.headUrl} size={36} />
-            </Link>
+              {/* 32 px: head pixels stay whole at 100, 125, 150 and 200% scaling. */}
+              <AccountFace account={active} size={32} />
+            </button>
           </Tooltip>
         ) : null}
       </div>

@@ -2,3 +2,65 @@
 
 /* Scan the app's own sources (the ui package scans itself). */
 @source "./";
+
+/* Page changes (router.tsx, view transition type "page"). Only the page area takes part: the
+   rail, title bar, command bar and the art stay live and change in place. The leaving page
+   fades out fast; the new one rises 6 px into place a beat later (docs/design.md §5). */
+.page-transition {
+  view-transition-name: page;
+}
+
+/* Toasts stay live above the page picture while it runs. */
+[data-sonner-toaster] {
+  view-transition-name: toasts;
+}
+
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-group(toasts),
+::view-transition-new(toasts) {
+  animation: none;
+}
+
+::view-transition-old(toasts) {
+  display: none;
+}
+
+::view-transition-group(page) {
+  animation-duration: 0s;
+}
+
+::view-transition-old(page) {
+  animation: page-out 130ms var(--ease-out-expo) both;
+}
+
+::view-transition-new(page) {
+  animation: page-in 210ms var(--ease-drawer) 30ms both;
+}
+
+@keyframes page-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* Performance mode and reduced motion keep the cross-fade only. */
+html[data-perf="on"]::view-transition-new(page) {
+  animation-name: fade-in;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(page) {
+    animation: fade-out 110ms ease-out both;
+  }
+  ::view-transition-new(page) {
+    animation: fade-in 150ms ease-out both;
+  }
+}

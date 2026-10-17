@@ -1,15 +1,44 @@
-import "@/lib/i18n";
 import { PerfProvider, Toaster, TooltipProvider } from "@pl/ui";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { commands } from "@/bindings";
+import { setLanguage } from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
+import { prepareSounds } from "@/lib/sound";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { router } from "./router";
 import "./styles.css";
+
+// The saved language (always Turkish while English is hidden, see ENGLISH_ENABLED).
+setLanguage(usePrefs.getState().language);
+
+// Polling (server status and the like) pauses while the window is unfocused, minimized or in the
+// tray. WebView2 keeps reporting the page as visible then, so follow the native window focus.
+if (isTauri()) {
+  focusManager.setEventListener((handleFocus) => {
+    const win = getCurrentWindow();
+    let heard = false;
+    const unlisten = win.onFocusChanged(({ payload }) => {
+      heard = true;
+      handleFocus(payload);
+    });
+    // Started at login straight into the tray, the window never gains or loses focus, so no
+    // event ever says it is in the background: ask once.
+    void win
+      .isFocused()
+      .then((focused) => {
+        if (!heard) handleFocus(focused);
+      })
+      .catch(() => undefined);
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  });
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -42,9 +71,15 @@ createRoot(root).render(
   </StrictMode>,
 );
 
-// The window starts hidden to avoid a white flash; reveal it after the first paint.
+// The window starts hidden to avoid a white flash; reveal it after the first paint, unless the
+// OS started us at login (then we wait in the tray).
 if (isTauri()) {
   requestAnimationFrame(() => {
-    void getCurrentWindow().show();
+    void commands.appInfo().then((info) => {
+      if (!info.startMinimized) void getCurrentWindow().show();
+    });
   });
 }
+
+// Interface sounds are drawn in idle time, not on the first press that plays one.
+prepareSounds();

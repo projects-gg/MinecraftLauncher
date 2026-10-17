@@ -1,21 +1,44 @@
 import { useQuery } from "@tanstack/react-query";
 import { Outlet, useNavigate, useRouterState, useSearch } from "@tanstack/react-router";
-import { AnimatePresence, motion } from "motion/react";
-import { useEffect } from "react";
 import heroFallback from "@/assets/art/hero-dragon-1.webp";
-import { CrashDialog } from "@/features/crash/crash-dialog";
+import { DropHost } from "@/features/drop/drop-host";
+import { JavaPromptDialog } from "@/features/java/java-prompt";
+import { ScreenshotNotice } from "@/features/library/screenshot-notice";
 import { MigrationDialog } from "@/features/migrate/migration-dialog";
+import { ModFlowDialog } from "@/features/modhealth/flow-dialog";
 import { NewsReader } from "@/features/news/news-reader";
-import { MandatoryUpdate, useUpdateChecks, WhatsNew } from "@/features/updates/update-ui";
+import { Onboarding, shouldShowOnboarding } from "@/features/onboarding/onboarding";
+import { useCleanupReminder } from "@/features/settings/cleanup/reminder";
+import {
+  MandatoryUpdate,
+  PackNotesDialog,
+  useUpdateChecks,
+  WhatsNew,
+} from "@/features/updates/update-ui";
 import { api } from "@/lib/api";
-import { isTauri } from "@/lib/platform";
 import { usePrefs } from "@/stores/prefs";
 import { useUi } from "@/stores/ui";
 import { Backdrop } from "./backdrop";
 import { CommandBar } from "./command-bar";
+import { CommandPalette } from "./command-palette";
 import { NavRail } from "./nav-rail";
 import { TitleBar } from "./title-bar";
+import { useDesktopEvents } from "./use-desktop-events";
 import { usePresenceSync } from "./use-presence";
+import { useTaskbarProgress } from "./use-taskbar";
+
+// Hooks that follow fast-changing state (the launch's phase and progress, add-on downloads) live
+// in leaf components that render nothing: called in AppShell they re-rendered the whole app,
+// the open page included, on OYNA and on every progress tick (G6-P, item 8).
+function PresenceSync() {
+  usePresenceSync();
+  return null;
+}
+
+function TaskbarProgress() {
+  useTaskbarProgress();
+  return null;
+}
 
 export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -25,45 +48,40 @@ export function AppShell() {
   const home = pathname === "/";
   const migrationOpen = useUi((s) => s.migrationOpen);
   const setMigrationOpen = useUi((s) => s.setMigrationOpen);
-  const legacyOffered = usePrefs((s) => s.legacyOffered);
-  const setPref = usePrefs((s) => s.set);
-  usePresenceSync();
+  // First run (account, v1 import, Projects instance) happens in the welcome flow.
+  const onboarding = shouldShowOnboarding(usePrefs((s) => s.onboarded));
+  const particlesOn = usePrefs((s) => s.particles);
   useUpdateChecks();
-
-  // First start: offer the v1 import once if old data exists.
-  useEffect(() => {
-    if (!isTauri() || legacyOffered) return;
-    setPref("legacyOffered", true);
-    void api.legacyScan().then((scan) => {
-      if (scan.found) setMigrationOpen(true);
-    });
-  }, [legacyOffered, setPref, setMigrationOpen]);
+  useDesktopEvents();
+  useCleanupReminder();
 
   return (
     <div className="flex h-dvh w-dvw overflow-hidden text-bone-100">
+      <PresenceSync />
+      <TaskbarProgress />
       <Backdrop
         imageUrl={data?.hero.imageUrl ?? heroFallback}
         variant={home ? "home" : "page"}
-        particles={data?.hero.particles ?? "embers"}
+        particles={particlesOn ? (data?.hero.particles ?? "embers") : "none"}
       />
       <NavRail />
       <div className="flex min-w-0 flex-1 flex-col">
         <TitleBar />
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.main
-            key={pathname}
-            className="flex min-h-0 flex-1 flex-col"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0, transition: { duration: 0.28, ease: [0.16, 1, 0.3, 1] } }}
-            exit={{ opacity: 0, transition: { duration: 0.14 } }}
-          >
-            <Outlet />
-          </motion.main>
-        </AnimatePresence>
+        {/* One page at a time: the route change is a view transition (router.tsx, styles.css),
+            so the leaving page is a picture, not a second React tree rendering the new route. */}
+        <main className="page-transition flex min-h-0 flex-1 flex-col">
+          <Outlet />
+        </main>
         <CommandBar />
       </div>
-      <CrashDialog />
+      {onboarding ? <Onboarding /> : null}
+      <CommandPalette disabled={onboarding} />
+      <ModFlowDialog />
+      <JavaPromptDialog />
+      <DropHost disabled={onboarding} />
+      <ScreenshotNotice />
       <WhatsNew />
+      <PackNotesDialog />
       <MandatoryUpdate />
       <MigrationDialog open={migrationOpen} onOpenChange={setMigrationOpen} />
       <NewsReader
