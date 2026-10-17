@@ -284,6 +284,13 @@ export const en: DeepPartial<Strings> = {
     minutes: "minutes",
     seconds: "seconds",
   },
+  units: {
+    hoursMinutes: "{{hours}} h {{minutes}} min",
+    hours: "{{hours}} h",
+    minutes: "{{minutes}} min",
+    seconds: "{{seconds}} s",
+    perSecond: "{{size}}/s",
+  },
   play: {
     play: "Play",
     update: "Update",

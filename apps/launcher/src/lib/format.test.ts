@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { formatBytes, formatSpeed } from "./format";
+import { formatBytes, formatDuration, formatSpeed } from "./format";
+import i18n from "./i18n";
 
 const KB = 1024;
 const MB = KB * 1024;
@@ -33,5 +34,25 @@ describe("formatBytes", () => {
 describe("formatSpeed", () => {
   it("adds the per-second suffix", () => {
     expect(formatSpeed(2.5 * MB)).toBe("2,5 MB/sn");
+  });
+});
+
+describe("formatDuration", () => {
+  it("says hours, minutes and seconds with their units", () => {
+    expect(formatDuration(2 * 3600 + 14 * 60 + 40)).toBe("2 sa 14 dk");
+    expect(formatDuration(3 * 3600 + 20)).toBe("3 sa");
+    expect(formatDuration(38 * 60 + 20)).toBe("38 dk");
+    expect(formatDuration(45)).toBe("45 sn");
+    expect(formatDuration(-3)).toBe("0 sn");
+  });
+
+  it("takes its units from the strings", async () => {
+    await i18n.changeLanguage("en");
+    try {
+      expect(formatDuration(2 * 3600 + 14 * 60)).toBe("2 h 14 min");
+      expect(formatDuration(45)).toBe("45 s");
+    } finally {
+      await i18n.changeLanguage("tr");
+    }
   });
 });

@@ -72,6 +72,14 @@ export const tr = {
     community: "Topluluk",
   },
   countdown: { days: "gün", hours: "saat", minutes: "dakika", seconds: "saniye" },
+  /** Short spans of time ("2 sa 14 dk", "38 dk", "45 sn") and download speed (lib/format). */
+  units: {
+    hoursMinutes: "{{hours}} sa {{minutes}} dk",
+    hours: "{{hours}} sa",
+    minutes: "{{minutes}} dk",
+    seconds: "{{seconds}} sn",
+    perSecond: "{{size}}/sn",
+  },
   play: {
     play: "Oyna",
     update: "Güncelle",

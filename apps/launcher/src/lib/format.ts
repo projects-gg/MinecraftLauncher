@@ -1,3 +1,5 @@
+import i18n from "./i18n";
+
 const number1 = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
 const integer = new Intl.NumberFormat("tr-TR");
 const relative = new Intl.RelativeTimeFormat("tr", { numeric: "auto" });
@@ -20,7 +22,7 @@ export function formatBytes(bytes: number): string {
 }
 
 export function formatSpeed(bytesPerSec: number): string {
-  return `${formatBytes(bytesPerSec)}/sn`;
+  return i18n.t("units.perSecond", { size: formatBytes(bytesPerSec) });
 }
 
 export function formatCount(n: number): string {
@@ -39,12 +41,16 @@ export function formatRelative(iso: string, now = Date.now()): string {
   return new Date(iso).toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
 }
 
-/** "2 sa 14 dk", "38 dk", "45 sn". */
+/** "2 sa 14 dk", "38 dk", "45 sn" (units from the strings, `units.*`). */
 export function formatDuration(totalSecs: number): string {
-  const s = Math.max(0, Math.round(totalSecs));
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  if (h > 0) return m > 0 ? `${h} sa ${m} dk` : `${h} sa`;
-  if (m > 0) return `${m} dk`;
-  return `${s} sn`;
+  const seconds = Math.max(0, Math.round(totalSecs));
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) {
+    return minutes > 0
+      ? i18n.t("units.hoursMinutes", { hours, minutes })
+      : i18n.t("units.hours", { hours });
+  }
+  if (minutes > 0) return i18n.t("units.minutes", { minutes });
+  return i18n.t("units.seconds", { seconds });
 }
