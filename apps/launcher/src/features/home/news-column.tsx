@@ -6,11 +6,14 @@ import { AnimatePresence, motion } from "motion/react";
 import { Popover } from "radix-ui";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { NewDot, NewLabel } from "@/features/news/new-dot";
 import type { EventItem, HomeContent, NewsItem, PatchNotes } from "@/lib/api";
 import { cardEvents, nextBoundary, phaseOf } from "@/lib/event-card";
 import { formatDuration, formatRelative } from "@/lib/format";
 import i18n from "@/lib/i18n";
 import { isWebLink, openLink } from "@/lib/links";
+import { isNewsNew, useNewsSeen } from "@/stores/news-seen";
+import { ReminderBell } from "./event-reminders";
 
 const categoryTone = {
   event: "gold",
@@ -20,7 +23,18 @@ const categoryTone = {
   community: "neutral",
 } as const;
 
-function NewsRow({ item, index, arrive }: { item: NewsItem; index: number; arrive: boolean }) {
+function NewsRow({
+  item,
+  index,
+  arrive,
+  isNew,
+}: {
+  item: NewsItem;
+  index: number;
+  arrive: boolean;
+  /** Not seen yet: a small gold dot before the date. */
+  isNew: boolean;
+}) {
   const { t } = useTranslation();
   return (
     <motion.li
@@ -49,13 +63,17 @@ function NewsRow({ item, index, arrive }: { item: NewsItem; index: number; arriv
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-2">
             <Chip tone={categoryTone[item.category]}>{t(`categories.${item.category}`)}</Chip>
-            <span className="truncate text-[11.5px] text-ash-300">
-              {formatRelative(item.publishedAt)}
+            <span className="flex min-w-0 items-center gap-1.5">
+              <NewDot on={isNew} />
+              <span className="truncate text-[11.5px] text-ash-300">
+                {formatRelative(item.publishedAt)}
+              </span>
             </span>
           </span>
           <span className="mt-1 line-clamp-2 text-[13px] leading-snug font-semibold text-bone-100 group-hover:text-bone-50">
             {item.title}
           </span>
+          <NewLabel on={isNew} />
         </span>
       </Link>
     </motion.li>
@@ -157,16 +175,18 @@ function useEventCard(events: EventItem[] | undefined) {
     return () => window.clearTimeout(id);
   }, [boundary, queryClient]);
 
-  return { event, live, others: ordered.slice(1), now };
+  return { event, live, others: ordered.slice(1) };
 }
 
 /** "5 gün 3 sa", "2 sa 14 dk": time left in the other events list. */
-function spanText(ms: number, days: string): string {
+function spanText(ms: number): string {
   const day = 86_400_000;
   if (ms < day) return formatDuration(ms / 1000);
-  const whole = Math.floor(ms / day);
+  const days = Math.floor(ms / day);
   const hours = Math.floor((ms % day) / 3_600_000);
-  return hours ? `${whole} ${days} ${hours} sa` : `${whole} ${days}`;
+  return hours
+    ? i18n.t("reminders.daysHours", { days, hours })
+    : i18n.t("reminders.days", { days });
 }
 
 const clock = new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit" });
@@ -195,21 +215,28 @@ function startMoment(iso: string, now: number): string {
   return days < 7 ? weekdayMoment.format(at) : dateMoment.format(at);
 }
 
+/** The start under an upcoming event's title; "Yarın" turns into "Bugün" at midnight. */
+function StartsAt({ iso }: { iso: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    const wait = Math.min(midnight.getTime() - now + 500, 2_000_000_000);
+    const id = window.setTimeout(() => setNow(Date.now()), wait);
+    return () => window.clearTimeout(id);
+  }, [now]);
+  return <p className="mt-0.5 text-[12.5px] text-ash-300 tabular-nums">{startMoment(iso, now)}</p>;
+}
+
 /**
- * The list behind "+1 etkinlik": the other live and upcoming events. It opens beside the card
- * (anchored to the whole event block), so the card stays readable.
+ * The list behind "+1 etkinlik": the other live and upcoming events, upcoming ones with their
+ * reminder bell. It opens beside the card (anchored to the whole event block), so the card stays
+ * readable; its times are as of the moment it opened.
  */
-function OtherEvents({
-  events,
-  now,
-  onChosen,
-}: {
-  events: EventItem[];
-  now: number;
-  onChosen: () => void;
-}) {
+function OtherEvents({ events, onChosen }: { events: EventItem[]; onChosen: () => void }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [now] = useState(() => Date.now());
   const choose = (event: EventItem) => {
     onChosen();
     if (event.newsId) void navigate({ to: "/", search: { news: event.newsId } });
@@ -244,26 +271,34 @@ function OtherEvents({
                     {live
                       ? event.openEnded
                         ? t("home.eventStarted", { when: formatRelative(event.startsAt, now) })
-                        : t("home.eventEndsIn", {
-                            when: spanText(Date.parse(event.endsAt) - now, t("countdown.days")),
-                          })
+                        : t("home.eventEndsIn", { when: spanText(Date.parse(event.endsAt) - now) })
                       : t("home.eventStartsAt", { when: startMoment(event.startsAt, now) })}
                   </span>
                 </span>
               </>
             );
             return (
-              <li key={event.id}>
+              <li
+                key={event.id}
+                // The row stays lit while the pointer is on its bell.
+                className="relative [&:has([data-bell]:hover)>button]:bg-white/8"
+              >
                 {clickable ? (
                   <button
                     type="button"
                     onClick={() => choose(event)}
-                    className="block w-full cursor-pointer rounded-md px-2 py-1.5 text-left transition-colors duration-150 hover:bg-white/8 focus-visible:outline-2"
+                    className={cn(
+                      "block w-full cursor-pointer rounded-md px-2 py-1.5 text-left transition-colors duration-150 hover:bg-white/8 focus-visible:outline-2",
+                      !live && "pr-10",
+                    )}
                   >
                     {body}
                   </button>
                 ) : (
-                  <div className="px-2 py-1.5">{body}</div>
+                  <div className={cn("px-2 py-1.5", !live && "pr-10")}>{body}</div>
+                )}
+                {live ? null : (
+                  <ReminderBell event={event} className="absolute inset-y-0 right-1 my-auto" />
                 )}
               </li>
             );
@@ -295,7 +330,7 @@ function EventTarget({ event, children }: { event: EventItem; children: ReactNod
     "group -mx-2 block rounded-[var(--radius-panel)] px-2 py-1.5 text-left transition-colors duration-150 hover:bg-white/6 focus-visible:outline-2";
   if (event.newsId) {
     return (
-      <Link to="/" search={{ news: event.newsId }} className={className}>
+      <Link to="/" search={{ news: event.newsId }} className={className} data-event-target="">
         {children}
       </Link>
     );
@@ -307,6 +342,7 @@ function EventTarget({ event, children }: { event: EventItem; children: ReactNod
         type="button"
         onClick={() => openLink(url)}
         className={cn(className, "w-[calc(100%+1rem)]")}
+        data-event-target=""
       >
         {children}
       </button>
@@ -319,13 +355,11 @@ function EventBlock({
   event,
   live,
   others,
-  now,
 }: {
   event: EventItem;
   live: boolean;
   /** The other live and upcoming events, behind the card. */
   others: EventItem[];
-  now: number;
 }) {
   const { t } = useTranslation();
   const glide = useInteractionMotion();
@@ -345,10 +379,12 @@ function EventBlock({
       <Popover.Anchor asChild>
         <section className="relative border-t border-white/7 px-3.5 pt-1.5">
           {/* The leaving event is lifted out of the flow, so a switch cross-fades at once and a
-          second switch mid-way retargets instead of waiting. */}
+          second switch mid-way retargets instead of waiting. The bell goes with its event. */}
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.div
               key={`${event.id}:${live ? "live" : "next"}`}
+              // The card stays lit while the pointer is on its bell (a sibling, not inside it).
+              className="relative [&:has([data-bell]:hover)_[data-event-target]]:bg-white/6"
               initial={{ opacity: 0, transform: `translateY(${shift}px)` }}
               animate={{
                 opacity: 1,
@@ -390,6 +426,7 @@ function EventBlock({
                 <p className="mt-0.5 line-clamp-2 font-display text-[14px] leading-snug font-semibold text-bone-50">
                   {event.title}
                 </p>
+                {live ? null : <StartsAt iso={event.startsAt} />}
                 {live && event.openEnded ? (
                   <StartedAgo at={event.startsAt} />
                 ) : (
@@ -403,6 +440,10 @@ function EventBlock({
                   </div>
                 )}
               </EventTarget>
+              {live ? null : (
+                // Level with the countdown's digits; its glyph lines up with the caret above.
+                <ReminderBell event={event} className="absolute right-[-6px] bottom-[22px]" />
+              )}
             </motion.div>
           </AnimatePresence>
           {others.length ? (
@@ -420,9 +461,7 @@ function EventBlock({
           ) : null}
         </section>
       </Popover.Anchor>
-      {others.length ? (
-        <OtherEvents events={others} now={now} onChosen={() => setListOpen(false)} />
-      ) : null}
+      {others.length ? <OtherEvents events={others} onChosen={() => setListOpen(false)} /> : null}
     </Popover.Root>
   );
 }
@@ -439,12 +478,15 @@ export function NewsColumn({ content, loading }: { content?: HomeContent; loadin
   const news = (content?.news ?? [])
     .filter((n) => n.id !== content?.hero.newsId && n.id !== boxed)
     .slice(0, 4);
-  const { event, live, others, now } = useEventCard(content?.events);
+  const watermark = useNewsSeen((s) => s.watermark);
+  const read = useNewsSeen((s) => s.read);
+  const { event, live, others } = useEventCard(content?.events);
   // The column settles in once per start (the boot moment), not on every return to Home.
   const [arrive] = useState(() => !columnArrived);
   useEffect(() => {
     columnArrived = true;
   }, []);
+  const now = Date.now();
 
   return (
     <motion.aside
@@ -486,7 +528,13 @@ export function NewsColumn({ content, loading }: { content?: HomeContent; loadin
         ) : (
           <ul className="space-y-px">
             {news.map((item, i) => (
-              <NewsRow key={item.id} item={item} index={i} arrive={arrive} />
+              <NewsRow
+                key={item.id}
+                item={item}
+                index={i}
+                arrive={arrive}
+                isNew={isNewsNew(item, { watermark, read }, now)}
+              />
             ))}
           </ul>
         )}
@@ -494,7 +542,7 @@ export function NewsColumn({ content, loading }: { content?: HomeContent; loadin
         {notes ? <PatchNotesBox notes={notes} /> : null}
       </div>
 
-      {event ? <EventBlock event={event} live={live} others={others} now={now} /> : null}
+      {event ? <EventBlock event={event} live={live} others={others} /> : null}
       <div className="h-2.5" />
     </motion.aside>
   );
