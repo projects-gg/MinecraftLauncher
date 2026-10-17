@@ -4,7 +4,9 @@ import { enGraphics } from "./en-graphics";
 import { enLibraryDrop } from "./en-library-drop";
 import { enOverview } from "./en-overview";
 import { enReminders } from "./en-reminders";
+import { enShortcuts } from "./en-shortcuts";
 import { enTuning } from "./en-tuning";
+import { enUpdates } from "./en-updates";
 import type { Strings } from "./tr";
 
 /**
@@ -25,6 +27,8 @@ export const en: DeepPartial<Strings> = {
   disk: enDisk,
   overview: enOverview,
   libraryDrop: enLibraryDrop,
+  updates: enUpdates,
+  shortcuts: enShortcuts,
   social: {
     title: "Friends",
     pill: {
@@ -1224,7 +1228,6 @@ export const en: DeepPartial<Strings> = {
     game: {
       memory: "Default memory",
       memoryHelp: "New instances start with this value.",
-      memoryAuto: "Automatic",
       memoryAutoHelp: "Chosen based on your computer's memory and the number of mods.",
       maxMemory: "Maximum memory",
       jvmArgs: "Default JVM arguments",
@@ -1788,7 +1791,6 @@ export const en: DeepPartial<Strings> = {
       maxMemory: "Maximum",
       memoryWarn: "Giving it most of your system memory can slow down your computer.",
       jvmArgs: "JVM arguments",
-      jvmHelp: "Advanced. Leaving it empty is usually best.",
       window: "Window",
       width: "Width",
       height: "Height",

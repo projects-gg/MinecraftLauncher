@@ -5,8 +5,10 @@ import { trGraphics } from "./tr-graphics";
 import { trLibraryDrop } from "./tr-library-drop";
 import { trOverview } from "./tr-overview";
 import { trReminders } from "./tr-reminders";
+import { trShortcuts } from "./tr-shortcuts";
 import { trSocial } from "./tr-social";
 import { trTuning } from "./tr-tuning";
+import { trUpdates } from "./tr-updates";
 
 export const tr = {
   reminders: trReminders,
@@ -16,6 +18,8 @@ export const tr = {
   disk: trDisk,
   overview: trOverview,
   libraryDrop: trLibraryDrop,
+  updates: trUpdates,
+  shortcuts: trShortcuts,
   social: trSocial,
   nav: {
     home: "Ana Sayfa",
@@ -969,7 +973,6 @@ export const tr = {
     game: {
       memory: "Varsayılan bellek",
       memoryHelp: "Yeni kurulumlar bu değerle başlar.",
-      memoryAuto: "Otomatik",
       memoryAutoHelp: "Bilgisayarının belleğine ve mod sayısına göre seçilir.",
       maxMemory: "En fazla bellek",
       jvmArgs: "Varsayılan JVM argümanları",
@@ -1513,7 +1516,6 @@ export const tr = {
       maxMemory: "En fazla",
       memoryWarn: "Sistem belleğinin çoğunu ayırmak bilgisayarı yavaşlatabilir.",
       jvmArgs: "JVM argümanları",
-      jvmHelp: "İleri düzey. Boş bırakmak çoğu zaman en iyisidir.",
       window: "Pencere",
       width: "Genişlik",
       height: "Yükseklik",
