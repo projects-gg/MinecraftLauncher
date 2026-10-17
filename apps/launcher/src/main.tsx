@@ -8,6 +8,7 @@ import { commands } from "@/bindings";
 import { setLanguage } from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
 import { prepareSounds } from "@/lib/sound";
+import { refreshWindowAway, trackWindowAway, useWindowAway } from "@/lib/window-away";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { router } from "./router";
@@ -38,6 +39,8 @@ if (isTauri()) {
       void unlisten.then((fn) => fn());
     };
   });
+  // Ambient motion stops while the window is in the tray or minimized (lib/window-away.ts).
+  trackWindowAway(getCurrentWindow());
 }
 
 const queryClient = new QueryClient({
@@ -48,10 +51,12 @@ const queryClient = new QueryClient({
 
 function Providers() {
   const performanceMode = usePrefs((s) => s.performanceMode);
-  // Ambient motion stops while the game runs: the GPU belongs to Minecraft then.
+  // Ambient motion stops while the game runs (the GPU belongs to Minecraft then) and while
+  // nobody can see it (tray, minimized).
   const gameRunning = useLaunch((s) => s.phase.kind === "running");
+  const away = useWindowAway();
   return (
-    <PerfProvider performanceMode={performanceMode} ambientPaused={gameRunning}>
+    <PerfProvider performanceMode={performanceMode} ambientPaused={gameRunning || away}>
       <TooltipProvider>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />
@@ -75,8 +80,9 @@ createRoot(root).render(
 // OS started us at login (then we wait in the tray).
 if (isTauri()) {
   requestAnimationFrame(() => {
-    void commands.appInfo().then((info) => {
-      if (!info.startMinimized) void getCurrentWindow().show();
+    void commands.appInfo().then(async (info) => {
+      if (!info.startMinimized) await getCurrentWindow().show();
+      await refreshWindowAway();
     });
   });
 }
