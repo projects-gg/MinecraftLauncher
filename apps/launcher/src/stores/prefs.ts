@@ -4,6 +4,11 @@ import { persist } from "zustand/middleware";
 export type GameStartBehavior = "keep" | "minimize" | "tray" | "close";
 export type CleanupSetDays = 30 | 60 | 90;
 export type UpdateChannel = "stable" | "beta";
+/**
+ * The one-time look at this computer (features/perf): "todo" until it is decided, "switched"
+ * while the launcher has turned Performance mode on and not yet said so, "done" afterwards.
+ */
+export type PerfAdvice = "todo" | "switched" | "done";
 
 /**
  * Launcher preferences. UI-only ones stay here; the ones the backend needs (channel, Discord,
@@ -11,6 +16,9 @@ export type UpdateChannel = "stable" | "beta";
  */
 interface PrefsState {
   performanceMode: boolean;
+  /** The player switched Performance mode themselves: the launcher never changes or offers it. */
+  perfTouched: boolean;
+  perfAdvice: PerfAdvice;
   particles: boolean;
   sounds: boolean;
   soundVolume: number;
@@ -48,6 +56,7 @@ interface PrefsState {
   set: <K extends keyof PrefValues>(key: K, value: PrefValues[K]) => void;
   selectInstance: (id: string) => void;
   setAutoJoin: (on: boolean) => void;
+  /** The player's own switch (Settings, the palette, a toast's button): marks `perfTouched`. */
   setPerformanceMode: (on: boolean) => void;
 }
 
@@ -60,6 +69,8 @@ export const usePrefs = create<PrefsState>()(
   persist(
     (set) => ({
       performanceMode: false,
+      perfTouched: false,
+      perfAdvice: "todo",
       particles: true,
       sounds: true,
       soundVolume: 35,
@@ -88,7 +99,7 @@ export const usePrefs = create<PrefsState>()(
       set: (key, value) => set({ [key]: value } as Partial<PrefsState>),
       selectInstance: (selectedInstanceId) => set({ selectedInstanceId }),
       setAutoJoin: (autoJoin) => set({ autoJoin }),
-      setPerformanceMode: (performanceMode) => set({ performanceMode }),
+      setPerformanceMode: (performanceMode) => set({ performanceMode, perfTouched: true }),
     }),
     { name: "pl.prefs", version: 2 },
   ),
