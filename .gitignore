@@ -34,7 +34,11 @@ Thumbs.db
 
 # Local tooling
 graphify-out/
-.claude/worktrees/
+# AI assistant settings and instructions stay local
+.claude/
+.codex/
+/AGENTS.md
+/CLAUDE.local.md
 
 # Cloudflare Workers local state and local secrets (services/social)
 .wrangler/
