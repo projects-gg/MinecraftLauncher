@@ -57,13 +57,15 @@ export function Backdrop({
         >
           {/* The drift pauses instead of stopping: switching Performance mode (a toast's button
               on Home), the tray or a game no longer snaps the art back to its starting size,
-              and it moves on from the same frame afterwards. */}
+              and it moves on from the same frame afterwards. It also pauses on the other pages,
+              where this layer is invisible: a running animation kept the compositor drawing
+              every frame there (OPT1: ~6 % of a CPU core with the OYNA sheen). */}
           <img
             src={imageUrl}
             alt=""
             draggable={false}
             className="size-full animate-kenburns object-cover object-[88%_center]"
-            style={{ animationPlayState: ambient ? "running" : "paused" }}
+            style={{ animationPlayState: ambient && home ? "running" : "paused" }}
           />
         </motion.div>
 
