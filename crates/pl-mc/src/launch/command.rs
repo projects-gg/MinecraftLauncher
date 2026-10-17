@@ -97,6 +97,8 @@ pub struct LaunchCommand {
     pub env: BTreeMap<String, String>,
     /// Indices in `args` of the JVM options (after the Java executable, before the main class).
     jvm_options: Range<usize>,
+    /// Indices in `args` of the JVM arguments the player typed ([`LaunchOptions::jvm_args`]).
+    player_jvm_options: Range<usize>,
     secrets: Vec<String>,
 }
 
@@ -104,6 +106,14 @@ impl LaunchCommand {
     /// The JVM options (memory, system properties, classpath...).
     pub fn jvm_options(&self) -> &[String] {
         &self.args[self.jvm_options.clone()]
+    }
+
+    /// The JVM arguments the player typed, as split into the command (crash analysis tells a
+    /// rejected argument of the player's from one of the launcher's).
+    pub fn player_jvm_options(&self) -> &[String] {
+        self.args
+            .get(self.player_jvm_options.clone())
+            .unwrap_or_default()
     }
 
     pub(crate) fn jvm_option_range(&self) -> Range<usize> {
@@ -138,7 +148,12 @@ impl LaunchCommand {
 
     /// Shell-like one-line rendering for logs and "copy details", with secrets masked.
     pub fn display_redacted(&self) -> String {
-        std::iter::once(self.program.display().to_string())
+        self.display_redacted_as(&self.program)
+    }
+
+    /// [`Self::display_redacted`] with the executable that was really started.
+    pub(crate) fn display_redacted_as(&self, program: &Path) -> String {
+        std::iter::once(program.display().to_string())
             .chain(self.redacted_args())
             .map(|arg| quote_for_display(&arg))
             .collect::<Vec<_>>()
@@ -153,6 +168,7 @@ impl LaunchCommand {
             cwd,
             env: BTreeMap::new(),
             jvm_options: 0..0,
+            player_jvm_options: 0..0,
             secrets: Vec::new(),
         }
     }
@@ -160,6 +176,12 @@ impl LaunchCommand {
     #[cfg(test)]
     pub(crate) fn with_jvm_options(mut self, range: Range<usize>) -> Self {
         self.jvm_options = range;
+        self
+    }
+
+    #[cfg(test)]
+    pub(crate) fn with_player_jvm_options(mut self, range: Range<usize>) -> Self {
+        self.player_jvm_options = range;
         self
     }
 }
@@ -332,6 +354,8 @@ pub fn build_launch_command(
     let mut features = Features {
         is_demo_user: options.demo,
         has_custom_resolution: resolution.is_some(),
+        // The game then writes the world or server it joined (read for "Devam et").
+        has_quick_plays_support: quick_play_supported,
         ..Features::default()
     };
     if quick_play_supported {
@@ -386,7 +410,9 @@ pub fn build_launch_command(
     vars.insert("user_properties", "{}".to_owned());
     vars.insert(
         "quickPlayPath",
-        path_string(&options.game_dir.join("quickPlay").join("log.json")),
+        path_string(&crate::launch::resume::quick_play_log_path(
+            &options.game_dir,
+        )),
     );
     if let Some(quick_play) = &options.quick_play {
         match quick_play {
@@ -427,7 +453,9 @@ pub fn build_launch_command(
     if let Some(max) = options.max_memory_mb.filter(|m| *m > 0) {
         args.push(format!("-Xmx{max}M"));
     }
+    let player_start = args.len();
     args.extend(split_args(&options.jvm_args));
+    let player_options = player_start..args.len();
     if let (Some(config), Some(path)) = (&resolved.logging, &installed.logging_config)
         && let Some(argument) = config.argument.as_deref()
     {
@@ -489,16 +517,18 @@ pub fn build_launch_command(
         .as_deref()
         .map(split_args)
         .filter(|w| !w.is_empty());
-    let (program, args, jvm_options) = match wrapper {
+    let (program, args, offset) = match wrapper {
         Some(mut wrapped) => {
             let program = PathBuf::from(wrapped.remove(0));
             wrapped.push(java);
             let start = wrapped.len();
             wrapped.extend(args);
-            (program, wrapped, start..start + jvm_option_count)
+            (program, wrapped, start)
         }
-        None => (options.java_path.clone(), args, 0..jvm_option_count),
+        None => (options.java_path.clone(), args, 0),
     };
+    let jvm_options = offset..offset + jvm_option_count;
+    let player_jvm_options = offset + player_options.start..offset + player_options.end;
 
     let secrets = [identity.access_token.as_str()]
         .into_iter()
@@ -511,6 +541,7 @@ pub fn build_launch_command(
         cwd: options.game_dir.clone(),
         env: options.env.clone(),
         jvm_options,
+        player_jvm_options,
         secrets,
     })
 }
@@ -661,7 +692,13 @@ mod tests {
             "play.projects.gg:25565"
         );
         assert!(!a.contains(&"--server".to_owned()));
-        assert!(!a.contains(&"--quickPlayPath".to_owned()));
+        // The game logs what it joined there ("Devam et" reads it).
+        assert_eq!(
+            PathBuf::from(&a[pos("--quickPlayPath") + 1]),
+            PathBuf::from("/games/one")
+                .join("quickPlay")
+                .join("log.json")
+        );
         assert!(!a.contains(&"--demo".to_owned()));
         assert!(a.iter().all(|x| !x.contains("${")), "unsubstituted: {a:?}");
 
@@ -678,6 +715,14 @@ mod tests {
         assert!(jvm.iter().any(|x| x == "-cp"));
         assert!(jvm.iter().all(|x| !x.contains("secret-token-value")));
         assert!(cmd.command_line_len() > cp.len());
+        // The player's own arguments are known (crash analysis), the launcher's are not theirs.
+        assert_eq!(cmd.player_jvm_options(), ["-XX:+UseG1GC", "-Dmy.prop=a b"]);
+        assert_eq!(
+            cmd.display_redacted_as(Path::new("/java/bin/java.exe"))
+                .split(' ')
+                .next(),
+            Some("/java/bin/java.exe")
+        );
     }
 
     #[test]
@@ -702,6 +747,7 @@ mod tests {
         options.wrapper = Some("mangohud --dlsym".into());
         options.window.fullscreen = true;
         options.demo = true;
+        options.jvm_args = "-Xss2M".into();
         let cmd = build_launch_command(
             &DataDirs::new("/data"),
             &r,
@@ -714,6 +760,7 @@ mod tests {
         assert_eq!(cmd.args[0], "--dlsym");
         assert_eq!(cmd.args[1], "/java/bin/java");
         assert_eq!(cmd.jvm_options()[0], "-XstartOnFirstThread");
+        assert_eq!(cmd.player_jvm_options(), ["-Xss2M"]);
         assert!(cmd.args.contains(&"-XstartOnFirstThread".to_owned()));
         assert!(!cmd.args.iter().any(|x| x.starts_with("-XX:HeapDumpPath")));
         let cp = cmd.args.iter().position(|x| x == "-cp").unwrap();

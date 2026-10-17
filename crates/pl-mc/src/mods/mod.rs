@@ -1,8 +1,13 @@
 //! Mods of a game directory: metadata read from the jars (Fabric, Quilt, Forge, NeoForge and
 //! legacy Forge descriptors, icons), enabling/disabling (`.jar` ↔ `.jar.disabled`) and removal.
 
+pub mod apply;
+pub mod check;
 pub(crate) mod lenient_json;
 mod metadata;
+pub mod repair;
+pub mod scan;
+pub mod version;
 
 pub(crate) use metadata::{read_entry_png as read_zip_png, read_entry_text as read_zip_text};
 
@@ -81,6 +86,24 @@ pub fn is_mod_file_name(name: &str) -> bool {
 
 fn is_disabled_name(name: &str) -> bool {
     name.to_ascii_lowercase().ends_with(DISABLED_SUFFIX)
+}
+
+/// Enabled mod files in `dir` (a missing folder has none). Only names are read, so this is cheap
+/// enough to run before every launch ("Otomatik" memory).
+pub fn count_enabled_mods(dir: &Path) -> usize {
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| entry.file_type().is_ok_and(|t| t.is_file()))
+                .filter(|entry| {
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    is_mod_file_name(&name) && !is_disabled_name(&name)
+                })
+                .count()
+        })
+        .unwrap_or(0)
 }
 
 /// Read mod metadata from an in-memory or on-disk jar. Never panics; `None` for files that are
@@ -395,5 +418,25 @@ type="required"
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn counts_enabled_mods() {
+        let dir = tempfile::tempdir().unwrap();
+        let mods = dir.path().join("mods");
+        std::fs::create_dir_all(mods.join("sub.jar")).unwrap();
+        for name in [
+            "a.jar",
+            "b.JAR",
+            "c.zip",
+            "d.litemod",
+            "off.jar.disabled",
+            "notes.txt",
+            ".hidden.jar",
+        ] {
+            std::fs::write(mods.join(name), b"x").unwrap();
+        }
+        assert_eq!(count_enabled_mods(&mods), 4);
+        assert_eq!(count_enabled_mods(&dir.path().join("missing")), 0);
     }
 }

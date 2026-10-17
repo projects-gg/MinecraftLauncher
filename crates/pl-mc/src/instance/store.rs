@@ -1,13 +1,14 @@
 //! Instances on disk: `instances/<id>/instance.json` plus `instances/<id>/minecraft/` (the game
-//! directory). Writes are atomic; broken entries are skipped when listing.
+//! directory). Writes are atomic and flushed to disk; broken entries are skipped when listing.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::error::{Error, Result};
+use crate::gamefiles::{LauncherTrash, TrashEntry, TrashKind};
 use crate::instance::memory::{recommended_memory, system_memory_mb};
 use crate::instance::model::{Instance, NewInstance};
-use crate::paths::{DataDirs, safe_name, write_atomic};
+use crate::paths::{DataDirs, safe_name, write_durable};
 
 pub const INSTANCE_FILE: &str = "instance.json";
 /// Game directory inside an instance folder.
@@ -126,6 +127,9 @@ impl InstanceStore {
             instance.icon = icon;
         }
         instance.group = new.group.filter(|g| !g.trim().is_empty());
+        // Without explicit values the instance is "Otomatik"; the recommendation is kept as the
+        // starting point for manual values.
+        instance.memory_auto = new.memory.is_none();
         instance.memory = new
             .memory
             .unwrap_or_else(|| recommended_memory(system_memory_mb(), instance.is_modded()));
@@ -156,7 +160,7 @@ impl InstanceStore {
     async fn write(&self, instance: &Instance) -> Result<()> {
         let bytes = serde_json::to_vec_pretty(instance)
             .map_err(|e| Error::json(format!("instance {}", instance.id), e))?;
-        write_atomic(&self.file(&instance.id)?, &bytes).await
+        write_durable(&self.file(&instance.id)?, &bytes).await
     }
 
     /// Remove an instance: into the OS trash when possible, deleted otherwise.
@@ -215,6 +219,53 @@ impl InstanceStore {
         result
     }
 
+    /// Move an instance into the launcher trash (kept like other deleted items, so it can be put
+    /// back). The entry carries the instance's id and display name.
+    pub async fn move_to_trash(&self, id: &str, trash: &LauncherTrash) -> Result<TrashEntry> {
+        let instance = self.get(id).await?;
+        let dir = self.instance_dir(id)?;
+        trash
+            .put(&dir, TrashKind::Instance, id, &instance.name)
+            .await
+    }
+
+    /// Put a deleted instance back from the launcher trash. It keeps its old id when that is
+    /// still free (a newer instance may have taken it: then it gets the next free one, `id-2`), and
+    /// a name another instance has meanwhile gets a number (`Adrenaline (2)`).
+    pub async fn restore_from_trash(
+        &self,
+        trash: &LauncherTrash,
+        entry_id: &str,
+    ) -> Result<Instance> {
+        let entry = trash.get(entry_id).await?;
+        if entry.kind != TrashKind::Instance {
+            return Err(Error::Invalid(format!(
+                "trash item {entry_id} is not an instance"
+            )));
+        }
+        let base = safe_name(&entry.instance_id)
+            .map(str::to_owned)
+            .unwrap_or_else(|_| slugify(&entry.name));
+        let id = self.claim_id(&base).await?;
+        let dir = self.instance_dir(&id)?;
+        if let Err(error) = trash.restore_to(entry_id, &dir).await {
+            let _ = tokio::fs::remove_dir(&dir).await;
+            return Err(error);
+        }
+        // The folder name is the id (`get` follows it); the name must not repeat another's.
+        let mut instance = self.get(&id).await?;
+        let taken: Vec<String> = self
+            .list()
+            .await?
+            .into_iter()
+            .filter(|other| other.id != id)
+            .map(|other| other.name)
+            .collect();
+        instance.name = free_name(&instance.name, &taken);
+        self.write(&instance).await?;
+        Ok(instance)
+    }
+
     /// Add a finished session to the play time and set "last played".
     pub async fn record_session(&self, id: &str, played: Duration) -> Result<Instance> {
         let mut instance = self.get(id).await?;
@@ -245,6 +296,22 @@ impl InstanceStore {
         }
         Err(Error::Invalid(format!("no free instance id for {base}")))
     }
+}
+
+/// `name` when no other instance has it (any case), else the first free `name (2)`, `name (3)`…
+pub fn free_name(name: &str, taken: &[String]) -> String {
+    let free = |candidate: &str| {
+        !taken
+            .iter()
+            .any(|other| other.trim().to_lowercase() == candidate.trim().to_lowercase())
+    };
+    if free(name) {
+        return name.to_owned();
+    }
+    (2..10_000u32)
+        .map(|n| format!("{name} ({n})"))
+        .find(|candidate| free(candidate))
+        .unwrap_or_else(|| name.to_owned())
 }
 
 /// Folder-safe id from a display name (Turkish letters transliterated): `"Çılgın Köy"` →
@@ -472,5 +539,59 @@ mod tests {
         )
         .unwrap();
         assert_eq!(store.get("moved").await.unwrap().id, "moved");
+    }
+
+    #[tokio::test]
+    async fn deleted_instances_come_back_from_the_trash() {
+        let (tmp, store) = store();
+        let trash = LauncherTrash::new(tmp.path().join("trash"));
+        let first = store.create(new("Adrenaline")).await.unwrap();
+        let options = |id: &str| store.game_dir(id).unwrap().join("options.txt");
+        std::fs::write(options(&first.id), b"lang:tr_tr").unwrap();
+
+        let entry = store.move_to_trash(&first.id, &trash).await.unwrap();
+        assert_eq!(entry.kind, TrashKind::Instance);
+        assert_eq!(
+            (entry.instance_id.as_str(), entry.name.as_str()),
+            ("adrenaline", "Adrenaline")
+        );
+        assert!(store.list().await.unwrap().is_empty());
+
+        // Back under its old id, with its files; the trash slot is gone.
+        let back = store.restore_from_trash(&trash, &entry.id).await.unwrap();
+        assert_eq!(
+            (back.id.as_str(), back.name.as_str()),
+            ("adrenaline", "Adrenaline")
+        );
+        assert!(options(&back.id).is_file());
+        assert!(trash.list(None).await.unwrap().is_empty());
+
+        // Meanwhile a newer instance took the id and the name: a free id, a numbered name.
+        let entry = store.move_to_trash(&back.id, &trash).await.unwrap();
+        let newer = store.create(new("Adrenaline")).await.unwrap();
+        assert_eq!(newer.id, "adrenaline");
+        let again = store.restore_from_trash(&trash, &entry.id).await.unwrap();
+        assert_eq!(again.id, "adrenaline-2");
+        assert_eq!(again.name, "Adrenaline (2)");
+        assert_eq!(store.get(&again.id).await.unwrap().name, "Adrenaline (2)");
+        assert!(options(&again.id).is_file());
+        assert!(!options(&newer.id).is_file());
+        assert_eq!(store.list().await.unwrap().len(), 2);
+
+        // Only instances: other trash items are refused.
+        let world = tmp.path().join("World");
+        std::fs::create_dir_all(&world).unwrap();
+        let other = trash
+            .put(&world, TrashKind::World, "x", "World")
+            .await
+            .unwrap();
+        assert!(store.restore_from_trash(&trash, &other.id).await.is_err());
+    }
+
+    #[test]
+    fn free_names() {
+        let taken = vec!["Adrenaline".to_owned(), "adrenaline (2)".to_owned()];
+        assert_eq!(free_name("Projects", &taken), "Projects");
+        assert_eq!(free_name("Adrenaline", &taken), "Adrenaline (3)");
     }
 }

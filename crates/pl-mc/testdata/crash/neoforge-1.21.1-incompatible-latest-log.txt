@@ -1,0 +1,7 @@
+# source: https://github.com/txnimc/SodiumOptionsAPI/issues/49#issuecomment-5008784766
+# loader: NeoForge 21.1.x (exact build not given), minecraft: 1.21.1
+# note: quoted inside markdown code spans in the comment; the backticks were removed, the tab before Mod is 8 spaces in the paste
+[18:24:36] [main/ERROR]: Incompatibilities between mods:
+        Mod 'reeses_sodium_options' is incompatible with 'sodiumoptionsapi', versions: '[0,)'; Version found: '1.0.10'
+[18:24:50] [Render thread/FATAL] [ne.ne.fm.ModLoader/CORE]: Error during pre-loading phase: Mod reeses_sodium_options is incompatible with sodiumoptionsapi 0 or above
+Currently, sodiumoptionsapi is 1.0.10

@@ -1,0 +1,14 @@
+# source: https://github.com/IrisShaders/Iris/issues/3262
+# loader: Fabric Loader >= 0.19.3 (this wording exists since 0.19.3), minecraft: 1.21.11 (Modrinth App)
+Incompatible mods found!
+net.fabricmc.loader.impl.FormattedException: Some of your mods are incompatible with the game or each other!
+A potential solution has been determined, this may resolve your problem:
+	 - Replace mod 'Sodium' (sodium) 0.8.13+mc1.21.11 with any 0.8.x version that is compatible with:
+		 - iris 1.10.7+mc1.21.11
+More details:
+	 - Mod 'Sodium' (sodium) 0.8.13+mc1.21.11 is incompatible with version 1.10.7 or earlier of mod 'Iris' (iris), yet a conflicting version is present: 1.10.7+mc1.21.11!
+	at net.fabricmc.loader.impl.FormattedException.ofLocalized(FormattedException.java:51)
+	at net.fabricmc.loader.impl.FabricLoaderImpl.load(FabricLoaderImpl.java:202)
+	at net.fabricmc.loader.impl.launch.knot.Knot.init(Knot.java:142)
+	at net.fabricmc.loader.impl.launch.knot.Knot.launch(Knot.java:66)
+	at net.fabricmc.loader.impl.launch.knot.KnotClient.main(KnotClient.java:23)

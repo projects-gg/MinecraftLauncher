@@ -2,6 +2,7 @@
 //! dependency resolver. Built on the shared [`pl_net::Http`] client (which sets the user agent);
 //! rate limiting (HTTP 429) is handled by waiting for `X-Ratelimit-Reset`.
 
+mod migration;
 mod models;
 mod resolve;
 
@@ -15,6 +16,7 @@ use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use url::Url;
 
+pub use migration::{MigrationFit, migration_fits, migration_hashes, migration_moves};
 pub use models::*;
 
 use crate::error::{Error, Result};
@@ -45,6 +47,11 @@ impl ModrinthClient {
             http,
             base: base.into().trim_end_matches('/').to_owned(),
         }
+    }
+
+    /// The HTTP client (for downloads that are not API calls, like project icons).
+    pub fn http(&self) -> &Http {
+        &self.http
     }
 
     /// `base/segments...?query`; each segment is percent-encoded (ids cannot change the path).
@@ -223,6 +230,19 @@ impl ModrinthClient {
         self.get(&["version", id], &[]).await
     }
 
+    /// The version of a project to install on `target`: the newest release, else the newest
+    /// beta, else the newest alpha. `None` when nothing is compatible.
+    pub async fn best_version(
+        &self,
+        id_or_slug: &str,
+        target: &ModrinthResolveTarget,
+    ) -> Result<Option<ModrinthVersion>> {
+        let versions = self
+            .project_versions(id_or_slug, &target.loaders, &target.game_versions)
+            .await?;
+        Ok(resolve::pick_best(&versions, target).cloned())
+    }
+
     /// Several versions by id (unknown ones are missing from the result).
     pub async fn versions(&self, ids: &[String]) -> Result<Vec<ModrinthVersion>> {
         let mut out = Vec::new();
@@ -272,14 +292,31 @@ impl ModrinthClient {
         loaders: &[String],
         game_versions: &[String],
     ) -> Result<HashMap<String, ModrinthVersion>> {
+        self.update_check_typed(hashes, algorithm, loaders, game_versions, &[])
+            .await
+    }
+
+    /// [`Self::update_check`] limited to `version_types` (empty = any type).
+    pub async fn update_check_typed(
+        &self,
+        hashes: &[String],
+        algorithm: ModrinthHashAlgorithm,
+        loaders: &[String],
+        game_versions: &[String],
+        version_types: &[ModrinthVersionType],
+    ) -> Result<HashMap<String, ModrinthVersion>> {
         let mut out = HashMap::new();
         for chunk in hashes.chunks(HASHES_PER_REQUEST) {
-            let body = json!({
+            let mut body = json!({
                 "hashes": chunk,
                 "algorithm": algorithm.as_str(),
                 "loaders": loaders,
                 "game_versions": game_versions,
             });
+            if !version_types.is_empty() {
+                body["version_types"] =
+                    json!(version_types.iter().map(|t| t.as_str()).collect::<Vec<_>>());
+            }
             let map: HashMap<String, ModrinthVersion> =
                 self.post(&["version_files", "update"], &body).await?;
             out.extend(map);
@@ -416,4 +453,4 @@ fn backoff(attempt: u32) -> Duration {
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

@@ -1,0 +1,39 @@
+# source: https://github.com/hookuru/GrandTeleport/issues/7
+# loader: NeoForge 21.1.235 (FML 4.0.42), minecraft: 1.21.1 (CurseForge)
+---- Minecraft Crash Report ----
+// You're mean.
+
+Time: 2026-07-05 20:02:38
+Description: Mod loading failures have occurred; consult the issue messages for more details
+
+net.neoforged.neoforge.logging.CrashReportExtender$ModLoadingCrashException: Mod loading has failed
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: Render thread
+Stacktrace:
+	at MC-BOOTSTRAP/fml_loader@4.0.42/net.neoforged.fml.loading.moddiscovery.ModInfo.<init>(ModInfo.java:77) ~[loader-4.0.42.jar%23107!/:4.0] {}
+-- Mod loading issue --
+Details:
+	Mod file: <No mod information provided>
+	Failure message: File mods\GrandTeleport-NeoForge-1.21.1-neoforge-1.0.1.jar is not a valid mod file
+	Mod version: <No mod information provided>
+	Mod issues URL: <No issues URL found>
+	Exception message: net.neoforged.neoforgespi.locating.InvalidModFileException: Illegal version number specified neoforge-1.0.1 (GrandTeleport-NeoForge-1.21.1-neoforge-1.0.1.jar)
+Stacktrace:
+[... 46 lines omitted ...]
+-- Mod loading issue for: controllable --
+Details:
+	Mod file: /C:/Users/Player/curseforge/minecraft/Instances/1.21.1/mods/controllable-neoforge-1.21.1-0.25.4.jar
+	Failure message: Mod controllable only supports jei 19.27.0.336 or above
+		Currently, jei is 19.25.1.334
+	Mod version: 0.25.4
+	Mod issues URL: https://github.com/MrCrayfish/Controllable/issues
+	Exception message: <No associated exception found>
+
+-- System Details --
+Details:
+	Minecraft Version: 1.21.1

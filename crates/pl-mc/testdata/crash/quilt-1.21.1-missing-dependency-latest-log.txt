@@ -1,0 +1,24 @@
+# source: https://github.com/Darkhax-Minecraft/Bookshelf/issues/234
+# loader: Quilt Loader 0.26.4, minecraft: 1.21.1
+[00:50:26] [main/INFO]: Loading Minecraft 1.21.1 with Quilt Loader 0.26.4
+[00:50:26] [main/INFO]: Loading mappings: jar:file:/C:/Users/Player/AppData/Roaming/.minecraft/libraries/net/fabricmc/intermediary/1.21.1/intermediary-1.21.1.jar!/mappings/mappings.tiny
+[00:50:27] [main/ERROR]: Crashed! The full crash report has been saved to D:\Minecraft\0_modded directories\Quilt1-21\crash-reports\crash-2024-10-02_00.50.27.7580-quilt_loader.txt
+[00:50:27] [main/ERROR]: Partial Report:
+---- Quilt Loader: Failed to load ----
+Date/Time: 2024/10/02 00:50:27.7810 [-0700]
+Quilt Loader Version: 0.26.4
+
+-- Error 1 --
+
+Bookshelf requires version [0.16.5, ∞) of fabricloader, which is missing!
+
+- <mods>/bookshelf-fabric-1.21.1-21.1.3.jar
+
+
+-- Plugin State --
+
+Cycle number = 1
+Cycle Step = SOLVE
+
+Loaded Plugins (2):
+ - 'quilt_loader' (Builtin)

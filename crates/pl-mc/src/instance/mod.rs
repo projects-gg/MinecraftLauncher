@@ -1,13 +1,20 @@
 //! Instances: MultiMC-style isolated game directories with their own version, loader, Java,
 //! memory and launch settings.
 
+pub mod defaults;
 pub mod memory;
 pub mod model;
 pub mod store;
 
+pub use defaults::{
+    DEFAULT_GUI_SCALE, DEFAULT_SERVER_ADDRESS, DEFAULT_SERVER_NAME, OptionsSeed, ServerSeed,
+    add_servers, client_data_version, has_accessibility_onboarding, seed_default_server,
+    seed_options, turkish_language,
+};
 pub use memory::{
-    MIN_HEAP_FLOOR_MB, MemoryIssue, MemoryLimits, MemoryValidation, clamp_memory, memory_limits,
-    recommended_memory, system_memory_mb, validate_memory,
+    AUTO_MAX_MB, MIN_HEAP_FLOOR_MB, MemoryIssue, MemoryLimits, MemoryValidation, auto_memory,
+    auto_memory_at_least, clamp_memory, memory_limits, recommended_memory, system_memory_mb,
+    validate_memory,
 };
 pub use model::{
     Hooks, INSTANCE_SCHEMA_VERSION, Instance, InstanceIcon, InstanceLoader, ManagedPack,

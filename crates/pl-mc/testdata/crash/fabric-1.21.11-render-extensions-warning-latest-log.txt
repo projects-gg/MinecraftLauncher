@@ -1,0 +1,19 @@
+# source: https://github.com/Reijin2312/WorldWeaver-New-Dawn/issues/15
+# loader: Fabric Loader 0.19.3, minecraft: 1.21.11 (client)
+# note: the log in the issue ends with this warning; Minecraft 1.21.5+ logs it whenever a crash report is made before the window exists
+[13:30:41] [main/INFO]: Loading Minecraft 1.21.11 with Fabric Loader 0.19.3
+[... 230 lines omitted ...]
+[13:30:43] [main/INFO]: Searching for graphics cards...
+[13:30:43] [main/INFO]: Found graphics adapter: AdapterInfo{vendor=INTEL, description='Intel(R) UHD Graphics 770', adapterType=0x00002323, openglIcdFilePath='C:\WINDOWS\System32\DriverStore\FileRepository\iigd_dch.inf_amd64_68fe65fbc646d3a4\igxelpicd64.dll', openglIcdVersion=32.0.101.7082}
+[13:30:43] [main/INFO]: Found graphics adapter: AdapterInfo{vendor=NVIDIA, description='NVIDIA GeForce RTX 3080 Ti', adapterType=0x0000031B, openglIcdFilePath='C:\WINDOWS\System32\DriverStore\FileRepository\nv_dispi.inf_amd64_e980fd2c7c4fce8e\nvoglv64.dll', openglIcdVersion=32.0.15.9597}
+[... 4 lines omitted ...]
+[13:30:46] [main/WARN]: Method overwrite conflict for method_21740 in modernfix-common.mixins.json:perf.remove_biome_temperature_cache.BiomeMixin from mod modernfix, previously written by net.caffeinemc.mods.lithium.mixin.world.temperature_cache.BiomeMixin. Skipping method.
+[... 24 lines omitted ...]
+[13:30:50] [Render thread/WARN]: Failed to get system info for Render Extensions
+java.lang.IllegalStateException: Can't getDevice() before it was initialized
+	at knot//com.mojang.blaze3d.systems.RenderSystem.getDevice(RenderSystem.java:299)
+	at knot//net.minecraft.class_310.method_68671(class_310.java:2527)
+	at knot//net.minecraft.class_6396.method_37123(class_6396.java:78)
+	at knot//net.minecraft.class_310.method_37274(class_310.java:2527)
+	at knot//net.minecraft.class_310.method_22681(class_310.java:2497)
+	at java.base/java.lang.Thread.run(Thread.java:1583)

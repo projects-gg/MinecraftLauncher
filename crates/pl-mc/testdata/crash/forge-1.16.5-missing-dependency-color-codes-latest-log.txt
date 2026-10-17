@@ -1,0 +1,11 @@
+# source: https://github.com/Serilum/.issue-tracker/issues/1051
+# loader: Forge 36.2.34, minecraft: 1.16.5 (client)
+[28四月2022 02:34:53.572] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher running: args [--username, Player, --version, 1.16.5-forge-36.2.34, --gameDir, D:\Minecraft, --assetsDir, D:\Minecraft, --assetIndex, 1.16, --uuid, 00000000000000000000000000000000, --accessToken, [redacted], --userType, msa, --versionType, release, --width, 1459, --height, 839, --launchTarget, fmlclient, --fml.forgeVersion, 36.2.34, --fml.mcVersion, 1.16.5, --fml.forgeGroup, net.minecraftforge, --fml.mcpVersion, 20210115.111550]
+[... 37 lines omitted ...]
+[28四月2022 02:35:04.796] [main/FATAL] [net.minecraftforge.fml.ModLoader/CORE]: Error during pre-loading phase
+net.minecraftforge.fml.ModLoadingException: Mod §eenchantingcommands§r requires §6collective§r §o2.27 or above§r
+§7Currently, §6collective§r§7 is §o§nnot installed
+	at net.minecraftforge.fml.ModLoadingException.lambda$fromEarlyException$0(ModLoadingException.java:64) ~[?:?]
+	at net.minecraftforge.fml.ModLoadingException$$Lambda$2934/2951941.apply(Unknown Source) ~[?:?]
+[... 36 lines omitted ...]
+[28四月2022 02:35:04.846] [main/ERROR] [net.minecraftforge.fml.ModLoader/]: Cowardly refusing to send event net.minecraftforge.client.event.sound.SoundLoadEvent to a broken mod state

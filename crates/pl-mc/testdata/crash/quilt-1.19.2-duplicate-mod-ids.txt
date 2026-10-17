@@ -1,0 +1,11 @@
+# source: https://github.com/object-Object/HexDebug/issues/7#issuecomment-2185353678
+# loader: Quilt Loader 0.26.0, minecraft: 1.19.2
+---- Quilt Loader: Failed to load ----
+Date/Time: 2024/06/23 16:11:52.0982 [-0700]
+Quilt Loader Version: 0.26.0
+
+-- Error 1 --
+
+Duplicate mandatory mod ids [qkl]
+- <mods>/quilt-kotlin-libraries-4.0.0+kt.1.9.23+flk.1.10.19.jar
+- <mods>/quilt-kotlin-libraries-1.0.2+kt.1.8.0+flk.1.9.0.jar

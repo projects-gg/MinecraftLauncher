@@ -1,0 +1,42 @@
+# source: https://github.com/DrMango14/Create-The_Factory_Must_Grow/issues/421 (attachment https://github.com/user-attachments/files/30814138/acGhMzL.txt)
+# loader: NeoForge 21.1.248 (sponge-mixin 0.15.2), minecraft: 1.21.1
+---- Minecraft Crash Report ----
+// I'm sorry, Dave.
+
+Time: 2026-08-06 21:51:10
+Description: Mod loading failures have occurred; consult the issue messages for more details
+
+net.neoforged.neoforge.logging.CrashReportExtender$ModLoadingCrashException: Mod loading has failed
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Head --
+Thread: main
+Stacktrace:
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:392) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar%2373!/:0.15.2+mixin.0.8.7] {}
+-- Mod loading issue for: createframed --
+Details:
+	Caused by 0: java.lang.NoClassDefFoundError: Could not initialize class com.simibubi.create.AllBlocks
+		at TRANSFORMER/createframed@1.8.2/net.dakotapride.createframed.registry.CreateFramedBuilderTransformers.framedGlassSlidingDoor(CreateFramedBuilderTransformers.java:253) ~[createframed-1.21.1-1.8.2.jar%23240!/:?] {re:classloading}
+[... 62 lines omitted ...]
+-- Mod loading issue for: bits_n_bobs --
+Details:
+	Caused by 0: java.lang.NoClassDefFoundError: Could not initialize class com.simibubi.create.AllBlocks
+[... 61 lines omitted ...]
+-- Mod loading issue --
+Details:
+	Mod file: <No mod information provided>
+	Failure message: Mixin application of com.kipti.bnb.mixin.dyeable.pipes.FluidPipeBlockMixin from Create Bits 'n' Bobs (bits_n_bobs) has failed
+		org.spongepowered.asm.mixin.injection.throwables.InvalidInjectionException: @At("INVOKE") on com/simibubi/create/content/fluids/pipes/FluidPipeBlock::bnb$filterDyeConnections with priority 1000 cannot inject into com/simibubi/create/content/fluids/pipes/FluidPipeBlock::updateBlockState(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;Lnet/minecraft/core/Direction;Lnet/minecraft/world/level/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState; merged by com.drmangotea.tfmg.mixin.FluidPipeBlockMixin with priority 1000 [INJECT_PREPARE Applicator Phase -> bits_n_bobs.mixins.json:dyeable.pipes.FluidPipeBlockMixin from mod bits_n_bobs -> Prepare Injections -> wrapOperation$bjo000$bits_n_bobs$bnb$filterDyeConnections(Lnet/minecraft/world/level/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;Lcom/llamalad7/mixinextras/injector/wrapoperation/Operation;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;Lnet/minecraft/core/Direction;Lnet/minecraft/world/level/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;)Z -> Prepare ->  -> { target: updateBlockState(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;Lnet/minecraft/core/Direction;Lnet/minecraft/world/level/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState; }]
+	Mod version: <No mod information provided>
+	Mod issues URL: <No issues URL found>
+	Exception message: org.spongepowered.asm.mixin.injection.throwables.InvalidInjectionException: @At("INVOKE") on com/simibubi/create/content/fluids/pipes/FluidPipeBlock::bnb$filterDyeConnections with priority 1000 cannot inject into com/simibubi/create/content/fluids/pipes/FluidPipeBlock::updateBlockState(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;Lnet/minecraft/core/Direction;Lnet/minecraft/world/level/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState; merged by com.drmangotea.tfmg.mixin.FluidPipeBlockMixin with priority 1000 [INJECT_PREPARE Applicator Phase -> bits_n_bobs.mixins.json:dyeable.pipes.FluidPipeBlockMixin from mod bits_n_bobs -> Prepare Injections -> wrapOperation$bjo000$bits_n_bobs$bnb$filterDyeConnections(Lnet/minecraft/world/level/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;Lcom/llamalad7/mixinextras/injector/wrapoperation/Operation;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;Lnet/minecraft/core/Direction;Lnet/minecraft/world/level/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;)Z -> Prepare ->  -> { target: updateBlockState(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;Lnet/minecraft/core/Direction;Lnet/minecraft/world/level/BlockAndTintGetter;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState; }]
+Stacktrace:
+[... 236 lines omitted ...]
+-- Mod loading issue for: create --
+Details:
+	Caused by 0: java.lang.NoClassDefFoundError: Could not initialize class com.simibubi.create.AllBlocks
+[... 62 lines omitted ...]
+	Minecraft Version: 1.21.1

@@ -211,16 +211,8 @@ pub(crate) fn import_curseforge_archive<R: Read + Seek>(
     game_dir: &Path,
     cancel: &CancellationToken,
 ) -> Result<ImportedInstance> {
-    let names = entry_names(archive);
-    let root = find_root(&names, "manifest.json")
-        .ok_or_else(|| Error::archive(archive_path, "manifest.json not found"))?;
-    let text = read_entry_string(archive, &format!("{root}manifest.json"), MAX_MANIFEST_BYTES)
-        .ok_or_else(|| Error::archive(archive_path, "manifest.json is unreadable"))?;
-    let manifest = parse_curseforge_manifest(&text)?;
-    validate_relative_path(&manifest.overrides)?;
-
+    let (mut instance, prefix) = describe_curseforge_archive(archive, archive_path)?;
     let mut report = ExtractReport::default();
-    let prefix = format!("{root}{}/", manifest.overrides);
     extract_prefix(
         archive,
         archive_path,
@@ -229,6 +221,25 @@ pub(crate) fn import_curseforge_archive<R: Read + Seek>(
         cancel,
         &mut report,
     )?;
+    instance.apply_report(report);
+    Ok(instance)
+}
+
+/// Read what a CurseForge pack describes without extracting anything. Returns the instance and
+/// the archive prefix of its overrides folder.
+pub(crate) fn describe_curseforge_archive<R: Read + Seek>(
+    archive: &mut ZipArchive<R>,
+    archive_path: &Path,
+) -> Result<(ImportedInstance, String)> {
+    let names = entry_names(archive);
+    let root = find_root(&names, "manifest.json")
+        .ok_or_else(|| Error::archive(archive_path, "manifest.json not found"))?;
+    let text = read_entry_string(archive, &format!("{root}manifest.json"), MAX_MANIFEST_BYTES)
+        .ok_or_else(|| Error::archive(archive_path, "manifest.json is unreadable"))?;
+    let manifest = parse_curseforge_manifest(&text)?;
+    validate_relative_path(&manifest.overrides)?;
+
+    let prefix = format!("{root}{}/", manifest.overrides);
     let links = read_entry_string(archive, &format!("{root}modlist.html"), MAX_MANIFEST_BYTES)
         .map(|html| parse_modlist(&html))
         .unwrap_or_default();
@@ -242,7 +253,6 @@ pub(crate) fn import_curseforge_archive<R: Read + Seek>(
     instance.author = manifest.author.clone();
     instance.loader = manifest.loader;
     instance.loader_version = manifest.loader_version.clone();
-    instance.apply_report(report);
     instance.pending = if manifest.files.is_empty() {
         ImportPendingFiles::None
     } else {
@@ -251,7 +261,7 @@ pub(crate) fn import_curseforge_archive<R: Read + Seek>(
             links,
         }
     };
-    Ok(instance)
+    Ok((instance, prefix))
 }
 
 pub(crate) fn import_curseforge_blocking(

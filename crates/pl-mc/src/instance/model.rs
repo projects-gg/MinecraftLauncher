@@ -126,6 +126,14 @@ pub struct Instance {
     pub java: JavaSetting,
     #[serde(default)]
     pub memory: MemorySettings,
+    /// "Otomatik": every launch picks the memory from the machine and the enabled mods
+    /// ([`Instance::launch_memory`]); `memory` then keeps the last manual values.
+    #[serde(default)]
+    pub memory_auto: bool,
+    /// Maximum memory the managed pack recommends; "Otomatik" never goes below it (as far as
+    /// the machine can spare). Recorded at every pack sync.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_memory_mb: Option<u32>,
     /// Extra JVM arguments as typed by the user.
     #[serde(default)]
     pub jvm_args: String,
@@ -142,6 +150,10 @@ pub struct Instance {
     pub notes: String,
     #[serde(default)]
     pub managed_pack: Option<ManagedPack>,
+    /// The default server was offered once (added to an empty server list, or the list already
+    /// had servers). It is never added again, so a server the player removed stays removed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub default_server_seeded: bool,
     pub created_at: jiff::Timestamp,
     #[serde(default)]
     pub last_played_at: Option<jiff::Timestamp>,
@@ -166,6 +178,8 @@ impl Instance {
             loader: InstanceLoader::default(),
             java: JavaSetting::Auto,
             memory: MemorySettings::default(),
+            memory_auto: false,
+            pack_memory_mb: None,
             jvm_args: String::new(),
             window: WindowSettings::default(),
             auto_join: None,
@@ -173,6 +187,7 @@ impl Instance {
             env: BTreeMap::new(),
             notes: String::new(),
             managed_pack: None,
+            default_server_seeded: false,
             created_at: jiff::Timestamp::now(),
             last_played_at: None,
             play_time_secs: 0,
@@ -181,6 +196,26 @@ impl Instance {
 
     pub fn is_modded(&self) -> bool {
         self.loader.kind != LoaderKind::Vanilla
+    }
+
+    /// The memory a launch uses: "Otomatik" picks it from the machine's RAM and the enabled mods
+    /// (never below the managed pack's recommendation), otherwise the saved values.
+    pub fn launch_memory(&self, total_mb: u64, enabled_mods: usize) -> MemorySettings {
+        if self.memory_auto {
+            self.automatic_memory(total_mb, enabled_mods)
+        } else {
+            self.memory
+        }
+    }
+
+    /// What "Otomatik" gives this instance (whether or not it is on).
+    pub fn automatic_memory(&self, total_mb: u64, enabled_mods: usize) -> MemorySettings {
+        use crate::instance::memory::{auto_memory, auto_memory_at_least};
+        let auto = auto_memory(total_mb, self.is_modded(), enabled_mods);
+        match self.pack_memory_mb {
+            Some(wanted) => auto_memory_at_least(auto, wanted, total_mb),
+            None => auto,
+        }
     }
 
     /// Launch options from the instance settings (memory, JVM arguments, window, auto-join,
@@ -284,6 +319,16 @@ mod tests {
         instance.hooks.wrapper = Some("  ".into());
         let options = instance.to_launch_options("/java", "/game");
         assert_eq!(options.max_memory_mb, Some(6144));
+        assert_eq!(instance.launch_memory(16 * 1024, 200), instance.memory);
+        // "Otomatik" ignores the saved values (vanilla on 16 GB gets 4 GB).
+        instance.memory_auto = true;
+        assert_eq!(instance.launch_memory(16 * 1024, 200).max_mb, 4096);
+        instance.loader.kind = LoaderKind::Fabric;
+        assert_eq!(instance.launch_memory(16 * 1024, 200).max_mb, 8192);
+        // The pack's recommendation is a floor.
+        instance.pack_memory_mb = Some(9216);
+        assert_eq!(instance.launch_memory(16 * 1024, 200).max_mb, 9216);
+        assert_eq!(instance.launch_memory(16 * 1024, 20).max_mb, 9216);
         assert_eq!(options.window.width, Some(1280));
         assert_eq!(
             options.quick_play,

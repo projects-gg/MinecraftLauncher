@@ -272,7 +272,11 @@ pub struct ModrinthDonationUrl {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ModrinthGalleryImage {
+    /// Compressed image (for thumbnails).
     pub url: String,
+    /// The original upload, when the API provides it.
+    #[serde(default)]
+    pub raw_url: Option<String>,
     pub featured: bool,
     pub title: Option<String>,
     pub description: Option<String>,

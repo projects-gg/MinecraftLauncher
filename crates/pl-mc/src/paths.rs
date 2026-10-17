@@ -257,6 +257,82 @@ pub fn write_atomic_blocking(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
+/// [`write_atomic`] that also flushes the new content to disk before it replaces the old file, so
+/// a power cut never leaves an empty or half-written file behind. For files the launcher cannot
+/// rebuild (instance settings, the player's server list, trash descriptions); caches and
+/// downloads use the cheaper [`write_atomic`].
+pub async fn write_durable(path: &Path, bytes: &[u8]) -> Result<()> {
+    let path = path.to_path_buf();
+    let bytes = bytes.to_vec();
+    let shown = path.clone();
+    tokio::task::spawn_blocking(move || write_durable_blocking(&path, &bytes))
+        .await
+        .map_err(|e| Error::io(shown, std::io::Error::other(e.to_string())))?
+}
+
+/// Blocking variant of [`write_durable`].
+pub fn write_durable_blocking(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
+    }
+    let tmp = temp_sibling(path);
+    let written = std::fs::File::create(&tmp).and_then(|mut file| {
+        file.write_all(bytes)?;
+        file.sync_all()
+    });
+    if let Err(error) = written {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(Error::io(&tmp, error));
+    }
+    if let Err(error) = std::fs::rename(&tmp, path) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(Error::io(path, error));
+    }
+    if let Some(parent) = path.parent() {
+        sync_dir(parent);
+    }
+    Ok(())
+}
+
+/// Copies a file and flushes the copy to disk before returning (the caller may remove the
+/// original right after). Keeps the modification time and permissions. Returns the bytes copied.
+pub fn copy_file_durable(from: &Path, to: &Path) -> Result<u64> {
+    let mut input = std::fs::File::open(from).map_err(|e| Error::io(from, e))?;
+    let meta = input.metadata().map_err(|e| Error::io(from, e))?;
+    let mut output = std::fs::File::create(to).map_err(|e| Error::io(to, e))?;
+    let copied = std::io::copy(&mut input, &mut output).map_err(|e| Error::io(to, e))?;
+    if let Ok(modified) = meta.modified() {
+        let _ = output.set_modified(modified);
+    }
+    output.sync_all().map_err(|e| Error::io(to, e))?;
+    drop(output);
+    let _ = std::fs::set_permissions(to, meta.permissions());
+    Ok(copied)
+}
+
+/// Flushes an existing file to disk. Windows needs a writable handle for that; a file that cannot
+/// be opened for writing (read-only) is flushed through a plain handle where the OS allows it.
+pub fn sync_file(path: &Path) -> Result<()> {
+    let file = std::fs::OpenOptions::new()
+        .write(true)
+        .open(path)
+        .or_else(|_| std::fs::File::open(path))
+        .map_err(|e| Error::io(path, e))?;
+    file.sync_all().map_err(|e| Error::io(path, e))
+}
+
+/// Makes renames and new entries in `dir` durable where the OS needs that (Unix). Best effort;
+/// Windows journals directory changes itself.
+pub fn sync_dir(dir: &Path) {
+    #[cfg(unix)]
+    if let Ok(handle) = std::fs::File::open(dir) {
+        let _ = handle.sync_all();
+    }
+    #[cfg(not(unix))]
+    let _ = dir;
+}
+
 fn temp_sibling(path: &Path) -> PathBuf {
     let mut name = path
         .file_name()
@@ -358,8 +434,35 @@ mod tests {
         assert_eq!(std::fs::read(&file).unwrap(), b"two");
         write_atomic_blocking(&file, b"three").unwrap();
         assert_eq!(std::fs::read(&file).unwrap(), b"three");
+        write_durable(&file, b"four").await.unwrap();
+        assert_eq!(std::fs::read(&file).unwrap(), b"four");
+        write_durable_blocking(&file, b"five").unwrap();
+        assert_eq!(std::fs::read(&file).unwrap(), b"five");
         let leftovers = std::fs::read_dir(file.parent().unwrap()).unwrap().count();
         assert_eq!(leftovers, 1, "no temporary files are left behind");
+    }
+
+    #[test]
+    fn durable_copies_keep_content_and_time() {
+        let tmp = tempfile::tempdir().unwrap();
+        let from = tmp.path().join("a.bin");
+        std::fs::write(&from, vec![3u8; 70_000]).unwrap();
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(3600);
+        std::fs::File::options()
+            .write(true)
+            .open(&from)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        let to = tmp.path().join("b.bin");
+        assert_eq!(copy_file_durable(&from, &to).unwrap(), 70_000);
+        assert_eq!(std::fs::read(&to).unwrap(), std::fs::read(&from).unwrap());
+        let copied = std::fs::metadata(&to).unwrap().modified().unwrap();
+        let drift = copied.duration_since(old).unwrap_or_else(|e| e.duration());
+        assert!(drift < std::time::Duration::from_secs(2), "{drift:?}");
+        sync_file(&to).unwrap();
+        sync_dir(tmp.path());
+        assert!(copy_file_durable(&tmp.path().join("missing"), &to).is_err());
     }
 
     #[test]

@@ -92,8 +92,9 @@ pub fn parse_major(version: &str) -> Option<u32> {
     .filter(|m| *m > 0)
 }
 
-/// On Windows `javaw.exe` prints nothing useful without a console; probe the sibling `java.exe`.
-fn console_java(path: &Path) -> PathBuf {
+/// On Windows `javaw.exe` prints nothing useful without a console (and reports a JVM that cannot
+/// start in a modal message box); the sibling `java.exe` writes to stderr instead.
+pub(crate) fn console_java(path: &Path) -> PathBuf {
     if path
         .file_name()
         .is_some_and(|n| n.eq_ignore_ascii_case("javaw.exe"))
@@ -138,6 +139,54 @@ pub async fn detect_system_javas() -> Vec<JavaInstallation> {
                 None
             }
         }
+    });
+    futures::future::join_all(probes)
+        .await
+        .into_iter()
+        .flatten()
+        .collect()
+}
+
+/// Every Java on the system, for showing them (Settings → Java): an installation's `release`
+/// file answers when it names the version and the architecture (no process is started); the
+/// others are probed. Duplicates and broken installs are left out like in
+/// [`detect_system_javas`].
+pub async fn detect_system_javas_quick() -> Vec<JavaInstallation> {
+    let candidates = tokio::task::spawn_blocking(|| {
+        candidate_executables()
+            .into_iter()
+            .map(|path| {
+                let release = crate::java::release::read_release(&path);
+                (path, release)
+            })
+            .collect::<Vec<_>>()
+    })
+    .await
+    .unwrap_or_default();
+    let probes = candidates.into_iter().map(|(path, release)| async move {
+        let known = release.and_then(|release| {
+            Some(JavaInfo {
+                major: release.major()?,
+                arch: release.arch?,
+                version: release.version,
+                vendor: release.vendor,
+            })
+        });
+        let info = match known {
+            Some(info) => info,
+            None => match probe_java(&path).await {
+                Ok(info) => info,
+                Err(error) => {
+                    tracing::debug!(path = %path.display(), %error, "skipping Java candidate");
+                    return None;
+                }
+            },
+        };
+        Some(JavaInstallation {
+            path: preferred_launch_executable(&path),
+            info,
+            source: JavaSource::System,
+        })
     });
     futures::future::join_all(probes)
         .await
@@ -352,6 +401,45 @@ mod tests {
         let banner_only = "openjdk version \"17.0.2\" 2022-01-18\nOpenJDK Runtime Environment";
         assert_eq!(parse_java_properties(banner_only).unwrap().major, 17);
         assert!(parse_java_properties("command not found").is_none());
+    }
+
+    /// `java -version` banners of common builds (JVMs that ignore `-XshowSettings`).
+    #[test]
+    fn parses_version_banners() {
+        let cases = [
+            (
+                "java version \"1.8.0_431\"\nJava(TM) SE Runtime Environment (build 1.8.0_431-b10)\nJava HotSpot(TM) 64-Bit Server VM (build 25.431-b10, mixed mode)\n",
+                "1.8.0_431",
+                8,
+            ),
+            (
+                "openjdk version \"21.0.5\" 2024-10-15 LTS\nOpenJDK Runtime Environment Temurin-21.0.5+11 (build 21.0.5+11-LTS)\n",
+                "21.0.5",
+                21,
+            ),
+            (
+                "openjdk version \"25\" 2025-09-16\nOpenJDK Runtime Environment (build 25+36-3489)\n",
+                "25",
+                25,
+            ),
+            (
+                "openjdk version \"17.0.2-ea\" 2022-01-18\n",
+                "17.0.2-ea",
+                17,
+            ),
+            ("java version \"16.0.1.9.1\"\n", "16.0.1.9.1", 16),
+        ];
+        for (text, version, major) in cases {
+            let info = parse_java_properties(text).unwrap_or_else(|| panic!("{text}"));
+            assert_eq!((info.version.as_str(), info.major), (version, major));
+            assert_eq!(info.arch, Arch::Other);
+        }
+        // Properties win over the banner; the vendor falls back to `java.vm.vendor`.
+        let both = "    java.vm.vendor = Azul Systems, Inc.\n    java.version = 21.0.4\n    os.arch = aarch64\nopenjdk version \"99\"\n";
+        let info = parse_java_properties(both).unwrap();
+        assert_eq!(info.major, 21);
+        assert_eq!(info.arch, Arch::Aarch64);
+        assert_eq!(info.vendor.as_deref(), Some("Azul Systems, Inc."));
     }
 
     #[test]

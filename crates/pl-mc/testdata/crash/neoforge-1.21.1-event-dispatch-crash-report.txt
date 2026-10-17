@@ -1,0 +1,41 @@
+# source: https://github.com/Glytch10/noxlights-1.21.1/issues/3 (attachment https://github.com/user-attachments/files/28775203/crash-2026-06-09_19.07.34-fml.txt)
+# loader: NeoForge 21.1.233 (FML 4.0.42), minecraft: 1.21.1 (dedicated server, Sinytra Connector present)
+Time: 2026-06-09 19:07:34
+Description: Mod loading failures have occurred; consult the issue messages for more details
+
+net.neoforged.neoforge.logging.CrashReportExtender$ModLoadingCrashException: Mod loading has failed
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Mod loading issue --
+Details:
+	Mod file: <No mod information provided>
+	Failure message: File /home/player/Documents/@/1.21.1 create aeronautics 2/mods/audition-1.0.1-1.21.1.jar is a Fabric mod and cannot be loaded
+	Mod version: <No mod information provided>
+	Mod issues URL: <No issues URL found>
+	Exception message: <No associated exception found>
+
+[... 16 lines omitted ...]
+-- Mod loading issue for: noxlights --
+Details:
+	Caused by 0: java.lang.BootstrapMethodError: java.lang.RuntimeException: Attempted to load class net/minecraft/client/particle/ParticleRenderType for invalid dist DEDICATED_SERVER
+		at TRANSFORMER/noxlights@1.0.0/net.aeterna.noxlights.registry.common.NoxLightsBlockEntities.lambda$static$3(NoxLightsBlockEntities.java:22) ~[noxlights-1.0.0.jar%23630!/:?] {re:classloading}
+		at TRANSFORMER/neoforge@21.1.233/net.neoforged.neoforge.registries.DeferredRegister.lambda$register$0(DeferredRegister.java:215) ~[neoforge-21.1.233-universal.jar%23426!/:?] {re:mixin,re:classloading,pl:mixin:APP:veil.neoforge.mixins.json:DeferredRegisterMixin from mod veil,pl:mixin:APP:yumi_mc_core.neoforge.mixins.json:DeferredRegisterMixin from mod yumi_mc_core,pl:mixin:A}
+		at TRANSFORMER/neoforge@21.1.233/net.neoforged.neoforge.registries.DeferredRegister.lambda$register$1(DeferredRegister.java:234) ~[neoforge-21.1.233-universal.jar%23426!/:?] {re:mixin,re:classloading,pl:mixin:APP:veil.neoforge.mixins.json:DeferredRegisterMixin from mod veil,pl:mixin:APP:yumi_mc_core.neoforge.mixins.json:DeferredRegisterMixin from mod yumi_mc_core,pl:mixin:A}
+		at TRANSFORMER/neoforge@21.1.233/net.neoforged.neoforge.registries.DeferredRegister.lambda$addEntries$2(DeferredRegister.java:375) ~[neoforge-21.1.233-universal.jar%23426!/:?] {re:mixin,re:classloading,pl:mixin:APP:veil.neoforge.mixins.json:DeferredRegisterMixin from mod veil,pl:mixin:APP:yumi_mc_core.neoforge.mixins.json:DeferredRegisterMixin from mod yumi_mc_core,pl:mixin:A}
+[... 17 lines omitted ...]
+
+	Mod file: /home/player/Documents/@/1.21.1 create aeronautics 2/mods/noxlights-1.0.0.jar
+	Failure message: Nox Lights (noxlights) encountered an error while dispatching the net.neoforged.neoforge.registries.RegisterEvent event
+		java.lang.BootstrapMethodError: java.lang.RuntimeException: Attempted to load class net/minecraft/client/particle/ParticleRenderType for invalid dist DEDICATED_SERVER
+	Mod version: 1.0.0
+	Mod issues URL: <No issues URL found>
+	Exception message: java.lang.RuntimeException: Attempted to load class net/minecraft/client/particle/ParticleRenderType for invalid dist DEDICATED_SERVER
+Stacktrace:
+	at MC-BOOTSTRAP/fml_loader@4.0.42/net.neoforged.fml.common.asm.RuntimeDistCleaner.processClassWithFlags(RuntimeDistCleaner.java:60) ~[loader-4.0.42.jar%2359!/:4.0] {}
+[... 43 lines omitted ...]
+	Minecraft Version: 1.21.1
+[... 321 lines omitted ...]
+		neoforge: NeoForge v21.1.233

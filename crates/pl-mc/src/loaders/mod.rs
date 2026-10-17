@@ -3,6 +3,8 @@
 //!
 //! - [`list_loader_versions`]: installable loader versions for a Minecraft version, newest first,
 //!   cached in `meta/loaders/` so the list also works offline.
+//! - [`supported_minecraft_versions`]: which Minecraft versions a loader has builds for (the
+//!   version selector of an instance), cached the same way.
 //! - [`install_loader`]: writes the loader profile `versions/<id>/<id>.json` (inheriting from the
 //!   vanilla version), runs the loader's own install steps (Forge/NeoForge installers) and the
 //!   core `install_version`, and returns the version id to launch.
@@ -21,7 +23,8 @@ use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 
-pub use listing::{LoaderVersion, list_loader_versions};
+pub(crate) use forge::installer_outputs_blocking;
+pub use listing::{LoaderVersion, list_loader_versions, supported_minecraft_versions};
 
 use crate::error::{Error, Result};
 use crate::install::{InstallOptions, McContext};
@@ -58,6 +61,18 @@ impl LoaderKind {
             Self::Quilt => Some("quilt-loader"),
             Self::Forge => Some("forge"),
             Self::NeoForge => Some("neoforge"),
+        }
+    }
+
+    /// The inverse of [`Self::modrinth_name`]; an empty name is vanilla, an unknown one `None`.
+    pub fn from_modrinth_name(name: &str) -> Option<Self> {
+        match name.trim().to_ascii_lowercase().as_str() {
+            "" | "vanilla" | "minecraft" => Some(Self::Vanilla),
+            "fabric" => Some(Self::Fabric),
+            "quilt" => Some(Self::Quilt),
+            "forge" => Some(Self::Forge),
+            "neoforge" => Some(Self::NeoForge),
+            _ => None,
         }
     }
 
@@ -205,6 +220,20 @@ mod tests {
             assert_eq!(LoaderKind::from_mrpack_dependency_key(key), Some(kind));
         }
         assert_eq!(LoaderKind::Vanilla.mrpack_dependency_key(), None);
+        for kind in [
+            LoaderKind::Fabric,
+            LoaderKind::Quilt,
+            LoaderKind::Forge,
+            LoaderKind::NeoForge,
+        ] {
+            let name = kind.modrinth_name().unwrap();
+            assert_eq!(LoaderKind::from_modrinth_name(name), Some(kind));
+        }
+        assert_eq!(
+            LoaderKind::from_modrinth_name(""),
+            Some(LoaderKind::Vanilla)
+        );
+        assert_eq!(LoaderKind::from_modrinth_name("liteloader"), None);
     }
 
     #[test]

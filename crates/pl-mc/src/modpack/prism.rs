@@ -135,6 +135,26 @@ pub(crate) fn import_prism_archive<R: Read + Seek>(
     game_dir: &Path,
     cancel: &CancellationToken,
 ) -> Result<ImportedInstance> {
+    let (mut instance, game_prefix) = describe_prism_archive(archive, archive_path)?;
+    let mut report = ExtractReport::default();
+    extract_prefix(
+        archive,
+        archive_path,
+        &game_prefix,
+        game_dir,
+        cancel,
+        &mut report,
+    )?;
+    instance.apply_report(report);
+    Ok(instance)
+}
+
+/// Read what a Prism/MultiMC export describes without extracting anything. Returns the
+/// instance and the archive prefix of its game directory.
+pub(crate) fn describe_prism_archive<R: Read + Seek>(
+    archive: &mut ZipArchive<R>,
+    archive_path: &Path,
+) -> Result<(ImportedInstance, String)> {
     let names = entry_names(archive);
     let root = find_root(&names, "instance.cfg")
         .ok_or_else(|| Error::archive(archive_path, "instance.cfg not found"))?;
@@ -194,15 +214,6 @@ pub(crate) fn import_prism_archive<R: Read + Seek>(
     } else {
         format!("{root}minecraft/")
     };
-    let mut report = ExtractReport::default();
-    extract_prefix(
-        archive,
-        archive_path,
-        &game_prefix,
-        game_dir,
-        cancel,
-        &mut report,
-    )?;
 
     let name = cfg
         .get("name")
@@ -238,8 +249,7 @@ pub(crate) fn import_prism_archive<R: Read + Seek>(
             read_png_limited(entry, MAX_ICON_BYTES)
         });
     instance.unsupported = unsupported;
-    instance.apply_report(report);
-    Ok(instance)
+    Ok((instance, game_prefix))
 }
 
 pub(crate) fn import_prism_blocking(

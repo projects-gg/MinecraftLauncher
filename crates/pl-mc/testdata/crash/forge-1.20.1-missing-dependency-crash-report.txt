@@ -1,0 +1,38 @@
+# source: https://github.com/Octo-Studios/perception/issues/11
+# loader: Forge 47.3.29, minecraft: 1.20.1 (ZalithLauncher on Android)
+# note: the mojibake in the Mod File names is in the original (emoji in the jar names)
+---- Minecraft Crash Report ----
+// Everything's going to plan. No, really, that was supposed to happen.
+
+Time: 2025-03-07 10:34:09
+Description: Mod loading error has occurred
+
+java.lang.Exception: Mod Loading has failed
+[... 28 lines omitted ...]
+-- Head --
+Thread: Render thread
+Suspected Mods: NONE
+Stacktrace:
+	at net.minecraftforge.logging.CrashReportExtender.lambda$dumpModLoadingCrashReport$7(CrashReportExtender.java:63) ~[forge-1.20.1-47.3.29-universal.jar%23131!/:?] {re:classloading}
+-- MOD perception --
+Details:
+	Mod File: /storage/emulated/0/Android/data/com.movtery.zalithlauncher/files/.minecraft/versions/1.20.1 Forge/mods/ðŸŽ¥âœ¨ Perception-FORGE-0.1.2.1+1.20.1.jar
+	Failure message: Mod perception requires architectury 9.2.14 or above
+		Currently, architectury is not installed
+	Mod Version: 0.1.2.1
+	Mod Issue URL: https://github.com/Octo-Studios/perception/issues
+	Exception message: MISSING EXCEPTION MESSAGE
+Stacktrace:
+[... 27 lines omitted ...]
+-- MOD octolib --
+Details:
+	Mod File: /storage/emulated/0/Android/data/com.movtery.zalithlauncher/files/.minecraft/versions/1.20.1 Forge/mods/ðŸŽ¥âœ¨ OctoLib-FORGE-0.5.0.1+1.20.1.jar
+	Failure message: Mod octolib requires architectury 9.2.14 or above
+		Currently, architectury is not installed
+	Mod Version: 0.5.0.1
+	Mod Issue URL: https://github.com/SSKirillSS/octo-lib/issues
+	Exception message: MISSING EXCEPTION MESSAGE
+[... 1 lines omitted ...]
+-- System Details --
+Details:
+	Minecraft Version: 1.20.1

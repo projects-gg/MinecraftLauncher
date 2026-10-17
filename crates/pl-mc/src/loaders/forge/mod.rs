@@ -29,8 +29,8 @@ use crate::install::{InstallOptions, InstallStage, McContext};
 use crate::java::{EnsureJavaOptions, ensure_java};
 use crate::loaders::LoaderKind;
 use crate::loaders::common::{
-    Progress, check_cancel, console_java, download, existing_profile, finish, manifest_for,
-    prepare_profile, verify_mode, write_profile,
+    Progress, check_cancel, console_java, download, download_reporting, existing_profile, finish,
+    manifest_for, prepare_profile, verify_mode, write_profile,
 };
 use crate::loaders::listing::{
     Endpoints, FORGE_MAVEN_URL, NEOFORGE_LEGACY_MC, NEOFORGE_MAVEN_URL, NeoForgeFilter,
@@ -48,6 +48,16 @@ use marker::Marker;
 use processors::{
     DataValue, Environment, Invocation, build_tokens, client_data, plan_invocation, run_invocation,
 };
+
+/// Files the Forge/NeoForge installer step of profile `id` placed in the data folder (from its
+/// `projects-loader.json` marker), relative to the data root and `/`-separated. `None` when the
+/// profile has no readable marker.
+pub(crate) fn installer_outputs_blocking(dirs: &DataDirs, id: &str) -> Option<Vec<String>> {
+    let path = dirs.version_dir(id).ok()?.join(marker::MARKER_FILE);
+    let bytes = std::fs::read(path).ok()?;
+    let marker: Marker = serde_json::from_slice(&bytes).ok()?;
+    Some(marker.files.into_iter().map(|file| file.path).collect())
+}
 
 /// What is being installed.
 #[derive(Debug, Clone)]
@@ -135,6 +145,13 @@ pub(crate) struct Outcome {
     pub files: Vec<PathBuf>,
     /// Known SHA-1s of some of `files` (just verified or extracted).
     pub known: HashMap<PathBuf, String>,
+}
+
+/// Loader progress of an installer run: steps done before the processors, and all steps.
+#[derive(Clone, Copy)]
+struct Steps {
+    done: usize,
+    total: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -249,7 +266,9 @@ async fn fetch_installer(
         return Ok((path, false));
     }
     check_cancel(options)?;
-    Progress::new(options).stage(InstallStage::Metadata);
+    // The first loader step; how many follow is known once the installer is read.
+    let progress = Progress::new(options);
+    progress.loader(0, 0);
     let url = coord.url(target.maven_base());
     let (checksum, missing) = match ctx.http.get_text(&format!("{url}.sha1")).await {
         Ok(text) => (parse_sha1(&text).map(Checksum::sha1), false),
@@ -266,7 +285,8 @@ async fn fetch_installer(
             .map_err(|e| Error::io(&path, e))?;
     }
     let item = DownloadItem::new(&url, &path).checksum(checksum);
-    match download(ctx, vec![item], InstallStage::Metadata, options).await {
+    let reporting = progress.loader_download_fn(0, 0);
+    match download_reporting(ctx, vec![item], reporting, options).await {
         Ok(()) => Ok((path, true)),
         Err(error) if missing && !error.is_cancelled() => {
             tracing::warn!(%error, %url, "installer not found");
@@ -310,7 +330,6 @@ async fn install_modern(
     let version: VersionJson =
         serde_json::from_value(profile_value.clone()).map_err(|e| Error::json(what, e))?;
     let progress = Progress::new(options);
-    progress.stage(InstallStage::Libraries);
 
     // Libraries of both files: install_profile ones are downloaded here (processor tools and,
     // since 1.17, jars FML loads by coordinate); empty URLs are shipped in `maven/` or made by
@@ -354,17 +373,27 @@ async fn install_modern(
             );
         }
     }
-    for extracted in extract(installer, extractions).await? {
-        known.insert(extracted.dest.clone(), extracted.sha1);
-        files.push(extracted.dest);
-    }
-    download(ctx, downloads, InstallStage::Libraries, options).await?;
-
     let processors: Vec<&Processor> = profile
         .processors
         .iter()
         .filter(|p| p.runs_on_client())
         .collect();
+    // Loader steps: the installer (done), each extracted or downloaded library, each processor.
+    let steps = Steps {
+        done: 1 + extractions.len() + downloads.len(),
+        total: 1 + extractions.len() + downloads.len() + processors.len(),
+    };
+    progress.loader(1, steps.total);
+    let downloaded_from = 1 + extractions.len();
+    for extracted in extract(installer, extractions).await? {
+        known.insert(extracted.dest.clone(), extracted.sha1);
+        files.push(extracted.dest);
+    }
+    progress.loader(downloaded_from, steps.total);
+    let reporting = progress.loader_download_fn(downloaded_from, steps.total);
+    download_reporting(ctx, downloads, reporting, options).await?;
+    progress.loader(steps.done, steps.total);
+
     if !processors.is_empty() {
         let data = client_data(&profile.data, &dirs.libraries())?;
         let previous = marker::read(dirs, &target.id)
@@ -384,7 +413,8 @@ async fn install_modern(
                 }
             }
             _ => {
-                let outputs = run_processors(job, &profile, &processors, &data, manifest).await?;
+                let outputs =
+                    run_processors(job, &profile, &processors, &data, manifest, steps).await?;
                 files.extend(outputs);
             }
         }
@@ -393,6 +423,7 @@ async fn install_modern(
             _ => None,
         }));
     }
+    progress.loader(steps.total, steps.total);
     Ok(Outcome {
         profile: profile_value,
         files,
@@ -493,13 +524,15 @@ async fn check_outputs(invocation: &Invocation) -> Result<()> {
     Ok(())
 }
 
-/// Run the client processors; returns their declared outputs.
+/// Run the client processors; returns their declared outputs. Each processor is one loader step
+/// after `steps.done`.
 async fn run_processors(
     job: Job<'_>,
     profile: &ModernProfile,
     processors: &[&Processor],
     data: &[(String, DataValue)],
     manifest: &VersionManifest,
+    steps: Steps,
 ) -> Result<Vec<PathBuf>> {
     let Job {
         ctx,
@@ -569,7 +602,7 @@ async fn run_processors(
     let mut outputs = Vec::new();
     for (index, processor) in processors.iter().enumerate() {
         check_cancel(options)?;
-        progress.files(InstallStage::Libraries, index, total);
+        progress.loader(steps.done + index, steps.total);
         let invocation = plan_invocation(processor, &tokens, &libraries)?;
         outputs.extend(invocation.outputs.iter().map(|(path, _)| path.clone()));
         if !invocation.outputs.is_empty() && outputs_match(&invocation.outputs).await {
@@ -601,7 +634,7 @@ async fn run_processors(
             "installer step finished"
         );
     }
-    progress.files(InstallStage::Libraries, total, total);
+    progress.loader(steps.done + total, steps.total);
     tracing::info!(
         id = %target.id,
         processors = total,

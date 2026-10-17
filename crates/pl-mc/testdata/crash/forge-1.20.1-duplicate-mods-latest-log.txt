@@ -1,0 +1,10 @@
+# source: https://github.com/aternosorg/codex-minecraft/blob/master/test/data/Vanilla/Forge/forge-1-20-1-duplicate-mods.log
+# loader: Forge 47.4.0, minecraft: 1.20.1 (client, Prism Launcher)
+[14Apr2025 11:43:03.532] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher running: args [--username, Player, --version, 1.20.1, --gameDir, /home/player/.local/share/PrismLauncher/instances/Duplicate Mods Test/minecraft, --assetsDir, /home/player/.local/share/PrismLauncher/assets, --assetIndex, 5, --uuid, 00000000000000000000000000000000, --accessToken, [redacted], --userType, msa, --versionType, release, --launchTarget, forgeclient, --fml.forgeVersion, 47.4.0, --fml.mcVersion, 1.20.1, --fml.forgeGroup, net.minecraftforge, --fml.mcpVersion, 20230612.114412, --width, 854, --height, 480]
+[14Apr2025 11:43:03.534] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher 10.0.9+10.0.9+main.dcd20f30 starting: java version 17.0.12 by JetBrains s.r.o.; OS Linux arch amd64 version 6.13.8-200.fc41.x86_64
+[... 23 lines omitted ...]
+[14Apr2025 11:43:04.120] [main/ERROR] [net.minecraftforge.fml.loading.UniqueModListBuilder/LOADING]: Found duplicate mods:
+	Mod ID: 'rubidium' from mod files: rubidium-mc1.20.1-0.7.1.jar, embeddium-0.3.31+mc1.20.1.jar
+[14Apr2025 11:43:04.121] [main/ERROR] [net.minecraftforge.fml.loading.moddiscovery.ModDiscoverer/SCAN]: Failed to build unique mod list after mod discovery.
+net.minecraftforge.fml.loading.EarlyLoadingException: Duplicate mods found
+	at net.minecraftforge.fml.loading.UniqueModListBuilder.buildUniqueList(UniqueModListBuilder.java:87) ~[fmlloader-1.20.1-47.4.0.jar:1.0]

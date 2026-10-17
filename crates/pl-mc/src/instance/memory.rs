@@ -130,6 +130,74 @@ pub fn recommended_memory(total_mb: u64, modded: bool) -> MemorySettings {
     }
 }
 
+/// The most "Otomatik" ever gives the game: more rarely helps and lengthens garbage collection
+/// pauses.
+pub const AUTO_MAX_MB: u32 = 10 * 1024;
+
+/// What "Otomatik" wants for an instance before the machine's limit: vanilla by RAM, modded by
+/// the number of enabled mods.
+fn auto_wanted_mb(total_gb: u64, modded: bool, mods: usize) -> u32 {
+    if !modded {
+        return match total_gb {
+            16.. => 4096,
+            8.. => 3072,
+            _ => 2048,
+        };
+    }
+    match mods {
+        0..=15 => 3072,
+        16..=50 => 4096,
+        51..=100 => 5120,
+        101..=160 => 6144,
+        161..=250 => 8192,
+        _ => AUTO_MAX_MB,
+    }
+}
+
+/// How much the machine can give the game and still run the system, a browser and Discord:
+/// half of the RAM up to 8 GB, the RAM minus 6 GB above that (never less than half).
+fn auto_ceiling_mb(total_mb: u64) -> u32 {
+    let gb = total_mb.div_ceil(1024).max(1);
+    let ram = gb * 1024;
+    let spare = if gb <= 8 {
+        ram / 2
+    } else {
+        (ram - 6 * 1024).max(ram / 2)
+    };
+    let limits = memory_limits(total_mb);
+    u32::try_from(spare)
+        .unwrap_or(u32::MAX)
+        .min(limits.max_ceiling_mb)
+}
+
+/// "Otomatik" memory: grows with the enabled mods (or the RAM, for vanilla) and stays within
+/// what the machine can spare, in 512 MB steps, between 1 GB and [`AUTO_MAX_MB`].
+pub fn auto_memory(total_mb: u64, modded: bool, enabled_mods: usize) -> MemorySettings {
+    let gb = total_mb.div_ceil(1024).max(1);
+    let wanted = auto_wanted_mb(gb, modded, enabled_mods);
+    let max_mb =
+        (wanted.min(auto_ceiling_mb(total_mb)) / 512 * 512).clamp(MIN_HEAP_FLOOR_MB, AUTO_MAX_MB);
+    MemorySettings {
+        min_mb: MIN_HEAP_FLOOR_MB.min(max_mb),
+        max_mb,
+    }
+}
+
+/// "Otomatik" memory raised to a modpack's own recommendation, as far as the machine can spare
+/// (the pack's author knows what it needs; the cap still protects small machines).
+pub fn auto_memory_at_least(
+    memory: MemorySettings,
+    wanted_mb: u32,
+    total_mb: u64,
+) -> MemorySettings {
+    let reachable = wanted_mb.min(auto_ceiling_mb(total_mb)) / 512 * 512;
+    let max_mb = memory.max_mb.max(reachable);
+    MemorySettings {
+        min_mb: memory.min_mb.min(max_mb),
+        max_mb,
+    }
+}
+
 /// Bring settings back inside the limits (what the legacy launcher did when a field was left
 /// with an invalid value).
 pub fn clamp_memory(settings: &MemorySettings, total_mb: u64) -> MemorySettings {
@@ -289,5 +357,60 @@ mod tests {
             }
         );
         assert!(system_memory_mb() > 0);
+    }
+
+    #[test]
+    fn automatic_memory() {
+        let gb = |n: u64| n * 1024 - 120;
+        let max = |total: u64, modded: bool, mods: usize| auto_memory(total, modded, mods).max_mb;
+        // Vanilla follows the RAM.
+        assert_eq!(max(gb(4), false, 0), 2048);
+        assert_eq!(max(gb(8), false, 0), 3072);
+        assert_eq!(max(gb(16), false, 0), 4096);
+        assert_eq!(max(gb(64), false, 0), 4096);
+        // Modded follows the mods, within what the machine can spare.
+        assert_eq!(max(gb(16), true, 0), 3072);
+        assert_eq!(max(gb(16), true, 12), 3072);
+        assert_eq!(max(gb(16), true, 40), 4096);
+        assert_eq!(max(gb(16), true, 90), 5120);
+        assert_eq!(max(gb(16), true, 150), 6144);
+        assert_eq!(max(gb(16), true, 220), 8192);
+        assert_eq!(max(gb(16), true, 400), 10240);
+        assert_eq!(max(gb(64), true, 900), AUTO_MAX_MB);
+        // Small machines: half of the RAM at most.
+        assert_eq!(max(gb(8), true, 220), 4096);
+        assert_eq!(max(gb(6), true, 90), 3072);
+        assert_eq!(max(gb(4), true, 90), 2048);
+        assert_eq!(max(gb(2), true, 90), 1024);
+        assert_eq!(max(gb(12), true, 220), 6144);
+        // More mods never means less memory, and the result is always a valid setting.
+        for total in [gb(2), gb(4), gb(6), gb(8), gb(12), gb(16), gb(32), gb(64)] {
+            let mut previous = 0;
+            for mods in [0, 1, 15, 16, 50, 51, 100, 101, 160, 161, 250, 251, 1000] {
+                let auto = auto_memory(total, true, mods);
+                assert!(auto.max_mb >= previous, "{total} {mods}");
+                assert_eq!(auto.max_mb % 512, 0);
+                assert!(
+                    validate_memory(&auto, total).is_valid(),
+                    "{total} {mods} {auto:?}"
+                );
+                previous = auto.max_mb;
+            }
+            assert!(validate_memory(&auto_memory(total, false, 0), total).is_valid());
+        }
+    }
+
+    #[test]
+    fn pack_recommendation_raises_automatic_memory() {
+        let gb = |n: u64| n * 1024 - 120;
+        let auto = auto_memory(gb(16), true, 40);
+        assert_eq!(auto.max_mb, 4096);
+        assert_eq!(auto_memory_at_least(auto, 6144, gb(16)).max_mb, 6144);
+        // Never past what the machine can spare, never below what "Otomatik" picked.
+        assert_eq!(auto_memory_at_least(auto, 12_000, gb(16)).max_mb, 10240);
+        assert_eq!(auto_memory_at_least(auto, 2048, gb(16)).max_mb, 4096);
+        let small = auto_memory(gb(8), true, 40);
+        assert_eq!(auto_memory_at_least(small, 6144, gb(8)).max_mb, 4096);
+        assert!(validate_memory(&auto_memory_at_least(auto, 6000, gb(16)), gb(16)).is_valid());
     }
 }

@@ -12,10 +12,11 @@ use super::resolve::pick_best;
 use super::*;
 use crate::loaders::LoaderKind;
 
-type Handler = Arc<dyn Fn(&str, &Url) -> (u16, Vec<(&'static str, String)>, String) + Send + Sync>;
+pub(crate) type Handler =
+    Arc<dyn Fn(&str, &Url) -> (u16, Vec<(&'static str, String)>, String) + Send + Sync>;
 
 /// Minimal HTTP/1.1 server: one request per connection, routed through `handler`.
-async fn mock_api(handler: Handler) -> String {
+pub(crate) async fn mock_api(handler: Handler) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     tokio::spawn(async move {
@@ -75,15 +76,15 @@ async fn mock_api(handler: Handler) -> String {
     format!("http://{addr}/v2")
 }
 
-fn client_for(base: &str) -> ModrinthClient {
+pub(crate) fn client_for(base: &str) -> ModrinthClient {
     ModrinthClient::with_base_url(Http::new(HttpConfig::new("pl-mc-tests")).unwrap(), base)
 }
 
-fn dep(project: Option<&str>, version: Option<&str>, kind: &str) -> Value {
+pub(crate) fn dep(project: Option<&str>, version: Option<&str>, kind: &str) -> Value {
     json!({"project_id": project, "version_id": version, "file_name": null, "dependency_type": kind})
 }
 
-fn version_json(id: &str, project: &str, kind: &str, deps: Value, sha1: &str) -> Value {
+pub(crate) fn version_json(id: &str, project: &str, kind: &str, deps: Value, sha1: &str) -> Value {
     json!({
         "id": id, "project_id": project, "author_id": "author", "name": format!("Version {id}"),
         "version_number": "1.0.0", "changelog": null, "changelog_url": null,

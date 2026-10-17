@@ -75,6 +75,25 @@ impl MrFile {
     pub fn client_support(&self) -> MrEnvSupport {
         self.env.map_or(MrEnvSupport::Required, |env| env.client)
     }
+
+    /// The Modrinth project of the file, read from its download link
+    /// (`https://cdn.modrinth.com/data/<project>/versions/<version>/<file>`).
+    pub fn modrinth_project(&self) -> Option<String> {
+        self.downloads.iter().find_map(|url| {
+            let id = url
+                .strip_prefix("https://cdn.modrinth.com/data/")?
+                .split('/')
+                .next()?;
+            (!id.is_empty() && id.len() <= 64 && id.chars().all(|c| c.is_ascii_alphanumeric()))
+                .then(|| id.to_owned())
+        })
+    }
+
+    /// What names an optional file across versions of a pack (a player's choice to leave it out
+    /// is kept by it): its Modrinth project, else its path.
+    pub fn optional_key(&self) -> String {
+        self.modrinth_project().unwrap_or_else(|| self.path.clone())
+    }
 }
 
 impl MrIndex {
@@ -197,7 +216,10 @@ fn open_archive(path: &Path) -> Result<ZipArchive<BufReader<File>>> {
     ZipArchive::new(BufReader::new(file)).map_err(|e| Error::archive(path, e))
 }
 
-fn read_index(archive: &mut ZipArchive<BufReader<File>>, path: &Path) -> Result<MrIndex> {
+pub(crate) fn read_index(
+    archive: &mut ZipArchive<BufReader<File>>,
+    path: &Path,
+) -> Result<MrIndex> {
     let json = read_entry_string(archive, MRPACK_INDEX, MAX_INDEX_BYTES)
         .ok_or_else(|| Error::archive(path, format!("{MRPACK_INDEX} is missing")))?;
     MrIndex::parse(&json)

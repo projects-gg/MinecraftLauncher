@@ -6,8 +6,10 @@
 mod curseforge;
 mod extract;
 mod mrpack;
+mod preview;
 mod prism;
 pub mod safe_path;
+mod update;
 
 use std::fs::File;
 use std::io::BufReader;
@@ -26,7 +28,13 @@ pub use mrpack::{
     MrpackWriteSummary, identify_hosted_files, import_mrpack, mrpack_download_items,
     read_mrpack_index, write_mrpack,
 };
+pub use preview::{PackOptionalFile, PackPreview, preview_pack};
 pub use prism::import_prism;
+pub use update::{
+    HashCache, KeptReason, MODPACK_STATE_FILE, ModpackState, OnDisk, PackContents, PackFile,
+    PackFileSource, UpdatePlan, disk_state, pack_update_candidate, plan_update, read_pack_contents,
+    remove_dropped, update_download_items, write_bundled,
+};
 
 use crate::error::{Error, Result};
 use crate::gamefiles::fsops::blocking;
@@ -123,7 +131,10 @@ impl ImportedInstance {
     }
 }
 
-fn detect_in(archive: &mut ZipArchive<BufReader<File>>) -> Option<ModpackFormat> {
+/// The pack format of an open archive (also used by drag-and-drop to recognize packs).
+pub(crate) fn detect_in<R: std::io::Read + std::io::Seek>(
+    archive: &mut ZipArchive<R>,
+) -> Option<ModpackFormat> {
     let names = extract::entry_names(archive);
     if names.iter().any(|n| n == MRPACK_INDEX) {
         return Some(ModpackFormat::Mrpack);

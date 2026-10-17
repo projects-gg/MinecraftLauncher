@@ -1,0 +1,27 @@
+# source: https://github.com/cao-awa/Sepals/issues/41 (attachment https://github.com/user-attachments/files/23501090/crash-2025-11-12_21.21.30-fml.txt)
+# loader: NeoForge 21.1.214 (FML 4.x), minecraft: 1.21.1
+# note: latest.log of the same pin in Sepals#56 logs: Mod ID: 'neoforge', Requested by: 'sepals', Expected range: '[21.1.132,21.1.132]', Actual version: '21.1.230'
+---- Minecraft Crash Report ----
+// I bet Cylons wouldn't have this problem.
+
+Time: 2025-11-12 21:21:30
+Description: Mod loading failures have occurred; consult the issue messages for more details
+
+net.neoforged.neoforge.logging.CrashReportExtender$ModLoadingCrashException: Mod loading has failed
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- Mod loading issue for: sepals --
+Details:
+	Mod file: /C:/Users/Player/Desktop/Minecraft/.minecraft/versions/NeoForge 1.21.1/mods/Sepals-neoforge-1.0.15.jar
+	Failure message: Mod sepals requires neoforge 21.1.132
+		Currently, neoforge is 21.1.214
+		
+	Mod version: 1.0.15
+	Mod issues URL: https://github.com/cao-awa/sepals/issues
+	Exception message: <No associated exception found>
+[... 3 lines omitted ...]
+	Minecraft Version: 1.21.1
+	Minecraft Version ID: 1.21.1

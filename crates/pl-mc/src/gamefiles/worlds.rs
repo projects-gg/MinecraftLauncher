@@ -137,6 +137,31 @@ fn parse_level_dat(bytes: &[u8]) -> Option<LevelSummary> {
     })
 }
 
+/// The world's own name (`LevelName`) from `level.dat` bytes (gzip or raw NBT).
+pub(crate) fn level_name_from_bytes(bytes: &[u8]) -> Option<String> {
+    parse_level_dat(bytes)?.name
+}
+
+/// The world's own name (`LevelName`) of a world folder.
+pub(crate) fn level_name(world_dir: &Path) -> Option<String> {
+    read_level_file(world_dir)?.name
+}
+
+/// Name (`LevelName`, else the folder name) and last played time (`LastPlayed`, else the
+/// `level.dat` time) of a world folder, without measuring the folder. `None` without a readable
+/// `level.dat`.
+pub(crate) fn world_summary(world_dir: &Path) -> Option<(String, Option<i64>)> {
+    let summary = read_level_file(world_dir)?;
+    let folder_name = world_dir
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let last_played = summary
+        .last_played
+        .or_else(|| modified_ms(&std::fs::metadata(world_dir.join("level.dat")).ok()?));
+    Some((summary.name.unwrap_or(folder_name), last_played))
+}
+
 fn read_level_file(world_dir: &Path) -> Option<LevelSummary> {
     ["level.dat", "level.dat_old"].iter().find_map(|name| {
         let path = world_dir.join(name);

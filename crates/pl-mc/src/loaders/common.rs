@@ -16,9 +16,11 @@ use crate::version::{
     resolve_version,
 };
 
-/// Progress reporting for loader work. `InstallStage` has no loader-specific stage, so the
-/// installers report `Metadata` (profiles, installers), `Libraries` (installer libraries and
-/// processors, counted as files), `Java` and `Client` (what processors need).
+/// Progress reporting for loader work. The loader's own work (profile, installer, installer
+/// libraries, processors) is [`InstallStage::Loader`], counted in steps so its bar only moves
+/// forward ([`Self::loader`], [`Self::loader_download_fn`]): one per installer file and one per
+/// processor. The Java runtime and the client jar the processors need report `Java` and `Client`
+/// like the core install does.
 pub(super) struct Progress<'a> {
     options: &'a InstallOptions,
 }
@@ -26,6 +28,29 @@ pub(super) struct Progress<'a> {
 impl<'a> Progress<'a> {
     pub fn new(options: &'a InstallOptions) -> Self {
         Self { options }
+    }
+
+    /// `done` of `total` loader steps (`total` 0: not known yet).
+    pub fn loader(&self, done: usize, total: usize) {
+        self.files(InstallStage::Loader, done.min(total), total);
+    }
+
+    /// Loader steps while files download: `done` steps before this download plus its finished
+    /// files, of `total`, with the download speed (no byte counts, which would restart the bar).
+    pub fn loader_download_fn(&self, done: usize, total: usize) -> Option<ProgressFn> {
+        self.options.progress.clone().map(|progress| {
+            Arc::new(move |download: DownloadProgress| {
+                progress(InstallProgress {
+                    stage: InstallStage::Loader,
+                    download: DownloadProgress {
+                        total_files: total,
+                        done_files: (done + download.done_files).min(total),
+                        bytes_per_sec: download.bytes_per_sec,
+                        ..DownloadProgress::default()
+                    },
+                })
+            }) as ProgressFn
+        })
     }
 
     pub fn report(&self, stage: InstallStage, download: DownloadProgress) {
@@ -88,6 +113,17 @@ pub(super) async fn download(
     stage: InstallStage,
     options: &InstallOptions,
 ) -> Result<()> {
+    let progress = Progress::new(options).download_fn(stage);
+    download_reporting(ctx, items, progress, options).await
+}
+
+/// [`download`] reporting through `progress` (loader steps, see [`Progress`]).
+pub(super) async fn download_reporting(
+    ctx: &McContext,
+    items: Vec<DownloadItem>,
+    progress: Option<ProgressFn>,
+    options: &InstallOptions,
+) -> Result<()> {
     check_cancel(options)?;
     if items.is_empty() {
         return Ok(());
@@ -96,7 +132,7 @@ pub(super) async fn download(
         concurrency: options.concurrency.max(1),
         verify: verify_mode(options),
         cancel: options.cancel.clone(),
-        progress: Progress::new(options).download_fn(stage),
+        progress,
         progress_interval: Duration::from_millis(120),
     };
     ctx.downloader
@@ -209,6 +245,51 @@ pub(super) fn console_java(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn loader_progress_counts_steps_and_never_goes_back() {
+        let seen = Arc::new(std::sync::Mutex::new(Vec::<InstallProgress>::new()));
+        let sink = Arc::clone(&seen);
+        let options = InstallOptions {
+            progress: Some(Arc::new(move |p| sink.lock().unwrap().push(p))),
+            ..InstallOptions::default()
+        };
+        let progress = Progress::new(&options);
+        progress.loader(1, 10);
+        let download = progress.loader_download_fn(3, 10).unwrap();
+        download(DownloadProgress {
+            total_files: 4,
+            done_files: 2,
+            total_bytes: 500,
+            done_bytes: 300,
+            bytes_per_sec: 77,
+        });
+        download(DownloadProgress {
+            total_files: 4,
+            done_files: 9,
+            ..DownloadProgress::default()
+        });
+        progress.loader(12, 10);
+        let seen = seen.lock().unwrap();
+        assert!(seen.iter().all(|p| p.stage == InstallStage::Loader));
+        let steps: Vec<(usize, usize, u64, u64)> = seen
+            .iter()
+            .map(|p| {
+                let d = p.download;
+                (d.done_files, d.total_files, d.total_bytes, d.bytes_per_sec)
+            })
+            .collect();
+        assert_eq!(
+            steps,
+            vec![
+                (1, 10, 0, 0),
+                (5, 10, 0, 77),
+                (10, 10, 0, 0),
+                (10, 10, 0, 0)
+            ],
+            "steps only, the download's own bytes never restart the bar"
+        );
+    }
 
     #[test]
     fn profiles_get_our_id_and_parent() {

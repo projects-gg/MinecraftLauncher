@@ -1,0 +1,29 @@
+# source: https://github.com/Stardust-Labs-MC/Structory-Towers/issues/8 (attachment https://github.com/user-attachments/files/29843445/latest.log)
+# loader: NeoForge 21.1.235 (FML 4.0.42), minecraft: 1.21.1 (dedicated server)
+[09Jul2026 03:45:17.291] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher running: args [--launchTarget, forgeserver, --fml.neoForgeVersion, 21.1.235, --fml.fmlVersion, 4.0.42, --fml.mcVersion, 1.21.1, --fml.neoFormVersion, 20240808.144430]
+[... 919 lines omitted ...]
+[09Jul2026 03:45:24.661] [main/WARN] [mixin/]: @Mixin target fuzs.diagonalblocks.world.phys.shapes.VoxelCollection was not found snowrealmagic.mixins.json:diagonalblocks.VoxelCollectionAccess from mod snowrealmagic
+[... 3 lines omitted ...]
+[09Jul2026 03:45:24.846] [main/WARN] [mixin/]: @Mixin target com.teammetallurgy.aquaculture.entity.AquaFishingBobberEntity was not found littlejoys.neoforge.mixins.json:AquaFishingBobberEntityMixin from mod littlejoys
+[... 101 lines omitted ...]
+[09Jul2026 03:45:32.007] [main/WARN] [mixin/]: Method overwrite conflict for getTemperature in lithium.mixins.json:world.temperature_cache.BiomeMixin from mod lithium, previously written by org.embeddedt.modernfix.common.mixin.perf.remove_biome_temperature_cache.BiomeMixin. Skipping method.
+[... 3 lines omitted ...]
+[09Jul2026 03:45:35.212] [main/FATAL] [net.neoforged.fml.ModLoader/CORE]: Error during pre-loading phase: File /home/player/MC/testServer/mods/Structory_Towers_26.2_v1.0.17.jar is not a valid mod file
+[... 37 lines omitted ...]
+[09Jul2026 03:45:37.066] [main/FATAL] [net.neoforged.neoforge.server.loading.ServerModLoader/]: Crash report saved to ./crash-reports/crash-2026-07-09_03.45.37-fml.txt
+[... 4 lines omitted ...]
+Description: Mod loading failures have occurred; consult the issue messages for more details
+[... 11 lines omitted ...]
+-- Mod loading issue --
+Details:
+	Mod file: <No mod information provided>
+	Failure message: File /home/player/MC/testServer/mods/Structory_Towers_26.2_v1.0.17.jar is not a valid mod file
+	Mod version: <No mod information provided>
+	Mod issues URL: <No issues URL found>
+	Exception message: net.neoforged.neoforgespi.locating.InvalidModFileException: Missing ModLoader in file (Structory_Towers_26.2_v1.0.17.jar)
+Stacktrace:
+[... 425 lines omitted ...]
+	Suspected Mods: None
+[09Jul2026 03:45:37.306] [main/ERROR] [net.minecraft.server.Main/FATAL]: Failed to start the minecraft server
+net.neoforged.fml.ModLoadingException: Loading errors encountered:
+	- File /home/player/MC/testServer/mods/Structory_Towers_26.2_v1.0.17.jar is not a valid mod file

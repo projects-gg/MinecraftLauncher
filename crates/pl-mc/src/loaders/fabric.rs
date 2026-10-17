@@ -6,7 +6,7 @@ use pl_net::{NetError, VerifyMode};
 use serde_json::Value;
 
 use crate::error::{Error, Result};
-use crate::install::{InstallOptions, InstallStage, McContext};
+use crate::install::{InstallOptions, McContext};
 use crate::loaders::LoaderKind;
 use crate::loaders::common::{
     Progress, check_cancel, existing_profile, finish, manifest_for, prepare_profile, write_profile,
@@ -41,7 +41,8 @@ pub(super) async fn install(
             return Err(Error::Offline);
         }
         check_cancel(options)?;
-        progress.stage(InstallStage::Metadata);
+        // The profile is the loader's only own step; its libraries come with the core install.
+        progress.loader(0, 1);
         let url = profile_url(kind, mc, loader)?;
         match ctx.http.get_bytes(&url).await {
             Ok(bytes) => {
@@ -50,6 +51,7 @@ pub(super) async fn install(
                 let value =
                     prepare_profile(value, id, mc, &format!("{} profile", kind.display_name()))?;
                 write_profile(ctx, id, &value).await?;
+                progress.loader(1, 1);
                 tracing::info!(%id, "loader profile written");
             }
             Err(NetError::Status {

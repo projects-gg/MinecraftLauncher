@@ -1,8 +1,9 @@
-//! Starting the game and watching it: output is parsed into [`LogLine`]s, the last
-//! [`MAX_TAIL_LINES`] are kept in memory and everything is written to
+//! Starting the game and watching it: output is parsed into [`LogLine`]s and masked
+//! ([`masked_line`]), the last [`MAX_TAIL_LINES`] are kept in memory and everything is written to
 //! `logs/game-<instance>-<timestamp>.log` (capped at [`MAX_LOG_BYTES`]). Events go through a
 //! callback; when the run fails, the crash analyzer produces a [`CrashDiagnosis`].
 
+use std::borrow::Cow;
 use std::collections::VecDeque;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -23,6 +24,7 @@ use crate::launch::crash::{
     CrashDiagnosis, CrashInput, analyze_crash, find_crash_report, find_jvm_error_log, is_failure,
 };
 use crate::launch::log::{Log4jParser, LogLine};
+use crate::mask::mask_secrets;
 use crate::paths::write_atomic;
 
 /// Lines kept in memory for the log view and crash analysis.
@@ -159,8 +161,25 @@ struct Shared {
     on_event: GameEventFn,
 }
 
+/// The line with its secrets masked ([`mask_secrets`]): what the game prints is masked before it
+/// is written to the captured log, kept for crash analysis or handed to the event callback.
+pub fn masked_line(mut line: LogLine) -> LogLine {
+    if let Cow::Owned(message) = mask_secrets(&line.message) {
+        line.message = message;
+    }
+    for field in [&mut line.thread, &mut line.logger] {
+        if let Some(value) = field
+            && let Cow::Owned(masked) = mask_secrets(value)
+        {
+            *value = masked;
+        }
+    }
+    line
+}
+
 impl Shared {
     fn emit_line(&self, line: LogLine) {
+        let line = masked_line(line);
         self.log.lock().write(&line.format());
         let window = !self.window_shown.load(Ordering::Relaxed) && looks_like_window(&line.message);
         {
@@ -190,6 +209,20 @@ impl Shared {
             out.push('\n');
         }
         out
+    }
+}
+
+/// The executable the game is started with. On Windows `javaw.exe` becomes the `java.exe` next to
+/// it: when the JVM cannot start (a mistyped option, more memory than the computer can give),
+/// `javaw` reports it in a modal "Java Virtual Machine Launcher" box and exits only once the
+/// player closes it, while `java.exe` writes the same text to stderr (captured, so the crash
+/// dialog comes at once) and exits. `CREATE_NO_WINDOW` keeps its console hidden. Elsewhere the
+/// executable is used as it is.
+pub fn launch_program(program: &Path) -> PathBuf {
+    if cfg!(windows) {
+        crate::java::detect::console_java(program)
+    } else {
+        program.to_path_buf()
     }
 }
 
@@ -223,7 +256,8 @@ impl GameProcess {
             .await
             .map_err(|e| Error::io(&command.cwd, e))?;
         let (args, argfile) = prepare_args(command, &options).await?;
-        let mut cmd = tokio::process::Command::new(&command.program);
+        let program = launch_program(&command.program);
+        let mut cmd = tokio::process::Command::new(&program);
         cmd.args(&args)
             .current_dir(&command.cwd)
             .envs(&command.env)
@@ -233,9 +267,10 @@ impl GameProcess {
         #[cfg(windows)]
         cmd.creation_flags(crate::java::detect::CREATE_NO_WINDOW);
 
+        let shown = command.display_redacted_as(&program);
         let header = format!(
             "# Projects Launcher game log\n# command: {}",
-            command.display_redacted()
+            mask_secrets(&shown)
         );
         let sink = LogSink::open(&options.logs_dir, &options.instance_id, &header);
         let started = Instant::now();
@@ -248,12 +283,12 @@ impl GameProcess {
                 }
                 return Err(Error::Process(format!(
                     "cannot start {}: {e}",
-                    command.program.display()
+                    program.display()
                 )));
             }
         };
         let pid = child.id();
-        tracing::info!(?pid, command = %command.display_redacted(), "game started");
+        tracing::info!(?pid, command = %shown, "game started");
 
         let shared = Arc::new(Shared {
             tail: Mutex::new(VecDeque::with_capacity(512)),
@@ -289,6 +324,7 @@ impl GameProcess {
             started_at,
             game_dir: command.cwd.clone(),
             argfile,
+            player_jvm_args: command.player_jvm_options().to_vec(),
             options,
         }));
         Ok(Self {
@@ -377,6 +413,8 @@ struct Supervision {
     started_at: SystemTime,
     game_dir: PathBuf,
     argfile: Option<PathBuf>,
+    /// The JVM arguments the player typed (crash analysis).
+    player_jvm_args: Vec<String>,
     options: SpawnOptions,
 }
 
@@ -469,6 +507,7 @@ async fn supervise(mut s: Supervision) {
             java_major: s.options.java_major,
             required_java: s.options.required_java,
             max_memory_mb: s.options.max_memory_mb,
+            player_jvm_args: &s.player_jvm_args,
         });
         diagnosis.crash_report = report_path;
         diagnosis.log_file = log_file.clone();
@@ -496,6 +535,94 @@ fn read_report(path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn games_start_with_the_console_java_on_windows() {
+        let tmp = tempfile::tempdir().unwrap();
+        let bin = tmp.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let javaw = bin.join("javaw.exe");
+        std::fs::write(&javaw, b"").unwrap();
+        // Without a java.exe next to it, javaw stays.
+        assert_eq!(launch_program(&javaw), javaw);
+        let java = bin.join("java.exe");
+        std::fs::write(&java, b"").unwrap();
+        let expected = if cfg!(windows) { &java } else { &javaw };
+        assert_eq!(&launch_program(&javaw), expected);
+        // Other executables (a wrapper, java itself, macOS/Linux java) are left alone.
+        assert_eq!(launch_program(&java), java);
+        assert_eq!(
+            launch_program(Path::new("mangohud")),
+            PathBuf::from("mangohud")
+        );
+        let unix = tmp.path().join("bin").join("java");
+        assert_eq!(launch_program(&unix), unix);
+    }
+
+    /// A JVM that refuses one of the player's arguments exits at once; the run is reported with
+    /// "reset the Java arguments" as the fix.
+    #[tokio::test]
+    async fn a_refused_player_argument_is_reported_at_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (program, args, player) = if cfg!(windows) {
+            let script = tmp.path().join("fake-java.cmd");
+            std::fs::write(
+                &script,
+                "@echo Unrecognized VM option 'UseFancyThing' 1>&2\r\n@echo Error: Could not create the Java Virtual Machine. 1>&2\r\n@exit /b 1\r\n",
+            )
+            .unwrap();
+            (
+                PathBuf::from("cmd"),
+                vec![
+                    "/C".to_owned(),
+                    script.display().to_string(),
+                    "-XX:+UseFancyThing".to_owned(),
+                ],
+                2..3,
+            )
+        } else {
+            (
+                PathBuf::from("sh"),
+                vec![
+                    "-c".to_owned(),
+                    "echo \"Unrecognized VM option 'UseFancyThing'\" >&2; echo 'Error: Could not create the Java Virtual Machine.' >&2; exit 1".to_owned(),
+                    "sh".to_owned(),
+                    "-XX:+UseFancyThing".to_owned(),
+                ],
+                3..4,
+            )
+        };
+        let command = LaunchCommand::for_tests(program, args, tmp.path().join("game"))
+            .with_player_jvm_options(player);
+        assert_eq!(command.player_jvm_options(), ["-XX:+UseFancyThing"]);
+        let started = Instant::now();
+        let process = GameProcess::spawn(
+            &command,
+            SpawnOptions {
+                instance_id: "jvm".into(),
+                logs_dir: tmp.path().join("logs"),
+                max_memory_mb: Some(4096),
+                ..SpawnOptions::default()
+            },
+            Arc::new(|_| {}),
+        )
+        .await
+        .unwrap();
+        let exit = tokio::time::timeout(Duration::from_secs(10), process.wait())
+            .await
+            .unwrap();
+        assert_eq!(exit.code, Some(1));
+        let crash = exit.crash.unwrap();
+        assert_eq!(
+            crash.kind,
+            crate::launch::crash::CrashKind::InvalidJvmArgument
+        );
+        assert_eq!(
+            crash.suggested_actions[0],
+            crate::launch::crash::SuggestedAction::ResetJvmArguments
+        );
+        assert!(started.elapsed() < DRAIN_TIMEOUT, "{:?}", started.elapsed());
+    }
 
     #[test]
     fn window_markers() {
@@ -589,6 +716,95 @@ mod tests {
         );
         assert!(matches!(events.last(), Some(GameEvent::Crashed(_))));
         assert_eq!(process.tail().len(), 1);
+    }
+
+    /// Secrets the game prints never reach the captured log, the tail or the event callback.
+    #[tokio::test]
+    async fn output_is_masked_at_the_source() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (program, args) = if cfg!(windows) {
+            (
+                PathBuf::from("cmd"),
+                vec![
+                    "/C".to_owned(),
+                    "echo [12:00:00] [main/INFO]: session token=abc123def & echo /login hunter2 & exit 0"
+                        .to_owned(),
+                ],
+            )
+        } else {
+            (
+                PathBuf::from("sh"),
+                vec![
+                    "-c".to_owned(),
+                    "echo '[12:00:00] [main/INFO]: session token=abc123def'; echo '/login hunter2'"
+                        .to_owned(),
+                ],
+            )
+        };
+        let command = LaunchCommand::for_tests(program, args, tmp.path().join("game"));
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&events);
+        let process = GameProcess::spawn(
+            &command,
+            SpawnOptions {
+                instance_id: "mask".into(),
+                logs_dir: tmp.path().join("logs"),
+                ..SpawnOptions::default()
+            },
+            Arc::new(move |event| sink.lock().push(event)),
+        )
+        .await
+        .unwrap();
+        let exit = process.wait().await;
+        let saved = std::fs::read_to_string(exit.log_file.unwrap()).unwrap();
+        let shown: Vec<String> = events
+            .lock()
+            .iter()
+            .filter_map(|event| match event {
+                GameEvent::Line(line) => Some(line.message.clone()),
+                _ => None,
+            })
+            .collect();
+        let kept: Vec<String> = process.tail().into_iter().map(|l| l.message).collect();
+        for secret in ["abc123def", "hunter2"] {
+            assert!(!saved.contains(secret), "{saved}");
+            assert!(shown.iter().all(|l| !l.contains(secret)), "{shown:?}");
+            assert!(kept.iter().all(|l| !l.contains(secret)), "{kept:?}");
+        }
+        assert!(
+            shown.iter().any(|l| l.contains("session token=********")),
+            "{shown:?}"
+        );
+        assert!(
+            shown.iter().any(|l| l.contains("/login ********")),
+            "{shown:?}"
+        );
+        assert!(
+            saved.contains("[main/INFO]: session token=********"),
+            "{saved}"
+        );
+    }
+
+    #[test]
+    fn masked_lines_keep_ordinary_text() {
+        let line = LogLine {
+            time: Some("12:00:00".into()),
+            level: crate::launch::log::LogLevel::Info,
+            thread: Some("Render thread".into()),
+            logger: None,
+            message: r"Loaded C:\Users\Ali Veli\mods\sodium.jar --accessToken eyJx".into(),
+        };
+        let masked = masked_line(line.clone());
+        assert_eq!(
+            masked.message,
+            r"Loaded C:\Users\********\mods\sodium.jar --accessToken ********"
+        );
+        assert_eq!(masked.thread, line.thread);
+        let plain = LogLine {
+            message: "Sound engine started".into(),
+            ..line
+        };
+        assert_eq!(masked_line(plain.clone()), plain);
     }
 
     #[tokio::test]

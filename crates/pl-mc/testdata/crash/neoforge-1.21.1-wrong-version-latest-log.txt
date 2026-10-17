@@ -1,0 +1,25 @@
+# source: https://github.com/ProjectsForAll/ProperProxyProtocol/issues/2
+# loader: NeoForge 21.1.228 (FML 4.0.42), minecraft: 1.21.1
+[26мая2026 07:59:10.440] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher running: args [--launchTarget, forgeserver, --fml.neoForgeVersion, 21.1.228, --fml.fmlVersion, 4.0.42, --fml.mcVersion, 1.21.1, --fml.neoFormVersion, 20240808.144430, nogui]
+[... 91 lines omitted ...]
+[26мая2026 07:59:11.503] [main/ERROR] [net.neoforged.fml.loading.ModSorter/LOADING]: Missing or unsupported mandatory dependencies:
+	Mod ID: 'architectury', Requested by: 'properproxyprotocol', Expected range: '[19.0.0,)', Actual version: '13.0.8'
+[26мая2026 07:59:11.926] [main/INFO] [cpw.mods.modlauncher.LaunchServiceHandler/MODLAUNCHER]: Launching target 'forgeserver' with arguments [nogui]
+[26мая2026 07:59:12.534] [main/INFO] [MixinExtras|Service/]: Initializing MixinExtras via com.llamalad7.mixinextras.service.MixinExtrasServiceImpl(version=0.5.3).
+[26мая2026 07:59:16.545] [main/FATAL] [net.neoforged.fml.ModLoader/CORE]: Error during pre-loading phase: Mod properproxyprotocol requires architectury 19.0.0 or above
+Currently, architectury is 13.0.8
+
+[26мая2026 07:59:16.603] [main/ERROR] [net.minecraft.CrashReport/]: Negative index in crash report handler (0/18)
+[26мая2026 07:59:16.611] [main/FATAL] [net.neoforged.neoforge.server.loading.ServerModLoader/]: Crash report saved to ./crash-reports/crash-2026-05-26_07.59.16-fml.txt
+[26мая2026 07:59:16.612] [main/ERROR] [net.minecraft.server.Main/FATAL]: Failed to start the minecraft server
+net.neoforged.fml.ModLoadingException: Loading errors encountered:
+	- Mod properproxyprotocol requires architectury 19.0.0 or above
+	  Currently, architectury is 13.0.8
+	  
+Loading warnings encountered:
+	- File /home/player/mods/fabric-api-0.116.12+1.21.1.jar is a Fabric mod and cannot be loaded
+
+	at MC-BOOTSTRAP/fml_loader@4.0.42/net.neoforged.fml.ModLoader.gatherAndInitializeMods(ModLoader.java:110) ~[loader-4.0.42.jar%2359!/:4.0]
+	at TRANSFORMER/neoforge@21.1.228/net.neoforged.neoforge.internal.CommonModLoader.begin(CommonModLoader.java:49) ~[neoforge-21.1.228-universal.jar%23146!/:?]
+	at TRANSFORMER/neoforge@21.1.228/net.neoforged.neoforge.server.loading.ServerModLoader.load(ServerModLoader.java:34) ~[neoforge-21.1.228-universal.jar%23146!/:?]
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.Main.main(Main.java:124) [server-1.21.1-20240808.144430-srg.jar%23145!/:?]

@@ -1,0 +1,7 @@
+# source: https://github.com/itzg/docker-minecraft-server/issues/2304
+# loader: Forge 47.1.0, minecraft: 1.20.1 (dedicated server; cause: macOS '._*.jar' files in mods)
+[15:33:18] [main/INFO] [cp.mo.mo.Launcher/MODLAUNCHER]: ModLauncher running: args [--launchTarget, forgeserver, --fml.forgeVersion, 47.1.0, --fml.mcVersion, 1.20.1, --fml.forgeGroup, net.minecraftforge, --fml.mcpVersion, 20230612.114412]
+[15:33:18] [main/INFO] [cp.mo.mo.Launcher/MODLAUNCHER]: ModLauncher 10.0.9+10.0.9+main.dcd20f30 starting: java version 17.0.7 by Eclipse Adoptium; OS Linux arch amd64 version 5.15.59
+Exception in thread "main" cpw.mods.niofs.union.UnionFileSystem$UncheckedIOException: java.util.zip.ZipException: zip END header not found
+Caused by: java.util.zip.ZipException: zip END header not found
+	at jdk.zipfs/jdk.nio.zipfs.ZipFileSystem.findEND(Unknown Source)

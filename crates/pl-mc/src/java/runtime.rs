@@ -1,16 +1,19 @@
 //! Mojang Java runtimes: `all.json` → platform → component → file manifest, installed into
 //! `runtimes/<component>/<platform>/` (raw downloads, directories, executable bits, symlinks on
 //! Unix). A marker file records which manifest is installed so repeat launches skip the work.
+//! A newer build of an installed runtime is staged next to it and swapped in by
+//! [`crate::java::managed`]; launches use the installed build until then.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use pl_net::{DownloadItem, DownloadOptions, VerifyMode};
+use pl_net::{CancellationToken, DownloadItem, DownloadOptions, ProgressFn, VerifyMode};
 use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::install::McContext;
 use crate::java::detect::parse_major;
+use crate::java::managed::{SwapOutcome, recover, stage_update, staged_dir, swap_in_staged};
 use crate::java::{EnsureJavaOptions, JavaInfo, JavaInstallation, JavaSource};
 use crate::paths::{safe_join, safe_name, write_atomic};
 use crate::platform::{Os, Platform, java_runtime_platform_arch};
@@ -21,9 +24,9 @@ pub const JAVA_RUNTIME_MANIFEST_URL: &str = "https://piston-meta.mojang.com/v1/p
 /// Cached copy of `all.json` inside `meta/`.
 const INDEX_CACHE_FILE: &str = "java_runtime_all.json";
 /// Inside a runtime folder: which manifest is installed.
-const MARKER_FILE: &str = ".projects-runtime.json";
+pub(crate) const MARKER_FILE: &str = ".projects-runtime.json";
 /// Inside a runtime folder: the file manifest itself.
-const MANIFEST_FILE: &str = ".projects-manifest.json";
+pub(crate) const MANIFEST_FILE: &str = ".projects-manifest.json";
 
 /// `all.json`: platform key → component → available builds (first = current).
 pub type RuntimeIndex = BTreeMap<String, BTreeMap<String, Vec<RuntimeEntry>>>;
@@ -49,35 +52,35 @@ pub struct RuntimeVersion {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct RuntimeManifest {
+pub(crate) struct RuntimeManifest {
     #[serde(default)]
-    files: BTreeMap<String, RuntimeFile>,
+    pub(crate) files: BTreeMap<String, RuntimeFile>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct RuntimeFile {
+pub(crate) struct RuntimeFile {
     #[serde(rename = "type")]
-    kind: String,
+    pub(crate) kind: String,
     #[serde(default)]
-    executable: bool,
+    pub(crate) executable: bool,
     #[serde(default)]
-    downloads: Option<RuntimeDownloads>,
+    pub(crate) downloads: Option<RuntimeDownloads>,
     #[serde(default)]
-    target: Option<String>,
+    pub(crate) target: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct RuntimeDownloads {
-    raw: RemoteFile,
+pub(crate) struct RuntimeDownloads {
+    pub(crate) raw: RemoteFile,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct RuntimeMarker {
-    component: String,
-    platform: String,
-    version: String,
-    manifest_sha1: String,
+pub(crate) struct RuntimeMarker {
+    pub(crate) component: String,
+    pub(crate) platform: String,
+    pub(crate) version: String,
+    pub(crate) manifest_sha1: String,
 }
 
 fn parse_index(bytes: &[u8]) -> Result<RuntimeIndex> {
@@ -101,29 +104,35 @@ fn parse_index(bytes: &[u8]) -> Result<RuntimeIndex> {
         .collect())
 }
 
+/// Mojang's runtime index fetched now (and cached). No fallback: the caller learns whether
+/// Mojang answered (the background updater's schedule depends on it).
+pub async fn refresh_runtime_index(ctx: &McContext) -> Result<RuntimeIndex> {
+    let bytes = ctx.http.get_bytes(JAVA_RUNTIME_MANIFEST_URL).await?;
+    let index = parse_index(&bytes)?;
+    let cache = ctx.dirs.meta().join(INDEX_CACHE_FILE);
+    if let Err(error) = write_atomic(&cache, &bytes).await {
+        tracing::warn!(%error, "could not cache the Java runtime index");
+    }
+    Ok(index)
+}
+
 /// Mojang's runtime index. Online it is refreshed (falling back to the cached copy when the
 /// request fails); offline only the cache is used.
 pub async fn runtime_index(ctx: &McContext, offline: bool) -> Result<RuntimeIndex> {
-    let cache = ctx.dirs.meta().join(INDEX_CACHE_FILE);
     let mut fetch_error = None;
     if !offline {
-        match ctx.http.get_bytes(JAVA_RUNTIME_MANIFEST_URL).await {
-            Ok(bytes) => {
-                let index = parse_index(&bytes)?;
-                if let Err(error) = write_atomic(&cache, &bytes).await {
-                    tracing::warn!(%error, "could not cache the Java runtime index");
-                }
-                return Ok(index);
-            }
+        match refresh_runtime_index(ctx).await {
+            Ok(index) => return Ok(index),
             Err(error) => {
                 tracing::warn!(%error, "Java runtime index fetch failed, trying the cache");
                 fetch_error = Some(error);
             }
         }
     }
+    let cache = ctx.dirs.meta().join(INDEX_CACHE_FILE);
     match tokio::fs::read(&cache).await {
         Ok(bytes) => parse_index(&bytes),
-        Err(_) => Err(fetch_error.map(Error::from).unwrap_or(Error::Offline)),
+        Err(_) => Err(fetch_error.unwrap_or(Error::Offline)),
     }
 }
 
@@ -201,9 +210,33 @@ fn installation(
     }
 }
 
-async fn read_marker(root: &Path) -> Option<RuntimeMarker> {
+pub(crate) async fn read_marker(root: &Path) -> Option<RuntimeMarker> {
     let bytes = tokio::fs::read(root.join(MARKER_FILE)).await.ok()?;
     serde_json::from_slice(&bytes).ok()
+}
+
+pub(crate) fn read_marker_blocking(root: &Path) -> Option<RuntimeMarker> {
+    let bytes = std::fs::read(root.join(MARKER_FILE)).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+pub(crate) async fn write_marker(root: &Path, marker: &RuntimeMarker) -> Result<()> {
+    let bytes = serde_json::to_vec_pretty(marker).map_err(|e| Error::json("runtime marker", e))?;
+    write_atomic(&root.join(MARKER_FILE), &bytes).await
+}
+
+pub(crate) fn read_manifest_blocking(path: &Path) -> Option<RuntimeManifest> {
+    let bytes = std::fs::read(path).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+/// Finishes or undoes an interrupted swap of the runtime in `root` (see
+/// [`crate::java::managed`]) before it is read.
+async fn recover_runtime(root: &Path) {
+    let owned = root.to_path_buf();
+    if let Ok(Err(error)) = tokio::task::spawn_blocking(move || recover(&owned)).await {
+        tracing::warn!(%error, root = %root.display(), "could not finish a runtime update");
+    }
 }
 
 /// An already installed runtime for `component` (native platform first, then emulated ones).
@@ -212,6 +245,7 @@ pub async fn installed_runtime(ctx: &McContext, component: &str) -> Option<JavaI
         let Ok(root) = ctx.dirs.runtime_dir(component, key) else {
             continue;
         };
+        recover_runtime(&root).await;
         let Some(marker) = read_marker(&root).await else {
             continue;
         };
@@ -223,62 +257,46 @@ pub async fn installed_runtime(ctx: &McContext, component: &str) -> Option<JavaI
     None
 }
 
-/// Download (or update/repair) the Mojang runtime `component` for the context platform.
-pub async fn install_runtime(
+/// The file manifest of `entry`, downloaded (verified by its SHA-1) into `dir`.
+pub(crate) async fn download_manifest(
     ctx: &McContext,
-    component: &str,
-    options: &EnsureJavaOptions,
-) -> Result<JavaInstallation> {
-    safe_name(component)?;
-    let index = runtime_index(ctx, false).await?;
-    let Some((platform_key, entry)) = select_runtime(&index, component, &ctx.platform) else {
-        return Err(Error::Unsupported(format!(
-            "Mojang publishes no {component} runtime for {}",
-            ctx.platform
-        )));
-    };
-    if Some(platform_key) != ctx.platform.java_runtime_platform() {
-        tracing::info!(%component, %platform_key, "using an emulated Java runtime");
-    }
-    let root = ctx.dirs.runtime_dir(component, platform_key)?;
-    let current = read_marker(&root)
-        .await
-        .is_some_and(|m| m.manifest_sha1 == entry.manifest.sha1);
-    let java = runtime_java_executable(&root, ctx.platform.os);
-    if current && options.verify != VerifyMode::Full && java.is_file() {
-        return Ok(installation(
-            &root,
-            ctx.platform.os,
-            component,
-            platform_key,
-            &entry.version.name,
-        ));
-    }
-
-    let base = DownloadOptions {
-        cancel: options.cancel.clone(),
-        ..DownloadOptions::default()
-    };
-    let manifest_path = root.join(MANIFEST_FILE);
+    entry: &RuntimeEntry,
+    dir: &Path,
+    cancel: &CancellationToken,
+) -> Result<RuntimeManifest> {
+    let manifest_path = dir.join(MANIFEST_FILE);
     ctx.downloader
         .download(
             DownloadItem::new(&entry.manifest.url, &manifest_path)
                 .sha1(&entry.manifest.sha1)
                 .size(Some(entry.manifest.size)),
-            &base,
+            &DownloadOptions {
+                cancel: cancel.clone(),
+                ..DownloadOptions::default()
+            },
         )
         .await?;
     let bytes = tokio::fs::read(&manifest_path)
         .await
         .map_err(|e| Error::io(&manifest_path, e))?;
-    let manifest: RuntimeManifest =
-        serde_json::from_slice(&bytes).map_err(|e| Error::json("Java runtime manifest", e))?;
+    serde_json::from_slice(&bytes).map_err(|e| Error::json("Java runtime manifest", e))
+}
 
+/// Directories, files (downloaded or checked), executable bits and links of `manifest` under
+/// `root`.
+pub(crate) async fn install_files(
+    ctx: &McContext,
+    root: &Path,
+    manifest: &RuntimeManifest,
+    verify: VerifyMode,
+    cancel: &CancellationToken,
+    progress: Option<ProgressFn>,
+) -> Result<()> {
     let mut items = Vec::new();
     let mut executables = Vec::new();
     let mut links = Vec::new();
     for (name, file) in &manifest.files {
-        let path = safe_join(&root, name)?;
+        let path = safe_join(root, name)?;
         match file.kind.as_str() {
             "directory" => {
                 tokio::fs::create_dir_all(&path)
@@ -308,17 +326,14 @@ pub async fn install_runtime(
         }
     }
 
-    let options_for_files = DownloadOptions {
-        verify: if current {
-            options.verify
-        } else {
-            VerifyMode::Full
-        },
-        progress: options.progress.clone(),
-        ..base
+    let options = DownloadOptions {
+        cancel: cancel.clone(),
+        verify,
+        progress,
+        ..DownloadOptions::default()
     };
     ctx.downloader
-        .download_all(items, &options_for_files)
+        .download_all(items, &options)
         .await
         .map_err(|e| {
             if e.is_cancelled() {
@@ -330,25 +345,174 @@ pub async fn install_runtime(
 
     tokio::task::spawn_blocking(move || finish_files(&executables, &links))
         .await
-        .map_err(|e| Error::Java(format!("runtime finalization task failed: {e}")))??;
+        .map_err(|e| Error::Java(format!("runtime finalization task failed: {e}")))?
+}
 
-    let marker = RuntimeMarker {
-        component: component.to_owned(),
-        platform: platform_key.to_owned(),
-        version: entry.version.name.clone(),
-        manifest_sha1: entry.manifest.sha1.clone(),
+/// What [`install_runtime`] does with the runtime folder.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InstallStep {
+    /// The installed build is Mojang's current one.
+    UseCurrent,
+    /// A newer build exists; the installed one is used until the background update.
+    KeepInstalled,
+    /// A newer build exists and a full check was asked for: install it next to the old one and
+    /// swap.
+    StageAndSwap,
+    /// Download (or check) the files in place.
+    InPlace { verify: VerifyMode },
+}
+
+fn install_step(
+    installed_sha1: Option<&str>,
+    usable: bool,
+    current_sha1: &str,
+    verify: VerifyMode,
+) -> InstallStep {
+    let current = installed_sha1 == Some(current_sha1);
+    match (installed_sha1, usable) {
+        (Some(_), true) if current && verify != VerifyMode::Full => InstallStep::UseCurrent,
+        (Some(_), true) if current => InstallStep::InPlace { verify },
+        (Some(_), true) if verify != VerifyMode::Full => InstallStep::KeepInstalled,
+        (Some(_), true) => InstallStep::StageAndSwap,
+        // Missing or broken (no executable): everything is checked by its hash.
+        _ => InstallStep::InPlace {
+            verify: if current { verify } else { VerifyMode::Full },
+        },
+    }
+}
+
+/// Swaps a staged update in place (blocking work on a worker thread).
+async fn swap_staged(root: &Path) -> Result<SwapOutcome> {
+    let owned = root.to_path_buf();
+    tokio::task::spawn_blocking(move || swap_in_staged(&owned))
+        .await
+        .map_err(|e| Error::Java(format!("runtime swap task failed: {e}")))?
+}
+
+/// Download (or update/repair) the Mojang runtime `component` for the context platform.
+///
+/// Callers make sure no game of this launcher runs (a launch, a repair): a complete update the
+/// launcher staged in the background takes the old build's place here. Otherwise an installed
+/// runtime with a newer build available is used as it is (the background updater stages the new
+/// build), except with [`VerifyMode::Full`], which installs the new build next to the old one
+/// and swaps it in. A runtime that is not installed yet is downloaded in place.
+pub async fn install_runtime(
+    ctx: &McContext,
+    component: &str,
+    options: &EnsureJavaOptions,
+) -> Result<JavaInstallation> {
+    safe_name(component)?;
+    let index = pl_net::until_cancelled(&options.cancel, runtime_index(ctx, false)).await?;
+    let Some((platform_key, entry)) = select_runtime(&index, component, &ctx.platform) else {
+        return Err(Error::Unsupported(format!(
+            "Mojang publishes no {component} runtime for {}",
+            ctx.platform
+        )));
     };
-    let marker_bytes =
-        serde_json::to_vec_pretty(&marker).map_err(|e| Error::json("runtime marker", e))?;
-    write_atomic(&root.join(MARKER_FILE), &marker_bytes).await?;
+    if Some(platform_key) != ctx.platform.java_runtime_platform() {
+        tracing::info!(%component, %platform_key, "using an emulated Java runtime");
+    }
+    let root = ctx.dirs.runtime_dir(component, platform_key)?;
+    let os = ctx.platform.os;
+    let make = |version: &str| installation(&root, os, component, platform_key, version);
+    recover_runtime(&root).await;
 
-    let installed = installation(
+    // An update staged in the background for this very build takes the old one's place now.
+    if read_marker(&staged_dir(&root))
+        .await
+        .is_some_and(|staged| staged.manifest_sha1 == entry.manifest.sha1)
+    {
+        match swap_staged(&root).await {
+            Ok(SwapOutcome::Swapped { version }) => {
+                tracing::info!(%component, %version, "staged Java runtime update applied");
+            }
+            Ok(outcome) => tracing::debug!(?outcome, "staged Java runtime not applied"),
+            Err(error) => tracing::warn!(%error, "could not apply the staged Java runtime"),
+        }
+    }
+
+    let marker = read_marker(&root).await;
+    let usable = runtime_java_executable(&root, os).is_file();
+    let installed_version = marker
+        .as_ref()
+        .map(|m| m.version.clone())
+        .unwrap_or_default();
+    let verify = match install_step(
+        marker.as_ref().map(|m| m.manifest_sha1.as_str()),
+        usable,
+        &entry.manifest.sha1,
+        options.verify,
+    ) {
+        InstallStep::UseCurrent => return Ok(make(&entry.version.name)),
+        InstallStep::KeepInstalled => {
+            tracing::info!(
+                %component,
+                installed = %installed_version,
+                available = %entry.version.name,
+                "a newer Java runtime build is available; using the installed one until it is staged"
+            );
+            return Ok(make(&installed_version));
+        }
+        InstallStep::StageAndSwap => {
+            // The new build goes next to the old one and takes its place.
+            stage_update(
+                ctx,
+                component,
+                platform_key,
+                entry,
+                &options.cancel,
+                options.progress.clone(),
+            )
+            .await?;
+            return match swap_staged(&root).await {
+                Ok(SwapOutcome::Swapped { .. }) => {
+                    let updated = make(&entry.version.name);
+                    if updated.path.is_file() {
+                        Ok(updated)
+                    } else {
+                        Err(Error::Java(format!(
+                            "runtime {component} has no Java executable at {}",
+                            updated.path.display()
+                        )))
+                    }
+                }
+                Ok(outcome) => {
+                    tracing::warn!(?outcome, "keeping the installed Java runtime");
+                    Ok(make(&installed_version))
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "keeping the installed Java runtime");
+                    recover_runtime(&root).await;
+                    Ok(make(&installed_version))
+                }
+            };
+        }
+        InstallStep::InPlace { verify } => verify,
+    };
+
+    // Not installed yet (or a full check of the current build): in place.
+    let manifest = download_manifest(ctx, entry, &root, &options.cancel).await?;
+    install_files(
+        ctx,
         &root,
-        ctx.platform.os,
-        component,
-        platform_key,
-        &entry.version.name,
-    );
+        &manifest,
+        verify,
+        &options.cancel,
+        options.progress.clone(),
+    )
+    .await?;
+    write_marker(
+        &root,
+        &RuntimeMarker {
+            component: component.to_owned(),
+            platform: platform_key.to_owned(),
+            version: entry.version.name.clone(),
+            manifest_sha1: entry.manifest.sha1.clone(),
+        },
+    )
+    .await?;
+
+    let installed = make(&entry.version.name);
     if !installed.path.is_file() {
         return Err(Error::Java(format!(
             "runtime {component} has no Java executable at {}",
@@ -442,6 +606,42 @@ mod tests {
         assert!(select_runtime(&index, "java-runtime-delta", &linux).is_none());
         let linux_arm = Platform::new(Os::Linux, Arch::Aarch64, "6.1");
         assert!(select_runtime(&index, "jre-legacy", &linux_arm).is_none());
+    }
+
+    #[test]
+    fn install_steps() {
+        use VerifyMode::{Full, Size};
+        // Current build: used as it is, or checked in place with a full check.
+        assert_eq!(
+            install_step(Some("a"), true, "a", Size),
+            InstallStep::UseCurrent
+        );
+        assert_eq!(
+            install_step(Some("a"), true, "a", Full),
+            InstallStep::InPlace { verify: Full }
+        );
+        // Older build: kept until the background update, unless a full check asks for the new one.
+        assert_eq!(
+            install_step(Some("a"), true, "b", Size),
+            InstallStep::KeepInstalled
+        );
+        assert_eq!(
+            install_step(Some("a"), true, "b", Full),
+            InstallStep::StageAndSwap
+        );
+        // Not installed, or the executable is gone: downloaded and checked in place.
+        assert_eq!(
+            install_step(None, false, "b", Size),
+            InstallStep::InPlace { verify: Full }
+        );
+        assert_eq!(
+            install_step(Some("a"), false, "b", Size),
+            InstallStep::InPlace { verify: Full }
+        );
+        assert_eq!(
+            install_step(Some("b"), false, "b", Size),
+            InstallStep::InPlace { verify: Size }
+        );
     }
 
     #[test]

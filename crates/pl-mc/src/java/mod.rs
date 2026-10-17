@@ -1,7 +1,13 @@
-//! Java for the game: Mojang's runtimes ([`runtime`]) and Java installed on the system
-//! ([`detect`]), chosen per instance with [`JavaSetting`].
+//! Java for the game: Mojang's runtimes ([`runtime`], kept current by [`managed`]) and Java
+//! installed on the system ([`detect`], [`release`]), chosen per instance with [`JavaSetting`].
+//! [`requirement`] says which Java a game needs and [`prelaunch`] judges a custom Java against
+//! it before a launch.
 
 pub mod detect;
+pub mod managed;
+pub mod prelaunch;
+pub mod release;
+pub mod requirement;
 pub mod runtime;
 
 use std::path::PathBuf;
@@ -15,11 +21,17 @@ use crate::platform::Arch;
 use crate::version::ResolvedVersion;
 
 pub use detect::{
-    detect_system_javas, find_system_java, parse_java_properties, parse_major, probe_java,
+    detect_system_javas, detect_system_javas_quick, find_system_java, parse_java_properties,
+    parse_major, probe_java,
+};
+pub use release::{ReleaseInfo, read_release, resolve_custom_java, vendor_label};
+pub use requirement::{
+    JavaNeed, component_for_major, fallback_for_minecraft, game_component, game_need,
+    need_from_version_json, uses_launchwrapper,
 };
 pub use runtime::{
     JAVA_RUNTIME_MANIFEST_URL, RuntimeEntry, RuntimeIndex, install_runtime, installed_runtime,
-    runtime_index, runtime_java_executable, select_runtime,
+    refresh_runtime_index, runtime_index, runtime_java_executable, select_runtime,
 };
 
 /// Per-instance Java choice.
@@ -96,7 +108,8 @@ impl std::fmt::Debug for EnsureJavaOptions {
 
 /// Pick (and if needed download) the Java for `resolved`.
 ///
-/// - [`JavaSetting::Custom`]: the given executable, probed for version/architecture.
+/// - [`JavaSetting::Custom`]: the given executable (a Java folder or its `bin` folder leads to
+///   the program inside, see [`resolve_custom_java`]), probed for version/architecture.
 /// - [`JavaSetting::Auto`]: the Mojang runtime named by `javaVersion.component` (`jre-legacy`
 ///   when missing), with the macOS arm64 → x64 (Rosetta) and Windows arm64 → x64 fallbacks. When
 ///   Mojang publishes nothing for the platform, or offline without an installed runtime, a system
@@ -111,7 +124,8 @@ pub async fn ensure_java(
     let major = resolved.java_major();
     match setting {
         JavaSetting::Custom { path } => {
-            let info = probe_java(path).await?;
+            let path = resolve_custom_java(path, ctx.platform.os);
+            let info = probe_java(&path).await?;
             if info.major < major {
                 tracing::warn!(
                     path = %path.display(),
@@ -121,7 +135,7 @@ pub async fn ensure_java(
                 );
             }
             Ok(JavaInstallation {
-                path: path.clone(),
+                path,
                 info,
                 source: JavaSource::Custom,
             })
@@ -139,7 +153,10 @@ pub async fn ensure_java(
         }
         JavaSetting::Auto => match install_runtime(ctx, component, options).await {
             Ok(installed) => Ok(installed),
-            Err(error) if error.is_cancelled() => Err(Error::Cancelled),
+            // A cancel never falls back to probing every Java on the system (seconds).
+            Err(error) if error.is_cancelled() || options.cancel.is_cancelled() => {
+                Err(Error::Cancelled)
+            }
             Err(error) => {
                 if let Some(installed) = installed_runtime(ctx, component).await {
                     tracing::warn!(%error, "runtime update failed, using the installed copy");

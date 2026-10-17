@@ -148,7 +148,7 @@ fn field(obj: &Map<String, Value>, key: &str) -> Option<String> {
 }
 
 /// `version` with `${file.jarVersion}` resolved; other unresolved placeholders give `None`.
-fn clean_version(raw: Option<String>, jar_version: Option<&str>) -> Option<String> {
+pub(super) fn clean_version(raw: Option<String>, jar_version: Option<&str>) -> Option<String> {
     let mut version = raw?;
     if version.contains("${file.jarVersion}") {
         version = version.replace("${file.jarVersion}", jar_version?);
@@ -375,7 +375,7 @@ fn from_toml_table(
 
 /// Line-based reader for `mods.toml` files strict TOML rejects (duplicate keys, bad escapes):
 /// takes the first `[[mods]]` table's simple string keys.
-fn parse_mods_toml_fallback(
+pub(super) fn parse_mods_toml_fallback(
     text_in: &str,
     loader: LoaderKind,
     jar_version: Option<&str>,

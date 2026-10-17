@@ -39,17 +39,25 @@ pub(crate) fn sibling_with_suffix(path: &Path, suffix: &str) -> PathBuf {
     path.with_file_name(name)
 }
 
-/// Write a file atomically: `<path>.tmp`, then rename over the target.
+/// Write a file atomically and durably: `<path>.tmp` is written and flushed to disk, then renamed
+/// over the target (these files are player data: `servers.dat`, trash descriptions).
 pub(crate) fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| Error::io(parent, e))?;
     }
     let tmp = sibling_with_suffix(path, ".tmp");
-    let result = std::fs::write(&tmp, bytes)
+    let result = std::fs::File::create(&tmp)
+        .and_then(|mut file| {
+            file.write_all(bytes)?;
+            file.sync_all()
+        })
         .map_err(|e| Error::io(&tmp, e))
         .and_then(|()| std::fs::rename(&tmp, path).map_err(|e| Error::io(path, e)));
     if result.is_err() {
         let _ = std::fs::remove_file(&tmp);
+    } else if let Some(parent) = path.parent() {
+        crate::paths::sync_dir(parent);
     }
     result
 }
@@ -211,6 +219,12 @@ pub async fn import_file(src: &Path, dest_dir: &Path) -> Result<PathBuf> {
         .and_then(|n| n.to_str())
         .ok_or_else(|| Error::Invalid(format!("{} has no usable file name", src.display())))?
         .to_owned();
+    import_file_named(src, dest_dir, &name).await
+}
+
+/// [`import_file`] under the file name `name` (same checks, never overwrites).
+pub async fn import_file_named(src: &Path, dest_dir: &Path, name: &str) -> Result<PathBuf> {
+    let name = name.to_owned();
     validate_file_name(&name)?;
     let src = src.to_path_buf();
     let dest_dir = dest_dir.to_path_buf();

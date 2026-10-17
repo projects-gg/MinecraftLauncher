@@ -13,7 +13,12 @@
 //! - [`modpack`]: `.mrpack` read/write and Prism/MultiMC/CurseForge import.
 //! - [`gamefiles`]: worlds, resource packs, shader packs and screenshots of a game directory.
 //! - [`server`]: Server List Ping and `servers.dat`.
+//! - [`addons`]: mods, resource packs and shader packs installed from Modrinth (index, updates).
+//! - [`mask`]: the one place secrets are masked in text that is shown, copied or shared.
+//! - [`shared_files`]: which versions, loader profiles, Java runtimes, libraries and assets no
+//!   instance uses any more (cleanup in Settings → Veri).
 
+pub mod addons;
 pub mod error;
 pub mod gamefiles;
 pub mod install;
@@ -21,12 +26,14 @@ pub mod instance;
 pub mod java;
 pub mod launch;
 pub mod loaders;
+pub mod mask;
 pub mod modpack;
 pub mod modrinth;
 pub mod mods;
 pub mod paths;
 pub mod platform;
 pub mod server;
+pub mod shared_files;
 pub mod version;
 
 pub use error::{Error, Result};

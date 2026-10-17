@@ -1,0 +1,25 @@
+# source: https://github.com/GenerationsMod/Generations-Core/issues/27 (attachments https://github.com/user-attachments/files/14348090/latest.log and https://github.com/user-attachments/files/14348089/crash-2024-02-20_09.57.34-client.txt)
+# loader: Fabric Loader 0.15.6, minecraft: 1.20.1
+# note: first block: latest.log startup warnings (the game kept loading); second block: the crash report of the same run
+[09:55:09] [main/INFO]: Loading Minecraft 1.20.1 with Fabric Loader 0.15.6
+[... 21 lines omitted ...]
+[09:55:10] [main/WARN]: Warnings were found!
+ - Mod 'FullSlabs' (full_slabs) 3.4.0 recommends version 0.16.0 or later of malilib, which is missing!
+	 - You should install version 0.16.0 or later of malilib for the optimal experience.
+ - Mod 'LambDynamicLights' (lambdynlights) 2.3.2+1.20.1 recommends version 0.19.1 or later of quilt_loader, which is missing!
+	 - You should install version 0.19.1 or later of quilt_loader for the optimal experience.
+ - Mod 'Scannable' (scannable) 1.7.12+18ccb75 recommends any version of tooltipfix, which is missing!
+	 - You should install any version of tooltipfix for the optimal experience.
+ - Mod 'SleepWarp' (sleepwarp) 2.2.0_rc1+1.20.1 recommends version 7.0.1 of mod 'Mod Menu' (modmenu), but only the wrong version is present: 7.2.2!
+	 - You should install version 7.0.1 of mod 'Mod Menu' (modmenu) for the optimal experience.
+ - Mod 'SleepWarp' (sleepwarp) 2.2.0_rc1+1.20.1 recommends version 3.0.1 of yet-another-config-lib, which is missing!
+	 - You should install version 3.0.1 of yet-another-config-lib for the optimal experience.
+[... next file of the same report: 14348089_crash-2024-02-20_09.57.34-client.txt ...]
+---- Minecraft Crash Report ----
+// This doesn't make any sense!
+
+Time: 2024-02-20 09:57:34
+Description: Initializing game
+
+java.lang.RuntimeException: Could not execute entrypoint stage 'main' due to errors, provided by 'generations_core'!
+	at net.fabricmc.loader.impl.FabricLoaderImpl.lambda$invokeEntrypoints$2(FabricLoaderImpl.java:388)

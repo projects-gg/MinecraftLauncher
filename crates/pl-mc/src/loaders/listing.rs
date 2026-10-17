@@ -119,6 +119,154 @@ pub async fn list_loader_versions(
     Ok(entries.iter().map(VersionEntry::public).collect())
 }
 
+/// The Minecraft versions among `candidates` that `kind` has builds for, in the order given
+/// (vanilla supports all of them). One request per loader, cached in
+/// `meta/loaders/<loader>/_game-versions.json` and used whenever the network fails
+/// ([`Error::Offline`] when there is no cache).
+pub async fn supported_minecraft_versions(
+    ctx: &McContext,
+    kind: LoaderKind,
+    candidates: &[String],
+) -> Result<Vec<String>> {
+    if kind == LoaderKind::Vanilla {
+        return Ok(candidates.to_vec());
+    }
+    let source = game_version_source(ctx, &Endpoints::default(), kind).await?;
+    Ok(candidates
+        .iter()
+        .filter(|mc| source.supports(kind, mc.trim()))
+        .cloned()
+        .collect())
+}
+
+/// What a loader publishes about the Minecraft versions it supports.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GameVersionSource {
+    format: u32,
+    /// Fabric and Quilt: Minecraft versions. Forge and NeoForge: loader Maven versions.
+    versions: Vec<String>,
+    /// NeoForge builds for 1.20.1 exist (published under the legacy artifact).
+    #[serde(default)]
+    legacy: bool,
+}
+
+impl GameVersionSource {
+    pub(crate) fn supports(&self, kind: LoaderKind, mc: &str) -> bool {
+        match kind {
+            LoaderKind::Vanilla => true,
+            LoaderKind::Fabric | LoaderKind::Quilt => self.versions.iter().any(|v| v == mc),
+            LoaderKind::Forge => self
+                .versions
+                .iter()
+                .any(|maven| split_forge_version(mc, maven).is_some()),
+            LoaderKind::NeoForge if mc == NEOFORGE_LEGACY_MC => self.legacy,
+            LoaderKind::NeoForge => NeoForgeFilter::for_minecraft(mc)
+                .is_some_and(|filter| self.versions.iter().any(|v| filter.matches(v))),
+        }
+    }
+}
+
+async fn game_version_source(
+    ctx: &McContext,
+    endpoints: &Endpoints,
+    kind: LoaderKind,
+) -> Result<GameVersionSource> {
+    let path = ctx
+        .dirs
+        .meta()
+        .join("loaders")
+        .join(kind_dir(kind))
+        .join("_game-versions.json");
+    match fetch_game_versions(ctx, endpoints, kind).await {
+        Ok(source) => {
+            match serde_json::to_vec(&source) {
+                Ok(bytes) => {
+                    if let Err(error) = write_atomic(&path, &bytes).await {
+                        tracing::warn!(%error, ?kind, "could not cache the supported game versions");
+                    }
+                }
+                Err(error) => tracing::warn!(%error, "could not serialize the game versions"),
+            }
+            Ok(source)
+        }
+        Err(error) => {
+            let cached = tokio::fs::read(&path)
+                .await
+                .ok()
+                .and_then(|bytes| serde_json::from_slice::<GameVersionSource>(&bytes).ok())
+                .filter(|cached| cached.format == CACHE_FORMAT);
+            match cached {
+                Some(cached) => {
+                    tracing::warn!(%error, ?kind, "game version list fetch failed, using the cached copy");
+                    Ok(cached)
+                }
+                None if error.is_offline() => Err(Error::Offline),
+                None => Err(error),
+            }
+        }
+    }
+}
+
+async fn fetch_game_versions(
+    ctx: &McContext,
+    endpoints: &Endpoints,
+    kind: LoaderKind,
+) -> Result<GameVersionSource> {
+    let versions = match kind {
+        LoaderKind::Vanilla => Vec::new(),
+        LoaderKind::Fabric | LoaderKind::Quilt => {
+            let base = if kind == LoaderKind::Fabric {
+                &endpoints.fabric
+            } else {
+                &endpoints.quilt
+            };
+            let url = meta_url(base, &["versions", "game"])?;
+            parse_meta_game_versions(&ctx.http.get_bytes(&url).await?)?
+        }
+        LoaderKind::Forge => {
+            parse_maven_versions(&ctx.http.get_text(&endpoints.forge_metadata).await?)?
+        }
+        LoaderKind::NeoForge => {
+            parse_maven_versions(&ctx.http.get_text(&endpoints.neoforge_metadata).await?)?
+        }
+    };
+    let legacy = if kind == LoaderKind::NeoForge {
+        match ctx.http.get_text(&endpoints.neoforge_legacy_metadata).await {
+            Ok(xml) => parse_maven_versions(&xml)?
+                .iter()
+                .any(|v| v.starts_with(&format!("{NEOFORGE_LEGACY_MC}-"))),
+            Err(error) => {
+                tracing::warn!(%error, "NeoForge 1.20.1 builds could not be listed");
+                false
+            }
+        }
+    } else {
+        false
+    };
+    Ok(GameVersionSource {
+        format: CACHE_FORMAT,
+        versions,
+        legacy,
+    })
+}
+
+/// Fabric/Quilt `/versions/game` answers: the Minecraft versions they support.
+pub(crate) fn parse_meta_game_versions(bytes: &[u8]) -> Result<Vec<String>> {
+    #[derive(Deserialize)]
+    struct GameVersion {
+        version: String,
+    }
+    let raw: Vec<serde_json::Value> =
+        serde_json::from_slice(bytes).map_err(|e| Error::json("game version list", e))?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|value| serde_json::from_value::<GameVersion>(value).ok())
+        .map(|entry| entry.version.trim().to_owned())
+        .filter(|version| !version.is_empty())
+        .collect())
+}
+
 /// Online list with cache fallback.
 pub(crate) async fn loader_entries(
     ctx: &McContext,
@@ -743,6 +891,50 @@ mod tests {
         );
     }
 
+    #[test]
+    fn supported_minecraft_versions_per_loader() {
+        let fabric = GameVersionSource {
+            format: CACHE_FORMAT,
+            versions: parse_meta_game_versions(
+                br#"[{"version": "1.21.4", "stable": true}, {"version": "25w14a", "stable": false},
+                    {"version": "1.20.1", "stable": true}, {"broken": 1}]"#,
+            )
+            .unwrap(),
+            legacy: false,
+        };
+        assert_eq!(fabric.versions, ["1.21.4", "25w14a", "1.20.1"]);
+        assert!(fabric.supports(LoaderKind::Fabric, "1.21.4"));
+        assert!(!fabric.supports(LoaderKind::Fabric, "1.21.5"));
+
+        let forge = GameVersionSource {
+            format: CACHE_FORMAT,
+            versions: versions(),
+            legacy: false,
+        };
+        assert!(forge.supports(LoaderKind::Forge, "1.20.1"));
+        assert!(forge.supports(LoaderKind::Forge, "1.7.10"));
+        assert!(
+            !forge.supports(LoaderKind::Forge, "1.7.1"),
+            "not a prefix match"
+        );
+        assert!(!forge.supports(LoaderKind::Forge, "1.21.1"));
+
+        let neo = GameVersionSource {
+            format: CACHE_FORMAT,
+            versions: neo_versions(),
+            legacy: true,
+        };
+        assert!(neo.supports(LoaderKind::NeoForge, "1.21.1"));
+        assert!(neo.supports(LoaderKind::NeoForge, "26.1.2"));
+        assert!(
+            neo.supports(LoaderKind::NeoForge, "1.20.1"),
+            "legacy artifact"
+        );
+        assert!(!neo.supports(LoaderKind::NeoForge, "1.19.2"));
+        assert!(!neo.supports(LoaderKind::NeoForge, "26.2"));
+        assert!(neo.supports(LoaderKind::Vanilla, "b1.7.3"));
+    }
+
     /// With every endpoint unreachable the cached list is used; without a cache the error is
     /// `Offline`.
     #[tokio::test]
@@ -792,6 +984,27 @@ mod tests {
                 .await
                 .unwrap()
                 .is_empty()
+        );
+
+        // The supported Minecraft versions fall back to their cache the same way.
+        let missing = game_version_source(&ctx, &endpoints, LoaderKind::Quilt).await;
+        assert!(matches!(missing, Err(Error::Offline)), "{missing:?}");
+        let cached = GameVersionSource {
+            format: CACHE_FORMAT,
+            versions: vec!["1.21.1".into()],
+            legacy: false,
+        };
+        write_atomic(
+            &ctx.dirs.meta().join("loaders/quilt/_game-versions.json"),
+            &serde_json::to_vec(&cached).unwrap(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            game_version_source(&ctx, &endpoints, LoaderKind::Quilt)
+                .await
+                .unwrap(),
+            cached
         );
     }
 }

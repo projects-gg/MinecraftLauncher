@@ -1,0 +1,17 @@
+# source: https://github.com/lethargistic/amaranth/issues/3 (log https://pastebin.com/8w86H5jf)
+# loader: NeoForge 21.1.233 (FML 4.0.42), minecraft: 1.21.1
+[08Jun2026 10:55:48.015] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher running: args [--launchTarget, forgeserver, --fml.neoForgeVersion, 21.1.233, --fml.fmlVersion, 4.0.42, --fml.mcVersion, 1.21.1, --fml.neoFormVersion, 20240808.144430]
+[... 136 lines omitted ...]
+[08Jun2026 10:55:49.332] [main/WARN] [mixin/]: @Mixin target net.minecraft.client.OptionInstance was not found c2me-client-uncapvd.mixins.json:ISimpleOption from mod c2me_client_uncapvd
+[... 2 lines omitted ...]
+[08Jun2026 10:55:49.334] [main/WARN] [mixin/]: @Mixin target net.minecraft.client.Options was not found c2me-client-uncapvd.mixins.json:MixinGameOptions from mod c2me_client_uncapvd
+[... 60 lines omitted ...]
+[08Jun2026 10:55:53.618] [main/FATAL] [net.neoforged.fml.ModLoader/LOADING]: Failed to wait for future Mod Construction, 1 errors found
+[08Jun2026 10:55:53.657] [main/ERROR] [net.minecraft.CrashReport/]: Negative index in crash report handler (0/18)
+[08Jun2026 10:55:53.664] [main/FATAL] [net.neoforged.neoforge.common.NeoForgeMod/]: Preparing crash report with UUID 00000000-0000-0000-0000-000000000000
+[08Jun2026 10:55:53.665] [main/FATAL] [net.neoforged.neoforge.server.loading.ServerModLoader/]: Crash report saved to ./crash-reports/crash-2026-06-08_10.55.53-fml.txt
+[08Jun2026 10:55:53.665] [main/FATAL] [net.neoforged.neoforge.common.NeoForgeMod/]: Preparing crash report with UUID 00000000-0000-0000-0000-000000000000
+[08Jun2026 10:55:53.666] [main/ERROR] [net.minecraft.server.Main/FATAL]: Failed to start the minecraft server
+net.neoforged.fml.ModLoadingException: Loading errors encountered:
+	- Amaranth (amaranth) has failed to load correctly
+	  java.lang.ExceptionInInitializerError: null

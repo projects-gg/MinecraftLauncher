@@ -6,6 +6,7 @@
 //! [`Error::Offline`] when something is missing.
 
 pub mod assets;
+pub mod bar;
 pub mod context;
 pub mod libraries;
 pub mod natives;
@@ -25,6 +26,7 @@ use pl_net::{
 use serde::{Deserialize, Serialize};
 
 pub use assets::{AssetIndex, AssetLayout, AssetObject, AssetsInfo, RESOURCES_URL};
+pub use bar::{LaunchBar, LaunchPart};
 pub use context::McContext;
 pub use libraries::{LibraryPlan, NativeJar, plan_libraries};
 pub use natives::{
@@ -40,6 +42,10 @@ use crate::version::ResolvedVersion;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum InstallStage {
+    /// A mod loader's own work before the game files: its profile, the Forge/NeoForge installer,
+    /// the installer's libraries and its processor steps. Reported as steps (`done_files` of
+    /// `total_files`, never going back) with the download speed; see `loaders::common::Progress`.
+    Loader,
     Metadata,
     Java,
     Libraries,
@@ -193,11 +199,16 @@ pub async fn install_version(
     run.fetch(InstallStage::Assets, objects, concurrency * 2)
         .await?;
     let assets_info = assets::assets_info(&ctx.dirs, resolved.assets_id(), &asset_index)?;
-    assets::materialize_layout(
-        &ctx.dirs,
-        &assets_info,
-        &asset_index,
-        options.game_dir.as_deref(),
+    // Old versions copy thousands of assets here; a cancel does not wait for the copy (it goes
+    // on in the background and is repeated, skipping finished files, at the next launch).
+    pl_net::until_cancelled(
+        &options.cancel,
+        assets::materialize_layout(
+            &ctx.dirs,
+            &assets_info,
+            &asset_index,
+            options.game_dir.as_deref(),
+        ),
     )
     .await?;
 
@@ -595,5 +606,110 @@ mod tests {
         assert!(!installed.natives_dir.join("META-INF").exists());
         assert_eq!(installed.assets.layout, AssetLayout::Standard);
         assert!(installed.logging_config.is_none());
+    }
+
+    /// A local HTTP server that answers every request with `size` bytes, slowly (1 KiB every
+    /// 20 ms), counting the requests.
+    async fn slow_server(size: usize) -> (String, Arc<std::sync::atomic::AtomicUsize>) {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let requests = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::clone(&requests);
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let counter = Arc::clone(&counter);
+                tokio::spawn(async move {
+                    let mut head = Vec::new();
+                    let mut buf = [0u8; 1024];
+                    while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                        match socket.read(&mut buf).await {
+                            Ok(0) | Err(_) => return,
+                            Ok(n) => head.extend_from_slice(&buf[..n]),
+                        }
+                    }
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    let header = format!("HTTP/1.1 200 OK\r\nContent-Length: {size}\r\n\r\n");
+                    if socket.write_all(header.as_bytes()).await.is_err() {
+                        return;
+                    }
+                    let mut sent = 0;
+                    while sent < size {
+                        let n = 1024.min(size - sent);
+                        if socket.write_all(&vec![b'{'; n]).await.is_err() {
+                            return;
+                        }
+                        sent += n;
+                        tokio::time::sleep(Duration::from_millis(20)).await;
+                    }
+                });
+            }
+        });
+        (format!("http://{address}"), requests)
+    }
+
+    /// Cancelling an install (here while the asset index downloads) ends it within a second as
+    /// `Cancelled`, starts nothing more and leaves no partial file behind.
+    #[tokio::test]
+    async fn cancelling_an_install_stops_at_once() {
+        use std::sync::atomic::Ordering;
+        let tmp = tempfile::tempdir().unwrap();
+        let size = 4 * 1024 * 1024;
+        let (base, requests) = slow_server(size).await;
+        let ctx = McContext::new(
+            Http::new(HttpConfig::new("pl-mc-test")).unwrap(),
+            DataDirs::new(tmp.path()),
+        )
+        .with_platform(Platform::new(Os::Linux, Arch::X86_64, "6.1"));
+        let vanilla: VersionJson = serde_json::from_str(&format!(
+            r#"{{"id": "1.8.9", "type": "release", "mainClass": "net.minecraft.client.main.Main",
+                "assetIndex": {{"id": "1.8", "sha1": "0000000000000000000000000000000000000000",
+                    "size": {size}, "url": "{base}/indexes/1.8.json"}},
+                "downloads": {{"client": {{"sha1": "00", "url": "{base}/client.jar"}}}},
+                "libraries": [{{"name": "com.example:lib:1.0", "url": "{base}/maven/"}}]}}"#
+        ))
+        .unwrap();
+        let resolved = resolve_with("1.8.9", |_| Ok(vanilla.clone())).unwrap();
+        let cancel = CancellationToken::new();
+        let options = InstallOptions {
+            cancel: cancel.clone(),
+            ..InstallOptions::default()
+        };
+        let run = tokio::spawn(async move { install_version(&ctx, &resolved, options).await });
+        let part = tmp
+            .path()
+            .join("assets")
+            .join("indexes")
+            .join("1.8.json.part");
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while !part.is_file() {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the download never started"
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        let cancelled_at = std::time::Instant::now();
+        cancel.cancel();
+        let result = tokio::time::timeout(Duration::from_secs(5), run)
+            .await
+            .expect("the install kept running")
+            .unwrap();
+        let took = cancelled_at.elapsed();
+        assert!(
+            result.as_ref().is_err_and(Error::is_cancelled),
+            "{result:?}"
+        );
+        assert!(took < Duration::from_secs(1), "cancel took {took:?}");
+        tokio::time::sleep(Duration::from_millis(150)).await;
+        assert_eq!(requests.load(Ordering::SeqCst), 1, "a later stage started");
+        let partial: Vec<PathBuf> = walkdir::WalkDir::new(tmp.path())
+            .into_iter()
+            .flatten()
+            .map(|e| e.into_path())
+            .filter(|p| p.extension().is_some_and(|e| e == "part"))
+            .collect();
+        assert!(partial.is_empty(), "{partial:?}");
     }
 }

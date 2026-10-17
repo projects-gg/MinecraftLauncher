@@ -1,0 +1,21 @@
+# source: https://github.com/comp500/Indium/issues/248 (attachment https://github.com/user-attachments/files/12837431/crash-2023-10-07_12.59.03.6222-quilt_loader.txt)
+# loader: Quilt Loader 0.21.0, minecraft: 1.20.1
+---- Quilt Loader: Failed to load ----
+Date/Time: 2023/10/07 12:59:03.6248
+Quilt Loader Version: 0.21.0
+
+-- Error 1 --
+
+Indium requires version [3.2.0, ∞) of fabric-renderer-api-v1, which is missing!
+
+- <mods>/indium-1.0.27+mc1.20.1.jar
+
+
+-- Plugin State --
+
+Cycle number = 1
+Cycle Step = SOLVE
+
+Loaded Plugins (2):
+ - 'quilt_loader' (Builtin)
+ - 'quilted_fabric_loader' (Builtin)

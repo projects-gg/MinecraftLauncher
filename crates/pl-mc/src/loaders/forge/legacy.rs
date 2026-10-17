@@ -15,8 +15,8 @@ use pl_net::{DownloadItem, HashAlgo, hash_file};
 use serde_json::{Map, Value, json};
 
 use crate::error::{Error, Result};
-use crate::install::{InstallOptions, InstallStage, McContext};
-use crate::loaders::common::{Progress, download, prepare_profile};
+use crate::install::{InstallOptions, McContext};
+use crate::loaders::common::{Progress, download_reporting, prepare_profile};
 use crate::loaders::forge::Outcome;
 use crate::loaders::forge::installer::{Extraction, LegacyProfile, extract};
 use crate::paths::DataDirs;
@@ -236,8 +236,10 @@ pub(crate) async fn install(
         universal,
         checked,
     } = conversion;
+    // Loader steps: the installer (done), the universal jar, each checksum-listed library.
     let progress = Progress::new(options);
-    progress.stage(InstallStage::Libraries);
+    let total = 2 + checked.len();
+    progress.loader(1, total);
 
     let universal_dest = dirs.library_file(&universal.path)?;
     let extracted = extract(
@@ -271,11 +273,19 @@ pub(crate) async fn install(
             }
         }
     }
+    let done = total - pending.len();
+    progress.loader(done, total);
     let items = pending
         .iter()
         .map(|(library, dest)| DownloadItem::with_urls(library.urls.clone(), dest))
         .collect();
-    download(ctx, items, InstallStage::Libraries, options).await?;
+    download_reporting(
+        ctx,
+        items,
+        progress.loader_download_fn(done, total),
+        options,
+    )
+    .await?;
     for (library, dest) in &pending {
         match matching_sha1(dest, &library.checksums).await {
             Some((sha1, size)) => set_library_file(&mut profile, library.index, &sha1, size),
@@ -288,6 +298,7 @@ pub(crate) async fn install(
             }
         }
     }
+    progress.loader(total, total);
     Ok(Outcome {
         profile,
         files: vec![universal_dest],

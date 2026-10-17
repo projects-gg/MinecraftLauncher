@@ -172,6 +172,20 @@ pub async fn list_shader_packs(game_dir: &Path) -> Result<Vec<ShaderPackInfo>> {
     Ok(packs)
 }
 
+/// The data packs folder of a world of a game directory (`saves/<world>/datapacks`).
+pub fn datapacks_dir(game_dir: &Path, world: &str) -> Result<PathBuf> {
+    let world = crate::paths::safe_name(world)?;
+    Ok(game_dir.join("saves").join(world).join("datapacks"))
+}
+
+/// Data packs in a `datapacks` folder: zip files and folders with a `pack.mcmeta`, shaped like
+/// resource packs. Sorted by file name.
+pub async fn list_datapacks(dir: &Path) -> Result<Vec<ResourcePackInfo>> {
+    let mut packs = list_parallel(dir.to_path_buf(), read_resource_pack).await?;
+    packs.sort_by_cached_key(|p| p.file_name.to_lowercase());
+    Ok(packs)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -245,5 +259,35 @@ mod tests {
                 .unwrap()
                 .is_empty()
         );
+    }
+
+    #[tokio::test]
+    async fn lists_a_worlds_data_packs() {
+        let game = tempfile::tempdir().unwrap();
+        let dir = datapacks_dir(game.path(), "Yeni Dünya").unwrap();
+        assert!(dir.ends_with("saves/Yeni Dünya/datapacks"));
+        assert!(datapacks_dir(game.path(), "../escape").is_err());
+        assert!(
+            list_datapacks(&dir).await.unwrap().is_empty(),
+            "no folder yet"
+        );
+        std::fs::create_dir_all(dir.join("handmade")).unwrap();
+        std::fs::write(
+            dir.join("handmade").join("pack.mcmeta"),
+            br#"{"pack":{"pack_format":48,"description":"Mine"}}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("Incendium_1.21_v5.4.zip"),
+            zip_bytes(&[(
+                "pack.mcmeta",
+                br#"{"pack":{"pack_format":48,"description":["",{"text":"Nether","color":"red"}]}}"#,
+            )]),
+        )
+        .unwrap();
+        let packs = list_datapacks(&dir).await.unwrap();
+        let names: Vec<&str> = packs.iter().map(|p| p.file_name.as_str()).collect();
+        assert_eq!(names, ["handmade", "Incendium_1.21_v5.4.zip"]);
+        assert_eq!(packs[1].description.as_deref(), Some("Nether"));
     }
 }

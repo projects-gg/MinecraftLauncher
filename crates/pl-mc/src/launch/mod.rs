@@ -1,5 +1,6 @@
 //! Launching: who plays ([`identity`]), the command line ([`command`]), the running process
-//! ([`process`]), output parsing ([`log`]) and crash analysis ([`crash`]).
+//! ([`process`]), output parsing ([`log`]), crash analysis ([`crash`]) and where "Devam et"
+//! joins ([`resume`]).
 //!
 //! Typical flow: `install::install_version` → [`build_launch_command`] → [`GameProcess::spawn`].
 
@@ -8,6 +9,7 @@ pub mod crash;
 pub mod identity;
 pub mod log;
 pub mod process;
+pub mod resume;
 
 pub use command::{
     LAUNCHER_NAME, LAUNCHER_VERSION, LaunchCommand, LaunchOptions, QuickPlay, WindowOptions,
@@ -23,3 +25,4 @@ pub use process::{
     GameEvent, GameEventFn, GameExit, GameProcess, MAX_LOG_BYTES, MAX_TAIL_LINES, SpawnOptions,
     WINDOW_FALLBACK, looks_like_window,
 };
+pub use resume::{ResumeTarget, quick_play_log_path, resume_target, supports_quick_play};
