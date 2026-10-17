@@ -7,20 +7,19 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::util::eq_ignore_case;
-
 /// Server used when an account leaves its host empty.
 pub const DEFAULT_SERVER_HOST: &str = "play.projects.gg";
-/// Game version of new accounts and of legacy records that never stored one.
+/// Recommended game version of the built-in version list (used while the content index publishes
+/// none; see [`crate::VersionCatalog`]).
 pub const DEFAULT_MINECRAFT_VERSION: &str = "26.3";
 /// "Ask the server" version value understood by MCC.
 pub const AUTO_MINECRAFT_VERSION: &str = "auto";
 /// Name given to scheduler tasks without one.
 pub const DEFAULT_TASK_NAME: &str = "Görev";
 
-/// One entry of the game version picker. Versions sharing a protocol are listed once; `value` is
-/// written to MCC as-is, `label` is the range shown to the user (the UI localizes the
-/// recommended/auto entries).
+/// One entry of the game version picker (see [`crate::VersionCatalog::options`]). Versions sharing
+/// a protocol are listed once; `value` is written to MCC as-is, `label` is the range shown to the
+/// user (the UI words the `auto` entry and marks the recommended one).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct VersionOption {
@@ -28,76 +27,6 @@ pub struct VersionOption {
     pub label: String,
     pub recommended: bool,
     pub auto: bool,
-}
-
-/// `AfkVersions.Options` in legacy order: index 0 is the default.
-const VERSION_TABLE: &[(&str, &str)] = &[
-    (DEFAULT_MINECRAFT_VERSION, DEFAULT_MINECRAFT_VERSION),
-    (AUTO_MINECRAFT_VERSION, AUTO_MINECRAFT_VERSION),
-    ("26.2", "26.2"),
-    ("26.1", "26.1"),
-    ("1.21.11", "1.21.11"),
-    ("1.21.9", "1.21.9 – 1.21.10"),
-    ("1.21.7", "1.21.7 – 1.21.8"),
-    ("1.21.6", "1.21.6"),
-    ("1.21.5", "1.21.5"),
-    ("1.21.4", "1.21.4"),
-    ("1.21.2", "1.21.2 – 1.21.3"),
-    ("1.21", "1.21 – 1.21.1"),
-    ("1.20.5", "1.20.5 – 1.20.6"),
-    ("1.20.3", "1.20.3 – 1.20.4"),
-    ("1.20.2", "1.20.2"),
-    ("1.20", "1.20 – 1.20.1"),
-    ("1.19.4", "1.19.4"),
-    ("1.19.3", "1.19.3"),
-    ("1.19.1", "1.19.1 – 1.19.2"),
-    ("1.19", "1.19"),
-    ("1.18.2", "1.18.2"),
-    ("1.18", "1.18 – 1.18.1"),
-    ("1.17.1", "1.17.1"),
-    ("1.17", "1.17"),
-    ("1.16.4", "1.16.4 – 1.16.5"),
-    ("1.16.3", "1.16.3"),
-    ("1.16.2", "1.16.2"),
-    ("1.16.1", "1.16.1"),
-    ("1.16", "1.16"),
-    ("1.15.2", "1.15.2"),
-    ("1.14.4", "1.14.4"),
-    ("1.13.2", "1.13.2"),
-    ("1.12.2", "1.12.2"),
-    ("1.11.1", "1.11.1 – 1.11.2"),
-    ("1.10", "1.10 – 1.10.2"),
-    ("1.9.3", "1.9.3 – 1.9.4"),
-    ("1.8", "1.8 – 1.8.9"),
-];
-
-/// The game versions the AFK client can join, in picker order.
-pub fn minecraft_versions() -> Vec<VersionOption> {
-    VERSION_TABLE
-        .iter()
-        .enumerate()
-        .map(|(i, (value, label))| VersionOption {
-            value: (*value).to_owned(),
-            label: (*label).to_owned(),
-            recommended: i == 0,
-            auto: *value == AUTO_MINECRAFT_VERSION,
-        })
-        .collect()
-}
-
-/// `AfkVersions.IndexOf`: position of a stored value in the picker; unknown or empty values map to
-/// the default entry (index 0) so a hand-edited record can never block a connection.
-pub fn minecraft_version_index(value: &str) -> usize {
-    let trimmed = value.trim();
-    VERSION_TABLE
-        .iter()
-        .position(|(v, _)| eq_ignore_case(v, trimmed))
-        .unwrap_or(0)
-}
-
-/// `AfkVersions.Normalize`: the value MCC receives for a stored version.
-pub fn normalize_minecraft_version(value: &str) -> &'static str {
-    VERSION_TABLE[minecraft_version_index(value)].0
 }
 
 /// Same rule as the main menu nickname: 3-16 characters of `[A-Za-z0-9_]`.
@@ -122,7 +51,7 @@ pub(crate) fn is_safe_account_id(id: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AfkAccount {
     pub id: String,
@@ -133,7 +62,8 @@ pub struct AfkAccount {
     pub server_port: i32,
     /// Connect this account when the launcher starts.
     pub auto_start: bool,
-    /// [`AUTO_MINECRAFT_VERSION`] or a value from [`minecraft_versions`].
+    /// Empty: follow the recommended version (new accounts); [`AUTO_MINECRAFT_VERSION`]; or a value
+    /// of the version list (see [`crate::VersionCatalog`]).
     pub minecraft_version: String,
     /// When false the server resource pack is not downloaded (the server is still told it loaded).
     pub allow_resource_packs: bool,
@@ -145,28 +75,6 @@ pub struct AfkAccount {
     pub alerts: AlertsOptions,
     pub scheduler: SchedulerOptions,
     pub login_commands: LoginCommandsOptions,
-}
-
-impl Default for AfkAccount {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            nickname: String::new(),
-            server_host: String::new(),
-            server_port: 0,
-            auto_start: false,
-            minecraft_version: DEFAULT_MINECRAFT_VERSION.to_owned(),
-            allow_resource_packs: false,
-            anti_afk: AntiAfkOptions::default(),
-            auto_relog: AutoRelogOptions::default(),
-            auto_eat: AutoEatOptions::default(),
-            auto_respond: AutoRespondOptions::default(),
-            chat_log: ChatLogOptions::default(),
-            alerts: AlertsOptions::default(),
-            scheduler: SchedulerOptions::default(),
-            login_commands: LoginCommandsOptions::default(),
-        }
-    }
 }
 
 impl AfkAccount {
@@ -223,11 +131,13 @@ impl Default for AntiAfkOptions {
 }
 
 /// Reconnect after a disconnect. With the launcher bridge MCC exits on every failure, so these
-/// settings drive the launcher-side restart loop (retry limit and kick-message filter).
+/// settings drive the launcher-side restart loop (delays, retry limit and kick-message filter; see
+/// [`crate::RestartSchedule`]).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AutoRelogOptions {
     pub enabled: bool,
+    /// Seconds before the first restart; later restarts wait longer, up to `delay_max`.
     pub delay_min: f64,
     pub delay_max: f64,
     /// -1 means unlimited.
@@ -423,22 +333,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn version_lookup_is_trimmed_and_case_insensitive() {
-        assert_eq!(normalize_minecraft_version("  AUTO "), "auto");
-        assert_eq!(normalize_minecraft_version("1.21.9"), "1.21.9");
-        assert_eq!(
-            normalize_minecraft_version("1.2.3"),
-            DEFAULT_MINECRAFT_VERSION
-        );
-        assert_eq!(normalize_minecraft_version(""), DEFAULT_MINECRAFT_VERSION);
-        let versions = minecraft_versions();
-        assert_eq!(versions.len(), 37);
-        assert!(versions[0].recommended && !versions[0].auto);
-        assert!(versions[1].auto);
-        assert_eq!(
-            versions.last().map(|v| v.label.as_str()),
-            Some("1.8 – 1.8.9")
-        );
+    fn new_accounts_follow_the_recommended_version() {
+        assert_eq!(AfkAccount::new("Test").minecraft_version, "");
     }
 
     #[test]

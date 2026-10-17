@@ -8,7 +8,8 @@
 use std::path::{Path, PathBuf};
 
 use pl_afk::{
-    INI_FILE_NAME, LOGIN_SCRIPT_FILE_NAME, MATCHES_FILE_NAME, build_config, write_config,
+    INI_FILE_NAME, LOGIN_SCRIPT_FILE_NAME, MATCHES_FILE_NAME, VersionCatalog, build_config,
+    write_config,
 };
 
 #[derive(serde::Deserialize)]
@@ -82,6 +83,7 @@ fn config_matches_the_legacy_writer_byte_for_byte() {
             &legacy.account,
             &legacy.login_commands,
             case.launcher_nickname.as_deref().unwrap_or_default(),
+            &VersionCatalog::built_in(),
         );
         for (file, actual) in [
             (INI_FILE_NAME, &files.ini),
@@ -105,6 +107,7 @@ fn written_files_are_utf8_without_bom_and_identical() {
             &legacy.account,
             &legacy.login_commands,
             case.launcher_nickname.as_deref().unwrap_or_default(),
+            &VersionCatalog::built_in(),
         );
         let target = out.path().join(&case.name);
         write_config(&target, &files).unwrap();

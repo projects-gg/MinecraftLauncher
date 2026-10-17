@@ -4,14 +4,22 @@
 //! numeric fields allow, replies shown without the `send ` prefix) and [`AccountSettings::apply`] is
 //! `OnSaveClicked` + `ApplyToAccount` (trimming, swapping inverted min/max pairs, the `send ` prefix
 //! rule for replies and the three "enabled but empty" checks).
+//!
+//! Beyond the legacy form, the server address and the auto-respond patterns are checked (the
+//! legacy form took anything), the game version is resolved against the current version list
+//! ([`VersionCatalog`]), and the free-form grid numbers are kept in sane ranges: rule cooldowns
+//! 0-86400 s, scheduler intervals 1 s to a week (MCC fires a 0 s interval task on every tick) and
+//! reconnect delays 5 s to an hour.
 
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
     AfkAccount, AlertsOptions, AntiAfkOptions, AutoEatOptions, AutoRelogOptions, AutoRespondMatch,
-    DEFAULT_TASK_NAME, ScheduledTask, SchedulerOptions, normalize_minecraft_version,
+    DEFAULT_TASK_NAME, ScheduledTask, SchedulerOptions,
 };
+use crate::pattern::{PatternProblem, check_pattern};
 use crate::util::eq_ignore_case;
+use crate::versions::VersionCatalog;
 
 /// Everything the settings page edits, in the shape the UI works with.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
@@ -35,7 +43,7 @@ pub struct AccountSettings {
 
 impl Default for AccountSettings {
     fn default() -> Self {
-        Self::from_account(&AfkAccount::default(), &[])
+        Self::from_account(&AfkAccount::default(), &[], &VersionCatalog::built_in())
     }
 }
 
@@ -133,14 +141,20 @@ impl ChatLogFilter {
     }
 }
 
-/// Why the settings could not be saved (the legacy form's "Eksik Bilgi" warnings, in its order).
+/// Why the settings could not be saved: the server address check, then the legacy form's
+/// "Eksik Bilgi" warnings in its order, with the pattern checks next to the auto-respond one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum ValidationIssue {
+    /// The server address is not a host name or IP address (see [`is_valid_server_host`]).
+    InvalidServerHost,
     /// Login commands are on but the list is empty.
     LoginCommandsEmpty,
     /// Auto-respond is on but no rule has both a pattern and a reply.
     AutoRespondNoRules,
+    /// Auto-respond is on and rule number `rule` (0-based, in the order sent) has a pattern the
+    /// client can not use (see [`check_pattern`]).
+    AutoRespondPattern { rule: u32, problem: PatternProblem },
     /// The scheduler is on but no task has an action.
     SchedulerNoTasks,
 }
@@ -198,6 +212,58 @@ pub fn split_lines<S: AsRef<str>>(lines: &[S]) -> Vec<String> {
         .collect()
 }
 
+/// Longest host name DNS allows.
+const MAX_HOST_LEN: usize = 253;
+/// Upper bound of an auto-respond rule's cooldown (a day).
+pub const MAX_COOLDOWN_SECONDS: i32 = 86_400;
+/// Scheduler interval bounds: at least a second, at most a week.
+pub const MIN_TASK_SECONDS: f64 = 1.0;
+pub const MAX_TASK_SECONDS: f64 = 604_800.0;
+/// Reconnect delay bounds: servers and proxies refuse logins from one address that come within a
+/// few seconds of each other, and every attempt starts a client process.
+pub const MIN_RELOG_DELAY_SECONDS: f64 = 5.0;
+pub const MAX_RELOG_DELAY_SECONDS: f64 = 3600.0;
+
+/// A server address MCC can resolve: letters, digits, `.`, `-` and `_`, not starting with `.` or
+/// `-` (no scheme, path, spaces or port; the port has its own field). Surrounding whitespace is
+/// ignored and empty means the default server.
+pub fn is_valid_server_host(host: &str) -> bool {
+    let host = host.trim();
+    host.is_empty()
+        || (host.len() <= MAX_HOST_LEN
+            && !host.starts_with(['.', '-'])
+            && host
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_')))
+}
+
+/// `play.example.net:25566` → (`play.example.net`, 25566): an address typed (or stored by the
+/// legacy launcher) with its port. `None` for anything else, IPv6 literals included.
+pub fn split_host_port(address: &str) -> Option<(&str, i32)> {
+    let (host, digits) = address.trim().rsplit_once(':')?;
+    let host = host.trim();
+    if host.is_empty()
+        || host.contains(':')
+        || digits.is_empty()
+        || digits.len() > 5
+        || !digits.bytes().all(|b| b.is_ascii_digit())
+    {
+        return None;
+    }
+    let port: i32 = digits.parse().ok()?;
+    (1..=65535).contains(&port).then_some((host, port))
+}
+
+/// Host and port as the form stores them: a `host:port` address moves its port into the port field
+/// when that field is unset (0); otherwise the address is kept as typed (and later rejected).
+fn server_address(host: &str, port: i32) -> (String, i32) {
+    let port = clamp_i32(port, 0, 65535);
+    match split_host_port(host) {
+        Some((name, split_port)) if port == 0 => (name.to_owned(), split_port),
+        _ => (host.to_owned(), port),
+    }
+}
+
 fn clamp_i32(value: i32, min: i32, max: i32) -> i32 {
     value.clamp(min, max)
 }
@@ -212,8 +278,18 @@ fn clamp_f64(value: f64, min: f64, max: f64, fallback: f64) -> f64 {
 }
 
 /// `NormalizeRange`: swaps an inverted pair.
-fn ordered(min: f64, max: f64) -> (f64, f64) {
+pub(crate) fn ordered(min: f64, max: f64) -> (f64, f64) {
     if min > max { (max, min) } else { (min, max) }
+}
+
+/// A reconnect delay as the form stores it.
+fn relog_delay(seconds: f64, fallback: f64) -> f64 {
+    clamp_f64(
+        seconds,
+        MIN_RELOG_DELAY_SECONDS,
+        MAX_RELOG_DELAY_SECONDS,
+        fallback,
+    )
 }
 
 /// The relog retry count as the form stores it: -1 (unlimited) or 1-100.
@@ -226,16 +302,22 @@ fn form_retries(retries: i32) -> i32 {
 }
 
 impl AccountSettings {
-    /// `LoadFromAccount`.
-    pub fn from_account(account: &AfkAccount, login_commands: &[String]) -> Self {
+    /// `LoadFromAccount`. The game version is the picker value the stored one resolves to in
+    /// `versions` (the recommended version for "follow" and for values the list does not know).
+    pub fn from_account(
+        account: &AfkAccount,
+        login_commands: &[String],
+        versions: &VersionCatalog,
+    ) -> Self {
         let anti_afk = &account.anti_afk;
         let relog = &account.auto_relog;
         let respond = &account.auto_respond;
         let chat_log = &account.chat_log;
+        let (server_host, server_port) = server_address(&account.server_host, account.server_port);
         Self {
-            server_host: account.server_host.clone(),
-            server_port: clamp_i32(account.server_port, 0, 65535),
-            minecraft_version: normalize_minecraft_version(&account.minecraft_version).to_owned(),
+            server_host,
+            server_port,
+            minecraft_version: versions.resolve(&account.minecraft_version).value,
             auto_start: account.auto_start,
             allow_resource_packs: account.allow_resource_packs,
             login_commands: LoginCommandsSettings {
@@ -253,8 +335,8 @@ impl AccountSettings {
                 ..anti_afk.clone()
             },
             auto_relog: AutoRelogOptions {
-                delay_min: clamp_f64(relog.delay_min, 1.0, 3600.0, 5.0),
-                delay_max: clamp_f64(relog.delay_max, 1.0, 3600.0, 10.0),
+                delay_min: relog_delay(relog.delay_min, 5.0),
+                delay_max: relog_delay(relog.delay_max, 10.0),
                 retries: form_retries(relog.retries),
                 ..relog.clone()
             },
@@ -292,9 +374,20 @@ impl AccountSettings {
 
     /// `OnSaveClicked` + `ApplyToAccount`: validates, then writes the normalized values into
     /// `account` (id and nickname untouched) and returns the normalized login commands. On failure
-    /// `account` is left unchanged and every issue is reported in the legacy check order.
-    pub fn apply(&self, account: &mut AfkAccount) -> Result<Vec<String>, Vec<ValidationIssue>> {
+    /// `account` is left unchanged and every issue is reported in the legacy check order. The game
+    /// version is stored as `versions` says ([`VersionCatalog::to_stored`]: the recommended entry
+    /// follows the recommendation).
+    pub fn apply(
+        &self,
+        account: &mut AfkAccount,
+        versions: &VersionCatalog,
+    ) -> Result<Vec<String>, Vec<ValidationIssue>> {
         let mut issues = Vec::new();
+
+        let (server_host, server_port) = server_address(self.server_host.trim(), self.server_port);
+        if !is_valid_server_host(&server_host) {
+            issues.push(ValidationIssue::InvalidServerHost);
+        }
 
         let login_commands = split_lines(&self.login_commands.commands);
         if self.login_commands.enabled && login_commands.is_empty() {
@@ -302,8 +395,18 @@ impl AccountSettings {
         }
 
         let matches = self.collect_matches();
-        if self.auto_respond.enabled && matches.is_empty() {
-            issues.push(ValidationIssue::AutoRespondNoRules);
+        if self.auto_respond.enabled {
+            if matches.is_empty() {
+                issues.push(ValidationIssue::AutoRespondNoRules);
+            }
+            for (index, rule) in self.auto_respond.rules.iter().enumerate() {
+                if let Some(problem) = check_pattern(&rule.pattern, rule.is_regex) {
+                    issues.push(ValidationIssue::AutoRespondPattern {
+                        rule: u32::try_from(index).unwrap_or(u32::MAX),
+                        problem,
+                    });
+                }
+            }
         }
 
         let tasks = self.collect_tasks();
@@ -315,9 +418,9 @@ impl AccountSettings {
             return Err(issues);
         }
 
-        account.server_host = self.server_host.trim().to_owned();
-        account.server_port = clamp_i32(self.server_port, 0, 65535);
-        account.minecraft_version = normalize_minecraft_version(&self.minecraft_version).to_owned();
+        account.server_host = server_host;
+        account.server_port = server_port;
+        account.minecraft_version = versions.to_stored(&self.minecraft_version);
         account.auto_start = self.auto_start;
         account.allow_resource_packs = self.allow_resource_packs;
 
@@ -344,8 +447,8 @@ impl AccountSettings {
 
         let source = &self.auto_relog;
         let (delay_min, delay_max) = ordered(
-            clamp_f64(source.delay_min, 1.0, 3600.0, 5.0),
-            clamp_f64(source.delay_max, 1.0, 3600.0, 10.0),
+            relog_delay(source.delay_min, 5.0),
+            relog_delay(source.delay_max, 10.0),
         );
         account.auto_relog = AutoRelogOptions {
             enabled: source.enabled,
@@ -409,14 +512,15 @@ impl AccountSettings {
                     private_action,
                     other_action,
                     owners_only: rule.owners_only,
-                    cooldown_seconds: rule.cooldown_seconds,
+                    cooldown_seconds: clamp_i32(rule.cooldown_seconds, 0, MAX_COOLDOWN_SECONDS),
                 })
             })
             .collect()
     }
 
     /// `CollectScheduledTasks`: rows need an action; unnamed tasks get the default name and an
-    /// inverted interval is swapped. Non-finite seconds fall back to the grid defaults (300/600).
+    /// inverted interval is swapped. Non-finite seconds fall back to the grid defaults (300/600);
+    /// the rest is kept between [`MIN_TASK_SECONDS`] and [`MAX_TASK_SECONDS`].
     fn collect_tasks(&self) -> Vec<ScheduledTask> {
         self.scheduler
             .tasks
@@ -427,16 +531,8 @@ impl AccountSettings {
                     return None;
                 }
                 let name = task.name.trim();
-                let min = if task.min_seconds.is_finite() {
-                    task.min_seconds
-                } else {
-                    300.0
-                };
-                let max = if task.max_seconds.is_finite() {
-                    task.max_seconds
-                } else {
-                    600.0
-                };
+                let min = clamp_f64(task.min_seconds, MIN_TASK_SECONDS, MAX_TASK_SECONDS, 300.0);
+                let max = clamp_f64(task.max_seconds, MIN_TASK_SECONDS, MAX_TASK_SECONDS, 600.0);
                 let (min_seconds, max_seconds) = ordered(min, max);
                 Some(ScheduledTask {
                     name: if name.is_empty() {
@@ -474,8 +570,12 @@ mod tests {
         assert_eq!(display_to_action("   "), "");
     }
 
+    fn built_in() -> VersionCatalog {
+        VersionCatalog::built_in()
+    }
+
     fn valid_settings() -> AccountSettings {
-        AccountSettings::from_account(&AfkAccount::new("Test"), &[])
+        AccountSettings::from_account(&AfkAccount::new("Test"), &[], &built_in())
     }
 
     #[test]
@@ -502,7 +602,7 @@ mod tests {
 
         let mut account = AfkAccount::new("Test");
         let id = account.id.clone();
-        let commands = settings.apply(&mut account).unwrap();
+        let commands = settings.apply(&mut account, &built_in()).unwrap();
         assert!(commands.is_empty());
         assert_eq!(account.id, id);
         assert_eq!(
@@ -511,7 +611,7 @@ mod tests {
         );
         assert_eq!(
             (account.auto_relog.delay_min, account.auto_relog.delay_max),
-            (1.0, 3600.0)
+            (MIN_RELOG_DELAY_SECONDS, MAX_RELOG_DELAY_SECONDS)
         );
         assert_eq!(account.auto_relog.retries, 1);
         assert_eq!(account.anti_afk.walk_range, 32);
@@ -551,7 +651,7 @@ mod tests {
 
         let mut account = AfkAccount::new("Test");
         let before = account.clone();
-        let issues = settings.apply(&mut account).unwrap_err();
+        let issues = settings.apply(&mut account, &built_in()).unwrap_err();
         assert_eq!(
             issues,
             vec![
@@ -583,7 +683,7 @@ mod tests {
         settings.chat_log.filter = ChatLogFilter::Chat;
 
         let mut account = AfkAccount::new("Test");
-        let commands = settings.apply(&mut account).unwrap();
+        let commands = settings.apply(&mut account, &built_in()).unwrap();
         assert_eq!(commands, vec!["/login pw", "/kit"]);
         let rule = &account.auto_respond.matches[0];
         assert_eq!(rule.pattern, "selam");
@@ -595,7 +695,7 @@ mod tests {
         assert_eq!(account.chat_log.filter, "chat");
 
         // Loading the saved account shows the replies without the prefix again.
-        let loaded = AccountSettings::from_account(&account, &commands);
+        let loaded = AccountSettings::from_account(&account, &commands, &built_in());
         assert_eq!(loaded.auto_respond.rules[0].reply, "Merhaba $u");
         assert_eq!(loaded.login_commands.commands, commands);
     }
@@ -607,17 +707,259 @@ mod tests {
         account.anti_afk.delay_min = 0.0;
         account.chat_log.filter = "ALL".into();
         account.minecraft_version = "weird".into();
-        let settings = AccountSettings::from_account(&account, &[]);
+        let settings = AccountSettings::from_account(&account, &[], &built_in());
         assert_eq!(settings.auto_relog.retries, 100);
         assert_eq!(settings.anti_afk.delay_min, 1.0);
         assert_eq!(settings.chat_log.filter, ChatLogFilter::All);
         assert_eq!(settings.minecraft_version, "26.3");
         account.auto_relog.retries = -1;
         assert_eq!(
-            AccountSettings::from_account(&account, &[])
+            AccountSettings::from_account(&account, &[], &built_in())
                 .auto_relog
                 .retries,
             -1
+        );
+    }
+
+    #[test]
+    fn server_host_rule() {
+        for ok in [
+            "",
+            "   ",
+            "play.projects.gg",
+            " mc.example.org ",
+            "localhost",
+            "192.168.1.20",
+            "my_srv-01.example.com.",
+            "UPPER.Case.NET",
+        ] {
+            assert!(is_valid_server_host(ok), "{ok:?} should be valid");
+        }
+        for bad in [
+            "play projects.gg",
+            "https://play.projects.gg",
+            "play.projects.gg/harita",
+            "play.projects.gg:25565",
+            ".projects.gg",
+            "-projects.gg",
+            "sunucu.türk",
+            "[::1]",
+            "tab\there",
+        ] {
+            assert!(!is_valid_server_host(bad), "{bad:?} should be invalid");
+        }
+        assert!(!is_valid_server_host(&"a".repeat(254)));
+        assert!(is_valid_server_host(&"a".repeat(253)));
+    }
+
+    #[test]
+    fn host_port_addresses_are_split_only_when_the_port_is_unset() {
+        assert_eq!(
+            split_host_port(" play.example.net:25566 "),
+            Some(("play.example.net", 25566))
+        );
+        assert_eq!(split_host_port("play.example.net"), None);
+        assert_eq!(split_host_port("play.example.net:0"), None);
+        assert_eq!(split_host_port("play.example.net:70000"), None);
+        assert_eq!(split_host_port("play.example.net:port"), None);
+        assert_eq!(split_host_port("::1:25565"), None);
+        assert_eq!(split_host_port(":25565"), None);
+
+        // Typed with the port field left at 0: the port moves over.
+        let mut settings = valid_settings();
+        settings.server_host = "play.example.net:25566".into();
+        let mut account = AfkAccount::new("Test");
+        settings.apply(&mut account, &built_in()).unwrap();
+        assert_eq!(
+            (account.server_host.as_str(), account.server_port),
+            ("play.example.net", 25566)
+        );
+
+        // Both set: ambiguous, rejected without touching the account.
+        settings.server_port = 25565;
+        let before = account.clone();
+        assert_eq!(
+            settings.apply(&mut account, &built_in()).unwrap_err(),
+            vec![ValidationIssue::InvalidServerHost]
+        );
+        assert_eq!(account, before);
+
+        // A legacy record with the port in the address loads into the separate fields.
+        let mut legacy = AfkAccount::new("Legacy");
+        legacy.server_host = "eski.sunucu.net:25570".into();
+        let loaded = AccountSettings::from_account(&legacy, &[], &built_in());
+        assert_eq!(
+            (loaded.server_host.as_str(), loaded.server_port),
+            ("eski.sunucu.net", 25570)
+        );
+        legacy.server_port = 25599;
+        let loaded = AccountSettings::from_account(&legacy, &[], &built_in());
+        assert_eq!(
+            (loaded.server_host.as_str(), loaded.server_port),
+            ("eski.sunucu.net:25570", 25599)
+        );
+    }
+
+    #[test]
+    fn invalid_host_is_reported_before_the_legacy_checks() {
+        let mut settings = valid_settings();
+        settings.server_host = "http://play.projects.gg".into();
+        settings.scheduler.enabled = true;
+        let mut account = AfkAccount::new("Test");
+        assert_eq!(
+            settings.apply(&mut account, &built_in()).unwrap_err(),
+            vec![
+                ValidationIssue::InvalidServerHost,
+                ValidationIssue::SchedulerNoTasks
+            ]
+        );
+    }
+
+    #[test]
+    fn grid_numbers_are_kept_in_range() {
+        let mut settings = valid_settings();
+        settings.auto_respond.enabled = true;
+        settings.auto_respond.rules = vec![
+            AutoRespondRule {
+                pattern: "a".into(),
+                reply: "b".into(),
+                cooldown_seconds: -5,
+                ..AutoRespondRule::default()
+            },
+            AutoRespondRule {
+                pattern: "c".into(),
+                reply: "d".into(),
+                cooldown_seconds: 999_999,
+                ..AutoRespondRule::default()
+            },
+        ];
+        settings.scheduler.enabled = true;
+        settings.scheduler.tasks = vec![
+            ScheduledTask {
+                action: "send /a".into(),
+                min_seconds: 0.0,
+                max_seconds: -10.0,
+                ..ScheduledTask::default()
+            },
+            ScheduledTask {
+                action: "send /b".into(),
+                min_seconds: f64::INFINITY,
+                max_seconds: 1e9,
+                ..ScheduledTask::default()
+            },
+        ];
+        let mut account = AfkAccount::new("Test");
+        settings.apply(&mut account, &built_in()).unwrap();
+        let cooldowns: Vec<i32> = account
+            .auto_respond
+            .matches
+            .iter()
+            .map(|m| m.cooldown_seconds)
+            .collect();
+        assert_eq!(cooldowns, vec![0, MAX_COOLDOWN_SECONDS]);
+        let intervals: Vec<(f64, f64)> = account
+            .scheduler
+            .tasks
+            .iter()
+            .map(|t| (t.min_seconds, t.max_seconds))
+            .collect();
+        assert_eq!(
+            intervals,
+            vec![
+                (MIN_TASK_SECONDS, MIN_TASK_SECONDS),
+                (300.0, MAX_TASK_SECONDS)
+            ]
+        );
+    }
+
+    #[test]
+    fn versions_load_and_save_through_the_current_list() {
+        let catalog = VersionCatalog::from_release(
+            [("26.4", "26.4"), ("26.3", "26.3"), ("1.9.2", "1.9.2")],
+            Some("26.4"),
+        )
+        .unwrap();
+        let load = |stored: &str| {
+            let mut account = AfkAccount::new("Test");
+            account.minecraft_version = stored.into();
+            AccountSettings::from_account(&account, &[], &catalog).minecraft_version
+        };
+        assert_eq!(load(""), "26.4", "new accounts show the recommendation");
+        assert_eq!(load("1.9.2"), "1.9.2", "a valid saved value stays");
+        assert_eq!(load("Auto"), "auto");
+        assert_eq!(
+            load("1.8"),
+            "26.4",
+            "unknown values show the recommendation"
+        );
+
+        let save = |chosen: &str| {
+            let mut settings = valid_settings();
+            settings.minecraft_version = chosen.into();
+            let mut account = AfkAccount::new("Test");
+            settings.apply(&mut account, &catalog).unwrap();
+            account.minecraft_version
+        };
+        assert_eq!(save("26.4"), "", "the recommended entry follows");
+        assert_eq!(save("26.3"), "26.3");
+        assert_eq!(save("auto"), "auto");
+        assert_eq!(save("1.8"), "", "a value the list does not know follows");
+    }
+
+    #[test]
+    fn auto_respond_patterns_are_checked_while_it_is_on() {
+        let rule = |pattern: &str, is_regex: bool| AutoRespondRule {
+            pattern: pattern.into(),
+            reply: "selam".into(),
+            is_regex,
+            ..AutoRespondRule::default()
+        };
+        let mut settings = valid_settings();
+        settings.auto_respond.rules = vec![
+            rule("(?i)selam", true),
+            rule("[bozuk", true),
+            rule("[bozuk değil", false),
+            rule("(a+)+$", true),
+            rule(&"x".repeat(300), false),
+        ];
+
+        // Off: the rules are kept as they are (the client file leaves bad ones out).
+        let mut account = AfkAccount::new("Test");
+        settings.apply(&mut account, &built_in()).unwrap();
+        assert_eq!(account.auto_respond.matches.len(), 5);
+
+        settings.auto_respond.enabled = true;
+        let before = account.clone();
+        assert_eq!(
+            settings.apply(&mut account, &built_in()).unwrap_err(),
+            vec![
+                ValidationIssue::AutoRespondPattern {
+                    rule: 1,
+                    problem: PatternProblem::Invalid
+                },
+                ValidationIssue::AutoRespondPattern {
+                    rule: 3,
+                    problem: PatternProblem::TooComplex
+                },
+                ValidationIssue::AutoRespondPattern {
+                    rule: 4,
+                    problem: PatternProblem::TooLong
+                },
+            ]
+        );
+        assert_eq!(account, before, "nothing is saved");
+        let json = serde_json::to_string(&ValidationIssue::AutoRespondPattern {
+            rule: 1,
+            problem: PatternProblem::Invalid,
+        })
+        .unwrap();
+        assert_eq!(
+            json,
+            r#"{"autoRespondPattern":{"rule":1,"problem":"invalid"}}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&ValidationIssue::InvalidServerHost).unwrap(),
+            r#""invalidServerHost""#
         );
     }
 }

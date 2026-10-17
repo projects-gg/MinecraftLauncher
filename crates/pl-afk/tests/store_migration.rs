@@ -6,8 +6,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use pl_afk::{
-    AccountStore, AfkPaths, LoadReport, MemorySecretStore, SecretStore, build_config,
-    default_kick_messages, login_commands_key,
+    AccountStore, AfkPaths, LoadReport, MemorySecretStore, SecretStore, VersionCatalog,
+    build_config, default_kick_messages, login_commands_key,
 };
 
 const PLAIN_ID: &str = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
@@ -117,7 +117,12 @@ fn legacy_file_loads_unchanged_and_secrets_move_to_the_keychain() {
     assert_eq!(again.login_commands(PLAIN_ID).unwrap().len(), 2);
 
     // The migrated account still produces the legacy config.
-    let from_store = build_config(plain, &again.login_commands(PLAIN_ID).unwrap(), "Hazar");
+    let from_store = build_config(
+        plain,
+        &again.login_commands(PLAIN_ID).unwrap(),
+        "Hazar",
+        &VersionCatalog::built_in(),
+    );
     assert!(
         from_store
             .login_script

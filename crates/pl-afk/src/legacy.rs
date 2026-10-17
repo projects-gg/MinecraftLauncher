@@ -22,9 +22,8 @@ use serde_json::{Map, Value};
 use crate::error::{AfkError, Result};
 use crate::model::{
     AfkAccount, AfkSettings, AlertsOptions, AntiAfkOptions, AutoEatOptions, AutoRelogOptions,
-    AutoRespondMatch, AutoRespondOptions, ChatLogOptions, DEFAULT_MINECRAFT_VERSION,
-    DEFAULT_TASK_NAME, LoginCommandsOptions, ScheduledTask, SchedulerOptions,
-    default_kick_messages,
+    AutoRespondMatch, AutoRespondOptions, ChatLogOptions, DEFAULT_TASK_NAME, LoginCommandsOptions,
+    ScheduledTask, SchedulerOptions, default_kick_messages,
 };
 
 /// An account read from a legacy file, with the login commands it stored in plain text.
@@ -113,7 +112,8 @@ fn read_account(o: Obj<'_>) -> LegacyAccount {
         server_host: o.string("ServerHost", ""),
         server_port: o.i32("ServerPort", 0),
         auto_start: o.bool("AutoStart", false),
-        minecraft_version: o.string("MinecraftVersion", DEFAULT_MINECRAFT_VERSION),
+        // Missing means the legacy default, which today is "follow the recommended version".
+        minecraft_version: o.string("MinecraftVersion", ""),
         allow_resource_packs: o.bool("AllowResourcePacks", false),
         anti_afk: o.object("AntiAfk").map(read_anti_afk).unwrap_or_default(),
         auto_relog: o
@@ -572,7 +572,10 @@ mod tests {
         )
         .unwrap();
         let account = &parsed[0].account;
-        assert_eq!(account.minecraft_version, DEFAULT_MINECRAFT_VERSION);
+        assert_eq!(
+            account.minecraft_version, "",
+            "follows the recommended version"
+        );
         assert_eq!(account.anti_afk, AntiAfkOptions::default());
         assert!(!account.auto_relog.enabled);
         assert_eq!(account.auto_relog.kick_messages, default_kick_messages());

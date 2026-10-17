@@ -4,7 +4,8 @@
 //! afk/
 //!   accounts.json, settings.json
 //!   accounts/<id>/      MCC working directory: MinecraftClient.ini, matches.ini,
-//!                       giris-komutlari.txt (only while needed), sohbet.txt, uyarilar.txt, konsol.txt
+//!                       giris-komutlari.txt (only while needed), sohbet.txt, uyarilar.txt, konsol.txt,
+//!                       istemci.json (the running client's process, see `orphans`)
 //!   bin/<version>/      installed client builds (see `runtime`)
 //! ```
 //!

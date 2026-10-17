@@ -47,7 +47,9 @@ pub trait ClientSpawner: Send + Sync {
 }
 
 /// Spawns the client as a child process: stdin/stdout/stderr piped, `MCC_LAUNCHER_BRIDGE=1`, no
-/// console window on Windows, killed if the launcher drops it.
+/// console window on Windows, killed if the launcher drops it. The running client is recorded in
+/// its account folder until it exits, so a launcher that crashed can stop it at its next start
+/// (see `orphans`).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ProcessSpawner;
 
@@ -70,6 +72,10 @@ impl ClientSpawner for ProcessSpawner {
         command.creation_flags(CREATE_NO_WINDOW);
 
         let mut child = command.spawn()?;
+        let record = child.id().map(|pid| {
+            crate::orphans::record_spawn(&spec.cwd, pid, &spec.exe, &spec.ini);
+            (spec.cwd.clone(), pid)
+        });
         let missing = || std::io::Error::other("child pipe missing");
         let stdin = child.stdin.take().ok_or_else(missing)?;
         let stdout = child.stdout.take().ok_or_else(missing)?;
@@ -78,25 +84,34 @@ impl ClientSpawner for ProcessSpawner {
             stdin: Box::new(stdin),
             stdout: Box::new(stdout),
             stderr: Box::new(stderr),
-            exit: Box::new(ChildExit(child)),
+            exit: Box::new(ChildExit { child, record }),
         })
     }
 }
 
-struct ChildExit(tokio::process::Child);
+struct ChildExit {
+    child: tokio::process::Child,
+    /// Account folder and process id of the client's record (see `orphans`).
+    record: Option<(PathBuf, u32)>,
+}
 
 impl ProcessExit for ChildExit {
     fn wait(self: Box<Self>, kill: CancellationToken) -> ExitFuture {
-        let mut child = self.0;
+        let ChildExit { mut child, record } = *self;
         Box::pin(async move {
-            tokio::select! {
-                status = child.wait() => return status.ok().and_then(|s| s.code()),
-                () = kill.cancelled() => {}
+            let code = tokio::select! {
+                status = child.wait() => status.ok().and_then(|s| s.code()),
+                () = kill.cancelled() => {
+                    if let Err(error) = child.start_kill() {
+                        tracing::debug!(%error, "AFK client already gone when killing");
+                    }
+                    child.wait().await.ok().and_then(|s| s.code())
+                }
+            };
+            if let Some((dir, pid)) = record {
+                crate::orphans::clear_record(&dir, pid);
             }
-            if let Err(error) = child.start_kill() {
-                tracing::debug!(%error, "AFK client already gone when killing");
-            }
-            child.wait().await.ok().and_then(|s| s.code())
+            code
         })
     }
 }

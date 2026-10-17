@@ -13,7 +13,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use parking_lot::Mutex;
+use parking_lot::{Mutex, RwLock};
 
 use crate::error::{AfkError, Result};
 use crate::form::AccountSettings;
@@ -21,9 +21,11 @@ use crate::legacy;
 use crate::model::{
     AfkAccount, AfkSettings, is_safe_account_id, is_valid_nickname, new_account_id,
 };
+use crate::page::SettingsPage;
 use crate::paths::AfkPaths;
 use crate::secrets::{SecretStore, login_commands_key};
 use crate::util::{eq_ignore_case, write_atomic};
+use crate::versions::VersionCatalog;
 
 /// What [`AccountStore::open`] had to repair.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -45,6 +47,15 @@ struct State {
     /// Login commands that are still only in `accounts.json`, by account id.
     plaintext: HashMap<String, Vec<String>>,
     settings: AfkSettings,
+    /// Bumped on every change of an account's settings or login commands (in memory only), so a
+    /// running client can tell it was launched with older ones.
+    revisions: HashMap<String, u64>,
+}
+
+impl State {
+    fn bump(&mut self, id: &str) {
+        *self.revisions.entry(id.to_owned()).or_default() += 1;
+    }
 }
 
 /// Thread-safe AFK account storage.
@@ -52,6 +63,8 @@ pub struct AccountStore {
     paths: AfkPaths,
     secrets: Arc<dyn SecretStore>,
     state: Mutex<State>,
+    /// The game versions the settings page offers and resolves against (see [`VersionCatalog`]).
+    versions: RwLock<Arc<VersionCatalog>>,
 }
 
 impl std::fmt::Debug for AccountStore {
@@ -140,7 +153,9 @@ impl AccountStore {
                 accounts,
                 plaintext,
                 settings,
+                revisions: HashMap::new(),
             }),
+            versions: RwLock::new(Arc::new(VersionCatalog::built_in())),
         };
         if changed {
             let state = store.state.lock();
@@ -151,6 +166,18 @@ impl AccountStore {
 
     pub fn paths(&self) -> &AfkPaths {
         &self.paths
+    }
+
+    /// The game versions accounts choose from now: the built-in list until
+    /// [`Self::set_versions`] hands over the content index's.
+    pub fn versions(&self) -> Arc<VersionCatalog> {
+        self.versions.read().clone()
+    }
+
+    /// Replaces the version list. Stored choices are never rewritten: they resolve against the new
+    /// list from now on.
+    pub fn set_versions(&self, versions: VersionCatalog) {
+        *self.versions.write() = Arc::new(versions);
     }
 
     pub fn accounts(&self) -> Vec<AfkAccount> {
@@ -166,8 +193,8 @@ impl AccountStore {
             .cloned()
     }
 
-    /// Adds an account with legacy defaults. The nickname is trimmed and must be a valid,
-    /// unused (case-insensitive) nickname.
+    /// Adds an account with legacy defaults, following the recommended game version. The nickname
+    /// is trimmed and must be a valid, unused (case-insensitive) nickname.
     pub fn add_account(&self, nickname: &str) -> Result<AfkAccount> {
         let nickname = nickname.trim();
         if !is_valid_nickname(nickname) {
@@ -196,12 +223,15 @@ impl AccountStore {
             .iter_mut()
             .find(|a| a.id == account.id)
             .ok_or_else(|| AfkError::AccountNotFound(account.id.clone()))?;
-        let nickname = std::mem::take(&mut slot.nickname);
-        *slot = AfkAccount {
-            nickname,
+        let updated = AfkAccount {
+            nickname: slot.nickname.clone(),
             ..account
         };
-        let updated = slot.clone();
+        let changed = *slot != updated;
+        *slot = updated.clone();
+        if changed {
+            state.bump(&updated.id);
+        }
         self.save_locked(&state)?;
         Ok(updated)
     }
@@ -216,6 +246,7 @@ impl AccountStore {
             };
             state.accounts.remove(index);
             state.plaintext.remove(id);
+            state.revisions.remove(id);
             self.save_locked(&state)?;
         }
         if let Err(error) = self.secrets.delete(&login_commands_key(id)) {
@@ -248,11 +279,18 @@ impl AccountStore {
             store_commands(self.secrets.as_ref(), id, commands)?;
         }
         let mut state = self.state.lock();
+        state.bump(id);
         if state.plaintext.remove(id).is_some() {
             // The plain-text copy is obsolete now; drop it from disk too.
             self.save_locked(&state)?;
         }
         Ok(())
+    }
+
+    /// Counter of the account's settings changes since the store was opened (see
+    /// [`crate::AfkManager::settings_changed`]).
+    pub fn revision(&self, id: &str) -> u64 {
+        self.state.lock().revisions.get(id).copied().unwrap_or(0)
     }
 
     /// The settings page for an account, including its login commands.
@@ -261,7 +299,11 @@ impl AccountStore {
             .account(id)
             .ok_or_else(|| AfkError::AccountNotFound(id.to_owned()))?;
         let commands = self.login_commands(id)?;
-        Ok(AccountSettings::from_account(&account, &commands))
+        Ok(AccountSettings::from_account(
+            &account,
+            &commands,
+            &self.versions(),
+        ))
     }
 
     /// Validates and saves the settings page. Login commands are stored first: if the keychain
@@ -271,9 +313,34 @@ impl AccountStore {
             .account(id)
             .ok_or_else(|| AfkError::AccountNotFound(id.to_owned()))?;
         let commands = settings
-            .apply(&mut account)
+            .apply(&mut account, &self.versions())
             .map_err(AfkError::InvalidSettings)?;
         self.set_login_commands(id, &commands)?;
+        self.update_account(account)
+    }
+
+    /// The settings page for the UI: like [`Self::settings_form`] but stored secrets stay in the
+    /// keychain (see [`SettingsPage`]). May block on the keychain.
+    pub fn settings_page(&self, id: &str) -> Result<SettingsPage> {
+        self.settings_form(id).map(SettingsPage::from_settings)
+    }
+
+    /// Validates and saves a settings page. Kept secrets are read back from the keychain; the
+    /// keychain is only written when the command list actually changed. Nothing is saved on any
+    /// error. May block on the keychain.
+    pub fn save_settings_page(&self, id: &str, page: SettingsPage) -> Result<AfkAccount> {
+        let mut account = self
+            .account(id)
+            .ok_or_else(|| AfkError::AccountNotFound(id.to_owned()))?;
+        let stored = self.login_commands(id)?;
+        let settings = page.into_settings(&stored)?;
+        let commands = settings
+            .apply(&mut account, &self.versions())
+            .map_err(AfkError::InvalidSettings)?;
+        let pending_migration = self.state.lock().plaintext.contains_key(id);
+        if commands != stored || pending_migration {
+            self.set_login_commands(id, &commands)?;
+        }
         self.update_account(account)
     }
 
@@ -493,6 +560,113 @@ mod tests {
                 .commands,
             vec!["/login pw1"]
         );
+    }
+
+    #[test]
+    fn settings_page_round_trip_keeps_secrets_in_the_keychain() {
+        use crate::page::LoginCommandLine;
+
+        let dir = tempfile::tempdir().unwrap();
+        let secrets = Arc::new(MemorySecretStore::new());
+        let (store, _) = open(dir.path(), &secrets);
+        let account = store.add_account("Paged").unwrap();
+        store
+            .set_login_commands(
+                &account.id,
+                &["/login hunter22".to_owned(), "/warp afk".to_owned()],
+            )
+            .unwrap();
+
+        let mut page = store.settings_page(&account.id).unwrap();
+        let json = serde_json::to_string(&page).unwrap();
+        assert!(!json.contains("hunter22"), "{json}");
+        assert_eq!(
+            page.login_commands.commands[0],
+            LoginCommandLine::Stored {
+                index: 0,
+                command: "/login".into()
+            }
+        );
+
+        // Unrelated change: the keychain is not written again.
+        page.server_host = "mc.example.org".into();
+        page.login_commands.enabled = true;
+        secrets.set_failing(true);
+        assert!(
+            matches!(
+                store.save_settings_page(&account.id, page.clone()),
+                Err(AfkError::Secret(_))
+            ),
+            "kept secrets are read back first"
+        );
+        secrets.set_failing(false);
+        let saved = store.save_settings_page(&account.id, page.clone()).unwrap();
+        assert_eq!(saved.server_host, "mc.example.org");
+        assert_eq!(
+            store.login_commands(&account.id).unwrap(),
+            vec!["/login hunter22", "/warp afk"]
+        );
+
+        // Replacing the secret and dropping the other line.
+        page.login_commands.commands = vec![LoginCommandLine::Text {
+            text: " /login yenisifre ".into(),
+        }];
+        store.save_settings_page(&account.id, page.clone()).unwrap();
+        assert_eq!(
+            store.login_commands(&account.id).unwrap(),
+            vec!["/login yenisifre"]
+        );
+        let file = std::fs::read_to_string(dir.path().join("accounts.json")).unwrap();
+        assert!(!file.contains("yenisifre") && !file.contains("hunter22"));
+
+        // The old page still points at the replaced list: rejected, nothing saved.
+        let mut stale = store.settings_page(&account.id).unwrap();
+        stale.login_commands.commands = vec![LoginCommandLine::Stored {
+            index: 1,
+            command: "/login".into(),
+        }];
+        stale.auto_start = true;
+        assert!(matches!(
+            store.save_settings_page(&account.id, stale),
+            Err(AfkError::LoginCommandsChanged)
+        ));
+        assert!(!store.account(&account.id).unwrap().auto_start);
+
+        // Clearing the list deletes the keychain entry.
+        page.login_commands.enabled = false;
+        page.login_commands.commands.clear();
+        store.save_settings_page(&account.id, page).unwrap();
+        assert!(secrets.entries().is_empty());
+    }
+
+    #[test]
+    fn revisions_count_real_changes_only() {
+        let dir = tempfile::tempdir().unwrap();
+        let secrets = Arc::new(MemorySecretStore::new());
+        let (store, _) = open(dir.path(), &secrets);
+        let account = store.add_account("Counted").unwrap();
+        assert_eq!(store.revision(&account.id), 0);
+
+        let page = store.settings_page(&account.id).unwrap();
+        store.save_settings_page(&account.id, page.clone()).unwrap();
+        assert_eq!(store.revision(&account.id), 0, "nothing changed");
+
+        let mut changed = page;
+        changed.anti_afk.command = "/ping".into();
+        store.save_settings_page(&account.id, changed).unwrap();
+        assert_eq!(store.revision(&account.id), 1);
+
+        store
+            .set_login_commands(&account.id, &["/kit".to_owned()])
+            .unwrap();
+        assert_eq!(store.revision(&account.id), 2);
+
+        assert!(matches!(
+            store.save_settings_page("missing", SettingsPage::default()),
+            Err(AfkError::AccountNotFound(_))
+        ));
+        store.remove_account(&account.id).unwrap();
+        assert_eq!(store.revision(&account.id), 0);
     }
 
     #[test]

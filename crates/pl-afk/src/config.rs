@@ -12,9 +12,10 @@ use crate::error::{AfkError, Result};
 use crate::model::{
     AfkAccount, AlertsOptions, AntiAfkOptions, AutoEatOptions, AutoRelogOptions,
     AutoRespondOptions, ChatLogOptions, DEFAULT_TASK_NAME, LoginCommandsOptions, ScheduledTask,
-    normalize_minecraft_version,
 };
+use crate::pattern::{check_pattern, matches_line};
 use crate::util::write_atomic;
+use crate::versions::VersionCatalog;
 
 pub const INI_FILE_NAME: &str = "MinecraftClient.ini";
 pub const MATCHES_FILE_NAME: &str = "matches.ini";
@@ -39,14 +40,15 @@ pub struct ConfigFiles {
 
 /// Builds all files for `account`. `login_commands` is the raw stored list (blank entries are
 /// ignored); `launcher_nickname` is the player's main launcher nickname, written as the only bot
-/// owner (blank means none).
+/// owner (blank means none); `versions` resolves the stored game version (see [`VersionCatalog`]).
 pub fn build_config(
     account: &AfkAccount,
     login_commands: &[String],
     launcher_nickname: &str,
+    versions: &VersionCatalog,
 ) -> ConfigFiles {
     ConfigFiles {
-        ini: build_ini(account, login_commands, launcher_nickname),
+        ini: build_ini(account, login_commands, launcher_nickname, versions),
         matches: build_matches_ini(&account.auto_respond),
         login_script: build_login_script(&account.login_commands, login_commands),
     }
@@ -95,7 +97,12 @@ impl Out {
     }
 }
 
-fn build_ini(account: &AfkAccount, login_commands: &[String], launcher_nickname: &str) -> String {
+fn build_ini(
+    account: &AfkAccount,
+    login_commands: &[String],
+    launcher_nickname: &str,
+    versions: &VersionCatalog,
+) -> String {
     // AutoEat reads the inventory and AntiAFK's walking needs terrain handling: forced on here
     // instead of asking the user.
     let inventory_handling = account.auto_eat.enabled;
@@ -134,7 +141,7 @@ fn build_ini(account: &AfkAccount, login_commands: &[String], launcher_nickname:
     out.line("ExitOnFailure = true");
     out.line(&format!(
         "MinecraftVersion = {}",
-        toml_str(normalize_minecraft_version(&account.minecraft_version))
+        toml_str(&versions.resolve(&account.minecraft_version).value)
     ));
     out.line(&format!(
         "LoadResourcePackTranslations = {}",
@@ -366,13 +373,14 @@ fn script_wait_ticks(seconds: f64) -> i32 {
 }
 
 /// `matches.ini` for AutoRespond (MCC's INI format, not TOML): one `[Match]` block per rule with a
-/// pattern and at least one action.
+/// pattern and at least one action. A pattern the client could not use is left out (see
+/// [`crate::pattern`]), so a rule saved before the check existed never breaks the client.
 fn build_matches_ini(options: &AutoRespondOptions) -> String {
     let mut out = Out::new();
     out.line("# Projects Launcher tarafından üretildi. Elle yapılan değişiklikler kaybolur.");
     out.blank();
 
-    for rule in &options.matches {
+    for (index, rule) in options.matches.iter().enumerate() {
         if rule.pattern.trim().is_empty() {
             continue;
         }
@@ -382,10 +390,17 @@ fn build_matches_ini(options: &AutoRespondOptions) -> String {
         if !has_action {
             continue;
         }
+        if let Some(problem) = check_pattern(&rule.pattern, rule.is_regex) {
+            tracing::warn!(
+                rule = index,
+                ?problem,
+                "auto-respond rule left out: unusable pattern"
+            );
+            continue;
+        }
 
         out.line("[Match]");
-        let key = if rule.is_regex { "regex=" } else { "match=" };
-        out.line(&format!("{key}{}", rule.pattern.trim()));
+        out.line(&matches_line(&rule.pattern, rule.is_regex));
         for (key, value) in [
             ("action=", &rule.action),
             ("actionprivate=", &rule.private_action),
@@ -613,6 +628,64 @@ mod tests {
         assert_eq!(toml_str("del\u{7f} 🎮 ğ"), "\"del\u{7f} 🎮 ğ\"");
         assert_eq!(toml_arr(&["  a ", " ", ""]), r#"[ "a" ]"#);
         assert_eq!(toml_arr::<&str>(&[]), "[ ]");
+    }
+
+    #[test]
+    fn unusable_patterns_never_reach_the_client() {
+        let rule = |pattern: &str, is_regex: bool| crate::model::AutoRespondMatch {
+            pattern: pattern.into(),
+            is_regex,
+            action: "send merhaba".into(),
+            ..crate::model::AutoRespondMatch::default()
+        };
+        let options = AutoRespondOptions {
+            enabled: true,
+            matches: vec![
+                rule("[bozuk", true),
+                rule("(a+)+$", true),
+                rule("#genel selam", false),
+                rule(r"^\[#(\w+)\]", true),
+                rule("selam", false),
+            ],
+            ..AutoRespondOptions::default()
+        };
+        let ini = build_matches_ini(&options);
+        let patterns: Vec<&str> = ini
+            .lines()
+            .filter(|l| l.starts_with("regex=") || l.starts_with("match="))
+            .collect();
+        assert_eq!(
+            patterns,
+            vec![
+                r"regex=(?i)\x23genel selam",
+                r"regex=^\[\x23(\w+)\]",
+                "match=selam"
+            ]
+        );
+        assert_eq!(ini.matches("[Match]").count(), 3);
+    }
+
+    #[test]
+    fn stored_versions_resolve_against_the_list() {
+        let versions = VersionCatalog::built_in();
+        let mut account = AfkAccount::new("Test");
+        let ini = |account: &AfkAccount| build_ini(account, &[], "", &versions);
+        assert!(
+            ini(&account).contains("MinecraftVersion = \"26.3\"\r\n"),
+            "follows"
+        );
+        account.minecraft_version = " AUTO ".into();
+        assert!(ini(&account).contains("MinecraftVersion = \"auto\"\r\n"));
+        account.minecraft_version = "1.9.2".into();
+        assert!(ini(&account).contains("MinecraftVersion = \"1.9.2\"\r\n"));
+        account.minecraft_version = "1.2.3".into();
+        assert!(ini(&account).contains("MinecraftVersion = \"26.3\"\r\n"));
+        let index = VersionCatalog::from_release([("26.4", "26.4")], None).unwrap();
+        account.minecraft_version = String::new();
+        assert!(
+            build_ini(&account, &[], "", &index).contains("MinecraftVersion = \"26.4\"\r\n"),
+            "follows the published recommendation"
+        );
     }
 
     #[test]

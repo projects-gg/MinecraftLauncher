@@ -18,9 +18,12 @@ const WAIT: Duration = Duration::from_secs(30);
 fn fast_config() -> ManagerConfig {
     ManagerConfig {
         stagger: Duration::from_millis(200),
+        // Every account delay (5-10 s by default) shrinks to 0.6 s.
         restart: RestartSchedule {
-            step: Duration::from_millis(300),
-            max: Duration::from_millis(600),
+            floor: Duration::from_millis(300),
+            ceiling: Duration::from_millis(600),
+            ramp: 4,
+            ..RestartSchedule::default()
         },
         stop_grace: Duration::from_secs(2),
         ..ManagerConfig::default()
@@ -101,6 +104,12 @@ async fn full_session_with_a_real_process() {
         !env.login_script_exists(&id),
         "deleted once the game was joined"
     );
+    // The running client is recorded for the next start, in case this launcher crashes.
+    let record = read(&env, &id, pl_afk::RECORD_FILE_NAME);
+    assert!(
+        record.contains("\"pid\"") && record.contains("MinecraftClient.ini"),
+        "{record}"
+    );
 
     let console = manager.console(&id);
     let find = |text: &str| console.iter().find(|l| l.text == text).cloned();
@@ -142,6 +151,10 @@ async fn full_session_with_a_real_process() {
         "merhaba dünya\n/quit\n"
     );
     assert_eq!(runs(&env, &id), 1, "a requested stop is never restarted");
+    assert!(
+        !env.account_dir(&id).join(pl_afk::RECORD_FILE_NAME).exists(),
+        "the record goes with the client"
+    );
     assert!(!env.all_event_json().contains("hunter22"));
     until("console log", WAIT, || {
         read(&env, &id, "konsol.txt").contains("[echo] merhaba dünya")

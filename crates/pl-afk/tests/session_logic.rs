@@ -10,7 +10,7 @@ use std::time::Duration;
 use common::{ScriptedSpawner, TestEnv, is_error, until};
 use pl_afk::{
     AfkError, AfkEventKind, ClientSpawner, ConsoleLineKind, ConsoleOrigin, FailureReason,
-    ManagerConfig, SessionState, SessionStats,
+    KickCause, ManagerConfig, SessionState, SessionStats,
 };
 
 const LONG: Duration = Duration::from_secs(600);
@@ -32,10 +32,41 @@ fn gaps(spawner: &ScriptedSpawner, run: Duration) -> Vec<u64> {
         .collect()
 }
 
+/// [`gaps`] in fractional seconds.
+fn exact_gaps(spawner: &ScriptedSpawner, run: Duration) -> Vec<f64> {
+    let launches = spawner.launches.lock();
+    launches
+        .windows(2)
+        .map(|w| (w[1].at - (w[0].at + run)).as_secs_f64())
+        .collect()
+}
+
+/// Each restart waits its base delay ±20 % (`RestartSchedule::spread_delay`), so clients that
+/// dropped together do not all come back in the same second. Gaps are whole seconds.
+fn assert_gaps_near(measured: &[u64], base: &[u64]) {
+    assert_eq!(measured.len(), base.len(), "{measured:?}");
+    for (gap, base) in measured.iter().zip(base) {
+        let (low, high) = (base * 8 / 10, base * 12 / 10 + 1);
+        assert!(
+            (low..=high).contains(gap),
+            "restart gap {gap}s outside {low}..={high}s (base {base}s): {measured:?}"
+        );
+    }
+}
+
+/// The legacy back-off: the account's reconnect delay set to 15-60 s.
+fn legacy_delays(env: &TestEnv, id: &str) {
+    env.update(id, |a| {
+        a.auto_relog.delay_min = 15.0;
+        a.auto_relog.delay_max = 60.0;
+    });
+}
+
 #[tokio::test(start_paused = true)]
-async fn restart_backoff_is_15_30_45_60_then_60() {
+async fn restart_backoff_ramps_through_the_account_delay_with_spread() {
     let env = TestEnv::new(None);
     let id = env.add("Backoff").id;
+    legacy_delays(&env, &id);
     let s = ScriptedSpawner::new(|_, mut proc| async move {
         proc.event(r#"{"e":"connecting","host":"h","port":25565}"#)
             .await;
@@ -46,7 +77,8 @@ async fn restart_backoff_is_15_30_45_60_then_60() {
     manager.connect(&id).await.unwrap();
 
     until("six launches", LONG, || s.launch_count() >= 6).await;
-    assert_eq!(gaps(&s, Duration::from_secs(1)), vec![15, 30, 45, 60, 60]);
+    // 15-60 s: 15 s, then doubling (and the ramp) up to 60 s.
+    assert_gaps_near(&gaps(&s, Duration::from_secs(1)), &[15, 30, 60, 60, 60]);
 
     let reconnecting: Vec<u32> = env
         .states(&id)
@@ -67,6 +99,38 @@ async fn restart_backoff_is_15_30_45_60_then_60() {
         })
         .collect();
     assert_eq!(reconnecting, vec![1, 2, 3, 4, 5]);
+    manager.shutdown().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn new_accounts_reconnect_after_their_short_default_delay() {
+    let env = TestEnv::new(None);
+    let id = env.add("Hizli").id;
+    let s = ScriptedSpawner::new(|_, _proc| async move {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        Some(3)
+    });
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    manager.connect(&id).await.unwrap();
+    until("five launches", LONG, || s.launch_count() >= 5).await;
+    // 5-10 s: 5 s doubling while the client keeps failing, each ±20 %.
+    let measured = exact_gaps(&s, Duration::from_secs(1));
+    assert_eq!(measured.len(), 4, "{measured:?}");
+    for (gap, base) in measured.iter().zip([5.0, 10.0, 20.0, 40.0]) {
+        assert!(
+            (base * 0.8 - 0.01..=base * 1.2 + 0.01).contains(gap),
+            "gap {gap:.2}s outside ±20 % of {base}s: {measured:?}"
+        );
+    }
+
+    // Changed while the fifth client runs: its restart already waits the new delay.
+    env.update(&id, |a| {
+        a.auto_relog.delay_min = 120.0;
+        a.auto_relog.delay_max = 120.0;
+    });
+    until("sixth launch", LONG, || s.launch_count() >= 6).await;
+    let gap = exact_gaps(&s, Duration::from_secs(1))[4];
+    assert!((96.0..=144.01).contains(&gap), "{gap}");
     manager.shutdown().await;
 }
 
@@ -99,22 +163,117 @@ async fn retry_limit_stops_the_restart_loop() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn joining_resets_the_backoff() {
+async fn a_lasting_connection_resets_the_backoff() {
     let env = TestEnv::new(None);
     let id = env.add("Rejoin").id;
+    legacy_delays(&env, &id);
     let s = ScriptedSpawner::new(|run, mut proc| async move {
         if run == 1 {
             proc.event(r#"{"e":"joined","user":"Rejoin","host":"h","port":25565,"protocol":777}"#)
                 .await;
+            // In game for two and a half minutes: the connection worked.
+            tokio::time::sleep(Duration::from_secs(150)).await;
+        } else {
+            tokio::time::sleep(Duration::from_secs(1)).await;
         }
-        tokio::time::sleep(Duration::from_secs(1)).await;
         Some(3)
     });
     let manager = env.manager(spawner(&s), ManagerConfig::default());
     manager.connect(&id).await.unwrap();
     until("three launches", LONG, || s.launch_count() >= 3).await;
-    // Without the join the second gap would be 30 s.
-    assert_eq!(gaps(&s, Duration::from_secs(1)), vec![15, 15]);
+    let launches = s.launches.lock().clone();
+    let first = (launches[1].at - (launches[0].at + Duration::from_secs(1))).as_secs_f64();
+    let second = (launches[2].at - (launches[1].at + Duration::from_secs(150))).as_secs_f64();
+    // Without the lasting connection the second gap would be 30 s (24..=36 s with the spread).
+    for gap in [first, second] {
+        assert!((12.0..=18.01).contains(&gap), "{first} {second}");
+    }
+    manager.shutdown().await;
+}
+
+/// Joined, then kicked a second later, again and again (a login plugin, an anti-bot check): the
+/// short join is not a working connection, so the restarts back off instead of hammering the
+/// server every few seconds.
+#[tokio::test(start_paused = true)]
+async fn a_quick_kick_after_joining_keeps_backing_off() {
+    let env = TestEnv::new(None);
+    let id = env.add("Atilan").id;
+    let s = ScriptedSpawner::new(|_, mut proc| async move {
+        proc.event(r#"{"e":"joined","user":"Atilan","host":"h","port":25565,"protocol":777}"#)
+            .await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        proc.event(r#"{"e":"disconnected","reason":"InGameKick","msg":"Spam yüzünden atıldınız"}"#)
+            .await;
+        Some(2)
+    });
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    manager.connect(&id).await.unwrap();
+    until("six launches", LONG, || s.launch_count() >= 6).await;
+    // 5 s doubling up to about a minute, each ±20 %.
+    assert_gaps_near(&gaps(&s, Duration::from_secs(1)), &[5, 10, 20, 40, 60]);
+    manager.shutdown().await;
+}
+
+/// A ban does not go away by reconnecting: the session stops with the reason.
+#[tokio::test(start_paused = true)]
+async fn a_ban_stops_reconnecting() {
+    let env = TestEnv::new(None);
+    let id = env.add("Yasakli").id;
+    let s = ScriptedSpawner::new(|_, mut proc| async move {
+        proc.event(r#"{"e":"disconnected","reason":"LoginRejected","msg":"§cYou are banned from this server!"}"#)
+            .await;
+        Some(4)
+    });
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    manager.connect(&id).await.unwrap();
+    until("stopped by the ban", LONG, || {
+        is_error(&env.last_state(&id)) && !manager.any_active()
+    })
+    .await;
+    assert_eq!(
+        env.last_state(&id),
+        Some(SessionState::Error {
+            reason: FailureReason::Refused {
+                cause: KickCause::Banned,
+                message: Some("You are banned from this server!".into()),
+            },
+            retry_limit_reached: false,
+        })
+    );
+    tokio::time::sleep(Duration::from_secs(600)).await;
+    assert_eq!(s.launch_count(), 1, "no reconnect after a ban");
+    manager.shutdown().await;
+}
+
+/// "Already connected" can be the server still holding a dropped session for a few seconds, so
+/// it is retried (backing off); five in a row mean the name really is online elsewhere.
+#[tokio::test(start_paused = true)]
+async fn already_connected_stops_after_five_in_a_row() {
+    let env = TestEnv::new(None);
+    let id = env.add("Ikiz").id;
+    let s = ScriptedSpawner::new(|_, mut proc| async move {
+        proc.event(r#"{"e":"disconnected","reason":"LoginRejected","msg":"You are already connected to this proxy!"}"#)
+            .await;
+        Some(4)
+    });
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    manager.connect(&id).await.unwrap();
+    until("gave up on the twin", LONG, || {
+        is_error(&env.last_state(&id)) && !manager.any_active()
+    })
+    .await;
+    assert_eq!(s.launch_count(), 5);
+    assert_gaps_near(&gaps(&s, Duration::ZERO), &[5, 10, 20, 40]);
+    assert_eq!(
+        env.last_state(&id),
+        Some(SessionState::Error {
+            reason: FailureReason::Refused {
+                cause: KickCause::AlreadyConnected,
+                message: Some("You are already connected to this proxy!".into()),
+            },
+            retry_limit_reached: false,
+        })
+    );
     manager.shutdown().await;
 }
 
@@ -581,6 +740,43 @@ async fn removing_an_account_stops_its_client_and_deletes_everything() {
     assert!(!manager.any_active());
     assert!(matches!(
         manager.connect(&id).await,
+        Err(AfkError::AccountNotFound(_))
+    ));
+    manager.shutdown().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_account_being_removed_is_never_started_again() {
+    let env = TestEnv::new(None);
+    let id = env.add("Gidiyor").id;
+    // The client ignores `/quit`: the removal waits for the kill after the grace period.
+    let s = ScriptedSpawner::new(|_, mut proc| async move { proc.hang().await });
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    manager.connect(&id).await.unwrap();
+    until("running", LONG, || manager.snapshot(&id).running).await;
+
+    let removal = tokio::spawn({
+        let manager = manager.clone();
+        let id = id.clone();
+        async move { manager.remove_account(&id).await }
+    });
+    until("stopping", LONG, || {
+        env.last_state(&id) == Some(SessionState::Stopping)
+    })
+    .await;
+    // A connect meanwhile (a bulk connect reaching the account, a click) must not start it.
+    assert!(matches!(
+        manager.connect(&id).await,
+        Err(AfkError::AccountNotFound(_))
+    ));
+    removal.await.unwrap().unwrap();
+    tokio::time::sleep(Duration::from_secs(60)).await;
+    assert_eq!(s.launch_count(), 1);
+    assert!(!manager.any_active());
+    assert!(env.store.account(&id).is_none());
+    assert!(!env.account_dir(&id).exists());
+    assert!(matches!(
+        manager.remove_account(&id).await,
         Err(AfkError::AccountNotFound(_))
     ));
     manager.shutdown().await;

@@ -17,6 +17,8 @@ use crate::error::{AfkError, Result};
 use crate::form::AccountSettings;
 use crate::housekeeping::{DEFAULT_LOG_CAP_BYTES, purge_login_scripts};
 use crate::model::{AfkAccount, AfkSettings};
+use crate::orphans;
+use crate::page::SettingsPage;
 use crate::process::{ClientSpawner, ProcessSpawner};
 use crate::restart::RestartSchedule;
 use crate::runtime::{AfkClientRelease, AfkRuntime, ClientExe};
@@ -24,13 +26,15 @@ use crate::session::{
     AfkEventKind, EventSink, Session, SessionEnv, SessionSnapshot, SessionState, SessionStats,
 };
 use crate::store::AccountStore;
+use crate::versions::VersionCatalog;
 
 /// Timing knobs (production defaults; tests shrink them).
 #[derive(Debug, Clone)]
 pub struct ManagerConfig {
     /// Gap between accounts in a bulk connect (legacy: 15 s).
     pub stagger: Duration,
-    /// Automatic restart back-off (legacy: 15/30/45/60 s, then 60 s).
+    /// Bounds and ramp of the automatic restart back-off; the delays themselves are each
+    /// account's AutoRelog delay.
     pub restart: RestartSchedule,
     /// Time a client gets to leave after `/quit` before it is killed (legacy: 4 s).
     pub stop_grace: Duration,
@@ -81,7 +85,8 @@ pub struct BulkOutcome {
 #[serde(rename_all = "camelCase")]
 pub struct SavedSettings {
     pub account: AfkAccount,
-    /// The client runs with the old settings until it reconnects (legacy hint).
+    /// The running client was launched with older settings and keeps them until it reconnects
+    /// (legacy hint, now only when something actually changed).
     pub reconnect_needed: bool,
 }
 
@@ -121,15 +126,24 @@ impl Drop for BulkGuard<'_> {
 }
 
 impl AfkManager {
-    /// Creates the manager. No client runs yet, so login scripts left behind by a crash are
-    /// deleted here.
+    /// Creates the manager. No client of ours runs yet, so clients a crashed launcher left
+    /// running are stopped here (only processes this launcher recorded starting, see `orphans`)
+    /// and the login scripts a crash left behind are deleted.
     pub fn new(
         store: Arc<AccountStore>,
         runtime: Arc<AfkRuntime>,
         events: EventSink,
         options: ManagerOptions,
     ) -> Self {
-        let purged = purge_login_scripts(&store.paths().accounts_dir());
+        let accounts_dir = store.paths().accounts_dir();
+        let stopped = orphans::stop_orphans(&accounts_dir, &mut orphans::OsProcesses::new());
+        if !stopped.is_empty() {
+            tracing::warn!(
+                ?stopped,
+                "stopped AFK clients a previous launcher left running"
+            );
+        }
+        let purged = purge_login_scripts(&accounts_dir);
         if purged > 0 {
             tracing::info!(purged, "deleted stale AFK login scripts");
         }
@@ -176,6 +190,18 @@ impl AfkManager {
     /// The client build the content index currently publishes (`None` when unknown/offline).
     pub fn set_client_release(&self, release: Option<AfkClientRelease>) {
         *self.inner.release.write() = release;
+    }
+
+    /// The game versions and the recommended one the content index publishes with the client
+    /// (`None`: nothing usable published, the built-in list applies). Applies to every config
+    /// written and every settings page loaded from now on; stored choices are never rewritten.
+    pub fn set_versions(&self, versions: Option<VersionCatalog>) {
+        self.inner.store.set_versions(versions.unwrap_or_default());
+    }
+
+    /// The game versions accounts choose from now.
+    pub fn versions(&self) -> Arc<VersionCatalog> {
+        self.inner.store.versions()
     }
 
     fn session(&self, account_id: &str) -> Arc<Session> {
@@ -444,8 +470,15 @@ impl AfkManager {
         self.inner.store.add_account(nickname)
     }
 
-    /// Stops the account's client, then removes the account, its keychain entry and its folder.
+    /// Removes the account and its keychain entry, stops its client, then deletes its folder. The
+    /// account leaves the list first, so nothing (a bulk connect reaching it, a click, an
+    /// automatic restart) can start it again while its client is being stopped.
     pub async fn remove_account(&self, account_id: &str) -> Result<()> {
+        let store = self.inner.store.clone();
+        let id = account_id.to_owned();
+        let removed = tokio::task::spawn_blocking(move || store.remove_account(&id))
+            .await
+            .map_err(|e| AfkError::InvalidData(format!("remove task failed: {e}")))??;
         let session = self.inner.sessions.lock().remove(account_id);
         if let Some(session) = session {
             session.stop();
@@ -454,11 +487,6 @@ impl AfkManager {
                 .await;
             session.shutdown().await;
         }
-        let store = self.inner.store.clone();
-        let id = account_id.to_owned();
-        let removed = tokio::task::spawn_blocking(move || store.remove_account(&id))
-            .await
-            .map_err(|e| AfkError::InvalidData(format!("remove task failed: {e}")))??;
         if !removed {
             return Err(AfkError::AccountNotFound(account_id.to_owned()));
         }
@@ -484,11 +512,53 @@ impl AfkManager {
         settings: &AccountSettings,
     ) -> Result<SavedSettings> {
         let account = self.inner.store.save_settings(account_id, settings)?;
-        let reconnect_needed = self.existing(account_id).is_some_and(|s| s.is_running());
         Ok(SavedSettings {
             account,
-            reconnect_needed,
+            reconnect_needed: self.settings_changed(account_id),
         })
+    }
+
+    /// The settings page for the UI, secrets left in the keychain (may block on the keychain).
+    pub fn settings_page(&self, account_id: &str) -> Result<SettingsPage> {
+        self.inner.store.settings_page(account_id)
+    }
+
+    /// Validates and saves a page from [`Self::settings_page`] (may block on the keychain).
+    pub fn save_settings_page(
+        &self,
+        account_id: &str,
+        page: SettingsPage,
+    ) -> Result<SavedSettings> {
+        let account = self.inner.store.save_settings_page(account_id, page)?;
+        Ok(SavedSettings {
+            account,
+            reconnect_needed: self.settings_changed(account_id),
+        })
+    }
+
+    /// True while the account's client runs with settings older than the saved ones: they apply
+    /// after [`Self::reconnect`] (or the next automatic restart).
+    pub fn settings_changed(&self, account_id: &str) -> bool {
+        self.existing(account_id)
+            .and_then(|s| s.launched_revision())
+            .is_some_and(|launched| launched != self.inner.store.revision(account_id))
+    }
+
+    /// Restarts the account's client so it picks up the saved settings: an active session is
+    /// stopped (`/quit`, killed after the grace period) and launched again. An idle account just
+    /// connects.
+    pub async fn reconnect(&self, account_id: &str) -> Result<()> {
+        if self.inner.store.account(account_id).is_none() {
+            return Err(AfkError::AccountNotFound(account_id.to_owned()));
+        }
+        if let Some(session) = self.existing(account_id).filter(|s| s.is_active()) {
+            session.stop();
+            let wait = self.inner.config.stop_grace + Duration::from_secs(3);
+            if !session.wait_idle(wait).await {
+                tracing::warn!(account = %account_id, "AFK client did not stop before reconnecting");
+            }
+        }
+        self.connect(account_id).await
     }
 
     pub fn afk_settings(&self) -> AfkSettings {
@@ -512,4 +582,5 @@ fn manager_futures_are_send(manager: &AfkManager) {
     send(manager.stop_all());
     send(manager.shutdown());
     send(manager.remove_account("id"));
+    send(manager.reconnect("id"));
 }

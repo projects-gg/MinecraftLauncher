@@ -6,7 +6,13 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!**/bindings.ts", "!**/src-tauri", "!**/dist"]
+    "includes": [
+      "**",
+      "!**/bindings.ts",
+      "!**/src-tauri",
+      "!**/dist",
+      "!crates/pl-afk/tests/golden"
+    ]
   },
   "formatter": {
     "enabled": true,

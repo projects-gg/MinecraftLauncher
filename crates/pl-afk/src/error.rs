@@ -47,6 +47,11 @@ pub enum AfkError {
     #[error("AFK settings are incomplete: {0:?}")]
     InvalidSettings(Vec<ValidationIssue>),
 
+    /// The settings page kept a stored login command that is no longer in the keychain (the list
+    /// changed after the page was loaded). Nothing was saved.
+    #[error("the stored login commands changed after the settings page was loaded")]
+    LoginCommandsChanged,
+
     #[error("the AFK client is not installed")]
     ClientNotInstalled,
 

@@ -21,6 +21,10 @@ zip = { workspace = true }
 parking_lot = { workspace = true }
 keyring = { workspace = true }
 specta = { workspace = true }
+# Auto-respond regex checks (the parser behind `regex`, already in the lock file).
+regex-syntax = "0.8"
+# Start time and command line of AFK clients a crashed launcher left running.
+sysinfo = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

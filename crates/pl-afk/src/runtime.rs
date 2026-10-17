@@ -185,7 +185,10 @@ impl AfkRuntime {
         if !source.join(CLIENT_EXE_NAME).is_file() {
             return Err(AfkError::ClientNotInstalled);
         }
-        let staging = self.bin_dir.join(STAGING_DIR).join(format!("{version}-adopt"));
+        let staging = self
+            .bin_dir
+            .join(STAGING_DIR)
+            .join(format!("{version}-adopt"));
         let _ = std::fs::remove_dir_all(&staging);
         copy_dir(source, &staging).map_err(|e| AfkError::io(&staging, e))?;
         let marker = serde_json::to_vec(&Marker {
@@ -507,14 +510,18 @@ fn is_valid_version(version: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'_' | b'+'))
 }
 
-/// Natural order: digit runs compare numerically (`v10` > `v9`, `1.10.0` > `1.9.2`).
+/// Natural order: digit runs compare numerically (`v10` > `v9`, `1.10.0` > `1.9.2`). A `v` right
+/// before the first digit is ignored, so the v1 launcher's `v3` sorts below `4.0.0`, and a
+/// pre-release suffix sorts below the plain release (`4.1.0-beta` < `4.1.0`).
 fn compare_versions(a: &str, b: &str) -> Ordering {
-    let mut a = chunks(a).into_iter();
-    let mut b = chunks(b).into_iter();
+    let mut a = chunks(without_v_prefix(a)).into_iter();
+    let mut b = chunks(without_v_prefix(b)).into_iter();
     loop {
         match (a.next(), b.next()) {
             (None, None) => return Ordering::Equal,
+            (None, Some(rest)) if rest.starts_with('-') => return Ordering::Greater,
             (None, Some(_)) => return Ordering::Less,
+            (Some(rest), None) if rest.starts_with('-') => return Ordering::Less,
             (Some(_), None) => return Ordering::Greater,
             (Some(x), Some(y)) => {
                 let order = match (x.parse::<u64>(), y.parse::<u64>()) {
@@ -526,6 +533,16 @@ fn compare_versions(a: &str, b: &str) -> Ordering {
                 }
             }
         }
+    }
+}
+
+fn without_v_prefix(version: &str) -> &str {
+    match version
+        .strip_prefix('v')
+        .or_else(|| version.strip_prefix('V'))
+    {
+        Some(rest) if rest.starts_with(|c: char| c.is_ascii_digit()) => rest,
+        _ => version,
     }
 }
 
@@ -552,6 +569,25 @@ mod tests {
         assert_eq!(compare_versions("1.10.0", "1.9.2"), Ordering::Greater);
         assert_eq!(compare_versions("v1", "v1"), Ordering::Equal);
         assert_eq!(compare_versions("v1", "v1.1"), Ordering::Less);
+    }
+
+    #[test]
+    fn legacy_v1_client_sorts_below_numbered_releases() {
+        assert_eq!(compare_versions("v3", "4.0.0"), Ordering::Less);
+        assert_eq!(compare_versions("4.0.0", "v3"), Ordering::Greater);
+        assert_eq!(compare_versions("v3", "3"), Ordering::Equal);
+        assert_eq!(without_v_prefix("vanilla"), "vanilla");
+    }
+
+    #[test]
+    fn pre_releases_sort_below_the_release() {
+        assert_eq!(compare_versions("4.1.0-beta", "4.1.0"), Ordering::Less);
+        assert_eq!(compare_versions("4.1.0", "4.1.0-beta"), Ordering::Greater);
+        assert_eq!(compare_versions("4.1.0-beta", "4.0.0"), Ordering::Greater);
+        assert_eq!(
+            compare_versions("4.1.0-beta.2", "4.1.0-beta.10"),
+            Ordering::Less
+        );
     }
 
     #[test]

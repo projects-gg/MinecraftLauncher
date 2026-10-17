@@ -127,6 +127,12 @@ const SENSITIVE_COMMANDS: &[&str] = &[
     "/2fauth",
 ];
 
+/// The command names [`is_sensitive_command`] treats as carrying passwords (lowercase), for UIs
+/// that mask such commands while they are typed.
+pub fn sensitive_command_names() -> &'static [&'static str] {
+    SENSITIVE_COMMANDS
+}
+
 /// First word of a command, split at a space or tab.
 fn first_token(command: &str) -> &str {
     let trimmed = command.trim();

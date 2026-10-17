@@ -36,7 +36,8 @@ use crate::model::{AfkAccount, AutoRelogOptions};
 use crate::paths::CONSOLE_LOG_FILE_NAME;
 use crate::process::{ClientProcess, ClientSpawner, LaunchSpec};
 use crate::restart::{
-    ExitDecision, Failure, FailureReason, RestartSchedule, decide_exit, decide_failure,
+    ExitDecision, Failure, FailureReason, KickCause, RestartSchedule, decide_exit, decide_failure,
+    kick_cause,
 };
 use crate::runtime::ClientExe;
 use crate::store::AccountStore;
@@ -169,6 +170,8 @@ struct Shared {
     /// A start was requested and the actor has not picked it up yet (keeps `is_active` true in
     /// between, so the launcher never exits right after a connect).
     start_pending: bool,
+    /// Store revision of the settings the running client was launched with.
+    launched_revision: Option<u64>,
 }
 
 enum Command {
@@ -215,6 +218,7 @@ impl Session {
             running: false,
             client_version: None,
             start_pending: false,
+            launched_revision: None,
         }));
         let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (io_tx, io_rx) = mpsc::unbounded_channel();
@@ -232,6 +236,9 @@ impl Session {
             generation: 0,
             stop_requested: false,
             restart_attempts: 0,
+            joined_at: None,
+            last_cause: None,
+            cause_repeats: 0,
             restart_at: None,
             kill_at: None,
             failure: None,
@@ -289,6 +296,12 @@ impl Session {
             .flatten()
     }
 
+    /// Store revision of the running client's settings (`None` while no client runs).
+    pub(crate) fn launched_revision(&self) -> Option<u64> {
+        let shared = self.shared.lock();
+        shared.running.then_some(shared.launched_revision).flatten()
+    }
+
     pub(crate) fn snapshot(&self) -> SessionSnapshot {
         let shared = self.shared.lock();
         SessionSnapshot {
@@ -338,6 +351,8 @@ struct Prepared {
     files: ConfigFiles,
     client: ClientExe,
     dir: PathBuf,
+    /// Store revision read before the settings.
+    revision: u64,
 }
 
 struct Actor {
@@ -349,8 +364,15 @@ struct Actor {
     process: Option<Running>,
     generation: u64,
     stop_requested: bool,
-    /// Automatic restarts since the last join.
+    /// Automatic restarts since the last lasting connection (see
+    /// [`RestartSchedule::stable_after`]): a join that ends in a kick seconds later does not
+    /// reset them, so a client that keeps getting kicked backs off.
     restart_attempts: u32,
+    /// When the running client joined the game.
+    joined_at: Option<Instant>,
+    /// The kick cause of the last failure, and how many failures in a row had it.
+    last_cause: Option<KickCause>,
+    cause_repeats: u32,
     restart_at: Option<Instant>,
     kill_at: Option<Instant>,
     /// What the running client last reported through the bridge.
@@ -416,6 +438,9 @@ impl Actor {
         self.stop_requested = false;
         self.restart_at = None;
         self.restart_attempts = 0;
+        self.joined_at = None;
+        self.last_cause = None;
+        self.cause_repeats = 0;
         self.failure = None;
         self.set_state(SessionState::Starting);
         self.launch(false).await;
@@ -498,6 +523,8 @@ impl Actor {
 
     async fn prepare(&mut self) -> std::result::Result<Prepared, FailureReason> {
         let store = self.env.store.clone();
+        // Read before the settings: a save racing this launch then counts as not applied.
+        let revision = store.revision(&self.id);
         let account = store
             .account(&self.id)
             .ok_or_else(|| FailureReason::LaunchFailed {
@@ -520,7 +547,7 @@ impl Actor {
 
         let client = (self.env.resolve_client)().ok_or(FailureReason::ClientMissing)?;
         let nickname = self.env.launcher_nickname.read().clone();
-        let files = build_config(&account, &commands, &nickname);
+        let files = build_config(&account, &commands, &nickname, &store.versions());
         let dir = store.paths().account_dir(&self.id);
 
         let written = {
@@ -553,6 +580,7 @@ impl Actor {
             files,
             client,
             dir,
+            revision,
         })
     }
 
@@ -563,6 +591,7 @@ impl Actor {
             files,
             client,
             dir,
+            revision,
         } = prepared;
         self.account_dir = Some(dir.clone());
         let spec = LaunchSpec {
@@ -642,6 +671,7 @@ impl Actor {
             let mut shared = self.shared.lock();
             shared.running = true;
             shared.client_version = Some(client.version);
+            shared.launched_revision = Some(revision);
         }
         tracing::info!(account = %self.id, is_restart, "AFK client started");
         self.set_state(SessionState::Connecting);
@@ -652,7 +682,8 @@ impl Actor {
         let relog = self.latest_relog();
         if is_restart && relog.enabled {
             // Legacy: a failed restart (e.g. a briefly locked file) keeps the loop going.
-            let decision = decide_failure(&relog, None, reason, self.restart_attempts);
+            let decision = decide_failure(&relog, None, reason, self.restart_attempts, 0);
+            self.note_cause(None);
             self.apply_decision(decision);
         } else {
             self.set_state(SessionState::Error {
@@ -736,7 +767,8 @@ impl Actor {
                 // The client read the login script before announcing the join (ScriptScheduler
                 // runs before the bridge bot), so the password file can go now.
                 self.remove_login_script();
-                self.restart_attempts = 0;
+                // The restart count starts over only once this connection lasts.
+                self.joined_at = Some(Instant::now());
                 self.failure = None;
                 self.set_state(SessionState::Connected {
                     since: Timestamp::now(),
@@ -795,12 +827,14 @@ impl Actor {
             self.failure.take(),
             Failure::new(reason, masked.as_deref(), version_error),
         );
+        self.forget_failures_after_a_lasting_connection();
         let relog = self.latest_relog();
         let decision = decide_failure(
             &relog,
             failure.reason.as_ref(),
             failure.to_reason(),
             self.restart_attempts,
+            self.repeats_of(&failure),
         );
         self.failure = Some(failure);
         let state = match decision {
@@ -836,16 +870,63 @@ impl Actor {
             .emit(&self.id, AfkEventKind::Stats(SessionStats::default()));
         tracing::info!(account = %self.id, ?code, "AFK client exited");
 
+        self.forget_failures_after_a_lasting_connection();
+        self.joined_at = None;
         let relog = self.latest_relog();
+        let failure = self.failure.take();
+        let repeats = failure
+            .as_ref()
+            .map_or(0, |failure| self.repeats_of(failure));
         let decision = decide_exit(
             &relog,
             self.stop_requested,
             code,
-            self.failure.as_ref(),
+            failure.as_ref(),
             self.restart_attempts,
+            repeats,
         );
-        self.failure = None;
+        if !self.stop_requested {
+            self.note_cause(
+                failure
+                    .as_ref()
+                    .and_then(|f| kick_cause(f.reason.as_ref(), f.message.as_deref())),
+            );
+        }
         self.apply_decision(decision);
+    }
+
+    /// In game for [`RestartSchedule::stable_after`]: the connection worked, so the failures
+    /// before it no longer count.
+    fn forget_failures_after_a_lasting_connection(&mut self) {
+        if self
+            .joined_at
+            .is_some_and(|at| at.elapsed() >= self.env.schedule.stable_after)
+        {
+            self.restart_attempts = 0;
+            self.last_cause = None;
+            self.cause_repeats = 0;
+        }
+    }
+
+    /// How many failures right before `failure` had its kick cause.
+    fn repeats_of(&self, failure: &Failure) -> u32 {
+        match (
+            kick_cause(failure.reason.as_ref(), failure.message.as_deref()),
+            self.last_cause,
+        ) {
+            (Some(cause), Some(last)) if cause == last => self.cause_repeats,
+            _ => 0,
+        }
+    }
+
+    /// Records the cause of a finished failure (`None`: it had none, which ends a streak).
+    fn note_cause(&mut self, cause: Option<KickCause>) {
+        if cause.is_some() && cause == self.last_cause {
+            self.cause_repeats += 1;
+        } else {
+            self.last_cause = cause;
+            self.cause_repeats = u32::from(cause.is_some());
+        }
     }
 
     fn apply_decision(&mut self, decision: ExitDecision) {
@@ -861,7 +942,15 @@ impl Actor {
             }),
             ExitDecision::Restart { attempt, reason } => {
                 self.restart_attempts = attempt;
-                let delay = self.env.schedule.delay(attempt);
+                // Any varying value spreads the reconnects; no cryptographic randomness needed.
+                let spread = f64::from(
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |since| since.subsec_nanos() % 1000),
+                ) / 999.0;
+                // The account's delay as it is now (it may have been edited since the launch).
+                let relog = self.latest_relog();
+                let delay = self.env.schedule.spread_delay(&relog, attempt, spread);
                 self.restart_at = Some(Instant::now() + delay);
                 let next_attempt_at = jiff::SignedDuration::try_from(delay)
                     .ok()
