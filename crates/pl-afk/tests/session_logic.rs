@@ -801,3 +801,75 @@ async fn missing_client_fails_the_connect() {
     assert_eq!(outcome.failed, vec![id.clone()]);
     assert_eq!(manager.snapshot(&id).state, SessionState::Stopped);
 }
+
+#[tokio::test(start_paused = true)]
+async fn an_update_restart_brings_back_running_and_queued_accounts() {
+    let env = TestEnv::new(None);
+    let ids: Vec<String> = ["Birinci", "Ikinci", "Ucuncu"]
+        .iter()
+        .map(|n| env.add(n).id)
+        .collect();
+    let never_started = env.add("Bekleyen").id;
+    let s = ScriptedSpawner::new(|_, mut proc| async move { proc.until_quit().await });
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    assert!(manager.resume_candidates().is_empty(), "nothing runs yet");
+
+    // The three connect one by one (a removed account's id is skipped).
+    let mut asked = ids.clone();
+    asked.push("silinmis".into());
+    let bulk = tokio::spawn({
+        let manager = manager.clone();
+        async move { manager.connect_staggered(&asked).await }
+    });
+    until("first launch", LONG, || s.launch_count() == 1).await;
+    assert_eq!(
+        manager.resume_candidates(),
+        ids,
+        "the one connecting and the two still waiting in the queue"
+    );
+    assert!(!manager.resume_candidates().contains(&never_started));
+
+    // Stopped by the player meanwhile: not brought back.
+    manager.disconnect(&ids[0]);
+    until("first stopped", LONG, || {
+        manager.snapshot(&ids[0]).state == SessionState::Stopped
+    })
+    .await;
+    assert_eq!(manager.resume_candidates(), ids[1..].to_vec());
+
+    // The update stops everything, the queue included.
+    manager.stop_all().await;
+    assert!(bulk.await.unwrap().unwrap().cancelled);
+    assert!(manager.resume_candidates().is_empty());
+    manager.shutdown().await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn auto_start_also_connects_the_accounts_an_update_stopped() {
+    let env = TestEnv::new(None);
+    let auto = env.add("Oto").id;
+    let stopped_by_update = env.add("Gece").id;
+    let _left_alone = env.add("Elle").id;
+    env.update(&auto, |a| a.auto_start = true);
+    let s = ScriptedSpawner::new(|_, mut proc| async move { proc.until_quit().await });
+    let manager = env.manager(spawner(&s), ManagerConfig::default());
+    let start = tokio::time::Instant::now();
+    let outcome = manager
+        .auto_start_with(&[stopped_by_update.clone(), "silinmis".into()])
+        .await
+        .unwrap();
+    assert_eq!(
+        outcome.started,
+        vec![auto.clone(), stopped_by_update.clone()]
+    );
+    until("second launch", LONG, || s.launch_count() == 2).await;
+    let launches = s.launches.lock().clone();
+    assert_eq!(launches.len(), 2, "the account nobody asked for stays off");
+    assert_eq!(
+        (launches[1].at - start).as_secs_f64().round() as u64,
+        15,
+        "the same staggered queue as \"connect all\""
+    );
+    assert_eq!(launches[1].spec.cwd, env.account_dir(&stopped_by_update));
+    manager.shutdown().await;
+}

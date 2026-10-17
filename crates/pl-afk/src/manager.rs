@@ -100,8 +100,15 @@ struct Inner {
     download_progress: Option<ProgressFn>,
     release: RwLock<Option<AfkClientRelease>>,
     sessions: Mutex<HashMap<String, Arc<Session>>>,
-    bulk: Mutex<Option<CancellationToken>>,
+    bulk: Mutex<Option<BulkRun>>,
     prepare_lock: tokio::sync::Mutex<()>,
+}
+
+/// A staggered bulk connect in progress.
+struct BulkRun {
+    token: CancellationToken,
+    /// Accounts it has not reached yet (the one it is connecting included).
+    remaining: Vec<String>,
 }
 
 #[derive(Clone)]
@@ -118,7 +125,7 @@ impl std::fmt::Debug for AfkManager {
 }
 
 /// Clears the bulk-run slot when a run ends, however it ends.
-struct BulkGuard<'a>(&'a Mutex<Option<CancellationToken>>);
+struct BulkGuard<'a>(&'a Mutex<Option<BulkRun>>);
 
 impl Drop for BulkGuard<'_> {
     fn drop(&mut self) {
@@ -300,26 +307,82 @@ impl AfkManager {
 
     /// Connects the auto-start accounts, staggered like [`Self::connect_all`].
     pub async fn auto_start(&self) -> Result<BulkOutcome> {
+        self.auto_start_with(&[]).await
+    }
+
+    /// Connects the auto-start accounts and `also` (the accounts a launcher update stopped, see
+    /// [`Self::resume_candidates`]) in one staggered run, in account order.
+    pub async fn auto_start_with(&self, also: &[String]) -> Result<BulkOutcome> {
         let ids = self
             .inner
             .store
             .accounts()
             .into_iter()
-            .filter(|a| a.auto_start)
+            .filter(|a| a.auto_start || also.contains(&a.id))
             .map(|a| a.id)
             .collect();
         self.run_staggered(ids).await
     }
 
+    /// Connects these accounts, staggered like [`Self::connect_all`] and in account order (ids
+    /// of removed accounts are skipped).
+    pub async fn connect_staggered(&self, ids: &[String]) -> Result<BulkOutcome> {
+        let ids = self
+            .inner
+            .store
+            .accounts()
+            .into_iter()
+            .filter(|a| ids.contains(&a.id))
+            .map(|a| a.id)
+            .collect();
+        self.run_staggered(ids).await
+    }
+
+    /// The accounts to bring back after the launcher restarts (for an update): every account in
+    /// game, connecting or waiting to reconnect, and those a running bulk connect has yet to
+    /// reach, in account order. Accounts being stopped or stopped for good are left out.
+    pub fn resume_candidates(&self) -> Vec<String> {
+        let queued = self
+            .inner
+            .bulk
+            .lock()
+            .as_ref()
+            .map(|run| run.remaining.clone())
+            .unwrap_or_default();
+        self.inner
+            .store
+            .accounts()
+            .into_iter()
+            .map(|a| a.id)
+            .filter(|id| {
+                queued.contains(id)
+                    || matches!(
+                        self.snapshot(id).state,
+                        SessionState::Starting
+                            | SessionState::Connecting
+                            | SessionState::Connected { .. }
+                            | SessionState::Reconnecting { .. }
+                    )
+            })
+            .collect()
+    }
+
     /// Cancels a running bulk connect (accounts already started keep running).
     pub fn cancel_bulk(&self) {
-        if let Some(token) = self.inner.bulk.lock().as_ref() {
-            token.cancel();
+        if let Some(run) = self.inner.bulk.lock().as_ref() {
+            run.token.cancel();
         }
     }
 
     pub fn bulk_running(&self) -> bool {
         self.inner.bulk.lock().is_some()
+    }
+
+    /// The bulk run is done with this account (started, skipped or failed).
+    fn bulk_reached(&self, account_id: &str) {
+        if let Some(run) = self.inner.bulk.lock().as_mut() {
+            run.remaining.retain(|id| id != account_id);
+        }
     }
 
     async fn run_staggered(&self, ids: Vec<String>) -> Result<BulkOutcome> {
@@ -329,7 +392,10 @@ impl AfkManager {
                 return Err(AfkError::Busy);
             }
             let token = CancellationToken::new();
-            *bulk = Some(token.clone());
+            *bulk = Some(BulkRun {
+                token: token.clone(),
+                remaining: ids.clone(),
+            });
             token
         };
         let _guard = BulkGuard(&self.inner.bulk);
@@ -342,6 +408,7 @@ impl AfkManager {
                 break;
             }
             if self.is_active(&id) {
+                self.bulk_reached(&id);
                 outcome.skipped.push(id);
                 continue;
             }
@@ -352,11 +419,14 @@ impl AfkManager {
                 }
                 // Connected by hand while waiting.
                 if self.is_active(&id) {
+                    self.bulk_reached(&id);
                     outcome.skipped.push(id);
                     continue;
                 }
             }
-            match self.connect(&id).await {
+            let result = self.connect(&id).await;
+            self.bulk_reached(&id);
+            match result {
                 Ok(()) => outcome.started.push(id),
                 Err(error) => {
                     tracing::warn!(account = %id, %error, "bulk connect could not start an account");
@@ -585,6 +655,8 @@ fn manager_futures_are_send(manager: &AfkManager) {
     send(manager.connect("id"));
     send(manager.connect_all());
     send(manager.auto_start());
+    send(manager.auto_start_with(&[]));
+    send(manager.connect_staggered(&[]));
     send(manager.stop_all());
     send(manager.shutdown());
     send(manager.remove_account("id"));
