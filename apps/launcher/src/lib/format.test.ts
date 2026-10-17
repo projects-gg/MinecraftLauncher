@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatBytes, formatDuration, formatSpeed } from "./format";
-import i18n from "./i18n";
+import i18n, { loadEnglish } from "./i18n";
 
 const KB = 1024;
 const MB = KB * 1024;
@@ -47,6 +47,7 @@ describe("formatDuration", () => {
   });
 
   it("takes its units from the strings", async () => {
+    await loadEnglish();
     await i18n.changeLanguage("en");
     try {
       expect(formatDuration(2 * 3600 + 14 * 60)).toBe("2 h 14 min");
