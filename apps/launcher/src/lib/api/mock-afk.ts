@@ -438,6 +438,31 @@ function setState(account: AfkAccount, state: AfkAccount["state"]) {
   notify();
 }
 
+/**
+ * Preview switch `?afk=fail`: five seconds after start the connected account is banned and stops
+ * for good, as the backend reports it (the notice of features/afk/use-afk-watch.ts).
+ */
+function failSoon() {
+  try {
+    if (new URLSearchParams(window.location.search).get("afk") !== "fail") return;
+  } catch {
+    return;
+  }
+  setTimeout(() => {
+    const account = accounts.find((a) => a.state.kind === "connected");
+    if (!account) return;
+    account.health = undefined;
+    account.food = undefined;
+    account.players = undefined;
+    push(account.id, "You are banned from this server!", "system");
+    setState(account, {
+      kind: "error",
+      reason: "Sunucudan yasaklandı (You are banned from this server!)",
+    });
+  }, 5000);
+}
+failSoon();
+
 async function connect(account: AfkAccount) {
   account.settingsChanged = false;
   setState(account, { kind: "starting" });

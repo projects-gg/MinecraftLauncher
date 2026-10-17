@@ -5,6 +5,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { commands } from "@/bindings";
+import { useAfkWatch } from "@/features/afk/use-afk-watch";
 import { useSocialUi } from "@/features/social/store";
 import { api, type DeepLink } from "@/lib/api";
 import { notify } from "@/lib/attention";
@@ -43,13 +44,15 @@ async function playPreferred() {
 
 /**
  * Desktop glue: content published in the background, the official pack appearing, tray actions,
- * `projects://` links and the close button (AFK accounts keep running in the tray).
+ * `projects://` links, the close button (AFK accounts keep running in the tray) and the notice
+ * when an AFK account stops for good.
  */
 export function useDesktopEvents() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const onboarded = usePrefs((s) => s.onboarded);
+  useAfkWatch();
 
   useEffect(
     () =>
