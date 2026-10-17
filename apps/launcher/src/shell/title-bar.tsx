@@ -1,5 +1,5 @@
 import { Check, CopySimple, MagnifyingGlass, Minus, Square, X } from "@phosphor-icons/react";
-import { cn, easeOutExpo, Kbd, Tooltip } from "@pl/ui";
+import { cn, easeOutExpo, Tooltip } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -14,8 +14,10 @@ import { api } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 import { formatCount } from "@/lib/format";
 import { detectOs, isTauri } from "@/lib/platform";
+import { ariaKeyShortcuts } from "@/lib/shortcuts";
 import { useLaunch } from "@/stores/launch";
 import { useUi } from "@/stores/ui";
+import { ShortcutKeys } from "./shortcut-keys";
 
 /** The address the pill copies until the status says otherwise. */
 const DEFAULT_SERVER_ADDRESS = "play.projects.gg";
@@ -180,18 +182,19 @@ function WindowControls() {
   );
 }
 
-function PaletteButton({ mac }: { mac: boolean }) {
+function PaletteButton() {
   const { t } = useTranslation();
   const setOpen = useUi((s) => s.setPaletteOpen);
   return (
     <button
       type="button"
       onClick={() => setOpen(true)}
+      aria-keyshortcuts={ariaKeyShortcuts("palette", detectOs())}
       className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[12.5px] text-ash-300 transition-[background-color,color,transform] duration-150 ease-out hover:bg-white/8 hover:text-bone-50 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.97]"
     >
       <MagnifyingGlass size={14} aria-hidden />
       {t("palette.open")}
-      <Kbd>{mac ? "⌘ K" : "Ctrl K"}</Kbd>
+      <ShortcutKeys id="palette" />
     </button>
   );
 }
@@ -220,7 +223,7 @@ export function TitleBar({ search = true }: { search?: boolean }) {
             <SocialHost />
           </>
         ) : null}
-        {search ? <PaletteButton mac={mac} /> : null}
+        {search ? <PaletteButton /> : null}
         <UpdatePill />
         {mac ? null : <WindowControls />}
       </div>

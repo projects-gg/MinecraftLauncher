@@ -9,12 +9,16 @@ import { AccountFace } from "@/features/accounts/account-face";
 import { useAccountsUi } from "@/features/accounts/store";
 import { api } from "@/lib/api";
 import { detectOs } from "@/lib/platform";
+import { ariaKeyShortcuts, type ShortcutId } from "@/lib/shortcuts";
 import { isNewsNew, useNewsSeen } from "@/stores/news-seen";
+import { ShortcutKeys } from "./shortcut-keys";
 
 interface Item {
   to: "/" | "/library" | "/news" | "/afk" | "/settings";
   icon: Icon;
   label: string;
+  /** The page's shortcut (Ctrl+1 …): its keys in the tooltip, `aria-keyshortcuts` on the link. */
+  shortcut?: ShortcutId;
   /**
    * Something new waits behind the link: a small, still gold dot at the icon's corner (it fades
    * in and out), and this name for screen readers while it shows.
@@ -26,11 +30,24 @@ function RailLink({ item, active }: { item: Item; active: boolean }) {
   const IconCmp = item.icon;
   const marked = item.marker?.on === true;
   return (
-    <Tooltip content={item.label} side="right">
+    <Tooltip
+      content={
+        item.shortcut ? (
+          <span className="flex items-center gap-2">
+            {item.label}
+            <ShortcutKeys id={item.shortcut} />
+          </span>
+        ) : (
+          item.label
+        )
+      }
+      side="right"
+    >
       <Link
         to={item.to}
         aria-label={marked && item.marker ? item.marker.label : item.label}
         aria-current={active ? "page" : undefined}
+        aria-keyshortcuts={item.shortcut ? ariaKeyShortcuts(item.shortcut, detectOs()) : undefined}
         className="group relative flex size-[40px] items-center justify-center rounded-lg outline-none transition-transform duration-150 ease-out focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.94]"
       >
         {active ? (
@@ -91,15 +108,16 @@ export function NavRail() {
   const newsWaiting = useNewsWaiting(isActive("/news"));
 
   const top: Item[] = [
-    { to: "/", icon: House, label: t("nav.home") },
-    { to: "/library", icon: SquaresFour, label: t("nav.library") },
+    { to: "/", icon: House, label: t("nav.home"), shortcut: "home" },
+    { to: "/library", icon: SquaresFour, label: t("nav.library"), shortcut: "library" },
     {
       to: "/news",
       icon: Newspaper,
       label: t("nav.news"),
+      shortcut: "news",
       marker: { on: newsWaiting, label: t("reminders.railNews", { label: t("nav.news") }) },
     },
-    { to: "/afk", icon: Robot, label: t("nav.afk") },
+    { to: "/afk", icon: Robot, label: t("nav.afk"), shortcut: "afk" },
   ];
 
   return (
@@ -132,7 +150,7 @@ export function NavRail() {
       </div>
       <div className="mt-auto flex flex-col items-center gap-1.5">
         <RailLink
-          item={{ to: "/settings", icon: GearSix, label: t("nav.settings") }}
+          item={{ to: "/settings", icon: GearSix, label: t("nav.settings"), shortcut: "settings" }}
           active={isActive("/settings")}
         />
         {active ? (
