@@ -54,6 +54,10 @@ crates/pl-auth    Microsoft + offline accounts, keychain secrets, skins
 crates/pl-content Signed content index, news/home models, modpack sync (shared with Studio)
 crates/pl-afk     AFK accounts (Projects Console Client)
 crates/pl-discord Discord Rich Presence
+crates/pl-data    Data folder: usage, cleanup policy, support bundles, logs, moving the folder
+crates/pl-desktop Desktop integration: projects:// links, desktop shortcuts and their icons
+crates/pl-social  Client for the optional friends service (HTTP API, presence WebSocket)
+services/social   Friends service: Cloudflare Worker, D1 and a presence Durable Object
 packages/ui       Shared design system
 docs/             Content format specification
 ```
