@@ -5,6 +5,7 @@ mod error;
 mod identity;
 mod shell;
 mod state;
+mod webview_rest;
 
 use tauri::Manager;
 
@@ -68,6 +69,9 @@ pub fn run() {
             // size, set exactly (shell::fit_main_window).
             #[cfg(desktop)]
             shell::fit_main_window(app);
+            // While the window is out of sight the page rests: hidden for WebView2, little
+            // memory, suspended when it has nothing to do (webview_rest).
+            webview_rest::install(app);
             // After an update restart, the AFK accounts it stopped come back (commands::updates).
             let resumed_afk = commands::updates::take_restart_note(app.handle());
             start_auto_afk(app.handle().clone(), resumed_afk);

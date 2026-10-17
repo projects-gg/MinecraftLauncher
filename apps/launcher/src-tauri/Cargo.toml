@@ -68,3 +68,9 @@ tauri-plugin-single-instance = { workspace = true }
 tauri-plugin-window-state = { workspace = true }
 tauri-plugin-autostart = { workspace = true }
 tauri-plugin-updater = { workspace = true }
+
+# The page's rest while the window is out of sight (webview_rest.rs): the versions Tauri itself
+# builds, so nothing new is compiled.
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

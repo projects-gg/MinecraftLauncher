@@ -11,6 +11,7 @@ import { api, type EventItem } from "@/lib/api";
 import { notify, requestAttention, windowAway } from "@/lib/attention";
 import i18n from "@/lib/i18n";
 import { openLink } from "@/lib/links";
+import { setPageDuty } from "@/lib/page-duties";
 import { onWindowAwayChange } from "@/lib/window-away";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
@@ -209,6 +210,8 @@ export function EventReminders() {
       }
     }
     const next = nextRing(current, events, now);
+    // A reminder ahead keeps the page awake in the tray (lib/page-duties.ts).
+    setPageDuty("reminders", next !== undefined);
     if (next === undefined) return;
     const id = window.setTimeout(() => setWake((n) => n + 1), wakeDelay(next, now));
     return () => window.clearTimeout(id);

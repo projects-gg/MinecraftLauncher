@@ -4158,6 +4158,8 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "walkdir",
+ "webview2-com",
+ "windows",
 ]
 
 [[package]]

@@ -979,6 +979,9 @@ async fn prepare_and_spawn(
     crashed_instance.memory = memory;
     tauri::async_runtime::spawn(async move {
         let exit = process.wait().await;
+        // A page suspended while the game ran must bring the window back and tell about a
+        // crash: it runs again before anything below reaches it (crate::webview_rest).
+        crate::webview_rest::wake(&app, "the game exited");
         let state = app.state::<AppState>();
         state.running.lock().take();
         // Java runtime updates waiting for the game can take their place now.
