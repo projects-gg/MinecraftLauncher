@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DroppedFile, DroppedKind, DropResult } from "@/lib/api";
-import { dropNotices, planDrop, stem, tabFor } from "./model";
+import { dropChips, dropHint, dropNotices, leftOut, planDrop, stem, tabFor } from "./model";
 
 const f = (name: string, kind: DroppedKind): DroppedFile => ({ path: `C:/x/${name}`, name, kind });
 
@@ -60,6 +60,67 @@ describe("planDrop", () => {
     expect(unknown.rows).toEqual([{ kind: "unknown", count: 2 }]);
     expect(unknown.acceptable).toBe(false);
     expect(planDrop([], null).importOnly).toBe(false);
+  });
+});
+
+describe("the zone's line", () => {
+  const modded = { id: "projects", modded: true };
+  const vanilla = { id: "vanilla", modded: false };
+
+  it("names what goes in, one kind with its count", () => {
+    expect(dropHint(planDrop([f("sodium.jar", "mod")], modded), false)).toEqual({
+      key: "drop.hint.mod",
+      count: 1,
+    });
+    expect(
+      dropHint(planDrop([f("a.zip", "resourcePack"), f("b.zip", "resourcePack")], modded), true),
+    ).toEqual({ key: "drop.here.resourcePack", count: 2 });
+  });
+
+  it("says files for several kinds, and the modpack when one comes along", () => {
+    const mixed = planDrop([f("a.jar", "mod"), f("BSL.zip", "shaderPack")], modded);
+    expect(dropHint(mixed, false)).toEqual({ key: "drop.hint.mixed" });
+    const withPack = planDrop([f("a.jar", "mod"), f("FO.mrpack", "modpack")], modded);
+    expect(dropHint(withPack, true)).toEqual({ key: "drop.here.mixedPack" });
+  });
+
+  it("imports a modpack, also next to unrecognized files", () => {
+    expect(dropHint(planDrop([f("FO.mrpack", "modpack")], null), false)).toEqual({
+      key: "drop.hint.modpack",
+    });
+    const withJunk = planDrop([f("FO.mrpack", "modpack"), f("a.txt", "unknown")], modded);
+    expect(dropHint(withJunk, true)).toEqual({ key: "drop.hint.modpack" });
+  });
+
+  it("gives the reason when nothing can go in", () => {
+    expect(dropHint(planDrop([f("a.txt", "unknown")], modded), false)).toEqual({
+      key: "drop.hint.unknown",
+    });
+    expect(dropHint(planDrop([f("sodium.jar", "mod")], vanilla), true)).toEqual({
+      key: "drop.blocked.needsLoader",
+    });
+    expect(dropHint(planDrop([f("F.zip", "resourcePack")], null), false)).toEqual({
+      key: "drop.blocked.noInstance",
+    });
+    expect(dropHint(planDrop([], modded), false)).toEqual({ key: "drop.hint.unknown" });
+  });
+
+  it("speaks of what goes in when part of the files stays out", () => {
+    const plan = planDrop([f("sodium.jar", "mod"), f("F.zip", "resourcePack")], vanilla);
+    expect(dropHint(plan, false)).toEqual({ key: "drop.hint.resourcePack", count: 1 });
+    expect(leftOut(plan)).toBe("needsLoader");
+    expect(leftOut(planDrop([f("sodium.jar", "mod")], vanilla))).toBeUndefined();
+  });
+
+  it("shows chips only when they add to the line", () => {
+    expect(dropChips(planDrop([f("sodium.jar", "mod")], modded))).toEqual([]);
+    expect(dropChips(planDrop([f("a.jar", "mod"), f("b.jar", "mod")], modded))).toEqual([
+      { kind: "mod", count: 2 },
+    ]);
+    expect(
+      dropChips(planDrop([f("a.jar", "mod"), f("x.txt", "unknown")], modded)).map((r) => r.kind),
+    ).toEqual(["mod", "unknown"]);
+    expect(dropChips(planDrop([], modded))).toEqual([]);
   });
 });
 

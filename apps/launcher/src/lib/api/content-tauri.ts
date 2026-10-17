@@ -1,6 +1,5 @@
 // Tauri implementation of `api.content`: maps the generated bindings onto the UI shapes.
 import { Channel, convertFileSrc } from "@tauri-apps/api/core";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import {
   type AddonInstallReport,
@@ -472,16 +471,5 @@ export const tauriContentApi: ContentApi = {
       defaultPath: defaultName,
       filters: [{ name: "Modrinth mod paketi", extensions: ["mrpack"] }],
     });
-  },
-  onFileDrop(listener) {
-    const unlisten = getCurrentWebview().onDragDropEvent((event) => {
-      const payload = event.payload;
-      if (payload.type === "drop") listener({ type: "drop", paths: payload.paths });
-      else if (payload.type === "leave") listener({ type: "leave" });
-      else listener({ type: "over" });
-    });
-    return () => {
-      void unlisten.then((fn) => fn());
-    };
   },
 };

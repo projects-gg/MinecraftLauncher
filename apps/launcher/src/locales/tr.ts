@@ -99,20 +99,49 @@ export const tr = {
     show: "Göster",
   },
   drop: {
-    kinds: {
-      mod: "Modlar",
-      resourcePack: "Kaynak paketleri",
-      shaderPack: "Shader paketleri",
-      modpack: "Mod paketi",
-      unknown: "Tanınmayan dosya",
+    zone: {
+      title: "Buraya bırak",
+      refuse_one: "Bu dosya buraya bırakılamaz",
+      refuse_other: "Bu dosyalar buraya bırakılamaz",
+    },
+    hint: {
+      mod_one: "Mod {{name}} kurulumuna eklenir",
+      mod_other: "Modlar {{name}} kurulumuna eklenir",
+      resourcePack_one: "Kaynak paketi {{name}} kurulumuna eklenir",
+      resourcePack_other: "Kaynak paketleri {{name}} kurulumuna eklenir",
+      shaderPack_one: "Shader paketi {{name}} kurulumuna eklenir",
+      shaderPack_other: "Shader paketleri {{name}} kurulumuna eklenir",
+      mixed: "Dosyalar {{name}} kurulumuna eklenir",
+      mixedPack: "Dosyalar {{name}} kurulumuna eklenir, mod paketi içe aktarılır",
+      modpack: "Mod paketi yeni kurulum olarak içe aktarılır",
+      unknown: "Mod, kaynak paketi, shader ya da mod paketi bırakabilirsin",
+    },
+    here: {
+      mod_one: "Mod bu kuruluma eklenir",
+      mod_other: "Modlar bu kuruluma eklenir",
+      resourcePack_one: "Kaynak paketi bu kuruluma eklenir",
+      resourcePack_other: "Kaynak paketleri bu kuruluma eklenir",
+      shaderPack_one: "Shader paketi bu kuruluma eklenir",
+      shaderPack_other: "Shader paketleri bu kuruluma eklenir",
+      mixed: "Dosyalar bu kuruluma eklenir",
+      mixedPack: "Dosyalar bu kuruluma eklenir, mod paketi içe aktarılır",
+    },
+    rest: {
+      mod: "Mod dosyaları (.jar) bu kuruluma eklenir",
+      resourcePack: "Kaynak paketleri (.zip) bu kuruluma eklenir",
+      shaderPack: "Shader paketleri (.zip) bu kuruluma eklenir",
+    },
+    chips: {
+      mod: "{{count}} mod",
+      resourcePack: "{{count}} kaynak paketi",
+      shaderPack: "{{count}} shader paketi",
+      modpack: "{{count}} mod paketi",
+      unknown: "{{count}} tanınmayan dosya",
     },
     blocked: {
       needsLoader: "Bu kurulumda mod yükleyici yok",
       noInstance: "Önce bir kurulum oluştur",
     },
-    newInstance: "Yeni kurulum",
-    noInstanceTitle: "Kurulum yok",
-    files: "{{count}} dosya",
     show: "Göster",
     notices: {
       addedOne: "{{name}} eklendi",
@@ -319,7 +348,8 @@ export const tr = {
       remove: "Dosyayı kaldır",
       size: "{{width}}×{{height}} PNG",
       pending: "Kaydettiğinde hesabına yüklenecek.",
-      dropHere: "Bırak, önizleyelim",
+      dropHint: "Kaydetmeden önce önizlenir",
+      dropRefuse: "Skin PNG dosyası olmalı",
       readFailed: "Dosya açılamadı. Başka bir PNG dosyası dene.",
       pickFailed: "Dosya seçme penceresi açılamadı. Dosyayı buraya sürükleyebilirsin.",
     },
@@ -569,7 +599,6 @@ export const tr = {
     loaderHelpVanilla: "Modsuz, saf Minecraft.",
     loaderHelp: "Modları çalıştırmak için gerekir.",
     unstable: "deneme",
-    drop: "Dosyayı buraya bırak",
     dropHint: ".mrpack, Prism/MultiMC ya da CurseForge zip dosyası",
     chooseFile: "Dosya seç",
     noMatch: "Aramana uyan sürüm yok.",
@@ -1318,7 +1347,6 @@ export const tr = {
       fromPack: "Paketten",
       toggle: "{{name}} açık/kapalı",
       emptyTitle: "Bu kurulumda mod yok",
-      emptyBody: "Modrinth'te ara ya da .jar dosyasını pencereye sürükle.",
       vanillaTitle: "Bu kurulum mod çalıştırmaz",
       vanillaBody:
         "Mod eklemek için Fabric, Quilt, Forge ya da NeoForge ile yeni bir kurulum oluştur.",
@@ -1326,7 +1354,6 @@ export const tr = {
     },
     packs: {
       emptyTitle: { resourcePack: "Henüz kaynak paketi yok", shaderPack: "Henüz shader yok" },
-      emptyBody: "Modrinth'te ara ya da .zip dosyasını pencereye sürükle.",
       needsLoaderTitle: "Bu kurulumda shader çalışmaz",
       needsLoaderBody: "Shader'lar için Fabric ya da Quilt ile bir kurulum oluşturup Iris'i ekle.",
       summary: {
@@ -1662,7 +1689,7 @@ export const tr = {
     sourceBrowse: "Mod paketi bul",
     import: {
       reading: "Dosya okunuyor",
-      dropActive: "Dosyayı bırak",
+      dropHint: "İçe aktarmadan önce önizlenir",
       formats: {
         mrpack: "Modrinth paketi",
         prism: "Prism/MultiMC kurulumu",
@@ -1884,7 +1911,6 @@ export const tr = {
     own: {
       migrate: "Başka sürüme taşı",
       emptyTitle: "Henüz kendi modun yok",
-      emptyBody: "Keşfet'ten mod ekle ya da .jar dosyasını pencereye sürükle.",
     },
     versions: {
       title: "Minecraft sürümü",

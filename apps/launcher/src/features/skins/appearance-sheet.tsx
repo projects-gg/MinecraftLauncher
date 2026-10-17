@@ -15,6 +15,7 @@ import {
   Chip,
   Dialog as ConfirmDialog,
   cn,
+  DropZone,
   EntranceGate,
   easeOutExpo,
   GatedMotion,
@@ -30,7 +31,7 @@ import {
   useMotionPrefs,
 } from "@pl/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AnimatePresence, motion, useAnimate } from "motion/react";
+import { AnimatePresence, useAnimate } from "motion/react";
 import { Dialog, RadioGroup } from "radix-ui";
 import {
   lazy,
@@ -43,7 +44,9 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { useDropClaim } from "@/features/drop/store";
+import { useDropAnnouncement, useDropZone } from "@/features/drop/store";
+import { announcementOf, zoneTitle } from "@/features/drop/text";
+import { isSkinFile } from "@/features/drop/zones";
 import { MicrosoftMark } from "@/features/settings/microsoft-mark";
 import {
   type AccountSummary,
@@ -236,7 +239,6 @@ function Editor({
   const [guessed, setGuessed] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [reading, setReading] = useState(false);
-  const [dragging, setDragging] = useState(false);
   const [turn, setTurn] = useState<SkinTurn | null>(null);
   const [flat, setFlat] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
@@ -554,29 +556,31 @@ function Editor({
     }
   };
 
-  // Files dropped anywhere on the window while the panel is open (the window-wide drop layer
-  // steps aside meanwhile).
-  useDropClaim(true);
+  // Files dropped anywhere on the window while the panel is open come here (the window-wide
+  // drop layer steps aside meanwhile); the panel's body shows the zone. While the panel is busy
+  // it shows none and the drop is ignored.
+  const dropBlocked = busy || putting || reading || confirmReset;
+  const blockedRef = useRef(dropBlocked);
+  blockedRef.current = dropBlocked;
   const intakeRef = useRef(intake);
   intakeRef.current = intake;
-  const blockedRef = useRef(false);
-  blockedRef.current = busy || putting || reading || confirmReset;
-  useEffect(() => {
-    const unsubscribe = api.skins.onFileDrop((event) => {
-      if (event.type === "over") setDragging(!blockedRef.current);
-      else if (event.type === "leave") setDragging(false);
-      else {
-        setDragging(false);
-        if (blockedRef.current) return;
-        const path = event.paths.find((p) => /\.png$/i.test(p)) ?? event.paths[0];
-        if (path) void intakeRef.current(path);
-      }
-    });
-    return () => {
-      unsubscribe();
-      setDragging(false);
-    };
-  }, []);
+  const drop = useDropZone({
+    layer: "claim",
+    accepts: (drag) => !blockedRef.current && drag.paths.some(isSkinFile),
+    onDrop: (paths) => {
+      if (blockedRef.current) return;
+      // A PNG among the files wins; anything else is read and refused with its usual message.
+      const path = paths.find(isSkinFile) ?? paths[0];
+      if (path) void intakeRef.current(path);
+    },
+  });
+  const dropTitle = zoneTitle(t, drop.state, drop.drag?.paths.length ?? 1);
+  const dropHint = drop.state === "refuse" ? t("skins.file.dropRefuse") : t("skins.file.dropHint");
+  const dropShown = (drop.state !== "idle" && !dropBlocked) || drop.state === "absorb";
+  useDropAnnouncement(
+    dropShown && drop.state !== "absorb" ? announcementOf(drop.state, dropTitle, dropHint) : null,
+    drop.drag?.id,
+  );
 
   const pickCape = (id: string | null) => {
     setCapeDraft({ id });
@@ -664,7 +668,7 @@ function Editor({
 
   return (
     <>
-      <div className="relative flex min-h-0 flex-1">
+      <div ref={drop.ref} className="relative flex min-h-0 flex-1">
         <div className="flex w-[320px] shrink-0 flex-col border-r border-white/7 p-5">
           {stage}
           <p className="mt-3 text-center text-[12.5px] text-ash-400">
@@ -847,20 +851,17 @@ function Editor({
         </fieldset>
 
         <AnimatePresence>
-          {dragging ? (
-            <motion.div
-              key="drop"
-              aria-hidden
-              className="pointer-events-none absolute inset-3 z-10 flex flex-col items-center justify-center gap-3 rounded-[var(--radius-panel)] border-2 border-dashed border-gold-400/70 bg-obsidian-950/80"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, transition: { duration: 0.12 } }}
-            >
-              <UploadSimple size={34} weight="duotone" className="text-gold-300" />
-              <p className="font-display text-[17px] font-semibold text-bone-50">
-                {t("skins.file.dropHere")}
-              </p>
-            </motion.div>
+          {dropShown ? (
+            <EntranceGate key="drop">
+              <DropZone
+                aria-hidden
+                variant="cover"
+                state={drop.state}
+                title={dropTitle}
+                hint={dropHint}
+                className="pointer-events-none absolute inset-3 z-10"
+              />
+            </EntranceGate>
           ) : null}
         </AnimatePresence>
       </div>

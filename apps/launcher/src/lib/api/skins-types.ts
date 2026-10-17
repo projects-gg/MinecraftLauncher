@@ -41,11 +41,6 @@ export interface SkinFile {
   height: number;
 }
 
-export type SkinFileDropEvent =
-  | { type: "over" }
-  | { type: "leave" }
-  | { type: "drop"; paths: string[] };
-
 /** A skin the account wore while the launcher knew it (kept on this computer only). */
 export interface SkinHistoryEntry {
   /** Key for the history calls; never shown. */
@@ -87,8 +82,6 @@ export interface SkinsApi {
   setCape(accountId: string, capeId: string | null): Promise<SkinAppearance>;
   /** Back to Minecraft's default skin. */
   reset(accountId: string): Promise<SkinAppearance>;
-  /** Files dragged onto the window. Returns an unsubscribe function. */
-  onFileDrop(listener: (event: SkinFileDropEvent) => void): () => void;
 
   /** The skins the account wore ("Önceki skinler"). */
   history(accountId: string): Promise<SkinHistory>;

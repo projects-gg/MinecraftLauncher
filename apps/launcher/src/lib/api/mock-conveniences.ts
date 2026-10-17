@@ -4,9 +4,10 @@
 // - `resume`: "world" (default), "server" or "none".
 // - `shots`: screenshots the next mock game session takes (e.g. "3").
 // - `runSecs`: how long a mock game session lasts (default 25).
-// - `window.__plMockDrag({ type: "enter", paths: [...] })` (then "over", "drop" or "leave")
-//   drags files over the window; names decide the kind (".jar" mod, ".mrpack" modpack, names with
-//   "shader"/"BSL"/"Complementary" shader pack, other ".zip" resource pack).
+// - `window.__plMockDrag({ type: "enter", paths: [...], position: { x, y } })` (then "over",
+//   "drop" or "leave", with the cursor in CSS pixels) drags files over the window; names decide
+//   the kind (".jar" mod, ".mrpack" modpack, names with "shader"/"BSL"/"Complementary" shader
+//   pack, other ".zip" resource pack). Real files dragged onto the browser preview work too.
 
 import coverBuild from "@/assets/art/news-build-contest.webp";
 import coverPvp from "@/assets/art/news-pvp-arena.webp";
@@ -47,6 +48,73 @@ if (typeof window !== "undefined") {
   };
 }
 
+/** Real files dropped onto the browser preview, by the path the mock gave them. */
+const droppedFiles = new Map<string, File>();
+
+/** A real file dropped onto the browser preview (the skin preview reads it). */
+export function mockDroppedFile(path: string): File | undefined {
+  return droppedFiles.get(path);
+}
+
+/** Until the drop a page sees only the types of dragged files: enough to guess their kind. */
+function guessedName(type: string, index: number): string {
+  const extension =
+    type === "image/png"
+      ? ".png"
+      : type.includes("java-archive")
+        ? ".jar"
+        : type.includes("zip")
+          ? ".zip"
+          : "";
+  return `C:/Mock/dosya-${index + 1}${extension}`;
+}
+
+/** Files dragged onto the browser preview itself, as the app's drag events. */
+function listenToPageDrags(emit: (event: FileDragEvent) => void): () => void {
+  let depth = 0;
+  const carriesFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
+  const at = (e: DragEvent) => ({ x: e.clientX, y: e.clientY });
+  const enter = (e: DragEvent) => {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    depth += 1;
+    if (depth > 1) return;
+    const items = Array.from(e.dataTransfer?.items ?? []).filter((i) => i.kind === "file");
+    emit({ type: "enter", paths: items.map((i, n) => guessedName(i.type, n)), position: at(e) });
+  };
+  const over = (e: DragEvent) => {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    emit({ type: "over", position: at(e) });
+  };
+  const leave = (e: DragEvent) => {
+    if (!carriesFiles(e)) return;
+    depth = Math.max(0, depth - 1);
+    if (depth === 0) emit({ type: "leave" });
+  };
+  const drop = (e: DragEvent) => {
+    if (!carriesFiles(e)) return;
+    e.preventDefault();
+    depth = 0;
+    const paths = Array.from(e.dataTransfer?.files ?? []).map((file) => {
+      const path = `C:/Mock/${file.name}`;
+      droppedFiles.set(path, file);
+      return path;
+    });
+    emit({ type: "drop", paths, position: at(e) });
+  };
+  window.addEventListener("dragenter", enter);
+  window.addEventListener("dragover", over);
+  window.addEventListener("dragleave", leave);
+  window.addEventListener("drop", drop);
+  return () => {
+    window.removeEventListener("dragenter", enter);
+    window.removeEventListener("dragover", over);
+    window.removeEventListener("dragleave", leave);
+    window.removeEventListener("drop", drop);
+  };
+}
+
 function kindOf(path: string): DroppedKind {
   const name = path.split(/[\\/]/).pop()?.toLowerCase() ?? "";
   if (name.endsWith(".mrpack")) return "modpack";
@@ -74,12 +142,18 @@ export function mockSessionMs(): number {
   return (Number.isFinite(secs) && secs > 0 ? secs : 25) * 1000;
 }
 
-export function createMockConveniences(loaderOf: (instanceId: string) => LoaderKind | undefined) {
+export function createMockConveniences(
+  loaderOf: (instanceId: string) => LoaderKind | undefined,
+  /** Mods a drop added (the instance page lists them). */
+  onModsAdded?: (instanceId: string, files: DroppedFile[]) => void,
+) {
   return {
     onFileDrag(listener: (event: FileDragEvent) => void) {
       listeners.add(listener);
+      const stopPageDrags = listenToPageDrags(listener);
       return () => {
         listeners.delete(listener);
+        stopPageDrags();
       };
     },
     async classifyFiles(paths: string[]): Promise<DroppedFile[]> {
@@ -106,6 +180,8 @@ export function createMockConveniences(loaderOf: (instanceId: string) => LoaderK
         else if (/faithful/i.test(f.name)) result.existing.push(f);
         else result.added.push(f);
       }
+      const mods = result.added.filter((f) => f.kind === "mod");
+      if (mods.length > 0) onModsAdded?.(instanceId, mods);
       return result;
     },
     async resumeTarget(instanceId: string): Promise<ResumeTarget | null> {

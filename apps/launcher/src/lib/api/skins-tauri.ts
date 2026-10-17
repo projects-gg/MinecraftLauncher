@@ -1,5 +1,4 @@
 // Tauri implementation of `api.skins`: maps the generated bindings onto the UI shapes.
-import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { open } from "@tauri-apps/plugin-dialog";
 import { type AppearanceView, type CmdError, commands, type SkinHistoryView } from "@/bindings";
 import type { SkinAppearance, SkinHistory, SkinsApi } from "./skins-types";
@@ -82,17 +81,6 @@ export const tauriSkins: SkinsApi = {
   },
   async reset(accountId) {
     return appearance(await ok(commands.skinReset(accountId)));
-  },
-  onFileDrop(listener) {
-    const unlisten = getCurrentWebview().onDragDropEvent((event) => {
-      const payload = event.payload;
-      if (payload.type === "drop") listener({ type: "drop", paths: payload.paths });
-      else if (payload.type === "leave") listener({ type: "leave" });
-      else listener({ type: "over" });
-    });
-    return () => {
-      void unlisten.then((fn) => fn());
-    };
   },
   async history(accountId) {
     return history(await ok(commands.skinHistory(accountId)));

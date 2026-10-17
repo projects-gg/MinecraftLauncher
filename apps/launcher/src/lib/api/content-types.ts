@@ -273,11 +273,6 @@ export interface ModpackExportResult {
   offline: boolean;
 }
 
-export type FileDropEvent =
-  | { type: "over" }
-  | { type: "leave" }
-  | { type: "drop"; paths: string[] };
-
 export type PickKind = ContentKind | "modpack";
 
 /** Content browser, add-on management and modpacks. `api.content`. */
@@ -365,6 +360,4 @@ export interface ContentApi {
   pickFiles(kind: PickKind, multiple: boolean): Promise<string[] | null>;
   /** Native save dialog for an `.mrpack`; `null` when cancelled. */
   pickSavePath(defaultName: string): Promise<string | null>;
-  /** Files dragged onto the window. Returns an unsubscribe function. */
-  onFileDrop(listener: (event: FileDropEvent) => void): () => void;
 }

@@ -27,6 +27,7 @@ import type { AfkSettingsSaveResult, AfkSettingsView } from "./afk-settings";
 import { tauriCleanup } from "./cleanup-tauri";
 import { tauriContentApi } from "./content-tauri";
 import { tauriData } from "./data-tauri";
+import { cssPoint } from "./drag-point";
 import type { LauncherApi } from "./index";
 import { javaPrompt, tauriJava } from "./java-tauri";
 import { tauriLibrary } from "./library-tauri";
@@ -722,18 +723,21 @@ export const tauriApi: LauncherApi = {
   onFileDrag(listener) {
     const unlisten = getCurrentWebview().onDragDropEvent((event) => {
       const payload = event.payload;
+      // Physical pixels from the webview's corner; the scale can change with the monitor.
+      const at = (position: { x: number; y: number }) =>
+        cssPoint(position, window.devicePixelRatio);
       switch (payload.type) {
         case "enter":
-          listener({ type: "enter", paths: payload.paths });
+          listener({ type: "enter", paths: payload.paths, position: at(payload.position) });
+          break;
+        case "over":
+          listener({ type: "over", position: at(payload.position) });
           break;
         case "drop":
-          listener({ type: "drop", paths: payload.paths });
-          break;
-        case "leave":
-          listener({ type: "leave" });
+          listener({ type: "drop", paths: payload.paths, position: at(payload.position) });
           break;
         default:
-          listener({ type: "over" });
+          listener({ type: "leave" });
       }
     });
     return () => {

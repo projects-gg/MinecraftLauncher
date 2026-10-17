@@ -51,6 +51,46 @@ export function planDrop(files: DroppedFile[], target: DropTarget | null): DropP
   return { rows, modpack, acceptable, importOnly };
 }
 
+/** The zone's line on what the drop will do: an i18n key, with a count for the plural forms. */
+export interface DropHint {
+  key: string;
+  count?: number;
+}
+
+/**
+ * What the window's zone says while files are dragged. `here`: the zone sits on the target's own
+ * page ("bu kuruluma") instead of naming it. Refused files get the reason.
+ */
+export function dropHint(plan: DropPlan, here: boolean): DropHint {
+  const base = here ? "drop.here" : "drop.hint";
+  if (plan.importOnly) return { key: "drop.hint.modpack" };
+  if (!plan.acceptable) {
+    const blocked = plan.rows.find((r) => r.blocked)?.blocked;
+    return { key: blocked ? `drop.blocked.${blocked}` : "drop.hint.unknown" };
+  }
+  const copies = plan.rows.filter((r) => isCopy(r.kind) && !r.blocked);
+  const pack = Boolean(plan.modpack);
+  const only = copies.length === 1 ? copies[0] : undefined;
+  if (only && !pack) return { key: `${base}.${only.kind}`, count: only.count };
+  if (copies.length === 0) return { key: "drop.hint.modpack" };
+  return { key: pack ? `${base}.mixedPack` : `${base}.mixed` };
+}
+
+/**
+ * The window zone's chips (one per kind with its count), only when they add something to the
+ * line above: several kinds, or several files.
+ */
+export function dropChips(plan: DropPlan): DropRow[] {
+  const first = plan.rows[0];
+  if (!first) return [];
+  return plan.rows.length > 1 || first.count > 1 ? plan.rows : [];
+}
+
+/** Why some of the files stay out while the rest go in (none when everything goes or nothing). */
+export function leftOut(plan: DropPlan): DropRow["blocked"] {
+  return plan.acceptable ? plan.rows.find((r) => r.blocked)?.blocked : undefined;
+}
+
 /** A file name without its extension ("Sodium-0.6.jar" → "Sodium-0.6"). */
 export function stem(name: string): string {
   const dot = name.lastIndexOf(".");

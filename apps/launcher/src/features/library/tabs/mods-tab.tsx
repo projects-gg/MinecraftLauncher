@@ -10,7 +10,7 @@ import {
 import { Button, Chip, cn, IconButton, SearchInput, toast } from "@pl/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   bulkJobKey,
@@ -24,6 +24,7 @@ import {
 import { JobStatus } from "@/features/content/parts";
 import { ProjectDialog } from "@/features/content/project-dialog";
 import { useContentScan } from "@/features/content/use-content";
+import { PageDropZone } from "@/features/drop/page-zone";
 import { api, type InstalledContent, type InstanceDetail, type ModEntry } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
@@ -251,7 +252,8 @@ export function ModsTab({
   // A removed mod hides at once and goes only when its "Geri al" toast ends (as packs do).
   const removal = useUndoableRemoval(instance.id, "mod");
   const jobs = useContentJobs((s) => s.jobs);
-  // Files dropped onto the window are sorted by the window-wide drop layer (features/drop).
+  // Files dropped onto the window are sorted by the window-wide drop layer (features/drop); an
+  // empty list shows its "Buraya bırak" zone in place.
 
   const entries = useMemo(() => {
     const map = new Map<string, InstalledContent>();
@@ -301,6 +303,12 @@ export function ModsTab({
       (e) => e.update && !e.fromPack && present.has(e.fileName.replace(/\.disabled$/, "")),
     );
   }, [scan.data, listed]);
+  // The list that takes the empty zone's place (mods were just dropped or added) rises in.
+  const wasEmpty = useRef(listed.length === 0);
+  const arriving = wasEmpty.current && listed.length > 0;
+  useEffect(() => {
+    wasEmpty.current = listed.length === 0;
+  });
 
   if (!modded) return <VanillaModsEmpty />;
 
@@ -371,11 +379,11 @@ export function ModsTab({
       ) : null}
 
       {listed.length === 0 ? (
-        <TabEmpty
-          icon={<Package size={26} weight="duotone" />}
-          title={ownOnly ? t("modCenter.own.emptyTitle") : t("instance.mods.emptyTitle")}
-          body={ownOnly ? t("modCenter.own.emptyBody") : t("instance.mods.emptyBody")}
-          action={browseButton}
+        <PageDropZone
+          kind="mod"
+          label={ownOnly ? t("modCenter.own.emptyTitle") : t("instance.mods.emptyTitle")}
+          actions={browseButton}
+          className="-mt-1"
         />
       ) : mods.length === 0 ? (
         // The search hides every mod: say so (the mods are still there) and offer the way back.
@@ -386,7 +394,7 @@ export function ModsTab({
           </Button>
         </div>
       ) : (
-        <ul className="space-y-0.5">
+        <ul className={cn("space-y-0.5", arriving && "panel-in")}>
           {mods.map((mod) => {
             const entry = entryOf(mod);
             const projectId = mod.projectId ?? entry?.projectId;

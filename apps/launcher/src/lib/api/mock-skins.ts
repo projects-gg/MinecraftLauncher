@@ -5,11 +5,11 @@
 // "none": only the skin worn now (the section stays hidden); "few": four skins on one page;
 // "slow": every picture still has to be drawn and takes a while; "fail": wearing fails;
 // "ratelimit": wearing is refused as too frequent. Default: 23 skins on three pages.
+import { mockDroppedFile } from "./mock-conveniences";
 import type {
   CapeOption,
   SkinAppearance,
   SkinFile,
-  SkinFileDropEvent,
   SkinHistory,
   SkinHistoryEntry,
   SkinsApi,
@@ -416,8 +416,6 @@ export function createMockSkins(username: (accountId: string) => string | undefi
       reader.readAsDataURL(file);
     });
 
-  const pending = new Map<string, Promise<SkinFile>>();
-
   return {
     async appearance(accountId) {
       await delay(450);
@@ -441,9 +439,26 @@ export function createMockSkins(username: (accountId: string) => string | undefi
     },
     async readFile(path) {
       await delay(150);
-      const known = files.get(path) ?? (await pending.get(path));
-      if (!known) throw new MockSkinError("Skin dosyası okunamadı.");
-      return known;
+      const known = files.get(path);
+      if (known) return known;
+      // A real file dropped onto the browser preview is checked like the app does; a scripted
+      // drag (`__plMockDrag`) of a ".png" path gets a painted skin.
+      const dropped = mockDroppedFile(path);
+      const name = path.split(/[\\/]/).pop() ?? path;
+      const read = dropped
+        ? await readDropped(dropped)
+        : /\.png$/i.test(path)
+          ? {
+              path,
+              name,
+              dataUrl: texture("skin-knight", () => paintSkin(palettes.knight)),
+              width: 64,
+              height: 64,
+            }
+          : null;
+      if (!read) throw new MockSkinError("Skin dosyası okunamadı.");
+      files.set(path, read);
+      return read;
     },
     async upload(accountId, path, variant) {
       await delay(900);
@@ -484,37 +499,6 @@ export function createMockSkins(username: (accountId: string) => string | undefi
         },
       }));
     },
-    onFileDrop(listener: (event: SkinFileDropEvent) => void) {
-      const over = (e: DragEvent) => {
-        e.preventDefault();
-        listener({ type: "over" });
-      };
-      const leave = (e: DragEvent) => {
-        if (e.relatedTarget === null) listener({ type: "leave" });
-      };
-      const drop = (e: DragEvent) => {
-        e.preventDefault();
-        const file = e.dataTransfer?.files[0];
-        if (!file) {
-          listener({ type: "leave" });
-          return;
-        }
-        const path = `C:/Mock/${file.name}`;
-        const reading = readDropped(file);
-        pending.set(path, reading);
-        reading.then((read) => files.set(path, read)).catch(() => {});
-        listener({ type: "drop", paths: [path] });
-      };
-      window.addEventListener("dragover", over);
-      window.addEventListener("dragleave", leave);
-      window.addEventListener("drop", drop);
-      return () => {
-        window.removeEventListener("dragover", over);
-        window.removeEventListener("dragleave", leave);
-        window.removeEventListener("drop", drop);
-      };
-    },
-
     async history(accountId) {
       await delay(60);
       return snapshot(accountId);

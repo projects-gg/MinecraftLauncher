@@ -322,11 +322,20 @@ export interface DropResult {
   failed: DroppedFile[];
 }
 
-/** Files dragged over the window. `enter` carries the paths (before the drop). */
+/** A point in the window, in CSS pixels from its top-left corner. */
+export interface DragPoint {
+  x: number;
+  y: number;
+}
+
+/**
+ * Files dragged over the window. `enter` carries the paths (before the drop); `position` is the
+ * cursor (absent when the source cannot tell).
+ */
 export type FileDragEvent =
-  | { type: "enter"; paths: string[] }
-  | { type: "over" }
-  | { type: "drop"; paths: string[] }
+  | { type: "enter"; paths: string[]; position?: DragPoint }
+  | { type: "over"; position?: DragPoint }
+  | { type: "drop"; paths: string[]; position?: DragPoint }
   | { type: "leave" };
 
 export interface OfficialPack {

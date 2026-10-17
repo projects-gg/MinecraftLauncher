@@ -10,7 +10,6 @@ import type {
   ContentProjectType,
   ContentVersion,
   Datapack,
-  FileDropEvent,
   InstalledContent,
   JobProgress,
   ModpackInfo,
@@ -1162,28 +1161,6 @@ export function createMockContent(deps: {
     async pickSavePath(defaultName) {
       await delay(150);
       return `C:/Users/Oyuncu/Desktop/${defaultName}`;
-    },
-    onFileDrop(listener: (event: FileDropEvent) => void) {
-      const over = (e: DragEvent) => {
-        e.preventDefault();
-        listener({ type: "over" });
-      };
-      const leave = (e: DragEvent) => {
-        if (e.relatedTarget === null) listener({ type: "leave" });
-      };
-      const drop = (e: DragEvent) => {
-        e.preventDefault();
-        const names = Array.from(e.dataTransfer?.files ?? []).map((f) => `C:/Mock/${f.name}`);
-        listener({ type: "drop", paths: names });
-      };
-      window.addEventListener("dragover", over);
-      window.addEventListener("dragleave", leave);
-      window.addEventListener("drop", drop);
-      return () => {
-        window.removeEventListener("dragover", over);
-        window.removeEventListener("dragleave", leave);
-        window.removeEventListener("drop", drop);
-      };
     },
   };
   return api;

@@ -8,10 +8,11 @@ import {
   Trash,
 } from "@phosphor-icons/react";
 import { Button, Chip, ContextMenu, cn, IconButton, SearchInput } from "@pl/ui";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { showError, useContentActions, useUndoableRemoval } from "@/features/content/jobs";
 import { ProjectDialog } from "@/features/content/project-dialog";
+import { PageDropZone } from "@/features/drop/page-zone";
 import { api, type ContentKind, type PackEntry } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
@@ -21,7 +22,8 @@ import { TabEmpty } from "../parts";
 const SEARCH_FROM = 9;
 
 /** Resource or shader packs of an instance. Files dropped onto the window are sorted by the
- * window-wide drop layer (features/drop), which reads what each file is. */
+ * window-wide drop layer (features/drop), which reads what each file is; an empty tab shows its
+ * "Buraya bırak" zone in place. */
 export function PacksTab({
   instanceId,
   kind,
@@ -48,6 +50,12 @@ export function PacksTab({
     ? shown.filter((p) => matchesQuery(p.name, query) || matchesQuery(p.description, query))
     : shown;
   const Icon = kind === "shaderPack" ? Sun : Images;
+  // The list that takes the empty zone's place (packs were just dropped or added) rises in.
+  const wasEmpty = useRef(shown.length === 0);
+  const arriving = wasEmpty.current && shown.length > 0;
+  useEffect(() => {
+    wasEmpty.current = shown.length === 0;
+  });
 
   const addButton = (
     <Button variant="ghost" icon={<FilePlus size={17} />} onClick={() => void actions.addFiles()}>
@@ -72,16 +80,16 @@ export function PacksTab({
         body={t("instance.packs.needsLoaderBody")}
       />
     ) : (
-      <TabEmpty
-        icon={<Icon size={26} weight="duotone" />}
-        title={t(`instance.packs.emptyTitle.${kind}`)}
-        body={t("instance.packs.emptyBody")}
-        action={
+      <PageDropZone
+        kind={kind}
+        label={t(`instance.packs.emptyTitle.${kind}`)}
+        actions={
           <>
             {addButton}
             {browseButton}
           </>
         }
+        className="max-w-[980px]"
       />
     );
   }
@@ -118,7 +126,12 @@ export function PacksTab({
           </Button>
         </div>
       ) : (
-        <ul className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
+        <ul
+          className={cn(
+            "grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3",
+            arriving && "panel-in",
+          )}
+        >
           {matching.map((p) => (
             <ContextMenu
               key={p.fileName}

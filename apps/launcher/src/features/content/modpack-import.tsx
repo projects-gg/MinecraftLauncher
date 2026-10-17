@@ -1,10 +1,12 @@
 import { FileArrowUp, FileZip, Package, Sun, TShirt, Warning } from "@phosphor-icons/react";
-import { Button, Chip, cn, Field, Input, Skeleton, Switch } from "@pl/ui";
+import { Button, Chip, cn, DropZone, EntranceGate, Field, Input, Skeleton, Switch } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useDrop } from "@/features/drop/store";
+import { useDrop, useDropAnnouncement, useDropZone } from "@/features/drop/store";
+import { announcementOf, zoneTitle } from "@/features/drop/text";
+import { hasModpack } from "@/features/drop/zones";
 import { api, type ModpackImportResult, type PackOptionalFile, type PackPreview } from "@/lib/api";
 import { notifyWhenAway } from "@/lib/attention";
 import { formatBytes, formatCount } from "@/lib/format";
@@ -12,7 +14,6 @@ import { trackTask } from "@/stores/progress";
 import { newJobId, type RunningJob, showError } from "./jobs";
 import { optionalFolder, optionalTotals, prettyFileName } from "./optional-files";
 import { JobStatus, ProjectIcon } from "./parts";
-import { useFileDrop } from "./use-content";
 
 const folderIcon = {
   mods: Package,
@@ -241,10 +242,31 @@ export function useModpackImport({
     if (active && pendingPack) setPath(pendingPack);
   }, [active, pendingPack]);
 
-  const dragging = useFileDrop(active && !job, (paths) => {
-    const first = paths[0];
-    if (first) setPath(first);
-  });
+  // Files dropped anywhere on the window go to this step while it waits for a pack (the
+  // window-wide drop layer steps aside); a modpack among them wins over the other files.
+  const zone = useDropZone(
+    {
+      layer: "claim",
+      accepts: (drag) => hasModpack(drag.files),
+      onDrop: (paths, files) => {
+        const pick = files?.find((f) => f.kind === "modpack")?.path ?? paths[0];
+        if (pick) setPath(pick);
+      },
+    },
+    active && !job,
+  );
+  const dragging = zone.drag !== null;
+  const zoneName = zoneTitle(t, zone.state, zone.drag?.paths.length ?? 1);
+  // At rest and when refusing, the line says which files work; while a pack is over the window,
+  // what happens to it.
+  const zoneHint =
+    dragging && zone.state !== "refuse" ? t("modpack.import.dropHint") : t("create.dropHint");
+  useDropAnnouncement(
+    dragging && zone.state !== "absorb" && zone.drag?.files
+      ? announcementOf(zone.state, zoneName, zoneHint)
+      : null,
+    zone.drag?.id,
+  );
 
   const choose = async () => {
     try {
@@ -292,23 +314,7 @@ export function useModpackImport({
 
   const fileName = path?.split(/[\\/]/).pop() ?? "";
 
-  const body = !path ? (
-    <div
-      className={cn(
-        "flex flex-col items-center justify-center rounded-[var(--radius-panel)] border-2 border-dashed px-6 py-12 text-center transition-colors",
-        dragging ? "border-gold-400/70 bg-gold-500/8" : "border-white/12",
-      )}
-    >
-      <FileArrowUp size={40} weight="duotone" className="text-gold-400" />
-      <p className="mt-3 font-display text-[16px] font-semibold text-bone-50">
-        {dragging ? t("modpack.import.dropActive") : t("create.drop")}
-      </p>
-      <p className="mt-1 text-[13px] text-ash-400">{t("create.dropHint")}</p>
-      <Button className="mt-5" variant="secondary" onClick={() => void choose()}>
-        {t("create.chooseFile")}
-      </Button>
-    </div>
-  ) : preview.isPending ? (
+  const content = !path ? null : preview.isPending ? (
     <div className="grid gap-4" aria-busy>
       <div className="glass flex items-start gap-4 rounded-[var(--radius-panel)] p-4">
         <Skeleton className="size-14 shrink-0" />
@@ -338,6 +344,40 @@ export function useModpackImport({
       onToggle={toggleOptional}
       disabled={Boolean(job)}
     />
+  );
+
+  const body = !path ? (
+    <DropZone
+      ref={zone.ref}
+      state={zone.state}
+      title={zoneName}
+      hint={zoneHint}
+      className="min-h-[248px]"
+    >
+      <Button variant="secondary" onClick={() => void choose()}>
+        {t("create.chooseFile")}
+      </Button>
+    </DropZone>
+  ) : (
+    // Another pack can be dropped over the one shown: a zone covers its preview meanwhile (the
+    // short reading and error states take the drop without one).
+    <div ref={zone.ref} className="relative">
+      {content}
+      <AnimatePresence>
+        {preview.data && zone.state !== "idle" ? (
+          <EntranceGate key="drop">
+            <DropZone
+              aria-hidden
+              variant="cover"
+              state={zone.state}
+              title={zoneName}
+              hint={zoneHint}
+              className="absolute inset-0 z-10"
+            />
+          </EntranceGate>
+        ) : null}
+      </AnimatePresence>
+    </div>
   );
 
   const footer = job ? (

@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
-import { useDropClaim } from "@/features/drop/store";
+import { useEffect, useState } from "react";
 import { api, type ContentKind } from "@/lib/api";
 
 /**
@@ -25,31 +24,4 @@ export function useDebounced<T>(value: T, ms = 300): T {
     return () => clearTimeout(timer);
   }, [value, ms]);
   return settled;
-}
-
-/**
- * Files dragged onto the window while `enabled` (the window-wide drop layer steps aside then).
- * Returns whether a drag is over the window.
- */
-export function useFileDrop(enabled: boolean, onDrop: (paths: string[]) => void): boolean {
-  const [over, setOver] = useState(false);
-  const handler = useRef(onDrop);
-  handler.current = onDrop;
-  useDropClaim(enabled);
-  useEffect(() => {
-    if (!enabled) return;
-    const unsubscribe = api.content.onFileDrop((event) => {
-      if (event.type === "over") setOver(true);
-      else if (event.type === "leave") setOver(false);
-      else {
-        setOver(false);
-        if (event.paths.length > 0) handler.current(event.paths);
-      }
-    });
-    return () => {
-      unsubscribe();
-      setOver(false);
-    };
-  }, [enabled]);
-  return over;
 }
