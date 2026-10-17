@@ -34,7 +34,9 @@ pub fn create(
         if ephemeral_secrets || !pl_social::KeyringTokenStore::is_available() {
             Arc::new(pl_social::MemoryTokenStore::new())
         } else {
-            Arc::new(pl_social::KeyringTokenStore::new())
+            Arc::new(pl_social::KeyringTokenStore::with_service(
+                crate::identity::current().keychain_service.clone(),
+            ))
         };
     let service = SocialService::new(
         http.client().clone(),

@@ -103,7 +103,19 @@ pub fn default_root() -> PathBuf {
     if let Some(dir) = crate::commands::data::relocated_root() {
         return dir;
     }
-    DataDirs::default_root().unwrap_or_else(|| PathBuf::from("ProjectsLauncher"))
+    platform_default_root()
+        .unwrap_or_else(|| PathBuf::from(&crate::identity::current().data_folder))
+}
+
+/// The data root nothing moved: `DataDirs::default_root` (`%APPDATA%\ProjectsLauncher` on
+/// Windows), or a debug build's own folder next to it (`crate::identity`).
+pub fn platform_default_root() -> Option<PathBuf> {
+    let identity = crate::identity::current();
+    if identity.is_isolated() {
+        dirs::data_dir().map(|dir| dir.join(&identity.data_folder))
+    } else {
+        DataDirs::default_root()
+    }
 }
 
 impl AppState {
@@ -116,9 +128,14 @@ impl AppState {
         )))?;
         let downloader = Downloader::new(http.clone());
 
+        // Debug builds keep their secrets under a keychain service of their own (crate::identity).
+        let keychain_service = &crate::identity::current().keychain_service;
         let (secrets, ephemeral_secrets): (Arc<dyn SecretStore>, bool) =
             if KeyringStore::is_available() {
-                (Arc::new(KeyringStore::new()), false)
+                (
+                    Arc::new(KeyringStore::with_service(keychain_service.clone())),
+                    false,
+                )
             } else {
                 tracing::warn!(
                     "OS keychain unavailable; account secrets are kept for this session only"
@@ -152,7 +169,9 @@ impl AppState {
         let afk_secrets: Arc<dyn pl_afk::SecretStore> = if ephemeral_secrets {
             Arc::new(pl_afk::MemorySecretStore::new())
         } else {
-            Arc::new(pl_afk::KeyringSecretStore::new())
+            Arc::new(pl_afk::KeyringSecretStore::with_service(
+                keychain_service.clone(),
+            ))
         };
         let (afk_store, report) = pl_afk::AccountStore::open(afk_paths.clone(), afk_secrets)?;
         tracing::info!(?report, "AFK accounts loaded");

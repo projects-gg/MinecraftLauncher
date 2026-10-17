@@ -2,12 +2,16 @@
 
 mod commands;
 mod error;
+mod identity;
 mod shell;
 mod state;
 
 use tauri::Manager;
 
 pub fn run() {
+    // Debug builds run under an identity of their own (identifier, keychain service, data
+    // folder): they never forward to, read from or write over an installed launcher.
+    identity::check();
     init_logging();
 
     let specta = specta_builder();
@@ -35,10 +39,7 @@ pub fn run() {
                     .build(),
             )
             .plugin(tauri_plugin_updater::Builder::new().build())
-            .plugin(tauri_plugin_autostart::init(
-                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-                Some(vec!["--minimized"]),
-            ));
+            .plugin(shell::autostart_plugin());
     }
 
     builder
@@ -83,7 +84,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(tauri::generate_context!())
+        .run(identity::context())
         .expect("error while running Projects Launcher");
 }
 

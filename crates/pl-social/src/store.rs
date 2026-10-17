@@ -32,8 +32,13 @@ impl Default for KeyringTokenStore {
 
 impl KeyringTokenStore {
     pub fn new() -> Self {
+        Self::with_service(KEYRING_SERVICE)
+    }
+
+    /// Another service (debug builds keep their session apart from the installed launcher's).
+    pub fn with_service(service: impl Into<String>) -> Self {
         Self {
-            service: KEYRING_SERVICE.to_owned(),
+            service: service.into(),
         }
     }
 
@@ -126,9 +131,7 @@ mod tests {
     #[test]
     #[ignore = "uses the OS keychain"]
     fn keyring_round_trip() {
-        let store = KeyringTokenStore {
-            service: "gg.projects.launcher.test".into(),
-        };
+        let store = KeyringTokenStore::with_service("gg.projects.launcher.test");
         let token = SessionToken::new(format!("pls_{}", "Z".repeat(43)));
         store.save(&token).unwrap();
         assert_eq!(store.load(), Some(token));

@@ -13,9 +13,12 @@ use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
 
 /// Folder of the shortcut pictures. Outside the data folder, which can be moved, so shortcuts
-/// keep their picture.
+/// keep their picture. Named after the app identifier (a debug build's own, `crate::identity`).
 fn icon_dir() -> Option<PathBuf> {
-    dirs::data_local_dir().map(|dir| dir.join("gg.projects.launcher").join("shortcuts"))
+    dirs::data_local_dir().map(|dir| {
+        dir.join(&crate::identity::current().identifier)
+            .join("shortcuts")
+    })
 }
 
 /// The program a shortcut starts. An AppImage runs from a temporary mount, so its own path is

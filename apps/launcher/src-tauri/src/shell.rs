@@ -130,9 +130,11 @@ fn open_link(app: &AppHandle, link: DeepLink) {
 pub fn setup_deep_links(app: &tauri::App) {
     use tauri_plugin_deep_link::DeepLinkExt;
 
-    // Installers register the scheme; development builds register it here.
+    // Installers register the scheme; development builds only when asked (crate::identity).
     #[cfg(all(debug_assertions, any(windows, target_os = "linux")))]
-    if let Err(error) = app.deep_link().register_all() {
+    if crate::identity::register_links()
+        && let Err(error) = app.deep_link().register_all()
+    {
         tracing::debug!(%error, "could not register projects:// for development");
     }
     if let Ok(Some(urls)) = app.deep_link().get_current()
@@ -195,16 +197,35 @@ const TRAY_ID: &str = "main";
 const TRAY_TITLE: &str = "Projects Launcher";
 
 /// The tray tooltip: the app's name and, while AFK accounts are in game or on their way, a second
-/// line saying how many (the player sees at a glance whether the night's AFK still runs).
+/// line saying how many (the player sees at a glance whether the night's AFK still runs). A debug
+/// build names its instance (crate::identity).
 #[cfg(desktop)]
 fn tray_tooltip(activity: pl_afk::AfkActivity) -> String {
+    let title = crate::identity::current().label(TRAY_TITLE);
     let line = match (activity.in_game, activity.connecting) {
-        (0, 0) => return TRAY_TITLE.to_owned(),
+        (0, 0) => return title,
         (0, connecting) => format!("{connecting} AFK hesabı bağlanıyor"),
         (in_game, 0) => format!("{in_game} AFK hesabı oyunda"),
         (in_game, connecting) => format!("{in_game} AFK hesabı oyunda, {connecting} bağlanıyor"),
     };
-    format!("{TRAY_TITLE}\n{line}")
+    format!("{title}\n{line}")
+}
+
+/// "Start with the computer": a login item that starts the launcher with `--minimized`. A debug
+/// build names its own (crate::identity), so turning the setting on or off in a test never
+/// changes the installed launcher's login item.
+#[cfg(desktop)]
+pub fn autostart_plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    let mut builder = tauri_plugin_autostart::Builder::new().arg("--minimized");
+    #[cfg(target_os = "macos")]
+    {
+        builder = builder.macos_launcher(tauri_plugin_autostart::MacosLauncher::LaunchAgent);
+    }
+    let identity = crate::identity::current();
+    if identity.is_isolated() {
+        builder = builder.app_name(identity.label(TRAY_TITLE));
+    }
+    builder.build()
 }
 
 /// Brings the tray tooltip up to date with the AFK sessions (called after each AFK state change).
@@ -243,7 +264,7 @@ pub fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let menu = Menu::with_items(app, &[&open, &play, &afk, &separator, &quit_item])?;
 
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
-        .tooltip(TRAY_TITLE)
+        .tooltip(crate::identity::current().label(TRAY_TITLE))
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {

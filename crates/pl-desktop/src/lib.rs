@@ -6,9 +6,12 @@
 //!   a shell link on Windows, a `.desktop` launcher on Linux, a `.webloc` on macOS.
 //! - [`ico`]: a PNG wrapped as a Windows icon (the shortcut's picture).
 //! - [`window`]: the main window's default size for the screen it first opens on.
+//! - [`identity`]: the identity a process runs under (debug builds never share the installed
+//!   launcher's identifier, keychain service or data folder).
 
 mod error;
 pub mod ico;
+pub mod identity;
 pub mod link;
 pub mod shortcut;
 pub mod window;

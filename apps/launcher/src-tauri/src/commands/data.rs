@@ -3,8 +3,9 @@
 //! progress channel and the restart.
 //!
 //! A moved folder is found through a pointer file outside the data folder
-//! (`<OS config>/gg.projects.launcher/location.json`), read by `state::default_root`. The old
-//! folder is deleted by [`finish_pending_move`] once the launcher has run from the new one.
+//! (`<OS config>/gg.projects.launcher/location.json`; debug builds use their own identifier's
+//! folder, see `crate::identity`), read by `state::default_root`. The old folder is deleted by
+//! [`finish_pending_move`] once the launcher has run from the new one.
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -24,8 +25,6 @@ use tauri_plugin_opener::OpenerExt;
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
 
-/// Tauri's app config folder name (the bundle identifier).
-const APP_CONFIG_DIR: &str = "gg.projects.launcher";
 const LOCATION_FILE: &str = "location.json";
 /// The old folder of a move is deleted only after the launcher has run this long from the new
 /// one.
@@ -46,7 +45,12 @@ pub fn location_file() -> Option<PathBuf> {
     {
         return Some(PathBuf::from(file));
     }
-    dirs::config_dir().map(|dir| dir.join(APP_CONFIG_DIR).join(LOCATION_FILE))
+    location_file_of(&crate::identity::current().identifier)
+}
+
+/// The pointer file of the launcher with this app identifier (Tauri's app config folder name).
+pub fn location_file_of(identifier: &str) -> Option<PathBuf> {
+    dirs::config_dir().map(|dir| dir.join(identifier).join(LOCATION_FILE))
 }
 
 /// The data folder chosen with "Taşı", when there is one and it is reachable.
@@ -695,7 +699,7 @@ pub fn finish_pending_move(app: &AppHandle) {
             tracing::info!("another data job runs; the old data folder waits for the next start");
             return;
         };
-        let default = pl_mc::paths::DataDirs::default_root();
+        let default = crate::state::platform_default_root();
         let outcome = tauri::async_runtime::spawn_blocking(move || {
             relocate::finish_move(&file, &root, default.as_deref())
         })

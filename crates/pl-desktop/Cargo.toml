@@ -1,6 +1,6 @@
 [package]
 name = "pl-desktop"
-description = "Desktop integration without Tauri: projects:// links, desktop shortcuts, shortcut icons"
+description = "Desktop integration without Tauri: projects:// links, desktop shortcuts, shortcut icons, process identity"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
