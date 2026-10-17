@@ -4,63 +4,99 @@
 ## Projects Launcher
 
 [![GNU](https://img.shields.io/github/license/projects-gg/MinecraftLauncher?&logo=github)](LICENSE)
-[![Codacy Badge](https://app.codacy.com/project/badge/Grade/17980a84919b4fff967e047ba0487517)](https://www.codacy.com/gh/projects-gg/MinecraftLauncher/dashboard?utm_source=github.com&amp;utm_medium=referral&amp;utm_content=projects-gg/MinecraftLauncher&amp;utm_campaign=Badge_Grade)
 [![Join us on Discord (Turkish)](https://img.shields.io/discord/480094926164590593.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://projects.gg/discord)
 
-[![Projects Launcher's Stars](https://img.shields.io/github/stars/projects-gg/minecraftlauncher?label=stars&logo=github)](https://github.com/projects-gg/minecraftlauncher/stargazers)
-[![Projects Launcher's Forks](https://img.shields.io/github/forks/projects-gg/minecraftlauncher?label=forks&logo=github)](https://github.com/projects-gg/minecraftlauncher/network/members)
-
-Projects Launcher is a Minecraft Launcher that created to make starting the game easier and faster with QoL features.
-
-<a href="https://projects.gg"><img src="https://projects.gg/medya/launcher.png" alt="projects.gg"></a>
+The Minecraft launcher of [projects.gg](https://projects.gg): every Minecraft version and mod
+loader, the server's official modpack kept up to date automatically, news on start, AFK accounts,
+and offline play when the internet or our servers are down. Windows, macOS and Linux.
 
 </div>
 
 ## Contact
-[![Join us on Discord](https://img.shields.io/discord/480094926164590593.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://projects.gg/discord)
 
-Join us on [Discord](https://projects.gg/discord) (Turkish)
+Join us on [Discord](https://projects.gg/discord) (Turkish).
 
 ## Downloads
-Latest version can be obtained from [Projects Landing Page](https://projects.gg/indir/).
-[VirusTotal Results](https://projects.gg/launchervirustotal).
+
+The latest version is on the [Projects landing page](https://projects.gg/indir/). Installed
+launchers update themselves in the background.
+
+## What's inside (v2)
+
+- **Instances like MultiMC/Prism:** any Minecraft version (year-based 26.x included), Fabric,
+  Quilt, Forge and NeoForge, per-instance Java, memory, JVM arguments, window and hooks; mods,
+  resource packs, shaders, worlds, screenshots and servers per instance; Modrinth browser with
+  dependency resolution and updates; `.mrpack`, Prism/MultiMC and CurseForge import, `.mrpack`
+  export.
+- **The official pack:** the "Projects" instance follows the pack published from Projects
+  Studio; files sync before each launch without touching anything the player added.
+- **Home:** season art, news, patch notes and event countdowns published without an app update;
+  maintenance notices; the big gold OYNA button.
+- **Accounts:** Microsoft sign-in (browser + PKCE, tokens in the OS keychain) and offline names;
+  skins and capes for Microsoft accounts.
+- **AFK accounts** through the Projects Console Client, with the full v1 settings.
+- **Offline first:** cached signed content and installed files are enough to play.
+- **Updates:** signed, channel-based (stable/beta), staged rollout, mandatory minimum version,
+  "What's new" after an update.
+- **Desktop:** tray icon, start with the computer, `projects://` links, Ctrl+K command palette,
+  modern Discord Rich Presence, crash assistant.
+- **Moving from v1:** nickname, premium session, AFK accounts, worlds, screenshots and packs are
+  imported on first start.
+
+## Repository
+
+```
+apps/launcher     Tauri 2 app: React UI (src) + Rust shell (src-tauri)
+apps/studio       Projects Studio: publishes news, home, packs, AFK client and launcher releases
+crates/pl-net     HTTP + parallel verified downloads
+crates/pl-mc      Minecraft: versions, install, Java, launch, instances, loaders, mods, Modrinth, modpacks
+crates/pl-auth    Microsoft + offline accounts, keychain secrets, skins
+crates/pl-content Signed content index, news/home models, modpack sync (shared with Studio)
+crates/pl-afk     AFK accounts (Projects Console Client)
+crates/pl-discord Discord Rich Presence
+packages/ui       Shared design system
+docs/             Content format specification
+```
+
+The signed content tree that Studio publishes and the launcher reads is specified in
+[`docs/content-format.md`](docs/content-format.md); its JSON examples are checked by the tests.
+
+Conventions: crates never depend on Tauri; the app crates expose typed commands
+(tauri-specta generates `apps/*/src/bindings.ts`, regenerate with
+`cargo run -p projects-launcher --bin export-bindings`). Runtime secrets live in the OS keychain,
+never in files or in the repository. User-facing text is Turkish; code, comments, commit messages
+and developer documentation are English.
+
+## Building
+
+Requirements: Rust stable (see `rust-toolchain.toml`), Node 22+, pnpm 10, and the
+[Tauri prerequisites](https://tauri.app/start/prerequisites/) for your OS.
+
+```sh
+pnpm install
+pnpm --filter @pl/launcher tauri dev     # launcher with hot reload
+pnpm --filter @pl/studio tauri dev       # Projects Studio
+pnpm --filter @pl/launcher dev           # UI only, in a browser with mock data
+cargo test --workspace                   # Rust tests
+pnpm lint && pnpm typecheck              # Biome + TypeScript
+```
+
+Releases are built by GitHub Actions (`.github/workflows/release.yml`) from a `v*` tag: signed
+updater bundles for Windows, macOS and Linux, a draft GitHub release and, when the R2 secrets are
+configured, the update channel files on the CDN. A local installer needs the updater signing key
+in `TAURI_SIGNING_PRIVATE_KEY`:
+
+```sh
+pnpm --filter @pl/launcher tauri build --bundles nsis
+```
+
+### Microsoft sign-in in forks
+
+Forks need their own Azure application. Register one at [portal.azure.com](https://portal.azure.com)
+→ *App registrations* → *New registration*: personal Microsoft accounts only, redirect URI
+`http://localhost` (public client), "Allow public client flows" on. Put its client id into
+`CLIENT_ID` in `crates/pl-auth/src/config.rs`. Client ids are public values, not secrets.
 
 ## License
-[![GNU License](https://img.shields.io/github/license/projects-gg/MinecraftLauncher?&logo=github)](LICENSE)
 
 All commits are licensed under the GNU license, unless otherwise noted in the patch headers.
-
-## Building and setting up
-
-### Initial setup
-Open the project in any C# IDE like Visual Studio. Project is based on .NET 4.7.2.
-
-### Compiling
-Open `Projects Launcher.sln` file with any C# IDE and simply, click to `Build -> Build Solution` above of the page. Output will save to `./Debug/` folder.
-
-### Premium (Microsoft account) sign-in
-The launcher can start the game with a real, purchased Minecraft account so players join servers in
-online mode. The whole flow lives in `Projects Launcher/Auth/` and has no extra NuGet dependency:
-
-| File | Responsibility |
-| --- | --- |
-| `MicrosoftAuth.cs` | OAuth 2.0 with PKCE → Xbox Live → XSTS → Minecraft Services → profile |
-| `PremiumSession.cs` | Stores the session, refreshes expired tokens, maps it to a `CmlLib` session |
-| `PremiumLoginForm.cs` | The sign-in window (progress steps, license warning, errors) |
-| `MicrosoftBrand.cs` | Draws the Microsoft logo so no image asset is needed |
-
-The authorization code is captured by a short-lived loopback listener on a random free port, so the
-user signs in through their own browser on Microsoft's real page — the launcher never sees the
-password. The Microsoft refresh token is stored at `%APPDATA%\.projects\premium.dat`, encrypted with
-DPAPI (`CurrentUser` scope), so the file is useless on another account or machine.
-
-**Forks need their own Azure application.** Register one at
-[portal.azure.com](https://portal.azure.com) → *App registrations* → *New registration*:
-
-1. **Supported account types:** `Personal Microsoft accounts only`
-2. **Redirect URI:** platform `Public client/native (mobile & desktop)`, value `http://localhost`
-3. **Authentication → Allow public client flows:** `Yes`
-4. Copy the *Application (client) ID* into `MicrosoftAuth.ClientId`
-
-No API permission needs to be added in the portal; `XboxLive.signin offline_access` is requested at
-sign-in time. Client IDs are public values, not secrets.
