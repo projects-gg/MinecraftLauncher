@@ -346,10 +346,13 @@ pub async fn accounts_ensure_heads(state: State<'_, AppState>) -> CmdResult<u32>
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum LegacyAccountImport {
+    #[cfg_attr(not(windows), allow(dead_code))]
     Imported {
         account: AccountView,
     },
+    #[cfg_attr(not(windows), allow(dead_code))]
     NotFound,
+    #[cfg_attr(not(windows), allow(dead_code))]
     Unreadable,
     #[cfg_attr(windows, allow(dead_code))]
     Unsupported,

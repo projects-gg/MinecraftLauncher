@@ -153,6 +153,8 @@ pub async fn legacy_scan(state: State<'_, AppState>) -> CmdResult<LegacyScan> {
 #[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct LegacyImportRequest {
+    // Read on Windows only, where the premium session can be decrypted.
+    #[cfg_attr(not(windows), allow(dead_code))]
     pub premium: bool,
     pub nickname: bool,
     pub afk: bool,

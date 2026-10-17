@@ -73,7 +73,8 @@ pub fn context() -> tauri::Context<tauri::Wry> {
 /// (`PROJECTS_LAUNCHER_REGISTER_LINKS=1`, e.g. to test the friends sign-in page): the registration
 /// would take the scheme away from the installed launcher. A link reaches a running test build
 /// anyway when its exe is started again with the link as argument (single-instance plugin).
-#[cfg(debug_assertions)]
+/// macOS takes the scheme from the app bundle, so it never asks.
+#[cfg(all(debug_assertions, any(windows, target_os = "linux")))]
 pub fn register_links() -> bool {
     std::env::var("PROJECTS_LAUNCHER_REGISTER_LINKS").is_ok_and(|value| value.trim() == "1")
 }
