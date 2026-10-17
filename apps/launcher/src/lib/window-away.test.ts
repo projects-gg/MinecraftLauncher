@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { type AwayWindow, isWindowAway, refreshWindowAway, trackWindowAway } from "./window-away";
+import {
+  type AwayWindow,
+  isWindowAway,
+  RESIZE_SETTLE_MS,
+  refreshWindowAway,
+  trackWindowAway,
+} from "./window-away";
 
 /** A window whose answers the test sets; answers can be held back to model a slow round trip. */
 function fakeWindow() {
@@ -42,7 +48,7 @@ function fakeWindow() {
   };
 }
 
-const settle = () => new Promise((r) => setTimeout(r, 0));
+const settle = (ms = 0) => new Promise((r) => setTimeout(r, ms));
 
 describe("trackWindowAway", () => {
   it("is away in the tray from the start and back when the window gains focus", async () => {
@@ -77,21 +83,37 @@ describe("trackWindowAway", () => {
     stop();
   });
 
-  it("follows a minimize that comes without a focus change, but not resizes in front", async () => {
+  it("follows a minimize and a restore through resizes, once they settle", async () => {
     const w = fakeWindow();
     const stop = trackWindowAway(w.win);
     w.focus(true);
+    // On Windows the window reports a blur right after it was shown; it is still in front.
+    w.focus(false);
+    await settle();
+    expect(isWindowAway()).toBe(false);
     w.state.minimized = true;
     w.resize();
     await settle();
     expect(isWindowAway()).toBe(false);
-    w.focus(false);
-    await settle();
+    await settle(RESIZE_SETTLE_MS + 30);
     expect(isWindowAway()).toBe(true);
     w.state.minimized = false;
     w.resize();
-    await settle();
+    w.resize();
+    await settle(RESIZE_SETTLE_MS + 30);
     expect(isWindowAway()).toBe(false);
+    stop();
+  });
+
+  it("learns about a hide only when asked, since hiding sends no event", async () => {
+    const w = fakeWindow();
+    const stop = trackWindowAway(w.win);
+    w.focus(true);
+    w.state.visible = false;
+    await settle(RESIZE_SETTLE_MS + 30);
+    expect(isWindowAway()).toBe(false);
+    await refreshWindowAway();
+    expect(isWindowAway()).toBe(true);
     stop();
   });
 

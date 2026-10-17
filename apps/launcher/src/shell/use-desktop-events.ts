@@ -12,6 +12,7 @@ import { readStartOnBoot } from "@/lib/autostart";
 import i18n from "@/lib/i18n";
 import { onAppLink } from "@/lib/links";
 import { isTauri } from "@/lib/platform";
+import { refreshWindowAway } from "@/lib/window-away";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 
@@ -167,6 +168,8 @@ export function useDesktopEvents() {
         return;
       }
       await win.hide();
+      // Hiding sends no window event: ambient motion stops on this answer.
+      void refreshWindowAway();
       if (!prefs.trayHintShown) {
         prefs.set("trayHintShown", true);
         await notify(t("tray.hintTitle"), afkActive ? t("tray.hintAfk") : t("tray.hint"));

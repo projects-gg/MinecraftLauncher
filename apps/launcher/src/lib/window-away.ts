@@ -13,6 +13,9 @@ export interface AwayWindow {
   onResized(handler: () => void): Promise<() => void>;
 }
 
+/** A resize drag fires many events; the window is asked once they settle. */
+export const RESIZE_SETTLE_MS = 120;
+
 let away = false;
 let check: (() => Promise<void>) | undefined;
 const listeners = new Set<() => void>();
@@ -24,14 +27,16 @@ function setAway(next: boolean) {
 }
 
 /**
- * Follows the window: gaining focus means it is in front; losing focus, or a resize while it is not
- * focused (minimized from the taskbar or with Win+D), asks whether it is still visible and not
- * minimized. An answer that arrives after the window came back to the front is dropped. The
- * launcher's own show at start-up asks with `refreshWindowAway`. Returns a stop function.
+ * Follows the window. Gaining focus means it is in front. Minimizing (title bar, taskbar, Win+D)
+ * resizes it, so a resize asks whether it is visible and not minimized; so does losing focus.
+ * Hiding sends no event at all, and on Windows a blur also arrives right after the window was
+ * shown (WebView2 takes the keyboard focus), so the launcher asks with `refreshWindowAway` after
+ * it shows or hides the window itself. An answer that arrives after the window came back to the
+ * front is dropped. Returns a stop function.
  */
 export function trackWindowAway(win: AwayWindow): () => void {
-  let focused = false;
   let asked = 0;
+  let settle: ReturnType<typeof setTimeout> | undefined;
   check = async () => {
     const question = ++asked;
     try {
@@ -43,7 +48,6 @@ export function trackWindowAway(win: AwayWindow): () => void {
   };
   const stops = [
     win.onFocusChanged(({ payload }) => {
-      focused = payload;
       if (payload) {
         asked++;
         setAway(false);
@@ -52,16 +56,18 @@ export function trackWindowAway(win: AwayWindow): () => void {
       }
     }),
     win.onResized(() => {
-      if (!focused) void check?.();
+      clearTimeout(settle);
+      settle = setTimeout(() => void check?.(), RESIZE_SETTLE_MS);
     }),
   ];
   return () => {
+    clearTimeout(settle);
     check = undefined;
     for (const stop of stops) void stop.then((fn) => fn());
   };
 }
 
-/** Asks the window again (after the launcher showed it, or chose to stay in the tray). */
+/** Asks the window again (after the launcher showed, hid or minimized it). */
 export function refreshWindowAway(): Promise<void> {
   return check?.() ?? Promise.resolve();
 }

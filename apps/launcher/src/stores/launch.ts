@@ -10,6 +10,7 @@ import { notifyWhenAway } from "@/lib/attention";
 import i18n from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
 import { playSound } from "@/lib/sound";
+import { refreshWindowAway } from "@/lib/window-away";
 import { usePrefs } from "./prefs";
 
 export type LaunchPhase =
@@ -79,6 +80,7 @@ async function applyGameStartBehavior() {
     default:
       break;
   }
+  await refreshWindowAway();
 }
 
 async function restoreWindow() {
@@ -87,6 +89,7 @@ async function restoreWindow() {
   await win.show();
   await win.unminimize();
   await win.setFocus();
+  await refreshWindowAway();
 }
 
 /**
