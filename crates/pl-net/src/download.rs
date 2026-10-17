@@ -5,7 +5,8 @@ use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use futures::StreamExt;
-use tokio::io::AsyncWriteExt;
+use reqwest::StatusCode;
+use tokio::io::{AsyncSeekExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 
 use crate::client::{Http, backoff};
@@ -152,6 +153,8 @@ pub struct DownloadSummary {
 #[derive(Debug, Clone)]
 pub struct Downloader {
     http: Http,
+    /// A file a cancel or a dropped connection interrupted keeps what it got (its `.part` file).
+    keep_partial: bool,
     /// Tests only: a write that would take a file past this many bytes fails as if the disk were
     /// full.
     #[cfg(test)]
@@ -186,9 +189,18 @@ impl Downloader {
     pub fn new(http: Http) -> Self {
         Self {
             http,
+            keep_partial: false,
             #[cfg(test)]
             disk_full_after: None,
         }
+    }
+
+    /// The same downloader for background downloads: a file a cancel or a dropped connection
+    /// interrupts keeps what it got, and the next attempt (or the player's own launch) goes on
+    /// from there. Any downloader resumes such a file when the whole file can be checked.
+    pub fn keeping_partial_files(mut self) -> Self {
+        self.keep_partial = true;
+        self
     }
 
     pub fn http(&self) -> &Http {
@@ -395,10 +407,33 @@ impl Downloader {
             url: url.to_owned(),
             source,
         };
-        let response = tokio::select! {
-            _ = options.cancel.cancelled() => return Err(NetError::Cancelled),
-            r = self.http.client().get(url).send() => r.map_err(request_error)?,
+        let tmp = part_path(&item.dest);
+        // What an interrupted download left goes on where it stopped, when the whole file can be
+        // checked at the end (a part that does not belong to this file fails the check and goes).
+        let mut resume_from = match &item.checksum {
+            Some(_) => partial_len(&tmp, item.size).await,
+            None => 0,
         };
+        let mut response = tokio::select! {
+            _ = options.cancel.cancelled() => return Err(NetError::Cancelled),
+            r = self.request(url, resume_from) => r.map_err(request_error)?,
+        };
+        if resume_from > 0 && !resumes(&response, resume_from) {
+            let status = response.status();
+            resume_from = 0;
+            if status == StatusCode::PARTIAL_CONTENT || status == StatusCode::RANGE_NOT_SATISFIABLE
+            {
+                // The part does not fit the file the server has: start over without it.
+                tracing::debug!(%url, status = status.as_u16(), "partial download not resumable");
+                let _ = tokio::fs::remove_file(&tmp).await;
+                response = tokio::select! {
+                    _ = options.cancel.cancelled() => return Err(NetError::Cancelled),
+                    r = self.request(url, 0) => r.map_err(request_error)?,
+                };
+            }
+            // Otherwise the whole file came (no range support) and replaces the part, or an
+            // error status is reported below and the part waits for the next attempt.
+        }
         if !response.status().is_success() {
             return Err(NetError::Status {
                 url: url.to_owned(),
@@ -406,7 +441,9 @@ impl Downloader {
             });
         }
         if !*size_accounted && let Some(len) = response.content_length() {
-            counters.total_bytes.fetch_add(len, Ordering::Relaxed);
+            counters
+                .total_bytes
+                .fetch_add(len + resume_from, Ordering::Relaxed);
             *size_accounted = true;
         }
 
@@ -415,18 +452,47 @@ impl Downloader {
                 .await
                 .map_err(|e| NetError::io(parent, e))?;
         }
-        let tmp = part_path(&item.dest);
         let mut written = 0u64;
 
         let result: Result<()> = async {
-            let mut file = tokio::fs::File::create(&tmp)
-                .await
-                .map_err(|e| NetError::io(&tmp, e))?;
             let mut hasher = item.checksum.as_ref().map(|c| Hasher::new(c.algo));
+            let mut file = if resume_from > 0 {
+                // The part's bytes are checked again with the rest at the end.
+                if let Some(fresh) = hasher.take() {
+                    hasher = Some(hash_prefix(&tmp, resume_from, fresh).await?);
+                }
+                let mut file = tokio::fs::OpenOptions::new()
+                    .write(true)
+                    .open(&tmp)
+                    .await
+                    .map_err(|e| NetError::io(&tmp, e))?;
+                file.set_len(resume_from)
+                    .await
+                    .map_err(|e| NetError::io(&tmp, e))?;
+                file.seek(std::io::SeekFrom::End(0))
+                    .await
+                    .map_err(|e| NetError::io(&tmp, e))?;
+                written = resume_from;
+                counters
+                    .done_bytes
+                    .fetch_add(resume_from, Ordering::Relaxed);
+                tracing::debug!(dest = %item.dest.display(), from = resume_from, "download resumed");
+                file
+            } else {
+                tokio::fs::File::create(&tmp)
+                    .await
+                    .map_err(|e| NetError::io(&tmp, e))?
+            };
             let mut stream = response.bytes_stream();
             loop {
                 let next = tokio::select! {
-                    _ = options.cancel.cancelled() => return Err(NetError::Cancelled),
+                    _ = options.cancel.cancelled() => {
+                        // What was written stays whole for the next attempt.
+                        if self.keep_partial {
+                            let _ = tokio::time::timeout(KEEP_FLUSH, file.flush()).await;
+                        }
+                        return Err(NetError::Cancelled);
+                    }
                     next = stream.next() => next,
                 };
                 let Some(chunk) = next else { break };
@@ -442,11 +508,21 @@ impl Downloader {
                     let full = std::io::Error::from(std::io::ErrorKind::StorageFull);
                     return Err(NetError::io(&tmp, full));
                 }
-                // A slow disk (a busy USB drive) must not hold up a cancel either.
-                tokio::select! {
+                // A slow disk (a busy USB drive) must not hold up a cancel either (a background
+                // download still lets the write in progress end, so its part stays whole).
+                let cancelled = tokio::select! {
                     biased;
-                    _ = options.cancel.cancelled() => return Err(NetError::Cancelled),
-                    result = file.write_all(&chunk) => result.map_err(|e| NetError::io(&tmp, e))?,
+                    _ = options.cancel.cancelled() => true,
+                    result = file.write_all(&chunk) => {
+                        result.map_err(|e| NetError::io(&tmp, e))?;
+                        false
+                    }
+                };
+                if cancelled {
+                    if self.keep_partial {
+                        let _ = tokio::time::timeout(KEEP_FLUSH, file.flush()).await;
+                    }
+                    return Err(NetError::Cancelled);
                 }
                 written += chunk.len() as u64;
                 counters
@@ -486,11 +562,88 @@ impl Downloader {
 
         if let Err(error) = result {
             counters.done_bytes.fetch_sub(written, Ordering::Relaxed);
-            let _ = tokio::fs::remove_file(&tmp).await;
+            // A background download keeps what a cancel or a dropped connection interrupted
+            // (only when the whole file can be checked once it is complete).
+            let keep = self.keep_partial
+                && written > 0
+                && item.checksum.is_some()
+                && matches!(error, NetError::Cancelled | NetError::Request { .. });
+            if !keep {
+                let _ = tokio::fs::remove_file(&tmp).await;
+            }
             return Err(error);
         }
         Ok(written)
     }
+
+    /// A GET, asking for the rest of the file from `from` on (and the bytes as stored, so the
+    /// range means the same as the part on disk) when there is a part to go on with.
+    async fn request(
+        &self,
+        url: &str,
+        from: u64,
+    ) -> std::result::Result<reqwest::Response, reqwest::Error> {
+        let mut request = self.http.client().get(url);
+        if from > 0 {
+            request = request
+                .header(reqwest::header::RANGE, format!("bytes={from}-"))
+                .header(reqwest::header::ACCEPT_ENCODING, "identity");
+        }
+        request.send().await
+    }
+}
+
+/// How long a cancelled background download may take to write out what it already got.
+const KEEP_FLUSH: Duration = Duration::from_secs(2);
+
+/// The bytes an interrupted download left in its part file: some, and fewer than the whole file.
+async fn partial_len(part: &Path, size: Option<u64>) -> u64 {
+    match tokio::fs::metadata(part).await {
+        Ok(meta)
+            if meta.is_file() && meta.len() > 0 && size.is_none_or(|size| meta.len() < size) =>
+        {
+            meta.len()
+        }
+        _ => 0,
+    }
+}
+
+/// The server sends the rest of the file from `from` on.
+fn resumes(response: &reqwest::Response, from: u64) -> bool {
+    response.status() == StatusCode::PARTIAL_CONTENT
+        && response
+            .headers()
+            .get(reqwest::header::CONTENT_RANGE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(range_start)
+            == Some(from)
+}
+
+/// The first byte of a `Content-Range` value (`bytes 1000-4999/5000`).
+fn range_start(value: &str) -> Option<u64> {
+    let rest = value.trim().strip_prefix("bytes")?.trim_start();
+    rest.split('-').next()?.trim().parse().ok()
+}
+
+/// `hasher` fed with the first `len` bytes of `part` (a resumed download), on the blocking pool.
+async fn hash_prefix(part: &Path, len: u64, mut hasher: Hasher) -> Result<Hasher> {
+    use std::io::Read;
+    let path = part.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let file = std::fs::File::open(&path).map_err(|e| NetError::io(&path, e))?;
+        let mut reader = file.take(len);
+        let mut buf = vec![0u8; 256 * 1024];
+        loop {
+            let n = reader.read(&mut buf).map_err(|e| NetError::io(&path, e))?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buf[..n]);
+        }
+        Ok(hasher)
+    })
+    .await
+    .map_err(|e| NetError::Setup(format!("hash task panicked: {e}")))?
 }
 
 /// Network hiccups, server errors and corrupted transfers are worth retrying;
@@ -791,6 +944,247 @@ mod tests {
             "more files were asked for"
         );
         assert_eq!(leftovers(dir.path()), ["done"]);
+    }
+
+    #[test]
+    fn content_ranges_are_read() {
+        assert_eq!(range_start("bytes 1000-4999/5000"), Some(1000));
+        assert_eq!(range_start("  bytes 0-9/*"), Some(0));
+        assert_eq!(range_start("bytes */5000"), None);
+        assert_eq!(range_start("items 1-2/3"), None);
+    }
+
+    /// The bytes a range test serves: not all the same, so a misplaced part shows.
+    fn sample(len: usize) -> Vec<u8> {
+        (0..len).map(|i| (i % 251) as u8).collect()
+    }
+
+    type Asked = Arc<parking_lot::Mutex<Vec<Option<u64>>>>;
+
+    /// A local HTTP server for `content` that answers `Range: bytes=N-` with the rest when
+    /// `ranges` is set (and with 416 past the end), and the whole file otherwise. Records the
+    /// range of every request (`None` for a plain one). `slow`: 1 KiB every 20 ms.
+    async fn range_server(content: Vec<u8>, ranges: bool, slow: bool) -> (String, Asked) {
+        use tokio::io::AsyncReadExt;
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let asked: Asked = Arc::default();
+        let log = Arc::clone(&asked);
+        let content = Arc::new(content);
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                let log = Arc::clone(&log);
+                let content = Arc::clone(&content);
+                tokio::spawn(async move {
+                    let mut head = Vec::new();
+                    let mut buf = [0u8; 1024];
+                    while !head.windows(4).any(|w| w == b"\r\n\r\n") {
+                        match socket.read(&mut buf).await {
+                            Ok(0) | Err(_) => return,
+                            Ok(n) => head.extend_from_slice(&buf[..n]),
+                        }
+                    }
+                    let text = String::from_utf8_lossy(&head).to_ascii_lowercase();
+                    let from = text
+                        .lines()
+                        .find_map(|line| line.strip_prefix("range: bytes="))
+                        .and_then(|value| value.trim().trim_end_matches('-').parse::<usize>().ok());
+                    log.lock().push(from.map(|from| from as u64));
+                    let total = content.len();
+                    let (status, range, body): (&str, Option<String>, &[u8]) = match from {
+                        Some(from) if ranges && from >= total => (
+                            "416 Range Not Satisfiable",
+                            Some(format!("bytes */{total}")),
+                            &[],
+                        ),
+                        Some(from) if ranges => (
+                            "206 Partial Content",
+                            Some(format!("bytes {from}-{}/{total}", total - 1)),
+                            &content[from..],
+                        ),
+                        _ => ("200 OK", None, &content[..]),
+                    };
+                    let mut header = format!(
+                        "HTTP/1.1 {status}\r\nContent-Length: {}\r\nConnection: close\r\n",
+                        body.len()
+                    );
+                    if let Some(range) = range {
+                        header.push_str(&format!("Content-Range: {range}\r\n"));
+                    }
+                    header.push_str("\r\n");
+                    if socket.write_all(header.as_bytes()).await.is_err() {
+                        return;
+                    }
+                    for chunk in body.chunks(1024) {
+                        if socket.write_all(chunk).await.is_err() {
+                            return;
+                        }
+                        if slow {
+                            tokio::time::sleep(Duration::from_millis(20)).await;
+                        }
+                    }
+                });
+            }
+        });
+        (format!("http://{address}"), asked)
+    }
+
+    fn downloader() -> Downloader {
+        Downloader::new(Http::new(crate::HttpConfig::new("pl-net-test")).unwrap())
+    }
+
+    fn checked_item(base: &str, content: &[u8], dest: &Path) -> DownloadItem {
+        DownloadItem::new(format!("{base}/file"), dest)
+            .sha1(crate::hash_bytes(content, crate::HashAlgo::Sha1))
+            .size(Some(content.len() as u64))
+    }
+
+    /// A part an interrupted download left goes on from where it stopped, and the whole file is
+    /// checked at the end.
+    #[tokio::test]
+    async fn a_part_left_behind_goes_on_where_it_stopped() {
+        let dir = tempfile::tempdir().unwrap();
+        let content = sample(64 * 1024);
+        let (base, asked) = range_server(content.clone(), true, false).await;
+        let dest = dir.path().join("file");
+        std::fs::write(dir.path().join("file.part"), &content[..20_000]).unwrap();
+        let summary = downloader()
+            .download_all(
+                vec![checked_item(&base, &content, &dest)],
+                &DownloadOptions::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(summary.downloaded, 1);
+        assert_eq!(summary.bytes, content.len() as u64);
+        assert_eq!(*asked.lock(), [Some(20_000)]);
+        assert_eq!(std::fs::read(&dest).unwrap(), content);
+        assert_eq!(leftovers(dir.path()), ["file"]);
+    }
+
+    /// A server without ranges sends the whole file, which replaces the part.
+    #[tokio::test]
+    async fn a_server_without_ranges_sends_the_whole_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let content = sample(32 * 1024);
+        let (base, asked) = range_server(content.clone(), false, false).await;
+        let dest = dir.path().join("file");
+        std::fs::write(dir.path().join("file.part"), &content[..5_000]).unwrap();
+        downloader()
+            .download_all(
+                vec![checked_item(&base, &content, &dest)],
+                &DownloadOptions::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(*asked.lock(), [Some(5_000)]);
+        assert_eq!(std::fs::read(&dest).unwrap(), content);
+        assert_eq!(leftovers(dir.path()), ["file"]);
+    }
+
+    /// A part that does not belong to the file fails the check, goes, and the file comes again
+    /// whole.
+    #[tokio::test]
+    async fn a_part_of_another_file_is_dropped() {
+        let dir = tempfile::tempdir().unwrap();
+        let content = sample(32 * 1024);
+        let (base, asked) = range_server(content.clone(), true, false).await;
+        let dest = dir.path().join("file");
+        std::fs::write(dir.path().join("file.part"), vec![b'?'; 10_000]).unwrap();
+        downloader()
+            .download_all(
+                vec![checked_item(&base, &content, &dest)],
+                &DownloadOptions::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(*asked.lock(), [Some(10_000), None]);
+        assert_eq!(std::fs::read(&dest).unwrap(), content);
+    }
+
+    /// A part longer than the file the server has (its size unknown here) gets 416 and goes.
+    #[tokio::test]
+    async fn a_part_past_the_end_starts_over() {
+        let dir = tempfile::tempdir().unwrap();
+        let content = sample(8 * 1024);
+        let (base, asked) = range_server(content.clone(), true, false).await;
+        let dest = dir.path().join("file");
+        std::fs::write(dir.path().join("file.part"), sample(9 * 1024)).unwrap();
+        let item = DownloadItem::new(format!("{base}/file"), &dest)
+            .sha1(crate::hash_bytes(&content, crate::HashAlgo::Sha1));
+        downloader()
+            .download_all(vec![item], &DownloadOptions::default())
+            .await
+            .unwrap();
+        assert_eq!(*asked.lock(), [Some(9 * 1024), None]);
+        assert_eq!(std::fs::read(&dest).unwrap(), content);
+    }
+
+    /// Without a checksum a part could never be told apart from another file's: it is not used.
+    #[tokio::test]
+    async fn without_a_checksum_nothing_resumes() {
+        let dir = tempfile::tempdir().unwrap();
+        let content = sample(16 * 1024);
+        let (base, asked) = range_server(content.clone(), true, false).await;
+        let dest = dir.path().join("file");
+        std::fs::write(dir.path().join("file.part"), &content[..4_000]).unwrap();
+        let item =
+            DownloadItem::new(format!("{base}/file"), &dest).size(Some(content.len() as u64));
+        downloader()
+            .download_all(vec![item], &DownloadOptions::default())
+            .await
+            .unwrap();
+        assert_eq!(*asked.lock(), [None]);
+        assert_eq!(std::fs::read(&dest).unwrap(), content);
+    }
+
+    /// A background download keeps what it got when it is cancelled; the next download (here an
+    /// ordinary one, like the player's own launch) only asks for the rest.
+    #[tokio::test]
+    async fn a_background_download_keeps_its_part_for_the_next_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let content = sample(256 * 1024);
+        let (base, asked) = range_server(content.clone(), true, true).await;
+        let dest = dir.path().join("file");
+        let part = dir.path().join("file.part");
+        let cancel = CancellationToken::new();
+        let options = DownloadOptions {
+            cancel: cancel.clone(),
+            ..DownloadOptions::default()
+        };
+        let background = downloader().keeping_partial_files();
+        let run = tokio::spawn({
+            let item = checked_item(&base, &content, &dest);
+            async move { background.download_all(vec![item], &options).await }
+        });
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !(part.is_file() && std::fs::metadata(&part).unwrap().len() >= 8 * 1024) {
+            assert!(Instant::now() < deadline, "the download never started");
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        cancel.cancel();
+        let result = tokio::time::timeout(Duration::from_secs(5), run)
+            .await
+            .expect("the batch kept running")
+            .unwrap();
+        assert!(matches!(result, Err(NetError::Cancelled)), "{result:?}");
+        let kept = std::fs::metadata(&part).unwrap().len();
+        assert!(kept > 0 && kept < content.len() as u64, "kept {kept}");
+        assert_eq!(
+            &std::fs::read(&part).unwrap()[..],
+            &content[..kept as usize]
+        );
+
+        downloader()
+            .download_all(
+                vec![checked_item(&base, &content, &dest)],
+                &DownloadOptions::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(*asked.lock(), [None, Some(kept)]);
+        assert_eq!(std::fs::read(&dest).unwrap(), content);
+        assert_eq!(leftovers(dir.path()), ["file"]);
     }
 
     /// A single request that takes no token is dropped as soon as the token fires.
