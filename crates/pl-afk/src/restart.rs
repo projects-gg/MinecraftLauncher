@@ -197,11 +197,14 @@ const PASSING: &[&str] = &[
     "SERVER RESTART",
     "RESTARTING SERVER",
     "YENIDEN BASLATILIYOR",
+    // projects.gg's whitelist text while a server is being worked on.
+    "GELISTIRME MODU",
 ];
 
 /// Phrases of each cause, upper case with Turkish letters in ASCII (see [`plain_upper`]). Plain
 /// words such as `banned` or `yasaklı` are left out on purpose: "kicked for a banned word" is not
-/// a ban.
+/// a ban. Includes projects.gg's own AuthMe and LiteBans texts (checked against the server's
+/// message files, October 2026).
 const CAUSES: &[(KickCause, &[&str])] = &[
     (
         KickCause::Banned,
@@ -223,6 +226,8 @@ const CAUSES: &[(KickCause, &[&str])] = &[
             "BANLANDIN",
             "BANLANMISSIN",
             "UZAKLASTIRILDIN",
+            "HESABINIZ KULLANIMA KAPATILMIS",
+            "BOLGENIZ YASAKLI",
         ],
     ),
     (
@@ -275,6 +280,7 @@ const CAUSES: &[(KickCause, &[&str])] = &[
             "ZATEN OYUNDA",
             "ZATEN SUNUCUDA",
             "ZATEN BIR OYUNCU",
+            "ADINIZDA BIR OYUNCU",
         ],
     ),
     (
@@ -286,6 +292,7 @@ const CAUSES: &[(KickCause, &[&str])] = &[
             "GIRIS ZAMAN ASIMI",
             "GIRIS SURESI",
             "GIRIS YAPMAK ICIN SURE",
+            "SIFRE GIRILMEDIGI ICIN",
         ],
     ),
 ];
@@ -809,6 +816,21 @@ mod tests {
                 "Giris zaman asimi suresi asildi, sunucudan atildiniz",
                 KickCause::LoginTimeout,
             ),
+            // projects.gg's own texts (AuthMe messages_pro.yml, LiteBans messages.yml).
+            ("§cHesabınız kullanıma kapatılmıştır!", KickCause::Banned),
+            ("Bölgeniz yasaklı gözüküyor: TR", KickCause::Banned),
+            (
+                "Sizin adınızda bir oyuncu şu an oyunda ya da ağda bir takılma mevcut.",
+                KickCause::AlreadyConnected,
+            ),
+            (
+                "Uzun süredir şifre girilmediği için bağlantı kaybedildi.",
+                KickCause::LoginTimeout,
+            ),
+            (
+                "Birçok kez hatalı şifre girdiğiniz için sunucudan atıldınız.",
+                KickCause::WrongPassword,
+            ),
         ];
         for (message, cause) in cases {
             let failure = kicked(message);
@@ -826,6 +848,7 @@ mod tests {
             "Yasaklı kelime kullandığın için atıldın",
             "Spam yüzünden atıldınız",
             "Server is full",
+            "Sunucu geliştirme modunda olarak gözüküyor!",
         ] {
             let failure = kicked(message);
             assert_eq!(
