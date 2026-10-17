@@ -1,10 +1,11 @@
 //! [`PresenceManager`]: a background actor that keeps Discord showing the desired activity.
 //!
 //! Callers only record what they want (never blocking); the actor connects lazily when there
-//! is something to show, retries every `reconnect_interval` while Discord is not running,
-//! re-applies the activity after a reconnect, answers pings and keeps updates within
-//! Discord's rate limit (at most `max_updates` per `update_window`; intermediate states are
-//! coalesced into the latest one).
+//! is something to show, retries while Discord is not running (after `reconnect_interval`,
+//! doubling up to `max_reconnect_interval`, and logging the outage once), re-applies the
+//! activity after a reconnect, answers pings and keeps updates within Discord's rate limit (at
+//! most `max_updates` per `update_window`; intermediate states are coalesced into the latest
+//! one).
 
 use std::collections::VecDeque;
 use std::path::PathBuf;
@@ -27,8 +28,11 @@ pub struct PresenceConfig {
     /// Discord application id.
     pub client_id: String,
     pub enabled: bool,
-    /// Delay between connection attempts while Discord is not running.
+    /// Delay before the next connection attempt while Discord is not running. It doubles with
+    /// every attempt that fails in a row, up to `max_reconnect_interval`: a player without
+    /// Discord costs the launcher one quiet attempt a minute, not four.
     pub reconnect_interval: Duration,
+    pub max_reconnect_interval: Duration,
     /// Limit for connecting plus the handshake.
     pub connect_timeout: Duration,
     /// Rate limit: at most `max_updates` activity updates per `update_window`.
@@ -44,6 +48,7 @@ impl PresenceConfig {
             client_id: client_id.into(),
             enabled: true,
             reconnect_interval: Duration::from_secs(15),
+            max_reconnect_interval: Duration::from_secs(60),
             connect_timeout: Duration::from_secs(5),
             max_updates: 5,
             update_window: Duration::from_secs(20),
@@ -115,6 +120,7 @@ impl PresenceManager {
         let actor = Actor {
             endpoints: config.endpoints.unwrap_or_else(default_endpoints),
             reconnect_interval: config.reconnect_interval,
+            max_reconnect_interval: config.max_reconnect_interval,
             connect_timeout: config.connect_timeout,
             desired: desired_rx,
             status: status_tx,
@@ -122,6 +128,7 @@ impl PresenceManager {
             shown: None,
             limiter: RateLimiter::new(config.max_updates, config.update_window),
             retry_at: None,
+            failures: 0,
         };
         let task = handle.spawn(actor.run());
         Self {
@@ -205,6 +212,7 @@ enum Wake {
 struct Actor {
     endpoints: Vec<PathBuf>,
     reconnect_interval: Duration,
+    max_reconnect_interval: Duration,
     connect_timeout: Duration,
     desired: watch::Receiver<Desired>,
     status: watch::Sender<PresenceStatus>,
@@ -213,6 +221,8 @@ struct Actor {
     shown: Option<Option<Activity>>,
     limiter: RateLimiter,
     retry_at: Option<Instant>,
+    /// Connection attempts that failed in a row (the next retry waits longer).
+    failures: u32,
 }
 
 impl Actor {
@@ -245,6 +255,7 @@ impl Actor {
         if !want.enabled {
             self.disconnect().await;
             self.retry_at = None;
+            self.failures = 0;
             self.set_status(PresenceStatus::Disabled);
             return None;
         }
@@ -282,9 +293,13 @@ impl Actor {
                     });
                     self.shown = Some(None);
                     self.retry_at = None;
+                    self.failures = 0;
                 }
                 Err(error) => {
-                    tracing::debug!(%error, "Discord is not available");
+                    // Once per outage: the retries that follow say nothing new.
+                    if self.failures == 0 {
+                        tracing::debug!(%error, "Discord is not available");
+                    }
                     self.set_status(PresenceStatus::Unavailable);
                     return self.schedule_retry();
                 }
@@ -352,7 +367,13 @@ impl Actor {
     }
 
     fn schedule_retry(&mut self) -> Option<Instant> {
-        let at = Instant::now() + self.reconnect_interval;
+        let delay = retry_delay(
+            self.reconnect_interval,
+            self.max_reconnect_interval,
+            self.failures,
+        );
+        self.failures = self.failures.saturating_add(1);
+        let at = Instant::now() + delay;
         self.retry_at = Some(at);
         Some(at)
     }
@@ -373,6 +394,13 @@ async fn next_frame(conn: &mut Option<Connection>) -> Option<Result<Frame>> {
         Some(conn) => conn.ipc.next_frame().await,
         None => std::future::pending().await,
     }
+}
+
+/// The wait before the next connection attempt after `failures` attempts failed in a row:
+/// `first`, doubled per failure, never more than `max` (nor less than `first`).
+fn retry_delay(first: Duration, max: Duration, failures: u32) -> Duration {
+    let factor = 1u32.checked_shl(failures.min(16)).unwrap_or(u32::MAX);
+    first.saturating_mul(factor).min(max.max(first))
 }
 
 async fn sleep_until(deadline: Option<Instant>) {
@@ -678,6 +706,21 @@ mod tests {
         wait_for(&manager, |s| *s == PresenceStatus::Unavailable).await;
         manager.shutdown().await;
         assert_eq!(manager.status(), PresenceStatus::Disabled);
+    }
+
+    #[test]
+    fn retries_slow_down_while_discord_is_away() {
+        let (first, max) = (Duration::from_secs(15), Duration::from_secs(60));
+        let waits: Vec<u64> = (0..6)
+            .map(|failures| retry_delay(first, max, failures).as_secs())
+            .collect();
+        assert_eq!(waits, [15, 30, 60, 60, 60, 60]);
+        assert_eq!(retry_delay(first, max, u32::MAX), max, "no overflow");
+        assert_eq!(
+            retry_delay(first, Duration::from_secs(5), 3),
+            first,
+            "a cap below the first wait keeps the first wait"
+        );
     }
 
     #[test]
