@@ -380,6 +380,7 @@ function AccountStep({
   const [loginOpen, setLoginOpen] = useState(false);
   const [name, setName] = useState("");
   const [final, setFinal] = useState(false);
+  const nameInput = useRef<HTMLInputElement>(null);
 
   const hasAccount = Boolean(accounts?.length);
   // The name rules show as the player types (Turkish letters, spaces, a name already used);
@@ -470,6 +471,7 @@ function AccountStep({
             <Field label={t("onboarding.account.nameLabel")} htmlFor="onboarding-name">
               <div className="flex gap-2">
                 <Input
+                  ref={nameInput}
                   id="onboarding-name"
                   value={name}
                   invalid={Boolean(nameError)}
@@ -491,13 +493,29 @@ function AccountStep({
                   {t("onboarding.account.useName")}
                 </Button>
               </div>
-              {/* Only problems are spelled out; the line keeps its height, so the step never moves. */}
+              {/* Only problems are spelled out, with a fixed name to take when there is one ("Çağrı"
+                  → "Cagri kullan"); the line keeps its height, so the step never moves. */}
               <p
                 id="onboarding-name-problem"
                 aria-live="polite"
                 className="min-h-[18px] text-[12.5px] leading-snug text-flare-400"
               >
                 {nameError}
+                {nameError && check.suggestion ? (
+                  <>
+                    {" "}
+                    <button
+                      type="button"
+                      className="cursor-pointer font-semibold text-gold-300 underline-offset-2 hover:underline focus-visible:underline"
+                      onClick={() => {
+                        setName(check.suggestion ?? name);
+                        nameInput.current?.focus();
+                      }}
+                    >
+                      {t("accounts.center.useSuggestion", { name: check.suggestion })}
+                    </button>
+                  </>
+                ) : null}
               </p>
             </Field>
           </form>
