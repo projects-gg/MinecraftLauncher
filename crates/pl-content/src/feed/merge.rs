@@ -13,8 +13,8 @@ use jiff::{SignedDuration, Timestamp};
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    BotFeed, EventCountdown, EventPhase, FeedSource, MediaRef, NewsCategory, NewsFeed, NewsItem,
-    compare_news,
+    BotFeed, EventCountdown, EventPhase, FeedSource, FeedStatus, MediaRef, NewsCategory, NewsFeed,
+    NewsItem, compare_news,
 };
 
 /// Where a home screen entry comes from.
@@ -84,6 +84,20 @@ pub fn merge_news(
     }
     merged.sort_by(|a, b| compare_news(&a.item, &b.item));
     merged
+}
+
+/// The feed's status notice for the home screen: shown while it has not expired
+/// ([`FeedStatus::is_active`]) and never while Studio's maintenance notice is up (Studio wins;
+/// both sit in the same place).
+pub fn home_status(
+    feed: Option<&BotFeed>,
+    maintenance_active: bool,
+    now: Timestamp,
+) -> Option<&FeedStatus> {
+    if maintenance_active {
+        return None;
+    }
+    feed?.status.as_ref().filter(|status| status.is_active(now))
 }
 
 /// The patch notes box: the newest item of a [`merge_news`] result with category
@@ -280,6 +294,40 @@ mod tests {
 
     fn ids(news: &[HomeNewsItem]) -> Vec<&str> {
         news.iter().map(|n| n.item.id.as_str()).collect()
+    }
+
+    #[test]
+    fn the_status_notice_shows_until_it_expires_and_maintenance_wins() {
+        let bytes = serde_json::to_vec(&json!({
+            "schema": 1,
+            "sequence": 1,
+            "generatedAt": NOW,
+            "status": {
+                "level": "outage",
+                "title": "Bazı hizmetlerde sorun var",
+                "message": "Şu an erişilemiyor: Survival Zephyr",
+                "updatedAt": "2026-10-16T11:55:00Z",
+                "expiresAt": "2026-10-16T12:10:00Z"
+            }
+        }))
+        .unwrap();
+        let (feed, problems) = BotFeed::parse(&bytes).unwrap();
+        assert!(problems.is_empty(), "{problems:?}");
+
+        let shown = home_status(Some(&feed), false, ts(NOW)).expect("active");
+        assert_eq!(shown.title, "Bazı hizmetlerde sorun var");
+        assert!(home_status(Some(&feed), false, ts("2026-10-16T12:09:59Z")).is_some());
+        assert!(
+            home_status(Some(&feed), false, ts("2026-10-16T12:10:00Z")).is_none(),
+            "an expired notice is never shown, so a stopped bot leaves nothing behind"
+        );
+        assert!(
+            home_status(Some(&feed), true, ts(NOW)).is_none(),
+            "Studio's maintenance notice wins"
+        );
+        assert!(home_status(None, false, ts(NOW)).is_none());
+        let quiet = bot_feed(vec![feed_item("discord-1", NOW)], Vec::new());
+        assert!(home_status(Some(&quiet), false, ts(NOW)).is_none());
     }
 
     #[test]

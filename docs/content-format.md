@@ -580,7 +580,16 @@ The signature envelope and rules are those of `index.json.sig`: Ed25519 over the
         "url": "https://discord.com/channels/480094926164590593/480099230275600394/1300000000000000004"
       }
     }
-  ]
+  ],
+  "status": {
+    "level": "outage",
+    "title": "Bazı hizmetlerde sorun var",
+    "message": "Şu an erişilemiyor: Survival Zephyr",
+    "services": [{ "name": "Survival Zephyr", "state": "down" }],
+    "url": "https://status.projects.gg",
+    "updatedAt": "2026-10-16T08:59:00Z",
+    "expiresAt": "2026-10-16T09:14:00Z"
+  }
 }
 ```
 
@@ -598,6 +607,8 @@ The signature envelope and rules are those of `index.json.sig`: Ed25519 over the
 - `sequence` strictly increases (`max(previous + 1, unix seconds)`). The feed is a full
   snapshot: a newer feed without an item means it is gone (deleted on Discord or hidden by an
   admin).
+- `status` (optional): a short-lived notice about an active problem on the server's status
+  page ([Status notice](#status-notice)); missing while everything works.
 
 Client rules:
 
@@ -616,7 +627,8 @@ Client rules:
    is not `kind: image` of 1 byte to 2 MB with a valid path and SHA-256 (posters are ignored), a
    `cta` without a label and exactly one target (a safe link or a news id), an event `url` that
    is not a safe link, a `source.url` that is not `https://`, a `newsId` naming no item of the
-   feed.
+   feed. `status` has its own rules ([Status notice](#status-notice)); breaking them drops only
+   the notice.
 5. Safe links are `https://` URLs with a host and no credentials, and `projects://` deep links.
    Other links in `body` are shown as plain text; images in a feed `body` are not loaded.
 6. Covers are fetched only from the feed mirrors (the one that served the feed first), read up
@@ -640,6 +652,8 @@ Home screen (Studio always wins):
   event whose id a config event uses (hidden or not) is ignored. Which event the card shows:
   [Event card](#event-card). An event's `newsId` (config or feed) opens that article while it
   is on the home screen.
+- Status notice: shown where the maintenance notice goes, only while no maintenance notice is
+  active ([Status notice](#status-notice)).
 
 ### Event card
 
@@ -659,6 +673,37 @@ A live event shows a countdown to its end (an open-ended feed event shows when i
 instead), an upcoming one a countdown to its start. Launchers apply the rule again whenever an
 event starts or ends, so the card changes on time without a refresh, and list the other live
 and upcoming events behind the card.
+
+### Status notice
+
+`status` tells players about a problem on the server's status page while it lasts: services
+that are down or reachable only in part, or a warning posted on the status page. The bot writes
+it only while there is such a problem (example in [News feed (Discord bot)](#news-feed-discord-bot)).
+
+| Field | Rule |
+| --- | --- |
+| `level` | `outage` (services down), `degraded` (services reachable only in part) or `notice` (a warning posted on the status page). Missing or unknown: `notice`. |
+| `title` | Required, 1–80 characters, not blank. |
+| `message` | Optional, at most 200 characters; default empty. |
+| `services` | Optional, at most 20 `{ name, state }`: `name` 1–64 characters, not blank; `state` `down` or `degraded` (unknown: `unknown`). |
+| `url` | Optional: the status page, an `https://` URL with a host and no credentials. |
+| `updatedAt` | Required: when the bot last confirmed the notice. |
+| `expiresAt` | Required: after `updatedAt`, at most 15 minutes after it. |
+
+- Characters are Unicode scalar values. Texts are plain (no Markdown), short and in the players'
+  language; the bot writes them.
+- Unknown fields are ignored here as everywhere. A `status` that breaks a rule of the table
+  (wrong type, missing or blank title, a limit exceeded, a bad expiry) is ignored on its own: the
+  rest of the feed is used as usual. A `url` that is not `https://` is removed and the notice
+  kept.
+- Clients show the notice only while `now < expiresAt`; an expired one is ignored, also in a
+  cached feed, so a bot that stops leaves no stale notice behind. While the problem lasts, the
+  bot publishes the notice again before it expires (new `updatedAt` and `expiresAt`, a new
+  `sequence`); when the problem is over, it publishes the feed without `status`. It publishes
+  only on a change or to renew the notice, debounced.
+- Studio's maintenance notice (`LauncherConfig.maintenance`) wins: while it is active, the status
+  notice is not shown. The notice is informational and never blocks playing. Launchers show
+  `title`, `message` and a link to `url`; `services` is for readers that list the services.
 
 ### Studio overrides
 

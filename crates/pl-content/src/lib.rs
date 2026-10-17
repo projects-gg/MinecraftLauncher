@@ -19,7 +19,7 @@
 //!   deterministic serialization Studio uploads.
 //! - [`feed`]: the Discord bot's news feed ([`FeedClient`]: delegated-key verification,
 //!   rollback checks, cache, covers) and the home screen merge rules ([`merge_news`],
-//!   [`newest_patch_notes`], [`merge_events`]).
+//!   [`newest_patch_notes`], [`merge_events`], [`home_status`]).
 
 pub mod client;
 pub mod error;
@@ -44,7 +44,8 @@ pub use client::{
 pub use error::{Error, Result};
 pub use feed::{
     FeedClient, FeedMediaReport, FeedSettings, FeedSnapshot, HomeEvent, HomeNewsItem, MirrorProbe,
-    NewsOrigin, card_order, feed_age_floor, merge_events, merge_news, newest_patch_notes,
+    NewsOrigin, card_order, feed_age_floor, home_status, merge_events, merge_news,
+    newest_patch_notes,
 };
 pub use glob::glob_match;
 pub use images::{LAUNCHER_IMAGE_HOSTS, is_launcher_image_url};

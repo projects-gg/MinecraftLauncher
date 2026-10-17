@@ -1,14 +1,15 @@
 //! A signed Discord bot news feed for local end-to-end tests, and a checker for feeds the bot
 //! writes. Never publish the fixture.
 //!
-//! `cargo run -p pl-content --example feed_fixture -- <out-dir> [1|2|tampered]`
+//! `cargo run -p pl-content --example feed_fixture -- <out-dir> [1|2|status|tampered]`
 //!
 //! Writes `<out-dir>/v1/feed.json`, `.sig` and `media/` signed with a throwaway feed key stored
 //! in `<out-dir>/feed-signing.key` (created on the first run, reused afterwards). Times are
 //! relative to now: generation 1 has a live event (ends in two hours) linked to its news item,
 //! an open-ended event tomorrow, patch notes without a cover and three covered items.
-//! Generation 2 drops one item and the live event; `tampered` writes generation 2 and then
-//! changes `feed.json` after signing, so clients must refuse it.
+//! Generation 2 drops one item and the live event; `status` is generation 1 with an outage
+//! notice that expires in 15 minutes; `tampered` writes generation 2 and then changes
+//! `feed.json` after signing, so clients must refuse it.
 //!
 //! Serve `<out-dir>` (`node D:/ProLauncher-build/shots/static-server.mjs <out-dir> 8789`) and
 //! give a debug launcher `PROJECTS_FEED_MIRRORS=http://127.0.0.1:8789/v1/`; the content
@@ -179,8 +180,19 @@ fn build(out: PathBuf, release: &str) {
         .and_then(|feed| feed["sequence"].as_u64())
         .unwrap_or(0);
     let unix = u64::try_from(now.as_second()).unwrap_or(0);
-    let mut feed = generation(&v1, release, now);
+    let mut feed = generation(&v1, if release == "status" { "1" } else { release }, now);
     feed["sequence"] = json!(unix.max(previous + 1));
+    if release == "status" {
+        feed["status"] = json!({
+            "level": "outage",
+            "title": "Bazı hizmetlerde sorun var",
+            "message": "Şu an erişilemiyor: Survival Zephyr",
+            "services": [{ "name": "Survival Zephyr", "state": "down" }],
+            "url": "https://status.projects.gg",
+            "updatedAt": iso(now),
+            "expiresAt": iso(now + SignedDuration::from_mins(15))
+        });
+    }
     let bytes = pl_content::json::to_canonical_json(&feed).expect("feed json");
     let signature = pl_content::sign_index(&bytes, &signing);
     let signature = pl_content::json::to_canonical_json(&signature).expect("signature json");
@@ -291,6 +303,27 @@ fn check(dir: PathBuf, public_key: &str) {
             }
         );
     }
+    match &feed.status {
+        Some(status) => println!(
+            "status:     {:?} {:?} / {:?}, {} services, until {} ({}){}",
+            status.level,
+            status.title,
+            status.message,
+            status.services.len(),
+            status.expires_at,
+            if status.is_active(now) {
+                "shown"
+            } else {
+                "expired"
+            },
+            status
+                .url
+                .as_deref()
+                .map(|url| format!(", link {url}"))
+                .unwrap_or_default()
+        ),
+        None => println!("status:     none"),
+    }
     let dropped = problems.iter().filter(|p| p.issue.drops()).count();
     let unsafe_links = problems
         .iter()
@@ -309,12 +342,12 @@ fn main() {
     match args.as_slice() {
         [mode, dir, key] if mode == "check" => check(PathBuf::from(dir), key),
         [out] => build(PathBuf::from(out), "1"),
-        [out, release] if ["1", "2", "tampered"].contains(&release.as_str()) => {
+        [out, release] if ["1", "2", "status", "tampered"].contains(&release.as_str()) => {
             build(PathBuf::from(out), release)
         }
         _ => {
             eprintln!(
-                "usage: feed_fixture <out-dir> [1|2|tampered]\n       feed_fixture check <feed-dir> <public-key>"
+                "usage: feed_fixture <out-dir> [1|2|status|tampered]\n       feed_fixture check <feed-dir> <public-key>"
             );
             std::process::exit(2);
         }

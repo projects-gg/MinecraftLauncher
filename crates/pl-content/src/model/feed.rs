@@ -5,7 +5,8 @@
 //! ([`NewsFeedConfig`]), so delegation, revocation and rotation need no launcher release. A feed
 //! key can only add news: items are never pinned, links open only `https://` and `projects://`,
 //! covers are small images verified by size and SHA-256, and one broken item never hides the
-//! others ([`BotFeed::parse`]).
+//! others ([`BotFeed::parse`]). The feed may also carry a short-lived notice about the servers
+//! ([`FeedStatus`]), shown only until it expires.
 //!
 //! The normative description lives in `docs/content-format.md` ("News feed (Discord bot)").
 
@@ -50,6 +51,16 @@ pub const FEED_DEFAULT_MAX_AGE_DAYS: u32 = 60;
 pub const FEED_MAX_AGE_DAYS: RangeInclusive<u32> = 1..=365;
 /// How long a feed event without `endsAt` counts as live.
 pub const OPEN_EVENT_DURATION: SignedDuration = SignedDuration::from_hours(3);
+/// Longest `status.title`, in characters.
+pub const STATUS_MAX_TITLE_CHARS: usize = 80;
+/// Longest `status.message`, in characters.
+pub const STATUS_MAX_MESSAGE_CHARS: usize = 200;
+/// Most entries `status.services` may list.
+pub const STATUS_MAX_SERVICES: usize = 20;
+/// Longest `status.services[].name`, in characters.
+pub const STATUS_MAX_SERVICE_NAME_CHARS: usize = 64;
+/// Latest `status.expiresAt` after its `updatedAt`.
+pub const STATUS_MAX_LIFETIME: SignedDuration = SignedDuration::from_mins(15);
 
 /// `LauncherConfig.newsFeed`: whether launchers read the bot's feed, from where, and which keys
 /// may sign it. Writers omit the object while `enabled` is false (Studio keeps it locally).
@@ -274,6 +285,9 @@ pub struct BotFeed {
     pub items: Vec<FeedItem>,
     #[serde(default)]
     pub events: Vec<FeedEvent>,
+    /// What players should know about the servers right now; missing while all is well.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub status: Option<FeedStatus>,
 }
 
 /// A news item of the feed: a [`NewsItem`] plus where it came from. `cover.path` is relative to
@@ -492,19 +506,94 @@ pub enum FeedSourceKind {
     Unknown,
 }
 
-/// Item or event a [`FeedProblem`] is about.
+/// `feed.json` → `status`: what players should know about the servers right now, from the
+/// server's status page (services down or degraded, or a warning posted there). Short-lived:
+/// launchers show it only while `now < expiresAt` ([`FeedStatus::is_active`]) and the bot
+/// republishes it before then while the problem lasts, so a bot that stops leaves no stale
+/// notice. Purely informational; it never blocks playing.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedStatus {
+    #[serde(default)]
+    pub level: FeedStatusLevel,
+    /// 1–[`STATUS_MAX_TITLE_CHARS`] characters.
+    pub title: String,
+    /// At most [`STATUS_MAX_MESSAGE_CHARS`] characters; may be empty.
+    #[serde(default)]
+    pub message: String,
+    /// The affected services, at most [`STATUS_MAX_SERVICES`].
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub services: Vec<FeedStatusService>,
+    /// The status page (`https://` only).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    pub updated_at: Timestamp,
+    /// After `updatedAt`, at most [`STATUS_MAX_LIFETIME`] later.
+    pub expires_at: Timestamp,
+}
+
+impl FeedStatus {
+    /// Shown at `now`: it has not expired.
+    pub fn is_active(&self, now: Timestamp) -> bool {
+        now < self.expires_at
+    }
+}
+
+/// How serious a [`FeedStatus`] is.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum FeedStatusLevel {
+    /// Services are down.
+    Outage,
+    /// Services are reachable only in part.
+    Degraded,
+    /// A notice posted on the status page; also any level added by a newer bot.
+    #[default]
+    #[serde(other)]
+    Notice,
+}
+
+/// A service a [`FeedStatus`] is about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FeedStatusService {
+    /// 1–[`STATUS_MAX_SERVICE_NAME_CHARS`] characters, as players know it.
+    pub name: String,
+    #[serde(default)]
+    pub state: FeedServiceState,
+}
+
+/// What a [`FeedStatusService`] is going through.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum FeedServiceState {
+    Down,
+    Degraded,
+    /// A state added by a newer bot.
+    #[default]
+    #[serde(other)]
+    Unknown,
+}
+
+/// Item, event or status notice a [`FeedProblem`] is about.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum FeedTarget {
     Item,
     Event,
+    /// `status` (the problem's id is empty).
+    Status,
 }
 
-/// What was wrong with one item or event of an otherwise valid feed.
+/// What was wrong with one item or event, or the status notice, of an otherwise valid feed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum FeedIssue {
-    /// Dropped: not an item or event of this schema (missing or mistyped fields).
+    /// Dropped: not an item, event or status notice of this schema (missing or mistyped fields).
     Unreadable,
     /// Dropped: the id is not 1–64 characters from `[A-Za-z0-9._-]`.
     BadId,
@@ -512,7 +601,7 @@ pub enum FeedIssue {
     DuplicateId,
     /// Dropped: the title is empty.
     EmptyTitle,
-    /// Dropped: longer than [`FEED_MAX_TITLE_CHARS`].
+    /// Dropped: longer than [`FEED_MAX_TITLE_CHARS`] ([`STATUS_MAX_TITLE_CHARS`] for the status).
     TitleTooLong,
     /// Dropped: longer than [`FEED_MAX_SUMMARY_CHARS`].
     SummaryTooLong,
@@ -520,9 +609,18 @@ pub enum FeedIssue {
     BodyTooLong,
     /// Dropped: `endsAt` is not after `startsAt`.
     EndsBeforeStart,
+    /// Dropped (status): the message is longer than [`STATUS_MAX_MESSAGE_CHARS`].
+    MessageTooLong,
+    /// Dropped (status): more than [`STATUS_MAX_SERVICES`] services, or a service name that is
+    /// empty or longer than [`STATUS_MAX_SERVICE_NAME_CHARS`].
+    BadServices,
+    /// Dropped (status): `expiresAt` is not after `updatedAt`, or more than
+    /// [`STATUS_MAX_LIFETIME`] after it.
+    BadExpiry,
     /// Kept without its cover (not an image of at most 2 MB with a safe path and a SHA-256).
     BadCover,
-    /// Kept without its `cta` or `url` (not a safe link, or a button without a label or target).
+    /// Kept without its `cta` or `url` (not a safe link, or a button without a label or target;
+    /// the status page link must be `https://`).
     BadLink,
     /// Kept without `source.url` (not `https://`).
     BadSourceLink,
@@ -546,6 +644,9 @@ impl FeedIssue {
                 | Self::SummaryTooLong
                 | Self::BodyTooLong
                 | Self::EndsBeforeStart
+                | Self::MessageTooLong
+                | Self::BadServices
+                | Self::BadExpiry
         )
     }
 }
@@ -576,9 +677,18 @@ impl FeedProblem {
             issue,
         }
     }
+
+    fn status(issue: FeedIssue) -> Self {
+        Self {
+            target: FeedTarget::Status,
+            id: String::new(),
+            issue,
+        }
+    }
 }
 
-/// The feed before its items are read one by one.
+/// The feed before its items are read one by one. Unknown fields are ignored, so a field a
+/// newer bot adds never breaks this reader.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RawFeed {
@@ -590,13 +700,17 @@ struct RawFeed {
     items: Vec<Value>,
     #[serde(default)]
     events: Vec<Value>,
+    #[serde(default)]
+    status: Option<Value>,
 }
 
 impl BotFeed {
     /// Reads `feed.json` bytes (after the signature verified). The size, `schema` and the item
     /// and event counts are whole-feed rules: breaking one fails the feed. A broken item or
     /// event is dropped or repaired on its own and reported (see [`FeedIssue`]); `pinned` is
-    /// always cleared and cover posters are ignored.
+    /// always cleared and cover posters are ignored. A broken status notice is dropped the same
+    /// way (an unsafe status page link only loses the link); whether it has expired is
+    /// [`FeedStatus::is_active`], checked when it is shown.
     pub fn parse(bytes: &[u8]) -> Result<(BotFeed, Vec<FeedProblem>)> {
         if bytes.len() as u64 > FEED_MAX_BYTES {
             return Err(Error::Invalid(format!(
@@ -621,6 +735,7 @@ impl BotFeed {
         let mut problems = Vec::new();
         let items = read_items(raw.items, &mut problems);
         let events = read_events(raw.events, &items, &mut problems);
+        let status = read_status(raw.status, &mut problems);
         Ok((
             BotFeed {
                 schema: raw.schema,
@@ -628,6 +743,7 @@ impl BotFeed {
                 generated_at: raw.generated_at,
                 items,
                 events,
+                status,
             },
             problems,
         ))
@@ -812,6 +928,46 @@ fn read_events(
         events.push(event);
     }
     events
+}
+
+/// The status notice when it follows the rules (unknown fields, levels and states are tolerated;
+/// a status page link that is not `https://` is removed). Expiry against the clock is left to
+/// [`FeedStatus::is_active`]: a cached feed is read again later.
+fn read_status(raw: Option<Value>, problems: &mut Vec<FeedProblem>) -> Option<FeedStatus> {
+    let mut status: FeedStatus = match serde_json::from_value(raw?) {
+        Ok(status) => status,
+        Err(_) => {
+            problems.push(FeedProblem::status(FeedIssue::Unreadable));
+            return None;
+        }
+    };
+    let bad_service = |service: &FeedStatusService| {
+        service.name.trim().is_empty() || too_long(&service.name, STATUS_MAX_SERVICE_NAME_CHARS)
+    };
+    let latest_end = saturating_add(status.updated_at, STATUS_MAX_LIFETIME);
+    let issue = if status.title.trim().is_empty() {
+        Some(FeedIssue::EmptyTitle)
+    } else if too_long(&status.title, STATUS_MAX_TITLE_CHARS) {
+        Some(FeedIssue::TitleTooLong)
+    } else if too_long(&status.message, STATUS_MAX_MESSAGE_CHARS) {
+        Some(FeedIssue::MessageTooLong)
+    } else if status.services.len() > STATUS_MAX_SERVICES || status.services.iter().any(bad_service)
+    {
+        Some(FeedIssue::BadServices)
+    } else if status.expires_at <= status.updated_at || status.expires_at > latest_end {
+        Some(FeedIssue::BadExpiry)
+    } else {
+        None
+    };
+    if let Some(issue) = issue {
+        problems.push(FeedProblem::status(issue));
+        return None;
+    }
+    if status.url.as_deref().is_some_and(|url| !is_https(url)) {
+        status.url = None;
+        problems.push(FeedProblem::status(FeedIssue::BadLink));
+    }
+    Some(status)
 }
 
 /// Link targets in Markdown, for checking: inline links and images (`[t](dest)`), autolinks
@@ -1509,6 +1665,229 @@ mod tests {
             FeedSourceKind::Unknown
         );
         assert!(feed.events.is_empty());
+    }
+
+    #[test]
+    fn later_additions_never_break_the_reader() {
+        // Fields a newer bot may add anywhere: at the top, in items, events, the status notice
+        // and its services. This reader skips them and keeps everything it knows.
+        let mut news = item("discord-1");
+        news["reactions"] = json!({ "👍": 4 });
+        let mut status = status_value("outage");
+        status["incidentId"] = json!("abc");
+        status["services"][0]["region"] = json!("eu");
+        let (feed, problems) = BotFeed::parse(
+            &serde_json::to_vec(&json!({
+                "schema": 1,
+                "sequence": 3,
+                "generatedAt": "2026-10-16T09:00:00Z",
+                "items": [news],
+                "events": [{ "id": "e", "title": "E", "startsAt": "2026-10-18T17:00:00Z", "stream": "https://x.example" }],
+                "status": status,
+                "polls": [{ "id": "p" }],
+                "servers": { "count": 3 },
+                "motd": 7
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!((feed.items.len(), feed.events.len()), (1, 1));
+        let status = feed.status.expect("status kept");
+        assert_eq!(status.services[0].name, "Survival Zephyr");
+    }
+
+    fn status_value(level: &str) -> Value {
+        json!({
+            "level": level,
+            "title": "Bazı hizmetlerde sorun var",
+            "message": "Şu an erişilemiyor: Survival Zephyr",
+            "services": [{ "name": "Survival Zephyr", "state": "down" }],
+            "url": "https://status.projects.gg",
+            "updatedAt": "2026-10-16T09:00:00Z",
+            "expiresAt": "2026-10-16T09:15:00Z"
+        })
+    }
+
+    fn with_status(status: Value) -> (BotFeed, Vec<FeedProblem>) {
+        let mut doc: Value =
+            serde_json::from_slice(&feed(vec![item("discord-1")], Vec::new())).expect("feed json");
+        doc["status"] = status;
+        BotFeed::parse(&serde_json::to_vec(&doc).unwrap()).unwrap()
+    }
+
+    #[test]
+    fn a_valid_status_is_read_and_shown_until_it_expires() {
+        let (feed, problems) = with_status(status_value("outage"));
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(feed.items.len(), 1, "the news is untouched");
+        let status = feed.status.as_ref().expect("status");
+        assert_eq!(status.level, FeedStatusLevel::Outage);
+        assert_eq!(status.title, "Bazı hizmetlerde sorun var");
+        assert_eq!(status.message, "Şu an erişilemiyor: Survival Zephyr");
+        assert_eq!(
+            status.services,
+            [FeedStatusService {
+                name: "Survival Zephyr".into(),
+                state: FeedServiceState::Down
+            }]
+        );
+        assert_eq!(status.url.as_deref(), Some("https://status.projects.gg"));
+        assert!(status.is_active(ts("2026-10-16T09:00:00Z")));
+        assert!(status.is_active(ts("2026-10-16T09:14:59Z")));
+        assert!(!status.is_active(ts("2026-10-16T09:15:00Z")), "expired");
+        assert!(!status.is_active(ts("2026-10-17T09:00:00Z")));
+
+        // The least a notice needs: a title and its two times.
+        let (feed, problems) = with_status(json!({
+            "title": "Bu gece bakım var",
+            "updatedAt": "2026-10-16T09:00:00Z",
+            "expiresAt": "2026-10-16T09:01:00Z"
+        }));
+        assert!(problems.is_empty(), "{problems:?}");
+        let status = feed.status.expect("status");
+        assert_eq!(status.level, FeedStatusLevel::Notice);
+        assert!(status.message.is_empty() && status.services.is_empty() && status.url.is_none());
+    }
+
+    #[test]
+    fn a_missing_status_means_all_is_well() {
+        let (feed, problems) = parse(vec![item("discord-1")], Vec::new());
+        assert!(feed.status.is_none() && problems.is_empty());
+        let (feed, problems) = with_status(Value::Null);
+        assert!(feed.status.is_none() && problems.is_empty());
+    }
+
+    #[test]
+    fn status_limits_are_inclusive() {
+        let mut value = status_value("degraded");
+        value["title"] = json!("ş".repeat(STATUS_MAX_TITLE_CHARS));
+        value["message"] = json!("ü".repeat(STATUS_MAX_MESSAGE_CHARS));
+        value["services"] = json!(
+            (0..STATUS_MAX_SERVICES)
+                .map(|i| json!({
+                    "name": format!("{i:02}{}", "ğ".repeat(STATUS_MAX_SERVICE_NAME_CHARS - 2)),
+                    "state": "degraded"
+                }))
+                .collect::<Vec<_>>()
+        );
+        value["expiresAt"] = json!("2026-10-16T09:15:00Z");
+        let (feed, problems) = with_status(value);
+        assert!(problems.is_empty(), "{problems:?}");
+        let status = feed.status.expect("status");
+        assert_eq!(status.level, FeedStatusLevel::Degraded);
+        assert_eq!(status.services.len(), STATUS_MAX_SERVICES);
+    }
+
+    #[test]
+    fn a_broken_status_is_dropped_but_the_feed_stays() {
+        let broken = |edit: &dyn Fn(&mut Value)| {
+            let mut value = status_value("outage");
+            edit(&mut value);
+            let (feed, problems) = with_status(value);
+            assert!(feed.status.is_none(), "dropped");
+            assert_eq!(feed.items.len(), 1, "the rest of the feed stays");
+            assert_eq!(problems.len(), 1, "{problems:?}");
+            assert_eq!(problems[0].target, FeedTarget::Status);
+            assert!(problems[0].id.is_empty());
+            assert!(problems[0].issue.drops());
+            problems[0].issue
+        };
+        let services = |count: usize| {
+            json!(
+                (0..count)
+                    .map(|i| json!({ "name": format!("Sunucu {i}"), "state": "down" }))
+                    .collect::<Vec<_>>()
+            )
+        };
+        let remove = |key: &'static str| {
+            move |s: &mut Value| {
+                s.as_object_mut().expect("object").remove(key);
+            }
+        };
+
+        assert_eq!(broken(&|s| s["title"] = json!(" ")), FeedIssue::EmptyTitle);
+        assert_eq!(
+            broken(&|s| s["title"] = json!("a".repeat(STATUS_MAX_TITLE_CHARS + 1))),
+            FeedIssue::TitleTooLong
+        );
+        assert_eq!(
+            broken(&|s| s["message"] = json!("ı".repeat(STATUS_MAX_MESSAGE_CHARS + 1))),
+            FeedIssue::MessageTooLong
+        );
+        assert_eq!(
+            broken(&|s| s["services"] = services(STATUS_MAX_SERVICES + 1)),
+            FeedIssue::BadServices
+        );
+        assert_eq!(
+            broken(&|s| s["services"][0]["name"] = json!("  ")),
+            FeedIssue::BadServices
+        );
+        assert_eq!(
+            broken(&|s| s["services"][0]["name"] =
+                json!("a".repeat(STATUS_MAX_SERVICE_NAME_CHARS + 1))),
+            FeedIssue::BadServices
+        );
+        // A life longer than 15 minutes, none at all, or a backwards one.
+        assert_eq!(
+            broken(&|s| s["expiresAt"] = json!("2026-10-16T09:15:01Z")),
+            FeedIssue::BadExpiry
+        );
+        assert_eq!(
+            broken(&|s| s["expiresAt"] = json!("2026-10-16T09:00:00Z")),
+            FeedIssue::BadExpiry
+        );
+        assert_eq!(
+            broken(&|s| s["expiresAt"] = json!("2026-10-15T09:00:00Z")),
+            FeedIssue::BadExpiry
+        );
+        // Mistyped or missing fields.
+        assert_eq!(broken(&|s| s["level"] = json!(2)), FeedIssue::Unreadable);
+        assert_eq!(broken(&|s| s["level"] = Value::Null), FeedIssue::Unreadable);
+        assert_eq!(broken(&|s| s["url"] = json!(42)), FeedIssue::Unreadable);
+        assert_eq!(
+            broken(&|s| s["expiresAt"] = json!("yarın")),
+            FeedIssue::Unreadable
+        );
+        assert_eq!(
+            broken(&|s| s["services"] = json!(["Survival Zephyr"])),
+            FeedIssue::Unreadable
+        );
+        assert_eq!(broken(&remove("title")), FeedIssue::Unreadable);
+        assert_eq!(broken(&remove("updatedAt")), FeedIssue::Unreadable);
+        assert_eq!(broken(&remove("expiresAt")), FeedIssue::Unreadable);
+        assert_eq!(
+            broken(&|s| *s = json!("Bazı hizmetlerde sorun var")),
+            FeedIssue::Unreadable
+        );
+    }
+
+    #[test]
+    fn unknown_status_values_fall_back_and_unsafe_links_go() {
+        let mut value = status_value("maintenance");
+        value["services"][0]["state"] = json!("slow");
+        let (feed, problems) = with_status(value);
+        assert!(problems.is_empty(), "{problems:?}");
+        let status = feed.status.expect("status");
+        assert_eq!(status.level, FeedStatusLevel::Notice, "the calmest level");
+        assert_eq!(status.services[0].state, FeedServiceState::Unknown);
+
+        for url in [
+            "http://status.projects.gg",
+            "javascript:alert(1)",
+            "projects://news/sezon-5",
+            "https://user:pw@status.projects.gg",
+            " https://status.projects.gg",
+            "",
+        ] {
+            let mut value = status_value("outage");
+            value["url"] = json!(url);
+            let (feed, problems) = with_status(value);
+            let status = feed.status.expect("kept without the link");
+            assert_eq!(status.url, None, "{url:?}");
+            assert_eq!(issues(&problems), [("", FeedIssue::BadLink)], "{url:?}");
+            assert!(!problems[0].issue.drops());
+        }
     }
 
     #[test]
