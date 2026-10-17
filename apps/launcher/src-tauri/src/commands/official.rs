@@ -20,17 +20,16 @@ use pl_content::{
     ContentSnapshot, PackLoader, PackManifest, PackRef, PackState, RootIndex, SyncPolicy,
     SyncProgress, SyncProgressFn, apply_sync, plan_sync,
 };
-use pl_mc::install::LaunchBar;
+use pl_mc::install::{LaunchBar, McContext};
 use pl_mc::instance::model::{ManagedPack, ServerAddress};
 use pl_mc::instance::{Instance, InstanceIcon, InstanceLoader, NewInstance};
 use pl_mc::loaders::LoaderKind;
 use pl_net::{CancellationToken, DownloadOptions, VerifyMode};
 use serde::Serialize;
 use tauri::State;
-use tauri::ipc::Channel;
 
 use crate::commands::instances::{InstanceView, seed_default_server_once, view};
-use crate::commands::launch::{LaunchEventView, ProgressView};
+use crate::commands::launch::{EventSink, LaunchEventView, ProgressView};
 use crate::commands::modcenter;
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
@@ -509,17 +508,29 @@ pub(crate) async fn prepare_pack(
     Ok(prepared)
 }
 
+/// Where [`sync_pack_files`] reports (the launch's events, its progress on the launch's one bar)
+/// and how it downloads: for the player's launch, or gently for background preparation
+/// (`McContext::for_background`).
+pub(crate) struct PackSync<'a> {
+    pub events: &'a EventSink,
+    pub bar: &'a Arc<LaunchBar>,
+    pub ctx: &'a McContext,
+}
+
 /// After the game files: makes the pack's files match `manifest` (player-added files stay as
 /// they are; changes the player made to pack mods are adopted and reported with `ModsNotice`).
-/// Emits `PackUpdated` when an installed pack moved to a new version. Reports to the launch's
-/// channel, its progress on the launch's one bar (the pack part).
+/// Emits `PackUpdated` when an installed pack moved to a new version.
 pub(crate) async fn sync_pack_files(
     state: &AppState,
     instance: &mut Instance,
     manifest: &PackManifest,
     game_dir: &Path,
     offline: bool,
-    (on_event, bar): (&Channel<LaunchEventView>, &Arc<LaunchBar>),
+    PackSync {
+        events: on_event,
+        bar,
+        ctx,
+    }: PackSync<'_>,
     cancel: &CancellationToken,
 ) -> CmdResult<()> {
     let previous = PackState::load(game_dir).await.map_err(pack_error)?;
@@ -543,7 +554,7 @@ pub(crate) async fn sync_pack_files(
         if offline && !plan.downloads.is_empty() {
             tracing::info!("pack update pending until the network is back");
         } else {
-            let events = on_event.clone();
+            let events = Arc::clone(on_event);
             let bar = Arc::clone(bar);
             let progress: SyncProgressFn = Arc::new(move |p: SyncProgress| {
                 let fraction = if p.total_bytes > 0 {
@@ -554,7 +565,7 @@ pub(crate) async fn sync_pack_files(
                     1.0
                 };
                 let remaining = p.total_bytes.saturating_sub(p.done_bytes);
-                let _ = events.send(LaunchEventView::Progress(ProgressView {
+                events(LaunchEventView::Progress(ProgressView {
                     stage: "pack".to_owned(),
                     percent: bar.part_percent(fraction),
                     done_files: p.done_files as u64,
@@ -565,12 +576,12 @@ pub(crate) async fn sync_pack_files(
                 }));
             });
             let options = DownloadOptions {
-                concurrency: 8,
+                concurrency: ctx.concurrency(8),
                 verify: VerifyMode::Full,
                 cancel: cancel.clone(),
                 ..DownloadOptions::default()
             };
-            let report = apply_sync(&plan, &state.mc.downloader, &options, Some(progress))
+            let report = apply_sync(&plan, &ctx.downloader, &options, Some(progress))
                 .await
                 .map_err(pack_error)?;
             changed = report.downloaded + report.deleted + report.restored;
@@ -578,7 +589,7 @@ pub(crate) async fn sync_pack_files(
         }
     }
     if let Some(notice) = modcenter::notice(&plan, manifest, failed) {
-        let _ = on_event.send(LaunchEventView::ModsNotice(notice));
+        on_event(LaunchEventView::ModsNotice(notice));
     }
 
     if first_install {
@@ -614,7 +625,7 @@ pub(crate) async fn sync_pack_files(
             .map_err(CmdError::from)?;
         if recorded != manifest.version_id && !first_install && !recorded.is_empty() {
             let changelog = manifest.projects.changelog.trim();
-            let _ = on_event.send(LaunchEventView::PackUpdated {
+            on_event(LaunchEventView::PackUpdated {
                 name: manifest.name.clone(),
                 version: manifest.version_id.clone(),
                 changelog: (!changelog.is_empty()).then(|| changelog.to_owned()),

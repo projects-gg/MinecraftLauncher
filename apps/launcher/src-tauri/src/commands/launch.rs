@@ -7,10 +7,13 @@ use std::time::{Duration, Instant};
 
 use pl_auth::FailureClass;
 use pl_content::{PackManifest, PackState, SyncPolicy, plan_sync};
+use pl_mc::install::context::BACKGROUND_CONCURRENCY;
 use pl_mc::install::space::{self, GameFiles, Target};
 use pl_mc::install::{
-    InstallOptions, InstallProgress, InstallStage, LaunchBar, LaunchPart, install_version,
+    InstallOptions, InstallProgress, InstallStage, LaunchBar, LaunchPart, McContext,
+    install_version,
 };
+use pl_mc::instance::Instance;
 use pl_mc::launch::{
     GameEvent, GameProcess, LaunchIdentity, QuickPlay, SpawnOptions, UserType, build_launch_command,
 };
@@ -322,7 +325,10 @@ pub async fn launch_instance(
     if let Some(previous) = previous {
         previous.cancel.cancel();
     }
-    // A Java runtime update downloading in the background leaves the network to the launch.
+    // Background preparation stops (what it finished, and its half-done files, are this launch's
+    // head start) and a Java runtime update downloading in the background leaves the network to
+    // the launch.
+    crate::prepare::yield_to_launch(&app).await;
     crate::commands::java::yield_to_launch(&app).await;
     let started = Instant::now();
     let result = prepare_and_spawn(
@@ -341,6 +347,11 @@ pub async fn launch_instance(
         if current.as_ref().is_some_and(|launch| launch.id == id) {
             current.take();
         }
+    }
+    // A launch that ended without a game lets background preparation go on after a while (a game
+    // that started tells it when it closes).
+    if state.running.lock().is_none() {
+        crate::prepare::launch_ended(&app);
     }
     match result {
         // A cancel is not an error: no error message, the command bar returns to idle.
@@ -387,7 +398,7 @@ fn out_of_room(error: CmdError, state: &AppState, instance_id: &str) -> CmdError
 }
 
 /// Free space where a launch writes (or the end-to-end stand-in of debug builds).
-fn free_space(path: &Path) -> Option<u64> {
+pub(crate) fn free_space(path: &Path) -> Option<u64> {
     space::free_bytes_override().or_else(|| pl_data::usage::free_space(path))
 }
 
@@ -397,19 +408,26 @@ fn free_space(path: &Path) -> Option<u64> {
 /// offers "Yer aç"). A roomy disk costs one look at the version's file list; the files are only
 /// checked when room is tight. A guess that fails (an unreadable file list, no answer from
 /// Mojang) never stops a launch: a disk that fills up anyway is reported when it happens.
+/// Background preparation (`ctx.background`) leaves [`space::BACKGROUND_RESERVE`] free and
+/// guesses nothing: a disk or a download it cannot measure stops it.
 async fn ensure_room(
-    state: &AppState,
-    instance: &pl_mc::instance::Instance,
+    ctx: &McContext,
+    instance: &Instance,
     loader_version: Option<&str>,
     manifest: Option<&pl_mc::version::VersionManifest>,
     pack: Option<&PackManifest>,
     game_dir: &Path,
     cancel: &CancellationToken,
 ) -> CmdResult<()> {
-    let ctx = &state.mc;
+    let background = ctx.background;
+    let check: fn(Target, Target) -> Option<space::Shortfall> = if background {
+        space::background_shortfall
+    } else {
+        space::shortfall
+    };
     let shared_free = free_space(ctx.dirs.root());
     let game_free = free_space(game_dir);
-    if shared_free.is_none() && game_free.is_none() {
+    if shared_free.is_none() && game_free.is_none() && !background {
         return Ok(());
     }
     let files = match GameFiles::for_launch(
@@ -423,13 +441,14 @@ async fn ensure_room(
     .await
     {
         Ok(files) => files,
+        Err(error) if background => return Err(error.into()),
         Err(error) => {
             tracing::warn!(%error, "room check skipped: the version's files are unknown");
             return Ok(());
         }
     };
     let roomy = files.upper_bound(ctx).await.is_some_and(|upper| {
-        space::shortfall(
+        check(
             Target {
                 free: shared_free,
                 missing: upper,
@@ -447,6 +466,7 @@ async fn ensure_room(
     let shared = match files.missing(ctx, cancel).await {
         Ok(bytes) => bytes,
         Err(_) if cancel.is_cancelled() => return Err(cancelled()),
+        Err(error) if background => return Err(error.into()),
         Err(error) => {
             tracing::warn!(%error, "room check skipped: the missing files are unknown");
             return Ok(());
@@ -456,7 +476,7 @@ async fn ensure_room(
         Some(manifest) => pack_missing(manifest, game_dir).await,
         None => 0,
     };
-    let short = space::shortfall(
+    let short = check(
         Target {
             free: shared_free,
             missing: shared,
@@ -472,6 +492,7 @@ async fn ensure_room(
         ?shared_free,
         ?game_free,
         short = short.is_some(),
+        background,
         "room on the disk checked"
     );
     match short {
@@ -509,6 +530,335 @@ async fn pack_missing(manifest: &PackManifest, game_dir: &Path) -> u64 {
     }
 }
 
+/// Where the steps shared with background preparation report: the launch's channel, or the
+/// background preparation (which keeps the notices for the instance's next launch).
+pub(crate) type EventSink = Arc<dyn Fn(LaunchEventView) + Send + Sync>;
+
+/// Who gets the game files ready.
+pub(crate) enum Readying<'a> {
+    /// The player pressed OYNA: their download settings, the Java question, offline play. The
+    /// launch holds the instance lock all along.
+    Launch(&'a LaunchSettings),
+    /// Background preparation (`crate::prepare`): gentle downloads, a disk reserve, no questions
+    /// and nothing without the network. It takes the instance lock only to change the instance
+    /// (its version, its install marker, its pack's files); the shared game files download
+    /// without it, so the instance page and mod changes never wait for them.
+    Background {
+        lock: &'a Arc<tokio::sync::Mutex<()>>,
+    },
+}
+
+/// The game files in place: what the launch command is built from.
+pub(crate) struct ReadyGame {
+    pub resolved: pl_mc::version::ResolvedVersion,
+    pub installed: pl_mc::install::InstalledVersion,
+}
+
+/// Background preparation stopped: the network is gone (there is nothing to fetch then).
+pub(crate) const OFFLINE: &str = "CEVRIMDISI";
+/// Background preparation stopped: the instance's version changed while its files downloaded.
+pub(crate) const CHANGED: &str = "KURULUM-DEGISTI";
+
+/// The instance lock, unless the preparation is cancelled first.
+async fn take_lock<'a>(
+    lock: &'a tokio::sync::Mutex<()>,
+    cancel: &CancellationToken,
+) -> CmdResult<tokio::sync::MutexGuard<'a, ()>> {
+    tokio::select! {
+        _ = cancel.cancelled() => Err(cancelled()),
+        guard = lock.lock() => Ok(guard),
+    }
+}
+
+/// Steps 1 and 2 of a launch and the pack's files, shared with background preparation: version
+/// metadata, the official pack's version, the mod loader, the game files with Java, the pack sync.
+/// No account, no mod check, no process. A launch holds the instance lock; background preparation
+/// takes it where it changes the instance. `Ok(None)`: the launch stopped for the Java question
+/// (never in the background).
+pub(crate) async fn ready_game_files(
+    app: &AppHandle,
+    state: &AppState,
+    instance: &mut Instance,
+    (instance_dir, game_dir): (&Path, &Path),
+    readying: Readying<'_>,
+    sink: &EventSink,
+    cancel: &CancellationToken,
+) -> CmdResult<Option<ReadyGame>> {
+    let (settings, background_lock) = match readying {
+        Readying::Launch(settings) => (Some(settings), None),
+        Readying::Background { lock } => (None, Some(lock)),
+    };
+    let background_ctx;
+    let ctx = match settings {
+        Some(_) => &state.mc,
+        None => {
+            background_ctx = state.mc.for_background();
+            &background_ctx
+        }
+    };
+    let launcher_version = app.package_info().version.to_string();
+    // Background: the instance lock while the instance may change (a switch finishing, the pack's
+    // version followed).
+    let mut background_guard = match background_lock {
+        Some(lock) => Some(take_lock(lock, cancel).await?),
+        None => None,
+    };
+    versions::ensure_switch_finished(state, instance).await?;
+    checkpoint(cancel)?;
+
+    // 1. Version metadata, falling back to offline mode when the network is gone.
+    let mut offline = false;
+    let fetched = step(cancel, async {
+        Ok(pl_mc::version::manifest::load_manifest(ctx, false).await)
+    })
+    .await?;
+    let manifest = match fetched {
+        Ok(m) => Some(m),
+        Err(e) if e.is_offline() => {
+            if settings.is_none() {
+                return Err(CmdError::new(OFFLINE, "", "the network is gone"));
+            }
+            offline = true;
+            sink(LaunchEventView::Offline);
+            pl_mc::version::manifest::load_manifest(ctx, true)
+                .await
+                .ok()
+        }
+        Err(e) => return Err(e.into()),
+    };
+
+    // Official pack: Minecraft and loader versions follow the family member of the instance's
+    // version.
+    let prepared = step(
+        cancel,
+        official::prepare_pack(state, instance, game_dir, offline, &launcher_version),
+    )
+    .await?;
+    if prepared.content_changed {
+        let _ = app.emit("content-changed", ());
+    }
+    if let Some(dropped) = prepared.dropped {
+        sink(LaunchEventView::PackVersionDropped {
+            minecraft: dropped.minecraft,
+            recommended: dropped.recommended,
+        });
+    }
+    let pack = prepared.manifest;
+    // Background: the shared game files download without the instance lock (what the instance
+    // follows now tells a change made meanwhile).
+    drop(background_guard.take());
+    let followed = background_lock.is_some().then(|| instance.clone());
+
+    let marker = read_marker(instance_dir);
+    let first_install = marker.as_ref().is_none_or(|m| {
+        m.mc_version != instance.mc_version
+            || m.loader != instance.loader.kind
+            || m.loader_version != instance.loader.version
+    });
+
+    // One bar over the parts this launch runs, in order.
+    let modded = instance.loader.kind != LoaderKind::Vanilla;
+    let installs_java = settings
+        .is_some_and(|s| s.java == Some(crate::commands::java::JavaChoice::Install))
+        && matches!(instance.java, pl_mc::java::JavaSetting::Custom { .. });
+    let parts: Vec<LaunchPart> = [
+        installs_java.then_some(LaunchPart::Java),
+        modded.then_some(LaunchPart::Loader),
+        Some(LaunchPart::Game),
+        pack.is_some().then_some(LaunchPart::Pack),
+    ]
+    .into_iter()
+    .flatten()
+    .collect();
+    let bar = Arc::new(LaunchBar::new(&parts));
+
+    let events = Arc::clone(sink);
+    let progress_bar = Arc::clone(&bar);
+    let progress: pl_mc::install::InstallProgressFn = Arc::new(move |p: InstallProgress| {
+        events(LaunchEventView::Progress(progress_view(&p, &progress_bar)));
+    });
+
+    // A custom Java that does not suit this game is asked about before anything is downloaded;
+    // "Kur ve oyna" switches the instance here and the launch goes on. The background leaves
+    // the question to the launch (and the instance's Java as it is).
+    if let Some(settings) = settings {
+        let java_gate = step(
+            cancel,
+            crate::commands::java::prelaunch(
+                app,
+                state,
+                instance,
+                manifest.as_ref(),
+                settings.java,
+                &progress,
+                cancel,
+            ),
+        )
+        .await?;
+        if let crate::commands::java::JavaGate::Ask(prompt) = java_gate {
+            sink(LaunchEventView::JavaMismatch(prompt));
+            return Ok(None);
+        }
+    }
+    let concurrency = ctx.concurrency(settings.map_or(BACKGROUND_CONCURRENCY, |s| {
+        s.concurrent_downloads.clamp(4, 48) as usize
+    }));
+    let verify_files = settings.is_some_and(|s| s.verify_files);
+    let install_options = |verify: VerifyMode| InstallOptions {
+        java: instance.java.clone(),
+        offline,
+        verify: if offline {
+            VerifyMode::Exists
+        } else if verify_files {
+            VerifyMode::Full
+        } else {
+            verify
+        },
+        game_dir: Some(game_dir.to_path_buf()),
+        concurrency,
+        cancel: cancel.clone(),
+        progress: Some(progress.clone()),
+    };
+
+    // The mod loader version to install: the instance's, else the newest stable one.
+    let loader_version = match instance.loader.kind {
+        LoaderKind::Vanilla => None,
+        kind => Some(match &instance.loader.version {
+            Some(v) if !v.trim().is_empty() => v.clone(),
+            _ => step(cancel, async {
+                pl_mc::loaders::list_loader_versions(ctx, kind, &instance.mc_version)
+                    .await
+                    .map_err(CmdError::from)
+            })
+            .await?
+            .into_iter()
+            .find(|v| v.stable)
+            .map(|v| v.version)
+            .ok_or_else(|| {
+                CmdError::new(
+                    "YUKLEYICI-YOK",
+                    "Bu Minecraft sürümü için seçilen mod yükleyici bulunamadı.",
+                    format!("{kind:?} for {}", instance.mc_version),
+                )
+            })?,
+        }),
+    };
+
+    // Before anything big is downloaded: room on the disk for what this launch still needs.
+    if !offline {
+        step(
+            cancel,
+            ensure_room(
+                ctx,
+                instance,
+                loader_version.as_deref(),
+                manifest.as_ref(),
+                pack.as_ref(),
+                game_dir,
+                cancel,
+            ),
+        )
+        .await?;
+    }
+
+    // Mod loaders install their profile (and run Forge/NeoForge installer steps) first.
+    if modded {
+        bar.enter(LaunchPart::Loader);
+    }
+    let version_id = match &loader_version {
+        None => instance.mc_version.clone(),
+        Some(loader_version) => {
+            step(cancel, async {
+                pl_mc::loaders::install_loader(
+                    ctx,
+                    &instance.mc_version,
+                    instance.loader.kind,
+                    loader_version,
+                    install_options(if first_install {
+                        VerifyMode::Full
+                    } else {
+                        VerifyMode::Size
+                    }),
+                )
+                .await
+                .map_err(CmdError::from)
+            })
+            .await?
+        }
+    };
+
+    bar.enter(LaunchPart::Game);
+    let resolved = step(cancel, async {
+        pl_mc::version::resolve::resolve_version(ctx, &version_id, manifest.as_ref())
+            .await
+            .map_err(CmdError::from)
+    })
+    .await?;
+
+    // 2. Install / verify files. Full hashing only on first install; size checks otherwise
+    //    (loader installs above already verified their files, so a size check suffices then).
+    let verify = if first_install && instance.loader.kind == LoaderKind::Vanilla {
+        VerifyMode::Full
+    } else {
+        VerifyMode::Size
+    };
+    let installed = step(cancel, async {
+        install_version(ctx, &resolved, install_options(verify))
+            .await
+            .map_err(CmdError::from)
+    })
+    .await?;
+
+    // Background: the instance lock again for its own files; an instance whose version changed
+    // (or that went) meanwhile is left alone (the change brings its own preparation).
+    if let (Some(lock), Some(followed)) = (background_lock, &followed) {
+        background_guard = Some(take_lock(lock, cancel).await?);
+        let unchanged = state.instances.get(&instance.id).await.is_ok_and(|now| {
+            now.mc_version == followed.mc_version
+                && now.loader == followed.loader
+                && now.managed_pack == followed.managed_pack
+        });
+        if !unchanged {
+            return Err(CmdError::new(CHANGED, "", "the instance changed meanwhile"));
+        }
+    }
+    let _ = write_marker(
+        instance_dir,
+        &InstalledMarker {
+            version_id: version_id.clone(),
+            mc_version: instance.mc_version.clone(),
+            loader: instance.loader.kind,
+            loader_version: instance.loader.version.clone(),
+        },
+    );
+
+    // The pack's own files (mods, configs, resource packs) once the game itself is in place.
+    // The sync stops on the token by itself (it is not dropped half-way: it moves files).
+    checkpoint(cancel)?;
+    if let Some(manifest) = &pack {
+        bar.enter(LaunchPart::Pack);
+        official::sync_pack_files(
+            state,
+            instance,
+            manifest,
+            game_dir,
+            offline,
+            official::PackSync {
+                events: sink,
+                bar: &bar,
+                ctx,
+            },
+            cancel,
+        )
+        .await?;
+    }
+    drop(background_guard);
+    Ok(Some(ReadyGame {
+        resolved,
+        installed,
+    }))
+}
+
 async fn prepare_and_spawn(
     app: &AppHandle,
     state: &AppState,
@@ -540,223 +890,32 @@ async fn prepare_and_spawn(
         _ = cancel.cancelled() => return Err(cancelled()),
         guard = lock.lock() => guard,
     };
-    versions::ensure_switch_finished(state, &mut instance).await?;
-    checkpoint(cancel)?;
-
-    // 1. Version metadata, falling back to offline mode when the network is gone.
-    let mut offline = false;
-    let fetched = step(cancel, async {
-        Ok(pl_mc::version::manifest::load_manifest(&state.mc, false).await)
-    })
-    .await?;
-    let manifest = match fetched {
-        Ok(m) => Some(m),
-        Err(e) if e.is_offline() => {
-            offline = true;
-            let _ = on_event.send(LaunchEventView::Offline);
-            pl_mc::version::manifest::load_manifest(&state.mc, true)
-                .await
-                .ok()
-        }
-        Err(e) => return Err(e.into()),
+    let sink: EventSink = {
+        let channel = on_event.clone();
+        Arc::new(move |event| {
+            let _ = channel.send(event);
+        })
     };
-
-    // Official pack: Minecraft and loader versions follow the family member of the instance's
-    // version.
-    let prepared = step(
+    let Some(ReadyGame {
+        resolved,
+        installed,
+    }) = ready_game_files(
+        app,
+        state,
+        &mut instance,
+        (instance_dir.as_path(), game_dir.as_path()),
+        Readying::Launch(&settings),
+        &sink,
         cancel,
-        official::prepare_pack(state, &mut instance, &game_dir, offline, &launcher_version),
     )
-    .await?;
-    if prepared.content_changed {
-        let _ = app.emit("content-changed", ());
-    }
-    if let Some(dropped) = prepared.dropped {
-        let _ = on_event.send(LaunchEventView::PackVersionDropped {
-            minecraft: dropped.minecraft,
-            recommended: dropped.recommended,
-        });
-    }
-    let pack = prepared.manifest;
-
-    let marker = read_marker(&instance_dir);
-    let first_install = marker.as_ref().is_none_or(|m| {
-        m.mc_version != instance.mc_version
-            || m.loader != instance.loader.kind
-            || m.loader_version != instance.loader.version
-    });
-
-    // One bar over the parts this launch runs, in order.
-    let modded = instance.loader.kind != LoaderKind::Vanilla;
-    let installs_java = settings.java == Some(crate::commands::java::JavaChoice::Install)
-        && matches!(instance.java, pl_mc::java::JavaSetting::Custom { .. });
-    let parts: Vec<LaunchPart> = [
-        installs_java.then_some(LaunchPart::Java),
-        modded.then_some(LaunchPart::Loader),
-        Some(LaunchPart::Game),
-        pack.is_some().then_some(LaunchPart::Pack),
-    ]
-    .into_iter()
-    .flatten()
-    .collect();
-    let bar = Arc::new(LaunchBar::new(&parts));
-
-    let events = on_event.clone();
-    let progress_bar = Arc::clone(&bar);
-    let progress: pl_mc::install::InstallProgressFn = Arc::new(move |p: InstallProgress| {
-        let _ = events.send(LaunchEventView::Progress(progress_view(&p, &progress_bar)));
-    });
-
-    // A custom Java that does not suit this game is asked about before anything is downloaded;
-    // "Kur ve oyna" switches the instance here and the launch goes on.
-    let java_gate = step(
-        cancel,
-        crate::commands::java::prelaunch(
-            app,
-            state,
-            &mut instance,
-            manifest.as_ref(),
-            settings.java,
-            &progress,
-            cancel,
-        ),
-    )
-    .await?;
-    if let crate::commands::java::JavaGate::Ask(prompt) = java_gate {
-        let _ = on_event.send(LaunchEventView::JavaMismatch(prompt));
+    .await?
+    else {
         return Ok(());
-    }
-    let concurrency = settings.concurrent_downloads.clamp(4, 48) as usize;
-    let install_options = |verify: VerifyMode| InstallOptions {
-        java: instance.java.clone(),
-        offline,
-        verify: if offline {
-            VerifyMode::Exists
-        } else if settings.verify_files {
-            VerifyMode::Full
-        } else {
-            verify
-        },
-        game_dir: Some(game_dir.clone()),
-        concurrency,
-        cancel: cancel.clone(),
-        progress: Some(progress.clone()),
     };
-
-    // The mod loader version to install: the instance's, else the newest stable one.
-    let loader_version = match instance.loader.kind {
-        LoaderKind::Vanilla => None,
-        kind => Some(match &instance.loader.version {
-            Some(v) if !v.trim().is_empty() => v.clone(),
-            _ => step(cancel, async {
-                pl_mc::loaders::list_loader_versions(&state.mc, kind, &instance.mc_version)
-                    .await
-                    .map_err(CmdError::from)
-            })
-            .await?
-            .into_iter()
-            .find(|v| v.stable)
-            .map(|v| v.version)
-            .ok_or_else(|| {
-                CmdError::new(
-                    "YUKLEYICI-YOK",
-                    "Bu Minecraft sürümü için seçilen mod yükleyici bulunamadı.",
-                    format!("{kind:?} for {}", instance.mc_version),
-                )
-            })?,
-        }),
-    };
-
-    // Before anything big is downloaded: room on the disk for what this launch still needs.
-    if !offline {
-        step(
-            cancel,
-            ensure_room(
-                state,
-                &instance,
-                loader_version.as_deref(),
-                manifest.as_ref(),
-                pack.as_ref(),
-                &game_dir,
-                cancel,
-            ),
-        )
-        .await?;
-    }
-
-    // Mod loaders install their profile (and run Forge/NeoForge installer steps) first.
-    if modded {
-        bar.enter(LaunchPart::Loader);
-    }
-    let version_id = match &loader_version {
-        None => instance.mc_version.clone(),
-        Some(loader_version) => {
-            step(cancel, async {
-                pl_mc::loaders::install_loader(
-                    &state.mc,
-                    &instance.mc_version,
-                    instance.loader.kind,
-                    loader_version,
-                    install_options(if first_install {
-                        VerifyMode::Full
-                    } else {
-                        VerifyMode::Size
-                    }),
-                )
-                .await
-                .map_err(CmdError::from)
-            })
-            .await?
-        }
-    };
-
-    bar.enter(LaunchPart::Game);
-    let resolved = step(cancel, async {
-        pl_mc::version::resolve::resolve_version(&state.mc, &version_id, manifest.as_ref())
-            .await
-            .map_err(CmdError::from)
-    })
-    .await?;
-
-    // 2. Install / verify files. Full hashing only on first install; size checks otherwise
-    //    (loader installs above already verified their files, so a size check suffices then).
-    let verify = if first_install && instance.loader.kind == LoaderKind::Vanilla {
-        VerifyMode::Full
-    } else {
-        VerifyMode::Size
-    };
-    let installed = step(cancel, async {
-        install_version(&state.mc, &resolved, install_options(verify))
-            .await
-            .map_err(CmdError::from)
-    })
-    .await?;
-
-    let _ = write_marker(
-        &instance_dir,
-        &InstalledMarker {
-            version_id: version_id.clone(),
-            mc_version: instance.mc_version.clone(),
-            loader: instance.loader.kind,
-            loader_version: instance.loader.version.clone(),
-        },
-    );
-
-    // The pack's own files (mods, configs, resource packs) once the game itself is in place.
-    // The sync stops on the token by itself (it is not dropped half-way: it moves files).
-    checkpoint(cancel)?;
-    if let Some(manifest) = &pack {
-        bar.enter(LaunchPart::Pack);
-        official::sync_pack_files(
-            state,
-            &mut instance,
-            manifest,
-            &game_dir,
-            offline,
-            (on_event, &bar),
-            cancel,
-        )
-        .await?;
+    // What a background preparation of this instance found on its way (a pack update, mod
+    // changes it adopted, a version the pack dropped) is told now, as this launch would have.
+    for notice in crate::prepare::take_notices(app, instance_id) {
+        let _ = on_event.send(notice);
     }
     // Instances made before every instance got the Projects server: an empty list gets it once.
     crate::commands::instances::seed_default_server_once(state, &mut instance).await;
@@ -986,6 +1145,8 @@ async fn prepare_and_spawn(
         state.running.lock().take();
         // Java runtime updates waiting for the game can take their place now.
         crate::commands::java::game_exited(&app);
+        // Background preparation looks again once the player is done with the launcher.
+        crate::prepare::game_exited(&app);
         if let Some(diagnosis) = exit.crash.clone() {
             let view =
                 modhealth::crash_view(&app, &state, &crashed_instance, java_major, diagnosis).await;

@@ -3,6 +3,7 @@
 mod commands;
 mod error;
 mod identity;
+mod prepare;
 mod shell;
 mod state;
 mod webview_rest;
@@ -81,6 +82,8 @@ pub fn run() {
             commands::cleanup::start_housekeeping(app.handle());
             // The launcher's Java runtimes: newer builds staged and swapped in while no game runs.
             commands::java::start_java_updates(app.handle());
+            // The chosen instance's files, downloaded gently while the launcher is idle (prepare).
+            prepare::start(app.handle());
             // Started at login: stay in the tray until the user opens the launcher (not after an
             // update the player installed from the open window).
             if !commands::updates::start_hidden() {
@@ -104,6 +107,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<commands::launch::GameLogEvent>()
         // Emitted as the plain "java-progress" event (a Java runtime update downloading).
         .typ::<commands::java::JavaProgressEvent>()
+        // Emitted as the plain "prepare-status" event (background preparation).
+        .typ::<prepare::PrepareStatusView>()
         // Emitted as the plain "social-view" / "social-notice" events (friends feature).
         .typ::<pl_social::SocialView>()
         .typ::<pl_social::SocialNotice>()
@@ -147,6 +152,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::launch::launch_cancel,
             commands::launch::game_kill,
             commands::launch::game_running,
+            prepare::prepare_configure,
+            prepare::prepare_status,
             commands::server::server_status,
             commands::afk::afk_overview,
             commands::afk::afk_add,

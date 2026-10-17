@@ -140,6 +140,14 @@ export const commands = {
 	/**  Instance id of the running game, if any (used after a UI reload). */
 	gameRunning: () => __TAURI_INVOKE<string | null>("game_running"),
 	/**
+	 *  Settings → İndirmeler "Arka planda hazırla" and the instance the command bar shows, with its
+	 *  version (`mc/loader/loader version`). Called whenever one of them changes: a choice makes a run
+	 *  due soon, a run for another instance (or with the setting off) stops at once.
+	 */
+	prepareConfigure: (enabled: boolean, instanceId: string | null, version: string | null) => __TAURI_INVOKE<void>("prepare_configure", { enabled, instanceId, version }),
+	/**  What the command bar shows now (after the page loaded or came back on screen). */
+	prepareStatus: () => __TAURI_INVOKE<PrepareStatusView>("prepare_status"),
+	/**
 	 *  Server List Ping. Never fails: an unreachable server is reported as offline. Without a name
 	 *  and address it pings the featured server Studio published (else `play.projects.gg`).
 	 */
@@ -2814,6 +2822,15 @@ export type PatternProblem =
  *  some chat lines.
  */
 "tooComplex";
+
+/**  What the command bar shows (`prepare-status`, `prepare_status`). */
+export type PrepareStatusView = 
+/**  Nothing to show. */
+{ state: "idle" } | 
+/**  Downloading for the instance; `percent` (0–100) never goes back within a run. */
+{ state: "preparing"; instanceId: string; percent: number | null } | 
+/**  A run just put in place everything the next launch needs (sent once, never kept). */
+{ state: "ready"; instanceId: string };
 
 /**
  *  What the player is doing, sent by the UI whenever it changes. The backend turns it into a
