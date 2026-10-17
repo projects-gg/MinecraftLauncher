@@ -17,6 +17,7 @@ import {
 } from "@/lib/window-away";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
+import { useUpdate } from "@/stores/update";
 import { router } from "./router";
 import "./styles.css";
 
@@ -43,12 +44,16 @@ const queryClient = new QueryClient({
 
 function Providers() {
   const performanceMode = usePrefs((s) => s.performanceMode);
-  // Ambient motion stops while the game runs (the GPU belongs to Minecraft then) and while
-  // nobody can see it (tray, minimized).
+  // Ambient motion stops while the game runs (the GPU belongs to Minecraft then), while nobody
+  // can see it (tray, minimized) and under the mandatory update screen, which covers the app.
   const gameRunning = useLaunch((s) => s.phase.kind === "running");
   const away = useWindowAway();
+  const updateLocked = useUpdate((s) => s.mandatory && s.phase !== "idle");
   return (
-    <PerfProvider performanceMode={performanceMode} ambientPaused={gameRunning || away}>
+    <PerfProvider
+      performanceMode={performanceMode}
+      ambientPaused={gameRunning || away || updateLocked}
+    >
       <TooltipProvider>
         <QueryClientProvider client={queryClient}>
           <RouterProvider router={router} />
