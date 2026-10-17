@@ -1,34 +1,56 @@
 import {
   ArrowsClockwise,
   ChatsCircle,
+  Coffee,
   DownloadSimple,
-  FolderOpen,
   GameController,
   Gear,
   HardDrives,
   Info,
-  Lifebuoy,
   PaintBrush,
-  Trash,
   UserCircle,
+  UsersThree,
 } from "@phosphor-icons/react";
-import { Button, cn, Segmented, Select, Slider, Switch, toast } from "@pl/ui";
+import {
+  Button,
+  cn,
+  easeOutExpo,
+  Field,
+  Input,
+  Segmented,
+  Select,
+  Slider,
+  Switch,
+  toast,
+  useMotionPrefs,
+} from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { AnimatePresence, motion } from "motion/react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import logo from "@/assets/brand/logo-96.webp";
+import { FriendsSettingsSection } from "@/features/social/settings-section";
+import { useSocialUi } from "@/features/social/store";
 import { api } from "@/lib/api";
-import { setLanguage } from "@/lib/i18n";
+import { applyStartOnBoot } from "@/lib/autostart";
+import { ENGLISH_ENABLED, setLanguage } from "@/lib/i18n";
+import { openLink } from "@/lib/links";
+import { playSound } from "@/lib/sound";
 import { type GameStartBehavior, usePrefs } from "@/stores/prefs";
-import { useUi } from "@/stores/ui";
+import { useUpdate } from "@/stores/update";
 import { AccountsSection } from "./accounts-section";
+import { DataSection } from "./data-section";
+import { JavaSection } from "./java-section";
 
 const sections = [
   { id: "general", icon: Gear },
   { id: "appearance", icon: PaintBrush },
   { id: "game", icon: GameController },
+  { id: "java", icon: Coffee },
   { id: "accounts", icon: UserCircle },
+  // Only while the friends feature is on.
+  { id: "friends", icon: UsersThree },
   { id: "downloads", icon: DownloadSimple },
   { id: "updates", icon: ArrowsClockwise },
   { id: "discord", icon: ChatsCircle },
@@ -48,10 +70,10 @@ export function Row({
   children: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-8 border-b border-white/6 py-4 last:border-b-0">
+    <div className="flex items-center justify-between gap-6 border-b border-white/6 py-3.5 last:border-b-0">
       <div className="min-w-0">
-        <p className="text-[14px] font-medium text-bone-50">{title}</p>
-        {help ? <p className="mt-0.5 max-w-[56ch] text-[12.5px] text-ash-400">{help}</p> : null}
+        <p className="text-[13.5px] font-medium text-bone-50">{title}</p>
+        {help ? <p className="mt-0.5 max-w-[56ch] text-[12.5px] text-ash-300">{help}</p> : null}
       </div>
       <div className="shrink-0">{children}</div>
     </div>
@@ -63,22 +85,25 @@ function General() {
   const p = usePrefs();
   return (
     <>
-      <Row title={t("settings.general.language")}>
-        <Segmented
-          value={p.language}
-          onValueChange={(v) => {
-            p.set("language", v);
-            setLanguage(v);
-          }}
-          label={t("settings.general.language")}
-          options={[
-            { value: "tr", label: "Türkçe" },
-            { value: "en", label: "English" },
-          ]}
-        />
-      </Row>
+      {ENGLISH_ENABLED ? (
+        <Row title={t("settings.general.language")}>
+          <Segmented
+            value={p.language}
+            onValueChange={(v) => {
+              p.set("language", v);
+              setLanguage(v);
+            }}
+            label={t("settings.general.language")}
+            options={[
+              { value: "tr", label: "Türkçe" },
+              { value: "en", label: "English" },
+            ]}
+          />
+        </Row>
+      ) : null}
       <Row title={t("settings.general.onGameStart")} help={t("settings.general.onGameStartHelp")}>
-        <div className="w-56">
+        {/* Wide enough for "Simge durumuna küçülsün" on one line. */}
+        <div className="w-64">
           <Select<GameStartBehavior>
             value={p.onGameStart}
             onValueChange={(v) => p.set("onGameStart", v)}
@@ -92,10 +117,16 @@ function General() {
           />
         </div>
       </Row>
-      <Row title={t("settings.general.startOnBoot")} help={t("settings.general.startOnBootHelp")}>
+      <Row title={t("settings.general.startOnBoot")}>
         <Switch
           checked={p.startOnBoot}
-          onCheckedChange={(v) => p.set("startOnBoot", v)}
+          onCheckedChange={(v) => {
+            p.set("startOnBoot", v);
+            applyStartOnBoot(v).catch(() => {
+              p.set("startOnBoot", !v);
+              toast.error(t("settings.general.startOnBootFailed"));
+            });
+          }}
           label={t("settings.general.startOnBoot")}
           hideLabel
         />
@@ -108,8 +139,25 @@ function General() {
           hideLabel
         />
       </Row>
+      <Row title={t("settings.general.notifications")}>
+        <Switch
+          checked={p.desktopNotifications}
+          onCheckedChange={(v) => p.set("desktopNotifications", v)}
+          label={t("settings.general.notifications")}
+          hideLabel
+        />
+      </Row>
     </>
   );
+}
+
+/** Lets the player hear the new volume while dragging, at most a few times a second. */
+let lastPreview = 0;
+function previewVolume() {
+  const now = Date.now();
+  if (now - lastPreview < 180) return;
+  lastPreview = now;
+  playSound("success");
 }
 
 function Appearance() {
@@ -129,8 +177,9 @@ function Appearance() {
         />
       </Row>
       <Row title={t("settings.appearance.particles")}>
+        {/* Performance mode turns the embers off: the switch says so while it is on. */}
         <Switch
-          checked={p.particles}
+          checked={p.particles && !p.performanceMode}
           onCheckedChange={(v) => p.set("particles", v)}
           label={t("settings.appearance.particles")}
           hideLabel
@@ -145,19 +194,22 @@ function Appearance() {
           hideLabel
         />
       </Row>
-      {p.sounds ? (
-        <div className="py-4">
-          <Slider
-            label={t("settings.appearance.volume")}
-            value={p.soundVolume}
-            onValueChange={(v) => p.set("soundVolume", v)}
-            min={0}
-            max={100}
-            step={5}
-            format={(v) => `%${v}`}
-          />
-        </div>
-      ) : null}
+      {/* Always there (dimmed while sounds are off), so nothing below jumps. */}
+      <div className="py-4">
+        <Slider
+          label={t("settings.appearance.volume")}
+          value={p.soundVolume}
+          onValueChange={(v) => {
+            p.set("soundVolume", v);
+            previewVolume();
+          }}
+          min={0}
+          max={100}
+          step={5}
+          format={(v) => `%${v}`}
+          disabled={!p.sounds}
+        />
+      </div>
     </>
   );
 }
@@ -194,6 +246,11 @@ function Updates() {
   const { t } = useTranslation();
   const p = usePrefs();
   const { data: info } = useQuery({ queryKey: ["app-info"], queryFn: () => api.appInfo() });
+  const phase = useUpdate((s) => s.phase);
+  const percent = useUpdate((s) => s.percent);
+  const check = useUpdate((s) => s.check);
+  const apply = useUpdate((s) => s.apply);
+  const busy = phase === "checking" || phase === "downloading" || phase === "applying";
   return (
     <>
       <Row
@@ -218,14 +275,45 @@ function Updates() {
           hideLabel
         />
       </Row>
-      <Row title={t("settings.updates.current", { version: info?.version ?? "" })}>
-        <Button
-          variant="secondary"
-          icon={<ArrowsClockwise size={16} />}
-          onClick={() => toast.success(t("settings.updates.upToDate"))}
-        >
-          {t("settings.updates.check")}
-        </Button>
+      <Row
+        title={
+          info
+            ? t("settings.updates.current", { version: info.version })
+            : t("settings.about.version")
+        }
+      >
+        {phase === "ready" ? (
+          <Button
+            variant="primary"
+            icon={<ArrowsClockwise size={16} />}
+            onClick={() => void apply()}
+          >
+            {t("settings.updates.restart")}
+          </Button>
+        ) : (
+          <Button
+            variant="secondary"
+            icon={
+              <ArrowsClockwise
+                size={16}
+                className={busy ? "animate-spin motion-reduce:animate-none" : undefined}
+              />
+            }
+            disabled={busy}
+            onClick={async () => {
+              const result = await check(true);
+              if (result === "upToDate") toast.success(t("settings.updates.upToDate"));
+              else if (result === "ready") toast.success(t("settings.updates.ready"));
+              else if (result === "unavailable") toast.error(t("settings.updates.unavailable"));
+            }}
+          >
+            {phase === "downloading"
+              ? t("settings.updates.downloading", { percent: Math.round(percent) })
+              : busy
+                ? t("settings.updates.checking")
+                : t("settings.updates.check")}
+          </Button>
+        )}
       </Row>
     </>
   );
@@ -263,11 +351,20 @@ function Discord() {
                 E
               </span>
             </div>
+            {/* What Discord shows while playing, with "Bağlandığım sunucuyu göster" as it is. */}
             <div className="text-[13px] leading-snug">
               <p className="font-semibold text-white">Projects Launcher</p>
-              <p className="text-[#dbdee1]">{t("settings.discord.previewDetails")}</p>
-              <p className="text-[#b5bac1]">{t("settings.discord.previewState")}</p>
-              <p className="text-[#b5bac1] tabular-nums">00:42 geçti</p>
+              <p className="text-[#dbdee1]">
+                {p.discordShowServer
+                  ? t("settings.discord.previewDetails")
+                  : t("settings.discord.previewDetailsPlain")}
+              </p>
+              <p className="text-[#b5bac1] tabular-nums">
+                {p.discordShowServer
+                  ? t("settings.discord.previewStateParty")
+                  : t("settings.discord.previewState")}
+              </p>
+              <p className="text-[#b5bac1] tabular-nums">{t("settings.discord.previewElapsed")}</p>
             </div>
           </div>
         </div>
@@ -276,64 +373,53 @@ function Discord() {
   );
 }
 
+/** Data folder, storage and cleanup, support bundle, moving the folder, v1 import. */
 function Data() {
-  const { t } = useTranslation();
-  return (
-    <>
-      <Row title={t("settings.data.folder")} help={t("settings.data.folderHelp")}>
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" icon={<FolderOpen size={15} />}>
-            {t("settings.data.open")}
-          </Button>
-          <Button variant="secondary" size="sm">
-            {t("settings.data.move")}
-          </Button>
-        </div>
-      </Row>
-      <Row title={t("settings.data.cache")} help={t("settings.data.cacheHelp")}>
-        <Button variant="secondary" size="sm" icon={<Trash size={15} />}>
-          {t("settings.data.clear")}
-        </Button>
-      </Row>
-      <Row title={t("settings.data.legacy")} help={t("settings.data.legacyHelp")}>
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => useUi.getState().setMigrationOpen(true)}
-        >
-          {t("settings.data.import")}
-        </Button>
-      </Row>
-      <Row title={t("settings.data.support")} help={t("settings.data.supportHelp")}>
-        <Button variant="secondary" size="sm" icon={<Lifebuoy size={15} />}>
-          {t("settings.data.support")}
-        </Button>
-      </Row>
-    </>
-  );
+  return <DataSection />;
+}
+
+/** "Windows, 64 bit" instead of "windows x86_64". */
+function platformLabel(os: string, arch: string): string {
+  const system =
+    { windows: "Windows", macos: "macOS", linux: "Linux" }[os] ??
+    os.charAt(0).toLocaleUpperCase("tr") + os.slice(1);
+  const bits = { x86_64: "64 bit", aarch64: "ARM", x86: "32 bit" }[arch];
+  return bits ? `${system}, ${bits}` : system;
 }
 
 function About() {
   const { t } = useTranslation();
   const { data: info } = useQuery({ queryKey: ["app-info"], queryFn: () => api.appInfo() });
+  // Studio's links (from the home content, cached with it); the built-in addresses stand in.
+  const { data: home } = useQuery({ queryKey: ["home-content"], queryFn: () => api.homeContent() });
+  const links = home?.links;
+  const linkButtons = [
+    { label: t("settings.about.website"), url: links?.website ?? "https://projects.gg" },
+    { label: t("settings.about.discord"), url: links?.discord ?? "https://projects.gg/discord" },
+    ...(links?.store ? [{ label: t("settings.about.store"), url: links.store }] : []),
+    ...(links?.support ? [{ label: t("settings.about.support"), url: links.support }] : []),
+    ...(links?.custom ?? []),
+  ];
   return (
     <div>
       <div className="flex items-center gap-4 pb-5">
         <img src={logo} alt="" className="size-16" />
         <div>
           <p className="font-display text-[22px] font-semibold text-bone-50">Projects Launcher</p>
-          <p className="text-ash-400">
-            {t("settings.about.version")} {info?.version} ({info?.os} {info?.arch})
+          <p className="flex gap-3 text-ash-300 tabular-nums" data-selectable>
+            <span>
+              {t("settings.about.version")} {info?.version}
+            </span>
+            {info ? <span>{platformLabel(info.os, info.arch)}</span> : null}
           </p>
         </div>
       </div>
       <div className="flex flex-wrap gap-2.5">
-        <Button variant="secondary" onClick={() => void api.openUrl("https://projects.gg")}>
-          {t("settings.about.website")}
-        </Button>
-        <Button variant="secondary" onClick={() => void api.openUrl("https://projects.gg/discord")}>
-          {t("settings.about.discord")}
-        </Button>
+        {linkButtons.map((link) => (
+          <Button key={link.url} variant="secondary" onClick={() => openLink(link.url)}>
+            {link.label}
+          </Button>
+        ))}
         <Button
           variant="ghost"
           onClick={() => void api.openUrl("https://github.com/projects-gg/MinecraftLauncher")}
@@ -346,12 +432,82 @@ function About() {
   );
 }
 
+const gigabytes = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
+
+/** Defaults applied to instances created from now on. */
 function GameDefaults() {
   const { t } = useTranslation();
+  const p = usePrefs();
+  const { data: info } = useQuery({ queryKey: ["app-info"], queryFn: () => api.appInfo() });
+  const total = info?.systemMemoryMb ?? 8192;
+  // Leave at least 1 GB to the system, like the per-instance limits.
+  const ceiling = Math.max(2048, Math.floor((total - 1024) / 512) * 512);
+  const auto = p.defaultMaxMemoryMb === null;
+  // The slider fades in place when "Otomatik" goes off; the rows below glide (not in Performance
+  // mode or under reduced motion, where they simply move).
+  const glides = useMotionPrefs().layout;
   return (
-    <div className="py-2">
-      <p className="text-[12.5px] text-ash-400">{t("settings.game.memoryHelp")}</p>
-    </div>
+    <>
+      <Row
+        title={t("settings.game.memory")}
+        help={auto ? t("settings.game.memoryAutoHelp") : t("settings.game.memoryHelp")}
+      >
+        <Switch
+          checked={auto}
+          onCheckedChange={(v) => p.set("defaultMaxMemoryMb", v ? null : Math.min(4096, ceiling))}
+          label={t("settings.game.memoryAuto")}
+        />
+      </Row>
+      <AnimatePresence initial={false}>
+        {auto ? null : (
+          <motion.div
+            key="max-memory"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: { duration: 0.2 } }}
+            exit={{ opacity: 0, transition: { duration: 0.12 } }}
+            className="border-b border-white/6 py-4"
+          >
+            <Slider
+              label={t("settings.game.maxMemory")}
+              value={Math.min(p.defaultMaxMemoryMb ?? 4096, ceiling)}
+              onValueChange={(v) => p.set("defaultMaxMemoryMb", v)}
+              min={1024}
+              max={ceiling}
+              step={512}
+              format={(v) => `${gigabytes.format(v / 1024)} GB`}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <motion.div
+        layout={glides ? "position" : false}
+        transition={{ layout: { duration: 0.3, ease: easeOutExpo } }}
+      >
+        <Row title={t("settings.game.showSnapshots")}>
+          <Switch
+            checked={p.showSnapshots}
+            onCheckedChange={(v) => p.set("showSnapshots", v)}
+            label={t("settings.game.showSnapshots")}
+            hideLabel
+          />
+        </Row>
+        <div className="py-4">
+          <Field
+            label={t("settings.game.jvmArgs")}
+            help={t("settings.game.jvmArgsHelp")}
+            htmlFor="default-jvm-args"
+          >
+            <Input
+              id="default-jvm-args"
+              value={p.defaultJvmArgs}
+              onChange={(e) => p.set("defaultJvmArgs", e.target.value)}
+              spellCheck={false}
+              autoComplete="off"
+            />
+          </Field>
+        </div>
+      </motion.div>
+    </>
   );
 }
 
@@ -359,13 +515,18 @@ export function SettingsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { section?: string };
-  const active = (sections.find((s) => s.id === search.section)?.id ?? "general") as SectionId;
+  const friendsOn = useSocialUi((s) => s.view.enabled);
+  const shown = sections.filter((s) => s.id !== "friends" || friendsOn);
+  const active = (shown.find((s) => s.id === search.section)?.id ?? "general") as SectionId;
+  const glide = useMotionPrefs().layout;
 
   const body: Record<SectionId, ReactNode> = {
     general: <General />,
     appearance: <Appearance />,
     game: <GameDefaults />,
+    java: <JavaSection />,
     accounts: <AccountsSection />,
+    friends: <FriendsSettingsSection />,
     downloads: <Downloads />,
     updates: <Updates />,
     discord: <Discord />,
@@ -374,13 +535,11 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="flex min-h-0 flex-1 gap-8 px-10 pt-4 pb-6">
-      <nav aria-label={t("settings.title")} className="w-56 shrink-0">
-        <h1 className="mb-5 font-display text-[32px] leading-tight font-semibold text-bone-50">
-          {t("settings.title")}
-        </h1>
+    <div className="flex min-h-0 flex-1 gap-6 px-page pt-3 pb-5">
+      <nav aria-label={t("settings.title")} className="w-[184px] shrink-0">
+        <h1 className="page-title mb-4">{t("settings.title")}</h1>
         <ul className="space-y-0.5">
-          {sections.map((s) => {
+          {shown.map((s) => {
             const Icon = s.icon;
             const on = s.id === active;
             return (
@@ -392,14 +551,21 @@ export function SettingsPage() {
                     void navigate({ to: "/settings", search: { section: s.id }, replace: true })
                   }
                   className={cn(
-                    "flex w-full cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-left text-[13.5px] font-medium transition-colors",
-                    on
-                      ? "bg-white/8 text-bone-50"
-                      : "text-ash-300 hover:bg-white/5 hover:text-bone-50",
+                    "relative isolate flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left text-[13px] font-medium transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.98]",
+                    on ? "text-bone-50" : "text-ash-300 hover:bg-white/5 hover:text-bone-50",
                   )}
                 >
+                  {/* The highlight glides to the chosen section (in place in Performance mode). */}
+                  {on ? (
+                    <motion.span
+                      aria-hidden
+                      layoutId={glide ? "settings-section" : undefined}
+                      className="absolute inset-0 -z-10 rounded-md bg-white/8"
+                      transition={{ type: "spring", stiffness: 480, damping: 40 }}
+                    />
+                  ) : null}
                   <Icon
-                    size={18}
+                    size={17}
                     weight={on ? "duotone" : "regular"}
                     className={on ? "text-gold-300" : undefined}
                   />
@@ -410,11 +576,14 @@ export function SettingsPage() {
           })}
         </ul>
       </nav>
-      <section className="glass min-h-0 max-w-[760px] flex-1 overflow-y-auto rounded-[var(--radius-panel)] px-7 py-5">
-        <h2 className="mb-2 font-display text-[20px] font-semibold text-bone-50">
-          {t(`settings.sections.${active}`)}
-        </h2>
-        {body[active]}
+      <section className="glass min-h-0 max-w-[740px] flex-1 overflow-y-auto rounded-[var(--radius-panel)] px-6 py-4">
+        {/* A new section rises into place; the panel itself stays. */}
+        <div key={active} className="panel-in">
+          <h2 className="mb-1 font-display text-section font-semibold text-bone-50">
+            {t(`settings.sections.${active}`)}
+          </h2>
+          {body[active]}
+        </div>
       </section>
     </div>
   );
