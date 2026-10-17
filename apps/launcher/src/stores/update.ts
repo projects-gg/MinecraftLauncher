@@ -6,6 +6,15 @@ import { usePrefs } from "./prefs";
 
 type Phase = "idle" | "checking" | "downloading" | "ready" | "applying" | "error";
 
+/** What a check found (for the manual "Güncellemeleri denetle" button). */
+export type CheckResult =
+  | "upToDate"
+  | "downloading"
+  | "ready"
+  | "available"
+  | "unavailable"
+  | "busy";
+
 interface UpdateState {
   phase: Phase;
   version: string | null;
@@ -13,7 +22,8 @@ interface UpdateState {
   mandatory: boolean;
   percent: number;
   error: string | null;
-  check: () => Promise<void>;
+  /** `manual`: the player asked, so an available update downloads even without auto-download. */
+  check: (manual?: boolean) => Promise<CheckResult>;
   apply: () => Promise<void>;
 }
 
@@ -27,8 +37,12 @@ export const useUpdate = create<UpdateState>()((set, get) => ({
   mandatory: false,
   percent: 0,
   error: null,
-  async check() {
-    if (!isTauri() || get().phase === "downloading" || get().phase === "ready") return;
+  async check(manual = false) {
+    if (!isTauri()) return "upToDate";
+    const current = get().phase;
+    if (current === "downloading") return "downloading";
+    if (current === "ready" || current === "applying") return "ready";
+    if (current === "checking") return "busy";
     const { updateChannel, autoDownloadUpdates } = usePrefs.getState();
     set({ phase: "checking", error: null });
     try {
@@ -37,13 +51,13 @@ export const useUpdate = create<UpdateState>()((set, get) => ({
       const s = status.data;
       if (s.state !== "available" && s.state !== "mandatory") {
         set({ phase: "idle" });
-        return;
+        return s.state === "unavailable" ? "unavailable" : "upToDate";
       }
       const mandatory = s.state === "mandatory";
       set({ version: s.version, notes: s.notes, mandatory });
-      if (!autoDownloadUpdates && !mandatory) {
+      if (!autoDownloadUpdates && !mandatory && !manual) {
         set({ phase: "idle" });
-        return;
+        return "available";
       }
       set({ phase: "downloading", percent: 0 });
       const progress = new Channel<UpdateProgress>();
@@ -53,8 +67,10 @@ export const useUpdate = create<UpdateState>()((set, get) => ({
       const result = await commands.updateDownload(updateChannel, progress);
       if (result.status === "error") throw new Error(result.error.message);
       set({ phase: result.data ? "ready" : "idle", percent: 100 });
+      return result.data ? "ready" : "upToDate";
     } catch (error) {
       set({ phase: "error", error: error instanceof Error ? error.message : String(error) });
+      return "unavailable";
     }
   },
   async apply() {

@@ -5,21 +5,34 @@ import coverForge from "@/assets/art/news-patch-forge.webp";
 import coverPvp from "@/assets/art/news-pvp-arena.webp";
 import coverSpawn from "@/assets/art/news-spawn-city.webp";
 import coverWinter from "@/assets/art/news-winter.webp";
+import { newsHighlights } from "@/lib/news";
 import type { LauncherApi } from "./index";
+import { mockAccountName, mockAccounts } from "./mock-accounts";
 import { mockAfk } from "./mock-afk";
+import { createMockCleanup } from "./mock-cleanup";
+import { createMockContent, mockExtraMods } from "./mock-content";
+import { createMockConveniences, mockNewScreenshots, mockSessionMs } from "./mock-conveniences";
+import { createMockData } from "./mock-data";
+import { mockCustomJava, mockJava, mockJavaPrompt } from "./mock-java";
+import { createMockLibrary, mockServers } from "./mock-library";
+import { createMockModCenter } from "./mock-modcenter";
+import { mockCrash, mockCrashScenario, mockModHealth } from "./mock-modhealth";
+import { createMockSkins } from "./mock-skins";
+import { mockSocial } from "./mock-social";
+import { mockTrashedInstances } from "./mock-trash";
 import type {
-  AccountSummary,
   HomeContent,
   InstanceDetail,
   InstanceSummary,
   LaunchEvent,
+  LaunchOptions,
   LaunchStage,
   LoaderKind,
   LoaderVersion,
-  LoginStep,
   McVersion,
   ModEntry,
   NewInstance,
+  NewsItem,
   ServerStatus,
 } from "./types";
 
@@ -54,7 +67,15 @@ const content: HomeContent = {
     newsId: "sezon-5",
     particles: "embers",
   },
-  banners: [{ id: "xp", level: "event", text: "Hafta sonu boyunca iki kat XP etkinliği açık." }],
+  banners: [
+    {
+      id: "xp",
+      level: "event",
+      text: "Hafta sonu boyunca iki kat XP etkinliği açık.",
+      url: "https://projects.gg/etkinlik",
+      dismissible: true,
+    },
+  ],
   events: [
     {
       id: "pvp",
@@ -132,6 +153,7 @@ const content: HomeContent = {
     },
   ],
   patchNotes: {
+    kind: "pack",
     packName: "Projects",
     version: "v13",
     publishedAt: hoursAgo(72),
@@ -143,6 +165,176 @@ const content: HomeContent = {
   },
   offline: false,
 };
+
+/**
+ * Browser previews only: items the Discord bot's news feed adds (the bundled welcome content the
+ * real launcher shows before anything is published stays without them).
+ */
+const feedNews: NewsItem[] = [
+  {
+    id: "discord-1300000000000000007",
+    title: "Çifte XP haftası başladı",
+    summary: "Pazara kadar tüm görevlerden iki kat XP. Günlük ödüller de ikiye katlandı.",
+    body: "Çifte XP haftası **şimdi** sunucuda.\n\n- Tüm görevlerden iki kat XP\n- Günlük ödüller ikiye katlandı\n- Pazar 23.59'da biter\n\nAyrıntılar [etkinlik sayfasında](https://projects.gg/etkinlik).",
+    coverUrl: coverWinter,
+    category: "event",
+    publishedAt: hoursAgo(1),
+    pinned: false,
+    featured: false,
+    fromFeed: true,
+    sourceUrl:
+      "https://discord.com/channels/480094926164590593/480099230275600394/1300000000000000007",
+  },
+  {
+    id: "discord-1300000000000000006",
+    title: "2.4 yama notları",
+    summary: "Yeni zindan, PvP dengelemeleri ve hata düzeltmeleri.",
+    body: "- Yeni zindan: Kül Mağarası\n- Kılıç hasarı dengelendi\n- Arenada takılma düzeltildi\n- Market menüsü hızlandı",
+    // No picture in the Discord post: the season's art stands in.
+    coverUrl: heroArt,
+    category: "patchNotes",
+    publishedAt: hoursAgo(5),
+    pinned: false,
+    featured: false,
+    fromFeed: true,
+    sourceUrl:
+      "https://discord.com/channels/480094926164590593/480099524652695576/1300000000000000006",
+  },
+];
+
+/**
+ * A preview switch: `?event=next|open|none|overlay` (or localStorage `pl.mock.event`),
+ * `?notes=pack`, `?banners=none|two`.
+ */
+function mockFlag(key: string): string {
+  try {
+    return (
+      new URLSearchParams(window.location.search).get(key) ??
+      localStorage.getItem(`pl.mock.${key}`) ??
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
+/** Events in event card order, relative to now: a live feed event leads by default. */
+function mockEvents(): HomeContent["events"] {
+  const at = (hours: number) => new Date(Date.now() + hours * 3_600_000).toISOString();
+  const saturday = nextSaturdayEvening();
+  const pvp = {
+    id: "pvp",
+    title: "Cumartesi PvP turnuvası",
+    startsAt: saturday.toISOString(),
+    endsAt: new Date(saturday.getTime() + 3 * 3_600_000).toISOString(),
+    newsId: "pvp-turnuvasi",
+  };
+  // A week-long event Studio lowered: whatever else runs leads the card over it.
+  const beginners = {
+    id: "discord-1300000000000000009",
+    title: "Yeni oyuncu haftası",
+    startsAt: at(-50),
+    endsAt: at(24 * 5),
+    priority: -1,
+    fromFeed: true,
+  };
+  switch (mockFlag("event")) {
+    case "none":
+      return [];
+    case "next":
+      return [pvp];
+    case "overlay":
+      return [
+        {
+          id: "discord-1300000000000000007",
+          title: "Çifte XP haftası",
+          startsAt: at(-1),
+          endsAt: at(2.25),
+          newsId: "discord-1300000000000000007",
+          fromFeed: true,
+        },
+        beginners,
+        pvp,
+      ];
+    case "open":
+      return [
+        {
+          id: "discord-1300000000000000008",
+          title: "Ejderha baskını",
+          startsAt: at(-0.4),
+          endsAt: at(2.6),
+          openEnded: true,
+          newsId: "sezon-5",
+        },
+        pvp,
+      ];
+    default:
+      return [
+        {
+          id: "discord-1300000000000000007",
+          title: "Çifte XP haftası",
+          startsAt: at(-1),
+          endsAt: at(2.25),
+          newsId: "discord-1300000000000000007",
+        },
+        pvp,
+      ];
+  }
+}
+
+/** The home content as the backend merges it: the newest patch notes news leads the box. */
+function mockHome(): HomeContent {
+  const news = [...content.news, ...feedNews].sort(
+    (a, b) =>
+      Number(b.pinned) - Number(a.pinned) ||
+      b.publishedAt.localeCompare(a.publishedAt) ||
+      a.id.localeCompare(b.id),
+  );
+  const notes = news
+    .filter((item) => item.category === "patchNotes")
+    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))[0];
+  const banners = mockFlag("banners");
+  return {
+    ...content,
+    links: {
+      website: "https://projects.gg",
+      discord: "https://discord.gg/projects",
+      store: "https://store.projects.gg",
+      custom: [{ label: "YouTube", url: "https://youtube.com/@projectsgg" }],
+    },
+    banners:
+      banners === "none"
+        ? []
+        : banners === "two"
+          ? [
+              ...content.banners,
+              {
+                id: "gece-bakimi",
+                level: "warning",
+                text: "Sunucular bu gece 03.00'te 15 dakika bakımda olacak.",
+                dismissible: false,
+              },
+            ]
+          : content.banners,
+    news,
+    events: mockEvents(),
+    patchNotes:
+      notes && mockFlag("notes") !== "pack"
+        ? {
+            kind: "news",
+            newsId: notes.id,
+            title: notes.title,
+            publishedAt: notes.publishedAt,
+            highlights: newsHighlights(notes.body, notes.summary),
+          }
+        : content.patchNotes,
+  };
+}
+
+/** What the launcher shows before anything is published or cached (no feed, no live events). */
+export function welcomeHome(): HomeContent {
+  return { ...content, offline: false };
+}
 
 const instances: InstanceSummary[] = [
   {
@@ -157,6 +349,7 @@ const instances: InstanceSummary[] = [
     playTimeSecs: 152 * 3600 + 14 * 60,
     state: "ready",
     autoJoin: "play.projects.gg",
+    createdAt: hoursAgo(4200),
   },
   {
     id: "vanilla",
@@ -167,6 +360,7 @@ const instances: InstanceSummary[] = [
     managed: false,
     playTimeSecs: 0,
     state: "needsInstall",
+    createdAt: hoursAgo(40),
   },
   {
     id: "hardcore",
@@ -179,6 +373,8 @@ const instances: InstanceSummary[] = [
     lastPlayedAt: hoursAgo(300),
     playTimeSecs: 41 * 3600,
     state: "ready",
+    group: "Arkadaşlarla",
+    createdAt: hoursAgo(2900),
   },
   {
     id: "yaratici",
@@ -191,12 +387,9 @@ const instances: InstanceSummary[] = [
     lastPlayedAt: hoursAgo(800),
     playTimeSecs: 9 * 3600,
     state: "needsUpdate",
+    group: "Arkadaşlarla",
+    createdAt: hoursAgo(1500),
   },
-];
-
-const accounts: AccountSummary[] = [
-  { id: "a1", kind: "offline", username: "EjderAvcisi", active: true },
-  { id: "a2", kind: "microsoft", username: "KorAtesi_", active: false },
 ];
 
 const versions: McVersion[] = [
@@ -226,6 +419,7 @@ const versions: McVersion[] = [
   id: id as string,
   kind: kind as McVersion["kind"],
   releaseTime: hoursAgo((daysAgo as number) * 24),
+  recommended: id === "26.1.2",
 }));
 
 const loaderVersionTable: Record<Exclude<LoaderKind, "vanilla">, LoaderVersion[]> = {
@@ -263,6 +457,8 @@ const mod = (
   description,
   enabled,
   fromPack,
+  // Pack mods are recommended mods of the mod center.
+  itemId: fromPack ? name.toLowerCase().replace(/[^a-z0-9]+/g, "-") : undefined,
   sizeBytes: 180_000 + name.length * 41_000,
 });
 
@@ -301,10 +497,17 @@ function detailFor(summary: InstanceSummary): InstanceDetail {
   return {
     ...summary,
     systemMemoryMb: 16_384,
+    autoMemoryMb: modded ? (summary.managed ? 5120 : 4096) : 4096,
     settings: {
-      javaMode: "auto",
+      ...(mockCustomJava()
+        ? {
+            javaMode: "custom" as const,
+            javaPath: "C:\\Program Files\\Eclipse Adoptium\\jdk-17.0.12.7-hotspot\\bin\\javaw.exe",
+          }
+        : { javaMode: "auto" as const }),
       minMemoryMb: 2048,
       maxMemoryMb: summary.managed ? 6144 : 4096,
+      memoryAuto: summary.managed || summary.id === "vanilla",
       jvmArgs: "",
       width: 1280,
       height: 720,
@@ -316,7 +519,15 @@ function detailFor(summary: InstanceSummary): InstanceDetail {
         ? "Resmi paket. Mod listesi otomatik güncellenir; eklediğin modlara dokunulmaz."
         : "",
     },
-    mods: modded ? (summary.managed ? projectsMods : projectsMods.slice(0, 5)) : [],
+    mods: [
+      ...(modded
+        ? summary.managed
+          ? projectsMods
+          : // Only the official pack installs pack files.
+            projectsMods.slice(0, 5).map((m) => ({ ...m, fromPack: false, itemId: undefined }))
+        : []),
+      ...(mockExtraMods.get(summary.id) ?? []),
+    ],
     resourcePacks: [
       {
         fileName: "Faithful 32x.zip",
@@ -379,37 +590,37 @@ function detailFor(summary: InstanceSummary): InstanceDetail {
       url,
       takenAt: hoursAgo(24 * (i + 1)),
     })),
-    servers: [
-      {
-        name: "Projects",
-        address: "play.projects.gg",
-        online: true,
-        players: 214,
-        maxPlayers: 500,
-      },
-      {
-        name: "Hypixel",
-        address: "mc.hypixel.net",
-        online: true,
-        players: 31_402,
-        maxPlayers: 100_000,
-      },
-    ],
+    servers: mockServers(summary.id),
   };
 }
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const running = new Map<string, { cancelled: boolean }>();
-let microsoftCancelled = false;
 
 export const mockApi: LauncherApi = {
   ...mockAfk,
+  ...createMockConveniences((id) => instances.find((i) => i.id === id)?.loader),
+  content: createMockContent({ createInstance: (spec) => mockApi.createInstance(spec) }),
+  ...mockAccounts,
+  skins: createMockSkins(mockAccountName),
+  data: createMockData(),
+  cleanup: createMockCleanup(),
+  modCenter: createMockModCenter(),
+  social: mockSocial,
+  modHealth: mockModHealth,
+  java: mockJava,
+  library: createMockLibrary({
+    setGroup: (id, group) => {
+      const instance = instances.find((i) => i.id === id);
+      if (instance) instance.group = group ?? undefined;
+    },
+  }),
   async appInfo() {
     return { version: "2.0.0", os: "windows", arch: "x86_64", debug: true };
   },
   async homeContent() {
     await delay(250);
-    return content;
+    return mockHome();
   },
   async serverStatus(): Promise<ServerStatus> {
     await delay(300);
@@ -444,6 +655,7 @@ export const mockApi: LauncherApi = {
       managed: false,
       playTimeSecs: 0,
       state: "needsInstall",
+      createdAt: new Date().toISOString(),
     };
     instances.push(created);
     return created;
@@ -467,13 +679,36 @@ export const mockApi: LauncherApi = {
       id: `${source.id}-kopya`,
       name: `${source.name} (kopya)`,
       managed: false,
+      createdAt: new Date().toISOString(),
     };
     instances.push(copy);
     return copy;
   },
   async deleteInstance(id: string) {
+    await delay(160);
     const index = instances.findIndex((i) => i.id === id);
-    if (index >= 0) instances.splice(index, 1);
+    const [gone] = index >= 0 ? instances.splice(index, 1) : [];
+    const trashId = `trash-${id}-${Date.now()}`;
+    if (gone) {
+      mockTrashedInstances.set(trashId, {
+        instance: gone,
+        deletedAt: Date.now(),
+        sizeBytes: 1_288_490_189,
+      });
+    }
+    return trashId;
+  },
+  async restoreInstance(trashId: string) {
+    await delay(200);
+    const back = mockTrashedInstances.get(trashId)?.instance;
+    if (!back) throw new Error("not in the trash");
+    mockTrashedInstances.delete(trashId);
+    const taken = (name: string) => instances.some((i) => i.name === name);
+    let name = back.name;
+    for (let n = 2; taken(name); n++) name = `${back.name} (${n})`;
+    const restored = { ...back, name };
+    instances.push(restored);
+    return restored;
   },
   async minecraftVersions() {
     await delay(200);
@@ -483,102 +718,83 @@ export const mockApi: LauncherApi = {
     await delay(200);
     return loader === "vanilla" ? [] : loaderVersionTable[loader];
   },
-  async accounts() {
-    return [...accounts];
-  },
-  async addOfflineAccount(name: string) {
-    await delay(200);
-    for (const a of accounts) a.active = false;
-    const account: AccountSummary = {
-      id: `off-${name}`,
-      kind: "offline",
-      username: name,
-      active: true,
-    };
-    accounts.push(account);
-    return account;
-  },
-  async loginMicrosoft(onStep: (step: LoginStep) => void) {
-    microsoftCancelled = false;
-    const steps: LoginStep[] = [
-      "openingBrowser",
-      "waitingForBrowser",
-      "microsoft",
-      "xboxLive",
-      "xsts",
-      "minecraft",
-      "profile",
-    ];
-    for (const step of steps) {
-      if (microsoftCancelled) throw new Error("cancelled");
-      onStep(step);
-      await delay(step === "waitingForBrowser" ? 2600 : 650);
-    }
-    onStep("done");
-    for (const a of accounts) a.active = false;
-    const account: AccountSummary = {
-      id: "ms-new",
-      kind: "microsoft",
-      username: "AlevKanat",
-      active: true,
-    };
-    accounts.push(account);
-    return account;
-  },
-  async cancelMicrosoftLogin() {
-    microsoftCancelled = true;
-  },
-  async setActiveAccount(id: string) {
-    for (const a of accounts) a.active = a.id === id;
-  },
-  async removeAccount(id: string) {
-    const index = accounts.findIndex((a) => a.id === id);
-    if (index >= 0) accounts.splice(index, 1);
-    if (accounts.length && !accounts.some((a) => a.active) && accounts[0])
-      accounts[0].active = true;
-  },
-  async launch(instanceId: string, onEvent: (e: LaunchEvent) => void) {
+  async launch(instanceId: string, onEvent: (e: LaunchEvent) => void, options?: LaunchOptions) {
     const job = { cancelled: false };
     running.set(instanceId, job);
     const instance = instances.find((i) => i.id === instanceId);
-    const heavy = instance?.state !== "ready";
-    const stages: Array<[LaunchStage, number]> = heavy
-      ? [
-          ["metadata", 4],
-          ["java", 14],
-          ["libraries", 38],
-          ["assets", 86],
-          ["natives", 90],
-          ["pack", 100],
-        ]
-      : [
-          ["metadata", 30],
-          ["pack", 100],
-        ];
-    let percent = 0;
-    const totalFiles = heavy ? 3204 : 48;
-    for (const [stage, target] of stages) {
-      while (percent < target) {
+    // Preview switch (mock-java.ts): the custom Java does not suit the game.
+    const javaQuestion = options?.java ? null : mockJavaPrompt(instanceId, instance?.name ?? "");
+    if (javaQuestion) {
+      await delay(450);
+      onEvent({ type: "javaMismatch", ...javaQuestion });
+      return;
+    }
+    // "Kur ve oyna" downloads Java first.
+    const heavy = instance?.state !== "ready" || options?.java === "install";
+    const modded = instance?.loader !== "vanilla";
+    // One bar for the whole launch, like the backend's `LaunchBar` (pl_mc::install::bar): Java 10
+    // (when it is installed first), mod loader 12, game files 70, pack files 18. A part that does
+    // not run leaves its share to the others, and the bar never goes back.
+    const parts: Array<[LaunchStage[], number, number]> = [];
+    if (options?.java === "install") parts.push([["java"], 10, 0]);
+    if (heavy && modded) parts.push([["loader"], 12, 0]);
+    parts.push([
+      heavy ? ["metadata", "libraries", "assets", "natives"] : ["metadata"],
+      70,
+      heavy ? 3204 : 0,
+    ]);
+    parts.push([["pack"], 18, 48]);
+    const sum = parts.reduce((total, [, share]) => total + share, 0);
+    let from = 0;
+    for (const [stages, share, totalFiles] of parts) {
+      const span = (share / sum) * 100;
+      const steps = heavy ? Math.round(share * 1.4) : 4;
+      for (let step = 1; step <= steps; step++) {
         if (job.cancelled) throw new Error("cancelled");
         await delay(110);
-        percent = Math.min(target, percent + (heavy ? 1.6 : 9));
+        const fraction = step / steps;
+        const stage =
+          stages[Math.min(stages.length - 1, Math.floor(fraction * stages.length * 0.999))];
         onEvent({
           type: "progress",
-          stage,
-          percent,
-          doneFiles: Math.round((percent / 100) * totalFiles),
+          stage: stage ?? "metadata",
+          percent: from + span * fraction,
+          doneFiles: Math.round(fraction * totalFiles),
           totalFiles,
-          bytesPerSec: 9_400_000 + Math.random() * 6_000_000,
-          etaSecs: heavy ? Math.round((100 - percent) / 14) : 1,
+          bytesPerSec:
+            stage === "loader" && fraction > 0.4 ? 0 : 9_400_000 + Math.random() * 6_000_000,
+          etaSecs: heavy ? Math.round((1 - fraction) * steps * 0.11 + (100 - from - span) / 14) : 1,
         });
+      }
+      from += span;
+    }
+    // Preview switches (mock-modhealth.ts): mods that stop the game, warnings, a crash.
+    if (instance?.loader !== "vanilla") {
+      const check = await mockModHealth.check(instanceId);
+      if (check.blocking > 0 && !options?.ignoreModIssues) {
+        onEvent({ type: "modsBlocked", check });
+        return;
+      }
+      if (check.issues.some((i) => i.severity === "warning")) {
+        onEvent({ type: "modsWarning", check });
       }
     }
     onEvent({ type: "launching" });
     await delay(1600);
     onEvent({ type: "started", pid: 4242 });
     if (instance) instance.state = "ready";
-    await delay(25_000);
-    onEvent({ type: "exited", code: 0, runtimeSecs: 25 });
+    const crash = mockCrashScenario();
+    if (crash) {
+      await delay(2600);
+      onEvent({ type: "crashed", ...mockCrash(instanceId, crash) });
+      onEvent({ type: "exited", code: 1, runtimeSecs: 4 });
+      return;
+    }
+    const session = mockSessionMs();
+    await delay(session);
+    const shots = mockNewScreenshots();
+    if (shots) onEvent({ type: "newScreenshots", ...shots });
+    onEvent({ type: "exited", code: 0, runtimeSecs: Math.round(session / 1000) });
   },
   async cancelLaunch(instanceId: string) {
     const job = running.get(instanceId);
@@ -617,4 +833,55 @@ export const mockApi: LauncherApi = {
   async openUrl(url: string) {
     window.open(url, "_blank", "noopener");
   },
+  async officialStatus() {
+    await delay(150);
+    return {
+      pack: {
+        id: "projects",
+        name: "Projects",
+        version: "v13",
+        mcVersion: "26.1.2",
+        loader: "fabric",
+        summary: "Sunucu için hazırlanmış performans ve görünüm paketi.",
+      },
+      instanceId: instances.find((i) => i.managed)?.id,
+    };
+  },
+  async ensureOfficialInstance() {
+    await delay(500);
+    const existing = instances.find((i) => i.managed);
+    if (existing) return existing;
+    const created: InstanceSummary = {
+      id: "projects",
+      name: "Projects",
+      icon: "dragon-egg",
+      mcVersion: "26.1.2",
+      loader: "fabric",
+      loaderVersion: "0.19.5",
+      managed: true,
+      playTimeSecs: 0,
+      state: "needsInstall",
+      autoJoin: "play.projects.gg",
+    };
+    instances.unshift(created);
+    return created;
+  },
+  onContentChanged() {
+    return () => {};
+  },
+  // Previews show the offline strip with `?offline` in the address.
+  async contentStatus() {
+    return { offline: new URLSearchParams(window.location.search).has("offline") };
+  },
+  onContentStatus() {
+    return () => {};
+  },
+  async contentRecheck() {},
+  onDeepLink() {
+    return () => {};
+  },
+  async takePendingDeepLink() {
+    return null;
+  },
+  async quitApp() {},
 };

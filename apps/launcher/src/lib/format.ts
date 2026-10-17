@@ -2,16 +2,21 @@ const number1 = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
 const integer = new Intl.NumberFormat("tr-TR");
 const relative = new Intl.RelativeTimeFormat("tr", { numeric: "auto" });
 
+const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
+
+/**
+ * "512 B", "1,5 MB", "1 GB". Never four digits before the unit: from what would read as 1000 of
+ * a unit (1000–1023 MB, or 999,96 MB rounding up) it switches to the next one.
+ */
 export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${integer.format(bytes)} B`;
-  const units = ["KB", "MB", "GB", "TB"];
-  let value = bytes / 1024;
+  let value = Math.max(0, bytes);
   let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
+  const shown = () => (unit === 0 ? Math.round(value) : Math.round(value * 10) / 10);
+  while (shown() >= 1000 && unit < BYTE_UNITS.length - 1) {
     value /= 1024;
     unit++;
   }
-  return `${number1.format(value)} ${units[unit]}`;
+  return `${(unit === 0 ? integer : number1).format(shown())} ${BYTE_UNITS[unit]}`;
 }
 
 export function formatSpeed(bytesPerSec: number): string {

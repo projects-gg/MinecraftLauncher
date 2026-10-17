@@ -4,9 +4,14 @@ import { create } from "zustand";
 interface UiState {
   migrationOpen: boolean;
   setMigrationOpen: (open: boolean) => void;
+  /** Command palette (Ctrl+K or the title bar search). */
+  paletteOpen: boolean;
+  setPaletteOpen: (open: boolean) => void;
 }
 
 export const useUi = create<UiState>()((set) => ({
   migrationOpen: false,
   setMigrationOpen: (migrationOpen) => set({ migrationOpen }),
+  paletteOpen: false,
+  setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
 }));

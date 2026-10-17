@@ -1,9 +1,15 @@
 import { toast } from "@pl/ui";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { create } from "zustand";
-import { api, type LaunchEvent, type LaunchStage } from "@/lib/api";
+import { confirmAfkBeforePlay } from "@/features/accounts/afk-guard";
+import { useJavaPrompt } from "@/features/java/prompt-store";
+import { announceModsNotice, announceVersionDropped } from "@/features/modcenter/notices";
+import { announceModWarnings, useModFlow } from "@/features/modhealth/flow";
+import { api, type LaunchEvent, type LaunchOptions, type LaunchStage } from "@/lib/api";
+import { notifyWhenAway } from "@/lib/attention";
 import i18n from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
+import { playSound } from "@/lib/sound";
 import { usePrefs } from "./prefs";
 
 export type LaunchPhase =
@@ -21,12 +27,23 @@ export type LaunchPhase =
   | { kind: "running"; since: number }
   | { kind: "error"; message: string; details: string };
 
-export interface CrashInfo {
-  title: string;
-  hint: string;
-  actions: string[];
-  mods: string[];
-  logFile: string | null;
+/** The diagnosis of a crash with its suspects and one-click actions (mod health flow). */
+export type CrashInfo = Omit<Extract<LaunchEvent, { type: "crashed" }>, "type">;
+
+export interface PackNotes {
+  name: string;
+  version: string;
+  changelog: string;
+}
+
+/** Screenshots the last game session took ("N yeni ekran görüntüsü"). */
+export interface NewScreenshots {
+  instanceId: string;
+  count: number;
+  /** Image URLs of the newest ones (at most three). */
+  recent: string[];
+  /** Tells announcements of two sessions apart. */
+  at: number;
 }
 
 interface LaunchState {
@@ -34,9 +51,16 @@ interface LaunchState {
   phase: LaunchPhase;
   offline: boolean;
   crash: CrashInfo | null;
-  play: (instanceId: string) => Promise<void>;
+  /** Changelog of the official pack update applied by the last launch, when opened. */
+  packNotes: PackNotes | null;
+  /** Set when a session that took screenshots ended (the window is back by then). */
+  newShots: NewScreenshots | null;
+  /** `ignoreModIssues`: "Yine de başlat" after the mod check stopped a launch. */
+  play: (instanceId: string, options?: LaunchOptions) => Promise<void>;
   cancel: () => Promise<void>;
   dismissCrash: () => void;
+  showPackNotes: (notes: PackNotes | null) => void;
+  clearNewShots: () => void;
   reset: () => void;
 }
 
@@ -65,15 +89,56 @@ async function restoreWindow() {
   await win.setFocus();
 }
 
+/**
+ * The current launch. `cancel` moves past it, so what a cancelled launch still reports (a late
+ * progress tick, its end) changes nothing; only a game that started anyway is followed.
+ */
+let launchRun = 0;
+/**
+ * OYNA was pressed and the launch has not begun yet: the AFK check asks the backend first (and
+ * may ask the player). A second press meanwhile (a double click) starts nothing more.
+ */
+let starting = false;
+const gameEvents = new Set<LaunchEvent["type"]>([
+  "started",
+  "windowShown",
+  "crashed",
+  "newScreenshots",
+  "exited",
+]);
+
 /** One active launch at a time; the command bar and Discord presence read from here. */
 export const useLaunch = create<LaunchState>()((set, get) => ({
   instanceId: null,
   phase: { kind: "idle" },
   offline: false,
   crash: null,
-  async play(instanceId) {
-    const { phase } = get();
-    if (phase.kind === "working" || phase.kind === "launching" || phase.kind === "running") return;
+  packNotes: null,
+  newShots: null,
+  async play(instanceId, options) {
+    const { phase, instanceId: current } = get();
+    if (phase.kind === "working" || phase.kind === "launching" || phase.kind === "running") {
+      // One game at a time. Another instance's "Oyna" says so (instead of doing nothing) and the
+      // selection its caller made goes back to the game that is on, which the bar still shows.
+      if (current && current !== instanceId) {
+        toast(i18n.t("play.oneAtATime"));
+        usePrefs.getState().selectInstance(current);
+      }
+      return;
+    }
+    if (starting) return;
+    // Same name as a running AFK session: the player chooses first (accounts/afk-guard).
+    starting = true;
+    let go = false;
+    try {
+      go = await confirmAfkBeforePlay(useLaunch);
+    } finally {
+      starting = false;
+    }
+    if (!go) return;
+    playSound("play");
+    launchRun += 1;
+    const run = launchRun;
     set({
       instanceId,
       offline: false,
@@ -87,7 +152,30 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
         bytesPerSec: 0,
       },
     });
+    // The launcher usually hides once the game window shows, so a pack update is announced
+    // again when the player comes back.
+    let unseenNotes: PackNotes | null = null;
+    // Announced once the window is back, after the game closed.
+    let shots: Omit<NewScreenshots, "at"> | null = null;
+    // A long first install: a player who went elsewhere hears when it is over.
+    const startedAt = Date.now();
+    const tellIfAway = (title: string, body: string) =>
+      void notifyWhenAway(Date.now() - startedAt, title, body);
+    const announcePack = (notes: PackNotes | null, name: string, version: string) =>
+      toast.success(i18n.t("play.packUpdated", { name, version }), {
+        duration: 8000,
+        action: notes
+          ? {
+              label: i18n.t("play.packWhatsNew"),
+              onClick: () => {
+                unseenNotes = null;
+                set({ packNotes: notes });
+              },
+            }
+          : undefined,
+      });
     const onEvent = (event: LaunchEvent) => {
+      if (run !== launchRun && !gameEvents.has(event.type)) return;
       switch (event.type) {
         case "progress":
           set({ phase: { kind: "working", ...event } });
@@ -98,45 +186,96 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
           break;
         case "launching":
           set({ phase: { kind: "launching" } });
+          tellIfAway(i18n.t("attention.ready.title"), i18n.t("attention.ready.body"));
           break;
         case "started":
           set({ phase: { kind: "running", since: Date.now() } });
+          playSound("success");
           break;
         case "windowShown":
           void applyGameStartBehavior();
           break;
-        case "crashed":
-          set({
-            crash: {
-              title: event.title,
-              hint: event.hint,
-              actions: event.actions,
-              mods: event.mods,
-              logFile: event.logFile,
-            },
-          });
+        case "crashed": {
+          const { type: _type, ...crash } = event;
+          set({ crash });
+          // The crash opens the mod health flow (suspects, "Onar", memory, "Yeniden yükle").
+          useModFlow.getState().open(instanceId, "crash", { kind: "crash" });
           break;
-        case "exited":
+        }
+        case "modsBlocked":
+          // The game was not started: the player picks "Onar", "Yine de başlat" or "İptal".
+          set({ phase: { kind: "idle" } });
+          playSound("error");
+          tellIfAway(i18n.t("attention.blocked.title"), i18n.t("attention.blocked.body"));
+          useModFlow
+            .getState()
+            .open(instanceId, "blocked", { kind: "blocked", check: event.check });
+          break;
+        case "modsWarning":
+          announceModWarnings(instanceId);
+          break;
+        case "javaMismatch": {
+          // The custom Java does not suit the game: nothing was downloaded yet; the player picks
+          // "Kur ve oyna", "Yine de dene" or cancels (features/java). A launch from the tray or a
+          // shortcut brings the window forward for the question.
+          const { type: _type, ...prompt } = event;
           set({ phase: { kind: "idle" } });
           void restoreWindow();
+          useJavaPrompt.getState().open({ prompt, options });
+          break;
+        }
+        case "newScreenshots":
+          shots = { instanceId, count: event.count, recent: event.recent };
+          break;
+        case "exited":
+          set({ phase: { kind: "idle" }, newShots: shots ? { ...shots, at: Date.now() } : null });
+          shots = null;
+          void restoreWindow();
+          if (unseenNotes) {
+            announcePack(unseenNotes, unseenNotes.name, unseenNotes.version);
+            unseenNotes = null;
+          }
           break;
         case "error":
           set({ phase: { kind: "error", message: event.message, details: event.details } });
+          playSound("error");
+          tellIfAway(i18n.t("attention.failed.title"), event.message);
+          break;
+        case "cancelled":
+          // Stopped from somewhere else than `cancel` (it already went idle): no message.
+          set({ phase: { kind: "idle" } });
+          break;
+        case "packUpdated": {
+          const { name, version, changelog } = event;
+          unseenNotes = changelog ? { name, version, changelog } : null;
+          announcePack(unseenNotes, name, version);
+          break;
+        }
+        case "modsNotice":
+          announceModsNotice(instanceId, event);
+          break;
+        case "packVersionDropped":
+          announceVersionDropped(instanceId, event.minecraft, event.recommended);
           break;
       }
     };
     try {
-      await api.launch(instanceId, onEvent);
+      await api.launch(instanceId, onEvent, options);
     } catch {
       // Errors also arrive as events; anything else (cancel, transport) returns to idle.
-      if (get().phase.kind !== "error") set({ phase: { kind: "idle" } });
+      if (run === launchRun && get().phase.kind !== "error") set({ phase: { kind: "idle" } });
     }
   },
   async cancel() {
     const { instanceId } = get();
-    if (instanceId) await api.cancelLaunch(instanceId);
+    // Calm and at once: the bar is idle right away and nothing the stopping launch still
+    // reports brings it back (the launcher stops its downloads within a second).
+    launchRun += 1;
     set({ phase: { kind: "idle" } });
+    if (instanceId) await api.cancelLaunch(instanceId);
   },
   dismissCrash: () => set({ crash: null }),
+  showPackNotes: (packNotes) => set({ packNotes }),
+  clearNewShots: () => set({ newShots: null }),
   reset: () => set({ phase: { kind: "idle" } }),
 }));
