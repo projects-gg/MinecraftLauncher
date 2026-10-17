@@ -1,4 +1,4 @@
-import { cn } from "@pl/ui";
+import { cn, prewarmImages } from "@pl/ui";
 import compass from "@/assets/art/icons/icon-compass.webp";
 import dragonEgg from "@/assets/art/icons/icon-dragon-egg.webp";
 import grass from "@/assets/art/icons/icon-grass.webp";
@@ -20,6 +20,15 @@ export const instanceIcons: Record<IconKey, string> = {
   compass,
 };
 
+/**
+ * Decodes every instance icon in idle moments after start-up. The palette opens without
+ * animation and the picker lists all instances at once: icons decoded on that first opening
+ * drew a few frames late (3 of 4 still empty after 60 ms, Q2).
+ */
+export function prewarmInstanceIcons() {
+  prewarmImages(Object.values(instanceIcons));
+}
+
 /** Instance icon on a chamfered, softly lit tile. */
 export function InstanceIcon({
   icon,
@@ -38,9 +47,11 @@ export function InstanceIcon({
       )}
       style={{ width: size, height: size }}
     >
+      {/* Warmed beforehand (prewarmInstanceIcons): drawn in the same frame as the tile. */}
       <img
         src={instanceIcons[icon]}
         alt=""
+        decoding="sync"
         draggable={false}
         className="size-[78%] object-contain drop-shadow-[0_2px_4px_rgb(10_9_12/0.6)]"
       />

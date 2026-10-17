@@ -14,7 +14,7 @@ import { copyDetails } from "@/lib/clipboard";
 import { formatCount, formatDuration, formatRelative, formatSpeed } from "@/lib/format";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
-import { InstanceIcon } from "./instance-icon";
+import { InstanceIcon, prewarmInstanceIcons } from "./instance-icon";
 
 function loaderLine(i: InstanceSummary, loaderName: string) {
   return i.loader === "vanilla" ? `Minecraft ${i.mcVersion}` : `${loaderName} ${i.mcVersion}`;
@@ -276,6 +276,8 @@ export function CommandBar() {
   const queryClient = useQueryClient();
   // While a game is prepared or played the bar shows that one: its progress, its session.
   const busy = phase.kind === "working" || phase.kind === "launching" || phase.kind === "running";
+  // The picker and the Ctrl+K palette show every instance icon at once on their first opening.
+  useEffect(() => prewarmInstanceIcons(), []);
 
   const selected = useMemo(
     () =>
