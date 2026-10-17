@@ -467,6 +467,24 @@ const instances: InstanceSummary[] = [
     group: "Arkadaşlarla",
     createdAt: hoursAgo(1500),
   },
+  // `?vanillaPlayed=1`: a vanilla instance with play history, worlds and servers (the "Vanilla"
+  // one above was never started).
+  ...(mockFlag("vanillaPlayed") === "1"
+    ? [
+        {
+          id: "hayatta-kalma",
+          name: "Hayatta kalma",
+          icon: "pickaxe" as const,
+          mcVersion: "26.3",
+          loader: "vanilla" as const,
+          managed: false,
+          lastPlayedAt: hoursAgo(6),
+          playTimeSecs: 23 * 3600 + 40 * 60,
+          state: "ready" as const,
+          createdAt: hoursAgo(700),
+        },
+      ]
+    : []),
 ];
 
 const versions: McVersion[] = [
