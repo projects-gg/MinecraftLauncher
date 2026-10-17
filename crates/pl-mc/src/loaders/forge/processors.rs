@@ -241,14 +241,21 @@ pub(crate) fn output_tail(stderr: &[u8], stdout: &[u8]) -> String {
     }
 }
 
+/// Windows' `BELOW_NORMAL_PRIORITY_CLASS`: installer steps of a background preparation leave the
+/// processor to whatever the player is doing.
+#[cfg(windows)]
+const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
+
 /// Run one processor with `java`; fails with [`Error::Process`] (including the output tail) on a
-/// non-zero exit, a timeout or when Java cannot start.
+/// non-zero exit, a timeout or when Java cannot start. `low_priority`: a background preparation
+/// runs it below normal priority.
 pub(crate) async fn run_invocation(
     java: &Path,
     main_class: &str,
     invocation: &Invocation,
     separator: &str,
     cwd: &Path,
+    low_priority: bool,
     cancel: &CancellationToken,
 ) -> Result<()> {
     let classpath = invocation
@@ -269,7 +276,16 @@ pub(crate) async fn run_invocation(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     #[cfg(windows)]
-    command.creation_flags(crate::java::detect::CREATE_NO_WINDOW);
+    command.creation_flags(
+        crate::java::detect::CREATE_NO_WINDOW
+            | if low_priority {
+                BELOW_NORMAL_PRIORITY_CLASS
+            } else {
+                0
+            },
+    );
+    #[cfg(not(windows))]
+    let _ = low_priority;
     tracing::debug!(
         processor = %invocation.name,
         java = %java.display(),

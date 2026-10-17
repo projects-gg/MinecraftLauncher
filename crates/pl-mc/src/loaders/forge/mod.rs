@@ -624,6 +624,7 @@ async fn run_processors(
             &invocation,
             separator,
             work.path(),
+            ctx.background,
             &options.cancel,
         )
         .await?;

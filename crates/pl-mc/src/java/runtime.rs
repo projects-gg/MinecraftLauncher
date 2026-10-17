@@ -330,6 +330,8 @@ pub(crate) async fn install_files(
         cancel: cancel.clone(),
         verify,
         progress,
+        // Few at a time while preparing in the background.
+        concurrency: ctx.concurrency(DownloadOptions::default().concurrency),
         ..DownloadOptions::default()
     };
     ctx.downloader

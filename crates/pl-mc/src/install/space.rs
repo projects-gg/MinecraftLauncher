@@ -85,9 +85,40 @@ pub struct Shortfall {
 /// link sends the instance elsewhere, so the same free space read at both is taken for one disk
 /// and their downloads add up. An unknown free space never stops anything.
 pub fn shortfall(shared: Target, instance: Target) -> Option<Shortfall> {
+    first_short(shared, instance, 0, true)
+}
+
+/// Free space that background preparation leaves alone: a download nobody asked for yet never
+/// takes a disk below this much (the player's own OYNA still may, after [`shortfall`]).
+pub const BACKGROUND_RESERVE: u64 = 2 * 1024 * MB;
+
+/// [`shortfall`] for background preparation: [`BACKGROUND_RESERVE`] has to stay free on top of
+/// the usual room, and a disk whose free space is unknown counts as too small.
+pub fn background_shortfall(shared: Target, instance: Target) -> Option<Shortfall> {
+    first_short(shared, instance, BACKGROUND_RESERVE, false)
+}
+
+/// A disk too full for background preparation to go on downloading.
+pub fn background_tight(free: u64) -> bool {
+    free < BACKGROUND_RESERVE
+}
+
+fn first_short(
+    shared: Target,
+    instance: Target,
+    reserve: u64,
+    unknown_fits: bool,
+) -> Option<Shortfall> {
     let check = |free: Option<u64>, missing: u64| {
-        let free = free?;
-        let needed = room_needed(missing);
+        if missing == 0 {
+            return None;
+        }
+        let free = match free {
+            Some(free) => free,
+            None if unknown_fits => return None,
+            None => 0,
+        };
+        let needed = room_needed(missing).saturating_add(reserve);
         (needed > free).then_some(Shortfall {
             needed,
             free,
@@ -425,6 +456,91 @@ mod tests {
             shortfall(Target { free, missing: 0 }, Target { free, missing: 0 }),
             None
         );
+    }
+
+    #[test]
+    fn background_preparation_leaves_a_reserve() {
+        let missing = 600 * MB;
+        let needed = room_needed(missing) + BACKGROUND_RESERVE;
+        let at = |free: u64| {
+            background_shortfall(
+                Target {
+                    free: Some(free),
+                    missing,
+                },
+                Target {
+                    free: Some(free),
+                    missing: 0,
+                },
+            )
+        };
+        assert_eq!(at(needed), None);
+        assert_eq!(
+            at(needed - 1),
+            Some(Shortfall {
+                needed,
+                free: needed - 1,
+                missing,
+            })
+        );
+        // What would still let the player's own launch go ahead.
+        assert_eq!(
+            shortfall(
+                Target {
+                    free: Some(needed - 1),
+                    missing
+                },
+                Target {
+                    free: Some(needed - 1),
+                    missing: 0
+                },
+            ),
+            None
+        );
+        assert!(background_tight(BACKGROUND_RESERVE - 1));
+        assert!(!background_tight(BACKGROUND_RESERVE));
+    }
+
+    #[test]
+    fn background_preparation_does_not_guess_an_unknown_disk() {
+        let unknown = Target {
+            free: None,
+            missing: MB,
+        };
+        let nothing = Target {
+            free: None,
+            missing: 0,
+        };
+        assert!(background_shortfall(unknown, nothing).is_some());
+        assert!(background_shortfall(nothing, unknown).is_some());
+        // Nothing to download needs no room, known or not.
+        assert_eq!(background_shortfall(nothing, nothing), None);
+        // The player's own launch never stops for an unknown disk.
+        assert_eq!(shortfall(unknown, unknown), None);
+    }
+
+    #[test]
+    fn background_preparation_adds_up_one_disk() {
+        let free = Some(room_needed(3 * GB) + BACKGROUND_RESERVE);
+        let two = background_shortfall(
+            Target {
+                free,
+                missing: 2 * GB,
+            },
+            Target { free, missing: GB },
+        );
+        assert_eq!(two, None);
+        let more = background_shortfall(
+            Target {
+                free,
+                missing: 2 * GB,
+            },
+            Target {
+                free,
+                missing: GB + MB,
+            },
+        );
+        assert!(more.is_some_and(|short| short.missing == 3 * GB + MB));
     }
 
     #[test]
