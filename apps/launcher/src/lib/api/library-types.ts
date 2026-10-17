@@ -140,6 +140,19 @@ export interface ServerEditResult {
   removed?: SavedServerEntry;
 }
 
+/** A graphics preset of options.txt: Akıcı, Dengeli, Güzel. */
+export type GraphicsPreset = "smooth" | "balanced" | "quality";
+
+/** What an instance's options.txt says about graphics. */
+export type GraphicsState =
+  | { kind: "preset"; preset: GraphicsPreset }
+  /** Values of its own ("Özel"): changed in the game, a modpack's or the game's defaults. */
+  | { kind: "custom" }
+  /** No options.txt yet: the first launch writes this preset (picked, or the computer's). */
+  | { kind: "firstLaunch"; preset: GraphicsPreset }
+  /** A Minecraft version presets do not cover (before 1.7.2). */
+  | { kind: "unsupported" };
+
 /** `api.library`: everything the logs, worlds and screenshots tabs ask of the backend. */
 export interface LibraryApi {
   /** Captured sessions first, then the game's own log files; each part newest first. */
@@ -198,4 +211,9 @@ export interface LibraryApi {
   pingServer(address: string): Promise<ServerStatus>;
   /** Adds, changes, removes or puts back a server of the instance's list (not while it runs). */
   editServers(instanceId: string, edit: ServerEdit): Promise<ServerEditResult>;
+
+  /** The graphics preset of the instance's options.txt. */
+  graphics(instanceId: string): Promise<GraphicsState>;
+  /** Writes the preset the player picked (not while the instance's game runs). */
+  setGraphics(instanceId: string, preset: GraphicsPreset): Promise<GraphicsState>;
 }

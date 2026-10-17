@@ -129,6 +129,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::instances::instance_open_folder,
             commands::instances::instance_detail,
             commands::instances::instance_update_settings,
+            commands::instances::instance_graphics,
+            commands::instances::instance_set_graphics,
             commands::instances::mod_set_enabled,
             commands::instances::instance_servers_edit,
             commands::instances::minecraft_versions,

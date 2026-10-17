@@ -187,4 +187,7 @@ export const tauriLibrary: LibraryApi = {
       removed: result.removed ?? undefined,
     };
   },
+
+  graphics: (instanceId) => ok(commands.instanceGraphics(instanceId)),
+  setGraphics: (instanceId, preset) => ok(commands.instanceSetGraphics(instanceId, preset)),
 };

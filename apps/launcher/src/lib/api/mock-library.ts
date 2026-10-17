@@ -8,6 +8,7 @@ import winterArt from "@/assets/art/news-winter.webp";
 import type {
   BackupProgress,
   GameLogSession,
+  GraphicsState,
   LibraryApi,
   LogLevel,
   LogLine,
@@ -566,6 +567,38 @@ function toTrash(
   return item;
 }
 
+// --- Graphics presets ------------------------------------------------------------------------
+
+const graphicsStates = new Map<string, GraphicsState>();
+
+/**
+ * Each sample instance shows another state: Projects a preset, Vanilla (never played) the first
+ * launch's preset, Hardcore its own values ("Özel"). `mockGraphics=custom|first|smooth|balanced|
+ * quality|unsupported` in the hash route's query puts every instance in one state (previews).
+ */
+function graphicsOf(instanceId: string): GraphicsState {
+  const known = graphicsStates.get(instanceId);
+  if (known) return known;
+  const forced =
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("mockGraphics");
+  const state: GraphicsState =
+    forced === "custom" || forced === "unsupported"
+      ? { kind: forced }
+      : forced === "first"
+        ? { kind: "firstLaunch", preset: "smooth" }
+        : forced === "smooth" || forced === "balanced" || forced === "quality"
+          ? { kind: "preset", preset: forced }
+          : instanceId === "vanilla"
+            ? { kind: "firstLaunch", preset: "smooth" }
+            : instanceId === "hardcore"
+              ? { kind: "custom" }
+              : { kind: "preset", preset: instanceId === "projects" ? "balanced" : "quality" };
+  graphicsStates.set(instanceId, state);
+  return state;
+}
+
 async function runJob(jobId: string, total: number, onProgress: (p: BackupProgress) => void) {
   const job = { cancelled: false };
   jobs.set(jobId, job);
@@ -800,6 +833,23 @@ export function createMockLibrary(options: {
       }
       const removed = editMockServers(instanceId, edit);
       return { servers: mockServers(instanceId), removed };
+    },
+
+    async graphics(instanceId) {
+      await delay(40);
+      return graphicsOf(instanceId);
+    },
+    async setGraphics(instanceId, preset) {
+      await delay(180);
+      if (liveInstance === instanceId) {
+        throw failure("Oyun açıkken grafik ayarı değiştirilemez. Önce oyunu kapat.", "OYUN-ACIK");
+      }
+      const next: GraphicsState =
+        graphicsOf(instanceId).kind === "firstLaunch"
+          ? { kind: "firstLaunch", preset }
+          : { kind: "preset", preset };
+      graphicsStates.set(instanceId, next);
+      return next;
     },
   };
 }

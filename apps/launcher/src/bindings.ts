@@ -100,6 +100,18 @@ export const commands = {
 	instanceDetail: (id: string) => typedError<InstanceDetailView, CmdError>(__TAURI_INVOKE("instance_detail", { id })),
 	instanceUpdateSettings: (id: string, settings: InstanceSettingsView) => typedError<null, CmdError>(__TAURI_INVOKE("instance_update_settings", { id, settings })),
 	/**
+	 *  The graphics preset of an instance's `options.txt`: Akıcı, Dengeli or Güzel, "Özel" when the
+	 *  file has values of its own, or the preset the first launch will write.
+	 */
+	instanceGraphics: (id: string) => typedError<GraphicsState, CmdError>(__TAURI_INVOKE("instance_graphics", { id })),
+	/**
+	 *  Applies the graphics preset the player picked: into `options.txt` (only the preset's keys
+	 *  change), or kept for the first launch while there is no such file. Refused while the
+	 *  instance's game runs: the game keeps its options in memory and writes them back over any
+	 *  change.
+	 */
+	instanceSetGraphics: (id: string, preset: GraphicsPreset) => typedError<GraphicsState, CmdError>(__TAURI_INVOKE("instance_set_graphics", { id, preset })),
+	/**
 	 *  Switches a mod on or off. A recommended mod of the official pack changes the mod center
 	 *  selection (its file is installed or removed by the pack sync); other mods are renamed
 	 *  (`x.jar` ↔ `x.jar.disabled`).
@@ -187,7 +199,8 @@ export const commands = {
 	updateDownload: (channel: string, onProgress: Channel<UpdateProgress>) => typedError<boolean, CmdError>(__TAURI_INVOKE("update_download", { channel, onProgress })),
 	/**
 	 *  Install the downloaded update. On Windows the installer takes over and the app exits; on
-	 *  macOS/Linux the app restarts itself.
+	 *  macOS/Linux the app restarts itself. The update is kept when it cannot be installed now, so
+	 *  "try again" works (the mandatory update screen has no other way forward).
 	 */
 	updateApply: () => typedError<null, CmdError>(__TAURI_INVOKE("update_apply")),
 	appRestart: () => __TAURI_INVOKE<void>("app_restart"),
@@ -1433,6 +1446,32 @@ export type Game_Serialize = {
 	where: GameLocation,
 	host?: string | null,
 };
+
+/**  A graphics preset the launcher can write into `options.txt`. */
+export type GraphicsPreset = 
+/**  "Akıcı": the most frames on a weak laptop (about the game's Fast, clouds off). */
+"smooth" | 
+/**  "Dengeli": the game's usual view distance with lighter effects. */
+"balanced" | 
+/**  "Güzel": farther and richer, for a capable computer (about the game's Fancy). */
+"quality";
+
+/**  What an instance's `options.txt` says about graphics. */
+export type GraphicsState = 
+/**  The file has this preset's values. */
+{ kind: "preset"; preset: GraphicsPreset } | 
+/**
+ *  The file has values of its own ("Özel"): changed in the game, a modpack's or the game's
+ *  defaults.
+ */
+{ kind: "custom" } | 
+/**
+ *  No `options.txt` yet: the first launch writes this preset (the one the player picked, or
+ *  the computer's).
+ */
+{ kind: "firstLaunch"; preset: GraphicsPreset } | 
+/**  A Minecraft version before 1.7.2, whose options presets do not cover. */
+{ kind: "unsupported" };
 
 export type HeroView = {
 	/**  Local file path of the cached art (convert with `convertFileSrc`); `None` = bundled art. */

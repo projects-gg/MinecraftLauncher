@@ -701,6 +701,64 @@ pub async fn instance_update_settings(
         .map_err(CmdError::from)
 }
 
+// ---------------------------------------------------------------------------------------------
+// Graphics presets (instance page → Ayarlar → Grafik)
+
+/// The graphics preset of an instance's `options.txt`: Akıcı, Dengeli or Güzel, "Özel" when the
+/// file has values of its own, or the preset the first launch will write.
+#[tauri::command]
+#[specta::specta]
+pub async fn instance_graphics(
+    state: State<'_, AppState>,
+    id: String,
+) -> CmdResult<pl_mc::instance::GraphicsState> {
+    let instance = state.instances.get(&id).await.map_err(CmdError::from)?;
+    let game_dir = state.instances.game_dir(&id).map_err(CmdError::from)?;
+    Ok(pl_mc::instance::graphics_state(&game_dir, &instance.mc_version).await)
+}
+
+/// Applies the graphics preset the player picked: into `options.txt` (only the preset's keys
+/// change), or kept for the first launch while there is no such file. Refused while the
+/// instance's game runs: the game keeps its options in memory and writes them back over any
+/// change.
+#[tauri::command]
+#[specta::specta]
+pub async fn instance_set_graphics(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    preset: pl_mc::instance::GraphicsPreset,
+) -> CmdResult<pl_mc::instance::GraphicsState> {
+    let running = || {
+        state
+            .running
+            .lock()
+            .as_ref()
+            .is_some_and(|r| r.instance_id == id)
+    };
+    let refuse_running = || {
+        CmdError::new(
+            "OYUN-ACIK",
+            "Oyun açıkken grafik ayarı değiştirilemez. Önce oyunu kapat.",
+            format!("the game of instance {id} is running"),
+        )
+    };
+    if running() {
+        return Err(refuse_running());
+    }
+    // After a launch has prepared the game files (its first-launch options included).
+    let lock = crate::commands::modrinth::instance_lock(&app, &id);
+    let _guard = lock.lock().await;
+    if running() {
+        return Err(refuse_running());
+    }
+    let instance = state.instances.get(&id).await.map_err(CmdError::from)?;
+    let game_dir = state.instances.game_dir(&id).map_err(CmdError::from)?;
+    pl_mc::instance::set_graphics_preset(&game_dir, &instance.mc_version, preset)
+        .await
+        .map_err(CmdError::from)
+}
+
 /// Switches a mod on or off. A recommended mod of the official pack changes the mod center
 /// selection (its file is installed or removed by the pack sync); other mods are renamed
 /// (`x.jar` ↔ `x.jar.disabled`).
