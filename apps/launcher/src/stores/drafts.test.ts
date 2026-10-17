@@ -47,6 +47,11 @@ describe("settingsChanged", () => {
     const manual = { ...saved, memoryAuto: false };
     expect(settingsChanged({ ...manual, maxMemoryMb: 6144 }, manual)).toBe(true);
   });
+
+  it("counts a picked graphics preset on its own", () => {
+    expect(settingsChanged({ ...saved, graphics: "smooth" }, saved)).toBe(true);
+    expect(settingsChanged({ ...saved, graphics: undefined }, saved)).toBe(false);
+  });
 });
 
 describe("settleSettingsDraft", () => {

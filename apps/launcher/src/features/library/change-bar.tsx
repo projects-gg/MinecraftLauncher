@@ -14,6 +14,39 @@ function scrollParent(node: HTMLElement | null): HTMLElement | null {
   return null;
 }
 
+/** Scrolls `node`'s scroll area just enough that its bottom clears the bar's room. */
+export function revealAboveBar(node: HTMLElement | null, reduce: boolean) {
+  const scroller = scrollParent(node);
+  if (!node || !scroller) return;
+  const covered =
+    node.getBoundingClientRect().bottom - (scroller.getBoundingClientRect().bottom - BAR_ROOM);
+  if (covered > 0) scroller.scrollBy({ top: covered, behavior: reduce ? "auto" : "smooth" });
+}
+
+/**
+ * The end of `node`'s scroll area is about to lose `lost` pixels. Scrolled down that far, the
+ * browser would pull the content down in one jump when it goes; instead the area glides up by
+ * as much, along the entrance curve in `ms` (at once for 0), so nothing moves when it shrinks.
+ */
+export function glideBeforeShrink(node: HTMLElement | null, lost: number, ms: number) {
+  const scroller = scrollParent(node);
+  if (!scroller || lost <= 0) return;
+  const target = Math.max(0, scroller.scrollHeight - scroller.clientHeight - lost);
+  const from = scroller.scrollTop;
+  if (from <= target) return;
+  if (ms <= 0) {
+    scroller.scrollTop = target;
+    return;
+  }
+  const start = performance.now();
+  const step = (now: number) => {
+    const t = Math.min(1, (now - start) / ms);
+    scroller.scrollTop = t >= 1 ? target : from + (target - from) * (1 - 2 ** (-10 * t));
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
 /**
  * The bar that floats at the bottom of a scroll area while there is something to save or apply
  * (instance settings, the mod center's choices). It rises in and leaves faster; what it shows

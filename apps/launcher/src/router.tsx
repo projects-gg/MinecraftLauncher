@@ -43,12 +43,14 @@ const instanceRoute = createRoute({
   path: "/library/$instanceId",
   validateSearch: (
     search: Record<string, unknown>,
-  ): { tab?: string; browse?: string; log?: string } => ({
+  ): { tab?: string; browse?: string; log?: string; focus?: string } => ({
     tab: typeof search.tab === "string" ? search.tab : undefined,
     // Modrinth browser for "mod" | "resourcePack" | "shaderPack".
     browse: typeof search.browse === "string" ? search.browse : undefined,
     // Logs tab: the captured session to show first (the crash dialog's "show log").
     log: typeof search.log === "string" ? search.log : undefined,
+    // Settings tab: the group the command palette came for ("graphics" | "memory"), taken once.
+    focus: typeof search.focus === "string" ? search.focus : undefined,
   }),
   component: InstancePage,
 });
