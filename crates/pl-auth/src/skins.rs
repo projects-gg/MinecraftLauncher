@@ -1,6 +1,9 @@
 //! Skins and capes of Microsoft accounts (Minecraft Services profile API) and texture downloads
 //! for the 3D preview.
 
+use std::io::{ErrorKind, Read};
+use std::path::Path;
+
 use jiff::Timestamp;
 use pl_net::CancellationToken;
 use reqwest::header::ACCEPT;
@@ -17,6 +20,56 @@ const PNG_SIGNATURE: &[u8] = b"\x89PNG\r\n\x1a\n";
 /// Generous cap: a 64×64 RGBA skin is a few KiB; the server has its own, stricter checks.
 pub const MAX_SKIN_BYTES: usize = 1024 * 1024;
 const MAX_TEXTURE_BYTES: usize = 2 * 1024 * 1024;
+/// Where Mojang serves skin and cape textures.
+pub const TEXTURE_HOST: &str = "textures.minecraft.net";
+
+/// True for a skin or cape texture on Mojang's texture host (`http` or `https`, default port,
+/// no credentials). Lets the app fetch textures for the player without fetching arbitrary URLs.
+pub fn is_mojang_texture_url(url: &str) -> bool {
+    Url::parse(url).is_ok_and(|url| {
+        matches!(url.scheme(), "http" | "https")
+            && url.host_str() == Some(TEXTURE_HOST)
+            && url.port().is_none()
+            && url.username().is_empty()
+            && url.password().is_none()
+    })
+}
+
+/// Reads a skin PNG the player picked. Files over [`MAX_SKIN_BYTES`] are rejected without being
+/// read whole; the content is then checked like [`validate_skin_png`].
+pub async fn read_skin_file(path: &Path) -> Result<Vec<u8>> {
+    let path = path.to_owned();
+    let bytes = tokio::task::spawn_blocking(move || read_capped(&path))
+        .await
+        .map_err(|error| AuthError::unexpected(AuthStep::Skin, error.to_string()))?
+        .map_err(|problem| AuthError::InvalidSkinFile { problem })?;
+    validate_skin_png(&bytes).map_err(|problem| AuthError::InvalidSkinFile { problem })?;
+    Ok(bytes)
+}
+
+fn read_capped(path: &Path) -> Result<Vec<u8>, SkinFileProblem> {
+    let unreadable = |error: std::io::Error| SkinFileProblem::Unreadable { kind: error.kind() };
+    let file = std::fs::File::open(path).map_err(unreadable)?;
+    let meta = file.metadata().map_err(unreadable)?;
+    if !meta.is_file() {
+        return Err(SkinFileProblem::Unreadable {
+            kind: ErrorKind::InvalidInput,
+        });
+    }
+    let limit = MAX_SKIN_BYTES as u64;
+    if meta.len() > limit {
+        return Err(SkinFileProblem::TooLarge);
+    }
+    let mut bytes = Vec::new();
+    // The cap also holds when the file grows after the size check.
+    file.take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(unreadable)?;
+    if bytes.len() > MAX_SKIN_BYTES {
+        return Err(SkinFileProblem::TooLarge);
+    }
+    Ok(bytes)
+}
 
 /// Checks that `bytes` is a PNG of a Java Edition skin (64×64, or legacy 64×32) and returns its
 /// dimensions. Reads only the IHDR header.
@@ -257,6 +310,82 @@ mod tests {
         let mut huge = testutil::png(64, 64);
         huge.resize(MAX_SKIN_BYTES + 1, 0);
         assert_eq!(validate_skin_png(&huge), Err(SkinFileProblem::TooLarge));
+    }
+
+    fn problem(result: Result<Vec<u8>>) -> SkinFileProblem {
+        match result {
+            Err(AuthError::InvalidSkinFile { problem }) => problem,
+            other => panic!("expected a skin file problem, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn skin_files_are_read_with_a_size_cap() {
+        let dir = tempfile::tempdir().unwrap();
+        let skin = dir.path().join("skin.png");
+        std::fs::write(&skin, testutil::png(64, 64)).unwrap();
+        assert_eq!(read_skin_file(&skin).await.unwrap(), testutil::png(64, 64));
+        let legacy = dir.path().join("legacy.png");
+        std::fs::write(&legacy, testutil::png(64, 32)).unwrap();
+        assert!(read_skin_file(&legacy).await.is_ok());
+
+        let big = dir.path().join("big.png");
+        std::fs::write(&big, testutil::png(128, 128)).unwrap();
+        assert_eq!(
+            problem(read_skin_file(&big).await),
+            SkinFileProblem::BadDimensions {
+                width: 128,
+                height: 128
+            }
+        );
+        let huge = dir.path().join("huge.png");
+        let mut bytes = testutil::png(64, 64);
+        bytes.resize(MAX_SKIN_BYTES + 1, 0);
+        std::fs::write(&huge, bytes).unwrap();
+        assert_eq!(
+            problem(read_skin_file(&huge).await),
+            SkinFileProblem::TooLarge
+        );
+        let text = dir.path().join("notes.png");
+        std::fs::write(&text, "not a picture").unwrap();
+        assert_eq!(
+            problem(read_skin_file(&text).await),
+            SkinFileProblem::NotPng
+        );
+
+        let missing = problem(read_skin_file(&dir.path().join("gone.png")).await);
+        assert_eq!(
+            missing,
+            SkinFileProblem::Unreadable {
+                kind: ErrorKind::NotFound
+            }
+        );
+        let folder = problem(read_skin_file(dir.path()).await);
+        assert!(matches!(folder, SkinFileProblem::Unreadable { .. }));
+        let error = AuthError::InvalidSkinFile { problem: folder };
+        assert_eq!(error.code(), "SKIN-DOSYA");
+        assert!(error.user_message_tr().contains("okunamadı"));
+    }
+
+    #[test]
+    fn only_mojang_texture_urls_are_textures() {
+        assert!(is_mojang_texture_url(
+            "https://textures.minecraft.net/texture/abc"
+        ));
+        assert!(is_mojang_texture_url(
+            "http://textures.minecraft.net/texture/abc"
+        ));
+        for url in [
+            "https://textures.minecraft.net.evil.example/texture/abc",
+            "https://evil.example/textures.minecraft.net/texture/abc",
+            "https://user:pass@textures.minecraft.net/texture/abc",
+            "https://textures.minecraft.net:8443/texture/abc",
+            "file:///C:/skin.png",
+            "data:image/png;base64,AAAA",
+            "not a url",
+        ] {
+            assert!(!is_mojang_texture_url(url), "{url}");
+        }
     }
 
     #[tokio::test]

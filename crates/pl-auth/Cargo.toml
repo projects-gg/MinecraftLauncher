@@ -26,6 +26,9 @@ jiff = { workspace = true }
 keyring = { workspace = true }
 parking_lot = { workspace = true }
 specta = { workspace = true }
+# Player heads: decode skin textures, encode the 8×8 face; default skins from client jars.
+png = "0.18"
+zip = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 # DPAPI, to import the legacy launcher's premium session (`%APPDATA%\.projects\premium.dat`).

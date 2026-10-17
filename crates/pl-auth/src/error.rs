@@ -91,6 +91,8 @@ pub enum OfflineNameProblem {
     TooShort,
     TooLong,
     InvalidCharacters,
+    /// Another offline account already uses this name (ignoring case).
+    Taken,
 }
 
 impl OfflineNameProblem {
@@ -103,6 +105,7 @@ impl OfflineNameProblem {
                 "Kullanıcı adında yalnızca A–Z harfleri, rakamlar ve alt çizgi (_) kullanılabilir. \
                  Boşluk, Türkçe karakter ve diğer simgeler kullanılamaz."
             }
+            Self::Taken => "Bu adla bir çevrimdışı hesap zaten var.",
         }
     }
 }
@@ -118,6 +121,10 @@ pub enum SkinFileProblem {
     TooLarge,
     /// "Set skin by URL" with something that is not an http(s) URL.
     InvalidUrl,
+    /// The chosen file could not be read (missing, a folder, no permission).
+    Unreadable {
+        kind: std::io::ErrorKind,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -202,6 +209,9 @@ pub enum AuthError {
 
     #[error("invalid skin file: {problem:?}")]
     InvalidSkinFile { problem: SkinFileProblem },
+
+    #[error("the skin is not in the account's skin history")]
+    NotInSkinHistory,
 
     #[error("network error at {step}: {message}")]
     Network {
@@ -335,11 +345,15 @@ impl AuthError {
                 _ => format!("MC-{status}"),
             },
             Self::InvalidSkinFile { .. } => "SKIN-DOSYA".to_owned(),
+            Self::NotInSkinHistory => "SKIN-GECMIS".to_owned(),
             Self::Network { .. } => "AG-BAGLANTI".to_owned(),
             Self::UnexpectedResponse { step, .. } => match step {
                 AuthStep::XboxLive | AuthStep::Xsts => "XBL-VERI".to_owned(),
                 _ => "VERI-BICIM".to_owned(),
             },
+            Self::InvalidOfflineName {
+                problem: OfflineNameProblem::Taken,
+            } => "AD-VAR".to_owned(),
             Self::InvalidOfflineName { .. } => "AD-GECERSIZ".to_owned(),
             Self::AccountNotFound { .. } => "HESAP-YOK".to_owned(),
             Self::NotMicrosoftAccount { .. } => "HESAP-TUR".to_owned(),
@@ -492,7 +506,12 @@ impl AuthError {
                 SkinFileProblem::InvalidUrl => {
                     "Girilen skin bağlantısı geçerli değil. Lütfen bir görsel bağlantısı girin."
                 }
+                SkinFileProblem::Unreadable { .. } => {
+                    "Skin dosyası okunamadı. Dosyanın yerinde durduğundan emin olup yeniden \
+                     deneyin."
+                }
             },
+            Self::NotInSkinHistory => "Bu skin artık geçmişte yok.",
             Self::Network { .. } => {
                 "Sunuculara ulaşılamadı. İnternet bağlantınızı kontrol edip yeniden deneyin."
             }
@@ -556,7 +575,7 @@ impl AuthError {
             Self::MinecraftApi { step, .. }
             | Self::Network { step, .. }
             | Self::UnexpectedResponse { step, .. } => *step,
-            Self::InvalidSkinFile { .. } => AuthStep::Skin,
+            Self::InvalidSkinFile { .. } | Self::NotInSkinHistory => AuthStep::Skin,
             Self::InvalidOfflineName { .. } => AuthStep::Offline,
             Self::MissingSecrets { .. } | Self::Keychain { .. } => AuthStep::Keychain,
             Self::Storage { .. } => AuthStep::Storage,
@@ -617,6 +636,9 @@ impl AuthError {
             Self::InvalidSkinFile {
                 problem: SkinFileProblem::BadDimensions { width, height },
             } => Some(format!("{width}x{height}")),
+            Self::InvalidSkinFile {
+                problem: SkinFileProblem::Unreadable { kind },
+            } => Some(kind.to_string()),
             _ => None,
         }
         .filter(|detail| !detail.trim().is_empty())
@@ -1002,10 +1024,18 @@ mod tests {
                     height: 10,
                 },
             },
+            AuthError::InvalidSkinFile {
+                problem: SkinFileProblem::Unreadable {
+                    kind: std::io::ErrorKind::NotFound,
+                },
+            },
             AuthError::network(AuthStep::Profile, "timeout"),
             AuthError::unexpected(AuthStep::Profile, "garbage"),
             AuthError::InvalidOfflineName {
                 problem: OfflineNameProblem::InvalidCharacters,
+            },
+            AuthError::InvalidOfflineName {
+                problem: OfflineNameProblem::Taken,
             },
             AuthError::MissingSecrets { id: Uuid::nil() },
             AuthError::keychain("load", true, "no secret service"),

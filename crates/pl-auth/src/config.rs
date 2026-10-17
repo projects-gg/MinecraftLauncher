@@ -34,6 +34,8 @@ pub struct Endpoints {
     pub xsts_authorize: String,
     /// Minecraft Services base URL, without a trailing slash.
     pub minecraft_services: String,
+    /// Mojang's texture host (public skin and cape pictures), without a trailing slash.
+    pub textures: String,
 }
 
 impl Default for Endpoints {
@@ -52,6 +54,7 @@ impl Endpoints {
             xbox_user_auth: "https://user.auth.xboxlive.com/user/authenticate".to_owned(),
             xsts_authorize: "https://xsts.auth.xboxlive.com/xsts/authorize".to_owned(),
             minecraft_services: "https://api.minecraftservices.com".to_owned(),
+            textures: "https://textures.minecraft.net".to_owned(),
         }
     }
 
@@ -65,12 +68,18 @@ impl Endpoints {
             xbox_user_auth: format!("{base}/user/authenticate"),
             xsts_authorize: format!("{base}/xsts/authorize"),
             minecraft_services: base.to_owned(),
+            textures: base.to_owned(),
         }
     }
 
     /// A Minecraft Services URL for `path` (which starts with `/`).
     pub(crate) fn minecraft(&self, path: &str) -> String {
         format!("{}{path}", self.minecraft_services)
+    }
+
+    /// Where the texture `id` (a [`crate::texture_id`]) is downloaded from.
+    pub(crate) fn texture(&self, id: &str) -> String {
+        format!("{}/texture/{id}", self.textures)
     }
 }
 

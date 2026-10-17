@@ -54,6 +54,16 @@ impl SkinVariant {
 pub struct Skin {
     pub url: String,
     pub variant: SkinVariant,
+    /// Set for Mojang's default skins (e.g. "STEVE"); `None` for uploaded skins.
+    #[serde(default)]
+    pub alias: Option<String>,
+}
+
+impl Skin {
+    /// One of Mojang's default skins (Steve, Alex and the others) rather than an upload.
+    pub fn is_default(&self) -> bool {
+        self.alias.is_some()
+    }
 }
 
 /// A cape the profile owns.
@@ -83,8 +93,38 @@ pub struct Account {
     #[serde(default)]
     pub capes: Vec<Cape>,
     pub added_at: Timestamp,
+    /// Last time the game was started with this account.
     #[serde(default)]
     pub last_used_at: Option<Timestamp>,
+    /// Microsoft refused the saved session (or it is gone): only a new sign-in fixes it. Set by
+    /// [`crate::AuthManager::ensure_fresh`], cleared by a successful refresh or sign-in.
+    #[serde(default)]
+    pub needs_relogin: bool,
+    /// Pinned by the player: listed before the others, in the player's order (the order of the
+    /// pinned accounts in `accounts.json`). Unpinned accounts have no manual order.
+    #[serde(default)]
+    pub pinned: bool,
+    /// Picture shown instead of the player head (offline accounts only): `preset:<slug>`, one of
+    /// the pictures bundled with the launcher. `None` shows the head.
+    #[serde(default)]
+    pub avatar: Option<String>,
+}
+
+/// Prefix of the bundled pictures' ids (`preset:<slug>`), shared with the friends service.
+pub const PRESET_AVATAR_PREFIX: &str = "preset:";
+
+/// Whether `value` names a bundled picture: `preset:` and a slug of 1–32 characters of
+/// `[a-z0-9-]`. Which slugs exist is the launcher's business (its manifest); an unknown slug
+/// shows the player head.
+pub fn is_preset_avatar(value: &str) -> bool {
+    value
+        .strip_prefix(PRESET_AVATAR_PREFIX)
+        .is_some_and(|slug| {
+            (1..=32).contains(&slug.len())
+                && slug
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        })
 }
 
 impl Account {
@@ -98,6 +138,9 @@ impl Account {
             capes: Vec::new(),
             added_at: Timestamp::now(),
             last_used_at: None,
+            needs_relogin: false,
+            pinned: false,
+            avatar: None,
         }
     }
 
@@ -141,6 +184,7 @@ impl MinecraftProfile {
         self.skins.iter().find(|skin| skin.active).map(|skin| Skin {
             url: skin.url.clone(),
             variant: skin.variant,
+            alias: skin.alias.clone(),
         })
     }
 }
@@ -155,6 +199,18 @@ pub struct Ownership {
     pub game_pass: bool,
     /// False when the entitlement service could not be asked; the other fields are then unknown.
     pub verified: bool,
+}
+
+/// What a session check of a Microsoft account found ([`crate::AuthManager::check_session`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SessionCheck {
+    /// The saved session works: the game starts online.
+    Valid,
+    /// Microsoft refused the saved session, or it is gone: sign in again.
+    Expired,
+    /// Could not be checked right now (no internet, service outage).
+    Unknown,
 }
 
 /// Secrets of a Microsoft account. Lives only in the OS keychain (see [`crate::SecretStore`]);
@@ -374,14 +430,73 @@ mod tests {
         account.skin = Some(Skin {
             url: "https://textures.minecraft.net/texture/abc".into(),
             variant: SkinVariant::Slim,
+            alias: None,
         });
         let json = serde_json::to_value(&account).unwrap();
         assert_eq!(json["kind"], "offline");
         assert_eq!(json["skin"]["variant"], "slim");
         assert!(json.get("addedAt").is_some());
         assert!(json.get("lastUsedAt").is_some());
+        assert_eq!(json["needsRelogin"], false);
+        assert_eq!(json["pinned"], false);
+        assert_eq!(json["avatar"], serde_json::Value::Null);
         let back: Account = serde_json::from_value(json).unwrap();
         assert_eq!(back, account);
+
+        account.pinned = true;
+        account.avatar = Some("preset:golden-dragon".into());
+        let json = serde_json::to_value(&account).unwrap();
+        assert_eq!(json["pinned"], true);
+        assert_eq!(json["avatar"], "preset:golden-dragon");
+        let back: Account = serde_json::from_value(json).unwrap();
+        assert_eq!(back, account);
+    }
+
+    #[test]
+    fn preset_avatar_ids() {
+        assert!(is_preset_avatar("preset:fox"));
+        assert!(is_preset_avatar("preset:golden-dragon"));
+        assert!(is_preset_avatar(&format!("preset:{}", "a".repeat(32))));
+        assert!(!is_preset_avatar(&format!("preset:{}", "a".repeat(33))));
+        assert!(!is_preset_avatar("preset:"));
+        assert!(!is_preset_avatar("preset:Fox"));
+        assert!(!is_preset_avatar("preset:fox.webp"));
+        assert!(!is_preset_avatar("preset:../fox"));
+        assert!(!is_preset_avatar("fox"));
+        assert!(!is_preset_avatar("discord"));
+        assert!(!is_preset_avatar("https://example.com/fox.png"));
+    }
+
+    #[test]
+    fn accounts_saved_before_the_session_flag_still_load() {
+        let account: Account = serde_json::from_value(serde_json::json!({
+            "id": "6c3ee5c2-5a2d-4d3e-9a52-3f2f7f0d2b11",
+            "kind": "microsoft",
+            "username": "Steve",
+            "uuid": "069a79f4-44e9-4726-a5be-fca90e38aaf5",
+            "addedAt": "2026-10-01T10:00:00Z"
+        }))
+        .unwrap();
+        assert!(!account.needs_relogin);
+        assert_eq!(account.last_used_at, None);
+        // Pins and pictures came later too.
+        assert!(!account.pinned);
+        assert_eq!(account.avatar, None);
+        assert_eq!(
+            serde_json::to_value(SessionCheck::Expired).unwrap(),
+            "expired"
+        );
+    }
+
+    #[test]
+    fn skins_saved_before_the_alias_field_still_load() {
+        let skin: Skin = serde_json::from_value(serde_json::json!({
+            "url": "https://textures.minecraft.net/texture/abc",
+            "variant": "classic"
+        }))
+        .unwrap();
+        assert_eq!(skin.alias, None);
+        assert!(!skin.is_default());
     }
 
     #[test]
@@ -414,8 +529,12 @@ mod tests {
             profile.active_skin(),
             Some(Skin {
                 url: "https://b".into(),
-                variant: SkinVariant::Slim
+                variant: SkinVariant::Slim,
+                alias: None,
             })
         );
+        let mut default = profile.clone();
+        default.skins[1].alias = Some("ALEX".into());
+        assert!(default.active_skin().unwrap().is_default());
     }
 }

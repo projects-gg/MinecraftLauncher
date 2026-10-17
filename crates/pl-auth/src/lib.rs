@@ -12,9 +12,16 @@
 //! - [`AuthError`]: short codes for support, friendly Turkish messages
 //!   ([`AuthError::user_message_tr`]) and copyable diagnostics ([`AuthError::details`]); tokens
 //!   never appear in either.
+//! - [`HeadSource`] / [`HeadCache`]: player heads for the account list, cut from the profile's
+//!   Mojang texture or from the default skin in a local client jar.
+//! - [`SkinHistory`]: the skins each Microsoft profile wore, kept on this computer so the player
+//!   can go back to an old one ([`AuthManager::wear_history_skin`]).
 
+mod avatar;
 mod config;
+pub mod e2e;
 mod error;
+mod history;
 mod http;
 #[cfg(windows)]
 mod legacy;
@@ -31,25 +38,38 @@ mod store;
 #[cfg(test)]
 mod testutil;
 
+pub use avatar::{
+    DEFAULT_SKIN_NAMES, DefaultSkin, HeadCache, HeadError, HeadSource, client_jars, front_png,
+    head_png, read_default_skin, texture_id,
+};
 pub use config::{
     AuthConfig, BROWSER_LOGIN_TIMEOUT, CLIENT_ID, Endpoints, KEYRING_SERVICE, REFRESH_MARGIN, SCOPE,
 };
 pub use error::{
     AuthError, AuthErrorInfo, AuthStep, FailureClass, OfflineNameProblem, Result, SkinFileProblem,
 };
+pub use history::{
+    FORGOTTEN_PROFILE_KEPT, HISTORY_UNDO_WINDOW, HistoryEntry, HistoryTidy, MAX_KEPT, SkinHistory,
+    SkinSource,
+};
 #[cfg(windows)]
 pub use legacy::{LegacyImport, legacy_premium_path};
-pub use manager::AuthManager;
+pub use manager::{
+    Appearance, AuthManager, PROFILE_SYNC_EVERY, SignIn, SkinHistoryList, UNDO_WINDOW,
+};
 pub use microsoft::{
     DeviceCodeLogin, LoginProgressFn, MicrosoftAuth, MicrosoftLogin, OpenUrlFn, RefreshedSession,
 };
 pub use model::{
     Account, AccountKind, AccountSecrets, Cape, DeviceCodeInfo, LaunchIdentityData, LoginStep,
-    MinecraftProfile, Ownership, ProfileSkin, Skin, SkinVariant, UserType, launch_identity,
+    MinecraftProfile, Ownership, ProfileSkin, SessionCheck, Skin, SkinVariant, UserType,
+    launch_identity,
 };
 pub use offline::{
     OFFLINE_ACCESS_TOKEN, OFFLINE_NAME_MAX, OFFLINE_NAME_MIN, offline_uuid, validate_offline_name,
 };
 pub use secrets::{KeyringStore, MemoryStore, SecretStore};
-pub use skins::{MAX_SKIN_BYTES, validate_skin_png};
-pub use store::AccountStore;
+pub use skins::{
+    MAX_SKIN_BYTES, TEXTURE_HOST, is_mojang_texture_url, read_skin_file, validate_skin_png,
+};
+pub use store::{AccountStore, RemovedAccount};
