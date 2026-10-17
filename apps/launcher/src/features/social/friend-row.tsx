@@ -1,0 +1,473 @@
+// One friend in the list: picture with presence, name, where they are, and "Katıl" when they are
+// on projects.gg. The row opens their card (beside the panel): join, "Birlikte oyna",
+// "Discord'dan mesaj at", favourite, and in a quieter corner remove and block, each confirmed in
+// place with one sentence.
+import {
+  DiscordLogo,
+  DotsThree,
+  PaperPlaneTilt,
+  Play,
+  Prohibit,
+  Star,
+  UserMinus,
+} from "@phosphor-icons/react";
+import { Button, ContextMenu, cn, easeOutExpo, IconButton, type MenuItem, Tooltip } from "@pl/ui";
+import { AnimatePresence, motion } from "motion/react";
+import { DropdownMenu, Popover } from "radix-ui";
+import { type KeyboardEvent, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useCalm } from "@/features/accounts/calm";
+import { announce } from "@/features/accounts/use-accounts";
+import { api } from "@/lib/api";
+import type { Friend } from "@/lib/api/social-types";
+import { useLaunch } from "@/stores/launch";
+import { attempt, inviteCoolingDown, inviteFriend } from "./actions";
+import { DiscordButton } from "./discord-button";
+import { gameBusy, joinProjects } from "./join";
+import { isJoinable, presenceLine } from "./model";
+import { rise, swap, useSocialMotion } from "./motion";
+import { SocialAvatar } from "./social-face";
+import { useSocialPrefs, useSocialUi } from "./store";
+
+const dateFormat = new Intl.DateTimeFormat("tr-TR", {
+  day: "numeric",
+  month: "long",
+  year: "numeric",
+});
+
+/** "Katıl": disabled (with the reason) while a game is being prepared or running. */
+export function JoinButton({
+  size = "sm",
+  variant = "secondary",
+  className,
+}: {
+  size?: "sm" | "md";
+  variant?: "primary" | "secondary";
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  const busy = useLaunch((s) => gameBusy(s.phase.kind));
+  const button = (
+    <Button
+      size={size}
+      variant={variant}
+      disabled={busy}
+      className={className}
+      onClick={(event) => {
+        event.stopPropagation();
+        void joinProjects();
+      }}
+    >
+      {t("social.actions.join")}
+    </Button>
+  );
+  return busy ? (
+    <Tooltip content={t("social.actions.joinBusy")}>
+      <span className="inline-flex">{button}</span>
+    </Tooltip>
+  ) : (
+    button
+  );
+}
+
+const menuItemClass =
+  "flex h-10 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[13.5px] outline-none select-none data-[highlighted]:bg-white/8";
+
+type Confirm = "remove" | "block";
+
+function FriendCard({
+  friend,
+  initialConfirm,
+  onDone,
+}: {
+  friend: Friend;
+  /** Opened from the right-click menu's remove or block: the card starts at that question. */
+  initialConfirm: Confirm | null;
+  onDone: () => void;
+}) {
+  const { t } = useTranslation();
+  const { reduce } = useSocialMotion();
+  const favorite = useSocialPrefs((s) => s.favorites.includes(friend.id));
+  const toggleFavorite = useSocialPrefs((s) => s.toggleFavorite);
+  const cooldown = useSocialUi((s) => s.inviteCooldown);
+  const [confirm, setConfirm] = useState<Confirm | null>(initialConfirm);
+  const [busy, setBusy] = useState(false);
+  const joinable = friend.state === "playing" && isJoinable(friend.game);
+  const coolingDown = inviteCoolingDown(friend.id, cooldown);
+
+  const run = async (action: "remove" | "block") => {
+    setBusy(true);
+    const done = await attempt(() =>
+      action === "remove" ? api.social.removeFriend(friend.id) : api.social.block(friend.id),
+    );
+    setBusy(false);
+    if (done === undefined) return;
+    announce(
+      t(action === "remove" ? "social.actions.removed" : "social.actions.blocked", {
+        name: friend.name,
+      }),
+    );
+    onDone();
+  };
+
+  return (
+    <div className="w-[300px]">
+      <div className="flex items-center gap-3.5">
+        <SocialAvatar
+          source={friend}
+          size={56}
+          state={friend.state}
+          dnd={friend.dnd}
+          surface="var(--color-obsidian-900)"
+        />
+        <div className="min-w-0">
+          <p className="truncate font-display text-[18px] leading-tight font-semibold text-bone-50">
+            {friend.name}
+          </p>
+          <p className="truncate text-[12.5px] text-ash-400" data-selectable>
+            @{friend.username}
+          </p>
+          <p
+            className={cn(
+              "mt-1 truncate text-[13px]",
+              joinable
+                ? "text-jade-400"
+                : friend.state === "offline"
+                  ? "text-ash-400"
+                  : "text-ash-300",
+            )}
+          >
+            {presenceLine(friend, t)}
+            {friend.dnd ? (
+              <span className="text-gold-300"> ({t("social.presence.dnd")})</span>
+            ) : null}
+          </p>
+        </div>
+      </div>
+      {friend.since ? (
+        <p className="mt-3 text-[12px] text-ash-400">
+          {t("social.actions.friendsSince", { date: dateFormat.format(new Date(friend.since)) })}
+        </p>
+      ) : null}
+
+      <div className="mt-4 flex flex-col gap-2">
+        {joinable ? <JoinButton size="md" variant="primary" className="w-full" /> : null}
+        <Button
+          variant="secondary"
+          className="w-full"
+          icon={<PaperPlaneTilt size={16} />}
+          disabled={coolingDown}
+          onClick={() => void inviteFriend(friend)}
+        >
+          {coolingDown ? t("social.actions.invited") : t("social.actions.invite")}
+        </Button>
+        <DiscordButton className="w-full" onClick={() => void api.openUrl(friend.discordUrl)}>
+          {t("social.actions.message")}
+        </DiscordButton>
+      </div>
+
+      <div className="mt-3 border-t border-white/8 pt-2">
+        <AnimatePresence mode="popLayout" initial={false}>
+          {confirm ? (
+            <motion.div key={confirm} className="pt-1" {...rise(reduce, 4, 0.2)}>
+              <p className="text-[13px] leading-snug text-bone-100">
+                {confirm === "remove"
+                  ? t("social.actions.removeAsk", { name: friend.name })
+                  : t("social.actions.blockAsk")}
+              </p>
+              <div className="mt-2.5 flex justify-end gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setConfirm(null)}>
+                  {t("social.actions.cancel")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="danger"
+                  disabled={busy}
+                  onClick={() => void run(confirm)}
+                >
+                  {confirm === "remove" ? t("social.actions.remove") : t("social.actions.block")}
+                </Button>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="tools"
+              className="flex items-center justify-between"
+              {...rise(reduce, 4, 0.2)}
+            >
+              <button
+                type="button"
+                aria-pressed={favorite}
+                onClick={() => toggleFavorite(friend.id)}
+                className="flex h-9 cursor-pointer items-center gap-2 rounded-md px-2 text-[13px] text-ash-300 outline-none transition-colors hover:bg-white/6 hover:text-bone-100 focus-visible:ring-2 focus-visible:ring-gold-300"
+              >
+                <motion.span
+                  key={String(favorite)}
+                  initial={
+                    reduce ? { opacity: 0 } : { opacity: 0, transform: "scale(0.7) rotate(-20deg)" }
+                  }
+                  animate={{
+                    opacity: 1,
+                    transform: "scale(1) rotate(0deg)",
+                    transition: { type: "spring", stiffness: 520, damping: 22 },
+                  }}
+                  className="flex"
+                >
+                  <Star
+                    size={16}
+                    weight={favorite ? "fill" : "regular"}
+                    className={favorite ? "text-gold-300" : undefined}
+                  />
+                </motion.span>
+                <span className="relative inline-flex">
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    <motion.span key={String(favorite)} {...swap(reduce)}>
+                      {favorite ? t("social.actions.unfavorite") : t("social.actions.favorite")}
+                    </motion.span>
+                  </AnimatePresence>
+                </span>
+              </button>
+              <MoreMenu onPick={setConfirm} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+function MoreMenu({ onPick }: { onPick: (action: "remove" | "block") => void }) {
+  const { t } = useTranslation();
+  const calm = useCalm();
+  const [open, setOpen] = useState(false);
+  return (
+    <DropdownMenu.Root open={open} onOpenChange={setOpen} modal={false}>
+      <DropdownMenu.Trigger asChild>
+        <IconButton
+          label={t("social.actions.more")}
+          icon={<DotsThree size={20} weight="bold" />}
+          size="sm"
+        />
+      </DropdownMenu.Trigger>
+      <AnimatePresence>
+        {open ? (
+          <DropdownMenu.Portal forceMount>
+            <DropdownMenu.Content
+              forceMount
+              asChild
+              align="end"
+              sideOffset={4}
+              collisionPadding={12}
+              loop
+            >
+              <motion.div
+                className="z-[60] w-[220px] rounded-[var(--radius-panel)] border border-white/8 bg-obsidian-900/96 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_24px_60px_rgb(34_6_6/0.55)] backdrop-blur-xl outline-none [html[data-perf=on]_&]:backdrop-blur-none"
+                style={{ transformOrigin: "var(--radix-dropdown-menu-content-transform-origin)" }}
+                initial={calm({ opacity: 0, scale: 0.96, y: -4 })}
+                animate={calm({
+                  opacity: 1,
+                  scale: 1,
+                  y: 0,
+                  transition: { duration: 0.18, ease: easeOutExpo },
+                })}
+                exit={calm({ opacity: 0, scale: 0.98, transition: { duration: 0.12 } })}
+              >
+                <DropdownMenu.Item
+                  onSelect={() => onPick("remove")}
+                  className={cn(menuItemClass, "text-bone-100")}
+                >
+                  <UserMinus size={16} className="text-ash-300" aria-hidden />
+                  {t("social.actions.remove")}
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  onSelect={() => onPick("block")}
+                  className={cn(menuItemClass, "text-flare-400")}
+                >
+                  <Prohibit size={16} aria-hidden />
+                  {t("social.actions.block")}
+                </DropdownMenu.Item>
+              </motion.div>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        ) : null}
+      </AnimatePresence>
+    </DropdownMenu.Root>
+  );
+}
+
+export function FriendRow({
+  friend,
+  favorite,
+  onKeyDown,
+}: {
+  friend: Friend;
+  favorite: boolean;
+  onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void;
+}) {
+  const { t } = useTranslation();
+  const calm = useCalm();
+  const { reduce } = useSocialMotion();
+  const [open, setOpen] = useState(false);
+  const [intent, setIntent] = useState<Confirm | null>(null);
+  const toggleFavorite = useSocialPrefs((s) => s.toggleFavorite);
+  const cooldown = useSocialUi((s) => s.inviteCooldown);
+  const busy = useLaunch((s) => gameBusy(s.phase.kind));
+  const joinable = friend.state === "playing" && isJoinable(friend.game);
+  const coolingDown = inviteCoolingDown(friend.id, cooldown);
+  const line = presenceLine(friend, t);
+
+  // Remove and block ask first, in the card: it opens at the question once the menu is gone.
+  const openAt = (question: Confirm) =>
+    window.setTimeout(() => {
+      setIntent(question);
+      setOpen(true);
+    }, 0);
+
+  // The card's actions, a right click away on the row.
+  const items: Array<MenuItem | null> = [
+    ...(joinable
+      ? [
+          {
+            label: t("social.actions.join"),
+            icon: <Play size={16} />,
+            disabled: busy,
+            onSelect: () => void joinProjects(),
+          },
+        ]
+      : []),
+    {
+      label: coolingDown ? t("social.actions.invited") : t("social.actions.invite"),
+      icon: <PaperPlaneTilt size={16} />,
+      disabled: coolingDown,
+      onSelect: () => void inviteFriend(friend),
+    },
+    {
+      label: t("social.actions.message"),
+      icon: <DiscordLogo size={16} />,
+      onSelect: () => void api.openUrl(friend.discordUrl),
+    },
+    {
+      label: favorite ? t("social.actions.unfavorite") : t("social.actions.favorite"),
+      icon: <Star size={16} weight={favorite ? "fill" : "regular"} />,
+      onSelect: () => toggleFavorite(friend.id),
+    },
+    null,
+    {
+      label: t("social.actions.remove"),
+      icon: <UserMinus size={16} />,
+      onSelect: () => openAt("remove"),
+    },
+    {
+      label: t("social.actions.block"),
+      icon: <Prohibit size={16} />,
+      danger: true,
+      onSelect: () => openAt("block"),
+    },
+  ];
+
+  return (
+    <ContextMenu items={items}>
+      <div className="group/friend flex items-center gap-2 rounded-[var(--radius-panel)] pr-2 transition-colors duration-150 hover:bg-white/[0.045] data-[state=open]:bg-white/[0.06] has-[[data-state=open]]:bg-white/[0.06]">
+        <Popover.Root
+          open={open}
+          onOpenChange={(next) => {
+            setOpen(next);
+            if (!next) setIntent(null);
+          }}
+        >
+          <Popover.Trigger asChild>
+            <button
+              type="button"
+              data-friend-row
+              onKeyDown={onKeyDown}
+              aria-label={`${friend.name}, ${line}`}
+              className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+            >
+              <SocialAvatar source={friend} size={36} state={friend.state} dnd={friend.dnd} />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      "truncate text-[14px] font-semibold",
+                      friend.state === "offline" ? "text-bone-100/70" : "text-bone-50",
+                    )}
+                  >
+                    {friend.name}
+                  </span>
+                  {favorite ? (
+                    <Star
+                      size={12}
+                      weight="fill"
+                      className="shrink-0 text-gold-300"
+                      aria-label={t("social.list.favorite")}
+                    />
+                  ) : null}
+                </span>
+                <span className="relative block h-[18px] overflow-hidden">
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    <motion.span
+                      key={line}
+                      className={cn(
+                        "absolute inset-x-0 truncate text-[12.5px] leading-[18px]",
+                        joinable ? "text-jade-400" : "text-ash-400",
+                      )}
+                      {...swap(reduce)}
+                    >
+                      {line}
+                    </motion.span>
+                  </AnimatePresence>
+                </span>
+              </span>
+            </button>
+          </Popover.Trigger>
+          <AnimatePresence>
+            {open ? (
+              <Popover.Portal forceMount>
+                <Popover.Content
+                  forceMount
+                  asChild
+                  side="left"
+                  align="start"
+                  sideOffset={14}
+                  collisionPadding={16}
+                  aria-label={friend.name}
+                >
+                  <motion.div
+                    className="z-50 rounded-[var(--radius-panel)] border border-white/8 bg-obsidian-900/96 p-4 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_30px_80px_rgb(34_6_6/0.6)] backdrop-blur-xl outline-none [html[data-perf=on]_&]:backdrop-blur-none"
+                    style={{ transformOrigin: "var(--radix-popover-content-transform-origin)" }}
+                    initial={calm({ opacity: 0, scale: 0.96, x: 8 })}
+                    animate={calm({
+                      opacity: 1,
+                      scale: 1,
+                      x: 0,
+                      transition: { duration: 0.22, ease: easeOutExpo },
+                    })}
+                    exit={calm({ opacity: 0, scale: 0.98, transition: { duration: 0.14 } })}
+                  >
+                    <FriendCard
+                      // A question asked from the menu while the card is open starts it afresh.
+                      key={intent ?? "card"}
+                      friend={friend}
+                      initialConfirm={intent}
+                      onDone={() => {
+                        setOpen(false);
+                        setIntent(null);
+                      }}
+                    />
+                  </motion.div>
+                </Popover.Content>
+              </Popover.Portal>
+            ) : null}
+          </AnimatePresence>
+        </Popover.Root>
+        <AnimatePresence initial={false}>
+          {joinable ? (
+            <motion.span key="join" className="flex" {...rise(reduce, 0, 0.2)}>
+              <JoinButton />
+            </motion.span>
+          ) : null}
+        </AnimatePresence>
+      </div>
+    </ContextMenu>
+  );
+}
