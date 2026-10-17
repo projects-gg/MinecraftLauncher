@@ -295,11 +295,6 @@ export function InstancePage() {
                 {t("instance.mods.summary", { enabled: enabledMods, total: data.mods.length })}
               </p>
             ) : null}
-            {data.managed ? (
-              <p className="mt-3 max-w-[70ch] text-[13.5px] leading-relaxed text-ash-300">
-                {t("instance.overview.managedNote")}
-              </p>
-            ) : null}
             {data.settings.notes ? (
               <div className="mt-6 max-w-[70ch]">
                 <h3 className="font-display text-[15px] font-semibold text-bone-50">

@@ -762,9 +762,12 @@ function Editor({
             <div className="mt-5 flex items-center justify-between gap-6">
               <div className="min-w-0">
                 <p className="text-[13.5px] font-medium text-bone-50">{t("skins.model.title")}</p>
-                <p className="mt-0.5 max-w-[46ch] text-[12.5px] text-ash-400">
-                  {guessed && file ? t("skins.model.guessed") : t("skins.model.help")}
-                </p>
+                {/* The 3D preview shows the arm width; only a guess from the file is worth a word. */}
+                {guessed && file ? (
+                  <p className="mt-0.5 max-w-[46ch] text-[12.5px] text-ash-400">
+                    {t("skins.model.guessed")}
+                  </p>
+                ) : null}
               </div>
               <Segmented<SkinVariant>
                 value={variant}
@@ -832,9 +835,11 @@ function Editor({
           <section className="mt-8 flex items-center justify-between gap-6 border-t border-white/7 pt-5">
             <div className="min-w-0">
               <p className="text-[13.5px] font-medium text-bone-50">{t("skins.reset.title")}</p>
-              <p className="mt-0.5 max-w-[50ch] text-[12.5px] text-ash-400">
-                {view.skin?.isDefault ? t("skins.reset.already") : t("skins.reset.help")}
-              </p>
+              {view.skin?.isDefault ? (
+                <p className="mt-0.5 max-w-[50ch] text-[12.5px] text-ash-400">
+                  {t("skins.reset.already")}
+                </p>
+              ) : null}
             </div>
             <Button
               size="sm"

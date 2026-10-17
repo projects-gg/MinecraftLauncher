@@ -63,7 +63,7 @@ export function GroupDialog({
       }
     >
       <form id={`${inputId}-form`} onSubmit={submit} className="space-y-3">
-        <Field label={t("library.groups.name")} htmlFor={inputId} help={t("library.groups.help")}>
+        <Field label={t("library.groups.name")} htmlFor={inputId}>
           <Input
             id={inputId}
             value={value}

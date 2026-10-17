@@ -172,7 +172,6 @@ export function ExportDialog({
             checked={includeConfig}
             onCheckedChange={setIncludeConfig}
             label={t("modpack.export.includeConfig")}
-            description={t("modpack.export.includeConfigHelp")}
             disabled={Boolean(job)}
           />
           <Switch

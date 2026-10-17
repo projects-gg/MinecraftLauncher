@@ -35,8 +35,9 @@ import heroArt from "@/assets/art/hero-dragon-1.webp";
 import logo from "@/assets/brand/logo-96.webp";
 import { AccountFace } from "@/features/accounts/account-face";
 import { sortAccounts } from "@/features/accounts/account-order";
+import { checkOfflineName } from "@/features/accounts/name-rules";
 import { MigrationDialog } from "@/features/migrate/migration-dialog";
-import { MicrosoftLoginDialog, OFFLINE_NAME } from "@/features/settings/accounts-section";
+import { MicrosoftLoginDialog } from "@/features/settings/accounts-section";
 import { MicrosoftMark } from "@/features/settings/microsoft-mark";
 import { api, type InstanceSummary, type LegacyScan } from "@/lib/api";
 import { applyStartOnBoot } from "@/lib/autostart";
@@ -378,14 +379,19 @@ function AccountStep({
   const [adding, setAdding] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
   const [name, setName] = useState("");
-  const [nameError, setNameError] = useState<string | null>(null);
+  const [final, setFinal] = useState(false);
 
   const hasAccount = Boolean(accounts?.length);
+  // The name rules show as the player types (Turkish letters, spaces, a name already used);
+  // "too short" waits for "Bu adla devam et", as in the account center.
+  const check = checkOfflineName(name, accounts ?? [], { final });
+  const nameError = check.problem ? t(`accounts.name.${check.problem}`) : null;
   const addOffline = useMutation({
     mutationFn: ({ name: n }: { name: string; first: boolean }) => api.addOfflineAccount(n),
     onSuccess: (_, { first }) => {
       if (!first) {
         setName("");
+        setFinal(false);
         setAdding(false);
         void queryClient.invalidateQueries({ queryKey: ["accounts"] });
         return;
@@ -399,12 +405,10 @@ function AccountStep({
   });
 
   const submitOffline = () => {
-    const trimmed = name.trim();
-    if (!OFFLINE_NAME.test(trimmed)) {
-      setNameError(t("settings.accounts.invalidName"));
-      return;
-    }
-    addOffline.mutate({ name: trimmed, first: !hasAccount });
+    const strict = checkOfflineName(name, accounts ?? [], { final: true });
+    setFinal(true);
+    if (strict.problem) return;
+    addOffline.mutate({ name: strict.name, first: !hasAccount });
   };
 
   const showForms = !hasAccount || adding;
@@ -463,23 +467,19 @@ function AccountStep({
               submitOffline();
             }}
           >
-            <Field
-              label={t("onboarding.account.nameLabel")}
-              help={t("onboarding.account.nameHelp")}
-              error={nameError}
-              htmlFor="onboarding-name"
-            >
+            <Field label={t("onboarding.account.nameLabel")} htmlFor="onboarding-name">
               <div className="flex gap-2">
                 <Input
                   id="onboarding-name"
                   value={name}
                   invalid={Boolean(nameError)}
+                  aria-describedby="onboarding-name-problem"
                   maxLength={16}
                   autoComplete="off"
                   spellCheck={false}
                   onChange={(e) => {
                     setName(e.target.value);
-                    setNameError(null);
+                    setFinal(false);
                   }}
                 />
                 <Button
@@ -491,6 +491,14 @@ function AccountStep({
                   {t("onboarding.account.useName")}
                 </Button>
               </div>
+              {/* Only problems are spelled out; the line keeps its height, so the step never moves. */}
+              <p
+                id="onboarding-name-problem"
+                aria-live="polite"
+                className="min-h-[18px] text-[12.5px] leading-snug text-flare-400"
+              >
+                {nameError}
+              </p>
             </Field>
           </form>
         </div>

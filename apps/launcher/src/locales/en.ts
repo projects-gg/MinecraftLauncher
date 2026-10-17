@@ -608,7 +608,6 @@ export const en: DeepPartial<Strings> = {
     },
     model: {
       title: "Arm model",
-      help: "Classic arms are 4 pixels wide, slim arms 3 pixels.",
       guessed: "Picked from the file. Change it if the arms look wrong.",
       classic: "Classic",
       slim: "Slim",
@@ -648,7 +647,6 @@ export const en: DeepPartial<Strings> = {
     },
     reset: {
       title: "Reset to the default skin",
-      help: "Removes your uploaded skin and uses Minecraft's default skin.",
       already: "You're using Minecraft's default skin.",
       action: "Reset",
       confirmTitle: "Reset to the default skin?",
@@ -715,17 +713,16 @@ export const en: DeepPartial<Strings> = {
       microsoft: "Sign in with Microsoft",
       or: "or",
       nameLabel: "Username",
-      nameHelp: "3 to 16 characters: letters, numbers and underscores.",
       useName: "Continue with this name",
       ready: "Your account is ready",
-      readyBody: "You'll play with this account. You can add another one if you like.",
+      readyBody: "You'll play with this account.",
       addAnother: "Add another account",
       continue: "Continue",
     },
     projects: {
       title: "Your Projects instance is ready",
       preparing: "Preparing your instance",
-      body: "The game files download the first time you press Play. When the game opens, you join the Projects server automatically.",
+      body: "The game downloads the first time you press Play, then you join the Projects server automatically.",
       pack: "{{name}} updates automatically along with the server.",
       noPack: "When the server releases its own modpack, this instance switches to it.",
       startOnBoot: "Launch at startup",
@@ -737,9 +734,8 @@ export const en: DeepPartial<Strings> = {
   },
   tray: {
     hintTitle: "Projects Launcher is still running",
-    hint: "It keeps running in the tray when you close it. Click its icon to open it again.",
-    hintAfk:
-      "Your AFK accounts are online, so the launcher keeps running in the tray. Click its icon to open it again.",
+    hint: "The launcher keeps running in the tray.",
+    hintAfk: "Your AFK accounts are on, so the launcher keeps running in the tray.",
   },
   official: {
     added: "{{name}} was added to your library. It downloads the first time you play.",
@@ -816,7 +812,6 @@ export const en: DeepPartial<Strings> = {
       dialogBody: "Which group should {{name}} appear under in the library?",
       name: "Group name",
       placeholder: "e.g. With friends",
-      help: "Type a new name or pick a group below.",
       save: "Save",
       remove: "Remove from group",
       moved: "{{name}} moved to {{group}}",
@@ -832,7 +827,6 @@ export const en: DeepPartial<Strings> = {
   },
   create: {
     title: "New instance",
-    description: "Each instance has its own mods, worlds and settings.",
     sourceNew: "From scratch",
     sourceImport: "Import from file",
     name: "Name",
@@ -1218,8 +1212,7 @@ export const en: DeepPartial<Strings> = {
     },
     game: {
       memory: "Default memory",
-      memoryHelp:
-        "New instances start with this value. You can change it in each instance's settings.",
+      memoryHelp: "New instances start with this value.",
       memoryAuto: "Automatic",
       memoryAutoHelp: "Chosen based on your computer's memory and the number of mods.",
       maxMemory: "Maximum memory",
@@ -1229,8 +1222,6 @@ export const en: DeepPartial<Strings> = {
     },
     accounts: {
       addMicrosoft: "Sign in with Microsoft",
-      invalidName:
-        "Usernames must be 3 to 16 characters and use only letters, numbers or underscores.",
     },
     downloads: {
       concurrent: "Simultaneous downloads",
@@ -1628,8 +1619,6 @@ export const en: DeepPartial<Strings> = {
       version: "Version",
       loader: "Mod loader",
       notes: "Notes",
-      managedNote:
-        "When the official pack updates, the changes apply the next time you press Play.",
     },
     mods: {
       search: "Search mods",
@@ -1702,12 +1691,12 @@ export const en: DeepPartial<Strings> = {
       otherBackupsHint: "Backups of worlds no longer in this instance",
       deleteConfirm: {
         title: "Delete {{name}}?",
-        body: "The world goes to the launcher's trash. You can restore it from this page within 30 days.",
+        body: "It goes to the trash, and you can restore it within 30 days.",
         confirm: "Delete world",
       },
       deleteBackupConfirm: {
         title: "Delete this backup?",
-        body: "The backup goes to the launcher's trash. You can restore it within 30 days.",
+        body: "It goes to the trash, and you can restore it within 30 days.",
         confirm: "Delete backup",
       },
       restoreTitle: "Restore this backup?",
@@ -1743,7 +1732,7 @@ export const en: DeepPartial<Strings> = {
       next: "Next",
       deleteConfirm: {
         title: "Delete this screenshot?",
-        body: "The screenshot goes to the launcher's trash. You can restore it within 30 days.",
+        body: "It goes to the trash, and you can restore it within 30 days.",
         confirm: "Delete",
       },
     },
@@ -1777,7 +1766,6 @@ export const en: DeepPartial<Strings> = {
     settings: {
       java: "Java",
       javaAuto: "Automatic",
-      javaAutoHelp: "The launcher downloads and manages the right Java for this version.",
       javaCustom: "Custom",
       javaBrowse: "Browse",
       javaChecking: "Checking",
@@ -2044,14 +2032,12 @@ export const en: DeepPartial<Strings> = {
     export: {
       menu: "Export as modpack",
       title: "Export as modpack",
-      description:
-        "Save the instance as an .mrpack file. Mods from Modrinth are linked, so the file stays small.",
+      description: "Save the instance as an .mrpack file.",
       name: "Pack name",
       version: "Version",
       summary: "Short description",
       summaryHelp: "Optional.",
       includeConfig: "Include mod settings",
-      includeConfigHelp: "Settings in the config folder go into the pack.",
       includeOptions: "Include game options and the server list",
       includeWorlds: "Include worlds",
       includeWorldsHelp: "The file can get very large.",

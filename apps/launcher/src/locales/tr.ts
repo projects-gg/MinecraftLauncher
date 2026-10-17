@@ -368,7 +368,6 @@ export const tr = {
     },
     model: {
       title: "Kol modeli",
-      help: "Klasik modelde kollar 4, ince modelde 3 piksel genişliğindedir.",
       guessed: "Dosyaya göre seçildi. Kollar yanlış görünüyorsa değiştir.",
       classic: "Klasik",
       slim: "İnce",
@@ -409,7 +408,6 @@ export const tr = {
     },
     reset: {
       title: "Varsayılan skine dön",
-      help: "Yüklediğin skin kaldırılır ve Minecraft'ın varsayılan skini kullanılır.",
       already: "Şu an Minecraft'ın varsayılan skinini kullanıyorsun.",
       action: "Varsayılana dön",
       confirmTitle: "Varsayılan skine dönülsün mü?",
@@ -473,17 +471,16 @@ export const tr = {
       microsoft: "Microsoft ile giriş yap",
       or: "ya da",
       nameLabel: "Oyuncu adı",
-      nameHelp: "3 ile 16 karakter arası; harf, rakam ve alt çizgi.",
       useName: "Bu adla devam et",
       ready: "Hesabın hazır",
-      readyBody: "Bu hesapla oynayacaksın. İstersen başka bir hesap da ekleyebilirsin.",
+      readyBody: "Bu hesapla oynayacaksın.",
       addAnother: "Başka hesap ekle",
       continue: "Devam et",
     },
     projects: {
       title: "Projects kurulumun hazır",
       preparing: "Kurulum hazırlanıyor",
-      body: "Oyun dosyaları ilk kez Oyna'ya bastığında indirilir. Oyun açılınca Projects sunucusuna kendiliğinden bağlanırsın.",
+      body: "Oyun ilk Oyna'ya bastığında iner, sonra Projects sunucusuna kendiliğinden bağlanırsın.",
       pack: "{{name}} paketi, sunucu güncellendikçe kendiliğinden güncellenir.",
       noPack: "Sunucu kendi mod paketini yayınladığında bu kurulum ona geçer.",
       startOnBoot: "Bilgisayar açılınca başlat",
@@ -495,9 +492,8 @@ export const tr = {
   },
   tray: {
     hintTitle: "Projects Launcher arka planda",
-    hint: "Kapattığında tepside çalışmaya devam eder. Simgesine tıklayarak yeniden açabilirsin.",
-    hintAfk:
-      "AFK hesapların açık olduğu için launcher tepside çalışmaya devam ediyor. Simgesine tıklayarak yeniden açabilirsin.",
+    hint: "Launcher tepside çalışmaya devam ediyor.",
+    hintAfk: "AFK hesapların açık, launcher tepside çalışıyor.",
   },
   official: {
     added: "{{name}} paketi kütüphanene eklendi. İlk oynayışta indirilecek.",
@@ -571,7 +567,6 @@ export const tr = {
       dialogBody: "{{name}} kütüphanede hangi grubun altında görünsün?",
       name: "Grup adı",
       placeholder: "Örneğin Arkadaşlarla",
-      help: "Yeni bir ad yazabilir ya da aşağıdan bir grup seçebilirsin.",
       save: "Kaydet",
       remove: "Gruptan çıkar",
       moved: "{{name}}, {{group}} grubuna taşındı",
@@ -587,7 +582,6 @@ export const tr = {
   },
   create: {
     title: "Yeni kurulum",
-    description: "Her kurulumun kendi modları, dünyaları ve ayarları olur.",
     sourceNew: "Sıfırdan",
     sourceImport: "Dosyadan içe aktar",
     name: "İsim",
@@ -962,8 +956,7 @@ export const tr = {
     },
     game: {
       memory: "Varsayılan bellek",
-      memoryHelp:
-        "Yeni kurulumlar bu değerle başlar. Her kurulumun ayarlarından değiştirebilirsin.",
+      memoryHelp: "Yeni kurulumlar bu değerle başlar.",
       memoryAuto: "Otomatik",
       memoryAutoHelp: "Bilgisayarının belleğine ve mod sayısına göre seçilir.",
       maxMemory: "En fazla bellek",
@@ -973,8 +966,6 @@ export const tr = {
     },
     accounts: {
       addMicrosoft: "Microsoft ile giriş yap",
-      invalidName:
-        "Oyuncu adı 3-16 karakter olmalı ve yalnızca harf, rakam ya da alt çizgi içermeli.",
     },
     downloads: {
       concurrent: "Aynı anda indirilecek dosya",
@@ -1351,7 +1342,6 @@ export const tr = {
       version: "Sürüm",
       loader: "Mod yükleyici",
       notes: "Notlar",
-      managedNote: "Resmi paket güncellendiğinde değişiklikler bir sonraki Oyna'da uygulanır.",
     },
     mods: {
       search: "Modlarda ara",
@@ -1425,12 +1415,12 @@ export const tr = {
       otherBackupsHint: "Dünyası artık bu kurulumda olmayan yedekler",
       deleteConfirm: {
         title: "{{name}} silinsin mi?",
-        body: "Dünya launcher'ın çöp kutusuna taşınır. 30 gün içinde bu sayfadan geri alabilirsin.",
+        body: "Çöp kutusuna taşınır, 30 gün içinde geri alabilirsin.",
         confirm: "Dünyayı sil",
       },
       deleteBackupConfirm: {
         title: "Yedek silinsin mi?",
-        body: "Yedek launcher'ın çöp kutusuna taşınır. 30 gün içinde geri alabilirsin.",
+        body: "Çöp kutusuna taşınır, 30 gün içinde geri alabilirsin.",
         confirm: "Yedeği sil",
       },
       restoreTitle: "Yedek geri yüklensin mi?",
@@ -1466,7 +1456,7 @@ export const tr = {
       next: "Sonraki",
       deleteConfirm: {
         title: "Ekran görüntüsü silinsin mi?",
-        body: "Görüntü launcher'ın çöp kutusuna taşınır. 30 gün içinde geri alabilirsin.",
+        body: "Çöp kutusuna taşınır, 30 gün içinde geri alabilirsin.",
         confirm: "Sil",
       },
     },
@@ -1500,7 +1490,6 @@ export const tr = {
     settings: {
       java: "Java",
       javaAuto: "Otomatik",
-      javaAutoHelp: "Sürüme uygun Java'yı launcher indirir ve yönetir.",
       javaCustom: "Özel",
       javaBrowse: "Gözat",
       javaChecking: "Denetleniyor",
@@ -1743,14 +1732,12 @@ export const tr = {
     export: {
       menu: "Mod paketi olarak dışa aktar",
       title: "Mod paketi olarak dışa aktar",
-      description:
-        "Kurulumu .mrpack dosyası olarak kaydet. Modrinth'teki modlar bağlantı olarak eklenir, dosya küçük kalır.",
+      description: "Kurulumu .mrpack dosyası olarak kaydet.",
       name: "Paket adı",
       version: "Sürüm",
       summary: "Kısa açıklama",
       summaryHelp: "İsteğe bağlı.",
       includeConfig: "Mod ayarlarını ekle",
-      includeConfigHelp: "config klasöründeki ayarlar pakete girer.",
       includeOptions: "Oyun ayarlarını ve sunucu listesini ekle",
       includeWorlds: "Dünyaları ekle",
       includeWorldsHelp: "Dosya çok büyüyebilir.",

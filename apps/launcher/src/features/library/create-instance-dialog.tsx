@@ -187,7 +187,6 @@ export function CreateInstanceDialog({
         open={open}
         onOpenChange={close}
         title={t("create.title")}
-        description={t("create.description")}
         closeLabel={t("common.close")}
         width={680}
         // The three sources and the modpack steps differ a lot in height: the panel glides.

@@ -144,6 +144,7 @@ export function SettingsTab({ instance }: { instance: InstanceDetail }) {
             { value: "custom", label: t("instance.settings.javaCustom") },
           ]}
         />
+        {/* "Otomatik" says what it does; "Özel" brings the picker in. */}
         <AnimatePresence mode="popLayout" initial={false}>
           {customJava ? (
             <motion.div key="custom" {...appear}>
@@ -153,11 +154,7 @@ export function SettingsTab({ instance }: { instance: InstanceDetail }) {
                 onChange={(path) => set("javaPath", path)}
               />
             </motion.div>
-          ) : (
-            <motion.p key="auto" className="text-[12.5px] text-ash-400" {...appear}>
-              {t("instance.settings.javaAutoHelp")}
-            </motion.p>
-          )}
+          ) : null}
         </AnimatePresence>
       </Group>
 
