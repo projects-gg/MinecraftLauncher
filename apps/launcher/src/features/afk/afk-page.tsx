@@ -1,9 +1,12 @@
 import {
+  ArrowsClockwise,
   DotsThreeVertical,
+  FolderOpen,
   ForkKnife,
   GearSix,
   Heart,
   Play,
+  Robot,
   Stop,
   Terminal,
   Trash,
@@ -13,204 +16,330 @@ import {
 import {
   Button,
   Chip,
+  ContextMenu,
   cn,
+  Dialog,
   EmptyState,
+  easeOutExpo,
+  enter,
   Field,
   IconButton,
   Input,
+  leave,
   Menu,
-  PlayerHead,
-  toast,
+  type MenuItem,
+  useMotionPrefs,
 } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { AnimatePresence, motion, type Transition } from "motion/react";
+import { type Ref, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { type AfkAccount, type AfkState, api } from "@/lib/api";
-import { formatDuration } from "@/lib/format";
+import { type AfkAccount, api } from "@/lib/api";
 import { AfkConsole } from "./afk-console";
+import { AfkHead } from "./afk-head";
+import { afkFailed, isFriendly, runAfk } from "./errors";
+import { AfkSettingsSheet, useAfkReconnect } from "./settings/settings-sheet";
+import { StateLine } from "./state-line";
 
 const NAME = /^[A-Za-z0-9_]{3,16}$/;
 
-function useNow(intervalMs = 1000) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), intervalMs);
-    return () => window.clearInterval(id);
-  }, [intervalMs]);
-  return now;
-}
+/** Cards gliding when one before them leaves or grows. */
+const glide: Transition = { type: "spring", stiffness: 420, damping: 36, mass: 0.9 };
 
-function stateTone(state: AfkState): "jade" | "gold" | "flare" | "ash" {
-  switch (state.kind) {
-    case "connected":
-      return "jade";
-    case "error":
-      return "flare";
-    case "stopped":
-      return "ash";
-    default:
-      return "gold";
-  }
-}
+/** Anything but stopped: a stop makes sense (queued and reconnecting included). */
+const isActive = (account: AfkAccount) =>
+  account.state.kind !== "stopped" && account.state.kind !== "error";
 
-function StateLine({ state }: { state: AfkState }) {
+/** Health, food and players of a connected account, beside its state (no extra row). */
+function Stats({ account }: { account: AfkAccount }) {
   const { t } = useTranslation();
-  const now = useNow();
-  let text: string;
-  switch (state.kind) {
-    case "connected":
-      text = t("afk.states.connected", {
-        uptime: formatDuration((now - new Date(state.since).getTime()) / 1000),
-      });
-      break;
-    case "reconnecting":
-      text = t("afk.states.reconnecting", {
-        secs: Math.max(0, Math.round((new Date(state.nextAttemptAt).getTime() - now) / 1000)),
-      });
-      break;
-    case "queued":
-      text = t("afk.states.queued", { secs: state.inSecs });
-      break;
-    case "error":
-      text = `${t("afk.states.error")}: ${state.reason}`;
-      break;
-    default:
-      text = t(`afk.states.${state.kind}`);
-  }
-  const tone = stateTone(state);
+  const stats = [
+    {
+      key: "health",
+      label: t("afk.stats.health"),
+      value: account.health,
+      icon: <Heart size={14} weight="fill" className="text-flare-400" />,
+    },
+    {
+      key: "food",
+      label: t("afk.stats.food"),
+      value: account.food,
+      icon: <ForkKnife size={14} weight="fill" className="text-gold-400" />,
+    },
+    {
+      key: "players",
+      label: t("afk.stats.players"),
+      value: account.players,
+      icon: <UsersThree size={14} weight="fill" className="text-ash-300" />,
+    },
+  ];
   return (
-    <p className="flex items-center gap-2 text-[12.5px]">
-      <span
-        className={cn(
-          "size-2 shrink-0 rounded-full",
-          tone === "jade" && "bg-jade-400 shadow-[0_0_8px_var(--color-jade-400)]",
-          tone === "gold" && "animate-pulse bg-gold-400",
-          tone === "flare" && "bg-flare-400",
-          tone === "ash" && "bg-ash-500",
-        )}
-      />
-      <span className={cn("truncate", tone === "flare" ? "text-flare-400" : "text-ash-300")}>
-        {text}
-      </span>
-    </p>
+    <span className="flex shrink-0 items-center gap-3 text-[12.5px] text-ash-300 tabular-nums">
+      {stats.map((stat) => (
+        <span key={stat.key} className="flex items-center gap-1" title={stat.label}>
+          <span aria-hidden className="flex">
+            {stat.icon}
+          </span>
+          <span className="sr-only">{stat.label}</span>
+          {stat.value ?? "-"}
+        </span>
+      ))}
+    </span>
   );
 }
 
 function AfkCard({
   account,
   onConsole,
+  onSettings,
+  onRemove,
   index,
+  ref,
 }: {
   account: AfkAccount;
   onConsole: () => void;
+  onSettings: () => void;
+  onRemove: () => void;
   index: number;
+  /** Set by the list's AnimatePresence (popLayout measures the leaving card). */
+  ref?: Ref<HTMLLIElement>;
 }) {
   const { t } = useTranslation();
-  const running = account.state.kind !== "stopped" && account.state.kind !== "error";
+  const { reduce, layout } = useMotionPrefs();
+  const reconnect = useAfkReconnect();
+  const active = isActive(account);
   const connected = account.state.kind === "connected";
+  const stale =
+    account.settingsChanged && ["starting", "connecting", "connected"].includes(account.state.kind);
+
+  const connect = () => runAfk(api.afkConnect(account.id), t("afk.connectFailed"));
+  const stop = () => runAfk(api.afkStop(account.id), t("afk.stopFailed"));
+  const openFolder = () => runAfk(api.afkOpenFolder(account.id), t("afk.openFolderFailed"));
+
+  // One list for the "more" button and the right click.
+  const items: Array<MenuItem | null> = [
+    active
+      ? { label: t("afk.stop"), icon: <Stop size={16} />, onSelect: stop }
+      : { label: t("afk.connect"), icon: <Play size={16} />, onSelect: connect },
+    ...(connected
+      ? [
+          {
+            label: t("afk.reconnect"),
+            icon: <ArrowsClockwise size={16} />,
+            onSelect: () => reconnect.mutate(account.id),
+          },
+        ]
+      : []),
+    { label: t("afk.console"), icon: <Terminal size={16} />, onSelect: onConsole },
+    { label: t("afk.settings"), icon: <GearSix size={16} />, onSelect: onSettings },
+    { label: t("afk.openFolder"), icon: <FolderOpen size={16} />, onSelect: openFolder },
+    null,
+    { label: t("afk.remove"), icon: <Trash size={16} />, danger: true, onSelect: onRemove },
+  ];
 
   return (
     <motion.li
-      layout
+      ref={ref}
+      layout={layout ? "position" : false}
+      transition={{ layout: glide }}
       initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35, delay: Math.min(index, 8) * 0.04, ease: [0.16, 1, 0.3, 1] }}
-      className={cn(
-        "glass relative flex flex-col rounded-[var(--radius-panel)] p-4",
-        connected && "shadow-[inset_0_0_0_1px_rgb(95_203_142/0.22)]",
-      )}
+      animate={{
+        opacity: 1,
+        y: 0,
+        transition: { duration: 0.35, delay: Math.min(index, 8) * 0.04, ease: easeOutExpo },
+      }}
+      // Removed: fades (and settles to 97%) in place while the cards after it glide over.
+      exit={{ opacity: 0, scale: reduce ? 1 : 0.97, transition: { duration: 0.18 } }}
+      className="flex"
     >
-      <div className="flex items-start gap-3.5">
-        <PlayerHead
-          name={account.nickname}
-          src={`https://mc-heads.net/avatar/${account.nickname}/64`}
-          size={48}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate font-display text-[16px] font-semibold text-bone-50">
-              {account.nickname}
-            </h3>
-            {account.autoStart ? <Chip>{t("afk.autoStart")}</Chip> : null}
-          </div>
-          <p className="truncate text-[12.5px] text-ash-400" data-selectable>
-            {account.server}
-          </p>
-        </div>
-        <Menu
-          trigger={
-            <IconButton
-              label={t("afk.more")}
-              icon={<DotsThreeVertical size={18} weight="bold" />}
-              size="sm"
+      <ContextMenu items={items}>
+        <div
+          className={cn(
+            "glass relative flex w-full flex-col rounded-[var(--radius-panel)] p-3.5",
+            connected && "shadow-[inset_0_0_0_1px_rgb(95_203_142/0.22)]",
+          )}
+        >
+          <div className="flex items-start gap-3">
+            <AfkHead nickname={account.nickname} size={40} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <h3 className="truncate font-display text-[15px] font-semibold text-bone-50">
+                  {account.nickname}
+                </h3>
+                {account.autoStart ? <Chip>{t("afk.autoStart")}</Chip> : null}
+              </div>
+              <p className="flex items-center gap-2 truncate text-[12.5px] text-ash-300">
+                <span className="truncate" title={account.server} data-selectable>
+                  {account.server}
+                </span>
+                {!account.mcVersionRecommended ? (
+                  <Chip className="shrink-0">
+                    {account.mcVersion === "auto"
+                      ? t("afk.versionAuto")
+                      : t("afk.versionPinned", { version: account.mcVersion })}
+                  </Chip>
+                ) : null}
+              </p>
+            </div>
+            <Menu
+              trigger={
+                <IconButton
+                  label={t("afk.more")}
+                  icon={<DotsThreeVertical size={18} weight="bold" />}
+                  size="sm"
+                />
+              }
+              items={items}
             />
-          }
-          items={[
-            {
-              label: t("afk.settings"),
-              icon: <GearSix size={16} />,
-              onSelect: () => toast(t("common.comingSoon")),
-            },
-            null,
-            {
-              label: t("afk.remove"),
-              icon: <Trash size={16} />,
-              danger: true,
-              onSelect: () => void api.afkRemove(account.id),
-            },
-          ]}
-        />
-      </div>
+          </div>
 
-      <div className="mt-3.5">
-        <StateLine state={account.state} />
-      </div>
+          <div className="mt-3 flex min-h-5 items-center gap-3">
+            <StateLine state={account.state} className="flex-1" />
+            <AnimatePresence initial={false}>
+              {connected ? (
+                <motion.span
+                  key="stats"
+                  className="flex"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1, transition: enter(0.22) }}
+                  exit={{ opacity: 0, transition: leave(0.16) }}
+                >
+                  <Stats account={account} />
+                </motion.span>
+              ) : null}
+            </AnimatePresence>
+          </div>
 
-      {connected ? (
-        <div className="mt-3 flex gap-4 text-[12.5px] text-ash-300 tabular-nums">
-          <span className="flex items-center gap-1.5" title={t("afk.stats.health")}>
-            <Heart size={15} weight="fill" className="text-flare-400" />
-            {account.health ?? "-"}
-          </span>
-          <span className="flex items-center gap-1.5" title={t("afk.stats.food")}>
-            <ForkKnife size={15} weight="fill" className="text-gold-400" />
-            {account.food ?? "-"}
-          </span>
-          <span className="flex items-center gap-1.5" title={t("afk.stats.players")}>
-            <UsersThree size={15} weight="fill" className="text-ash-300" />
-            {account.players ?? "-"}
-          </span>
+          {stale ? (
+            <div className="mt-3 flex items-center gap-2 rounded-md bg-gold-500/10 py-1.5 pr-1.5 pl-2.5 ring-1 ring-gold-400/20">
+              <p className="min-w-0 flex-1 text-[12px] leading-snug text-gold-200">
+                {t("afk.settingsChanged")}
+              </p>
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<ArrowsClockwise size={14} />}
+                disabled={reconnect.isPending}
+                onClick={() => reconnect.mutate(account.id)}
+              >
+                {t("afk.reconnect")}
+              </Button>
+            </div>
+          ) : null}
+
+          {/* Pinned to the bottom: the buttons of a row of cards line up. */}
+          <div className="mt-auto flex gap-2 pt-3">
+            {active ? (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Stop size={14} weight="fill" />}
+                onClick={stop}
+                className="flex-1"
+              >
+                {t("afk.stop")}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="primary"
+                icon={<Play size={14} weight="fill" />}
+                onClick={connect}
+                className="flex-1"
+              >
+                {t("afk.connect")}
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" icon={<Terminal size={15} />} onClick={onConsole}>
+              {t("afk.console")}
+            </Button>
+            <IconButton
+              label={t("afk.settings")}
+              icon={<GearSix size={17} />}
+              size="sm"
+              onClick={onSettings}
+            />
+          </div>
         </div>
-      ) : null}
-
-      <div className="mt-4 flex gap-2">
-        {running ? (
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={<Stop size={14} weight="fill" />}
-            onClick={() => void api.afkStop(account.id)}
-            className="flex-1"
-          >
-            {t("afk.stop")}
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            variant="primary"
-            icon={<Play size={14} weight="fill" />}
-            onClick={() => void api.afkConnect(account.id)}
-            className="flex-1"
-          >
-            {t("afk.connect")}
-          </Button>
-        )}
-        <Button size="sm" variant="ghost" icon={<Terminal size={15} />} onClick={onConsole}>
-          {t("afk.console")}
-        </Button>
-      </div>
+      </ContextMenu>
     </motion.li>
+  );
+}
+
+/**
+ * New account by its player name. Rendered in one place for both states, so typing (and the
+ * focus) survives the first account turning the empty page into the list.
+ */
+function AddForm({
+  accounts,
+  centered,
+  onAdded,
+}: {
+  accounts: AfkAccount[];
+  centered: boolean;
+  onAdded: () => void;
+}) {
+  const { t } = useTranslation();
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const add = () => {
+    const trimmed = name.trim();
+    if (!NAME.test(trimmed)) return setError(t("afk.invalidName"));
+    if (accounts.some((a) => a.nickname.toLowerCase() === trimmed.toLowerCase()))
+      return setError(t("afk.duplicate"));
+    setBusy(true);
+    api
+      .afkAdd(trimmed)
+      .then(() => setName(""))
+      // Command errors carry a friendly message (name rules, duplicates, disk).
+      .catch((e: unknown) => setError(isFriendly(e) ? e.message : t("afk.addFailed")))
+      .finally(() => {
+        setBusy(false);
+        onAdded();
+      });
+  };
+
+  return (
+    <form
+      noValidate
+      className={cn("w-full max-w-[460px]", centered ? "mx-auto" : "mt-5")}
+      onSubmit={(e) => {
+        e.preventDefault();
+        add();
+      }}
+    >
+      <Field
+        label={t("afk.nickname")}
+        help={t("afk.nicknameHelp")}
+        error={error}
+        htmlFor="afk-name"
+      >
+        <div className="flex gap-2">
+          <Input
+            id="afk-name"
+            value={name}
+            maxLength={16}
+            invalid={Boolean(error)}
+            spellCheck={false}
+            autoComplete="off"
+            onChange={(e) => {
+              setName(e.target.value);
+              setError(null);
+            }}
+          />
+          <Button
+            type="submit"
+            variant={centered ? "primary" : "secondary"}
+            icon={<UserPlus size={16} />}
+            disabled={busy}
+          >
+            {t("afk.add")}
+          </Button>
+        </div>
+      </Field>
+    </form>
   );
 }
 
@@ -222,102 +351,125 @@ export function AfkPage() {
     queryFn: () => api.afkAccounts(),
   });
   const [consoleId, setConsoleId] = useState<string | null>(null);
-  const [name, setName] = useState("");
-  const [nameError, setNameError] = useState<string | null>(null);
+  const [settingsId, setSettingsId] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<AfkAccount | null>(null);
 
   useEffect(
     () => api.onAfkChange(() => void queryClient.invalidateQueries({ queryKey: ["afk"] })),
     [queryClient],
   );
 
-  const anyRunning = accounts.some((a) => a.state.kind !== "stopped" && a.state.kind !== "error");
+  const anyActive = accounts.some(isActive);
+  const anyIdle = accounts.some((a) => !isActive(a));
+  const online = accounts.filter((a) => a.state.kind === "connected").length;
   const consoleAccount = accounts.find((a) => a.id === consoleId);
+  const settingsAccount = accounts.find((a) => a.id === settingsId);
 
-  const add = () => {
-    const trimmed = name.trim();
-    if (!NAME.test(trimmed)) return setNameError(t("afk.invalidName"));
-    if (accounts.some((a) => a.nickname.toLowerCase() === trimmed.toLowerCase()))
-      return setNameError(t("afk.duplicate"));
-    void api.afkAdd(trimmed).then(() => setName(""));
+  // Adding or removing an account sends no session event, so the list is asked again here.
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: ["afk"] });
+
+  const remove = (account: AfkAccount) => {
+    if (settingsId === account.id) setSettingsId(null);
+    if (consoleId === account.id) setConsoleId(null);
+    api
+      .afkRemove(account.id)
+      .catch((error: unknown) => afkFailed(error, t("afk.removeFailed")))
+      .finally(refresh);
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col px-10 pt-4">
-      <header className="flex flex-wrap items-end justify-between gap-4 pb-6">
+    <div className="flex min-h-0 flex-1 flex-col px-page pt-3">
+      <header className="flex flex-wrap items-end justify-between gap-3 pb-4">
         <div>
-          <h1 className="font-display text-[32px] leading-tight font-semibold text-bone-50">
-            {t("afk.title")}
-          </h1>
-          <p className="mt-1 max-w-[60ch] text-ash-400">{t("afk.subtitle")}</p>
+          <h1 className="page-title">{t("afk.title")}</h1>
+          {/* A count like the library's: what the page is for is said by the empty state. */}
+          <p className="mt-0.5 text-[13px] text-ash-300 tabular-nums">
+            {isPending
+              ? t("common.loading")
+              : online > 0
+                ? t("afk.countOnline", { count: accounts.length, online })
+                : t("afk.count", { count: accounts.length })}
+          </p>
         </div>
-        <div className="flex gap-2.5">
-          {anyRunning ? (
+        {accounts.length ? (
+          <div className="flex gap-2">
+            {anyActive ? (
+              <Button
+                variant="ghost"
+                icon={<Stop size={15} weight="fill" />}
+                onClick={() => runAfk(api.afkStopAll(), t("afk.stopFailed"))}
+              >
+                {t("afk.stopAll")}
+              </Button>
+            ) : null}
             <Button
-              variant="ghost"
-              icon={<Stop size={15} weight="fill" />}
-              onClick={() => void api.afkStopAll()}
+              variant="secondary"
+              icon={<Play size={15} weight="fill" className="text-gold-300" />}
+              onClick={() => runAfk(api.afkConnectAll(), t("afk.connectFailed"))}
+              disabled={!anyIdle}
             >
-              {t("afk.stopAll")}
+              {t("afk.connectAll")}
             </Button>
-          ) : null}
-          <Button
-            variant="secondary"
-            icon={<Play size={15} weight="fill" className="text-gold-300" />}
-            onClick={() => void api.afkConnectAll()}
-            disabled={!accounts.length}
-          >
-            {t("afk.connectAll")}
-          </Button>
-        </div>
+          </div>
+        ) : null}
       </header>
 
-      <div className="-mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-6">
-        {!isPending && accounts.length === 0 ? (
-          <EmptyState title={t("afk.empty.title")} body={t("afk.empty.body")} />
+      <div className="-mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-5">
+        {/* The list answers within a frame: nothing (rather than a jumping form) until then. */}
+        {isPending ? null : accounts.length === 0 ? (
+          <EmptyState
+            icon={<Robot size={28} weight="duotone" />}
+            title={t("afk.empty.title")}
+            body={t("afk.empty.body")}
+            className="pt-[8vh] pb-5"
+          />
         ) : (
-          <ul className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-4">
-            {accounts.map((a, i) => (
-              <AfkCard key={a.id} account={a} index={i} onConsole={() => setConsoleId(a.id)} />
-            ))}
+          <ul className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3">
+            <AnimatePresence initial={false} mode="popLayout">
+              {accounts.map((a, i) => (
+                <AfkCard
+                  key={a.id}
+                  account={a}
+                  index={i}
+                  onConsole={() => setConsoleId(a.id)}
+                  onSettings={() => setSettingsId(a.id)}
+                  onRemove={() => setRemoving(a)}
+                />
+              ))}
+            </AnimatePresence>
           </ul>
         )}
-
-        <form
-          className="mt-6 max-w-[520px]"
-          onSubmit={(e) => {
-            e.preventDefault();
-            add();
-          }}
-        >
-          <Field
-            label={t("afk.add")}
-            help={t("afk.nicknameHelp")}
-            error={nameError}
-            htmlFor="afk-name"
-          >
-            <div className="flex gap-2">
-              <Input
-                id="afk-name"
-                aria-label={t("afk.nickname")}
-                value={name}
-                maxLength={16}
-                invalid={Boolean(nameError)}
-                spellCheck={false}
-                autoComplete="off"
-                onChange={(e) => {
-                  setName(e.target.value);
-                  setNameError(null);
-                }}
-              />
-              <Button type="submit" variant="secondary" icon={<UserPlus size={16} />}>
-                {t("afk.add")}
-              </Button>
-            </div>
-          </Field>
-        </form>
+        {isPending ? null : (
+          <AddForm accounts={accounts} centered={accounts.length === 0} onAdded={refresh} />
+        )}
       </div>
 
       <AfkConsole account={consoleAccount} onClose={() => setConsoleId(null)} />
+      <AfkSettingsSheet account={settingsAccount} onClose={() => setSettingsId(null)} />
+      <Dialog
+        open={Boolean(removing)}
+        onOpenChange={(open) => !open && setRemoving(null)}
+        title={t("afk.removeConfirm.title", { name: removing?.nickname ?? "" })}
+        description={t("afk.removeConfirm.body")}
+        closeLabel={t("common.close")}
+        width={440}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setRemoving(null)}>
+              {t("afk.removeConfirm.cancel")}
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                if (removing) remove(removing);
+                setRemoving(null);
+              }}
+            >
+              {t("afk.removeConfirm.confirm")}
+            </Button>
+          </>
+        }
+      />
     </div>
   );
 }
