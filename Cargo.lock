@@ -3898,6 +3898,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "url",
+ "windows",
 ]
 
 [[package]]

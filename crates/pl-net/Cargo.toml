@@ -23,6 +23,18 @@ sha2 = { workspace = true }
 hex = { workspace = true }
 parking_lot = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+# Connection cost, battery saver and full-screen apps for background downloads (background.rs).
+# Only features Tauri's window layer already enables, so the shared `windows` build is reused.
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Power",
+    "Win32_System_SystemServices",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
