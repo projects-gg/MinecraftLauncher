@@ -8,4 +8,18 @@ export const trTuning = {
     suggest: "Daha akıcı bir launcher için Performans modunu aç.",
     turnOn: "Aç",
   },
+  palette: {
+    /** The selected instance's settings tab (searched with "ram"). */
+    memory: "Bellek ayarı",
+    java: "Java ayarları",
+    /** Settings → Veri ve depolama, where the cleanup is. */
+    cleanup: "Yer aç",
+    support: "Destek paketi oluştur",
+    /** The active Microsoft account's skin and cape panel. */
+    appearance: "Görünümü değiştir",
+    copyAddress: "Sunucu adresini kopyala",
+    openFolder: "Oyun klasörünü aç",
+    /** "Güncellemeleri denetle" while an update is already downloading. */
+    updateDownloading: "Yeni sürüm indiriliyor.",
+  },
 };
