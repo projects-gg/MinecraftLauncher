@@ -23,7 +23,8 @@ use crate::process::{ClientSpawner, ProcessSpawner};
 use crate::restart::RestartSchedule;
 use crate::runtime::{AfkClientRelease, AfkRuntime, ClientExe};
 use crate::session::{
-    AfkEventKind, EventSink, Session, SessionEnv, SessionSnapshot, SessionState, SessionStats,
+    AfkActivity, AfkEventKind, EventSink, Session, SessionEnv, SessionSnapshot, SessionState,
+    SessionStats,
 };
 use crate::store::AccountStore;
 use crate::versions::VersionCatalog;
@@ -428,6 +429,11 @@ impl AfkManager {
     /// progress: the launcher must not hide or exit then.
     pub fn any_active(&self) -> bool {
         self.bulk_running() || self.all_sessions().iter().any(|s| s.is_active())
+    }
+
+    /// How many accounts are in game and how many are on their way there.
+    pub fn activity(&self) -> AfkActivity {
+        AfkActivity::of(self.snapshots().iter().map(|snapshot| &snapshot.state))
     }
 
     /// State of every account, in account order.

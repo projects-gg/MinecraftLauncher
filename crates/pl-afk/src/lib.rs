@@ -76,6 +76,8 @@ pub use runtime::{AfkClientBuild, AfkClientRelease, AfkRuntime, CLIENT_EXE_NAME,
 pub use secrets::{
     KEYRING_SERVICE, KeyringSecretStore, MemorySecretStore, SecretStore, login_commands_key,
 };
-pub use session::{AfkEvent, AfkEventKind, EventSink, SessionSnapshot, SessionState, SessionStats};
+pub use session::{
+    AfkActivity, AfkEvent, AfkEventKind, EventSink, SessionSnapshot, SessionState, SessionStats,
+};
 pub use store::{AccountStore, LoadReport};
 pub use versions::{MAX_LISTED_VERSIONS, ResolvedVersion, VersionCatalog, VersionEntry};

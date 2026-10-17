@@ -188,6 +188,47 @@ fn quit(app: &AppHandle) {
     });
 }
 
+/// The tray icon's id and the first line of its tooltip.
+#[cfg(desktop)]
+const TRAY_ID: &str = "main";
+#[cfg(desktop)]
+const TRAY_TITLE: &str = "Projects Launcher";
+
+/// The tray tooltip: the app's name and, while AFK accounts are in game or on their way, a second
+/// line saying how many (the player sees at a glance whether the night's AFK still runs).
+#[cfg(desktop)]
+fn tray_tooltip(activity: pl_afk::AfkActivity) -> String {
+    let line = match (activity.in_game, activity.connecting) {
+        (0, 0) => return TRAY_TITLE.to_owned(),
+        (0, connecting) => format!("{connecting} AFK hesabı bağlanıyor"),
+        (in_game, 0) => format!("{in_game} AFK hesabı oyunda"),
+        (in_game, connecting) => format!("{in_game} AFK hesabı oyunda, {connecting} bağlanıyor"),
+    };
+    format!("{TRAY_TITLE}\n{line}")
+}
+
+/// Brings the tray tooltip up to date with the AFK sessions (called after each AFK state change).
+/// Blocks until the main thread has set it, so it must not run on the main thread.
+#[cfg(desktop)]
+pub fn refresh_afk_tray(app: &AppHandle) {
+    // The tooltip last set; the lock also keeps refreshes in order, so the newest state wins.
+    static SHOWN: Mutex<String> = Mutex::new(String::new());
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let mut shown = SHOWN.lock().unwrap_or_else(|e| e.into_inner());
+    let text = tray_tooltip(state.afk.activity());
+    if *shown == text {
+        return;
+    }
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        match tray.set_tooltip(Some(&text)) {
+            Ok(()) => *shown = text,
+            Err(error) => tracing::debug!(%error, "tray tooltip not updated"),
+        }
+    }
+}
+
 /// Tray icon: left click opens the launcher; the menu offers play, AFK accounts and quit.
 #[cfg(desktop)]
 pub fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
@@ -201,8 +242,8 @@ pub fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
     let separator = PredefinedMenuItem::separator(app)?;
     let menu = Menu::with_items(app, &[&open, &play, &afk, &separator, &quit_item])?;
 
-    let mut tray = TrayIconBuilder::with_id("main")
-        .tooltip("Projects Launcher")
+    let mut tray = TrayIconBuilder::with_id(TRAY_ID)
+        .tooltip(TRAY_TITLE)
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {

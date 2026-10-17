@@ -146,7 +146,8 @@ impl AppState {
         let social =
             crate::commands::social::create(app, &http, version, handle.clone(), ephemeral_secrets);
 
-        // AFK accounts (Projects Console Client sessions). Events go straight to the UI.
+        // AFK accounts (Projects Console Client sessions). Events go straight to the UI (and
+        // state changes to the tray's summary).
         let afk_paths = pl_afk::AfkPaths::new(root.join("afk"));
         let afk_secrets: Arc<dyn pl_afk::SecretStore> = if ephemeral_secrets {
             Arc::new(pl_afk::MemorySecretStore::new())
@@ -155,15 +156,10 @@ impl AppState {
         };
         let (afk_store, report) = pl_afk::AccountStore::open(afk_paths.clone(), afk_secrets)?;
         tracing::info!(?report, "AFK accounts loaded");
-        let emitter = app.clone();
-        let afk_events: pl_afk::EventSink = Arc::new(move |event| {
-            use tauri::Emitter;
-            let _ = emitter.emit("afk-event", &event);
-        });
         let afk = pl_afk::AfkManager::new(
             Arc::new(afk_store),
             Arc::new(pl_afk::AfkRuntime::new(afk_paths.bin_dir())),
-            afk_events,
+            crate::commands::afk::event_sink(app),
             pl_afk::ManagerOptions {
                 config: pl_afk::ManagerConfig::default(),
                 downloader: Some(downloader.clone()),

@@ -1,13 +1,30 @@
+use std::sync::Arc;
+
 use pl_afk::{
-    AfkAccount, AfkError, AfkSettings, ConsoleLine, ConsoleLineKind, PatternProblem, SessionState,
-    SessionStats, SettingsPage, ValidationIssue, VersionOption,
+    AfkAccount, AfkError, AfkEventKind, AfkSettings, ConsoleLine, ConsoleLineKind, EventSink,
+    PatternProblem, SessionState, SessionStats, SettingsPage, ValidationIssue, VersionOption,
 };
 use serde::Serialize;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
+
+/// Where AFK sessions report: every event goes to the UI as `afk-event`; a state change also
+/// refreshes the tray's AFK summary. That runs on a blocking thread, never on the session's task:
+/// it reads every session and waits for the main thread to set the tooltip.
+pub fn event_sink(app: &AppHandle) -> EventSink {
+    let app = app.clone();
+    Arc::new(move |event| {
+        let _ = app.emit("afk-event", &event);
+        #[cfg(desktop)]
+        if matches!(event.kind, AfkEventKind::State(_)) {
+            let app = app.clone();
+            tauri::async_runtime::spawn_blocking(move || crate::shell::refresh_afk_tray(&app));
+        }
+    })
+}
 
 impl From<pl_afk::AfkError> for CmdError {
     fn from(error: pl_afk::AfkError) -> Self {

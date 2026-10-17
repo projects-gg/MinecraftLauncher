@@ -86,6 +86,32 @@ impl SessionState {
     }
 }
 
+/// The accounts at a glance: how many are in game and how many are on their way there (the
+/// launcher's tray summary).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AfkActivity {
+    pub in_game: usize,
+    /// Starting, connecting or waiting to reconnect.
+    pub connecting: usize,
+}
+
+impl AfkActivity {
+    pub fn of<'a>(states: impl IntoIterator<Item = &'a SessionState>) -> Self {
+        let mut activity = Self::default();
+        for state in states {
+            match state {
+                SessionState::Connected { .. } => activity.in_game += 1,
+                SessionState::Starting
+                | SessionState::Connecting
+                | SessionState::Reconnecting { .. } => activity.connecting += 1,
+                // Not running, or on its way out.
+                SessionState::Stopped | SessionState::Stopping | SessionState::Error { .. } => {}
+            }
+        }
+        activity
+    }
+}
+
 /// Live numbers from the bridge; cleared when the client exits.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -1131,5 +1157,48 @@ async fn write_lines<W: AsyncWrite + Unpin>(
         if writer.write_all(&bytes).await.is_err() || writer.flush().await.is_err() {
             break;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn activity_counts_accounts_in_game_and_on_their_way() {
+        let failed = SessionState::Error {
+            reason: FailureReason::Refused {
+                cause: KickCause::Banned,
+                message: None,
+            },
+            retry_limit_reached: false,
+        };
+        let states = [
+            SessionState::Connected {
+                since: Timestamp::UNIX_EPOCH,
+            },
+            SessionState::Connected {
+                since: Timestamp::UNIX_EPOCH,
+            },
+            SessionState::Starting,
+            SessionState::Connecting,
+            SessionState::Reconnecting {
+                attempt: 2,
+                next_attempt_at: None,
+                reason: None,
+            },
+            // Going away or not running: not counted.
+            SessionState::Stopping,
+            SessionState::Stopped,
+            failed,
+        ];
+        assert_eq!(
+            AfkActivity::of(&states),
+            AfkActivity {
+                in_game: 2,
+                connecting: 3,
+            }
+        );
+        assert_eq!(AfkActivity::of(&[]), AfkActivity::default());
     }
 }
