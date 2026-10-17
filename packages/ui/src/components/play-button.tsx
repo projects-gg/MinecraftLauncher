@@ -12,13 +12,48 @@ export type PlayState =
   | { kind: "running" }
   | { kind: "unavailable"; label: string };
 
+/** Visible labels (localized). */
+export interface PlayButtonLabels {
+  play: string;
+  update: string;
+  cancel: string;
+  running: string;
+}
+
 interface PlayButtonProps {
   state: PlayState;
   onPlay: () => void;
   onCancel?: () => void;
-  /** Visible labels (localized). */
-  labels: { play: string; update: string; cancel: string; running: string };
+  labels: PlayButtonLabels;
   className?: string;
+}
+
+/**
+ * The button's accessible name says what a press does. While a launch is prepared the button shows
+ * its progress, and once a press would cancel it the name leads with that ("İptal, Oyun dosyaları
+ * indiriliyor %42"); in the moment after OYNA, when a press does nothing, it is the progress alone.
+ * Tests: apps/launcher/src/shell/play-button.test.ts.
+ */
+export function playButtonName(
+  state: PlayState,
+  labels: PlayButtonLabels,
+  cancelReady: boolean,
+): string {
+  switch (state.kind) {
+    case "ready":
+      return labels.play;
+    case "update":
+      return labels.update;
+    case "working": {
+      const progress = `${state.label} %${Math.floor(state.percent)}`;
+      return cancelReady ? `${labels.cancel}, ${progress}` : progress;
+    }
+    case "running":
+      return labels.running;
+    case "launching":
+    case "unavailable":
+      return state.label;
+  }
 }
 
 /**
@@ -121,13 +156,7 @@ export function PlayButton({ state, onPlay, onCancel, labels, className }: PlayB
           setHover(false);
           setCancelArmed(true);
         }}
-        aria-label={
-          typeof text === "string"
-            ? text
-            : isWorking
-              ? `${state.label} %${Math.floor(state.percent)}`
-              : undefined
-        }
+        aria-label={playButtonName(state, labels, cancelArmed && Boolean(onCancel))}
         className={cn(
           "group relative block size-full cursor-pointer select-none focus-visible:outline-none",
           "transition-transform duration-150 enabled:active:scale-[0.98] enabled:hover:scale-[1.015]",

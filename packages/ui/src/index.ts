@@ -24,7 +24,12 @@ export {
   Slider,
 } from "./components/forms";
 export { ContextMenu, Menu, type MenuItem } from "./components/menu";
-export { PlayButton, type PlayState } from "./components/play-button";
+export {
+  PlayButton,
+  type PlayButtonLabels,
+  type PlayState,
+  playButtonName,
+} from "./components/play-button";
 export { Switch } from "./components/switch";
 export { type TabItem, TabPanel, Tabs } from "./components/tabs";
 export { Toaster, toast } from "./components/toaster";
