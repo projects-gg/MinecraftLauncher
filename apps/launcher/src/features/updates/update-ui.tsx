@@ -13,46 +13,25 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import Markdown, { type Components } from "react-markdown";
-import rehypeSanitize from "rehype-sanitize";
 import { useAfkSessions } from "@/features/accounts/use-accounts";
 import { AfkHead } from "@/features/afk/afk-head";
 import { type AfkAccount, api } from "@/lib/api";
 import i18n from "@/lib/i18n";
-import { canOpenLink, openLink } from "@/lib/links";
 import { isTauri } from "@/lib/platform";
 import { useLaunch } from "@/stores/launch";
 import { takePendingNotes, useUpdate } from "@/stores/update";
 import { chooseNotes, landingRoute, loadAfterUpdate, type ReleaseNotes } from "./after-update";
 import { cancelInstall, isAfkOpen, isGameBusy, requestInstall } from "./install";
+import { loadNotes } from "./notes";
 
 export { UpdatePill } from "./update-pill";
 
 const SIX_HOURS = 6 * 60 * 60 * 1000;
 
-/**
- * Links in release notes and pack changelogs open in the system browser (or inside the launcher
- * for projects://). A plain link would load the page in the launcher's own window, with no way
- * back but a restart.
- */
-const noteComponents: Components = {
-  a: ({ href, children }) =>
-    canOpenLink(href) ? (
-      <a
-        href={href}
-        onClick={(e) => {
-          e.preventDefault();
-          openLink(href);
-        }}
-      >
-        {children}
-      </a>
-    ) : (
-      <span>{children}</span>
-    ),
-};
+/** Release notes and pack changelogs (Markdown, loaded on demand: `notes.ts`). */
+const NotesMarkdown = lazy(loadNotes);
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -407,7 +386,7 @@ export function WhatsNew() {
     if (!isTauri()) {
       afterUpdateHandled = true;
       if (new URLSearchParams(window.location.search).get("update") === "whatsnew") {
-        setNotes({ version: "2.5.0", notes: PREVIEW_NOTES });
+        void loadNotes().finally(() => setNotes({ version: "2.5.0", notes: PREVIEW_NOTES }));
       }
       return;
     }
@@ -424,7 +403,8 @@ export function WhatsNew() {
       const route = landingRoute(after, router.state.location.pathname);
       if (route) router.history.replace(route);
       const shown = chooseNotes(after, info ? takePendingNotes(info.version) : null);
-      if (shown) setNotes(shown);
+      // The dialog opens once its Markdown renderer is there, with the notes in place.
+      if (shown) void loadNotes().finally(() => setNotes(shown));
     });
     return () => {
       live = false;
@@ -444,15 +424,18 @@ export function WhatsNew() {
       }
     >
       <div className="prose-news">
-        <Markdown rehypePlugins={[rehypeSanitize]} components={noteComponents}>
-          {notes?.notes ?? ""}
-        </Markdown>
+        <Suspense fallback={null}>
+          <NotesMarkdown text={notes?.notes ?? ""} />
+        </Suspense>
       </div>
     </Dialog>
   );
 }
 
-/** Changelog of an official pack update, opened from the "pack updated" toast. */
+/**
+ * Changelog of an official pack update, opened from the "pack updated" toast (which already
+ * started loading the Markdown renderer, `stores/launch.ts`).
+ */
 export function PackNotesDialog() {
   const { t } = useTranslation();
   const notes = useLaunch((s) => s.packNotes);
@@ -470,9 +453,9 @@ export function PackNotesDialog() {
       }
     >
       <div className="prose-news">
-        <Markdown rehypePlugins={[rehypeSanitize]} components={noteComponents}>
-          {notes?.changelog ?? ""}
-        </Markdown>
+        <Suspense fallback={null}>
+          <NotesMarkdown text={notes?.changelog ?? ""} />
+        </Suspense>
       </div>
     </Dialog>
   );

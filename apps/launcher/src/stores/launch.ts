@@ -6,6 +6,7 @@ import { launchErrorCode } from "@/features/disk/launch-error";
 import { useJavaPrompt } from "@/features/java/prompt-store";
 import { announceModsNotice, announceVersionDropped } from "@/features/modcenter/notices";
 import { announceModWarnings, useModFlow } from "@/features/modhealth/flow";
+import { loadNotes } from "@/features/updates/notes";
 import { api, type LaunchEvent, type LaunchOptions, type LaunchStage } from "@/lib/api";
 import { notifyWhenAway } from "@/lib/attention";
 import i18n from "@/lib/i18n";
@@ -168,7 +169,9 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
     const startedAt = Date.now();
     const tellIfAway = (title: string, body: string) =>
       void notifyWhenAway(Date.now() - startedAt, title, body);
-    const announcePack = (notes: PackNotes | null, name: string, version: string) =>
+    const announcePack = (notes: PackNotes | null, name: string, version: string) => {
+      // "Yenilikler" opens the changelog with its text in place: its renderer loads meanwhile.
+      if (notes) void loadNotes();
       toast.success(i18n.t("play.packUpdated", { name, version }), {
         duration: 8000,
         action: notes
@@ -181,6 +184,7 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
             }
           : undefined,
       });
+    };
     const onEvent = (event: LaunchEvent) => {
       if (run !== launchRun && !gameEvents.has(event.type)) return;
       switch (event.type) {
