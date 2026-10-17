@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next";
 import { AccountFace } from "@/features/accounts/account-face";
 import { launchErrorAction } from "@/features/disk/launch-error";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
+import { usePrepareSync } from "@/features/prepare/use-prepare-sync";
 import { ResumeButton, useResumeTarget } from "@/features/resume/resume-button";
 import { api, type InstanceSummary } from "@/lib/api";
 import { copyDetails } from "@/lib/clipboard";
@@ -17,10 +18,62 @@ import { detectOs } from "@/lib/platform";
 import { ariaKeyShortcuts } from "@/lib/shortcuts";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
+import { type PrepareHint, usePrepare } from "@/stores/prepare";
 import { InstanceIcon, prewarmInstanceIcons } from "./instance-icon";
 
 function loaderLine(i: InstanceSummary, loaderName: string) {
   return i.loader === "vanilla" ? `Minecraft ${i.mcVersion}` : `${loaderName} ${i.mcVersion}`;
+}
+
+/**
+ * The picker's second line: the game and loader version, or, while the instance prepares in the
+ * background, a quiet "Hazırlanıyor %42" over a thin grey bar and then "Oynamaya hazır" for a
+ * moment. The lines cross-fade in place; nothing around them moves.
+ */
+function PickerLine({
+  selected,
+  hint,
+}: {
+  selected: InstanceSummary | undefined;
+  hint: PrepareHint | null;
+}) {
+  const { t } = useTranslation();
+  const reduce = useReducedMotion() ?? false;
+  return (
+    <span className="grid text-[12px] *:[grid-area:1/1]">
+      <AnimatePresence initial={false}>
+        {hint?.kind === "preparing" ? (
+          <motion.span key="preparing" className="relative block min-w-0" {...swapIn(reduce)}>
+            <span className="block truncate text-ash-300 tabular-nums">
+              {t("prepare.preparing", { percent: Math.floor(hint.percent) })}
+            </span>
+            <span
+              aria-hidden
+              className="absolute inset-x-0 -bottom-[5px] h-[2px] overflow-hidden rounded-full bg-white/8"
+            >
+              <span
+                className="block h-full origin-left rounded-full bg-ash-300/60 transition-transform duration-500 ease-out motion-reduce:transition-none"
+                style={{ transform: `scaleX(${Math.min(1, Math.max(0, hint.percent / 100))})` }}
+              />
+            </span>
+          </motion.span>
+        ) : hint?.kind === "ready" ? (
+          <motion.span
+            key="ready"
+            className="flex min-w-0 items-center gap-1 text-bone-100"
+            {...swapIn(reduce)}
+          >
+            <Check size={12} weight="bold" className="shrink-0 text-gold-400" />
+            <span className="truncate">{t("prepare.ready")}</span>
+          </motion.span>
+        ) : (
+          <motion.span key="version" className="block truncate text-ash-300" {...swapIn(reduce)}>
+            {selected ? loaderLine(selected, t(`loaders.${selected.loader}`)) : ""}
+          </motion.span>
+        )}
+      </AnimatePresence>
+    </span>
+  );
 }
 
 function InstancePicker({
@@ -28,6 +81,7 @@ function InstancePicker({
   selected,
   loading,
   locked,
+  hint,
   onSelect,
 }: {
   instances: InstanceSummary[];
@@ -36,6 +90,8 @@ function InstancePicker({
   loading: boolean;
   /** A game is being prepared or played: the bar stays on it until it ends. */
   locked: boolean;
+  /** Background preparation of the selected instance, when there is something to show. */
+  hint: PrepareHint | null;
   onSelect: (id: string) => void;
 }) {
   const { t } = useTranslation();
@@ -59,9 +115,7 @@ function InstancePicker({
             <span className="block truncate font-display text-[15px] font-semibold text-bone-50">
               {selected?.name ?? (loading ? t("common.loading") : t("instances.pickerLabel"))}
             </span>
-            <span className="block truncate text-[12px] text-ash-300">
-              {selected ? loaderLine(selected, t(`loaders.${selected.loader}`)) : ""}
-            </span>
+            <PickerLine selected={selected} hint={hint} />
           </span>
           <CaretUpDown
             size={16}
@@ -289,6 +343,11 @@ export function CommandBar() {
       instances[0],
     [instances, selectedId, busy, launchId],
   );
+  // The instance OYNA plays is the one the launcher prepares in the background; its hint gives
+  // way to the launch's own progress.
+  usePrepareSync(selected, !instancesLoading);
+  const prepareHint = usePrepare((s) => s.hint);
+  const hint = !busy && prepareHint?.instanceId === selected?.id ? prepareHint : null;
 
   // A launch installs the instance and records when and how long it was played: once the game
   // starts and once the launch or the game ends, the bar, the library and "Devam et" read it
@@ -350,6 +409,7 @@ export function CommandBar() {
         selected={selected}
         loading={instancesLoading}
         locked={busy}
+        hint={hint}
         onSelect={selectInstance}
       />
       <AccountChip />

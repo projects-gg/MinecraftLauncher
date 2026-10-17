@@ -238,6 +238,14 @@ function Downloads() {
           hideLabel
         />
       </Row>
+      <Row title={t("prepare.setting")} help={t("prepare.settingHelp")}>
+        <Switch
+          checked={p.backgroundPrepare}
+          onCheckedChange={(v) => p.set("backgroundPrepare", v)}
+          label={t("prepare.setting")}
+          hideLabel
+        />
+      </Row>
     </>
   );
 }

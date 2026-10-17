@@ -36,6 +36,8 @@ interface PrefsState {
   discordShowServer: boolean;
   concurrentDownloads: number;
   verifyOnLaunch: boolean;
+  /** Settings → İndirmeler: the selected instance downloads while the launcher is idle. */
+  backgroundPrepare: boolean;
   /** The v1 import was offered once (first start). */
   legacyOffered: boolean;
   /** The first-run welcome (account, v1 import, Projects instance) was completed or skipped. */
@@ -87,6 +89,7 @@ export const usePrefs = create<PrefsState>()(
       discordShowServer: true,
       concurrentDownloads: 16,
       verifyOnLaunch: false,
+      backgroundPrepare: true,
       legacyOffered: false,
       onboarded: false,
       trayHintShown: false,
