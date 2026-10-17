@@ -11,7 +11,10 @@ function parts(ms: number) {
   };
 }
 
-/** Event countdown in Tektur digits. Units are localized by the caller. */
+/**
+ * Event countdown in Tektur digits. Units are localized by the caller. The day cell shows only
+ * while there are days left ("00 gün" said nothing); hours stay even at zero.
+ */
 export function Countdown({
   to,
   units,
@@ -28,7 +31,7 @@ export function Countdown({
   }, []);
   const p = parts(to.getTime() - now);
   const cells: Array<[number, string]> = [
-    [p.days, units.days],
+    ...(p.days > 0 ? [[p.days, units.days] as [number, string]] : []),
     [p.hours, units.hours],
     [p.minutes, units.minutes],
     [p.seconds, units.seconds],
