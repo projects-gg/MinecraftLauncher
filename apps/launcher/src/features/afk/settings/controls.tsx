@@ -3,6 +3,7 @@ import { Info, WarningCircle } from "@phosphor-icons/react";
 import { cn, Switch } from "@pl/ui";
 import { type ReactNode, useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { formatCount } from "@/lib/format";
 import type { Issue, Limit } from "./model";
 
 /** Translated text of an inline problem. */
@@ -11,8 +12,8 @@ export function useIssueText() {
   return (issue: Issue | undefined): string | null => {
     if (!issue) return null;
     return t(`afkSettings.errors.${issue.code}`, {
-      min: issue.limit?.min.toLocaleString("tr-TR"),
-      max: issue.limit?.max.toLocaleString("tr-TR"),
+      min: issue.limit ? formatCount(issue.limit.min) : undefined,
+      max: issue.limit ? formatCount(issue.limit.max) : undefined,
     });
   };
 }

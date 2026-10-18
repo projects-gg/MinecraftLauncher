@@ -18,6 +18,16 @@ export interface PlayButtonLabels {
   update: string;
   cancel: string;
   running: string;
+  /**
+   * Where the language puts the percent sign: before the figure in Turkish ("%42", the
+   * default), after it in English ("42%").
+   */
+  percentFirst?: boolean;
+}
+
+function percentText(percent: number, labels: PlayButtonLabels): string {
+  const figure = Math.floor(percent);
+  return labels.percentFirst === false ? `${figure}%` : `%${figure}`;
 }
 
 interface PlayButtonProps {
@@ -47,7 +57,7 @@ export function playButtonName(
     case "update":
       return labels.update;
     case "working": {
-      const progress = `${state.label} %${Math.floor(state.percent)}`;
+      const progress = `${state.label} ${percentText(state.percent, labels)}`;
       return cancelReady ? `${labels.cancel}, ${progress}` : progress;
     }
     case "running":
@@ -103,9 +113,15 @@ export function PlayButton({
       key = "update";
       break;
     case "working":
-      // Turkish puts the percent sign first; Tektur's % glyph is ornate, so it is set in Figtree.
+      // Turkish puts the percent sign first, English after the figure; Tektur's % glyph is
+      // ornate, so it is set in Figtree.
       text = showCancel ? (
         labels.cancel
+      ) : labels.percentFirst === false ? (
+        <>
+          {Math.floor(state.percent)}
+          <span className="ml-0.5 font-sans text-[16px] font-bold">%</span>
+        </>
       ) : (
         <>
           <span className="mr-0.5 font-sans text-[16px] font-bold">%</span>

@@ -12,7 +12,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { glide, useMotionPrefs } from "@/features/modcenter/motion";
 import { api, type MovePlan, type MoveProgress } from "@/lib/api";
-import { formatBytes, formatCount } from "@/lib/format";
+import { formatBytes, formatCount, formatPercent } from "@/lib/format";
 import { useUi } from "@/stores/ui";
 import { CleanupCard } from "./cleanup/cleanup-card";
 import { TrashRow } from "./cleanup/trash-row";
@@ -389,7 +389,7 @@ function MoveDialog({
             <p className="text-[14px] font-medium text-bone-50">{t(`${m}.stages.${stage}`)}</p>
             {percent !== undefined ? (
               <p className="font-display text-[20px] font-semibold text-gold-200 tabular-nums">
-                %{Math.floor(percent)}
+                {formatPercent(Math.floor(percent))}
               </p>
             ) : null}
           </div>

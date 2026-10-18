@@ -16,6 +16,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, type HomeStatus, type Maintenance } from "@/lib/api";
+import { dateTimeFormat } from "@/lib/format";
 import { isWebLink, openWebLink } from "@/lib/links";
 import { useWindowAway } from "@/lib/window-away";
 
@@ -121,7 +122,7 @@ function NoticeCard({
 
 function maintenanceUntil(until: string | undefined): string | null {
   if (!until) return null;
-  return new Intl.DateTimeFormat("tr-TR", {
+  return dateTimeFormat({
     day: "numeric",
     month: "long",
     hour: "2-digit",

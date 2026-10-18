@@ -38,7 +38,7 @@ import {
   type WorldBackup,
   type WorldDetail,
 } from "@/lib/api";
-import { formatBytes, formatRelative } from "@/lib/format";
+import { formatBytes, formatPercent, formatRelative } from "@/lib/format";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { ConfirmDialog, InlineNotice, TabEmpty, TabSection, TrashRow } from "../parts";
@@ -73,7 +73,7 @@ function JobProgress({
         <div className="mb-1 flex justify-between text-[12px] text-ash-300">
           <span>{label}</span>
           <span className="tabular-nums">
-            {percent === undefined ? "" : `%${Math.round(percent)}`}
+            {percent === undefined ? "" : formatPercent(percent)}
           </span>
         </div>
         <Progress value={percent} label={label} />

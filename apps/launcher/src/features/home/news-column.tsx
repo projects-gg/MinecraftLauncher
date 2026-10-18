@@ -9,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { NewDot, NewLabel } from "@/features/news/new-dot";
 import type { EventItem, HomeContent, NewsItem, PatchNotes } from "@/lib/api";
 import { cardEvents, nextBoundary, phaseOf } from "@/lib/event-card";
-import { formatDuration, formatRelative } from "@/lib/format";
+import { dateTimeFormat, formatDuration, formatRelative } from "@/lib/format";
 import i18n from "@/lib/i18n";
 import { isWebLink, openLink } from "@/lib/links";
 import { isNewsNew, useNewsSeen } from "@/stores/news-seen";
@@ -189,18 +189,11 @@ function spanText(ms: number): string {
     : i18n.t("reminders.days", { days });
 }
 
-const clock = new Intl.DateTimeFormat("tr-TR", { hour: "2-digit", minute: "2-digit" });
-const weekdayMoment = new Intl.DateTimeFormat("tr-TR", {
-  weekday: "long",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-const dateMoment = new Intl.DateTimeFormat("tr-TR", {
-  day: "numeric",
-  month: "long",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+// In the interface's language, looked up at each call (the language can change live).
+const clock = () => dateTimeFormat({ hour: "2-digit", minute: "2-digit" });
+const weekdayMoment = () => dateTimeFormat({ weekday: "long", hour: "2-digit", minute: "2-digit" });
+const dateMoment = () =>
+  dateTimeFormat({ day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
 
 /**
  * When an upcoming event starts: "Bugün 20:00", "Yarın 20:00", "Cumartesi 20:00" within the
@@ -210,9 +203,9 @@ function startMoment(iso: string, now: number): string {
   const at = new Date(iso);
   const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const days = Math.round((day(at) - day(new Date(now))) / 86_400_000);
-  if (days === 0) return i18n.t("library.when.today", { time: clock.format(at) });
-  if (days === 1) return i18n.t("library.when.tomorrow", { time: clock.format(at) });
-  return days < 7 ? weekdayMoment.format(at) : dateMoment.format(at);
+  if (days === 0) return i18n.t("library.when.today", { time: clock().format(at) });
+  if (days === 1) return i18n.t("library.when.tomorrow", { time: clock().format(at) });
+  return days < 7 ? weekdayMoment().format(at) : dateMoment().format(at);
 }
 
 /** The start under an upcoming event's title; "Yarın" turns into "Bugün" at midnight. */

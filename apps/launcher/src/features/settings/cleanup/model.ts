@@ -7,6 +7,7 @@ import type {
   SharedGroup,
   SharedItem,
 } from "@/lib/api";
+import { relativeTimeFormat } from "@/lib/format";
 
 export type GroupId = "sets" | "shared" | "leftovers";
 
@@ -154,10 +155,12 @@ export function planOf(
   };
 }
 
-/** Age of a date for a row: "dün", "3 gün önce", "geçen ay", "4 ay önce", "geçen yıl". */
-const relative = new Intl.RelativeTimeFormat("tr", { numeric: "auto" });
-
+/**
+ * Age of a date for a row, in the interface's language: "dün", "3 gün önce", "geçen ay", "4 ay
+ * önce", "geçen yıl" / "yesterday", "3 days ago", "last month".
+ */
 export function ageLabel(iso: string, now = Date.now()): string {
+  const relative = relativeTimeFormat();
   const days = Math.max(0, Math.round((now - Date.parse(iso)) / DAY));
   if (days < 30) return relative.format(-days, "day");
   if (days < 365) return relative.format(-Math.round(days / 30), "month");

@@ -1,14 +1,56 @@
 import i18n from "./i18n";
 
-const number1 = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
-const integer = new Intl.NumberFormat("tr-TR");
-const relative = new Intl.RelativeTimeFormat("tr", { numeric: "auto" });
+/**
+ * The interface's `Intl` locale. English is British English, not American: day-first dates and
+ * the 24-hour clock read like the Turkish ones the server's players know (L1, 18 Oct 2026).
+ */
+export function uiLocale(): "tr-TR" | "en-GB" {
+  return i18n.language === "en" ? "en-GB" : "tr-TR";
+}
+
+/** `Intl` formatters are costly to build: one per locale and set of options, built on first use. */
+const formatters = new Map<string, unknown>();
+
+function cached<T>(kind: string, options: object | undefined, make: (locale: string) => T): T {
+  const locale = uiLocale();
+  const key = `${kind}|${locale}|${options ? JSON.stringify(options) : ""}`;
+  let formatter = formatters.get(key) as T | undefined;
+  if (!formatter) {
+    formatter = make(locale);
+    formatters.set(key, formatter);
+  }
+  return formatter;
+}
+
+/** Numbers in the interface's language ("1,5" / "1.5", "12.345" / "12,345"). */
+export function numberFormat(options?: Intl.NumberFormatOptions): Intl.NumberFormat {
+  return cached("number", options, (locale) => new Intl.NumberFormat(locale, options));
+}
+
+/** Dates and times in the interface's language. */
+export function dateTimeFormat(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormat {
+  return cached("date", options, (locale) => new Intl.DateTimeFormat(locale, options));
+}
+
+/** "dün", "2 saat önce" / "yesterday", "2 hours ago". */
+export function relativeTimeFormat(): Intl.RelativeTimeFormat {
+  return cached(
+    "relative",
+    undefined,
+    (locale) => new Intl.RelativeTimeFormat(locale, { numeric: "auto" }),
+  );
+}
+
+/** "A, B ve C" / "A, B and C". */
+export function listFormat(type: "conjunction" | "disjunction" = "conjunction"): Intl.ListFormat {
+  return cached("list", { type }, (locale) => new Intl.ListFormat(locale, { style: "long", type }));
+}
 
 const BYTE_UNITS = ["B", "KB", "MB", "GB", "TB"] as const;
 
 /**
- * "512 B", "1,5 MB", "1 GB". Never four digits before the unit: from what would read as 1000 of
- * a unit (1000–1023 MB, or 999,96 MB rounding up) it switches to the next one.
+ * "512 B", "1,5 MB" / "1.5 MB", "1 GB". Never four digits before the unit: from what would read
+ * as 1000 of a unit (1000–1023 MB, or 999,96 MB rounding up) it switches to the next one.
  */
 export function formatBytes(bytes: number): string {
   let value = Math.max(0, bytes);
@@ -18,7 +60,8 @@ export function formatBytes(bytes: number): string {
     value /= 1024;
     unit++;
   }
-  return `${(unit === 0 ? integer : number1).format(shown())} ${BYTE_UNITS[unit]}`;
+  const format = numberFormat(unit === 0 ? undefined : { maximumFractionDigits: 1 });
+  return `${format.format(shown())} ${BYTE_UNITS[unit]}`;
 }
 
 export function formatSpeed(bytesPerSec: number): string {
@@ -26,7 +69,20 @@ export function formatSpeed(bytesPerSec: number): string {
 }
 
 export function formatCount(n: number): string {
-  return integer.format(n);
+  return numberFormat().format(n);
+}
+
+/** A share out of 100, the way the language writes it: "%42" in Turkish, "42%" in English. */
+export function formatPercent(percent: number): string {
+  return numberFormat({ style: "percent", maximumFractionDigits: 0 }).format(
+    Math.round(percent) / 100,
+  );
+}
+
+/** Memory: `6144` → "6 GB", `4608` → "4,5 GB" / "4.5 GB", `768` → "768 MB". */
+export function formatMemory(mb: number): string {
+  if (mb < 1024) return `${Math.round(mb)} MB`;
+  return `${numberFormat({ maximumFractionDigits: 1 }).format(mb / 1024)} GB`;
 }
 
 export function formatRelative(iso: string, now = Date.now()): string {
@@ -35,13 +91,14 @@ export function formatRelative(iso: string, now = Date.now()): string {
   const minute = 60_000;
   const hour = 60 * minute;
   const day = 24 * hour;
+  const relative = relativeTimeFormat();
   if (abs < hour) return relative.format(Math.round(diff / minute), "minute");
   if (abs < day) return relative.format(Math.round(diff / hour), "hour");
   if (abs < 30 * day) return relative.format(Math.round(diff / day), "day");
-  return new Date(iso).toLocaleDateString("tr-TR", { day: "numeric", month: "long" });
+  return dateTimeFormat({ day: "numeric", month: "long" }).format(new Date(iso));
 }
 
-/** "2 sa 14 dk", "38 dk", "45 sn" (units from the strings, `units.*`). */
+/** "2 sa 14 dk", "38 dk", "45 sn" / "2 h 14 min" (units from the strings, `units.*`). */
 export function formatDuration(totalSecs: number): string {
   const seconds = Math.max(0, Math.round(totalSecs));
   const hours = Math.floor(seconds / 3600);

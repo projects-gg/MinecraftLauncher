@@ -28,7 +28,7 @@ import {
   runtimeTitle,
 } from "@/features/java/texts";
 import { api, type JavaOverview, type JavaRuntime } from "@/lib/api";
-import { formatBytes } from "@/lib/format";
+import { formatBytes, formatPercent } from "@/lib/format";
 
 const QUERY_KEY = ["java-overview"] as const;
 
@@ -102,7 +102,7 @@ function Action({
         <div className="flex w-[132px] flex-col items-end gap-1.5">
           <span className="flex w-full justify-between text-[12.5px] text-ash-300">
             {t("java.updating")}
-            <span className="tabular-nums">%{Math.round(action.percent)}</span>
+            <span className="tabular-nums">{formatPercent(action.percent)}</span>
           </span>
           <Progress value={action.percent} label={t("java.updating")} className="w-full" />
         </div>

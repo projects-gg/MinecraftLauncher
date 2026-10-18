@@ -1,4 +1,5 @@
 import type { GameLogSession } from "@/lib/api";
+import { uiLocale } from "@/lib/format";
 import i18n from "@/lib/i18n";
 
 const sameDay = (a: Date, b: Date) =>
@@ -11,7 +12,7 @@ export function formatWhen(iso: string | undefined, now = new Date()): string {
   if (!iso) return "";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  const locale = i18n.language === "en" ? "en-GB" : "tr-TR";
+  const locale = uiLocale();
   const time = date.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
@@ -30,7 +31,7 @@ export function formatDay(iso: string | undefined, now = new Date()): string {
   if (!iso) return "";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
-  const locale = i18n.language === "en" ? "en-GB" : "tr-TR";
+  const locale = uiLocale();
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
   if (sameDay(date, now)) return i18n.t("library.when.todayDay");

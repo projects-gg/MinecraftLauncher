@@ -30,6 +30,7 @@ import { useTranslation } from "react-i18next";
 import { showError } from "@/features/content/jobs";
 import { JavaPicker, javaProblemText, useJavaCheck } from "@/features/java/java-picker";
 import { api, type InstanceDetail, type InstanceSettings } from "@/lib/api";
+import { formatMemory } from "@/lib/format";
 import {
   type SettingsDraft,
   settingsChanged,
@@ -79,8 +80,8 @@ function Group({
   );
 }
 
-const gb = (mb: number) =>
-  `${(mb / 1024).toLocaleString("tr-TR", { maximumFractionDigits: 1 })} GB`;
+/** Memory sizes on the sliders ("4,5 GB" / "4.5 GB"; they start at 1 GB). */
+const gb = (mb: number) => formatMemory(mb);
 
 const graphicsIcons: Record<GraphicsChoice, ReactNode> = {
   smooth: <Lightning size={15} />,

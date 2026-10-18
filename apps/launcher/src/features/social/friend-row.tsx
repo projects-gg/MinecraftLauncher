@@ -20,6 +20,7 @@ import { useCalm } from "@/features/accounts/calm";
 import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import type { Friend } from "@/lib/api/social-types";
+import { dateTimeFormat } from "@/lib/format";
 import { useLaunch } from "@/stores/launch";
 import { attempt, inviteCoolingDown, inviteFriend } from "./actions";
 import { DiscordButton } from "./discord-button";
@@ -29,11 +30,8 @@ import { rise, swap, useSocialMotion } from "./motion";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
 
-const dateFormat = new Intl.DateTimeFormat("tr-TR", {
-  day: "numeric",
-  month: "long",
-  year: "numeric",
-});
+// In the interface's language, looked up at each call (the language can change live).
+const dateFormat = () => dateTimeFormat({ day: "numeric", month: "long", year: "numeric" });
 
 /** "Katıl": disabled (with the reason) while a game is being prepared or running. */
 export function JoinButton({
@@ -146,7 +144,7 @@ function FriendCard({
       </div>
       {friend.since ? (
         <p className="mt-3 text-[12px] text-ash-400">
-          {t("social.actions.friendsSince", { date: dateFormat.format(new Date(friend.since)) })}
+          {t("social.actions.friendsSince", { date: dateFormat().format(new Date(friend.since)) })}
         </p>
       ) : null}
 

@@ -315,7 +315,7 @@ function AccountChip() {
 
 /** Bottom command bar: what to play, as whom, progress, and the OYNA button. */
 export function CommandBar() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { data: instances = [], isPending: instancesLoading } = useQuery({
     queryKey: ["instances"],
     queryFn: () => api.instances(),
@@ -431,6 +431,7 @@ export function CommandBar() {
           update: t("play.update"),
           cancel: t("play.cancel"),
           running: t("play.running"),
+          percentFirst: i18n.language !== "en",
         }}
       />
     </footer>

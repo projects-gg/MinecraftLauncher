@@ -4,24 +4,23 @@ import type { TFunction } from "i18next";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ContentKind, InstalledContent } from "@/lib/api";
-import { formatSpeed } from "@/lib/format";
+import { formatPercent, formatSpeed, numberFormat } from "@/lib/format";
 import { type RunningJob, stageLabel } from "./jobs";
-
-const compact = new Intl.NumberFormat("tr-TR", { notation: "compact", maximumFractionDigits: 1 });
-const whole = new Intl.NumberFormat("tr-TR");
 
 /** A job's × takes clicks this long after its bar appeared (OYNA waits 0.8 s the same way). */
 const CANCEL_ARM_MS = 600;
 
-/** "245,2 Mn" from a million up; below that the full number ("41.770"), since the Turkish
- * "B" (bin) reads like bytes next to file sizes. */
+/** "245,2 Mn" / "245.2M" from a million up; below that the full number ("41.770" / "41,770"),
+ * since the Turkish "B" (bin) reads like bytes next to file sizes. */
 export function formatCompact(n: number): string {
-  return n >= 1_000_000 ? compact.format(n) : whole.format(n);
+  return n >= 1_000_000
+    ? numberFormat({ notation: "compact", maximumFractionDigits: 1 }).format(n)
+    : numberFormat().format(n);
 }
 
-/** Turkish category name; unknown slugs are prettified. */
+/** The category's name in the interface's language; unknown (English) slugs are prettified. */
 export function categoryLabel(t: TFunction, name: string): string {
-  const fallback = name.replace(/-/g, " ").replace(/^./, (c) => c.toLocaleUpperCase("tr"));
+  const fallback = name.replace(/-/g, " ").replace(/^./, (c) => c.toLocaleUpperCase("en"));
   return t(`content.categories.${name}`, { defaultValue: fallback });
 }
 
@@ -89,7 +88,7 @@ export function JobStatus({
         <div className="mb-1.5 flex items-baseline gap-3 text-[12px] tabular-nums">
           <p className="min-w-0 flex-1 truncate text-ash-300" aria-live="polite">
             {label}
-            {typeof percent === "number" ? ` %${Math.round(percent)}` : ""}
+            {typeof percent === "number" ? ` ${formatPercent(percent)}` : ""}
           </p>
           {/* Right-aligned slots as wide as the figures get, so the line does not slide while
               the counts and the speed change. */}

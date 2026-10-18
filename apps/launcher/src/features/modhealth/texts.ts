@@ -9,12 +9,13 @@ import type {
   RepairStep,
   StepStatus,
 } from "@/lib/api";
+import { listFormat } from "@/lib/format";
 
-/** "A", "A ve B", "A, B ve C". */
-export function joinNames(names: string[], lang = "tr"): string {
+/** "A", "A ve B", "A, B ve C" / "A, B and C" (the interface's language). */
+export function joinNames(names: string[]): string {
   const unique = names.filter((name, i) => name && names.indexOf(name) === i);
   try {
-    return new Intl.ListFormat(lang, { style: "long", type: "conjunction" }).format(unique);
+    return listFormat().format(unique);
   } catch {
     return unique.join(", ");
   }
@@ -24,9 +25,9 @@ export function joinNames(names: string[], lang = "tr"): string {
  * The mods of one sentence: "A, B ve C"; a longer list names two and counts the rest ("A, B ve
  * 4 mod daha"), so a dependency many mods need stays one short line.
  */
-export function modNames(t: TFunction, names: string[], lang = "tr"): string {
+export function modNames(t: TFunction, names: string[]): string {
   const unique = names.filter((name, i) => name && names.indexOf(name) === i);
-  if (unique.length <= 3) return joinNames(unique, lang);
+  if (unique.length <= 3) return joinNames(unique);
   return t("modHealth.moreMods", {
     names: unique.slice(0, 2).join(", "),
     count: unique.length - 2,
@@ -132,13 +133,8 @@ export function crashHint(t: TFunction, kind: CrashKind | undefined, fallback: s
   return kind ? t(`modHealth.crash.hints.${kind}`, { defaultValue: fallback }) : fallback;
 }
 
-/** `6144` → "6 GB", `4608` → "4,5 GB", `768` → "768 MB". */
-export function formatMemory(mb: number, lang = "tr"): string {
-  if (mb < 1024) return `${Math.round(mb)} MB`;
-  const gb = mb / 1024;
-  const text = new Intl.NumberFormat(lang, { maximumFractionDigits: 1 }).format(gb);
-  return `${text} GB`;
-}
+/** `6144` → "6 GB", `4608` → "4,5 GB" / "4.5 GB", `768` → "768 MB". */
+export { formatMemory } from "@/lib/format";
 
 /** Text for "copy details": the issues with their files (support only). */
 export function issuesDetails(issues: HealthIssue[]): string {

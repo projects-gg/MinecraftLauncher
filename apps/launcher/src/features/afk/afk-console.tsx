@@ -20,6 +20,7 @@ import { Dialog } from "radix-ui";
 import { type KeyboardEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { type AfkAccount, api } from "@/lib/api";
+import { uiLocale } from "@/lib/format";
 import { AfkHead } from "./afk-head";
 import { afkFailed, runAfk } from "./errors";
 import { StateLine } from "./state-line";
@@ -243,7 +244,7 @@ export function AfkConsole({
                             )}
                           >
                             <span className="mr-2 text-ash-400 tabular-nums">
-                              {new Date(l.time).toLocaleString("tr-TR", timeFormat)}
+                              {new Date(l.time).toLocaleString(uiLocale(), timeFormat)}
                             </span>
                             {l.text}
                           </p>
