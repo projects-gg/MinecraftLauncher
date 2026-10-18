@@ -32,7 +32,7 @@ export function Switch({
         onCheckedChange={onCheckedChange}
         disabled={disabled}
         className={cn(
-          "group relative h-[20px] w-[34px] shrink-0 cursor-pointer rounded-full bg-obsidian-700 ring-1 ring-white/10 transition-colors duration-200",
+          "group relative h-[20px] w-[34px] shrink-0 cursor-pointer rounded-full bg-obsidian-700 ring-1 ring-white/10 transition-[background-color,box-shadow,opacity] duration-200",
           "data-[state=checked]:bg-gold-500 data-[state=checked]:ring-gold-400/60 disabled:cursor-not-allowed disabled:opacity-50",
         )}
       >

@@ -1,5 +1,5 @@
 import { Tooltip as RadixTooltip } from "radix-ui";
-import type { ReactElement, ReactNode } from "react";
+import { type ReactElement, type ReactNode, useState } from "react";
 
 export function TooltipProvider({ children }: { children: ReactNode }) {
   return (
@@ -12,14 +12,24 @@ export function TooltipProvider({ children }: { children: ReactNode }) {
 export function Tooltip({
   content,
   side = "top",
+  disabled,
   children,
 }: {
   content: ReactNode;
   side?: "top" | "right" | "bottom" | "left";
+  /**
+   * The tooltip does not open (a reason shown only while its control waits). Wrapping the
+   * control conditionally instead would mount a new control each time, and its transitions (a
+   * button fading into its disabled look) would never play.
+   */
+  disabled?: boolean;
   children: ReactElement;
 }) {
+  const [open, setOpen] = useState(false);
+  // Controlled only where it can be turned off, so every other tooltip stays as it was.
+  const control = disabled === undefined ? {} : { open: open && !disabled, onOpenChange: setOpen };
   return (
-    <RadixTooltip.Root>
+    <RadixTooltip.Root {...control}>
       <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
       <RadixTooltip.Portal>
         <RadixTooltip.Content

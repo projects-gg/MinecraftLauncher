@@ -58,8 +58,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       type={type ?? "button"}
       className={cn(
         "group relative isolate inline-flex shrink-0 cursor-pointer items-center justify-center whitespace-nowrap select-none",
-        // Press feedback: a quick 97% squeeze (released at the same speed, interruptible).
-        "transition-transform duration-150 ease-out active:scale-[0.97] focus-visible:outline-none",
+        // Press feedback: a quick 97% squeeze (released at the same speed, interruptible). The
+        // disabled look fades in and out too (a launch that starts dims "Katıl" at once).
+        "transition-[transform,scale,opacity] duration-150 ease-out active:scale-[0.97] focus-visible:outline-none",
         "disabled:pointer-events-none disabled:opacity-45",
         dims.box,
         dims.cut,
@@ -114,7 +115,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
         className={cn(
           // Drawn at 28 / 32 px; the hit area reaches 4 px further on every side.
           "hit-area relative inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md text-ash-300",
-          "transition-[background-color,color,transform,scale] duration-150 ease-out",
+          "transition-[background-color,color,transform,scale,opacity] duration-150 ease-out",
           "hover:bg-white/7 hover:text-bone-100 active:scale-[0.94] disabled:pointer-events-none disabled:opacity-45",
           size === "sm" ? "size-8" : "size-[32px]",
           active && "bg-white/8 text-gold-300",

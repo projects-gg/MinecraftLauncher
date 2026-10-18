@@ -20,20 +20,22 @@ export function EventJoin({
 }) {
   const { t } = useTranslation();
   const busy = useLaunch((s) => gameBusy(s.phase.kind));
-  const button = (
-    <span className={cn("inline-flex", className)}>
-      <Button
-        size="sm"
-        variant="secondary"
-        icon={<Play size={13} weight="fill" className="text-gold-300" />}
-        disabled={busy}
-        aria-describedby={describedBy}
-        onClick={() => void joinProjects()}
-      >
-        {t("eventJoin.join")}
-      </Button>
-    </span>
+  // A disabled button takes no pointer: the tooltip hangs on its wrapper, there all the time (and
+  // quiet while the button works), so the button stays the same and fades into its waiting look.
+  return (
+    <Tooltip content={t("eventJoin.busy")} disabled={!busy}>
+      <span className={cn("inline-flex", className)}>
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<Play size={13} weight="fill" className="text-gold-300" />}
+          disabled={busy}
+          aria-describedby={describedBy}
+          onClick={() => void joinProjects()}
+        >
+          {t("eventJoin.join")}
+        </Button>
+      </span>
+    </Tooltip>
   );
-  // A disabled button takes no pointer: the tooltip hangs on its wrapper.
-  return busy ? <Tooltip content={t("eventJoin.busy")}>{button}</Tooltip> : button;
 }

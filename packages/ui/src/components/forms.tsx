@@ -58,7 +58,7 @@ export const Input = forwardRef<
       ref={ref}
       aria-invalid={invalid || undefined}
       className={cn(
-        "h-[34px] w-full rounded-md border border-white/10 bg-obsidian-800/80 px-3 text-[13.5px] text-bone-50 transition-[border-color,box-shadow] duration-150 placeholder:text-ash-500",
+        "h-[34px] w-full rounded-md border border-white/10 bg-obsidian-800/80 px-3 text-[13.5px] text-bone-50 transition-[border-color,box-shadow,opacity] duration-150 placeholder:text-ash-500",
         "hover:border-white/18 focus:border-gold-400/70 focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-gold-400/25",
         "disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-white/10",
         invalid && "border-flare-400/70 focus:border-flare-400 focus:ring-flare-400/25",
@@ -186,7 +186,7 @@ const SelectItem = memo(function SelectItem({
 });
 
 const triggerClass =
-  "flex h-[34px] w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-white/10 bg-obsidian-800/80 px-3 text-left text-[13.5px] text-bone-50 transition-[border-color,box-shadow] duration-150 hover:border-white/18 focus:border-gold-400/70 focus:ring-2 focus:ring-gold-400/25 focus:outline-none data-[disabled]:opacity-50 disabled:cursor-default disabled:opacity-50";
+  "flex h-[34px] w-full cursor-pointer items-center justify-between gap-2 rounded-md border border-white/10 bg-obsidian-800/80 px-3 text-left text-[13.5px] text-bone-50 transition-[border-color,box-shadow,opacity] duration-150 hover:border-white/18 focus:border-gold-400/70 focus:ring-2 focus:ring-gold-400/25 focus:outline-none data-[disabled]:opacity-50 disabled:cursor-default disabled:opacity-50";
 
 function Badge({ text }: { text: string }) {
   return (
