@@ -435,6 +435,8 @@ function About() {
         </Button>
       </div>
       <p className="mt-6 text-[12.5px] text-ash-400">{t("settings.about.credits")}</p>
+      {/* Mojang's usage guidelines ask for it; the owner wants it quiet (18 Oct 2026). */}
+      <p className="mt-1 text-[12.5px] text-ash-400">{t("minecraft.notAffiliated")}</p>
     </div>
   );
 }

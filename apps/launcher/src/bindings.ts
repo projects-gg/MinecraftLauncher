@@ -73,6 +73,8 @@ export const commands = {
 	events: EventView[],
 	/**  Studio's news and the news feed's items, merged (Studio wins on the same id). */
 	news: NewsView[],
+	/**  The news feed's Minecraft updates, newest first: they only fill places `news` leaves empty. */
+	minecraft: MinecraftNewsView[],
 	maintenance: MaintenanceView | null,
 	/**  The news feed's status notice; `None` while `maintenance` is shown. */
 	status: StatusView | null,
@@ -1525,6 +1527,8 @@ export type HomeView = {
 	events: EventView[],
 	/**  Studio's news and the news feed's items, merged (Studio wins on the same id). */
 	news: NewsView[],
+	/**  The news feed's Minecraft updates, newest first: they only fill places `news` leaves empty. */
+	minecraft: MinecraftNewsView[],
 	maintenance: MaintenanceView | null,
 	/**  The news feed's status notice; `None` while `maintenance` is shown. */
 	status: StatusView | null,
@@ -2173,6 +2177,39 @@ export type MigrationStatus =
 "noVersion" | 
 /**  Modrinth does not know the file (added by hand from elsewhere). */
 "unknown";
+
+/**
+ *  A Minecraft update from the news feed (`pl_content::merge_minecraft`): the UI shows it only
+ *  where Projects news leaves room, never as "new".
+ */
+export type MinecraftNewsView = {
+	id: string,
+	/**  Mojang's version id (`26.3`). */
+	version: string,
+	/**  `release` or `snapshot`. */
+	kind: string,
+	/**  The bot's Turkish texts (`en` has the English ones). */
+	title: string,
+	summary: string,
+	/**  Markdown. */
+	body: string,
+	/**  Local path of the verified cover; `None` without a cover or while it is not downloaded. */
+	coverPath: string | null,
+	/**  The cover's BlurHash, shown until the picture is there. */
+	coverBlurhash: string | null,
+	publishedAt: string,
+	expiresAt: string,
+	/**  The official article on minecraft.net (`https://`). */
+	url: string,
+	/**  English texts for an English interface; a missing summary or body means the base text. */
+	en: MinecraftTextView | null,
+};
+
+export type MinecraftTextView = {
+	title: string,
+	summary: string | null,
+	body: string | null,
+};
 
 /**  Section of an item in the mod center (mirrors `pl_content::ItemCategory`). */
 export type ModCategory = "performance" | "visual" | "interface" | "gameplay" | "library" | "other";

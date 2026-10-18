@@ -19,6 +19,7 @@ export function welcomeHome(): HomeContent {
     banners: [],
     events: [],
     news: [],
+    minecraft: [],
     offline: false,
   };
 }

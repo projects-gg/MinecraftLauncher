@@ -49,6 +49,7 @@ import type {
   InstanceIcon,
   InstanceSummary,
   LaunchEvent,
+  MinecraftNewsItem,
   NewsCategory,
   ParticleKind,
 } from "./types";
@@ -158,6 +159,28 @@ function home(v: HomeView): HomeContent {
     sourceUrl: n.sourceUrl ?? undefined,
   }));
   const notesItem = v.patchNotesId ? news.find((n) => n.id === v.patchNotesId) : undefined;
+  const minecraft = v.minecraft.map((m) => ({
+    id: m.id,
+    version: m.version,
+    kind: (m.kind === "release" ? "release" : "snapshot") as MinecraftNewsItem["kind"],
+    title: m.title,
+    summary: m.summary,
+    body: m.body,
+    // Its BlurHash stands in while the cover downloads; an entry without a cover wears the
+    // season's art, like a feed post without a picture.
+    coverUrl: fileUrl(m.coverPath) ?? (m.coverBlurhash ? undefined : heroImage),
+    coverBlurhash: m.coverBlurhash ?? undefined,
+    publishedAt: m.publishedAt,
+    expiresAt: m.expiresAt,
+    url: m.url,
+    en: m.en
+      ? {
+          title: m.en.title,
+          summary: m.en.summary ?? undefined,
+          body: m.en.body ?? undefined,
+        }
+      : undefined,
+  }));
   return {
     hero: {
       imageUrl: heroImage,
@@ -192,6 +215,7 @@ function home(v: HomeView): HomeContent {
       fromFeed: e.fromFeed,
     })),
     news,
+    minecraft,
     maintenance: v.maintenance
       ? {
           title: v.maintenance.title,

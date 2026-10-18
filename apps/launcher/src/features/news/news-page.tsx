@@ -1,49 +1,65 @@
+import { Cube } from "@phosphor-icons/react";
 import { Button, Chip, cn, EmptyState, Segmented, Skeleton, useMotionPrefs } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { type Ref, useEffect, useMemo, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { api, type NewsCategory, type NewsItem } from "@/lib/api";
+import { api, type MinecraftNewsItem, type NewsCategory, type NewsItem } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
+import { liveMinecraft } from "@/lib/minecraft";
 import { isNewsNew, newestPublished, useNewsSeen } from "@/stores/news-seen";
+import { CoverImage } from "./cover-image";
+import { MinecraftChip, useMinecraftText } from "./minecraft";
 import { NewDot, NewLabel } from "./new-dot";
 
-type Filter = "all" | NewsCategory;
+/** Every Projects category, or Minecraft's updates (a source, listed last). */
+type Filter = "all" | NewsCategory | "minecraft";
 
-function Featured({ item, isNew }: { item: NewsItem; isNew: boolean }) {
-  const { t } = useTranslation();
+/** What a card shows, for Projects news and Minecraft updates alike. */
+interface CardFace {
+  id: string;
+  coverUrl?: string;
+  coverBlurhash?: string;
+  /** The category chip, or Minecraft's source mark. */
+  label: ReactNode;
+  publishedAt: string;
+  title: string;
+  summary: string;
+  isNew: boolean;
+  /** Minecraft's updates: a little quieter than Projects news. */
+  quiet?: boolean;
+}
+
+function Featured({ face }: { face: CardFace }) {
   return (
     <Link
       to="/news"
-      search={{ news: item.id }}
+      search={{ news: face.id }}
       className="group relative block overflow-hidden rounded-[14px] outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
     >
-      <div className="h-[clamp(200px,38vh,320px)] w-full overflow-hidden bg-obsidian-800">
-        {item.coverUrl ? (
-          <img
-            src={item.coverUrl}
-            alt=""
-            className="size-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
-          />
-        ) : null}
-      </div>
+      <CoverImage
+        src={face.coverUrl}
+        blurhash={face.coverBlurhash}
+        className="h-[clamp(200px,38vh,320px)] w-full overflow-hidden bg-obsidian-800"
+        imgClassName="group-hover:scale-[1.03]"
+      />
       <div className="absolute inset-0 bg-[linear-gradient(to_top,rgb(10_9_12/0.92),rgb(10_9_12/0.25)_55%,transparent)]" />
       <div className="absolute inset-x-0 bottom-0 p-5">
         <div className="flex items-center gap-2.5">
-          <Chip tone="onArt">{t(`categories.${item.category}`)}</Chip>
+          {face.label}
           <span className="flex items-center gap-1.5">
-            <NewDot on={isNew} />
+            <NewDot on={face.isNew} />
             <span className="text-shadow-art text-[12.5px] text-bone-100/90">
-              {formatRelative(item.publishedAt)}
+              {formatRelative(face.publishedAt)}
             </span>
           </span>
         </div>
         <h2 className="text-shadow-art mt-2 max-w-[26ch] font-display text-[26px] leading-[1.05] font-semibold text-bone-50">
-          {item.title}
+          {face.title}
         </h2>
-        <p className="mt-1.5 max-w-[60ch] text-[13.5px] text-bone-100/90">{item.summary}</p>
-        <NewLabel on={isNew} />
+        <p className="mt-1.5 max-w-[60ch] text-[13.5px] text-bone-100/90">{face.summary}</p>
+        <NewLabel on={face.isNew} />
       </div>
     </Link>
   );
@@ -53,8 +69,7 @@ function Featured({ item, isNew }: { item: NewsItem; isNew: boolean }) {
  * A news card. The page arrives with the page cross-fade; cards that a filter change brings in
  * fade in place and the others glide to their new spots (no rise on every visit).
  */
-function Card({ item, isNew, ref }: { item: NewsItem; isNew: boolean; ref?: Ref<HTMLLIElement> }) {
-  const { t } = useTranslation();
+function Card({ face, ref }: { face: CardFace; ref?: Ref<HTMLLIElement> }) {
   const { layout } = useMotionPrefs();
   return (
     <motion.li
@@ -67,38 +82,80 @@ function Card({ item, isNew, ref }: { item: NewsItem; isNew: boolean; ref?: Ref<
     >
       <Link
         to="/news"
-        search={{ news: item.id }}
+        search={{ news: face.id }}
         className="group glass block h-full overflow-hidden rounded-[var(--radius-panel)] outline-none transition-transform duration-200 hover:-translate-y-0.5 focus-visible:ring-2 focus-visible:ring-gold-300"
       >
-        <div className="aspect-video overflow-hidden bg-obsidian-800">
-          {item.coverUrl ? (
-            <img
-              src={item.coverUrl}
-              alt=""
-              loading="lazy"
-              className="size-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.05]"
-            />
-          ) : null}
-        </div>
+        <CoverImage
+          src={face.coverUrl}
+          blurhash={face.coverBlurhash}
+          lazy
+          className="aspect-video overflow-hidden bg-obsidian-800"
+          imgClassName="group-hover:scale-[1.05]"
+        />
         <div className="p-3.5">
           <div className="flex items-center gap-2">
-            <Chip>{t(`categories.${item.category}`)}</Chip>
+            {face.label}
             <span className="flex min-w-0 items-center gap-1.5">
-              <NewDot on={isNew} />
+              <NewDot on={face.isNew} />
               <span className="truncate text-[12px] text-ash-300">
-                {formatRelative(item.publishedAt)}
+                {formatRelative(face.publishedAt)}
               </span>
             </span>
           </div>
-          <h3 className="mt-1.5 line-clamp-2 font-display text-[15px] leading-snug font-semibold text-bone-50">
-            {item.title}
+          <h3
+            className={cn(
+              "mt-1.5 line-clamp-2 font-display text-[15px] leading-snug font-semibold",
+              face.quiet ? "text-bone-100" : "text-bone-50",
+            )}
+          >
+            {face.title}
           </h3>
-          <p className="mt-1 line-clamp-2 text-[12.5px] text-ash-300">{item.summary}</p>
-          <NewLabel on={isNew} />
+          <p className="mt-1 line-clamp-2 text-[12.5px] text-ash-300">{face.summary}</p>
+          <NewLabel on={face.isNew} />
         </div>
       </Link>
     </motion.li>
   );
+}
+
+/** A Projects news item as a card face. */
+function useNewsFace(chipTone: "neutral" | "onArt") {
+  const { t } = useTranslation();
+  return (item: NewsItem, isNew: boolean): CardFace => ({
+    id: item.id,
+    coverUrl: item.coverUrl,
+    label: <Chip tone={chipTone}>{t(`categories.${item.category}`)}</Chip>,
+    publishedAt: item.publishedAt,
+    title: item.title,
+    summary: item.summary,
+    isNew,
+  });
+}
+
+/** A Minecraft update as a card face, in the interface's language; never new. */
+function minecraftFace(
+  item: MinecraftNewsItem,
+  text: { title: string; summary: string },
+): CardFace {
+  return {
+    id: item.id,
+    coverUrl: item.coverUrl,
+    coverBlurhash: item.coverBlurhash,
+    label: <MinecraftChip />,
+    publishedAt: item.publishedAt,
+    title: text.title,
+    summary: text.summary,
+    isNew: false,
+    quiet: true,
+  };
+}
+
+function MinecraftFeatured({ item }: { item: MinecraftNewsItem }) {
+  return <Featured face={minecraftFace(item, useMinecraftText(item))} />;
+}
+
+function MinecraftCard({ item, ref }: { item: MinecraftNewsItem; ref?: Ref<HTMLLIElement> }) {
+  return <Card ref={ref} face={minecraftFace(item, useMinecraftText(item))} />;
 }
 
 /**
@@ -106,7 +163,8 @@ function Card({ item, isNew, ref }: { item: NewsItem; isNew: boolean; ref?: Ref<
  * (an opened article loses its dot at once). Everything the page shows counts as seen from the
  * moment it shows it, so the dots are gone on the next visit, and Home, rendered as the player
  * leaves, already draws its list without them (counting them at unmount came a render too late:
- * the dots faded out on arrival and left gaps).
+ * the dots faded out on arrival and left gaps). Minecraft's updates never count: they are never
+ * new.
  */
 function useVisitSeen(news: NewsItem[] | undefined) {
   const [watermark] = useState(() => useNewsSeen.getState().watermark);
@@ -126,30 +184,46 @@ export function NewsPage() {
     queryFn: () => api.homeContent(),
   });
   const seen = useVisitSeen(data?.news);
+  const featuredFace = useNewsFace("onArt");
+  const cardFace = useNewsFace("neutral");
+  const minecraft = useMemo(() => liveMinecraft(data?.minecraft, Date.now()), [data]);
+  // The Minecraft filter exists only while there is something under it.
+  const active: Filter = filter === "minecraft" && !minecraft.length ? "all" : filter;
 
   const items = useMemo(
-    () => (data?.news ?? []).filter((n) => filter === "all" || n.category === filter),
-    [data, filter],
+    () =>
+      active === "minecraft"
+        ? []
+        : (data?.news ?? []).filter((n) => active === "all" || n.category === active),
+    [data, active],
   );
   const [featured, ...rest] = items;
+  // Projects news leads the page while there is any; Minecraft's updates come after it, and
+  // only "Tümü" and the Minecraft filter show them.
+  const shownMinecraft = active === "all" || active === "minecraft" ? minecraft : [];
+  const [leadMinecraft, ...moreMinecraft] = featured ? [] : shownMinecraft;
+  const sectionMinecraft = featured ? shownMinecraft : [];
   const now = Date.now();
+
+  const options: { value: Filter; label: string }[] = [
+    { value: "all", label: t("home.allNews") },
+    { value: "event", label: t("categories.event") },
+    { value: "update", label: t("categories.update") },
+    { value: "patchNotes", label: t("categories.patchNotes") },
+    { value: "announcement", label: t("categories.announcement") },
+    { value: "community", label: t("categories.community") },
+    ...(minecraft.length ? [{ value: "minecraft" as const, label: t("minecraft.label") }] : []),
+  ];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col px-page pt-3">
       <header className="flex flex-wrap items-end justify-between gap-3 pb-4">
         <h1 className="page-title">{t("nav.news")}</h1>
         <Segmented<Filter>
-          value={filter}
+          value={active}
           onValueChange={setFilter}
           label={t("nav.news")}
-          options={[
-            { value: "all", label: t("home.allNews") },
-            { value: "event", label: t("categories.event") },
-            { value: "update", label: t("categories.update") },
-            { value: "patchNotes", label: t("categories.patchNotes") },
-            { value: "announcement", label: t("categories.announcement") },
-            { value: "community", label: t("categories.community") },
-          ]}
+          options={options}
         />
       </header>
       <div className={cn("-mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-6")}>
@@ -162,22 +236,57 @@ export function NewsPage() {
               ))}
             </div>
           </>
-        ) : featured ? (
+        ) : featured || leadMinecraft ? (
           <>
-            <Featured key={featured.id} item={featured} isNew={isNewsNew(featured, seen, now)} />
+            {featured ? (
+              <Featured
+                key={featured.id}
+                face={featuredFace(featured, isNewsNew(featured, seen, now))}
+              />
+            ) : leadMinecraft ? (
+              <MinecraftFeatured key={leadMinecraft.id} item={leadMinecraft} />
+            ) : null}
             <ul className="relative mt-4 grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3">
               <AnimatePresence initial={false} mode="popLayout">
                 {rest.map((item) => (
-                  <Card key={item.id} item={item} isNew={isNewsNew(item, seen, now)} />
+                  <Card key={item.id} face={cardFace(item, isNewsNew(item, seen, now))} />
+                ))}
+                {moreMinecraft.map((item) => (
+                  <MinecraftCard key={item.id} item={item} />
                 ))}
               </AnimatePresence>
             </ul>
+            <AnimatePresence initial={false}>
+              {sectionMinecraft.length ? (
+                <motion.section
+                  key="minecraft"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1, transition: { duration: 0.2 } }}
+                  exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                  aria-labelledby="news-minecraft"
+                  className="mt-7"
+                >
+                  <h2
+                    id="news-minecraft"
+                    className="mb-2.5 flex items-center gap-2 px-1 font-display text-[15px] font-semibold text-ash-300"
+                  >
+                    <Cube size={15} aria-hidden />
+                    {t("minecraft.label")}
+                  </h2>
+                  <ul className="relative grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3">
+                    {sectionMinecraft.map((item) => (
+                      <MinecraftCard key={item.id} item={item} />
+                    ))}
+                  </ul>
+                </motion.section>
+              ) : null}
+            </AnimatePresence>
           </>
         ) : (
           <EmptyState
-            title={filter === "all" ? t("home.newsEmpty") : t("home.newsEmptyCategory")}
+            title={active === "all" ? t("home.newsEmpty") : t("home.newsEmptyCategory")}
             action={
-              filter === "all" ? undefined : (
+              active === "all" ? undefined : (
                 <Button variant="secondary" onClick={() => setFilter("all")}>
                   {t("home.showAllNews")}
                 </Button>

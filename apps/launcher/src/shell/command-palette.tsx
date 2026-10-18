@@ -51,6 +51,7 @@ import type { InstanceTab } from "@/features/library/instance-page";
 import { useSocialUi } from "@/features/social/store";
 import { api, type ServerStatus } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
+import { liveMinecraft, minecraftText } from "@/lib/minecraft";
 import { detectOs } from "@/lib/platform";
 import {
   ESCAPE_KEYS,
@@ -138,7 +139,7 @@ function entry(
  * empty field goes back). The key itself is handled with the others in app-shell.tsx.
  */
 export function CommandPalette({ disabled }: { disabled?: boolean }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const open = useUi((s) => s.paletteOpen);
   const setOpen = useUi((s) => s.setPaletteOpen);
@@ -605,19 +606,35 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
       {
         id: "news",
         heading: t("palette.news"),
-        entries: (home?.news ?? []).slice(0, 8).map((item) =>
-          entry(
-            `news:${item.id}`,
-            item.title,
-            <BookOpenText size={18} />,
-            () => run(() => void navigate({ to: "/", search: { news: item.id } })),
-            {
-              // A summary's words rank below the items they name ("FPS" in a patch note).
-              words: { keywords: [t(`categories.${item.category}`)], related: [item.summary] },
-              hint: t(`categories.${item.category}`),
-            },
+        entries: [
+          ...(home?.news ?? []).map((item) =>
+            entry(
+              `news:${item.id}`,
+              item.title,
+              <BookOpenText size={18} />,
+              () => run(() => void navigate({ to: "/", search: { news: item.id } })),
+              {
+                // A summary's words rank below the items they name ("FPS" in a patch note).
+                words: { keywords: [t(`categories.${item.category}`)], related: [item.summary] },
+                hint: t(`categories.${item.category}`),
+              },
+            ),
           ),
-        ),
+          // Minecraft's updates only take places Projects news leaves, here too.
+          ...liveMinecraft(home?.minecraft, Date.now()).map((item) => {
+            const text = minecraftText(item, i18n.language === "en" ? "en" : "tr");
+            return entry(
+              `news:${item.id}`,
+              text.title,
+              <BookOpenText size={18} />,
+              () => run(() => void navigate({ to: "/", search: { news: item.id } })),
+              {
+                words: { keywords: [t("minecraft.label"), item.version], related: [text.summary] },
+                hint: t("minecraft.label"),
+              },
+            );
+          }),
+        ].slice(0, 8),
       },
     ];
   };

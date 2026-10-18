@@ -2,6 +2,7 @@ import { enAfkAlerts } from "./en-afk-alerts";
 import { enDisk } from "./en-disk";
 import { enGraphics } from "./en-graphics";
 import { enLibraryDrop } from "./en-library-drop";
+import { enMinecraft } from "./en-minecraft";
 import { enOverview } from "./en-overview";
 import { enPrepare } from "./en-prepare";
 import { enReminders } from "./en-reminders";
@@ -229,6 +230,7 @@ export const en: DeepPartial<Strings> = {
       noneOnline: "No one's online right now",
     },
   },
+  minecraft: enMinecraft,
   nav: {
     home: "Home",
     library: "Library",

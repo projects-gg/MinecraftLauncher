@@ -26,6 +26,31 @@ export interface NewsItem {
   sourceUrl?: string;
 }
 
+/**
+ * One of Minecraft's own updates from the news feed: it only fills places Projects news leaves
+ * empty and is never "new". Texts in the feed's language (Turkish); `en` for an English interface
+ * (`lib/minecraft.ts` → `minecraftText`).
+ */
+export interface MinecraftNewsItem {
+  id: string;
+  /** Mojang's version id (`26.3`). */
+  version: string;
+  kind: "release" | "snapshot";
+  title: string;
+  summary: string;
+  /** Markdown (links only https:// and projects://, no remote images). */
+  body: string;
+  /** The verified cover, or the season art for an entry without one. */
+  coverUrl?: string;
+  /** Shown until the cover is there (it may still be downloading). */
+  coverBlurhash?: string;
+  publishedAt: string;
+  expiresAt: string;
+  /** The official article on minecraft.net (https://). */
+  url: string;
+  en?: { title: string; summary?: string; body?: string };
+}
+
 export interface HeroConfig {
   imageUrl: string;
   videoUrl?: string;
@@ -122,6 +147,8 @@ export interface HomeContent {
   banners: BannerItem[];
   events: EventItem[];
   news: NewsItem[];
+  /** Minecraft's updates, newest first: only where `news` leaves room (never new, never pinned). */
+  minecraft: MinecraftNewsItem[];
   patchNotes?: PatchNotes;
   /** Missing before anything is published (the built-in addresses stand in). */
   links?: ContentLinks;

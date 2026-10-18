@@ -3,6 +3,7 @@ import { trAfkAlerts } from "./tr-afk-alerts";
 import { trDisk } from "./tr-disk";
 import { trGraphics } from "./tr-graphics";
 import { trLibraryDrop } from "./tr-library-drop";
+import { trMinecraft } from "./tr-minecraft";
 import { trOverview } from "./tr-overview";
 import { trPrepare } from "./tr-prepare";
 import { trReminders } from "./tr-reminders";
@@ -23,6 +24,7 @@ export const tr = {
   shortcuts: trShortcuts,
   prepare: trPrepare,
   social: trSocial,
+  minecraft: trMinecraft,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",

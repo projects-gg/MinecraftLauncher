@@ -33,6 +33,7 @@ import type {
   LoaderKind,
   LoaderVersion,
   McVersion,
+  MinecraftNewsItem,
   ModEntry,
   NewInstance,
   NewsItem,
@@ -166,6 +167,7 @@ const content: HomeContent = {
       "Complementary shader 5.4 isteğe bağlı",
     ],
   },
+  minecraft: [],
   offline: false,
 };
 
@@ -206,9 +208,79 @@ const feedNews: NewsItem[] = [
 ];
 
 /**
+ * Browser previews only: Minecraft updates as the bot writes them (MCN1 dry runs, in its words).
+ * Their covers live outside the app (`/mock-mc/…`, copied into a preview build for screenshots);
+ * where they are missing the BlurHash stays.
+ */
+function mockMinecraft(): MinecraftNewsItem[] {
+  const cover = (name: string) => `${import.meta.env.BASE_URL}mock-mc/${name}.webp`;
+  return [
+    {
+      id: "minecraft-26.3",
+      version: "26.3",
+      kind: "release",
+      title: "Minecraft 26.3 çıktı: Wilderness Bound",
+      summary:
+        "Yeni Dappled Forest biyomunu keşfet, Poplar ağaçlarıyla kamp kur, Straw Bed ile geceyi atlat ve Cushion üzerinde dinlen.",
+      body: "Yabana açılma zamanı geldi. Wilderness Bound güncellemesiyle doğada keşif yapabileceğin ve kamp kurabileceğin yepyeni içerikler oyuna ekleniyor.\n\n## Öne çıkanlar\n\n- Soğuk biyomların yakınında ortaya çıkan ve rengarenk yapraklarıyla dikkat çeken **Dappled Forest** biyomu\n- Kendi odun setine sahip üç farklı renkteki **Poplar Trees** ve gövdelerinde yetişen zıplatıcı **Shelf Mushrooms**\n- Sandıklarında ganimetler ve yeni keşif haritaları barındıran **Abandoned Camp** yapıları\n- Doğuş noktanı değiştirmeden tek seferlik geceyi geçirmeni sağlayan **Straw Bed**\n- Üzerine oturabileceğin 16 farklı renkteki **Cushion** eşyası",
+      coverUrl: cover("cover-09-autumn-valley"),
+      coverBlurhash: "LZFzA:9^I==v}rI=NbxDxGW;R+WV",
+      publishedAt: hoursAgo(50),
+      expiresAt: hoursAgo(-24 * 40),
+      url: "https://www.minecraft.net/article/minecraft-java-edition-26-3",
+      en: {
+        title: "Minecraft 26.3 released: Wilderness Bound",
+        summary:
+          "Explore the new Dappled Forest biome, set up camp with Poplar wood, sleep on Straw Beds, and relax on colorful Cushions.",
+        body: "It is time to venture into the wild. The Wilderness Bound update brings exciting new features for setting up camps and exploring uncharted forests.\n\n## Highlights\n\n- The new **Dappled Forest** biome found near cold regions, filled with colorful foliage\n- Three vibrant variations of **Poplar Trees** with a new wood set and bouncy **Shelf Mushrooms**\n- **Abandoned Camp** structures scattered across various biomes, holding valuable loot and maps\n- Single-use **Straw Bed** items that let you pass the night without setting your spawn point\n- Craftable **Cushion** items in 16 colors that you can place down and sit on",
+      },
+    },
+    {
+      id: "minecraft-26.1.2",
+      version: "26.1.2",
+      kind: "release",
+      title: "Minecraft 26.1.2 çıktı: hata düzeltmeleri",
+      summary:
+        "Bu küçük ara güncelleme, son sürümde ortaya çıkan birkaç kritik hatayı çözmeye odaklanıyor.",
+      body: "Minecraft 26.1.2 ile son sürümde karşılaşılan bazı kritik hatalar giderildi. Oyunu güncelleyerek daha sorunsuz ve kararlı bir deneyim yaşayabilirsin.",
+      // Published without a cover: the season's art stands in.
+      coverUrl: heroArt,
+      publishedAt: hoursAgo(24 * 9),
+      expiresAt: hoursAgo(-24 * 30),
+      url: "https://www.minecraft.net/article/minecraft-java-edition-26-1-2",
+      en: {
+        title: "Minecraft 26.1.2 released: bug fixes",
+        summary: "This hotfix addresses a couple of critical issues found in the recent release.",
+        body: "Minecraft 26.1.2 is a small hotfix that resolves several critical issues discovered in the latest update, providing a more stable gameplay experience.",
+      },
+    },
+    {
+      id: "minecraft-26.1",
+      version: "26.1",
+      kind: "release",
+      title: "Minecraft 26.1 çıktı: Tiny Takeover",
+      summary:
+        "Yavru yaratıklar yenilenen görünümleri ve sesleriyle karşında. Golden Dandelion ile büyümelerini durdurabilir, Name Tag eşyasını artık kendin üretebilirsin.",
+      body: "Tiny Takeover güncellemesiyle yavru yaratıklar yepyeni görünümlere kavuşuyor. Yeni eşyalar ve seslerle dünyan artık çok daha sevimli bir hal alıyor.\n\n## Öne çıkanlar\n\n- Çoğu yavru yaratığın modeli ve dokusu baştan aşağı yenilendi.\n- **Golden Dandelion** eklendi; Dandelion ve Gold Nugget ile üretilen bu çiçekle yavru yaratıkların büyümesini durdurabilir veya yeniden başlatabilirsin.\n- **Name Tag** artık 1 Paper ve 1 metal parçacığı ile üretilebiliyor.\n- Yavru kurt, kedi, domuz, at ve tavuklar için yeni sevimli sesler geldi.",
+      coverUrl: cover("cover-11-scaffold"),
+      coverBlurhash: "LRG?R]}p^4xE^5$$soWV9}IsEhR,",
+      publishedAt: hoursAgo(24 * 24),
+      expiresAt: hoursAgo(-24 * 20),
+      url: "https://www.minecraft.net/article/minecraft-java-edition-26-1",
+      en: {
+        title: "Minecraft 26.1 released: Tiny Takeover",
+        summary:
+          "Baby mobs receive revamped looks and sounds, the Golden Dandelion halts baby aging, and Name Tags are now craftable.",
+      },
+    },
+  ];
+}
+
+/**
  * A preview switch: `?event=next|soon|imminent|open|none|overlay` (or localStorage
  * `pl.mock.event`), `?notes=pack`, `?banners=none|two`,
- * `?status=outage|major|degraded|notice|expiring`, `?maintenance=1`.
+ * `?status=outage|major|degraded|notice|expiring`, `?maintenance=1`, `?projects=<count>` (keeps
+ * the first Projects news), `?mc=<count>` (Minecraft updates, 3 by default).
  */
 function mockFlag(key: string): string {
   try {
@@ -357,12 +429,16 @@ function mockStatus(): HomeStatus | undefined {
 
 /** The home content as the backend merges it: the newest patch notes news leads the box. */
 function mockHome(): HomeContent {
-  const news = [...content.news, ...feedNews].sort(
-    (a, b) =>
-      Number(b.pinned) - Number(a.pinned) ||
-      b.publishedAt.localeCompare(a.publishedAt) ||
-      a.id.localeCompare(b.id),
-  );
+  const projects = Number.parseInt(mockFlag("projects"), 10);
+  const minecraftCount = Number.parseInt(mockFlag("mc"), 10);
+  const news = [...content.news, ...feedNews]
+    .sort(
+      (a, b) =>
+        Number(b.pinned) - Number(a.pinned) ||
+        b.publishedAt.localeCompare(a.publishedAt) ||
+        a.id.localeCompare(b.id),
+    )
+    .slice(0, Number.isNaN(projects) ? undefined : projects);
   const notes = news
     .filter((item) => item.category === "patchNotes")
     .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt))[0];
@@ -400,6 +476,7 @@ function mockHome(): HomeContent {
             ]
           : content.banners,
     news,
+    minecraft: mockMinecraft().slice(0, Number.isNaN(minecraftCount) ? undefined : minecraftCount),
     events: mockEvents(),
     patchNotes:
       notes && mockFlag("notes") !== "pack"

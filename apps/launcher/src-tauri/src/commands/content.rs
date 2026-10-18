@@ -1,7 +1,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::time::Duration;
 
-use pl_content::{ContentSnapshot, HomeNewsItem, MediaRef, NewsOrigin};
+use pl_content::{ContentSnapshot, HomeNewsItem, MediaRef, MinecraftNews, NewsOrigin};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -165,6 +165,41 @@ pub struct StatusView {
     pub expires_at: String,
 }
 
+/// A Minecraft update from the news feed (`pl_content::merge_minecraft`): the UI shows it only
+/// where Projects news leaves room, never as "new".
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct MinecraftNewsView {
+    pub id: String,
+    /// Mojang's version id (`26.3`).
+    pub version: String,
+    /// `release` or `snapshot`.
+    pub kind: String,
+    /// The bot's Turkish texts (`en` has the English ones).
+    pub title: String,
+    pub summary: String,
+    /// Markdown.
+    pub body: String,
+    /// Local path of the verified cover; `None` without a cover or while it is not downloaded.
+    pub cover_path: Option<String>,
+    /// The cover's BlurHash, shown until the picture is there.
+    pub cover_blurhash: Option<String>,
+    pub published_at: String,
+    pub expires_at: String,
+    /// The official article on minecraft.net (`https://`).
+    pub url: String,
+    /// English texts for an English interface; a missing summary or body means the base text.
+    pub en: Option<MinecraftTextView>,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct MinecraftTextView {
+    pub title: String,
+    pub summary: Option<String>,
+    pub body: Option<String>,
+}
+
 /// Latest release of the official pack, for the patch notes card.
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -186,6 +221,8 @@ pub struct HomeView {
     pub events: Vec<EventView>,
     /// Studio's news and the news feed's items, merged (Studio wins on the same id).
     pub news: Vec<NewsView>,
+    /// The news feed's Minecraft updates, newest first: they only fill places `news` leaves empty.
+    pub minecraft: Vec<MinecraftNewsView>,
     pub maintenance: Option<MaintenanceView>,
     /// The news feed's status notice; `None` while `maintenance` is shown.
     pub status: Option<StatusView>,
@@ -311,6 +348,32 @@ async fn news_view(state: &AppState, entry: &HomeNewsItem) -> NewsView {
     }
 }
 
+async fn minecraft_view(state: &AppState, entry: &MinecraftNews) -> MinecraftNewsView {
+    let cover = entry.cover.as_ref();
+    MinecraftNewsView {
+        id: entry.id.clone(),
+        version: entry.version.clone(),
+        kind: enum_str(&entry.kind),
+        title: entry.title.clone(),
+        summary: entry.summary.clone(),
+        body: entry.body.clone(),
+        cover_path: crate::commands::feed::cover_path(state, cover).await,
+        cover_blurhash: cover.and_then(|c| c.blurhash.clone()),
+        published_at: entry.published_at.to_string(),
+        expires_at: entry.expires_at.to_string(),
+        url: entry.article_url().to_owned(),
+        en: entry
+            .translations
+            .as_ref()
+            .and_then(|t| t.en.as_ref())
+            .map(|en| MinecraftTextView {
+                title: en.title.clone(),
+                summary: en.summary.clone(),
+                body: en.body.clone(),
+            }),
+    }
+}
+
 async fn home_view(state: &AppState, snapshot: &ContentSnapshot) -> HomeView {
     let now = jiff::Timestamp::now();
     let hero = &snapshot.config.hero;
@@ -327,6 +390,10 @@ async fn home_view(state: &AppState, snapshot: &ContentSnapshot) -> HomeView {
     let mut news = Vec::new();
     for entry in &merged {
         news.push(news_view(state, entry).await);
+    }
+    let mut minecraft = Vec::new();
+    for entry in pl_content::merge_minecraft(&snapshot.news, feed, max_age_days, now) {
+        minecraft.push(minecraft_view(state, entry).await);
     }
     let events = pl_content::merge_events(&snapshot.config.events, feed, &merged, now);
     let maintenance = Some(&snapshot.config.maintenance)
@@ -393,6 +460,7 @@ async fn home_view(state: &AppState, snapshot: &ContentSnapshot) -> HomeView {
             .collect(),
         patch_notes_id: pl_content::newest_patch_notes(&merged).map(|n| n.item.id.clone()),
         news,
+        minecraft,
         maintenance,
         status,
         pack_notes: pack_notes(state, snapshot).await,

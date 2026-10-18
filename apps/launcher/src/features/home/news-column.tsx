@@ -6,12 +6,15 @@ import { AnimatePresence, motion } from "motion/react";
 import { Popover } from "radix-ui";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { CoverImage } from "@/features/news/cover-image";
+import { MinecraftChip, useMinecraftText } from "@/features/news/minecraft";
 import { NewDot, NewLabel } from "@/features/news/new-dot";
-import type { EventItem, HomeContent, NewsItem, PatchNotes } from "@/lib/api";
+import type { EventItem, HomeContent, MinecraftNewsItem, NewsItem, PatchNotes } from "@/lib/api";
 import { cardEvents, nextBoundary, phaseOf } from "@/lib/event-card";
 import { dateTimeFormat, formatDuration, formatRelative } from "@/lib/format";
 import i18n from "@/lib/i18n";
 import { isWebLink, openLink } from "@/lib/links";
+import { columnFill, liveMinecraft, NEWS_COLUMN_ROWS } from "@/lib/minecraft";
 import { isNewsNew, useNewsSeen } from "@/stores/news-seen";
 import { ReminderBell } from "./event-reminders";
 
@@ -74,6 +77,57 @@ function NewsRow({
             {item.title}
           </span>
           <NewLabel on={isNew} />
+        </span>
+      </Link>
+    </motion.li>
+  );
+}
+
+/**
+ * A Minecraft update in a row Projects news left empty: the same rhythm as a news row, but quieter
+ * (the source mark instead of a category, a lighter title) and never "new".
+ */
+function MinecraftRow({
+  item,
+  index,
+  arrive,
+  first,
+}: {
+  item: MinecraftNewsItem;
+  index: number;
+  arrive: boolean;
+  /** The first Minecraft row under Projects rows: a little air between the two sources. */
+  first: boolean;
+}) {
+  const text = useMinecraftText(item);
+  return (
+    <motion.li
+      className={cn(first && "pt-1.5", index >= 3 && "[@media(max-height:700px)]:hidden")}
+      initial={arrive ? { opacity: 0, transform: "translateX(10px)" } : false}
+      animate={{ opacity: 1, transform: "translateX(0px)" }}
+      transition={{ delay: 0.08 + index * 0.04, duration: 0.4, ease: easeOutExpo }}
+    >
+      <Link
+        to="/"
+        search={{ news: item.id }}
+        className="group flex gap-2.5 rounded-[var(--radius-panel)] p-1.5 transition-colors duration-150 hover:bg-white/6 focus-visible:outline-2"
+      >
+        <CoverImage
+          src={item.coverUrl}
+          blurhash={item.coverBlurhash}
+          className="chamfer relative h-[50px] w-[76px] shrink-0 overflow-hidden bg-obsidian-800 [--cut:5px]"
+          imgClassName="group-hover:scale-[1.06]"
+        />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2">
+            <MinecraftChip />
+            <span className="truncate text-[11.5px] text-ash-300">
+              {formatRelative(item.publishedAt)}
+            </span>
+          </span>
+          <span className="mt-1 line-clamp-2 text-[13px] leading-snug font-medium text-bone-100/90 transition-colors duration-150 group-hover:text-bone-50">
+            {text.title}
+          </span>
         </span>
       </Link>
     </motion.li>
@@ -470,7 +524,7 @@ export function NewsColumn({ content, loading }: { content?: HomeContent; loadin
   const boxed = notes?.kind === "news" ? notes.newsId : undefined;
   const news = (content?.news ?? [])
     .filter((n) => n.id !== content?.hero.newsId && n.id !== boxed)
-    .slice(0, 4);
+    .slice(0, NEWS_COLUMN_ROWS);
   const watermark = useNewsSeen((s) => s.watermark);
   const read = useNewsSeen((s) => s.read);
   const { event, live, others } = useEventCard(content?.events);
@@ -480,6 +534,8 @@ export function NewsColumn({ content, loading }: { content?: HomeContent; loadin
     columnArrived = true;
   }, []);
   const now = Date.now();
+  // Minecraft's updates only take the rows Projects news leaves empty.
+  const minecraft = columnFill(news.length, liveMinecraft(content?.minecraft, now));
 
   return (
     <motion.aside
@@ -515,7 +571,7 @@ export function NewsColumn({ content, loading }: { content?: HomeContent; loadin
               </div>
             ))}
           </div>
-        ) : !content?.news.length && !notes ? (
+        ) : !content?.news.length && !notes && !minecraft.length ? (
           // Nothing published yet (or nothing cached offline): one calm line, not an empty panel.
           <p className="px-1.5 pt-1 pb-2 text-[13px] text-ash-300">{t("home.noNews")}</p>
         ) : (
@@ -527,6 +583,15 @@ export function NewsColumn({ content, loading }: { content?: HomeContent; loadin
                 index={i}
                 arrive={arrive}
                 isNew={isNewsNew(item, { watermark, read }, now)}
+              />
+            ))}
+            {minecraft.map((item, i) => (
+              <MinecraftRow
+                key={item.id}
+                item={item}
+                index={news.length + i}
+                arrive={arrive}
+                first={i === 0 && news.length > 0}
               />
             ))}
           </ul>
