@@ -176,8 +176,14 @@ function AfkCard({
                 </h3>
                 {account.autoStart ? <Chip>{t("afk.autoStart")}</Chip> : null}
               </div>
-              <p className="flex items-center gap-2 truncate text-[12.5px] text-ash-300">
-                <span className="truncate" title={account.server} data-selectable>
+              {/* The address keeps its line: the version chip moves under it when both do not
+                  fit (three cards in a row at 1200 px, "Automatic version" in English). */}
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px] text-ash-300">
+                <span
+                  className="min-w-0 max-w-full truncate"
+                  title={account.server}
+                  data-selectable
+                >
                   {account.server}
                 </span>
                 {!account.mcVersionRecommended ? (
