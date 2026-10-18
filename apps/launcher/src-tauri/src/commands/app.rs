@@ -17,6 +17,24 @@ pub struct AppInfo {
     pub system_memory_mb: u64,
 }
 
+/// The language the UI shows, resolved there (`pl_lang`): the player's pick in Settings → Genel →
+/// Dil, else Turkish in Turkey or on a Turkish system, English otherwise. The backend's own texts
+/// follow it from now on: command errors, the tray menu, the Discord presence, the browser
+/// sign-in page and the game's first language. Async, so the tray's main-thread updates are never
+/// waited for on the main thread.
+#[tauri::command]
+#[specta::specta]
+pub async fn app_set_language(app: tauri::AppHandle, lang: pl_lang::Lang) {
+    if lang == pl_lang::Lang::current() {
+        return;
+    }
+    lang.set_current();
+    tracing::info!(lang = lang.code(), "interface language changed");
+    #[cfg(desktop)]
+    crate::shell::retitle_tray(&app);
+    crate::commands::discord::refresh_language(&app);
+}
+
 /// Basic facts about the running launcher, shown in Settings → About.
 #[tauri::command]
 #[specta::specta]

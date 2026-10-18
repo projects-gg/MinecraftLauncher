@@ -16,6 +16,7 @@ use tauri::{AppHandle, State};
 use crate::commands::modrinth::{JobProgressView, content_error, modrinth_client, start_job};
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
+use pl_lang::pick;
 
 /// One data pack of a world.
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -61,7 +62,13 @@ fn datapacks_dir(state: &AppState, instance_id: &str, world: &str) -> CmdResult<
         .instances
         .game_dir(instance_id)
         .map_err(CmdError::from)?;
-    let missing = |details: String| CmdError::new("DUNYA-YOK", "Bu dünya bulunamadı.", details);
+    let missing = |details: String| {
+        CmdError::new(
+            "DUNYA-YOK",
+            pick("Bu dünya bulunamadı.", "This world wasn't found."),
+            details,
+        )
+    };
     let dir = gamefiles::datapacks_dir(&game_dir, world).map_err(|e| missing(e.to_string()))?;
     let world_dir = dir.parent().map(PathBuf::from).unwrap_or_default();
     if !world_dir.join("level.dat").is_file() {
@@ -82,7 +89,7 @@ pub async fn datapacks_list(
     let packs = gamefiles::list_datapacks(&dir).await.map_err(|e| {
         CmdError::new(
             "VERI-PAKETI-LISTE",
-            "Veri paketleri okunamadı.",
+            pick("Veri paketleri okunamadı.", "Couldn't read the data packs."),
             e.to_string(),
         )
     })?;
@@ -121,7 +128,10 @@ pub async fn datapack_install(
         .ok_or_else(|| {
             CmdError::new(
                 "VERI-PAKETI-SURUM",
-                "Bu veri paketinin bu Minecraft sürümüne uygun bir sürümü yok.",
+                pick(
+                    "Bu veri paketinin bu Minecraft sürümüne uygun bir sürümü yok.",
+                    "This data pack has no version for this Minecraft version.",
+                ),
                 format!("{project_id} for {}", instance.mc_version),
             )
         })?;
@@ -131,7 +141,10 @@ pub async fn datapack_install(
         .ok_or_else(|| {
             CmdError::new(
                 "VERI-PAKETI-DOSYA",
-                "Bu veri paketinin indirilebilir bir dosyası yok.",
+                pick(
+                    "Bu veri paketinin indirilebilir bir dosyası yok.",
+                    "This data pack has no file to download.",
+                ),
                 version.id.clone(),
             )
         })?;
@@ -139,7 +152,10 @@ pub async fn datapack_install(
         .map_err(|e| {
             CmdError::new(
                 "VERI-PAKETI-DOSYA",
-                "Bu veri paketinin indirilebilir bir dosyası yok.",
+                pick(
+                    "Bu veri paketinin indirilebilir bir dosyası yok.",
+                    "This data pack has no file to download.",
+                ),
                 e.to_string(),
             )
         })?
@@ -197,15 +213,23 @@ pub async fn datapack_remove(
     file_name: String,
 ) -> CmdResult<()> {
     let dir = datapacks_dir(&state, &instance_id, &world)?;
-    let name = pl_mc::paths::safe_name(&file_name)
-        .map_err(|e| CmdError::new("AD", "Bu dosya bulunamadı.", e.to_string()))?;
+    let name = pl_mc::paths::safe_name(&file_name).map_err(|e| {
+        CmdError::new(
+            "AD",
+            pick("Bu dosya bulunamadı.", "This file wasn't found."),
+            e.to_string(),
+        )
+    })?;
     gamefiles::remove_path(&dir.join(name), true)
         .await
         .map(|_| ())
         .map_err(|e| {
             CmdError::new(
                 "VERI-PAKETI-SIL",
-                "Veri paketi kaldırılamadı. Oyun açıksa kapatıp tekrar dene.",
+                pick(
+                    "Veri paketi kaldırılamadı. Oyun açıksa kapatıp tekrar dene.",
+                    "Couldn't remove the data pack. If the game is open, close it and try again.",
+                ),
                 e.to_string(),
             )
         })

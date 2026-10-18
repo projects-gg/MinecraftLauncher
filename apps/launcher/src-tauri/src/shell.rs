@@ -200,15 +200,71 @@ const TRAY_TITLE: &str = "Projects Launcher";
 /// line saying how many (the player sees at a glance whether the night's AFK still runs). A debug
 /// build names its instance (crate::identity).
 #[cfg(desktop)]
-fn tray_tooltip(activity: pl_afk::AfkActivity) -> String {
+fn tray_tooltip(activity: pl_afk::AfkActivity, lang: pl_lang::Lang) -> String {
     let title = crate::identity::current().label(TRAY_TITLE);
+    let accounts = |count: usize| match (lang, count) {
+        (pl_lang::Lang::Tr, _) => format!("{count} AFK hesabı"),
+        (pl_lang::Lang::En, 1) => "1 AFK account".to_owned(),
+        (pl_lang::Lang::En, _) => format!("{count} AFK accounts"),
+    };
     let line = match (activity.in_game, activity.connecting) {
         (0, 0) => return title,
-        (0, connecting) => format!("{connecting} AFK hesabı bağlanıyor"),
-        (in_game, 0) => format!("{in_game} AFK hesabı oyunda"),
-        (in_game, connecting) => format!("{in_game} AFK hesabı oyunda, {connecting} bağlanıyor"),
+        (0, connecting) => lang.pick(
+            format!("{} bağlanıyor", accounts(connecting)),
+            format!("{} connecting", accounts(connecting)),
+        ),
+        (in_game, 0) => lang.pick(
+            format!("{} oyunda", accounts(in_game)),
+            format!("{} in game", accounts(in_game)),
+        ),
+        (in_game, connecting) => lang.pick(
+            format!("{} oyunda, {connecting} bağlanıyor", accounts(in_game)),
+            format!("{} in game, {connecting} connecting", accounts(in_game)),
+        ),
     };
     format!("{title}\n{line}")
+}
+
+/// The tray menu in the interface's language (rebuilt when it changes, [`retitle_tray`]).
+#[cfg(desktop)]
+fn tray_menu<R: tauri::Runtime, M: Manager<R>>(
+    manager: &M,
+    lang: pl_lang::Lang,
+) -> tauri::Result<tauri::menu::Menu<R>> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+
+    let open = lang.pick("Projects Launcher'ı aç", "Open Projects Launcher");
+    let open = MenuItem::with_id(manager, "open", open, true, None::<&str>)?;
+    let play = MenuItem::with_id(
+        manager,
+        "play",
+        lang.pick("Oyna", "Play"),
+        true,
+        None::<&str>,
+    )?;
+    let afk = lang.pick("AFK hesapları", "AFK accounts");
+    let afk = MenuItem::with_id(manager, "afk", afk, true, None::<&str>)?;
+    let quit = lang.pick("Çıkış", "Quit");
+    let quit_item = MenuItem::with_id(manager, "quit", quit, true, None::<&str>)?;
+    let separator = PredefinedMenuItem::separator(manager)?;
+    Menu::with_items(manager, &[&open, &play, &afk, &separator, &quit_item])
+}
+
+/// The interface's language changed (`commands::app::app_set_language`): the tray menu and its
+/// tooltip follow. Waits for the main thread, so it must not run on it.
+#[cfg(desktop)]
+pub fn retitle_tray(app: &AppHandle) {
+    if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        match tray_menu(app, pl_lang::Lang::current()) {
+            Ok(menu) => {
+                if let Err(error) = tray.set_menu(Some(menu)) {
+                    tracing::debug!(%error, "tray menu not renamed");
+                }
+            }
+            Err(error) => tracing::debug!(%error, "tray menu not rebuilt"),
+        }
+    }
+    refresh_afk_tray(app);
 }
 
 /// "Start with the computer": a login item that starts the launcher with `--minimized`. A debug
@@ -238,7 +294,7 @@ pub fn refresh_afk_tray(app: &AppHandle) {
         return;
     };
     let mut shown = SHOWN.lock().unwrap_or_else(|e| e.into_inner());
-    let text = tray_tooltip(state.afk.activity());
+    let text = tray_tooltip(state.afk.activity(), pl_lang::Lang::current());
     if *shown == text {
         return;
     }
@@ -250,19 +306,13 @@ pub fn refresh_afk_tray(app: &AppHandle) {
     }
 }
 
-/// Tray icon: left click opens the launcher; the menu offers play, AFK accounts and quit.
+/// Tray icon: left click opens the launcher; the menu offers play, AFK accounts and quit. Built in
+/// the system's language; the UI's language replaces it as soon as the page has started.
 #[cfg(desktop)]
 pub fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
-    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
-    let open = MenuItem::with_id(app, "open", "Projects Launcher'ı aç", true, None::<&str>)?;
-    let play = MenuItem::with_id(app, "play", "Oyna", true, None::<&str>)?;
-    let afk = MenuItem::with_id(app, "afk", "AFK hesapları", true, None::<&str>)?;
-    let quit_item = MenuItem::with_id(app, "quit", "Çıkış", true, None::<&str>)?;
-    let separator = PredefinedMenuItem::separator(app)?;
-    let menu = Menu::with_items(app, &[&open, &play, &afk, &separator, &quit_item])?;
-
+    let menu = tray_menu(app, pl_lang::Lang::current())?;
     let mut tray = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip(crate::identity::current().label(TRAY_TITLE))
         .menu(&menu)

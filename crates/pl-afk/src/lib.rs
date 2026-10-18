@@ -41,7 +41,7 @@ mod versions;
 
 pub use config::{
     ConfigFiles, INI_FILE_NAME, LOGIN_SCRIPT_FILE_NAME, MATCHES_FILE_NAME, build_config,
-    has_login_commands, write_config,
+    build_config_in, has_login_commands, write_config,
 };
 pub use console::{
     CONSOLE_CAPACITY, ConsoleLine, ConsoleLineKind, ConsoleOrigin, INPUT_PREFIX, LineFilter, MASK,

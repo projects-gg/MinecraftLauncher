@@ -16,6 +16,7 @@ use std::time::Instant;
 use parking_lot::Mutex;
 use pl_content::sets::folder_name;
 use pl_content::{PackManifest, PackSelection, PackState, SyncProgress, apply_sync, plan_sync};
+use pl_lang::pick;
 use pl_mc::addons::{AddonIndex, Addons};
 use pl_mc::gamefiles::LauncherTrash;
 use pl_mc::instance::{Instance, MemorySettings};
@@ -1169,7 +1170,10 @@ fn progress_view(p: &RepairProgress, titles: &Titles) -> RepairProgressView {
 fn game_running_error() -> CmdError {
     CmdError::new(
         "OYUN-ACIK-MOD",
-        "Oyun açıkken modlar onarılamaz. Önce oyunu kapat.",
+        pick(
+            "Oyun açıkken modlar onarılamaz. Önce oyunu kapat.",
+            "You can't repair mods while the game is open. Close the game first.",
+        ),
         "the game of this instance is running",
     )
 }
@@ -1502,7 +1506,10 @@ pub async fn mods_reinstall(
     if setup.managed && !host.has_pack() {
         return Err(CmdError::new(
             "PAKET-YOK",
-            "Modları yeniden yüklemek için internet bağlantısı gerekiyor. Bağlantını kontrol edip tekrar dene.",
+            pick(
+                "Modları yeniden yüklemek için internet bağlantısı gerekiyor. Bağlantını kontrol edip tekrar dene.",
+                "Reinstalling mods needs an internet connection. Check your connection and try again.",
+            ),
             "the pack manifest is unavailable",
         ));
     }
@@ -1538,7 +1545,7 @@ pub async fn mods_reinstall(
     let outcome = run_reinstall(&reinstall).await.map_err(|error| {
         CmdError::new(
             "YENIDEN-YUKLE",
-            "Modlar taşınamadı. Mod klasörünü açık tutan bir program (dosya gezgini ya da antivirüs gibi) olabilir; kapatıp tekrar dene.",
+            pick("Modlar taşınamadı. Mod klasörünü açık tutan bir program (dosya gezgini ya da antivirüs gibi) olabilir; kapatıp tekrar dene.", "Couldn't move the mods. A program may have the mods folder open (like your file manager or antivirus); close it and try again."),
             error.to_string(),
         )
     })?;

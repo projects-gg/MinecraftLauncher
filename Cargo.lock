@@ -3730,6 +3730,7 @@ dependencies = [
  "jiff",
  "keyring",
  "parking_lot",
+ "pl-lang",
  "pl-net",
  "regex-syntax",
  "serde",
@@ -3753,6 +3754,7 @@ dependencies = [
  "keyring",
  "md-5 0.11.0",
  "parking_lot",
+ "pl-lang",
  "pl-net",
  "png 0.18.1",
  "rand 0.10.3",
@@ -3842,6 +3844,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "pl-lang"
+version = "2.0.0"
+dependencies = [
+ "jiff",
+ "serde",
+ "serde_json",
+ "specta",
+ "sys-locale",
+]
+
+[[package]]
 name = "pl-mc"
 version = "2.0.0"
 dependencies = [
@@ -3856,6 +3869,7 @@ dependencies = [
  "jiff",
  "md-5 0.11.0",
  "parking_lot",
+ "pl-lang",
  "pl-net",
  "quick-xml 0.42.0",
  "regex",
@@ -4130,6 +4144,7 @@ dependencies = [
  "pl-data",
  "pl-desktop",
  "pl-discord",
+ "pl-lang",
  "pl-mc",
  "pl-net",
  "pl-social",

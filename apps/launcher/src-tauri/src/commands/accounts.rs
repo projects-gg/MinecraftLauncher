@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
+use pl_lang::pick;
 
 /// Account as the UI shows it (no secrets ever cross this boundary).
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -134,7 +135,10 @@ pub(crate) fn refuse_microsoft_in_tests() -> CmdResult<()> {
     );
     Err(CmdError::new(
         "E2E-MICROSOFT",
-        "Bu test ortamında Microsoft ile giriş kapalı.",
+        pick(
+            "Bu test ortamında Microsoft ile giriş kapalı.",
+            "Signing in with Microsoft is turned off in this test setup.",
+        ),
         format!("{}=1 (debug build)", pl_auth::e2e::NO_MICROSOFT_ENV),
     ))
 }

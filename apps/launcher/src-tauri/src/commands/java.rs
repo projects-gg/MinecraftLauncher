@@ -17,6 +17,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
+use pl_lang::pick;
 use pl_mc::install::{InstallProgress, InstallProgressFn, InstallStage};
 use pl_mc::instance::Instance;
 use pl_mc::java::managed::{self, ManagedRuntime, SwapOutcome, UpdateSchedule};
@@ -630,14 +631,20 @@ pub async fn java_runtime_remove(
     if game_active(&state) {
         return Err(CmdError::new(
             "JAVA-OYUN",
-            "Oyun açıkken Java kaldırılamaz. Önce oyunu kapat.",
+            pick(
+                "Oyun açıkken Java kaldırılamaz. Önce oyunu kapat.",
+                "You can't remove Java while the game is open. Close the game first.",
+            ),
             "a game runs or is being prepared",
         ));
     }
     if crate::commands::data::job_running(&app) {
         return Err(CmdError::new(
             "JAVA-VERI",
-            "Veri klasöründe başka bir işlem sürüyor. Bitince tekrar dene.",
+            pick(
+                "Veri klasöründe başka bir işlem sürüyor. Bitince tekrar dene.",
+                "Something else is working in the data folder. Try again when it's done.",
+            ),
             "a data job runs",
         ));
     }
@@ -650,7 +657,10 @@ pub async fn java_runtime_remove(
     {
         return Err(CmdError::new(
             "JAVA-ISLEM",
-            "Bu Java güncelleniyor. Bitince tekrar dene.",
+            pick(
+                "Bu Java güncelleniyor. Bitince tekrar dene.",
+                "This Java is updating. Try again when it's done.",
+            ),
             "an update of this runtime runs",
         ));
     }
@@ -667,7 +677,10 @@ pub async fn java_runtime_remove(
     if used_runtimes(&state, &managed, &infos).contains(&key) {
         return Err(CmdError::new(
             "JAVA-KULLANIMDA",
-            "Bu Java'yı kullanan kurulumlar var.",
+            pick(
+                "Bu Java'yı kullanan kurulumlar var.",
+                "Some instances use this Java.",
+            ),
             format!("{component}/{platform} is in use"),
         ));
     }
@@ -677,12 +690,19 @@ pub async fn java_runtime_remove(
     let freed = tokio::task::spawn_blocking(move || managed::remove_runtime(&root))
         .await
         .map_err(|error| {
-            CmdError::new("JAVA-SILINEMEDI", "Java kaldırılamadı.", error.to_string())
+            CmdError::new(
+                "JAVA-SILINEMEDI",
+                pick("Java kaldırılamadı.", "Couldn't remove Java."),
+                error.to_string(),
+            )
         })?
         .map_err(|error| {
             CmdError::new(
                 "JAVA-SILINEMEDI",
-                "Java kaldırılamadı. Onu kullanan bir program açık olabilir.",
+                pick(
+                    "Java kaldırılamadı. Onu kullanan bir program açık olabilir.",
+                    "Couldn't remove Java. A program that uses it may be open.",
+                ),
                 error.to_string(),
             )
         })?;
@@ -760,7 +780,7 @@ pub async fn java_open_folder(
         if !known {
             return Err(CmdError::new(
                 "KLASOR-ACILMADI",
-                "Klasör açılamadı.",
+                pick("Klasör açılamadı.", "Couldn't open the folder."),
                 "not a listed Java",
             ));
         }
@@ -774,7 +794,10 @@ pub async fn java_open_folder(
         .map_err(|error| {
             CmdError::new(
                 "KLASOR-ACILMADI",
-                "Klasör açılamadı. Dosya gezgininden elle açabilirsin.",
+                pick(
+                    "Klasör açılamadı. Dosya gezgininden elle açabilirsin.",
+                    "Couldn't open the folder. You can open it yourself in your file manager.",
+                ),
                 error.to_string(),
             )
         })
@@ -987,7 +1010,10 @@ async fn apply_remedy(
         }
         None => Err(CmdError::new(
             "JAVA-UYGUN-YOK",
-            "Bu oyun için uygun bir Java bulunamadı.",
+            pick(
+                "Bu oyun için uygun bir Java bulunamadı.",
+                "No suitable Java was found for this game.",
+            ),
             format!("{need:?}"),
         )),
     }

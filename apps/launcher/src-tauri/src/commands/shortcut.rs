@@ -11,6 +11,7 @@ use tauri::State;
 
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
+use pl_lang::pick;
 
 /// Folder of the shortcut pictures. Outside the data folder, which can be moved, so shortcuts
 /// keep their picture. Named after the app identifier (a debug build's own, `crate::identity`).
@@ -60,7 +61,14 @@ pub struct ShortcutView {
 }
 
 fn failed(details: impl Into<String>) -> CmdError {
-    CmdError::new("KISAYOL", "Masaüstü kısayolu oluşturulamadı.", details)
+    CmdError::new(
+        "KISAYOL",
+        pick(
+            "Masaüstü kısayolu oluşturulamadı.",
+            "Couldn't create the desktop shortcut.",
+        ),
+        details,
+    )
 }
 
 /// Create (or refresh) the desktop shortcut of `instance_id`. `icon_png` is the instance's icon
@@ -103,9 +111,12 @@ pub async fn instance_shortcut_create(
         None => None,
     };
     let spec = ShortcutSpec {
-        description: format!(
-            "{} kurulumunu Projects Launcher ile başlatır.",
-            instance.name
+        description: pick(
+            format!(
+                "{} kurulumunu Projects Launcher ile başlatır.",
+                instance.name
+            ),
+            format!("Starts {} with Projects Launcher.", instance.name),
         ),
         name: instance.name.clone(),
         target,

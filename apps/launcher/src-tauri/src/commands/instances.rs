@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use pl_lang::pick;
 use pl_mc::instance::{
     Hooks, Instance, InstanceIcon, InstanceLoader, MemorySettings, NewInstance, WindowSettings,
 };
@@ -206,7 +207,10 @@ pub async fn instance_delete(
     let busy = |detail: &str| {
         CmdError::new(
             "KURULUM-MESGUL",
-            "Kurulum şu an kullanılıyor. Oyun ya da indirme bitince tekrar dene.",
+            pick(
+                "Kurulum şu an kullanılıyor. Oyun ya da indirme bitince tekrar dene.",
+                "This instance is in use right now. Try again when the game or download is done.",
+            ),
             detail.to_owned(),
         )
     };
@@ -233,7 +237,7 @@ pub async fn instance_delete(
             pl_mc::Error::NotFound(_) => CmdError::from(error),
             other => CmdError::new(
                 "KURULUM-SIL",
-                "Kurulum çöp kutusuna taşınamadı. Klasörünü açık tutan bir program olabilir; kapatıp tekrar dene.",
+                pick("Kurulum çöp kutusuna taşınamadı. Klasörünü açık tutan bir program olabilir; kapatıp tekrar dene.", "Couldn't move the instance to the trash. A program may have its folder open; close it and try again."),
                 other.to_string(),
             ),
         })?;
@@ -259,7 +263,10 @@ pub async fn instance_restore(
         .map_err(|error| {
             CmdError::new(
                 "KURULUM-GERI",
-                "Kurulum geri alınamadı. Tekrar dene.",
+                pick(
+                    "Kurulum geri alınamadı. Tekrar dene.",
+                    "Couldn't bring the instance back. Try again.",
+                ),
                 error.to_string(),
             )
         })?;
@@ -271,9 +278,14 @@ pub async fn instance_restore(
 #[specta::specta]
 pub async fn instance_duplicate(state: State<'_, AppState>, id: String) -> CmdResult<InstanceView> {
     let source = state.instances.get(&id).await.map_err(CmdError::from)?;
+    // The copy's name, in the interface's language ("Vanilla (kopya)" / "Vanilla (copy)").
+    let name = pick(
+        format!("{} (kopya)", source.name),
+        format!("{} (copy)", source.name),
+    );
     let copy = state
         .instances
-        .duplicate(&id, &format!("{} (kopya)", source.name))
+        .duplicate(&id, &name)
         .await
         .map_err(CmdError::from)?;
     Ok(view(&state, &copy))
@@ -739,7 +751,10 @@ pub async fn instance_set_graphics(
     let refuse_running = || {
         CmdError::new(
             "OYUN-ACIK",
-            "Oyun açıkken grafik ayarı değiştirilemez. Önce oyunu kapat.",
+            pick(
+                "Oyun açıkken grafik ayarı değiştirilemez. Önce oyunu kapat.",
+                "You can't change the graphics setting while the game is open. Close the game first.",
+            ),
             format!("the game of instance {id} is running"),
         )
     };
@@ -836,7 +851,10 @@ pub async fn instance_servers_edit(
     let refuse_running = || {
         CmdError::new(
             "OYUN-ACIK",
-            "Oyun açıkken sunucu listesi değiştirilemez. Önce oyunu kapat.",
+            pick(
+                "Oyun açıkken sunucu listesi değiştirilemez. Önce oyunu kapat.",
+                "You can't change the server list while the game is open. Close the game first.",
+            ),
             format!("the game of instance {instance_id} is running"),
         )
     };
@@ -856,29 +874,46 @@ pub async fn instance_servers_edit(
     let mut list = ServerList::read(&path).await.map_err(|e| {
         CmdError::new(
             "SUNUCU-OKU",
-            "Sunucu listesi okunamadı. Dosya bozulmuş olabilir.",
+            pick(
+                "Sunucu listesi okunamadı. Dosya bozulmuş olabilir.",
+                "Couldn't read the server list. The file may be damaged.",
+            ),
             e.to_string(),
         )
     })?;
     let removed = list.apply(edit).map_err(|e| match &e {
         ServerEditError::BadAddress(_) => CmdError::new(
             "SUNUCU-ADRES",
-            "Bu bir sunucu adresi gibi görünmüyor.",
+            pick(
+                "Bu bir sunucu adresi gibi görünmüyor.",
+                "That doesn't look like a server address.",
+            ),
             e.to_string(),
         ),
-        ServerEditError::Duplicate(_) => {
-            CmdError::new("SUNUCU-VAR", "Bu sunucu listede zaten var.", e.to_string())
-        }
+        ServerEditError::Duplicate(_) => CmdError::new(
+            "SUNUCU-VAR",
+            pick(
+                "Bu sunucu listede zaten var.",
+                "This server is already on the list.",
+            ),
+            e.to_string(),
+        ),
         ServerEditError::Changed { .. } => CmdError::new(
             "SUNUCU-DEGISTI",
-            "Sunucu listesi oyunda değişmiş. Liste yenilendi, tekrar dene.",
+            pick(
+                "Sunucu listesi oyunda değişmiş. Liste yenilendi, tekrar dene.",
+                "The server list changed in the game. The list is refreshed; try again.",
+            ),
             e.to_string(),
         ),
     })?;
     list.write(&path).await.map_err(|e| {
         CmdError::new(
             "SUNUCU-YAZ",
-            "Sunucu listesi kaydedilemedi. Tekrar dene.",
+            pick(
+                "Sunucu listesi kaydedilemedi. Tekrar dene.",
+                "Couldn't save the server list. Try again.",
+            ),
             e.to_string(),
         )
     })?;

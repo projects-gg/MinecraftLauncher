@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
+use pl_lang::pick;
 
 /// The active skin of an account.
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -98,7 +99,7 @@ pub async fn skin_texture(state: State<'_, AppState>, url: String) -> CmdResult<
     if !pl_auth::is_mojang_texture_url(&url) {
         return Err(CmdError::new(
             "SKIN-ADRES",
-            "Görsel yüklenemedi.",
+            pick("Görsel yüklenemedi.", "Couldn't load the picture."),
             format!("not a Mojang texture URL: {url}"),
         ));
     }

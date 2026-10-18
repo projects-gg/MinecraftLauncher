@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use pl_lang::pick;
 use pl_mc::addons::{
     ADDON_INDEX_FILE, AddonEntry, AddonInstallOptions, AddonInstallReport, AddonProgress, Addons,
     cached_icon, index_key,
@@ -151,45 +152,82 @@ pub(crate) fn content_error(error: pl_mc::Error) -> CmdError {
     use pl_mc::Error as E;
     let details = error.to_string();
     let (code, message) = match &error {
-        _ if error.is_cancelled() => ("IPTAL", "İşlem iptal edildi."),
+        _ if error.is_cancelled() => ("IPTAL", pick("İşlem iptal edildi.", "Cancelled.")),
         _ if error.is_offline() => (
             "MODRINTH-AG",
-            "Modrinth'e ulaşılamadı. İnternet bağlantını kontrol edip tekrar dene.",
+            pick(
+                "Modrinth'e ulaşılamadı. İnternet bağlantını kontrol edip tekrar dene.",
+                "Couldn't reach Modrinth. Check your internet connection and try again.",
+            ),
         ),
         E::Net(NetError::Status { status: 429, .. }) => (
             "MODRINTH-YOGUN",
-            "Modrinth şu an çok yoğun. Biraz bekleyip tekrar dene.",
+            pick(
+                "Modrinth şu an çok yoğun. Biraz bekleyip tekrar dene.",
+                "Modrinth is very busy right now. Wait a bit and try again.",
+            ),
         ),
         E::Net(NetError::Status { status, .. }) if *status >= 500 => (
             "MODRINTH-SUNUCU",
-            "Modrinth şu an yanıt vermiyor. Biraz sonra tekrar dene.",
+            pick(
+                "Modrinth şu an yanıt vermiyor. Biraz sonra tekrar dene.",
+                "Modrinth isn't answering right now. Try again in a bit.",
+            ),
         ),
-        E::Net(NetError::Checksum { .. } | NetError::Size { .. }) => {
-            ("DOGRULAMA", "İndirilen dosya doğrulanamadı. Tekrar dene.")
-        }
+        E::Net(NetError::Checksum { .. } | NetError::Size { .. }) => (
+            "DOGRULAMA",
+            pick(
+                "İndirilen dosya doğrulanamadı. Tekrar dene.",
+                "The downloaded file couldn't be checked. Try again.",
+            ),
+        ),
         E::Net(NetError::Batch { first, .. })
             if first.contains("checksum") || first.contains("size mismatch") =>
         {
             (
                 "DOGRULAMA",
-                "İndirilen dosyalar doğrulanamadı. Tekrar dene.",
+                pick(
+                    "İndirilen dosyalar doğrulanamadı. Tekrar dene.",
+                    "The downloaded files couldn't be checked. Try again.",
+                ),
             )
         }
         E::Net(NetError::Batch { .. }) => (
             "INDIRME",
-            "Bazı dosyalar indirilemedi. Bağlantını kontrol edip tekrar dene.",
+            pick(
+                "Bazı dosyalar indirilemedi. Bağlantını kontrol edip tekrar dene.",
+                "Some files couldn't be downloaded. Check your connection and try again.",
+            ),
         ),
         E::Net(_) => (
             "MODRINTH",
-            "Modrinth ile bağlantıda bir sorun oldu. Tekrar dene.",
+            pick(
+                "Modrinth ile bağlantıda bir sorun oldu. Tekrar dene.",
+                "Something went wrong talking to Modrinth. Try again.",
+            ),
         ),
-        E::NotFound(_) => ("BULUNAMADI", "Bu içerik Modrinth'te bulunamadı."),
+        E::NotFound(_) => (
+            "BULUNAMADI",
+            pick(
+                "Bu içerik Modrinth'te bulunamadı.",
+                "This wasn't found on Modrinth.",
+            ),
+        ),
         E::Io { .. } | E::TrashUnavailable { .. } => (
             "DISK",
-            "Dosyalar kaydedilemedi. Diskte yer olduğundan ve antivirüsün engellemediğinden emin ol.",
+            pick(
+                "Dosyalar kaydedilemedi. Diskte yer olduğundan ve antivirüsün engellemediğinden emin ol.",
+                "Couldn't save the files. Make sure there's space on the disk and your antivirus isn't blocking it.",
+            ),
         ),
         E::AlreadyExists(_) => ("VAR", "Bu adda bir dosya zaten var."),
-        _ => ("ICERIK", "İçerik işlenirken bir sorun oluştu. Tekrar dene."),
+        _ => (
+            "ICERIK",
+            pick(
+                "İçerik işlenirken bir sorun oluştu. Tekrar dene.",
+                "Something went wrong with this content. Try again.",
+            ),
+        ),
     };
     CmdError::new(code, message, details)
 }
@@ -260,7 +298,10 @@ fn check_kind(instance: &Instance, kind: ImportKind) -> CmdResult<()> {
     if kind == ImportKind::Mod && instance.loader.kind == LoaderKind::Vanilla {
         return Err(CmdError::new(
             "VANILLA-MOD",
-            "Vanilla kurulumlara mod yüklenemez. Fabric, Quilt, Forge ya da NeoForge ile bir kurulum oluştur.",
+            pick(
+                "Vanilla kurulumlara mod yüklenemez. Fabric, Quilt, Forge ya da NeoForge ile bir kurulum oluştur.",
+                "Vanilla instances can't have mods. Make an instance with Fabric, Quilt, Forge or NeoForge.",
+            ),
             "mods on a vanilla instance",
         ));
     }
@@ -519,7 +560,10 @@ pub async fn content_install(
     if project.project_type != project_type_of(kind) {
         return Err(CmdError::new(
             "TUR",
-            "Bu içerik bu bölüme yüklenemez.",
+            pick(
+                "Bu içerik bu bölüme yüklenemez.",
+                "This can't go in this section.",
+            ),
             format!("{:?} into {kind:?}", project.project_type),
         ));
     }
@@ -540,7 +584,10 @@ pub async fn content_install(
             .ok_or_else(|| {
                 CmdError::new(
                     "UYUMLU-SURUM-YOK",
-                    "Bunun bu kurulumla uyumlu bir sürümü yok.",
+                    pick(
+                        "Bunun bu kurulumla uyumlu bir sürümü yok.",
+                        "There's no version of this that works with this instance.",
+                    ),
                     format!("{project_id} for {:?}", target),
                 )
             })?,
@@ -654,7 +701,10 @@ pub async fn content_remove(
     if pack_owned(addons.game_dir()).contains(&index_key(kind.folder(), &file_name)) {
         return Err(CmdError::new(
             "PAKET-DOSYASI",
-            "Bu dosya resmi paketin parçası, paket güncellenince geri gelir. Kaldırmak yerine kapatabilirsin.",
+            pick(
+                "Bu dosya resmi paketin parçası, paket güncellenince geri gelir. Kaldırmak yerine kapatabilirsin.",
+                "This file is part of the official pack and comes back when the pack updates. You can turn it off instead.",
+            ),
             file_name,
         ));
     }

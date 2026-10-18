@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
+use pl_lang::pick;
 use pl_mc::addons::{AddonIndex, AddonSource, index_key};
 use pl_mc::instance::Instance;
 use pl_mc::modpack::{
@@ -105,7 +106,10 @@ pub struct ModpackUpdateResultView {
 fn no_pack() -> CmdError {
     CmdError::new(
         "PAKET-YOK",
-        "Bu kurulum bir Modrinth mod paketinden oluşturulmadı.",
+        pick(
+            "Bu kurulum bir Modrinth mod paketinden oluşturulmadı.",
+            "This instance wasn't made from a Modrinth modpack.",
+        ),
         "no modpack source in the add-on index",
     )
 }
@@ -260,7 +264,10 @@ async fn prepare(
     if !old.minecraft.is_empty() && old.minecraft != instance.mc_version {
         return Err(CmdError::new(
             "PAKET-SURUM",
-            "Mod paketi bu kurulumun şu anki Minecraft sürümü için kurulmadı.",
+            pick(
+                "Mod paketi bu kurulumun şu anki Minecraft sürümü için kurulmadı.",
+                "The modpack wasn't installed for this instance's current Minecraft version.",
+            ),
             format!("pack files are for {}", old.minecraft),
         ));
     }

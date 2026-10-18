@@ -1,6 +1,9 @@
+use std::sync::Mutex;
+
 use pl_discord::{Activity, StatusDisplayType};
+use pl_lang::Lang;
 use serde::Deserialize;
-use tauri::State;
+use tauri::{Manager, State};
 
 use crate::state::AppState;
 
@@ -24,26 +27,43 @@ pub struct PresenceContext {
 
 const LOGO: &str = "logo";
 
-fn build(ctx: &PresenceContext) -> Activity {
+/// The last context the UI sent, so a language change can say the same thing in the new
+/// language.
+static LAST: Mutex<Option<PresenceContext>> = Mutex::new(None);
+
+/// The activity in the interface's language (the player's Discord friends read it).
+fn build(ctx: &PresenceContext, lang: Lang) -> Activity {
     let version_line = match (&ctx.loader, &ctx.mc_version) {
         (Some(loader), Some(version)) if loader != "vanilla" => format!("{loader} {version}"),
         (_, Some(version)) => format!("Minecraft {version}"),
         _ => "Minecraft".to_owned(),
     };
+    let in_launcher = lang.pick("Launcher'da", "In the launcher");
     let base = Activity::new()
         .large_image(LOGO)
         .large_text("Projects Launcher")
-        .button("Launcher'ı indir", "https://projects.gg/indir")
-        .button("Discord'a katıl", "https://projects.gg/discord");
+        .button(
+            lang.pick("Launcher'ı indir", "Get the launcher"),
+            "https://projects.gg/indir",
+        )
+        .button(
+            lang.pick("Discord'a katıl", "Join the Discord"),
+            "https://projects.gg/discord",
+        );
 
     match ctx.activity.as_str() {
         "playing" => {
             let details = match (&ctx.server, ctx.show_server) {
-                (Some(server), true) if server.contains("projects.gg") => {
-                    "Projects'te oynuyor".to_owned()
-                }
-                (Some(server), true) => format!("{server} sunucusunda"),
-                _ => "Minecraft oynuyor".to_owned(),
+                (Some(server), true) if server.contains("projects.gg") => lang
+                    .pick("Projects'te oynuyor", "Playing on Projects")
+                    .to_owned(),
+                (Some(server), true) => lang.pick(
+                    format!("{server} sunucusunda"),
+                    format!("Playing on {server}"),
+                ),
+                _ => lang
+                    .pick("Minecraft oynuyor", "Playing Minecraft")
+                    .to_owned(),
             };
             let mut activity = base
                 .details(details)
@@ -59,27 +79,49 @@ fn build(ctx: &PresenceContext) -> Activity {
             }
             activity
         }
-        "downloading" => base
-            .details("Oyunu hazırlıyor")
-            .state(format!("%{}", ctx.percent.unwrap_or(0))),
+        "downloading" => {
+            let percent = ctx.percent.unwrap_or(0);
+            base.details(lang.pick("Oyunu hazırlıyor", "Getting the game ready"))
+                .state(lang.pick(format!("%{percent}"), format!("{percent}%")))
+        }
         "afk" => base
-            .details("AFK hesaplarını yönetiyor")
-            .state("Launcher'da"),
-        "library" => base.details("Kütüphanede").state(
-            ctx.instance_name
-                .clone()
-                .map(|name| format!("{name} kurulumunu inceliyor"))
-                .unwrap_or_else(|| "Kurulumlarına bakıyor".to_owned()),
-        ),
-        "news" => base.details("Haberleri okuyor").state("Launcher'da"),
-        _ => base.details("Launcher'da").state("Ana sayfada"),
+            .details(lang.pick("AFK hesaplarını yönetiyor", "Managing AFK accounts"))
+            .state(in_launcher),
+        "library" => base
+            .details(lang.pick("Kütüphanede", "In the library"))
+            .state(match &ctx.instance_name {
+                Some(name) => lang.pick(
+                    format!("{name} kurulumunu inceliyor"),
+                    format!("Looking at {name}"),
+                ),
+                None => lang
+                    .pick("Kurulumlarına bakıyor", "Looking at their instances")
+                    .to_owned(),
+            }),
+        "news" => base
+            .details(lang.pick("Haberleri okuyor", "Reading the news"))
+            .state(in_launcher),
+        _ => base
+            .details(in_launcher)
+            .state(lang.pick("Ana sayfada", "On the home page")),
     }
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn discord_update(state: State<'_, AppState>, context: PresenceContext) {
-    state.presence.set(Some(build(&context)));
+    state.presence.set(Some(build(&context, Lang::current())));
+    *LAST.lock().unwrap_or_else(|e| e.into_inner()) = Some(context);
+}
+
+/// The interface's language changed: the presence says the same thing in the new language.
+pub fn refresh_language(app: &tauri::AppHandle) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    if let Some(context) = LAST.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+        state.presence.set(Some(build(context, Lang::current())));
+    }
 }
 
 #[tauri::command]

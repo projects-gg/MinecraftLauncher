@@ -15,6 +15,7 @@ use pl_content::{
     SyncIssueKind, SyncPhase, SyncPlan, SyncPolicy, SyncProgress, SyncProgressFn, SyncSummary,
     apply_sync, plan_sync,
 };
+use pl_lang::pick;
 use pl_mc::instance::Instance;
 use pl_mc::loaders::LoaderKind;
 use pl_net::{CancellationToken, DownloadOptions, VerifyMode};
@@ -454,7 +455,10 @@ fn game_running(state: &AppState, instance_id: &str) -> bool {
 fn not_available() -> CmdError {
     CmdError::new(
         "PAKET-YOK",
-        "Önerilen modlar şu an yüklenemiyor. İnternet bağlantını kontrol edip tekrar dene.",
+        pick(
+            "Önerilen modlar şu an yüklenemiyor. İnternet bağlantını kontrol edip tekrar dene.",
+            "The recommended mods can't be loaded right now. Check your internet connection and try again.",
+        ),
         "no pack manifest for this instance",
     )
 }

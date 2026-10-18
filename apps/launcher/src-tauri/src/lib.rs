@@ -20,6 +20,11 @@ pub fn run() {
     #[cfg(debug_assertions)]
     export_bindings(&specta);
 
+    // Until the UI names the language (the player's pick, else automatic), the backend speaks the
+    // automatic one: Turkish in Turkey or on a Turkish system, English otherwise (pl_lang).
+    let signals = pl_lang::Signals::system();
+    signals.automatic().set_current();
+
     let mut builder = tauri::Builder::default();
 
     #[cfg(desktop)]
@@ -45,6 +50,7 @@ pub fn run() {
     }
 
     builder
+        .plugin(language_plugin(&signals))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
@@ -95,6 +101,17 @@ pub fn run() {
         .expect("error while running Projects Launcher");
 }
 
+/// Hands the page the computer's language signals before its first script runs
+/// (`window.__PL_SYSTEM__`, read by `lib/i18n.ts`), so it resolves the language exactly like the
+/// backend and its first paint is already in it. The OS display language matters here: WebView2's
+/// own language can differ from it.
+fn language_plugin(signals: &pl_lang::Signals) -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    let json = serde_json::to_string(signals).unwrap_or_else(|_| "{}".to_owned());
+    tauri::plugin::Builder::new("pl-language")
+        .js_init_script(format!("window.__PL_SYSTEM__ = {json};"))
+        .build()
+}
+
 fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
     tauri_specta::Builder::<tauri::Wry>::new()
         // Byte counts, timestamps and play time are u64 but stay far below 2^53.
@@ -114,6 +131,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<pl_social::SocialNotice>()
         .commands(tauri_specta::collect_commands![
             commands::app::app_info,
+            commands::app::app_set_language,
             commands::accounts::accounts_list,
             commands::accounts::account_add_offline,
             commands::accounts::account_login_microsoft,

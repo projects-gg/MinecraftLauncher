@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use parking_lot::Mutex;
+use pl_lang::pick;
 use pl_mc::gamefiles::{
     self, BackupProgress, BackupProgressFn, LauncherTrash, LogSource, RestoreMode, TrashEntry,
     TrashKind,
@@ -109,8 +110,13 @@ fn fail(code: &'static str, message: &'static str) -> impl FnOnce(pl_mc::Error) 
 
 /// A single file or folder name from the UI (no separators, no `..`).
 fn plain_name(name: &str) -> CmdResult<&str> {
-    pl_mc::paths::safe_name(name)
-        .map_err(|e| CmdError::new("AD", "Bu dosya bulunamadı.", e.to_string()))
+    pl_mc::paths::safe_name(name).map_err(|e| {
+        CmdError::new(
+            "AD",
+            pick("Bu dosya bulunamadı.", "This file wasn't found."),
+            e.to_string(),
+        )
+    })
 }
 
 fn game_dir(state: &AppState, instance_id: &str) -> CmdResult<PathBuf> {
@@ -138,7 +144,10 @@ fn ensure_game_closed(state: &AppState, instance_id: &str) -> CmdResult<()> {
     if is_running(state, instance_id) {
         return Err(CmdError::new(
             "OYUN-ACIK",
-            "Oyun açıkken dünyalarda değişiklik yapılamaz. Önce oyunu kapat.",
+            pick(
+                "Oyun açıkken dünyalarda değişiklik yapılamaz. Önce oyunu kapat.",
+                "You can't change worlds while the game is open. Close the game first.",
+            ),
             format!("the game of instance {instance_id} is running"),
         ));
     }
@@ -159,7 +168,11 @@ fn png_data_url(bytes: &[u8]) -> String {
 }
 
 fn folder_error(error: impl std::fmt::Display) -> CmdError {
-    CmdError::new("KLASOR", "Klasör açılamadı.", error.to_string())
+    CmdError::new(
+        "KLASOR",
+        pick("Klasör açılamadı.", "Couldn't open the folder."),
+        error.to_string(),
+    )
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -222,7 +235,7 @@ fn log_path(
     let missing = || {
         CmdError::new(
             "KAYIT-YOK",
-            "Bu kayıt bulunamadı.",
+            pick("Bu kayıt bulunamadı.", "This log wasn't found."),
             format!("{name} is not a log of {instance_id}"),
         )
     };
@@ -255,7 +268,10 @@ pub async fn game_logs(
     let live = live_log_name(&state, &instance_id);
     let files = gamefiles::list_game_logs(&state.root.join("logs"), &instance_id)
         .await
-        .map_err(fail("KAYIT-LISTE", "Oyun kayıtları okunamadı."))?;
+        .map_err(fail(
+            "KAYIT-LISTE",
+            pick("Oyun kayıtları okunamadı.", "Couldn't read the game logs."),
+        ))?;
     let own = match game_dir(&state, &instance_id) {
         Ok(dir) => gamefiles::list_game_folder_logs(&dir)
             .await
@@ -292,7 +308,10 @@ pub async fn game_log_read(
     let path = log_path(&state, &instance_id, &file_name, source)?;
     let content = gamefiles::read_game_log(&path, gamefiles::MAX_READ_BYTES)
         .await
-        .map_err(fail("KAYIT-OKU", "Kayıt dosyası okunamadı."))?;
+        .map_err(fail(
+            "KAYIT-OKU",
+            pick("Kayıt dosyası okunamadı.", "Couldn't read the log file."),
+        ))?;
     Ok(GameLogView {
         lines: content.lines,
         truncated: content.truncated,
@@ -311,13 +330,17 @@ pub async fn game_log_share(
     source: Option<LogSource>,
 ) -> CmdResult<SharedLogView> {
     let path = log_path(&state, &instance_id, &file_name, source)?;
-    let content = gamefiles::read_log_for_upload(&path)
-        .await
-        .map_err(fail("KAYIT-OKU", "Kayıt dosyası okunamadı."))?;
+    let content = gamefiles::read_log_for_upload(&path).await.map_err(fail(
+        "KAYIT-OKU",
+        pick("Kayıt dosyası okunamadı.", "Couldn't read the log file."),
+    ))?;
     if content.trim().is_empty() {
         return Err(CmdError::new(
             "KAYIT-BOS",
-            "Bu kayıt boş, paylaşılacak bir şey yok.",
+            pick(
+                "Bu kayıt boş, paylaşılacak bir şey yok.",
+                "This log is empty; there's nothing to share.",
+            ),
             file_name,
         ));
     }
@@ -327,13 +350,19 @@ pub async fn game_log_share(
             if error.is_offline() {
                 CmdError::new(
                     "PAYLAS-AG",
-                    "mclo.gs'e ulaşılamadı. İnternet bağlantını kontrol edip tekrar dene.",
+                    pick(
+                        "mclo.gs'e ulaşılamadı. İnternet bağlantını kontrol edip tekrar dene.",
+                        "Couldn't reach mclo.gs. Check your internet connection and try again.",
+                    ),
                     error.to_string(),
                 )
             } else {
                 CmdError::new(
                     "PAYLAS",
-                    "Kayıt paylaşılamadı. Biraz sonra tekrar dene.",
+                    pick(
+                        "Kayıt paylaşılamadı. Biraz sonra tekrar dene.",
+                        "Couldn't share the log. Try again in a bit.",
+                    ),
                     error.to_string(),
                 )
             }
@@ -473,9 +502,10 @@ pub async fn worlds_list(
     instance_id: String,
 ) -> CmdResult<Vec<WorldDetailView>> {
     let game_dir = game_dir(&state, &instance_id)?;
-    let worlds = gamefiles::list_worlds(&game_dir)
-        .await
-        .map_err(fail("DUNYA-LISTE", "Dünyalar okunamadı."))?;
+    let worlds = gamefiles::list_worlds(&game_dir).await.map_err(fail(
+        "DUNYA-LISTE",
+        pick("Dünyalar okunamadı.", "Couldn't read the worlds."),
+    ))?;
     Ok(worlds
         .into_iter()
         .map(|w| WorldDetailView {
@@ -510,7 +540,10 @@ pub async fn world_backups(
     let game_dir = game_dir(&state, &instance_id)?;
     let backups = gamefiles::list_world_backups(&game_dir)
         .await
-        .map_err(fail("YEDEK-LISTE", "Yedekler okunamadı."))?;
+        .map_err(fail(
+            "YEDEK-LISTE",
+            pick("Yedekler okunamadı.", "Couldn't read the backups."),
+        ))?;
     Ok(backups.into_iter().map(backup_view).collect())
 }
 
@@ -545,7 +578,10 @@ pub async fn world_backup(
         .await
         .map_err(fail(
             "YEDEK",
-            "Dünya yedeklenemedi. Diskte yer olduğundan emin olup tekrar dene.",
+            pick(
+                "Dünya yedeklenemedi. Diskte yer olduğundan emin olup tekrar dene.",
+                "Couldn't back up the world. Make sure there's space on the disk and try again.",
+            ),
         ))?;
     let file_name = summary
         .path
@@ -617,12 +653,18 @@ pub async fn world_restore(
     .map_err(|error| match error {
         pl_mc::Error::Invalid(_) | pl_mc::Error::Archive { .. } => CmdError::new(
             "YEDEK-GECERSIZ",
-            "Bu dosya bir dünya yedeği değil ya da bozuk.",
+            pick(
+                "Bu dosya bir dünya yedeği değil ya da bozuk.",
+                "This file isn't a world backup, or it's damaged.",
+            ),
             error.to_string(),
         ),
         other => fail(
             "GERI-YUKLE",
-            "Yedek geri yüklenemedi. Diskte yer olduğundan emin olup tekrar dene.",
+            pick(
+                "Yedek geri yüklenemedi. Diskte yer olduğundan emin olup tekrar dene.",
+                "Couldn't restore the backup. Make sure there's space on the disk and try again.",
+            ),
         )(other),
     })?;
     Ok(RestoredWorldView {
@@ -656,7 +698,10 @@ pub async fn world_delete(
         .await
         .map_err(fail(
             "DUNYA-SIL",
-            "Dünya çöp kutusuna taşınamadı. Başka bir program dünyayı kullanıyor olabilir.",
+            pick(
+                "Dünya çöp kutusuna taşınamadı. Başka bir program dünyayı kullanıyor olabilir.",
+                "Couldn't move the world to the trash. Another program may be using it.",
+            ),
         ))?;
     purge_trash_later(trash);
     Ok(trash_view(entry))
@@ -679,7 +724,13 @@ pub async fn world_backup_delete(
     let entry = trash
         .put(&path, TrashKind::Backup, &instance_id, &name)
         .await
-        .map_err(fail("YEDEK-SIL", "Yedek çöp kutusuna taşınamadı."))?;
+        .map_err(fail(
+            "YEDEK-SIL",
+            pick(
+                "Yedek çöp kutusuna taşınamadı.",
+                "Couldn't move the backup to the trash.",
+            ),
+        ))?;
     purge_trash_later(trash);
     Ok(trash_view(entry))
 }
@@ -692,10 +743,10 @@ pub async fn trash_list(
     instance_id: String,
 ) -> CmdResult<Vec<TrashItemView>> {
     let trash = launcher_trash(&state);
-    let items = trash
-        .list(Some(&instance_id))
-        .await
-        .map_err(fail("COP-LISTE", "Çöp kutusu okunamadı."))?;
+    let items = trash.list(Some(&instance_id)).await.map_err(fail(
+        "COP-LISTE",
+        pick("Çöp kutusu okunamadı.", "Couldn't read the trash."),
+    ))?;
     // Expired items are deleted in the background (big worlds take a while) and hidden now.
     let retention = i64::try_from(gamefiles::TRASH_RETENTION.as_millis()).unwrap_or(i64::MAX);
     let now = jiff::Timestamp::now().as_millisecond();
@@ -720,7 +771,13 @@ pub async fn trash_restore(
     id: String,
 ) -> CmdResult<String> {
     let trash = launcher_trash(&state);
-    let not_found = |detail: String| CmdError::new("COP-YOK", "Bu öğe çöp kutusunda yok.", detail);
+    let not_found = |detail: String| {
+        CmdError::new(
+            "COP-YOK",
+            pick("Bu öğe çöp kutusunda yok.", "This item isn't in the trash."),
+            detail,
+        )
+    };
     let entry = trash
         .get(plain_name(&id)?)
         .await
@@ -733,10 +790,13 @@ pub async fn trash_restore(
     if entry.kind == TrashKind::World {
         ensure_game_closed(&state, &instance_id)?;
     }
-    let path = trash
-        .restore(&id)
-        .await
-        .map_err(fail("COP-GERI", "Geri alınamadı. Tekrar dene."))?;
+    let path = trash.restore(&id).await.map_err(fail(
+        "COP-GERI",
+        pick(
+            "Geri alınamadı. Tekrar dene.",
+            "Couldn't bring it back. Try again.",
+        ),
+    ))?;
     Ok(path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -752,21 +812,27 @@ pub async fn trash_delete(
     id: String,
 ) -> CmdResult<()> {
     let trash = launcher_trash(&state);
-    let entry = trash
-        .get(plain_name(&id)?)
-        .await
-        .map_err(|e| CmdError::new("COP-YOK", "Bu öğe çöp kutusunda yok.", e.to_string()))?;
+    let entry = trash.get(plain_name(&id)?).await.map_err(|e| {
+        CmdError::new(
+            "COP-YOK",
+            pick("Bu öğe çöp kutusunda yok.", "This item isn't in the trash."),
+            e.to_string(),
+        )
+    })?;
     if entry.instance_id != instance_id || entry.kind == TrashKind::Instance {
         return Err(CmdError::new(
             "COP-YOK",
-            "Bu öğe çöp kutusunda yok.",
+            pick("Bu öğe çöp kutusunda yok.", "This item isn't in the trash."),
             format!("{id} belongs to another instance"),
         ));
     }
-    trash
-        .delete(&id)
-        .await
-        .map_err(fail("COP-SIL", "Kalıcı olarak silinemedi. Tekrar dene."))
+    trash.delete(&id).await.map_err(fail(
+        "COP-SIL",
+        pick(
+            "Kalıcı olarak silinemedi. Tekrar dene.",
+            "Couldn't delete it for good. Try again.",
+        ),
+    ))
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -824,9 +890,13 @@ pub async fn screenshots_list(
             tracing::warn!(%error, "could not allow a gallery folder");
         }
     }
-    let shots = gamefiles::list_screenshots(&game_dir)
-        .await
-        .map_err(fail("GORSEL-LISTE", "Ekran görüntüleri okunamadı."))?;
+    let shots = gamefiles::list_screenshots(&game_dir).await.map_err(fail(
+        "GORSEL-LISTE",
+        pick(
+            "Ekran görüntüleri okunamadı.",
+            "Couldn't read the screenshots.",
+        ),
+    ))?;
     let views = shots
         .iter()
         .map(|s| ScreenshotFileView {
@@ -860,7 +930,10 @@ pub async fn screenshot_thumbnail(
     let meta = tokio::fs::metadata(&path).await.map_err(|e| {
         CmdError::new(
             "GORSEL-OKU",
-            "Ekran görüntüsü okunamadı.",
+            pick(
+                "Ekran görüntüsü okunamadı.",
+                "Couldn't read the screenshot.",
+            ),
             format!("{}: {e}", path.display()),
         )
     })?;
@@ -897,7 +970,10 @@ pub async fn screenshot_copy(
     let bytes = tokio::fs::read(&path).await.map_err(|e| {
         CmdError::new(
             "GORSEL-OKU",
-            "Ekran görüntüsü okunamadı.",
+            pick(
+                "Ekran görüntüsü okunamadı.",
+                "Couldn't read the screenshot.",
+            ),
             format!("{}: {e}", path.display()),
         )
     })?;
@@ -918,7 +994,13 @@ pub async fn screenshot_copy(
             tracing::warn!(%reason, "could not copy the screenshot as a picture, copying its path");
             app.clipboard()
                 .write_text(path.to_string_lossy().into_owned())
-                .map_err(|e| CmdError::new("PANO", "Panoya kopyalanamadı.", e.to_string()))?;
+                .map_err(|e| {
+                    CmdError::new(
+                        "PANO",
+                        pick("Panoya kopyalanamadı.", "Couldn't copy to the clipboard."),
+                        e.to_string(),
+                    )
+                })?;
             Ok(ClipboardCopy::Path)
         }
     }
@@ -936,7 +1018,13 @@ pub async fn screenshot_open(
     let path = screenshot_path(&state, &instance_id, &file_name)?;
     app.opener()
         .open_path(path.to_string_lossy(), None::<&str>)
-        .map_err(|e| CmdError::new("GORSEL-AC", "Görüntü açılamadı.", e.to_string()))
+        .map_err(|e| {
+            CmdError::new(
+                "GORSEL-AC",
+                pick("Görüntü açılamadı.", "Couldn't open the picture."),
+                e.to_string(),
+            )
+        })
 }
 
 /// Show a file of the instance (`screenshots/`, `backups/`) in the file manager.
@@ -971,7 +1059,13 @@ pub async fn screenshot_delete(
     let entry = trash
         .put(&path, TrashKind::Screenshot, &instance_id, &file_name)
         .await
-        .map_err(fail("GORSEL-SIL", "Ekran görüntüsü silinemedi."))?;
+        .map_err(fail(
+            "GORSEL-SIL",
+            pick(
+                "Ekran görüntüsü silinemedi.",
+                "Couldn't delete the screenshot.",
+            ),
+        ))?;
     purge_trash_later(trash);
     Ok(trash_view(entry))
 }

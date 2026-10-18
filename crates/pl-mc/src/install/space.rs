@@ -136,9 +136,10 @@ pub fn nearly_full(free: u64) -> bool {
     free < NEARLY_FULL
 }
 
-/// "300 MB", "1,2 GB": the launcher's byte format (`formatBytes`): a Turkish decimal comma, at most
-/// one decimal, and never four digits before the unit (999,96 MB reads "1 GB").
-pub fn format_size(bytes: u64) -> String {
+/// "300 MB", "1,2 GB" / "1.2 GB": the launcher's byte format (`formatBytes`): the language's
+/// decimal mark, at most one decimal, and never four digits before the unit (999,96 MB reads
+/// "1 GB").
+pub fn format_size(bytes: u64, lang: pl_lang::Lang) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
     let shown = |value: f64, unit: usize| {
         if unit == 0 {
@@ -157,7 +158,10 @@ pub fn format_size(bytes: u64) -> String {
     let text = if figure.fract() == 0.0 {
         format!("{figure:.0}")
     } else {
-        format!("{figure:.1}").replace('.', ",")
+        lang.pick(
+            format!("{figure:.1}").replace('.', ","),
+            format!("{figure:.1}"),
+        )
     };
     format!("{text} {}", UNITS[unit])
 }
@@ -631,6 +635,7 @@ mod tests {
 
     #[test]
     fn sizes_read_like_the_launcher() {
+        let format_size = |bytes| format_size(bytes, pl_lang::Lang::Tr);
         // The cases of `formatBytes` (lib/format.test.ts).
         assert_eq!(format_size(0), "0 B");
         assert_eq!(format_size(999), "999 B");
@@ -647,6 +652,14 @@ mod tests {
         // The disk message's figures.
         assert_eq!(format_size(300 * MB), "300 MB");
         assert_eq!(format_size(1_288_490_189), "1,2 GB");
+    }
+
+    #[test]
+    fn english_sizes_use_a_decimal_point() {
+        let english = |bytes| format_size(bytes, pl_lang::Lang::En);
+        assert_eq!(english(1_288_490_189), "1.2 GB");
+        assert_eq!(english(817_869), "798.7 KB");
+        assert_eq!(english(300 * MB), "300 MB");
     }
 
     #[test]

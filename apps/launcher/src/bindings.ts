@@ -6,6 +6,14 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 export const commands = {
 	/**  Basic facts about the running launcher, shown in Settings → About. */
 	appInfo: () => __TAURI_INVOKE<AppInfo>("app_info"),
+	/**
+	 *  The language the UI shows, resolved there (`pl_lang`): the player's pick in Settings → Genel →
+	 *  Dil, else Turkish in Turkey or on a Turkish system, English otherwise. The backend's own texts
+	 *  follow it from now on: command errors, the tray menu, the Discord presence, the browser
+	 *  sign-in page and the game's first language. Async, so the tray's main-thread updates are never
+	 *  waited for on the main thread.
+	 */
+	appSetLanguage: (lang: Lang) => __TAURI_INVOKE<void>("app_set_language", { lang }),
 	accountsList: () => __TAURI_INVOKE<AccountView[]>("accounts_list"),
 	accountAddOffline: (name: string) => typedError<AccountView, CmdError>(__TAURI_INVOKE("account_add_offline", { name })),
 	/**
@@ -1084,7 +1092,8 @@ export type ClipboardCopy =
 "path";
 
 /**
- *  Error returned by every command. `message` is friendly Turkish text for the UI; `code` and
+ *  Error returned by every command. `message` is friendly text for the UI in the interface's
+ *  language (`pl_lang`: the backend's own texts are written as Turkish/English pairs); `code` and
  *  `details` are only for the "copy details" action (never shown as visible text).
  */
 export type CmdError = {
@@ -1837,6 +1846,11 @@ export type KickCause = "banned" | "notWhitelisted" |
  *  so it stops the session only after [`REPEATED_KICKS`] in a row.
  */
 "loginTimeout";
+
+/**  A language of the launcher's own texts. */
+export type Lang = 
+/**  Turkish: the launcher's first language, and the backend's until the UI says otherwise. */
+"tr" | "en";
 
 export type LastSeen = "today" | "yesterday" | 
 /**  Within the last 7 days. */

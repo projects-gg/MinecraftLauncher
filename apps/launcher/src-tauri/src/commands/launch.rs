@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use pl_auth::FailureClass;
 use pl_content::{PackManifest, PackState, SyncPolicy, plan_sync};
+use pl_lang::pick;
 use pl_mc::install::context::BACKGROUND_CONCURRENCY;
 use pl_mc::install::space::{self, GameFiles, Target};
 use pl_mc::install::{
@@ -230,12 +231,12 @@ async fn run_hook(command: &str, env: &BTreeMap<String, String>, cwd: &Path) -> 
     cmd.envs(env).current_dir(cwd).kill_on_drop(true);
     let status = tokio::time::timeout(Duration::from_secs(300), cmd.status())
         .await
-        .map_err(|_| "komut 5 dakika içinde bitmedi".to_owned())?
+        .map_err(|_| "the command did not finish within 5 minutes".to_owned())?
         .map_err(|e| e.to_string())?;
     if status.success() {
         Ok(())
     } else {
-        Err(format!("komut {status} ile bitti"))
+        Err(format!("the command exited with {status}"))
     }
 }
 
@@ -253,7 +254,11 @@ static NEXT_LAUNCH: AtomicU64 = AtomicU64::new(1);
 const CANCEL_GRACE: Duration = Duration::from_millis(500);
 
 fn cancelled() -> CmdError {
-    CmdError::new("IPTAL", "İşlem iptal edildi.", "launch cancelled")
+    CmdError::new(
+        "IPTAL",
+        pick("İşlem iptal edildi.", "Cancelled."),
+        "launch cancelled",
+    )
 }
 
 /// Stops the launch here when it was cancelled.
@@ -303,7 +308,10 @@ pub async fn launch_instance(
     if state.running.lock().is_some() {
         return Err(CmdError::new(
             "OYUN-ACIK",
-            "Oyun zaten açık. Önce mevcut oyunu kapat.",
+            pick(
+                "Oyun zaten açık. Önce mevcut oyunu kapat.",
+                "The game is already open. Close it first.",
+            ),
             "",
         ));
     }
@@ -312,7 +320,10 @@ pub async fn launch_instance(
     if crate::commands::data::move_running(&app) {
         return Err(CmdError::new(
             "TASI-SURUYOR",
-            "Veri klasörü taşınırken oyun başlatılamaz. Taşıma bitince tekrar dene.",
+            pick(
+                "Veri klasörü taşınırken oyun başlatılamaz. Taşıma bitince tekrar dene.",
+                "The game can't start while the data folder is moving. Try again when the move is done.",
+            ),
             "the data folder is being moved",
         ));
     }
@@ -737,7 +748,10 @@ pub(crate) async fn ready_game_files(
             .ok_or_else(|| {
                 CmdError::new(
                     "YUKLEYICI-YOK",
-                    "Bu Minecraft sürümü için seçilen mod yükleyici bulunamadı.",
+                    pick(
+                        "Bu Minecraft sürümü için seçilen mod yükleyici bulunamadı.",
+                        "The chosen mod loader wasn't found for this Minecraft version.",
+                    ),
                     format!("{kind:?} for {}", instance.mc_version),
                 )
             })?,
@@ -919,10 +933,15 @@ async fn prepare_and_spawn(
     }
     // Instances made before every instance got the Projects server: an empty list gets it once.
     crate::commands::instances::seed_default_server_once(state, &mut instance).await;
-    // First launch without an options.txt (the player's, a modpack's or the pack's): Turkish,
-    // GUI scale 2 and the client's data version.
-    match pl_mc::instance::seed_options(&game_dir, &instance.mc_version, &installed.client_jar)
-        .await
+    // First launch without an options.txt (the player's, a modpack's or the pack's): the
+    // launcher's language, GUI scale 2 and the client's data version.
+    match pl_mc::instance::seed_options(
+        &game_dir,
+        &instance.mc_version,
+        &installed.client_jar,
+        pl_lang::Lang::current(),
+    )
+    .await
     {
         Ok(pl_mc::instance::OptionsSeed::Written { data_version }) => {
             tracing::info!(?data_version, "first-launch options written");
@@ -964,7 +983,10 @@ async fn prepare_and_spawn(
     let account = state.auth.active_account().ok_or_else(|| {
         CmdError::new(
             "HESAP-YOK",
-            "Oynamak için önce bir hesap ekle (Ayarlar > Hesaplar).",
+            pick(
+                "Oynamak için önce bir hesap ekle (Ayarlar > Hesaplar).",
+                "Add an account first to play (Settings > Accounts).",
+            ),
             "no active account",
         )
     })?;
@@ -1039,7 +1061,10 @@ async fn prepare_and_spawn(
             run_hook(pre, &hook_env, &game_dir).await.map_err(|detail| {
                 CmdError::new(
                     "ON-KOMUT",
-                    "Başlatmadan önceki komut başarısız oldu.",
+                    pick(
+                        "Başlatmadan önceki komut başarısız oldu.",
+                        "The command set to run before the game failed.",
+                    ),
                     detail,
                 )
             })

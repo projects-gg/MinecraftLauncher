@@ -9,6 +9,8 @@ publish = false
 
 [dependencies]
 pl-net = { workspace = true }
+# The game's first language and the sizes in messages follow the interface's (pl-lang).
+pl-lang = { workspace = true }
 tokio = { workspace = true }
 futures = { workspace = true }
 reqwest = { workspace = true }

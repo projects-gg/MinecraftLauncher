@@ -9,6 +9,8 @@ publish = false
 
 [dependencies]
 pl-net = { workspace = true }
+# MCC's language follows the launcher's (pl-lang).
+pl-lang = { workspace = true }
 tokio = { workspace = true }
 futures = { workspace = true }
 serde = { workspace = true }

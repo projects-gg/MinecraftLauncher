@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use pl_lang::pick;
 use pl_mc::launch::{GameEvent, QuickPlay};
 use pl_social::{
     InviteResult, LookupView, ProfileUpdate, SendOutcome, SessionInfo, SettingsMeta, SocialService,
@@ -249,7 +250,7 @@ pub async fn social_set_avatar(state: State<'_, AppState>, avatar: String) -> Cm
     let avatar = pl_social::Avatar::parse(&avatar).ok_or_else(|| {
         crate::error::CmdError::new(
             "SOSYAL-AVATAR",
-            "Bu resim seçilemedi.",
+            pick("Bu resim seçilemedi.", "This picture couldn't be picked."),
             "invalid avatar choice",
         )
     })?;
@@ -306,7 +307,11 @@ pub async fn social_backup_upload(
     data: String,
 ) -> CmdResult<SettingsMeta> {
     let data: serde_json::Value = serde_json::from_str(&data).map_err(|error| {
-        crate::error::CmdError::new("SOSYAL-YEDEK", "Ayarlar yedeklenemedi.", error.to_string())
+        crate::error::CmdError::new(
+            "SOSYAL-YEDEK",
+            pick("Ayarlar yedeklenemedi.", "Couldn't back up your settings."),
+            error.to_string(),
+        )
     })?;
     Ok(state.social.upload_settings(data).await?)
 }

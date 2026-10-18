@@ -16,6 +16,7 @@ use pl_content::{
     PackManifest, PackRef, PackState, SetInfo, SwitchJournal, SwitchRequest, VersionSets,
     apply_sync, estimate_downloads, plan_sync, resolve_items,
 };
+use pl_lang::pick;
 use pl_mc::addons::{AddonIndex, AddonInstallOptions, AddonProgress, Addons};
 use pl_mc::gamefiles::{ImportKind, LauncherTrash, TRASH_RETENTION, TrashEntry, TrashKind};
 use pl_mc::instance::{Instance, InstanceLoader};
@@ -59,7 +60,10 @@ pub(crate) fn refuse_while_running(state: &AppState, instance_id: &str) -> CmdRe
     {
         return Err(CmdError::new(
             "OYUN-ACIK-MOD",
-            "Oyun açıkken modlar ve sürüm değiştirilemez. Önce oyunu kapat.",
+            pick(
+                "Oyun açıkken modlar ve sürüm değiştirilemez. Önce oyunu kapat.",
+                "You can't change mods or the version while the game is open. Close the game first.",
+            ),
             "the game of this instance is running",
         ));
     }
@@ -69,7 +73,10 @@ pub(crate) fn refuse_while_running(state: &AppState, instance_id: &str) -> CmdRe
 fn switch_error(error: pl_content::Error) -> CmdError {
     CmdError::new(
         "SURUM-DEGISIMI",
-        "Sürüm değiştirilemedi. Mod klasörünü açık tutan bir program (dosya gezgini ya da antivirüs gibi) olabilir; kapatıp tekrar dene.",
+        pick(
+            "Sürüm değiştirilemedi. Mod klasörünü açık tutan bir program (dosya gezgini ya da antivirüs gibi) olabilir; kapatıp tekrar dene.",
+            "Couldn't switch the version. A program may have the mods folder open (like your file manager or antivirus); close it and try again.",
+        ),
         error.to_string(),
     )
 }
@@ -251,7 +258,10 @@ async fn switch_target(
         let snapshot = cached_or_fresh(state).await.ok_or_else(|| {
             CmdError::new(
                 "ICERIK-YOK",
-                "Sürümler yüklenemedi. İnternet bağlantını kontrol edip tekrar dene.",
+                pick(
+                    "Sürümler yüklenemedi. İnternet bağlantını kontrol edip tekrar dene.",
+                    "Couldn't load the versions. Check your internet connection and try again.",
+                ),
                 "no content snapshot",
             )
         })?;
@@ -263,7 +273,10 @@ async fn switch_target(
             .ok_or_else(|| {
                 CmdError::new(
                     "SURUM-SUNULMUYOR",
-                    "Projects paketi bu Minecraft sürümü için sunulmuyor.",
+                    pick(
+                        "Projects paketi bu Minecraft sürümü için sunulmuyor.",
+                        "The Projects pack isn't offered for this Minecraft version.",
+                    ),
                     format!("family {family} has no member for {minecraft}"),
                 )
             })?;
@@ -288,7 +301,10 @@ async fn switch_target(
         Ok(list) if list.is_empty() => {
             return Err(CmdError::new(
                 "YUKLEYICI-SURUM",
-                "Bu kurulumun mod yükleyicisi bu Minecraft sürümünü desteklemiyor.",
+                pick(
+                    "Bu kurulumun mod yükleyicisi bu Minecraft sürümünü desteklemiyor.",
+                    "This instance's mod loader doesn't support this Minecraft version.",
+                ),
                 format!("{kind:?} has no build for {minecraft}"),
             ));
         }
@@ -806,7 +822,10 @@ pub async fn instance_switch_version(
     if to.is_empty() || to == instance.mc_version {
         return Err(CmdError::new(
             "SURUM-AYNI",
-            "Kurulum zaten bu sürümde.",
+            pick(
+                "Kurulum zaten bu sürümde.",
+                "The instance is already on this version.",
+            ),
             format!("already on {to}"),
         ));
     }
@@ -941,7 +960,14 @@ pub async fn instance_restore_trashed_set(
 ) -> CmdResult<()> {
     refuse_while_running(&state, &instance_id)?;
     let gone = |detail: String| {
-        CmdError::new("SET-COP-YOK", "Eski set artık çöp kutusunda değil.", detail)
+        CmdError::new(
+            "SET-COP-YOK",
+            pick(
+                "Eski set artık çöp kutusunda değil.",
+                "The old set isn't in the trash anymore.",
+            ),
+            detail,
+        )
     };
     let trash = LauncherTrash::new(state.root.join("trash"));
     let entry = trash
@@ -977,14 +1003,20 @@ pub async fn instance_restore_trashed_set(
     if taken {
         return Err(CmdError::new(
             "SET-DOLU",
-            "Bu sürümün artık yeni bir seti var; eski set çöp kutusunda kaldı.",
+            pick(
+                "Bu sürümün artık yeni bir seti var; eski set çöp kutusunda kaldı.",
+                "This version has a new set now; the old one stays in the trash.",
+            ),
             format!("{} has a set", entry.name),
         ));
     }
     let restored = trash.restore(&trash_id).await.map_err(|e| {
         CmdError::new(
             "SET-GERI",
-            "Eski set geri getirilemedi. Tekrar dene.",
+            pick(
+                "Eski set geri getirilemedi. Tekrar dene.",
+                "Couldn't bring the old set back. Try again.",
+            ),
             e.to_string(),
         )
     })?;
@@ -994,7 +1026,10 @@ pub async fn instance_restore_trashed_set(
         tokio::fs::rename(&restored, &home).await.map_err(|e| {
             CmdError::new(
                 "SET-GERI",
-                "Eski set geri getirilemedi. Tekrar dene.",
+                pick(
+                    "Eski set geri getirilemedi. Tekrar dene.",
+                    "Couldn't bring the old set back. Try again.",
+                ),
                 e.to_string(),
             )
         })?;

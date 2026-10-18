@@ -23,7 +23,7 @@ use tokio::time::Instant;
 
 use crate::bridge::{BridgeEvent, ClientLine, DisconnectReason, parse_line};
 use crate::config::{
-    ConfigFiles, INI_FILE_NAME, LOGIN_SCRIPT_FILE_NAME, build_config, has_login_commands,
+    ConfigFiles, INI_FILE_NAME, LOGIN_SCRIPT_FILE_NAME, build_config_in, has_login_commands,
     write_config, write_login_script,
 };
 use crate::console::{
@@ -573,7 +573,14 @@ impl Actor {
 
         let client = (self.env.resolve_client)().ok_or(FailureReason::ClientMissing)?;
         let nickname = self.env.launcher_nickname.read().clone();
-        let files = build_config(&account, &commands, &nickname, &store.versions());
+        // MCC's own messages in the console follow the launcher's language.
+        let files = build_config_in(
+            &account,
+            &commands,
+            &nickname,
+            &store.versions(),
+            pl_lang::Lang::current(),
+        );
         let dir = store.paths().account_dir(&self.id);
 
         let written = {

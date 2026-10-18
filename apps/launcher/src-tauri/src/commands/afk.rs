@@ -4,6 +4,7 @@ use pl_afk::{
     AfkAccount, AfkError, AfkEventKind, AfkSettings, ConsoleLine, ConsoleLineKind, EventSink,
     PatternProblem, SessionState, SessionStats, SettingsPage, ValidationIssue, VersionOption,
 };
+use pl_lang::pick;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
@@ -32,28 +33,67 @@ impl From<pl_afk::AfkError> for CmdError {
         let (code, message) = match &error {
             AfkError::AccountNotFound(_) => (
                 "AFK-HESAP-YOK",
-                "Bu AFK hesabı artık yok. Listeyi yenileyip tekrar dene.",
+                pick(
+                    "Bu AFK hesabı artık yok. Listeyi yenileyip tekrar dene.",
+                    "This AFK account is gone. Refresh the list and try again.",
+                ),
             ),
             AfkError::InvalidNickname => (
                 "AFK-AD",
-                "Oyuncu adı 3-16 karakter olmalı ve yalnızca harf, rakam ya da alt çizgi içermeli.",
+                pick(
+                    "Oyuncu adı 3-16 karakter olmalı ve yalnızca harf, rakam ya da alt çizgi içermeli.",
+                    "The player name must be 3 to 16 characters: letters, numbers or underscores only.",
+                ),
             ),
-            AfkError::DuplicateNickname => ("AFK-AD", "Bu isimde bir AFK hesabı zaten var."),
+            AfkError::DuplicateNickname => (
+                "AFK-AD",
+                pick(
+                    "Bu isimde bir AFK hesabı zaten var.",
+                    "There's already an AFK account with this name.",
+                ),
+            ),
             AfkError::Secret(_) => (
                 "AFK-ANAHTAR",
-                "Giriş komutlarına bilgisayarın güvenli anahtar deposundan ulaşılamadı. Tekrar dene; sürerse bilgisayarı yeniden başlat.",
+                pick(
+                    "Giriş komutlarına bilgisayarın güvenli anahtar deposundan ulaşılamadı. Tekrar dene; sürerse bilgisayarı yeniden başlat.",
+                    "Couldn't reach the login commands in your computer's secure storage. Try again; if it keeps happening, restart your computer.",
+                ),
             ),
             AfkError::LoginCommandsChanged => (
                 "AFK-AYAR-DEGISTI",
-                "Giriş komutları bu sırada değişmiş. Ayarları kapatıp yeniden aç.",
+                pick(
+                    "Giriş komutları bu sırada değişmiş. Ayarları kapatıp yeniden aç.",
+                    "The login commands changed in the meantime. Close the settings and open them again.",
+                ),
             ),
-            AfkError::InvalidSettings(_) => ("AFK-AYAR", "Ayarlarda eksik ya da hatalı bilgi var."),
+            AfkError::InvalidSettings(_) => (
+                "AFK-AYAR",
+                pick(
+                    "Ayarlarda eksik ya da hatalı bilgi var.",
+                    "Some settings are missing or wrong.",
+                ),
+            ),
             AfkError::Io { .. } => (
                 "AFK-DISK",
-                "AFK ayarları diske yazılamadı. Diskte yer olduğundan ve antivirüsün engellemediğinden emin ol.",
+                pick(
+                    "AFK ayarları diske yazılamadı. Diskte yer olduğundan ve antivirüsün engellemediğinden emin ol.",
+                    "Couldn't save the AFK settings. Make sure there's space on the disk and your antivirus isn't blocking it.",
+                ),
             ),
-            AfkError::NotRunning => ("AFK-BAGLI-DEGIL", "Bu hesap şu an bağlı değil."),
-            _ => ("AFK", "AFK işlemi tamamlanamadı."),
+            AfkError::NotRunning => (
+                "AFK-BAGLI-DEGIL",
+                pick(
+                    "Bu hesap şu an bağlı değil.",
+                    "This account isn't connected right now.",
+                ),
+            ),
+            _ => (
+                "AFK",
+                pick(
+                    "AFK işlemi tamamlanamadı.",
+                    "Couldn't finish that for the AFK account.",
+                ),
+            ),
         };
         CmdError::new(code, message, details)
     }
@@ -153,7 +193,10 @@ fn connect_error(error: AfkError) -> CmdError {
     }
     CmdError::new(
         "AFK-BAGLAN",
-        "AFK hesabı başlatılamadı. AFK istemcisi henüz indirilmemiş olabilir; internet bağlantını kontrol et.",
+        pick(
+            "AFK hesabı başlatılamadı. AFK istemcisi henüz indirilmemiş olabilir; internet bağlantını kontrol et.",
+            "The AFK account couldn't start. The AFK client may not be downloaded yet; check your internet connection.",
+        ),
         error.to_string(),
     )
 }
@@ -247,7 +290,13 @@ pub fn afk_open_folder(app: AppHandle, state: State<'_, AppState>, id: String) -
     std::fs::create_dir_all(&dir).map_err(CmdError::internal)?;
     app.opener()
         .open_path(dir.to_string_lossy(), None::<&str>)
-        .map_err(|error| CmdError::new("KLASOR", "Klasör açılamadı.", error.to_string()))
+        .map_err(|error| {
+            CmdError::new(
+                "KLASOR",
+                pick("Klasör açılamadı.", "Couldn't open the folder."),
+                error.to_string(),
+            )
+        })
 }
 
 // --- Settings sheet ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use pl_lang::pick;
 use pl_mc::addons::AddonSource;
 use pl_mc::instance::{Instance, InstanceIcon, InstanceLoader, MemorySettings, NewInstance};
 use pl_mc::loaders::LoaderKind;
@@ -40,12 +41,18 @@ fn pack_error(error: pl_mc::Error) -> CmdError {
         _ if error.is_cancelled() || error.is_offline() => content_error(error),
         E::Unsupported(_) => CmdError::new(
             "PAKET-TANINMADI",
-            "Bu dosya tanınan bir mod paketi değil. .mrpack, Prism/MultiMC ya da CurseForge zip dosyası seç.",
+            pick(
+                "Bu dosya tanınan bir mod paketi değil. .mrpack, Prism/MultiMC ya da CurseForge zip dosyası seç.",
+                "This file isn't a modpack the launcher knows. Pick an .mrpack, a Prism/MultiMC zip or a CurseForge zip.",
+            ),
             details,
         ),
         E::Invalid(_) | E::Json { .. } | E::Archive { .. } => CmdError::new(
             "PAKET-BOZUK",
-            "Mod paketi bozuk ya da eksik görünüyor.",
+            pick(
+                "Mod paketi bozuk ya da eksik görünüyor.",
+                "The modpack looks damaged or incomplete.",
+            ),
             details,
         ),
         _ => content_error(error),
@@ -91,7 +98,10 @@ pub async fn modpack_preview(path: String) -> CmdResult<PackPreview> {
         .map_err(|error| match error {
             pl_mc::Error::Io { .. } => CmdError::new(
                 "DOSYA-OKUNAMADI",
-                "Dosya açılamadı. Dosyanın hâlâ yerinde olduğundan emin ol.",
+                pick(
+                    "Dosya açılamadı. Dosyanın hâlâ yerinde olduğundan emin ol.",
+                    "Couldn't open the file. Make sure it's still where it was.",
+                ),
                 error.to_string(),
             ),
             error => pack_error(error),
@@ -174,7 +184,7 @@ pub async fn modpack_install(
     if project.project_type != ModrinthProjectType::Modpack {
         return Err(CmdError::new(
             "TUR",
-            "Bu içerik bir mod paketi değil.",
+            pick("Bu içerik bir mod paketi değil.", "This isn't a modpack."),
             format!("{:?}", project.project_type),
         ));
     }
@@ -187,7 +197,10 @@ pub async fn modpack_install(
             .ok_or_else(|| {
                 CmdError::new(
                     "SURUM-YOK",
-                    "Bu mod paketinin indirilebilir bir sürümü yok.",
+                    pick(
+                        "Bu mod paketinin indirilebilir bir sürümü yok.",
+                        "This modpack has no version to download.",
+                    ),
                     project_id.clone(),
                 )
             })?,
@@ -245,7 +258,10 @@ pub(crate) async fn download_pack_version(
         .ok_or_else(|| {
             CmdError::new(
                 "PAKET-DOSYASI-YOK",
-                "Bu sürümün mod paketi dosyası yok.",
+                pick(
+                    "Bu sürümün mod paketi dosyası yok.",
+                    "This version has no modpack file.",
+                ),
                 version.id.clone(),
             )
         })?;
@@ -598,7 +614,10 @@ pub async fn modpack_export(
     if instance.loader.kind != LoaderKind::Vanilla && loader_version.is_none() {
         return Err(CmdError::new(
             "YUKLEYICI-YOK",
-            "Mod yükleyici sürümü bulunamadı. Kurulumu bir kez başlatıp tekrar dene.",
+            pick(
+                "Mod yükleyici sürümü bulunamadı. Kurulumu bir kez başlatıp tekrar dene.",
+                "The mod loader version wasn't found. Start the instance once and try again.",
+            ),
             format!("{:?} {}", instance.loader.kind, instance.mc_version),
         ));
     }

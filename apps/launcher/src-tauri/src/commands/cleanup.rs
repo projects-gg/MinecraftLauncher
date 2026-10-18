@@ -28,6 +28,7 @@ use tauri::{AppHandle, Manager, State};
 use crate::commands::data::{DataJob, begin_job};
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
+use pl_lang::pick;
 
 /// The automatic tidy-up starts this long after the launcher (never slows the start).
 const FIRST_TIDY: Duration = Duration::from_secs(90);
@@ -120,19 +121,31 @@ fn block_error(block: CleanupBlock) -> CmdError {
     let (code, message) = match block {
         CleanupBlock::GameRunning => (
             "TEMIZLIK-OYUN",
-            "Oyun açıkken temizlik yapılamaz. Önce oyunu kapat.",
+            pick(
+                "Oyun açıkken temizlik yapılamaz. Önce oyunu kapat.",
+                "You can't clean up while the game is open. Close the game first.",
+            ),
         ),
         CleanupBlock::Preparing => (
             "TEMIZLIK-HAZIRLIK",
-            "Oyun hazırlanırken temizlik yapılamaz. Bitmesini bekle.",
+            pick(
+                "Oyun hazırlanırken temizlik yapılamaz. Bitmesini bekle.",
+                "You can't clean up while a game is getting ready. Wait for it to finish.",
+            ),
         ),
         CleanupBlock::Busy => (
             "TEMIZLIK-ISLEM",
-            "Arka planda bir kurulum ya da yedekleme sürüyor. Bitince tekrar dene.",
+            pick(
+                "Arka planda bir kurulum ya da yedekleme sürüyor. Bitince tekrar dene.",
+                "An install or backup is running in the background. Try again when it's done.",
+            ),
         ),
         CleanupBlock::DataJob => (
             "TEMIZLIK-VERI",
-            "Veri klasöründe başka bir işlem sürüyor. Bitince tekrar dene.",
+            pick(
+                "Veri klasöründe başka bir işlem sürüyor. Bitince tekrar dene.",
+                "Something else is working in the data folder. Try again when it's done.",
+            ),
         ),
     };
     CmdError::new(code, message, format!("{block:?}"))
@@ -573,7 +586,10 @@ pub async fn cleanup_shared_files(state: State<'_, AppState>) -> CmdResult<Share
     .map_err(|error| {
         CmdError::new(
             "TEMIZLIK-TARAMA",
-            "Oyun dosyaları taranamadı.",
+            pick(
+                "Oyun dosyaları taranamadı.",
+                "Couldn't scan the game files.",
+            ),
             error.to_string(),
         )
     })?;
@@ -633,7 +649,10 @@ pub async fn cleanup_delete_shared(
     .map_err(|error| {
         CmdError::new(
             "TEMIZLIK-SIL",
-            "Bazı dosyalar silinemedi. Tekrar dene.",
+            pick(
+                "Bazı dosyalar silinemedi. Tekrar dene.",
+                "Some files couldn't be deleted. Try again.",
+            ),
             error.to_string(),
         )
     })?;
@@ -848,10 +867,13 @@ pub struct TrashSummaryView {
 #[specta::specta]
 pub async fn cleanup_trash(state: State<'_, AppState>) -> CmdResult<TrashSummaryView> {
     let trash = launcher_trash(&state);
-    let usage = trash
-        .usage()
-        .await
-        .map_err(|e| CmdError::new("COP-LISTE", "Çöp kutusu okunamadı.", e.to_string()))?;
+    let usage = trash.usage().await.map_err(|e| {
+        CmdError::new(
+            "COP-LISTE",
+            pick("Çöp kutusu okunamadı.", "Couldn't read the trash."),
+            e.to_string(),
+        )
+    })?;
     let limits = trash_limits(trash.dir());
     let retention = i64::try_from(limits.max_age.as_millis()).unwrap_or(i64::MAX);
     let names: HashMap<String, String> = state
@@ -942,7 +964,13 @@ pub async fn cleanup_delete_trashed_set(
 ) -> CmdResult<CleanupResultView> {
     let _job = begin_job(&app, DataJob::Cleaning)?;
     let trash = launcher_trash(&state);
-    let not_found = |detail: String| CmdError::new("COP-YOK", "Bu öğe çöp kutusunda yok.", detail);
+    let not_found = |detail: String| {
+        CmdError::new(
+            "COP-YOK",
+            pick("Bu öğe çöp kutusunda yok.", "This item isn't in the trash."),
+            detail,
+        )
+    };
     let entry = trash
         .get(&trash_id)
         .await
@@ -950,7 +978,10 @@ pub async fn cleanup_delete_trashed_set(
     trash.delete(&trash_id).await.map_err(|e| {
         CmdError::new(
             "COP-SIL",
-            "Kalıcı olarak silinemedi. Tekrar dene.",
+            pick(
+                "Kalıcı olarak silinemedi. Tekrar dene.",
+                "Couldn't delete it for good. Try again.",
+            ),
             e.to_string(),
         )
     })?;
@@ -972,7 +1003,10 @@ pub async fn cleanup_empty_trash(
     let report = launcher_trash(&state).empty().await.map_err(|e| {
         CmdError::new(
             "COP-BOSALT",
-            "Çöp kutusu boşaltılamadı. Tekrar dene.",
+            pick(
+                "Çöp kutusu boşaltılamadı. Tekrar dene.",
+                "Couldn't empty the trash. Try again.",
+            ),
             e.to_string(),
         )
     })?;

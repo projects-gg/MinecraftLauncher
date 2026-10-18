@@ -1,6 +1,8 @@
+use pl_lang::{Lang, pick};
 use serde::Serialize;
 
-/// Error returned by every command. `message` is friendly Turkish text for the UI; `code` and
+/// Error returned by every command. `message` is friendly text for the UI in the interface's
+/// language (`pl_lang`: the backend's own texts are written as Turkish/English pairs); `code` and
 /// `details` are only for the "copy details" action (never shown as visible text).
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -30,7 +32,10 @@ impl CmdError {
     pub fn internal(details: impl std::fmt::Display) -> Self {
         Self::new(
             "GENEL",
-            "Beklenmeyen bir sorun oluştu. Tekrar dene; sürerse ayrıntıları destek ekibine gönder.",
+            pick(
+                "Beklenmeyen bir sorun oluştu. Tekrar dene; sürerse ayrıntıları destek ekibine gönder.",
+                "Something unexpected went wrong. Try again; if it keeps happening, send the details to support.",
+            ),
             details.to_string(),
         )
     }
@@ -39,23 +44,30 @@ impl CmdError {
     pub fn disk_full(details: impl Into<String>) -> Self {
         Self::new(
             Self::DISK_FULL,
-            "Diskte yer kalmadı. Biraz yer açıp tekrar dene.",
+            pick(
+                "Diskte yer kalmadı. Biraz yer açıp tekrar dene.",
+                "The disk is full. Free up some space and try again.",
+            ),
             details,
         )
     }
 
     /// Before a launch downloads anything: the disk cannot hold it (`needed` with the margin).
     pub fn disk_short(needed: u64, free: u64, details: impl Into<String>) -> Self {
+        let lang = Lang::current();
         // A figure and its unit stay on one line of the toast ("1,2 GB").
         let size = |bytes| {
-            pl_mc::install::space::format_size(bytes).replace(' ', &char::from(0xA0_u8).to_string())
+            pl_mc::install::space::format_size(bytes, lang)
+                .replace(' ', &char::from(0xA0_u8).to_string())
         };
+        let (needed, free) = (size(needed), size(free));
         Self::new(
             Self::DISK_FULL,
-            format!(
-                "Diskte yeterli yer yok. Oyun için {} gerekiyor, {} boş.",
-                size(needed),
-                size(free)
+            lang.pick(
+                format!("Diskte yeterli yer yok. Oyun için {needed} gerekiyor, {free} boş."),
+                format!(
+                    "There isn't enough space on the disk. The game needs {needed}, {free} is free."
+                ),
             ),
             details,
         )
@@ -64,7 +76,11 @@ impl CmdError {
 
 impl From<pl_auth::AuthError> for CmdError {
     fn from(error: pl_auth::AuthError) -> Self {
-        Self::new(error.code(), error.user_message_tr(), error.details())
+        Self::new(
+            error.code(),
+            error.user_message(Lang::current()),
+            error.details(),
+        )
     }
 }
 
@@ -73,11 +89,18 @@ impl From<pl_content::Error> for CmdError {
         if error.is_offline() {
             Self::new(
                 "ICERIK-AG",
-                "Haberlere ulaşılamadı. İnternet bağlantını kontrol et.",
+                pick(
+                    "Haberlere ulaşılamadı. İnternet bağlantını kontrol et.",
+                    "Couldn't reach the news. Check your internet connection.",
+                ),
                 error.to_string(),
             )
         } else {
-            Self::new("ICERIK", "Haberler yüklenemedi.", error.to_string())
+            Self::new(
+                "ICERIK",
+                pick("Haberler yüklenemedi.", "The news couldn't be loaded."),
+                error.to_string(),
+            )
         }
     }
 }
@@ -87,92 +110,214 @@ impl From<pl_mc::Error> for CmdError {
         use pl_mc::Error as E;
         let details = error.to_string();
         let (code, message) = match &error {
-            _ if error.is_cancelled() => ("IPTAL", "İşlem iptal edildi."),
+            _ if error.is_cancelled() => ("IPTAL", pick("İşlem iptal edildi.", "Cancelled.")),
             _ if error.is_disk_full() => return Self::disk_full(details),
             _ if error.is_offline() => (
                 "AG-YOK",
-                "İnternete bağlanılamadı ve gereken oyun dosyaları bilgisayarında yok. Bağlantını kontrol edip tekrar dene.",
+                pick(
+                    "İnternete bağlanılamadı ve gereken oyun dosyaları bilgisayarında yok. Bağlantını kontrol edip tekrar dene.",
+                    "Couldn't connect to the internet, and the game files it needs aren't on your computer. Check your connection and try again.",
+                ),
             ),
             E::VersionNotFound(_) => (
                 "SURUM-YOK",
-                "Bu Minecraft sürümü bulunamadı. Kurulumun sürümünü değiştir.",
+                pick(
+                    "Bu Minecraft sürümü bulunamadı. Kurulumun sürümünü değiştir.",
+                    "This Minecraft version wasn't found. Pick another version for the instance.",
+                ),
             ),
             E::Java(_) => (
                 "JAVA",
-                "Bu sürüm için uygun Java hazırlanamadı. Kurulum ayarlarından Java'yı Otomatik'e al.",
+                pick(
+                    "Bu sürüm için uygun Java hazırlanamadı. Kurulum ayarlarından Java'yı Otomatik'e al.",
+                    "Couldn't get the right Java ready for this version. Set Java to Automatic in the instance settings.",
+                ),
             ),
-            E::Net(_) => ("AG", "İndirme sırasında bağlantı sorunu oldu. Tekrar dene."),
+            E::Net(_) => (
+                "AG",
+                pick(
+                    "İndirme sırasında bağlantı sorunu oldu. Tekrar dene.",
+                    "The connection dropped during the download. Try again.",
+                ),
+            ),
             E::Io { .. } => (
                 "DISK",
-                "Dosyalara yazılamadı. Diskte yer olduğundan ve antivirüsün engellemediğinden emin ol.",
+                pick(
+                    "Dosyalara yazılamadı. Diskte yer olduğundan ve antivirüsün engellemediğinden emin ol.",
+                    "Couldn't write the files. Make sure there's space on the disk and your antivirus isn't blocking it.",
+                ),
             ),
-            E::Process(_) => ("SUREC", "Oyun başlatılamadı. Tekrar dene."),
-            E::NotFound(_) => ("BULUNAMADI", "Gereken bir dosya bulunamadı. Tekrar dene."),
-            _ => ("OYUN", "Oyun hazırlanırken bir sorun oluştu. Tekrar dene."),
+            E::Process(_) => (
+                "SUREC",
+                pick(
+                    "Oyun başlatılamadı. Tekrar dene.",
+                    "The game couldn't start. Try again.",
+                ),
+            ),
+            E::NotFound(_) => (
+                "BULUNAMADI",
+                pick(
+                    "Gereken bir dosya bulunamadı. Tekrar dene.",
+                    "A file it needs is missing. Try again.",
+                ),
+            ),
+            _ => (
+                "OYUN",
+                pick(
+                    "Oyun hazırlanırken bir sorun oluştu. Tekrar dene.",
+                    "Something went wrong while getting the game ready. Try again.",
+                ),
+            ),
         };
         Self::new(code, message, details)
     }
 }
 
 impl From<pl_social::SocialError> for CmdError {
-    /// Friends service failures: a short Turkish sentence; the code stays in the details.
+    /// Friends service failures: a short sentence; the code stays in the details.
     fn from(error: pl_social::SocialError) -> Self {
         use pl_social::{ErrorCode as C, SocialError as E};
         let details = error.to_string();
-        let unavailable = "Arkadaşlar şu an kullanılamıyor. Biraz sonra tekrar dene.";
+        let unavailable = pick(
+            "Arkadaşlar şu an kullanılamıyor. Biraz sonra tekrar dene.",
+            "Friends isn't available right now. Try again in a bit.",
+        );
         let (code, message) = match &error {
-            E::Unauthorized => ("SOSYAL-OTURUM", "Oturumun sona erdi. Yeniden giriş yap."),
+            E::Unauthorized => (
+                "SOSYAL-OTURUM",
+                pick(
+                    "Oturumun sona erdi. Yeniden giriş yap.",
+                    "Your session ended. Sign in again.",
+                ),
+            ),
             E::RateLimited { .. } => (
                 "SOSYAL-SINIR",
-                "Bunu çok sık denedin. Biraz sonra tekrar dene.",
+                pick(
+                    "Bunu çok sık denedin. Biraz sonra tekrar dene.",
+                    "You tried that too often. Try again in a bit.",
+                ),
             ),
             E::Unavailable { .. } | E::Network(_) => ("SOSYAL-YOK", unavailable),
             E::SettingsConflict { .. } => (
                 "SOSYAL-YEDEK",
-                "Ayarların başka bir bilgisayarda değişti. Tekrar dene.",
+                pick(
+                    "Ayarların başka bir bilgisayarda değişti. Tekrar dene.",
+                    "Your settings changed on another computer. Try again.",
+                ),
             ),
-            E::InvalidInput("not a friend code") => ("SOSYAL-KOD", "Bu bir arkadaşlık kodu değil."),
-            E::InvalidInput(_) | E::Protocol(_) => {
-                ("SOSYAL", "Bir sorun oluştu. Biraz sonra tekrar dene.")
-            }
+            E::InvalidInput("not a friend code") => (
+                "SOSYAL-KOD",
+                pick("Bu bir arkadaşlık kodu değil.", "That's not a friend code."),
+            ),
+            E::InvalidInput(_) | E::Protocol(_) => (
+                "SOSYAL",
+                pick(
+                    "Bir sorun oluştu. Biraz sonra tekrar dene.",
+                    "Something went wrong. Try again in a bit.",
+                ),
+            ),
             E::Refused { code, .. } => match code {
-                C::InvalidCode | C::BadRequest => ("SOSYAL-KOD", "Bu bir arkadaşlık kodu değil."),
-                C::CodeNotFound | C::UserNotFound => {
-                    ("SOSYAL-KOD-YOK", "Bu koda ait kimse bulunamadı.")
-                }
-                C::SelfTarget => ("SOSYAL-KENDIN", "Bu senin kodun."),
-                C::AlreadyFriends => ("SOSYAL-ZATEN", "Zaten arkadaşsınız."),
-                C::AlreadyRequested => ("SOSYAL-ISTEK-VAR", "İsteğin zaten gönderildi."),
+                C::InvalidCode | C::BadRequest => (
+                    "SOSYAL-KOD",
+                    pick("Bu bir arkadaşlık kodu değil.", "That's not a friend code."),
+                ),
+                C::CodeNotFound | C::UserNotFound => (
+                    "SOSYAL-KOD-YOK",
+                    pick("Bu koda ait kimse bulunamadı.", "Nobody has this code."),
+                ),
+                C::SelfTarget => (
+                    "SOSYAL-KENDIN",
+                    pick("Bu senin kodun.", "That's your own code."),
+                ),
+                C::AlreadyFriends => (
+                    "SOSYAL-ZATEN",
+                    pick("Zaten arkadaşsınız.", "You're already friends."),
+                ),
+                C::AlreadyRequested => (
+                    "SOSYAL-ISTEK-VAR",
+                    pick("İsteğin zaten gönderildi.", "Your request is already sent."),
+                ),
                 C::Blocked => (
                     "SOSYAL-ENGEL",
-                    "Bu kişiyi engellemişsin. Önce engeli kaldır.",
+                    pick(
+                        "Bu kişiyi engellemişsin. Önce engeli kaldır.",
+                        "You blocked this person. Unblock them first.",
+                    ),
                 ),
-                C::LimitFriends => ("SOSYAL-LISTE-DOLU", "Arkadaş listen dolu."),
-                C::LimitFriendsTarget => ("SOSYAL-LISTE-DOLU", "Bu kişinin arkadaş listesi dolu."),
+                C::LimitFriends => (
+                    "SOSYAL-LISTE-DOLU",
+                    pick("Arkadaş listen dolu.", "Your friends list is full."),
+                ),
+                C::LimitFriendsTarget => (
+                    "SOSYAL-LISTE-DOLU",
+                    pick(
+                        "Bu kişinin arkadaş listesi dolu.",
+                        "This person's friends list is full.",
+                    ),
+                ),
                 C::LimitOutgoingRequests => (
                     "SOSYAL-ISTEK-SINIR",
-                    "Bekleyen çok isteğin var. Bazıları yanıtlanınca tekrar dene.",
+                    pick(
+                        "Bekleyen çok isteğin var. Bazıları yanıtlanınca tekrar dene.",
+                        "You have too many pending requests. Try again once some are answered.",
+                    ),
                 ),
                 C::LimitIncomingRequests => (
                     "SOSYAL-ISTEK-SINIR",
-                    "Bu kişinin bekleyen çok isteği var. Biraz sonra tekrar dene.",
+                    pick(
+                        "Bu kişinin bekleyen çok isteği var. Biraz sonra tekrar dene.",
+                        "This person has too many pending requests. Try again in a bit.",
+                    ),
                 ),
-                C::RequestNotFound => ("SOSYAL-ISTEK-YOK", "Bu istek artık geçerli değil."),
+                C::RequestNotFound => (
+                    "SOSYAL-ISTEK-YOK",
+                    pick(
+                        "Bu istek artık geçerli değil.",
+                        "This request isn't valid anymore.",
+                    ),
+                ),
                 C::FriendNotFound => (
                     "SOSYAL-ARKADAS-YOK",
-                    "Bu kişi artık arkadaş listende değil.",
+                    pick(
+                        "Bu kişi artık arkadaş listende değil.",
+                        "This person isn't on your friends list anymore.",
+                    ),
                 ),
-                C::SessionNotFound => ("SOSYAL-OTURUM-YOK", "Bu oturum zaten kapanmış."),
-                C::Unauthorized => ("SOSYAL-OTURUM", "Oturumun sona erdi. Yeniden giriş yap."),
+                C::SessionNotFound => (
+                    "SOSYAL-OTURUM-YOK",
+                    pick(
+                        "Bu oturum zaten kapanmış.",
+                        "This session is already closed.",
+                    ),
+                ),
+                C::Unauthorized => (
+                    "SOSYAL-OTURUM",
+                    pick(
+                        "Oturumun sona erdi. Yeniden giriş yap.",
+                        "Your session ended. Sign in again.",
+                    ),
+                ),
                 C::RateLimited => (
                     "SOSYAL-SINIR",
-                    "Bunu çok sık denedin. Biraz sonra tekrar dene.",
+                    pick(
+                        "Bunu çok sık denedin. Biraz sonra tekrar dene.",
+                        "You tried that too often. Try again in a bit.",
+                    ),
                 ),
                 C::Unavailable => (
                     "SOSYAL-YOK",
-                    "Bu şu an yapılamıyor. Biraz sonra tekrar dene.",
+                    pick(
+                        "Bu şu an yapılamıyor. Biraz sonra tekrar dene.",
+                        "That can't be done right now. Try again in a bit.",
+                    ),
                 ),
-                _ => ("SOSYAL", "Bir sorun oluştu. Biraz sonra tekrar dene."),
+                _ => (
+                    "SOSYAL",
+                    pick(
+                        "Bir sorun oluştu. Biraz sonra tekrar dene.",
+                        "Something went wrong. Try again in a bit.",
+                    ),
+                ),
             },
         };
         Self::new(code, message, details)

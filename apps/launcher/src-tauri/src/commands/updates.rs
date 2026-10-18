@@ -25,6 +25,7 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 use crate::error::{CmdError, CmdResult};
 use crate::state::{AppState, CONTENT_MIRRORS};
+use pl_lang::pick;
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -155,7 +156,10 @@ pub async fn update_download(
     let Some((_, url)) = fetch_channel(&state, &channel).await else {
         return Err(CmdError::new(
             "GUNCELLEME-YOK",
-            "Güncelleme sunucusuna ulaşılamadı. Daha sonra tekrar dene.",
+            pick(
+                "Güncelleme sunucusuna ulaşılamadı. Daha sonra tekrar dene.",
+                "Couldn't reach the update server. Try again later.",
+            ),
             "no channel mirror answered",
         ));
     };
@@ -166,10 +170,13 @@ pub async fn update_download(
         .map_err(CmdError::internal)?
         .build()
         .map_err(CmdError::internal)?;
-    let Some(update) = updater
-        .check()
-        .await
-        .map_err(|e| CmdError::new("GUNCELLEME", "Güncelleme denetlenemedi.", e.to_string()))?
+    let Some(update) = updater.check().await.map_err(|e| {
+        CmdError::new(
+            "GUNCELLEME",
+            pick("Güncelleme denetlenemedi.", "Couldn't check for updates."),
+            e.to_string(),
+        )
+    })?
     else {
         return Ok(false);
     };
@@ -199,7 +206,10 @@ pub async fn update_download(
         .map_err(|e| {
             CmdError::new(
                 "GUNCELLEME-INDIR",
-                "Güncelleme indirilemedi.",
+                pick(
+                    "Güncelleme indirilemedi.",
+                    "The update couldn't be downloaded.",
+                ),
                 e.to_string(),
             )
         })?;
@@ -211,7 +221,11 @@ pub async fn update_download(
 pub const NOT_READY: &str = "GUNCELLEME-HAZIR-DEGIL";
 
 fn not_ready(details: &str) -> CmdError {
-    CmdError::new(NOT_READY, "Hazır bir güncelleme yok.", details)
+    CmdError::new(
+        NOT_READY,
+        pick("Hazır bir güncelleme yok.", "No update is ready."),
+        details,
+    )
 }
 
 fn note_path(state: &AppState) -> PathBuf {
@@ -339,7 +353,10 @@ pub async fn update_apply(
         *state.pending_update.lock() = Some((update, bytes));
         return Err(CmdError::new(
             "GUNCELLEME-OYUN",
-            "Oyun açıkken güncelleme kurulamaz. Oyundan çıkınca tekrar dene.",
+            pick(
+                "Oyun açıkken güncelleme kurulamaz. Oyundan çıkınca tekrar dene.",
+                "The update can't be installed while the game is open. Try again after you quit the game.",
+            ),
             "a game runs or is being prepared",
         ));
     }
@@ -370,7 +387,10 @@ pub async fn update_apply(
             *state.pending_update.lock() = Some(pending);
             Err(CmdError::new(
                 "GUNCELLEME-KURULUM",
-                "Güncelleme kurulamadı. Tekrar dene.",
+                pick(
+                    "Güncelleme kurulamadı. Tekrar dene.",
+                    "The update couldn't be installed. Try again.",
+                ),
                 failed.details,
             ))
         }

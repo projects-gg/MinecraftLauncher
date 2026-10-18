@@ -62,6 +62,7 @@ pl-discord = { workspace = true }
 pl-data = { workspace = true }
 pl-social = { workspace = true }
 pl-desktop = { workspace = true }
+pl-lang = { workspace = true }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = { workspace = true }

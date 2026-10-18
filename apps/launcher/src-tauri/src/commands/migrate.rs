@@ -11,6 +11,7 @@ use tauri::State;
 
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
+use pl_lang::pick;
 
 fn legacy_root() -> Option<PathBuf> {
     if !cfg!(windows) {
@@ -229,7 +230,10 @@ pub async fn legacy_import(
     let root = legacy_root().ok_or_else(|| {
         CmdError::new(
             "ESKI-YOK",
-            "Eski Projects Launcher verisi bulunamadı.",
+            pick(
+                "Eski Projects Launcher verisi bulunamadı.",
+                "No data from the old Projects Launcher was found.",
+            ),
             "no %APPDATA%\\.projects",
         )
     })?;
@@ -244,13 +248,13 @@ pub async fn legacy_import(
             Ok(()) => match state.auth.import_legacy_premium().await {
                 Ok(pl_auth::LegacyImport::Imported { .. }) => report.premium_imported = true,
                 Ok(_) => report.notes.push(
-                    "Premium oturum okunamadı; Ayarlar > Hesaplar'dan tekrar giriş yapabilirsin."
+                    pick("Premium oturum okunamadı; Ayarlar > Hesaplar'dan tekrar giriş yapabilirsin.", "Couldn't read the premium session; you can sign in again in Settings > Accounts.")
                         .into(),
                 ),
                 Err(error) => {
                     tracing::warn!(%error, "legacy premium import failed");
                     report.notes.push(
-                        "Premium oturum aktarılamadı; Microsoft ile yeniden giriş yap.".into(),
+                        pick("Premium oturum aktarılamadı; Microsoft ile yeniden giriş yap.", "Couldn't bring over the premium session; sign in with Microsoft again.").into(),
                     );
                 }
             },
@@ -286,9 +290,10 @@ pub async fn legacy_import(
                     Err(pl_afk::AfkError::DuplicateNickname) => continue,
                     Err(error) => {
                         tracing::warn!(%error, "legacy AFK account not imported");
-                        report
-                            .notes
-                            .push(format!("{nickname} AFK hesabı aktarılamadı."));
+                        report.notes.push(pick(
+                            format!("{nickname} AFK hesabı aktarılamadı."),
+                            format!("The AFK account {nickname} couldn't be brought over."),
+                        ));
                         continue;
                     }
                 };
@@ -300,16 +305,26 @@ pub async fn legacy_import(
                 };
                 if let Err(error) = store.update_account(created) {
                     tracing::warn!(%error, "legacy AFK account settings not imported");
-                    report.notes.push(format!(
-                        "{nickname} AFK hesabının ayarları aktarılamadı; AFK sayfasından kontrol et."
+                    report.notes.push(pick(
+                        format!(
+                            "{nickname} AFK hesabının ayarları aktarılamadı; AFK sayfasından kontrol et."
+                        ),
+                        format!(
+                            "The settings of the AFK account {nickname} couldn't be brought over; check them on the AFK page."
+                        ),
                     ));
                 }
                 if !legacy.login_commands.is_empty()
                     && let Err(error) = store.set_login_commands(&id, &legacy.login_commands)
                 {
                     tracing::warn!(%error, "legacy AFK login commands not imported");
-                    report.notes.push(format!(
-                        "{nickname} AFK hesabının giriş komutları aktarılamadı; AFK ayarlarından yeniden gir."
+                    report.notes.push(pick(
+                        format!(
+                            "{nickname} AFK hesabının giriş komutları aktarılamadı; AFK ayarlarından yeniden gir."
+                        ),
+                        format!(
+                            "The login commands of the AFK account {nickname} couldn't be brought over; enter them again in its AFK settings."
+                        ),
                     ));
                 }
                 report.afk_accounts += 1;
@@ -403,7 +418,7 @@ pub async fn legacy_import(
         report.instance_id = Some(instance.id);
         if skipped_worlds {
             report.notes.push(
-                "Dünyalar diskte yeterli yer olmadığı için kopyalanmadı. Eski launcher'daki dünyaların yerinde duruyor.".into(),
+                pick("Dünyalar diskte yeterli yer olmadığı için kopyalanmadı. Eski launcher'daki dünyaların yerinde duruyor.", "The worlds weren't copied because the disk is too full. Your worlds are still in the old launcher.").into(),
             );
         }
     }

@@ -24,6 +24,7 @@ use tauri_plugin_opener::OpenerExt;
 
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
+use pl_lang::pick;
 
 const LOCATION_FILE: &str = "location.json";
 /// The old folder of a move is deleted only after the launcher has run this long from the new
@@ -122,9 +123,18 @@ pub(crate) fn begin_job(app: &AppHandle, job: DataJob) -> CmdResult<JobGuard> {
     let mut current = jobs.current.lock();
     if let Some(running) = current.as_ref() {
         let message = match running {
-            DataJob::Moving(_) => "Veri klasörü taşınıyor. Bitmesini bekle.",
-            DataJob::Cleaning => "Temizlik sürüyor. Bitmesini bekle.",
-            DataJob::Finishing => "Önceki taşıma tamamlanıyor. Biraz sonra tekrar dene.",
+            DataJob::Moving(_) => pick(
+                "Veri klasörü taşınıyor. Bitmesini bekle.",
+                "The data folder is moving. Wait for it to finish.",
+            ),
+            DataJob::Cleaning => pick(
+                "Temizlik sürüyor. Bitmesini bekle.",
+                "A cleanup is running. Wait for it to finish.",
+            ),
+            DataJob::Finishing => pick(
+                "Önceki taşıma tamamlanıyor. Biraz sonra tekrar dene.",
+                "The last move is finishing. Try again in a bit.",
+            ),
         };
         return Err(CmdError::new(
             "VERI-MESGUL",
@@ -188,7 +198,10 @@ pub async fn data_open_folder(app: AppHandle, state: State<'_, AppState>) -> Cmd
         .map_err(|error| {
             CmdError::new(
                 "KLASOR-ACILMADI",
-                "Klasör açılamadı. Dosya gezgininden elle açabilirsin.",
+                pick(
+                    "Klasör açılamadı. Dosya gezgininden elle açabilirsin.",
+                    "Couldn't open the folder. You can open it yourself in your file manager.",
+                ),
                 error.to_string(),
             )
         })
@@ -218,7 +231,10 @@ pub async fn data_support_bundle(
     let Some((dir, folder)) = bundle::bundle_folder() else {
         return Err(CmdError::new(
             "DESTEK-KLASOR",
-            "Destek paketini kaydedecek bir klasör bulunamadı.",
+            pick(
+                "Destek paketini kaydedecek bir klasör bulunamadı.",
+                "No folder was found to save the support package in.",
+            ),
             "no Downloads, Desktop or home folder",
         ));
     };
@@ -264,7 +280,7 @@ pub async fn data_support_bundle(
     .map_err(|error| {
         CmdError::new(
             "DESTEK",
-            "Destek paketi oluşturulamadı. Diskte yer olduğundan emin olup tekrar dene.",
+            pick("Destek paketi oluşturulamadı. Diskte yer olduğundan emin olup tekrar dene.", "Couldn't create the support package. Make sure there's space on the disk and try again."),
             error.to_string(),
         )
     })?;
@@ -440,28 +456,40 @@ fn ensure_can_move(app: &AppHandle, state: &AppState) -> CmdResult<()> {
     if pinned_by_environment() {
         return Err(CmdError::new(
             "TASI-SABIT",
-            "Bu kurulumda veri klasörünün yeri sabit, buradan taşınamaz.",
+            pick(
+                "Bu kurulumda veri klasörünün yeri sabit, buradan taşınamaz.",
+                "This install keeps the data folder in a fixed place; it can't be moved from here.",
+            ),
             "PROJECTS_LAUNCHER_DATA_DIR is set",
         ));
     }
     if state.running.lock().is_some() {
         return Err(CmdError::new(
             "TASI-OYUN",
-            "Oyun açıkken veri klasörü taşınamaz. Önce oyunu kapat.",
+            pick(
+                "Oyun açıkken veri klasörü taşınamaz. Önce oyunu kapat.",
+                "You can't move the data folder while the game is open. Close the game first.",
+            ),
             "a game is running",
         ));
     }
     if state.launch_cancel.lock().is_some() {
         return Err(CmdError::new(
             "TASI-HAZIRLIK",
-            "Oyun hazırlanırken veri klasörü taşınamaz. Bitmesini bekle.",
+            pick(
+                "Oyun hazırlanırken veri klasörü taşınamaz. Bitmesini bekle.",
+                "You can't move the data folder while a game is getting ready. Wait for it to finish.",
+            ),
             "a launch is being prepared",
         ));
     }
     if state.afk.any_active() {
         return Err(CmdError::new(
             "TASI-AFK",
-            "AFK hesapları çalışırken veri klasörü taşınamaz. Önce hepsini durdur.",
+            pick(
+                "AFK hesapları çalışırken veri klasörü taşınamaz. Önce hepsini durdur.",
+                "You can't move the data folder while AFK accounts are running. Stop them all first.",
+            ),
             "AFK sessions are active",
         ));
     }
@@ -471,7 +499,10 @@ fn ensure_can_move(app: &AppHandle, state: &AppState) -> CmdResult<()> {
     {
         return Err(CmdError::new(
             "TASI-ISLEM",
-            "Arka planda bir kurulum ya da yedekleme sürüyor. Bitince tekrar dene.",
+            pick(
+                "Arka planda bir kurulum ya da yedekleme sürüyor. Bitince tekrar dene.",
+                "An install or backup is running in the background. Try again when it's done.",
+            ),
             "a content or library job is running",
         ));
     }
@@ -485,58 +516,103 @@ fn move_error(error: pl_data::Error) -> CmdError {
     let (code, message) = match &error {
         E::Cancelled => (
             "IPTAL",
-            "Taşıma iptal edildi. Verilerin eski yerinde duruyor.",
+            pick(
+                "Taşıma iptal edildi. Verilerin eski yerinde duruyor.",
+                "Move cancelled. Your data is still in its old place.",
+            ),
         ),
         E::Target { problem, .. } => match problem {
             TargetProblem::NotAbsolute | TargetProblem::NotAFolder => (
                 "TASI-HEDEF",
-                "Seçilen yer bir klasör değil. Başka bir klasör seç.",
+                pick(
+                    "Seçilen yer bir klasör değil. Başka bir klasör seç.",
+                    "That's not a folder. Pick another folder.",
+                ),
             ),
-            TargetProblem::Same => ("TASI-AYNI", "Verilerin zaten bu klasörde."),
+            TargetProblem::Same => (
+                "TASI-AYNI",
+                pick(
+                    "Verilerin zaten bu klasörde.",
+                    "Your data is already in this folder.",
+                ),
+            ),
             TargetProblem::InsideCurrent => (
                 "TASI-ICERIDE",
-                "Yeni yer, şu anki veri klasörünün içinde olamaz. Başka bir klasör seç.",
+                pick(
+                    "Yeni yer, şu anki veri klasörünün içinde olamaz. Başka bir klasör seç.",
+                    "The new place can't be inside the current data folder. Pick another folder.",
+                ),
             ),
             TargetProblem::ContainsCurrent => (
                 "TASI-KAPSIYOR",
-                "Yeni yer, şu anki veri klasörünü içeremez. Başka bir klasör seç.",
+                pick(
+                    "Yeni yer, şu anki veri klasörünü içeremez. Başka bir klasör seç.",
+                    "The new place can't contain the current data folder. Pick another folder.",
+                ),
             ),
             TargetProblem::NotEmpty => (
                 "TASI-DOLU",
-                "Seçtiğin yerde içi dolu bir ProjectsLauncher klasörü var. Başka bir klasör seç.",
+                pick(
+                    "Seçtiğin yerde içi dolu bir ProjectsLauncher klasörü var. Başka bir klasör seç.",
+                    "There's already a ProjectsLauncher folder with files in it there. Pick another folder.",
+                ),
             ),
             TargetProblem::NotWritable => (
                 "TASI-YAZILAMIYOR",
-                "Seçtiğin klasöre yazılamıyor. Başka bir klasör seç.",
+                pick(
+                    "Seçtiğin klasöre yazılamıyor. Başka bir klasör seç.",
+                    "The launcher can't write to that folder. Pick another folder.",
+                ),
             ),
         },
         E::NotEnoughSpace { .. } => (
             "TASI-YER",
-            "Seçtiğin diskte yeterli boş alan yok. Yer aç ya da başka bir disk seç.",
+            pick(
+                "Seçtiğin diskte yeterli boş alan yok. Yer aç ya da başka bir disk seç.",
+                "That disk doesn't have enough free space. Free up space or pick another disk.",
+            ),
         ),
         E::Mismatch { .. } => (
             "TASI-DOGRULAMA",
-            "Kopyalanan dosyalar doğrulanamadı. Verilerin eski yerinde duruyor, tekrar dene.",
+            pick(
+                "Kopyalanan dosyalar doğrulanamadı. Verilerin eski yerinde duruyor, tekrar dene.",
+                "The copied files couldn't be checked. Your data is still in its old place; try again.",
+            ),
         ),
         E::Link { folder: true, .. } => (
             "TASI-BAGLANTI",
-            "Veri klasöründeki bir klasör bağlantısı yeni yerde oluşturulamadı. Verilerin eski yerinde duruyor.",
+            pick(
+                "Veri klasöründeki bir klasör bağlantısı yeni yerde oluşturulamadı. Verilerin eski yerinde duruyor.",
+                "A folder link in the data folder couldn't be made in the new place. Your data is still in its old place.",
+            ),
         ),
         E::Link { folder: false, .. } => (
             "TASI-BAGLANTI",
-            "Veri klasöründeki bir dosya bağlantısı yeni yerde oluşturulamadı. Verilerin eski yerinde duruyor.",
+            pick(
+                "Veri klasöründeki bir dosya bağlantısı yeni yerde oluşturulamadı. Verilerin eski yerinde duruyor.",
+                "A file link in the data folder couldn't be made in the new place. Your data is still in its old place.",
+            ),
         ),
         E::Io { source, .. } if source.kind() == ErrorKind::StorageFull => (
             "TASI-YER",
-            "Kopyalarken disk doldu. Verilerin eski yerinde duruyor.",
+            pick(
+                "Kopyalarken disk doldu. Verilerin eski yerinde duruyor.",
+                "The disk filled up while copying. Your data is still in its old place.",
+            ),
         ),
         E::Io { source, .. } if source.kind() == ErrorKind::PermissionDenied => (
             "TASI-ERISIM",
-            "Bazı dosyalar kopyalanamadı, başka bir program kullanıyor olabilir. Diğer programları kapatıp tekrar dene. Verilerin eski yerinde duruyor.",
+            pick(
+                "Bazı dosyalar kopyalanamadı, başka bir program kullanıyor olabilir. Diğer programları kapatıp tekrar dene. Verilerin eski yerinde duruyor.",
+                "Some files couldn't be copied; another program may be using them. Close other programs and try again. Your data is still in its old place.",
+            ),
         ),
         _ => (
             "TASI",
-            "Veri klasörü taşınamadı. Verilerin eski yerinde duruyor.",
+            pick(
+                "Veri klasörü taşınamadı. Verilerin eski yerinde duruyor.",
+                "Couldn't move the data folder. Your data is still in its old place.",
+            ),
         ),
     };
     CmdError::new(code, message, details)
@@ -585,7 +661,10 @@ pub async fn data_move_start(
     let pointer_file = location_file().ok_or_else(|| {
         CmdError::new(
             "TASI-AYAR",
-            "Yeni yer kaydedilemiyor, bu bilgisayarda ayar klasörü bulunamadı.",
+            pick(
+                "Yeni yer kaydedilemiyor, bu bilgisayarda ayar klasörü bulunamadı.",
+                "The new place can't be saved: no settings folder was found on this computer.",
+            ),
             "no OS config folder",
         )
     })?;
@@ -647,7 +726,10 @@ pub async fn data_move_start(
         discard_copy(report).await;
         return Err(CmdError::new(
             "TASI-GECIS",
-            "Yeni yer kaydedilemedi. Verilerin eski yerinde duruyor.",
+            pick(
+                "Yeni yer kaydedilemedi. Verilerin eski yerinde duruyor.",
+                "Couldn't save the new place. Your data is still in its old place.",
+            ),
             error.to_string(),
         ));
     }

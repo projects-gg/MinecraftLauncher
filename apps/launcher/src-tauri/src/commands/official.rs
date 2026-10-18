@@ -20,6 +20,7 @@ use pl_content::{
     ContentSnapshot, PackLoader, PackManifest, PackRef, PackState, RootIndex, SyncPolicy,
     SyncProgress, SyncProgressFn, apply_sync, plan_sync,
 };
+use pl_lang::pick;
 use pl_mc::install::{LaunchBar, McContext};
 use pl_mc::instance::model::{ManagedPack, ServerAddress};
 use pl_mc::instance::{Instance, InstanceIcon, InstanceLoader, NewInstance};
@@ -63,17 +64,23 @@ pub struct OfficialStatus {
 
 pub(crate) fn pack_error(error: pl_content::Error) -> CmdError {
     if matches!(error, pl_content::Error::Cancelled) {
-        CmdError::new("IPTAL", "İşlem iptal edildi.", "")
+        CmdError::new("IPTAL", pick("İşlem iptal edildi.", "Cancelled."), "")
     } else if error.is_offline() {
         CmdError::new(
             "PAKET-AG",
-            "Projects paketi indirilemedi. İnternet bağlantını kontrol edip tekrar dene.",
+            pick(
+                "Projects paketi indirilemedi. İnternet bağlantını kontrol edip tekrar dene.",
+                "Couldn't download the Projects pack. Check your internet connection and try again.",
+            ),
             error.to_string(),
         )
     } else {
         CmdError::new(
             "PAKET",
-            "Projects paketi hazırlanamadı. Tekrar dene; sürerse ayrıntıları destek ekibine gönder.",
+            pick(
+                "Projects paketi hazırlanamadı. Tekrar dene; sürerse ayrıntıları destek ekibine gönder.",
+                "Couldn't get the Projects pack ready. Try again; if it keeps happening, send the details to support.",
+            ),
             error.to_string(),
         )
     }
@@ -318,7 +325,10 @@ pub async fn official_instance_ensure(state: State<'_, AppState>) -> CmdResult<I
         // two apart.
         for old in unmanaged {
             let mut renamed = old.clone();
-            renamed.name = format!("{PROJECTS_NAME} (eski)");
+            renamed.name = pick(
+                format!("{PROJECTS_NAME} (eski)"),
+                format!("{PROJECTS_NAME} (old)"),
+            );
             state
                 .instances
                 .update(&renamed)
@@ -474,7 +484,10 @@ pub(crate) async fn prepare_pack(
     {
         return Err(CmdError::new(
             "PAKET-LAUNCHER",
-            "Projects paketinin yeni sürümü için launcher'ın güncellenmesi gerekiyor. Güncelleme hazır olunca üst çubukta göreceksin.",
+            pick(
+                "Projects paketinin yeni sürümü için launcher'ın güncellenmesi gerekiyor. Güncelleme hazır olunca üst çubukta göreceksin.",
+                "The new Projects pack needs a launcher update. You'll see it in the top bar when it's ready.",
+            ),
             format!("pack needs launcher {min}, running {current}"),
         ));
     }

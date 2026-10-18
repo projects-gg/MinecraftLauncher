@@ -9,8 +9,8 @@ pub mod store;
 
 pub use defaults::{
     DEFAULT_GUI_SCALE, DEFAULT_SERVER_ADDRESS, DEFAULT_SERVER_NAME, OptionsSeed, ServerSeed,
-    add_servers, client_data_version, has_accessibility_onboarding, seed_default_server,
-    seed_options, turkish_language,
+    add_servers, client_data_version, game_language, has_accessibility_onboarding,
+    seed_default_server, seed_options,
 };
 pub use memory::{
     AUTO_MAX_MB, MIN_HEAP_FLOOR_MB, MemoryIssue, MemoryLimits, MemoryValidation, auto_memory,

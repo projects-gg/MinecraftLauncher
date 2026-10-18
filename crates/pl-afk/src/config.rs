@@ -8,6 +8,8 @@
 
 use std::path::Path;
 
+use pl_lang::Lang;
+
 use crate::error::{AfkError, Result};
 use crate::model::{
     AfkAccount, AlertsOptions, AntiAfkOptions, AutoEatOptions, AutoRelogOptions,
@@ -38,17 +40,37 @@ pub struct ConfigFiles {
     pub login_script: String,
 }
 
-/// Builds all files for `account`. `login_commands` is the raw stored list (blank entries are
-/// ignored); `launcher_nickname` is the player's main launcher nickname, written as the only bot
-/// owner (blank means none); `versions` resolves the stored game version (see [`VersionCatalog`]).
+/// Builds all files for `account`, with MCC's own language Turkish (the legacy files).
+/// `login_commands` is the raw stored list (blank entries are ignored); `launcher_nickname` is
+/// the player's main launcher nickname, written as the only bot owner (blank means none);
+/// `versions` resolves the stored game version (see [`VersionCatalog`]).
 pub fn build_config(
     account: &AfkAccount,
     login_commands: &[String],
     launcher_nickname: &str,
     versions: &VersionCatalog,
 ) -> ConfigFiles {
+    build_config_in(
+        account,
+        login_commands,
+        launcher_nickname,
+        versions,
+        Lang::Tr,
+    )
+}
+
+/// [`build_config`] with MCC's language (its console messages and the server's translated texts)
+/// following the launcher's: `tr_tr` or `en_us`. The kick reasons read from the console are
+/// recognised in both (`restart`).
+pub fn build_config_in(
+    account: &AfkAccount,
+    login_commands: &[String],
+    launcher_nickname: &str,
+    versions: &VersionCatalog,
+    lang: Lang,
+) -> ConfigFiles {
     ConfigFiles {
-        ini: build_ini(account, login_commands, launcher_nickname, versions),
+        ini: build_ini(account, login_commands, launcher_nickname, versions, lang),
         matches: build_matches_ini(&account.auto_respond),
         login_script: build_login_script(&account.login_commands, login_commands),
     }
@@ -102,6 +124,7 @@ fn build_ini(
     login_commands: &[String],
     launcher_nickname: &str,
     versions: &VersionCatalog,
+    lang: Lang,
 ) -> String {
     // AutoEat reads the inventory and AntiAFK's walking needs terrain handling: forced on here
     // instead of asking the user.
@@ -134,7 +157,7 @@ fn build_ini(
 
     out.line("[Main.Advanced]");
     out.line("EnableSentry = false");
-    out.line("Language = \"tr_tr\"");
+    out.line(lang.pick("Language = \"tr_tr\"", "Language = \"en_us\""));
     out.line("ConsoleTitle = \"\"");
     out.line("PlayerHeadAsIcon = false");
     out.line("ShowGithubStarReminder = false");
@@ -666,10 +689,21 @@ mod tests {
     }
 
     #[test]
+    fn mcc_speaks_the_launchers_language() {
+        let versions = VersionCatalog::built_in();
+        let account = AfkAccount::new("Test");
+        let turkish = build_config(&account, &[], "", &versions).ini;
+        assert!(turkish.contains("\r\nLanguage = \"tr_tr\"\r\n"));
+        let english = build_config_in(&account, &[], "", &versions, Lang::En).ini;
+        assert!(english.contains("\r\nLanguage = \"en_us\"\r\n"));
+        assert_eq!(english.replace("en_us", "tr_tr"), turkish);
+    }
+
+    #[test]
     fn stored_versions_resolve_against_the_list() {
         let versions = VersionCatalog::built_in();
         let mut account = AfkAccount::new("Test");
-        let ini = |account: &AfkAccount| build_ini(account, &[], "", &versions);
+        let ini = |account: &AfkAccount| build_ini(account, &[], "", &versions, Lang::Tr);
         assert!(
             ini(&account).contains("MinecraftVersion = \"26.3\"\r\n"),
             "follows"
@@ -683,7 +717,8 @@ mod tests {
         let index = VersionCatalog::from_release([("26.4", "26.4")], None).unwrap();
         account.minecraft_version = String::new();
         assert!(
-            build_ini(&account, &[], "", &index).contains("MinecraftVersion = \"26.4\"\r\n"),
+            build_ini(&account, &[], "", &index, Lang::Tr)
+                .contains("MinecraftVersion = \"26.4\"\r\n"),
             "follows the published recommendation"
         );
     }
