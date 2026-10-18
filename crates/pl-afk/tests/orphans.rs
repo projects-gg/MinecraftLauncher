@@ -10,12 +10,17 @@ use std::time::Duration;
 
 use common::TestEnv;
 use pl_afk::{CONSOLE_MODE_ARG, INI_FILE_NAME, ManagerConfig, RECORD_FILE_NAME};
-use sysinfo::{Pid, ProcessesToUpdate, System};
+use sysinfo::{Pid, ProcessStatus, ProcessesToUpdate, System};
 
 fn process(pid: u32) -> Option<(u64, System)> {
     let mut system = System::new();
     system.refresh_processes(ProcessesToUpdate::Some(&[Pid::from_u32(pid)]), true);
-    let started = system.process(Pid::from_u32(pid))?.start_time();
+    let found = system.process(Pid::from_u32(pid))?;
+    // On Unix a killed client stays a zombie until this test, its parent, exits: it runs no more.
+    if found.status() == ProcessStatus::Zombie {
+        return None;
+    }
+    let started = found.start_time();
     Some((started, system))
 }
 

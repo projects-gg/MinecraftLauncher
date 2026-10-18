@@ -77,6 +77,14 @@ impl OsProcesses {
                 .with_cmd(sysinfo::UpdateKind::Always),
         );
     }
+
+    /// Whether `pid` still runs. On Unix a killed process stays listed as a zombie until its
+    /// parent reaps it; it runs no more.
+    fn runs(&self, pid: sysinfo::Pid) -> bool {
+        self.system
+            .process(pid)
+            .is_some_and(|process| process.status() != sysinfo::ProcessStatus::Zombie)
+    }
 }
 
 impl ProcessTable for OsProcesses {
@@ -102,7 +110,7 @@ impl ProcessTable for OsProcesses {
         let deadline = Instant::now() + wait;
         loop {
             self.refresh(pid);
-            if self.system.process(pid).is_none() {
+            if !self.runs(pid) {
                 return true;
             }
             if Instant::now() >= deadline {
