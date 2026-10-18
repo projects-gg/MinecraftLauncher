@@ -150,6 +150,11 @@ export const commands = {
 	/**  Instance id of the running game, if any (used after a UI reload). */
 	gameRunning: () => __TAURI_INVOKE<string | null>("game_running"),
 	/**
+	 *  Settings → Genel "Ekran görüntülerini panoya kopyala" switched: a game that runs now starts
+	 *  or stops copying its new screenshots at once (each launch also brings the setting along).
+	 */
+	gameCopyScreenshots: (enabled: boolean) => __TAURI_INVOKE<void>("game_copy_screenshots", { enabled }),
+	/**
 	 *  Settings → İndirmeler "Arka planda hazırla" and the instance the command bar shows, with its
 	 *  version (`mc/loader/loader version`). Called whenever one of them changes: a choice makes a run
 	 *  due soon, a run for another instance (or with the setting off) stops at once.
@@ -1917,7 +1922,12 @@ export type LaunchEventView = {
  *  files (at most three, newest first) for thumbnails; their folder is allowed in the asset
  *  protocol.
  */
-({ type: "newScreenshots"; count: number; recent: string[] }) & { changedFiles?: never; changelog?: never; code?: never; minecraft?: never; name?: never; pid?: never; recommended?: never; runtimeSecs?: never; version?: never };
+({ type: "newScreenshots"; count: number; recent: string[] }) & { changedFiles?: never; changelog?: never; code?: never; minecraft?: never; name?: never; pid?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+/**
+ *  "Ekran görüntülerini panoya kopyala" could not put a new screenshot on the clipboard
+ *  (sent once per session, during the game; the page shows a quiet notice).
+ */
+({ type: "screenshotNotCopied" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never };
 
 /**  Download preferences from Settings → İndirmeler, and how this launch starts. */
 export type LaunchSettings = {
@@ -1934,6 +1944,11 @@ export type LaunchSettings = {
 	quickPlay?: QuickPlay | null,
 	/**  The answer to the Java question of the previous attempt ("Kur ve oyna", "Yine de dene"). */
 	java?: JavaChoice | null,
+	/**
+	 *  Settings → Genel "Ekran görüntülerini panoya kopyala": each screenshot the game takes goes
+	 *  to the clipboard (`crate::shot_copy`).
+	 */
+	copyScreenshots?: boolean,
 };
 
 export type LeftoverKindView = "cache" | "downloads" | "logs" | "crashReports";

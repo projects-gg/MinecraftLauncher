@@ -128,6 +128,8 @@ export interface LauncherApi {
     options?: LaunchOptions,
   ): Promise<void>;
   cancelLaunch(instanceId: string): Promise<void>;
+  /** "Ekran görüntülerini panoya kopyala" switched: a game that runs now follows it at once. */
+  setScreenshotCopy(enabled: boolean): Promise<void>;
   openUrl(url: string): Promise<void>;
   updatePresence(context: PresenceContext): Promise<void>;
   setPresenceEnabled(enabled: boolean): Promise<void>;

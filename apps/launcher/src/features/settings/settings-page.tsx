@@ -148,6 +148,18 @@ function General() {
           />
         </div>
       </Row>
+      <Row title={t("shotCopy.setting")} help={t("shotCopy.settingHelp")}>
+        <Switch
+          checked={p.copyScreenshots}
+          onCheckedChange={(v) => {
+            p.set("copyScreenshots", v);
+            // A game that runs now follows the switch at once; the next launch brings it anyway.
+            void api.setScreenshotCopy(v).catch(() => {});
+          }}
+          label={t("shotCopy.setting")}
+          hideLabel
+        />
+      </Row>
       <Row title={t("settings.general.startOnBoot")}>
         <Switch
           checked={p.startOnBoot}

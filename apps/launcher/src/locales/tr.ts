@@ -9,6 +9,7 @@ import { trOverview } from "./tr-overview";
 import { trPrepare } from "./tr-prepare";
 import { trReminders } from "./tr-reminders";
 import { trShortcuts } from "./tr-shortcuts";
+import { trShotCopy } from "./tr-shot-copy";
 import { trSocial } from "./tr-social";
 import { trTuning } from "./tr-tuning";
 import { trUpdates } from "./tr-updates";
@@ -27,6 +28,7 @@ export const tr = {
   social: trSocial,
   minecraft: trMinecraft,
   eventJoin: trEventJoin,
+  shotCopy: trShotCopy,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",

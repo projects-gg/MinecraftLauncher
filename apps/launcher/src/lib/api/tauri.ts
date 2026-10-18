@@ -84,6 +84,7 @@ function storedPrefs(): {
   autoJoin?: boolean;
   concurrentDownloads?: number;
   verifyOnLaunch?: boolean;
+  copyScreenshots?: boolean;
   defaultMaxMemoryMb?: number | null;
   defaultJvmArgs?: string;
 } {
@@ -705,6 +706,7 @@ export const tauriApi: LauncherApi = {
           ignoreModIssues: options?.ignoreModIssues ?? false,
           quickPlay: options?.quickPlay ?? null,
           java: options?.java ?? null,
+          copyScreenshots: prefs.copyScreenshots ?? false,
         },
         channel,
       ),
@@ -712,6 +714,9 @@ export const tauriApi: LauncherApi = {
   },
   async cancelLaunch() {
     await commands.launchCancel();
+  },
+  async setScreenshotCopy(enabled) {
+    await commands.gameCopyScreenshots(enabled);
   },
 
   async officialStatus() {

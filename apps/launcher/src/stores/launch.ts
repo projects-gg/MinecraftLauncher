@@ -4,6 +4,7 @@ import { create } from "zustand";
 import { confirmAfkBeforePlay } from "@/features/accounts/afk-guard";
 import { launchErrorCode } from "@/features/disk/launch-error";
 import { useJavaPrompt } from "@/features/java/prompt-store";
+import { announceShotNotCopied } from "@/features/library/shot-copy";
 import { announceModsNotice, announceVersionDropped } from "@/features/modcenter/notices";
 import { announceModWarnings, useModFlow } from "@/features/modhealth/flow";
 import { loadNotes } from "@/features/updates/notes";
@@ -112,6 +113,7 @@ const gameEvents = new Set<LaunchEvent["type"]>([
   "windowShown",
   "crashed",
   "newScreenshots",
+  "screenshotNotCopied",
   "exited",
 ]);
 
@@ -242,6 +244,10 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
             recent: event.recent,
             newest: event.newest,
           };
+          break;
+        case "screenshotNotCopied":
+          // "Ekran görüntülerini panoya kopyala" failed during the game (told once per game).
+          announceShotNotCopied();
           break;
         case "exited":
           set({ phase: { kind: "idle" }, newShots: shots ? { ...shots, at: Date.now() } : null });

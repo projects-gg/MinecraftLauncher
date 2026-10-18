@@ -8,6 +8,7 @@ import { enOverview } from "./en-overview";
 import { enPrepare } from "./en-prepare";
 import { enReminders } from "./en-reminders";
 import { enShortcuts } from "./en-shortcuts";
+import { enShotCopy } from "./en-shot-copy";
 import { enTuning } from "./en-tuning";
 import { enUpdates } from "./en-updates";
 import type { Strings } from "./tr";
@@ -233,6 +234,7 @@ export const en: DeepPartial<Strings> = {
   },
   minecraft: enMinecraft,
   eventJoin: enEventJoin,
+  shotCopy: enShotCopy,
   nav: {
     home: "Home",
     library: "Library",

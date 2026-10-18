@@ -322,7 +322,9 @@ export type LaunchEvent =
    * The session took screenshots (sent right before `exited`); `recent` are image URLs (newest
    * first), `newest` is the newest one's file name ("Kopyala" copies it).
    */
-  | { type: "newScreenshots"; count: number; recent: string[]; newest: string };
+  | { type: "newScreenshots"; count: number; recent: string[]; newest: string }
+  /** "Ekran görüntülerini panoya kopyala" could not copy a new screenshot (once per game). */
+  | { type: "screenshotNotCopied" };
 
 /** A world or server joined right after start (1.20+ quick play). */
 export type QuickPlayTarget = QuickPlay;

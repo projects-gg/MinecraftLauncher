@@ -1015,6 +1015,11 @@ export const mockApi: LauncherApi = {
       onEvent({ type: "exited", code: 1, runtimeSecs: 4 });
       return;
     }
+    // `?shotcopy=fail`: a screenshot taken during the game could not go to the clipboard.
+    if (mockFlag("shotcopy") === "fail") {
+      await delay(1200);
+      onEvent({ type: "screenshotNotCopied" });
+    }
     const session = mockSessionMs();
     await delay(session);
     const shots = mockNewScreenshots();
@@ -1025,6 +1030,7 @@ export const mockApi: LauncherApi = {
     const job = running.get(instanceId);
     if (job) job.cancelled = true;
   },
+  async setScreenshotCopy() {},
   async updatePresence() {},
   async setPresenceEnabled() {},
   async setLanguage() {},

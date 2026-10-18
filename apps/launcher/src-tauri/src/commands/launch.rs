@@ -142,6 +142,9 @@ pub enum LaunchEventView {
         count: u32,
         recent: Vec<String>,
     },
+    /// "Ekran görüntülerini panoya kopyala" could not put a new screenshot on the clipboard
+    /// (sent once per session, during the game; the page shows a quiet notice).
+    ScreenshotNotCopied,
 }
 
 /// Download preferences from Settings → İndirmeler, and how this launch starts.
@@ -162,6 +165,10 @@ pub struct LaunchSettings {
     /// The answer to the Java question of the previous attempt ("Kur ve oyna", "Yine de dene").
     #[serde(default)]
     pub java: Option<crate::commands::java::JavaChoice>,
+    /// Settings → Genel "Ekran görüntülerini panoya kopyala": each screenshot the game takes goes
+    /// to the clipboard (`crate::shot_copy`).
+    #[serde(default)]
+    pub copy_screenshots: bool,
 }
 
 /// One line of the running game's log, emitted as the `game-log` event.
@@ -1130,6 +1137,8 @@ async fn prepare_and_spawn(
         process: Arc::clone(&process),
     });
     drop(preparing);
+    // "Ekran görüntülerini panoya kopyala": the folder is watched while this game runs.
+    crate::shot_copy::session_started(app, &game_dir, on_event.clone(), settings.copy_screenshots);
     // The set of this version was played now (cleanup suggestions use it).
     let played = pl_content::SetInfo {
         minecraft: instance.mc_version.clone(),
@@ -1168,6 +1177,7 @@ async fn prepare_and_spawn(
         crate::webview_rest::wake(&app, "the game exited");
         let state = app.state::<AppState>();
         state.running.lock().take();
+        crate::shot_copy::session_ended(&app);
         // Java runtime updates waiting for the game can take their place now.
         crate::commands::java::game_exited(&app);
         // Background preparation looks again once the player is done with the launcher.
@@ -1239,4 +1249,12 @@ pub fn game_kill(state: State<'_, AppState>) {
 #[specta::specta]
 pub fn game_running(state: State<'_, AppState>) -> Option<String> {
     state.running.lock().as_ref().map(|r| r.instance_id.clone())
+}
+
+/// Settings → Genel "Ekran görüntülerini panoya kopyala" switched: a game that runs now starts
+/// or stops copying its new screenshots at once (each launch also brings the setting along).
+#[tauri::command]
+#[specta::specta]
+pub async fn game_copy_screenshots(app: AppHandle, enabled: bool) {
+    crate::shot_copy::set_enabled(&app, enabled);
 }

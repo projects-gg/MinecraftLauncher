@@ -32,6 +32,8 @@ interface PrefsState {
   closeToTray: boolean;
   /** System notifications while the launcher is in the background (long installs, friends). */
   desktopNotifications: boolean;
+  /** Settings → Genel: every screenshot taken in game goes to the clipboard (src-tauri shot_copy). */
+  copyScreenshots: boolean;
   updateChannel: UpdateChannel;
   autoDownloadUpdates: boolean;
   discordEnabled: boolean;
@@ -85,6 +87,7 @@ export const usePrefs = create<PrefsState>()(
       startOnBoot: false,
       closeToTray: true,
       desktopNotifications: true,
+      copyScreenshots: false,
       updateChannel: "stable",
       autoDownloadUpdates: true,
       discordEnabled: true,

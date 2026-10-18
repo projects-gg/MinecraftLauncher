@@ -5,6 +5,7 @@ mod error;
 mod identity;
 mod prepare;
 mod shell;
+mod shot_copy;
 #[cfg(target_os = "macos")]
 mod single_instance_macos;
 mod state;
@@ -198,6 +199,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::launch::launch_cancel,
             commands::launch::game_kill,
             commands::launch::game_running,
+            commands::launch::game_copy_screenshots,
             prepare::prepare_configure,
             prepare::prepare_status,
             commands::server::server_status,
