@@ -294,11 +294,12 @@ export const en: DeepPartial<Strings> = {
     patchNotes: "Patch notes",
     community: "Community",
   },
+  // Under the event card's digits: as short as the Turkish words, so the digits keep one rhythm.
   countdown: {
     days: "days",
-    hours: "hours",
-    minutes: "minutes",
-    seconds: "seconds",
+    hours: "hrs",
+    minutes: "mins",
+    seconds: "secs",
   },
   units: {
     hoursMinutes: "{{hours}} h {{minutes}} min",
