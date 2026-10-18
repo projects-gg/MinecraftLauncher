@@ -134,6 +134,87 @@
     opacity: 0;
   }
 }
+/* Server bars (SignalBars): the game's "pinging" frames, one bar lit at a time back and forth
+   (0 1 2 3 4 3 2 1, 100 ms each; `step-end` holds every frame). */
+@keyframes signal-ping-0 {
+  0% {
+    fill: var(--hot);
+  }
+  12.5% {
+    fill: var(--rest);
+  }
+}
+@keyframes signal-ping-1 {
+  0% {
+    fill: var(--rest);
+  }
+  12.5% {
+    fill: var(--hot);
+  }
+  25% {
+    fill: var(--rest);
+  }
+  87.5% {
+    fill: var(--hot);
+  }
+}
+@keyframes signal-ping-2 {
+  0% {
+    fill: var(--rest);
+  }
+  25% {
+    fill: var(--hot);
+  }
+  37.5% {
+    fill: var(--rest);
+  }
+  75% {
+    fill: var(--hot);
+  }
+  87.5% {
+    fill: var(--rest);
+  }
+}
+@keyframes signal-ping-3 {
+  0% {
+    fill: var(--rest);
+  }
+  37.5% {
+    fill: var(--hot);
+  }
+  50% {
+    fill: var(--rest);
+  }
+  62.5% {
+    fill: var(--hot);
+  }
+  75% {
+    fill: var(--rest);
+  }
+}
+@keyframes signal-ping-4 {
+  0% {
+    fill: var(--rest);
+  }
+  50% {
+    fill: var(--hot);
+  }
+  62.5% {
+    fill: var(--rest);
+  }
+}
+/* An answer that arrives on screen fills the bars from the left: each flashes, then stays lit. */
+@keyframes signal-fill {
+  0% {
+    fill: var(--rest);
+  }
+  1% {
+    fill: var(--hot);
+  }
+  50% {
+    fill: var(--lit);
+  }
+}
 
 @layer base {
   html {
@@ -366,6 +447,60 @@
     border-left: 3px solid var(--color-gold-600);
     padding-left: 1em;
     color: var(--color-ash-300);
+  }
+
+  /* Server bars (SignalBars, docs/design.md §6): gold faces with a one-pixel shadow below right,
+     dim bars where nothing is lit, a flare cross when the server cannot be reached. Each rect
+     names its own --rest, --hot and --lit colours, so one set of keyframes drives both. */
+  .signal-bars {
+    --signal-face: var(--color-gold-400);
+    --signal-shade: var(--color-gold-700);
+    --signal-hot-face: var(--color-gold-200);
+    --signal-hot-shade: var(--color-gold-600);
+    --signal-dim-face: rgb(255 255 255 / 0.2);
+    --signal-dim-shade: rgb(255 255 255 / 0.08);
+  }
+  .signal-face {
+    --rest: var(--signal-dim-face);
+    --hot: var(--signal-hot-face);
+    --lit: var(--signal-face);
+    fill: var(--rest);
+  }
+  .signal-shade {
+    --rest: var(--signal-dim-shade);
+    --hot: var(--signal-hot-shade);
+    --lit: var(--signal-shade);
+    fill: var(--rest);
+  }
+  .signal-bar[data-on] > rect {
+    fill: var(--lit);
+  }
+  /* Unreachable: the bars fade further back so the cross reads first. */
+  .signal-bars[data-state="offline"] {
+    --signal-dim-face: rgb(255 255 255 / 0.12);
+    --signal-dim-shade: rgb(255 255 255 / 0.05);
+  }
+  .signal-cross {
+    fill: var(--color-flare-400);
+  }
+  /* 15 rounds (12 s) at most: a ping that never answers does not keep the page drawing. */
+  .signal-bars[data-sweep] .signal-bar > rect {
+    animation: signal-ping-0 800ms step-end 15;
+  }
+  .signal-bars[data-sweep] .signal-bar:nth-child(2) > rect {
+    animation-name: signal-ping-1;
+  }
+  .signal-bars[data-sweep] .signal-bar:nth-child(3) > rect {
+    animation-name: signal-ping-2;
+  }
+  .signal-bars[data-sweep] .signal-bar:nth-child(4) > rect {
+    animation-name: signal-ping-3;
+  }
+  .signal-bars[data-sweep] .signal-bar:nth-child(5) > rect {
+    animation-name: signal-ping-4;
+  }
+  .signal-bars[data-fill] .signal-bar[data-on] > rect {
+    animation: signal-fill 150ms step-end calc(var(--i) * 45ms) both;
   }
 }
 

@@ -36,6 +36,7 @@ export {
   type PlayState,
   playButtonName,
 } from "./components/play-button";
+export { SignalBars, type SignalState, signalLevel } from "./components/signal-bars";
 export { Switch } from "./components/switch";
 export { type TabItem, TabPanel, Tabs } from "./components/tabs";
 export { Toaster, toast } from "./components/toaster";

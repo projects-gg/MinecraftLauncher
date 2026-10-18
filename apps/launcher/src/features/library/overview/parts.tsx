@@ -1,5 +1,5 @@
 // Small pieces the overview's sections share: section heads, icon tiles, the server's players.
-import { Button, cn, Skeleton } from "@pl/ui";
+import { Button, cn, SignalBars, type SignalState } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useState } from "react";
@@ -122,44 +122,37 @@ export function useServerPing(address: string | null) {
 }
 
 /**
- * Players of a server, or that it cannot be reached. A shimmer holds the place until the ping
- * answers; the answer fades in where it was, so nothing around it moves.
+ * Players of a server, or that it cannot be reached. The bars sweep until the ping answers; the
+ * words then fade in beside them, so nothing around them moves.
  */
 export function ServerPlayers({ address }: { address: string }) {
   const { t } = useTranslation();
-  const data = useServerPing(address).data;
-  const key = !data ? "pending" : data.online ? "online" : "offline";
+  const ping = useServerPing(address);
+  const data = ping.data;
+  const state: SignalState = data
+    ? data.online
+      ? "online"
+      : "offline"
+    : ping.isError
+      ? "offline"
+      : "pending";
   return (
-    <span className="relative flex h-5 min-w-0 items-center">
-      <AnimatePresence initial={false} mode="popLayout">
-        <motion.span
-          key={key}
-          {...swap()}
-          className="flex min-w-0 items-center gap-2 whitespace-nowrap tabular-nums"
-        >
-          {!data ? (
-            <Skeleton className="h-3 w-24" />
-          ) : (
-            <>
-              <span
-                aria-hidden
-                className={cn(
-                  "size-2 shrink-0 rounded-full",
-                  data.online ? "bg-jade-400" : "bg-ash-500",
-                )}
-              />
-              <span className="truncate">
-                {data.online
-                  ? t("instance.servers.players", {
-                      players: formatCount(data.players),
-                      max: formatCount(data.maxPlayers),
-                    })
-                  : t("instance.servers.unreachable")}
-              </span>
-            </>
+    <span className="flex h-5 min-w-0 items-center gap-2 whitespace-nowrap tabular-nums">
+      <SignalBars state={state} latencyMs={data?.latencyMs} />
+      <span className="relative flex min-w-0">
+        <AnimatePresence initial={false} mode="popLayout">
+          {state === "pending" ? null : (
+            <motion.span key={state} {...swap()} className="truncate">
+              {data?.online
+                ? t("instance.servers.players", {
+                    players: formatCount(data.players),
+                    max: formatCount(data.maxPlayers),
+                  })
+                : t("instance.servers.unreachable")}
+            </motion.span>
           )}
-        </motion.span>
-      </AnimatePresence>
+        </AnimatePresence>
+      </span>
     </span>
   );
 }

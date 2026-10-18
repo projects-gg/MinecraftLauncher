@@ -1,6 +1,7 @@
-// An AFK account's state in one line: a dot (gold pulses while something is under way) and the
-// words, ticking live for uptime and the next reconnect. Used by the cards and the console.
-import { cn } from "@pl/ui";
+// An AFK account's state in one line: the server bars (lit in the game, sweeping while it
+// connects, a cross when the connection dropped) and the words, ticking live for uptime and the
+// next reconnect. Used by the cards and the console.
+import { cn, SignalBars, type SignalState } from "@pl/ui";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AfkState } from "@/lib/api";
@@ -15,16 +16,21 @@ function useNow(intervalMs = 1000) {
   return now;
 }
 
-function stateTone(state: AfkState): "jade" | "gold" | "flare" | "ash" {
+/**
+ * The bars for a state. They sweep only while a connection is being made; waiting (in the queue,
+ * for the next reconnect) and stopping show them dim, with the countdown in the words.
+ */
+export function stateSignal(state: AfkState): SignalState {
   switch (state.kind) {
     case "connected":
-      return "jade";
+      return "online";
+    case "starting":
+    case "connecting":
+      return "pending";
     case "error":
-      return "flare";
-    case "stopped":
-      return "ash";
+      return "offline";
     default:
-      return "gold";
+      return "idle";
   }
 }
 
@@ -52,27 +58,15 @@ export function StateLine({ state, className }: { state: AfkState; className?: s
     default:
       text = t(`afk.states.${state.kind}`);
   }
-  const tone = stateTone(state);
+  const failed = state.kind === "error";
   return (
     <p
       className={cn("flex min-w-0 items-center gap-2 text-[12.5px]", className)}
       // A long disconnect reason is cut in the line; the whole of it stays one hover away.
-      title={state.kind === "error" ? text : undefined}
+      title={failed ? text : undefined}
     >
-      <span
-        aria-hidden
-        className={cn(
-          "size-2 shrink-0 rounded-full",
-          tone === "jade" && "bg-jade-400 shadow-[0_0_8px_var(--color-jade-400)]",
-          tone === "gold" &&
-            "bg-gold-400 motion-safe:animate-pulse [html[data-perf=on]_&]:animate-none",
-          tone === "flare" && "bg-flare-400",
-          tone === "ash" && "bg-ash-500",
-        )}
-      />
-      <span className={cn("truncate", tone === "flare" ? "text-flare-400" : "text-ash-300")}>
-        {text}
-      </span>
+      <SignalBars state={stateSignal(state)} />
+      <span className={cn("truncate", failed ? "text-flare-400" : "text-ash-300")}>{text}</span>
     </p>
   );
 }

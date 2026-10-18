@@ -11,14 +11,14 @@ import {
 import {
   Button,
   ContextMenu,
-  cn,
   Dialog,
   Field,
   IconButton,
   Input,
   Menu,
   type MenuItem,
-  Skeleton,
+  SignalBars,
+  type SignalState,
   toast,
   useMotionPrefs,
 } from "@pl/ui";
@@ -70,40 +70,44 @@ function ServerIcon({ server }: { server: SavedServer }) {
   );
 }
 
-/** Players and reachability of one server. */
+/**
+ * Players and reachability of one server. The bars sit at the slot's right edge, as in the game's
+ * server list, and sweep while the ping is out; the words fade in beside them.
+ */
 function ServerStatusLine({ address }: { address: string }) {
   const { t } = useTranslation();
-  const data = useServerPing(address).data;
-  const key = !data ? "pending" : data.online ? "online" : "offline";
+  const ping = useServerPing(address);
+  const data = ping.data;
+  const state: SignalState = data
+    ? data.online
+      ? "online"
+      : "offline"
+    : ping.isError
+      ? "offline"
+      : "pending";
   return (
     // Fixed width: the line below never shifts when the answer arrives.
-    <span className="relative flex h-5 w-[150px] shrink-0 items-center justify-end">
-      <AnimatePresence initial={false} mode="popLayout">
-        <motion.span
-          key={key}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1, transition: { duration: 0.18 } }}
-          exit={{ opacity: 0, transition: { duration: 0.1 } }}
-          className="flex items-center gap-2 text-[12.5px] whitespace-nowrap text-ash-300 tabular-nums"
-        >
-          {!data ? (
-            <Skeleton className="h-3 w-24" />
-          ) : (
-            <>
-              <span
-                aria-hidden
-                className={cn("size-2 rounded-full", data.online ? "bg-jade-400" : "bg-ash-500")}
-              />
-              {data.online
+    <span className="flex h-5 w-[172px] shrink-0 items-center justify-end gap-2 text-[12.5px] whitespace-nowrap text-ash-300 tabular-nums">
+      <span className="relative flex min-w-0 justify-end">
+        <AnimatePresence initial={false} mode="popLayout">
+          {state === "pending" ? null : (
+            <motion.span
+              key={state}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { duration: 0.18 } }}
+              exit={{ opacity: 0, transition: { duration: 0.1 } }}
+            >
+              {data?.online
                 ? t("instance.servers.players", {
                     players: formatCount(data.players),
                     max: formatCount(data.maxPlayers),
                   })
                 : t("instance.servers.unreachable")}
-            </>
+            </motion.span>
           )}
-        </motion.span>
-      </AnimatePresence>
+        </AnimatePresence>
+      </span>
+      <SignalBars state={state} latencyMs={data?.latencyMs} />
     </span>
   );
 }

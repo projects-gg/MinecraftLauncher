@@ -1,5 +1,5 @@
 import { Check, CopySimple, MagnifyingGlass, Minus, Square, X } from "@phosphor-icons/react";
-import { cn, easeOutExpo, Tooltip } from "@pl/ui";
+import { cn, easeOutExpo, SignalBars, Tooltip } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -83,15 +83,9 @@ function ServerPill() {
             transition: { duration: copied ? 0.1 : 0.2, ease: easeOutExpo },
           }}
         >
-          <span
-            className={cn(
-              "size-2 rounded-full",
-              isPending
-                ? "bg-ash-500"
-                : online
-                  ? "bg-jade-400 shadow-[0_0_8px_var(--color-jade-400)]"
-                  : "bg-flare-400",
-            )}
+          <SignalBars
+            state={isPending ? "pending" : online ? "online" : "offline"}
+            latencyMs={data?.latencyMs}
           />
           <span className="font-display font-semibold text-bone-50">
             {data?.name ?? "Projects"}
