@@ -1,6 +1,7 @@
 // Turkish is the primary language. Keep strings plain, sentence case, no em dashes.
 import { trAfkAlerts } from "./tr-afk-alerts";
 import { trDisk } from "./tr-disk";
+import { trEventJoin } from "./tr-event-join";
 import { trGraphics } from "./tr-graphics";
 import { trLibraryDrop } from "./tr-library-drop";
 import { trMinecraft } from "./tr-minecraft";
@@ -25,6 +26,7 @@ export const tr = {
   prepare: trPrepare,
   social: trSocial,
   minecraft: trMinecraft,
+  eventJoin: trEventJoin,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",

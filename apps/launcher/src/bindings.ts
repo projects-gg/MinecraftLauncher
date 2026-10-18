@@ -1340,6 +1340,8 @@ export type EventView = {
 	newsId: string | null,
 	/**  Among live events the highest leads the card (`pl_content::card_order`). */
 	priority: number,
+	/**  On the server: while it is live the card offers "Katıl" (`events[].join`). */
+	join: boolean,
 	/**  From the Discord bot's feed (config events win ties). */
 	fromFeed: boolean,
 };

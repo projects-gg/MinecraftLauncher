@@ -97,6 +97,8 @@ pub struct EventView {
     pub news_id: Option<String>,
     /// Among live events the highest leads the card (`pl_content::card_order`).
     pub priority: i32,
+    /// On the server: while it is live the card offers "Katıl" (`events[].join`).
+    pub join: bool,
     /// From the Discord bot's feed (config events win ties).
     pub from_feed: bool,
 }
@@ -455,6 +457,7 @@ async fn home_view(state: &AppState, snapshot: &ContentSnapshot) -> HomeView {
                 url: e.url,
                 news_id: e.news_id,
                 priority: e.priority,
+                join: e.join,
                 from_feed: e.origin == NewsOrigin::Feed,
             })
             .collect(),

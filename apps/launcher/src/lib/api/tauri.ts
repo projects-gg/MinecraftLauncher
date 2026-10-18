@@ -212,6 +212,7 @@ function home(v: HomeView): HomeContent {
       newsId: e.newsId ?? undefined,
       url: e.url ?? undefined,
       priority: e.priority,
+      join: e.join,
       fromFeed: e.fromFeed,
     })),
     news,

@@ -4,7 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
 import { Popover } from "radix-ui";
-import { type ReactNode, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CoverImage } from "@/features/news/cover-image";
 import { MinecraftChip, useMinecraftText } from "@/features/news/minecraft";
@@ -16,6 +16,7 @@ import i18n from "@/lib/i18n";
 import { isWebLink, openLink } from "@/lib/links";
 import { columnFill, liveMinecraft, NEWS_COLUMN_ROWS } from "@/lib/minecraft";
 import { isNewsNew, useNewsSeen } from "@/stores/news-seen";
+import { EventJoin } from "./event-join";
 import { ReminderBell } from "./event-reminders";
 
 const categoryTone = {
@@ -421,6 +422,7 @@ function EventBlock({
   const enter = 0.28;
   const hasTarget = Boolean(event.newsId || event.url);
   const [listOpen, setListOpen] = useState(false);
+  const titleId = useId();
   return (
     <Popover.Root open={listOpen} onOpenChange={setListOpen}>
       <Popover.Anchor asChild>
@@ -470,7 +472,10 @@ function EventBlock({
                     />
                   ) : null}
                 </div>
-                <p className="mt-0.5 line-clamp-2 font-display text-[14px] leading-snug font-semibold text-bone-50">
+                <p
+                  id={titleId}
+                  className="mt-0.5 line-clamp-2 font-display text-[14px] leading-snug font-semibold text-bone-50"
+                >
                   {event.title}
                 </p>
                 {live ? null : <StartsAt iso={event.startsAt} />}
@@ -487,7 +492,19 @@ function EventBlock({
                   </div>
                 )}
               </EventTarget>
-              {live ? null : (
+              {live ? (
+                // On the server: "Katıl" takes the bell's place, level with the countdown's digits
+                // (or with the "started" line of an open-ended event) and flush with the caret.
+                event.join ? (
+                  <EventJoin
+                    describedBy={titleId}
+                    className={cn(
+                      "absolute right-0",
+                      event.openEnded ? "bottom-[1px]" : "bottom-[22px]",
+                    )}
+                  />
+                ) : null
+              ) : (
                 // Level with the countdown's digits; its glyph lines up with the caret above.
                 <ReminderBell event={event} className="absolute right-[-6px] bottom-[22px]" />
               )}

@@ -1,5 +1,6 @@
 import { enAfkAlerts } from "./en-afk-alerts";
 import { enDisk } from "./en-disk";
+import { enEventJoin } from "./en-event-join";
 import { enGraphics } from "./en-graphics";
 import { enLibraryDrop } from "./en-library-drop";
 import { enMinecraft } from "./en-minecraft";
@@ -231,6 +232,7 @@ export const en: DeepPartial<Strings> = {
     },
   },
   minecraft: enMinecraft,
+  eventJoin: enEventJoin,
   nav: {
     home: "Home",
     library: "Library",

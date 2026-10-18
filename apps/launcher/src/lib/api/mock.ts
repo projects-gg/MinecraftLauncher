@@ -277,8 +277,9 @@ function mockMinecraft(): MinecraftNewsItem[] {
 }
 
 /**
- * A preview switch: `?event=next|soon|imminent|open|none|overlay` (or localStorage
- * `pl.mock.event`), `?notes=pack`, `?banners=none|two`,
+ * A preview switch: `?event=next|soon|imminent|open|none|overlay|join|joinweek|joinopen` (or
+ * localStorage `pl.mock.event`; the `join` ones are on the server: "Katıl"), `?notes=pack`,
+ * `?banners=none|two`,
  * `?status=outage|major|degraded|notice|expiring`, `?maintenance=1`, `?projects=<count>` (keeps
  * the first Projects news), `?mc=<count>` (Minecraft updates, 3 by default).
  */
@@ -351,6 +352,7 @@ function mockEvents(): HomeContent["events"] {
         pvp,
       ];
     case "open":
+    case "joinopen":
       return [
         {
           id: "discord-1300000000000000008",
@@ -359,9 +361,25 @@ function mockEvents(): HomeContent["events"] {
           endsAt: at(2.6),
           openEnded: true,
           newsId: "sezon-5",
+          join: mockFlag("event") === "joinopen",
         },
         pvp,
       ];
+    // On the server ("Katıl"): hours left, and the widest countdown (days left).
+    case "join":
+      return [
+        {
+          id: "discord-1300000000000000007",
+          title: "Çifte XP haftası",
+          startsAt: at(-1),
+          endsAt: at(2.25),
+          newsId: "discord-1300000000000000007",
+          join: true,
+        },
+        pvp,
+      ];
+    case "joinweek":
+      return [{ ...beginners, priority: 0, join: true }, pvp];
     default:
       return [
         {

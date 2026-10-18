@@ -88,6 +88,8 @@ export interface EventItem {
   url?: string;
   /** Among live events the highest leads the card (default 0). */
   priority?: number;
+  /** On the server: while it is live the card offers "Katıl". */
+  join?: boolean;
   /** From the Discord feed (config events win ties). */
   fromFeed?: boolean;
 }
