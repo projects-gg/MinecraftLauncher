@@ -5,6 +5,8 @@ mod error;
 mod identity;
 mod prepare;
 mod shell;
+#[cfg(target_os = "macos")]
+mod single_instance_macos;
 mod state;
 mod webview_rest;
 
@@ -32,11 +34,7 @@ pub fn run() {
         use tauri_plugin_window_state::StateFlags;
         // Single instance must be the first plugin so a second launch only focuses us.
         builder = builder
-            // A second launch only focuses us; `projects://` links it carried reach the
-            // deep-link handler through the plugin's deep-link feature.
-            .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-                shell::focus_main_window(app);
-            }))
+            .plugin(single_instance())
             .plugin(
                 tauri_plugin_window_state::Builder::new()
                     .with_state_flags(
@@ -60,6 +58,16 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .invoke_handler(specta.invoke_handler())
         .setup(move |app| {
+            // A second copy on macOS hands over to the running launcher now that AppKit has
+            // finished launching it, without touching the data folder (single_instance_macos).
+            #[cfg(target_os = "macos")]
+            if single_instance_macos::is_secondary() {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.destroy();
+                }
+                single_instance_macos::hand_over(app.handle());
+                return Ok(());
+            }
             specta.mount_events(app);
             let version = app.package_info().version.to_string();
             let state = state::AppState::init(app.handle(), &version)?;
@@ -97,8 +105,28 @@ pub fn run() {
             }
             Ok(())
         })
-        .run(identity::context())
-        .expect("error while running Projects Launcher");
+        .build(identity::context())
+        .expect("error while running Projects Launcher")
+        .run(|_app, _event| {
+            #[cfg(target_os = "macos")]
+            single_instance_macos::on_run_event(_app, &_event, shell::focus_main_window);
+        });
+}
+
+/// A second launch only focuses us; `projects://` links it carried reach the deep-link handler
+/// through the plugin's deep-link feature.
+#[cfg(all(desktop, not(target_os = "macos")))]
+fn single_instance() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        shell::focus_main_window(app);
+    })
+}
+
+/// On macOS a second copy hands over only after its launch finished (single_instance_macos);
+/// links arrive there as Apple events, not as arguments.
+#[cfg(target_os = "macos")]
+fn single_instance() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    single_instance_macos::init(shell::focus_main_window)
 }
 
 /// Hands the page the computer's language signals before its first script runs
