@@ -26,8 +26,9 @@ import {
 } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
-import type { ReactNode } from "react";
+import { type ReactNode, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import logo from "@/assets/brand/logo-96.webp";
 import { FriendsSettingsSection } from "@/features/social/settings-section";
@@ -35,7 +36,14 @@ import { useSocialUi } from "@/features/social/store";
 import { UpdateSettingsAction } from "@/features/updates/update-settings";
 import { api } from "@/lib/api";
 import { applyStartOnBoot } from "@/lib/autostart";
-import { ENGLISH_ENABLED, setLanguage } from "@/lib/i18n";
+import { formatMemory, formatPercent } from "@/lib/format";
+import {
+  automaticLanguage,
+  LANGUAGE_NAMES,
+  type LanguageChoice,
+  loadEnglish,
+  setLanguage,
+} from "@/lib/i18n";
 import { openLink } from "@/lib/links";
 import { playSound } from "@/lib/sound";
 import { type GameStartBehavior, usePrefs } from "@/stores/prefs";
@@ -80,27 +88,50 @@ export function Row({
   );
 }
 
+/**
+ * "Otomatik" says what it gives on this computer (Turkish in Turkey or on a Turkish system,
+ * English otherwise); the languages are named in their own language. The pick applies at once:
+ * the window cross-fades to the new words while the plate slides (lib/i18n.ts). English starts
+ * loading as soon as the pointer or the focus reaches the control, so the words change with the
+ * click instead of a beat after it.
+ */
+function LanguageRow() {
+  const { t } = useTranslation();
+  const choice = usePrefs((s) => s.language);
+  const set = usePrefs((s) => s.set);
+  const automatic = useMemo(() => automaticLanguage(), []);
+  const warm = () => void loadEnglish().catch(() => {});
+  return (
+    <Row title={t("settings.general.language")}>
+      <Segmented<LanguageChoice>
+        value={choice}
+        onValueChange={(v) => {
+          set("language", v);
+          void setLanguage(v);
+        }}
+        onIntent={warm}
+        label={t("settings.general.language")}
+        options={[
+          {
+            value: "auto",
+            label: t("settings.general.languageAuto"),
+            hint: `(${LANGUAGE_NAMES[automatic]})`,
+            hintLang: automatic,
+          },
+          { value: "tr", label: LANGUAGE_NAMES.tr, lang: "tr" },
+          { value: "en", label: LANGUAGE_NAMES.en, lang: "en" },
+        ]}
+      />
+    </Row>
+  );
+}
+
 function General() {
   const { t } = useTranslation();
   const p = usePrefs();
   return (
     <>
-      {ENGLISH_ENABLED ? (
-        <Row title={t("settings.general.language")}>
-          <Segmented
-            value={p.language}
-            onValueChange={(v) => {
-              p.set("language", v);
-              setLanguage(v);
-            }}
-            label={t("settings.general.language")}
-            options={[
-              { value: "tr", label: "Türkçe" },
-              { value: "en", label: "English" },
-            ]}
-          />
-        </Row>
-      ) : null}
+      <LanguageRow />
       <Row title={t("settings.general.onGameStart")} help={t("settings.general.onGameStartHelp")}>
         {/* Wide enough for "Simge durumuna küçülsün" on one line. */}
         <div className="w-64">
@@ -206,7 +237,7 @@ function Appearance() {
           min={0}
           max={100}
           step={5}
-          format={(v) => `%${v}`}
+          format={formatPercent}
           disabled={!p.sounds}
         />
       </div>
@@ -350,12 +381,16 @@ function Data() {
   return <DataSection />;
 }
 
-/** "Windows, 64 bit" instead of "windows x86_64". */
-function platformLabel(os: string, arch: string): string {
+/** "Windows, 64 bit" / "Windows, 64-bit" instead of "windows x86_64". */
+function platformLabel(t: TFunction, os: string, arch: string): string {
   const system =
     { windows: "Windows", macos: "macOS", linux: "Linux" }[os] ??
-    os.charAt(0).toLocaleUpperCase("tr") + os.slice(1);
-  const bits = { x86_64: "64 bit", aarch64: "ARM", x86: "32 bit" }[arch];
+    os.charAt(0).toLocaleUpperCase("en") + os.slice(1);
+  const bits = {
+    x86_64: t("settings.about.bits", { bits: 64 }),
+    aarch64: "ARM",
+    x86: t("settings.about.bits", { bits: 32 }),
+  }[arch];
   return bits ? `${system}, ${bits}` : system;
 }
 
@@ -382,7 +417,7 @@ function About() {
             <span>
               {t("settings.about.version")} {info?.version}
             </span>
-            {info ? <span>{platformLabel(info.os, info.arch)}</span> : null}
+            {info ? <span>{platformLabel(t, info.os, info.arch)}</span> : null}
           </p>
         </div>
       </div>
@@ -403,8 +438,6 @@ function About() {
     </div>
   );
 }
-
-const gigabytes = new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 1 });
 
 /** Defaults applied to instances created from now on. */
 function GameDefaults() {
@@ -453,7 +486,7 @@ function GameDefaults() {
               min={1024}
               max={ceiling}
               step={512}
-              format={(v) => `${gigabytes.format(v / 1024)} GB`}
+              format={formatMemory}
             />
           </motion.div>
         )}

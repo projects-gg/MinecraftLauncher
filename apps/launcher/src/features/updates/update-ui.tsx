@@ -60,10 +60,16 @@ function previewApply(fails: boolean) {
     useUpdate.setState({
       phase: "ready",
       step: null,
-      error: "Güncelleme kurulamadı. Tekrar dene.",
+      error: previewError(
+        "Güncelleme kurulamadı. Tekrar dene.",
+        "The update couldn't be installed. Try again.",
+      ),
     });
   };
 }
+
+/** The backend's words in the preview, in the interface's language as the backend writes them. */
+const previewError = (tr: string, en: string) => (i18n.language === "en" ? en : tr);
 
 const PREVIEW_NOTES =
   "- Güncelleme artık AFK hesaplarını kendisi durdurup sonra yeniden bağlıyor\n- Oyun açıkken güncelleme oyundan sonraya kalıyor\n- Daha hızlı indirmeler";
@@ -88,7 +94,9 @@ function previewUpdate() {
         mandatory: true,
         phase: failed ? "error" : "ready",
         // The backend's words for a failed download.
-        error: failed ? "Güncelleme indirilemedi." : null,
+        error: failed
+          ? previewError("Güncelleme indirilemedi.", "The update couldn't be downloaded.")
+          : null,
         apply: previewApply(false),
       });
       break;

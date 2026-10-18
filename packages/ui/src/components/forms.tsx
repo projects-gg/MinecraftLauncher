@@ -473,19 +473,34 @@ export function Select<T extends string>({
   );
 }
 
-/** Mutually exclusive options shown inline (loader kind, view mode, release channel). */
+/**
+ * Mutually exclusive options shown inline (loader kind, view mode, release channel). An option's
+ * `hint` follows its label in a quieter weight ("Otomatik (Türkçe)"); `lang` and `hintLang` name
+ * the language of text in another language than the page's, so screen readers say it right.
+ * `onIntent` runs when the pointer or the focus reaches the control (to load what a pick needs
+ * before the click).
+ */
 export function Segmented<T extends string>({
   value,
   onValueChange,
   options,
   label,
   className,
+  onIntent,
 }: {
   value: T;
   onValueChange: (value: T) => void;
-  options: Array<{ value: T; label: string; icon?: ReactNode }>;
+  options: Array<{
+    value: T;
+    label: string;
+    icon?: ReactNode;
+    hint?: string;
+    lang?: string;
+    hintLang?: string;
+  }>;
   label: string;
   className?: string;
+  onIntent?: () => void;
 }) {
   // The gold plate slides to the chosen option (shared layout id, unique per control).
   const layoutId = useId();
@@ -494,6 +509,8 @@ export function Segmented<T extends string>({
       type="single"
       value={value}
       onValueChange={(v) => v && onValueChange(v as T)}
+      onPointerEnter={onIntent}
+      onFocus={onIntent}
       aria-label={label}
       className={cn(
         "isolate inline-flex rounded-md border border-white/10 bg-obsidian-850/80 p-[3px]",
@@ -524,9 +541,14 @@ export function Segmented<T extends string>({
               aria-hidden
               className="chamfer pointer-events-none absolute inset-0 -z-10 opacity-0 shadow-[inset_0_0_0_2px_var(--color-gold-300)] group-focus-visible:opacity-100"
             />
-            <span className="flex items-center gap-1.5">
+            <span className="flex items-center gap-1.5 whitespace-nowrap">
               {o.icon}
-              {o.label}
+              <span lang={o.lang}>{o.label}</span>
+              {o.hint ? (
+                <span lang={o.hintLang} className="-ml-0.5 font-normal opacity-75">
+                  {o.hint}
+                </span>
+              ) : null}
             </span>
           </ToggleGroup.Item>
         ))}

@@ -688,6 +688,25 @@ export const tr = {
       stopping: "Durduruluyor",
       error: "Bağlantı kesildi",
     },
+    /** Why an account dropped (the server's own words follow in brackets). */
+    failure: {
+      kicked: "Sunucudan atıldı",
+      loginRejected: "Sunucu girişi reddetti",
+      connectionLost: "Bağlantı koptu",
+      loggedOut: "Oturum kapatıldı",
+      disconnected: "Bağlantı kesildi",
+      unsupportedVersion: "Sürüm desteklenmiyor",
+    },
+    /** Kicks reconnecting does not fix: the account stopped instead of trying again. */
+    refusal: {
+      banned: "Sunucudan yasaklandı",
+      notWhitelisted: "Beyaz listede değil",
+      wrongPassword: "Giriş şifresi yanlış",
+      premiumOnly: "Sunucu yalnız premium hesap kabul ediyor",
+      loggedInElsewhere: "Bu adla başka yerden girildi",
+      alreadyConnected: "Bu ad sunucuda zaten bağlı",
+      loginTimeout: "Giriş süresi doldu",
+    },
     stats: { health: "Can", food: "Tokluk", players: "Oyuncu" },
     empty: {
       title: "Henüz AFK hesabın yok",
@@ -953,6 +972,7 @@ export const tr = {
     },
     general: {
       language: "Dil",
+      languageAuto: "Otomatik",
       onGameStart: "Oyun açılınca launcher",
       onGameStartHelp: "AFK hesapları çalışırken launcher hiçbir zaman kapanmaz.",
       keep: "Açık kalsın",
@@ -1022,6 +1042,7 @@ export const tr = {
       store: "Mağaza",
       support: "Destek",
       source: "Kaynak kodu",
+      bits: "{{bits}} bit",
       credits: "Yazı tipleri: Tektur ve Figtree (OFL). Simgeler: Phosphor (MIT).",
     },
   },

@@ -5,7 +5,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { commands } from "@/bindings";
-import { setLanguage } from "@/lib/i18n";
+import { api } from "@/lib/api";
+import i18n, { currentLanguage, startLanguage } from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
 import { prepareSounds } from "@/lib/sound";
 import {
@@ -20,9 +21,6 @@ import { usePrefs } from "@/stores/prefs";
 import { useUpdate } from "@/stores/update";
 import { router } from "./router";
 import "./styles.css";
-
-// The saved language (always Turkish while English is hidden, see ENGLISH_ENABLED).
-setLanguage(usePrefs.getState().language);
 
 // Polling (server status and the like) and ambient motion pause while the window is in the tray
 // or minimized (lib/window-away.ts). WebView2 keeps reporting the page as visible then, and the
@@ -68,22 +66,47 @@ function Providers() {
 const root = document.getElementById("root");
 if (!root) throw new Error("#root missing");
 
-createRoot(root).render(
-  <StrictMode>
-    <Providers />
-  </StrictMode>,
-);
-
-// The window starts hidden to avoid a white flash; reveal it after the first paint, unless the
-// OS started us at login (then we wait in the tray).
-if (isTauri()) {
-  requestAnimationFrame(() => {
-    void commands.appInfo().then(async (info) => {
-      if (!info.startMinimized) await getCurrentWindow().show();
-      await refreshWindowAway();
-    });
-  });
+/** The backend writes the tray menu, the Discord presence and its errors in the same language. */
+function tellBackendLanguage() {
+  void api.setLanguage(currentLanguage()).catch(() => {});
 }
+
+/**
+ * A live language change: the backend follows, and the data the API layer put into words when it
+ * was read (AFK drop reasons, the welcome greeting) is read again.
+ */
+function languageChanged() {
+  tellBackendLanguage();
+  void queryClient.invalidateQueries({ queryKey: ["afk"] });
+  void queryClient.invalidateQueries({ queryKey: ["home-content"] });
+}
+
+async function start(rootElement: HTMLElement) {
+  // The language first (the player's pick, else automatic; English loaded when needed), so the
+  // first paint is already in it: the window is still hidden.
+  await startLanguage(usePrefs.getState().language).catch(() => {});
+  tellBackendLanguage();
+  i18n.on("languageChanged", languageChanged);
+
+  createRoot(rootElement).render(
+    <StrictMode>
+      <Providers />
+    </StrictMode>,
+  );
+
+  // The window starts hidden to avoid a white flash; reveal it after the first paint, unless the
+  // OS started us at login (then we wait in the tray).
+  if (isTauri()) {
+    requestAnimationFrame(() => {
+      void commands.appInfo().then(async (info) => {
+        if (!info.startMinimized) await getCurrentWindow().show();
+        await refreshWindowAway();
+      });
+    });
+  }
+}
+
+void start(root);
 
 // Interface sounds are drawn in idle time, not on the first press that plays one.
 prepareSounds();

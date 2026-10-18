@@ -64,3 +64,17 @@ html[data-perf="on"]::view-transition-new(page) {
     animation: fade-in 150ms ease-out both;
   }
 }
+
+/* A language change (lib/i18n.ts, view transition type "language"): the whole window
+   cross-fades to the new words. Both pictures share one duration and curve, so with the
+   browser's plus-lighter blend everything that did not change stays exactly as bright. Nothing
+   moves, so Performance mode and reduced motion keep it. */
+html:active-view-transition-type(language)::view-transition-old(root),
+html:active-view-transition-type(language)::view-transition-old(page) {
+  animation: fade-out 180ms ease-out both;
+}
+
+html:active-view-transition-type(language)::view-transition-new(root),
+html:active-view-transition-type(language)::view-transition-new(page) {
+  animation: fade-in 180ms ease-out both;
+}

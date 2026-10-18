@@ -1,4 +1,5 @@
 import type {
+  Lang,
   LegacyImportReport,
   LegacyImportRequest,
   LegacyScan,
@@ -130,6 +131,8 @@ export interface LauncherApi {
   openUrl(url: string): Promise<void>;
   updatePresence(context: PresenceContext): Promise<void>;
   setPresenceEnabled(enabled: boolean): Promise<void>;
+  /** The language the UI shows: the backend's own texts (tray, presence, errors) follow it. */
+  setLanguage(lang: Lang): Promise<void>;
   legacyScan(): Promise<LegacyScan>;
   legacyImport(request: LegacyImportRequest): Promise<LegacyImportReport>;
   officialStatus(): Promise<OfficialStatus>;

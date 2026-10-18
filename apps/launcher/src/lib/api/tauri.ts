@@ -22,6 +22,7 @@ import {
   type KickCause,
   type LaunchEventView,
 } from "@/bindings";
+import i18n from "@/lib/i18n";
 import { highlights, newsHighlights } from "@/lib/news";
 import { fileNameOf } from "@/lib/paths";
 import type { AfkSettingsSaveResult, AfkSettingsView } from "./afk-settings";
@@ -324,32 +325,27 @@ function dropped(file: DroppedFileView): DroppedFile {
 
 // --- AFK -------------------------------------------------------------------------------------
 
-const failureText: Record<string, string> = {
-  kicked: "Sunucudan atıldı",
-  loginRejected: "Sunucu girişi reddetti",
-  connectionLost: "Bağlantı koptu",
-  loggedOut: "Oturum kapatıldı",
-  disconnected: "Bağlantı kesildi",
-  unsupportedVersion: "Sürüm desteklenmiyor",
-};
+/** Kinds of drop with their own words (`afk.failure.*`); any other kind says "disconnected". */
+const FAILURE_KINDS = new Set([
+  "kicked",
+  "loginRejected",
+  "connectionLost",
+  "loggedOut",
+  "disconnected",
+  "unsupportedVersion",
+]);
 
-/** Kicks reconnecting does not fix: the account stopped instead of trying again. */
-const refusalText: Record<KickCause, string> = {
-  banned: "Sunucudan yasaklandı",
-  notWhitelisted: "Beyaz listede değil",
-  wrongPassword: "Giriş şifresi yanlış",
-  premiumOnly: "Sunucu yalnız premium hesap kabul ediyor",
-  loggedInElsewhere: "Bu adla başka yerden girildi",
-  alreadyConnected: "Bu ad sunucuda zaten bağlı",
-  loginTimeout: "Giriş süresi doldu",
-};
-
+/**
+ * Why an account dropped, in the interface's language, with the server's own words in brackets.
+ * Kicks reconnecting does not fix (`refused`) say why the account stopped (`afk.refusal.*`). The
+ * AFK list is read again when the language changes (main.tsx), so these follow it.
+ */
 function failure(reason: FailureReason | null | undefined): string {
-  if (!reason) return "Bağlantı kesildi";
+  if (!reason) return i18n.t("afk.failure.disconnected");
   const base =
     reason.kind === "refused"
-      ? refusalText[reason.cause]
-      : (failureText[reason.kind] ?? "Bağlantı kesildi");
+      ? i18n.t(`afk.refusal.${reason.cause satisfies KickCause}`)
+      : i18n.t(`afk.failure.${FAILURE_KINDS.has(reason.kind) ? reason.kind : "disconnected"}`);
   const message = "message" in reason ? reason.message : null;
   return message ? `${base} (${message})` : base;
 }
@@ -604,6 +600,9 @@ export const tauriApi: LauncherApi = {
   },
   async setPresenceEnabled(enabled) {
     await commands.discordSetEnabled(enabled);
+  },
+  async setLanguage(lang) {
+    await commands.appSetLanguage(lang);
   },
   async legacyScan() {
     return ok(commands.legacyScan());

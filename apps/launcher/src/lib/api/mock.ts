@@ -5,6 +5,7 @@ import coverForge from "@/assets/art/news-patch-forge.webp";
 import coverPvp from "@/assets/art/news-pvp-arena.webp";
 import coverSpawn from "@/assets/art/news-spawn-city.webp";
 import coverWinter from "@/assets/art/news-winter.webp";
+import i18n from "@/lib/i18n";
 import { newsHighlights } from "@/lib/news";
 import type { LauncherApi } from "./index";
 import { mockAccountName, mockAccounts } from "./mock-accounts";
@@ -803,7 +804,8 @@ export const mockApi: LauncherApi = {
     const copy = {
       ...source,
       id: `${source.id}-kopya`,
-      name: `${source.name} (kopya)`,
+      // Named like the backend does, in the interface's language.
+      name: `${source.name} (${i18n.language === "en" ? "copy" : "kopya"})`,
       managed: false,
       createdAt: new Date().toISOString(),
     };
@@ -930,6 +932,7 @@ export const mockApi: LauncherApi = {
   },
   async updatePresence() {},
   async setPresenceEnabled() {},
+  async setLanguage() {},
   async legacyScan() {
     return {
       found: true,

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { LanguageChoice } from "@/lib/i18n";
 
 export type GameStartBehavior = "keep" | "minimize" | "tray" | "close";
 export type CleanupSetDays = 30 | 60 | 90;
@@ -22,7 +23,8 @@ interface PrefsState {
   particles: boolean;
   sounds: boolean;
   soundVolume: number;
-  language: "tr" | "en";
+  /** Settings → Genel → Dil: "auto" (Turkish in Turkey or on a Turkish system) or the player's. */
+  language: LanguageChoice;
   selectedInstanceId: string | null;
   autoJoin: boolean;
   onGameStart: GameStartBehavior;
@@ -76,7 +78,7 @@ export const usePrefs = create<PrefsState>()(
       particles: true,
       sounds: true,
       soundVolume: 35,
-      language: "tr",
+      language: "auto",
       selectedInstanceId: null,
       autoJoin: true,
       onGameStart: "minimize",
@@ -104,6 +106,19 @@ export const usePrefs = create<PrefsState>()(
       setAutoJoin: (autoJoin) => set({ autoJoin }),
       setPerformanceMode: (performanceMode) => set({ performanceMode, perfTouched: true }),
     }),
-    { name: "pl.prefs", version: 2 },
+    { name: "pl.prefs", version: 3, migrate: migratePrefs },
   ),
 );
+
+/**
+ * Saved preferences of older versions. Version 3 (L1, 18 Oct 2026): the language is automatic
+ * (Turkish in Turkey or on a Turkish system, English otherwise) unless the player picks one. A
+ * saved "tr" was never a choice (Turkish was the only language then), so it becomes "auto":
+ * players in Turkey see no change, players abroad on an English system get English. A saved "en"
+ * stays the player's.
+ */
+export function migratePrefs(persisted: unknown, version: number): PrefValues {
+  const prefs = { ...(persisted as Partial<PrefValues> & { language?: string }) };
+  if (version < 3) prefs.language = prefs.language === "en" ? "en" : "auto";
+  return prefs as PrefValues;
+}

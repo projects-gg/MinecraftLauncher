@@ -20,7 +20,11 @@ export const PALETTE_WORDS = {
   library: { keywords: ["kurulumlar", "kurulum", "profiller", "library", "instances"] },
   news: { keywords: ["duyuru", "duyurular", "yenilikler", "etkinlik", "etkinlikler", "news"] },
   afk: { keywords: ["afk", "bot", "botlar"] },
-  settings: { keywords: ["seçenekler", "ayar", "settings", "options"] },
+  settings: {
+    keywords: ["seçenekler", "ayar", "settings", "options"],
+    // Settings opens on Genel, where the language is chosen.
+    related: ["dil", "language", "ingilizce", "english", "türkçe", "turkish"],
+  },
 
   // The selected instance (shown only while searching)
   // In-game lag is what the graphics preset fixes, so the lag words lead here first; the
