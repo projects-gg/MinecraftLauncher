@@ -803,8 +803,8 @@ Rules (characters are Unicode scalar values; unknown fields are ignored as every
 Where launchers show them:
 
 - Never as the hero, in the patch notes box (they are not the server's patch notes), on the event
-  card, pinned or featured, and they never raise a notification, a reminder or an unread badge.
-  Their own row or card may show the "new" dot under the usual seen rules.
+  card, pinned or featured. They never raise a notification, a reminder, an unread badge or a
+  "new" dot, and they do not move the "seen" mark of Projects news.
 - **Desktop home news column:** the rows Projects news fills come first (Studio's and the feed's
   news minus the hero's article and the patch notes box's, at most 4 rows). Only rows left empty
   get Minecraft entries, in their order. With no Projects news and no patch notes, Minecraft rows
