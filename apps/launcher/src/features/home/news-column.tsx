@@ -1,5 +1,14 @@
 import { ArrowSquareOut, CaretRight } from "@phosphor-icons/react";
-import { Chip, Countdown, cn, easeOutExpo, exitOf, Skeleton, useInteractionMotion } from "@pl/ui";
+import {
+  Chip,
+  Countdown,
+  cn,
+  easeOutExpo,
+  exitOf,
+  Skeleton,
+  useInteractionMotion,
+  usePerf,
+} from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
@@ -357,14 +366,20 @@ function OtherEvents({ events, onChosen }: { events: EventItem[]; onChosen: () =
   );
 }
 
-/** "20 dakika önce başladı", kept fresh while it is on screen. */
+/**
+ * "20 dakika önce başladı", kept fresh while it is on screen: like the countdown, it stops while
+ * nobody can see it (tray, minimized) and is right again the moment it is back.
+ */
 function StartedAgo({ at }: { at: string }) {
   const { t } = useTranslation();
+  const { unseen } = usePerf();
   const [, tick] = useState(0);
   useEffect(() => {
+    if (unseen) return;
+    tick((n) => n + 1);
     const id = window.setInterval(() => tick((n) => n + 1), 30_000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [unseen]);
   return (
     <p className="mt-1.5 text-[12.5px] text-ash-300">
       {t("home.eventStarted", { when: formatRelative(at) })}
