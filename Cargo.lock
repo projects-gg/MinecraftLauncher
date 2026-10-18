@@ -3939,6 +3939,7 @@ dependencies = [
  "dirs 7.0.0",
  "fastnbt",
  "flate2",
+ "fs4",
  "futures",
  "hex",
  "hickory-resolver",

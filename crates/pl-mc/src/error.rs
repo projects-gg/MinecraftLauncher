@@ -67,6 +67,16 @@ pub enum Error {
         kind: crate::server::PingFailure,
         message: String,
     },
+
+    /// The disk cannot hold what an install is about to download or unpack; nothing was written
+    /// ([`crate::install::space::ensure_room`]).
+    #[error(
+        "not enough room: {} bytes needed for {} bytes, {} bytes free",
+        .0.needed,
+        .0.missing,
+        .0.free
+    )]
+    NoRoom(crate::install::space::Shortfall),
 }
 
 impl Error {

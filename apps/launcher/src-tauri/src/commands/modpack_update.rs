@@ -480,6 +480,12 @@ pub async fn modpack_update_apply(
 
     let items = update_download_items(&game_dir, &new, &plan).map_err(content_error)?;
     if !items.is_empty() {
+        // Nothing starts that cannot fit on the disk (the launch's margin; "Yer aç").
+        pl_mc::install::space::ensure_room(
+            &game_dir,
+            pl_mc::install::space::download_bytes(&items),
+        )
+        .map_err(content_error)?;
         let events = on_progress.clone();
         let on_download: ProgressFn = Arc::new(move |p: pl_net::DownloadProgress| {
             send(&events, JobProgressView::download("downloading", &p))

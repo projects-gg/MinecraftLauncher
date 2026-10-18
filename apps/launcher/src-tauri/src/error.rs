@@ -55,12 +55,7 @@ impl CmdError {
     /// Before a launch downloads anything: the disk cannot hold it (`needed` with the margin).
     pub fn disk_short(needed: u64, free: u64, details: impl Into<String>) -> Self {
         let lang = Lang::current();
-        // A figure and its unit stay on one line of the toast ("1,2 GB").
-        let size = |bytes| {
-            pl_mc::install::space::format_size(bytes, lang)
-                .replace(' ', &char::from(0xA0_u8).to_string())
-        };
-        let (needed, free) = (size(needed), size(free));
+        let (needed, free) = (toast_size(needed, lang), toast_size(free, lang));
         Self::new(
             Self::DISK_FULL,
             lang.pick(
@@ -72,6 +67,28 @@ impl CmdError {
             details,
         )
     }
+
+    /// Before a mod, a modpack or a mod center change downloads or unpacks anything: the disk
+    /// cannot hold it (`needed` with the launch's margin; `pl_mc::Error::NoRoom`).
+    pub fn no_room(needed: u64, free: u64, details: impl Into<String>) -> Self {
+        let lang = Lang::current();
+        let (needed, free) = (toast_size(needed, lang), toast_size(free, lang));
+        Self::new(
+            Self::DISK_FULL,
+            lang.pick(
+                format!("Diskte yeterli yer yok. Bunun için {needed} gerekiyor, {free} boş."),
+                format!(
+                    "There isn't enough space on the disk. This needs {needed}, {free} is free."
+                ),
+            ),
+            details,
+        )
+    }
+}
+
+/// "1,2 GB" with a no-break space: a figure and its unit stay on one line of the toast.
+fn toast_size(bytes: u64, lang: Lang) -> String {
+    pl_mc::install::space::format_size(bytes, lang).replace(' ', &char::from(0xA0_u8).to_string())
 }
 
 impl From<pl_auth::AuthError> for CmdError {
@@ -111,6 +128,7 @@ impl From<pl_mc::Error> for CmdError {
         let details = error.to_string();
         let (code, message) = match &error {
             _ if error.is_cancelled() => ("IPTAL", pick("İşlem iptal edildi.", "Cancelled.")),
+            E::NoRoom(short) => return Self::no_room(short.needed, short.free, details),
             _ if error.is_disk_full() => return Self::disk_full(details),
             _ if error.is_offline() => (
                 "AG-YOK",

@@ -8,6 +8,7 @@
 //! only looked at when room is tight ([`GameFiles::missing`]).
 
 use std::collections::HashSet;
+use std::path::Path;
 
 use futures::StreamExt;
 use pl_net::{CancellationToken, DownloadItem, DownloadOptions, VerifyMode, verify_file};
@@ -182,6 +183,48 @@ pub fn free_bytes_override() -> Option<u64> {
 #[cfg(any(debug_assertions, test))]
 fn parse_free_bytes(value: Option<&str>) -> Option<u64> {
     value?.trim().parse().ok()
+}
+
+/// Free space on the disk that holds `path` (its nearest existing parent decides, so a folder an
+/// install is about to make works too), or the stand-in of debug builds ([`FREE_BYTES_ENV`]).
+/// `None` when it cannot be read.
+pub fn free_space(path: &Path) -> Option<u64> {
+    free_bytes_override().or_else(|| {
+        let existing = path.ancestors().find(|p| p.exists())?;
+        fs4::available_space(existing).ok()
+    })
+}
+
+/// The bytes a batch of downloads brings (a file of unknown size counts as nothing).
+pub fn download_bytes(items: &[DownloadItem]) -> u64 {
+    items
+        .iter()
+        .filter_map(|item| item.size)
+        .fold(0, u64::saturating_add)
+}
+
+/// Stops an install before it downloads or unpacks `missing` bytes into `dir` when that disk
+/// cannot hold them with the launch's margin ([`room_needed`]): [`Error::NoRoom`], which the
+/// launcher shows with "Yer aç" (`DISK-DOLU`). Nothing is written before. A free space that
+/// cannot be read never stops anything. Mod center installs, Modrinth add-ons and modpacks use
+/// it; a launch has its own two-disk check ([`shortfall`]).
+pub fn ensure_room(dir: &Path, missing: u64) -> Result<()> {
+    check_room(free_space(dir), missing).inspect_err(|_| {
+        tracing::info!(missing, dir = %dir.display(), "not enough room for an install");
+    })
+}
+
+/// [`ensure_room`] with the free space already read.
+pub fn check_room(free: Option<u64>, missing: u64) -> Result<()> {
+    let only = Target { free, missing };
+    let nothing = Target {
+        free: None,
+        missing: 0,
+    };
+    match shortfall(only, nothing) {
+        Some(short) => Err(Error::NoRoom(short)),
+        None => Ok(()),
+    }
 }
 
 /// The game files one launch installs: the version the install works through and a guess for
@@ -555,6 +598,43 @@ mod tests {
         assert_eq!(room_needed(100 * MB), 100 * MB + 10 * MB + 100 * MB);
         assert_eq!(room_needed(GB), GB + GB / 10 + WORK_ROOM_MAX);
         assert_eq!(room_needed(u64::MAX), u64::MAX);
+    }
+
+    #[test]
+    fn content_installs_use_the_same_margin() {
+        // A 5 MB mod needs 5 + 0.5 + 32 MB; a 37 MB disk is too small, an unknown one never is.
+        let missing = 5 * MB;
+        match check_room(Some(37 * MB), missing) {
+            Err(Error::NoRoom(short)) => assert_eq!(
+                short,
+                Shortfall {
+                    needed: room_needed(missing),
+                    free: 37 * MB,
+                    missing
+                }
+            ),
+            other => panic!("expected no room, got {other:?}"),
+        }
+        assert!(check_room(Some(room_needed(missing)), missing).is_ok());
+        assert!(check_room(None, missing).is_ok());
+        assert!(check_room(Some(0), 0).is_ok(), "nothing to download");
+        let error = check_room(Some(MB), missing).unwrap_err().to_string();
+        assert!(error.starts_with("not enough room:"), "{error}");
+    }
+
+    #[test]
+    fn download_batches_add_their_known_sizes() {
+        let items = [
+            DownloadItem::new("https://example.org/a", "a").size(Some(3 * MB)),
+            DownloadItem::new("https://example.org/b", "b"),
+            DownloadItem::new("https://example.org/c", "c").size(Some(u64::MAX)),
+        ];
+        assert_eq!(download_bytes(&items[..2]), 3 * MB);
+        assert_eq!(download_bytes(&items), u64::MAX);
+        assert_eq!(download_bytes(&[]), 0);
+        // A folder that does not exist yet is measured on its nearest existing parent.
+        let dir = tempfile::tempdir().unwrap();
+        assert!(free_space(&dir.path().join("instances/new/minecraft")).is_some());
     }
 
     #[test]

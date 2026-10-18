@@ -263,6 +263,11 @@ impl Addons {
         }
 
         if !items.is_empty() {
+            // Nothing starts that cannot fit on the disk (the launch's margin; "Yer aç").
+            crate::install::space::ensure_room(
+                self.game_dir(),
+                crate::install::space::download_bytes(&items),
+            )?;
             let download_progress: Option<ProgressFn> = options.progress.clone().map(|report| {
                 Arc::new(move |p: DownloadProgress| {
                     report(AddonProgress::Downloading {

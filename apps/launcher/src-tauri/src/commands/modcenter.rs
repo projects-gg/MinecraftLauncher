@@ -622,6 +622,13 @@ pub(crate) async fn apply_selection(
     )
     .await
     .map_err(pack_error)?;
+    // Nothing starts that cannot fit on the disk (the launch's margin; "Yer aç").
+    let downloads = plan
+        .downloads
+        .iter()
+        .map(|download| download.size)
+        .fold(0, u64::saturating_add);
+    pl_mc::install::space::ensure_room(&game_dir, downloads).map_err(CmdError::from)?;
     let report = apply_sync(
         &plan,
         &state.mc.downloader,
@@ -629,7 +636,15 @@ pub(crate) async fn apply_selection(
         on_progress.map(sync_progress),
     )
     .await
-    .map_err(pack_error)?;
+    .map_err(|error| {
+        // A disk that fills up on the way says so (and offers "Yer aç").
+        let details = error.to_string();
+        if pl_net::mentions_disk_full(&details) {
+            CmdError::disk_full(details)
+        } else {
+            pack_error(error)
+        }
+    })?;
     tracing::info!(
         instance = %instance_id,
         summary = %plan.summary().describe_tr(),

@@ -2,6 +2,8 @@ import { toast } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
+import { DISK_FULL } from "@/features/disk/launch-error";
+import { openMakeSpace } from "@/features/disk/make-space";
 import {
   api,
   type ContentInstallResult,
@@ -144,11 +146,23 @@ export async function copyErrorDetails(error: unknown) {
   }
 }
 
-/** Toast for a failed command; cancellations stay quiet. Details go to "copy details". */
+/**
+ * Toast for a failed command; cancellations stay quiet. Details go to "copy details"; a disk
+ * that cannot hold the job (`DISK-DOLU`, before anything was downloaded or on the way) offers
+ * "Yer aç" instead, like OYNA does.
+ */
 export function showError(error: unknown) {
   if (isCancelled(error)) return;
   const message =
     error instanceof Error && error.message ? error.message : i18n.t("content.browse.errorTitle");
+  if (errorCode(error) === DISK_FULL) {
+    toast.error(message, {
+      id: "content-disk",
+      duration: 10_000,
+      action: { label: i18n.t("disk.makeSpace"), onClick: openMakeSpace },
+    });
+    return;
+  }
   toast.error(message, {
     action: {
       label: i18n.t("common.copyDetails"),

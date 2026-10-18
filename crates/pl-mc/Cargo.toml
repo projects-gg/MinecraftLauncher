@@ -44,6 +44,8 @@ base64 = { workspace = true }
 same-file = "1.0.6"
 # The screenshots folder while a game runs (ReadDirectoryChangesW, inotify, FSEvents; no polling).
 notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
+# Free space where an install writes (the crate pl-data measures with).
+fs4 = "1.1.0"
 
 [dev-dependencies]
 tempfile = { workspace = true }

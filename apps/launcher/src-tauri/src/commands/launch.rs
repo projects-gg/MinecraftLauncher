@@ -417,7 +417,7 @@ fn out_of_room(error: CmdError, state: &AppState, instance_id: &str) -> CmdError
 
 /// Free space where a launch writes (or the end-to-end stand-in of debug builds).
 pub(crate) fn free_space(path: &Path) -> Option<u64> {
-    space::free_bytes_override().or_else(|| pl_data::usage::free_space(path))
+    space::free_space(path)
 }
 
 /// Stops the launch before anything big is downloaded when a disk cannot hold what it still

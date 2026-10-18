@@ -1,7 +1,7 @@
 //! Pack previews: what an import would create, read without extracting anything.
 
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Read, Seek};
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
@@ -33,6 +33,9 @@ pub struct PackPreview {
     pub download_bytes: u64,
     /// Files bundled in the archive (overrides or the exported game folder).
     pub bundled_files: u64,
+    /// Their size once unpacked, for the room check before an import (not sent to the UI).
+    #[serde(skip)]
+    pub bundled_bytes: u64,
     /// Mods of a CurseForge pack that have to be downloaded by hand.
     pub manual_files: u64,
     /// Parts of the source instance the launcher cannot reproduce.
@@ -91,7 +94,33 @@ fn count_below(names: &[String], prefixes: &[&str]) -> u64 {
         .count() as u64
 }
 
-fn from_described(instance: ImportedInstance, bundled_files: u64) -> PackPreview {
+/// Unpacked size of the archive's files below `prefixes`, from its directory (nothing is
+/// extracted). An entry that cannot be read counts as nothing.
+fn size_below<R: Read + Seek>(archive: &mut ZipArchive<R>, prefixes: &[&str]) -> u64 {
+    let mut total = 0_u64;
+    for index in 0..archive.len() {
+        let Ok(entry) = archive.by_index_raw(index) else {
+            continue;
+        };
+        let Ok(name) = entry.name() else {
+            continue;
+        };
+        let name = name.replace('\\', "/");
+        let below = prefixes
+            .iter()
+            .any(|p| name.len() > p.len() && name.starts_with(p));
+        if below && !entry.is_dir() {
+            total = total.saturating_add(entry.size());
+        }
+    }
+    total
+}
+
+fn from_described(
+    instance: ImportedInstance,
+    bundled_files: u64,
+    bundled_bytes: u64,
+) -> PackPreview {
     let manual_files = match &instance.pending {
         ImportPendingFiles::CurseForgeNeedsApiKey { files, .. } => files.len() as u64,
         _ => 0,
@@ -108,6 +137,7 @@ fn from_described(instance: ImportedInstance, bundled_files: u64) -> PackPreview
         download_files: 0,
         download_bytes: 0,
         bundled_files,
+        bundled_bytes,
         manual_files,
         unsupported: instance.unsupported,
         optional: Vec::new(),
@@ -129,6 +159,8 @@ fn preview_blocking(path: &Path) -> Result<PackPreview> {
         ModpackFormat::Mrpack => {
             let index = read_index(&mut archive, path)?;
             let (loader, loader_version) = index.loader();
+            const OVERRIDES: [&str; 2] = ["overrides/", "client-overrides/"];
+            let bundled_bytes = size_below(&mut archive, &OVERRIDES);
             let downloads: Vec<_> = index
                 .files
                 .iter()
@@ -145,7 +177,8 @@ fn preview_blocking(path: &Path) -> Result<PackPreview> {
                 loader_version,
                 download_files: downloads.len() as u64,
                 download_bytes: downloads.iter().map(|f| f.file_size).sum(),
-                bundled_files: count_below(&names, &["overrides/", "client-overrides/"]),
+                bundled_files: count_below(&names, &OVERRIDES),
+                bundled_bytes,
                 manual_files: 0,
                 unsupported: Vec::new(),
                 optional: downloads
@@ -158,12 +191,14 @@ fn preview_blocking(path: &Path) -> Result<PackPreview> {
         ModpackFormat::Prism => {
             let (instance, prefix) = describe_prism_archive(&mut archive, path)?;
             let bundled = count_below(&names, &[prefix.as_str()]);
-            Ok(from_described(instance, bundled))
+            let bytes = size_below(&mut archive, &[prefix.as_str()]);
+            Ok(from_described(instance, bundled, bytes))
         }
         ModpackFormat::CurseForge => {
             let (instance, prefix) = describe_curseforge_archive(&mut archive, path)?;
             let bundled = count_below(&names, &[prefix.as_str()]);
-            Ok(from_described(instance, bundled))
+            let bytes = size_below(&mut archive, &[prefix.as_str()]);
+            Ok(from_described(instance, bundled, bytes))
         }
     }
 }
@@ -218,7 +253,18 @@ mod tests {
         assert_eq!(preview.loader_version.as_deref(), Some("0.16.5"));
         assert_eq!((preview.download_files, preview.download_bytes), (1, 100));
         assert_eq!(preview.bundled_files, 3);
+        assert_eq!(
+            preview.bundled_bytes, 3,
+            "one byte each, the folder entry counts nothing"
+        );
         assert_eq!(preview.total_files(), 4);
+        // The unpacked size stays out of what the UI gets.
+        assert!(
+            serde_json::to_value(&preview)
+                .unwrap()
+                .get("bundledBytes")
+                .is_none()
+        );
 
         let prism = dir.path().join("b.zip");
         std::fs::write(
@@ -239,6 +285,7 @@ mod tests {
         assert_eq!(preview.name, "My Pack");
         assert_eq!(preview.loader, LoaderKind::Forge);
         assert_eq!(preview.bundled_files, 2);
+        assert_eq!(preview.bundled_bytes, 2);
         assert!(!dir.path().join("mods").exists());
 
         let curse = dir.path().join("c.zip");

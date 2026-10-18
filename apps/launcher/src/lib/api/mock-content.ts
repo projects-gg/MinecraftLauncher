@@ -33,6 +33,28 @@ class MockCommandError extends Error {
   }
 }
 
+/**
+ * `?disk=low` (or localStorage `pl.mock.disk`): installs and imports stop before downloading
+ * because the disk cannot hold them, worded as the launcher sends it (`CmdError::no_room`).
+ */
+function refuseWhenDiskLow() {
+  let flag = "";
+  try {
+    flag =
+      new URLSearchParams(window.location.search).get("disk") ??
+      localStorage.getItem("pl.mock.disk") ??
+      "";
+  } catch {
+    // No storage in this preview.
+  }
+  if (flag !== "low") return;
+  const nb = String.fromCharCode(0xa0);
+  throw new MockCommandError(
+    "DISK-DOLU",
+    `Diskte yeterli yer yok. Bunun için 1,2${nb}GB gerekiyor, 300${nb}MB boş.`,
+  );
+}
+
 type Row = [string, string, string, string, string, string, number, number, number, string];
 
 const rows: Record<ContentProjectType, Row[]> = {
@@ -877,6 +899,9 @@ export function createMockContent(deps: {
     },
     async install(job, onProgress): Promise<ContentInstallResult> {
       cancelled.delete(job.jobId);
+      onProgress({ stage: "resolving", doneFiles: 0, totalFiles: 0, bytesPerSec: 0 });
+      await delay(400);
+      refuseWhenDiskLow();
       const deps = (dependencies[job.projectId] ?? []).filter(
         (dep) => !entries(job.instanceId, "mod").some((e) => e.projectId === dep),
       );
@@ -970,6 +995,7 @@ export function createMockContent(deps: {
       cancelled.delete(job.jobId);
       onProgress({ stage: "extracting", doneFiles: 0, totalFiles: 0, bytesPerSec: 0 });
       await delay(900);
+      refuseWhenDiskLow();
       const steps = 20;
       for (let i = 1; i <= steps; i++) {
         if (cancelled.has(job.jobId)) throw new MockCommandError("IPTAL", "İşlem iptal edildi.");

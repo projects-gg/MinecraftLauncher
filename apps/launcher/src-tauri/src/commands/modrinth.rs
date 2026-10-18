@@ -153,6 +153,9 @@ pub(crate) fn content_error(error: pl_mc::Error) -> CmdError {
     let details = error.to_string();
     let (code, message) = match &error {
         _ if error.is_cancelled() => ("IPTAL", pick("İşlem iptal edildi.", "Cancelled.")),
+        // The disk: before anything was downloaded, or filled up on the way ("Yer aç").
+        E::NoRoom(short) => return CmdError::no_room(short.needed, short.free, details),
+        _ if error.is_disk_full() => return CmdError::disk_full(details),
         _ if error.is_offline() => (
             "MODRINTH-AG",
             pick(

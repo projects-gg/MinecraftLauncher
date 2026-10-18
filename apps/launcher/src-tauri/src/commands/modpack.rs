@@ -267,6 +267,12 @@ pub(crate) async fn download_pack_version(
         })?;
     let cache = state.root.join("cache").join("modrinth").join("packs");
     let dest = cache.join(format!("{}.mrpack", version.id));
+    // The pack file itself first, unless it is already here (what it unpacks and downloads is
+    // checked before the import).
+    let cached = std::fs::metadata(&dest).is_ok_and(|meta| meta.len() == file.size);
+    if !cached {
+        pl_mc::install::space::ensure_room(&cache, file.size).map_err(CmdError::from)?;
+    }
     let checksum = match (&file.hashes.sha512, &file.hashes.sha1) {
         (Some(h), _) if !h.is_empty() => Some(Checksum::new(HashAlgo::Sha512, h)),
         (_, Some(h)) if !h.is_empty() => Some(Checksum::new(HashAlgo::Sha1, h)),
@@ -312,6 +318,18 @@ async fn import_archive(
     let preview = pl_mc::modpack::preview_pack(archive)
         .await
         .map_err(pack_error)?;
+    // Nothing starts that cannot fit: the pack's own files unpacked and the files it downloads
+    // (without the optional ones the player left out), with the launch's margin ("Yer aç").
+    let left_out: u64 = preview
+        .optional
+        .iter()
+        .filter(|file| skip_optional.contains(&file.path))
+        .map(|file| file.size)
+        .fold(0, u64::saturating_add);
+    let incoming = preview
+        .bundled_bytes
+        .saturating_add(preview.download_bytes.saturating_sub(left_out));
+    pl_mc::install::space::ensure_room(state.instances.root(), incoming).map_err(CmdError::from)?;
     let modded = preview.loader != LoaderKind::Vanilla;
     let name = name
         .map(|n| n.trim().to_owned())
