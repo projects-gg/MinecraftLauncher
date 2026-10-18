@@ -627,8 +627,8 @@ export const tauriApi: LauncherApi = {
   async setPresenceEnabled(enabled) {
     await commands.discordSetEnabled(enabled);
   },
-  async setLanguage(lang) {
-    await commands.appSetLanguage(lang);
+  async setLanguage(lang, pick) {
+    await commands.appSetLanguage(lang, pick);
   },
   async legacyScan() {
     return ok(commands.legacyScan());

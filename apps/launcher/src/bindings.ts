@@ -12,8 +12,14 @@ export const commands = {
 	 *  follow it from now on: command errors, the tray menu, the Discord presence, the browser
 	 *  sign-in page and the game's first language. Async, so the tray's main-thread updates are never
 	 *  waited for on the main thread.
+	 * 
+	 *  `pick` is the player's own pick (`None`: "Otomatik"), kept in the data folder for the next
+	 *  start (`pl_lang::write_pick`): AFK accounts that start automatically connect before the page
+	 *  names the language.
 	 */
-	appSetLanguage: (lang: Lang) => __TAURI_INVOKE<void>("app_set_language", { lang }),
+	appSetLanguage: (lang: Lang, pick: 
+/**  Turkish: the launcher's first language, and the backend's until the UI says otherwise. */
+"tr" | "en" | null) => __TAURI_INVOKE<void>("app_set_language", { lang, pick }),
 	accountsList: () => __TAURI_INVOKE<AccountView[]>("accounts_list"),
 	accountAddOffline: (name: string) => typedError<AccountView, CmdError>(__TAURI_INVOKE("account_add_offline", { name })),
 	/**

@@ -133,8 +133,12 @@ export interface LauncherApi {
   openUrl(url: string): Promise<void>;
   updatePresence(context: PresenceContext): Promise<void>;
   setPresenceEnabled(enabled: boolean): Promise<void>;
-  /** The language the UI shows: the backend's own texts (tray, presence, errors) follow it. */
-  setLanguage(lang: Lang): Promise<void>;
+  /**
+   * The language the UI shows: the backend's own texts (tray, presence, errors) follow it.
+   * `pick` is the player's own pick (`null`: "Otomatik"), which the backend keeps for its next
+   * start: AFK accounts that start automatically connect before the page names the language.
+   */
+  setLanguage(lang: Lang, pick: Lang | null): Promise<void>;
   legacyScan(): Promise<LegacyScan>;
   legacyImport(request: LegacyImportRequest): Promise<LegacyImportReport>;
   officialStatus(): Promise<OfficialStatus>;

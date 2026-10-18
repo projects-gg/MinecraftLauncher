@@ -12,12 +12,14 @@
 //! Nothing asks the network. The UI resolves the language and tells the backend
 //! ([`Lang::set_current`]); the texts the backend writes for players (command errors, the tray
 //! menu, the Discord presence, the browser sign-in page) follow it through [`pick`], and so does
-//! the game's first language. Nothing sets it in Studio, which stays Turkish: [`Lang::Tr`] is the
-//! default.
+//! the game's first language. The launcher keeps the pick between starts ([`write_pick`],
+//! [`read_pick`]), so what it says before the page has run is in it too. Nothing sets it in
+//! Studio, which stays Turkish: [`Lang::Tr`] is the default.
 //!
 //! Functions whose texts are tested take a [`Lang`] instead of reading the current one, so tests
 //! that run side by side never see each other's language.
 
+use std::path::Path;
 use std::sync::atomic::{AtomicU8, Ordering};
 
 use serde::{Deserialize, Serialize};
@@ -157,6 +159,33 @@ pub fn resolve(choice: Option<Lang>, signals: &Signals) -> Lang {
     choice.unwrap_or_else(|| signals.automatic())
 }
 
+/// The file in the launcher's data folder that keeps the player's pick ([`write_pick`]).
+pub const PICK_FILE: &str = "language";
+
+/// The player's pick as the launcher kept it ([`write_pick`]), read when it starts: AFK accounts
+/// that start automatically connect before the page names the language. `None`: "Otomatik", no
+/// file yet, or one that cannot be read.
+pub fn read_pick(path: &Path) -> Option<Lang> {
+    match std::fs::read_to_string(path).ok()?.trim() {
+        "tr" => Some(Lang::Tr),
+        "en" => Some(Lang::En),
+        _ => None,
+    }
+}
+
+/// Keeps the player's pick for the next start: `tr`, `en`, or `auto` for "Otomatik" (`None`).
+/// Written only when it changed (the page names it on every start), through a temporary file so
+/// a crash never leaves half of it.
+pub fn write_pick(path: &Path, pick: Option<Lang>) -> std::io::Result<()> {
+    let text = pick.map_or("auto", Lang::code);
+    if std::fs::read_to_string(path).is_ok_and(|kept| kept.trim() == text) {
+        return Ok(());
+    }
+    let temporary = path.with_extension("tmp");
+    std::fs::write(&temporary, text)?;
+    std::fs::rename(&temporary, path)
+}
+
 /// Windows' home location when it is Turkey (`GetUserGeoID`, there since Windows XP: a newer
 /// call would stop the launcher from starting on an older Windows 10). GeoID 235 is Turkey.
 #[cfg(windows)]
@@ -270,6 +299,46 @@ mod tests {
         assert_eq!(resolve(Some(Lang::Tr), &berlin), Lang::Tr);
         assert_eq!(resolve(None, &istanbul), Lang::Tr);
         assert_eq!(resolve(None, &berlin), Lang::En);
+    }
+
+    #[test]
+    fn the_pick_is_kept_between_starts() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(PICK_FILE);
+        // Nothing kept yet: automatic.
+        assert_eq!(read_pick(&path), None);
+        // A player abroad who picked Turkish: the next start speaks Turkish before the page runs
+        // (an English system in Berlin would be English on its own).
+        write_pick(&path, Some(Lang::Tr)).unwrap();
+        assert_eq!(read_pick(&path), Some(Lang::Tr));
+        let berlin = signals("en-US", "Europe/Berlin");
+        assert_eq!(resolve(read_pick(&path), &berlin), Lang::Tr);
+        write_pick(&path, Some(Lang::En)).unwrap();
+        assert_eq!(read_pick(&path), Some(Lang::En));
+        // Back to "Otomatik": the computer decides again.
+        write_pick(&path, None).unwrap();
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "auto");
+        assert_eq!(read_pick(&path), None);
+        assert_eq!(resolve(read_pick(&path), &berlin), Lang::En);
+        assert!(!path.with_extension("tmp").exists());
+        // Whatever else is in the file counts as automatic.
+        std::fs::write(&path, " en\n").unwrap();
+        assert_eq!(read_pick(&path), Some(Lang::En));
+        std::fs::write(&path, "deutsch").unwrap();
+        assert_eq!(read_pick(&path), None);
+    }
+
+    #[test]
+    fn an_unchanged_pick_is_not_written_again() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join(PICK_FILE);
+        write_pick(&path, Some(Lang::En)).unwrap();
+        // A folder where the temporary file would go: any write fails, so only a pick that is
+        // left alone gets through.
+        std::fs::create_dir(path.with_extension("tmp")).unwrap();
+        write_pick(&path, Some(Lang::En)).unwrap();
+        assert!(write_pick(&path, Some(Lang::Tr)).is_err());
+        assert_eq!(read_pick(&path), Some(Lang::En));
     }
 
     #[test]

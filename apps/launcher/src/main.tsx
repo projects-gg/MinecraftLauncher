@@ -66,9 +66,14 @@ function Providers() {
 const root = document.getElementById("root");
 if (!root) throw new Error("#root missing");
 
-/** The backend writes the tray menu, the Discord presence and its errors in the same language. */
+/**
+ * The backend writes the tray menu, the Discord presence and its errors in the same language,
+ * and keeps the player's pick for its next start (AFK accounts that start automatically connect
+ * before this page runs).
+ */
 function tellBackendLanguage() {
-  void api.setLanguage(currentLanguage()).catch(() => {});
+  const choice = usePrefs.getState().language;
+  void api.setLanguage(currentLanguage(), choice === "auto" ? null : choice).catch(() => {});
 }
 
 /**
@@ -87,6 +92,11 @@ async function start(rootElement: HTMLElement) {
   await startLanguage(usePrefs.getState().language).catch(() => {});
   tellBackendLanguage();
   i18n.on("languageChanged", languageChanged);
+  // A pick that keeps the words ("Otomatik" to "Türkçe" on a Turkish system) changes no language,
+  // but the backend keeps it all the same.
+  usePrefs.subscribe((state, previous) => {
+    if (state.language !== previous.language) tellBackendLanguage();
+  });
 
   createRoot(rootElement).render(
     <StrictMode>

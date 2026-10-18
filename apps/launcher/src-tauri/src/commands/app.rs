@@ -22,9 +22,23 @@ pub struct AppInfo {
 /// follow it from now on: command errors, the tray menu, the Discord presence, the browser
 /// sign-in page and the game's first language. Async, so the tray's main-thread updates are never
 /// waited for on the main thread.
+///
+/// `pick` is the player's own pick (`None`: "Otomatik"), kept in the data folder for the next
+/// start (`pl_lang::write_pick`): AFK accounts that start automatically connect before the page
+/// names the language.
 #[tauri::command]
 #[specta::specta]
-pub async fn app_set_language(app: tauri::AppHandle, lang: pl_lang::Lang) {
+pub async fn app_set_language(
+    app: tauri::AppHandle,
+    lang: pl_lang::Lang,
+    pick: Option<pl_lang::Lang>,
+) {
+    use tauri::Manager;
+    if let Some(state) = app.try_state::<crate::state::AppState>()
+        && let Err(error) = pl_lang::write_pick(&state.root.join(pl_lang::PICK_FILE), pick)
+    {
+        tracing::warn!(%error, "could not keep the language pick");
+    }
     if lang == pl_lang::Lang::current() {
         return;
     }

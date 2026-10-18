@@ -164,7 +164,8 @@ fn ask_to_replace(
     socket: PathBuf,
     own_bundle: Option<PathBuf>,
 ) {
-    // The automatic language (pl_lang): this copy's UI never ran, so no pick reached it.
+    // This copy's UI never runs: the language is the player's last pick, read at start, else the
+    // automatic one (pl_lang).
     let turkish = matches!(pl_lang::Lang::current(), pl_lang::Lang::Tr);
     let texts = Texts::new(turkish, older.as_deref());
     app.dialog()

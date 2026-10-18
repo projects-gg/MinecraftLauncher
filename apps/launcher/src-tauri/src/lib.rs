@@ -23,10 +23,13 @@ pub fn run() {
     #[cfg(debug_assertions)]
     export_bindings(&specta);
 
-    // Until the UI names the language (the player's pick, else automatic), the backend speaks the
-    // automatic one: Turkish in Turkey or on a Turkish system, English otherwise (pl_lang).
+    // Until the UI names the language, the backend speaks the player's last pick (kept by
+    // `app_set_language`), else the automatic one: Turkish in Turkey or on a Turkish system,
+    // English otherwise (pl_lang). AFK accounts that start automatically connect before the page
+    // has run, so they need it now.
     let signals = pl_lang::Signals::system();
-    signals.automatic().set_current();
+    let pick = pl_lang::read_pick(&state::default_root().join(pl_lang::PICK_FILE));
+    pl_lang::resolve(pick, &signals).set_current();
 
     let mut builder = tauri::Builder::default();
 

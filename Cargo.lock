@@ -3929,6 +3929,7 @@ dependencies = [
  "serde_json",
  "specta",
  "sys-locale",
+ "tempfile",
 ]
 
 [[package]]
