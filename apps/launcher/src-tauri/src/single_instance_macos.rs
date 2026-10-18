@@ -11,6 +11,10 @@
 //!   a running 2.0.x launcher answers as well);
 //! - when the running copy is an older version installed elsewhere, or does not answer, it asks
 //!   whether to close that one and open this one.
+//!
+//! Only copies of the same user count: another user's launcher on the same Mac (fast user
+//! switching) has a socket closed to us and cannot be signalled, so each user's opens on its own,
+//! as it did with the plugin.
 
 use std::{
     ffi::{OsString, c_int, c_void},
@@ -35,13 +39,17 @@ static SECONDARY: AtomicBool = AtomicBool::new(false);
 
 const SIGKILL: c_int = 9;
 const SIGTERM: c_int = 15;
+/// kill(2)'s "no such process". EPERM means the process is there but not ours.
+const ESRCH: c_int = 3;
 const PROC_PIDPATHINFO_MAXSIZE: usize = 4096;
 
-// libproc and kill(2), both part of libSystem.
+// libproc, kill(2) and getuid(2), all part of libSystem.
 unsafe extern "C" {
     fn proc_listallpids(buffer: *mut c_void, buffersize: c_int) -> c_int;
     fn proc_pidpath(pid: c_int, buffer: *mut c_void, buffersize: u32) -> c_int;
     fn kill(pid: c_int, sig: c_int) -> c_int;
+    /// Never fails and reads nothing from us; `uid_t` is a `u32` on macOS.
+    safe fn getuid() -> u32;
 }
 
 /// Whether this process is a second copy that is handing over (see the module docs).
@@ -278,9 +286,12 @@ fn listen(socket: PathBuf, app: AppHandle, on_second_launch: fn(&AppHandle)) {
     }
 }
 
-/// Other running copies of this app (the same bundle identifier), wherever they are installed.
+/// Other running copies of this app (the same bundle identifier) of this user, wherever they are
+/// installed. `proc_pidpath` reads every user's processes, but another user's copy is not one
+/// (see the module docs).
 fn other_copies(identifier: &str) -> Vec<RunningCopy> {
     let own_pid = std::process::id() as c_int;
+    let own_uid = getuid();
     let own_name = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.file_name().map(|name| name.to_owned()));
@@ -302,6 +313,10 @@ fn other_copies(identifier: &str) -> Vec<RunningCopy> {
             if plist_string(&plist, "CFBundleIdentifier").as_deref() != Some(identifier) {
                 return None;
             }
+            // Asked last, so only a copy of this app costs a `ps`.
+            if process_uid(pid) != Some(own_uid) {
+                return None;
+            }
             Some(RunningCopy {
                 pid,
                 version: plist_string(&plist, "CFBundleShortVersionString"),
@@ -309,6 +324,27 @@ fn other_copies(identifier: &str) -> Vec<RunningCopy> {
             })
         })
         .collect()
+}
+
+/// The user a process runs as (its effective uid), from `ps`, which reads it for any user's
+/// process. `None` when the process is gone or `ps` gives no answer: the copy is then not
+/// counted, and one of this user that answers is still found on the socket.
+fn process_uid(pid: c_int) -> Option<u32> {
+    let output = std::process::Command::new("/bin/ps")
+        .args(["-o", "uid=", "-p"])
+        .arg(pid.to_string())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_uid(&output.stdout)
+}
+
+/// `ps -o uid=` prints the number alone, padded with spaces.
+fn parse_uid(output: &[u8]) -> Option<u32> {
+    std::str::from_utf8(output).ok()?.trim().parse().ok()
 }
 
 fn pid_path(pid: c_int) -> Option<PathBuf> {
@@ -352,8 +388,11 @@ fn terminate(pid: c_int) {
 fn wait_gone(pid: c_int, limit: Duration) -> bool {
     let start = Instant::now();
     loop {
-        // SAFETY: signal 0 only checks that the process exists.
-        if unsafe { kill(pid, 0) } != 0 {
+        // SAFETY: signal 0 only checks that the process exists. Only "no such process" means
+        // gone: EPERM is a process that is still there.
+        if unsafe { kill(pid, 0) } != 0
+            && std::io::Error::last_os_error().raw_os_error() == Some(ESRCH)
+        {
             return true;
         }
         if start.elapsed() >= limit {
@@ -419,5 +458,36 @@ mod tests {
             socket_path("gg.projects.launcher"),
             PathBuf::from("/tmp/gg_projects_launcher_si.sock")
         );
+    }
+
+    #[test]
+    fn reads_the_user_id_ps_prints() {
+        assert_eq!(parse_uid(b"  501\n"), Some(501));
+        assert_eq!(parse_uid(b"0"), Some(0));
+        assert_eq!(parse_uid(b""), None);
+        assert_eq!(parse_uid(b"  UID\n  501\n"), None);
+    }
+
+    #[test]
+    fn knows_whose_process_it_is() {
+        // This test's own process is ours; launchd (pid 1) is root's, and ps still names it.
+        assert_eq!(process_uid(std::process::id() as c_int), Some(getuid()));
+        assert_eq!(process_uid(1), Some(0));
+    }
+
+    #[test]
+    fn a_process_is_gone_only_once_it_no_longer_exists() {
+        // launchd is there, whether kill(2) lets us signal it (root) or refuses (EPERM).
+        assert!(!wait_gone(1, Duration::from_millis(250)));
+        let mut child = std::process::Command::new("/bin/sleep")
+            .arg("30")
+            .spawn()
+            .unwrap();
+        let pid = child.id() as c_int;
+        // Reaped as soon as it ends: a zombie still exists for kill(2).
+        let reaper = std::thread::spawn(move || child.wait());
+        terminate(pid);
+        assert!(reaper.join().unwrap().is_ok());
+        assert!(wait_gone(pid, Duration::from_millis(250)));
     }
 }
