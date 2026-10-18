@@ -277,8 +277,8 @@ function mockMinecraft(): MinecraftNewsItem[] {
 }
 
 /**
- * A preview switch: `?event=next|soon|imminent|open|none|overlay|join|joinweek|joinopen` (or
- * localStorage `pl.mock.event`; the `join` ones are on the server: "Katıl"), `?notes=pack`,
+ * A preview switch: `?event=next|soon|imminent|open|none|overlay|join|joinweek|joinopen|joinsoon`
+ * (or localStorage `pl.mock.event`; the `join` ones are on the server: "Katıl"), `?notes=pack`,
  * `?banners=none|two`,
  * `?status=outage|major|degraded|notice|expiring`, `?maintenance=1`, `?projects=<count>` (keeps
  * the first Projects news), `?mc=<count>` (Minecraft updates, 3 by default).
@@ -380,6 +380,19 @@ function mockEvents(): HomeContent["events"] {
       ];
     case "joinweek":
       return [{ ...beginners, priority: 0, join: true }, pvp];
+    // A server event that starts 8 seconds after the preview loads: the bell gives way to "Katıl".
+    case "joinsoon":
+      return [
+        {
+          id: "baskin",
+          title: "Ejderha baskını",
+          startsAt: new Date(previewLoadedAt + 8_000).toISOString(),
+          endsAt: new Date(previewLoadedAt + 3_600_000).toISOString(),
+          newsId: "sezon-5",
+          join: true,
+        },
+        pvp,
+      ];
     default:
       return [
         {
