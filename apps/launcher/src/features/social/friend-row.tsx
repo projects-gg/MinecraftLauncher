@@ -33,7 +33,12 @@ import { useSocialPrefs, useSocialUi } from "./store";
 // In the interface's language, looked up at each call (the language can change live).
 const dateFormat = () => dateTimeFormat({ day: "numeric", month: "long", year: "numeric" });
 
-/** "Katıl": disabled (with the reason) while a game is being prepared or running. */
+/**
+ * "Katıl": disabled (with the reason) while a game is being prepared or running. A disabled
+ * button takes no pointer, so the tooltip hangs on its wrapper, there all the time (and quiet
+ * while the button works): the button stays the same and fades into its waiting look. The wrapper
+ * takes the layout (`w-full` in the friend's card) and the button fills it.
+ */
 export function JoinButton({
   size = "sm",
   variant = "secondary",
@@ -45,26 +50,23 @@ export function JoinButton({
 }) {
   const { t } = useTranslation();
   const busy = useLaunch((s) => gameBusy(s.phase.kind));
-  const button = (
-    <Button
-      size={size}
-      variant={variant}
-      disabled={busy}
-      className={className}
-      onClick={(event) => {
-        event.stopPropagation();
-        void joinProjects();
-      }}
-    >
-      {t("social.actions.join")}
-    </Button>
-  );
-  return busy ? (
-    <Tooltip content={t("social.actions.joinBusy")}>
-      <span className="inline-flex">{button}</span>
+  return (
+    <Tooltip content={t("social.actions.joinBusy")} disabled={!busy}>
+      <span className={cn("inline-flex", className)}>
+        <Button
+          size={size}
+          variant={variant}
+          disabled={busy}
+          className="w-full"
+          onClick={(event) => {
+            event.stopPropagation();
+            void joinProjects();
+          }}
+        >
+          {t("social.actions.join")}
+        </Button>
+      </span>
     </Tooltip>
-  ) : (
-    button
   );
 }
 
