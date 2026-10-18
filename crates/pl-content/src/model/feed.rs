@@ -6,7 +6,8 @@
 //! key can only add news: items are never pinned, links open only `https://` and `projects://`,
 //! covers are small images verified by size and SHA-256, and one broken item never hides the
 //! others ([`BotFeed::parse`]). The feed may also carry a short-lived notice about the servers
-//! ([`FeedStatus`]), shown only until it expires.
+//! ([`FeedStatus`]), shown only until it expires, and Minecraft's own updates ([`MinecraftNews`]),
+//! which only fill places Projects news leaves empty.
 //!
 //! The normative description lives in `docs/content-format.md` ("News feed (Discord bot)").
 
@@ -61,6 +62,14 @@ pub const STATUS_MAX_SERVICES: usize = 20;
 pub const STATUS_MAX_SERVICE_NAME_CHARS: usize = 64;
 /// Latest `status.expiresAt` after its `updatedAt`.
 pub const STATUS_MAX_LIFETIME: SignedDuration = SignedDuration::from_mins(15);
+/// Most `minecraft[]` entries one feed may carry; a longer array is ignored as a whole.
+pub const FEED_MAX_MINECRAFT: usize = 10;
+/// Longest `minecraft[].version`, in characters.
+pub const MINECRAFT_MAX_VERSION_CHARS: usize = 40;
+/// Latest `minecraft[].expiresAt` after its `publishedAt`.
+pub const MINECRAFT_MAX_LIFETIME: SignedDuration = SignedDuration::from_hours(24 * 90);
+/// Hosts a `minecraft[].source.url` may point at: the official article.
+pub const MINECRAFT_ARTICLE_HOSTS: [&str; 2] = ["minecraft.net", "www.minecraft.net"];
 
 /// `LauncherConfig.newsFeed`: whether launchers read the bot's feed, from where, and which keys
 /// may sign it. Writers omit the object while `enabled` is false (Studio keeps it locally).
@@ -288,6 +297,10 @@ pub struct BotFeed {
     /// What players should know about the servers right now; missing while all is well.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status: Option<FeedStatus>,
+    /// Minecraft's own updates, shown only where Projects news leaves room; missing when there
+    /// are none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub minecraft: Vec<MinecraftNews>,
 }
 
 /// A news item of the feed: a [`NewsItem`] plus where it came from. `cover.path` is relative to
@@ -500,10 +513,92 @@ pub struct FeedSource {
 #[serde(rename_all = "camelCase")]
 pub enum FeedSourceKind {
     Discord,
+    /// Mojang's public launcher content (`minecraft[]` entries); `url` is the official article.
+    Minecraft,
     /// A source added by a newer bot.
     #[default]
     #[serde(other)]
     Unknown,
+}
+
+/// `feed.json` → `minecraft[]`: one of Minecraft's own updates (a Java Edition release or
+/// snapshot), summarized by the bot in its own words, with the official article in `source.url`.
+/// Launchers show it only in places Projects news leaves empty: never as the hero, in the patch
+/// notes box or on the event card, never pinned, featured or "new". Read with
+/// [`BotFeed::parse`]; visible while [`MinecraftNews::is_visible`] and within `maxAgeDays`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct MinecraftNews {
+    /// `minecraft-<version>`.
+    pub id: String,
+    /// Mojang's version id (`26.3`, `26.1.2`, `26.4-snapshot-4`).
+    pub version: String,
+    #[serde(default)]
+    pub kind: MinecraftNewsKind,
+    /// In the feed's language (Turkish), like an item's texts.
+    pub title: String,
+    #[serde(default)]
+    pub summary: String,
+    /// Markdown.
+    #[serde(default)]
+    pub body: String,
+    /// Relative to the feed mirror, with the rules of item covers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cover: Option<MediaRef>,
+    /// When Mojang released the version.
+    pub published_at: Timestamp,
+    /// After `publishedAt`, at most [`MINECRAFT_MAX_LIFETIME`] later.
+    pub expires_at: Timestamp,
+    /// `kind: minecraft` and the official article (`https://` on [`MINECRAFT_ARTICLE_HOSTS`]).
+    pub source: FeedSource,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub translations: Option<MinecraftTranslations>,
+}
+
+impl MinecraftNews {
+    /// Shown at `now`: `publishedAt <= now < expiresAt` (the age limit is applied when merging).
+    pub fn is_visible(&self, now: Timestamp) -> bool {
+        self.published_at <= now && now < self.expires_at
+    }
+
+    /// The official article: `source.url` (always set on an entry [`BotFeed::parse`] kept).
+    pub fn article_url(&self) -> &str {
+        self.source.url.as_deref().unwrap_or_default()
+    }
+}
+
+/// Which kind of Minecraft version a [`MinecraftNews`] is about.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type,
+)]
+#[serde(rename_all = "camelCase")]
+pub enum MinecraftNewsKind {
+    Release,
+    /// Snapshots, pre-releases and release candidates; also any kind a newer bot adds.
+    #[default]
+    #[serde(other)]
+    Snapshot,
+}
+
+/// A [`MinecraftNews`]'s texts in other languages (today only English).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct MinecraftTranslations {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub en: Option<MinecraftText>,
+}
+
+/// One language's texts of a [`MinecraftNews`]; a missing `summary` or `body` falls back to the
+/// base text. Each field has the limits of the field it replaces.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct MinecraftText {
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+    /// Markdown.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body: Option<String>,
 }
 
 /// `feed.json` → `status`: what players should know about the servers right now, from the
@@ -587,9 +682,12 @@ pub enum FeedTarget {
     Event,
     /// `status` (the problem's id is empty).
     Status,
+    /// A `minecraft[]` entry, or the array itself when the problem's id is empty.
+    Minecraft,
 }
 
-/// What was wrong with one item or event, or the status notice, of an otherwise valid feed.
+/// What was wrong with one item or event, the status notice or a Minecraft entry of an otherwise
+/// valid feed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub enum FeedIssue {
@@ -614,9 +712,18 @@ pub enum FeedIssue {
     /// Dropped (status): more than [`STATUS_MAX_SERVICES`] services, or a service name that is
     /// empty or longer than [`STATUS_MAX_SERVICE_NAME_CHARS`].
     BadServices,
-    /// Dropped (status): `expiresAt` is not after `updatedAt`, or more than
-    /// [`STATUS_MAX_LIFETIME`] after it.
+    /// Dropped: `expiresAt` is not after `updatedAt` (status) or `publishedAt` (Minecraft), or more
+    /// than [`STATUS_MAX_LIFETIME`] or [`MINECRAFT_MAX_LIFETIME`] after it.
     BadExpiry,
+    /// Dropped (Minecraft): `version` is missing, empty, longer than
+    /// [`MINECRAFT_MAX_VERSION_CHARS`] or has characters outside `[A-Za-z0-9._-]`.
+    BadVersion,
+    /// Dropped (Minecraft): `source.url` is missing or not an `https://` link to the official
+    /// article ([`MINECRAFT_ARTICLE_HOSTS`]); the link is part of the attribution.
+    MissingSource,
+    /// Ignored (Minecraft): `minecraft` is not an array or lists more than
+    /// [`FEED_MAX_MINECRAFT`] entries; the rest of the feed is used.
+    BadList,
     /// Kept without its cover (not an image of at most 2 MB with a safe path and a SHA-256).
     BadCover,
     /// Kept without its `cta` or `url` (not a safe link, or a button without a label or target;
@@ -629,10 +736,13 @@ pub enum FeedIssue {
     /// Kept: the body links somewhere other than `https://` or `projects://`; launchers show
     /// such links as plain text.
     UnsafeBodyLink,
+    /// Kept without that translation (Minecraft): not an object, or a text breaking the limits
+    /// of the field it replaces; the base texts are shown.
+    BadTranslation,
 }
 
 impl FeedIssue {
-    /// True when the item or event is not shown at all.
+    /// True when the item, event, notice or entry (or the Minecraft array) is not shown at all.
     pub fn drops(self) -> bool {
         matches!(
             self,
@@ -647,6 +757,9 @@ impl FeedIssue {
                 | Self::MessageTooLong
                 | Self::BadServices
                 | Self::BadExpiry
+                | Self::BadVersion
+                | Self::MissingSource
+                | Self::BadList
         )
     }
 }
@@ -685,6 +798,15 @@ impl FeedProblem {
             issue,
         }
     }
+
+    /// A Minecraft entry's problem; an empty `id` means the whole array.
+    fn minecraft(id: &str, issue: FeedIssue) -> Self {
+        Self {
+            target: FeedTarget::Minecraft,
+            id: id.to_owned(),
+            issue,
+        }
+    }
 }
 
 /// The feed before its items are read one by one. Unknown fields are ignored, so a field a
@@ -702,6 +824,8 @@ struct RawFeed {
     events: Vec<Value>,
     #[serde(default)]
     status: Option<Value>,
+    #[serde(default)]
+    minecraft: Option<Value>,
 }
 
 impl BotFeed {
@@ -710,7 +834,9 @@ impl BotFeed {
     /// event is dropped or repaired on its own and reported (see [`FeedIssue`]); `pinned` is
     /// always cleared and cover posters are ignored. A broken status notice is dropped the same
     /// way (an unsafe status page link only loses the link); whether it has expired is
-    /// [`FeedStatus::is_active`], checked when it is shown.
+    /// [`FeedStatus::is_active`], checked when it is shown. Minecraft entries follow their own
+    /// rules ([`MinecraftNews`]): a broken entry is dropped alone, a `minecraft` that is not an
+    /// array or is too long is ignored as a whole, never the feed.
     pub fn parse(bytes: &[u8]) -> Result<(BotFeed, Vec<FeedProblem>)> {
         if bytes.len() as u64 > FEED_MAX_BYTES {
             return Err(Error::Invalid(format!(
@@ -736,6 +862,7 @@ impl BotFeed {
         let items = read_items(raw.items, &mut problems);
         let events = read_events(raw.events, &items, &mut problems);
         let status = read_status(raw.status, &mut problems);
+        let minecraft = read_minecraft(raw.minecraft, &mut problems);
         Ok((
             BotFeed {
                 schema: raw.schema,
@@ -744,6 +871,7 @@ impl BotFeed {
                 items,
                 events,
                 status,
+                minecraft,
             },
             problems,
         ))
@@ -753,11 +881,16 @@ impl BotFeed {
         self.items.iter().find(|item| item.id == id)
     }
 
-    /// Every cover the feed references.
+    /// Every cover the feed references: its items' and its Minecraft entries'.
     pub fn media_refs(&self) -> Vec<&MediaRef> {
         self.items
             .iter()
             .filter_map(|item| item.cover.as_ref())
+            .chain(
+                self.minecraft
+                    .iter()
+                    .filter_map(|entry| entry.cover.as_ref()),
+            )
             .collect()
     }
 }
@@ -968,6 +1101,160 @@ fn read_status(raw: Option<Value>, problems: &mut Vec<FeedProblem>) -> Option<Fe
         problems.push(FeedProblem::status(FeedIssue::BadLink));
     }
     Some(status)
+}
+
+/// A `minecraft[].version`: 1–[`MINECRAFT_MAX_VERSION_CHARS`] characters from `[A-Za-z0-9._-]`.
+fn is_valid_minecraft_news_version(version: &str) -> bool {
+    (1..=MINECRAFT_MAX_VERSION_CHARS).contains(&version.len())
+        && version
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
+}
+
+/// The official article of a Minecraft entry: an `https://` link on [`MINECRAFT_ARTICLE_HOSTS`].
+fn is_minecraft_article(url: &str) -> bool {
+    is_https(url)
+        && Url::parse(url).is_ok_and(|url| {
+            url.host_str()
+                .is_some_and(|host| MINECRAFT_ARTICLE_HOSTS.contains(&host))
+        })
+}
+
+/// The Minecraft entries that follow the rules, in feed order. The array itself is ignored when
+/// it is not an array or lists more than [`FEED_MAX_MINECRAFT`] entries (one problem with an
+/// empty id); a broken entry is dropped alone; a bad cover or translation only loses that part.
+fn read_minecraft(raw: Option<Value>, problems: &mut Vec<FeedProblem>) -> Vec<MinecraftNews> {
+    let entries = match raw {
+        None | Some(Value::Null) => return Vec::new(),
+        Some(Value::Array(entries)) if entries.len() <= FEED_MAX_MINECRAFT => entries,
+        Some(_) => {
+            problems.push(FeedProblem::minecraft("", FeedIssue::BadList));
+            return Vec::new();
+        }
+    };
+    let mut seen = HashSet::new();
+    let mut out = Vec::new();
+    for mut value in entries {
+        let id = raw_id(&value);
+        // An entry is an object (serde would also read a struct from an array).
+        if !value.is_object() {
+            problems.push(FeedProblem::minecraft(&id, FeedIssue::Unreadable));
+            continue;
+        }
+        // Read apart: a broken translation loses only its language, never the entry.
+        let translations = value
+            .as_object_mut()
+            .and_then(|entry| entry.remove("translations"));
+        let mut entry: MinecraftNews = match serde_json::from_value(value) {
+            Ok(entry) => entry,
+            Err(_) => {
+                problems.push(FeedProblem::minecraft(&id, FeedIssue::Unreadable));
+                continue;
+            }
+        };
+        let latest_end = saturating_add(entry.published_at, MINECRAFT_MAX_LIFETIME);
+        let issue = if !is_valid_id(&entry.id) {
+            Some(FeedIssue::BadId)
+        } else if !is_valid_minecraft_news_version(&entry.version) {
+            Some(FeedIssue::BadVersion)
+        } else if entry.id.strip_prefix("minecraft-") != Some(entry.version.as_str()) {
+            Some(FeedIssue::BadId)
+        } else if entry.title.trim().is_empty() {
+            Some(FeedIssue::EmptyTitle)
+        } else if too_long(&entry.title, FEED_MAX_TITLE_CHARS) {
+            Some(FeedIssue::TitleTooLong)
+        } else if too_long(&entry.summary, FEED_MAX_SUMMARY_CHARS) {
+            Some(FeedIssue::SummaryTooLong)
+        } else if too_long(&entry.body, FEED_MAX_BODY_CHARS) {
+            Some(FeedIssue::BodyTooLong)
+        } else if entry.expires_at <= entry.published_at || entry.expires_at > latest_end {
+            Some(FeedIssue::BadExpiry)
+        } else if !entry
+            .source
+            .url
+            .as_deref()
+            .is_some_and(is_minecraft_article)
+        {
+            Some(FeedIssue::MissingSource)
+        } else {
+            None
+        };
+        if let Some(issue) = issue {
+            problems.push(FeedProblem::minecraft(&entry.id, issue));
+            continue;
+        }
+        if !seen.insert(entry.id.clone()) {
+            problems.push(FeedProblem::minecraft(&entry.id, FeedIssue::DuplicateId));
+            continue;
+        }
+        if let Some(mut cover) = entry.cover.take() {
+            cover.poster = None;
+            if is_valid_feed_cover(&cover) {
+                entry.cover = Some(cover);
+            } else {
+                problems.push(FeedProblem::minecraft(&entry.id, FeedIssue::BadCover));
+            }
+        }
+        entry.translations = read_translations(translations, &entry.id, problems);
+        let english_body = entry
+            .translations
+            .as_ref()
+            .and_then(|t| t.en.as_ref())
+            .and_then(|en| en.body.as_deref());
+        if std::iter::once(entry.body.as_str())
+            .chain(english_body)
+            .flat_map(markdown_links)
+            .any(|link| !is_safe_link(&link))
+        {
+            problems.push(FeedProblem::minecraft(&entry.id, FeedIssue::UnsafeBodyLink));
+        }
+        out.push(entry);
+    }
+    out
+}
+
+/// A Minecraft entry's `translations`, each language on its own (today only `en`): a value that
+/// is not an object, or a text that breaks the limits of the field it replaces, is left out.
+fn read_translations(
+    raw: Option<Value>,
+    id: &str,
+    problems: &mut Vec<FeedProblem>,
+) -> Option<MinecraftTranslations> {
+    let languages = match raw? {
+        Value::Null => return None,
+        Value::Object(languages) => languages,
+        _ => {
+            problems.push(FeedProblem::minecraft(id, FeedIssue::BadTranslation));
+            return None;
+        }
+    };
+    let en = match languages.get("en") {
+        None | Some(Value::Null) => None,
+        Some(value) => {
+            // Only an object: serde would also read a struct from an array.
+            let parsed = value
+                .is_object()
+                .then(|| MinecraftText::deserialize(value).ok())
+                .flatten();
+            let text = parsed.filter(|text| {
+                !text.title.trim().is_empty()
+                    && !too_long(&text.title, FEED_MAX_TITLE_CHARS)
+                    && text
+                        .summary
+                        .as_deref()
+                        .is_none_or(|summary| !too_long(summary, FEED_MAX_SUMMARY_CHARS))
+                    && text
+                        .body
+                        .as_deref()
+                        .is_none_or(|body| !too_long(body, FEED_MAX_BODY_CHARS))
+            });
+            if text.is_none() {
+                problems.push(FeedProblem::minecraft(id, FeedIssue::BadTranslation));
+            }
+            text
+        }
+    };
+    en.map(|en| MinecraftTranslations { en: Some(en) })
 }
 
 /// Link targets in Markdown, for checking: inline links and images (`[t](dest)`), autolinks
@@ -1888,6 +2175,355 @@ mod tests {
             assert_eq!(issues(&problems), [("", FeedIssue::BadLink)], "{url:?}");
             assert!(!problems[0].issue.drops());
         }
+    }
+
+    fn minecraft_entry(version: &str) -> Value {
+        json!({
+            "id": format!("minecraft-{version}"),
+            "version": version,
+            "kind": "release",
+            "title": format!("Minecraft {version} çıktı"),
+            "summary": "Java sürümüne yeni bir güncelleme geldi.",
+            "body": "Keşif temalı yeni güncelleme.\n\n## Öne çıkanlar\n\n- **Dappled Forest** biyomu",
+            "cover": cover(),
+            "publishedAt": "2026-09-15T11:23:02Z",
+            "expiresAt": "2026-10-30T11:23:02Z",
+            "source": {
+                "kind": "minecraft",
+                "url": format!(
+                    "https://www.minecraft.net/article/minecraft-java-edition-{}",
+                    version.replace('.', "-")
+                )
+            },
+            "translations": {
+                "en": {
+                    "title": format!("Minecraft {version} is out"),
+                    "summary": "A new update for Java Edition.",
+                    "body": "A new exploration update.\n\n## Highlights\n\n- The **Dappled Forest** biome"
+                }
+            }
+        })
+    }
+
+    fn with_minecraft(minecraft: Value) -> (BotFeed, Vec<FeedProblem>) {
+        let mut doc: Value =
+            serde_json::from_slice(&feed(vec![item("discord-1")], Vec::new())).expect("feed json");
+        doc["minecraft"] = minecraft;
+        BotFeed::parse(&serde_json::to_vec(&doc).unwrap()).unwrap()
+    }
+
+    /// Many entries read in feeds of at most [`FEED_MAX_MINECRAFT`], in order: what was kept and
+    /// every problem (repeats are only found within one feed).
+    fn minecraft_in_feeds(entries: Vec<Value>) -> (Vec<MinecraftNews>, Vec<FeedProblem>) {
+        let mut kept = Vec::new();
+        let mut problems = Vec::new();
+        for chunk in entries.chunks(FEED_MAX_MINECRAFT) {
+            let (feed, found) = with_minecraft(Value::Array(chunk.to_vec()));
+            assert_eq!(feed.items.len(), 1, "the news is untouched");
+            kept.extend(feed.minecraft);
+            problems.extend(found);
+        }
+        (kept, problems)
+    }
+
+    #[test]
+    fn minecraft_entries_are_read_with_their_english_texts() {
+        let (feed, problems) =
+            with_minecraft(json!([minecraft_entry("26.3"), minecraft_entry("26.1.2")]));
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(feed.items.len(), 1, "the news is untouched");
+        let ids: Vec<&str> = feed.minecraft.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["minecraft-26.3", "minecraft-26.1.2"],
+            "feed order kept"
+        );
+        let entry = &feed.minecraft[0];
+        assert_eq!(entry.version, "26.3");
+        assert_eq!(entry.kind, MinecraftNewsKind::Release);
+        assert_eq!(entry.source.kind, FeedSourceKind::Minecraft);
+        assert_eq!(
+            entry.article_url(),
+            "https://www.minecraft.net/article/minecraft-java-edition-26-3"
+        );
+        let en = entry.translations.as_ref().and_then(|t| t.en.as_ref());
+        assert_eq!(
+            en.map(|en| en.title.as_str()),
+            Some("Minecraft 26.3 is out")
+        );
+        assert_eq!(
+            feed.media_refs().len(),
+            2,
+            "Minecraft covers are feed covers"
+        );
+
+        assert!(
+            !entry.is_visible(ts("2026-09-15T11:23:01Z")),
+            "not released yet"
+        );
+        assert!(entry.is_visible(ts("2026-09-15T11:23:02Z")));
+        assert!(entry.is_visible(ts("2026-10-30T11:23:01Z")));
+        assert!(!entry.is_visible(ts("2026-10-30T11:23:02Z")), "expired");
+
+        // The least an entry needs; a missing kind reads as a snapshot.
+        let (feed, problems) = with_minecraft(json!([{
+            "id": "minecraft-26.4-snapshot-4",
+            "version": "26.4-snapshot-4",
+            "title": "Minecraft 26.4 Snapshot 4",
+            "publishedAt": "2026-10-13T12:05:46Z",
+            "expiresAt": "2026-10-27T12:05:46Z",
+            "source": { "kind": "minecraft", "url": "https://minecraft.net/article/minecraft-26-4-snapshot-4" }
+        }]));
+        assert!(problems.is_empty(), "{problems:?}");
+        let entry = &feed.minecraft[0];
+        assert_eq!(entry.kind, MinecraftNewsKind::Snapshot);
+        assert!(entry.summary.is_empty() && entry.body.is_empty());
+        assert!(entry.cover.is_none() && entry.translations.is_none());
+
+        // A feed without Minecraft entries is written as before: no `minecraft` key.
+        let (plain, _) = parse(vec![item("discord-1")], Vec::new());
+        assert!(plain.minecraft.is_empty());
+        let written = serde_json::to_value(&plain).unwrap();
+        assert!(written.get("minecraft").is_none());
+    }
+
+    #[test]
+    fn a_broken_minecraft_array_is_ignored_but_the_feed_stays() {
+        let (feed, problems) = with_minecraft(Value::Null);
+        assert!(feed.minecraft.is_empty() && problems.is_empty());
+
+        for broken in [
+            json!({ "entries": [] }),
+            json!("minecraft-26.3"),
+            json!(3),
+            json!(
+                (0..=FEED_MAX_MINECRAFT)
+                    .map(|i| minecraft_entry(&format!("26.{i}")))
+                    .collect::<Vec<_>>()
+            ),
+        ] {
+            let (feed, problems) = with_minecraft(broken);
+            assert!(feed.minecraft.is_empty(), "the whole array goes");
+            assert_eq!(feed.items.len(), 1, "the rest of the feed stays");
+            assert_eq!(issues(&problems), [("", FeedIssue::BadList)]);
+            assert_eq!(problems[0].target, FeedTarget::Minecraft);
+            assert!(problems[0].issue.drops());
+        }
+
+        let (feed, problems) = with_minecraft(json!(
+            (0..FEED_MAX_MINECRAFT)
+                .map(|i| minecraft_entry(&format!("26.{i}")))
+                .collect::<Vec<_>>()
+        ));
+        assert!(problems.is_empty(), "{problems:?}");
+        assert_eq!(
+            feed.minecraft.len(),
+            FEED_MAX_MINECRAFT,
+            "the limit is inclusive"
+        );
+    }
+
+    #[test]
+    fn broken_minecraft_entries_drop_only_themselves() {
+        let entry = |version: &str, edit: &dyn Fn(&mut Value)| {
+            let mut value = minecraft_entry(version);
+            edit(&mut value);
+            value
+        };
+        let remove = |key: &'static str| {
+            move |e: &mut Value| {
+                e.as_object_mut().expect("object").remove(key);
+            }
+        };
+        let (minecraft, problems) = minecraft_in_feeds(vec![
+            minecraft_entry("26.3"),
+            minecraft_entry("26.3"),
+            entry("26.2", &|e| e["id"] = json!("../26.2")),
+            entry("26.1", &|e| e["id"] = json!("minecraft-26.9")),
+            entry("26.0", &|e| e["id"] = json!("26.0")),
+            entry("26 4", &|e| e["id"] = json!("minecraft-26-4")),
+            entry("x", &|e| {
+                e["version"] = json!("");
+                e["id"] = json!("minecraft-");
+            }),
+            entry(&"9".repeat(MINECRAFT_MAX_VERSION_CHARS + 1), &|_| {}),
+            entry("25.1", &|e| e["title"] = json!("  ")),
+            entry("25.2", &|e| {
+                e["title"] = json!("ş".repeat(FEED_MAX_TITLE_CHARS + 1))
+            }),
+            entry("25.3", &|e| {
+                e["summary"] = json!("a".repeat(FEED_MAX_SUMMARY_CHARS + 1))
+            }),
+            entry("25.4", &|e| {
+                e["body"] = json!("b".repeat(FEED_MAX_BODY_CHARS + 1))
+            }),
+            entry("25.5", &|e| e["expiresAt"] = json!("2026-09-15T11:23:02Z")),
+            entry("25.6", &|e| e["expiresAt"] = json!("2026-09-14T11:23:02Z")),
+            // 90 days and a second.
+            entry("25.7", &|e| e["expiresAt"] = json!("2026-12-14T11:23:03Z")),
+            entry("25.8", &|e| {
+                e["source"]["url"] = json!("http://www.minecraft.net/article/x")
+            }),
+            entry("25.9", &|e| {
+                e["source"]["url"] = json!("https://minecraft.net.example/article")
+            }),
+            entry("24.1", &|e| {
+                e["source"]["url"] = json!("https://user@www.minecraft.net/a")
+            }),
+            entry("24.2", &|e| {
+                e["source"].as_object_mut().expect("object").remove("url");
+            }),
+            entry("24.3", &remove("source")),
+            entry("24.4", &remove("publishedAt")),
+            entry("24.5", &remove("expiresAt")),
+            entry("24.6", &remove("version")),
+            entry("24.7", &|e| e["kind"] = json!(3)),
+            json!(42),
+            json!(["minecraft-23.1", "23.1", "release", "Minecraft 23.1"]),
+            // Exactly 90 days is still fine.
+            entry("24.8", &|e| e["expiresAt"] = json!("2026-12-14T11:23:02Z")),
+        ]);
+        let ids: Vec<&str> = minecraft.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["minecraft-26.3", "minecraft-24.8"]);
+        let long_version = format!("minecraft-{}", "9".repeat(MINECRAFT_MAX_VERSION_CHARS + 1));
+        assert_eq!(
+            issues(&problems),
+            [
+                ("minecraft-26.3", FeedIssue::DuplicateId),
+                ("../26.2", FeedIssue::BadId),
+                ("minecraft-26.9", FeedIssue::BadId),
+                ("26.0", FeedIssue::BadId),
+                ("minecraft-26-4", FeedIssue::BadVersion),
+                ("minecraft-", FeedIssue::BadVersion),
+                (long_version.as_str(), FeedIssue::BadVersion),
+                ("minecraft-25.1", FeedIssue::EmptyTitle),
+                ("minecraft-25.2", FeedIssue::TitleTooLong),
+                ("minecraft-25.3", FeedIssue::SummaryTooLong),
+                ("minecraft-25.4", FeedIssue::BodyTooLong),
+                ("minecraft-25.5", FeedIssue::BadExpiry),
+                ("minecraft-25.6", FeedIssue::BadExpiry),
+                ("minecraft-25.7", FeedIssue::BadExpiry),
+                ("minecraft-25.8", FeedIssue::MissingSource),
+                ("minecraft-25.9", FeedIssue::MissingSource),
+                ("minecraft-24.1", FeedIssue::MissingSource),
+                ("minecraft-24.2", FeedIssue::MissingSource),
+                ("minecraft-24.3", FeedIssue::Unreadable),
+                ("minecraft-24.4", FeedIssue::Unreadable),
+                ("minecraft-24.5", FeedIssue::Unreadable),
+                ("minecraft-24.6", FeedIssue::Unreadable),
+                ("minecraft-24.7", FeedIssue::Unreadable),
+                ("", FeedIssue::Unreadable),
+                ("", FeedIssue::Unreadable),
+            ]
+        );
+        assert!(problems.iter().all(|p| p.issue.drops()));
+        assert!(problems.iter().all(|p| p.target == FeedTarget::Minecraft));
+    }
+
+    #[test]
+    fn minecraft_parts_are_repaired_alone() {
+        let entry = |version: &str, edit: &dyn Fn(&mut Value)| {
+            let mut value = minecraft_entry(version);
+            edit(&mut value);
+            value
+        };
+        let (minecraft, problems) = minecraft_in_feeds(vec![
+            entry("26.3", &|e| e["cover"]["kind"] = json!("video")),
+            entry("26.2", &|e| {
+                e["translations"] = json!("Minecraft 26.2 is out")
+            }),
+            entry("26.1", &|e| {
+                e["translations"]["en"] = json!(["Minecraft 26.1"])
+            }),
+            entry("26.0", &|e| {
+                e["translations"]["en"]["title"] = json!("a".repeat(FEED_MAX_TITLE_CHARS + 1))
+            }),
+            entry("25.9", &|e| {
+                e["translations"]["en"]["summary"] = json!("a".repeat(FEED_MAX_SUMMARY_CHARS + 1))
+            }),
+            entry("25.8", &|e| {
+                e["translations"]["en"]["body"] = json!("b".repeat(FEED_MAX_BODY_CHARS + 1))
+            }),
+            entry("25.7", &|e| e["translations"]["en"]["title"] = json!(" ")),
+            entry("25.6", &|e| {
+                e["translations"]["en"]
+                    .as_object_mut()
+                    .expect("object")
+                    .remove("title");
+            }),
+            entry("25.5", &|e| {
+                e["body"] = json!("Bkz. [notlar](http://example.com/notes)")
+            }),
+            entry("25.4", &|e| {
+                e["translations"]["en"]["body"] =
+                    json!("Write to [the team](mailto:team@example.com)")
+            }),
+            // Not problems: no translation, an English title alone, unknown values and fields.
+            entry("25.3", &|e| e["translations"] = json!({})),
+            entry("25.2", &|e| e["translations"]["en"] = Value::Null),
+            entry("25.1", &|e| {
+                e["translations"]["en"] = json!({ "title": "Minecraft 25.1 is out" });
+                e["translations"]["de"] = json!({ "title": "Minecraft 25.1 ist da" });
+            }),
+            entry("24.9", &|e| {
+                e["kind"] = json!("preRelease");
+                e["category"] = json!("patchNotes");
+                e["pinned"] = json!(true);
+                e["featured"] = json!(true);
+                e["cta"] = json!({ "label": "Oyna", "url": "projects://play" });
+                e["source"]["kind"] = json!("mojang");
+            }),
+        ]);
+        assert_eq!(minecraft.len(), 14, "every entry stays: {problems:?}");
+        assert_eq!(
+            issues(&problems),
+            [
+                ("minecraft-26.3", FeedIssue::BadCover),
+                ("minecraft-26.2", FeedIssue::BadTranslation),
+                ("minecraft-26.1", FeedIssue::BadTranslation),
+                ("minecraft-26.0", FeedIssue::BadTranslation),
+                ("minecraft-25.9", FeedIssue::BadTranslation),
+                ("minecraft-25.8", FeedIssue::BadTranslation),
+                ("minecraft-25.7", FeedIssue::BadTranslation),
+                ("minecraft-25.6", FeedIssue::BadTranslation),
+                ("minecraft-25.5", FeedIssue::UnsafeBodyLink),
+                ("minecraft-25.4", FeedIssue::UnsafeBodyLink),
+            ]
+        );
+        assert!(problems.iter().all(|p| !p.issue.drops()));
+        let by_id = |id: &str| minecraft.iter().find(|m| m.id == id).expect(id);
+        assert!(by_id("minecraft-26.3").cover.is_none(), "the cover goes");
+        for id in [
+            "minecraft-26.2",
+            "minecraft-26.1",
+            "minecraft-26.0",
+            "minecraft-25.9",
+            "minecraft-25.8",
+            "minecraft-25.7",
+            "minecraft-25.6",
+            "minecraft-25.3",
+            "minecraft-25.2",
+        ] {
+            assert!(by_id(id).translations.is_none(), "{id}: base texts only");
+        }
+        let english = by_id("minecraft-25.1")
+            .translations
+            .as_ref()
+            .and_then(|t| t.en.as_ref())
+            .expect("English kept");
+        assert_eq!(english.title, "Minecraft 25.1 is out");
+        assert!(
+            english.summary.is_none() && english.body.is_none(),
+            "base texts fill in"
+        );
+        let future = by_id("minecraft-24.9");
+        assert_eq!(
+            future.kind,
+            MinecraftNewsKind::Snapshot,
+            "unknown kinds are snapshots"
+        );
+        assert_eq!(future.source.kind, FeedSourceKind::Unknown);
+        assert!(by_id("minecraft-25.5").translations.is_some());
     }
 
     #[test]

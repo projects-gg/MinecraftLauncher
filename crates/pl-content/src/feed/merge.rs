@@ -13,8 +13,8 @@ use jiff::{SignedDuration, Timestamp};
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    BotFeed, EventCountdown, EventPhase, FeedSource, FeedStatus, MediaRef, NewsCategory, NewsFeed,
-    NewsItem, compare_news,
+    BotFeed, EventCountdown, EventPhase, FeedSource, FeedStatus, MediaRef, MinecraftNews,
+    NewsCategory, NewsFeed, NewsItem, compare_news,
 };
 
 /// Where a home screen entry comes from.
@@ -84,6 +84,39 @@ pub fn merge_news(
     }
     merged.sort_by(|a, b| compare_news(&a.item, &b.item));
     merged
+}
+
+/// The feed's Minecraft entries the home screen may show at `now`, newest first (then the smaller
+/// id): visible (`publishedAt <= now < expiresAt`), published at most `max_age_days` ago, and not
+/// overridden by Studio (a Studio news item with the same id hides the entry even while that item
+/// is not shown itself, as for feed items). Where they go is the screen's business: only into the
+/// places Projects news leaves empty, never the hero, the patch notes box or the event card.
+pub fn merge_minecraft<'a>(
+    studio: &NewsFeed,
+    feed: Option<&'a BotFeed>,
+    max_age_days: u32,
+    now: Timestamp,
+) -> Vec<&'a MinecraftNews> {
+    let Some(feed) = feed else {
+        return Vec::new();
+    };
+    let studio_ids: HashSet<&str> = studio.items.iter().map(|i| i.id.as_str()).collect();
+    let floor = feed_age_floor(now, max_age_days);
+    let mut entries: Vec<&MinecraftNews> = feed
+        .minecraft
+        .iter()
+        .filter(|entry| {
+            !studio_ids.contains(entry.id.as_str())
+                && entry.is_visible(now)
+                && entry.published_at >= floor
+        })
+        .collect();
+    entries.sort_by(|a, b| {
+        b.published_at
+            .cmp(&a.published_at)
+            .then_with(|| a.id.cmp(&b.id))
+    });
+    entries
 }
 
 /// The feed's status notice for the home screen: shown while it has not expired
@@ -403,6 +436,120 @@ mod tests {
         let one_day = merge_news(&empty, Some(&feed), 1, ts(NOW));
         assert_eq!(ids(&one_day), ["now"]);
         assert_eq!(feed_age_floor(Timestamp::MIN, 365), Timestamp::MIN);
+    }
+
+    fn minecraft(version: &str, published: &str, expires: &str) -> Value {
+        json!({
+            "id": format!("minecraft-{version}"),
+            "version": version,
+            "kind": "release",
+            "title": format!("Minecraft {version}"),
+            "publishedAt": published,
+            "expiresAt": expires,
+            "source": {
+                "kind": "minecraft",
+                "url": "https://www.minecraft.net/article/minecraft-java-edition"
+            }
+        })
+    }
+
+    fn feed_with_minecraft(items: Vec<Value>, minecraft: Vec<Value>) -> BotFeed {
+        let bytes = serde_json::to_vec(&json!({
+            "schema": 1,
+            "sequence": 1,
+            "generatedAt": NOW,
+            "items": items,
+            "minecraft": minecraft
+        }))
+        .unwrap();
+        let (feed, problems) = BotFeed::parse(&bytes).unwrap();
+        assert!(
+            problems.is_empty(),
+            "fixture entries must be valid: {problems:?}"
+        );
+        feed
+    }
+
+    fn minecraft_ids(entries: Vec<&MinecraftNews>) -> Vec<&str> {
+        entries.into_iter().map(|m| m.id.as_str()).collect()
+    }
+
+    #[test]
+    fn minecraft_entries_show_while_visible_and_young_enough() {
+        let feed = feed_with_minecraft(
+            vec![feed_item("discord-1", "2026-10-16T10:00:00Z")],
+            vec![
+                minecraft("26.4", "2026-10-16T12:00:01Z", "2026-10-30T00:00:00Z"),
+                minecraft("26.3", "2026-09-15T11:23:02Z", "2026-10-30T11:23:02Z"),
+                minecraft("26.2", "2026-08-20T00:00:00Z", "2026-10-16T12:00:00Z"),
+                minecraft("26.1.2", "2026-10-01T00:00:00Z", "2026-10-16T12:00:01Z"),
+                // Exactly 60 days old is still shown; one second more is not.
+                minecraft("26.1", "2026-08-17T12:00:00Z", "2026-11-01T00:00:00Z"),
+                minecraft("26.0", "2026-08-17T11:59:59Z", "2026-11-01T00:00:00Z"),
+            ],
+        );
+        let empty = NewsFeed::default();
+        assert_eq!(
+            minecraft_ids(merge_minecraft(&empty, Some(&feed), 60, ts(NOW))),
+            ["minecraft-26.1.2", "minecraft-26.3", "minecraft-26.1"],
+            "scheduled and expired entries wait or go; newest first"
+        );
+        assert!(merge_minecraft(&empty, Some(&feed), 1, ts(NOW)).is_empty());
+        assert!(merge_minecraft(&empty, None, 60, ts(NOW)).is_empty());
+
+        // They never become Projects news, patch notes or events.
+        let news = merge_news(&empty, Some(&feed), 60, ts(NOW));
+        assert_eq!(ids(&news), ["discord-1"]);
+        assert!(newest_patch_notes(&news).is_none());
+        assert!(merge_events(&[], Some(&feed), &news, ts(NOW)).is_empty());
+    }
+
+    #[test]
+    fn studio_hides_or_takes_over_minecraft_entries() {
+        let feed = feed_with_minecraft(
+            Vec::new(),
+            vec![
+                minecraft("26.1", "2026-09-01T00:00:00Z", "2026-11-01T00:00:00Z"),
+                minecraft("26.3", "2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z"),
+                minecraft("26.2", "2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z"),
+                minecraft(
+                    "26.4-snapshot-4",
+                    "2026-10-13T12:05:46Z",
+                    "2026-10-27T12:05:46Z",
+                ),
+            ],
+        );
+        let empty = NewsFeed::default();
+        assert_eq!(
+            minecraft_ids(merge_minecraft(&empty, Some(&feed), 60, ts(NOW))),
+            [
+                "minecraft-26.4-snapshot-4",
+                "minecraft-26.2",
+                "minecraft-26.3",
+                "minecraft-26.1"
+            ],
+            "newest first, then the smaller id"
+        );
+
+        // Studio hides 26.3, takes 26.1 over with its own copy and schedules one of the snapshot.
+        let mut hidden = studio_item("minecraft-26.3", "2026-10-01T00:00:00Z");
+        hidden.hidden = true;
+        let studio = NewsFeed {
+            schema: 1,
+            items: vec![
+                hidden,
+                studio_item("minecraft-26.1", "2026-09-01T00:00:00Z"),
+                studio_item("minecraft-26.4-snapshot-4", "2026-10-30T00:00:00Z"),
+            ],
+        };
+        assert_eq!(
+            minecraft_ids(merge_minecraft(&studio, Some(&feed), 60, ts(NOW))),
+            ["minecraft-26.2"],
+            "Studio wins on the id, shown or not"
+        );
+        let news = merge_news(&studio, Some(&feed), 60, ts(NOW));
+        assert_eq!(ids(&news), ["minecraft-26.1"], "the copy is Projects news");
+        assert_eq!(news[0].origin, NewsOrigin::Studio);
     }
 
     #[test]

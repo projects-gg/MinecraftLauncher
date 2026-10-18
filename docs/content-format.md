@@ -720,8 +720,7 @@ short summary in the players' language in its own words, and links the official 
 entries live in their own array: launchers that do not know it ignore it, so they never appear as
 Projects news, and launchers that know it only put them where Projects news leaves room.
 
-<!-- Not tagged as a BotFeed example yet: pl-content's round-trip test rejects fields BotFeed does
-not know. Tag it when BotFeed gets `minecraft` (MCN1-B). -->
+<!-- example: BotFeed -->
 ```json
 {
   "schema": 1,

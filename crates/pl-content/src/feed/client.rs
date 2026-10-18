@@ -340,8 +340,8 @@ impl FeedClient {
             .unwrap_or_else(|| Error::Offline(media.path.clone())))
     }
 
-    /// Downloads the covers of the items visible at `now` that are not cached yet, so the home
-    /// screen never waits for them. Failures are counted, not returned.
+    /// Downloads the covers of the items and Minecraft entries visible at `now` that are not
+    /// cached yet, so the home screen never waits for them. Failures are counted, not returned.
     pub async fn prefetch_media(
         &self,
         settings: &FeedSettings,
@@ -350,12 +350,20 @@ impl FeedClient {
     ) -> FeedMediaReport {
         let floor = feed_age_floor(now, settings.max_age_days);
         let mut seen = HashSet::new();
-        let wanted: Vec<&MediaRef> = snapshot
+        let items = snapshot
             .feed
             .items
             .iter()
             .filter(|item| item.is_visible(now) && item.published_at >= floor)
-            .filter_map(|item| item.cover.as_ref())
+            .filter_map(|item| item.cover.as_ref());
+        let minecraft = snapshot
+            .feed
+            .minecraft
+            .iter()
+            .filter(|entry| entry.is_visible(now) && entry.published_at >= floor)
+            .filter_map(|entry| entry.cover.as_ref());
+        let wanted: Vec<&MediaRef> = items
+            .chain(minecraft)
             .filter(|media| seen.insert(media.sha256.trim().to_ascii_lowercase()))
             .collect();
         let mut missing = Vec::new();
@@ -1066,6 +1074,80 @@ mod tests {
         assert!(!feeds.has_cache());
         assert!(feeds.load_cached(&settings).await.is_none());
         feeds.clear().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn minecraft_covers_are_prefetched_and_collected_like_item_covers() {
+        let server = TestServer::start().await;
+        let signer = key(1);
+        let now = Timestamp::now();
+        let days = |n: i64| {
+            now.checked_add(jiff::SignedDuration::from_hours(24 * n))
+                .unwrap()
+        };
+        let shown_bytes = b"RIFF....WEBPVP8 wilderness".to_vec();
+        let shown = cover(&shown_bytes);
+        server.put(&format!("/v1/{}", shown.path), shown_bytes);
+        let gone_bytes = b"RIFF....WEBPVP8 old drop".to_vec();
+        let gone = cover(&gone_bytes);
+        server.put(&format!("/v1/{}", gone.path), gone_bytes);
+        let entry = |version: &str, published: Timestamp, expires: Timestamp, cover: &MediaRef| {
+            json!({
+                "id": format!("minecraft-{version}"),
+                "version": version,
+                "kind": "release",
+                "title": format!("Minecraft {version} çıktı"),
+                "cover": cover,
+                "publishedAt": published.to_string(),
+                "expiresAt": expires.to_string(),
+                "source": { "kind": "minecraft", "url": "https://www.minecraft.net/article/x" }
+            })
+        };
+        let with_minecraft = |sequence: u64, minecraft: Vec<Value>| {
+            to_canonical_json(&json!({
+                "schema": 1,
+                "sequence": sequence,
+                "generatedAt": "2026-10-16T09:00:00Z",
+                "items": [item("discord-1", None)],
+                "minecraft": minecraft
+            }))
+            .unwrap()
+        };
+        let entries = vec![
+            entry("26.3", days(-2), days(40), &shown),
+            // Expired yesterday: its cover is never fetched.
+            entry("26.2", days(-50), days(-1), &gone),
+        ];
+        publish(&server, &signer, &with_minecraft(1, entries.clone()));
+        let dir = tempfile::tempdir().unwrap();
+        let feeds = client(dir.path());
+        let settings = settings(&[server.base()], &[&signer]);
+        let snapshot = feeds.refresh(&settings).await.unwrap();
+        assert_eq!(snapshot.feed.minecraft.len(), 2);
+
+        let report = feeds.prefetch_media(&settings, &snapshot, now).await;
+        assert_eq!(
+            report,
+            FeedMediaReport {
+                requested: 1,
+                downloaded: 1,
+                failed: 0
+            }
+        );
+        assert!(feeds.cached_media(&shown).await.is_some());
+        assert!(feeds.cached_media(&gone).await.is_none());
+        assert_eq!(server.hits(&format!("/v1/{}", gone.path)), 0);
+
+        // Kept while a current or the previous feed lists it, then collected.
+        publish(&server, &signer, &with_minecraft(2, entries));
+        feeds.refresh(&settings).await.unwrap();
+        assert!(feeds.cached_media(&shown).await.is_some());
+        publish(&server, &signer, &with_minecraft(3, Vec::new()));
+        feeds.refresh(&settings).await.unwrap();
+        assert!(feeds.cached_media(&shown).await.is_some());
+        publish(&server, &signer, &with_minecraft(4, Vec::new()));
+        feeds.refresh(&settings).await.unwrap();
+        assert!(feeds.cached_media(&shown).await.is_none());
     }
 
     #[test]
