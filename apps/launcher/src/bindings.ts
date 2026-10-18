@@ -670,6 +670,16 @@ export const commands = {
 	instanceRevealFile: (instanceId: string, folder: string, fileName: string) => typedError<null, CmdError>(__TAURI_INVOKE("instance_reveal_file", { instanceId, folder, fileName })),
 	/**  Put an instance in a library group (`None` or blank: no group). */
 	instanceSetGroup: (instanceId: string, group: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("instance_set_group", { instanceId, group })),
+	/**
+	 *  The room the whole instance folder takes (`pl_mc::instance::usage`: every version set,
+	 *  worlds, backups, screenshots and settings; never the game files all instances share). A
+	 *  folder whose top levels did not change since the last measurement answers from it at once;
+	 *  otherwise the folder is walked off the async threads. `request_id` lets
+	 *  `instance_disk_usage_cancel` stop exactly this walk; a newer request stops it too.
+	 */
+	instanceDiskUsage: (instanceId: string, requestId: string) => typedError<InstanceDiskUsageView, CmdError>(__TAURI_INVOKE("instance_disk_usage", { instanceId, requestId })),
+	/**  Stops the measurement `instance_disk_usage` runs for `request_id` (the overview went away). */
+	instanceDiskUsageCancel: (requestId: string) => __TAURI_INVOKE<void>("instance_disk_usage_cancel", { requestId }),
 	socialState: () => __TAURI_INVOKE<SocialView_Serialize>("social_state"),
 	/**
 	 *  Opens Discord's sign-in page in the browser; the page comes back through
@@ -1563,6 +1573,12 @@ export type InstanceDetailView = {
 	/**  The maximum memory "Otomatik" gives this instance now. */
 	autoMemoryMb: number,
 } & InstanceView;
+
+/**  What `instance_disk_usage` measured. */
+export type InstanceDiskUsageView = {
+	bytes: number,
+	files: number,
+};
 
 export type InstanceSettingsView = {
 	/**  "auto" | "custom" */

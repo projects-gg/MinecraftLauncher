@@ -817,6 +817,17 @@ export function createMockLibrary(options: {
       await delay(120);
       options.setGroup(instanceId, group);
     },
+    async diskUsage(instanceId, signal) {
+      // The worlds, backups and screenshots, plus mods, settings and the other versions' sets.
+      await delay(650);
+      if (signal?.aborted) throw failure("İşlem iptal edildi.", "IPTAL");
+      const state = filesOf(instanceId);
+      const sum = (items: Array<{ sizeBytes: number }>) =>
+        items.reduce((total, item) => total + item.sizeBytes, 0);
+      const rest =
+        instanceId === "vanilla" ? 6_400_000 : 412_000_000 + (hash(instanceId) % 9) * 37_000_000;
+      return sum(state.worlds) + sum(state.backups) + sum(state.screenshots) + rest;
+    },
 
     async pingServer(address) {
       const known = mockStatuses[address.trim().toLowerCase()];

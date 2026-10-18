@@ -147,7 +147,7 @@ export function SidePanel({
   onBrowse,
 }: {
   instance: InstanceDetail;
-  /** Null while the lists it adds up are read. */
+  /** The whole folder's size; null while it is first measured. */
   sizeBytes: number | null;
   onOpenModCenter: () => void;
   onBrowse: (kind: ContentKind) => void;

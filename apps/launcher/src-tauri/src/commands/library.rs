@@ -1,6 +1,7 @@
 //! The instance page's logs, worlds and screenshots tabs, and library groups: captured game
 //! logs (viewer, mclo.gs sharing), world backups and restores, the launcher trash, the
-//! screenshot gallery (clipboard, system viewer) and instance groups.
+//! screenshot gallery (clipboard, system viewer), instance groups and the room an instance's
+//! folder takes.
 //!
 //! Worlds are never touched while the game of their instance runs; long jobs (backup, restore)
 //! stream progress over a channel and can be cancelled with `library_cancel`.
@@ -8,6 +9,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use parking_lot::Mutex;
 use pl_lang::pick;
@@ -15,6 +17,7 @@ use pl_mc::gamefiles::{
     self, BackupProgress, BackupProgressFn, LauncherTrash, LogSource, RestoreMode, TrashEntry,
     TrashKind,
 };
+use pl_mc::instance::usage;
 use pl_mc::launch::LogLine;
 use pl_net::CancellationToken;
 use serde::Serialize;
@@ -1095,4 +1098,103 @@ pub async fn instance_set_group(
         .update(&instance)
         .await
         .map_err(CmdError::from)
+}
+
+// ---------------------------------------------------------------------------------------------
+// The instance folder's size ("Kapladığı yer" on the overview)
+
+/// What `instance_disk_usage` measured.
+#[derive(Debug, Clone, Copy, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct InstanceDiskUsageView {
+    pub bytes: u64,
+    pub files: u64,
+}
+
+/// The last measurement of each instance with the folder's stamp at that time, and the walk that
+/// runs now (one at a time: a new request stops the one before).
+#[derive(Default)]
+pub struct DiskUsageJobs {
+    cache: Mutex<HashMap<String, (u64, InstanceDiskUsageView)>>,
+    running: Mutex<Option<(String, Arc<AtomicBool>)>>,
+}
+
+fn disk_usage_jobs(app: &AppHandle) -> tauri::State<'_, DiskUsageJobs> {
+    if app.try_state::<DiskUsageJobs>().is_none() {
+        app.manage(DiskUsageJobs::default());
+    }
+    app.state::<DiskUsageJobs>()
+}
+
+/// The room the whole instance folder takes (`pl_mc::instance::usage`: every version set,
+/// worlds, backups, screenshots and settings; never the game files all instances share). A
+/// folder whose top levels did not change since the last measurement answers from it at once;
+/// otherwise the folder is walked off the async threads. `request_id` lets
+/// `instance_disk_usage_cancel` stop exactly this walk; a newer request stops it too.
+#[tauri::command]
+#[specta::specta]
+pub async fn instance_disk_usage(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    request_id: String,
+) -> CmdResult<InstanceDiskUsageView> {
+    let dir = state
+        .instances
+        .instance_dir(&instance_id)
+        .map_err(CmdError::from)?;
+    let jobs = disk_usage_jobs(&app);
+    let look = dir.clone();
+    let stamp = tauri::async_runtime::spawn_blocking(move || usage::stamp(&look))
+        .await
+        .map_err(CmdError::internal)?;
+    if let Some((known, view)) = jobs.cache.lock().get(&instance_id).copied()
+        && known == stamp
+    {
+        return Ok(view);
+    }
+    let cancel = Arc::new(AtomicBool::new(false));
+    if let Some((_, previous)) = jobs
+        .running
+        .lock()
+        .replace((request_id.clone(), Arc::clone(&cancel)))
+    {
+        previous.store(true, Ordering::Relaxed);
+    }
+    let flag = Arc::clone(&cancel);
+    let measured = tauri::async_runtime::spawn_blocking(move || usage::measure(&dir, &flag)).await;
+    {
+        let mut running = jobs.running.lock();
+        if running.as_ref().is_some_and(|(id, _)| *id == request_id) {
+            running.take();
+        }
+    }
+    let usage = match measured.map_err(CmdError::internal)? {
+        Ok(usage) => usage,
+        Err(pl_mc::Error::Cancelled) => {
+            return Err(CmdError::new(
+                "IPTAL",
+                pick("İşlem iptal edildi.", "Cancelled."),
+                "the measurement was stopped",
+            ));
+        }
+        Err(error) => return Err(CmdError::from(error)),
+    };
+    let view = InstanceDiskUsageView {
+        bytes: usage.bytes,
+        files: usage.files,
+    };
+    jobs.cache.lock().insert(instance_id, (stamp, view));
+    Ok(view)
+}
+
+/// Stops the measurement `instance_disk_usage` runs for `request_id` (the overview went away).
+#[tauri::command]
+#[specta::specta]
+pub fn instance_disk_usage_cancel(app: AppHandle, request_id: String) {
+    if let Some((id, cancel)) = disk_usage_jobs(&app).running.lock().as_ref()
+        && *id == request_id
+    {
+        cancel.store(true, Ordering::Relaxed);
+    }
 }

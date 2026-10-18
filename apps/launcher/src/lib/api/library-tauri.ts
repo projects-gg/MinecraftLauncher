@@ -163,6 +163,17 @@ export const tauriLibrary: LibraryApi = {
   async setGroup(instanceId, group) {
     await ok(commands.instanceSetGroup(instanceId, group));
   },
+  async diskUsage(instanceId, signal) {
+    // The request's own id: aborting stops exactly this walk, never a newer one.
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const stop = () => void commands.instanceDiskUsageCancel(requestId);
+    signal?.addEventListener("abort", stop, { once: true });
+    try {
+      return (await ok(commands.instanceDiskUsage(instanceId, requestId))).bytes;
+    } finally {
+      signal?.removeEventListener("abort", stop);
+    }
+  },
 
   async pingServer(address) {
     const s = await commands.serverStatus(null, address);

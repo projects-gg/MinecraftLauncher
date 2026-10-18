@@ -342,6 +342,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::library::screenshot_delete,
             commands::library::instance_reveal_file,
             commands::library::instance_set_group,
+            commands::library::instance_disk_usage,
+            commands::library::instance_disk_usage_cancel,
             // friends (optional feature, off until the signed config turns it on)
             commands::social::social_state,
             commands::social::social_sign_in,

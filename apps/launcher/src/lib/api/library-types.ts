@@ -206,6 +206,13 @@ export interface LibraryApi {
 
   /** Library group of an instance; `null` removes it from its group. */
   setGroup(instanceId: string, group: string | null): Promise<void>;
+  /**
+   * Bytes the whole instance folder takes (every version set, worlds, backups, screenshots,
+   * settings; never the game files all instances share). Measured off the UI thread and answered
+   * from the backend's cache while the folder's top levels are unchanged; aborting `signal` stops
+   * a walk still running.
+   */
+  diskUsage(instanceId: string, signal?: AbortSignal): Promise<number>;
 
   /** Server List Ping of one address; never fails (an unreachable server is `online: false`). */
   pingServer(address: string): Promise<ServerStatus>;

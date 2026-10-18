@@ -6,6 +6,7 @@ pub mod memory;
 pub mod model;
 pub mod options;
 pub mod store;
+pub mod usage;
 
 pub use defaults::{
     DEFAULT_GUI_SCALE, DEFAULT_SERVER_ADDRESS, DEFAULT_SERVER_NAME, OptionsSeed, ServerSeed,
@@ -26,3 +27,4 @@ pub use options::{
     set_graphics_preset, supports_presets, this_machine_preset,
 };
 pub use store::{GAME_DIR_NAME, INSTANCE_FILE, InstanceStore, slugify};
+pub use usage::DiskUsage;

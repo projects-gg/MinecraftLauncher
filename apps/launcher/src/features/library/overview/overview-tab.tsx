@@ -98,12 +98,12 @@ export function OverviewTab({
   });
   const resume = useResumeTarget(instance);
 
-  // A session changes the worlds, the play time and the server list: read them again once the
-  // game closes (the screenshots follow the session's own notice).
+  // A session changes the worlds, the play time, the server list and the folder's size: read
+  // them again once the game closes (the screenshots follow the session's own notice).
   const wasLocked = useRef(locked);
   useEffect(() => {
     if (wasLocked.current && !locked) {
-      for (const key of ["worlds", "instance"]) {
+      for (const key of ["worlds", "instance", "instance-size"]) {
         void queryClient.invalidateQueries({ queryKey: [key, id] });
       }
     }
@@ -139,7 +139,9 @@ export function OverviewTab({
     server: Boolean(serverPlan.server),
   });
 
-  const sizeBytes =
+  // What the lists above add up to: a change there (a world, a screenshot, a backup, a mod) means
+  // the folder changed, and it stands in if the folder cannot be measured.
+  const known =
     worlds.isPending || shots.isPending || backups.isPending
       ? null
       : instanceBytes({
@@ -150,6 +152,22 @@ export function OverviewTab({
           screenshots: shots.data,
           backups: backups.data,
         });
+  // The whole folder (every version set, settings, logs): measured off the UI thread and answered
+  // from the backend's cache while its top levels are unchanged, so every visit asks again for
+  // free. Leaving the tab stops a walk still running (the query's signal).
+  const folder = useQuery({
+    queryKey: ["instance-size", id],
+    queryFn: ({ signal }) => api.library.diskUsage(id, signal),
+    retry: false,
+  });
+  const seen = useRef(known);
+  useEffect(() => {
+    if (known !== null && seen.current !== null && seen.current !== known) {
+      void queryClient.invalidateQueries({ queryKey: ["instance-size", id] });
+    }
+    if (known !== null) seen.current = known;
+  }, [known, id, queryClient]);
+  const sizeBytes = folder.data ?? (folder.isError ? known : null);
 
   return (
     <div className="grid max-w-[980px] items-start gap-x-6 gap-y-5 md:grid-cols-[minmax(0,1fr)_clamp(264px,32%,320px)]">
