@@ -115,7 +115,7 @@ function Gallery({ images }: { images: ContentGalleryImage[] }) {
               alt={image.title ?? ""}
               loading="lazy"
               draggable={false}
-              className="aspect-video w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+              className="aspect-video w-full object-cover transition-transform duration-300 group-hover:scale-[1.02] motion-reduce:group-hover:scale-100"
             />
           </button>
           {image.title ? (

@@ -51,7 +51,13 @@ export function CoverImage({
           }}
           onLoad={() => setLoaded(src)}
           onError={() => setFailed(src)}
-          className={cn("size-full object-cover", hidden && "opacity-0", imgClassName)}
+          className={cn(
+            "size-full object-cover",
+            hidden && "opacity-0",
+            imgClassName,
+            // The hover zoom is CSS, outside MotionConfig: reduced motion keeps the picture still.
+            "motion-reduce:group-hover:scale-100",
+          )}
           // The hover zoom (`group-hover:scale-*`) is Tailwind 4's `scale` property, not `transform`.
           style={{
             transition: `opacity 260ms cubic-bezier(0.16, 1, 0.3, 1), scale ${zoomMs}ms ease-out`,

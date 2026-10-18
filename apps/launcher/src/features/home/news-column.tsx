@@ -69,7 +69,7 @@ function NewsRow({
               alt=""
               loading="lazy"
               draggable={false}
-              className="size-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.06]"
+              className="size-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.06] motion-reduce:group-hover:scale-100"
             />
           ) : null}
         </span>
