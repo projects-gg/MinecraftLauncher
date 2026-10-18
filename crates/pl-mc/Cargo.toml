@@ -42,6 +42,8 @@ hickory-resolver = "0.26"
 trash = "5.2"
 base64 = { workspace = true }
 same-file = "1.0.6"
+# The screenshots folder while a game runs (ReadDirectoryChangesW, inotify, FSEvents; no polling).
+notify = { version = "8", default-features = false, features = ["macos_fsevent"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

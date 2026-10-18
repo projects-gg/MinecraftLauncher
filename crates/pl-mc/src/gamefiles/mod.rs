@@ -11,6 +11,7 @@ pub(crate) mod fsops;
 mod logs;
 mod packs;
 mod screenshots;
+mod shot_watch;
 mod thumbs;
 mod trash;
 mod worlds;
@@ -35,6 +36,10 @@ pub use packs::{
     list_shader_packs,
 };
 pub use screenshots::{ScreenshotInfo, ScreenshotSnapshot, list_screenshots};
+pub use shot_watch::{
+    ScreenshotEvent, ScreenshotWatcher, Timing as ScreenshotWatchTiming, ends_like_png,
+    is_screenshot_name,
+};
 pub use thumbs::{
     THUMB_SIZE, ensure_thumbnail, existing_thumbnail, make_thumbnail, prune_thumbnails,
     thumbnail_name, thumbnails_dir,
