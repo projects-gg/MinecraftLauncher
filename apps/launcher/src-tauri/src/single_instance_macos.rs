@@ -126,8 +126,13 @@ pub fn hand_over(app: &AppHandle) {
     if stale.is_none() && notify(&socket).is_ok() {
         std::process::exit(0);
     }
-    match stale.or_else(|| running.first().cloned()) {
-        Some(target) => ask_to_replace(app, target, socket, own_bundle),
+    // Only the older copy is named by its version: any other one is there but does not answer.
+    let target = match stale {
+        Some(copy) => Some((copy.version.clone(), copy)),
+        None => running.first().cloned().map(|copy| (None, copy)),
+    };
+    match target {
+        Some((older, target)) => ask_to_replace(app, target, older, socket, own_bundle),
         // The other copy quit meanwhile: start again as the only one.
         None => {
             relaunch(own_bundle.as_deref());
@@ -143,15 +148,17 @@ struct RunningCopy {
     version: Option<String>,
 }
 
+/// `older`: the running copy's version when it is an older one; none when it does not answer.
 fn ask_to_replace(
     app: &AppHandle,
     target: RunningCopy,
+    older: Option<String>,
     socket: PathBuf,
     own_bundle: Option<PathBuf>,
 ) {
     // The automatic language (pl_lang): this copy's UI never ran, so no pick reached it.
     let turkish = matches!(pl_lang::Lang::current(), pl_lang::Lang::Tr);
-    let texts = Texts::new(turkish, target.version.as_deref());
+    let texts = Texts::new(turkish, older.as_deref());
     app.dialog()
         .message(texts.message)
         .title(texts.title)
