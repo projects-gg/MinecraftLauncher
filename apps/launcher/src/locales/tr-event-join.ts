@@ -5,4 +5,6 @@ export const trEventJoin = {
   join: "Katıl",
   /** Why it waits: one game at a time. */
   busy: "Oyun zaten açık",
+  /** A failure without the backend's own words (every "Katıl", friends list included). */
+  failed: "Oyun başlatılamadı. Tekrar dene.",
 };

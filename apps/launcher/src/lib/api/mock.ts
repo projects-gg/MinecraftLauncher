@@ -281,7 +281,8 @@ function mockMinecraft(): MinecraftNewsItem[] {
  * (or localStorage `pl.mock.event`; the `join` ones are on the server: "Katıl"), `?notes=pack`,
  * `?banners=none|two`,
  * `?status=outage|major|degraded|notice|expiring`, `?maintenance=1`, `?projects=<count>` (keeps
- * the first Projects news), `?mc=<count>` (Minecraft updates, 3 by default).
+ * the first Projects news), `?mc=<count>` (Minecraft updates, 3 by default), `?join=offline` (no
+ * Projects instance and its pack cannot be fetched: "Katıl" fails).
  */
 function mockFlag(key: string): string {
   try {
@@ -595,6 +596,11 @@ const instances: InstanceSummary[] = [
       ]
     : []),
 ];
+// `?join=offline`: no Projects instance yet and no connection to fetch its pack, so "Katıl"
+// cannot start the game and says why (FIX1, E1).
+const joinOffline = mockFlag("join") === "offline";
+const projectsIndex = instances.findIndex((i) => i.managed);
+if (joinOffline && projectsIndex >= 0) instances.splice(projectsIndex, 1);
 
 const versions: McVersion[] = [
   ["26.3", "release", 30],
@@ -1096,6 +1102,16 @@ export const mockApi: LauncherApi = {
     await delay(500);
     const existing = instances.find((i) => i.managed);
     if (existing) return existing;
+    if (joinOffline) {
+      throw Object.assign(
+        new Error(
+          i18n.language === "en"
+            ? "Couldn't download the Projects pack. Check your internet connection and try again."
+            : "Projects paketi indirilemedi. İnternet bağlantını kontrol edip tekrar dene.",
+        ),
+        { code: "PAKET-AG", details: "Önizleme verisi" },
+      );
+    }
     const created: InstanceSummary = {
       id: "projects",
       name: "Projects",

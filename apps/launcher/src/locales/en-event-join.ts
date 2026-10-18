@@ -2,4 +2,5 @@
 export const enEventJoin = {
   join: "Join",
   busy: "The game is already open",
+  failed: "The game couldn't start. Try again.",
 };
