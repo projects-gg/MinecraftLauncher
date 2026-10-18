@@ -442,6 +442,9 @@ jobs:
   publish-r2:
     name: Publish to R2
     needs: [prepare, finalize]
+    # Without always() the skipped launcher-windows-signed job (no SignPath secrets) would skip
+    # this job too, although finalize ran: a skip passes on to every job further down the chain.
+    if: always() && needs.finalize.result == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # Add required reviewers to this environment to approve CDN publishes by hand.
