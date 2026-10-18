@@ -139,11 +139,21 @@ let latestSwitch = 0;
  * Settings → Genel → Dil: switches live, without a reload. The window cross-fades to the new
  * texts (a view transition of type "language", styles.css) so the words do not snap; engines
  * without view transition types switch in place.
+ *
+ * `settle` lets the control the player clicked finish its own motion first (the picker's plate
+ * glides to the pick, `SEGMENTED_GLIDE_MS`): while a view transition starts, the screen holds
+ * still for the new texts to render, and the old screen fades out as a picture, so a plate still
+ * moving froze and faded out beside the arriving one. English loads meanwhile.
  */
-export async function setLanguage(choice: LanguageChoice): Promise<UiLanguage> {
+export async function setLanguage(
+  choice: LanguageChoice,
+  { settle = 0 }: { settle?: number } = {},
+): Promise<UiLanguage> {
   const request = ++latestSwitch;
   const lang = resolveLanguage(choice);
-  if (lang === "en") await loadEnglish();
+  const loading = lang === "en" ? loadEnglish() : undefined;
+  if (settle > 0) await new Promise((resolve) => setTimeout(resolve, settle));
+  await loading;
   if (request !== latestSwitch) return currentLanguage();
   if (lang === currentLanguage()) return lang;
   const apply = () => {

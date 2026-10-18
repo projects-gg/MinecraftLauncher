@@ -17,11 +17,13 @@ import {
   easeOutExpo,
   Field,
   Input,
+  SEGMENTED_GLIDE_MS,
   Segmented,
   Select,
   Slider,
   Switch,
   toast,
+  useInteractionMotion,
   useMotionPrefs,
 } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
@@ -90,15 +92,16 @@ export function Row({
 
 /**
  * "Otomatik" says what it gives on this computer (Turkish in Turkey or on a Turkish system,
- * English otherwise); the languages are named in their own language. The pick applies at once:
- * the window cross-fades to the new words while the plate slides (lib/i18n.ts). English starts
- * loading as soon as the pointer or the focus reaches the control, so the words change with the
- * click instead of a beat after it.
+ * English otherwise); the languages are named in their own language. The pick answers at once:
+ * the plate glides to it, and as it arrives the window cross-fades to the new words
+ * (lib/i18n.ts; under reduced motion the plate jumps and the fade starts right away). English
+ * starts loading as soon as the pointer or the focus reaches the control.
  */
 function LanguageRow() {
   const { t } = useTranslation();
   const choice = usePrefs((s) => s.language);
   const set = usePrefs((s) => s.set);
+  const glide = useInteractionMotion();
   const automatic = useMemo(() => automaticLanguage(), []);
   const warm = () => void loadEnglish().catch(() => {});
   return (
@@ -107,7 +110,7 @@ function LanguageRow() {
         value={choice}
         onValueChange={(v) => {
           set("language", v);
-          void setLanguage(v);
+          void setLanguage(v, { settle: glide ? SEGMENTED_GLIDE_MS : 0 });
         }}
         onIntent={warm}
         label={t("settings.general.language")}

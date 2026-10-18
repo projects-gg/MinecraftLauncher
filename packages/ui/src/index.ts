@@ -23,6 +23,7 @@ export { EmberField, type ParticleKind } from "./components/ember-field";
 export {
   Field,
   Input,
+  SEGMENTED_GLIDE_MS,
   SearchInput,
   Segmented,
   Select,

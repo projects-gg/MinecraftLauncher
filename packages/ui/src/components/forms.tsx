@@ -473,6 +473,17 @@ export function Select<T extends string>({
   );
 }
 
+/** The plate's spring (sliding markers, docs/design.md §5). */
+const PLATE_SPRING = { type: "spring", stiffness: 480, damping: 38 } as const;
+
+/**
+ * About when the plate has arrived after a pick (within a few pixels on its spring), for work
+ * that should wait for it: the language picker's window cross-fade (a view transition) freezes
+ * the screen while it starts and fades out a picture of the old one, so a plate still on its way
+ * would stop and fade out beside the arriving one.
+ */
+export const SEGMENTED_GLIDE_MS = 170;
+
 /**
  * Mutually exclusive options shown inline (loader kind, view mode, release channel). An option's
  * `hint` follows its label in a quieter weight ("Otomatik (Türkçe)"); `lang` and `hintLang` name
@@ -534,7 +545,7 @@ export function Segmented<T extends string>({
                 aria-hidden
                 layoutId={layoutId}
                 className="chamfer absolute inset-0 -z-10 bg-gold-500"
-                transition={{ type: "spring", stiffness: 480, damping: 38 }}
+                transition={PLATE_SPRING}
               />
             ) : null}
             <span

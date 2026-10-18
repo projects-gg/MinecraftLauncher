@@ -66,15 +66,30 @@ html[data-perf="on"]::view-transition-new(page) {
 }
 
 /* A language change (lib/i18n.ts, view transition type "language"): the whole window
-   cross-fades to the new words. Both pictures share one duration and curve, so with the
-   browser's plus-lighter blend everything that did not change stays exactly as bright. Nothing
-   moves, so Performance mode and reduced motion keep it. */
+   cross-fades to the new words. Both pictures share one duration and curve and add up with
+   plus-lighter, so everything that did not change stays exactly as bright. The browser applies
+   plus-lighter through its own default animation, which `animation` here replaces: it is set
+   again below (without it the whole window dimmed by a quarter mid-fade, POLISH1). Nothing
+   moves, so Performance mode and reduced motion keep it. The root group has nothing to move
+   either: without its default 250 ms animation the transition (which takes the clicks while it
+   runs) ends with the fade. */
+html:active-view-transition-type(language)::view-transition-group(root) {
+  animation: none;
+}
+
+html:active-view-transition-type(language)::view-transition-image-pair(root),
+html:active-view-transition-type(language)::view-transition-image-pair(page) {
+  isolation: isolate;
+}
+
 html:active-view-transition-type(language)::view-transition-old(root),
 html:active-view-transition-type(language)::view-transition-old(page) {
   animation: fade-out 180ms ease-out both;
+  mix-blend-mode: plus-lighter;
 }
 
 html:active-view-transition-type(language)::view-transition-new(root),
 html:active-view-transition-type(language)::view-transition-new(page) {
   animation: fade-in 180ms ease-out both;
+  mix-blend-mode: plus-lighter;
 }
