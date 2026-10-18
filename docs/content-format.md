@@ -1238,6 +1238,12 @@ Moving from version A to version B:
 - `mandatory`: eligible installs must update before playing.
 - `minVersion`: installs older than this always get a mandatory update, regardless of rollout.
 - The launcher fetches the channel file from R2 first, then the GitHub mirror.
+- Writers: CI writes `beta.json` for every release tag and `stable.json` on a promotion, on the
+  primary mirror only. Studio writes a channel file only when the admin changed that channel since
+  the live state Studio last read, and only while the primary still holds exactly that state; a
+  later mirror may be moved forward but never to an older version than it offers. A publish that
+  would break this writes nothing anywhere. A channel removed from Studio's draft is never deleted
+  live.
 
 ## HTTP caching
 
