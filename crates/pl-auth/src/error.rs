@@ -3,8 +3,9 @@
 //! Every [`AuthError`] carries three faces:
 //! - [`AuthError::code`]: a short, stable code in the legacy launcher's style (`XSTS-2148916233`,
 //!   `MC-APPREG`, `AG-BAGLANTI`) for support conversations;
-//! - [`AuthError::user_message_tr`]: friendly Turkish text telling the player what to do, without
-//!   codes or other technical identifiers;
+//! - [`AuthError::user_message`]: friendly text telling the player what to do, in the
+//!   interface's language (`pl_lang`), without codes or other technical identifiers
+//!   ([`AuthError::user_message_tr`] is the Turkish one);
 //! - [`AuthError::details`]: multi-line diagnostics for the "Ayrıntıları kopyala" button (code,
 //!   step, HTTP status, time). Server snippets are sanitized and token-like strings are redacted.
 
@@ -12,6 +13,7 @@ use std::fmt::{self, Write as _};
 use std::path::PathBuf;
 
 use jiff::Timestamp;
+use pl_lang::Lang;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -97,15 +99,19 @@ pub enum OfflineNameProblem {
 
 impl OfflineNameProblem {
     pub fn user_message_tr(self) -> &'static str {
+        self.user_message(Lang::Tr)
+    }
+
+    pub fn user_message(self, lang: Lang) -> &'static str {
         match self {
-            Self::Empty => "Bir oyuncu adı yaz.",
-            Self::TooShort => "Oyuncu adı en az 3 karakter olmalı.",
-            Self::TooLong => "Oyuncu adı en fazla 16 karakter olabilir.",
+            Self::Empty => lang.pick("Bir oyuncu adı yaz.", "Type a player name."),
+            Self::TooShort => lang.pick("Oyuncu adı en az 3 karakter olmalı.", "A player name needs at least 3 characters."),
+            Self::TooLong => lang.pick("Oyuncu adı en fazla 16 karakter olabilir.", "A player name can have at most 16 characters."),
             Self::InvalidCharacters => {
-                "Oyuncu adında yalnızca İngilizce harf, rakam ve alt çizgi (_) kullanılabilir. \
-                 Boşluk ve Türkçe harf kullanılamaz."
+                lang.pick("Oyuncu adında yalnızca İngilizce harf, rakam ve alt çizgi (_) kullanılabilir. \
+                 Boşluk ve Türkçe harf kullanılamaz.", "A player name can only use the letters A to Z, numbers and underscores (_), with no spaces or special letters.")
             }
-            Self::Taken => "Bu adla bir hesabın zaten var.",
+            Self::Taken => lang.pick("Bu adla bir hesabın zaten var.", "You already have an account with this name."),
         }
     }
 }
@@ -366,34 +372,50 @@ impl AuthError {
         }
     }
 
-    /// Friendly Turkish explanation that tells the player what to do. Contains no error codes.
+    /// The friendly Turkish explanation ([`AuthError::user_message`]).
     pub fn user_message_tr(&self) -> String {
-        const RELOGIN: &str = "Oturumunun süresi doldu. Microsoft hesabınla yeniden giriş yap.";
-        const RATE_LIMITED: &str =
-            "Kısa sürede çok fazla deneme yapıldı. Birkaç dakika bekleyip tekrar dene.";
-        const MC_DOWN: &str = "Minecraft sunucuları şu an yanıt vermiyor. Biraz sonra tekrar dene.";
-        const XBOX_DOWN: &str = "Xbox Live şu an yanıt vermiyor. Biraz sonra tekrar dene.";
+        self.user_message(Lang::Tr)
+    }
+
+    /// Friendly explanation in `lang` that tells the player what to do. Contains no error codes.
+    pub fn user_message(&self, lang: Lang) -> String {
+        let relogin = lang.pick(
+            "Oturumunun süresi doldu. Microsoft hesabınla yeniden giriş yap.",
+            "Your session expired. Sign in with your Microsoft account again.",
+        );
+        let rate_limited = lang.pick(
+            "Kısa sürede çok fazla deneme yapıldı. Birkaç dakika bekleyip tekrar dene.",
+            "Too many tries in a short time. Wait a few minutes and try again.",
+        );
+        let mc_down = lang.pick(
+            "Minecraft sunucuları şu an yanıt vermiyor. Biraz sonra tekrar dene.",
+            "Minecraft's servers aren't answering right now. Try again in a bit.",
+        );
+        let xbox_down = lang.pick(
+            "Xbox Live şu an yanıt vermiyor. Biraz sonra tekrar dene.",
+            "Xbox Live isn't answering right now. Try again in a bit.",
+        );
 
         let text = match self {
-            Self::Cancelled => "Giriş iptal edildi.",
+            Self::Cancelled => lang.pick("Giriş iptal edildi.", "Sign-in cancelled."),
             Self::BrowserTimeout { .. } => {
-                "Giriş süresi doldu. Tarayıcıdaki adımları beş dakika içinde tamamlayıp tekrar \
-                 dene."
+                lang.pick("Giriş süresi doldu. Tarayıcıdaki adımları beş dakika içinde tamamlayıp tekrar \
+                 dene.", "Sign-in timed out. Finish the steps in your browser within five minutes and try again.")
             }
             Self::Loopback { .. } => {
-                "Giriş yanıtı tarayıcıdan alınamadı. Güvenlik yazılımın launcher'ı engelliyor \
-                 olabilir; izin verip tekrar dene."
+                lang.pick("Giriş yanıtı tarayıcıdan alınamadı. Güvenlik yazılımın launcher'ı engelliyor \
+                 olabilir; izin verip tekrar dene.", "The sign-in answer didn't come back from the browser. Your security software may be blocking the launcher; allow it and try again.")
             }
             Self::StateMismatch { .. } => {
-                "Giriş yanıtı doğrulanamadı, güvenliğin için giriş durduruldu. Tekrar dene."
+                lang.pick("Giriş yanıtı doğrulanamadı, güvenliğin için giriş durduruldu. Tekrar dene.", "The sign-in answer couldn't be verified, so sign-in stopped to keep you safe. Try again.")
             }
-            Self::MissingCode { .. } => "Microsoft'tan giriş onayı alınamadı. Tekrar dene.",
+            Self::MissingCode { .. } => lang.pick("Microsoft'tan giriş onayı alınamadı. Tekrar dene.", "Microsoft didn't confirm the sign-in. Try again."),
             Self::Authorize { error, .. } => {
                 if error.eq_ignore_ascii_case("access_denied") {
-                    "Giriş izni verilmedi. Devam etmek için Microsoft sayfasında istenen izni \
-                     onayla."
+                    lang.pick("Giriş izni verilmedi. Devam etmek için Microsoft sayfasında istenen izni \
+                     onayla.", "Permission wasn't given. To continue, accept the permission on the Microsoft page.")
                 } else {
-                    "Microsoft giriş sayfası isteği reddetti. Tekrar dene."
+                    lang.pick("Microsoft giriş sayfası isteği reddetti. Tekrar dene.", "The Microsoft sign-in page turned the request down. Try again.")
                 }
             }
             Self::MicrosoftToken {
@@ -405,133 +427,133 @@ impl AuthError {
                 let error = error.as_deref().unwrap_or_default();
                 if is_relogin_error(error) {
                     if *step == AuthStep::Refresh {
-                        RELOGIN
+                        relogin
                     } else {
-                        "Giriş onayı geçersiz ya da süresi dolmuş. Yeniden giriş yap."
+                        lang.pick("Giriş onayı geçersiz ya da süresi dolmuş. Yeniden giriş yap.", "The sign-in confirmation is invalid or expired. Sign in again.")
                     }
                 } else if matches!(error, "unauthorized_client" | "invalid_client") {
-                    "Microsoft ile giriş şu an kullanılamıyor. Launcher'ı güncelle; sorun sürerse \
-                     destek ekibimize yaz."
+                    lang.pick("Microsoft ile giriş şu an kullanılamıyor. Launcher'ı güncelle; sorun sürerse \
+                     destek ekibimize yaz.", "Signing in with Microsoft isn't working right now. Update the launcher; if it keeps happening, write to our support team.")
                 } else if is_transient_status(*status) {
-                    "Microsoft giriş hizmetine şu an ulaşılamıyor. Biraz sonra tekrar dene."
+                    lang.pick("Microsoft giriş hizmetine şu an ulaşılamıyor. Biraz sonra tekrar dene.", "Microsoft's sign-in service can't be reached right now. Try again in a bit.")
                 } else {
-                    "Microsoft girişi tamamlanamadı. Tekrar dene."
+                    lang.pick("Microsoft girişi tamamlanamadı. Tekrar dene.", "Couldn't finish signing in with Microsoft. Try again.")
                 }
             }
-            Self::NoRefreshToken { .. } => RELOGIN,
+            Self::NoRefreshToken { .. } => relogin,
             Self::DeviceCodeExpired { .. } => {
-                "Giriş kodunun süresi doldu. Yeni bir kod alıp tekrar dene."
+                lang.pick("Giriş kodunun süresi doldu. Yeni bir kod alıp tekrar dene.", "The sign-in code expired. Get a new code and try again.")
             }
             Self::DeviceCodeDeclined { .. } => {
-                "Giriş isteği reddedildi. Devam etmek için isteği onayla."
+                lang.pick("Giriş isteği reddedildi. Devam etmek için isteği onayla.", "The sign-in request was declined. Accept the request to continue.")
             }
             Self::XboxLive { status, .. } => {
                 if is_transient_status(*status) {
-                    XBOX_DOWN
+                    xbox_down
                 } else {
-                    "Xbox Live oturumu açılamadı. Microsoft hesabının bir Xbox profili olduğundan \
-                     emin olup tekrar dene."
+                    lang.pick("Xbox Live oturumu açılamadı. Microsoft hesabının bir Xbox profili olduğundan \
+                     emin olup tekrar dene.", "Couldn't sign in to Xbox Live. Make sure your Microsoft account has an Xbox profile and try again.")
                 }
             }
             Self::Xsts { xerr, status, .. } => {
                 if xerr.is_none() && is_transient_status(*status) {
-                    XBOX_DOWN
+                    xbox_down
                 } else {
-                    xsts_message(*xerr)
+                    xsts_message(*xerr, lang)
                 }
             }
             Self::MinecraftLogin {
                 app_registration: true,
                 ..
             } => {
-                "Microsoft ile giriş şu an kullanılamıyor. Sorun hesabında değil, launcher'da. Bu \
-                 sürede çevrimdışı hesapla oynayabilirsin."
+                lang.pick("Microsoft ile giriş şu an kullanılamıyor. Sorun hesabında değil, launcher'da. Bu \
+                 sürede çevrimdışı hesapla oynayabilirsin.", "Signing in with Microsoft isn't working right now. The problem is in the launcher, not your account. Meanwhile you can play with an offline account.")
             }
             Self::MinecraftLogin { status, .. } => match status {
                 401 | 403 => {
-                    "Minecraft hesabın doğrulanamadı. Oyunu bu Microsoft hesabıyla satın \
-                     aldığından emin ol."
+                    lang.pick("Minecraft hesabın doğrulanamadı. Oyunu bu Microsoft hesabıyla satın \
+                     aldığından emin ol.", "Your Minecraft account couldn't be verified. Make sure you bought the game with this Microsoft account.")
                 }
-                429 => RATE_LIMITED,
-                _ => MC_DOWN,
+                429 => rate_limited,
+                _ => mc_down,
             },
             Self::NoLicense { .. } => {
-                "Bu Microsoft hesabında Minecraft: Java Edition yok. Oyunu satın aldığın hesapla \
-                 giriş yap."
+                lang.pick("Bu Microsoft hesabında Minecraft: Java Edition yok. Oyunu satın aldığın hesapla \
+                 giriş yap.", "This Microsoft account doesn't own Minecraft: Java Edition. Sign in with the account you bought the game with.")
             }
             Self::NoProfile { .. } => {
-                "Bu hesapta Minecraft: Java Edition var ama henüz oyuncu profili yok. \
-                 minecraft.net'te giriş yapıp oyuncu adını seç, sonra tekrar dene."
+                lang.pick("Bu hesapta Minecraft: Java Edition var ama henüz oyuncu profili yok. \
+                 minecraft.net'te giriş yapıp oyuncu adını seç, sonra tekrar dene.", "This account owns Minecraft: Java Edition but has no player profile yet. Sign in at minecraft.net, pick your player name, then try again.")
             }
             Self::MinecraftApi { step, status, .. } => {
                 if *status == 429 {
-                    RATE_LIMITED
+                    rate_limited
                 } else if is_transient_status(*status) {
-                    MC_DOWN
+                    mc_down
                 } else {
                     match (step, status) {
                         (AuthStep::Skin, 400) => {
-                            "Minecraft bu skini kabul etmedi. 64×64 ya da 64×32 boyutunda bir \
-                             PNG dosyası seç."
+                            lang.pick("Minecraft bu skini kabul etmedi. 64×64 ya da 64×32 boyutunda bir \
+                             PNG dosyası seç.", "Minecraft didn't accept this skin. Pick a 64×64 or 64×32 PNG file.")
                         }
-                        (AuthStep::Skin, _) => "Skin güncellenemedi. Tekrar dene.",
-                        (AuthStep::Cape, _) => "Pelerin değiştirilemedi. Tekrar dene.",
-                        (AuthStep::Texture, _) => "Skin görüntüsü indirilemedi. Tekrar dene.",
-                        (AuthStep::Entitlements, _) => "Oyun lisansı denetlenemedi. Tekrar dene.",
-                        _ => "Minecraft profili alınamadı. Tekrar dene.",
+                        (AuthStep::Skin, _) => lang.pick("Skin güncellenemedi. Tekrar dene.", "Couldn't change the skin. Try again."),
+                        (AuthStep::Cape, _) => lang.pick("Pelerin değiştirilemedi. Tekrar dene.", "Couldn't change the cape. Try again."),
+                        (AuthStep::Texture, _) => lang.pick("Skin görüntüsü indirilemedi. Tekrar dene.", "Couldn't download the skin picture. Try again."),
+                        (AuthStep::Entitlements, _) => lang.pick("Oyun lisansı denetlenemedi. Tekrar dene.", "Couldn't check the game license. Try again."),
+                        _ => lang.pick("Minecraft profili alınamadı. Tekrar dene.", "Couldn't get the Minecraft profile. Try again."),
                     }
                 }
             }
             Self::InvalidSkinFile { problem } => match problem {
                 SkinFileProblem::NotPng => {
-                    "Bu dosya PNG değil. Skin olarak 64×64 ya da 64×32 boyutunda bir PNG dosyası \
-                     seç."
+                    lang.pick("Bu dosya PNG değil. Skin olarak 64×64 ya da 64×32 boyutunda bir PNG dosyası \
+                     seç.", "This file isn't a PNG. Pick a 64×64 or 64×32 PNG file as the skin.")
                 }
-                SkinFileProblem::BadDimensions { .. } => "Skin 64×64 ya da 64×32 piksel olmalı.",
+                SkinFileProblem::BadDimensions { .. } => lang.pick("Skin 64×64 ya da 64×32 piksel olmalı.", "A skin must be 64×64 or 64×32 pixels."),
                 SkinFileProblem::TooLarge => {
-                    "Skin dosyası çok büyük. Daha küçük bir PNG dosyası seç."
+                    lang.pick("Skin dosyası çok büyük. Daha küçük bir PNG dosyası seç.", "The skin file is too big. Pick a smaller PNG file.")
                 }
                 SkinFileProblem::InvalidUrl => {
-                    "Bu skin bağlantısı geçerli değil. Bir görsel bağlantısı yaz."
+                    lang.pick("Bu skin bağlantısı geçerli değil. Bir görsel bağlantısı yaz.", "That skin link isn't valid. Type a link to a picture.")
                 }
                 SkinFileProblem::Unreadable { .. } => {
-                    "Skin dosyası okunamadı. Dosyanın yerinde olduğundan emin olup tekrar dene."
+                    lang.pick("Skin dosyası okunamadı. Dosyanın yerinde olduğundan emin olup tekrar dene.", "Couldn't read the skin file. Make sure it's still there and try again.")
                 }
             },
-            Self::NotInSkinHistory => "Bu skin artık geçmişte yok.",
+            Self::NotInSkinHistory => lang.pick("Bu skin artık geçmişte yok.", "This skin isn't in your history anymore."),
             Self::Network { .. } => {
-                "Sunuculara ulaşılamadı. İnternet bağlantını kontrol edip tekrar dene."
+                lang.pick("Sunuculara ulaşılamadı. İnternet bağlantını kontrol edip tekrar dene.", "Couldn't reach the servers. Check your internet connection and try again.")
             }
             Self::UnexpectedResponse { .. } => {
-                "Sunucudan beklenmedik bir yanıt geldi. Tekrar dene."
+                lang.pick("Sunucudan beklenmedik bir yanıt geldi. Tekrar dene.", "The server sent an unexpected answer. Try again.")
             }
-            Self::InvalidOfflineName { problem } => problem.user_message_tr(),
+            Self::InvalidOfflineName { problem } => problem.user_message(lang),
             Self::AccountNotFound { .. } => {
-                "Hesap bulunamadı. Hesap listesi değişmiş olabilir, tekrar dene."
+                lang.pick("Hesap bulunamadı. Hesap listesi değişmiş olabilir, tekrar dene.", "Account not found. The account list may have changed; try again.")
             }
             Self::NotMicrosoftAccount { .. } => {
-                "Bu işlem yalnızca Microsoft hesaplarında kullanılabilir."
+                lang.pick("Bu işlem yalnızca Microsoft hesaplarında kullanılabilir.", "This only works with Microsoft accounts.")
             }
             Self::MissingSecrets { .. } => {
-                "Bu hesabın oturum bilgileri bulunamadı. Microsoft hesabınla yeniden giriş yap."
+                lang.pick("Bu hesabın oturum bilgileri bulunamadı. Microsoft hesabınla yeniden giriş yap.", "This account's session wasn't found. Sign in with your Microsoft account again.")
             }
             Self::Keychain {
                 unavailable: true, ..
             } => {
-                "Sistemin güvenli parola deposuna erişilemedi. Kilitliyse kilidini açıp tekrar \
+                lang.pick("Sistemin güvenli parola deposuna erişilemedi. Kilitliyse kilidini açıp tekrar \
                  dene. Linux'ta GNOME Keyring ya da KWallet gibi bir parola deposunun \
-                 çalıştığından emin ol."
+                 çalıştığından emin ol.", "Couldn't reach your system's secure password storage. If it's locked, unlock it and try again. On Linux, make sure a password store like GNOME Keyring or KWallet is running.")
             }
             Self::Keychain { .. } => {
-                "Sistemin güvenli parola deposunda bir sorun oluştu. Tekrar dene."
+                lang.pick("Sistemin güvenli parola deposunda bir sorun oluştu. Tekrar dene.", "Something went wrong with your system's secure password storage. Try again.")
             }
             Self::Storage { op, .. } => {
                 if *op == "read" {
-                    "Hesap bilgileri okunamadı. Veri klasörüne erişim izni olduğundan emin olup \
-                     tekrar dene."
+                    lang.pick("Hesap bilgileri okunamadı. Veri klasörüne erişim izni olduğundan emin olup \
+                     tekrar dene.", "Couldn't read the account details. Make sure the launcher can access its data folder and try again.")
                 } else {
-                    "Hesap bilgileri kaydedilemedi. Diskte yer olduğundan ve veri klasörüne yazma \
-                     izni bulunduğundan emin ol."
+                    lang.pick("Hesap bilgileri kaydedilemedi. Diskte yer olduğundan ve veri klasörüne yazma \
+                     izni bulunduğundan emin ol.", "Couldn't save the account details. Make sure there's space on the disk and the launcher can write to its data folder.")
                 }
             }
         };
@@ -694,7 +716,7 @@ impl AuthError {
     pub fn info(&self) -> AuthErrorInfo {
         AuthErrorInfo {
             code: self.code(),
-            message: self.user_message_tr(),
+            message: self.user_message(Lang::current()),
             details: self.details(),
             class: self.class(),
             cancelled: self.is_cancelled(),
@@ -708,7 +730,7 @@ impl AuthError {
 pub struct AuthErrorInfo {
     /// Short code; goes only into "copy details", never into visible text.
     pub code: String,
-    /// Friendly Turkish message without codes.
+    /// Friendly message without codes, in the interface's language.
     pub message: String,
     /// Multi-line diagnostics for the "copy details" button.
     pub details: String,
@@ -736,35 +758,35 @@ pub(crate) fn is_transient_status(status: u16) -> bool {
 }
 
 /// XSTS rejections describe the state of the player's account; each needs its own fix.
-pub(crate) fn xsts_message(xerr: Option<u64>) -> &'static str {
+pub(crate) fn xsts_message(xerr: Option<u64>, lang: Lang) -> &'static str {
     match xerr {
         Some(2_148_916_233) => {
-            "Bu Microsoft hesabına bağlı bir Xbox profili yok. xbox.com'dan ücretsiz bir profil \
-             oluşturup tekrar dene."
+            lang.pick("Bu Microsoft hesabına bağlı bir Xbox profili yok. xbox.com'dan ücretsiz bir profil \
+             oluşturup tekrar dene.", "This Microsoft account has no Xbox profile. Make a free one at xbox.com and try again.")
         }
         Some(2_148_916_235) => {
-            "Xbox Live, hesabının kayıtlı olduğu ülkede veya bölgede kullanılamıyor."
+            lang.pick("Xbox Live, hesabının kayıtlı olduğu ülkede veya bölgede kullanılamıyor.", "Xbox Live isn't available in the country or region your account is registered in.")
         }
         Some(2_148_916_236 | 2_148_916_237) => {
-            "Hesabın için yetişkin doğrulaması gerekiyor. xbox.com'da doğrulamayı tamamlayıp \
-             tekrar dene."
+            lang.pick("Hesabın için yetişkin doğrulaması gerekiyor. xbox.com'da doğrulamayı tamamlayıp \
+             tekrar dene.", "Your account needs adult verification. Finish it at xbox.com and try again.")
         }
         Some(2_148_916_238) => {
-            "Bu hesap bir çocuk hesabı. Xbox Live'a girebilmesi için bir yetişkinin bu hesabı \
-             Microsoft aile grubuna eklemesi gerekiyor."
+            lang.pick("Bu hesap bir çocuk hesabı. Xbox Live'a girebilmesi için bir yetişkinin bu hesabı \
+             Microsoft aile grubuna eklemesi gerekiyor.", "This is a child account. To use Xbox Live, an adult needs to add it to a Microsoft family group.")
         }
         Some(2_148_916_227) => {
-            "Bu Microsoft hesabı Xbox tarafından engellendiği için Minecraft'a giriş yapılamıyor."
+            lang.pick("Bu Microsoft hesabı Xbox tarafından engellendiği için Minecraft'a giriş yapılamıyor.", "Xbox has banned this Microsoft account, so it can't sign in to Minecraft.")
         }
         Some(2_148_916_229) => {
-            "Hesabında çevrimiçi oyun izni kısıtlanmış. Ailen bu izni Microsoft aile \
-             ayarlarından açabilir."
+            lang.pick("Hesabında çevrimiçi oyun izni kısıtlanmış. Ailen bu izni Microsoft aile \
+             ayarlarından açabilir.", "Online play is restricted on your account. Your parents can allow it in Microsoft's family settings.")
         }
         Some(2_148_916_234) => {
-            "Xbox kullanım koşulları henüz kabul edilmemiş. xbox.com'da giriş yapıp koşulları \
-             kabul et, sonra tekrar dene."
+            lang.pick("Xbox kullanım koşulları henüz kabul edilmemiş. xbox.com'da giriş yapıp koşulları \
+             kabul et, sonra tekrar dene.", "The Xbox terms aren't accepted yet. Sign in at xbox.com, accept them, then try again.")
         }
-        _ => "Xbox Live doğrulaması tamamlanamadı. Tekrar dene.",
+        _ => lang.pick("Xbox Live doğrulaması tamamlanamadı. Tekrar dene.", "Couldn't finish the Xbox Live check. Try again."),
     }
 }
 

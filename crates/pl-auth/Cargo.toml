@@ -9,6 +9,8 @@ publish = false
 
 [dependencies]
 pl-net = { workspace = true }
+# Player texts (errors, the browser sign-in page) in the interface's language.
+pl-lang = { workspace = true }
 tokio = { workspace = true }
 # `multipart` for skin uploads. Form bodies are encoded with `url::form_urlencoded`.
 reqwest = { workspace = true, features = ["multipart"] }

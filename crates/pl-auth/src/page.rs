@@ -1,5 +1,7 @@
 //! The page the browser shows after Microsoft redirects back to the launcher.
 
+use pl_lang::Lang;
+
 /// Content-Security-Policy sent with the page: inline styles only, no scripts, no requests.
 pub(crate) const PAGE_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; \
                                    form-action 'none'; frame-ancestors 'none'";
@@ -47,34 +49,44 @@ h1,.lead,.hint{animation:fade .5s .15s ease-out both}}
 @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 "#;
 
-/// Renders the result page. `reason` (already user-facing Turkish text) replaces the default
-/// failure explanation. Nothing technical (codes, ids) ever goes on this page.
-pub(crate) fn result_page(success: bool, reason: Option<&str>) -> String {
+/// Renders the result page in `lang` (the interface's language). `reason` (already user-facing
+/// text in that language) replaces the default failure explanation. Nothing technical (codes,
+/// ids) ever goes on this page.
+pub(crate) fn result_page(success: bool, reason: Option<&str>, lang: Lang) -> String {
     let (class, title, lead, icon) = if success {
         (
             "ok",
-            "Hesabın onaylandı",
-            "Girişin Projects Launcher&#39;da birkaç saniye içinde tamamlanacak.".to_owned(),
+            lang.pick("Hesabın onaylandı", "Your account is confirmed"),
+            lang.pick(
+                "Girişin Projects Launcher&#39;da birkaç saniye içinde tamamlanacak.",
+                "Projects Launcher will finish signing you in within a few seconds.",
+            )
+            .to_owned(),
             r#"<path d="M9 18.5l6 6L27 12"/>"#,
         )
     } else {
+        let retry = lang.pick(
+            "Projects Launcher&#39;da tekrar dene.",
+            "Try again in Projects Launcher.",
+        );
         let lead = match reason {
-            Some(reason) => format!(
-                "{} Projects Launcher&#39;da tekrar dene.",
-                escape_html(reason)
-            ),
-            None => "Projects Launcher&#39;da tekrar dene.".to_owned(),
+            Some(reason) => format!("{} {retry}", escape_html(reason)),
+            None => retry.to_owned(),
         };
         (
             "fail",
-            "Giriş tamamlanamadı",
+            lang.pick("Giriş tamamlanamadı", "Sign-in didn't finish"),
             lead,
             r#"<path d="M12 12l12 12M24 12L12 24"/>"#,
         )
     };
+    let hint = lang.pick(
+        "Bu sekmeyi kapatıp <b>Projects Launcher</b>&#39;a dönebilirsin.",
+        "You can close this tab and go back to <b>Projects Launcher</b>.",
+    );
     format!(
         concat!(
-            "<!doctype html><html lang=\"tr\"><head><meta charset=\"utf-8\">",
+            "<!doctype html><html lang=\"{lang}\"><head><meta charset=\"utf-8\">",
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
             "<meta name=\"color-scheme\" content=\"dark\">",
             "<meta name=\"referrer\" content=\"no-referrer\">",
@@ -83,14 +95,16 @@ pub(crate) fn result_page(success: bool, reason: Option<&str>) -> String {
             "<div class=\"brand\"><i aria-hidden=\"true\"></i>Projects Launcher</div>",
             "<div class=\"mark\" aria-hidden=\"true\"><svg viewBox=\"0 0 36 36\">{icon}</svg></div>",
             "<h1>{title}</h1><p class=\"lead\">{lead}</p>",
-            "<p class=\"hint\">Bu sekmeyi kapatıp <b>Projects Launcher</b>&#39;a dönebilirsin.</p>",
+            "<p class=\"hint\">{hint}</p>",
             "</main></body></html>"
         ),
+        lang = lang.code(),
         title = title,
         style = STYLE.trim(),
         class = class,
         icon = icon,
         lead = lead,
+        hint = hint,
     )
 }
 
@@ -115,7 +129,7 @@ mod tests {
 
     #[test]
     fn success_and_failure_variants() {
-        let ok = result_page(true, None);
+        let ok = result_page(true, None, Lang::Tr);
         assert!(ok.starts_with("<!doctype html>"));
         assert!(ok.contains("lang=\"tr\""));
         assert!(ok.contains("#0b0907"));
@@ -127,12 +141,27 @@ mod tests {
         assert!(ok.contains("dönebilirsin."));
         assert!(!ok.contains("<script"));
 
-        let fail = result_page(false, Some("Giriş izni <verilmedi>."));
+        let fail = result_page(false, Some("Giriş izni <verilmedi>."), Lang::Tr);
         assert!(fail.contains("Giriş tamamlanamadı"));
         assert!(fail.contains("card fail"));
         assert!(
             fail.contains("Giriş izni &lt;verilmedi&gt;. Projects Launcher&#39;da tekrar dene.")
         );
-        assert!(result_page(false, None).contains("Projects Launcher&#39;da tekrar dene."));
+        assert!(
+            result_page(false, None, Lang::Tr).contains("Projects Launcher&#39;da tekrar dene.")
+        );
+    }
+
+    #[test]
+    fn the_page_speaks_the_interface_language() {
+        let ok = result_page(true, None, Lang::En);
+        assert!(ok.contains("lang=\"en\""));
+        assert!(ok.contains("Your account is confirmed"));
+        assert!(ok.contains("close this tab"));
+        let fail = result_page(false, Some("Permission wasn't given."), Lang::En);
+        assert!(
+            fail.contains("Sign-in didn&#39;t finish") || fail.contains("Sign-in didn't finish")
+        );
+        assert!(fail.contains("Permission wasn&#39;t given. Try again in Projects Launcher."));
     }
 }

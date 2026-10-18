@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use jiff::Timestamp;
+use pl_lang::Lang;
 use pl_net::CancellationToken;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -183,8 +184,12 @@ async fn serve_connection(
 
     let outcome = evaluate_callback(&params, &expected_state);
     let page = match &outcome {
-        Ok(_) => result_page(true, None),
-        Err(error) => result_page(false, Some(page_reason(error))),
+        Ok(_) => result_page(true, None, Lang::current()),
+        Err(error) => result_page(
+            false,
+            Some(page_reason(error, Lang::current())),
+            Lang::current(),
+        ),
     };
     let _ = respond(
         &mut stream,
@@ -261,16 +266,23 @@ fn evaluate_callback(params: &HashMap<String, String>, expected_state: &str) -> 
 }
 
 /// Short Turkish reason for the browser page; the full message appears in the launcher.
-fn page_reason(error: &AuthError) -> &'static str {
+fn page_reason(error: &AuthError, lang: Lang) -> &'static str {
     match error {
         AuthError::Authorize { error, .. } if error.eq_ignore_ascii_case("access_denied") => {
-            "Giriş izni verilmedi."
+            lang.pick("Giriş izni verilmedi.", "Permission wasn't given.")
         }
-        AuthError::Authorize { .. } => "Microsoft giriş isteğini tamamlamadı.",
-        AuthError::StateMismatch { .. } => {
-            "Giriş yanıtı doğrulanamadı, güvenliğin için giriş durduruldu."
-        }
-        _ => "Microsoft'tan giriş onayı alınamadı.",
+        AuthError::Authorize { .. } => lang.pick(
+            "Microsoft giriş isteğini tamamlamadı.",
+            "Microsoft didn't finish the sign-in request.",
+        ),
+        AuthError::StateMismatch { .. } => lang.pick(
+            "Giriş yanıtı doğrulanamadı, güvenliğin için giriş durduruldu.",
+            "The sign-in answer couldn't be verified, so sign-in stopped to keep you safe.",
+        ),
+        _ => lang.pick(
+            "Microsoft'tan giriş onayı alınamadı.",
+            "Microsoft didn't confirm the sign-in.",
+        ),
     }
 }
 
