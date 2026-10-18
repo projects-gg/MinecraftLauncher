@@ -109,13 +109,23 @@ describe("dates", () => {
 
   it("say how long ago in the language", async () => {
     const yesterday = new Date(now - 24 * 3600_000).toISOString();
+    const twoDays = new Date(now - 48 * 3600_000).toISOString();
+    const inTwoDays = new Date(now + 48 * 3600_000).toISOString();
     const earlier = new Date(now - 2 * 3600_000).toISOString();
+    const seconds = new Date(now - 20_000).toISOString();
     expect(formatRelative(yesterday, now)).toBe("dün");
+    // Numbers past one step: not Intl's dated "evvelsi gün" / "öbür gün".
+    expect(formatRelative(twoDays, now)).toBe("2 gün önce");
+    expect(formatRelative(inTwoDays, now)).toBe("2 gün sonra");
     expect(formatRelative(earlier, now)).toBe("2 saat önce");
+    // Not Intl's "bu dakika".
+    expect(formatRelative(seconds, now)).toBe("az önce");
     expect(formatRelative(new Date(2026, 6, 3).toISOString(), now)).toBe("3 Temmuz");
     await inEnglish();
     expect(formatRelative(yesterday, now)).toBe("yesterday");
+    expect(formatRelative(twoDays, now)).toBe("2 days ago");
     expect(formatRelative(earlier, now)).toBe("2 hours ago");
+    expect(formatRelative(seconds, now)).toBe("just now");
     expect(formatRelative(new Date(2026, 6, 3).toISOString(), now)).toBe("3 July");
   });
 });

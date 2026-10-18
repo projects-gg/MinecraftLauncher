@@ -33,12 +33,21 @@ export function dateTimeFormat(options: Intl.DateTimeFormatOptions): Intl.DateTi
 }
 
 /** "dün", "2 saat önce" / "yesterday", "2 hours ago". */
-export function relativeTimeFormat(): Intl.RelativeTimeFormat {
+export function relativeTimeFormat(numeric: "auto" | "always" = "auto"): Intl.RelativeTimeFormat {
   return cached(
     "relative",
-    undefined,
-    (locale) => new Intl.RelativeTimeFormat(locale, { numeric: "auto" }),
+    { numeric },
+    (locale) => new Intl.RelativeTimeFormat(locale, { numeric }),
   );
+}
+
+/**
+ * A relative time with a word only where the word is plain: "dün", "yarın", "geçen ay", "bugün"
+ * / "yesterday", "last month". Beyond one step Intl's words read dated ("evvelsi gün", "öbür gün"),
+ * so those are numbers: "2 gün önce", "2 gün sonra".
+ */
+export function relativeWords(value: number, unit: Intl.RelativeTimeFormatUnit): string {
+  return relativeTimeFormat(Math.abs(value) <= 1 ? "auto" : "always").format(value, unit);
 }
 
 /** "A, B ve C" / "A, B and C". */
@@ -85,16 +94,21 @@ export function formatMemory(mb: number): string {
   return `${numberFormat({ maximumFractionDigits: 1 }).format(mb / 1024)} GB`;
 }
 
+/**
+ * "az önce", "5 dakika önce", "3 saat önce", "dün", "2 gün önce", then the date ("3 Temmuz").
+ * Under a minute it is "az önce" / "just now": Intl says "bu dakika" / "this minute", which read
+ * oddly in "Son oynama …" and "… başladı".
+ */
 export function formatRelative(iso: string, now = Date.now()): string {
   const diff = new Date(iso).getTime() - now;
   const abs = Math.abs(diff);
   const minute = 60_000;
   const hour = 60 * minute;
   const day = 24 * hour;
-  const relative = relativeTimeFormat();
-  if (abs < hour) return relative.format(Math.round(diff / minute), "minute");
-  if (abs < day) return relative.format(Math.round(diff / hour), "hour");
-  if (abs < 30 * day) return relative.format(Math.round(diff / day), "day");
+  if (abs < minute) return diff <= 0 ? i18n.t("units.justNow") : relativeWords(1, "minute");
+  if (abs < hour) return relativeWords(Math.round(diff / minute), "minute");
+  if (abs < day) return relativeWords(Math.round(diff / hour), "hour");
+  if (abs < 30 * day) return relativeWords(Math.round(diff / day), "day");
   return dateTimeFormat({ day: "numeric", month: "long" }).format(new Date(iso));
 }
 

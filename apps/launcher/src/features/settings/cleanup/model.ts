@@ -7,7 +7,7 @@ import type {
   SharedGroup,
   SharedItem,
 } from "@/lib/api";
-import { relativeTimeFormat } from "@/lib/format";
+import { relativeWords } from "@/lib/format";
 
 export type GroupId = "sets" | "shared" | "leftovers";
 
@@ -160,11 +160,10 @@ export function planOf(
  * önce", "geçen yıl" / "yesterday", "3 days ago", "last month".
  */
 export function ageLabel(iso: string, now = Date.now()): string {
-  const relative = relativeTimeFormat();
   const days = Math.max(0, Math.round((now - Date.parse(iso)) / DAY));
-  if (days < 30) return relative.format(-days, "day");
-  if (days < 365) return relative.format(-Math.round(days / 30), "month");
-  return relative.format(-Math.round(days / 365), "year");
+  if (days < 30) return relativeWords(-days, "day");
+  if (days < 365) return relativeWords(-Math.round(days / 30), "month");
+  return relativeWords(-Math.round(days / 365), "year");
 }
 
 // ---------------------------------------------------------------------------------------------

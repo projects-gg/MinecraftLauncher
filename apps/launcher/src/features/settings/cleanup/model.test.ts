@@ -104,6 +104,8 @@ describe("selection", () => {
 
   it("says how long ago in words", () => {
     expect(ageLabel(new Date(NOW - 1 * DAY).toISOString(), NOW)).toBe("dün");
+    // A number past yesterday, not Intl's dated "evvelsi gün".
+    expect(ageLabel(new Date(NOW - 2 * DAY).toISOString(), NOW)).toBe("2 gün önce");
     expect(ageLabel(new Date(NOW - 12 * DAY).toISOString(), NOW)).toBe("12 gün önce");
     expect(ageLabel(new Date(NOW - 38 * DAY).toISOString(), NOW)).toBe("geçen ay");
     expect(ageLabel(new Date(NOW - 143 * DAY).toISOString(), NOW)).toBe("5 ay önce");

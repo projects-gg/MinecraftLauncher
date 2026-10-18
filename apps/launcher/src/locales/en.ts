@@ -306,6 +306,7 @@ export const en: DeepPartial<Strings> = {
     minutes: "{{minutes}} min",
     seconds: "{{seconds}} s",
     perSecond: "{{size}}/s",
+    justNow: "just now",
   },
   play: {
     play: "Play",

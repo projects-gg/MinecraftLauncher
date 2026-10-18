@@ -95,6 +95,8 @@ export const tr = {
     minutes: "{{minutes}} dk",
     seconds: "{{seconds}} sn",
     perSecond: "{{size}}/sn",
+    /** Under a minute ago (lib/format `formatRelative`): "Son oynama az önce". */
+    justNow: "az önce",
   },
   play: {
     play: "Oyna",
