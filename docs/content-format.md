@@ -609,6 +609,10 @@ The signature envelope and rules are those of `index.json.sig`: Ed25519 over the
   admin).
 - `status` (optional): a short-lived notice about an active problem on the server's status
   page ([Status notice](#status-notice)); missing while everything works.
+- `minecraft` (optional): Minecraft's own updates, summarized by the bot from Mojang's public
+  launcher content ([Minecraft news](#minecraft-news)). A separate array, so launchers that do not
+  know it never show these entries as Projects news; they only fill places Projects news leaves
+  empty. Missing when there are none.
 
 Client rules:
 
@@ -628,7 +632,8 @@ Client rules:
    `cta` without a label and exactly one target (a safe link or a news id), an event `url` that
    is not a safe link, a `source.url` that is not `https://`, a `newsId` naming no item of the
    feed. `status` has its own rules ([Status notice](#status-notice)); breaking them drops only
-   the notice.
+   the notice. `minecraft` has its own rules ([Minecraft news](#minecraft-news)); breaking them
+   drops only that entry (or, for the array itself, only the array).
 5. Safe links are `https://` URLs with a host and no credentials, and `projects://` deep links.
    Other links in `body` are shown as plain text; images in a feed `body` are not loaded.
 6. Covers are fetched only from the feed mirrors (the one that served the feed first), read up
@@ -654,6 +659,8 @@ Home screen (Studio always wins):
   is on the home screen.
 - Status notice: shown where the maintenance notice goes, only while no maintenance notice is
   active ([Status notice](#status-notice)).
+- Minecraft news: only in the places the news above leaves empty, never in the hero, the patch
+  notes box or the event card ([Minecraft news](#minecraft-news)).
 
 ### Event card
 
@@ -705,6 +712,118 @@ it only while there is such a problem (example in [News feed (Discord bot)](#new
   notice is not shown. The notice is informational and never blocks playing. Launchers show
   `title`, `message` and a link to `url`; `services` is for readers that list the services.
 
+### Minecraft news
+
+`minecraft` carries Minecraft's own updates so the home screen is not empty when the server has
+little news. The bot reads Mojang's public launcher content (Java Edition patch notes), writes a
+short summary in the players' language in its own words, and links the official article. The
+entries live in their own array: launchers that do not know it ignore it, so they never appear as
+Projects news, and launchers that know it only put them where Projects news leaves room.
+
+<!-- Not tagged as a BotFeed example yet: pl-content's round-trip test rejects fields BotFeed does
+not know. Tag it when BotFeed gets `minecraft` (MCN1-B). -->
+```json
+{
+  "schema": 1,
+  "sequence": 1792310400,
+  "generatedAt": "2026-10-18T10:00:00Z",
+  "items": [],
+  "events": [],
+  "minecraft": [
+    {
+      "id": "minecraft-26.3",
+      "version": "26.3",
+      "kind": "release",
+      "title": "Minecraft 26.3 çıktı: Wilderness Bound",
+      "summary": "Dappled Forest biyomu, kavak ağaçları ve terk edilmiş kamplar Java sürümüne geldi.",
+      "body": "Keşif temalı yeni oyun güncellemesi Java sürümünde.\n\n## Öne çıkanlar\n\n- **Dappled Forest** biyomu ve üç renk yapraklı **Poplar** ağaçları\n- **Abandoned Camp** yapıları ve yeni kâşif haritaları\n- Kamp için **Cushion** ve **Straw Bed**",
+      "cover": {
+        "path": "media/6d1c0f8b2a4e93c7d5b1f0a8e2c4d6b8f0a2c4e6d8b0f2a4c6e8d0b2f4a6c8e0.webp",
+        "sha256": "6d1c0f8b2a4e93c7d5b1f0a8e2c4d6b8f0a2c4e6d8b0f2a4c6e8d0b2f4a6c8e0",
+        "size": 84211,
+        "kind": "image",
+        "width": 1280,
+        "height": 720,
+        "blurhash": "LKO2?U%2Tw=w]~RBVZRi};RPxuwH"
+      },
+      "publishedAt": "2026-09-15T11:23:02Z",
+      "expiresAt": "2026-10-30T11:23:02Z",
+      "source": {
+        "kind": "minecraft",
+        "url": "https://www.minecraft.net/article/minecraft-java-edition-26-3"
+      },
+      "translations": {
+        "en": {
+          "title": "Minecraft 26.3 is out: Wilderness Bound",
+          "summary": "The Dappled Forest biome, Poplar trees and abandoned camps arrive in Java Edition.",
+          "body": "A new exploration game drop is out in Java Edition.\n\n## Highlights\n\n- The **Dappled Forest** biome with **Poplar** trees in three leaf colours\n- **Abandoned Camp** structures and new explorer maps\n- **Cushions** and **Straw Beds** for your camp"
+        }
+      }
+    }
+  ]
+}
+```
+
+| Field | Rule |
+| --- | --- |
+| `id` | Required: `minecraft-` followed by `version`; at most 64 characters from `[A-Za-z0-9._-]`; unique in the array. |
+| `version` | Required: Mojang's version id (`26.3`, `26.1.2`, `26.4-snapshot-4`), 1–40 characters from `[A-Za-z0-9._-]`. |
+| `kind` | `release`, or `snapshot` for snapshots, pre-releases and release candidates. Missing or unknown: `snapshot`. |
+| `title`, `summary`, `body` | As in `items[]`: title required, not blank, at most 120 characters; summary at most 300; body Markdown, at most 8 000. Written in the feed's language (Turkish). |
+| `cover` | Optional: a `MediaRef` relative to the feed mirror, with the rules of item covers. |
+| `publishedAt` | Required: when Mojang released the version. |
+| `expiresAt` | Required: after `publishedAt` and at most 90 days after it. |
+| `source` | Required: `{ "kind": "minecraft", "url" }`; `url` is the official article, an `https://` URL whose host is `minecraft.net` or `www.minecraft.net`. |
+| `translations` | Optional: texts in other languages by language code; today only `en`: `{ "title", "summary"?, "body"? }`, each with the limits of the field it replaces. |
+
+Rules (characters are Unicode scalar values; unknown fields are ignored as everywhere):
+
+1. The array: missing means none. Not an array, or more than 10 entries: ignored as a whole; the
+   rest of the feed is used. Entries do not count toward the 50 items.
+2. An entry is dropped when it does not parse, its `id` breaks the rule above or repeats one
+   before it, `version` is missing or invalid, the title breaks its rules, the summary or body is
+   too long, `publishedAt` or `expiresAt` is missing, `expiresAt` is not after `publishedAt` or
+   more than 90 days after it, or `source.url` is missing or not an `https://` URL on
+   `minecraft.net` (the attribution link is part of the entry). A cover that breaks the item
+   cover rules is removed. A translation that breaks its limits, or is not an object, is ignored
+   for its language only. `category`, `tags`, `author`, `cta`, `pinned` and `featured` are never
+   written by the bot; clients ignore them.
+3. Links in `body` follow the item rules (only `https://` and `projects://` are clickable); the
+   bot writes none: the article is linked through `source.url`.
+4. Visible while `publishedAt <= now < expiresAt` and `publishedAt` is at most `maxAgeDays` ago.
+   A Studio news item with the same id hides the entry, even while that item is not visible
+   itself (Studio wins, as for `items[]`; [Studio overrides](#studio-overrides)).
+5. Order among themselves: the newer `publishedAt` first, then the smaller id.
+6. Language: the base texts are Turkish. A launcher whose interface language is English shows
+   `translations.en` when it has one; a missing `summary` or `body` there falls back to the base
+   text.
+7. Covers of `minecraft[]` entries are feed covers: fetched from the feed mirrors, verified by size
+   and SHA-256 and cached like item covers. Without a cover the launcher shows its own art.
+
+Where launchers show them:
+
+- Never as the hero, in the patch notes box (they are not the server's patch notes), on the event
+  card, pinned or featured, and they never raise a notification, a reminder or an unread badge.
+  Their own row or card may show the "new" dot under the usual seen rules.
+- **Desktop home news column:** the rows Projects news fills come first (Studio's and the feed's
+  news minus the hero's article and the patch notes box's, at most 4 rows). Only rows left empty
+  get Minecraft entries, in their order. With no Projects news and no patch notes, Minecraft rows
+  take the place of the "no news" line.
+- **News page ("Tüm haberler"):** every Projects news item first (the large first card is always
+  Projects news while there is any), then the Minecraft entries under a "Minecraft" heading. A
+  "Minecraft" filter shows only them; the category filters never show them.
+- **Mobile Projects card:** the story is the latest Projects story; only when there is none, the
+  first Minecraft entry. The news list orders them as the desktop news page does.
+- Label: "Minecraft" in place of the category. The reader names the source ("minecraft.net") and
+  links `source.url` ("minecraft.net'te oku"), opened in the system browser (`https://` only),
+  never with "Discord'da aç".
+
+What the bot publishes (informative): Java Edition releases for 45 days after their release, at
+most 3 at a time; of several hotfixes of one game drop only the newest (26.1 and 26.1.2, not
+26.1.1); snapshots only when the owner turns them on. Admins hide an entry from Discord (the
+notice in the review channel, `/launcher kaldır`) or through the bot's API; a hidden entry is
+simply missing from the next feed. ProBot: `discord-bot/docs/launcher-feed.md` → "Minecraft news".
+
 ### Studio overrides
 
 Studio controls the bot's items and events without the bot's key, through its own signed
@@ -716,6 +835,8 @@ content and the "Studio wins" rule:
 - **Hide:** Studio publishes an entry with the feed entry's id and `hidden: true` (news items
   also get `expiresAt` = `publishedAt`, see [News](#news)). Hidden items carry no cover.
 - **Undo:** Studio stops publishing the entry; the feed entry shows again.
+- The same works for a `minecraft[]` entry by its id ([Minecraft news](#minecraft-news)). A Studio
+  copy of one is an ordinary Studio news item: it shows as Projects news, by the admin's choice.
 - `feedOverride: { fingerprint, sourceUrl? }` on the Studio entry records which feed entry it
   replaced or hid: `fingerprint` is Studio's digest of the feed entry's content when the admin
   took it over (an opaque string; Studio compares it with the current feed entry to report that
