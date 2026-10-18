@@ -149,7 +149,9 @@ fn ask_to_replace(
     socket: PathBuf,
     own_bundle: Option<PathBuf>,
 ) {
-    let texts = Texts::new(prefers_turkish(), target.version.as_deref());
+    // The automatic language (pl_lang): this copy's UI never ran, so no pick reached it.
+    let turkish = matches!(pl_lang::Lang::current(), pl_lang::Lang::Tr);
+    let texts = Texts::new(turkish, target.version.as_deref());
     app.dialog()
         .message(texts.message)
         .title(texts.title)
@@ -215,30 +217,6 @@ impl Texts {
             }
         }
     }
-}
-
-/// The launcher's language rule without a saved choice: Turkish in Turkey (the time zone) or
-/// with Turkish as the first system language, else English.
-fn prefers_turkish() -> bool {
-    let istanbul = std::fs::read_link("/etc/localtime").is_ok_and(|target| {
-        let target = target.to_string_lossy();
-        target.ends_with("/Europe/Istanbul") || target.ends_with("/Asia/Istanbul")
-    });
-    istanbul
-        || first_language().is_some_and(|language| language.to_ascii_lowercase().starts_with("tr"))
-}
-
-fn first_language() -> Option<String> {
-    let output = std::process::Command::new("/usr/bin/defaults")
-        .args(["read", "-g", "AppleLanguages"])
-        .output()
-        .ok()?;
-    // "(\n    \"tr-TR\",\n    en\n)": the first item, quoted or not.
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(|line| line.trim().trim_end_matches(',').trim_matches('"'))
-        .find(|item| !item.is_empty() && *item != "(" && *item != ")")
-        .map(str::to_owned)
 }
 
 /// The plugin's socket, so copies of either kind find each other.
