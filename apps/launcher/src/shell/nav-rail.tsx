@@ -139,7 +139,7 @@ export function NavRail() {
         <img
           src={logo}
           alt=""
-          className="size-[34px] drop-shadow-[0_0_10px_rgb(232_154_44/0.35)] transition-[filter,transform] duration-300 group-hover:scale-105 group-hover:drop-shadow-[0_0_16px_rgb(240_184_73/0.7)]"
+          className="size-[34px] drop-shadow-[0_0_10px_rgb(232_154_44/0.35)] transition-[filter,transform,scale] duration-300 group-hover:scale-105 group-hover:drop-shadow-[0_0_16px_rgb(240_184_73/0.7)]"
           draggable={false}
         />
       </Link>
@@ -160,7 +160,7 @@ export function NavRail() {
               type="button"
               aria-label={t("accounts.center.open")}
               onClick={(event) => openCenter({ from: event.currentTarget })}
-              className="mt-1 cursor-pointer rounded-[6px] p-[3px] ring-1 ring-white/10 transition-[box-shadow,transform] duration-150 ease-out hover:ring-gold-400/60 active:scale-[0.94]"
+              className="mt-1 cursor-pointer rounded-[6px] p-[3px] ring-1 ring-white/10 transition-[box-shadow,transform,scale] duration-150 ease-out hover:ring-gold-400/60 active:scale-[0.94]"
             >
               {/* 32 px: head pixels stay whole at 100, 125, 150 and 200% scaling. */}
               <AccountFace account={active} size={32} />

@@ -580,7 +580,7 @@ export function SettingsPage() {
                     void navigate({ to: "/settings", search: { section: s.id }, replace: true })
                   }
                   className={cn(
-                    "relative isolate flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left text-[13px] font-medium transition-[color,background-color,transform] duration-150 ease-out active:scale-[0.98]",
+                    "relative isolate flex w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-[7px] text-left text-[13px] font-medium transition-[color,background-color,transform,scale] duration-150 ease-out active:scale-[0.98]",
                     on ? "text-bone-50" : "text-ash-300 hover:bg-white/5 hover:text-bone-50",
                   )}
                 >

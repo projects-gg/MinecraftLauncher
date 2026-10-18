@@ -619,7 +619,7 @@ export function Slider({
         <RadixSlider.Thumb
           aria-labelledby={id}
           aria-valuetext={format ? format(value) : undefined}
-          className="block size-[18px] rounded-full border-2 border-gold-300 bg-obsidian-900 shadow-[0_2px_8px_rgb(34_6_6/0.6)] transition-[transform,border-color] duration-200 hover:scale-110 focus-visible:ring-4 focus-visible:ring-gold-400/30 focus-visible:outline-none data-[disabled]:scale-75 data-[disabled]:border-ash-400 data-[disabled]:hover:scale-75"
+          className="block size-[18px] rounded-full border-2 border-gold-300 bg-obsidian-900 shadow-[0_2px_8px_rgb(34_6_6/0.6)] transition-[transform,scale,border-color] duration-200 hover:scale-110 focus-visible:ring-4 focus-visible:ring-gold-400/30 focus-visible:outline-none data-[disabled]:scale-75 data-[disabled]:border-ash-400 data-[disabled]:hover:scale-75"
         />
       </RadixSlider.Root>
       {marks ? (

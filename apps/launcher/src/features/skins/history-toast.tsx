@@ -68,7 +68,7 @@ function RemovedToast({ thumbUrl, onUndo }: { thumbUrl: string | null; onUndo: (
       <button
         type="button"
         onClick={onUndo}
-        className="pointer-events-auto -my-1 flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-3 text-[13px] font-semibold text-gold-300 transition-[background-color,transform] duration-150 hover:bg-gold-500/12 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.97]"
+        className="pointer-events-auto -my-1 flex h-11 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-3 text-[13px] font-semibold text-gold-300 transition-[background-color,transform,scale] duration-150 hover:bg-gold-500/12 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.97]"
       >
         <ArrowCounterClockwise size={16} weight="bold" aria-hidden />
         {i18n.t("skins.history.undo")}

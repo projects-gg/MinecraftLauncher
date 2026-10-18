@@ -73,7 +73,7 @@ function ServerPill() {
         type="button"
         onClick={() => void copy()}
         aria-label={t("server.copy", { address })}
-        className="relative flex h-8 cursor-pointer items-center rounded-full bg-obsidian-950/45 px-3 text-[12.5px] ring-1 ring-white/8 backdrop-blur-md transition-[background-color,box-shadow,transform] duration-150 ease-out hover:bg-obsidian-950/65 hover:ring-white/14 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.97]"
+        className="relative flex h-8 cursor-pointer items-center rounded-full bg-obsidian-950/45 px-3 text-[12.5px] ring-1 ring-white/8 backdrop-blur-md transition-[background-color,box-shadow,transform,scale] duration-150 ease-out hover:bg-obsidian-950/65 hover:ring-white/14 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.97]"
       >
         <motion.span
           className="flex items-center gap-2"
@@ -185,7 +185,7 @@ function PaletteButton() {
       type="button"
       onClick={() => setOpen(true)}
       aria-keyshortcuts={ariaKeyShortcuts("palette", detectOs())}
-      className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[12.5px] text-ash-300 transition-[background-color,color,transform] duration-150 ease-out hover:bg-white/8 hover:text-bone-50 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.97]"
+      className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-2.5 text-[12.5px] text-ash-300 transition-[background-color,color,transform,scale] duration-150 ease-out hover:bg-white/8 hover:text-bone-50 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.97]"
     >
       <MagnifyingGlass size={14} aria-hidden />
       {t("palette.open")}

@@ -127,7 +127,7 @@ function Pill({ view }: { view: ShownView }) {
           view.kind === "downloading" && "min-w-[148px]",
           passive
             ? "cursor-default"
-            : "cursor-pointer transition-[filter,transform] duration-150 ease-out hover:brightness-110 active:scale-[0.97]",
+            : "cursor-pointer transition-[filter,transform,scale] duration-150 ease-out hover:brightness-110 active:scale-[0.97]",
         )}
       >
         {/* The focus ring is a larger chamfer (an outline would be cut off by the shape). */}

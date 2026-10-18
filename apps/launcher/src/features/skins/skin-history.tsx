@@ -111,7 +111,7 @@ function Figure({ thumbUrl }: { thumbUrl: string | null }) {
           }}
           onLoad={() => setLoaded(true)}
           className={cn(
-            "relative transition-[opacity,transform] duration-200 ease-out [image-rendering:pixelated]",
+            "relative transition-[opacity,transform,translate] duration-200 ease-out [image-rendering:pixelated]",
             "group-hover/tile:-translate-y-0.5 motion-reduce:group-hover/tile:translate-y-0",
             loaded ? "opacity-100" : "opacity-0",
           )}
@@ -183,7 +183,7 @@ function HistoryTile({
         onFocus={() => onFocus(index)}
         className={cn(
           "group/tile relative flex w-full flex-col items-center rounded-[var(--radius-panel)] pt-3 select-none",
-          "transition-[background-color,box-shadow,transform] duration-150 ease-out",
+          "transition-[background-color,box-shadow,transform,scale] duration-150 ease-out",
           "focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none",
           worn
             ? "bg-gold-500/12 ring-1 ring-gold-400/50"
@@ -217,7 +217,7 @@ function HistoryTile({
                   aria-hidden
                   className={cn(
                     "chamfer absolute inset-x-2 inset-y-0 flex items-center justify-center bg-[linear-gradient(180deg,var(--color-gold-300),var(--color-gold-500)_55%,var(--color-gold-600))] text-[12.5px] font-semibold text-gold-ink [--cut:6px]",
-                    "translate-y-0.5 opacity-0 transition-[opacity,transform] duration-150 ease-out motion-reduce:translate-y-0",
+                    "translate-y-0.5 opacity-0 transition-[opacity,transform,translate] duration-150 ease-out motion-reduce:translate-y-0",
                     "group-hover/tile:translate-y-0 group-hover/tile:opacity-100 group-focus-visible/tile:translate-y-0 group-focus-visible/tile:opacity-100",
                   )}
                 >

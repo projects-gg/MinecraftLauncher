@@ -151,7 +151,7 @@ export function InstanceCard({
               <button
                 type="button"
                 onClick={() => actions.play(instance)}
-                className="chamfer flex h-8 flex-1 cursor-pointer items-center justify-center gap-1.5 bg-gold-500 text-[13px] font-semibold text-gold-ink transition-[filter,transform] duration-150 ease-out [--cut:6px] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-200 active:scale-[0.97]"
+                className="chamfer flex h-8 flex-1 cursor-pointer items-center justify-center gap-1.5 bg-gold-500 text-[13px] font-semibold text-gold-ink transition-[filter,transform,scale] duration-150 ease-out [--cut:6px] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-200 active:scale-[0.97]"
               >
                 <Play size={14} weight="fill" /> {t("instance.play")}
               </button>

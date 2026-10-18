@@ -74,7 +74,7 @@ function NewsRow({
               </span>
             </span>
           </span>
-          <span className="mt-1 line-clamp-2 text-[13px] leading-snug font-semibold text-bone-100 group-hover:text-bone-50">
+          <span className="mt-1 line-clamp-2 text-[13px] leading-snug font-semibold text-bone-100 transition-colors duration-150 group-hover:text-bone-50">
             {item.title}
           </span>
           <NewLabel on={isNew} />
@@ -462,7 +462,7 @@ function EventBlock({
                       size={13}
                       weight="bold"
                       aria-hidden
-                      className="text-ash-400 transition-[color,transform] duration-200 ease-out group-hover:translate-x-0.5 group-hover:text-gold-300"
+                      className="text-ash-400 transition-[color,transform,translate] duration-200 ease-out group-hover:translate-x-0.5 group-hover:text-gold-300"
                     />
                   ) : event.url ? (
                     <ArrowSquareOut
@@ -515,7 +515,7 @@ function EventBlock({
               <button
                 type="button"
                 className={cn(
-                  "hit-area absolute top-[11px] cursor-pointer rounded-full bg-white/8 px-2 py-0.5 text-[11px] font-medium text-ash-300 tabular-nums transition-[color,background-color,transform] duration-150 [--hit:6px] hover:bg-white/12 hover:text-bone-50 focus-visible:outline-2 active:scale-[0.96] data-[state=open]:bg-white/12 data-[state=open]:text-bone-50",
+                  "hit-area absolute top-[11px] cursor-pointer rounded-full bg-white/8 px-2 py-0.5 text-[11px] font-medium text-ash-300 tabular-nums transition-[color,background-color,transform,scale] duration-150 [--hit:6px] hover:bg-white/12 hover:text-bone-50 focus-visible:outline-2 active:scale-[0.96] data-[state=open]:bg-white/12 data-[state=open]:text-bone-50",
                   hasTarget ? "right-[38px]" : "right-3.5",
                 )}
               >

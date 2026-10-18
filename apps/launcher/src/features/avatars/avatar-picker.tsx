@@ -120,7 +120,7 @@ export function AvatarPicker({
               onClick={() => onSelect(choice.id)}
               className={cn(
                 "group/tile relative flex cursor-pointer rounded-[var(--radius-head)] outline-none",
-                "transition-[transform,filter] duration-150 ease-out hover:brightness-110 active:scale-[0.95]",
+                "transition-[transform,scale,filter] duration-150 ease-out hover:brightness-110 active:scale-[0.95]",
                 "focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:ring-offset-2 focus-visible:ring-offset-obsidian-900",
               )}
               style={{ width: size, height: size }}

@@ -59,7 +59,7 @@ export function ResumeButton({
       type="button"
       onClick={() => void play(instance.id, { quickPlay: target.quickPlay })}
       aria-label={t("resume.aria", { name: target.name })}
-      className="group -my-1 -ml-2 flex w-fit max-w-full min-w-0 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-1 pr-3 pl-2 text-left transition-[background-color,transform] duration-150 ease-out hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.98]"
+      className="group -my-1 -ml-2 flex w-fit max-w-full min-w-0 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-1 pr-3 pl-2 text-left transition-[background-color,transform,scale] duration-150 ease-out hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.98]"
     >
       <span className="relative flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-[var(--radius-head)] bg-obsidian-800 ring-1 ring-white/10">
         {target.iconUrl && !broken ? (

@@ -43,6 +43,7 @@ function Featured({ face }: { face: CardFace }) {
         blurhash={face.coverBlurhash}
         className="h-[clamp(200px,38vh,320px)] w-full overflow-hidden bg-obsidian-800"
         imgClassName="group-hover:scale-[1.03]"
+        zoomMs={700}
       />
       <div className="absolute inset-0 bg-[linear-gradient(to_top,rgb(10_9_12/0.92),rgb(10_9_12/0.25)_55%,transparent)]" />
       <div className="absolute inset-x-0 bottom-0 p-5">

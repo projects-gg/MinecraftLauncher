@@ -114,7 +114,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
         className={cn(
           // Drawn at 28 / 32 px; the hit area reaches 4 px further on every side.
           "hit-area relative inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md text-ash-300",
-          "transition-[background-color,color,transform] duration-150 ease-out",
+          "transition-[background-color,color,transform,scale] duration-150 ease-out",
           "hover:bg-white/7 hover:text-bone-100 active:scale-[0.94] disabled:pointer-events-none disabled:opacity-45",
           size === "sm" ? "size-8" : "size-[32px]",
           active && "bg-white/8 text-gold-300",

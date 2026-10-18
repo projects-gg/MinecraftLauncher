@@ -4,7 +4,7 @@ import { Checkbox } from "radix-ui";
 
 /** Shape of each mark: grows in from 60% (never from nothing) and fades with its state. */
 const mark =
-  "absolute inset-0 m-auto transition-[transform,opacity] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] scale-[0.6] opacity-0";
+  "absolute inset-0 m-auto transition-[transform,scale,opacity] duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] scale-[0.6] opacity-0";
 
 /**
  * Small chamfered checkbox (the hextech cut of actions, docs/design.md §1) with a third

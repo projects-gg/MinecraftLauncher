@@ -18,9 +18,9 @@ export function Toaster() {
           // `pointer-events-auto`: a modal sheet turns pointer events off outside itself, the
           // toasts included; their buttons must still work (the sheet ignores those clicks).
           actionButton:
-            "pointer-events-auto ml-auto shrink-0 cursor-pointer rounded-md bg-gold-500 px-2.5 py-1 text-[12px] font-semibold text-gold-ink transition-[filter,transform] duration-150 ease-out hover:brightness-110 active:scale-[0.97]",
+            "pointer-events-auto ml-auto shrink-0 cursor-pointer rounded-md bg-gold-500 px-2.5 py-1 text-[12px] font-semibold text-gold-ink transition-[filter,transform,scale] duration-150 ease-out hover:brightness-110 active:scale-[0.97]",
           cancelButton:
-            "pointer-events-auto ml-auto shrink-0 cursor-pointer rounded-md bg-white/8 px-2.5 py-1 text-[12px] text-bone-100 transition-[background-color,transform] duration-150 ease-out hover:bg-white/12 active:scale-[0.97]",
+            "pointer-events-auto ml-auto shrink-0 cursor-pointer rounded-md bg-white/8 px-2.5 py-1 text-[12px] text-bone-100 transition-[background-color,transform,scale] duration-150 ease-out hover:bg-white/12 active:scale-[0.97]",
           // The state is the icon's colour; the sentence stays legible bone (a whole line of green
           // or red text shouts).
           error: "[&_[data-icon]]:text-flare-400",

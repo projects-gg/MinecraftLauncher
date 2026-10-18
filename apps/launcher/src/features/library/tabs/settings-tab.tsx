@@ -444,7 +444,7 @@ export function SettingsTab({ instance }: { instance: InstanceDetail }) {
             aria-expanded={advancedOpen}
             aria-controls={advancedOpen ? advancedId : undefined}
             onClick={toggleAdvanced}
-            className="-ml-1 flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 font-display text-[15px] font-semibold text-ash-300 transition-[color,transform] duration-150 ease-out hover:text-bone-50 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.97] aria-expanded:text-bone-50"
+            className="-ml-1 flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 font-display text-[15px] font-semibold text-ash-300 transition-[color,transform,scale] duration-150 ease-out hover:text-bone-50 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none active:scale-[0.97] aria-expanded:text-bone-50"
           >
             <CaretDown
               size={14}

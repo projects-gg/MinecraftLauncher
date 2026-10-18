@@ -289,7 +289,7 @@ function CodeChip({ code }: { code: string }) {
           window.setTimeout(() => setCopied(false), 1600);
         })
       }
-      className="group mt-4 inline-flex cursor-pointer items-center gap-2.5 rounded-md bg-obsidian-950/50 py-2 pr-2.5 pl-3 ring-1 ring-white/8 outline-none transition-[box-shadow,transform] duration-150 hover:ring-white/16 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.98]"
+      className="group mt-4 inline-flex cursor-pointer items-center gap-2.5 rounded-md bg-obsidian-950/50 py-2 pr-2.5 pl-3 ring-1 ring-white/8 outline-none transition-[box-shadow,transform,scale] duration-150 hover:ring-white/16 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.98]"
     >
       <span className="text-[12px] text-ash-400">{t("social.list.yourCode")}</span>
       <span

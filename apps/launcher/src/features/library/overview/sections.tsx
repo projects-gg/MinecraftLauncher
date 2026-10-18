@@ -241,7 +241,7 @@ function ShotThumb({
             if (src !== shot.url) setBroken(true);
           }}
           className={cn(
-            "relative block aspect-video w-full object-cover transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
+            "relative block aspect-video w-full object-cover transition-[opacity,transform,scale] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]",
             zoom && "group-hover:scale-[1.03]",
             loaded ? "opacity-100" : "opacity-0",
           )}

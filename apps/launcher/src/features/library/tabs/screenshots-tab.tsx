@@ -76,7 +76,7 @@ function ShotImage({ instanceId, shot }: { instanceId: string; shot: Screenshot 
             if (src !== shot.url) setBroken(true);
           }}
           className={cn(
-            "relative aspect-video w-full object-cover transition-[opacity,transform] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.03] motion-reduce:group-hover:scale-100",
+            "relative aspect-video w-full object-cover transition-[opacity,transform,scale] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:scale-[1.03] motion-reduce:group-hover:scale-100",
             loaded ? "opacity-100" : "opacity-0",
           )}
         />

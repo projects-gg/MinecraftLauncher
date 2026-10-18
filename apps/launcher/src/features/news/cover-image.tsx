@@ -14,6 +14,7 @@ export function CoverImage({
   className,
   imgClassName,
   lazy,
+  zoomMs = 500,
 }: {
   src: string | undefined;
   blurhash?: string;
@@ -22,6 +23,8 @@ export function CoverImage({
   /** The picture: hover transforms. */
   imgClassName?: string;
   lazy?: boolean;
+  /** How long the hover zoom eases (the big featured card takes its time). */
+  zoomMs?: number;
 }) {
   const placeholder = blurhashUrl(blurhash);
   const [loaded, setLoaded] = useState<string | undefined>(undefined);
@@ -49,8 +52,9 @@ export function CoverImage({
           onLoad={() => setLoaded(src)}
           onError={() => setFailed(src)}
           className={cn("size-full object-cover", hidden && "opacity-0", imgClassName)}
+          // The hover zoom (`group-hover:scale-*`) is Tailwind 4's `scale` property, not `transform`.
           style={{
-            transition: "opacity 260ms cubic-bezier(0.16, 1, 0.3, 1), transform 500ms ease-out",
+            transition: `opacity 260ms cubic-bezier(0.16, 1, 0.3, 1), scale ${zoomMs}ms ease-out`,
           }}
         />
       ) : null}

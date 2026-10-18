@@ -49,7 +49,7 @@ export function AccountSwitcher() {
         className={triggerClass}
         onClick={() => openCenter({ focus: "add", from: trigger.current })}
       >
-        <span className="flex h-8 items-center gap-2 rounded-full bg-gold-500/15 px-3 ring-1 ring-gold-400/40 transition-[background-color,transform] duration-150 group-hover:bg-gold-500/22 group-focus-visible:ring-2 group-focus-visible:ring-gold-300 group-active:scale-[0.97]">
+        <span className="flex h-8 items-center gap-2 rounded-full bg-gold-500/15 px-3 ring-1 ring-gold-400/40 transition-[background-color,transform,scale] duration-150 group-hover:bg-gold-500/22 group-focus-visible:ring-2 group-focus-visible:ring-gold-300 group-active:scale-[0.97]">
           <UserPlus size={16} className="text-gold-300" aria-hidden />
           <span className="text-[13px] font-semibold text-gold-200">
             {t("accounts.switcher.empty")}
@@ -73,7 +73,7 @@ export function AccountSwitcher() {
           >
             <span
               className={cn(
-                "flex h-8 items-center gap-2 rounded-full bg-obsidian-950/45 pr-3 pl-1 ring-1 ring-white/8 backdrop-blur-md transition-[background-color,box-shadow,transform] duration-150",
+                "flex h-8 items-center gap-2 rounded-full bg-obsidian-950/45 pr-3 pl-1 ring-1 ring-white/8 backdrop-blur-md transition-[background-color,box-shadow,transform,scale] duration-150",
                 "group-hover:bg-obsidian-950/60 group-hover:ring-white/16 group-active:scale-[0.97]",
                 "group-data-[state=open]:ring-gold-400/45 group-focus-visible:ring-2 group-focus-visible:ring-gold-300",
                 !active && "pl-2.5",

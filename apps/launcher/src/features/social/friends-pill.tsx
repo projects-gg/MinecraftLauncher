@@ -43,7 +43,7 @@ export function FriendsPill() {
       >
         <span
           className={cn(
-            "relative flex h-8 items-center gap-2 rounded-full bg-obsidian-950/45 ring-1 ring-white/8 backdrop-blur-md transition-[background-color,box-shadow,transform] duration-150",
+            "relative flex h-8 items-center gap-2 rounded-full bg-obsidian-950/45 ring-1 ring-white/8 backdrop-blur-md transition-[background-color,box-shadow,transform,scale] duration-150",
             "group-hover:bg-obsidian-950/60 group-hover:ring-white/16 group-active:scale-[0.97] group-focus-visible:ring-2 group-focus-visible:ring-gold-300",
             faces.length ? "pr-3 pl-1" : "px-2.5",
           )}

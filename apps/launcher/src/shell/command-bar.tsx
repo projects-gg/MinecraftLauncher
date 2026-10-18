@@ -108,7 +108,7 @@ function InstancePicker({
         <button
           type="button"
           aria-label={t("instances.pickerLabel")}
-          className="group flex h-[52px] w-[clamp(200px,20vw,264px)] shrink-0 cursor-pointer items-center gap-2.5 rounded-[var(--radius-panel)] px-2 text-left transition-[background-color,transform] duration-150 ease-out hover:bg-white/6 active:scale-[0.985] data-[state=open]:bg-white/8"
+          className="group flex h-[52px] w-[clamp(200px,20vw,264px)] shrink-0 cursor-pointer items-center gap-2.5 rounded-[var(--radius-panel)] px-2 text-left transition-[background-color,transform,scale] duration-150 ease-out hover:bg-white/6 active:scale-[0.985] data-[state=open]:bg-white/8"
         >
           {selected ? <InstanceIcon icon={selected.icon} size={36} /> : <span className="size-9" />}
           <span className="min-w-0 flex-1">
