@@ -239,14 +239,23 @@ export function NewsPage() {
           </>
         ) : featured || leadMinecraft ? (
           <>
-            {featured ? (
-              <Featured
-                key={featured.id}
-                face={featuredFace(featured, isNewsNew(featured, seen, now))}
-              />
-            ) : leadMinecraft ? (
-              <MinecraftFeatured key={leadMinecraft.id} item={leadMinecraft} />
-            ) : null}
+            {/* A filter change cross-fades the big card in place, like the cards below it. */}
+            <div className="relative">
+              <AnimatePresence initial={false} mode="popLayout">
+                <motion.div
+                  key={featured?.id ?? leadMinecraft?.id}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1, transition: { duration: 0.2 } }}
+                  exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                >
+                  {featured ? (
+                    <Featured face={featuredFace(featured, isNewsNew(featured, seen, now))} />
+                  ) : leadMinecraft ? (
+                    <MinecraftFeatured item={leadMinecraft} />
+                  ) : null}
+                </motion.div>
+              </AnimatePresence>
+            </div>
             <ul className="relative mt-4 grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3">
               <AnimatePresence initial={false} mode="popLayout">
                 {rest.map((item) => (
