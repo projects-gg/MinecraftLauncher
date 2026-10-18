@@ -164,6 +164,8 @@ pub struct HomeEvent {
     pub image: Option<MediaRef>,
     /// Higher leads among live events (default 0).
     pub priority: i32,
+    /// On the server: the card offers "Katıl" while the event is live.
+    pub join: bool,
     pub origin: NewsOrigin,
 }
 
@@ -208,6 +210,7 @@ pub fn merge_events(
                 .filter(|id| news_ids.contains(id.as_str())),
             image: event.image.clone(),
             priority: event.priority,
+            join: event.join,
             origin: NewsOrigin::Studio,
         })
         .collect();
@@ -230,6 +233,7 @@ pub fn merge_events(
                         .filter(|id| news_ids.contains(id.as_str())),
                     image: None,
                     priority: event.priority,
+                    join: event.join,
                     origin: NewsOrigin::Feed,
                 }),
         );
@@ -590,9 +594,38 @@ mod tests {
             url: None,
             news_id: None,
             priority: 0,
+            join: false,
             hidden: false,
             feed_override: None,
         }
+    }
+
+    #[test]
+    fn join_follows_each_source_and_studio_wins() {
+        let feed = bot_feed(
+            Vec::new(),
+            vec![
+                json!({ "id": "cup", "title": "Kupa", "startsAt": "2026-10-16T11:00:00Z", "join": true }),
+                json!({ "id": "talk", "title": "Soru-cevap", "startsAt": "2026-10-16T11:30:00Z" }),
+                json!({ "id": "raid", "title": "Baskın", "startsAt": "2026-10-16T11:45:00Z", "join": true }),
+            ],
+        );
+        // Studio marks the feed's "talk" as on the server and takes "raid" over without it.
+        let mut talk = config_event("talk", "2026-10-16T11:30:00Z", "2026-10-16T14:00:00Z");
+        talk.join = true;
+        let raid = config_event("raid", "2026-10-16T11:45:00Z", "2026-10-16T14:00:00Z");
+        let season = config_event("season", "2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z");
+        let events = merge_events(&[talk, raid, season], Some(&feed), &[], ts(NOW));
+        let joins: Vec<(&str, bool)> = events.iter().map(|e| (e.id.as_str(), e.join)).collect();
+        assert_eq!(
+            joins,
+            [
+                ("raid", false),
+                ("talk", true),
+                ("cup", true),
+                ("season", false)
+            ]
+        );
     }
 
     fn event_ids(events: &[HomeEvent]) -> Vec<&str> {

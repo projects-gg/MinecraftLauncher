@@ -280,6 +280,11 @@ pub struct EventCountdown {
     /// one that started last). Default 0.
     #[serde(default, skip_serializing_if = "super::is_default")]
     pub priority: i32,
+    /// The event takes place on the server: while it is live, the event card offers "Katıl",
+    /// which starts the official Projects instance straight into the server. Default `false`,
+    /// left out while `false` (launchers that do not know it ignore it).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub join: bool,
     /// Never shown. Studio publishes a hidden event to take the feed event with its id off the
     /// event card (Studio wins on a shared id).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -512,6 +517,7 @@ mod tests {
             url: None,
             news_id: None,
             priority: 0,
+            join: false,
             hidden: false,
             feed_override: None,
         }
@@ -525,15 +531,41 @@ mod tests {
         .unwrap();
         assert!(!plain.hidden && plain.news_id.is_none() && plain.feed_override.is_none());
         assert_eq!(plain.priority, 0);
+        assert!(!plain.join);
         let written = serde_json::to_value(&plain).unwrap();
-        for key in ["hidden", "newsId", "feedOverride", "priority"] {
+        for key in ["hidden", "newsId", "feedOverride", "priority", "join"] {
             assert!(written.get(key).is_none(), "{key} is left out when unused");
         }
         let raised = EventCountdown {
             priority: -2,
-            ..plain
+            ..plain.clone()
         };
         assert_eq!(serde_json::to_value(&raised).unwrap()["priority"], -2);
+        let on_server = EventCountdown {
+            join: true,
+            ..plain
+        };
+        assert_eq!(serde_json::to_value(&on_server).unwrap()["join"], true);
+    }
+
+    #[test]
+    fn join_is_read_and_older_readers_skip_it() {
+        let text = r#"{"id":"cup","title":"Kupa","startsAt":"2026-10-20T18:00:00Z","endsAt":"2026-10-20T21:00:00Z","join":true}"#;
+        let event: EventCountdown = serde_json::from_str(text).unwrap();
+        assert!(event.join);
+        // A launcher from before the field reads the same event (unknown fields are skipped).
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Before {
+            id: String,
+            starts_at: Timestamp,
+        }
+        let before: Before = serde_json::from_str(text).unwrap();
+        assert_eq!(before.id, "cup");
+        assert_eq!(before.starts_at, event.starts_at);
+        let config: LauncherConfig =
+            serde_json::from_str(&format!(r#"{{"events":[{text}]}}"#)).unwrap();
+        assert!(config.events[0].join);
     }
 
     #[test]

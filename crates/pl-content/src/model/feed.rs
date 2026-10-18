@@ -439,6 +439,10 @@ pub struct FeedEvent {
     /// Like `LauncherConfig.events[].priority`: among live events the highest leads. Default 0.
     #[serde(default, skip_serializing_if = "super::is_default")]
     pub priority: i32,
+    /// Like `LauncherConfig.events[].join`: the event takes place on the server ("Katıl" on the
+    /// card while it is live). Default `false`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub join: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source: Option<FeedSource>,
 }
@@ -461,7 +465,8 @@ impl FeedEvent {
     }
 
     /// Like [`FeedItem::fingerprint`]: the SHA-256 (lowercase hex) of the event's title, times,
-    /// link, news item and priority.
+    /// link, news item, priority and `join`. `join` is left out while `false`, so the events
+    /// Studio took over before it existed keep their fingerprints.
     pub fn fingerprint(&self) -> String {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
@@ -472,6 +477,8 @@ impl FeedEvent {
             url: Option<&'a str>,
             news_id: Option<&'a str>,
             priority: i32,
+            #[serde(skip_serializing_if = "std::ops::Not::not")]
+            join: bool,
         }
         fingerprint_of(&Print {
             title: &self.title,
@@ -480,6 +487,7 @@ impl FeedEvent {
             url: self.url.as_deref(),
             news_id: self.news_id.as_deref(),
             priority: self.priority,
+            join: self.join,
         })
     }
 }
@@ -1841,6 +1849,7 @@ mod tests {
             url: None,
             news_id: None,
             priority: 0,
+            join: false,
             source: None,
         };
         assert_eq!(
@@ -1910,6 +1919,34 @@ mod tests {
         let mut raised = event.clone();
         raised.priority = 1;
         assert_ne!(raised.fingerprint(), event.fingerprint());
+        // "Katıl" changes what players see; an event without it keeps its old fingerprint.
+        let mut on_server = event.clone();
+        on_server.join = true;
+        assert_eq!(
+            on_server.fingerprint(),
+            sha256_hex(
+                br#"{"title":"E","startsAt":"2026-10-18T17:00:00Z","endsAt":null,"url":null,"newsId":null,"priority":0,"join":true}"#
+            )
+        );
+    }
+
+    #[test]
+    fn event_join_is_read_and_checked() {
+        let (feed, problems) = parse(
+            Vec::new(),
+            vec![
+                json!({ "id": "cup", "title": "Kupa", "startsAt": "2026-10-18T17:00:00Z", "join": true }),
+                json!({ "id": "talk", "title": "Soru-cevap", "startsAt": "2026-10-18T17:00:00Z" }),
+                json!({ "id": "odd", "title": "Bozuk", "startsAt": "2026-10-18T17:00:00Z", "join": "evet" }),
+            ],
+        );
+        assert_eq!(feed.events.len(), 2);
+        assert!(feed.events[0].join);
+        assert!(!feed.events[1].join);
+        assert_eq!(issues(&problems), [("odd", FeedIssue::Unreadable)]);
+        // Written back only when set, like `priority`.
+        let written = serde_json::to_value(&feed.events[1]).unwrap();
+        assert!(written.get("join").is_none());
     }
 
     #[test]

@@ -26,6 +26,9 @@
 //! its community item, a hidden copy of its first event, two banners, a hero button with a link,
 //! and two Studio events that overlap now (a week-long one with priority -1 and an hour-long one),
 //! so the event card shows the short one with "+N etkinlik".
+//!
+//! `--join-event` adds a Studio event on the server (`join`) that runs now, so the event card offers
+//! "Katıl".
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -375,7 +378,7 @@ async fn main() {
     let Some(out) = args.next().map(PathBuf::from) else {
         eprintln!(
             "usage: e2e_fixture <out-dir> [1|2] [--feed-key <public key> [--feed-mirror <url>]] \
-             [--overrides <feed.json>] [--files-url <url>]"
+             [--overrides <feed.json>] [--files-url <url>] [--join-event]"
         );
         std::process::exit(2);
     };
@@ -385,11 +388,14 @@ async fn main() {
     let mut feed_key = None;
     let mut feed_mirror = "https://projects.gg/launcher-feed/v1/".to_owned();
     let mut overrides: Option<PathBuf> = None;
+    // A Studio event on the server that runs now (`join`): the event card offers "Katıl".
+    let mut join_event = false;
     while let Some(flag) = args.next() {
         match flag.as_str() {
             "--feed-key" => feed_key = args.next(),
             "--feed-mirror" => feed_mirror = args.next().expect("--feed-mirror <url>"),
             "--overrides" => overrides = args.next().map(PathBuf::from),
+            "--join-event" => join_event = true,
             "--files-url" => {
                 let url = args.next().expect("--files-url <url>");
                 FILES_URL
@@ -486,6 +492,24 @@ async fn main() {
         }]
     }))
     .expect("launcher config");
+    if join_event {
+        let at = |minutes: i64| {
+            (jiff::Timestamp::now() + jiff::SignedDuration::from_mins(minutes))
+                .round(jiff::Unit::Second)
+                .expect("round")
+                .to_string()
+        };
+        config.events.push(
+            serde_json::from_value(json!({
+                "id": "e2e-sunucu",
+                "title": "Sunucuda çifte XP",
+                "startsAt": at(-10),
+                "endsAt": at(150),
+                "join": true
+            }))
+            .expect("join event"),
+        );
+    }
     // Release 1 leaves the recommended Minecraft version to the launcher's built-in default;
     // release 2 names one, so a refresh moves the "Önerilen" badge.
     if release >= 2 {

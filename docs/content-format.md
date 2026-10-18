@@ -266,7 +266,8 @@ cache file extension.
       "title": "Bed Wars turnuvası",
       "startsAt": "2026-10-20T18:00:00Z",
       "endsAt": "2026-10-20T21:00:00Z",
-      "url": "https://projects.gg/turnuva"
+      "url": "https://projects.gg/turnuva",
+      "join": true
     },
     {
       "id": "discord-1300000000000000001",
@@ -349,10 +350,14 @@ news feed, the launcher's built-in recommended Minecraft version.
 - `events[]`: countdown until `startsAt`, "live" until `endsAt`, hidden afterwards. `newsId`
   (optional): the article the event card opens while that item is on the home screen (else
   the card falls back to `url`). `priority` (optional integer, default 0): which of several
-  live events the card shows ([event card](#event-card)). `hidden: true`: never shown; Studio
+  live events the card shows ([event card](#event-card)). `join: true` (optional boolean,
+  default `false`): the event takes place on the server; while it is live the card offers
+  "Katıl" ([event card](#event-card)). Launchers that do not know the field ignore it, so it
+  needs no new `schema` or `minLauncherVersion`. `hidden: true`: never shown; Studio
   publishes a hidden event to take the feed event with its id off the card. `feedOverride`:
   Studio's record of the feed event this entry replaces or hides, ignored by launchers (see
-  [Studio overrides](#studio-overrides)). These are left out when unused (`priority` while 0).
+  [Studio overrides](#studio-overrides)). These are left out when unused (`priority` while 0,
+  `join` and `hidden` while `false`).
 - `maintenance` is active while `enabled` and (`until` missing or `now < until`).
 - `minLauncherVersion`: older launchers show the lock screen and install the update.
 - `recommendedMinecraftVersion`: the Minecraft version launchers recommend. Their version lists
@@ -601,7 +606,10 @@ The signature envelope and rules are those of `index.json.sig`: Ed25519 over the
   `startsAt` and is shown without time left; a bot that knows the end writes `endsAt`.
   `priority` (optional integer, default 0) works as for config events: above, the week-long
   "Yeni oyuncu haftası" has `-1`, so any other live event leads the card over it, even one
-  that started before it.
+  that started before it. `join` (optional boolean, default `false`) works as for config
+  events. The bot does not write it yet; an admin marks a Discord event as on the server through
+  a Studio copy ("Sunucuda", [Studio overrides](#studio-overrides)), and a bot that learns it
+  later only has to add the field.
 - `source`: `{ kind, channel?, url? }`: `kind` is `discord` (unknown kinds are tolerated),
   `channel` a display name, `url` the original message (`https://` only).
 - `sequence` strictly increases (`max(previous + 1, unix seconds)`). The feed is a full
@@ -624,7 +632,8 @@ Client rules:
 3. Whole-feed rules; breaking one keeps the cached feed: `feed.json` at most 512 KB and
    `.sig` at most 16 KB, a supported `schema`, at most 50 items and 20 events, and a `sequence`
    greater than the cached feed's (equal only with identical bytes).
-4. Entry rules; breaking one affects only that entry. Dropped: an entry that does not parse,
+4. Entry rules; breaking one affects only that entry. Dropped: an entry that does not parse
+   (also an event whose `priority` is not an integer or whose `join` is not a boolean),
    an id that is not 1–64 characters from `[A-Za-z0-9._-]`, a repeated id (the first wins), an
    empty title, more than 120 characters of title, 300 of summary or 8 000 of body (characters
    are Unicode scalar values), an event with `endsAt <= startsAt`. Removed field: a cover that
@@ -680,6 +689,14 @@ A live event shows a countdown to its end (an open-ended feed event shows when i
 instead), an upcoming one a countdown to its start. Launchers apply the rule again whenever an
 event starts or ends, so the card changes on time without a refresh, and list the other live
 and upcoming events behind the card.
+
+"Katıl" (`join: true`, config or feed event): while the event on the card is live, the card
+offers "Katıl". It starts the official Projects instance (created first if the player has none)
+and joins the server the instance joins by itself (`play.projects.gg`), whatever the player's
+auto-join setting, exactly like "Katıl" in the friends list: the usual launch with its account
+and AFK questions, and nothing while another game is being prepared or played (one game at a
+time). Upcoming events never offer it (the reminder bell is there instead), and the event
+never starts the game by itself. Without `join` the card looks as before.
 
 ### Status notice
 
@@ -830,7 +847,8 @@ content and the "Studio wins" rule:
 
 - **Edit:** Studio publishes its own `NewsItem` (or `EventCountdown`) with the feed entry's id,
   filled from the feed entry; launchers show Studio's copy in its place. A copy may be pinned
-  and ordered like any Studio item. Its cover, if any, is re-hosted on the content mirrors.
+  and ordered like any Studio item; an event copy carries its own `priority` and `join`. Its
+  cover, if any, is re-hosted on the content mirrors.
 - **Hide:** Studio publishes an entry with the feed entry's id and `hidden: true` (news items
   also get `expiresAt` = `publishedAt`, see [News](#news)). Hidden items carry no cover.
 - **Undo:** Studio stops publishing the entry; the feed entry shows again.
