@@ -1,0 +1,19 @@
+[package]
+name = "pl-lang"
+description = "The language players read Projects Launcher in: the system's, or the one they pick"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+# Lang is exported to TypeScript by the launcher (tauri-specta).
+specta = { workspace = true }
+sys-locale = { workspace = true }
+# The device's time zone ("in Turkey"); already built for the other crates.
+jiff = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
