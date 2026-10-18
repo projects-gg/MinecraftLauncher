@@ -51,3 +51,7 @@ graphify-out/
 /docs/*
 !/docs/content-format.md
 /scripts/secrets-sync.mjs
+
+# Python bytecode
+__pycache__/
+*.pyc
