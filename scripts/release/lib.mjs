@@ -380,7 +380,9 @@ export class R2Client {
       const signed = signRequest({
         method,
         path,
-        headers: { host: this.endpoint.host, ...headers },
+        // Uncompressed answers: Cloudflare gzips text (.sig, .json) otherwise, and a gzipped HEAD
+        // has no Content-Length and only a weak ETag, so the upload check could not compare them.
+        headers: { host: this.endpoint.host, "accept-encoding": "identity", ...headers },
         payloadHash,
         accessKeyId: this.accessKeyId,
         secretAccessKey: this.secretAccessKey,
