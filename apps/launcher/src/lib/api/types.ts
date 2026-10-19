@@ -519,15 +519,26 @@ export interface InstanceDetail extends InstanceSummary {
   autoMemoryMb: number;
 }
 
+/** Why a connect could not get the AFK client (`pl_afk::ClientProblem`). */
+export type AfkClientProblem = "notPublished" | "offline" | "diskFull" | "blocked" | "broken";
+
 export type AfkState =
   | { kind: "stopped" }
   | { kind: "queued"; inSecs: number }
+  /**
+   * The connect waits for the AFK client: looked up in the content, downloaded (`percent` once its
+   * size is known) or unpacked.
+   */
+  | { kind: "preparing"; step: "checking" | "downloading" | "installing"; percent?: number }
+  /** The last connect could not get the AFK client; the account is idle. */
+  | { kind: "clientFailed"; problem: AfkClientProblem }
   | { kind: "starting" }
   | { kind: "connecting" }
   | { kind: "connected"; since: string }
   | { kind: "reconnecting"; attempt: number; nextAttemptAt: string }
   | { kind: "stopping" }
-  | { kind: "error"; reason: string };
+  /** `standalone`: the reason says it all, without "Bağlantı kesildi" before it. */
+  | { kind: "error"; reason: string; standalone?: boolean };
 
 export interface AfkAccount {
   id: string;

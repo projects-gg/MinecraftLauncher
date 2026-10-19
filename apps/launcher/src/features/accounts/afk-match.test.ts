@@ -3,6 +3,7 @@ import type { AfkAccount, AfkState } from "@/lib/api";
 import {
   afkSummary,
   findAfkSession,
+  isAfkIdle,
   isAfkOnline,
   isAfkRunning,
   onlineAfkSession,
@@ -49,6 +50,12 @@ describe("AFK name matching", () => {
     expect(running({ kind: "stopped" })).toBe(false);
     expect(running({ kind: "error", reason: "" })).toBe(false);
     expect(isAfkOnline({ kind: "connecting" })).toBe(false);
+    // Waiting for its client it is on its way; after the client could not be had it is idle.
+    expect(running({ kind: "preparing", step: "downloading", percent: 10 })).toBe(true);
+    expect(running({ kind: "clientFailed", problem: "offline" })).toBe(false);
+    expect(isAfkIdle({ kind: "clientFailed", problem: "offline" })).toBe(true);
+    expect(isAfkIdle({ kind: "preparing", step: "checking" })).toBe(false);
+    expect(isAfkIdle({ kind: "stopping" })).toBe(false);
   });
 
   it("finds the session that would clash with a launch", () => {

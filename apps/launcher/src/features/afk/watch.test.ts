@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { AfkAccount, AfkState } from "@/lib/api";
 import { trAfkAlerts } from "@/locales/tr-afk-alerts";
+import { trAfkConnect } from "@/locales/tr-afk-connect";
 import { type AfkSeen, findStops, seenOf, shortReason, stopNotice } from "./watch";
 
 // The Turkish strings themselves, with i18next's {{name}} interpolation.
+const strings: Record<string, unknown> = { afkAlerts: trAfkAlerts, afkConnect: trAfkConnect };
 const t = ((key: string, options: Record<string, unknown> = {}) => {
-  let value: unknown = trAfkAlerts;
-  for (const part of key.replace(/^afkAlerts\./, "").split(".")) {
+  let value: unknown = strings;
+  for (const part of key.split(".")) {
     value = (value as Record<string, unknown>)[part];
   }
-  return String(value).replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(options[name]));
+  if (typeof value !== "string") throw new Error(`no text for ${key}`);
+  return value.replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(options[name]));
 }) as never;
 
 const connected: AfkState = { kind: "connected", since: "2026-10-17T02:00:00Z" };
@@ -94,6 +97,19 @@ describe("findStops", () => {
     const after = [account("A", banned), account("B", banned), account("C", reconnecting)];
     expect(step(before, after)).toEqual(["A: Sunucudan yasaklandı"]);
   });
+
+  it("reports an account whose client could not be had, once", () => {
+    const preparing: AfkState = { kind: "preparing", step: "downloading", percent: 40 };
+    const failed: AfkState = { kind: "clientFailed", problem: "offline" };
+    expect(findStops(seenOf([account("Kasa", preparing)]), [account("Kasa", failed)])).toEqual([
+      { id: "Kasa", name: "Kasa", reason: "", problem: "offline" },
+    ]);
+    expect(findStops(seenOf([account("Kasa", failed)]), [account("Kasa", failed)])).toEqual([]);
+    // Fetching the client is no news by itself.
+    expect(
+      findStops(seenOf([account("Kasa", { kind: "stopped" })]), [account("Kasa", preparing)]),
+    ).toEqual([]);
+  });
 });
 
 describe("shortReason", () => {
@@ -127,5 +143,23 @@ describe("stopNotice", () => {
     expect(
       stopNotice([stop("A", "Sunucudan yasaklandı"), stop("B", "Giriş süresi doldu")], t),
     ).toEqual({ title: "2 AFK hesabı durdu", body: "A, B" });
+  });
+
+  it("says an account could not connect, and what to do", () => {
+    const client = (name: string, problem: "offline" | "notPublished") => ({
+      id: name,
+      name,
+      reason: "",
+      problem,
+    });
+    expect(stopNotice([client("Kasa", "offline")], t)).toEqual({
+      title: "Kasa bağlanamadı",
+      body: "AFK istemcisi indirilemedi. İnternet bağlantını kontrol et.",
+    });
+    // A connect-all whose client is not out yet: one notice for the run.
+    expect(stopNotice([client("A", "notPublished"), client("B", "notPublished")], t)).toEqual({
+      title: "2 AFK hesabı bağlanamadı",
+      body: "AFK istemcisi henüz hazır değil. Biraz sonra tekrar dene.",
+    });
   });
 });

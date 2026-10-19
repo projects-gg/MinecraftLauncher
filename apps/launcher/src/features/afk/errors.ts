@@ -1,7 +1,9 @@
 // Failed AFK commands: one short sentence in a toast (the backend's own when it sent one, else the
-// caller's), with the technical details one click away for support.
+// caller's), with the technical details one click away for support. A client that could not be
+// had is not toasted: the account's card says it in place (`shownInPlace`).
 import { toast } from "@pl/ui";
 import { copyErrorDetails } from "@/features/content/jobs";
+import { shownInPlace } from "@/lib/api/afk-client";
 import i18n from "@/lib/i18n";
 
 /** A command error the backend worded for the player (it carries `details` for support). */
@@ -10,6 +12,7 @@ export function isFriendly(error: unknown): error is Error & { details: string }
 }
 
 export function afkFailed(error: unknown, fallback: string) {
+  if (shownInPlace(error)) return;
   toast.error(isFriendly(error) ? error.message : fallback, {
     action: {
       label: i18n.t("common.copyDetails"),

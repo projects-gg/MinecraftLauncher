@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::client::ClientProblem;
 use crate::form::ValidationIssue;
 
 pub type Result<T, E = AfkError> = std::result::Result<T, E>;
@@ -55,6 +56,22 @@ pub enum AfkError {
     #[error("the AFK client is not installed")]
     ClientNotInstalled,
 
+    /// A mirror answered and the content index lists no AFK client build for this computer.
+    #[error("the content index publishes no AFK client for this platform")]
+    NoClientRelease,
+
+    /// The content index could not be refreshed to look for the client (no mirror answered).
+    #[error("could not check the content index for the AFK client: {0}")]
+    ContentUnavailable(String),
+
+    /// A connect could not get the AFK client; `problem` is what the player is told and
+    /// `details` the cause (also logged).
+    #[error("the AFK client could not be prepared ({problem:?}): {details}")]
+    ClientUnavailable {
+        problem: ClientProblem,
+        details: String,
+    },
+
     #[error("invalid AFK client release: {0}")]
     InvalidRelease(String),
 
@@ -100,6 +117,11 @@ impl AfkError {
 
     /// True when the failure looks like missing connectivity.
     pub fn is_network(&self) -> bool {
-        matches!(self, Self::Net(e) if e.is_network())
+        match self {
+            Self::Net(e) => e.is_network(),
+            Self::ContentUnavailable(_) => true,
+            Self::ClientUnavailable { problem, .. } => *problem == ClientProblem::Offline,
+            _ => false,
+        }
     }
 }

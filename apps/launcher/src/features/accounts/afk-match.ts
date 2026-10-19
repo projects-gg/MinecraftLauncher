@@ -9,9 +9,17 @@ export function isAfkOnline(state: AfkState): boolean {
   return state.kind === "connected";
 }
 
-/** Holds its name on the server or is about to: connected, connecting, queued, reconnecting. */
+/** Not running and not on its way: stopped, stopped for good, or its client could not be had. */
+export function isAfkIdle(state: AfkState): boolean {
+  return state.kind === "stopped" || state.kind === "error" || state.kind === "clientFailed";
+}
+
+/**
+ * Holds its name on the server or is about to: connected, connecting, queued, reconnecting, or
+ * waiting for its client.
+ */
 export function isAfkRunning(state: AfkState): boolean {
-  return state.kind !== "stopped" && state.kind !== "stopping" && state.kind !== "error";
+  return !isAfkIdle(state) && state.kind !== "stopping";
 }
 
 export function sameName(a: string, b: string): boolean {

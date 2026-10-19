@@ -14,7 +14,7 @@ import type {
   VersionOption,
 } from "./afk-settings";
 import { pick } from "./mock-lang";
-import type { AfkAccount, AfkLogLine } from "./types";
+import type { AfkAccount, AfkClientProblem, AfkLogLine, AfkState } from "./types";
 
 const listeners = new Set<() => void>();
 const notify = () => {
@@ -477,7 +477,83 @@ function failSoon() {
 }
 failSoon();
 
+// --- The AFK client, fetched on the first connect (pl_afk::client) -----------------------------
+
+type ClientPreview = "client" | "noclient" | "offline" | "clientfail";
+
+/**
+ * Preview switches for a launcher without the AFK client yet: `?afk=client` fetches it on the
+ * first connect (cancellable), `?afk=noclient` finds none published, `?afk=offline` cannot reach
+ * the content, `?afk=clientfail` loses the connection halfway through the download. A failure
+ * happens once: "Tekrar dene" then fetches the client.
+ */
+function clientPreview(): ClientPreview | null {
+  try {
+    const value = new URLSearchParams(window.location.search).get("afk");
+    return value === "client" ||
+      value === "noclient" ||
+      value === "offline" ||
+      value === "clientfail"
+      ? value
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+let clientMode = clientPreview();
+let clientReady = clientMode === null;
+/** Accounts waiting for the client; the last one to leave stops the download. */
+const waiting = new Set<string>();
+let preparation: Promise<AfkClientProblem | "ready" | "cancelled"> | null = null;
+
+function showClient(state: AfkState) {
+  for (const account of accounts) if (waiting.has(account.id)) account.state = state;
+  notify();
+}
+
+async function fetchClient(): Promise<AfkClientProblem | "ready" | "cancelled"> {
+  const mode = clientMode;
+  // Fails once; the next attempt gets the client.
+  clientMode = "client";
+  showClient({ kind: "preparing", step: "checking" });
+  await delay(mode === "offline" ? 1600 : 700);
+  if (!waiting.size) return "cancelled";
+  if (mode === "noclient") return "notPublished";
+  if (mode === "offline") return "offline";
+  for (let percent = 0; percent < 100; percent += 3) {
+    if (!waiting.size) return "cancelled";
+    if (mode === "clientfail" && percent >= 40) return "offline";
+    showClient({ kind: "preparing", step: "downloading", percent });
+    await delay(180);
+  }
+  showClient({ kind: "preparing", step: "installing" });
+  await delay(800);
+  return waiting.size ? "ready" : "cancelled";
+}
+
+/** Waits for the client with these accounts. True for the ones still waiting once it is ready. */
+async function waitForClient(list: AfkAccount[]): Promise<AfkAccount[]> {
+  if (clientReady) return list;
+  for (const account of list) waiting.add(account.id);
+  preparation ??= fetchClient().finally(() => {
+    preparation = null;
+  });
+  const outcome = await preparation;
+  const still = list.filter((account) => waiting.delete(account.id));
+  if (outcome === "ready") {
+    clientReady = true;
+    return still;
+  }
+  if (outcome !== "cancelled") {
+    for (const account of still) account.state = { kind: "clientFailed", problem: outcome };
+    notify();
+  }
+  return [];
+}
+
 async function connect(account: AfkAccount) {
+  if (!(await waitForClient([account])).length) return;
   account.settingsChanged = false;
   setState(account, { kind: "starting" });
   await delay(700);
@@ -528,6 +604,11 @@ export const mockAfk = {
   async afkStop(id: string) {
     const account = accounts.find((a) => a.id === id);
     if (!account) return;
+    // Waiting for the client (or failed to get it): it just stops waiting.
+    if (waiting.delete(id) || account.state.kind === "clientFailed") {
+      setState(account, { kind: "stopped" });
+      return;
+    }
     setState(account, { kind: "stopping" });
     push(id, "/quit", "self");
     setTimeout(() => setState(account, { kind: "stopped" }), 900);
@@ -543,15 +624,21 @@ export const mockAfk = {
     void connect(account);
   },
   async afkConnectAll() {
-    const waiting = accounts.filter((a) => a.state.kind === "stopped" || a.state.kind === "error");
-    waiting.forEach((account, index) => {
-      if (index === 0) {
-        void connect(account);
-        return;
-      }
-      setState(account, { kind: "queued", inSecs: index * 15 });
-      setTimeout(() => void connect(account), index * 15_000);
-    });
+    const idle = accounts.filter(
+      (a) =>
+        a.state.kind === "stopped" || a.state.kind === "error" || a.state.kind === "clientFailed",
+    );
+    // The run's accounts wait for the client together, then connect one by one.
+    void waitForClient(idle).then((ready) =>
+      ready.forEach((account, index) => {
+        if (index === 0) {
+          void connect(account);
+          return;
+        }
+        setState(account, { kind: "queued", inSecs: index * 15 });
+        setTimeout(() => void connect(account), index * 15_000);
+      }),
+    );
   },
   async afkStopAll() {
     for (const a of accounts) if (a.state.kind !== "stopped") void mockAfk.afkStop(a.id);

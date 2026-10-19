@@ -16,15 +16,14 @@ import {
   type ContentStatusView,
   commands,
   type DroppedFileView,
-  type FailureReason,
   type HomeView,
   type InstanceView,
-  type KickCause,
   type LaunchEventView,
 } from "@/bindings";
 import i18n from "@/lib/i18n";
 import { highlights, newsHighlights } from "@/lib/news";
 import { fileNameOf } from "@/lib/paths";
+import { clientState, failureText } from "./afk-client";
 import type { AfkSettingsSaveResult, AfkSettingsView } from "./afk-settings";
 import { tauriCleanup } from "./cleanup-tauri";
 import { tauriContentApi } from "./content-tauri";
@@ -351,37 +350,19 @@ function dropped(file: DroppedFileView): DroppedFile {
 
 // --- AFK -------------------------------------------------------------------------------------
 
-/** Kinds of drop with their own words (`afk.failure.*`); any other kind says "disconnected". */
-const FAILURE_KINDS = new Set([
-  "kicked",
-  "loginRejected",
-  "connectionLost",
-  "loggedOut",
-  "disconnected",
-  "unsupportedVersion",
-]);
-
-/**
- * Why an account dropped, in the interface's language, with the server's own words in brackets.
- * Kicks reconnecting does not fix (`refused`) say why the account stopped (`afk.refusal.*`). The
- * AFK list is read again when the language changes (main.tsx), so these follow it.
- */
-function failure(reason: FailureReason | null | undefined): string {
-  if (!reason) return i18n.t("afk.failure.disconnected");
-  const base =
-    reason.kind === "refused"
-      ? i18n.t(`afk.refusal.${reason.cause satisfies KickCause}`)
-      : i18n.t(`afk.failure.${FAILURE_KINDS.has(reason.kind) ? reason.kind : "disconnected"}`);
-  const message = "message" in reason ? reason.message : null;
-  return message ? `${base} (${message})` : base;
-}
-
 /** Live "queued for N seconds" countdowns from bulk connects, keyed by account id. */
 const afkCountdowns = new Map<string, number>();
 
+/**
+ * The account's state for the cards. Why an account stopped is worded in the interface's language
+ * (`failureText`); the AFK list is read again when the language changes (main.tsx), so the words
+ * follow it.
+ */
 function afkState(v: AfkAccountView): AfkState {
   const queued = afkCountdowns.get(v.id);
   if (queued && v.state.state === "stopped") return { kind: "queued", inSecs: queued };
+  const client = clientState(v.client, v.state.state);
+  if (client) return client;
   const s = v.state;
   switch (s.state) {
     case "connected":
@@ -393,7 +374,7 @@ function afkState(v: AfkAccountView): AfkState {
         nextAttemptAt: s.nextAttemptAt ?? new Date(Date.now() + 15_000).toISOString(),
       };
     case "error":
-      return { kind: "error", reason: failure(s.reason) };
+      return { kind: "error", ...failureText(s.reason, (key) => i18n.t(key)) };
     default:
       return { kind: s.state };
   }

@@ -242,21 +242,30 @@ pub struct HomeView {
 pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
     APPLIED_SEQUENCE.store(snapshot.index.sequence, Ordering::SeqCst);
     crate::commands::social::apply_flag(&state.social, snapshot.config.features.friends);
-    let release = snapshot.index.afk.as_ref().and_then(|afk| {
-        let build = afk.current_build()?;
-        Some(pl_afk::AfkClientRelease {
-            version: afk.version.clone(),
-            build: pl_afk::AfkClientBuild {
-                urls: state.content.file_urls(build),
-                sha256: build.sha256.clone(),
-                size: build.size,
-            },
-        })
-    });
-    state.afk.set_client_release(release);
+    state
+        .afk
+        .set_client_release(afk_client_release(state, snapshot));
     state
         .afk
         .set_versions(snapshot.index.afk.as_ref().and_then(afk_versions));
+}
+
+/// The AFK client build the snapshot's index publishes for this computer, with its download URLs
+/// (mirror copies first).
+pub(crate) fn afk_client_release(
+    state: &AppState,
+    snapshot: &ContentSnapshot,
+) -> Option<pl_afk::AfkClientRelease> {
+    let afk = snapshot.index.afk.as_ref()?;
+    let build = afk.current_build()?;
+    Some(pl_afk::AfkClientRelease {
+        version: afk.version.clone(),
+        build: pl_afk::AfkClientBuild {
+            urls: state.content.file_urls(build),
+            sha256: build.sha256.clone(),
+            size: build.size,
+        },
+    })
 }
 
 /// The AFK version picker the index publishes with the client (`afk.minecraftVersions` and the
@@ -528,10 +537,16 @@ pub fn content_recheck(app: AppHandle) {
 /// Background refreshes are at most this frequent (the home screen asks on every visit).
 const MIN_REFRESH_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5 * 60);
 
+/// When the last refresh started (background or on demand).
+static LAST_REFRESH: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
+
+fn mark_refresh() {
+    *LAST_REFRESH.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::time::Instant::now());
+}
+
 /// Refreshes in the background, at most every [`MIN_REFRESH_INTERVAL`] unless `force` (retries
 /// while offline, the network going or coming back).
 fn spawn_refresh(app: AppHandle, force: bool) {
-    static LAST_REFRESH: std::sync::Mutex<Option<std::time::Instant>> = std::sync::Mutex::new(None);
     {
         let mut last = LAST_REFRESH.lock().unwrap_or_else(|e| e.into_inner());
         if !force && last.is_some_and(|at| at.elapsed() < MIN_REFRESH_INTERVAL) {
@@ -545,30 +560,74 @@ fn spawn_refresh(app: AppHandle, force: bool) {
     }
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
-        let offline = match state.content.refresh().await {
-            Ok(snapshot) => {
-                let fresh = !snapshot.from_cache
-                    && snapshot.index.sequence != APPLIED_SEQUENCE.load(Ordering::SeqCst);
-                if fresh {
-                    apply_snapshot(&state, &snapshot);
-                    let _ = state.content.prefetch_media(&snapshot).await;
-                    let _ = app.emit("content-changed", ());
-                }
-                // The bot's news feed follows the content refresh: same cadence, never while
-                // offline, only when the (possibly new) signed config enables it.
-                if !snapshot.offline {
-                    crate::commands::feed::spawn_refresh(app.clone(), snapshot.config.clone());
-                }
-                snapshot.from_cache && snapshot.offline
-            }
-            Err(error) => {
-                tracing::info!(%error, "content refresh failed");
-                error.is_offline()
-            }
-        };
+        let result = state.content.refresh().await;
+        let offline = take_refresh(&app, &result).await;
         state.content_refreshing.store(false, Ordering::SeqCst);
         report_reachability(&app, offline);
     });
+}
+
+/// A refresh that brought no snapshot at all (nothing cached either).
+pub(crate) struct RefreshFailed {
+    /// No mirror could be reached.
+    pub offline: bool,
+    pub message: String,
+}
+
+/// Refreshes right away, whatever the schedule: connecting an AFK account needs the client build
+/// the index publishes now (`commands::afk::release_source`). Hands the outcome back as soon as
+/// the index is in; applying it (media, the UI told, the news feed, the offline strip) goes on as
+/// after a background refresh, on its own task, so a caller giving up cuts nothing short.
+pub(crate) async fn refresh_now(app: &AppHandle) -> Result<ContentSnapshot, RefreshFailed> {
+    let (sender, receiver) = tokio::sync::oneshot::channel();
+    let app = app.clone();
+    mark_refresh();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+        let result = state.content.refresh().await;
+        let _ = sender.send(match &result {
+            Ok(snapshot) => Ok(snapshot.clone()),
+            Err(error) => Err(RefreshFailed {
+                offline: error.is_offline(),
+                message: error.to_string(),
+            }),
+        });
+        let offline = take_refresh(&app, &result).await;
+        report_reachability(&app, offline);
+    });
+    receiver.await.unwrap_or_else(|_| {
+        Err(RefreshFailed {
+            offline: false,
+            message: "the content refresh ended without an answer".to_owned(),
+        })
+    })
+}
+
+/// What a refresh's outcome changes: a newer index is applied (its media fetched first, then the
+/// UI told) and the news feed follows. True when no mirror could be reached.
+async fn take_refresh(app: &AppHandle, result: &pl_content::Result<ContentSnapshot>) -> bool {
+    let state = app.state::<AppState>();
+    match result {
+        Ok(snapshot) => {
+            let fresh = !snapshot.from_cache
+                && snapshot.index.sequence != APPLIED_SEQUENCE.load(Ordering::SeqCst);
+            if fresh {
+                apply_snapshot(&state, snapshot);
+                let _ = state.content.prefetch_media(snapshot).await;
+                let _ = app.emit("content-changed", ());
+            }
+            // The bot's news feed follows the content refresh: same cadence, never while
+            // offline, only when the (possibly new) signed config enables it.
+            if !snapshot.offline {
+                crate::commands::feed::spawn_refresh(app.clone(), snapshot.config.clone());
+            }
+            snapshot.from_cache && snapshot.offline
+        }
+        Err(error) => {
+            tracing::info!(%error, "content refresh failed");
+            error.is_offline()
+        }
+    }
 }
 
 /// Records whether the mirrors were reachable, tells the UI when that changed and, while they are

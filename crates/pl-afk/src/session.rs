@@ -22,6 +22,7 @@ use tokio::sync::{mpsc, watch};
 use tokio::time::Instant;
 
 use crate::bridge::{BridgeEvent, ClientLine, DisconnectReason, parse_line};
+use crate::client::ClientStep;
 use crate::config::{
     ConfigFiles, INI_FILE_NAME, LOGIN_SCRIPT_FILE_NAME, build_config_in, has_login_commands,
     write_config, write_login_script,
@@ -155,6 +156,9 @@ pub enum AfkEventKind {
     Countdown {
         secs: u32,
     },
+    /// The account waits for the AFK client (download progress included), or its connect could
+    /// not get it; `None` once that is over (see [`crate::client`]).
+    Client(Option<ClientStep>),
 }
 
 /// Receives every event. Called from runtime threads; must not block.

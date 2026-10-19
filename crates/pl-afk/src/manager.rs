@@ -3,15 +3,22 @@
 //! [`AfkManager`] owns one session actor per account, prepares the client build, runs the
 //! staggered bulk connects (also used for auto-start, which the legacy launcher started all at
 //! once) and is the single entry point the app shell talks to. It is cheap to clone.
+//!
+//! The client build is made ready by one background preparation at a time (see
+//! [`crate::client`]): every connect that needs it waits on that one, its card showing the step
+//! ([`AfkManager::client_step`]), and leaves it when the account is stopped. The last waiter to
+//! leave stops the preparation (and its download).
 
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 
 use parking_lot::{Mutex, RwLock};
-use pl_net::{CancellationToken, DownloadOptions, Downloader, ProgressFn};
+use pl_net::{CancellationToken, DownloadOptions, DownloadProgress, Downloader, ProgressFn};
 use serde::{Deserialize, Serialize};
+use tokio::sync::watch;
 
+use crate::client::{ClientProblem, ClientStep, ReleaseSource};
 use crate::console::ConsoleLine;
 use crate::error::{AfkError, Result};
 use crate::form::AccountSettings;
@@ -28,6 +35,9 @@ use crate::session::{
 };
 use crate::store::AccountStore;
 use crate::versions::VersionCatalog;
+
+/// How often a client download reports its progress to the waiting accounts.
+const PROGRESS_INTERVAL: Duration = Duration::from_millis(250);
 
 /// Timing knobs (production defaults; tests shrink them).
 #[derive(Debug, Clone)]
@@ -60,7 +70,13 @@ pub struct ManagerOptions {
     pub config: ManagerConfig,
     /// Needed to install client builds; without it only installed builds are used.
     pub downloader: Option<Downloader>,
+    /// Also told the client download's progress (the waiting accounts get it as
+    /// [`AfkEventKind::Client`] events either way).
     pub download_progress: Option<ProgressFn>,
+    /// Refreshes the content index when a connect finds no client installed and no build known
+    /// (see [`crate::client`]). Without it such a connect fails with
+    /// [`ClientProblem::NotPublished`].
+    pub release_source: Option<ReleaseSource>,
     /// Defaults to [`ProcessSpawner`].
     pub spawner: Option<Arc<dyn ClientSpawner>>,
     /// The player's main launcher nickname (written as the bot owner).
@@ -98,17 +114,81 @@ struct Inner {
     config: ManagerConfig,
     downloader: Option<Downloader>,
     download_progress: Option<ProgressFn>,
+    release_source: Option<ReleaseSource>,
     release: RwLock<Option<AfkClientRelease>>,
     sessions: Mutex<HashMap<String, Arc<Session>>>,
     bulk: Mutex<Option<BulkRun>>,
-    prepare_lock: tokio::sync::Mutex<()>,
+    prep: Mutex<ClientPrep>,
 }
 
 /// A staggered bulk connect in progress.
 struct BulkRun {
     token: CancellationToken,
-    /// Accounts it has not reached yet (the one it is connecting included).
+    /// Accounts it has not reached yet (the one it is connecting included). An account the
+    /// player stops leaves it.
     remaining: Vec<String>,
+}
+
+/// The AFK client being made ready for connects, and the connects it could not serve.
+#[derive(Default)]
+struct ClientPrep {
+    /// The preparation in progress: one at a time, later connects join it.
+    current: Option<Preparation>,
+    /// Why the last connect of an account could not get the client.
+    failed: HashMap<String, ClientProblem>,
+    /// Numbers preparations and waiters, so a newer one is told apart from an older one.
+    serial: u64,
+}
+
+struct Preparation {
+    serial: u64,
+    waiters: HashMap<String, Waiter>,
+    /// Shown on the waiting accounts' cards. `None` until there is something to show: a client
+    /// that needs neither a download nor an index refresh is ready before anyone could notice.
+    step: Option<ClientStep>,
+    /// Stops the preparation: the last waiter left.
+    cancel: CancellationToken,
+    outcome: watch::Receiver<Option<PrepOutcome>>,
+}
+
+struct Waiter {
+    /// Start the account's session once the client is ready (a connect). A bulk run's accounts
+    /// only wait; the run connects them in turn afterwards.
+    start: bool,
+    serial: u64,
+    /// Fires when the account stops waiting (stopped, removed, its run cancelled).
+    left: CancellationToken,
+}
+
+#[derive(Debug, Clone)]
+enum PrepOutcome {
+    Ready,
+    Failed {
+        problem: ClientProblem,
+        details: String,
+    },
+    Cancelled,
+}
+
+impl PrepOutcome {
+    fn from_error(error: AfkError) -> Self {
+        if error.is_cancelled() {
+            return Self::Cancelled;
+        }
+        Self::Failed {
+            problem: ClientProblem::of(&error),
+            details: error.to_string(),
+        }
+    }
+}
+
+/// What joining a preparation gave a caller.
+struct Joined {
+    outcome: watch::Receiver<Option<PrepOutcome>>,
+    /// Waiters this call added (accounts already waiting keep their place), by serial.
+    added: Vec<(String, u64)>,
+    /// Fire when each of the caller's accounts stops waiting.
+    left: Vec<CancellationToken>,
 }
 
 #[derive(Clone)]
@@ -174,10 +254,11 @@ impl AfkManager {
                 config: options.config,
                 downloader: options.downloader,
                 download_progress: options.download_progress,
+                release_source: options.release_source,
                 release: RwLock::new(None),
                 sessions: Mutex::new(HashMap::new()),
                 bulk: Mutex::new(None),
-                prepare_lock: tokio::sync::Mutex::new(()),
+                prep: Mutex::new(ClientPrep::default()),
             }),
         }
     }
@@ -233,39 +314,420 @@ impl AfkManager {
         self.existing(account_id).is_some_and(|s| s.is_active())
     }
 
-    /// Installs/updates the client when needed and returns the build new sessions will run. While
-    /// sessions run, an installed build is used as-is (legacy: never update under a running
-    /// client). Concurrent callers wait for one preparation.
-    pub async fn prepare_client(&self) -> Result<ClientExe> {
-        let _guard = self.inner.prepare_lock.lock().await;
-        let runtime = &self.inner.runtime;
-        let sessions = self.all_sessions();
-        if sessions.iter().any(|s| s.is_running())
-            && let Some(client) = runtime.resolve()
+    // --- The client build ----------------------------------------------------------------------
+
+    /// What the account's card shows about the AFK client: the preparation it waits for (once
+    /// there is something to show), or why its last connect could not get the client.
+    pub fn client_step(&self, account_id: &str) -> Option<ClientStep> {
+        let prep = self.inner.prep.lock();
+        if let Some(preparation) = &prep.current
+            && preparation.waiters.contains_key(account_id)
         {
-            return Ok(client);
+            return preparation.step;
         }
-        let release = self.inner.release.read().clone();
+        prep.failed
+            .get(account_id)
+            .map(|&problem| ClientStep::Failed { problem })
+    }
+
+    /// Accounts waiting for the client now.
+    fn waiting_ids(&self) -> Vec<String> {
+        self.inner
+            .prep
+            .lock()
+            .current
+            .as_ref()
+            .map(|p| p.waiters.keys().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    fn emit_client(&self, account_id: &str, step: Option<ClientStep>) {
+        self.inner.env.emit(account_id, AfkEventKind::Client(step));
+    }
+
+    /// Waits until the client is ready for `ids`, joining the preparation in progress or starting
+    /// one. With `start`, each account's session starts once the client is ready (a connect).
+    /// `run`: a bulk run's token; cancelling the run takes the accounts it added off the wait.
+    /// Fails with [`AfkError::Cancelled`] when the accounts stopped waiting and with
+    /// [`AfkError::ClientUnavailable`] when the client cannot be had.
+    async fn wait_for_client(
+        &self,
+        ids: &[String],
+        start: bool,
+        run: Option<&CancellationToken>,
+    ) -> Result<()> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let Joined {
+            mut outcome,
+            added,
+            left,
+        } = self.join_preparation(ids, start);
+        let all_left = async {
+            for token in &left {
+                token.cancelled().await;
+            }
+        };
+        let run_cancelled = async {
+            match run {
+                Some(token) => token.cancelled().await,
+                None => std::future::pending().await,
+            }
+        };
+        tokio::select! {
+            ready = outcome.wait_for(Option::is_some) => {
+                match ready.ok().and_then(|value| (*value).clone()) {
+                    Some(PrepOutcome::Ready) => Ok(()),
+                    Some(PrepOutcome::Failed { problem, details }) => {
+                        Err(AfkError::ClientUnavailable { problem, details })
+                    }
+                    Some(PrepOutcome::Cancelled) | None => Err(AfkError::Cancelled),
+                }
+            }
+            () = all_left => Err(AfkError::Cancelled),
+            () = run_cancelled => {
+                for (id, serial) in &added {
+                    self.leave_run_wait(id, *serial);
+                }
+                Err(AfkError::Cancelled)
+            }
+        }
+    }
+
+    /// Puts `ids` on the preparation in progress, starting one when none runs (or the one there
+    /// is being stopped). A new wait forgets the account's last failure.
+    fn join_preparation(&self, ids: &[String], start: bool) -> Joined {
+        let mut events = Vec::new();
+        let (joined, spawn) = {
+            let mut guard = self.inner.prep.lock();
+            let prep = &mut *guard;
+            let forgotten: Vec<&String> = ids
+                .iter()
+                .filter(|id| prep.failed.remove(id.as_str()).is_some())
+                .collect();
+            let mut spawn = None;
+            if prep
+                .current
+                .as_ref()
+                .is_none_or(|current| current.cancel.is_cancelled())
+            {
+                prep.serial += 1;
+                let (sender, receiver) = watch::channel(None);
+                let cancel = CancellationToken::new();
+                prep.current = Some(Preparation {
+                    serial: prep.serial,
+                    waiters: HashMap::new(),
+                    step: None,
+                    cancel: cancel.clone(),
+                    outcome: receiver,
+                });
+                spawn = Some((prep.serial, sender, cancel));
+            }
+            let preparation = prep.current.as_mut().expect("a preparation was just set");
+            let mut added = Vec::new();
+            let mut left = Vec::new();
+            for id in ids {
+                match preparation.waiters.get_mut(id) {
+                    Some(waiter) => {
+                        waiter.start |= start;
+                        left.push(waiter.left.clone());
+                    }
+                    None => {
+                        prep.serial += 1;
+                        let token = CancellationToken::new();
+                        preparation.waiters.insert(
+                            id.clone(),
+                            Waiter {
+                                start,
+                                serial: prep.serial,
+                                left: token.clone(),
+                            },
+                        );
+                        added.push((id.clone(), prep.serial));
+                        left.push(token);
+                    }
+                }
+            }
+            // Cards that showed a failure, or join a preparation that shows a step, change now.
+            for id in ids {
+                let newly = added.iter().any(|(added, _)| added == id);
+                if forgotten.contains(&id) || (newly && preparation.step.is_some()) {
+                    events.push((id.clone(), preparation.step));
+                }
+            }
+            let joined = Joined {
+                outcome: preparation.outcome.clone(),
+                added,
+                left,
+            };
+            (joined, spawn)
+        };
+        for (id, step) in events {
+            self.emit_client(&id, step);
+        }
+        if let Some((serial, sender, cancel)) = spawn {
+            let manager = self.clone();
+            tokio::spawn(async move { manager.run_preparation(serial, sender, cancel).await });
+        }
+        joined
+    }
+
+    /// The account stops waiting for the client and its last failure is forgotten. The last
+    /// waiter to leave stops the preparation (and its download).
+    fn leave_wait(&self, account_id: &str) {
+        let changed = {
+            let mut prep = self.inner.prep.lock();
+            let mut changed = prep.failed.remove(account_id).is_some();
+            if let Some(preparation) = prep.current.as_mut()
+                && let Some(waiter) = preparation.waiters.remove(account_id)
+            {
+                waiter.left.cancel();
+                if preparation.waiters.is_empty() {
+                    preparation.cancel.cancel();
+                }
+                changed |= preparation.step.is_some();
+            }
+            changed
+        };
+        if changed {
+            self.emit_client(account_id, None);
+        }
+    }
+
+    /// A cancelled bulk run takes the waiter it added off the wait, unless a connect took it over
+    /// since (that connect still wants the client).
+    fn leave_run_wait(&self, account_id: &str, serial: u64) {
+        let shown = {
+            let mut prep = self.inner.prep.lock();
+            let Some(preparation) = prep.current.as_mut() else {
+                return;
+            };
+            let ours = preparation
+                .waiters
+                .get(account_id)
+                .is_some_and(|w| w.serial == serial && !w.start);
+            if !ours {
+                return;
+            }
+            if let Some(waiter) = preparation.waiters.remove(account_id) {
+                waiter.left.cancel();
+            }
+            if preparation.waiters.is_empty() {
+                preparation.cancel.cancel();
+            }
+            preparation.step.is_some()
+        };
+        if shown {
+            self.emit_client(account_id, None);
+        }
+    }
+
+    /// Shows `step` on every waiting account's card.
+    fn set_step(&self, step: ClientStep) {
+        let waiters: Vec<String> = {
+            let mut prep = self.inner.prep.lock();
+            let Some(preparation) = prep.current.as_mut() else {
+                return;
+            };
+            if preparation.step == Some(step) {
+                return;
+            }
+            preparation.step = Some(step);
+            preparation.waiters.keys().cloned().collect()
+        };
+        for id in waiters {
+            self.emit_client(&id, Some(step));
+        }
+    }
+
+    /// The background task of one preparation: gets the client, then tells its waiters (starting
+    /// the sessions of those that asked) before the outcome wakes the callers.
+    async fn run_preparation(
+        self,
+        serial: u64,
+        sender: watch::Sender<Option<PrepOutcome>>,
+        cancel: CancellationToken,
+    ) {
+        let outcome = self.prepare(&cancel).await;
+        if let PrepOutcome::Failed { problem, details } = &outcome {
+            tracing::warn!(?problem, %details, "the AFK client could not be prepared");
+        }
+        let (waiters, shown, forgotten) = {
+            let mut prep = self.inner.prep.lock();
+            // A newer preparation replaced this stopped one: its waiters are not ours.
+            let ours = prep.current.as_ref().is_some_and(|p| p.serial == serial);
+            let (waiters, shown) = match prep.current.take_if(|_| ours) {
+                Some(preparation) => (preparation.waiters, preparation.step.is_some()),
+                None => (HashMap::new(), false),
+            };
+            let mut forgotten = Vec::new();
+            match &outcome {
+                // The client works now: older failures no longer say anything true.
+                PrepOutcome::Ready => forgotten = prep.failed.drain().map(|(id, _)| id).collect(),
+                PrepOutcome::Failed { problem, .. } => {
+                    for id in waiters.keys() {
+                        prep.failed.insert(id.clone(), *problem);
+                    }
+                }
+                PrepOutcome::Cancelled => {}
+            }
+            (waiters, shown, forgotten)
+        };
+        for id in forgotten.iter().filter(|id| !waiters.contains_key(*id)) {
+            self.emit_client(id, None);
+        }
+        for (id, waiter) in &waiters {
+            match &outcome {
+                PrepOutcome::Ready => {
+                    // Started before the card stops showing the client, so it goes straight on
+                    // to "starting".
+                    if waiter.start && self.inner.store.account(id).is_some() {
+                        self.session(id).start();
+                    }
+                    if shown {
+                        self.emit_client(id, None);
+                    }
+                }
+                PrepOutcome::Failed { problem, .. } => {
+                    self.emit_client(id, Some(ClientStep::Failed { problem: *problem }))
+                }
+                PrepOutcome::Cancelled => {
+                    if shown {
+                        self.emit_client(id, None);
+                    }
+                }
+            }
+        }
+        let _ = sender.send(Some(outcome));
+    }
+
+    /// Gets a client ready for new sessions. While sessions run, an installed build is used as it
+    /// is (legacy: never update under a running client). Otherwise the known build is installed
+    /// when needed (falling back to an installed one when that fails, for offline starts). With
+    /// nothing installed and no build known, the content index is refreshed once first; a known
+    /// build that cannot be had while nothing is installed gets one more look at the index too.
+    async fn prepare(&self, cancel: &CancellationToken) -> PrepOutcome {
+        let runtime = &self.inner.runtime;
+        if self.all_sessions().iter().any(|s| s.is_running()) && runtime.resolve().is_some() {
+            return PrepOutcome::Ready;
+        }
+        let mut release = self.inner.release.read().clone();
+        let mut refreshed = false;
+        if release.is_none() && runtime.resolve().is_none() {
+            // The index this launcher has may predate the client's first publish, or it was
+            // offline when it last looked.
+            match self.refresh_release(cancel).await {
+                Ok(found) => {
+                    release = found;
+                    refreshed = true;
+                }
+                Err(error) => return PrepOutcome::from_error(error),
+            }
+        }
+        let mut result = self.ensure(release.as_ref(), cancel).await;
+        if let Err(error) = &result
+            && !refreshed
+            && release.is_some()
+            && !error.is_cancelled()
+            && !error.is_network()
+        {
+            // The known build is gone from the mirrors, or a newer one replaced it since.
+            tracing::info!(%error, "AFK client build unavailable, checking the content index again");
+            match self.refresh_release(cancel).await {
+                Ok(Some(newer)) if release.as_ref() != Some(&newer) => {
+                    result = self.ensure(Some(&newer), cancel).await;
+                }
+                Ok(None) => result = Err(AfkError::NoClientRelease),
+                Err(refresh) if refresh.is_cancelled() => result = Err(refresh),
+                // The same build, or the index could not be reached: the first error stands.
+                Ok(Some(_)) | Err(_) => {}
+            }
+        }
+        match result {
+            Ok(_) => {
+                self.prune().await;
+                PrepOutcome::Ready
+            }
+            Err(error) => PrepOutcome::from_error(error),
+        }
+    }
+
+    /// Refreshes the content index for the client build it publishes (cards show "checking").
+    async fn refresh_release(
+        &self,
+        cancel: &CancellationToken,
+    ) -> Result<Option<AfkClientRelease>> {
+        let Some(source) = self.inner.release_source.clone() else {
+            return Ok(None);
+        };
+        self.set_step(ClientStep::Checking);
+        let found = tokio::select! {
+            found = source() => found?,
+            () = cancel.cancelled() => return Err(AfkError::Cancelled),
+        };
+        self.set_client_release(found.clone());
+        Ok(found)
+    }
+
+    /// [`AfkRuntime::ensure`] with the waiters' progress and the preparation's cancel.
+    async fn ensure(
+        &self,
+        release: Option<&AfkClientRelease>,
+        cancel: &CancellationToken,
+    ) -> Result<ClientExe> {
         let options = DownloadOptions {
-            progress: self.inner.download_progress.clone(),
+            cancel: cancel.clone(),
+            progress: Some(self.progress_fn()),
+            progress_interval: PROGRESS_INTERVAL,
             ..DownloadOptions::default()
         };
-        let client = runtime
-            .ensure(self.inner.downloader.as_ref(), release.as_ref(), &options)
-            .await?;
+        self.inner
+            .runtime
+            .ensure(self.inner.downloader.as_ref(), release, &options)
+            .await
+    }
 
-        let in_use: Vec<String> = sessions.iter().filter_map(|s| s.client_version()).collect();
-        let runtime = runtime.clone();
+    /// Download progress → the waiters' step: downloading, then installing once the file is in.
+    fn progress_fn(&self) -> ProgressFn {
+        let manager = self.clone();
+        Arc::new(move |progress: DownloadProgress| {
+            let step = if progress.total_files > 0 && progress.done_files == progress.total_files {
+                ClientStep::Installing
+            } else {
+                ClientStep::Downloading {
+                    done: progress.done_bytes,
+                    total: progress.total_bytes,
+                }
+            };
+            manager.set_step(step);
+            if let Some(external) = &manager.inner.download_progress {
+                external(progress);
+            }
+        })
+    }
+
+    /// Removes old client builds no session uses.
+    async fn prune(&self) {
+        let in_use: Vec<String> = self
+            .all_sessions()
+            .iter()
+            .filter_map(|s| s.client_version())
+            .collect();
+        let runtime = self.inner.runtime.clone();
         let pruned = tokio::task::spawn_blocking(move || runtime.prune(&in_use)).await;
         if let Ok(removed) = pruned
             && !removed.is_empty()
         {
             tracing::info!(?removed, "removed old AFK client builds");
         }
-        Ok(client)
     }
 
-    /// Connects one account now (a pending reconnect is replaced by an immediate one).
+    // --- Sessions ------------------------------------------------------------------------------
+
+    /// Connects one account now (a pending reconnect is replaced by an immediate one). When the
+    /// client has to be fetched first the account waits for it, its card showing the progress
+    /// ([`Self::client_step`]); [`Self::disconnect`] ends the wait with [`AfkError::Cancelled`].
     pub async fn connect(&self, account_id: &str) -> Result<()> {
         if self.inner.store.account(account_id).is_none() {
             return Err(AfkError::AccountNotFound(account_id.to_owned()));
@@ -273,13 +735,15 @@ impl AfkManager {
         if self.existing(account_id).is_some_and(|s| s.is_running()) {
             return Ok(());
         }
-        self.prepare_client().await?;
-        self.session(account_id).start();
-        Ok(())
+        self.wait_for_client(&[account_id.to_owned()], true, None)
+            .await
     }
 
-    /// Disconnects (`/quit`, killed after the grace period) or cancels a pending reconnect.
+    /// Disconnects (`/quit`, killed after the grace period) or cancels a pending reconnect. An
+    /// account waiting for the client stops waiting, and a bulk run skips it.
     pub fn disconnect(&self, account_id: &str) {
+        self.bulk_reached(account_id);
+        self.leave_wait(account_id);
         if let Some(session) = self.existing(account_id) {
             session.stop();
         }
@@ -339,8 +803,9 @@ impl AfkManager {
     }
 
     /// The accounts to bring back after the launcher restarts (for an update): every account in
-    /// game, connecting or waiting to reconnect, and those a running bulk connect has yet to
-    /// reach, in account order. Accounts being stopped or stopped for good are left out.
+    /// game, connecting, waiting to reconnect or waiting for the client, and those a running bulk
+    /// connect has yet to reach, in account order. Accounts being stopped or stopped for good are
+    /// left out.
     pub fn resume_candidates(&self) -> Vec<String> {
         let queued = self
             .inner
@@ -349,6 +814,7 @@ impl AfkManager {
             .as_ref()
             .map(|run| run.remaining.clone())
             .unwrap_or_default();
+        let waiting = self.waiting_ids();
         self.inner
             .store
             .accounts()
@@ -356,6 +822,7 @@ impl AfkManager {
             .map(|a| a.id)
             .filter(|id| {
                 queued.contains(id)
+                    || waiting.contains(id)
                     || matches!(
                         self.snapshot(id).state,
                         SessionState::Starting
@@ -367,7 +834,8 @@ impl AfkManager {
             .collect()
     }
 
-    /// Cancels a running bulk connect (accounts already started keep running).
+    /// Cancels a running bulk connect (accounts already started keep running; the ones it had
+    /// waiting for the client stop waiting).
     pub fn cancel_bulk(&self) {
         if let Some(run) = self.inner.bulk.lock().as_ref() {
             run.token.cancel();
@@ -378,11 +846,21 @@ impl AfkManager {
         self.inner.bulk.lock().is_some()
     }
 
-    /// The bulk run is done with this account (started, skipped or failed).
+    /// The bulk run is done with this account (started, skipped, failed or stopped by the
+    /// player).
     fn bulk_reached(&self, account_id: &str) {
         if let Some(run) = self.inner.bulk.lock().as_mut() {
             run.remaining.retain(|id| id != account_id);
         }
+    }
+
+    /// The running bulk connect still has this account to connect.
+    fn in_bulk(&self, account_id: &str) -> bool {
+        self.inner
+            .bulk
+            .lock()
+            .as_ref()
+            .is_some_and(|run| run.remaining.iter().any(|id| id == account_id))
     }
 
     async fn run_staggered(&self, ids: Vec<String>) -> Result<BulkOutcome> {
@@ -401,11 +879,32 @@ impl AfkManager {
         let _guard = BulkGuard(&self.inner.bulk);
 
         let mut outcome = BulkOutcome::default();
+        // The run's accounts wait for the client together, every card showing it. A client that
+        // cannot be had ends the run, and each of those accounts says why.
+        let idle: Vec<String> = ids
+            .iter()
+            .filter(|id| !self.is_active(id))
+            .cloned()
+            .collect();
+        if let Err(error) = self.wait_for_client(&idle, false, Some(&token)).await {
+            if error.is_cancelled() {
+                outcome.cancelled = true;
+            } else {
+                tracing::warn!(%error, "bulk connect could not get the AFK client");
+                outcome.failed = idle.into_iter().filter(|id| self.in_bulk(id)).collect();
+            }
+            return Ok(outcome);
+        }
+
         let mut started_one = false;
         for id in ids {
             if token.is_cancelled() {
                 outcome.cancelled = true;
                 break;
+            }
+            // Stopped (or removed) by the player since the run started.
+            if !self.in_bulk(&id) {
+                continue;
             }
             if self.is_active(&id) {
                 self.bulk_reached(&id);
@@ -416,6 +915,10 @@ impl AfkManager {
                 if !self.countdown(&id, &token).await {
                     outcome.cancelled = true;
                     break;
+                }
+                // Stopped while it waited for its turn.
+                if !self.in_bulk(&id) {
+                    continue;
                 }
                 // Connected by hand while waiting.
                 if self.is_active(&id) {
@@ -428,6 +931,8 @@ impl AfkManager {
             self.bulk_reached(&id);
             match result {
                 Ok(()) => outcome.started.push(id),
+                // Stopped while its client was prepared.
+                Err(error) if error.is_cancelled() => {}
                 Err(error) => {
                     tracing::warn!(account = %id, %error, "bulk connect could not start an account");
                     outcome.failed.push(id);
@@ -438,7 +943,8 @@ impl AfkManager {
         Ok(outcome)
     }
 
-    /// Waits one stagger interval, emitting the remaining whole seconds. False when cancelled.
+    /// Waits one stagger interval, emitting the remaining whole seconds. False when cancelled;
+    /// ends early when the account leaves the run or connects meanwhile.
     async fn countdown(&self, account_id: &str, token: &CancellationToken) -> bool {
         let tick = Duration::from_secs(1);
         let mut remaining = self.inner.config.stagger;
@@ -448,7 +954,7 @@ impl AfkManager {
                 completed = false;
                 break;
             }
-            if self.is_active(account_id) {
+            if self.is_active(account_id) || !self.in_bulk(account_id) {
                 break;
             }
             let secs = remaining.as_secs() + u64::from(remaining.subsec_nanos() > 0);
@@ -473,10 +979,14 @@ impl AfkManager {
         completed
     }
 
-    /// Stops everything (cancelling a bulk connect) and waits until every client has exited
-    /// (each is killed after the grace period). Call before the launcher exits.
+    /// Stops everything (cancelling a bulk connect and every wait for the client) and waits until
+    /// every client has exited (each is killed after the grace period). Call before the launcher
+    /// exits.
     pub async fn stop_all(&self) {
         self.cancel_bulk();
+        for id in self.waiting_ids() {
+            self.leave_wait(&id);
+        }
         let sessions = self.all_sessions();
         for session in &sessions {
             session.stop();
@@ -495,15 +1005,25 @@ impl AfkManager {
         }
     }
 
-    /// True while any client runs, connects or waits to reconnect, or a bulk connect is in
-    /// progress: the launcher must not hide or exit then.
+    /// True while any client runs, connects or waits to reconnect, an account waits for the
+    /// client, or a bulk connect is in progress: the launcher must not hide or exit then.
     pub fn any_active(&self) -> bool {
-        self.bulk_running() || self.all_sessions().iter().any(|s| s.is_active())
+        self.bulk_running()
+            || !self.waiting_ids().is_empty()
+            || self.all_sessions().iter().any(|s| s.is_active())
     }
 
-    /// How many accounts are in game and how many are on their way there.
+    /// How many accounts are in game and how many are on their way there (waiting for the client
+    /// counts as on the way).
     pub fn activity(&self) -> AfkActivity {
-        AfkActivity::of(self.snapshots().iter().map(|snapshot| &snapshot.state))
+        let snapshots = self.snapshots();
+        let mut activity = AfkActivity::of(snapshots.iter().map(|snapshot| &snapshot.state));
+        let waiting = self.waiting_ids();
+        activity.connecting += snapshots
+            .iter()
+            .filter(|s| waiting.contains(&s.account_id) && !s.state.is_active())
+            .count();
+        activity
     }
 
     /// State of every account, in account order.
@@ -548,13 +1068,16 @@ impl AfkManager {
 
     /// Removes the account and its keychain entry, stops its client, then deletes its folder. The
     /// account leaves the list first, so nothing (a bulk connect reaching it, a click, an
-    /// automatic restart) can start it again while its client is being stopped.
+    /// automatic restart, the client it waited for) can start it again while its client is being
+    /// stopped.
     pub async fn remove_account(&self, account_id: &str) -> Result<()> {
         let store = self.inner.store.clone();
         let id = account_id.to_owned();
         let removed = tokio::task::spawn_blocking(move || store.remove_account(&id))
             .await
             .map_err(|e| AfkError::InvalidData(format!("remove task failed: {e}")))??;
+        self.bulk_reached(account_id);
+        self.leave_wait(account_id);
         let session = self.inner.sessions.lock().remove(account_id);
         if let Some(session) = session {
             session.stop();
@@ -651,7 +1174,6 @@ impl AfkManager {
 #[allow(dead_code)]
 fn manager_futures_are_send(manager: &AfkManager) {
     fn send<T: Send>(_: T) {}
-    send(manager.prepare_client());
     send(manager.connect("id"));
     send(manager.connect_all());
     send(manager.auto_start());
@@ -661,4 +1183,9 @@ fn manager_futures_are_send(manager: &AfkManager) {
     send(manager.shutdown());
     send(manager.remove_account("id"));
     send(manager.reconnect("id"));
+    send(
+        manager
+            .clone()
+            .run_preparation(0, watch::channel(None).0, CancellationToken::new()),
+    );
 }

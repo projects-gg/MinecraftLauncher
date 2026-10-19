@@ -1,6 +1,5 @@
-import { ArrowDown, PaperPlaneRight, Play, X } from "@phosphor-icons/react";
+import { ArrowDown, PaperPlaneRight, X } from "@phosphor-icons/react";
 import {
-  Button,
   cn,
   EntranceGate,
   enter,
@@ -22,7 +21,8 @@ import { useTranslation } from "react-i18next";
 import { type AfkAccount, api } from "@/lib/api";
 import { uiLocale } from "@/lib/format";
 import { AfkHead } from "./afk-head";
-import { afkFailed, runAfk } from "./errors";
+import { afkFailed } from "./errors";
+import { AfkPrimaryAction } from "./primary-action";
 import { StateLine } from "./state-line";
 
 /** Lines typed per account this session, newest last: ↑ and ↓ walk through them. */
@@ -307,15 +307,8 @@ export function AfkConsole({
                         className="bg-gold-500 text-gold-ink hover:bg-gold-400 hover:text-gold-ink"
                       />
                     ) : (
-                      <Button
-                        type="button"
-                        variant="primary"
-                        icon={<Play size={14} weight="fill" />}
-                        disabled={account.state.kind === "stopping"}
-                        onClick={() => runAfk(api.afkConnect(account.id), t("afk.connectFailed"))}
-                      >
-                        {t("afk.connect")}
-                      </Button>
+                      // Bağla; İptal while its client is fetched; Tekrar dene after it could not be.
+                      <AfkPrimaryAction account={account} size="md" />
                     )}
                   </form>
                 </GatedMotion.aside>

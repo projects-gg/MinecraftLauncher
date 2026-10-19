@@ -793,13 +793,24 @@ async fn missing_client_fails_the_connect() {
         env.sink(),
         pl_afk::ManagerOptions::default(),
     );
+    // No build installed, none known, nothing to refresh the index with (client_prepare.rs covers
+    // the refresh): the connect fails with what the card tells the player.
     assert!(matches!(
         manager.connect(&id).await,
-        Err(AfkError::ClientNotInstalled)
+        Err(AfkError::ClientUnavailable {
+            problem: pl_afk::ClientProblem::NotPublished,
+            ..
+        })
     ));
     let outcome = manager.connect_all().await.unwrap();
     assert_eq!(outcome.failed, vec![id.clone()]);
     assert_eq!(manager.snapshot(&id).state, SessionState::Stopped);
+    assert_eq!(
+        manager.client_step(&id),
+        Some(pl_afk::ClientStep::Failed {
+            problem: pl_afk::ClientProblem::NotPublished
+        })
+    );
 }
 
 #[tokio::test(start_paused = true)]

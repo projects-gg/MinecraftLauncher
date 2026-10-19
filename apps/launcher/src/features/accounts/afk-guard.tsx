@@ -8,7 +8,7 @@ import { create } from "zustand";
 import { type AccountSummary, type AfkAccount, api } from "@/lib/api";
 import i18n from "@/lib/i18n";
 import { AccountDialog } from "./account-dialog";
-import { findAfkSession } from "./afk-match";
+import { findAfkSession, isAfkIdle } from "./afk-match";
 import { useAccountsUi } from "./store";
 
 export type AfkChoice = "stop" | "keep" | "cancel";
@@ -60,7 +60,7 @@ function restartAfterGame(session: AfkAccount, launch: LaunchPhaseSource) {
     try {
       const current = (await api.afkAccounts()).find((s) => s.id === session.id);
       // Removed meanwhile, or the player already started it again.
-      if (!current || (current.state.kind !== "stopped" && current.state.kind !== "error")) return;
+      if (!current || !isAfkIdle(current.state)) return;
       await api.afkConnect(session.id);
       toast(i18n.t("accounts.afkGuard.restarted", { name: session.nickname }));
     } catch {

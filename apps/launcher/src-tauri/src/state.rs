@@ -172,7 +172,8 @@ impl AppState {
             crate::commands::social::create(app, &http, version, handle.clone(), ephemeral_secrets);
 
         // AFK accounts (Projects Console Client sessions). Events go straight to the UI (and
-        // state changes to the tray's summary).
+        // state changes to the tray's summary). A connect that finds no client installed and no
+        // build known refreshes the content index right away (`commands::afk::release_source`).
         let afk_paths = pl_afk::AfkPaths::new(root.join("afk"));
         let afk_secrets: Arc<dyn pl_afk::SecretStore> = if ephemeral_secrets {
             Arc::new(pl_afk::MemorySecretStore::new())
@@ -191,6 +192,7 @@ impl AppState {
                 config: pl_afk::ManagerConfig::default(),
                 downloader: Some(downloader.clone()),
                 download_progress: None,
+                release_source: Some(crate::commands::afk::release_source(app)),
                 spawner: None,
                 launcher_nickname: auth
                     .active_account()

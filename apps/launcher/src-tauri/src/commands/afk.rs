@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use pl_afk::{
-    AfkAccount, AfkError, AfkEventKind, AfkSettings, ConsoleLine, ConsoleLineKind, EventSink,
-    PatternProblem, SessionState, SessionStats, SettingsPage, ValidationIssue, VersionOption,
+    AfkAccount, AfkError, AfkEventKind, AfkSettings, ClientProblem, ClientStep, ConsoleLine,
+    ConsoleLineKind, EventSink, PatternProblem, SessionState, SessionStats, SettingsPage,
+    ValidationIssue, VersionOption,
 };
 use pl_lang::pick;
 use serde::Serialize;
@@ -12,25 +13,101 @@ use tauri_plugin_opener::OpenerExt;
 use crate::error::{CmdError, CmdResult};
 use crate::state::AppState;
 
-/// Where AFK sessions report: every event goes to the UI as `afk-event`; a state change also
-/// refreshes the tray's AFK summary. That runs on a blocking thread, never on the session's task:
-/// it reads every session and waits for the main thread to set the tooltip.
+/// Where AFK sessions report: every event goes to the UI as `afk-event`; a state change (or a
+/// change in waiting for the client) also refreshes the tray's AFK summary. That runs on a
+/// blocking thread, never on the session's task: it reads every session and waits for the main
+/// thread to set the tooltip (only when its text changed).
 pub fn event_sink(app: &AppHandle) -> EventSink {
     let app = app.clone();
     Arc::new(move |event| {
         let _ = app.emit("afk-event", &event);
         #[cfg(desktop)]
-        if matches!(event.kind, AfkEventKind::State(_)) {
+        if matches!(event.kind, AfkEventKind::State(_) | AfkEventKind::Client(_)) {
             let app = app.clone();
             tauri::async_runtime::spawn_blocking(move || crate::shell::refresh_afk_tray(&app));
         }
     })
 }
 
+/// The AFK manager's look at the content index when a connect finds no client installed and no
+/// build known (`pl_afk::client`): the index refreshed now, and the client build it publishes for
+/// this computer. No mirror reached is "offline"; mirrors that answered with nothing usable are a
+/// broken download.
+pub fn release_source(app: &AppHandle) -> pl_afk::ReleaseSource {
+    let app = app.clone();
+    Arc::new(move || {
+        let app = app.clone();
+        Box::pin(async move {
+            let unusable = |offline: bool, problem: String| {
+                if offline {
+                    AfkError::ContentUnavailable(problem)
+                } else {
+                    AfkError::InvalidData(format!("content index: {problem}"))
+                }
+            };
+            let snapshot = crate::commands::content::refresh_now(&app)
+                .await
+                .map_err(|failed| unusable(failed.offline, failed.message))?;
+            if snapshot.from_cache {
+                return Err(unusable(
+                    snapshot.offline,
+                    snapshot.problem.unwrap_or_default(),
+                ));
+            }
+            let state = app.state::<AppState>();
+            Ok(crate::commands::content::afk_client_release(
+                &state, &snapshot,
+            ))
+        })
+    })
+}
+
+/// What the player is told when a connect could not get the AFK client (the AFK page words the
+/// same in place: `afkConnect.problem` in the UI's texts).
+fn client_problem_message(problem: ClientProblem) -> &'static str {
+    match problem {
+        ClientProblem::NotPublished => pick(
+            "AFK istemcisi henüz hazır değil. Biraz sonra tekrar dene.",
+            "The AFK client isn't ready yet. Try again in a bit.",
+        ),
+        ClientProblem::Offline => pick(
+            "AFK istemcisi indirilemedi. İnternet bağlantını kontrol et.",
+            "Couldn't download the AFK client. Check your internet connection.",
+        ),
+        ClientProblem::DiskFull => pick(
+            "Diskte yer kalmadı. Biraz yer açıp tekrar dene.",
+            "The disk is full. Free up some space and try again.",
+        ),
+        ClientProblem::Blocked => pick(
+            "AFK istemcisi kurulamadı. Antivirüsün engellemediğinden emin ol.",
+            "Couldn't install the AFK client. Make sure your antivirus isn't blocking it.",
+        ),
+        ClientProblem::Broken => pick(
+            "AFK istemcisi indirilemedi. Biraz sonra tekrar dene.",
+            "Couldn't download the AFK client. Try again in a bit.",
+        ),
+    }
+}
+
 impl From<pl_afk::AfkError> for CmdError {
     fn from(error: pl_afk::AfkError) -> Self {
         let details = error.to_string();
         let (code, message) = match &error {
+            AfkError::ClientUnavailable { .. }
+            | AfkError::NoClientRelease
+            | AfkError::ContentUnavailable(_)
+            | AfkError::ClientNotInstalled => (
+                "AFK-ISTEMCI",
+                client_problem_message(ClientProblem::of(&error)),
+            ),
+            AfkError::Cancelled => ("IPTAL", pick("İşlem iptal edildi.", "Cancelled.")),
+            AfkError::Busy => (
+                "AFK-SIRADA",
+                pick(
+                    "AFK hesapları zaten sırayla bağlanıyor.",
+                    "The AFK accounts are already connecting one by one.",
+                ),
+            ),
             AfkError::AccountNotFound(_) => (
                 "AFK-HESAP-YOK",
                 pick(
@@ -118,6 +195,9 @@ pub struct AfkAccountView {
     pub settings_changed: bool,
     /// Show the date next to the time in the live console (chat log settings).
     pub show_date: bool,
+    /// The account waits for the AFK client (the step, with the download's progress), or its
+    /// last connect could not get it (`failed`, with the problem to word).
+    pub client: Option<ClientStep>,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -154,6 +234,7 @@ fn overview(state: &AppState) -> Vec<AfkAccountView> {
                 server: server_label(&account),
                 settings_changed: state.afk.settings_changed(&account.id),
                 show_date: account.chat_log.show_date,
+                client: state.afk.client_step(&account.id),
                 id: account.id,
                 nickname: account.nickname,
                 auto_start: account.auto_start,
@@ -187,24 +268,38 @@ pub async fn afk_remove(state: State<'_, AppState>, id: String) -> CmdResult<()>
     Ok(())
 }
 
-fn connect_error(error: AfkError) -> CmdError {
-    if matches!(error, AfkError::AccountNotFound(_)) {
-        return error.into();
+/// A connect's outcome for the UI. Stopping the account while it waited for the client is not a
+/// failure. A client that could not be had is shown on the account's card (the AFK page words it
+/// from the account's `client` step), so its error only backs that up.
+fn connect_result(result: pl_afk::Result<()>) -> CmdResult<()> {
+    match result {
+        Ok(()) => Ok(()),
+        Err(error) if error.is_cancelled() => Ok(()),
+        Err(
+            error @ (AfkError::AccountNotFound(_)
+            | AfkError::ClientUnavailable { .. }
+            | AfkError::NoClientRelease
+            | AfkError::ContentUnavailable(_)
+            | AfkError::ClientNotInstalled),
+        ) => Err(error.into()),
+        Err(error) => Err(CmdError::new(
+            "AFK-BAGLAN",
+            pick(
+                "AFK hesabı başlatılamadı. Tekrar dene.",
+                "The AFK account couldn't start. Try again.",
+            ),
+            error.to_string(),
+        )),
     }
-    CmdError::new(
-        "AFK-BAGLAN",
-        pick(
-            "AFK hesabı başlatılamadı. AFK istemcisi henüz indirilmemiş olabilir; internet bağlantını kontrol et.",
-            "The AFK account couldn't start. The AFK client may not be downloaded yet; check your internet connection.",
-        ),
-        error.to_string(),
-    )
 }
 
+/// Connects one account. When the AFK client is missing it is fetched first (the content index
+/// refreshed when the launcher knows no build), the card showing the progress; stopping the
+/// account ends the wait.
 #[tauri::command]
 #[specta::specta]
 pub async fn afk_connect(state: State<'_, AppState>, id: String) -> CmdResult<()> {
-    state.afk.connect(&id).await.map_err(connect_error)
+    connect_result(state.afk.connect(&id).await)
 }
 
 #[tauri::command]
@@ -217,7 +312,7 @@ pub fn afk_disconnect(state: State<'_, AppState>, id: String) {
 #[tauri::command]
 #[specta::specta]
 pub async fn afk_reconnect(state: State<'_, AppState>, id: String) -> CmdResult<()> {
-    state.afk.reconnect(&id).await.map_err(connect_error)
+    connect_result(state.afk.reconnect(&id).await)
 }
 
 /// Staggered connect of every idle account. Runs in the background (15 s between accounts);

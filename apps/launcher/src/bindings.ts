@@ -176,6 +176,11 @@ export const commands = {
 	afkOverview: () => __TAURI_INVOKE<AfkAccountView[]>("afk_overview"),
 	afkAdd: (nickname: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_add", { nickname })),
 	afkRemove: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_remove", { id })),
+	/**
+	 *  Connects one account. When the AFK client is missing it is fetched first (the content index
+	 *  refreshed when the launcher knows no build), the card showing the progress; stopping the
+	 *  account ends the wait.
+	 */
 	afkConnect: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_connect", { id })),
 	afkDisconnect: (id: string) => __TAURI_INVOKE<void>("afk_disconnect", { id }),
 	/**
@@ -839,6 +844,11 @@ export type AfkAccountView = {
 	settingsChanged: boolean,
 	/**  Show the date next to the time in the live console (chat log settings). */
 	showDate: boolean,
+	/**
+	 *  The account waits for the AFK client (the step, with the download's progress), or its
+	 *  last connect could not get it (`failed`, with the problem to word).
+	 */
+	client: ClientStep | null,
 };
 
 export type AfkEvent = {
@@ -857,7 +867,12 @@ export type AfkEventKind = { type: "state"; data: SessionState } |
 /**  Bulk connect: seconds until this account connects; 0 clears the countdown. */
 { type: "countdown"; data: {
 	secs: number,
-} };
+} } | 
+/**
+ *  The account waits for the AFK client (download progress included), or its connect could
+ *  not get it; `None` once that is over (see [`crate::client`]).
+ */
+{ type: "client"; data: ClientStep | null };
 
 /**  Account-independent AFK preferences (`settings.json`). */
 export type AfkSettings = {
@@ -1106,6 +1121,45 @@ export type CleanupSummaryView = {
 	reclaimableBytes: number,
 	freeBytes: number | null,
 };
+
+/**
+ *  Why the AFK client could not be had, in the player's terms (the UI words each one; the cause
+ *  itself goes to the log).
+ */
+export type ClientProblem = 
+/**
+ *  The content index lists no client for this computer: none published yet (or not for this
+ *  platform).
+ */
+"notPublished" | 
+/**  No connection: neither the content index nor the download could be reached. */
+"offline" | 
+/**  The disk is full. */
+"diskFull" | 
+/**  Writing the client was refused or failed (permissions, an antivirus). */
+"blocked" | 
+/**
+ *  The download or the package was broken (a server error, a checksum or size mismatch, a
+ *  damaged archive, no executable in it).
+ */
+"broken";
+
+/**
+ *  Where an account's connect stands while the AFK client is made ready, or why the last one
+ *  could not get it.
+ */
+export type ClientStep = 
+/**  Looking for the client build in a freshly refreshed content index. */
+{ step: "checking" } | 
+/**  Downloading the build: `done` of `total` bytes (`total` is 0 while unknown). */
+{ step: "downloading"; done: number; total: number } | 
+/**  Verifying and unpacking the downloaded build. */
+{ step: "installing" } | 
+/**
+ *  The last connect could not get the client. Cleared by the account's next connect, by
+ *  stopping it, and by any preparation that succeeds.
+ */
+{ step: "failed"; problem: ClientProblem };
 
 /**  How a screenshot reached the clipboard. */
 export type ClipboardCopy = 

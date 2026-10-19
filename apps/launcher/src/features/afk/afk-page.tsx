@@ -13,6 +13,7 @@ import {
   Trash,
   UserPlus,
   UsersThree,
+  X,
 } from "@phosphor-icons/react";
 import {
   Button,
@@ -29,16 +30,19 @@ import {
   leave,
   Menu,
   type MenuItem,
+  Progress,
   useMotionPrefs,
 } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion, type Transition } from "motion/react";
 import { type Ref, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { isAfkIdle } from "@/features/accounts/afk-match";
 import { type AfkAccount, api } from "@/lib/api";
 import { AfkConsole } from "./afk-console";
 import { AfkHead } from "./afk-head";
 import { afkFailed, isFriendly, runAfk } from "./errors";
+import { AfkPrimaryAction, primaryAction } from "./primary-action";
 import { AfkSettingsSheet, useAfkReconnect } from "./settings/settings-sheet";
 import { StateLine } from "./state-line";
 
@@ -49,9 +53,57 @@ const glide: Transition = { type: "spring", stiffness: 420, damping: 36, mass: 0
 /** Where a card rests; its entrance and exit move from and to the same function list. */
 const REST = "translateY(0px) scale(1)";
 
-/** Anything but stopped: a stop makes sense (queued and reconnecting included). */
-const isActive = (account: AfkAccount) =>
-  account.state.kind !== "stopped" && account.state.kind !== "error";
+/**
+ * Anything but idle: a stop makes sense (queued, reconnecting and waiting for the client
+ * included).
+ */
+const isActive = (account: AfkAccount) => !isAfkIdle(account.state);
+
+/**
+ * Under the state line while the account's client is fetched (its progress) or after it could not
+ * be had (what to do). One slot: the outgoing line fades where it was while the new one takes its
+ * place.
+ */
+function ClientRow({ account }: { account: AfkAccount }) {
+  const { t } = useTranslation();
+  const { reduce } = useMotionPrefs();
+  const { state } = account;
+  const from = reduce ? "translateY(0px)" : "translateY(3px)";
+  return (
+    <AnimatePresence initial={false} mode="popLayout">
+      {state.kind === "preparing" ? (
+        <motion.div
+          key="progress"
+          className="mt-2.5"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: enter(0.22) }}
+          exit={{ opacity: 0, transition: leave(0.16) }}
+        >
+          <Progress
+            value={state.percent}
+            label={t(
+              state.step === "downloading" ? "afkConnect.downloading" : "afkConnect.preparing",
+            )}
+            className="h-1"
+          />
+        </motion.div>
+      ) : state.kind === "clientFailed" ? (
+        <motion.p
+          key={`hint-${state.problem}`}
+          // Said once when it appears; the state line above already shows what happened.
+          role="status"
+          className="mt-1.5 pl-[23px] text-[12px] leading-snug text-ash-300"
+          initial={{ opacity: 0, transform: from }}
+          animate={{ opacity: 1, transform: "translateY(0px)", transition: enter(0.24) }}
+          exit={{ opacity: 0, transition: leave(0.16) }}
+        >
+          <span className="sr-only">{t(`afkConnect.problem.${state.problem}.title`)}. </span>
+          {t(`afkConnect.problem.${state.problem}.hint`)}
+        </motion.p>
+      ) : null}
+    </AnimatePresence>
+  );
+}
 
 /** Health, food and players of a connected account, beside its state (no extra row). */
 function Stats({ account }: { account: AfkAccount }) {
@@ -110,7 +162,6 @@ function AfkCard({
   const { t } = useTranslation();
   const { reduce, layout } = useMotionPrefs();
   const reconnect = useAfkReconnect();
-  const active = isActive(account);
   const connected = account.state.kind === "connected";
   const stale =
     account.settingsChanged && ["starting", "connecting", "connected"].includes(account.state.kind);
@@ -119,11 +170,17 @@ function AfkCard({
   const stop = () => runAfk(api.afkStop(account.id), t("afk.stopFailed"));
   const openFolder = () => runAfk(api.afkOpenFolder(account.id), t("afk.openFolderFailed"));
 
+  // The main button's action leads the menu too.
+  const main: Record<ReturnType<typeof primaryAction>, MenuItem> = {
+    connect: { label: t("afk.connect"), icon: <Play size={16} />, onSelect: connect },
+    stop: { label: t("afk.stop"), icon: <Stop size={16} />, onSelect: stop },
+    cancel: { label: t("afkConnect.cancel"), icon: <X size={16} />, onSelect: stop },
+    retry: { label: t("common.retry"), icon: <ArrowsClockwise size={16} />, onSelect: connect },
+  };
+
   // One list for the "more" button and the right click.
   const items: Array<MenuItem | null> = [
-    active
-      ? { label: t("afk.stop"), icon: <Stop size={16} />, onSelect: stop }
-      : { label: t("afk.connect"), icon: <Play size={16} />, onSelect: connect },
+    main[primaryAction(account.state)],
     ...(connected
       ? [
           {
@@ -223,6 +280,7 @@ function AfkCard({
               ) : null}
             </AnimatePresence>
           </div>
+          <ClientRow account={account} />
 
           {stale ? (
             <div className="mt-3 flex items-center gap-2 rounded-md bg-gold-500/10 py-1.5 pr-1.5 pl-2.5 ring-1 ring-gold-400/20">
@@ -243,27 +301,7 @@ function AfkCard({
 
           {/* Pinned to the bottom: the buttons of a row of cards line up. */}
           <div className="mt-auto flex gap-2 pt-3">
-            {active ? (
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Stop size={14} weight="fill" />}
-                onClick={stop}
-                className="flex-1"
-              >
-                {t("afk.stop")}
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                variant="primary"
-                icon={<Play size={14} weight="fill" />}
-                onClick={connect}
-                className="flex-1"
-              >
-                {t("afk.connect")}
-              </Button>
-            )}
+            <AfkPrimaryAction account={account} className="flex-1" />
             <Button size="sm" variant="ghost" icon={<Terminal size={15} />} onClick={onConsole}>
               {t("afk.console")}
             </Button>

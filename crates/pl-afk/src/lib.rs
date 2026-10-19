@@ -13,11 +13,13 @@
 //!   identical to the legacy writer (golden-tested).
 //! - [`AfkRuntime`]: verified, side-by-side client installs with offline fallback.
 //! - [`AfkManager`]: session actors (bridge events, masked console, `/quit` + kill, restart loop
-//!   honoring the AutoRelog delays, retry limit and kick filter), staggered connect-all/auto-start.
+//!   honoring the AutoRelog delays, retry limit and kick filter), staggered connect-all/auto-start,
+//!   and the client fetched on demand for a connect ([`client`]: [`ClientStep`], [`ClientProblem`]).
 //!
 //! The client contract (`@@MCC@@` events, exit codes) is documented in [`bridge`].
 
 pub mod bridge;
+pub mod client;
 mod config;
 mod console;
 mod error;
@@ -39,6 +41,7 @@ mod store;
 mod util;
 mod versions;
 
+pub use client::{ClientProblem, ClientStep, ReleaseSource};
 pub use config::{
     ConfigFiles, INI_FILE_NAME, LOGIN_SCRIPT_FILE_NAME, MATCHES_FILE_NAME, build_config,
     build_config_in, has_login_commands, write_config,
