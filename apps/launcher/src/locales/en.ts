@@ -3,6 +3,7 @@ import { enAfkConnect } from "./en-afk-connect";
 import { enDisk } from "./en-disk";
 import { enEventJoin } from "./en-event-join";
 import { enGraphics } from "./en-graphics";
+import { enImport } from "./en-import";
 import { enLibraryDrop } from "./en-library-drop";
 import { enMinecraft } from "./en-minecraft";
 import { enOverview } from "./en-overview";
@@ -241,6 +242,7 @@ export const en: DeepPartial<Strings> = {
   placement: enPlacement,
   playOpen: enPlayOpen,
   afkConnect: enAfkConnect,
+  import: enImport,
   nav: {
     home: "Home",
     library: "Library",

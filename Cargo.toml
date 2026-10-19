@@ -24,6 +24,7 @@ pl-social = { path = "crates/pl-social" }
 pl-desktop = { path = "crates/pl-desktop" }
 pl-team = { path = "crates/pl-team" }
 pl-lang = { path = "crates/pl-lang" }
+pl-import = { path = "crates/pl-import" }
 
 # Async runtime
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "fs", "process", "io-util", "sync", "time", "net"] }

@@ -14,6 +14,7 @@ import { createMockContent, mockExtraMods } from "./mock-content";
 import { createMockConveniences, mockNewScreenshots, mockSessionMs } from "./mock-conveniences";
 import { createMockData } from "./mock-data";
 import { mockFreshOfficial, mockFreshOwnMod } from "./mock-fresh";
+import { createMockImport } from "./mock-import";
 import { mockCustomJava, mockJava, mockJavaPrompt } from "./mock-java";
 import { pick } from "./mock-lang";
 import { mockLaunchStop } from "./mock-launch-stop";
@@ -881,6 +882,7 @@ export const mockApi: LauncherApi = {
   social: mockSocial,
   modHealth: mockModHealth,
   java: mockJava,
+  importer: createMockImport(),
   library: createMockLibrary({
     setGroup: (id, group) => {
       const instance = instances.find((i) => i.id === id);
@@ -1091,11 +1093,11 @@ export const mockApi: LauncherApi = {
   async setLanguage() {},
   async legacyScan() {
     // `?legacy=noWorlds`: an old launcher without worlds; `?legacy=empty`: none of the kinds the
-    // welcome lists (its sentence names only what was found).
+    // welcome lists (its sentence names only what was found); `?legacy=none`: no old launcher.
     const legacy = mockFlag("legacy");
     const empty = legacy === "empty";
     return {
-      found: true,
+      found: legacy !== "none",
       hasPremium: false,
       nickname: empty ? null : "EjderAvcisi",
       afkAccounts: empty ? 0 : 3,

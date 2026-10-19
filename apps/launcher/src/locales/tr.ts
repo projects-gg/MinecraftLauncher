@@ -4,6 +4,7 @@ import { trAfkConnect } from "./tr-afk-connect";
 import { trDisk } from "./tr-disk";
 import { trEventJoin } from "./tr-event-join";
 import { trGraphics } from "./tr-graphics";
+import { trImport } from "./tr-import";
 import { trLibraryDrop } from "./tr-library-drop";
 import { trMinecraft } from "./tr-minecraft";
 import { trOverview } from "./tr-overview";
@@ -35,6 +36,7 @@ export const tr = {
   placement: trPlacement,
   playOpen: trPlayOpen,
   afkConnect: trAfkConnect,
+  import: trImport,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",

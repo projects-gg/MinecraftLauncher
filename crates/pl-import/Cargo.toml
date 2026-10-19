@@ -1,0 +1,33 @@
+[package]
+name = "pl-import"
+description = "Finds other Minecraft launchers' data (the Minecraft Launcher, TLauncher, CurseForge, Modrinth, Prism, MultiMC) and brings the player's settings, servers, worlds, packs and setups over"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+pl-mc = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+fastnbt = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+jiff = { workspace = true }
+regex = { workspace = true }
+walkdir = { workspace = true }
+dirs = { workspace = true }
+specta = { workspace = true }
+# level.dat is gzip-compressed NBT (the version pl-mc builds).
+flate2 = "1.1"
+# Free space where the copies go (the version pl-mc and pl-data build).
+fs4 = "1.1.0"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+# Mod jars for the compatibility tests.
+zip = { workspace = true }

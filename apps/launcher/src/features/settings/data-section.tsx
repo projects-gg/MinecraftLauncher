@@ -10,6 +10,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useImportJob } from "@/features/import/import-job";
 import { glide, useMotionPrefs } from "@/features/modcenter/motion";
 import { api, type MovePlan, type MoveProgress } from "@/lib/api";
 import { formatBytes, formatCount, formatPercent } from "@/lib/format";
@@ -209,6 +210,20 @@ export function DataSection() {
               onClick={() => useUi.getState().setMigrationOpen(true)}
             >
               {t("dataSettings.import")}
+            </Button>
+          }
+        />
+
+        <Item
+          title={t("import.settings.title")}
+          help={t("import.settings.help")}
+          actions={
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => useImportJob.getState().setDialogOpen(true)}
+            >
+              {t("import.settings.action")}
             </Button>
           }
         />

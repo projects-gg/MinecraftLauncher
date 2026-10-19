@@ -16,6 +16,7 @@ import type {
 import type { CleanupApi } from "./cleanup-types";
 import type { ContentApi } from "./content-types";
 import type { DataApi } from "./data-types";
+import type { ImportApi } from "./import-types";
 import type { JavaApi } from "./java-types";
 import type { LibraryApi } from "./library-types";
 import { mockApi } from "./mock";
@@ -186,6 +187,8 @@ export interface LauncherApi {
   modHealth: ModHealthApi;
   /** Settings → Java: the launcher's runtimes and the Javas on the computer. */
   java: JavaApi;
+  /** Bringing a player over from another launcher (the welcome flow, Settings → Veri). */
+  importer: ImportApi;
 }
 
 export type {
@@ -201,6 +204,7 @@ export * from "./afk-settings";
 export * from "./cleanup-types";
 export * from "./content-types";
 export * from "./data-types";
+export * from "./import-types";
 export * from "./java-types";
 export * from "./library-types";
 export * from "./modcenter-types";

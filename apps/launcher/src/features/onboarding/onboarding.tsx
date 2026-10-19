@@ -36,6 +36,11 @@ import logo from "@/assets/brand/logo-96.webp";
 import { AccountFace } from "@/features/accounts/account-face";
 import { sortAccounts } from "@/features/accounts/account-order";
 import { checkOfflineName } from "@/features/accounts/name-rules";
+import { useImportJob } from "@/features/import/import-job";
+import { ImportStatusCard } from "@/features/import/import-status";
+import { ImportStep } from "@/features/import/import-step";
+import { suggestedName } from "@/features/import/model";
+import { importKeys } from "@/features/import/use-import-picker";
 import { MigrationDialog } from "@/features/migrate/migration-dialog";
 import { MicrosoftLoginDialog } from "@/features/settings/accounts-section";
 import { MicrosoftMark } from "@/features/settings/microsoft-mark";
@@ -47,7 +52,7 @@ import { InstanceIcon } from "@/shell/instance-icon";
 import { TitleBar } from "@/shell/title-bar";
 import { usePrefs } from "@/stores/prefs";
 
-type Step = "welcome" | "legacy" | "account" | "projects";
+type Step = "welcome" | "legacy" | "import" | "account" | "projects";
 
 const enter = { duration: 0.32, ease: [0.16, 1, 0.3, 1] as const };
 
@@ -90,8 +95,37 @@ export function shouldShowOnboarding(onboarded: boolean): boolean {
 }
 
 /**
- * First run: welcome, optional v1 import, an account, and the Projects instance. Every step can
- * be left for later; nothing here is required to reach the launcher.
+ * A running or finished import from another launcher, in a glass card at the bottom right, over
+ * the art and clear of the steps (where the launcher's toasts appear): the flow goes on while it
+ * copies. It rises in when the player leaves the import step and stays until the flow ends.
+ */
+function ImportCardSlot({ hidden }: { hidden: boolean }) {
+  const status = useImportJob((s) => s.status);
+  const motionPrefs = useMotionPrefs();
+  const shown = status !== "idle" && !hidden;
+  return (
+    <div className="pointer-events-none absolute right-6 bottom-6 w-[320px]">
+      <AnimatePresence>
+        {shown ? (
+          <motion.div
+            key="import"
+            className="pointer-events-auto"
+            initial={{ opacity: 0, transform: motionPrefs.reduce ? "none" : "translateY(10px)" }}
+            animate={{ opacity: 1, transform: "translateY(0px)", transition: enter }}
+            exit={{ opacity: 0, transition: { duration: 0.18 } }}
+          >
+            <ImportStatusCard />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+/**
+ * First run: welcome, optional v1 import, an optional import from another launcher (IMPORT1), an
+ * account, and the Projects instance. Every step can be left for later; nothing here is required
+ * to reach the launcher.
  */
 export function Onboarding() {
   const { t } = useTranslation();
@@ -103,11 +137,17 @@ export function Onboarding() {
     queryKey: ["legacy-scan"],
     queryFn: () => api.legacyScan(),
   });
+  // Other launchers (small files and folder listings): their step is known before "Başlayalım".
+  const { data: imports, isPending: importScanning } = useQuery({
+    queryKey: importKeys.scan,
+    queryFn: () => api.importer.scan(),
+  });
   // Read early for the last step (its switch's description), so nothing moves there.
   useQuery({ queryKey: ["afk"], queryFn: () => api.afkAccounts() });
   const steps: Step[] = [
     "welcome",
     ...(scan?.found ? (["legacy"] as const) : []),
+    ...(imports?.sources.length ? (["import"] as const) : []),
     "account",
     "projects",
   ];
@@ -177,7 +217,7 @@ export function Onboarding() {
             <div
               className={cn(
                 "flex-1 transition-opacity duration-300",
-                scanning ? "opacity-0" : "opacity-100",
+                scanning || importScanning ? "opacity-0" : "opacity-100",
               )}
             >
               <p className="text-[12.5px] font-medium text-ash-400">
@@ -229,8 +269,26 @@ export function Onboarding() {
                   onNext={() => go(1)}
                 />
               ) : null}
+              {step === "import" && imports ? (
+                <StepFrame
+                  headingRef={headingRef}
+                  title={t("import.step.title")}
+                  body={t("import.step.body")}
+                >
+                  <ImportStep
+                    scan={imports}
+                    back={<BackButton onClick={() => go(-1)} />}
+                    onNext={() => go(1)}
+                  />
+                </StepFrame>
+              ) : null}
               {step === "account" ? (
-                <AccountStep headingRef={headingRef} onBack={() => go(-1)} onNext={() => go(1)} />
+                <AccountStep
+                  headingRef={headingRef}
+                  suggestedName={suggestedName(imports)}
+                  onBack={() => go(-1)}
+                  onNext={() => go(1)}
+                />
               ) : null}
               {step === "projects" ? (
                 <ProjectsStep headingRef={headingRef} onBack={() => go(-1)} onFinish={finish} />
@@ -239,6 +297,7 @@ export function Onboarding() {
           </AnimatePresence>
         </section>
       </div>
+      <ImportCardSlot hidden={step === "import"} />
     </div>
   );
 }
@@ -374,10 +433,13 @@ function LegacyStep({
 
 function AccountStep({
   headingRef,
+  suggestedName,
   onBack,
   onNext,
 }: {
   headingRef: RefObject<HTMLHeadingElement | null>;
+  /** The offline name another launcher used (TLauncher), to start the name field with. */
+  suggestedName?: string;
   onBack: () => void;
   onNext: () => void;
 }) {
@@ -389,7 +451,7 @@ function AccountStep({
   });
   const [adding, setAdding] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
-  const [name, setName] = useState("");
+  const [name, setName] = useState(suggestedName ?? "");
   const [final, setFinal] = useState(false);
   const nameInput = useRef<HTMLInputElement>(null);
 

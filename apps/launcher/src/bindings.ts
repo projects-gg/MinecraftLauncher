@@ -227,6 +227,15 @@ export const commands = {
 	afkOpenFolder: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_open_folder", { id })),
 	legacyScan: () => typedError<LegacyScan, CmdError>(__TAURI_INVOKE("legacy_scan")),
 	legacyImport: (request: LegacyImportRequest) => typedError<LegacyImportReport, CmdError>(__TAURI_INVOKE("legacy_import", { request })),
+	/**  Other launchers' data on this computer (cheap: small files and folder listings). */
+	importScan: () => typedError<ImportScanView, CmdError>(__TAURI_INVOKE("import_scan")),
+	/**  Sizes and fitting mods of one source's rows (reads folders and mod jars). */
+	importMeasure: (sourceId: string) => typedError<SourceMeasure, CmdError>(__TAURI_INVOKE("import_measure", { sourceId })),
+	/**
+	 *  Copies what the player picked. Each item reports how it went; one that fails does not stop
+	 *  the others. `content_cancel(job_id)` stops it after the file being copied.
+	 */
+	importStart: (request: ImportRequest, jobId: string, onProgress: Channel<ImportProgress>) => typedError<ImportReport, CmdError>(__TAURI_INVOKE("import_start", { request, jobId, onProgress })),
 	updateCheck: (channel: string) => typedError<UpdateStatus, CmdError>(__TAURI_INVOKE("update_check", { channel })),
 	/**
 	 *  Download the update of `channel` in the background (signature verified by the updater) and
@@ -1320,6 +1329,11 @@ export type CrashView = {
 	resetJvmArgs: boolean,
 };
 
+export type CreatedInstance = {
+	id: string,
+	name: string,
+};
+
 /**  A mod name and page from `modlist.html`, to show the user what is missing. */
 export type CurseForgeModLink = {
 	name: string,
@@ -1369,6 +1383,13 @@ export type DeepLink = { kind: "home" } |
  *  panel shows who it is; nothing is sent until the player confirms.
  */
 { kind: "friend"; code: string };
+
+/**  Where an item's copies went. */
+export type Destination = {
+	instanceId: string,
+	instanceName: string,
+	count: number,
+};
 
 /**  What happened to the files of a drop. */
 export type DropResultView = {
@@ -1628,6 +1649,101 @@ export type HomeView = {
 /**  What kind of file is being imported into a game directory. */
 export type ImportKind = "mod" | "resourcePack" | "shaderPack";
 
+/**  A version, profile or instance of another launcher that can become an instance here. */
+export type ImportProfile = {
+	/**  Stable within its source (`version:<id>`, `profile:<key>`, `instance:<folder>`). */
+	id: string,
+	/**
+	 *  The name it becomes: the player's own (an instance, a launcher profile they named) or
+	 *  one read from the version ("Fabric 1.21.4", "Minecraft 1.8.9").
+	 */
+	name: string,
+	minecraft: string | null,
+	loader: LoaderKind,
+	loaderVersion: string | null,
+	/**  Set when it cannot come over; the row says why. */
+	unsupported: Unsupported | null,
+	/**  OptiFine was part of it: the instance is made without it (Sodium and Iris do its work). */
+	withoutOptifine: boolean,
+	/**
+	 *  It plays in a folder of its own (an instance, a launcher profile with its own game
+	 *  directory), copied as a whole. Otherwise it shares the source's folder and brings its
+	 *  mods, mod settings, game settings and server list.
+	 */
+	ownFolder: boolean,
+	/**  Mod files in its mods folder, before they are checked. */
+	modFiles: number,
+	lastUsedMs: number | null,
+	/**  An earlier import made it into this instance, which still exists. */
+	importedAs: string | null,
+};
+
+export type ImportProgress = {
+	stage: ImportStage,
+	doneBytes: number,
+	totalBytes: number,
+	doneItems: number,
+	totalItems: number,
+	/**  What is being brought over now (a world's or an instance's name), when it has one. */
+	current: string | null,
+};
+
+export type ImportReport = {
+	/**  In the order they ran. */
+	outcomes: ItemOutcome[],
+	cancelled: boolean,
+	/**  Instances made from profiles. */
+	created: CreatedInstance[],
+	/**  The Projects instance, when shared data went into it. */
+	officialId: string | null,
+};
+
+export type ImportRequest = {
+	sources: SourceRequest[],
+};
+
+export type ImportScanView = {
+	/**  Other launchers with something to bring, the `.minecraft`-style folders first. */
+	sources: ImportSource[],
+	/**  Free space on the data folder's disk. */
+	freeBytes: number | null,
+	/**  What the import leaves free (the games still download). */
+	reserveBytes: number,
+	/**  The Projects instance already has game settings of its own: they are kept. */
+	projectsHasOptions: boolean,
+};
+
+/**  A kind of shared data. */
+export type ImportShared = "options" | "servers" | "worlds" | "resourcePacks" | "shaderPacks" | "screenshots";
+
+/**  One launcher's data on this computer. */
+export type ImportSource = {
+	/**  Stable between a scan and the import (`minecraft`, `curseforge`, ...). */
+	id: string,
+	kind: SourceKind,
+	/**  Its folder (logs and support; the UI does not show paths). */
+	path: string,
+	/**
+	 *  Settings, servers, worlds and packs shared by every version (`.minecraft`-style
+	 *  folders); `None` for launchers that keep everything per instance.
+	 */
+	shared: SharedData | null,
+	/**  Most recently used first. */
+	profiles: ImportProfile[],
+	/**
+	 *  A player name the launcher used offline (TLauncher), offered for the account step.
+	 *  Accounts and their sign-ins never come over.
+	 */
+	offlineName: string | null,
+	lastUsedMs: number | null,
+};
+
+export type ImportStage = 
+/**  Reading what the picked items take. */
+"preparing" | "copying" | 
+/**  Writing the last records. */
+"finishing";
+
 export type InstanceDetailView = {
 	settings: InstanceSettingsView,
 	mods: ModView[],
@@ -1756,6 +1872,26 @@ export type IssueKind =
 "brokenMetadata" | 
 /**  A jar without a mod description (a library, or not a mod for this loader). */
 "noMetadata";
+
+export type ItemOutcome = {
+	sourceId: string,
+	item: ItemRef,
+	/**  The profile's or instance's name; empty for shared data. */
+	label: string,
+	status: OutcomeStatus,
+	/**  Things that came over (worlds, packs, screenshots, servers added, mods). */
+	copied: number,
+	/**  Things that stayed behind. */
+	left: number,
+	reason: OutcomeReason | null,
+	/**  The instances the copies went into. */
+	destinations: Destination[],
+	/**  Technical detail for support ("Ayrıntıları kopyala"); never shown as it is. */
+	detail: string | null,
+};
+
+/**  One item of a request. */
+export type ItemRef = { type: "shared"; kind: ImportShared } | { type: "profile"; id: string };
 
 /**
  *  A Java the player picks in an instance's settings ("Özel"): what it is and whether it suits
@@ -2895,6 +3031,36 @@ export type OldSetsView = {
 	olderThanDays: number,
 };
 
+export type OutcomeReason = 
+/**  The disk had no room for it. */
+"noSpace" | 
+/**  The other launcher's file could not be read. */
+"unreadable" | 
+/**  It came over before. */
+"alreadyThere" | 
+/**  The Projects instance has its own game settings; they stay. */
+"keptExisting" | "cancelled" | 
+/**  The copy failed (details in `detail`). */
+"failed" | 
+/**  The Projects instance could not be prepared (offline at the first start). */
+"noTarget" | 
+/**  Mods made for another loader or Minecraft version stayed behind. */
+"incompatibleMods" | 
+/**  The other launcher's item is gone. */
+"notFound" | 
+/**  Its loader or version cannot be installed here. */
+"unsupported" | 
+/**  A world is open in a running game. */
+"inUse";
+
+export type OutcomeStatus = 
+/**  Everything came over. */
+"done" | 
+/**  Some of it came over; `left` says how much did not, `reason` why. */
+"partial" | 
+/**  Nothing was copied, on purpose (already there, the player's own kept, cancelled). */
+"skipped" | "failed";
+
 /**  One file an update adds, changes, removes or leaves alone. */
 export type PackChangeView = {
 	/**  Game-relative path. */
@@ -3020,6 +3186,19 @@ export type Privacy = {
 	shareServer: boolean,
 	/**  Show a coarse "last seen" to friends (default on). */
 	shareLastSeen: boolean,
+};
+
+/**  What one profile brings, read on demand. */
+export type ProfileMeasure = {
+	id: string,
+	/**  Bytes the copy takes. */
+	bytes: number,
+	/**  Mods that come over: made for its loader and Minecraft version. */
+	mods: number,
+	/**  Mods left behind: made for another loader or Minecraft version, or broken files. */
+	leftMods: number,
+	/**  Worlds of a profile with its own folder. */
+	worlds: number,
 };
 
 /**  Someone shown with name and picture (requests, blocked users, code lookups). */
@@ -3409,6 +3588,21 @@ export type Severity =
 /**  Worth knowing; nothing has to be done. */
 "info";
 
+/**
+ *  What a `.minecraft`-style folder shares between all its versions, counted without opening
+ *  anything big.
+ */
+export type SharedData = {
+	/**  `options.txt` is there (language, controls, video). */
+	options: boolean,
+	/**  Servers listed in `servers.dat` (hidden "Direct Connection" entries left out). */
+	servers: number,
+	worlds: number,
+	resourcePacks: number,
+	shaderPacks: number,
+	screenshots: number,
+};
+
 export type SharedFilesView = {
 	items: SharedItem[],
 	/**  Bytes freed only when all of a group's items go (files hard-linked into each). */
@@ -3446,6 +3640,14 @@ export type SharedKind = "gameVersion" | "loaderProfile" | "javaRuntime" | "libr
 export type SharedLogView = {
 	id: string,
 	url: string,
+};
+
+/**  Sizes of the shared data, for the rows and the free-space check. */
+export type SharedSizes = {
+	worlds: number,
+	resourcePacks: number,
+	shaderPacks: number,
+	screenshots: number,
 };
 
 export type ShortcutView = {
@@ -3581,6 +3783,30 @@ export type SocialView_Serialize = {
 	limits: Limits | null,
 	/**  What this launcher tells friends right now. */
 	activity: ActivityView,
+};
+
+/**  The launcher a source belongs to. Names are brand names: the UI shows them as they are. */
+export type SourceKind = 
+/**  Mojang's Minecraft Launcher (`.minecraft`). */
+"minecraft" | 
+/**  TLauncher: `.minecraft` (or the folder its settings name) plus its own settings. */
+"tLauncher" | 
+/**  SKlauncher: `.minecraft` plus its `sklauncher` folder. */
+"skLauncher" | "curseForge" | "modrinth" | "prism" | "polyMc" | "multiMc";
+
+export type SourceMeasure = {
+	sourceId: string,
+	shared: SharedSizes | null,
+	profiles: ProfileMeasure[],
+};
+
+/**  What to bring from one source. */
+export type SourceRequest = {
+	sourceId: string,
+	/**  Shared data that goes into the Projects instance. */
+	shared?: ImportShared[],
+	/**  Profile ids, each becoming an instance. */
+	profiles?: string[],
 };
 
 export type StatusMode = "online" | 
@@ -3845,6 +4071,16 @@ export type TurnOffView = {
 	file: string,
 	name: string,
 };
+
+/**  Why a profile cannot come over. */
+export type Unsupported = 
+/**
+ *  Made with a mod loader this launcher does not install (`name`: LiteLoader, Rift,
+ *  Legacy Fabric...; empty when the loader is not known at all).
+ */
+{ kind: "loader"; name: string } | 
+/**  Its Minecraft version could not be read. */
+{ kind: "unknownVersion" };
 
 export type UpdateProgress = {
 	downloaded: number,

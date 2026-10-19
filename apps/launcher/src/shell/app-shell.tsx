@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import heroFallback from "@/assets/art/hero-dragon-1.webp";
 import { DropHost } from "@/features/drop/drop-host";
 import { EventReminders } from "@/features/home/event-reminders";
+import { ImportHost } from "@/features/import/import-host";
 import { JavaPromptDialog } from "@/features/java/java-prompt";
 import { ScreenshotNotice } from "@/features/library/screenshot-notice";
 import { MigrationDialog } from "@/features/migrate/migration-dialog";
@@ -143,6 +144,7 @@ export function AppShell() {
       <PackNotesDialog />
       <MandatoryUpdate />
       <MigrationDialog open={migrationOpen} onOpenChange={setMigrationOpen} />
+      <ImportHost onboarding={onboarding} />
       <NewsReader
         newsId={newsId}
         onClose={() =>
