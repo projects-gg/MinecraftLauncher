@@ -12,6 +12,7 @@ export function Switch({
   hideLabel,
   className,
   id: idProp,
+  describedBy,
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
@@ -24,6 +25,8 @@ export function Switch({
   className?: string;
   /** For a `<label htmlFor>` of the row around it (a click on the row's words toggles too). */
   id?: string;
+  /** The id of the row's help line, read with the switch's name. */
+  describedBy?: string;
 }) {
   const generatedId = useId();
   const id = idProp ?? generatedId;
@@ -32,14 +35,16 @@ export function Switch({
       <RadixSwitch.Root
         id={id}
         aria-label={hideLabel ? label : undefined}
+        aria-describedby={describedBy}
         checked={checked}
         onCheckedChange={onCheckedChange}
         disabled={disabled}
         className={cn(
           "group relative h-[20px] w-[34px] shrink-0 cursor-pointer rounded-full bg-obsidian-700 ring-1 ring-white/10 transition-[background-color,box-shadow,opacity] duration-200",
-          // Under the pointer the track lifts a little, so a switch reads as something to press.
-          "data-[state=unchecked]:enabled:hover:bg-[color-mix(in_oklab,var(--color-obsidian-700),white_7%)] data-[state=unchecked]:enabled:hover:ring-white/20",
-          "data-[state=checked]:bg-gold-500 data-[state=checked]:ring-gold-400/60 data-[state=checked]:enabled:hover:bg-gold-400",
+          // Under the pointer the track lifts a little, so a switch reads as something to press;
+          // in a `switch-row` it also lifts while the pointer is on its words (its label).
+          "data-[state=unchecked]:enabled:hovered:bg-[color-mix(in_oklab,var(--color-obsidian-700),white_7%)] data-[state=unchecked]:enabled:hovered:ring-white/20",
+          "data-[state=checked]:bg-gold-500 data-[state=checked]:ring-gold-400/60 data-[state=checked]:enabled:hovered:bg-gold-400",
           "disabled:cursor-not-allowed disabled:opacity-50",
         )}
       >

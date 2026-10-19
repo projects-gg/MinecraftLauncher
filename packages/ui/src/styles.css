@@ -270,6 +270,20 @@
   }
 }
 
+/* `hovered:` is `hover:`, and also "the pointer is on the words that label me": a row marked
+   `switch-row` whose <label> names the switch in it (Settings, AFK settings) lifts the switch
+   while the pointer is on the label, since a click there toggles it. */
+@custom-variant hovered {
+  @media (hover: hover) {
+    &:hover {
+      @slot;
+    }
+    :where(.switch-row:has(label:hover)) & {
+      @slot;
+    }
+  }
+}
+
 /* Diagonal "hextech" cut on the top-left and bottom-right corners. Set --cut to resize. */
 @utility chamfer {
   clip-path: polygon(

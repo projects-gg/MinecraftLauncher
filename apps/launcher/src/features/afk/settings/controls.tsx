@@ -65,7 +65,8 @@ export function ToggleRow({
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-6 py-3",
+        // `switch-row`: the switch lifts while the pointer is on the title too (`hovered:`).
+        "switch-row flex items-center justify-between gap-6 py-3",
         emphasis && "mb-1 border-b border-white/7 pb-4",
         disabled && "opacity-55",
       )}
@@ -82,10 +83,15 @@ export function ToggleRow({
         >
           {title}
         </label>
-        {help ? <p className="mt-0.5 max-w-[58ch] text-[12.5px] text-ash-400">{help}</p> : null}
+        {help ? (
+          <p id={`${id}-help`} className="mt-0.5 max-w-[58ch] text-[12.5px] text-ash-400">
+            {help}
+          </p>
+        ) : null}
       </div>
       <Switch
         id={id}
+        describedBy={help ? `${id}-help` : undefined}
         checked={checked}
         onCheckedChange={onCheckedChange}
         label={title}
