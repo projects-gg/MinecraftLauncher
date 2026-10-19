@@ -108,6 +108,44 @@ pub fn rollout_bucket(install_id: &str) -> u8 {
     (prefix % 100) as u8
 }
 
+/// The release channel files a launcher reads for its own updates, in order:
+/// `<mirror>releases/<channel>.json` (`beta`, or `stable` for anything else). The installed
+/// launcher reads its content mirrors (`production`). A test launcher (`isolated`: debug builds,
+/// every `PROJECTS_LAUNCHER_INSTANCE`) reads only the test mirrors it was given (`test`, the debug
+/// override of the content mirrors): without one it gets no channel at all, so it never offers,
+/// downloads or runs a real release's installer over the installed launcher.
+pub fn release_channel_urls(
+    isolated: bool,
+    production: &[&str],
+    test: Option<&[String]>,
+    channel: &str,
+) -> Vec<String> {
+    let channel = if channel == "beta" { "beta" } else { "stable" };
+    let bases: Vec<&str> = if isolated {
+        test.unwrap_or_default()
+            .iter()
+            .map(String::as_str)
+            .collect()
+    } else {
+        production.to_vec()
+    };
+    bases
+        .into_iter()
+        .map(|base| format!("{base}releases/{channel}.json"))
+        .collect()
+}
+
+/// Whether a launcher may download the update bundle at `url`. The installed launcher takes what
+/// its signed channel names. A test launcher takes a bundle only from one of its test mirrors
+/// ([`release_channel_urls`]), so a test channel that points at a real installer is refused too.
+pub fn release_bundle_allowed(isolated: bool, test: Option<&[String]>, url: &str) -> bool {
+    !isolated
+        || test
+            .unwrap_or_default()
+            .iter()
+            .any(|base| !base.is_empty() && url.starts_with(base.as_str()))
+}
+
 fn parse_version(text: &str) -> Option<semver::Version> {
     let text = text.trim();
     semver::Version::parse(text.strip_prefix('v').unwrap_or(text)).ok()
@@ -196,6 +234,79 @@ mod tests {
             forced.decide(&semver::Version::new(2, 0, 5), 99),
             UpdateDecision::HeldBack
         );
+    }
+
+    const PRODUCTION: [&str; 2] = [
+        "https://cdn.projects.gg/v1/",
+        "https://raw.githubusercontent.com/projects-gg/launcher-content/main/v1/",
+    ];
+
+    #[test]
+    fn the_installed_launcher_reads_its_content_mirrors() {
+        assert_eq!(
+            release_channel_urls(false, &PRODUCTION, None, "stable"),
+            [
+                "https://cdn.projects.gg/v1/releases/stable.json",
+                "https://raw.githubusercontent.com/projects-gg/launcher-content/main/v1/releases/stable.json"
+            ]
+        );
+        assert_eq!(
+            release_channel_urls(false, &PRODUCTION, None, "beta")[0],
+            "https://cdn.projects.gg/v1/releases/beta.json"
+        );
+        // Any other name is the stable channel (nothing from outside reaches the path).
+        assert_eq!(
+            release_channel_urls(false, &PRODUCTION, None, "../nightly")[0],
+            "https://cdn.projects.gg/v1/releases/stable.json"
+        );
+        // Test mirrors never redirect the installed launcher.
+        let test = vec!["http://127.0.0.1:8811/v1/".to_owned()];
+        assert_eq!(
+            release_channel_urls(false, &PRODUCTION, Some(test.as_slice()), "stable")[0],
+            "https://cdn.projects.gg/v1/releases/stable.json"
+        );
+        assert!(release_bundle_allowed(
+            false,
+            None,
+            "https://cdn.projects.gg/v1/releases/2.1.0/x.nsis.zip"
+        ));
+    }
+
+    #[test]
+    fn a_test_launcher_never_reaches_a_real_release() {
+        for test in [None, Some(&[][..])] {
+            assert!(
+                release_channel_urls(true, &PRODUCTION, test, "stable").is_empty(),
+                "no test mirror: no updater"
+            );
+            assert!(release_channel_urls(true, &PRODUCTION, test, "beta").is_empty());
+            assert!(!release_bundle_allowed(
+                true,
+                test,
+                "https://cdn.projects.gg/v1/releases/2.1.0/x.nsis.zip"
+            ));
+        }
+        let test = vec!["http://127.0.0.1:8811/v1/".to_owned()];
+        assert_eq!(
+            release_channel_urls(true, &PRODUCTION, Some(test.as_slice()), "beta"),
+            ["http://127.0.0.1:8811/v1/releases/beta.json"]
+        );
+        assert!(release_bundle_allowed(
+            true,
+            Some(test.as_slice()),
+            "http://127.0.0.1:8811/v1/releases/2.1.0/x.nsis.zip"
+        ));
+        // A test channel that names the real installer is refused.
+        assert!(!release_bundle_allowed(
+            true,
+            Some(test.as_slice()),
+            "https://cdn.projects.gg/v1/releases/2.1.0/x.nsis.zip"
+        ));
+        assert!(!release_bundle_allowed(
+            true,
+            Some(&[String::new()][..]),
+            "https://cdn.projects.gg/v1/releases/2.1.0/x.nsis.zip"
+        ));
     }
 
     #[test]

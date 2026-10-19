@@ -25,6 +25,14 @@ pub const CONTENT_MIRRORS: &[&str] = &[
 /// Content mirrors in use. Debug builds accept `PROJECTS_CONTENT_MIRRORS` (comma-separated base
 /// URLs) for local end-to-end tests; the content must still carry a trusted signature.
 pub fn content_mirrors() -> Vec<String> {
+    test_content_mirrors()
+        .unwrap_or_else(|| CONTENT_MIRRORS.iter().map(|m| (*m).to_owned()).collect())
+}
+
+/// Debug builds: the test mirrors `PROJECTS_CONTENT_MIRRORS` names (each ending in `/`), if any.
+/// Release builds never have any. A test launcher's updater reads only these
+/// (`pl_content::release_channel_urls`).
+pub fn test_content_mirrors() -> Option<Vec<String>> {
     #[cfg(debug_assertions)]
     if let Ok(list) = std::env::var("PROJECTS_CONTENT_MIRRORS") {
         let mirrors: Vec<String> = list
@@ -40,10 +48,10 @@ pub fn content_mirrors() -> Vec<String> {
             })
             .collect();
         if !mirrors.is_empty() {
-            return mirrors;
+            return Some(mirrors);
         }
     }
-    CONTENT_MIRRORS.iter().map(|m| (*m).to_owned()).collect()
+    None
 }
 
 /// Keys trusted to sign the content index: `pl_content::CONTENT_PUBLIC_KEYS` (the list Studio

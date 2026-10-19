@@ -1,7 +1,9 @@
 //! Launcher self-updates on top of tauri-plugin-updater.
 //!
 //! 1. Our channel file (`v1/releases/<channel>.json`, Tauri's static format plus `rollout`,
-//!    `mandatory`, `minVersion`) is fetched from the content mirrors in order.
+//!    `mandatory`, `minVersion`) is fetched from the content mirrors in order. A test build
+//!    (debug, `PROJECTS_LAUNCHER_INSTANCE`) reads only its test mirrors and downloads only from
+//!    them; without one it has no updater (`pl_content::release_channel_urls`).
 //! 2. `ReleaseChannel::decide` applies staged rollout (stable per-install bucket) and the
 //!    minimum version.
 //! 3. The Tauri updater downloads the signed bundle from the mirror that answered and installs it.
@@ -87,16 +89,25 @@ fn install_id(state: &AppState) -> String {
     id
 }
 
+/// The channel files to read: the content mirrors' for the installed launcher; for a test launcher
+/// (debug builds, `PROJECTS_LAUNCHER_INSTANCE`) only its test mirrors', none without them.
 fn channel_urls(channel: &str) -> Vec<String> {
-    let channel = if channel == "beta" { "beta" } else { "stable" };
-    CONTENT_MIRRORS
-        .iter()
-        .map(|base| format!("{base}releases/{channel}.json"))
-        .collect()
+    pl_content::release_channel_urls(
+        crate::identity::current().is_isolated(),
+        CONTENT_MIRRORS,
+        crate::state::test_content_mirrors().as_deref(),
+        channel,
+    )
 }
 
 async fn fetch_channel(state: &AppState, channel: &str) -> Option<(ReleaseChannel, String)> {
     let urls = channel_urls(channel);
+    if urls.is_empty() {
+        // A test launcher without a test mirror: it never sees a real release ("unavailable",
+        // so no update pill).
+        tracing::info!("launcher updates are off in this test build (no PROJECTS_CONTENT_MIRRORS)");
+        return None;
+    }
     match state
         .http
         .get_json_from_mirrors::<ReleaseChannel>(&urls)
@@ -180,6 +191,18 @@ pub async fn update_download(
     else {
         return Ok(false);
     };
+    // A test launcher downloads only from its test mirrors, never a real installer.
+    if !pl_content::release_bundle_allowed(
+        crate::identity::current().is_isolated(),
+        crate::state::test_content_mirrors().as_deref(),
+        update.download_url.as_str(),
+    ) {
+        tracing::warn!(
+            url = %update.download_url,
+            "test build refused an update bundle outside its test mirrors"
+        );
+        return Ok(false);
+    }
     let downloaded = Arc::new(std::sync::atomic::AtomicU64::new(0));
     let progress = on_progress.clone();
     let counter = Arc::clone(&downloaded);

@@ -42,7 +42,10 @@ pub use pack::{
     ManifestProblem, ModrinthRef, OptionalGroup, PackDependencies, PackEnv, PackFile, PackHashes,
     PackItem, PackLoader, PackManifest, PackServer, PolicyRule, ProjectsExtension,
 };
-pub use release::{ReleaseChannel, ReleasePlatform, UpdateDecision, rollout_bucket};
+pub use release::{
+    ReleaseChannel, ReleasePlatform, UpdateDecision, release_bundle_allowed, release_channel_urls,
+    rollout_bucket,
+};
 
 /// Longest family or item id, in bytes.
 pub const MAX_ID_LEN: usize = 64;
