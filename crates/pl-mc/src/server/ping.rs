@@ -325,6 +325,12 @@ fn build_resolver() -> Option<TokioResolver> {
         let options = builder.options_mut();
         options.timeout = Duration::from_secs(2);
         options.attempts = 2;
+        // Windows: hickory binds each UDP query to 0.0.0.0 on a port it picks itself, which
+        // Windows Defender Firewall takes for a server: at the first server ping (seconds after
+        // the first start) players got a "Windows Security" prompt to let Projects Launcher on
+        // the network (E2E2, 19 Oct 2026; hickory documents it on this option). The OS's own
+        // ephemeral port raises none.
+        options.os_port_selection = cfg!(windows);
         builder.build()
     };
     let system = TokioResolver::builder_tokio()
@@ -748,6 +754,14 @@ mod tests {
         send(&crate::server::ServerList::read(path));
         let list = crate::server::ServerList::default();
         send(&list.write(path));
+    }
+
+    /// Windows Defender Firewall prompts for an app whose UDP socket is bound to 0.0.0.0 on a port
+    /// the app picked (hickory's default): there the SRV lookups let the OS pick it.
+    #[tokio::test]
+    async fn srv_lookups_let_windows_pick_the_udp_port() {
+        let resolver = build_resolver().expect("a resolver");
+        assert_eq!(resolver.options().os_port_selection, cfg!(windows));
     }
 
     #[test]
