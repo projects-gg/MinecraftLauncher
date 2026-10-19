@@ -88,10 +88,12 @@ export function Skeleton({ className }: { className?: string }) {
  * wording sits in one grid cell, so the control keeps the width of the longest and nothing beside
  * it moves; the outgoing words fade first, the new ones follow (POLISH2: the buttons next to
  * "Güncellemeleri denetle" slid 60 px and back). Only the shown words are in the accessible name.
+ * Centred on their own; a `Button` with an icon sets them beside it (`swap-label`, REVIEW2: a
+ * short wording floated 37 px away from its icon).
  */
 export function SwapLabel({ labels, active }: { labels: string[]; active: number }) {
   return (
-    <span className="inline-grid justify-items-center">
+    <span className="swap-label inline-grid justify-items-center">
       {labels.map((label, i) => (
         <span
           // biome-ignore lint/suspicious/noArrayIndexKey: the wordings are fixed, in order

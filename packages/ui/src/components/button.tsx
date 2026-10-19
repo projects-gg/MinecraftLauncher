@@ -88,7 +88,18 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
         <span className={cn("flex shrink-0 transition-colors", layer.text)}>{icon}</span>
       ) : null}
       {children ? (
-        <span className={cn("leading-none transition-colors", layer.text)}>{children}</span>
+        <span
+          className={cn(
+            "leading-none transition-colors",
+            layer.text,
+            // Words that change in place (`SwapLabel`) stay beside the icon.
+            icon
+              ? "[&_.swap-label]:justify-items-start"
+              : iconRight && "[&_.swap-label]:justify-items-end",
+          )}
+        >
+          {children}
+        </span>
       ) : null}
       {iconRight ? (
         <span className={cn("flex shrink-0 transition-colors", layer.text)}>{iconRight}</span>
