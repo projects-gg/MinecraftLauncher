@@ -12,7 +12,7 @@ export {
   SwapLabel,
 } from "./components/bits";
 export { Button, type ButtonProps, IconButton, type IconButtonProps } from "./components/button";
-export { Countdown } from "./components/countdown";
+export { Countdown, countdownCells, countdownTickMs } from "./components/countdown";
 export { Dialog } from "./components/dialog";
 export {
   DropZone,
