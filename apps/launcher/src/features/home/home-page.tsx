@@ -2,7 +2,7 @@ import { ArrowSquareOut, BookOpenText, WifiHigh, WifiSlash } from "@phosphor-ico
 import { Button, Chip, easeOutExpo, Skeleton, useMotionPrefs } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { FriendsInGameStrip } from "@/features/social/home-strip";
@@ -121,12 +121,16 @@ function ConnectionStrip() {
 
   const state = offline ? "offline" : backOnline ? "back" : null;
   const lift = reduce ? "none" : "translateY(-6px)";
+  const { layout } = useMotionPrefs();
   return (
     <div role="status" aria-live="polite">
       <AnimatePresence mode="wait" initial={false}>
         {state ? (
           <motion.div
             key={state}
+            // Glides with the banners and the friends strip above it (LayoutGroup).
+            layout={layout ? "position" : false}
+            transition={{ layout: { duration: 0.32, ease: easeOutExpo } }}
             className="glass flex w-fit items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] text-bone-100"
             initial={{ opacity: 0, transform: lift }}
             animate={{
@@ -172,9 +176,13 @@ export function HomePage() {
             transition={{ layout: { duration: NOTICE_ENTER, ease: easeOutExpo } }}
             className="space-y-2"
           >
-            <HomeBanners banners={data?.banners} />
-            <FriendsInGameStrip />
-            <ConnectionStrip />
+            {/* One group: a banner that leaves lets the strips below glide up with the other
+                banners (they used to jump once its fade ended). */}
+            <LayoutGroup>
+              <HomeBanners banners={data?.banners} />
+              <FriendsInGameStrip />
+              <ConnectionStrip />
+            </LayoutGroup>
           </motion.div>
         </div>
         {isPending || !data ? (

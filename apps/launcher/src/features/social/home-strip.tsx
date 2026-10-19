@@ -1,7 +1,7 @@
 // Home screen: friends in game, in one quiet line over the art, with "Katıl" when some of them are
 // on projects.gg. Clicking the faces or the text opens the friends panel. Nothing shows while no
 // friend plays (or the feature is off).
-import { cn } from "@pl/ui";
+import { cn, easeOutExpo, useMotionPrefs } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { JoinButton } from "./friend-row";
@@ -13,6 +13,7 @@ import { useSocialPrefs, useSocialUi } from "./store";
 export function FriendsInGameStrip() {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
+  const { layout } = useMotionPrefs();
   const view = useSocialUi((s) => s.view);
   const favorites = useSocialPrefs((s) => s.favorites);
   const openPanel = useSocialUi((s) => s.openPanel);
@@ -35,6 +36,9 @@ export function FriendsInGameStrip() {
       {first ? (
         <motion.div
           key="strip"
+          // Glides with the banners above it (LayoutGroup on Home).
+          layout={layout ? "position" : false}
+          transition={{ layout: { duration: 0.32, ease: easeOutExpo } }}
           className="glass flex w-fit max-w-[560px] items-center gap-3 rounded-full py-1.5 pr-1.5 pl-1.5"
           initial={{ opacity: 0, transform: reduce ? "none" : "translateY(8px)" }}
           animate={{ opacity: 1, transform: "translateY(0px)", transition: enter(0.42) }}
@@ -48,7 +52,7 @@ export function FriendsInGameStrip() {
             type="button"
             aria-label={`${text}. ${t("social.home.open")}`}
             onClick={() => openPanel({ page: "list" })}
-            className="flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-0.5 pr-2 pl-0.5 outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+            className="flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-0.5 pr-2.5 pl-0.5 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
           >
             <span className="flex items-center">
               {shown.slice(0, 4).map((friend, index) => (

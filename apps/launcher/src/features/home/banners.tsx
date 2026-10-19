@@ -104,7 +104,10 @@ export function HomeBanners({ banners }: { banners: BannerItem[] | undefined }) 
               <BannerIcon size={16} weight="fill" className={cn("shrink-0", style.className)} />
               <span className="min-w-0 text-left">{banner.text}</span>
               {isWebLink(url) ? (
-                <ArrowSquareOut size={14} className="shrink-0 text-ash-300" />
+                <ArrowSquareOut
+                  size={14}
+                  className="shrink-0 text-ash-300 transition-colors duration-150 group-hover:text-gold-300"
+                />
               ) : null}
             </>
           );
@@ -112,6 +115,8 @@ export function HomeBanners({ banners }: { banners: BannerItem[] | undefined }) 
             <motion.li
               key={banner.id}
               layout={layout ? "position" : false}
+              // The same glide as the friends strip below (one LayoutGroup on Home).
+              transition={{ layout: { duration: 0.32, ease: easeOutExpo } }}
               initial={{ opacity: 0, transform: lift }}
               animate={{
                 opacity: 1,
@@ -132,7 +137,8 @@ export function HomeBanners({ banners }: { banners: BannerItem[] | undefined }) 
                 <button
                   type="button"
                   onClick={() => openLink(url)}
-                  className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-full py-1.5 pl-3.5 transition-colors duration-150 hover:text-bone-50 focus-visible:outline-2"
+                  // The pill lights under the pointer like the friends line below it.
+                  className="group flex min-w-0 cursor-pointer items-center gap-2.5 rounded-full py-1.5 pr-2 pl-3.5 transition-colors duration-150 hover:bg-white/6 hover:text-bone-50 focus-visible:outline-2"
                 >
                   {text}
                 </button>
