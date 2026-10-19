@@ -111,6 +111,7 @@ mod tests {
             name: name.into(),
             key: key.into(),
             default: "key.keyboard.v".into(),
+            clashes_with: None,
             mod_name: "Mod".into(),
             action: "Action".into(),
         })
