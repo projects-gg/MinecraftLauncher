@@ -1,6 +1,7 @@
 import { toast } from "@pl/ui";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { create } from "zustand";
+import { commands } from "@/bindings";
 import { confirmAfkBeforePlay } from "@/features/accounts/afk-guard";
 import { launchErrorCode } from "@/features/disk/launch-error";
 import { useJavaPrompt } from "@/features/java/prompt-store";
@@ -91,10 +92,10 @@ async function applyGameStartBehavior() {
 
 async function restoreWindow() {
   if (!isTauri()) return;
-  const win = getCurrentWindow();
-  await win.show();
-  await win.unminimize();
-  await win.setFocus();
+  // The shell shows, restores and brings the window forward where Windows allows it, else the
+  // taskbar button flashes (shell::focus_main_window). Not the window's setFocus: on Windows it
+  // presses Alt (a fake key in the app the player is in) when the foreground is refused.
+  await commands.windowBringForward();
   await refreshWindowAway();
 }
 

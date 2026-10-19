@@ -1,4 +1,5 @@
-//! Default size of the main window, chosen from the screen it first opens on.
+//! The main window: its default size, chosen from the screen it first opens on, and how it is
+//! brought to the front.
 //!
 //! The launcher opens at about 62% of the screen's width (a calm size next to other windows),
 //! never smaller than the layout's minimum and never larger than the old fixed default. After
@@ -41,6 +42,45 @@ pub fn default_window_size(work_width: f64, work_height: f64) -> (u32, u32) {
         .clamp(min_h, max_h);
     // Both values are clamped to small positive ranges above, so the casts are exact.
     (width as u32, height as u32)
+}
+
+/// What bringing the main window to the front came to (Windows).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Raise {
+    /// It already was the foreground window: nothing was done.
+    AlreadyInFront,
+    /// Windows let the launcher take the foreground.
+    Raised,
+    /// Windows refused (the player is in another app that did not hand the right over): the
+    /// taskbar button flashes instead.
+    Flashed,
+}
+
+/// How many times the taskbar button flashes when Windows refuses the foreground. Windows then
+/// keeps the button lit until the player switches to the launcher.
+pub const FLASH_COUNT: u32 = 3;
+
+/// Brings a window to the front only the way Windows allows it. The platform calls are passed in:
+/// `set_foreground` (`SetForegroundWindow`) runs only when the window is not in front already,
+/// `flash` (`FlashWindowEx`) only when Windows refused. Never synthetic input: tao's `set_focus`
+/// presses Alt with `SendInput` when refused, so every tray click, second launch, `projects://`
+/// link and game end sent a fake key press to the app the player was in (E2E2, 19 Oct 2026).
+/// Windows normally allows it where the player asked for the launcher: a second launch hands the
+/// running launcher its right first (tauri-plugin-single-instance calls
+/// `AllowSetForegroundWindow`), and a click on the tray icon comes from the shell.
+pub fn raise_window(
+    in_front: bool,
+    set_foreground: impl FnOnce() -> bool,
+    flash: impl FnOnce(),
+) -> Raise {
+    if in_front {
+        return Raise::AlreadyInFront;
+    }
+    if set_foreground() {
+        return Raise::Raised;
+    }
+    flash();
+    Raise::Flashed
 }
 
 #[cfg(test)]
@@ -97,5 +137,94 @@ mod tests {
         let main = &main[..main.find('}').unwrap_or(main.len())];
         assert!(main.contains("\"visible\": false"), "{main}");
         assert!(main.contains("\"focus\": false"), "{main}");
+    }
+
+    #[test]
+    fn raising_goes_no_further_than_windows_allows() {
+        use std::cell::Cell;
+
+        let (asked, flashed) = (Cell::new(0), Cell::new(0));
+        let raise = |in_front: bool, allowed: bool| {
+            raise_window(
+                in_front,
+                || {
+                    asked.set(asked.get() + 1);
+                    allowed
+                },
+                || flashed.set(flashed.get() + 1),
+            )
+        };
+
+        // In front already: Windows is not asked and nothing flashes.
+        assert_eq!(raise(true, false), Raise::AlreadyInFront);
+        assert_eq!((asked.get(), flashed.get()), (0, 0));
+        // Allowed: raised, no flash.
+        assert_eq!(raise(false, true), Raise::Raised);
+        assert_eq!((asked.get(), flashed.get()), (1, 0));
+        // Refused: asked once, then the taskbar flashes; nothing else is tried.
+        assert_eq!(raise(false, false), Raise::Flashed);
+        assert_eq!((asked.get(), flashed.get()), (2, 1));
+    }
+
+    /// Lines of the launcher's sources (`apps/launcher/<dir>`) with the given extensions.
+    fn launcher_sources(dir: &str, extensions: &[&str]) -> Vec<(String, Vec<String>)> {
+        fn walk(dir: &std::path::Path, extensions: &[&str], out: &mut Vec<std::path::PathBuf>) {
+            for entry in std::fs::read_dir(dir).expect("launcher sources").flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    walk(&path, extensions, out);
+                } else if path
+                    .extension()
+                    .and_then(|e| e.to_str())
+                    .is_some_and(|e| extensions.contains(&e))
+                {
+                    out.push(path);
+                }
+            }
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../apps/launcher")
+            .join(dir);
+        let mut files = Vec::new();
+        walk(&root, extensions, &mut files);
+        assert!(!files.is_empty(), "no sources under {}", root.display());
+        files
+            .into_iter()
+            .map(|path| {
+                let text = std::fs::read_to_string(&path).expect("read source");
+                let lines = text.lines().map(str::to_owned).collect();
+                (path.display().to_string(), lines)
+            })
+            .collect()
+    }
+
+    /// The launcher brings its window forward only through [`raise_window`] on Windows: no
+    /// `setFocus()` from the page, and the shell's `set_focus()` only where Windows is not.
+    #[test]
+    fn the_launcher_never_forces_the_foreground_on_windows() {
+        for (path, lines) in launcher_sources("src", &["ts", "tsx"]) {
+            for (number, line) in lines.iter().enumerate() {
+                assert!(
+                    !line.contains(".setFocus("),
+                    "{path}:{}: the page must not call setFocus (tao presses Alt when Windows \
+                     refuses); use commands.windowBringForward()",
+                    number + 1
+                );
+            }
+        }
+        for (path, lines) in launcher_sources("src-tauri/src", &["rs"]) {
+            for (number, line) in lines.iter().enumerate() {
+                if !line.contains(".set_focus()") || line.trim_start().starts_with("//") {
+                    continue;
+                }
+                let before = &lines[number.saturating_sub(4)..number];
+                assert!(
+                    before.iter().any(|l| l.contains("cfg(not(windows))")),
+                    "{path}:{}: set_focus() outside a cfg(not(windows)) item (tao presses Alt \
+                     when Windows refuses the foreground); use pl_desktop::window::raise_window",
+                    number + 1
+                );
+            }
+        }
     }
 }

@@ -19,8 +19,8 @@ static PENDING_LINK: Mutex<Option<DeepLink>> = Mutex::new(None);
 /// The main window is created without the focus (`"focus": false` in `tauri.conf.json`): with it,
 /// the hidden window and its WebView took the foreground at every start, so after a start in the
 /// tray the keys typed in another window went to an invisible one (E2E1). Every way the window is
-/// shown activates it: the page's first reveal and the fallback (`show`, which activates on
-/// Windows) and [`focus_main_window`] (tray, second launch, links).
+/// shown activates it where Windows allows it: the page's first reveal and the fallback (`show`)
+/// and [`focus_main_window`] (tray, second launch, links, the end of a game).
 pub fn start_minimized() -> bool {
     std::env::args().any(|arg| arg == "--minimized")
 }
@@ -119,12 +119,65 @@ pub fn parse_link(raw: &str) -> Option<DeepLink> {
     pl_desktop::parse_link(raw, pl_social::normalize_friend_code)
 }
 
+/// Shows the main window and brings it to the front: the tray icon, a second launch, a
+/// `projects://` link, the launcher coming back after a game ([`window_bring_forward`]).
 pub fn focus_main_window(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
-        let _ = window.set_focus();
+        bring_to_front(&window);
     }
+}
+
+/// Windows: `SetForegroundWindow`, and when Windows refuses, the taskbar button flashes
+/// (`pl_desktop::window::raise_window`). Not tao's `set_focus`, which then presses Alt with
+/// `SendInput` (a fake key in the app the player was in). Runs on the main thread, after the
+/// show and unminimize queued above.
+#[cfg(windows)]
+fn bring_to_front(window: &tauri::WebviewWindow) {
+    let Ok(hwnd) = window.hwnd() else {
+        return;
+    };
+    // A window handle is only a number; it travels to the main thread as one.
+    let raw = hwnd.0 as isize;
+    let _ = window.run_on_main_thread(move || {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::{
+            FLASHW_TRAY, FLASHWINFO, FlashWindowEx, GetForegroundWindow, SetForegroundWindow,
+        };
+
+        let hwnd = HWND(raw as *mut std::ffi::c_void);
+        // SAFETY: plain Win32 calls on the main window's handle, alive for the whole run.
+        let in_front = unsafe { GetForegroundWindow() } == hwnd;
+        let outcome = pl_desktop::window::raise_window(
+            in_front,
+            || unsafe { SetForegroundWindow(hwnd) }.as_bool(),
+            || {
+                let flash = FLASHWINFO {
+                    cbSize: std::mem::size_of::<FLASHWINFO>() as u32,
+                    hwnd,
+                    dwFlags: FLASHW_TRAY,
+                    uCount: pl_desktop::window::FLASH_COUNT,
+                    dwTimeout: 0,
+                };
+                let _ = unsafe { FlashWindowEx(&flash) };
+            },
+        );
+        tracing::debug!(?outcome, "main window brought forward");
+    });
+}
+
+#[cfg(not(windows))]
+fn bring_to_front(window: &tauri::WebviewWindow) {
+    let _ = window.set_focus();
+}
+
+/// The launcher comes back after a game (`stores/launch.ts` → `restoreWindow`): shown,
+/// restored and brought forward without synthetic input ([`focus_main_window`]).
+#[tauri::command]
+#[specta::specta]
+pub fn window_bring_forward(app: AppHandle) {
+    focus_main_window(&app);
 }
 
 fn open_link(app: &AppHandle, link: DeepLink) {

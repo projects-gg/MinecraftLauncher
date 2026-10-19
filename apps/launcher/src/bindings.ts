@@ -271,6 +271,11 @@ export const commands = {
 { kind: "friend"; code: string } | null>("deep_link_pending"),
 	/**  Leaves for real: AFK sessions are stopped cleanly first. */
 	appQuit: () => __TAURI_INVOKE<void>("app_quit"),
+	/**
+	 *  The launcher comes back after a game (`stores/launch.ts` → `restoreWindow`): shown,
+	 *  restored and brought forward without synthetic input ([`focus_main_window`]).
+	 */
+	windowBringForward: () => __TAURI_INVOKE<void>("window_bring_forward"),
 	/**  What the dragged files are (called as soon as a drag enters the window). */
 	filesClassify: (paths: string[]) => __TAURI_INVOKE<DroppedFileView[]>("files_classify", { paths }),
 	/**

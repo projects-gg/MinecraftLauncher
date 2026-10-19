@@ -235,6 +235,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::official::official_instance_ensure,
             shell::deep_link_pending,
             shell::app_quit,
+            shell::window_bring_forward,
             // small conveniences: dropped files, "Devam et", desktop shortcuts
             commands::drop::files_classify,
             commands::drop::files_drop,
