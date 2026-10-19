@@ -1301,6 +1301,8 @@ export type ContentEntryView = {
 	fromPack: boolean,
 	/**  Cached project icon (local path; the UI converts it with `convertFileSrc`). */
 	iconPath: string | null,
+	/**  Installed by a ready-made set: it is updated with the set, not from here. */
+	modSet: SetBadgeView | null,
 } & AddonEntry;
 
 export type ContentScanView = {
@@ -1325,8 +1327,6 @@ export type ContentSearchRequest = {
  *  Whether the content mirrors could be reached, for the home screen's offline strip. Changes
  *  arrive as the `content-status` event.
  */
-	/**  Installed by a ready-made set: it is updated with the set, not from here. */
-	modSet: SetBadgeView | null,
 export type ContentStatusView = {
 	/**  The last refresh reached no mirror: the cached (or bundled) content is shown. */
 	offline: boolean,
@@ -1812,6 +1812,44 @@ export type InstanceDiskUsageView = {
 	files: number,
 };
 
+/**  A set an instance has. */
+export type InstanceSetView = {
+	id: string,
+	name: string,
+	nameEn: string | null,
+	summary: string | null,
+	summaryEn: string | null,
+	purpose: SetPurpose,
+	/**  Installed for the instance's Minecraft version. */
+	installed: boolean,
+	/**  The catalog has a variant for this instance (needed to install or update it). */
+	available: boolean,
+	/**  The team changed the set's files since it was installed ("Güncelleme var"). */
+	updateAvailable: boolean,
+	/**  The catalog no longer has the set: it keeps working and can be removed. */
+	retired: boolean,
+	/**  The set's items under the current choices, like the mod center's. */
+	items: ModCenterItemView[],
+	/**  Items the instance already has from elsewhere (the official pack, own mods). */
+	present: SetItemPreview[],
+	/**  Applying now would change files (a file is missing, something it needed went away). */
+	pending: boolean,
+	issues: ModIssueView[],
+	/**  Bytes of the files the set installed here. */
+	sizeBytes: number,
+};
+
+export type InstanceSetsView = {
+	instanceId: string,
+	mcVersion: string,
+	loader: LoaderKind,
+	sets: InstanceSetView[],
+	/**  The game of this instance is running: changes wait until it is closed. */
+	gameRunning: boolean,
+	/**  The catalog could not be loaded (the instance's sets still show from its records). */
+	unavailable: boolean,
+};
+
 export type InstanceSettingsView = {
 	/**  "auto" | "custom" */
 	javaMode: string,
@@ -1859,44 +1897,6 @@ export type InviteResult =
 "queued";
 
 export type InviteView = InviteView_Serialize | InviteView_Deserialize;
-/**  A set an instance has. */
-export type InstanceSetView = {
-	id: string,
-	name: string,
-	nameEn: string | null,
-	summary: string | null,
-	summaryEn: string | null,
-	purpose: SetPurpose,
-	/**  Installed for the instance's Minecraft version. */
-	installed: boolean,
-	/**  The catalog has a variant for this instance (needed to install or update it). */
-	available: boolean,
-	/**  The team changed the set's files since it was installed ("Güncelleme var"). */
-	updateAvailable: boolean,
-	/**  The catalog no longer has the set: it keeps working and can be removed. */
-	retired: boolean,
-	/**  The set's items under the current choices, like the mod center's. */
-	items: ModCenterItemView[],
-	/**  Items the instance already has from elsewhere (the official pack, own mods). */
-	present: SetItemPreview[],
-	/**  Applying now would change files (a file is missing, something it needed went away). */
-	pending: boolean,
-	issues: ModIssueView[],
-	/**  Bytes of the files the set installed here. */
-	sizeBytes: number,
-};
-
-export type InstanceSetsView = {
-	instanceId: string,
-	mcVersion: string,
-	loader: LoaderKind,
-	sets: InstanceSetView[],
-	/**  The game of this instance is running: changes wait until it is closed. */
-	gameRunning: boolean,
-	/**  The catalog could not be loaded (the instance's sets still show from its records). */
-	unavailable: boolean,
-};
-
 
 export type InviteView_Deserialize = {
 	id: string,
@@ -2780,6 +2780,8 @@ export type ModView = {
 	projectId: string | null,
 	/**  Cached Modrinth project icon (local path) for files without an icon of their own. */
 	iconPath: string | null,
+	/**  The ready-made set that installed the file (its badge). */
+	modSet: SetBadgeView | null,
 };
 
 export type ModpackExportRequest = {
@@ -2833,8 +2835,6 @@ export type ModpackImportView = {
 	manualMods: CurseForgeModLink[],
 	manualCount: number,
 	/**  Files written into the new instance (bundled and downloaded). */
-	/**  The ready-made set that installed the file (its badge). */
-	modSet: SetBadgeView | null,
 	files: number,
 	/**  Archive entries left out because their paths were unsafe. */
 	skipped: number,
@@ -3264,6 +3264,8 @@ export type PackView = {
 	projectId: string | null,
 	/**  Cached Modrinth project icon (local path) for packs without an icon of their own. */
 	iconPath: string | null,
+	/**  The ready-made set that installed the pack (its badge). */
+	modSet: SetBadgeView | null,
 };
 
 /**  Why an auto-respond pattern can not be used. */
@@ -3322,8 +3324,6 @@ export type Privacy = {
 /**  What one profile brings, read on demand. */
 export type ProfileMeasure = {
 	id: string,
-	/**  The ready-made set that installed the pack (its badge). */
-	modSet: SetBadgeView | null,
 	/**  Bytes the copy takes. */
 	bytes: number,
 	/**  Mods that come over: made for its loader and Minecraft version. */
@@ -3677,64 +3677,6 @@ export type SessionStats = {
 	players: number | null,
 };
 
-export type SetRef = {
-	instanceId: string,
-	minecraft: string,
-};
-
-/**  Settings backup metadata, enough for "Bu bilgisayara ayarlarını getireyim mi?". */
-export type SettingsMeta = {
-	version: number,
-	/**  Unix seconds. */
-	updatedAt: number,
-	/**  Label of the device that saved it. */
-	device: string,
-	/**  Bytes. */
-	size: number,
-};
-
-/**
- *  [`AccountSettings`] with the login commands' secrets left in the keychain. Same fields, same
- *  meaning; see the field docs there.
- */
-export type SettingsPage = {
-	serverHost?: string,
-	serverPort?: number,
-	minecraftVersion?: string,
-	autoStart?: boolean,
-	allowResourcePacks?: boolean,
-	loginCommands?: LoginCommandsPage,
-	scheduler?: SchedulerOptions,
-	antiAfk?: AntiAfkOptions,
-	autoRelog?: AutoRelogOptions,
-	autoEat?: AutoEatOptions,
-	autoRespond?: AutoRespondSettings,
-	chatLog?: ChatLogSettings,
-	alerts?: AlertsOptions,
-};
-
-export type Severity = 
-/**  The game will certainly fail to start. */
-"blocking" | 
-/**  The game starts, but something will not work (a mod will not load). */
-"warning" | 
-/**  Worth knowing; nothing has to be done. */
-"info";
-
-/**
- *  What a `.minecraft`-style folder shares between all its versions, counted without opening
- *  anything big.
- */
-export type SharedData = {
-	/**  `options.txt` is there (language, controls, video). */
-	options: boolean,
-	/**  Servers listed in `servers.dat` (hidden "Direct Connection" entries left out). */
-	servers: number,
-	worlds: number,
-	resourcePacks: number,
-	shaderPacks: number,
-	screenshots: number,
-};
 export type SetApplyView = {
 	downloaded: number,
 	restored: number,
@@ -3805,11 +3747,11 @@ export type SetItemPreview = {
 /**  What a set is for (mirrors `pl_content::ModSetPurpose`): its card's mark. */
 export type SetPurpose = "pvp" | "performance" | "visual" | "other";
 
+export type SetRef = {
+	instanceId: string,
+	minecraft: string,
+};
 
-export type SharedFilesView = {
-	items: SharedItem[],
-	/**  Bytes freed only when all of a group's items go (files hard-linked into each). */
-	groups: SharedGroup[],
 /**  One Minecraft version (and loader) of a set. */
 export type SetVariantView = {
 	minecraft: string,
@@ -3825,6 +3767,64 @@ export type SetVariantView = {
 	downloadBytes: number,
 };
 
+/**  Settings backup metadata, enough for "Bu bilgisayara ayarlarını getireyim mi?". */
+export type SettingsMeta = {
+	version: number,
+	/**  Unix seconds. */
+	updatedAt: number,
+	/**  Label of the device that saved it. */
+	device: string,
+	/**  Bytes. */
+	size: number,
+};
+
+/**
+ *  [`AccountSettings`] with the login commands' secrets left in the keychain. Same fields, same
+ *  meaning; see the field docs there.
+ */
+export type SettingsPage = {
+	serverHost?: string,
+	serverPort?: number,
+	minecraftVersion?: string,
+	autoStart?: boolean,
+	allowResourcePacks?: boolean,
+	loginCommands?: LoginCommandsPage,
+	scheduler?: SchedulerOptions,
+	antiAfk?: AntiAfkOptions,
+	autoRelog?: AutoRelogOptions,
+	autoEat?: AutoEatOptions,
+	autoRespond?: AutoRespondSettings,
+	chatLog?: ChatLogSettings,
+	alerts?: AlertsOptions,
+};
+
+export type Severity = 
+/**  The game will certainly fail to start. */
+"blocking" | 
+/**  The game starts, but something will not work (a mod will not load). */
+"warning" | 
+/**  Worth knowing; nothing has to be done. */
+"info";
+
+/**
+ *  What a `.minecraft`-style folder shares between all its versions, counted without opening
+ *  anything big.
+ */
+export type SharedData = {
+	/**  `options.txt` is there (language, controls, video). */
+	options: boolean,
+	/**  Servers listed in `servers.dat` (hidden "Direct Connection" entries left out). */
+	servers: number,
+	worlds: number,
+	resourcePacks: number,
+	shaderPacks: number,
+	screenshots: number,
+};
+
+export type SharedFilesView = {
+	items: SharedItem[],
+	/**  Bytes freed only when all of a group's items go (files hard-linked into each). */
+	groups: SharedGroup[],
 	totalBytes: number,
 };
 
