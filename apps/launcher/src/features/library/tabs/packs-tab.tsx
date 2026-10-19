@@ -222,8 +222,10 @@ export function PacksTab({
                         )}
                         {p.enabled ? null : <Chip>{t("instance.packs.disabled")}</Chip>}
                       </div>
+                      {/* Two lines, as the game's own pack list shows them: a 1200 px window
+                          left a single line about 170 px wide (POLISH3). */}
                       {p.description ? (
-                        <p className="truncate text-[12.5px] text-ash-300">{p.description}</p>
+                        <p className="line-clamp-2 text-[12.5px] text-ash-300">{p.description}</p>
                       ) : null}
                     </div>
                     <span className="shrink-0 text-[12px] text-ash-300 tabular-nums">
