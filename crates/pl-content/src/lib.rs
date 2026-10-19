@@ -15,6 +15,8 @@
 //!   tracking, config policies, items, manual changes, optional groups and path safety.
 //! - [`sets`]: per-version sets of a game directory ([`VersionSets`]): parking, restoring and
 //!   starting `mods/` + `config/` per Minecraft version with a crash-safe switch.
+//! - [`modsets`]: ready-made mod sets in a game directory ([`ModSetStates`]): installing,
+//!   updating and removing a [`ModSet`] with the sync engine, per version like the pack state.
 //! - [`studio`]: [`IndexBuilder`] and helpers to publish content; [`json`] gives the
 //!   deterministic serialization Studio uploads.
 //! - [`feed`]: the Discord bot's news feed ([`FeedClient`]: delegated-key verification,
@@ -30,6 +32,7 @@ pub mod images;
 pub mod items;
 pub mod json;
 pub mod model;
+pub mod modsets;
 pub mod path;
 pub mod sets;
 pub mod signing;
@@ -53,6 +56,10 @@ pub use items::{
     AdoptedChange, ItemResolution, ItemStatus, ManualChange, PackSelection, resolve_items,
 };
 pub use model::*;
+pub use modsets::{
+    AddedSet, MOD_SETS_FILE, ModSetStates, SetApplyReport, SetChange, apply_set, keep_shared_files,
+    plan_set, plan_set_removal, provided_projects,
+};
 pub use sets::{ParkedSet, SetInfo, SwitchJournal, SwitchRequest, SwitchStep, VersionSets};
 pub use signing::{
     CONTENT_PUBLIC_KEYS, SignatureFile, SigningKey, TrustedKey, VerifyingKey, content_public_keys,
@@ -65,7 +72,8 @@ pub use sync::{
     COPIED_DIRS, CategoryCounts, DownloadAction, DownloadEstimate, FileCategory, InstalledFile,
     KeepReason, KeptFile, PARKED_DIRS, PackState, PlannedDelete, PlannedDownload, PlannedRestore,
     SyncIssue, SyncIssueKind, SyncPhase, SyncPlan, SyncPolicy, SyncProgress, SyncProgressFn,
-    SyncReport, SyncSummary, VersionSwitch, apply_sync, estimate_downloads, plan_sync,
+    SyncReport, SyncSummary, VersionSwitch, apply_sync, apply_sync_into, estimate_downloads,
+    plan_sync,
 };
 
 #[cfg(test)]
@@ -187,6 +195,12 @@ mod doc_examples {
                         .unwrap_or_else(|e| panic!("{name}: {e}"));
                 }
                 "ReleaseChannel" => check::<ReleaseChannel>(name, json),
+                "ModSetCatalog" => {
+                    check::<ModSetCatalog>(name, json);
+                    let catalog: ModSetCatalog = serde_json::from_str(json).unwrap();
+                    catalog.validate().unwrap_or_else(|e| panic!("{name}: {e}"));
+                }
+                "ModSetStates" => check::<ModSetStates>(name, json),
                 "PackState" => check::<PackState>(name, json),
                 "MediaRef" => check::<MediaRef>(name, json),
                 other => panic!("unknown example type {other}"),

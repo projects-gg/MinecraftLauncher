@@ -9,8 +9,9 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
 use crate::model::{
-    Banner, BannerLevel, ConfigPolicy, Cta, FilePolicy, LauncherConfig, MediaRef, NewsCategory,
-    NewsFeed, NewsItem, PackDependencies, PackFile, PackManifest, PolicyRule, ProjectsExtension,
+    Banner, BannerLevel, ConfigPolicy, Cta, FilePolicy, ItemCategory, LauncherConfig, MediaRef,
+    ModSet, ModSetCatalog, ModSetPurpose, ModSetVariant, ModrinthRef, NewsCategory, NewsFeed,
+    NewsItem, PackDependencies, PackFile, PackItem, PackManifest, PolicyRule, ProjectsExtension,
 };
 use crate::signing::SigningKey;
 use crate::studio::{BuiltIndex, IndexBuilder, hosted_file_path, pack_hashes};
@@ -250,12 +251,93 @@ pub(crate) fn sample_manifest(server: &TestServer, files: &[(&str, &[u8])]) -> P
     }
 }
 
+/// A set item for `path` (Modrinth project `id`, version `<id>-v1`), on by default.
+pub(crate) fn set_item(id: &str, path: &str) -> PackItem {
+    PackItem {
+        id: id.into(),
+        path: path.into(),
+        title: id.to_uppercase(),
+        summary: None,
+        category: ItemCategory::Other,
+        icon_url: None,
+        page_url: None,
+        modrinth: Some(ModrinthRef {
+            project_id: id.into(),
+            version_id: format!("{id}-v1"),
+        }),
+        default_enabled: true,
+        requires: Vec::new(),
+        library: false,
+    }
+}
+
+/// A Fabric variant for `minecraft` whose files are served by `server` (when given) at
+/// `/files/<sha1>`; items are named after the file stem. Without a server the files point at
+/// Modrinth's CDN (valid for the catalog rules, never downloaded).
+pub(crate) fn sample_variant(
+    server: Option<&TestServer>,
+    minecraft: &str,
+    files: &[(&str, &[u8])],
+) -> ModSetVariant {
+    let mut variant = ModSetVariant {
+        dependencies: PackDependencies {
+            minecraft: minecraft.into(),
+            fabric_loader: Some("0.19.5".into()),
+            ..PackDependencies::default()
+        },
+        files: Vec::new(),
+        items: Vec::new(),
+    };
+    for (path, bytes) in files {
+        let hashes = pack_hashes(bytes);
+        let url = match server {
+            Some(server) => {
+                let remote = format!("/{}", hosted_file_path(&hashes.sha1));
+                server.put(&remote, bytes.to_vec());
+                server.url(&remote)
+            }
+            None => format!("https://cdn.modrinth.com/data/x/versions/y/{path}"),
+        };
+        let stem = path
+            .rsplit('/')
+            .next()
+            .and_then(|name| name.split('.').next())
+            .unwrap_or(path);
+        variant.files.push(PackFile {
+            path: (*path).to_owned(),
+            hashes,
+            env: None,
+            downloads: vec![url],
+            file_size: bytes.len() as u64,
+        });
+        variant.items.push(set_item(stem, path));
+    }
+    variant
+}
+
+/// A catalog with one PvP set holding `variant`.
+pub(crate) fn sample_mod_sets(variant: ModSetVariant) -> ModSetCatalog {
+    ModSetCatalog {
+        schema: 1,
+        sets: vec![ModSet {
+            id: "pvp".into(),
+            name: "PvP".into(),
+            summary: Some("Net görüntü ve sabit FPS.".into()),
+            purpose: ModSetPurpose::Pvp,
+            en: None,
+            variants: vec![variant],
+            min_launcher_version: None,
+        }],
+    }
+}
+
 /// One publish: documents, signed index, served under `/v1/`.
 pub(crate) struct Publish {
     pub(crate) sequence: u64,
     pub(crate) config: LauncherConfig,
     pub(crate) news: NewsFeed,
     pub(crate) pack: Option<PackManifest>,
+    pub(crate) mod_sets: Option<ModSetCatalog>,
 }
 
 impl Publish {
@@ -265,6 +347,7 @@ impl Publish {
             config: sample_config(None),
             news: sample_news(None),
             pack: None,
+            mod_sets: None,
         }
     }
 
@@ -275,6 +358,7 @@ impl Publish {
         if let Some(pack) = &self.pack {
             builder.set_pack("Projects", pack).unwrap();
         }
+        builder.set_mod_sets(self.mod_sets.as_ref()).unwrap();
         builder.set_sequence(self.sequence);
         let built = builder
             .build("2026-10-15T12:00:00Z".parse().unwrap())

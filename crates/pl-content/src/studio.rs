@@ -13,8 +13,8 @@ use crate::error::{Error, Result};
 use crate::fsutil::sha256_hex;
 use crate::json::to_canonical_json;
 use crate::model::{
-    AfkRelease, DocRef, LauncherConfig, MediaKind, MediaRef, NewsFeed, PackHashes, PackManifest,
-    PackRef, ROOT_INDEX_SCHEMA, RootIndex,
+    AfkRelease, DocRef, LauncherConfig, MediaKind, MediaRef, ModSetCatalog, NewsFeed, PackHashes,
+    PackManifest, PackRef, ROOT_INDEX_SCHEMA, RootIndex,
 };
 use crate::path::check_mirror_path;
 use crate::signing::{SignatureFile, SigningKey, sign_index};
@@ -75,6 +75,7 @@ pub struct IndexBuilder {
     news: Option<DocRef>,
     packs: Vec<PackRef>,
     afk: Option<AfkRelease>,
+    mod_sets: Option<DocRef>,
     documents: BTreeMap<String, PublishedDoc>,
 }
 
@@ -93,8 +94,30 @@ impl IndexBuilder {
             news: Some(previous.news.clone()),
             packs: previous.packs.clone(),
             afk: previous.afk.clone(),
+            mod_sets: previous.mod_sets.clone(),
             documents: BTreeMap::new(),
         }
+    }
+
+    /// Serializes the ready-made mod sets to `modsets/modsets.<sha256>.json`; `None` or a
+    /// catalog without sets drops the reference. The catalog must be valid
+    /// ([`ModSetCatalog::validate`]).
+    pub fn set_mod_sets(&mut self, catalog: Option<&ModSetCatalog>) -> Result<Option<DocRef>> {
+        let Some(catalog) = catalog.filter(|catalog| !catalog.sets.is_empty()) else {
+            if let Some(previous) = self.mod_sets.take() {
+                self.documents.remove(&previous.path);
+            }
+            return Ok(None);
+        };
+        catalog.validate()?;
+        let doc = PublishedDoc::new(String::new(), to_canonical_json(catalog)?);
+        let doc = PublishedDoc {
+            path: mod_sets_path(&doc.sha256),
+            ..doc
+        };
+        let doc_ref = self.add_document(doc, self.mod_sets.clone());
+        self.mod_sets = Some(doc_ref.clone());
+        Ok(Some(doc_ref))
     }
 
     /// Serializes the launcher config to `config/launcher.<sha256>.json`.
@@ -217,6 +240,7 @@ impl IndexBuilder {
             news,
             packs: self.packs,
             afk: self.afk,
+            mod_sets: self.mod_sets,
         };
         index.validate()?;
         let index_bytes = to_canonical_json(&index)?;
@@ -248,6 +272,11 @@ pub fn config_path(sha256: &str) -> String {
 /// `news/news.<sha256>.json`
 pub fn news_path(sha256: &str) -> String {
     format!("news/news.{sha256}.json")
+}
+
+/// `modsets/modsets.<sha256>.json`
+pub fn mod_sets_path(sha256: &str) -> String {
+    format!("modsets/modsets.{sha256}.json")
 }
 
 /// `packs/<id>/<version>.json`; both parts must be single `[A-Za-z0-9._-]` components.
@@ -383,6 +412,55 @@ mod tests {
                 .build(at("2026-10-15T12:02:00Z"))
                 .is_err()
         );
+    }
+
+    #[test]
+    fn mod_sets_are_published_as_a_document() {
+        use crate::testutil::{sample_mod_sets, sample_variant};
+        let catalog = sample_mod_sets(sample_variant(None, "26.3", &[("mods/zoom.jar", b"z")]));
+        let mut builder = IndexBuilder::new();
+        builder.set_config(&sample_config(None)).unwrap();
+        builder.set_news(&sample_news(None)).unwrap();
+        let doc = builder.set_mod_sets(Some(&catalog)).unwrap().unwrap();
+        assert!(doc.path.starts_with("modsets/modsets.") && doc.path.contains(&doc.sha256));
+        let built = builder.build(at("2026-10-15T12:00:00Z")).unwrap();
+        assert_eq!(built.index.mod_sets.as_ref(), Some(&doc));
+        let uploaded = built
+            .documents
+            .iter()
+            .find(|published| published.path == doc.path)
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<ModSetCatalog>(&uploaded.bytes).unwrap(),
+            catalog
+        );
+
+        // Kept by the next publish, dropped when the team removes every set.
+        let next = IndexBuilder::from_previous(&built.index);
+        let kept = next.build(at("2026-10-15T12:01:00Z")).unwrap();
+        assert_eq!(kept.index.mod_sets, built.index.mod_sets);
+        assert!(kept.documents.is_empty());
+        let mut cleared = IndexBuilder::from_previous(&built.index);
+        assert_eq!(
+            cleared
+                .set_mod_sets(Some(&ModSetCatalog::default()))
+                .unwrap(),
+            None
+        );
+        assert_eq!(
+            cleared
+                .build(at("2026-10-15T12:02:00Z"))
+                .unwrap()
+                .index
+                .mod_sets,
+            None
+        );
+
+        // An invalid catalog is refused.
+        let mut broken = catalog.clone();
+        broken.sets[0].name = String::new();
+        let mut refused = IndexBuilder::new();
+        assert!(refused.set_mod_sets(Some(&broken)).is_err());
     }
 
     #[test]

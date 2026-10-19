@@ -1437,6 +1437,27 @@ pub async fn apply_sync(
     options: &DownloadOptions,
     progress: Option<SyncProgressFn>,
 ) -> Result<SyncReport> {
+    let game_dir = plan.game_dir.clone();
+    apply_sync_into(plan, downloader, options, progress, |state| async move {
+        state.save(&game_dir).await
+    })
+    .await
+}
+
+/// [`apply_sync`] for a state kept somewhere else than `pack-state.json` (a ready-made mod set
+/// keeps its own inside `.projects/mod-sets.json`): `save` writes the new state at the point
+/// where [`apply_sync`] would.
+pub async fn apply_sync_into<F, Fut>(
+    plan: &SyncPlan,
+    downloader: &Downloader,
+    options: &DownloadOptions,
+    progress: Option<SyncProgressFn>,
+    save: F,
+) -> Result<SyncReport>
+where
+    F: FnOnce(PackState) -> Fut,
+    Fut: std::future::Future<Output = Result<()>>,
+{
     let mut items = Vec::with_capacity(plan.downloads.len());
     for download in &plan.downloads {
         let dest = join_relative(&plan.game_dir, &download.path)?;
@@ -1556,7 +1577,7 @@ pub async fn apply_sync(
         }
     }
 
-    state.save(&plan.game_dir).await?;
+    save(state).await?;
     if let Some(progress) = &progress {
         progress(SyncProgress {
             phase: SyncPhase::Finished,

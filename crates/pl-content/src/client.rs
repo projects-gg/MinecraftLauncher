@@ -31,7 +31,8 @@ use url::Url;
 use crate::error::{Error, Result};
 use crate::fsutil::{normalize_hex, read_optional, sha256_hex, write_atomic};
 use crate::model::{
-    DocRef, FileRef, LauncherConfig, MediaRef, NewsFeed, PackManifest, PackRef, RootIndex,
+    DocRef, FileRef, LauncherConfig, MediaRef, ModSetCatalog, NewsFeed, PackManifest, PackRef,
+    RootIndex,
 };
 use crate::signing::{SignatureFile, VerifyingKey, verify_index};
 
@@ -297,6 +298,23 @@ impl ContentClient {
         let manifest: PackManifest = parse_json(&bytes, &pack.manifest.path)?;
         manifest.validate()?;
         Ok(manifest)
+    }
+
+    /// The ready-made mod sets the index references (from the document cache when present):
+    /// an empty catalog when it references none. Downloaded on first use, not with every
+    /// refresh. A set that breaks a rule is left out (and logged); the others stay usable.
+    pub async fn mod_sets(&self, index: &RootIndex) -> Result<ModSetCatalog> {
+        let Some(doc) = &index.mod_sets else {
+            return Ok(ModSetCatalog::default());
+        };
+        let bytes = self.ensure_doc(doc, None).await?;
+        let catalog: ModSetCatalog = parse_json(&bytes, &doc.path)?;
+        catalog.check_schema()?;
+        let (catalog, dropped) = catalog.without_broken_sets();
+        for problem in dropped {
+            tracing::warn!(%problem, "leaving out a broken mod set");
+        }
+        Ok(catalog)
     }
 
     /// Local path of a media file, downloading and verifying it on first use. Cached copies
@@ -1200,6 +1218,47 @@ mod tests {
         content.pack_manifest(pack).await.unwrap();
         assert_eq!(server.hits(&format!("/v1/{}", pack.manifest.path)), 1);
         assert_eq!(published.index.packs.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn mod_sets_use_the_document_cache() {
+        use crate::testutil::{sample_mod_sets, sample_variant};
+        let server = TestServer::start().await;
+        let signer = key(1);
+        let dir = tempfile::tempdir().unwrap();
+        let content = client(&[server.base()], dir.path(), &signer);
+
+        // An index without sets gives an empty catalog and asks for nothing.
+        Publish::new(1).put(&server, &signer);
+        let snapshot = content.refresh().await.unwrap();
+        assert!(
+            content
+                .mod_sets(&snapshot.index)
+                .await
+                .unwrap()
+                .sets
+                .is_empty()
+        );
+
+        let mut publish = Publish::new(2);
+        let catalog = sample_mod_sets(sample_variant(None, "26.3", &[("mods/zoom.jar", b"z")]));
+        publish.mod_sets = Some(catalog.clone());
+        let published = publish.put(&server, &signer);
+        let snapshot = content.refresh().await.unwrap();
+        let doc = snapshot.index.mod_sets.clone().unwrap();
+        assert_eq!(content.mod_sets(&snapshot.index).await.unwrap(), catalog);
+        content.mod_sets(&snapshot.index).await.unwrap();
+        assert_eq!(server.hits(&format!("/v1/{}", doc.path)), 1, "cached");
+        assert_eq!(published.index.mod_sets, Some(doc.clone()));
+
+        // Garbage collection keeps the catalog of the current index.
+        content.gc().await.unwrap();
+        assert!(
+            dir.path()
+                .join(DOCS_DIR)
+                .join(format!("{}.json", doc.sha256))
+                .is_file()
+        );
     }
 
     #[test]

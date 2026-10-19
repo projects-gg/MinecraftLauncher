@@ -7,6 +7,7 @@ mod common;
 mod config;
 mod feed;
 mod index;
+mod modset;
 mod news;
 mod pack;
 mod release;
@@ -36,6 +37,11 @@ pub use index::{
     compare_minecraft_versions, current_platform_key, family_problems,
 };
 pub use jiff::Timestamp;
+pub use modset::{
+    MAX_MOD_SET_ITEMS, MAX_MOD_SET_NAME_CHARS, MAX_MOD_SET_SUMMARY_CHARS, MAX_MOD_SET_VARIANTS,
+    MAX_MOD_SETS, MOD_SET_CATALOG_SCHEMA, ModSet, ModSetCatalog, ModSetItemKind, ModSetProblem,
+    ModSetPurpose, ModSetText, ModSetVariant, loader_name,
+};
 pub use news::{NEWS_FEED_SCHEMA, NewsCategory, NewsFeed, NewsItem, compare_news};
 pub use pack::{
     ConfigPolicy, EnvSupport, FilePolicy, ItemCategory, ItemProblem, MRPACK_FORMAT_VERSION,

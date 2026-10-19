@@ -40,6 +40,10 @@ pub struct RootIndex {
     pub packs: Vec<PackRef>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub afk: Option<AfkRelease>,
+    /// `modsets/modsets.<sha256>.json` ([`crate::ModSetCatalog`]): the ready-made mod sets.
+    /// Absent when the team publishes none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mod_sets: Option<DocRef>,
 }
 
 impl RootIndex {
@@ -57,6 +61,9 @@ impl RootIndex {
         for pack in &self.packs {
             pack.manifest.validate()?;
         }
+        if let Some(mod_sets) = &self.mod_sets {
+            mod_sets.validate()?;
+        }
         match family_problems(&self.packs).into_iter().next() {
             Some(problem) => Err(Error::Invalid(problem.to_string())),
             None => Ok(()),
@@ -67,11 +74,12 @@ impl RootIndex {
         self.packs.iter().find(|pack| pack.id == id)
     }
 
-    /// Every document this index references (config, news, pack manifests).
+    /// Every document this index references (config, news, pack manifests, mod sets).
     pub fn documents(&self) -> impl Iterator<Item = &DocRef> {
         [&self.config, &self.news]
             .into_iter()
             .chain(self.packs.iter().map(|pack| &pack.manifest))
+            .chain(self.mod_sets.iter())
     }
 
     /// Distinct family ids, in index order.
@@ -622,6 +630,7 @@ mod tests {
             news: doc(2),
             packs,
             afk: None,
+            mod_sets: None,
         }
     }
 
@@ -639,6 +648,25 @@ mod tests {
             minecraft: minecraft.map(str::to_owned),
             default: false,
         }
+    }
+
+    #[test]
+    fn mod_sets_are_an_optional_document() {
+        let mut index = index(Vec::new());
+        let json = serde_json::to_value(&index).unwrap();
+        assert!(json.get("modSets").is_none(), "old shape kept");
+        index.mod_sets = Some(DocRef {
+            path: format!("modsets/modsets.{}.json", "a".repeat(64)),
+            sha256: "a".repeat(64),
+            size: 10,
+        });
+        index.validate().unwrap();
+        assert_eq!(index.documents().count(), 3);
+        let back: RootIndex =
+            serde_json::from_value(serde_json::to_value(&index).unwrap()).unwrap();
+        assert_eq!(back, index);
+        index.mod_sets.as_mut().unwrap().sha256 = "xyz".into();
+        assert!(index.validate().is_err());
     }
 
     #[test]

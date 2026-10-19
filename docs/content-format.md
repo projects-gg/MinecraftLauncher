@@ -18,6 +18,7 @@ v1/config/launcher.<sha256>.json   LauncherConfig (home, banners, servers, links
 v1/news/news.<sha256>.json         NewsFeed
 v1/media/<sha256>.<ext>            images and videos
 v1/packs/<id>/<version>.json       PackManifest (.mrpack index + "projects" extension)
+v1/modsets/modsets.<sha256>.json   ModSetCatalog (ready-made mod sets, optional)
 v1/files/<sha1>                    files we host for packs (own mods, configs)
 v1/afk/<version>/<platform>.zip    AFK client builds
 v1/releases/<channel>.json         launcher update channel (stable, beta)
@@ -109,6 +110,11 @@ the launcher config: see [News feed (Discord bot)](#news-feed-discord-bot).
       { "value": "1.21.4", "label": "1.21.4" }
     ],
     "recommendedMinecraftVersion": "1.21.9"
+  },
+  "modSets": {
+    "path": "modsets/modsets.6d1f0c2a9b8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a392817061f2e.json",
+    "sha256": "6d1f0c2a9b8e7d6c5b4a39281706f5e4d3c2b1a09f8e7d6c5b4a392817061f2e",
+    "size": 6214
   }
 }
 ```
@@ -135,6 +141,9 @@ the launcher config: see [News feed (Discord bot)](#news-feed-discord-bot).
 - `packs[]`: `{ id, name, latest, manifest, family?, minecraft?, default? }`, one entry per
   published pack; `latest` is the `versionId` of the referenced manifest. See
   [Pack families](#pack-families) for the last three.
+- `modSets` (optional `DocRef`): the ready-made mod sets, see [Mod sets](#mod-sets). Absent
+  when the team publishes none. Clients download it when they first need it (the "Hazır set"
+  choices), not with every refresh, and keep it in the document cache.
 
 <!-- example: SignatureFile -->
 ```json
@@ -1233,6 +1242,239 @@ Moving from version A to version B:
    while unchanged; B's missing files are downloaded, and a copied config that is still the one
    A's pack installed is updated to B's.
 
+## Mod sets
+
+Ready-made sets ("Hazır setler") are curated lists of Modrinth mods, resource packs and shader
+packs that the team keeps in Studio, for example for PvP or for performance. A player starts a
+new instance from a set or adds a set to an existing instance; everything a set brings stays
+optional and follows the mod center rules. The index references the catalog as `modSets`
+(`modsets/modsets.<sha256>.json`).
+
+<!-- example: ModSetCatalog -->
+```json
+{
+  "schema": 1,
+  "sets": [
+    {
+      "id": "pvp",
+      "name": "PvP",
+      "summary": "Düşük ateş, net efekt süreleri ve açlık göstergesi; sunucu kurallarına uygun.",
+      "purpose": "pvp",
+      "en": { "summary": "Low fire, clear effect timers and a hunger readout; within the server rules." },
+      "variants": [
+        {
+          "dependencies": { "minecraft": "26.3", "fabric-loader": "0.19.5" },
+          "files": [
+            {
+              "path": "mods/fabric-api-0.164.0+26.3.jar",
+              "hashes": {
+                "sha1": "7ec45ba92a286ed7d0c57bcd74cf9182789741ec",
+                "sha512": "2ce7b0826f75801a56e8150eb5ceca467cdf8b4b44e160b5a5381e5412567d024f46a16c679f29c4a9346b2687fa1740f91ed6026a31b2ed1f3d4b5035968d69"
+              },
+              "downloads": ["https://cdn.modrinth.com/data/P7dR8mSH/versions/LEklt8GT/fabric-api-0.164.0%2B26.3.jar"],
+              "fileSize": 1775592
+            },
+            {
+              "path": "mods/appleskin-fabric-mc26.3-3.0.10.jar",
+              "hashes": {
+                "sha1": "3d19e40c5f97186857db98e622c01c2cd0030497",
+                "sha512": "17d257af419b7530aa8617c2e8c0e4bbfabcf888f26655790e0188e7957e0bcd931f85f9a4c69fd27e889dee5082cf7b2b8741a14a6ed4425e9ef4bfe13a8b8c"
+              },
+              "downloads": ["https://cdn.modrinth.com/data/EsAfCjCV/versions/PHjDtQay/appleskin-fabric-mc26.3-3.0.10.jar"],
+              "fileSize": 180194
+            },
+            {
+              "path": "mods/statuseffecttimer-2.0.0+26.3.jar",
+              "hashes": {
+                "sha1": "a3447fee0a1fc1401e580bc727a1ac617951c181",
+                "sha512": "7dc22d4295a6733eb7d2578e42d490c2d475c1632ff6d5a6b5a9640cca762a42db8035b0f11e9feec770e9d13e8e60a30debfe5127bd8e2a02f65272d669be20"
+              },
+              "downloads": ["https://cdn.modrinth.com/data/T9FDHbY5/versions/NfHPutHW/statuseffecttimer-2.0.0%2B26.3.jar"],
+              "fileSize": 14952
+            },
+            {
+              "path": "resourcepacks/PvP Basics 2.3.1.zip",
+              "hashes": {
+                "sha1": "483e930a8a2dbe9e2d89e24300540a452501e8dc",
+                "sha512": "84ed3d15cb43d1bffc5fdfb5fcfb70c1bfe4c73ec1c68dee6b922c3dc4adab992aeb20955cdcc656633306a97736594009380d25c8e20d1f92374c48d7b50e24"
+              },
+              "downloads": ["https://cdn.modrinth.com/data/ehZrmfH1/versions/2tR7gDAe/PvP%20Basics%202.3.1.zip"],
+              "fileSize": 410264
+            }
+          ],
+          "items": [
+            {
+              "id": "P7dR8mSH",
+              "path": "mods/fabric-api-0.164.0+26.3.jar",
+              "title": "Fabric API",
+              "category": "library",
+              "modrinth": { "projectId": "P7dR8mSH", "versionId": "LEklt8GT" },
+              "library": true
+            },
+            {
+              "id": "EsAfCjCV",
+              "path": "mods/appleskin-fabric-mc26.3-3.0.10.jar",
+              "title": "AppleSkin",
+              "summary": "Açlığı ve doygunluğu gösterir.",
+              "category": "interface",
+              "pageUrl": "https://modrinth.com/project/EsAfCjCV",
+              "modrinth": { "projectId": "EsAfCjCV", "versionId": "PHjDtQay" },
+              "requires": ["P7dR8mSH"]
+            },
+            {
+              "id": "T9FDHbY5",
+              "path": "mods/statuseffecttimer-2.0.0+26.3.jar",
+              "title": "Status Effect Timer",
+              "summary": "Efektlerin kalan süresi simgelerin üstünde.",
+              "category": "interface",
+              "modrinth": { "projectId": "T9FDHbY5", "versionId": "NfHPutHW" }
+            },
+            {
+              "id": "ehZrmfH1",
+              "path": "resourcepacks/PvP Basics 2.3.1.zip",
+              "title": "PvP Basics",
+              "summary": "Alçak ateş, küçük kalkan ve totem, daha az duman.",
+              "category": "visual",
+              "modrinth": { "projectId": "ehZrmfH1", "versionId": "2tR7gDAe" }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+- `schema` (default 1): readers refuse a catalog whose schema is higher than they support.
+- `sets[]`: at most 32, in the order the launcher shows them.
+  - `id`: stable, 1–64 characters from `[A-Za-z0-9._-]`, unique. Instances remember a set by it.
+  - `name` (1–32 characters) and `summary` (optional, at most 140 characters, no line breaks):
+    Turkish. `en` (optional) `{ name?, summary? }` is the English wording; a missing field falls
+    back to the Turkish one.
+  - `purpose`: `pvp | performance | visual | other` (unknown values: `other`). The launcher draws
+    the card's mark from it.
+  - `minLauncherVersion` (optional): older launchers do not offer the set.
+  - `variants[]` (1–16): one per Minecraft version and loader.
+    - `dependencies`: `minecraft` plus at most one loader, `.mrpack` spelling (`fabric-loader`,
+      `quilt-loader`, `forge`, `neoforge`). The loader version is what a new instance started
+      from the set gets; adding the set to an instance only needs the same loader. A variant
+      without a loader holds only resource and shader packs and fits every instance on that
+      version, vanilla ones too. No two variants share the Minecraft version and the loader.
+    - `files[]`: `.mrpack` file entries ([Modpacks](#modpacks)), each a single file directly in
+      `mods/` (`.jar`), `resourcepacks/` or `shaderpacks/` (`.zip`), with HTTPS downloads and a
+      size. Studio writes only Modrinth files (`cdn.modrinth.com`): we never host set files
+      (many authors' licenses forbid copies).
+    - `items[]` (1–64): pack items with the rules of `projects.items` (unique ids, one file each,
+      a title, HTTPS icon and page, `requires` without cycles, `library`, `defaultEnabled`), each
+      with a `modrinth` reference; every file is installed by exactly one item. An item's kind
+      follows its file's folder: mod, resource pack or shader pack.
+- Studio refuses to publish a catalog that breaks a rule. A client leaves out the sets that break
+  one (logged) and keeps the others.
+
+What a set does in an instance:
+
+- **Variant.** An instance on Minecraft version V with loader L uses the set's variant for V and
+  L, else its loader-less variant for V. Other instances are not offered the set (the launcher
+  says which version and loader it is made for). A new instance started from a set gets the
+  variant's version and loader (and loader version).
+- **Installing is a pack sync.** The variant becomes a pack manifest (its files and items, pack
+  id = set id, `versionId` = the content key below, `configPolicy` `preserveUserChanges`) and is
+  installed with the [sync semantics](#sync-semantics-and-pack-state): a set added for the first
+  time selects its `defaultEnabled` items and what they require; afterwards the choices are the
+  player's; items a newer catalog adds are new and stay off; items it drops are removed while
+  unchanged; changes the player makes in the folders are adopted; a file the player changed is
+  never overwritten.
+- **Projects the instance already has are left out.** Items whose Modrinth project (or item id)
+  another part of the instance already brings are not installed by the set there: every item
+  the official pack offers (on or off: switching it on later must not give two copies) and the
+  player's own Modrinth files. Requirements on them are dropped with them; the mod center shows
+  them as present.
+- **Nothing happens on its own.** Sets change files only when the player acts: add, apply
+  choices, update, remove. Launches never sync sets. When the catalog's variant has other
+  content than the one installed, the mod center offers the update; the player applies it or
+  not.
+- **Content key.** The first 16 hex digits of the SHA-256 of the variant's loader and, per item,
+  its id, file path, file SHA-1, sorted requirements and library flag, sorted. Titles,
+  summaries and icons are not part of it, so rewording an item is not an update.
+- **Removing a set.** Its files go while unchanged; files the player changed stay as the
+  player's own.
+- **Resource packs** are shared by every version of the instance. A pack the set installs is
+  turned on once in `options.txt` `resourcePacks`: the set's new packs go on top of the list
+  (highest priority) in the set's order, its first pack topmost; the player's packs keep their
+  order under them. When `options.txt` does not exist yet (a new instance), the launcher turns
+  them on right after it creates the file before the first launch. A pack the player later turns
+  off or moves is never touched again; a pack the set removes is taken out of the list.
+- **Shader packs** are shared too. When a set puts a shader pack in place for the first time and
+  Iris has none chosen (`config/iris.properties` without a `shaderPack`), the launcher chooses it
+  once (`shaderPack=<file>`, `enableShaders=true`); otherwise the player picks it in Iris.
+- **Old versions.** Sets carry Modrinth files only, for the versions the server supports with
+  Fabric or NeoForge. 1.8.9 with Forge and OptiFine is out of scope: OptiFine may not be
+  redistributed and has no Modrinth files.
+
+The launcher records the sets of a game directory in `<game dir>/.projects/mod-sets.json`, per
+Minecraft version like the pack state (parked as `.projects/versions/<minecraft>/mod-sets.json`):
+
+<!-- example: ModSetStates -->
+```json
+{
+  "sets": {
+    "pvp": {
+      "name": "PvP",
+      "purpose": "pvp",
+      "applied": {
+        "dependencies": { "minecraft": "26.3" },
+        "files": [
+          {
+            "path": "resourcepacks/PvP Basics 2.3.1.zip",
+            "hashes": { "sha1": "483e930a8a2dbe9e2d89e24300540a452501e8dc" },
+            "downloads": ["https://cdn.modrinth.com/data/ehZrmfH1/versions/2tR7gDAe/PvP%20Basics%202.3.1.zip"],
+            "fileSize": 410264
+          }
+        ],
+        "items": [
+          {
+            "id": "ehZrmfH1",
+            "path": "resourcepacks/PvP Basics 2.3.1.zip",
+            "title": "PvP Basics",
+            "category": "visual",
+            "modrinth": { "projectId": "ehZrmfH1", "versionId": "2tR7gDAe" }
+          }
+        ]
+      },
+      "state": {
+        "packId": "pvp",
+        "versionId": "3f2b7c9d1e0a4b5c",
+        "minecraft": "26.3",
+        "files": {
+          "resourcepacks/PvP Basics 2.3.1.zip": { "sha1": "483e930a8a2dbe9e2d89e24300540a452501e8dc", "policy": "preserveUserChanges", "item": "ehZrmfH1" }
+        },
+        "groups": {},
+        "items": { "ehZrmfH1": true },
+        "seenItems": ["ehZrmfH1"]
+      },
+      "resourcePacks": { "PvP Basics 2.3.1.zip": true },
+      "addedAt": "2026-10-19T18:00:00Z"
+    }
+  }
+}
+```
+
+- `sets`: set id → `{ name, purpose, applied?, state, resourcePacks?, addedAt }`.
+  - `name`, `purpose`: as last applied (shown when the catalog no longer has the set).
+  - `applied`: the variant as last installed for this version. Missing while the set waits to
+    be installed for the version (a version switch carried it over).
+  - `state`: a [pack state](#sync-semantics-and-pack-state) (`packId` = set id, `versionId` =
+    the applied content key, empty while not installed).
+  - `resourcePacks`: file name → `true` once turned on in `options.txt`, `false` while that
+    waits for the game's first `options.txt`.
+- Version switches ([Per-version sets](#per-version-sets)) split every set's state like the
+  pack state: the parked file keeps the leaving version's records under `mods/` and `config/`,
+  its choices and its applied variant. Returning to a version that had the set brings that back
+  with the current records of shared files (resource and shader packs stay in place). On a
+  version that never had the set it comes along with its choices and shared records but is not
+  installed: the mod center offers to install it for that version when the set has a variant
+  for it.
+
 ## Launcher release channels
 
 `releases/<channel>.json` is Tauri's static updater JSON plus fields Tauri ignores:
@@ -1283,7 +1525,7 @@ Moving from version A to version B:
 | Objects | `Cache-Control` |
 | --- | --- |
 | `index.json`, `index.json.sig`, `releases/<channel>.json` | `public, max-age=60` |
-| `config/*`, `news/*`, `media/*`, `files/*`, `packs/*/*.json`, `afk/*/*`, `releases/<version>/*` | `public, max-age=31536000, immutable` |
+| `config/*`, `news/*`, `modsets/*`, `media/*`, `files/*`, `packs/*/*.json`, `afk/*/*`, `releases/<version>/*` | `public, max-age=31536000, immutable` |
 | Feed mirrors: `feed.json`, `feed.json.sig` | `public, max-age=60` |
 | Feed mirrors: `media/*` | `public, max-age=31536000, immutable` |
 
@@ -1296,7 +1538,7 @@ primary is down.
 ## Publish order
 
 1. Upload new immutable files: media, `files/<sha1>`, AFK builds, release bundles.
-2. Upload the documents: `config/…`, `news/…`, `packs/<id>/<version>.json`.
+2. Upload the documents: `config/…`, `news/…`, `packs/<id>/<version>.json`, `modsets/…`.
 3. Check that every new object is readable with the expected size and hash.
 4. Upload `index.json.sig`, then `index.json` last (the commit point). For updates:
    `releases/<version>/…` first, `releases/<channel>.json` last.

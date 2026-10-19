@@ -31,6 +31,7 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::fsutil::{read_optional, write_durable};
 use crate::model::compare_minecraft_versions;
+use crate::modsets::{MOD_SETS_FILE, ModSetStates};
 use crate::path::{LAUNCHER_DIR, check_relative_path};
 use crate::sync::{COPIED_DIRS, PACK_STATE_FILE, PARKED_DIRS, PackState};
 
@@ -103,6 +104,13 @@ pub struct SwitchJournal {
     pub parked_state: Option<PackState>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub active_state: Option<PackState>,
+    /// The ready-made mod sets of the leaving version, as parked
+    /// ([`ModSetStates::switch_version`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parked_mod_sets: Option<ModSetStates>,
+    /// The ready-made mod sets the target version starts with.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub active_mod_sets: Option<ModSetStates>,
     pub parked_info: SetInfo,
     pub active_info: SetInfo,
     /// Folders that were in the way and were moved aside (relative to the game directory).
@@ -460,6 +468,26 @@ impl VersionSets {
         let active_state = PackState::load(&self.game_dir).await?;
         let (parked_state, active_state) =
             split_states(active_state, &from, &to, returning, returning_state);
+        let returning_mod_sets = if returning {
+            ModSetStates::load_from(&self.set_dir(&to).join(MOD_SETS_FILE)).await?
+        } else {
+            None
+        };
+        let leaving_mod_sets = ModSetStates::load(&self.game_dir).await?;
+        let (parked_mod_sets, active_mod_sets) = if leaving_mod_sets.sets.is_empty() {
+            (
+                None,
+                returning_mod_sets.map(|states| {
+                    ModSetStates::default()
+                        .switch_version(&from, &to, true, Some(states))
+                        .1
+                }),
+            )
+        } else {
+            let (parked, active) =
+                leaving_mod_sets.switch_version(&from, &to, returning, returning_mod_sets);
+            (Some(parked), Some(active))
+        };
 
         // A leftover parked folder of the version being left would collide: set it aside.
         let parked_dir = self.set_dir(&from);
@@ -505,6 +533,8 @@ impl VersionSets {
             prepared,
             parked_state,
             active_state,
+            parked_mod_sets,
+            active_mod_sets,
             parked_info,
             active_info,
             moved_aside,
@@ -625,10 +655,24 @@ impl VersionSets {
             Some(state) => state.save(&self.game_dir).await?,
             None => remove_file_if_exists(&PackState::path(&self.game_dir)).await?,
         }
+        // Ready-made mod sets: an empty or missing record removes the file.
+        journal
+            .parked_mod_sets
+            .clone()
+            .unwrap_or_default()
+            .save_to(&parked.join(MOD_SETS_FILE))
+            .await?;
+        journal
+            .active_mod_sets
+            .clone()
+            .unwrap_or_default()
+            .save(&self.game_dir)
+            .await?;
         write_json(&self.active_info_path(), &journal.active_info).await?;
 
         let target = self.set_dir(&journal.to);
         remove_file_if_exists(&target.join(PACK_STATE_FILE)).await?;
+        remove_file_if_exists(&target.join(MOD_SETS_FILE)).await?;
         remove_file_if_exists(&target.join(SET_FILE)).await?;
         // Only an empty folder goes; anything else left in it stays visible as a parked set.
         let _ = tokio::fs::remove_dir(&target).await;
@@ -903,6 +947,71 @@ mod tests {
             seen_items: BTreeSet::from(["sodium".into(), "iris".into()]),
             ..PackState::default()
         }
+    }
+
+    #[tokio::test]
+    async fn ready_made_mod_sets_follow_the_version() {
+        use crate::modsets::AddedSet;
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        write(game, "mods/zoom.jar", b"zoom");
+        write(game, "resourcepacks/LowFire.zip", b"fire");
+        let states = ModSetStates {
+            sets: BTreeMap::from([(
+                "pvp".to_owned(),
+                AddedSet {
+                    name: "PvP".into(),
+                    purpose: crate::model::ModSetPurpose::Pvp,
+                    applied: Some(crate::testutil::sample_variant(
+                        None,
+                        "1.21.1",
+                        &[("mods/zoom.jar", b"zoom")],
+                    )),
+                    state: PackState {
+                        pack_id: "pvp".into(),
+                        version_id: "key".into(),
+                        minecraft: "1.21.1".into(),
+                        files: BTreeMap::from([
+                            ("mods/zoom.jar".into(), record(b"zoom", Some("zoom"))),
+                            (
+                                "resourcepacks/LowFire.zip".into(),
+                                record(b"fire", Some("LowFire")),
+                            ),
+                        ]),
+                        ..PackState::default()
+                    },
+                    resource_packs: BTreeMap::from([("LowFire.zip".into(), true)]),
+                    added_at: Timestamp::UNIX_EPOCH,
+                },
+            )]),
+        };
+        states.save(game).await.unwrap();
+        let sets = VersionSets::new(game);
+
+        sets.switch(request("1.21.1", "1.21.4")).await.unwrap();
+        sets.finish().await.unwrap();
+        let parked = ModSetStates::load_from(&sets.set_dir("1.21.1").join(MOD_SETS_FILE))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(parked.sets["pvp"].installed());
+        let active = ModSetStates::load(game).await.unwrap();
+        let carried = &active.sets["pvp"];
+        assert!(!carried.installed(), "waits to be installed for 1.21.4");
+        assert_eq!(
+            carried.state.files.keys().collect::<Vec<_>>(),
+            ["resourcepacks/LowFire.zip"]
+        );
+
+        // Coming back restores the set as it was.
+        sets.switch(request("1.21.4", "1.21.1")).await.unwrap();
+        sets.finish().await.unwrap();
+        let back = ModSetStates::load(game).await.unwrap();
+        assert!(back.sets["pvp"].installed());
+        assert_eq!(back.sets["pvp"].state.files.len(), 2);
+        assert!(!sets.set_dir("1.21.1").join(MOD_SETS_FILE).exists());
+        assert!(sets.set_dir("1.21.4").join(MOD_SETS_FILE).exists());
+        assert_eq!(read(game, "mods/zoom.jar"), b"zoom");
     }
 
     #[tokio::test]
@@ -1320,6 +1429,8 @@ mod tests {
             prepared: false,
             parked_state: None,
             active_state: None,
+            parked_mod_sets: None,
+            active_mod_sets: None,
             parked_info: info("1.21.1"),
             active_info: info("1.20.1"),
             moved_aside: Vec::new(),
