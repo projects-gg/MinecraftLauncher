@@ -11,6 +11,7 @@ export function Switch({
   disabled,
   hideLabel,
   className,
+  id: idProp,
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
@@ -21,8 +22,11 @@ export function Switch({
   /** Use when a visible title already sits next to the switch (settings rows). */
   hideLabel?: boolean;
   className?: string;
+  /** For a `<label htmlFor>` of the row around it (a click on the row's words toggles too). */
+  id?: string;
 }) {
-  const id = useId();
+  const generatedId = useId();
+  const id = idProp ?? generatedId;
   return (
     <div className={cn("flex items-center gap-3", className)}>
       <RadixSwitch.Root

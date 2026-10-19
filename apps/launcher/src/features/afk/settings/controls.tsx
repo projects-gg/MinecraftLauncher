@@ -61,6 +61,7 @@ export function ToggleRow({
   /** The section's main switch. */
   emphasis?: boolean;
 }) {
+  const id = useId();
   return (
     <div
       className={cn(
@@ -70,12 +71,21 @@ export function ToggleRow({
       )}
     >
       <div className="min-w-0">
-        <p className={cn("font-medium text-bone-50", emphasis ? "text-[14.5px]" : "text-[13.5px]")}>
+        {/* The title is the switch's label: a click on it toggles too (the help may hold links). */}
+        <label
+          htmlFor={id}
+          className={cn(
+            "block font-medium text-bone-50",
+            emphasis ? "text-[14.5px]" : "text-[13.5px]",
+            disabled ? "cursor-default" : "cursor-pointer",
+          )}
+        >
           {title}
-        </p>
+        </label>
         {help ? <p className="mt-0.5 max-w-[58ch] text-[12.5px] text-ash-400">{help}</p> : null}
       </div>
       <Switch
+        id={id}
         checked={checked}
         onCheckedChange={onCheckedChange}
         label={title}

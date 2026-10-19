@@ -30,7 +30,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
-import { type ReactNode, useMemo } from "react";
+import {
+  type ComponentProps,
+  cloneElement,
+  isValidElement,
+  type ReactNode,
+  useId,
+  useMemo,
+} from "react";
 import { useTranslation } from "react-i18next";
 import logo from "@/assets/brand/logo-96.webp";
 import { FriendsSettingsSection } from "@/features/social/settings-section";
@@ -79,13 +86,33 @@ export function Row({
   help?: string;
   children: ReactNode;
 }) {
+  const id = useId();
+  // A row whose control is a switch also toggles on a click on its words: its title and help
+  // become the switch's label (a target as wide as the row, POLISH2).
+  const toggle =
+    isValidElement<ComponentProps<typeof Switch>>(children) && children.type === Switch;
+  const control = toggle ? cloneElement(children, { id }) : children;
+  const words = (
+    <>
+      <span className="block text-[13.5px] font-medium text-bone-50">{title}</span>
+      {help ? (
+        <span className="mt-0.5 block max-w-[56ch] text-[12.5px] text-ash-300">{help}</span>
+      ) : null}
+    </>
+  );
   return (
     <div className="flex items-center justify-between gap-6 border-b border-white/6 py-3.5 last:border-b-0">
-      <div className="min-w-0">
-        <p className="text-[13.5px] font-medium text-bone-50">{title}</p>
-        {help ? <p className="mt-0.5 max-w-[56ch] text-[12.5px] text-ash-300">{help}</p> : null}
-      </div>
-      <div className="shrink-0">{children}</div>
+      {toggle ? (
+        <label
+          htmlFor={id}
+          className={cn("min-w-0", children.props.disabled ? "cursor-default" : "cursor-pointer")}
+        >
+          {words}
+        </label>
+      ) : (
+        <div className="min-w-0">{words}</div>
+      )}
+      <div className="shrink-0">{control}</div>
     </div>
   );
 }
