@@ -23,6 +23,7 @@ import { useTranslation } from "react-i18next";
 import { showError, useContentActions, useUndoableRemoval } from "@/features/content/jobs";
 import { ProjectDialog } from "@/features/content/project-dialog";
 import { PageDropZone } from "@/features/drop/page-zone";
+import { SetBadgeChip } from "@/features/modsets/parts";
 import { api, type ContentKind, type PackEntry } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
@@ -221,6 +222,7 @@ export function PacksTab({
                           </p>
                         )}
                         {p.enabled ? null : <Chip>{t("instance.packs.disabled")}</Chip>}
+                        {p.modSet ? <SetBadgeChip badge={p.modSet} compact /> : null}
                       </div>
                       {/* Two lines, as the game's own pack list shows them: a 1200 px window
                           left a single line about 170 px wide (POLISH3). */}

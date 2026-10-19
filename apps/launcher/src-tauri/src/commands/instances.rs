@@ -160,6 +160,16 @@ pub async fn instance_create(
     state: State<'_, AppState>,
     request: NewInstanceRequest,
 ) -> CmdResult<InstanceView> {
+    let created = create_instance(&state, request).await?;
+    Ok(view(&state, &created))
+}
+
+/// Creates an instance ("Otomatik" memory unless Settings → Oyun has a default) with the
+/// Projects server in its list. New instances from a ready-made set use it too.
+pub(crate) async fn create_instance(
+    state: &AppState,
+    request: NewInstanceRequest,
+) -> CmdResult<Instance> {
     let total = pl_mc::instance::system_memory_mb();
     let modded = request.loader != LoaderKind::Vanilla;
     // Without a default from Settings → Oyun the instance is "Otomatik".
@@ -193,8 +203,8 @@ pub async fn instance_create(
             .await
             .map_err(CmdError::from)?;
     }
-    seed_default_server_once(&state, &mut created).await;
-    Ok(view(&state, &created))
+    seed_default_server_once(state, &mut created).await;
+    Ok(created)
 }
 
 #[tauri::command]
@@ -332,6 +342,8 @@ pub struct ModView {
     pub project_id: Option<String>,
     /// Cached Modrinth project icon (local path) for files without an icon of their own.
     pub icon_path: Option<String>,
+    /// The ready-made set that installed the file (its badge).
+    pub mod_set: Option<crate::commands::modsets::SetBadgeView>,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -347,6 +359,8 @@ pub struct PackView {
     pub project_id: Option<String>,
     /// Cached Modrinth project icon (local path) for packs without an icon of their own.
     pub icon_path: Option<String>,
+    /// The ready-made set that installed the pack (its badge).
+    pub mod_set: Option<crate::commands::modsets::SetBadgeView>,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -525,6 +539,18 @@ pub async fn instance_detail(
             .and_then(|s| pl_mc::addons::cached_icon(&icon_dir, &s.project_id))
             .map(|p| p.to_string_lossy().into_owned())
     };
+    // Files a ready-made set installed: their badge and the set's title for them.
+    let mod_sets = pl_content::ModSetStates::load(&game_dir)
+        .await
+        .unwrap_or_default();
+    let from_set = |folder: &str, file_name: &str| {
+        super::modsets::set_of_file(&mod_sets, folder, file_name).map(|(id, set)| {
+            (
+                super::modsets::SetBadgeView::of(id, set),
+                super::modsets::set_item_title(set, folder, file_name),
+            )
+        })
+    };
 
     let mods = pl_mc::mods::list_mods(&game_dir.join("mods"), false)
         .await
@@ -535,9 +561,11 @@ pub async fn instance_detail(
             let base = m.file_name.trim_end_matches(".disabled").to_owned();
             let pack_file = pack_files.get(&format!("mods/{base}").to_ascii_lowercase());
             let source = addon_index.source_for("mods", &m.file_name, m.size, m.modified_ms);
+            let (mod_set, set_title) = from_set("mods", &m.file_name).unzip();
             ModView {
                 name: source
                     .and_then(|s| s.title.clone())
+                    .or(set_title.flatten())
                     .or_else(|| meta.and_then(|x| x.name.clone()))
                     .unwrap_or_else(|| base.trim_end_matches(".jar").to_owned()),
                 version: meta
@@ -559,6 +587,7 @@ pub async fn instance_detail(
                 enabled: m.enabled,
                 size_bytes: m.size,
                 file_name: m.file_name,
+                mod_set,
             }
         })
         .collect();
@@ -570,9 +599,11 @@ pub async fn instance_detail(
         .map(|p| {
             let source =
                 addon_index.source_for("resourcepacks", &p.file_name, p.size, p.modified_ms);
+            let (mod_set, set_title) = from_set("resourcepacks", &p.file_name).unzip();
             PackView {
                 name: source
                     .and_then(|s| s.title.clone())
+                    .or(set_title.flatten())
                     .unwrap_or_else(|| display_name(&p.file_name)),
                 description: p.description.clone().unwrap_or_default(),
                 enabled: true,
@@ -585,6 +616,7 @@ pub async fn instance_detail(
                     modrinth_icon(source)
                 },
                 file_name: p.file_name,
+                mod_set,
             }
         })
         .collect();
@@ -595,9 +627,11 @@ pub async fn instance_detail(
         .into_iter()
         .map(|p| {
             let source = addon_index.source_for("shaderpacks", &p.file_name, p.size, p.modified_ms);
+            let (mod_set, set_title) = from_set("shaderpacks", &p.file_name).unzip();
             PackView {
                 name: source
                     .and_then(|s| s.title.clone())
+                    .or(set_title.flatten())
                     .unwrap_or_else(|| display_name(&p.file_name)),
                 description: source
                     .and_then(|s| s.version_number.clone())
@@ -608,6 +642,7 @@ pub async fn instance_detail(
                 project_id: source.map(|s| s.project_id.clone()),
                 icon_path: modrinth_icon(source),
                 file_name: p.file_name,
+                mod_set,
             }
         })
         .collect();

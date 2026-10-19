@@ -22,6 +22,7 @@ import type { LibraryApi } from "./library-types";
 import { mockApi } from "./mock";
 import type { ModCenterApi } from "./modcenter-types";
 import type { ModHealthApi } from "./modhealth-types";
+import type { ModSetsApi } from "./modsets-types";
 import type { SkinsApi } from "./skins-types";
 import type { SocialApi } from "./social-types";
 import { tauriApi } from "./tauri";
@@ -181,6 +182,8 @@ export interface LauncherApi {
   cleanup: CleanupApi;
   /** Mod center (recommended mods), per-version sets and moving own mods. */
   modCenter: ModCenterApi;
+  /** Ready-made mod sets ("Hazır setler"): the catalog, an instance's sets, new instances. */
+  modSets: ModSetsApi;
   /** Friends (optional feature; hidden until the signed config turns it on). */
   social: SocialApi;
   /** Mod health: the mod check, repairs and set reinstalls. */
@@ -209,6 +212,7 @@ export * from "./java-types";
 export * from "./library-types";
 export * from "./modcenter-types";
 export * from "./modhealth-types";
+export * from "./modsets-types";
 export * from "./skins-types";
 export * from "./social-types";
 export * from "./types";

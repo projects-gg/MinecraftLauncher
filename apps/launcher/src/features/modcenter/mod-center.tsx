@@ -1,4 +1,4 @@
-import { WarningCircle } from "@phosphor-icons/react";
+import { Plus, WarningCircle } from "@phosphor-icons/react";
 import { Button, EmptyState, Segmented, Skeleton } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
@@ -10,6 +10,8 @@ import { ProjectDialog } from "@/features/content/project-dialog";
 import { ModsTab, VanillaModsEmpty } from "@/features/library/tabs/mods-tab";
 import { useModCheck } from "@/features/modhealth/flow";
 import { ModHealthSection } from "@/features/modhealth/health-banner";
+import { AddSetDialog } from "@/features/modsets/add-set-dialog";
+import { InstanceSets, useInstanceSets } from "@/features/modsets/instance-sets";
 import { api, type InstanceDetail, type ModCenterItem } from "@/lib/api";
 import { useLaunch } from "@/stores/launch";
 import { ModIssuesBanner } from "./issues-banner";
@@ -17,7 +19,7 @@ import { MigrateDialog } from "./migrate-dialog";
 import { fade, glide, rise, useMotionPrefs } from "./motion";
 import { RecommendedTab, refreshMods } from "./recommended-tab";
 
-export type ModCenterSection = "recommended" | "discover" | "own";
+export type ModCenterSection = "recommended" | "sets" | "discover" | "own";
 
 const titleWidths = ["w-40", "w-28", "w-36", "w-24", "w-32"];
 
@@ -60,7 +62,11 @@ export function ModCenter({
   );
   const [project, setProject] = useState<ModCenterItem | null>(null);
   const [migrating, setMigrating] = useState(false);
+  const [addingSet, setAddingSet] = useState(false);
   const queryClient = useQueryClient();
+  // The instance's ready-made sets (the "Setler" section and "Set ekle" share the query).
+  const instanceSets = useInstanceSets(instance.id, instance.loader !== "vanilla");
+  const addedSets = new Set((instanceSets.data?.sets ?? []).map((set) => set.id));
   const view = useQuery({
     queryKey: ["mod-center", instance.id],
     queryFn: () => api.modCenter.view(instance.id),
@@ -93,6 +99,13 @@ export function ModCenter({
           },
         ]
       : []),
+    {
+      value: "sets",
+      label:
+        addedSets.size > 0
+          ? t("modSets.center.sectionCount", { count: addedSets.size })
+          : t("modSets.center.section"),
+    },
     { value: "discover", label: t("modCenter.sections.discover") },
     { value: "own", label: t("modCenter.sections.own") },
   ];
@@ -168,6 +181,8 @@ export function ModCenter({
         />
       );
     }
+  } else if (section === "sets") {
+    content = <InstanceSets instance={instance} onAdd={() => setAddingSet(true)} />;
   } else if (section === "discover") {
     content = <ContentBrowser instance={instance} kind="mod" embedded />;
   } else {
@@ -203,21 +218,31 @@ export function ModCenter({
               label={t("modCenter.sectionsLabel")}
               options={sections}
             />
-            <AnimatePresence initial={false}>
-              {pack ? (
-                <motion.span
-                  key="pack"
-                  {...fade(0.16)}
-                  className="ml-auto text-[12.5px] text-ash-400 tabular-nums"
-                >
-                  {t("modCenter.packCaption", {
-                    name: pack.name,
-                    version: pack.version,
-                    minecraft: pack.minecraft,
-                  })}
-                </motion.span>
-              ) : null}
-            </AnimatePresence>
+            <div className="ml-auto flex items-center gap-3">
+              <AnimatePresence initial={false}>
+                {pack ? (
+                  <motion.span
+                    key="pack"
+                    {...fade(0.16)}
+                    className="text-[12.5px] text-ash-400 tabular-nums"
+                  >
+                    {t("modCenter.packCaption", {
+                      name: pack.name,
+                      version: pack.version,
+                      minecraft: pack.minecraft,
+                    })}
+                  </motion.span>
+                ) : null}
+              </AnimatePresence>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<Plus size={14} weight="bold" />}
+                onClick={() => setAddingSet(true)}
+              >
+                {t("modSets.center.add")}
+              </Button>
+            </div>
           </motion.div>
 
           {/* Sections swap with a quick fade: switching tabs is frequent, so no movement. */}
@@ -249,6 +274,14 @@ export function ModCenter({
         onClose={() => setProject(null)}
       />
       <MigrateDialog instance={instance} open={migrating} onClose={() => setMigrating(false)} />
+      <AddSetDialog
+        instance={instance}
+        open={addingSet}
+        addedIds={addedSets}
+        onClose={() => setAddingSet(false)}
+        // The added set shows where its items are switched.
+        onAdded={() => setSection("sets")}
+      />
     </MotionConfig>
   );
 }

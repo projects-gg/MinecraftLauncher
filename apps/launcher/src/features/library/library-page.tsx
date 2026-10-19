@@ -132,7 +132,7 @@ const sortOptions: LibrarySort[] = ["lastPlayed", "name", "playTime", "created"]
  * card for it: most of the first open's 200 ms task, POLISH3/POLISH4).
  */
 function CreateFromAddress({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
-  const search = useSearch({ strict: false }) as { create?: boolean; source?: "import" };
+  const search = useSearch({ strict: false }) as { create?: boolean; source?: "import" | "sets" };
   return (
     <CreateInstanceDialog
       open={Boolean(search.create)}

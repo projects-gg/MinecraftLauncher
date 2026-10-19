@@ -26,10 +26,12 @@ const homeRoute = createRoute({ getParentRoute: () => rootRoute, path: "/", comp
 const libraryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/library",
-  validateSearch: (search: Record<string, unknown>): { create?: boolean; source?: "import" } => ({
+  validateSearch: (
+    search: Record<string, unknown>,
+  ): { create?: boolean; source?: "import" | "sets" } => ({
     create: search.create === true || search.create === "true" ? true : undefined,
-    // The create dialog opens on its file import ("İçe aktar").
-    source: search.source === "import" ? "import" : undefined,
+    // The create dialog opens on its file import ("İçe aktar") or its ready-made sets.
+    source: search.source === "import" || search.source === "sets" ? search.source : undefined,
   }),
   component: LibraryPage,
 });

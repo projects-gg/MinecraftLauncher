@@ -4,6 +4,7 @@ import type { QuickPlay } from "@/bindings";
 import type { JavaChoice, JavaPrompt } from "./java-types";
 import type { ModsNotice } from "./modcenter-types";
 import type { CrashKind, CrashSuspect, MemoryAdvice, ModCheck } from "./modhealth-types";
+import type { SetBadge } from "./modsets-types";
 
 export type LoaderKind = "vanilla" | "fabric" | "quilt" | "forge" | "neoForge";
 export type NewsCategory = "update" | "event" | "announcement" | "patchNotes" | "community";
@@ -463,6 +464,8 @@ export interface ModEntry {
   sizeBytes: number;
   /** Modrinth project, when the launcher knows where the file came from. */
   projectId?: string;
+  /** The ready-made set that installed the file. */
+  modSet?: SetBadge;
 }
 
 export interface WorldEntry {
@@ -483,6 +486,8 @@ export interface PackEntry {
   sizeBytes: number;
   /** Modrinth project, when the launcher knows where the file came from. */
   projectId?: string;
+  /** The ready-made set that installed the pack. */
+  modSet?: SetBadge;
 }
 
 export interface ScreenshotEntry {

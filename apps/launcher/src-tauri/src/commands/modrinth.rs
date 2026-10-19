@@ -460,6 +460,8 @@ pub struct ContentEntryView {
     pub from_pack: bool,
     /// Cached project icon (local path; the UI converts it with `convertFileSrc`).
     pub icon_path: Option<String>,
+    /// Installed by a ready-made set: it is updated with the set, not from here.
+    pub mod_set: Option<crate::commands::modsets::SetBadgeView>,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -500,13 +502,17 @@ pub async fn content_scan(
     .map_err(content_error)?;
 
     let owned = pack_owned(addons.game_dir());
+    let sets = pl_content::ModSetStates::load_blocking(addons.game_dir());
     let icons = icon_dir(&state);
     let entries = scan
         .entries
         .into_iter()
         .map(|mut entry| {
             let from_pack = owned.contains(&index_key(kind.folder(), &entry.file_name));
-            if from_pack {
+            let mod_set =
+                crate::commands::modsets::set_of_file(&sets, kind.folder(), &entry.file_name)
+                    .map(|(id, set)| crate::commands::modsets::SetBadgeView::of(id, set));
+            if from_pack || mod_set.is_some() {
                 entry.update = None;
             }
             let icon_path = entry
@@ -518,6 +524,7 @@ pub async fn content_scan(
                 entry,
                 from_pack,
                 icon_path,
+                mod_set,
             }
         })
         .collect();

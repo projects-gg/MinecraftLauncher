@@ -6,6 +6,7 @@ pub mod keys;
 pub mod memory;
 pub mod model;
 pub mod options;
+pub mod packs;
 pub mod store;
 pub mod usage;
 
@@ -30,6 +31,9 @@ pub use model::{
 pub use options::{
     GraphicsPreset, GraphicsState, apply_preset, detect_preset, graphics_state, preset_for_machine,
     set_graphics_preset, supports_presets, this_machine_preset,
+};
+pub use packs::{
+    PackListChange, choose_shader_once, disable_resource_packs, enable_resource_packs,
 };
 pub use store::{GAME_DIR_NAME, INSTANCE_FILE, InstanceStore, slugify};
 pub use usage::DiskUsage;

@@ -62,6 +62,9 @@ export function useDesktopEvents() {
         // The version lists mark the recommended Minecraft version of the signed config.
         void queryClient.invalidateQueries({ queryKey: ["mc-versions"] });
         void queryClient.invalidateQueries({ queryKey: ["instance-versions"] });
+        // Ready-made sets: a new catalog may bring an update to a set an instance has.
+        void queryClient.invalidateQueries({ queryKey: ["mod-sets"] });
+        void queryClient.invalidateQueries({ queryKey: ["mod-sets-instance"] });
       }),
     [queryClient],
   );

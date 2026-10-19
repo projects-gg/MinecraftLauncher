@@ -37,6 +37,7 @@ import { JobStatus, useShownJob } from "@/features/content/parts";
 import { ProjectDialog } from "@/features/content/project-dialog";
 import { useContentScan } from "@/features/content/use-content";
 import { PageDropZone } from "@/features/drop/page-zone";
+import { SetBadgeChip } from "@/features/modsets/parts";
 import { api, type InstalledContent, type InstanceDetail, type ModEntry } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
@@ -142,8 +143,10 @@ function ModRow({
             <PackItemChip onClick={onPackItem} />
           ) : fromPack ? (
             <Chip className="shrink-0">{t("instance.mods.fromPack")}</Chip>
+          ) : mod.modSet ? (
+            <SetBadgeChip badge={mod.modSet} />
           ) : null}
-          {entry?.update && !fromPack ? (
+          {entry?.update && !fromPack && !mod.modSet ? (
             <Chip tone="gold" className="shrink-0">
               {t("content.updates.newVersion", { version: entry.update.versionNumber })}
             </Chip>
@@ -274,7 +277,12 @@ export function ModsTab({
         .filter(
           (m) =>
             !ownOnly ||
-            !(m.fromPack || entries.get(m.fileName.replace(/\.disabled$/, ""))?.fromPack),
+            // A ready-made set's files live in the "Setler" section.
+            !(
+              m.fromPack ||
+              m.modSet ||
+              entries.get(m.fileName.replace(/\.disabled$/, ""))?.fromPack
+            ),
         )
         .filter((m) => !isHidden(m.fileName))
         .sort((a, b) => a.name.localeCompare(b.name, "tr")),

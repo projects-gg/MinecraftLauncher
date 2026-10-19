@@ -421,6 +421,43 @@ export const commands = {
 	 *  acknowledged (no files change).
 	 */
 	modCenterMarkSeen: (instanceId: string) => typedError<null, CmdError>(__TAURI_INVOKE("mod_center_mark_seen", { instanceId })),
+	/**  The ready-made sets this launcher offers, with what each variant installs. */
+	modSetsCatalog: () => typedError<SetCatalogView, CmdError>(__TAURI_INVOKE("mod_sets_catalog")),
+	/**
+	 *  The sets of an instance with their items under the current choices (a dry run: nothing
+	 *  changes on disk).
+	 */
+	modSetsInstance: (instanceId: string) => typedError<InstanceSetsView, CmdError>(__TAURI_INVOKE("mod_sets_instance", { instanceId })),
+	/**  What adding a set, applying choices or updating it would do (nothing changes on disk). */
+	modSetPreview: (instanceId: string, setId: string, selection: {
+	/**  Item id → selected (items not listed keep their choice). */
+	items?: { [key in string]: boolean },
+	/**  Items whose replaced file goes back to the pack's ("Önerilene döndür"). */
+	revert?: string[],
+} | null) => typedError<ModCenterPreviewView, CmdError>(__TAURI_INVOKE("mod_set_preview", { instanceId, setId, selection })),
+	/**
+	 *  Adds a set to an instance, installs it for the instance's version, applies the player's
+	 *  choices or brings the catalog's newer content (only what the player chose changes; new
+	 *  items stay off). Refused while the instance's game runs.
+	 */
+	modSetApply: (instanceId: string, setId: string, selection: {
+	/**  Item id → selected (items not listed keep their choice). */
+	items?: { [key in string]: boolean },
+	/**  Items whose replaced file goes back to the pack's ("Önerilene döndür"). */
+	revert?: string[],
+} | null, jobId: string, onProgress: Channel<JobProgressView>) => typedError<SetApplyView, CmdError>(__TAURI_INVOKE("mod_set_apply", { instanceId, setId, selection, jobId, onProgress })),
+	/**
+	 *  Removes a set from an instance: its files go while unchanged (files the player changed stay
+	 *  as their own). Refused while the instance's game runs.
+	 */
+	modSetRemove: (instanceId: string, setId: string, jobId: string, onProgress: Channel<JobProgressView>) => typedError<SetApplyView, CmdError>(__TAURI_INVOKE("mod_set_remove", { instanceId, setId, jobId, onProgress })),
+	/**  The player looked at a set's items: new ones are no longer flagged (no files change). */
+	modSetMarkSeen: (instanceId: string, setId: string) => typedError<null, CmdError>(__TAURI_INVOKE("mod_set_mark_seen", { instanceId, setId })),
+	/**
+	 *  A new instance started from a set: the variant's Minecraft version and loader, then the set
+	 *  installed into it. A failed install leaves no half-made instance behind.
+	 */
+	instanceCreateFromSet: (request: SetInstanceRequest, jobId: string, onProgress: Channel<JobProgressView>) => typedError<InstanceView, CmdError>(__TAURI_INVOKE("instance_create_from_set", { request, jobId, onProgress })),
 	/**
 	 *  The Minecraft versions an instance can move to: the official pack's versions, or for other
 	 *  instances the releases its loader supports (and snapshots when `include_snapshots`; the
@@ -1288,6 +1325,8 @@ export type ContentSearchRequest = {
  *  Whether the content mirrors could be reached, for the home screen's offline strip. Changes
  *  arrive as the `content-status` event.
  */
+	/**  Installed by a ready-made set: it is updated with the set, not from here. */
+	modSet: SetBadgeView | null,
 export type ContentStatusView = {
 	/**  The last refresh reached no mirror: the cached (or bundled) content is shown. */
 	offline: boolean,
@@ -1820,6 +1859,44 @@ export type InviteResult =
 "queued";
 
 export type InviteView = InviteView_Serialize | InviteView_Deserialize;
+/**  A set an instance has. */
+export type InstanceSetView = {
+	id: string,
+	name: string,
+	nameEn: string | null,
+	summary: string | null,
+	summaryEn: string | null,
+	purpose: SetPurpose,
+	/**  Installed for the instance's Minecraft version. */
+	installed: boolean,
+	/**  The catalog has a variant for this instance (needed to install or update it). */
+	available: boolean,
+	/**  The team changed the set's files since it was installed ("Güncelleme var"). */
+	updateAvailable: boolean,
+	/**  The catalog no longer has the set: it keeps working and can be removed. */
+	retired: boolean,
+	/**  The set's items under the current choices, like the mod center's. */
+	items: ModCenterItemView[],
+	/**  Items the instance already has from elsewhere (the official pack, own mods). */
+	present: SetItemPreview[],
+	/**  Applying now would change files (a file is missing, something it needed went away). */
+	pending: boolean,
+	issues: ModIssueView[],
+	/**  Bytes of the files the set installed here. */
+	sizeBytes: number,
+};
+
+export type InstanceSetsView = {
+	instanceId: string,
+	mcVersion: string,
+	loader: LoaderKind,
+	sets: InstanceSetView[],
+	/**  The game of this instance is running: changes wait until it is closed. */
+	gameRunning: boolean,
+	/**  The catalog could not be loaded (the instance's sets still show from its records). */
+	unavailable: boolean,
+};
+
 
 export type InviteView_Deserialize = {
 	id: string,
@@ -2756,6 +2833,8 @@ export type ModpackImportView = {
 	manualMods: CurseForgeModLink[],
 	manualCount: number,
 	/**  Files written into the new instance (bundled and downloaded). */
+	/**  The ready-made set that installed the file (its badge). */
+	modSet: SetBadgeView | null,
 	files: number,
 	/**  Archive entries left out because their paths were unsafe. */
 	skipped: number,
@@ -3243,6 +3322,8 @@ export type Privacy = {
 /**  What one profile brings, read on demand. */
 export type ProfileMeasure = {
 	id: string,
+	/**  The ready-made set that installed the pack (its badge). */
+	modSet: SetBadgeView | null,
 	/**  Bytes the copy takes. */
 	bytes: number,
 	/**  Mods that come over: made for its loader and Minecraft version. */
@@ -3654,11 +3735,96 @@ export type SharedData = {
 	shaderPacks: number,
 	screenshots: number,
 };
+export type SetApplyView = {
+	downloaded: number,
+	restored: number,
+	removed: number,
+	/**  Files that could not be changed (they stay; the next apply tries again). */
+	issues: number,
+};
+
+/**  The badge of a file that came from a set. */
+export type SetBadgeView = {
+	id: string,
+	name: string,
+	purpose: SetPurpose,
+};
+
+/**  A set card. */
+export type SetCardView = {
+	id: string,
+	/**  Turkish wording; the `*_en` fields carry the English one when the team wrote it. */
+	name: string,
+	nameEn: string | null,
+	summary: string | null,
+	summaryEn: string | null,
+	purpose: SetPurpose,
+	/**  Newest Minecraft version first. */
+	variants: SetVariantView[],
+};
+
+export type SetCatalogView = {
+	sets: SetCardView[],
+	/**  The sets could not be loaded (no network and nothing cached). */
+	unavailable: boolean,
+};
+
+/**  A new instance started from a set. */
+export type SetInstanceRequest = {
+	setId: string,
+	/**  The variant's Minecraft version. */
+	minecraft: string,
+	name: string,
+	icon: string,
+	/**  Choices made before creating (items not listed keep their default). */
+	selection?: ModSelectionInput | null,
+	/**  Settings → Oyun defaults, as for a new instance. */
+	maxMemoryMb?: number | null,
+	jvmArgs?: string | null,
+};
+
+/**  Kind of a set item (from its file's folder). */
+export type SetItemKind = "mod" | "resourcePack" | "shaderPack";
+
+/**  One item of a set, as the cards and the add dialog show it. */
+export type SetItemPreview = {
+	id: string,
+	title: string,
+	summary: string | null,
+	kind: SetItemKind,
+	iconUrl: string | null,
+	pageUrl: string | null,
+	projectId: string | null,
+	defaultEnabled: boolean,
+	/**  Installed only because another item needs it; never a choice. */
+	library: boolean,
+	requires: string[],
+	sizeBytes: number,
+};
+
+/**  What a set is for (mirrors `pl_content::ModSetPurpose`): its card's mark. */
+export type SetPurpose = "pvp" | "performance" | "visual" | "other";
+
 
 export type SharedFilesView = {
 	items: SharedItem[],
 	/**  Bytes freed only when all of a group's items go (files hard-linked into each). */
 	groups: SharedGroup[],
+/**  One Minecraft version (and loader) of a set. */
+export type SetVariantView = {
+	minecraft: string,
+	/**  `None`: resource and shader packs only, for any loader (vanilla too). */
+	loader: LoaderKind | null,
+	/**  The loader version a new instance from the set gets. */
+	loaderVersion: string | null,
+	items: SetItemPreview[],
+	/**  What adding the set without changes installs (its default items and what they need). */
+	mods: number,
+	resourcePacks: number,
+	shaderPacks: number,
+	downloadBytes: number,
+};
+
 	totalBytes: number,
 };
 

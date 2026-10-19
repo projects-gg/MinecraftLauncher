@@ -86,7 +86,7 @@ function badge(prefs: MotionPrefs, key: string, label: string, tone?: "gold") {
   );
 }
 
-function ItemRow({
+export function ItemRow({
   item,
   items,
   enabled,
@@ -236,7 +236,7 @@ function ItemRow({
   );
 }
 
-function LibraryRow({
+export function LibraryRow({
   item,
   items,
   enabled,

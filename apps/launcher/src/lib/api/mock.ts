@@ -21,6 +21,13 @@ import { mockLaunchStop } from "./mock-launch-stop";
 import { createMockLibrary, mockServers } from "./mock-library";
 import { createMockModCenter } from "./mock-modcenter";
 import { mockAskKeys, mockCrash, mockCrashScenario, mockModHealth } from "./mock-modhealth";
+import {
+  createMockModSets,
+  DEMO_SET_INSTANCE,
+  loadMockSets,
+  mockSetFiles,
+  modSetsFlag,
+} from "./mock-modsets";
 import { mockOpening, mockWindowShown } from "./mock-opening";
 import { createMockSkins } from "./mock-skins";
 import { mockSocial } from "./mock-social";
@@ -598,6 +605,8 @@ const instances: InstanceSummary[] = [
         },
       ]
     : []),
+  // `?modsets=demo`: an instance made from the PvP set (MODSET1).
+  ...(modSetsFlag() === "demo" ? [DEMO_SET_INSTANCE] : []),
 ];
 // `?join=offline`: no Projects instance yet and no connection to fetch its pack, so "Katıl"
 // cannot start the game and says why (FIX1, E1).
@@ -879,6 +888,10 @@ export const mockApi: LauncherApi = {
   data: createMockData(),
   cleanup: createMockCleanup(),
   modCenter: createMockModCenter(),
+  modSets: createMockModSets({
+    instanceOf: (id) => instances.find((i) => i.id === id),
+    createInstance: (spec) => mockApi.createInstance(spec),
+  }),
   social: mockSocial,
   modHealth: mockModHealth,
   java: mockJava,
@@ -915,7 +928,18 @@ export const mockApi: LauncherApi = {
     await delay(180);
     const summary = instances.find((i) => i.id === id);
     if (!summary) throw new Error(`instance ${id} not found`);
-    return detailFor(summary);
+    if (modSetsFlag() === "demo") await loadMockSets();
+    const detail = detailFor(summary);
+    // Files a ready-made set put in place carry its badge; the set's own preview instance has
+    // only those and one mod of the player's.
+    const fromSets = mockSetFiles(id);
+    const demo = id === DEMO_SET_INSTANCE.id;
+    return {
+      ...detail,
+      mods: [...(demo ? projectsMods.slice(-1) : detail.mods), ...fromSets.mods],
+      resourcePacks: [...(demo ? [] : detail.resourcePacks), ...fromSets.resourcePacks],
+      shaderPacks: [...(demo ? [] : detail.shaderPacks), ...fromSets.shaderPacks],
+    };
   },
   async createInstance(spec: NewInstance) {
     await delay(400);

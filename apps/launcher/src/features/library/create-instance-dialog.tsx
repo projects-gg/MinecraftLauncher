@@ -20,6 +20,7 @@ import { ManualModsDialog } from "@/features/content/manual-mods-dialog";
 import { useModpackBrowser } from "@/features/content/modpack-browser";
 import { useModpackImport } from "@/features/content/modpack-import";
 import { useDrop } from "@/features/drop/store";
+import { useSetSource } from "@/features/modsets/set-source";
 import {
   api,
   type InstanceIcon as IconKey,
@@ -30,7 +31,7 @@ import { InstanceIcon, instanceIcons } from "@/shell/instance-icon";
 import { usePrefs } from "@/stores/prefs";
 import { defaultInstanceName } from "./default-name";
 
-type Source = "new" | "browse" | "import";
+type Source = "new" | "sets" | "browse" | "import";
 type VersionFilter = "release" | "snapshot" | "old";
 
 const loaderOptions: LoaderKind[] = ["vanilla", "fabric", "quilt", "forge", "neoForge"];
@@ -158,11 +159,25 @@ export function CreateInstanceDialog({
     onCancel: () => onOpenChange(false),
     onDone: (result) => finishPack(result, "modpack.browse.done"),
   });
+  const setFlow = useSetSource({
+    active: open && source === "sets",
+    onCancel: () => onOpenChange(false),
+    instances: (instancesQuery.data ?? []).map((i) => i.name),
+    onDone: (created) => {
+      void queryClient.invalidateQueries({ queryKey: ["instances"] });
+      toast.success(t("modSets.create.done", { name: created.name }));
+      onOpenChange(false);
+      // The new instance is the one on screen: OYNA plays it, not the previous choice.
+      usePrefs.getState().selectInstance(created.id);
+      void navigate({ to: "/library/$instanceId", params: { instanceId: created.id } });
+    },
+  });
   const close = (next: boolean) => {
     if (!next) {
       // Closing the dialog stops a running import or install.
       importFlow.cancelJob();
       browseFlow.cancelJob();
+      setFlow.cancelJob();
     }
     onOpenChange(next);
   };
@@ -205,7 +220,9 @@ export function CreateInstanceDialog({
         // A form (and a modpack search) made as a whole: a stray click beside it keeps it.
         dismissOnOutsideClick={false}
         footer={
-          source === "browse" ? (
+          source === "sets" ? (
+            setFlow.footer
+          ) : source === "browse" ? (
             browseFlow.footer
           ) : source === "import" ? (
             importFlow.footer
@@ -235,6 +252,7 @@ export function CreateInstanceDialog({
           label={t("create.title")}
           options={[
             { value: "new", label: t("create.sourceNew") },
+            { value: "sets", label: t("modSets.create.source") },
             { value: "browse", label: t("modpack.sourceBrowse") },
             { value: "import", label: t("create.sourceImport") },
           ]}
@@ -354,6 +372,8 @@ export function CreateInstanceDialog({
               </Field>
             </div>
           </div>
+        ) : source === "sets" ? (
+          setFlow.body
         ) : source === "browse" ? (
           browseFlow.body
         ) : (

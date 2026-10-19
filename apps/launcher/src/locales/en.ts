@@ -8,6 +8,7 @@ import { enKeyClash } from "./en-key-clash";
 import { enLibraryDrop } from "./en-library-drop";
 import { enMinecraft } from "./en-minecraft";
 import { enOverview } from "./en-overview";
+import { enModSets } from "./en-modsets";
 import { enPlacement } from "./en-placement";
 import { enPlayOpen } from "./en-play-open";
 import { enPrepare } from "./en-prepare";
@@ -248,6 +249,7 @@ export const en: DeepPartial<Strings> = {
   nav: {
     home: "Home",
     library: "Library",
+  modSets: enModSets,
     news: "News",
     afk: "AFK accounts",
     settings: "Settings",

@@ -36,6 +36,7 @@ import { tauriLibrary } from "./library-tauri";
 import { mockApi } from "./mock";
 import { tauriModCenter } from "./modcenter-tauri";
 import { modCheck, tauriModHealth } from "./modhealth-tauri";
+import { tauriModSets } from "./modsets-tauri";
 import { tauriSkins } from "./skins-tauri";
 import { tauriSocial } from "./social-tauri";
 import type {
@@ -404,6 +405,7 @@ export const tauriApi: LauncherApi = {
   ...mockApi,
   content: tauriContentApi,
   skins: tauriSkins,
+  modSets: tauriModSets,
   library: tauriLibrary,
   data: tauriData,
   cleanup: tauriCleanup,
@@ -527,16 +529,19 @@ export const tauriApi: LauncherApi = {
       autoMemoryMb: d.autoMemoryMb,
       // Modrinth icons are cached on disk for files without an icon of their own.
       mods: d.mods.map((m) => ({
+        modSet: m.modSet ?? undefined,
         ...m,
         iconUrl: m.iconUrl ?? fileUrl(m.iconPath),
         projectId: m.projectId ?? undefined,
         itemId: m.itemId ?? undefined,
       })),
+        modSet: p.modSet ?? undefined,
       resourcePacks: d.resourcePacks.map((p) => ({
         ...p,
         iconUrl: p.iconUrl ?? fileUrl(p.iconPath),
         projectId: p.projectId ?? undefined,
       })),
+        modSet: p.modSet ?? undefined,
       shaderPacks: d.shaderPacks.map((p) => ({
         ...p,
         iconUrl: p.iconUrl ?? fileUrl(p.iconPath),

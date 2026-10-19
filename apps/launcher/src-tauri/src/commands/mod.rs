@@ -21,6 +21,7 @@ pub mod modhealth;
 pub mod modpack;
 pub mod modpack_update;
 pub mod modrinth;
+pub mod modsets;
 pub mod official;
 pub mod resume;
 pub mod server;

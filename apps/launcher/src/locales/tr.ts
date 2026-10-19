@@ -9,6 +9,7 @@ import { trKeyClash } from "./tr-key-clash";
 import { trLibraryDrop } from "./tr-library-drop";
 import { trMinecraft } from "./tr-minecraft";
 import { trOverview } from "./tr-overview";
+import { trModSets } from "./tr-modsets";
 import { trPlacement } from "./tr-placement";
 import { trPlayOpen } from "./tr-play-open";
 import { trPrepare } from "./tr-prepare";
@@ -42,6 +43,7 @@ export const tr = {
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
+  modSets: trModSets,
     news: "Haberler",
     afk: "AFK hesapları",
     settings: "Ayarlar",

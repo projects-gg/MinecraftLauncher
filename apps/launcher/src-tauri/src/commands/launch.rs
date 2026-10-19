@@ -975,6 +975,9 @@ async fn prepare_and_spawn(
         Ok(pl_mc::instance::OptionsSeed::Exists) => {}
         Err(error) => tracing::warn!(%error, "could not write first-launch options"),
     }
+    // Resource packs a ready-made set installed before the game had an options.txt are turned
+    // on now, once (a file read when there are none waiting).
+    crate::commands::modsets::activate_pending_packs(&game_dir).await;
     // The mods are checked with the Java that will run, after the pack sync: problems that
     // would certainly stop the game stop the launch here instead.
     checkpoint(cancel)?;
