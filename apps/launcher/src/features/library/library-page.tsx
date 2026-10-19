@@ -304,8 +304,10 @@ export function LibraryPage() {
         </div>
       </header>
 
-      {/* Cards scrolled out of this area are not under the cursor while files are dragged. */}
-      <div data-drop-clip className="-mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-5">
+      {/* Cards scrolled out of this area are not under the cursor while files are dragged.
+          Positioned: a card or group that leaves pops out of the flow here, so it fades where it
+          was (scrolled or not) and is clipped with the list, never drawn over the header. */}
+      <div data-drop-clip className="relative -mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-5">
         {isPending ? (
           // A section title and cards, as the library will look.
           <div aria-busy>
@@ -350,8 +352,10 @@ export function LibraryPage() {
             </Button>
           </div>
         ) : (
-          // A group that a search empties fades out and the ones below glide up (popLayout).
-          <AnimatePresence initial={false} mode="popLayout">
+          // Searching swaps the groups in place (keyed by the query: no fades and glides while
+          // typing, as in the mods tab and the mod center). Without a new query, a group that
+          // empties (its last card removed) fades out and the ones below glide up (popLayout).
+          <AnimatePresence key={query.trim()} initial={false} mode="popLayout">
             {sections
               .filter((section) => section.items.length > 0)
               .map((section) => {

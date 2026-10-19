@@ -429,7 +429,9 @@ export function AfkPage() {
         ) : null}
       </header>
 
-      <div className="-mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-5">
+      {/* Positioned: a removed card pops out of the flow here, so it fades where it was even
+          when the list is scrolled, clipped with the list. */}
+      <div className="relative -mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-5">
         {/* The list answers within a frame: nothing (rather than a jumping form) until then. */}
         {isPending ? null : accounts.length === 0 ? (
           <EmptyState
