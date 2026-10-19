@@ -1,9 +1,20 @@
 import { CaretDown, DownloadSimple, Plus } from "@phosphor-icons/react";
-import { Button, cn, Dialog, EmptyState, SearchInput, Select, Skeleton, toast } from "@pl/ui";
+import {
+  Button,
+  cn,
+  Dialog,
+  EmptyState,
+  easeOutExpo,
+  SearchInput,
+  Select,
+  Skeleton,
+  toast,
+  useMotionPrefs,
+} from "@pl/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { AnimatePresence } from "motion/react";
-import { useId, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { type Ref, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import emptyArt from "@/assets/art/empty-library.webp";
 import { ExportDialog } from "@/features/content/export-dialog";
@@ -19,6 +30,11 @@ import { type InstanceActions, InstanceCard } from "./instance-card";
 import { type LibrarySort, sortInstances, useLibraryView } from "./library-view";
 import { createDesktopShortcut } from "./shortcut";
 
+/**
+ * A group of cards under its heading. Folding a group fades its cards where they are while the
+ * groups below glide up (and down again when it opens), like rows that come and go elsewhere: the
+ * headings used to jump while the cards glided (POLISH2). Performance mode drops the glide.
+ */
 function Section({
   title,
   items,
@@ -28,6 +44,7 @@ function Section({
   collapsed,
   onToggle,
   meta,
+  ref,
 }: {
   title: string;
   items: InstanceSummary[];
@@ -37,13 +54,22 @@ function Section({
   collapsed: boolean;
   onToggle: () => void;
   meta: "playTime" | "lastPlayed";
+  ref?: Ref<HTMLElement>;
 }) {
   const panelId = useId();
+  const { layout } = useMotionPrefs();
   // A section the player opens rises in (like a tab panel); on arrival it is just there.
   const opened = useRef(false);
-  if (!items.length) return null;
   return (
-    <section className="mb-5">
+    <motion.section
+      ref={ref}
+      layout={layout ? "position" : false}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1, transition: { duration: 0.2 } }}
+      exit={{ opacity: 0, transition: { duration: 0.12 } }}
+      transition={{ layout: { duration: 0.3, ease: easeOutExpo } }}
+      className="relative mb-5"
+    >
       <h2 className="mb-2.5">
         <button
           type="button"
@@ -66,30 +92,34 @@ function Section({
           </span>
         </button>
       </h2>
-      {collapsed ? null : (
-        <div
-          id={panelId}
-          className={cn(
-            "grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3",
-            opened.current && "panel-in",
-          )}
-        >
-          {/* A deleted card fades out in place while the others glide over (popLayout). */}
-          <AnimatePresence initial={false} mode="popLayout">
-            {items.map((instance, i) => (
-              <InstanceCard
-                key={instance.id}
-                instance={instance}
-                selected={instance.id === selectedId}
-                actions={actions}
-                index={offset + i}
-                meta={meta}
-              />
-            ))}
-          </AnimatePresence>
-        </div>
-      )}
-    </section>
+      <AnimatePresence initial={false} mode="popLayout">
+        {collapsed ? null : (
+          <motion.div
+            key="cards"
+            id={panelId}
+            exit={{ opacity: 0, transition: { duration: 0.12 } }}
+            className={cn(
+              "grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3",
+              opened.current && "panel-in",
+            )}
+          >
+            {/* A deleted card fades out in place while the others glide over (popLayout). */}
+            <AnimatePresence initial={false} mode="popLayout">
+              {items.map((instance, i) => (
+                <InstanceCard
+                  key={instance.id}
+                  instance={instance}
+                  selected={instance.id === selectedId}
+                  actions={actions}
+                  index={offset + i}
+                  meta={meta}
+                />
+              ))}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.section>
   );
 }
 
@@ -320,23 +350,28 @@ export function LibraryPage() {
             </Button>
           </div>
         ) : (
-          sections.map((section) => {
-            const start = offset;
-            offset += section.items.length;
-            return (
-              <Section
-                key={section.key}
-                title={section.title}
-                items={section.items}
-                selectedId={selectedId}
-                actions={actions}
-                offset={start}
-                collapsed={!searching && collapsed.includes(section.key)}
-                onToggle={() => toggleSection(section.key)}
-                meta={sort === "playTime" ? "playTime" : "lastPlayed"}
-              />
-            );
-          })
+          // A group that a search empties fades out and the ones below glide up (popLayout).
+          <AnimatePresence initial={false} mode="popLayout">
+            {sections
+              .filter((section) => section.items.length > 0)
+              .map((section) => {
+                const start = offset;
+                offset += section.items.length;
+                return (
+                  <Section
+                    key={section.key}
+                    title={section.title}
+                    items={section.items}
+                    selectedId={selectedId}
+                    actions={actions}
+                    offset={start}
+                    collapsed={!searching && collapsed.includes(section.key)}
+                    onToggle={() => toggleSection(section.key)}
+                    meta={sort === "playTime" ? "playTime" : "lastPlayed"}
+                  />
+                );
+              })}
+          </AnimatePresence>
         )}
       </div>
 
