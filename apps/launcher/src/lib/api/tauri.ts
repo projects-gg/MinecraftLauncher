@@ -371,11 +371,7 @@ function afkState(v: AfkAccountView): AfkState {
     case "connected":
       return { kind: "connected", since: s.since };
     case "reconnecting":
-      return {
-        kind: "reconnecting",
-        attempt: s.attempt,
-        nextAttemptAt: s.nextAttemptAt ?? new Date(Date.now() + 15_000).toISOString(),
-      };
+      return { kind: "reconnecting", attempt: s.attempt, nextAttemptAt: s.nextAttemptAt };
     case "error":
       return { kind: "error", ...failureText(s.reason, (key) => i18n.t(key)) };
     default:

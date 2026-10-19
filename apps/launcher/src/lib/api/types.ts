@@ -550,7 +550,11 @@ export type AfkState =
   | { kind: "starting" }
   | { kind: "connecting" }
   | { kind: "connected"; since: string }
-  | { kind: "reconnecting"; attempt: number; nextAttemptAt: string }
+  /**
+   * `nextAttemptAt` is null until the backend knows when: the client is still closing, or the
+   * attempt is starting.
+   */
+  | { kind: "reconnecting"; attempt: number; nextAttemptAt: string | null }
   | { kind: "stopping" }
   /** `standalone`: the reason says it all, without "Bağlantı kesildi" before it. */
   | { kind: "error"; reason: string; standalone?: boolean };
