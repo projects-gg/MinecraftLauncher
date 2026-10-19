@@ -111,6 +111,15 @@ export const projectJobKey = (instanceId: string, projectId: string) =>
   `${instanceId}:${projectId}`;
 export const bulkJobKey = (instanceId: string, kind: ContentKind) => `${instanceId}:${kind}:all`;
 
+/** When each running job started (`performance.now()`), for `useShownJob` (parts.tsx). */
+const jobStarts = new Map<string, number>();
+
+/** How long a job has been running in ms; `Infinity` for a job that did not start here. */
+export function jobAge(jobId: string): number {
+  const start = jobStarts.get(jobId);
+  return start === undefined ? Number.POSITIVE_INFINITY : performance.now() - start;
+}
+
 export function newJobId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -239,6 +248,7 @@ export function useContentActions(instanceId: string, kind: ContentKind) {
     if (useContentJobs.getState().jobs[key]) return;
     const jobId = newJobId();
     const startedAt = Date.now();
+    jobStarts.set(jobId, performance.now());
     setJob(key, { jobId });
     try {
       await work(jobId);
@@ -247,6 +257,7 @@ export function useContentActions(instanceId: string, kind: ContentKind) {
       showError(error);
     } finally {
       setJob(key, undefined);
+      jobStarts.delete(jobId);
     }
   };
 
@@ -271,6 +282,8 @@ export function useContentActions(instanceId: string, kind: ContentKind) {
     );
 
   const update = (entries: InstalledContent[]) => {
+    // "Tümünü güncelle" already covers it (its bar may not show yet: `useShownJob`).
+    if (useContentJobs.getState().jobs[bulkJobKey(instanceId, kind)]) return Promise.resolve();
     const single = entries.length === 1 ? entries[0] : undefined;
     const key =
       single?.projectId !== undefined

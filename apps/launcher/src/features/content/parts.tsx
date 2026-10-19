@@ -1,14 +1,43 @@
 import { ArrowsClockwise, DownloadSimple, Package, Trash, X } from "@phosphor-icons/react";
 import { Button, Chip, cn, IconButton, Progress } from "@pl/ui";
 import type { TFunction } from "i18next";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ContentKind, InstalledContent } from "@/lib/api";
 import { formatPercent, formatSpeed, numberFormat } from "@/lib/format";
-import { type RunningJob, stageLabel } from "./jobs";
+import { jobAge, type RunningJob, stageLabel } from "./jobs";
 
 /** A job's × takes clicks this long after its bar appeared (OYNA waits 0.8 s the same way). */
 const CANCEL_ARM_MS = 600;
+
+/**
+ * A job's bar takes its button's place only once the job has run this long. A job that fails at
+ * once (no room on the disk, no connection) leaves the button where it was and its toast says
+ * why, instead of a "Hazırlanıyor" bar that flashes for a tenth of a second first (POLISH2).
+ */
+const JOB_REVEAL_MS = 150;
+
+/**
+ * `job` once it has run `JOB_REVEAL_MS` (at once for a job that was already running when this
+ * mounted), else `undefined`. A second press meanwhile changes nothing: the job is already there.
+ */
+export function useShownJob(job: RunningJob | undefined): RunningJob | undefined {
+  const jobId = job?.jobId;
+  const [revealed, setRevealed] = useState(() =>
+    jobId !== undefined && jobAge(jobId) >= JOB_REVEAL_MS ? jobId : undefined,
+  );
+  useEffect(() => {
+    if (jobId === undefined) return;
+    const wait = JOB_REVEAL_MS - jobAge(jobId);
+    if (wait <= 0) {
+      setRevealed(jobId);
+      return;
+    }
+    const timer = window.setTimeout(() => setRevealed(jobId), wait);
+    return () => window.clearTimeout(timer);
+  }, [jobId]);
+  return job && revealed === jobId ? job : undefined;
+}
 
 /** "245,2 Mn" / "245.2M" from a million up; below that the full number ("41.770" / "41,770"),
  * since the Turkish "B" (bin) reads like bytes next to file sizes. */
@@ -83,7 +112,13 @@ export function JobStatus({
   const percent = progress?.percent;
   const label = stageLabel(progress?.stage ?? "resolving");
   return (
-    <div className={cn("flex w-[168px] items-center gap-2", className)}>
+    // Fades in where the button was (content that replaces other content in place).
+    <div
+      className={cn(
+        "flex w-[168px] animate-[fade-in_150ms_var(--ease-out-expo)] items-center gap-2",
+        className,
+      )}
+    >
       <div className="min-w-0 flex-1">
         <div className="mb-1.5 flex items-baseline gap-3 text-[12px] tabular-nums">
           <p className="min-w-0 flex-1 truncate text-ash-300" aria-live="polite">
@@ -149,7 +184,11 @@ export function InstallControl({
   installLabel?: string;
 }) {
   const { t } = useTranslation();
-  if (job) return <JobStatus job={job} onCancel={onCancel} />;
+  const shown = useShownJob(job);
+  // Until the bar comes the button stays pressed in (its 97% squeeze), and springs back if the
+  // job fails at once.
+  const held = job && !shown ? "scale-[0.97]" : undefined;
+  if (shown) return <JobStatus job={shown} onCancel={onCancel} />;
   if (state === "pack") return <Chip>{t("content.actions.inPack")}</Chip>;
   if (state === "none") {
     return (
@@ -158,6 +197,7 @@ export function InstallControl({
         variant="secondary"
         icon={<DownloadSimple size={15} weight="bold" className="text-gold-300" />}
         onClick={onInstall}
+        className={held}
       >
         {installLabel ?? t("content.actions.install")}
       </Button>
@@ -171,6 +211,7 @@ export function InstallControl({
           variant="secondary"
           icon={<ArrowsClockwise size={15} weight="bold" className="text-gold-300" />}
           onClick={onUpdate}
+          className={held}
         >
           {t("content.actions.update")}
         </Button>
