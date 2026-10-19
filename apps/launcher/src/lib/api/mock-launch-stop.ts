@@ -1,3 +1,4 @@
+import { pick } from "./mock-lang";
 import type { LaunchEvent } from "./types";
 
 /**
@@ -22,37 +23,55 @@ function flag(key: string): string {
 /** The launcher keeps a figure and its unit on one line (a no-break space). */
 const nb = String.fromCharCode(0xa0);
 
-const stops: Record<string, { code: string; message: string; details: string }> = {
+/** Messages are worded when the stop is sent, in the interface's language at that moment. */
+const stops: Record<string, { code: string; message: () => string; details: string }> = {
   low: {
     code: "DISK-DOLU",
-    message: `Diskte yeterli yer yok. Oyun için 1,2${nb}GB gerekiyor, 300${nb}MB boş.`,
+    message: () =>
+      pick(
+        `Diskte yeterli yer yok. Oyun için 1,2${nb}GB gerekiyor, 300${nb}MB boş.`,
+        `There isn't enough space on the disk. The game needs 1.2${nb}GB, 300${nb}MB is free.`,
+      ),
     details:
       "not enough room: 1288490189 bytes needed for 961893990 bytes to download, 314572800 bytes free",
   },
   full: {
     code: "DISK-DOLU",
-    message: "Diskte yer kalmadı. Biraz yer açıp tekrar dene.",
+    message: () =>
+      pick(
+        "Diskte yer kalmadı. Biraz yer açıp tekrar dene.",
+        "The disk is full. Free up some space and try again.",
+      ),
     details:
       "I/O error at assets/objects/5f/5ff04807c356f1beed0b86ccf659b44b9983e3fa.part: There is not enough space on the disk. (os error 112)",
   },
   version: {
     code: "SURUM-YOK",
-    message: "Bu Minecraft sürümü bulunamadı. Kurulumun sürümünü değiştir.",
+    message: () =>
+      pick(
+        "Bu Minecraft sürümü bulunamadı. Kurulumun sürümünü değiştir.",
+        "This Minecraft version wasn't found. Pick another version for the instance.",
+      ),
     details: "Minecraft version 1.21.9 was not found",
   },
   process: {
     code: "SUREC",
-    message: "Oyun başlatılamadı. Tekrar dene.",
+    message: () => pick("Oyun başlatılamadı. Tekrar dene.", "The game couldn't start. Try again."),
     details: "process error: the Java process could not start",
   },
   file: {
     code: "BULUNAMADI",
-    message: "Gereken bir dosya bulunamadı. Tekrar dene.",
+    message: () =>
+      pick("Gereken bir dosya bulunamadı. Tekrar dene.", "A file it needs is missing. Try again."),
     details: "client jar of 1.21.1 not found",
   },
   game: {
     code: "OYUN",
-    message: "Oyun hazırlanırken bir sorun oluştu. Tekrar dene.",
+    message: () =>
+      pick(
+        "Oyun hazırlanırken bir sorun oluştu. Tekrar dene.",
+        "Something went wrong while getting the game ready. Try again.",
+      ),
     details: "invalid data: version 1.21.1 has no mainClass",
   },
 };
@@ -86,6 +105,6 @@ export async function mockLaunchStop(
       etaSecs: key === "full" ? 41 : undefined,
     });
   }
-  onEvent({ type: "error", message: stop.message, details: `${stop.code}\n${stop.details}` });
+  onEvent({ type: "error", message: stop.message(), details: `${stop.code}\n${stop.details}` });
   return true;
 }

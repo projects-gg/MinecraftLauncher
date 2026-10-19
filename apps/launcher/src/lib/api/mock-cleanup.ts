@@ -14,6 +14,7 @@ import type {
   TrashedFile,
   TrashedSet,
 } from "./cleanup-types";
+import { pick } from "./mock-lang";
 import { mockTrashedInstances } from "./mock-trash";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -386,10 +387,13 @@ export function createMockCleanup(): CleanupApi {
       await delay(300 * slow());
       const file = state.files.find((item) => item.trashId === trashId && item.restorable);
       if (!file) {
-        throw Object.assign(new Error("Bu öğe çöp kutusunda yok."), {
-          code: "COP-YOK",
-          details: `${trashId}: mock`,
-        });
+        throw Object.assign(
+          new Error(pick("Bu öğe çöp kutusunda yok.", "This item isn't in the trash.")),
+          {
+            code: "COP-YOK",
+            details: `${trashId}: mock`,
+          },
+        );
       }
       state.files = state.files.filter((item) => item !== file);
       return file.fileName;

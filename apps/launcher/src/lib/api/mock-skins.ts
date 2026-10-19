@@ -6,6 +6,7 @@
 // "slow": every picture still has to be drawn and takes a while; "fail": wearing fails;
 // "ratelimit": wearing is refused as too frequent. Default: 23 skins on three pages.
 import { mockDroppedFile } from "./mock-conveniences";
+import { pick } from "./mock-lang";
 import type {
   CapeOption,
   SkinAppearance,
@@ -28,6 +29,27 @@ class MockSkinError extends Error {
     this.details = `Kod: ${code}\nÖnizleme verisi`;
   }
 }
+
+// The errors the calls below share, worded like the backend (`pl_auth::AuthError::user_message`).
+const notPng = () =>
+  new MockSkinError(
+    pick(
+      "Bu dosya PNG değil. Skin olarak 64×64 ya da 64×32 boyutunda bir PNG dosyası seç.",
+      "This file isn't a PNG. Pick a 64×64 or 64×32 PNG file as the skin.",
+    ),
+  );
+const unreadable = () =>
+  new MockSkinError(
+    pick(
+      "Skin dosyası okunamadı. Dosyanın yerinde olduğundan emin olup tekrar dene.",
+      "Couldn't read the skin file. Make sure it's still there and try again.",
+    ),
+  );
+const notInHistory = () =>
+  new MockSkinError(
+    pick("Bu skin artık geçmişte yok.", "This skin isn't in your history anymore."),
+    "SKIN-GECMIS",
+  );
 
 interface SkinPalette {
   hair: string;
@@ -388,24 +410,25 @@ export function createMockSkins(username: (accountId: string) => string | undefi
   const readDropped = (file: File): Promise<SkinFile> =>
     new Promise((resolve, reject) => {
       if (file.type && file.type !== "image/png") {
-        reject(
-          new MockSkinError(
-            "Seçilen dosya bir PNG görüntüsü değil. Skin olarak 64×64 veya 64×32 boyutunda bir PNG dosyası seçin.",
-          ),
-        );
+        reject(notPng());
         return;
       }
       const reader = new FileReader();
-      reader.onerror = () => reject(new MockSkinError("Skin dosyası okunamadı."));
+      reader.onerror = () => reject(unreadable());
       reader.onload = () => {
         const dataUrl = String(reader.result);
         const image = new Image();
-        image.onerror = () => reject(new MockSkinError("Seçilen dosya bir PNG görüntüsü değil."));
+        image.onerror = () => reject(notPng());
         image.onload = () => {
           const { naturalWidth: width, naturalHeight: height } = image;
           if (width !== 64 || (height !== 64 && height !== 32)) {
             reject(
-              new MockSkinError("Skin görüntüsü 64×64 veya 64×32 piksel boyutunda olmalıdır."),
+              new MockSkinError(
+                pick(
+                  "Skin 64×64 ya da 64×32 piksel olmalı.",
+                  "A skin must be 64×64 or 64×32 pixels.",
+                ),
+              ),
             );
             return;
           }
@@ -456,14 +479,14 @@ export function createMockSkins(username: (accountId: string) => string | undefi
               height: 64,
             }
           : null;
-      if (!read) throw new MockSkinError("Skin dosyası okunamadı.");
+      if (!read) throw unreadable();
       files.set(path, read);
       return read;
     },
     async upload(accountId, path, variant) {
       await delay(900);
       const file = files.get(path);
-      if (!file) throw new MockSkinError("Skin dosyası okunamadı.");
+      if (!file) throw unreadable();
       recordWorn(accountId, file.dataUrl, variant);
       return update(accountId, (current) => ({
         ...current,
@@ -518,15 +541,21 @@ export function createMockSkins(username: (accountId: string) => string | undefi
       const scenario = historyScenario();
       if (scenario === "ratelimit") {
         throw new MockSkinError(
-          "Kısa sürede çok fazla deneme yapıldı. Birkaç dakika bekleyip yeniden deneyin.",
+          pick(
+            "Kısa sürede çok fazla deneme yapıldı. Birkaç dakika bekleyip tekrar dene.",
+            "Too many tries in a short time. Wait a few minutes and try again.",
+          ),
           "MC-SKIN-429",
         );
       }
       if (scenario === "fail") {
-        throw new MockSkinError("Skin güncellenemedi. Lütfen yeniden deneyin.", "MC-SKIN-500");
+        throw new MockSkinError(
+          pick("Skin güncellenemedi. Tekrar dene.", "Couldn't change the skin. Try again."),
+          "MC-SKIN-500",
+        );
       }
       const entry = historyOf(accountId).entries.find((e) => e.id === entryId);
-      if (!entry) throw new MockSkinError("Bu skin artık geçmişte yok.", "SKIN-GECMIS");
+      if (!entry) throw notInHistory();
       recordWorn(accountId, entry.url, entry.variant);
       return update(accountId, (current) => ({
         ...current,
@@ -537,7 +566,7 @@ export function createMockSkins(username: (accountId: string) => string | undefi
     async setHistoryFavorite(accountId, entryId, favorite) {
       await delay(150);
       const entry = historyOf(accountId).entries.find((e) => e.id === entryId);
-      if (!entry) throw new MockSkinError("Bu skin artık geçmişte yok.", "SKIN-GECMIS");
+      if (!entry) throw notInHistory();
       entry.favorite = favorite;
     },
     async removeFromHistory(accountId, entryId) {
@@ -552,7 +581,7 @@ export function createMockSkins(username: (accountId: string) => string | undefi
       await delay(150);
       const history = historyOf(accountId);
       const entry = history.removed.get(entryId);
-      if (!entry) throw new MockSkinError("Bu skin artık geçmişte yok.", "SKIN-GECMIS");
+      if (!entry) throw notInHistory();
       history.removed.delete(entryId);
       if (!history.entries.some((e) => e.id === entryId)) history.entries.push(entry);
     },

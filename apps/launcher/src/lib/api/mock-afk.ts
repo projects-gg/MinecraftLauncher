@@ -1,6 +1,8 @@
 // Simulated AFK sessions for previews: states move like the real MCC bridge would report them, and
 // the settings sheet talks to a stand-in for the backend (same redaction and validation rules as
 // crates/pl-afk, passwords kept in a pretend keychain).
+
+import i18n from "@/lib/i18n";
 import type {
   AfkSettings,
   AfkSettingsSaveResult,
@@ -11,6 +13,7 @@ import type {
   ValidationIssue,
   VersionOption,
 } from "./afk-settings";
+import { pick } from "./mock-lang";
 import type { AfkAccount, AfkLogLine } from "./types";
 
 const listeners = new Set<() => void>();
@@ -398,6 +401,16 @@ function commandError(code: string, message: string): Error {
   return Object.assign(new Error(message), { code, details: `mock: ${code}` });
 }
 
+/** The account is gone, worded like the backend. */
+const accountGone = () =>
+  commandError(
+    "AFK-HESAP-YOK",
+    pick(
+      "Bu AFK hesabı artık yok. Listeyi yenileyip tekrar dene.",
+      "This AFK account is gone. Refresh the list and try again.",
+    ),
+  );
+
 function serverLabel(page: SettingsPage): string {
   const host = page.serverHost.trim() || "play.projects.gg";
   return page.serverPort > 0 && page.serverPort !== 25565 ? `${host}:${page.serverPort}` : host;
@@ -457,7 +470,8 @@ function failSoon() {
     push(account.id, "You are banned from this server!", "system");
     setState(account, {
       kind: "error",
-      reason: "Sunucudan yasaklandı (You are banned from this server!)",
+      // Worded like the API layer words a `refused` kick (tauri.ts `failure`).
+      reason: `${i18n.t("afk.refusal.banned")} (You are banned from this server!)`,
     });
   }, 5000);
 }
@@ -520,7 +534,7 @@ export const mockAfk = {
   },
   async afkReconnect(id: string) {
     const account = accounts.find((a) => a.id === id);
-    if (!account) throw commandError("AFK-HESAP-YOK", "Bu AFK hesabı artık yok.");
+    if (!account) throw accountGone();
     if (account.state.kind !== "stopped" && account.state.kind !== "error") {
       setState(account, { kind: "stopping" });
       push(id, "/quit", "self");
@@ -545,13 +559,15 @@ export const mockAfk = {
   async afkSend(id: string, line: string) {
     const account = accounts.find((a) => a.id === id);
     if (!account || !isRunning(account))
-      throw commandError("AFK-BAGLI-DEGIL", "Bu hesap şu an bağlı değil.");
+      throw commandError(
+        "AFK-BAGLI-DEGIL",
+        pick("Bu hesap şu an bağlı değil.", "This account isn't connected right now."),
+      );
     push(id, `> ${line}`, "self");
     notify();
   },
   async afkOpenFolder(id: string) {
-    if (!accounts.some((a) => a.id === id))
-      throw commandError("AFK-HESAP-YOK", "Bu AFK hesabı artık yok.");
+    if (!accounts.some((a) => a.id === id)) throw accountGone();
   },
   async afkLog(id: string) {
     return [...(logs.get(id) ?? [])];
@@ -559,7 +575,7 @@ export const mockAfk = {
   async afkSettings(id: string): Promise<AfkSettingsView> {
     await delay(250);
     const page = stored.get(id);
-    if (!page) throw commandError("AFK-HESAP-YOK", "Bu AFK hesabı artık yok.");
+    if (!page) throw accountGone();
     const version = resolveVersion(storedVersions.get(id) ?? "");
     return {
       settings: {
@@ -576,7 +592,7 @@ export const mockAfk = {
     await delay(450);
     const previous = stored.get(id);
     const account = accounts.find((a) => a.id === id);
-    if (!previous || !account) throw commandError("AFK-HESAP-YOK", "Bu AFK hesabı artık yok.");
+    if (!previous || !account) throw accountGone();
 
     // Kept passwords are resolved against the "keychain"; a changed list is refused.
     const secrets = keychain.get(id) ?? [];
@@ -591,7 +607,10 @@ export const mockAfk = {
       if (!current || !name || name.toUpperCase() !== line.command.toUpperCase())
         throw commandError(
           "AFK-AYAR-DEGISTI",
-          "Giriş komutları bu sırada değişmiş. Ayarları kapatıp yeniden aç.",
+          pick(
+            "Giriş komutları bu sırada değişmiş. Ayarları kapatıp yeniden aç.",
+            "The login commands changed in the meantime. Close the settings and open them again.",
+          ),
         );
       commands.push(current);
     }

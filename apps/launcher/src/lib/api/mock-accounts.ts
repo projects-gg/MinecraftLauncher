@@ -7,6 +7,7 @@
 //   and no pictures.
 // - `window.__plMockLogin = "<scenario>"` picks how the next Microsoft sign-in ends: "added"
 //   (default), "already", "other", "timeout", "noLicense", "noProfile", "network", "child".
+import { pick } from "./mock-lang";
 import type { AccountSummary, LoginStep, MicrosoftLoginResult, SessionCheck } from "./types";
 
 /** Same shape as the app's command errors, so the UI shows the friendly message. */
@@ -19,6 +20,23 @@ class MockCommandError extends Error {
     this.details = `Kod: ${code}\nÖnizleme verisi`;
   }
 }
+
+// The errors the calls below share, worded like the backend (`pl_auth::AuthError::user_message`).
+const accountNotFound = () =>
+  new MockCommandError(
+    "HESAP-YOK",
+    pick(
+      "Hesap bulunamadı. Hesap listesi değişmiş olabilir, tekrar dene.",
+      "Account not found. The account list may have changed; try again.",
+    ),
+  );
+const nameTaken = () =>
+  new MockCommandError(
+    "AD-VAR",
+    pick("Bu adla bir hesabın zaten var.", "You already have an account with this name."),
+  );
+const signInCancelled = () =>
+  new MockCommandError("IPTAL", pick("Giriş iptal edildi.", "Sign-in cancelled."));
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const ago = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
@@ -195,8 +213,7 @@ export const mockAccounts = {
     const taken = accounts.find(
       (a) => a.kind === "offline" && a.username.toLowerCase() === name.toLowerCase(),
     );
-    if (taken && taken.username !== name)
-      throw new MockCommandError("AD-VAR", "Bu adla bir çevrimdışı hesap zaten var.");
+    if (taken && taken.username !== name) throw nameTaken();
     if (taken) {
       select(taken.id);
       return summary(taken);
@@ -219,31 +236,37 @@ export const mockAccounts = {
   ): Promise<MicrosoftLoginResult> {
     cancelled = false;
     const ending = scenario();
-    const fail: Record<string, [LoginStep, string, string]> = {
+    // Step, code, then the Turkish and the English message (picked when the sign-in fails).
+    const fail: Record<string, [LoginStep, string, string, string]> = {
       timeout: [
         "waitingForBrowser",
         "MSA-ZAMANASIMI",
-        "Giriş süresi doldu. Tarayıcıdaki adımları beş dakika içinde tamamlayıp yeniden deneyin.",
+        "Giriş süresi doldu. Tarayıcıdaki adımları beş dakika içinde tamamlayıp tekrar dene.",
+        "Sign-in timed out. Finish the steps in your browser within five minutes and try again.",
       ],
       network: [
         "xboxLive",
         "AG-BAGLANTI",
-        "Sunuculara ulaşılamadı. İnternet bağlantınızı kontrol edip yeniden deneyin.",
+        "Sunuculara ulaşılamadı. İnternet bağlantını kontrol edip tekrar dene.",
+        "Couldn't reach the servers. Check your internet connection and try again.",
       ],
       noLicense: [
         "profile",
         "MC-LISANSYOK",
-        "Bu Microsoft hesabında Minecraft: Java Edition bulunamadı.",
+        "Bu Microsoft hesabında Minecraft: Java Edition yok. Oyunu satın aldığın hesapla giriş yap.",
+        "This Microsoft account doesn't own Minecraft: Java Edition. Sign in with the account you bought the game with.",
       ],
       noProfile: [
         "profile",
         "MC-PROFILYOK",
-        "Bu hesapta Minecraft: Java Edition var ancak henüz bir oyuncu profili oluşturulmamış.",
+        "Bu hesapta Minecraft: Java Edition var ama henüz oyuncu profili yok. minecraft.net'te giriş yapıp oyuncu adını seç, sonra tekrar dene.",
+        "This account owns Minecraft: Java Edition but has no player profile yet. Sign in at minecraft.net, pick your player name, then try again.",
       ],
       child: [
         "xsts",
         "XSTS-2148916238",
-        "Bu hesap bir aile grubundaki çocuk hesabı. Devam etmek için bir yetişkinin hesabı aile grubuna eklemesi gerekir.",
+        "Bu hesap bir çocuk hesabı. Xbox Live'a girebilmesi için bir yetişkinin bu hesabı Microsoft aile grubuna eklemesi gerekiyor.",
+        "This is a child account. To use Xbox Live, an adult needs to add it to a Microsoft family group.",
       ],
     };
     const steps: LoginStep[] = [
@@ -256,16 +279,16 @@ export const mockAccounts = {
       "profile",
     ];
     for (const step of steps) {
-      if (cancelled) throw new MockCommandError("IPTAL", "Giriş iptal edildi.");
+      if (cancelled) throw signInCancelled();
       onStep(step);
       await delay(step === "waitingForBrowser" ? 2400 : 520);
       const failure = fail[ending];
       if (failure && failure[0] === step) {
         if (ending === "timeout") await delay(600);
-        throw new MockCommandError(failure[1], failure[2]);
+        throw new MockCommandError(failure[1], pick(failure[2], failure[3]));
       }
     }
-    if (cancelled) throw new MockCommandError("IPTAL", "Giriş iptal edildi.");
+    if (cancelled) throw signInCancelled();
     onStep("done");
 
     const target = options?.relogin ? accounts.find((a) => a.id === options.relogin) : undefined;
@@ -304,7 +327,7 @@ export const mockAccounts = {
     await delay(120);
     const index = accounts.findIndex((a) => a.id === id);
     const account = accounts[index];
-    if (!account) throw new MockCommandError("HESAP-YOK", "Hesap bulunamadı.");
+    if (!account) throw accountNotFound();
     accounts.splice(index, 1);
     removed.set(id, { account, index, wasActive: account.active });
     if (account.active) {
@@ -316,7 +339,7 @@ export const mockAccounts = {
   async undoRemoveAccount(id: string) {
     await delay(100);
     const entry = removed.get(id);
-    if (!entry) throw new MockCommandError("HESAP-YOK", "Hesap bulunamadı.");
+    if (!entry) throw accountNotFound();
     removed.delete(id);
     accounts.splice(Math.min(entry.index, accounts.length), 0, entry.account);
     if (entry.wasActive) select(entry.account.id);
@@ -328,11 +351,11 @@ export const mockAccounts = {
   async renameAccount(id: string, name: string) {
     await delay(200);
     const account = accounts.find((a) => a.id === id);
-    if (!account) throw new MockCommandError("HESAP-YOK", "Hesap bulunamadı.");
+    if (!account) throw accountNotFound();
     const other = accounts.find(
       (a) => a.id !== id && a.kind === "offline" && a.username.toLowerCase() === name.toLowerCase(),
     );
-    if (other) throw new MockCommandError("AD-VAR", "Bu adla bir çevrimdışı hesap zaten var.");
+    if (other) throw nameTaken();
     account.username = name;
     return summary(account);
   },
@@ -340,7 +363,7 @@ export const mockAccounts = {
     await delay(60);
     const index = accounts.findIndex((a) => a.id === id);
     const account = accounts[index];
-    if (!account) throw new MockCommandError("HESAP-YOK", "Hesap bulunamadı.");
+    if (!account) throw accountNotFound();
     if (Boolean(account.pinned) !== pinned) {
       // Same rule as the backend: a new pin joins the end of the pinned ones.
       accounts.splice(index, 1);
@@ -361,8 +384,16 @@ export const mockAccounts = {
   async setAccountAvatar(id: string, avatar: string | null) {
     await delay(80);
     const account = accounts.find((a) => a.id === id);
-    if (!account) throw new MockCommandError("HESAP-YOK", "Hesap bulunamadı.");
-    if (account.kind !== "offline") throw new MockCommandError("AVATAR", "Önizleme verisi");
+    if (!account) throw accountNotFound();
+    // The backend refuses a picture for a Microsoft account as an unexpected request.
+    if (account.kind !== "offline")
+      throw new MockCommandError(
+        "AVATAR",
+        pick(
+          "Sunucudan beklenmedik bir yanıt geldi. Tekrar dene.",
+          "The server sent an unexpected answer. Try again.",
+        ),
+      );
     account.avatar = avatar ?? undefined;
     return summary(account);
   },

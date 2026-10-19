@@ -19,6 +19,7 @@ import type {
   WorldBackup,
   WorldDetail,
 } from "./library-types";
+import { pick } from "./mock-lang";
 import type { SavedServer, ServerStatus } from "./types";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -41,7 +42,10 @@ function hash(text: string): number {
 }
 
 function cancelled(): Error {
-  return Object.assign(new Error("İşlem iptal edildi."), { code: "IPTAL", details: "" });
+  return Object.assign(new Error(pick("İşlem iptal edildi.", "Cancelled.")), {
+    code: "IPTAL",
+    details: "",
+  });
 }
 
 function failure(message: string, code: string): Error {
@@ -477,13 +481,19 @@ function editMockServers(instanceId: string, edit: ServerEdit): SavedServerEntry
   const checkAddress = (address: string) => {
     const text = address.trim();
     if (!text || /\s/.test(text) || text.includes("/")) {
-      throw failure("Bu bir sunucu adresi gibi görünmüyor.", "SUNUCU-ADRES");
+      throw failure(
+        pick("Bu bir sunucu adresi gibi görünmüyor.", "That doesn't look like a server address."),
+        "SUNUCU-ADRES",
+      );
     }
     return text;
   };
   const unique = (address: string, except?: SavedServerEntry) => {
     if (listed().some((s) => s !== except && same(s.ip, address))) {
-      throw failure("Bu sunucu listede zaten var.", "SUNUCU-VAR");
+      throw failure(
+        pick("Bu sunucu listede zaten var.", "This server is already on the list."),
+        "SUNUCU-VAR",
+      );
     }
   };
   const find = (index: number, was: string) => {
@@ -492,7 +502,10 @@ function editMockServers(instanceId: string, edit: ServerEdit): SavedServerEntry
       atIndex && same(atIndex.ip, was) ? atIndex : listed().find((s) => same(s.ip, was));
     if (!found) {
       throw failure(
-        "Sunucu listesi oyunda değişmiş. Liste yenilendi, tekrar dene.",
+        pick(
+          "Sunucu listesi oyunda değişmiş. Liste yenilendi, tekrar dene.",
+          "The server list changed in the game. The list is refreshed; try again.",
+        ),
         "SUNUCU-DEGISTI",
       );
     }
@@ -632,7 +645,8 @@ export function createMockLibrary(options: {
       const session = sessionsOf(instanceId).find(
         (s) => s.fileName === fileName && s.source === source,
       );
-      if (!session) throw failure("Bu kayıt bulunamadı.", "KAYIT-YOK");
+      if (!session)
+        throw failure(pick("Bu kayıt bulunamadı.", "This log wasn't found."), "KAYIT-YOK");
       return { lines: [...linesOf(session)], truncated: false, sizeBytes: session.sizeBytes };
     },
     async shareLog() {
@@ -665,7 +679,7 @@ export function createMockLibrary(options: {
     },
     async backupWorld(instanceId, folder, jobId, onProgress) {
       const world = filesOf(instanceId).worlds.find((w) => w.folder === folder);
-      if (!world) throw failure("Dünya bulunamadı.", "BULUNAMADI");
+      if (!world) throw failure(pick("Dünya bulunamadı.", "The world wasn't found."), "BULUNAMADI");
       await runJob(jobId, world.sizeBytes, onProgress);
       const now = new Date();
       const created: WorldBackup = {
@@ -683,7 +697,13 @@ export function createMockLibrary(options: {
       const state = filesOf(instanceId);
       const source = state.backups.find((b) => b.fileName === fileName);
       if (!source?.valid)
-        throw failure("Bu dosya bir dünya yedeği değil ya da bozuk.", "YEDEK-GECERSIZ");
+        throw failure(
+          pick(
+            "Bu dosya bir dünya yedeği değil ya da bozuk.",
+            "This file isn't a world backup, or it's damaged.",
+          ),
+          "YEDEK-GECERSIZ",
+        );
       await runJob(jobId, Math.round(source.sizeBytes / 0.64), onProgress);
       const folder = source.worldFolder ?? "world";
       let replaced: TrashItem | undefined;
@@ -733,7 +753,7 @@ export function createMockLibrary(options: {
       await delay(260);
       const state = filesOf(instanceId);
       const world = state.worlds.find((w) => w.folder === folder);
-      if (!world) throw failure("Dünya bulunamadı.", "BULUNAMADI");
+      if (!world) throw failure(pick("Dünya bulunamadı.", "The world wasn't found."), "BULUNAMADI");
       state.worlds = state.worlds.filter((w) => w !== world);
       return toTrash(instanceId, "world", world.name, world.folder, world.sizeBytes, () => {
         const name = freeName(
@@ -748,7 +768,8 @@ export function createMockLibrary(options: {
       await delay(200);
       const state = filesOf(instanceId);
       const found = state.backups.find((b) => b.fileName === fileName);
-      if (!found) throw failure("Yedek bulunamadı.", "BULUNAMADI");
+      if (!found)
+        throw failure(pick("Yedek bulunamadı.", "The backup wasn't found."), "BULUNAMADI");
       state.backups = state.backups.filter((b) => b !== found);
       return toTrash(instanceId, "backup", found.fileName, found.fileName, found.sizeBytes, () => {
         state.backups.unshift(found);
@@ -765,14 +786,22 @@ export function createMockLibrary(options: {
       await delay(240);
       const index = trashSlots.findIndex((t) => t.id === id && t.instanceId === instanceId);
       const slot = trashSlots[index];
-      if (!slot) throw failure("Bu öğe çöp kutusunda yok.", "COP-YOK");
+      if (!slot)
+        throw failure(
+          pick("Bu öğe çöp kutusunda yok.", "This item isn't in the trash."),
+          "COP-YOK",
+        );
       trashSlots.splice(index, 1);
       return slot.restore();
     },
     async deleteFromTrash(instanceId, id) {
       await delay(200);
       const index = trashSlots.findIndex((t) => t.id === id && t.instanceId === instanceId);
-      if (index < 0) throw failure("Bu öğe çöp kutusunda yok.", "COP-YOK");
+      if (index < 0)
+        throw failure(
+          pick("Bu öğe çöp kutusunda yok.", "This item isn't in the trash."),
+          "COP-YOK",
+        );
       trashSlots.splice(index, 1);
     },
 
@@ -802,7 +831,11 @@ export function createMockLibrary(options: {
       await delay(180);
       const state = filesOf(instanceId);
       const shot = state.screenshots.find((s) => s.fileName === fileName);
-      if (!shot) throw failure("Ekran görüntüsü bulunamadı.", "BULUNAMADI");
+      if (!shot)
+        throw failure(
+          pick("Ekran görüntüsü bulunamadı.", "The screenshot wasn't found."),
+          "BULUNAMADI",
+        );
       state.screenshots = state.screenshots.filter((s) => s !== shot);
       return toTrash(instanceId, "screenshot", shot.fileName, shot.fileName, shot.sizeBytes, () => {
         state.screenshots = [...state.screenshots, shot].sort((a, b) =>
@@ -820,7 +853,7 @@ export function createMockLibrary(options: {
     async diskUsage(instanceId, signal) {
       // The worlds, backups and screenshots, plus mods, settings and the other versions' sets.
       await delay(650);
-      if (signal?.aborted) throw failure("İşlem iptal edildi.", "IPTAL");
+      if (signal?.aborted) throw failure(pick("İşlem iptal edildi.", "Cancelled."), "IPTAL");
       const state = filesOf(instanceId);
       const sum = (items: Array<{ sizeBytes: number }>) =>
         items.reduce((total, item) => total + item.sizeBytes, 0);
@@ -840,7 +873,13 @@ export function createMockLibrary(options: {
     async editServers(instanceId, edit) {
       await delay(160);
       if (liveInstance === instanceId) {
-        throw failure("Oyun açıkken sunucu listesi değiştirilemez. Önce oyunu kapat.", "OYUN-ACIK");
+        throw failure(
+          pick(
+            "Oyun açıkken sunucu listesi değiştirilemez. Önce oyunu kapat.",
+            "You can't change the server list while the game is open. Close the game first.",
+          ),
+          "OYUN-ACIK",
+        );
       }
       const removed = editMockServers(instanceId, edit);
       return { servers: mockServers(instanceId), removed };
@@ -853,7 +892,13 @@ export function createMockLibrary(options: {
     async setGraphics(instanceId, preset) {
       await delay(180);
       if (liveInstance === instanceId) {
-        throw failure("Oyun açıkken grafik ayarı değiştirilemez. Önce oyunu kapat.", "OYUN-ACIK");
+        throw failure(
+          pick(
+            "Oyun açıkken grafik ayarı değiştirilemez. Önce oyunu kapat.",
+            "You can't change the graphics setting while the game is open. Close the game first.",
+          ),
+          "OYUN-ACIK",
+        );
       }
       const next: GraphicsState =
         graphicsOf(instanceId).kind === "firstLaunch"

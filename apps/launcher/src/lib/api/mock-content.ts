@@ -16,6 +16,7 @@ import type {
   ModpackUpdatePlan,
   PackPreview,
 } from "./content-types";
+import { pick } from "./mock-lang";
 import type { InstanceSummary, ModEntry, NewInstance } from "./types";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -32,6 +33,9 @@ class MockCommandError extends Error {
     this.details = `${code}\nmock`;
   }
 }
+
+/** A job stopped by "İptal", worded like the backend. */
+const jobCancelled = () => new MockCommandError("IPTAL", pick("İşlem iptal edildi.", "Cancelled."));
 
 /**
  * `?disk=low` (or localStorage `pl.mock.disk`): installs and imports stop before downloading
@@ -51,7 +55,10 @@ function refuseWhenDiskLow() {
   const nb = String.fromCharCode(0xa0);
   throw new MockCommandError(
     "DISK-DOLU",
-    `Diskte yeterli yer yok. Bunun için 1,2${nb}GB gerekiyor, 300${nb}MB boş.`,
+    pick(
+      `Diskte yeterli yer yok. Bunun için 1,2${nb}GB gerekiyor, 300${nb}MB boş.`,
+      `There isn't enough space on the disk. This needs 1.2${nb}GB, 300${nb}MB is free.`,
+    ),
   );
 }
 
@@ -821,7 +828,10 @@ export function createMockContent(deps: {
       if (q === "çevrimdışı" || q === "offline") {
         throw new MockCommandError(
           "MODRINTH-AG",
-          "Modrinth'e ulaşılamadı. İnternet bağlantını kontrol edip tekrar dene.",
+          pick(
+            "Modrinth'e ulaşılamadı. İnternet bağlantını kontrol edip tekrar dene.",
+            "Couldn't reach Modrinth. Check your internet connection and try again.",
+          ),
         );
       }
       let list = hits[params.projectType].filter(
@@ -855,7 +865,11 @@ export function createMockContent(deps: {
     async project(id): Promise<ContentProject> {
       await delay(320);
       const hit = allHits.find((h) => h.projectId === id || h.slug === id);
-      if (!hit) throw new MockCommandError("BULUNAMADI", "Bu içerik Modrinth'te bulunamadı.");
+      if (!hit)
+        throw new MockCommandError(
+          "BULUNAMADI",
+          pick("Bu içerik Modrinth'te bulunamadı.", "This wasn't found on Modrinth."),
+        );
       const sodium = hit.projectId === "AANobbMI";
       return {
         id: hit.projectId,
@@ -900,13 +914,15 @@ export function createMockContent(deps: {
     async install(job, onProgress): Promise<ContentInstallResult> {
       cancelled.delete(job.jobId);
       onProgress({ stage: "resolving", doneFiles: 0, totalFiles: 0, bytesPerSec: 0 });
-      await delay(400);
+      // Like the backend, the disk is checked first: a full one stops the install at once.
+      await delay(90);
       refuseWhenDiskLow();
+      await delay(310);
       const deps = (dependencies[job.projectId] ?? []).filter(
         (dep) => !entries(job.instanceId, "mod").some((e) => e.projectId === dep),
       );
       await simulate(onProgress, 1 + deps.length);
-      if (cancelled.has(job.jobId)) throw new MockCommandError("IPTAL", "İşlem iptal edildi.");
+      if (cancelled.has(job.jobId)) throw jobCancelled();
       const result: ContentInstallResult = {
         installed: [addEntry(job.instanceId, job.kind, job.projectId, false)],
         alreadyInstalled: [],
@@ -969,7 +985,10 @@ export function createMockContent(deps: {
       if (!/\.(mrpack|zip)$/i.test(path)) {
         throw new MockCommandError(
           "PAKET-TANINMADI",
-          "Bu dosya tanınan bir mod paketi değil. .mrpack, Prism/MultiMC ya da CurseForge zip dosyası seç.",
+          pick(
+            "Bu dosya tanınan bir mod paketi değil. .mrpack, Prism/MultiMC ya da CurseForge zip dosyası seç.",
+            "This file isn't a modpack the launcher knows. Pick an .mrpack, a Prism/MultiMC zip or a CurseForge zip.",
+          ),
         );
       }
       if (/curse/i.test(path)) {
@@ -998,7 +1017,7 @@ export function createMockContent(deps: {
       refuseWhenDiskLow();
       const steps = 20;
       for (let i = 1; i <= steps; i++) {
-        if (cancelled.has(job.jobId)) throw new MockCommandError("IPTAL", "İşlem iptal edildi.");
+        if (cancelled.has(job.jobId)) throw jobCancelled();
         await delay(110);
         onProgress({
           stage: "downloading",
@@ -1049,7 +1068,7 @@ export function createMockContent(deps: {
       await delay(900);
       onProgress({ stage: "writing", doneFiles: 0, totalFiles: 0, bytesPerSec: 0 });
       await delay(700);
-      if (cancelled.has(jobId)) throw new MockCommandError("IPTAL", "İşlem iptal edildi.");
+      if (cancelled.has(jobId)) throw jobCancelled();
       return {
         path: options.path,
         hostedFiles: 11,
@@ -1087,7 +1106,7 @@ export function createMockContent(deps: {
       }
       onProgress({ stage: "checking", doneFiles: 0, totalFiles: 0, bytesPerSec: 0 });
       await delay(600);
-      if (cancelled.has(jobId)) throw new MockCommandError("IPTAL", "İşlem iptal edildi.");
+      if (cancelled.has(jobId)) throw jobCancelled();
       return structuredClone(updatePlan);
     },
     async modpackUpdateApply(instanceId, _versionId, jobId, onProgress) {
@@ -1155,7 +1174,7 @@ export function createMockContent(deps: {
       onProgress({ stage: "resolving", doneFiles: 0, totalFiles: 0, bytesPerSec: 0 });
       await delay(350);
       await simulate(onProgress, 1, 900);
-      if (cancelled.has(job.jobId)) throw new MockCommandError("IPTAL", "İşlem iptal edildi.");
+      if (cancelled.has(job.jobId)) throw jobCancelled();
       const hit = hitById(job.projectId);
       const name = `${hit?.title ?? "Datapack"}_1.21.1`;
       const pack: Datapack = {

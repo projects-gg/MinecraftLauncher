@@ -5,7 +5,6 @@ import coverForge from "@/assets/art/news-patch-forge.webp";
 import coverPvp from "@/assets/art/news-pvp-arena.webp";
 import coverSpawn from "@/assets/art/news-spawn-city.webp";
 import coverWinter from "@/assets/art/news-winter.webp";
-import i18n from "@/lib/i18n";
 import { newsHighlights } from "@/lib/news";
 import type { LauncherApi } from "./index";
 import { mockAccountName, mockAccounts } from "./mock-accounts";
@@ -15,6 +14,7 @@ import { createMockContent, mockExtraMods } from "./mock-content";
 import { createMockConveniences, mockNewScreenshots, mockSessionMs } from "./mock-conveniences";
 import { createMockData } from "./mock-data";
 import { mockCustomJava, mockJava, mockJavaPrompt } from "./mock-java";
+import { pick } from "./mock-lang";
 import { mockLaunchStop } from "./mock-launch-stop";
 import { createMockLibrary, mockServers } from "./mock-library";
 import { createMockModCenter } from "./mock-modcenter";
@@ -919,7 +919,7 @@ export const mockApi: LauncherApi = {
       ...source,
       id: `${source.id}-kopya`,
       // Named like the backend does, in the interface's language.
-      name: `${source.name} (${i18n.language === "en" ? "copy" : "kopya"})`,
+      name: pick(`${source.name} (kopya)`, `${source.name} (copy)`),
       managed: false,
       createdAt: new Date().toISOString(),
     };
@@ -1105,9 +1105,10 @@ export const mockApi: LauncherApi = {
     if (joinOffline) {
       throw Object.assign(
         new Error(
-          i18n.language === "en"
-            ? "Couldn't download the Projects pack. Check your internet connection and try again."
-            : "Projects paketi indirilemedi. İnternet bağlantını kontrol edip tekrar dene.",
+          pick(
+            "Projects paketi indirilemedi. İnternet bağlantını kontrol edip tekrar dene.",
+            "Couldn't download the Projects pack. Check your internet connection and try again.",
+          ),
         ),
         { code: "PAKET-AG", details: "Önizleme verisi" },
       );

@@ -8,6 +8,7 @@
 // - `signingIn`: waiting for the browser; `loading`: skeletons; `empty`: no friends yet;
 // - `down`: the service is unavailable; `replaced`: another device took over;
 // - `invite`: a live invite arrives shortly after start; `restore`: the "getireyim mi?" offer.
+import { pick } from "./mock-lang";
 import type {
   BackupMeta,
   CodeLookup,
@@ -32,6 +33,13 @@ class MockSocialError extends Error {
     this.details = `Kod: ${code}\nÖnizleme verisi`;
   }
 }
+
+/** Nobody has the friend code, worded like the backend. */
+const codeNotFound = () =>
+  new MockSocialError(
+    "SOSYAL-KOD-YOK",
+    pick("Bu koda ait kimse bulunamadı.", "Nobody has this code."),
+  );
 
 function scenario(): string {
   if (typeof window === "undefined") return "friends";
@@ -364,14 +372,14 @@ export const mockSocial: SocialApi = {
       };
     }
     const person = people[normalized];
-    if (!person) throw new MockSocialError("SOSYAL-KOD-YOK", "Bu koda ait kimse bulunamadı.");
+    if (!person) throw codeNotFound();
     const relation = view.friends.some((f) => f.id === person.id) ? "friend" : "none";
     return { profile: person, relation, code: normalized };
   },
   async sendRequest(code) {
     await delay(450);
     const person = people[code.toUpperCase()];
-    if (!person) throw new MockSocialError("SOSYAL-KOD-YOK", "Bu koda ait kimse bulunamadı.");
+    if (!person) throw codeNotFound();
     const request: FriendRequest = { ...person, sentAt: now() };
     commit((v) => ({ ...v, outgoing: [request, ...v.outgoing] }));
     return "requested";

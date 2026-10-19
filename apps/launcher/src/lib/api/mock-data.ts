@@ -3,6 +3,7 @@
 // a name with "Dolu" fails like a full folder, "Küçük" lacks space.
 // `localStorage["pl.mock.unreachable"]` pretends a moved folder on that path is missing.
 import type { DataApi, DataOverview, MoveProgress } from "./data-types";
+import { pick } from "./mock-lang";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const MB = 1024 * 1024;
@@ -18,6 +19,16 @@ class MockDataError extends Error {
     super(message);
   }
 }
+
+/** The move was cancelled, worded like the backend (`move_error`). */
+const moveCancelled = () =>
+  new MockDataError(
+    "IPTAL",
+    pick(
+      "Taşıma iptal edildi. Verilerin eski yerinde duruyor.",
+      "Move cancelled. Your data is still in its old place.",
+    ),
+  );
 
 export function createMockData(): DataApi {
   const state: DataOverview = {
@@ -54,7 +65,10 @@ export function createMockData(): DataApi {
       if (picked.includes("Dolu")) {
         throw new MockDataError(
           "TASI-DOLU",
-          "Seçtiğin yerde içi dolu bir ProjectsLauncher klasörü var. Başka bir klasör seç.",
+          pick(
+            "Seçtiğin yerde içi dolu bir ProjectsLauncher klasörü var. Başka bir klasör seç.",
+            "There's already a ProjectsLauncher folder with files in it there. Pick another folder.",
+          ),
         );
       }
       const small = picked.includes("Küçük");
@@ -79,7 +93,7 @@ export function createMockData(): DataApi {
       await delay(700);
       const steps = 60;
       for (let i = 1; i <= steps; i++) {
-        if (cancelled) throw new MockDataError("IPTAL", "Taşıma iptal edildi.");
+        if (cancelled) throw moveCancelled();
         await delay(110);
         const share = i / steps;
         send({
@@ -89,7 +103,7 @@ export function createMockData(): DataApi {
       }
       send({ stage: "verifying", doneBytes: totalBytes, doneFiles: totalFiles });
       await delay(900);
-      if (cancelled) throw new MockDataError("IPTAL", "Taşıma iptal edildi.");
+      if (cancelled) throw moveCancelled();
     },
     async cancelMove() {
       cancelled = true;
