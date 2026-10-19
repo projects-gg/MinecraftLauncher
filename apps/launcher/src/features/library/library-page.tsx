@@ -125,11 +125,27 @@ function Section({
 
 const sortOptions: LibrarySort[] = ["lastPlayed", "name", "playTime", "created"];
 
+/**
+ * "Yeni kurulum" and "İçe aktar" open their dialog through the address (`?create`, so the
+ * command bar, the palette and dropped files can open it too). Only this part reads it: the
+ * page does not render again when the dialog opens or closes (it did, and motion measured every
+ * card for it: most of the first open's 200 ms task, POLISH3/POLISH4).
+ */
+function CreateFromAddress({ onOpenChange }: { onOpenChange: (open: boolean) => void }) {
+  const search = useSearch({ strict: false }) as { create?: boolean; source?: "import" };
+  return (
+    <CreateInstanceDialog
+      open={Boolean(search.create)}
+      initialSource={search.source}
+      onOpenChange={(open) => onOpenChange(open)}
+    />
+  );
+}
+
 export function LibraryPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const search = useSearch({ strict: false }) as { create?: boolean; source?: "import" };
   const [query, setQuery] = useState("");
   const [pendingDelete, setPendingDelete] = useState<InstanceSummary | null>(null);
   const [exporting, setExporting] = useState<InstanceSummary | null>(null);
@@ -152,7 +168,6 @@ export function LibraryPage() {
   const collapsed = useLibraryView((s) => s.collapsed);
   const toggleSection = useLibraryView((s) => s.toggleSection);
 
-  const createOpen = Boolean(search.create);
   // "İçe aktar" opens the same dialog on its file import.
   const setCreateOpen = (open: boolean, source?: "import") =>
     void navigate({ to: "/library", search: open ? { create: true, source } : {} });
@@ -379,11 +394,7 @@ export function LibraryPage() {
         )}
       </div>
 
-      <CreateInstanceDialog
-        open={createOpen}
-        initialSource={search.source}
-        onOpenChange={(open) => setCreateOpen(open)}
-      />
+      <CreateFromAddress onOpenChange={setCreateOpen} />
       <ExportDialog instance={exporting} onClose={() => setExporting(null)} />
       <GroupDialog
         instance={grouping}

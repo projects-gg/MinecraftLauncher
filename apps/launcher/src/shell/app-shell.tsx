@@ -97,7 +97,9 @@ function GlobalShortcuts({ disabled }: { disabled: boolean }) {
 
 export function AppShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const search = useSearch({ strict: false }) as { news?: string };
+  // Only the news reader's id: a tab, a settings section or a dialog in the address leaves the
+  // shell alone (it drew the rail, the title bar and the command bar again for each; POLISH4).
+  const newsId = useSearch({ strict: false, select: (s) => (s as { news?: string }).news });
   const navigate = useNavigate();
   const { data } = useQuery({ queryKey: ["home-content"], queryFn: () => api.homeContent() });
   const home = pathname === "/";
@@ -142,7 +144,7 @@ export function AppShell() {
       <MandatoryUpdate />
       <MigrationDialog open={migrationOpen} onOpenChange={setMigrationOpen} />
       <NewsReader
-        newsId={search.news}
+        newsId={newsId}
         onClose={() =>
           void navigate({
             to: ".",
