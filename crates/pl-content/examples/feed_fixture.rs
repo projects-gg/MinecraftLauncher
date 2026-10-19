@@ -1,7 +1,7 @@
 //! A signed Discord bot news feed for local end-to-end tests, and a checker for feeds the bot
 //! writes. Never publish the fixture.
 //!
-//! `cargo run -p pl-content --example feed_fixture -- <out-dir> [1|2|status|tampered]`
+//! `cargo run -p pl-content --example feed_fixture -- <out-dir> [1|2|status|tampered] [switches]`
 //!
 //! Writes `<out-dir>/v1/feed.json`, `.sig` and `media/` signed with a throwaway feed key stored
 //! in `<out-dir>/feed-signing.key` (created on the first run, reused afterwards). Times are
@@ -10,6 +10,11 @@
 //! Generation 2 drops one item and the live event; `status` is generation 1 with an outage
 //! notice that expires in 15 minutes; `tampered` writes generation 2 and then changes
 //! `feed.json` after signing, so clients must refuse it.
+//!
+//! Switches, after the generation: `--level outage|major|degraded|notice` gives the status notice
+//! that kind, with the bot's default wording (`status` only); `--expires-in <minutes>` makes it
+//! last 1–15 minutes (`status` only); `--event-in <minutes>` adds an hour-long event that starts
+//! that many minutes from now (the event card's "Hatırlat" and its reminder).
 //!
 //! Serve `<out-dir>` (`node D:/ProLauncher-build/shots/static-server.mjs <out-dir> 8789`) and
 //! give a debug launcher `PROJECTS_FEED_MIRRORS=http://127.0.0.1:8789/v1/`; the content
@@ -168,7 +173,96 @@ fn signing_key(out: &Path) -> pl_content::SigningKey {
     }
 }
 
-fn build(out: PathBuf, release: &str) {
+/// The switches after the generation (see the module docs).
+struct Extras {
+    /// The status notice's kind: `outage`, `major`, `degraded` or `notice`.
+    level: String,
+    /// Minutes until the status notice expires.
+    expires_in: i64,
+    /// Minutes until the extra event starts.
+    event_in: Option<i64>,
+}
+
+impl Default for Extras {
+    fn default() -> Self {
+        Self {
+            level: "outage".to_owned(),
+            expires_in: 15,
+            event_in: None,
+        }
+    }
+}
+
+impl Extras {
+    /// `None` for an unknown switch or a bad value.
+    fn parse(args: &[String]) -> Option<Self> {
+        let mut extras = Self::default();
+        let mut args = args.iter();
+        while let Some(switch) = args.next() {
+            let value = args.next()?;
+            match switch.as_str() {
+                "--level"
+                    if ["outage", "major", "degraded", "notice"].contains(&value.as_str()) =>
+                {
+                    extras.level.clone_from(value);
+                }
+                "--expires-in" => {
+                    extras.expires_in = value.parse().ok().filter(|m| (1..=15).contains(m))?;
+                }
+                "--event-in" => extras.event_in = Some(value.parse().ok()?),
+                _ => return None,
+            }
+        }
+        Some(extras)
+    }
+}
+
+/// The status notice the bot writes for `level` (its default wording), updated now and expiring
+/// `minutes` later.
+fn status_block(level: &str, now: Timestamp, minutes: i64) -> Value {
+    let (kind, title, message, services): (&str, &str, &str, &[(&str, &str)]) = match level {
+        "major" => (
+            "outage",
+            "Hizmetlerde büyük bir kesinti var",
+            "Şu an erişilemiyor: Lobi, Survival Zephyr, Skyblock ve 2 hizmet daha",
+            &[
+                ("Lobi", "down"),
+                ("Survival Zephyr", "down"),
+                ("Skyblock", "down"),
+                ("Bedwars", "down"),
+                ("Giriş", "down"),
+            ],
+        ),
+        "degraded" => (
+            "degraded",
+            "Bazı hizmetlerde aksaklık var",
+            "Bağlanırken sorun yaşanabilir: Survival Zephyr",
+            &[("Survival Zephyr", "degraded")],
+        ),
+        "notice" => ("notice", "Durum sayfasında yeni bir duyuru var", "", &[]),
+        _ => (
+            "outage",
+            "Bazı hizmetlerde sorun var",
+            "Şu an erişilemiyor: Survival Zephyr",
+            &[("Survival Zephyr", "down")],
+        ),
+    };
+    let services: Vec<Value> = services
+        .iter()
+        .map(|(name, state)| json!({ "name": name, "state": state }))
+        .collect();
+    json!({
+        "level": kind,
+        "title": title,
+        "message": message,
+        "services": services,
+        "url": "https://status.projects.gg",
+        "updatedAt": iso(now),
+        "expiresAt": iso(now + SignedDuration::from_mins(minutes))
+    })
+}
+
+fn build(out: PathBuf, release: &str, extras: &Extras) {
     let v1 = out.join("v1");
     std::fs::create_dir_all(&v1).expect("create output");
     let signing = signing_key(&out);
@@ -180,18 +274,26 @@ fn build(out: PathBuf, release: &str) {
         .and_then(|feed| feed["sequence"].as_u64())
         .unwrap_or(0);
     let unix = u64::try_from(now.as_second()).unwrap_or(0);
-    let mut feed = generation(&v1, if release == "status" { "1" } else { release }, now);
+    let generation_of = if release == "status" { "1" } else { release };
+    let mut feed = generation(&v1, generation_of, now);
     feed["sequence"] = json!(unix.max(previous + 1));
     if release == "status" {
-        feed["status"] = json!({
-            "level": "outage",
-            "title": "Bazı hizmetlerde sorun var",
-            "message": "Şu an erişilemiyor: Survival Zephyr",
-            "services": [{ "name": "Survival Zephyr", "state": "down" }],
-            "url": "https://status.projects.gg",
-            "updatedAt": iso(now),
-            "expiresAt": iso(now + SignedDuration::from_mins(15))
+        feed["status"] = status_block(&extras.level, now, extras.expires_in);
+    }
+    if let Some(minutes) = extras.event_in {
+        let starts = now + SignedDuration::from_mins(minutes);
+        let mut event = json!({
+            "id": "discord-1300000000000000005",
+            "title": "Akşam PvP turnuvası",
+            "startsAt": iso(starts),
+            "endsAt": iso(starts + SignedDuration::from_hours(1)),
+            "source": source("duyurular", ANNOUNCEMENTS, "1300000000000000005")
         });
+        // "Göster" opens the tournament's news item where this generation has it.
+        if generation_of == "1" {
+            event["newsId"] = json!("discord-1300000000000000003");
+        }
+        feed["events"].as_array_mut().expect("events").push(event);
     }
     let bytes = pl_content::json::to_canonical_json(&feed).expect("feed json");
     let signature = pl_content::sign_index(&bytes, &signing);
@@ -337,19 +439,25 @@ fn check(dir: PathBuf, public_key: &str) {
     );
 }
 
+fn usage() -> ! {
+    eprintln!(
+        "usage: feed_fixture <out-dir> [1|2|status|tampered] [--level outage|major|degraded|notice] \
+         [--expires-in <minutes>] [--event-in <minutes>]\n       feed_fixture check <feed-dir> <public-key>"
+    );
+    std::process::exit(2);
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.as_slice() {
         [mode, dir, key] if mode == "check" => check(PathBuf::from(dir), key),
-        [out] => build(PathBuf::from(out), "1"),
-        [out, release] if ["1", "2", "status", "tampered"].contains(&release.as_str()) => {
-            build(PathBuf::from(out), release)
+        [out] => build(PathBuf::from(out), "1", &Extras::default()),
+        [out, release, switches @ ..]
+            if ["1", "2", "status", "tampered"].contains(&release.as_str()) =>
+        {
+            let extras = Extras::parse(switches).unwrap_or_else(|| usage());
+            build(PathBuf::from(out), release, &extras);
         }
-        _ => {
-            eprintln!(
-                "usage: feed_fixture <out-dir> [1|2|status|tampered]\n       feed_fixture check <feed-dir> <public-key>"
-            );
-            std::process::exit(2);
-        }
+        _ => usage(),
     }
 }
