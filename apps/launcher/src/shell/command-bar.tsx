@@ -1,4 +1,4 @@
-import { CaretUpDown, Check, FolderOpen, Plus } from "@phosphor-icons/react";
+import { CaretUpDown, Check, Plus, SquaresFour } from "@phosphor-icons/react";
 import { Chip, cn, easeOutExpo, PlayButton, type PlayState, Progress, Switch, toast } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -162,7 +162,8 @@ function InstancePicker({
             onSelect={() => void navigate({ to: "/library" })}
             className="flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] text-ash-300 outline-none data-[highlighted]:bg-white/8 data-[highlighted]:text-bone-50"
           >
-            <FolderOpen size={16} /> {t("instances.openLibrary")}
+            {/* The rail's Library mark: a folder would promise the files on disk ("Klasörü aç"). */}
+            <SquaresFour size={16} /> {t("instances.openLibrary")}
           </DropdownMenu.Item>
           <DropdownMenu.Item
             onSelect={() => void navigate({ to: "/library", search: { create: true } })}
