@@ -7,7 +7,17 @@ import {
   Sun,
   Trash,
 } from "@phosphor-icons/react";
-import { Button, Chip, ContextMenu, cn, IconButton, SearchInput } from "@pl/ui";
+import {
+  Button,
+  Chip,
+  ContextMenu,
+  cn,
+  easeOutExpo,
+  IconButton,
+  SearchInput,
+  useMotionPrefs,
+} from "@pl/ui";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { showError, useContentActions, useUndoableRemoval } from "@/features/content/jobs";
@@ -39,6 +49,7 @@ export function PacksTab({
   onBrowse: () => void;
 }) {
   const { t } = useTranslation();
+  const { layout } = useMotionPrefs();
   const actions = useContentActions(instanceId, kind);
   const removal = useUndoableRemoval(instanceId, kind);
   const [opened, setOpened] = useState<PackEntry | null>(null);
@@ -127,96 +138,109 @@ export function PacksTab({
         </div>
       ) : (
         <ul
+          // Searching swaps the list in place (no fades and glides while typing).
+          key={query.trim()}
           className={cn(
             "grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3",
             arriving && "panel-in",
           )}
         >
-          {matching.map((p) => (
-            <ContextMenu
-              key={p.fileName}
-              items={[
-                ...(p.projectId
-                  ? [
-                      {
-                        label: t("content.actions.details"),
-                        icon: <Info size={16} />,
-                        onSelect: () => setOpened(p),
-                      },
-                    ]
-                  : []),
-                {
-                  label: t("instance.openFolder"),
-                  icon: <FolderOpen size={16} />,
-                  onSelect: () =>
-                    void api
-                      .openInstanceFolder(
-                        instanceId,
-                        kind === "shaderPack" ? "shaderpacks" : "resourcepacks",
-                      )
-                      .catch(showError),
-                },
-                null,
-                {
-                  label: t("content.actions.remove"),
-                  icon: <Trash size={16} />,
-                  danger: true,
-                  onSelect: () => removal.remove(p.fileName, p.name),
-                },
-              ]}
-            >
-              <li className="glass group flex items-center gap-3 rounded-[var(--radius-panel)] p-3">
-                <span
-                  className={cn(
-                    "chamfer flex size-12 shrink-0 items-center justify-center overflow-hidden bg-obsidian-800 [--cut:6px]",
-                    !p.enabled && "opacity-60",
-                  )}
+          {/* A removed pack fades where it was and the others glide into its place. */}
+          <AnimatePresence initial={false} mode="popLayout">
+            {matching.map((p) => (
+              <motion.li
+                key={p.fileName}
+                layout={layout ? "position" : false}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: { duration: 0.2 } }}
+                exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                transition={{ layout: { duration: 0.3, ease: easeOutExpo } }}
+              >
+                <ContextMenu
+                  items={[
+                    ...(p.projectId
+                      ? [
+                          {
+                            label: t("content.actions.details"),
+                            icon: <Info size={16} />,
+                            onSelect: () => setOpened(p),
+                          },
+                        ]
+                      : []),
+                    {
+                      label: t("instance.openFolder"),
+                      icon: <FolderOpen size={16} />,
+                      onSelect: () =>
+                        void api
+                          .openInstanceFolder(
+                            instanceId,
+                            kind === "shaderPack" ? "shaderpacks" : "resourcepacks",
+                          )
+                          .catch(showError),
+                    },
+                    null,
+                    {
+                      label: t("content.actions.remove"),
+                      icon: <Trash size={16} />,
+                      danger: true,
+                      onSelect: () => removal.remove(p.fileName, p.name),
+                    },
+                  ]}
                 >
-                  {p.iconUrl ? (
-                    <img
-                      src={p.iconUrl}
-                      alt=""
-                      draggable={false}
-                      className="size-full object-cover [image-rendering:pixelated]"
+                  <div className="glass group flex h-full items-center gap-3 rounded-[var(--radius-panel)] p-3">
+                    <span
+                      className={cn(
+                        "chamfer flex size-12 shrink-0 items-center justify-center overflow-hidden bg-obsidian-800 [--cut:6px]",
+                        !p.enabled && "opacity-60",
+                      )}
+                    >
+                      {p.iconUrl ? (
+                        <img
+                          src={p.iconUrl}
+                          alt=""
+                          draggable={false}
+                          className="size-full object-cover [image-rendering:pixelated]"
+                        />
+                      ) : (
+                        <Icon size={22} weight="duotone" className="text-gold-400/80" />
+                      )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2">
+                        {p.projectId ? (
+                          <button
+                            type="button"
+                            onClick={() => setOpened(p)}
+                            className="block min-w-0 cursor-pointer truncate text-left text-[14px] font-semibold text-bone-50 transition-colors duration-150 hover:text-gold-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+                          >
+                            {p.name}
+                          </button>
+                        ) : (
+                          <p className="min-w-0 truncate text-[14px] font-semibold text-bone-50">
+                            {p.name}
+                          </p>
+                        )}
+                        {p.enabled ? null : <Chip>{t("instance.packs.disabled")}</Chip>}
+                      </div>
+                      {p.description ? (
+                        <p className="truncate text-[12.5px] text-ash-300">{p.description}</p>
+                      ) : null}
+                    </div>
+                    <span className="shrink-0 text-[12px] text-ash-300 tabular-nums">
+                      {formatBytes(p.sizeBytes)}
+                    </span>
+                    <IconButton
+                      label={t("content.actions.remove")}
+                      icon={<Trash size={16} />}
+                      size="sm"
+                      className="opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100"
+                      onClick={() => removal.remove(p.fileName, p.name)}
                     />
-                  ) : (
-                    <Icon size={22} weight="duotone" className="text-gold-400/80" />
-                  )}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-center gap-2">
-                    {p.projectId ? (
-                      <button
-                        type="button"
-                        onClick={() => setOpened(p)}
-                        className="block min-w-0 cursor-pointer truncate text-left text-[14px] font-semibold text-bone-50 hover:text-gold-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
-                      >
-                        {p.name}
-                      </button>
-                    ) : (
-                      <p className="min-w-0 truncate text-[14px] font-semibold text-bone-50">
-                        {p.name}
-                      </p>
-                    )}
-                    {p.enabled ? null : <Chip>{t("instance.packs.disabled")}</Chip>}
                   </div>
-                  {p.description ? (
-                    <p className="truncate text-[12.5px] text-ash-300">{p.description}</p>
-                  ) : null}
-                </div>
-                <span className="shrink-0 text-[12px] text-ash-300 tabular-nums">
-                  {formatBytes(p.sizeBytes)}
-                </span>
-                <IconButton
-                  label={t("content.actions.remove")}
-                  icon={<Trash size={16} />}
-                  size="sm"
-                  className="opacity-100 transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-focus-within:opacity-100 [@media(hover:hover)]:group-hover:opacity-100"
-                  onClick={() => removal.remove(p.fileName, p.name)}
-                />
-              </li>
-            </ContextMenu>
-          ))}
+                </ContextMenu>
+              </motion.li>
+            ))}
+          </AnimatePresence>
         </ul>
       )}
       <ProjectDialog

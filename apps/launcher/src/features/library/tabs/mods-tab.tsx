@@ -7,10 +7,22 @@ import {
   Plus,
   Trash,
 } from "@phosphor-icons/react";
-import { Button, Chip, cn, IconButton, SearchInput, toast } from "@pl/ui";
+import {
+  Button,
+  Chip,
+  cn,
+  easeOutExpo,
+  IconButton,
+  SearchInput,
+  SwapLabel,
+  Switch,
+  toast,
+  useMotionPrefs,
+} from "@pl/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { type Ref, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   bulkJobKey,
@@ -21,7 +33,7 @@ import {
   useContentJobs,
   useUndoableRemoval,
 } from "@/features/content/jobs";
-import { JobStatus } from "@/features/content/parts";
+import { JobStatus, useShownJob } from "@/features/content/parts";
 import { ProjectDialog } from "@/features/content/project-dialog";
 import { useContentScan } from "@/features/content/use-content";
 import { PageDropZone } from "@/features/drop/page-zone";
@@ -55,37 +67,6 @@ export function VanillaModsEmpty() {
   );
 }
 
-function ModToggle({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "relative h-[22px] w-[38px] shrink-0 cursor-pointer rounded-full ring-1 transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300",
-        checked ? "bg-gold-500 ring-gold-400/60" : "bg-obsidian-700 ring-white/10",
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-[3px] left-[3px] size-4 rounded-full shadow transition-transform duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
-          checked ? "translate-x-4 bg-gold-ink" : "bg-bone-100",
-        )}
-      />
-    </button>
-  );
-}
-
 function ModRow({
   mod,
   entry,
@@ -97,6 +78,7 @@ function ModRow({
   onCancel,
   onPackItem,
   busy,
+  ref,
 }: {
   mod: ModEntry;
   entry?: InstalledContent;
@@ -110,15 +92,23 @@ function ModRow({
   onPackItem?: () => void;
   /** A bulk update is running: single updates wait. */
   busy: boolean;
+  ref?: Ref<HTMLLIElement>;
 }) {
   const { t } = useTranslation();
+  const { layout } = useMotionPrefs();
   const fromPack = mod.fromPack || Boolean(entry?.fromPack);
+  const shownJob = useShownJob(job);
   return (
-    <li
-      className={cn(
-        "flex items-center gap-3.5 rounded-[var(--radius-panel)] px-3 py-2.5 transition-colors hover:bg-white/5",
-        !mod.enabled && "opacity-55",
-      )}
+    // A removed mod fades where it was and the rows below glide up (like servers and worlds);
+    // a mod that is switched off dims smoothly.
+    <motion.li
+      ref={ref}
+      layout={layout ? "position" : false}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: mod.enabled ? 1 : 0.55, transition: { duration: 0.2 } }}
+      exit={{ opacity: 0, transition: { duration: 0.12 } }}
+      transition={{ layout: { duration: 0.3, ease: easeOutExpo } }}
+      className="flex items-center gap-3.5 rounded-[var(--radius-panel)] px-3 py-2.5 transition-colors hover:bg-white/5"
     >
       <span className="chamfer flex size-10 shrink-0 items-center justify-center overflow-hidden bg-obsidian-800 [--cut:6px]">
         {mod.iconUrl ? (
@@ -137,7 +127,7 @@ function ModRow({
             <button
               type="button"
               onClick={onOpen}
-              className="min-w-0 cursor-pointer truncate text-left text-[14px] font-semibold text-bone-50 hover:text-gold-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+              className="min-w-0 cursor-pointer truncate text-left text-[14px] font-semibold text-bone-50 transition-colors duration-150 hover:text-gold-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
             >
               {mod.name}
             </button>
@@ -167,8 +157,8 @@ function ModRow({
         </div>
         <p className="truncate text-[12.5px] text-ash-400">{mod.description}</p>
       </div>
-      {job ? (
-        <JobStatus job={job} onCancel={onCancel} />
+      {shownJob ? (
+        <JobStatus job={shownJob} onCancel={onCancel} />
       ) : entry?.update && !fromPack ? (
         <Button
           size="sm"
@@ -176,6 +166,8 @@ function ModRow({
           icon={<ArrowsClockwise size={15} className="text-gold-300" />}
           disabled={busy}
           onClick={onUpdate}
+          // Pressed in until its bar comes (see InstallControl).
+          className={job ? "scale-[0.97]" : undefined}
         >
           {t("content.actions.update")}
         </Button>
@@ -193,12 +185,14 @@ function ModRow({
           onClick={onRemove}
         />
       )}
-      <ModToggle
+      {/* The same switch as the mod center's list (it was a larger look-alike without hover). */}
+      <Switch
+        hideLabel
         checked={mod.enabled}
-        onChange={onToggle}
+        onCheckedChange={onToggle}
         label={t("instance.mods.toggle", { name: mod.name })}
       />
-    </li>
+    </motion.li>
   );
 }
 
@@ -265,6 +259,7 @@ export function ModsTab({
   const entryOf = (mod: ModEntry) => entries.get(mod.fileName.replace(/\.disabled$/, ""));
   const bulkKey = bulkJobKey(instance.id, "mod");
   const bulkJob = jobs[bulkKey];
+  const shownBulkJob = useShownJob(bulkJob);
 
   const checkUpdates = async () => {
     const result = await scan.refetch();
@@ -347,7 +342,10 @@ export function ModsTab({
           disabled={scan.isFetching || instance.mods.length === 0}
           onClick={() => void checkUpdates()}
         >
-          {scan.isFetching ? t("content.updates.checking") : t("content.updates.check")}
+          <SwapLabel
+            labels={[t("content.updates.check"), t("content.updates.checking")]}
+            active={scan.isFetching ? 1 : 0}
+          />
         </Button>
         {onMigrate ? (
           <Button
@@ -368,10 +366,15 @@ export function ModsTab({
           <p className="flex-1 text-[13.5px] text-bone-100">
             {t("content.updates.available", { count: updates.length })}
           </p>
-          {bulkJob ? (
-            <JobStatus job={bulkJob} onCancel={() => actions.cancel(bulkKey)} />
+          {shownBulkJob ? (
+            <JobStatus job={shownBulkJob} onCancel={() => actions.cancel(bulkKey)} />
           ) : (
-            <Button size="sm" variant="secondary" onClick={() => void actions.update(updates)}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void actions.update(updates)}
+              className={bulkJob ? "scale-[0.97]" : undefined}
+            >
               {t("content.updates.updateAll")}
             </Button>
           )}
@@ -394,27 +397,32 @@ export function ModsTab({
           </Button>
         </div>
       ) : (
-        <ul className={cn("space-y-0.5", arriving && "panel-in")}>
-          {mods.map((mod) => {
-            const entry = entryOf(mod);
-            const projectId = mod.projectId ?? entry?.projectId;
-            const key = projectJobKey(instance.id, projectId ?? mod.fileName);
-            return (
-              <ModRow
-                key={mod.fileName}
-                mod={mod}
-                entry={entry}
-                job={jobs[key]}
-                onToggle={(enabled) => toggle.mutate({ mod, enabled })}
-                onOpen={projectId ? () => setOpened({ projectId, mod }) : undefined}
-                onUpdate={() => entry && void actions.update([entry])}
-                onRemove={() => removal.remove(mod.fileName, mod.name)}
-                onCancel={() => actions.cancel(key)}
-                onPackItem={mod.itemId && onOpenModCenter ? onOpenModCenter : undefined}
-                busy={Boolean(bulkJob)}
-              />
-            );
-          })}
+        // Searching swaps the list in place (no fades and glides while typing, as in the mod
+        // center); removals within it animate.
+        <ul key={query.trim()} className={cn("space-y-0.5", arriving && "panel-in")}>
+          <AnimatePresence initial={false} mode="popLayout">
+            {mods.map((mod) => {
+              const entry = entryOf(mod);
+              const projectId = mod.projectId ?? entry?.projectId;
+              const key = projectJobKey(instance.id, projectId ?? mod.fileName);
+              return (
+                <ModRow
+                  // Without ".disabled": switching a mod off renames its file, and the row stays.
+                  key={mod.fileName.replace(/\.disabled$/, "")}
+                  mod={mod}
+                  entry={entry}
+                  job={jobs[key]}
+                  onToggle={(enabled) => toggle.mutate({ mod, enabled })}
+                  onOpen={projectId ? () => setOpened({ projectId, mod }) : undefined}
+                  onUpdate={() => entry && void actions.update([entry])}
+                  onRemove={() => removal.remove(mod.fileName, mod.name)}
+                  onCancel={() => actions.cancel(key)}
+                  onPackItem={mod.itemId && onOpenModCenter ? onOpenModCenter : undefined}
+                  busy={Boolean(shownBulkJob)}
+                />
+              );
+            })}
+          </AnimatePresence>
         </ul>
       )}
 
