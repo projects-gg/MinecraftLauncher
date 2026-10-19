@@ -97,13 +97,44 @@ function sharedBytes(kind: ImportShared, measure: SourceMeasure | undefined): nu
   return sizes[kind];
 }
 
-/** The rows of every launcher found, in the scan's order (the `.minecraft` folders first). */
+/**
+ * What a source's measurement covers: its profiles and how many shared things it has. When a
+ * profile or a world turns up (the player made one in the other launcher meanwhile), the key
+ * changes and the source is measured again.
+ */
+export function rowsKey(source: ImportSource): string {
+  const shared = source.shared
+    ? SHARED_KINDS.map((kind) => sharedCount(source, kind)).join("/")
+    : "";
+  return [shared, ...source.profiles.map((p) => p.id).sort()].join("\n");
+}
+
+/**
+ * The rows each source (by id) is measured for: a source seen for the first time at once, a
+ * source whose rows changed for the rows it had until the new ones `settled` (a debounce: changes
+ * in a burst make one measurement, none is dropped).
+ */
+export function measureKeys(
+  current: Record<string, string>,
+  settled: Record<string, string>,
+): Record<string, string> {
+  return Object.fromEntries(Object.entries(current).map(([id, key]) => [id, settled[id] ?? key]));
+}
+
+/**
+ * The rows of every launcher found, in the scan's order (the `.minecraft` folders first).
+ * `upToDate` names the sources whose measurement covers the rows they have now: a profile such a
+ * measurement does not know is gone from the other launcher and weighs nothing. Under an older
+ * measurement it waits for its size.
+ */
 export function rowsOf(
   scan: ImportScanView,
   measures: Record<string, SourceMeasure | undefined>,
+  upToDate?: ReadonlySet<string>,
 ): SourceRows[] {
   return scan.sources.map((source) => {
     const measure = measures[source.id];
+    const current = measure !== undefined && upToDate?.has(source.id) === true;
     const shared: SharedRow[] = SHARED_KINDS.filter((kind) => sharedCount(source, kind) > 0).map(
       (kind) => ({
         type: "shared",
@@ -129,7 +160,7 @@ export function rowsOf(
         sourceId: source.id,
         profile,
         measure: measured,
-        bytes: state === "ready" ? measured?.bytes : 0,
+        bytes: state === "ready" ? (measured?.bytes ?? (current ? 0 : undefined)) : 0,
         state,
       };
     });
@@ -295,14 +326,21 @@ export type Tone = "done" | "partial" | "skipped" | "failed";
 
 /** One line of the summary: a locale key under `import.`, its values and the item it is about. */
 export interface SummaryLine {
+  /** Its item (a source's shared kind or profile), unique in the summary. */
+  id: string;
   tone: Tone;
   key: string;
   params: Record<string, string | number>;
   /** The shared item the line names (its words: `import.what.<kind>`). */
   what?: ImportShared;
+  /** Where the line's things came from (words: `import.from.<kind>`, `import.at.<kind>`). */
+  source?: SourceKind;
   /** Follow-up sentences in the same line. */
   more: Array<{ key: string; params: Record<string, string | number>; what?: ImportShared }>;
 }
+
+/** Follow-ups that say where worlds went (one list, not sentences). */
+export const PLACE_KEYS = ["outcome.worldsIn", "outcome.worldsInOne"];
 
 /** Why some of an item's things stayed behind (`import.outcome.leftBecause.<key>`). */
 function leftReason(reason: ItemOutcome["reason"]): string {
@@ -312,28 +350,38 @@ function leftReason(reason: ItemOutcome["reason"]): string {
     case "unreadable":
     case "noTarget":
     case "cancelled":
+    case "needsInstance":
       return reason;
     default:
       return "failed";
   }
 }
 
+const lineId = (outcome: ItemOutcome) =>
+  `${outcome.sourceId}|${outcome.item.type === "shared" ? outcome.item.kind : `profile|${outcome.item.id}`}`;
+
 function sharedLine(outcome: ItemOutcome, kind: ImportShared): SummaryLine | null {
   const line = (
     tone: Tone,
     key: string,
     params: Record<string, string | number> = {},
-  ): SummaryLine => ({ tone, key, params, what: kind, more: [] });
+  ): SummaryLine => ({
+    id: lineId(outcome),
+    tone,
+    key,
+    params,
+    what: kind,
+    source: outcome.sourceKind,
+    more: [],
+  });
   const reasonLine = (reason: ItemOutcome["reason"]) => {
     switch (reason) {
       case "noSpace":
-        return "outcome.noSpace";
       case "noTarget":
-        return "outcome.noTarget";
       case "unreadable":
-        return "outcome.unreadable";
       case "inUse":
-        return "outcome.inUse";
+      case "needsInstance":
+        return `outcome.${reason}`;
       default:
         return "outcome.failed";
     }
@@ -345,10 +393,12 @@ function sharedLine(outcome: ItemOutcome, kind: ImportShared): SummaryLine | nul
         kind === "options"
           ? line("done", "outcome.options")
           : line(outcome.status, `outcome.${kind}`, { count: outcome.copied });
-      if (kind === "worlds" && outcome.destinations.length > 1) {
+      // Worlds go into the instances that play them: the line says which.
+      if (kind === "worlds") {
+        const one = outcome.destinations.length === 1;
         for (const d of outcome.destinations) {
           done.more.push({
-            key: "outcome.worldsIn",
+            key: one ? "outcome.worldsInOne" : "outcome.worldsIn",
             params: { name: d.instanceName, count: d.count },
           });
         }
@@ -372,11 +422,16 @@ function sharedLine(outcome: ItemOutcome, kind: ImportShared): SummaryLine | nul
 
 function profileLine(outcome: ItemOutcome): SummaryLine | null {
   const name = outcome.label;
-  const line = (tone: Tone, key: string, params: Record<string, string | number> = {}) => ({
+  const line = (
+    tone: Tone,
+    key: string,
+    params: Record<string, string | number> = {},
+  ): SummaryLine => ({
+    id: lineId(outcome),
     tone,
     key,
     params: { name, ...params },
-    more: [] as SummaryLine["more"],
+    more: [],
   });
   switch (outcome.status) {
     case "done":
@@ -425,7 +480,13 @@ export function summaryLines(report: ImportReport): SummaryLine[] {
     if (line) lines.push(line);
   }
   if (cancelled || report.cancelled) {
-    lines.push({ tone: "skipped", key: "outcome.cancelled", params: {}, more: [] });
+    lines.push({
+      id: "cancelled",
+      tone: "skipped",
+      key: "outcome.cancelled",
+      params: {},
+      more: [],
+    });
   }
   return lines;
 }

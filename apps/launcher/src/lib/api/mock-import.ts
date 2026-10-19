@@ -250,9 +250,10 @@ interface PlannedItem {
   outcome: ItemOutcome;
 }
 
-function outcomeFor(sourceId: string, item: ItemOutcome["item"], label = ""): ItemOutcome {
+function outcomeFor(source: ImportSource, item: ItemOutcome["item"], label = ""): ItemOutcome {
   return {
-    sourceId,
+    sourceId: source.id,
+    sourceKind: source.kind,
     item,
     label,
     status: "done",
@@ -277,7 +278,7 @@ function plan(request: ImportRequest, all: ImportSource[]): PlannedItem[] {
       const sizes = measureOf(scenario(), source).shared;
       for (const kind of kinds) {
         if (!req.shared?.includes(kind)) continue;
-        const outcome = outcomeFor(source.id, { type: "shared", kind });
+        const outcome = outcomeFor(source, { type: "shared", kind });
         const counts: Record<ImportShared, number> = {
           options: 1,
           servers: source.shared.servers,
@@ -287,13 +288,22 @@ function plan(request: ImportRequest, all: ImportSource[]): PlannedItem[] {
           screenshots: source.shared.screenshots,
         };
         outcome.copied = counts[kind];
-        outcome.destinations =
-          kind === "worlds"
-            ? [
-                ...projects(counts[kind] - 2),
-                { instanceId: "forge-1-20-1", instanceName: "Forge 1.20.1", count: 2 },
-              ]
-            : projects(counts[kind]);
+        outcome.destinations = projects(counts[kind]);
+        if (kind === "worlds") {
+          // Worlds go into the instances that play them; one was played in a version not here.
+          outcome.copied = counts.worlds - 1;
+          outcome.left = 1;
+          outcome.status = "partial";
+          outcome.reason = "needsInstance";
+          outcome.destinations = [
+            {
+              instanceId: "fabric-1-21-4",
+              instanceName: "Fabric 1.21.4",
+              count: counts.worlds - 3,
+            },
+            { instanceId: "forge-1-20-1", instanceName: "Forge 1.20.1", count: 2 },
+          ];
+        }
         items.push({
           bytes: kind === "options" || kind === "servers" ? 0 : (sizes?.[kind] ?? 0),
           current: kind === "worlds" ? WORLD_NAMES : undefined,
@@ -311,7 +321,7 @@ function plan(request: ImportRequest, all: ImportSource[]): PlannedItem[] {
       const p = source.profiles.find((x) => x.id === id);
       const m = measured.profiles.find((x) => x.id === id);
       if (!p || !m) continue;
-      const outcome = outcomeFor(source.id, { type: "profile", id }, p.name);
+      const outcome = outcomeFor(source, { type: "profile", id }, p.name);
       outcome.copied = m.mods;
       outcome.left = m.leftMods;
       if (m.leftMods > 0) {
@@ -334,9 +344,9 @@ function failed(kind: string, outcome: ItemOutcome): ItemOutcome {
       ...outcome,
       status: "partial",
       copied: outcome.copied - 2,
-      left: 2,
+      left: outcome.left + 2,
       reason: "noSpace",
-      destinations: outcome.destinations.filter((d) => d.instanceId === "projects"),
+      destinations: outcome.destinations.filter((d) => d.instanceId !== "forge-1-20-1"),
     };
   }
   if (outcome.label === "RLCraft") {

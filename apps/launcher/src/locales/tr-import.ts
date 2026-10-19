@@ -68,25 +68,56 @@ export const trImport = {
     summaryTitle: "Aktarım özeti",
     close: "Tamam",
   },
-  /** What a summary line is about, inside a sentence ("Diskte yer kalmadığı için dünyaların…"). */
+  /**
+   * What a summary line is about, inside a sentence ("Diskte yer kalmadığı için TLauncher'daki
+   * dünyaların…"); `at` is the launcher it is in.
+   */
   what: {
-    options: "oyun ayarların",
-    servers: "sunucuların",
-    worlds: "dünyaların",
-    resourcePacks: "kaynak paketlerin",
-    shaderPacks: "shader'ların",
-    screenshots: "ekran görüntülerin",
+    options: "{{at}} oyun ayarların",
+    servers: "{{at}} sunucuların",
+    worlds: "{{at}} dünyaların",
+    resourcePacks: "{{at}} kaynak paketlerin",
+    shaderPacks: "{{at}} shader'ların",
+    screenshots: "{{at}} ekran görüntülerin",
+  },
+  /**
+   * Where a summary line's things came from ("TLauncher'dan 3 dünya geldi."). The suffixes
+   * follow how each name is said: "Modrinth App'ten", "PolyMC'den".
+   */
+  from: {
+    minecraft: "Minecraft Launcher'dan",
+    tLauncher: "TLauncher'dan",
+    skLauncher: "SKlauncher'dan",
+    curseForge: "CurseForge'dan",
+    modrinth: "Modrinth App'ten",
+    prism: "Prism Launcher'dan",
+    polyMc: "PolyMC'den",
+    multiMc: "MultiMC'den",
+  },
+  /** The same launchers as where things are ("TLauncher'daki dünyaların"). */
+  at: {
+    minecraft: "Minecraft Launcher'daki",
+    tLauncher: "TLauncher'daki",
+    skLauncher: "SKlauncher'daki",
+    curseForge: "CurseForge'daki",
+    modrinth: "Modrinth App'teki",
+    prism: "Prism Launcher'daki",
+    polyMc: "PolyMC'deki",
+    multiMc: "MultiMC'deki",
   },
   outcome: {
-    options: "Oyun ayarların Projects'e geldi.",
-    optionsKept: "Projects'teki oyun ayarların korundu.",
-    servers: "{{count}} sunucu eklendi.",
-    worlds: "{{count}} dünya geldi.",
+    options: "Oyun ayarların {{from}} Projects'e geldi.",
+    /** Projects already had game settings (its own, or another launcher's that came first). */
+    optionsKept: "{{What}} yerine Projects'teki ayarlar korundu.",
+    servers: "{{from}} {{count}} sunucu eklendi.",
+    worlds: "{{from}} {{count}} dünya geldi.",
     /** Where worlds went, when they went to more than one instance. */
     worldsIn: "{{name}} kurulumunda {{count}}",
-    resourcePacks: "{{count}} kaynak paketi geldi.",
-    shaderPacks: "{{count}} shader geldi.",
-    screenshots: "{{count}} ekran görüntüsü geldi.",
+    /** Where worlds went, when they all went to one instance. */
+    worldsInOne: "{{name}} kurulumunda",
+    resourcePacks: "{{from}} {{count}} kaynak paketi geldi.",
+    shaderPacks: "{{from}} {{count}} shader geldi.",
+    screenshots: "{{from}} {{count}} ekran görüntüsü geldi.",
     /** After a count line when some of them did not come over, with why. */
     leftBecause: {
       noSpace: "{{count}} tanesi için diskte yer kalmadı.",
@@ -95,6 +126,8 @@ export const trImport = {
       noTarget: "{{count}} tanesi için Projects kurulumu hazırlanamadı.",
       failed: "{{count}} tanesi aktarılamadı.",
       cancelled: "{{count}} tanesi iptal edildi.",
+      /** Worlds whose version and loader no instance here plays (their own was not picked). */
+      needsInstance: "{{count}} tanesi yalnız oynandığı kurulumla gelebilir.",
     },
     already: "{{What}} zaten burada.",
     profile: "{{name}} kütüphanene eklendi.",
@@ -108,7 +141,8 @@ export const trImport = {
     noSpace: "Diskte yer kalmadığı için {{what}} gelmedi.",
     noTarget: "Projects kurulumu hazırlanamadığı için {{what}} gelmedi.",
     unreadable: "{{What}} okunamadı.",
-    inUse: "Açık bir oyunda kullanılan dünyalar gelmedi.",
+    inUse: "{{What}} açık bir oyunda kullanıldığı için gelmedi.",
+    needsInstance: "{{What}} yalnız oynandıkları kurulumlarla gelebilir.",
     failed: "{{What}} aktarılamadı.",
     cancelled: "Kalanlar iptal edildi.",
   },

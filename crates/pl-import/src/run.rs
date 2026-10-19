@@ -1,10 +1,14 @@
 //! Bringing the picked items over, one after the other: game settings and the server list first
-//! (instant), then the profiles (each a new instance with its mods), then worlds (each into the
-//! instance it was last played with, else the Projects instance), packs and screenshots.
+//! (instant), then the profiles (each a new instance with its mods), then worlds (each into an
+//! instance that plays its version with its loader, never into one that would not), packs and
+//! screenshots.
 //!
 //! Every item ends with an [`ItemOutcome`]; one that fails does not stop the others. A cancel
 //! stops after the file being copied: finished items stay, the one in progress leaves nothing
 //! (a half-made instance is removed again), the rest are reported as cancelled.
+//!
+//! Running it again brings nothing twice: every world copied is recorded with what identifies it
+//! ([`WorldRecord`]), and a world recorded in any instance stays where it went.
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
@@ -24,11 +28,11 @@ use tokio_util::sync::CancellationToken;
 use crate::copy::{Copier, free_name, no_skip, remove_leftovers, tree_size};
 use crate::detect::{is_pack_entry, is_screenshot_entry};
 use crate::error::{Error, Result};
-use crate::journal::{Journal, JournalFrom, path_key};
+use crate::journal::{Journal, JournalFrom, WorldIndex, WorldRecord, imported_profiles, path_key};
 use crate::measure::{instance_skip, plan_mods, shared_sizes};
 use crate::model::{
     CreatedInstance, ImportProfile, ImportProgress, ImportReport, ImportRequest, ImportShared,
-    ImportSource, ImportStage, ItemOutcome, ItemRef, OutcomeReason, OutcomeStatus,
+    ImportSource, ImportStage, ItemOutcome, ItemRef, OutcomeReason, OutcomeStatus, SourceKind,
 };
 use crate::options::merge_options;
 use crate::servers::merge_server_lists;
@@ -72,13 +76,31 @@ struct Target {
     game_dir: PathBuf,
 }
 
-/// An instance made in this run from a profile (worlds of its source follow it).
+/// An instance made in this run from a profile.
 #[derive(Debug, Clone)]
 struct Made {
-    source_id: String,
+    /// Its source's folder ([`path_key`]).
+    source: String,
+    /// It plays in a folder of its own, not in its source's.
+    own_folder: bool,
+    target: Target,
+}
+
+/// An instance a world may go into, with the version and loader it runs now.
+#[derive(Debug, Clone)]
+struct Home {
     target: Target,
     minecraft: String,
     loader: LoaderKind,
+    /// The Projects instance: a world goes there only when none of its own launcher's fits.
+    projects: bool,
+}
+
+/// Where a world is: the launcher and the game folder whose `saves` holds it.
+#[derive(Debug, Clone)]
+struct Origin {
+    launcher: SourceKind,
+    game_dir: PathBuf,
 }
 
 enum Task<'a> {
@@ -112,7 +134,7 @@ pub async fn run_import(
         guards: Vec::new(),
         locked: HashSet::new(),
         made: Vec::new(),
-        routes: Vec::new(),
+        index: None,
     };
     for (task, expected) in tasks.iter().zip(sizes) {
         let outcome = if runner.ctx.cancel.is_cancelled() {
@@ -192,10 +214,10 @@ fn plan<'a>(sources: &'a [ImportSource], request: &ImportRequest) -> Vec<Task<'a
 fn task_outcome(task: &Task<'_>) -> ItemOutcome {
     match task {
         Task::Shared { source, kind } => {
-            ItemOutcome::new(&source.id, ItemRef::Shared { kind: *kind }, "")
+            ItemOutcome::new(source, ItemRef::Shared { kind: *kind }, "")
         }
         Task::Profile { source, profile } => ItemOutcome::new(
-            &source.id,
+            source,
             ItemRef::Profile {
                 id: profile.id.clone(),
             },
@@ -263,8 +285,8 @@ struct Runner {
     locked: HashSet<String>,
     /// Instances this run made.
     made: Vec<Made>,
-    /// Instances worlds can follow: the ones made now and the ones an earlier run made.
-    routes: Vec<Made>,
+    /// The worlds imports brought so far (every instance's journal), read when first needed.
+    index: Option<WorldIndex>,
 }
 
 impl Runner {
@@ -330,9 +352,21 @@ impl Runner {
         (self.ctx.cancel.clone(), self.progress.clone())
     }
 
+    /// The worlds imports brought so far, taken out to be used and updated (put it back in
+    /// `self.index`).
+    async fn take_index(&mut self) -> WorldIndex {
+        if let Some(index) = self.index.take() {
+            return index;
+        }
+        let root = self.ctx.store.root().to_path_buf();
+        blocking(move || Ok(WorldIndex::read(&root)))
+            .await
+            .unwrap_or_default()
+    }
+
     async fn options(&mut self, source: &ImportSource) -> ItemOutcome {
         let out = ItemOutcome::new(
-            &source.id,
+            source,
             ItemRef::Shared {
                 kind: ImportShared::Options,
             },
@@ -372,7 +406,7 @@ impl Runner {
 
     async fn servers(&mut self, source: &ImportSource) -> ItemOutcome {
         let out = ItemOutcome::new(
-            &source.id,
+            source,
             ItemRef::Shared {
                 kind: ImportShared::Servers,
             },
@@ -416,7 +450,7 @@ impl Runner {
         expected: u64,
     ) -> ItemOutcome {
         let mut out = ItemOutcome::new(
-            &source.id,
+            source,
             ItemRef::Profile {
                 id: profile.id.clone(),
             },
@@ -428,15 +462,7 @@ impl Runner {
         if let Some(existing) = profile.imported_as.as_deref()
             && let Ok(instance) = self.ctx.store.get(existing).await
         {
-            // Its worlds still follow it.
-            if let Ok(target) = self.target(&instance.id, &instance.name) {
-                self.routes.push(Made {
-                    source_id: source.id.clone(),
-                    target,
-                    minecraft: instance.mc_version.clone(),
-                    loader: instance.loader.kind,
-                });
-            }
+            // Its worlds still follow it: its journal says where it came from.
             out.add_destination(&instance.id, &instance.name, 1);
             return out.skipped(OutcomeReason::AlreadyThere);
         }
@@ -458,7 +484,7 @@ impl Runner {
             .store
             .create(NewInstance {
                 name: free_instance_name(&profile.name, &taken),
-                mc_version: minecraft.clone(),
+                mc_version: minecraft,
                 loader: InstanceLoader {
                     kind: profile.loader,
                     version: profile.loader_version.clone().filter(|_| modded),
@@ -483,6 +509,14 @@ impl Runner {
             remove_instance(&target).await;
             return out.skipped(OutcomeReason::Cancelled);
         }
+        // An instance with a folder of its own brings its worlds: none that came over before.
+        let index = if profile.own_folder {
+            let index = self.take_index().await;
+            self.index = Some(index.clone());
+            index
+        } else {
+            WorldIndex::default()
+        };
         let journal = Journal {
             from: Some(JournalFrom {
                 source: path_key(&source.root),
@@ -494,6 +528,10 @@ impl Runner {
         let job_profile = profile.clone();
         let job_target = target.clone();
         let source_root = source.root.clone();
+        let origin = Origin {
+            launcher: source.kind,
+            game_dir: profile.game_dir.clone(),
+        };
         let reserve = self.ctx.reserve_bytes;
         let copied = blocking(move || {
             journal.write(&job_target.instance_dir)?;
@@ -502,7 +540,15 @@ impl Runner {
                 cancel: &cancel,
                 on_bytes: &count,
             };
-            copy_profile(&copier, &job_profile, &source_root, &job_target, reserve)
+            copy_profile(
+                &copier,
+                &job_profile,
+                &source_root,
+                &job_target,
+                &origin,
+                &index,
+                reserve,
+            )
         })
         .await;
         match copied {
@@ -510,14 +556,16 @@ impl Runner {
                 if result.servers_written {
                     self.mark_seeded(&target.id).await;
                 }
-                let made = Made {
-                    source_id: source.id.clone(),
+                if let Some(index) = self.index.as_mut() {
+                    for (at, record) in &result.worlds {
+                        index.add(at.clone(), record);
+                    }
+                }
+                self.made.push(Made {
+                    source: path_key(&source.root),
+                    own_folder: profile.own_folder,
                     target: target.clone(),
-                    minecraft,
-                    loader: profile.loader,
-                };
-                self.routes.push(made.clone());
-                self.made.push(made);
+                });
                 out.add_destination(&target.id, &target.name, 1);
                 out.copied = result.mods;
                 out.left = result.left_mods + result.left_other;
@@ -539,8 +587,17 @@ impl Runner {
     }
 
     async fn worlds(&mut self, source: &ImportSource) -> ItemOutcome {
+        let mut index = self.take_index().await;
+        let out = self.copy_worlds(source, &mut index).await;
+        self.index = Some(index);
+        out
+    }
+
+    /// Each world of `source` into the instance that plays it as it was last played (see
+    /// [`pick`]); one that came over before (`index`) stays where it went.
+    async fn copy_worlds(&mut self, source: &ImportSource, index: &mut WorldIndex) -> ItemOutcome {
         let mut out = ItemOutcome::new(
-            &source.id,
+            source,
             ItemRef::Shared {
                 kind: ImportShared::Worlds,
             },
@@ -553,38 +610,35 @@ impl Runner {
         if worlds.is_empty() {
             return out.skipped(OutcomeReason::NotFound);
         }
-        // Each world goes into the instance it was last played with, else the Projects one.
-        let mut routed: Vec<(WorldDir, Option<Target>)> = Vec::new();
-        let mut official: Option<Option<Target>> = None;
-        for world in worlds {
-            let home = self.home_of(&source.id, &world);
-            let target = match home {
-                Some(target) => Some(target),
-                None => {
-                    if official.is_none() {
-                        official = Some(match self.official(&out).await {
-                            Ok(target) => Some(target),
-                            Err(outcome) if outcome.reason == Some(OutcomeReason::Cancelled) => {
-                                return *outcome;
-                            }
-                            Err(_) => None,
-                        });
-                    }
-                    official.clone().flatten()
-                }
-            };
-            routed.push((world, target));
-        }
+        let homes = self.homes(source).await;
+        let origin = Origin {
+            launcher: source.kind,
+            game_dir: source.root.clone(),
+        };
         let mut already = 0;
-        for (world, target) in routed {
+        for world in worlds {
             if self.ctx.cancel.is_cancelled() {
                 return cancelled(out);
             }
-            let Some(target) = target else {
+            if index.find(&world, &source.root).is_some() {
+                already += 1;
+                continue;
+            }
+            if world.unreadable {
                 out.left += 1;
-                out.reason.get_or_insert(OutcomeReason::NoTarget);
+                out.reason.get_or_insert(OutcomeReason::Unreadable);
+                continue;
+            }
+            let Some(home) = pick(&homes, &world) else {
+                out.left += 1;
+                out.reason.get_or_insert(if self.ctx.official.is_some() {
+                    OutcomeReason::NeedsInstance
+                } else {
+                    OutcomeReason::NoTarget
+                });
                 continue;
             };
+            let target = home.target.clone();
             if !self.lock(&target.id).await {
                 return cancelled(out);
             }
@@ -592,19 +646,21 @@ impl Runner {
             let (cancel, progress) = self.copier_parts();
             let reserve = self.ctx.reserve_bytes;
             let job_target = target.clone();
+            let job_origin = origin.clone();
             let result = blocking(move || {
                 let count = |n: u64| progress.add_bytes(n);
                 let copier = Copier {
                     cancel: &cancel,
                     on_bytes: &count,
                 };
-                copy_world(&copier, &world, &job_target, reserve, true)
+                copy_world(&copier, &world, &job_origin, &job_target, reserve)
             })
             .await;
             match result {
-                Ok(WorldResult::Copied) => {
+                Ok(WorldResult::Copied(at, record)) => {
                     out.copied += 1;
                     out.add_destination(&target.id, &target.name, 1);
+                    index.add(at, &record);
                 }
                 Ok(WorldResult::Already) => already += 1,
                 Ok(WorldResult::Left(reason)) => {
@@ -623,21 +679,59 @@ impl Runner {
         settle(out, already)
     }
 
-    /// The instance made in this run from the same source that plays the world's version with
-    /// the world's loader.
-    fn home_of(&self, source_id: &str, world: &WorldDir) -> Option<Target> {
-        let version = world.version.as_deref()?;
-        self.routes
+    /// Where `source`'s worlds may go, with the version and loader each runs now: the instances
+    /// made from its profiles that play in its folder (in this run first, then by earlier runs:
+    /// their journals say so), then the Projects instance.
+    async fn homes(&self, source: &ImportSource) -> Vec<Home> {
+        let root = path_key(&source.root);
+        let instances_root = self.ctx.store.root().to_path_buf();
+        let earlier = blocking(move || Ok(imported_profiles(&instances_root)))
+            .await
+            .unwrap_or_default();
+        let mut ids: Vec<String> = self
+            .made
             .iter()
-            .filter(|m| m.source_id == source_id && m.minecraft == version)
-            .find(|m| match world.loader {
-                Some(LoaderKind::Fabric) => {
-                    matches!(m.loader, LoaderKind::Fabric | LoaderKind::Quilt)
-                }
-                Some(loader) => m.loader == loader,
-                None => m.loader == LoaderKind::Vanilla,
-            })
-            .map(|m| m.target.clone())
+            .filter(|m| m.source == root && !m.own_folder)
+            .map(|m| m.target.id.clone())
+            .collect();
+        let made_here: HashSet<&str> = self.made.iter().map(|m| m.target.id.as_str()).collect();
+        for from in earlier {
+            // A profile with a folder of its own played other worlds with other mods; one the
+            // scan no longer lists cannot be told.
+            let shares_folder = source
+                .profiles
+                .iter()
+                .any(|p| p.id == from.profile && !p.own_folder);
+            if from.source == root
+                && shares_folder
+                && !made_here.contains(from.instance_id.as_str())
+                && !ids.contains(&from.instance_id)
+            {
+                ids.push(from.instance_id);
+            }
+        }
+        let mut homes = Vec::new();
+        for id in ids {
+            if let Some(home) = self.home(&id, false).await {
+                homes.push(home);
+            }
+        }
+        if let Some(official) = &self.ctx.official
+            && let Some(home) = self.home(&official.id, true).await
+        {
+            homes.push(home);
+        }
+        homes
+    }
+
+    async fn home(&self, id: &str, projects: bool) -> Option<Home> {
+        let instance = self.ctx.store.get(id).await.ok()?;
+        Some(Home {
+            target: self.target(&instance.id, &instance.name).ok()?,
+            minecraft: instance.mc_version,
+            loader: instance.loader.kind,
+            projects,
+        })
     }
 
     async fn files(
@@ -646,7 +740,7 @@ impl Runner {
         kind: ImportShared,
         expected: u64,
     ) -> ItemOutcome {
-        let out = ItemOutcome::new(&source.id, ItemRef::Shared { kind }, "");
+        let out = ItemOutcome::new(source, ItemRef::Shared { kind }, "");
         let target = match self.official(&out).await {
             Ok(target) => target,
             Err(outcome) => return *outcome,
@@ -722,6 +816,37 @@ impl Runner {
     }
 }
 
+/// How well an instance running `minecraft` with `loader` plays a world as it was last played:
+/// 0 with the world's own loader, 1 with another one that opens it unchanged (a vanilla world in
+/// a modded instance, a Fabric world in Quilt). `None` when it would not: another Minecraft
+/// version (the game would convert the world), a loader its mods do not run on, or a world whose
+/// version or loader cannot be told.
+fn fit(world: &WorldDir, minecraft: &str, loader: LoaderKind) -> Option<u8> {
+    if world.version.as_deref()? != minecraft {
+        return None;
+    }
+    match (world.loader?, loader) {
+        (played, runs) if played == runs => Some(0),
+        (LoaderKind::Vanilla, _) | (LoaderKind::Fabric, LoaderKind::Quilt) => Some(1),
+        _ => None,
+    }
+}
+
+/// The instance a world goes into: one of its own launcher's that fits it before the Projects
+/// instance, its own loader before another, the earlier listed first. `None` when none fits:
+/// the world then stays where it is.
+fn pick<'a>(homes: &'a [Home], world: &WorldDir) -> Option<&'a Home> {
+    homes
+        .iter()
+        .enumerate()
+        .filter_map(|(order, home)| {
+            fit(world, &home.minecraft, home.loader)
+                .map(|rank| ((home.projects, rank, order), home))
+        })
+        .min_by_key(|(key, _)| *key)
+        .map(|(_, home)| home)
+}
+
 /// The game folder entries copied one by one after the rest, whose failures leave the instance
 /// usable (reported as left behind).
 const LATER: [&str; 4] = ["saves", "resourcepacks", "shaderpacks", "screenshots"];
@@ -734,6 +859,8 @@ struct ProfileCopy {
     other_reason: Option<OutcomeReason>,
     /// The server list was written (it has the Projects server now).
     servers_written: bool,
+    /// The worlds of its own folder that came with it.
+    worlds: Vec<(PathBuf, WorldRecord)>,
 }
 
 fn copy_profile(
@@ -741,6 +868,8 @@ fn copy_profile(
     profile: &ImportProfile,
     source_root: &Path,
     target: &Target,
+    origin: &Origin,
+    index: &WorldIndex,
     reserve: u64,
 ) -> Result<ProfileCopy> {
     guard_overlap(&profile.game_dir, &target.game_dir)?;
@@ -763,7 +892,7 @@ fn copy_profile(
     if profile.own_folder {
         // An instance never started has no game folder yet: it comes over as its version.
         if profile.game_dir.is_dir() {
-            copy_own_folder(copier, profile, target, reserve, &mut result)?;
+            copy_own_folder(copier, profile, target, origin, index, reserve, &mut result)?;
         }
     } else {
         if profile.loader != LoaderKind::Vanilla {
@@ -795,11 +924,13 @@ fn copy_profile(
 
 /// A profile's own game folder: everything that makes the instance work first (a failure there
 /// fails the profile), then worlds, packs and screenshots (failures there leave the instance
-/// usable and are counted as left behind).
+/// usable and are counted as left behind). A world an earlier import brought stays where it went.
 fn copy_own_folder(
     copier: &Copier<'_>,
     profile: &ImportProfile,
     target: &Target,
+    origin: &Origin,
+    index: &WorldIndex,
     reserve: u64,
     result: &mut ProfileCopy,
 ) -> Result<()> {
@@ -836,8 +967,12 @@ fn copy_own_folder(
         }
         if later == "saves" {
             for world in list_worlds(&from) {
-                match copy_world(copier, &world, target, reserve, false) {
-                    Ok(WorldResult::Copied | WorldResult::Already) => {}
+                if index.find(&world, &profile.game_dir).is_some() {
+                    continue;
+                }
+                match copy_world(copier, &world, origin, target, reserve) {
+                    Ok(WorldResult::Copied(at, record)) => result.worlds.push((at, record)),
+                    Ok(WorldResult::Already) => {}
                     Ok(WorldResult::Left(reason)) => left(result, reason),
                     Err(Error::Cancelled) => return Err(Error::Cancelled),
                     Err(error) => {
@@ -899,32 +1034,31 @@ fn merge_servers_into(from: Option<&Path>, target: &Target, record: bool) -> Res
     Ok((merged.added as u32, true))
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum WorldResult {
-    Copied,
+    /// Copied to the path, recorded with what identifies it.
+    Copied(PathBuf, WorldRecord),
     Already,
     Left(OutcomeReason),
 }
 
-/// One world into `<target>/saves` under a free folder name. `journaled` records it (the
-/// Projects instance's shared worlds; an instance's own worlds come with it).
+/// One world into `<target>/saves` under a free folder name, recorded in the target's journal
+/// with the launcher and game folder it came from (`origin`) and what identifies it.
 fn copy_world(
     copier: &Copier<'_>,
     world: &WorldDir,
+    origin: &Origin,
     target: &Target,
     reserve: u64,
-    journaled: bool,
 ) -> Result<WorldResult> {
     guard_overlap(&world.path, &target.game_dir)?;
     let saves = target.game_dir.join("saves");
-    let mut journal = journaled.then(|| Journal::read(&target.instance_dir));
-    if let Some(journal) = journal.as_ref()
-        && journal.copied_to(&world.path, &target.game_dir).is_some()
-    {
-        return Ok(WorldResult::Already);
-    }
-    // A copy from a run that ended before its record was written.
+    let record = WorldRecord::of(origin.launcher, &origin.game_dir, world);
+    // A copy from a run that ended before its record was written: recorded now.
     if same_level_dat(&world.path, &saves.join(&world.folder)) {
+        let mut journal = Journal::read(&target.instance_dir);
+        journal.record_world(&format!("saves/{}", world.folder), record);
+        journal.write(&target.instance_dir)?;
         return Ok(WorldResult::Already);
     }
     if in_use(&world.path) {
@@ -950,11 +1084,10 @@ fn copy_world(
         Err(error) if error.is_disk_full() => return Ok(WorldResult::Left(OutcomeReason::NoSpace)),
         Err(error) => return Err(error),
     }
-    if let Some(journal) = journal.as_mut() {
-        journal.record(&format!("saves/{name}"), &world.path);
-        journal.write(&target.instance_dir)?;
-    }
-    Ok(WorldResult::Copied)
+    let mut journal = Journal::read(&target.instance_dir);
+    journal.record_world(&format!("saves/{name}"), record.clone());
+    journal.write(&target.instance_dir)?;
+    Ok(WorldResult::Copied(saves.join(&name), record))
 }
 
 fn same_level_dat(a: &Path, b: &Path) -> bool {
@@ -979,7 +1112,8 @@ struct EntryCounts {
 
 /// Packs or screenshots, one entry at a time, into `<target>/<folder>`. An entry already there
 /// (recorded, or the same name and size) is not copied again; another one with its name gets a
-/// numbered name.
+/// numbered name. Shader packs bring their settings (`<pack>.txt`) under their new name; only
+/// the packs are counted.
 fn copy_entries(
     copier: &Copier<'_>,
     kind: ImportShared,
@@ -996,10 +1130,8 @@ fn copy_entries(
     let mut entries: Vec<std::fs::DirEntry> = entries
         .flatten()
         .filter(|e| match kind {
-            ImportShared::ResourcePacks => is_pack_entry(e),
             ImportShared::Screenshots => is_screenshot_entry(e),
-            // Shader packs come with their settings files (`<pack>.zip.txt`).
-            _ => !e.file_name().to_string_lossy().starts_with('.'),
+            _ => is_pack_entry(e),
         })
         .collect();
     entries.sort_by_key(|e| e.file_name());
@@ -1051,6 +1183,24 @@ fn copy_entries(
                 counts.left += 1;
                 counts.reason.get_or_insert(reason_of(&error));
                 counts.detail.get_or_insert(error.to_string());
+                continue;
+            }
+        }
+        if kind == ImportShared::ShaderPacks {
+            let settings = from.join(format!("{name}.txt"));
+            let dest = dest_dir.join(format!("{dest_name}.txt"));
+            if settings.is_file() && !dest.exists() {
+                match copier.file(&settings, &dest) {
+                    Ok(_) => journal.record(&format!("{folder}/{dest_name}.txt"), &settings),
+                    Err(Error::Cancelled) => {
+                        counts.cancelled = true;
+                        break;
+                    }
+                    // The pack works without them (its defaults).
+                    Err(error) => {
+                        tracing::warn!(%error, pack = %name, "shader settings not imported")
+                    }
+                }
             }
         }
     }
@@ -1286,5 +1436,72 @@ mod tests {
         );
         assert!(guard_overlap(Path::new("/a/data/instances/x"), Path::new("/a/data")).is_err());
         assert!(guard_overlap(Path::new("/a/.minecraft"), Path::new("/a/.minecraft2")).is_ok());
+    }
+
+    fn world(version: Option<&str>, loader: Option<LoaderKind>) -> WorldDir {
+        WorldDir {
+            folder: "World".into(),
+            path: PathBuf::from("/other/.minecraft/saves/World"),
+            version: version.map(str::to_owned),
+            loader,
+            seed: Some(1),
+            name: Some("World".into()),
+            unreadable: false,
+        }
+    }
+
+    fn home(id: &str, minecraft: &str, loader: LoaderKind, projects: bool) -> Home {
+        Home {
+            target: Target {
+                id: id.into(),
+                name: id.into(),
+                instance_dir: PathBuf::from(format!("/data/instances/{id}")),
+                game_dir: PathBuf::from(format!("/data/instances/{id}/minecraft")),
+            },
+            minecraft: minecraft.into(),
+            loader,
+            projects,
+        }
+    }
+
+    #[test]
+    fn a_world_goes_only_where_it_opens_as_it_was_played() {
+        use LoaderKind::*;
+        let homes = [
+            home("benim-modlarim", "1.21.4", Fabric, false),
+            home("forge", "1.20.1", Forge, false),
+            home("vanilla", "1.21.4", Vanilla, false),
+            home("quilt", "1.21.1", Quilt, false),
+            home("projects", "26.1.2", Fabric, true),
+        ];
+        let to = |world: WorldDir| pick(&homes, &world).map(|h| h.target.id.as_str());
+        // Its own loader first, then one that opens it unchanged.
+        assert_eq!(to(world(Some("1.21.4"), Some(Vanilla))), Some("vanilla"));
+        assert_eq!(
+            to(world(Some("1.21.4"), Some(Fabric))),
+            Some("benim-modlarim")
+        );
+        assert_eq!(to(world(Some("1.21.1"), Some(Fabric))), Some("quilt"));
+        assert_eq!(to(world(Some("1.20.1"), Some(Forge))), Some("forge"));
+        // The Projects instance takes what plays on its version; nothing else goes there.
+        assert_eq!(to(world(Some("26.1.2"), Some(Vanilla))), Some("projects"));
+        assert_eq!(to(world(Some("26.1.2"), Some(Fabric))), Some("projects"));
+        assert_eq!(to(world(Some("26.1.2"), Some(Forge))), None);
+        assert_eq!(to(world(Some("1.20.1"), Some(Fabric))), None);
+        assert_eq!(to(world(Some("1.20.4"), Some(Forge))), None);
+        assert_eq!(to(world(Some("1.21.1"), Some(Quilt))), Some("quilt"));
+        assert_eq!(to(world(Some("1.20.1"), Some(NeoForge))), None);
+        // A world whose version or loader cannot be told goes nowhere.
+        assert_eq!(to(world(None, Some(Vanilla))), None);
+        assert_eq!(to(world(Some("1.21.4"), None)), None);
+        // Projects comes last even when it fits as well.
+        let both = [
+            home("projects", "1.21.4", Fabric, true),
+            home("mine", "1.21.4", Fabric, false),
+        ];
+        assert_eq!(
+            pick(&both, &world(Some("1.21.4"), Some(Vanilla))).map(|h| h.target.id.as_str()),
+            Some("mine")
+        );
     }
 }

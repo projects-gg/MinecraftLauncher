@@ -49,10 +49,18 @@ fn write(path: &Path, bytes: impl AsRef<[u8]>) {
     std::fs::write(path, bytes).unwrap();
 }
 
-fn level_dat(version: Option<&str>, brands: &[&str]) -> Vec<u8> {
+/// A world's `level.dat`: its version, the brands that saved it, its own name and a seed of its own.
+fn level_dat(version: Option<&str>, brands: &[&str], name: &str) -> Vec<u8> {
     use fastnbt::Value;
     use std::collections::HashMap;
     let mut data = HashMap::new();
+    data.insert("LevelName".to_owned(), Value::String(name.to_owned()));
+    let seed = name.bytes().fold(17i64, |seed, b| {
+        seed.wrapping_mul(31).wrapping_add(i64::from(b))
+    });
+    let mut settings = HashMap::new();
+    settings.insert("seed".to_owned(), Value::Long(seed));
+    data.insert("WorldGenSettings".to_owned(), Value::Compound(settings));
     if let Some(version) = version {
         let mut v = HashMap::new();
         v.insert("Name".to_owned(), Value::String(version.to_owned()));
@@ -82,7 +90,7 @@ fn level_dat(version: Option<&str>, brands: &[&str]) -> Vec<u8> {
 fn world(saves: &Path, name: &str, version: Option<&str>, brands: &[&str]) {
     write(
         &saves.join(name).join("level.dat"),
-        level_dat(version, brands),
+        level_dat(version, brands, name),
     );
     write(
         &saves.join(name).join("region/r.0.0.mca"),
@@ -401,6 +409,53 @@ fn names_in(dir: &Path) -> Vec<String> {
     names
 }
 
+/// The worlds of every instance, by instance name.
+async fn worlds_everywhere(store: &InstanceStore) -> BTreeMap<String, Vec<String>> {
+    let mut out = BTreeMap::new();
+    for instance in store.list().await.unwrap() {
+        let saves = store.game_dir(&instance.id).unwrap().join("saves");
+        out.insert(instance.name.clone(), names_in(&saves));
+    }
+    out
+}
+
+/// Only shared data from the `.minecraft` folder: what Settings' dialog sends once the profiles
+/// are in the library (their rows say "Kütüphanende" and cannot be ticked).
+fn shared_only(kinds: &[ImportShared]) -> ImportRequest {
+    ImportRequest {
+        sources: vec![SourceRequest {
+            source_id: "minecraft".into(),
+            shared: kinds.to_vec(),
+            profiles: vec![],
+        }],
+    }
+}
+
+const ALL_SHARED: [ImportShared; 6] = [
+    ImportShared::Options,
+    ImportShared::Servers,
+    ImportShared::Worlds,
+    ImportShared::ResourcePacks,
+    ImportShared::ShaderPacks,
+    ImportShared::Screenshots,
+];
+
+async fn run(
+    data: &Data,
+    locations: &Locations,
+    request: impl FnOnce(&[ImportSource]) -> ImportRequest,
+) -> ImportReport {
+    let imported = pl_import::imported_profiles(data.store.root());
+    let sources = pl_import::scan(locations, &imported);
+    let request = request(&sources);
+    pl_import::run_import(
+        sources,
+        request,
+        context(data, CancellationToken::new(), |_| {}),
+    )
+    .await
+}
+
 #[test]
 fn every_launcher_is_found_without_reading_anything_big() {
     let dir = tempfile::tempdir().unwrap();
@@ -596,15 +651,29 @@ async fn everything_comes_over_once_and_the_sources_stay_untouched() {
         (OutcomeStatus::Skipped, Some(OutcomeReason::Unsupported))
     );
 
-    // Worlds follow the instance they were played with; the others go to Projects.
+    // Worlds go where they open as they were played: the Forge world into the Forge instance,
+    // the vanilla 1.21.4 one into the Fabric 1.21.4 instance (its loader opens it unchanged).
+    // Projects plays 26.1.2: neither goes there, nor the world too old to tell its version.
     assert_eq!(names_in(&forge_game.join("saves")), ["Create World"]);
-    assert_eq!(names_in(&projects_game.join("saves")), ["Old", "Survival"]);
-    assert!(!projects_game.join("saves/Survival/session.lock").exists());
+    assert_eq!(names_in(&fabric_game.join("saves")), ["Survival"]);
+    assert!(!fabric_game.join("saves/Survival/session.lock").exists());
+    assert!(names_in(&projects_game.join("saves")).is_empty());
     let worlds = outcome(&report, &shared(ImportShared::Worlds));
-    assert_eq!((worlds.copied, worlds.left), (3, 0));
-    assert_eq!(worlds.destinations.len(), 2);
+    assert_eq!((worlds.copied, worlds.left), (2, 1));
+    assert_eq!(
+        (worlds.status, worlds.reason),
+        (OutcomeStatus::Partial, Some(OutcomeReason::NeedsInstance))
+    );
+    let places: Vec<&str> = worlds
+        .destinations
+        .iter()
+        .map(|d| d.instance_name.as_str())
+        .collect();
+    assert_eq!(places, ["Forge 1.20.1", "Benim modlarım"]);
+    assert_eq!(worlds.source_kind, SourceKind::TLauncher);
 
-    // Packs, shader settings and screenshots go to Projects.
+    // Packs, shader settings and screenshots go to Projects; a shader pack with its settings
+    // file counts as one.
     assert_eq!(
         names_in(&projects_game.join("resourcepacks")),
         ["Faithful.zip", "MyPack"]
@@ -612,6 +681,10 @@ async fn everything_comes_over_once_and_the_sources_stay_untouched() {
     assert_eq!(
         names_in(&projects_game.join("shaderpacks")),
         ["BSL.zip", "BSL.zip.txt"]
+    );
+    assert_eq!(
+        outcome(&report, &shared(ImportShared::ShaderPacks)).copied,
+        1
     );
     assert_eq!(names_in(&projects_game.join("screenshots")).len(), 2);
 
@@ -650,16 +723,16 @@ async fn everything_comes_over_once_and_the_sources_stay_untouched() {
 
     // Running it again copies nothing and makes nothing twice.
     let instances_before = data.store.list().await.unwrap().len();
-    let imported = pl_import::imported_profiles(data.store.root());
-    let again_sources = pl_import::scan(&locations, &imported);
-    let again = pl_import::run_import(
-        again_sources.clone(),
-        everything(&again_sources),
-        context(&data, CancellationToken::new(), |_| {}),
-    )
-    .await;
+    let worlds_before = worlds_everywhere(&data.store).await;
+    let again = run(&data, &locations, everything).await;
     assert_eq!(data.store.list().await.unwrap().len(), instances_before);
     for o in &again.outcomes {
+        assert_eq!(o.copied, 0, "{o:?}");
+        if o.item == shared(ImportShared::Worlds) {
+            // The world too old to tell its version still has nowhere to go.
+            assert_eq!((o.left, o.reason), (1, Some(OutcomeReason::NeedsInstance)));
+            continue;
+        }
         assert_eq!(o.status, OutcomeStatus::Skipped, "{o:?}");
         assert!(
             matches!(
@@ -669,15 +742,130 @@ async fn everything_comes_over_once_and_the_sources_stay_untouched() {
             "{o:?}"
         );
     }
-    assert_eq!(names_in(&projects_game.join("saves")), ["Old", "Survival"]);
+    assert_eq!(worlds_everywhere(&data.store).await, worlds_before);
     assert_eq!(names_in(&projects_game.join("screenshots")).len(), 2);
     assert_eq!(snapshot(&root), before);
+}
+
+/// E2E3: running it again from Settings (the profiles are in the library, so only the shared
+/// rows are sent) copied every world a second time, into the Projects instance.
+#[tokio::test]
+async fn a_second_run_from_settings_brings_no_world_twice() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = home(dir.path());
+    let before = snapshot(&root);
+    let locations = Locations::under(&root, Os::Windows);
+    let data = data().await;
+    run(&data, &locations, everything).await;
+    let worlds_before = worlds_everywhere(&data.store).await;
+    let projects_game = data.store.game_dir(&data.official.id).unwrap();
+    let shaders_before = names_in(&projects_game.join("shaderpacks"));
+
+    for _ in 0..2 {
+        let again = run(&data, &locations, |_| shared_only(&ALL_SHARED)).await;
+        assert_eq!(worlds_everywhere(&data.store).await, worlds_before);
+        let worlds = outcome(&again, &shared(ImportShared::Worlds));
+        assert_eq!(worlds.copied, 0);
+        assert!(worlds.destinations.is_empty());
+        assert!(again.outcomes.iter().all(|o| o.copied == 0), "{again:?}");
+    }
+    assert!(names_in(&projects_game.join("saves")).is_empty());
+    assert_eq!(names_in(&projects_game.join("shaderpacks")), shaders_before);
+    assert_eq!(snapshot(&root), before);
+}
+
+/// A world goes into the instance an earlier run made from its profile, and only while that
+/// instance still plays its version with its loader.
+#[tokio::test]
+async fn worlds_follow_the_instance_an_earlier_run_made_while_it_fits() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = home(dir.path());
+    let locations = Locations::under(&root, Os::Windows);
+    let data = data().await;
+    // First only the Forge profile, without the worlds.
+    run(&data, &locations, |sources| ImportRequest {
+        sources: vec![SourceRequest {
+            source_id: "minecraft".into(),
+            shared: vec![],
+            profiles: vec![profile_id(source(sources, "minecraft"), "Forge 1.20.1")],
+        }],
+    })
+    .await;
+    let forge = instance_named(&data.store, "Forge 1.20.1").await;
+    let forge_game = data.store.game_dir(&forge.id).unwrap();
+    assert!(names_in(&forge_game.join("saves")).is_empty());
+
+    // Then the worlds: the Create world finds the instance; the others have none that fits.
+    let report = run(&data, &locations, |_| shared_only(&[ImportShared::Worlds])).await;
+    assert_eq!(names_in(&forge_game.join("saves")), ["Create World"]);
+    let projects_game = data.store.game_dir(&data.official.id).unwrap();
+    assert!(names_in(&projects_game.join("saves")).is_empty());
+    let worlds = outcome(&report, &shared(ImportShared::Worlds));
+    assert_eq!((worlds.copied, worlds.left), (1, 2));
+    assert_eq!(worlds.reason, Some(OutcomeReason::NeedsInstance));
+    assert_eq!(worlds.destinations[0].instance_name, "Forge 1.20.1");
+
+    // The player moves the instance to another version and deletes the copy: the world no
+    // longer fits anywhere and stays where it is.
+    let mut moved = forge.clone();
+    moved.mc_version = "1.20.4".into();
+    data.store.update(&moved).await.unwrap();
+    std::fs::remove_dir_all(forge_game.join("saves/Create World")).unwrap();
+    let report = run(&data, &locations, |_| shared_only(&[ImportShared::Worlds])).await;
+    let worlds = outcome(&report, &shared(ImportShared::Worlds));
+    assert_eq!((worlds.copied, worlds.left), (0, 3));
+    assert_eq!(
+        (worlds.status, worlds.reason),
+        (OutcomeStatus::Failed, Some(OutcomeReason::NeedsInstance))
+    );
+    assert!(
+        worlds_everywhere(&data.store)
+            .await
+            .values()
+            .all(Vec::is_empty)
+    );
+}
+
+/// A world the player renamed in the other launcher is still the one that came over.
+#[tokio::test]
+async fn a_world_renamed_there_does_not_come_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = home(dir.path());
+    let locations = Locations::under(&root, Os::Windows);
+    let data = data().await;
+    run(&data, &locations, everything).await;
+    let worlds_before = worlds_everywhere(&data.store).await;
+    let saves = root.join("AppData/Roaming/.minecraft/saves");
+    std::fs::rename(saves.join("Create World"), saves.join("Create World 2")).unwrap();
+    let report = run(&data, &locations, |_| shared_only(&[ImportShared::Worlds])).await;
+    assert_eq!(worlds_everywhere(&data.store).await, worlds_before);
+    assert_eq!(outcome(&report, &shared(ImportShared::Worlds)).copied, 0);
+
+    // A copy kept beside the world there is a world of its own, though: it comes over.
+    let survival = saves.join("Survival");
+    let backup = saves.join("Survival - Kopya");
+    std::fs::create_dir_all(backup.join("region")).unwrap();
+    std::fs::copy(survival.join("level.dat"), backup.join("level.dat")).unwrap();
+    let report = run(&data, &locations, |_| shared_only(&[ImportShared::Worlds])).await;
+    assert_eq!(outcome(&report, &shared(ImportShared::Worlds)).copied, 1);
+    let fabric = instance_named(&data.store, "Benim modlarım").await;
+    assert_eq!(
+        names_in(&data.store.game_dir(&fabric.id).unwrap().join("saves")),
+        ["Survival", "Survival - Kopya"]
+    );
 }
 
 #[tokio::test]
 async fn the_projects_instances_own_settings_stay_and_nothing_is_replaced() {
     let dir = tempfile::tempdir().unwrap();
     let root = home(dir.path());
+    // The player's survival world was last played on the version Projects plays.
+    world(
+        &root.join("AppData/Roaming/.minecraft/saves"),
+        "Survival",
+        Some("26.1.2"),
+        &["vanilla"],
+    );
     let data = data().await;
     let projects_game = data.store.game_dir(&data.official.id).unwrap();
     write(&projects_game.join("options.txt"), "lang:en_us\n");
@@ -708,14 +896,24 @@ async fn the_projects_instances_own_settings_stay_and_nothing_is_replaced() {
         "lang:en_us\n"
     );
     // Their own "Survival" stays; the imported one gets a free name. With no Forge instance
-    // made, the Forge world goes to Projects too.
+    // made, the Forge world stays where it is: Projects would open it without its mods.
     assert_eq!(
         std::fs::read(projects_game.join("saves/Survival/level.dat")).unwrap(),
         b"a different world"
     );
     assert_eq!(
         names_in(&projects_game.join("saves")),
-        ["Create World", "Old", "Survival", "Survival (2)"]
+        ["Survival", "Survival (2)"]
+    );
+    let worlds = outcome(&report, &shared(ImportShared::Worlds));
+    assert_eq!(
+        (worlds.status, worlds.copied, worlds.left, worlds.reason),
+        (
+            OutcomeStatus::Partial,
+            1,
+            2,
+            Some(OutcomeReason::NeedsInstance)
+        )
     );
 }
 

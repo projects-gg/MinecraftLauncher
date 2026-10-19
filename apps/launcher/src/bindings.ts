@@ -2015,6 +2015,8 @@ export type IssueKind =
 
 export type ItemOutcome = {
 	sourceId: string,
+	/**  The launcher it came from (the summary names it). */
+	sourceKind: SourceKind,
 	item: ItemRef,
 	/**  The profile's or instance's name; empty for shared data. */
 	label: string,
@@ -3233,7 +3235,12 @@ export type OutcomeReason =
 /**  Its loader or version cannot be installed here. */
 "unsupported" | 
 /**  A world is open in a running game. */
-"inUse";
+"inUse" | 
+/**
+ *  A world was last played with a Minecraft version or loader no instance here has (its own
+ *  was not brought over): it comes with that instance, never into one it would not open in.
+ */
+"needsInstance";
 
 export type OutcomeStatus = 
 /**  Everything came over. */

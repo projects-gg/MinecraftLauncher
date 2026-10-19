@@ -15,10 +15,13 @@ import {
   failureDetails,
   fits,
   LARGE_BYTES,
+  LAUNCHER_NAMES,
+  measureKeys,
   measuring,
   profileKey,
   profileMeta,
   requestOf,
+  rowsKey,
   rowsOf,
   selectedBytes,
   sharedKey,
@@ -235,9 +238,55 @@ describe("import rows", () => {
   });
 });
 
+// E2E3: a profile that turned up within a minute of the last measurement was never measured, so
+// its row kept its skeleton and "Aktar" stayed off.
+describe("import measurements", () => {
+  const later = profile("version:Fabric 1.21.5", { name: "Fabric 1.21.5", minecraft: "1.21.5" });
+  const grown = { ...minecraft, profiles: [...minecraft.profiles, later] };
+
+  it("are made again when a profile turns up, once its rows hold still", () => {
+    expect(rowsKey(grown)).not.toBe(rowsKey(minecraft));
+    // A world that turns up changes what the worlds weigh.
+    const shared = minecraft.shared;
+    expect(shared && rowsKey({ ...minecraft, shared: { ...shared, worlds: 4 } })).not.toBe(
+      rowsKey(minecraft),
+    );
+    // The same profiles in another order are the same rows.
+    expect(rowsKey({ ...minecraft, profiles: [...minecraft.profiles].reverse() })).toBe(
+      rowsKey(minecraft),
+    );
+    const first = { minecraft: rowsKey(minecraft), curseforge: rowsKey(curseforge) };
+    // A source seen for the first time is measured at once.
+    expect(measureKeys(first, {})).toEqual(first);
+    // A changed one keeps its last rows until the change settles, then gets its new ones.
+    const changed = { ...first, minecraft: rowsKey(grown) };
+    expect(measureKeys(changed, first)).toEqual(first);
+    expect(measureKeys(changed, changed)).toEqual(changed);
+  });
+
+  it("let the new row wait for its size, never for ever", () => {
+    const grownScan = scan({ sources: [grown, curseforge] });
+    const sizes = measures(1 * GB);
+    const newRow = (upToDate?: Set<string>) =>
+      rowsOf(grownScan, sizes, upToDate)[0]?.profiles.find((r) => r.profile.id === later.id);
+    // Under the last measurement it waits: "Aktar" holds while it is ticked.
+    expect(newRow()?.bytes).toBeUndefined();
+    const rows = rowsOf(grownScan, sizes);
+    const ticks = defaultTicks(rows, 100 * GB, 2 * GB);
+    expect(ticks.has(profileKey("minecraft", later.id))).toBe(true);
+    expect(measuring(rows, ticks)).toBe(true);
+    // A measurement of the rows it has now that does not know it: it is gone, it weighs nothing.
+    const upToDate = new Set(["minecraft", "curseforge"]);
+    expect(newRow(upToDate)?.bytes).toBe(0);
+    const settled = rowsOf(grownScan, sizes, upToDate);
+    expect(measuring(settled, defaultTicks(settled, 100 * GB, 2 * GB))).toBe(false);
+  });
+});
+
 function outcome(extra: Partial<ItemOutcome>): ItemOutcome {
   return {
     sourceId: "minecraft",
+    sourceKind: "tLauncher",
     item: { type: "shared", kind: "options" },
     label: "",
     status: "done",
@@ -309,6 +358,61 @@ describe("import summary", () => {
     ]);
     expect(lines[3]?.params).toEqual({ name: "Fabric 1.21.4", count: 17 });
     expect(lines[3]?.more).toEqual([{ key: "outcome.profileLeftMods", params: { count: 3 } }]);
+    // Shared lines say which launcher their things came from; a profile is named by itself.
+    expect(lines.map((l) => l.source)).toEqual([
+      "tLauncher",
+      "tLauncher",
+      "tLauncher",
+      undefined,
+      undefined,
+      "tLauncher",
+    ]);
+  });
+
+  it("say where worlds went and why some stayed in the other launcher", () => {
+    const worlds = (extra: Partial<ItemOutcome>) =>
+      summaryLines(report([outcome({ item: { type: "shared", kind: "worlds" }, ...extra })]))[0];
+    // One instance: named without a count.
+    const one = worlds({
+      sourceId: "tlauncher-folder",
+      copied: 1,
+      destinations: [{ instanceId: "forge", instanceName: "Forge 1.20.1", count: 1 }],
+    });
+    expect(one?.more).toEqual([
+      { key: "outcome.worldsInOne", params: { name: "Forge 1.20.1", count: 1 } },
+    ]);
+    // Worlds whose version or loader no instance here plays stay there.
+    const some = worlds({
+      status: "partial",
+      copied: 2,
+      left: 1,
+      reason: "needsInstance",
+      destinations: [
+        { instanceId: "fabric", instanceName: "Benim modlarım", count: 1 },
+        { instanceId: "vanilla", instanceName: "Minecraft 1.21.1", count: 1 },
+      ],
+    });
+    expect([some?.tone, some?.more.map((m) => m.key)]).toEqual([
+      "partial",
+      ["outcome.worldsIn", "outcome.worldsIn", "outcome.leftBecause.needsInstance"],
+    ]);
+    const none = worlds({ status: "failed", copied: 0, left: 2, reason: "needsInstance" });
+    expect([none?.tone, none?.key]).toEqual(["failed", "outcome.needsInstance"]);
+  });
+
+  it("keep two launchers' alike lines apart", () => {
+    const lines = summaryLines(
+      report([
+        outcome({ item: { type: "shared", kind: "servers" }, copied: 1 }),
+        outcome({
+          sourceId: "tlauncher-folder",
+          item: { type: "shared", kind: "servers" },
+          copied: 1,
+        }),
+        outcome({ sourceId: "prism", sourceKind: "prism", item: { type: "profile", id: "x" } }),
+      ]),
+    );
+    expect(new Set(lines.map((l) => l.id)).size).toBe(3);
   });
 
   it("folds what was cancelled into one line and names the run", () => {
@@ -407,6 +511,18 @@ describe("import words", () => {
             outcome({ status: "failed", reason: "inUse" }),
             outcome({ status: "failed", reason: "failed" }),
             outcome({
+              item: { type: "shared", kind: "worlds" },
+              status: "failed",
+              reason: "needsInstance",
+            }),
+            outcome({
+              item: { type: "shared", kind: "worlds" },
+              status: "partial",
+              left: 1,
+              reason: "needsInstance",
+              destinations: [{ instanceId: "a", instanceName: "A", count: 1 }],
+            }),
+            outcome({
               item: { type: "profile", id: "a" },
               label: "A",
               status: "partial",
@@ -436,6 +552,22 @@ describe("import words", () => {
         .flatMap((row) => profileMeta(row).map((p) => p.key)),
     ];
     expect(used.filter((key) => !tr.has(key))).toEqual([]);
+    // Every launcher can be named as where things came from, in both languages.
+    for (const kind of Object.keys(LAUNCHER_NAMES)) {
+      expect(tr.has(`from.${kind}`) && tr.has(`at.${kind}`)).toBe(true);
+    }
+  });
+
+  it("name each launcher with the suffixes its name takes in Turkish", () => {
+    for (const [kind, name] of Object.entries(LAUNCHER_NAMES)) {
+      const from = trImport.from[kind as keyof typeof trImport.from];
+      const at = trImport.at[kind as keyof typeof trImport.at];
+      expect(from.startsWith(`${name}'`)).toBe(true);
+      expect(from).toMatch(/'(dan|den|tan|ten)$/);
+      // "TLauncher'dan" → "TLauncher'daki", "Modrinth App'ten" → "Modrinth App'teki".
+      expect(at).toBe(from.replace(/n$/, "ki"));
+      expect(enImport.from[kind as keyof typeof enImport.from]).toContain(name);
+    }
   });
 
   it("speak to the player informally and never show technical words", () => {

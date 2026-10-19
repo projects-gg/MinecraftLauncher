@@ -5,23 +5,37 @@ import { AnimatePresence, motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { copyErrorDetails } from "@/features/content/jobs";
 import { swap } from "@/features/modcenter/motion";
-import type { ImportReport, ImportShared } from "@/lib/api";
+import type { ImportReport, ImportShared, SourceKind } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 import { formatBytes, formatPercent, uiLocale } from "@/lib/format";
 import { importPercent, useImportJob } from "./import-job";
-import { failureDetails, type SummaryLine, summaryLines, summaryTitle, type Tone } from "./model";
+import {
+  failureDetails,
+  PLACE_KEYS,
+  type SummaryLine,
+  summaryLines,
+  summaryTitle,
+  type Tone,
+} from "./model";
 
 const capitalize = (text: string) => text.charAt(0).toLocaleUpperCase(uiLocale()) + text.slice(1);
+const tidy = (text: string) => text.replace(/\s+/g, " ").trim();
 
-/** A summary sentence in words; `what` names the item inside it ("dünyaların"). */
+/**
+ * A summary sentence in words: `what` names the item inside it ("TLauncher'daki dünyaların"),
+ * `source` the launcher its things came from ("TLauncher'dan").
+ */
 function lineText(
   t: TFunction,
   key: string,
   params: Record<string, string | number>,
   what?: ImportShared,
+  source?: SourceKind,
 ) {
-  const words = what ? t(`import.what.${what}`) : "";
-  return t(`import.${key}`, { ...params, what: words, What: capitalize(words) });
+  const from = source ? t(`import.from.${source}`) : "";
+  const at = source ? t(`import.at.${source}`) : "";
+  const words = what ? tidy(t(`import.what.${what}`, { from, at })) : "";
+  return tidy(t(`import.${key}`, { ...params, from, at, what: words, What: capitalize(words) }));
 }
 
 const TONE_ICON: Record<Tone, { icon: typeof CheckCircle; className: string }> = {
@@ -41,21 +55,18 @@ export function ImportSummary({ report }: { report: ImportReport }) {
         const { icon: Icon, className } = TONE_ICON[line.tone];
         // Where the worlds went reads as one list; the other follow-ups are sentences.
         const places = line.more
-          .filter((m) => m.key === "outcome.worldsIn")
+          .filter((m) => PLACE_KEYS.includes(m.key))
           .map((m) => lineText(t, m.key, m.params, m.what))
           .join(", ");
         const sentences = line.more
-          .filter((m) => m.key !== "outcome.worldsIn")
+          .filter((m) => !PLACE_KEYS.includes(m.key))
           .map((m) => lineText(t, m.key, m.params, m.what));
         const more = [places && `${places}.`, ...sentences].filter(Boolean).join(" ");
         return (
-          <li
-            key={`${line.key}:${line.what ?? ""}:${JSON.stringify(line.params)}`}
-            className="flex gap-2.5 text-[13.5px] leading-snug text-bone-100"
-          >
+          <li key={line.id} className="flex gap-2.5 text-[13.5px] leading-snug text-bone-100">
             <Icon size={18} weight="fill" className={cn("mt-px shrink-0", className)} aria-hidden />
             <span className="min-w-0">
-              {lineText(t, line.key, line.params, line.what)}
+              {lineText(t, line.key, line.params, line.what, line.source)}
               {more ? <span className="block text-[12.5px] text-ash-400">{more}</span> : null}
             </span>
           </li>

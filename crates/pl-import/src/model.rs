@@ -259,6 +259,9 @@ pub enum OutcomeReason {
     Unsupported,
     /// A world is open in a running game.
     InUse,
+    /// A world was last played with a Minecraft version or loader no instance here has (its own
+    /// was not brought over): it comes with that instance, never into one it would not open in.
+    NeedsInstance,
 }
 
 /// Where an item's copies went.
@@ -274,6 +277,8 @@ pub struct Destination {
 #[serde(rename_all = "camelCase")]
 pub struct ItemOutcome {
     pub source_id: String,
+    /// The launcher it came from (the summary names it).
+    pub source_kind: SourceKind,
     pub item: ItemRef,
     /// The profile's or instance's name; empty for shared data.
     pub label: String,
@@ -290,9 +295,10 @@ pub struct ItemOutcome {
 }
 
 impl ItemOutcome {
-    pub(crate) fn new(source_id: &str, item: ItemRef, label: impl Into<String>) -> Self {
+    pub(crate) fn new(source: &ImportSource, item: ItemRef, label: impl Into<String>) -> Self {
         Self {
-            source_id: source_id.to_owned(),
+            source_id: source.id.clone(),
+            source_kind: source.kind,
             item,
             label: label.into(),
             status: OutcomeStatus::Done,

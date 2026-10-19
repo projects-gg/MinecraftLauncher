@@ -35,7 +35,7 @@ pub(crate) fn shared_sizes(root: &Path) -> SharedSizes {
             .map(|w| tree_size(&w.path, &no_skip))
             .sum(),
         resource_packs: entries_size(&root.join("resourcepacks"), crate::detect::is_pack_entry),
-        shader_packs: tree_size(&root.join("shaderpacks"), &no_skip),
+        shader_packs: shader_size(&root.join("shaderpacks")),
         screenshots: entries_size(
             &root.join("screenshots"),
             crate::detect::is_screenshot_entry,
@@ -50,6 +50,22 @@ fn entries_size(dir: &Path, keep: fn(&std::fs::DirEntry) -> bool) -> u64 {
                 .flatten()
                 .filter(keep)
                 .map(|e| tree_size(&e.path(), &no_skip))
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
+/// Shader packs with the settings each brings (`<pack>.txt`).
+fn shader_size(dir: &Path) -> u64 {
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(crate::detect::is_pack_entry)
+                .map(|e| {
+                    let settings = dir.join(format!("{}.txt", e.file_name().to_string_lossy()));
+                    tree_size(&e.path(), &no_skip) + tree_size(&settings, &no_skip)
+                })
                 .sum()
         })
         .unwrap_or(0)
