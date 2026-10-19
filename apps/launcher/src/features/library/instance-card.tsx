@@ -107,8 +107,9 @@ export function InstanceCard({
                 {instance.state === "needsInstall" ? (
                   <Chip>{t("instances.needsInstall")}</Chip>
                 ) : null}
+                {/* Neutral like the mod center's "Güncelleme var": jade means success. */}
                 {instance.state === "needsUpdate" ? (
-                  <Chip tone="jade">{t("instances.needsUpdate")}</Chip>
+                  <Chip>{t("instances.needsUpdate")}</Chip>
                 ) : null}
               </div>
             </div>
