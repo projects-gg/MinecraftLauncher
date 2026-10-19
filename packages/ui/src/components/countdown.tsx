@@ -16,6 +16,11 @@ function parts(ms: number) {
  * Event countdown in Tektur digits. Units are localized by the caller. The day cell shows only
  * while there are days left ("00 gün" said nothing); hours stay even at zero. It stops ticking
  * while nobody can see it (`usePerf().unseen`) and is right again the moment it is back.
+ *
+ * Every cell is as wide as its digits (tabular, so "00" and "59" match) and a longer unit hangs
+ * into the gap after it ("dakika", "saniye"): the digit groups keep one rhythm in every language
+ * and the timer never grows next to the card's "Katıl" (POLISH2). Units stay about as short as
+ * the digits (design guide §7).
  */
 export function Countdown({
   to,
@@ -48,7 +53,9 @@ export function Countdown({
           <span className="font-display text-[22px] leading-none font-semibold text-bone-50 tabular-nums">
             {String(value).padStart(2, "0")}
           </span>
-          <span className="mt-1 text-[11px] font-medium text-ash-300">{unit}</span>
+          <span className="mt-1 w-0 text-[11px] font-medium whitespace-nowrap text-ash-300">
+            {unit}
+          </span>
         </div>
       ))}
     </div>
