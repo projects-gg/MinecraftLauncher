@@ -1,5 +1,6 @@
 import { enAfkAlerts } from "./en-afk-alerts";
 import { enAfkConnect } from "./en-afk-connect";
+import { enAfkReconnect } from "./en-afk-reconnect";
 import { enDisk } from "./en-disk";
 import { enEventJoin } from "./en-event-join";
 import { enFriendGroups } from "./en-friend-groups";
@@ -248,6 +249,7 @@ export const en: DeepPartial<Strings> = {
   placement: enPlacement,
   playOpen: enPlayOpen,
   afkConnect: enAfkConnect,
+  afkReconnect: enAfkReconnect,
   import: enImport,
   modSets: enModSets,
   keyClash: enKeyClash,
