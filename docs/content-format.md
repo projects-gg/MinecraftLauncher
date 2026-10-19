@@ -41,6 +41,12 @@ the launcher config: see [News feed (Discord bot)](#news-feed-discord-bot).
   only `[A-Za-z0-9._-/]`.
 - Forward compatibility: readers ignore unknown fields; every optional field has a default;
   unknown enum values map to a catch-all (`unknown`, or the safest value where noted).
+- Writers keep what they do not understand: when Studio republishes a document it read (the
+  index, the config, the news, pack manifests, mod sets, channel files), the fields, enum values
+  and omitted defaults its model does not know go back unchanged; unknown fields of an object
+  whose content changed (`sha256`, `sha1`, `hashes` or `version`) cannot, and Studio refuses to
+  publish then, as it does over a live document of a higher `schema`. Studio builds older than
+  this rule drop unknown fields, so a new field is safe once the team's Studios are updated.
 - `schema` (root, config, news) is a major version, bumped only for incompatible changes;
   readers refuse documents whose schema is higher than they support. Additive changes never
   bump it. An incompatible redesign gets a new tree (`v2/`).

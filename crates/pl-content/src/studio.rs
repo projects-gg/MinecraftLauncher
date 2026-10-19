@@ -4,10 +4,18 @@
 //! [`DocRef`]s and assembles the next [`RootIndex`] with a higher `sequence`.
 //! Publish order: upload [`BuiltIndex::documents`] (and any media/files) first, then
 //! `index.json.sig`, then `index.json` last; the index is the commit point.
+//!
+//! The `…_with` setters and [`IndexBuilder::build_with`] let Studio edit a document's JSON before
+//! its bytes are made: it puts back what its model does not know (fields a newer Studio wrote),
+//! so a republish keeps them. The reference and the signature cover the edited bytes, and the
+//! edited document must still read as its type.
 
 use std::collections::BTreeMap;
 
 use jiff::Timestamp;
+use serde::Serialize;
+use serde::de::DeserializeOwned;
+use serde_json::Value;
 
 use crate::error::{Error, Result};
 use crate::fsutil::sha256_hex;
@@ -103,6 +111,16 @@ impl IndexBuilder {
     /// catalog without sets drops the reference. The catalog must be valid
     /// ([`ModSetCatalog::validate`]).
     pub fn set_mod_sets(&mut self, catalog: Option<&ModSetCatalog>) -> Result<Option<DocRef>> {
+        self.set_mod_sets_with(catalog, |_| {})
+    }
+
+    /// [`Self::set_mod_sets`] with `edit` applied to the catalog's JSON (see the module
+    /// documentation).
+    pub fn set_mod_sets_with(
+        &mut self,
+        catalog: Option<&ModSetCatalog>,
+        edit: impl FnOnce(&mut Value),
+    ) -> Result<Option<DocRef>> {
         let Some(catalog) = catalog.filter(|catalog| !catalog.sets.is_empty()) else {
             if let Some(previous) = self.mod_sets.take() {
                 self.documents.remove(&previous.path);
@@ -110,7 +128,7 @@ impl IndexBuilder {
             return Ok(None);
         };
         catalog.validate()?;
-        let doc = PublishedDoc::new(String::new(), to_canonical_json(catalog)?);
+        let doc = PublishedDoc::new(String::new(), edited_json(catalog, edit)?);
         let doc = PublishedDoc {
             path: mod_sets_path(&doc.sha256),
             ..doc
@@ -122,7 +140,17 @@ impl IndexBuilder {
 
     /// Serializes the launcher config to `config/launcher.<sha256>.json`.
     pub fn set_config(&mut self, config: &LauncherConfig) -> Result<DocRef> {
-        let bytes = to_canonical_json(config)?;
+        self.set_config_with(config, |_| {})
+    }
+
+    /// [`Self::set_config`] with `edit` applied to the config's JSON (see the module
+    /// documentation).
+    pub fn set_config_with(
+        &mut self,
+        config: &LauncherConfig,
+        edit: impl FnOnce(&mut Value),
+    ) -> Result<DocRef> {
+        let bytes = edited_json(config, edit)?;
         let doc = PublishedDoc::new(String::new(), bytes);
         let doc = PublishedDoc {
             path: config_path(&doc.sha256),
@@ -135,7 +163,16 @@ impl IndexBuilder {
 
     /// Serializes the news feed to `news/news.<sha256>.json`.
     pub fn set_news(&mut self, news: &NewsFeed) -> Result<DocRef> {
-        let bytes = to_canonical_json(news)?;
+        self.set_news_with(news, |_| {})
+    }
+
+    /// [`Self::set_news`] with `edit` applied to the feed's JSON (see the module documentation).
+    pub fn set_news_with(
+        &mut self,
+        news: &NewsFeed,
+        edit: impl FnOnce(&mut Value),
+    ) -> Result<DocRef> {
+        let bytes = edited_json(news, edit)?;
         let doc = PublishedDoc::new(String::new(), bytes);
         let doc = PublishedDoc {
             path: news_path(&doc.sha256),
@@ -155,10 +192,21 @@ impl IndexBuilder {
         name: impl Into<String>,
         manifest: &PackManifest,
     ) -> Result<PackRef> {
+        self.set_pack_with(name, manifest, |_| {})
+    }
+
+    /// [`Self::set_pack`] with `edit` applied to the manifest's JSON (see the module
+    /// documentation).
+    pub fn set_pack_with(
+        &mut self,
+        name: impl Into<String>,
+        manifest: &PackManifest,
+        edit: impl FnOnce(&mut Value),
+    ) -> Result<PackRef> {
         manifest.validate()?;
         let id = manifest.projects.pack_id.clone();
         let path = pack_manifest_path(&id, &manifest.version_id)?;
-        let doc = PublishedDoc::new(path, to_canonical_json(manifest)?);
+        let doc = PublishedDoc::new(path, edited_json(manifest, edit)?);
         let existing = self.packs.iter().find(|p| p.id == id);
         let previous = existing.map(|p| p.manifest.clone());
         let default = existing.is_some_and(|p| p.default);
@@ -216,6 +264,16 @@ impl IndexBuilder {
     /// Builds the index. The sequence defaults to `max(previous + 1, unix seconds of
     /// generated_at)`, so it keeps increasing even when Studio lost track of the last one.
     pub fn build(self, generated_at: Timestamp) -> Result<BuiltIndex> {
+        self.build_with(generated_at, |_| {})
+    }
+
+    /// [`Self::build`] with `edit` applied to the index's JSON before it is signed (see the
+    /// module documentation). [`BuiltIndex::index`] is the typed index without the edit.
+    pub fn build_with(
+        self,
+        generated_at: Timestamp,
+        edit: impl FnOnce(&mut Value),
+    ) -> Result<BuiltIndex> {
         let config = self
             .config
             .ok_or_else(|| Error::Invalid("the index needs a launcher config".into()))?;
@@ -243,7 +301,10 @@ impl IndexBuilder {
             mod_sets: self.mod_sets,
         };
         index.validate()?;
-        let index_bytes = to_canonical_json(&index)?;
+        let index_bytes = edited_json(&index, edit)?;
+        let edited: RootIndex =
+            serde_json::from_slice(&index_bytes).map_err(|e| Error::json("edited index", e))?;
+        edited.validate()?;
         Ok(BuiltIndex {
             index,
             index_bytes,
@@ -262,6 +323,19 @@ impl IndexBuilder {
         self.documents.insert(doc.path.clone(), doc);
         doc_ref
     }
+}
+
+/// Canonical bytes of `document` after `edit` changed its JSON. The result must still read as
+/// `T`: an edit can add what `T` does not know, never break what it does.
+fn edited_json<T: Serialize + DeserializeOwned>(
+    document: &T,
+    edit: impl FnOnce(&mut Value),
+) -> Result<Vec<u8>> {
+    let mut value = serde_json::to_value(document).map_err(|e| Error::json("document", e))?;
+    edit(&mut value);
+    let bytes = to_canonical_json(&value)?;
+    serde_json::from_slice::<T>(&bytes).map_err(|e| Error::json("edited document", e))?;
+    Ok(bytes)
 }
 
 /// `config/launcher.<sha256>.json`
@@ -461,6 +535,65 @@ mod tests {
         broken.sets[0].name = String::new();
         let mut refused = IndexBuilder::new();
         assert!(refused.set_mod_sets(Some(&broken)).is_err());
+    }
+
+    #[test]
+    fn edits_reach_the_bytes_the_reference_and_the_signature() {
+        let mark = |key: &'static str| move |json: &mut Value| json[key] = serde_json::json!(true);
+        let mut builder = IndexBuilder::new();
+        let config = builder
+            .set_config_with(&sample_config(None), mark("futureConfig"))
+            .unwrap();
+        let news = builder
+            .set_news_with(&sample_news(None), mark("futureNews"))
+            .unwrap();
+        let pack = builder
+            .set_pack_with("Projects", &sample_manifest_offline("projects"), |json| {
+                json["projects"]["futurePack"] = serde_json::json!(1);
+            })
+            .unwrap();
+        let built = builder
+            .build_with(at("2026-10-15T12:00:00Z"), mark("futureIndex"))
+            .unwrap();
+        let document = |path: &str| -> Value {
+            let doc = built.documents.iter().find(|d| d.path == path).unwrap();
+            assert_eq!(sha256_hex(&doc.bytes), doc.sha256);
+            serde_json::from_slice(&doc.bytes).unwrap()
+        };
+        assert_eq!(document(&config.path)["futureConfig"], true);
+        assert_eq!(document(&news.path)["futureNews"], true);
+        assert_eq!(document(&pack.manifest.path)["projects"]["futurePack"], 1);
+        let config_doc = built
+            .documents
+            .iter()
+            .find(|d| d.path == config.path)
+            .unwrap();
+        assert_eq!(config.size, config_doc.bytes.len() as u64);
+
+        // The signed bytes are the edited index, canonical like any other.
+        let index: Value = serde_json::from_slice(&built.index_bytes).unwrap();
+        assert_eq!(index["futureIndex"], true);
+        assert_eq!(to_canonical_json(&index).unwrap(), built.index_bytes);
+        let key = SigningKey::from_bytes(&[7; 32]);
+        let (signature, _) = built.sign(&key).unwrap();
+        verify_index(&built.index_bytes, &signature, &[key.verifying_key()]).unwrap();
+
+        // An edit that breaks what the type knows is refused.
+        let mut broken = IndexBuilder::new();
+        assert!(
+            broken
+                .set_config_with(&sample_config(None), |json| json["hero"] = Value::Null)
+                .is_err()
+        );
+        let mut broken = IndexBuilder::new();
+        broken.set_config(&sample_config(None)).unwrap();
+        broken.set_news(&sample_news(None)).unwrap();
+        assert!(
+            broken
+                .build_with(at("2026-10-15T12:00:00Z"), |json| json["schema"] =
+                    99.into())
+                .is_err()
+        );
     }
 
     #[test]
