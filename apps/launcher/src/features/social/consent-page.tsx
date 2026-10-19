@@ -2,7 +2,7 @@
 // Discord sign-in. Pressing the button after reading is the consent. While the browser is open
 // the button gives way to a calm waiting card; an expired or failed sign-in says so in place.
 import { ArrowSquareOut, WarningCircle } from "@phosphor-icons/react";
-import { Button } from "@pl/ui";
+import { Button, useAmbientMotion } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -52,6 +52,10 @@ function Cluster() {
 export function ConsentPage() {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
+  // The Discord tile breathes while somebody uses this window. The player confirms in the
+  // browser meanwhile, so the window rests and the tile settles: an endless pulse kept a covered
+  // window drawing every frame (OPT2).
+  const breathe = useAmbientMotion();
   const auth = useSocialUi((s) => s.view.auth);
   const signInUrl = useSocialUi((s) => s.signInUrl);
   const error = useSocialUi((s) => s.signInError);
@@ -108,8 +112,12 @@ export function ConsentPage() {
               {...rise(reduce)}
             >
               <motion.span
-                animate={reduce ? undefined : { opacity: [1, 0.55, 1] }}
-                transition={{ duration: 1.8, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }}
+                animate={breathe ? { opacity: [1, 0.55, 1] } : { opacity: 1 }}
+                transition={
+                  breathe
+                    ? { duration: 1.8, repeat: Number.POSITIVE_INFINITY, ease: "easeInOut" }
+                    : { duration: 0.4, ease: "easeOut" }
+                }
               >
                 <DiscordTile size={44} />
               </motion.span>

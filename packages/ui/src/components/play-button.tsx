@@ -107,7 +107,8 @@ const FACE_EASE = [0.33, 1, 0.68, 1] as const;
  * they are ready the fill is full and, while the game opens, a light crosses it and its glow
  * swells every 2.4 s ("Açılıyor"); when the game's window is on screen the gold gives way to the
  * dark "Oyunda" face with one jade bloom. The faces are stacked layers that cross-fade (a
- * gradient cannot transition). Ambient effects respect reduced motion and Performance mode.
+ * gradient cannot transition). Ambient effects respect reduced motion and Performance mode, and
+ * the sheen crosses only while somebody uses the window.
  */
 export function PlayButton({
   state,
@@ -358,7 +359,7 @@ export function PlayButton({
           </motion.span>
           {/* Inner bevel */}
           <span className="chamfer absolute inset-[2px] [--cut:11px] shadow-[inset_0_1px_0_rgb(255_255_255/0.55),inset_0_-2px_0_rgb(63_10_10/0.35)]" />
-          {isGold && ambient ? <PlaySheen /> : null}
+          {isGold ? <PlaySheen active={ambient} /> : null}
         </span>
         <span className="relative z-10 flex size-full flex-col items-center justify-center">
           <AnimatePresence mode="popLayout" initial={false}>
@@ -458,19 +459,23 @@ const SHEEN_CYCLE_MS = 7000;
 const SHEEN_SWEEP_MS = 1960;
 
 /**
- * The periodic sheen across a ready OYNA. Each crossing is a short animation of its own and
- * nothing runs in between: as one endless keyframe animation that stood still for 5 s of every
- * 7, it kept the compositor drawing a frame per display refresh on every page, about 6 % of a
- * CPU core for a picture that did not change (OPT1).
+ * The periodic sheen across a ready OYNA, while ambient motion may run (`active`: somebody uses
+ * the window, which is in sight). Each crossing is a short animation of its own and nothing runs
+ * in between: as one endless keyframe animation that stood still for 5 s of every 7, it kept the
+ * compositor drawing a frame per display refresh on every page, about 6 % of a CPU core for a
+ * picture that did not change (OPT1); crossing every 7 s for as long as the window was open kept
+ * the Library at 16 % of a core at 144 Hz (OPT2). When it stops, a crossing under way finishes:
+ * a band that vanished mid-button read as a glitch. Leaving the gold face (OYNA pressed) ends it.
  */
-function PlaySheen() {
+function PlaySheen({ active }: { active: boolean }) {
   const ref = useRef<HTMLSpanElement>(null);
+  const crossing = useRef<Animation | undefined>(undefined);
+  useEffect(() => () => crossing.current?.cancel(), []);
   useEffect(() => {
     const sheen = ref.current;
-    if (!sheen || typeof sheen.animate !== "function") return;
-    let crossing: Animation | undefined;
+    if (!active || !sheen || typeof sheen.animate !== "function") return;
     const cross = () => {
-      crossing = sheen.animate(
+      crossing.current = sheen.animate(
         [
           { transform: "translateX(0) skewX(-18deg)" },
           { transform: "translateX(560%) skewX(-18deg)" },
@@ -486,9 +491,8 @@ function PlaySheen() {
     return () => {
       window.clearTimeout(first);
       window.clearInterval(every);
-      crossing?.cancel();
     };
-  }, []);
+  }, [active]);
   return (
     <span
       ref={ref}

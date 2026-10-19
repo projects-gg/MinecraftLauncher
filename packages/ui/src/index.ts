@@ -57,7 +57,14 @@ export {
 export { cn } from "./lib/cn";
 export * from "./motion";
 export { guardNativeContextMenu, keepsNativeMenu, type MenuDocument } from "./native-menu";
-export { PerfProvider, useAmbientMotion, useInteractionMotion, usePerf } from "./perf";
+export {
+  PerfProvider,
+  useAmbientMotion,
+  useInteractionMotion,
+  useLiveMotion,
+  usePerf,
+  useResting,
+} from "./perf";
 export {
   ARM_MS,
   guardElapsed,

@@ -1,4 +1,4 @@
-import { EmberField, type ParticleKind, useAmbientMotion } from "@pl/ui";
+import { EmberField, type ParticleKind, useAmbientMotion, useLiveMotion } from "@pl/ui";
 import { motion, useMotionValue, useSpring, useTransform } from "motion/react";
 import { useEffect } from "react";
 import { PerfAdvisor } from "@/features/perf/perf-advisor";
@@ -17,7 +17,10 @@ export function Backdrop({
   variant: "home" | "page";
   particles: ParticleKind;
 }) {
+  // The drift waits for the player (it rests with the embers); the parallax only ever follows
+  // the pointer, so it needs no rest of its own and holds where it is when the player stops.
   const ambient = useAmbientMotion();
+  const follow = useLiveMotion();
   const px = useMotionValue(0);
   const py = useMotionValue(0);
   const sx = useSpring(px, { stiffness: 40, damping: 18 });
@@ -26,7 +29,7 @@ export function Backdrop({
   const y = useTransform(sy, (v) => v * -8);
 
   useEffect(() => {
-    if (!ambient) {
+    if (!follow) {
       px.set(0);
       py.set(0);
       return;
@@ -37,7 +40,7 @@ export function Backdrop({
     };
     window.addEventListener("pointermove", onMove, { passive: true });
     return () => window.removeEventListener("pointermove", onMove);
-  }, [ambient, px, py]);
+  }, [follow, px, py]);
 
   const home = variant === "home";
 
@@ -59,7 +62,10 @@ export function Backdrop({
               on Home), the tray or a game no longer snaps the art back to its starting size,
               and it moves on from the same frame afterwards. It also pauses on the other pages,
               where this layer is invisible: a running animation kept the compositor drawing
-              every frame there (OPT1: ~6 % of a CPU core with the OYNA sheen). */}
+              every frame there (OPT1: ~6 % of a CPU core with the OYNA sheen). And it pauses
+              while the player rests: it runs on the compositor, but every frame of it is a
+              composite of the whole scene under the glass blurs, at the display's rate (OPT2).
+              It moves a few pixels a second at most, so holding and moving on never shows. */}
           <img
             src={imageUrl}
             alt=""

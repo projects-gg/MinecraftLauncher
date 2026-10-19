@@ -71,7 +71,12 @@
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 
   --animate-shimmer: shimmer 1.8s linear infinite;
-  --animate-kenburns: kenburns 48s ease-in-out infinite alternate;
+  /* The art's drift moves a few pixels a second, so it steps 20 times a second (960 steps in
+     48 s, a twentieth of a pixel each, which nobody can see): a smooth curve changed the picture
+     on every display refresh, and each change is a composite of the whole scene under the glass
+     blurs. With the embers (60 a second) Home draws ~76 frames a second at 144 Hz instead of 144,
+     the drift alone 20 instead of 144 (OPT2). */
+  --animate-kenburns: kenburns 48s steps(960, jump-none) infinite alternate;
   --animate-indeterminate: indeterminate 1.5s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 
   /* A 35%-wide fill sweeping across its track. */

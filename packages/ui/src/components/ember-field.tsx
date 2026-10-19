@@ -1,6 +1,7 @@
+import { useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn";
-import { useAmbientMotion } from "../perf";
+import { useAmbientMotion, useResting } from "../perf";
 
 interface Ember {
   x: number;
@@ -63,16 +64,30 @@ function emberSprite(hue: number): HTMLCanvasElement | null {
 }
 
 /**
- * When the embers start they fade in, and when they pause (a game starts, Performance mode) they
+ * When the embers start they fade in. When they pause (a game starts, Performance mode) they
  * keep drifting while they fade out: a scene that went still in one frame read as a glitch, most
- * of all right after OYNA.
+ * of all right after OYNA. When the player rests (no input for a while, another window in front)
+ * no new ember rises and the field fades slowly, a fire dying down; the next input brings it back
+ * from wherever the fade got to, with the embers still in the air.
  */
-const FADE_IN_MS = 900;
-const FADE_OUT_MS = 600;
+export const EMBER_FADE_IN_MS = 900;
+export const EMBER_FADE_OUT_MS = 600;
+export const EMBER_REST_FADE_MS = 2400;
 
 /**
- * Rising ember particles on a single canvas. Runs outside React state; pauses whenever
- * ambient motion is not allowed (reduced motion, Performance mode, hidden window, game running).
+ * How strong the field is `dtMs` after it was `strength` (0 to 1): rising towards 1 while it may
+ * draw (`on`), else sinking towards 0, slowly while the player rests.
+ */
+export function emberStrength(strength: number, dtMs: number, on: boolean, resting: boolean) {
+  if (on) return Math.min(1, strength + dtMs / EMBER_FADE_IN_MS);
+  return Math.max(0, strength - dtMs / (resting ? EMBER_REST_FADE_MS : EMBER_FADE_OUT_MS));
+}
+
+/**
+ * Rising ember particles on a single canvas. Runs outside React state; draws only while ambient
+ * motion may run (not under reduced motion, in Performance mode, with the window hidden, while
+ * the game runs or while the player rests). Between those times nothing runs at all: no frame is
+ * requested and the canvas is hidden.
  */
 export function EmberField({
   kind = "embers",
@@ -84,30 +99,33 @@ export function EmberField({
   className?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const enabled = useAmbientMotion() && kind !== "none";
-  // The newest drawing loop: one still fading out stops when a newer one starts.
-  const generation = useRef(0);
+  const on = useAmbientMotion() && kind !== "none";
+  const resting = useResting();
+  const reduce = useReducedMotion() ?? false;
+  // What the drawing loop heads for, read on every frame.
+  const wish = useRef({ on, resting, reduce });
+  // Starts the drawing loop unless it runs (a loop still fading out turns around instead).
+  const wake = useRef<(() => void) | null>(null);
   // Drawing or fading out: the canvas stays shown until the fade ended.
   const [live, setLive] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas || !enabled) return;
+    if (!canvas || kind === "none") return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    const mine = ++generation.current;
-    setLive(true);
-    const born = performance.now();
-    // Set when the embers pause: from then on they fade out and the loop ends.
-    let fadeFrom = 0;
 
+    let running = false;
+    let frame = 0;
     let width = 0;
     let height = 0;
     let dpr = 1;
-    let frame = 0;
-    let last = performance.now();
+    let last = 0;
     // When the next frame may draw (see FRAME_MS).
     let next = 0;
+    let strength = 0;
+    // The first top-up of a new loop spreads embers over the scene; later ones rise from below.
+    let seeded = false;
     const particles: Ember[] = [];
     const snow = kind === "snow";
 
@@ -147,40 +165,48 @@ export function EmberField({
       };
     };
 
-    const end = (clear: boolean) => {
+    const stop = () => {
+      running = false;
       cancelAnimationFrame(frame);
-      observer.disconnect();
-      if (clear) ctx.clearRect(0, 0, width, height);
+      ctx.clearRect(0, 0, width, height);
+      particles.length = 0;
+      setLive(false);
     };
 
     const tick = (now: number) => {
-      // A newer loop draws on this canvas now.
-      if (generation.current !== mine) {
-        end(false);
+      if (!canvas.isConnected) {
+        stop();
         return;
       }
       frame = requestAnimationFrame(tick);
       if (now < next - FRAME_SLACK_MS) return;
-      let strength = Math.min(1, (now - born) / FADE_IN_MS);
-      if (fadeFrom) {
-        strength *= 1 - (now - fadeFrom) / FADE_OUT_MS;
-        if (strength <= 0 || !canvas.isConnected) {
-          end(true);
-          setLive(false);
-          return;
-        }
-      }
       // Keep the 60 Hz rhythm (a 144 Hz display draws every 2nd or 3rd frame); after a stall
       // start over instead of drawing several frames back to back.
       next = now - next > FRAME_MS ? now + FRAME_MS : next + FRAME_MS;
-      const dt = Math.min(0.05, (now - last) / 1000);
+      const dtMs = Math.min(50, now - last);
       last = now;
+      const want = wish.current;
+      // Reduced motion came on: nothing drifts out, the embers go at once.
+      if (!want.on && want.reduce) {
+        stop();
+        return;
+      }
+      strength = emberStrength(strength, dtMs, want.on, want.resting);
+      if (!want.on && strength <= 0) {
+        stop();
+        return;
+      }
+      const dt = dtMs / 1000;
       ctx.clearRect(0, 0, width, height);
       ctx.globalCompositeOperation = snow ? "source-over" : "lighter";
 
-      // Fading out, nothing new rises.
-      while (!fadeFrom && particles.length < target()) {
-        particles.push(spawn(particles.length < target() / 2));
+      // Winding down, nothing new rises.
+      if (want.on) {
+        const count = target();
+        while (particles.length < count) {
+          particles.push(spawn(!seeded && particles.length < count / 2));
+        }
+        if (count > 0) seeded = true;
       }
 
       for (let i = particles.length - 1; i >= 0; i--) {
@@ -192,7 +218,9 @@ export function EmberField({
         p.y += p.vy * dt;
         const t = p.life / p.maxLife;
         if (t >= 1 || p.y < -20 || p.y > height + 20) {
-          particles[i] = spawn(false);
+          // A spent ember is replaced while the field is on; winding down, it is simply gone.
+          if (want.on) particles[i] = spawn(false);
+          else particles.splice(i, 1);
           continue;
         }
         // Fade in fast, out slow; embers flicker.
@@ -215,24 +243,36 @@ export function EmberField({
       ctx.globalAlpha = 1;
     };
 
+    const start = () => {
+      if (running) return;
+      running = true;
+      strength = 0;
+      seeded = false;
+      last = performance.now();
+      next = 0;
+      setLive(true);
+      frame = requestAnimationFrame(tick);
+    };
+
     resize();
+    // Also sizes the canvas when it shows (it is hidden while nothing draws).
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
-    frame = requestAnimationFrame(tick);
+    wake.current = start;
+    if (wish.current.on) start();
 
     return () => {
-      // Gone with its page, or under reduced motion: at once. Paused: they fade out.
-      const reduce =
-        typeof window.matchMedia === "function" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      if (!canvas.isConnected || reduce) {
-        end(true);
-        if (generation.current === mine) setLive(false);
-        return;
-      }
-      fadeFrom = performance.now();
+      wake.current = null;
+      observer.disconnect();
+      // Gone with its page, or a new kind of particles: at once.
+      if (running) stop();
     };
-  }, [enabled, kind, density]);
+  }, [kind, density]);
+
+  useEffect(() => {
+    wish.current = { on, resting, reduce };
+    if (on) wake.current?.();
+  }, [on, resting, reduce]);
 
   return (
     <canvas
@@ -240,7 +280,7 @@ export function EmberField({
       aria-hidden
       className={cn(
         "pointer-events-none absolute inset-0 size-full",
-        !enabled && !live && "hidden",
+        !on && !live && "hidden",
         className,
       )}
     />

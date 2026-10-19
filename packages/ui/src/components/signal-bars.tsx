@@ -1,6 +1,6 @@
 import { type CSSProperties, useState } from "react";
 import { cn } from "../lib/cn";
-import { useAmbientMotion } from "../perf";
+import { useLiveMotion } from "../perf";
 
 /**
  * What a server's bars say: `pending` while the ping is out, `online` (lit by latency), `offline`
@@ -38,9 +38,11 @@ export function signalLevel(latencyMs: number | null | undefined): number {
  * Server reachability as the game's server-list connection bars, in gold: five pixel bars with a
  * one-pixel drop shadow, drawn on whole pixels (15 × 8). While the ping is out a highlight sweeps
  * back and forth (the game's "pinging" frames, 100 ms each, stopped after 12 s); an answer that
- * arrives on screen fills the bars from the left once. Both run only while ambient motion may
- * (not hidden, in the tray, in game, in Performance mode or under reduced motion); otherwise the
- * final picture shows at once. Decorative: the words beside it carry the state.
+ * arrives on screen fills the bars from the left once. Both run only while live motion may (not
+ * hidden, in the tray, in game, in Performance mode or under reduced motion); otherwise the final
+ * picture shows at once. They show what happens, so they do not wait for the player as the
+ * ambient motion does, and both end by themselves. Decorative: the words beside it carry the
+ * state.
  */
 export function SignalBars({
   state,
@@ -51,7 +53,7 @@ export function SignalBars({
   latencyMs?: number | null;
   className?: string;
 }) {
-  const motion = useAmbientMotion();
+  const motion = useLiveMotion();
   const level = state === "online" ? signalLevel(latencyMs) : 0;
   // The fill plays when the answer comes in while the bars are on screen, never on mount.
   const [shown, setShown] = useState(state);

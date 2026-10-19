@@ -14,6 +14,7 @@ import { commands } from "@/bindings";
 import { api } from "@/lib/api";
 import i18n, { currentLanguage, startLanguage } from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
+import { playerActive, trackPlayerIdle, usePlayerIdle } from "@/lib/player-idle";
 import { prepareSounds } from "@/lib/sound";
 import {
   isWindowAway,
@@ -40,31 +41,47 @@ if (isTauri()) {
   });
 }
 
+// Ambient motion plays while somebody uses the window (lib/player-idle.ts); the window coming
+// back from the tray or the taskbar is the player coming back.
+trackPlayerIdle(window);
+onWindowAwayChange((away) => {
+  if (!away) playerActive();
+});
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 60_000, refetchOnWindowFocus: false, retry: 1 },
   },
 });
 
+// Made once: a change of the motion state below renders only what reads it, not the whole app
+// (the player resting and coming back changes it every few seconds).
+const app = (
+  <TooltipProvider>
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+      <Toaster />
+    </QueryClientProvider>
+  </TooltipProvider>
+);
+
 function Providers() {
   const performanceMode = usePrefs((s) => s.performanceMode);
   // Ambient motion stops while the game runs (the GPU belongs to Minecraft then), while nobody
-  // can see it (tray, minimized) and under the mandatory update screen, which covers the app.
+  // can see it (tray, minimized) and under the mandatory update screen, which covers the app;
+  // it winds down while nobody uses the window.
   const gameRunning = useLaunch((s) => s.phase.kind === "running");
   const away = useWindowAway();
   const updateLocked = useUpdate((s) => s.mandatory && s.phase !== "idle");
+  const resting = usePlayerIdle();
   return (
     <PerfProvider
       performanceMode={performanceMode}
       ambientPaused={gameRunning || away || updateLocked}
+      resting={resting}
       unseen={away}
     >
-      <TooltipProvider>
-        <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
-          <Toaster />
-        </QueryClientProvider>
-      </TooltipProvider>
+      {app}
     </PerfProvider>
   );
 }

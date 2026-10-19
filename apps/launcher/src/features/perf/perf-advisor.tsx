@@ -3,7 +3,7 @@
 // already runs lighter) and hears about it on Home; a weak one is measured on Home and offered
 // the mode only when the frames really are slow. Both wait for a calm moment: Home after its
 // first-arrival motion, the window in sight, no game, not in do-not-disturb.
-import { toast, usePerf } from "@pl/ui";
+import { toast, usePerf, useResting } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { shouldShowOnboarding } from "@/features/onboarding/onboarding";
@@ -137,11 +137,13 @@ export function PerfAdvisor({ home }: { home: boolean }) {
     else if (next === "none") prefs.set("perfAdvice", "done");
   }, [active, step, info]);
 
-  // `ambientPaused`: the window is in the tray, minimized or hidden, or the game runs.
+  // `ambientPaused`: the window is in the tray, minimized or hidden, or the game runs. `resting`:
+  // nobody uses the window, so the motion whose frames are measured does not run.
   const { ambientPaused } = usePerf();
+  const resting = useResting();
   const idle = useLaunch((s) => s.phase.kind === "idle");
   const dnd = useSocialUi((s) => s.view.me?.status === "dnd");
-  const calm = active && home && !onboarding && !ambientPaused && idle && !dnd;
+  const calm = active && home && !onboarding && !ambientPaused && !resting && idle && !dnd;
   const task =
     advice === "switched" ? "tell" : step === "measure" && !performanceMode ? "measure" : null;
 

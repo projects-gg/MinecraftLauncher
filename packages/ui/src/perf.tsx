@@ -32,14 +32,30 @@ const PerfContext = createContext<PerfState>({
   unseen: false,
 });
 
+/**
+ * Nobody is using the window right now: no input for a few seconds, or another window took the
+ * focus. Its own context: it changes whenever the player stops or starts moving, and only the
+ * ambient motion reads it (the many `usePerf` readers do not render again for it).
+ */
+const RestingContext = createContext(false);
+
 export function PerfProvider({
   performanceMode,
   ambientPaused = false,
+  resting = false,
   unseen = false,
   children,
 }: {
   performanceMode: boolean;
   ambientPaused?: boolean;
+  /**
+   * Nobody is using the window right now (no input for a while, another window in front).
+   * Ambient motion winds down slowly then (the embers die down, the art's drift holds) and comes
+   * back with the next input. Every frame on screen costs WebView2 a composite of the whole
+   * scene, so motion that ran for as long as the window was visible cost 89 % of a CPU core at
+   * 144 Hz with nobody looking (OPT2).
+   */
+  resting?: boolean;
   /** The window is out of sight (the page being hidden is added here). */
   unseen?: boolean;
   children: ReactNode;
@@ -71,9 +87,11 @@ export function PerfProvider({
   // component did not already calm down itself jump to their end, while fades still play.
   return (
     <PerfContext.Provider value={value}>
-      <MotionConfig nonce={nonce} reducedMotion="user">
-        {children}
-      </MotionConfig>
+      <RestingContext.Provider value={resting}>
+        <MotionConfig nonce={nonce} reducedMotion="user">
+          {children}
+        </MotionConfig>
+      </RestingContext.Provider>
     </PerfContext.Provider>
   );
 }
@@ -82,8 +100,29 @@ export function usePerf() {
   return useContext(PerfContext);
 }
 
-/** True when decorative, user-independent motion (embers, Ken Burns, sheen) may run. */
+/** True while nobody uses the window (see `PerfProvider`'s `resting`). */
+export function useResting() {
+  return useContext(RestingContext);
+}
+
+/**
+ * True when decorative, user-independent motion (embers, the art's drift, the OYNA sheen) may
+ * run: not under reduced motion or in Performance mode, the window in sight, no game, and
+ * somebody using the window.
+ */
 export function useAmbientMotion() {
+  const reduce = useReducedMotion();
+  const { performanceMode, ambientPaused } = usePerf();
+  const resting = useResting();
+  return !reduce && !performanceMode && !ambientPaused && !resting;
+}
+
+/**
+ * True when motion that follows something happening (a ping under way, an answer arriving, the
+ * pointer) may run: not under reduced motion or in Performance mode, the window in sight, no
+ * game. Unlike ambient motion it does not wait for the player; what drives it also ends it.
+ */
+export function useLiveMotion() {
   const reduce = useReducedMotion();
   const { performanceMode, ambientPaused } = usePerf();
   return !reduce && !performanceMode && !ambientPaused;
