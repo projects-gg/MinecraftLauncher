@@ -190,7 +190,8 @@ const triggerClass =
 
 function Badge({ text }: { text: string }) {
   return (
-    <Chip tone="gold" className="ml-2 h-[18px] px-1.5 align-[1px] text-[10.5px]">
+    // 11 px: nothing is smaller (design guide §3).
+    <Chip tone="gold" className="ml-2 h-[18px] px-1.5 align-[1px] text-[11px]">
       {text}
     </Chip>
   );
