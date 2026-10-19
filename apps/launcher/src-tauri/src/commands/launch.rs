@@ -94,9 +94,15 @@ pub enum LaunchEventView {
     /// The network is unreachable: continuing with installed files only.
     Offline,
     Launching,
+    /// The game process started; its window is not on screen yet ("Açılıyor").
+    #[serde(rename_all = "camelCase")]
     Started {
         pid: Option<u32>,
+        /// The first start with this version and loader: it takes longer (the loader prepares
+        /// its caches, the computer reads every new file once).
+        first_start: bool,
     },
+    /// The game's window is on screen ("Oyunda"); sent once, never after the exit.
     WindowShown,
     #[serde(rename_all = "camelCase")]
     Exited {
@@ -1089,17 +1095,34 @@ async fn prepare_and_spawn(
     // 5. Spawn and supervise. The last moment a cancel can still stop the game.
     checkpoint(cancel)?;
     let _ = on_event.send(LaunchEventView::Launching);
+    // The first start of this version and loader takes longer; the opening state says so when it
+    // lasts. Read before this start is recorded below.
+    let set = pl_content::VersionSets::new(&game_dir)
+        .active_info()
+        .await
+        .ok()
+        .flatten();
+    let first_start = pl_mc::launch::window::first_start(
+        set.as_ref().map(|set| pl_mc::launch::window::PlayedSet {
+            minecraft: &set.minecraft,
+            loader: &set.loader,
+            played: set.last_played_at.is_some(),
+        }),
+        &instance.mc_version,
+        instance.loader.kind.modrinth_name().unwrap_or_default(),
+        instance.last_played_at.is_some(),
+    );
     let events = on_event.clone();
     let log_app = app.clone();
     let log_instance = instance.id.clone();
-    // Friends see the game: started, the server read from the log, exited.
+    // Friends see the game: in game once its window shows, the server read from the log, exited.
     let game_presence =
         crate::commands::social::GamePresence::new(&state.social, options.quick_play.as_ref());
     let on_game: pl_mc::launch::GameEventFn = Arc::new(move |event| {
         game_presence.on_event(&event);
         let view = match event {
-            GameEvent::Started { pid } => Some(LaunchEventView::Started { pid }),
-            GameEvent::WindowLikelyShown => Some(LaunchEventView::WindowShown),
+            GameEvent::Started { pid } => Some(LaunchEventView::Started { pid, first_start }),
+            GameEvent::WindowShown => Some(LaunchEventView::WindowShown),
             // Sent after the exit, once the suspects are found in the mods folder.
             GameEvent::Crashed(_) => None,
             GameEvent::Line(line) => {
@@ -1132,6 +1155,8 @@ async fn prepare_and_spawn(
             java_major: Some(installed.java.info.major),
             required_java: resolved.java_version.as_ref().and_then(|j| j.major_version),
             max_memory_mb: Some(memory.max_mb),
+            // "Oyunda" once the game's own window is on screen (Windows; elsewhere its log).
+            window_probe: pl_desktop::game_window::probe(),
         },
         on_game,
     )
@@ -1143,6 +1168,12 @@ async fn prepare_and_spawn(
         instance_id: instance.id.clone(),
         process: Arc::clone(&process),
     });
+    // A cancel that came while the game was being started (after the last checkpoint, before it
+    // counted as running) still stops it: the page already went back to OYNA.
+    if cancel.is_cancelled() {
+        tracing::info!("launch cancelled while the game started; closing it");
+        process.kill();
+    }
     drop(preparing);
     // "Ekran görüntülerini panoya kopyala": the folder is watched while this game runs.
     crate::shot_copy::session_started(app, &game_dir, on_event.clone(), settings.copy_screenshots);
@@ -1231,15 +1262,23 @@ async fn prepare_and_spawn(
     Ok(())
 }
 
-/// Stops the launch being prepared: downloads and installs end within a second and the launch
-/// reports `Cancelled`. Its entry stays until it has really stopped (cleanup and data moves keep
-/// waiting until then).
+/// Stops the launch: while it is prepared, downloads and installs end within a second and the
+/// launch reports `Cancelled` (its entry stays until it has really stopped, so cleanup and data
+/// moves keep waiting until then); once the game started but before its window is on screen
+/// ("Açılıyor"), the game is closed and reports its exit, never a crash. A game whose window
+/// showed is never closed from here.
 #[tauri::command]
 #[specta::specta]
 pub fn launch_cancel(state: State<'_, AppState>) {
     if let Some(launch) = state.launch_cancel.lock().as_ref() {
         tracing::info!("launch cancel requested");
         launch.cancel.cancel();
+    }
+    if let Some(running) = state.running.lock().as_ref()
+        && !running.process.window_shown()
+    {
+        tracing::info!("launch cancelled while the game was opening; closing it");
+        running.process.kill();
     }
 }
 

@@ -128,13 +128,23 @@ fn check_soon(app: &AppHandle) {
 }
 
 /// Whether the page may be suspended now: nothing it does in the background would wait for the
-/// window to come back. A running game is fine (its exit wakes the page).
+/// window to come back. A running game is fine (its exit wakes the page) once its window showed;
+/// while it opens, the page answers its window (and reports that as its duty until it did).
 #[cfg(windows)]
 fn may_suspend(app: &AppHandle) -> Result<(), &'static str> {
     let state = app.state::<crate::state::AppState>();
     if state.launch_cancel.lock().is_some() {
         // Progress, the Java question and the long-install notification come from the page.
         return Err("a launch is being prepared");
+    }
+    if state
+        .running
+        .lock()
+        .as_ref()
+        .is_some_and(|game| !game.process.window_shown())
+    {
+        // "Oyunda", the presence and the launcher's own window answer the game's window.
+        return Err("the game is opening");
     }
     if state.afk.any_active() {
         // The page tells when an AFK account stops for good.

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn";
 import { useAmbientMotion } from "../perf";
 
@@ -63,6 +63,14 @@ function emberSprite(hue: number): HTMLCanvasElement | null {
 }
 
 /**
+ * When the embers start they fade in, and when they pause (a game starts, Performance mode) they
+ * keep drifting while they fade out: a scene that went still in one frame read as a glitch, most
+ * of all right after OYNA.
+ */
+const FADE_IN_MS = 900;
+const FADE_OUT_MS = 600;
+
+/**
  * Rising ember particles on a single canvas. Runs outside React state; pauses whenever
  * ambient motion is not allowed (reduced motion, Performance mode, hidden window, game running).
  */
@@ -77,12 +85,21 @@ export function EmberField({
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const enabled = useAmbientMotion() && kind !== "none";
+  // The newest drawing loop: one still fading out stops when a newer one starts.
+  const generation = useRef(0);
+  // Drawing or fading out: the canvas stays shown until the fade ended.
+  const [live, setLive] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas || !enabled) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    const mine = ++generation.current;
+    setLive(true);
+    const born = performance.now();
+    // Set when the embers pause: from then on they fade out and the loop ends.
+    let fadeFrom = 0;
 
     let width = 0;
     let height = 0;
@@ -130,9 +147,29 @@ export function EmberField({
       };
     };
 
+    const end = (clear: boolean) => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      if (clear) ctx.clearRect(0, 0, width, height);
+    };
+
     const tick = (now: number) => {
+      // A newer loop draws on this canvas now.
+      if (generation.current !== mine) {
+        end(false);
+        return;
+      }
       frame = requestAnimationFrame(tick);
       if (now < next - FRAME_SLACK_MS) return;
+      let strength = Math.min(1, (now - born) / FADE_IN_MS);
+      if (fadeFrom) {
+        strength *= 1 - (now - fadeFrom) / FADE_OUT_MS;
+        if (strength <= 0 || !canvas.isConnected) {
+          end(true);
+          setLive(false);
+          return;
+        }
+      }
       // Keep the 60 Hz rhythm (a 144 Hz display draws every 2nd or 3rd frame); after a stall
       // start over instead of drawing several frames back to back.
       next = now - next > FRAME_MS ? now + FRAME_MS : next + FRAME_MS;
@@ -141,7 +178,10 @@ export function EmberField({
       ctx.clearRect(0, 0, width, height);
       ctx.globalCompositeOperation = snow ? "source-over" : "lighter";
 
-      while (particles.length < target()) particles.push(spawn(particles.length < target() / 2));
+      // Fading out, nothing new rises.
+      while (!fadeFrom && particles.length < target()) {
+        particles.push(spawn(particles.length < target() / 2));
+      }
 
       for (let i = particles.length - 1; i >= 0; i--) {
         const p = particles[i];
@@ -158,7 +198,7 @@ export function EmberField({
         // Fade in fast, out slow; embers flicker.
         const fade = Math.min(1, t * 6) * (1 - t) ** 1.4;
         const flicker = snow ? 1 : 0.75 + Math.sin(p.phase * 3.1) * 0.25;
-        const alpha = fade * flicker;
+        const alpha = fade * flicker * strength;
         if (snow) {
           ctx.fillStyle = `rgba(243, 235, 221, ${alpha * 0.75})`;
           ctx.beginPath();
@@ -181,9 +221,16 @@ export function EmberField({
     frame = requestAnimationFrame(tick);
 
     return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      ctx.clearRect(0, 0, width, height);
+      // Gone with its page, or under reduced motion: at once. Paused: they fade out.
+      const reduce =
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!canvas.isConnected || reduce) {
+        end(true);
+        if (generation.current === mine) setLive(false);
+        return;
+      }
+      fadeFrom = performance.now();
     };
   }, [enabled, kind, density]);
 
@@ -193,7 +240,7 @@ export function EmberField({
       aria-hidden
       className={cn(
         "pointer-events-none absolute inset-0 size-full",
-        !enabled && "hidden",
+        !enabled && !live && "hidden",
         className,
       )}
     />

@@ -1,12 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { LaunchEvent } from "@/lib/api";
 
 // The launch store with its surroundings stubbed: the backend, the AFK check and the UI bits.
-const launch = vi.fn(async () => {});
+const launch = vi.fn(async (..._args: unknown[]) => {});
+const cancelLaunch = vi.fn(async () => {});
 const confirm = vi.fn(async () => true);
 vi.mock("@/lib/api", () => ({
   api: {
-    launch: (...args: unknown[]) => launch(...(args as [])),
-    cancelLaunch: vi.fn(async () => {}),
+    launch: (...args: unknown[]) => launch(...args),
+    cancelLaunch: () => cancelLaunch(),
   },
 }));
 vi.mock("@/features/accounts/afk-guard", () => ({
@@ -35,7 +37,18 @@ vi.mock("./prefs", () => ({
   usePrefs: { getState: () => ({ selectInstance: vi.fn(), onGameStart: "keep" }) },
 }));
 
-const { useLaunch } = await import("./launch");
+const { isOpening, useLaunch } = await import("./launch");
+
+/** Starts a launch whose backend events the test sends. */
+async function startLaunch(): Promise<(event: LaunchEvent) => void> {
+  let send: ((event: LaunchEvent) => void) | undefined;
+  launch.mockImplementationOnce(async (...args: unknown[]) => {
+    send = args[1] as (event: LaunchEvent) => void;
+  });
+  await useLaunch.getState().play("projects");
+  if (!send) throw new Error("the launch did not start");
+  return send;
+}
 
 describe("useLaunch.play", () => {
   beforeEach(() => {
@@ -65,6 +78,73 @@ describe("useLaunch.play", () => {
     confirm.mockResolvedValueOnce(false);
     await useLaunch.getState().play("projects");
     expect(launch).not.toHaveBeenCalled();
+    expect(useLaunch.getState().phase.kind).toBe("idle");
+  });
+});
+
+describe("the game opening (PLAY1)", () => {
+  beforeEach(() => {
+    launch.mockClear();
+    cancelLaunch.mockClear();
+    useLaunch.setState({ phase: { kind: "idle" }, instanceId: null });
+  });
+
+  it("says Açılıyor from the files being ready until the game's window shows", async () => {
+    const send = await startLaunch();
+    send({ type: "launching" });
+    expect(isOpening(useLaunch.getState().phase)).toBe(true);
+    send({ type: "started", pid: 42, firstStart: true });
+    const opening = useLaunch.getState().phase;
+    expect(opening).toMatchObject({ kind: "running", shown: false, firstStart: true });
+    expect(isOpening(opening)).toBe(true);
+    send({ type: "windowShown" });
+    const playing = useLaunch.getState().phase;
+    expect(playing).toMatchObject({ kind: "running", shown: true });
+    expect(isOpening(playing)).toBe(false);
+    send({ type: "exited", code: 0, runtimeSecs: 30 });
+    expect(useLaunch.getState().phase.kind).toBe("idle");
+  });
+
+  it("goes back to OYNA when the game closes before its window", async () => {
+    const send = await startLaunch();
+    send({ type: "started", pid: 42, firstStart: false });
+    send({ type: "exited", code: 1, runtimeSecs: 3 });
+    expect(useLaunch.getState().phase.kind).toBe("idle");
+  });
+
+  it("closes a game that opens on İptal; the next launch waits for its exit", async () => {
+    const send = await startLaunch();
+    send({ type: "started", pid: 42, firstStart: false });
+    await useLaunch.getState().cancel();
+    expect(cancelLaunch).toHaveBeenCalledTimes(1);
+    expect(useLaunch.getState().phase.kind).toBe("idle");
+    // OYNA again while the closed game is still exiting: nothing starts yet.
+    const again = useLaunch.getState().play("projects");
+    await Promise.resolve();
+    expect(launch).toHaveBeenCalledTimes(1);
+    send({ type: "exited", code: null, runtimeSecs: 1 });
+    await again;
+    expect(launch).toHaveBeenCalledTimes(2);
+    // The closed game's exit did not touch the new launch.
+    expect(useLaunch.getState().phase.kind).toBe("working");
+  });
+
+  it("never closes a game whose window is on screen", async () => {
+    const send = await startLaunch();
+    send({ type: "started", pid: 42, firstStart: false });
+    send({ type: "windowShown" });
+    await useLaunch.getState().cancel();
+    expect(cancelLaunch).not.toHaveBeenCalled();
+    expect(useLaunch.getState().phase).toMatchObject({ kind: "running", shown: true });
+  });
+
+  it("follows a game whose window came before İptal could close it", async () => {
+    const send = await startLaunch();
+    send({ type: "started", pid: 42, firstStart: false });
+    await useLaunch.getState().cancel();
+    send({ type: "windowShown" });
+    expect(useLaunch.getState().phase).toMatchObject({ kind: "running", shown: true });
+    send({ type: "exited", code: 0, runtimeSecs: 60 });
     expect(useLaunch.getState().phase.kind).toBe("idle");
   });
 });

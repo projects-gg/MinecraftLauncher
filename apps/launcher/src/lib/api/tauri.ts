@@ -317,7 +317,7 @@ function launchEvent(e: LaunchEventView): LaunchEvent {
     case "exited":
       return { type: "exited", code: e.code, runtimeSecs: e.runtimeSecs };
     case "started":
-      return { type: "started", pid: e.pid };
+      return { type: "started", pid: e.pid, firstStart: e.firstStart };
     case "modsNotice":
       return {
         type: "modsNotice",

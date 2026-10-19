@@ -147,9 +147,11 @@ export const commands = {
 	loaderVersions: (loader: LoaderKind, mcVersion: string) => typedError<LoaderVersionView[], CmdError>(__TAURI_INVOKE("loader_versions", { loader, mcVersion })),
 	launchInstance: (instanceId: string, autoJoin: boolean, settings: LaunchSettings, onEvent: Channel<LaunchEventView>) => typedError<null, CmdError>(__TAURI_INVOKE("launch_instance", { instanceId, autoJoin, settings, onEvent })),
 	/**
-	 *  Stops the launch being prepared: downloads and installs end within a second and the launch
-	 *  reports `Cancelled`. Its entry stays until it has really stopped (cleanup and data moves keep
-	 *  waiting until then).
+	 *  Stops the launch: while it is prepared, downloads and installs end within a second and the
+	 *  launch reports `Cancelled` (its entry stays until it has really stopped, so cleanup and data
+	 *  moves keep waiting until then); once the game started but before its window is on screen
+	 *  ("Açılıyor"), the game is closed and reports its exit, never a crash. A game whose window
+	 *  showed is never closed from here.
 	 */
 	launchCancel: () => __TAURI_INVOKE<void>("launch_cancel"),
 	gameKill: () => __TAURI_INVOKE<void>("game_kill"),
@@ -1955,7 +1957,16 @@ export type LaunchEventView = {
 	type: "progress",
 } & ProgressView | 
 /**  The network is unreachable: continuing with installed files only. */
-({ type: "offline" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "launching" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "started"; pid: number | null }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; name?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "windowShown" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "exited"; code: number | null; runtimeSecs: number }) & { changedFiles?: never; changelog?: never; count?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; version?: never } | {
+({ type: "offline" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "launching" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+/**  The game process started; its window is not on screen yet ("Açılıyor"). */
+({ type: "started"; pid: number | null; 
+/**
+ *  The first start with this version and loader: it takes longer (the loader prepares
+ *  its caches, the computer reads every new file once).
+ */
+firstStart: boolean }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; name?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+/**  The game's window is on screen ("Oyunda"); sent once, never after the exit. */
+({ type: "windowShown" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | ({ type: "exited"; code: number | null; runtimeSecs: number }) & { changedFiles?: never; changelog?: never; count?: never; firstStart?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; version?: never } | {
 	type: "crashed",
 } & CrashView | {
 	type: "error",
@@ -1964,9 +1975,9 @@ export type LaunchEventView = {
  *  `launch_cancel` stopped the launch before the game started (downloads and installs end,
  *  partial files go); the command bar simply returns to idle.
  */
-({ type: "cancelled" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+({ type: "cancelled" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
 /**  The official pack moved to a new version during this launch. */
-({ type: "packUpdated"; name: string; version: string; changelog: string | null; changedFiles: number }) & { code?: never; count?: never; minecraft?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never } | 
+({ type: "packUpdated"; name: string; version: string; changelog: string | null; changedFiles: number }) & { code?: never; count?: never; firstStart?: never; minecraft?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never } | 
 /**
  *  Changes the player made in the mods folder were adopted, files could not be read, or the
  *  mods folder was installed again (a non-blocking notice; details in the mod center).
@@ -1978,7 +1989,7 @@ export type LaunchEventView = {
  *  The pack no longer offers this Minecraft version: the installed set was launched as it
  *  is. `recommended` is the version the pack recommends now.
  */
-({ type: "packVersionDropped"; minecraft: string; recommended: string | null }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; name?: never; pid?: never; recent?: never; runtimeSecs?: never; version?: never } | 
+({ type: "packVersionDropped"; minecraft: string; recommended: string | null }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; name?: never; pid?: never; recent?: never; runtimeSecs?: never; version?: never } | 
 /**
  *  The mods would certainly stop the game: it was not started (the player chooses
  *  "Onar", "Yine de başlat" or "İptal").
@@ -2003,12 +2014,12 @@ export type LaunchEventView = {
  *  files (at most three, newest first) for thumbnails; their folder is allowed in the asset
  *  protocol.
  */
-({ type: "newScreenshots"; count: number; recent: string[] }) & { changedFiles?: never; changelog?: never; code?: never; minecraft?: never; name?: never; pid?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
+({ type: "newScreenshots"; count: number; recent: string[] }) & { changedFiles?: never; changelog?: never; code?: never; firstStart?: never; minecraft?: never; name?: never; pid?: never; recommended?: never; runtimeSecs?: never; version?: never } | 
 /**
  *  "Ekran görüntülerini panoya kopyala" could not put a new screenshot on the clipboard
  *  (sent once per session, during the game; the page shows a quiet notice).
  */
-({ type: "screenshotNotCopied" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never };
+({ type: "screenshotNotCopied" }) & { changedFiles?: never; changelog?: never; code?: never; count?: never; firstStart?: never; minecraft?: never; name?: never; pid?: never; recent?: never; recommended?: never; runtimeSecs?: never; version?: never };
 
 /**  Download preferences from Settings → İndirmeler, and how this launch starts. */
 export type LaunchSettings = {
@@ -2986,7 +2997,10 @@ export type PrepareStatusView =
  *  Rich Presence activity (templates from the content config come later).
  */
 export type PresenceContext = {
-	/**  "home" | "library" | "news" | "afk" | "settings" | "downloading" | "playing" */
+	/**
+	 *  "home" | "library" | "news" | "afk" | "settings" | "downloading" | "starting" (the game's
+	 *  window is not on screen yet) | "playing"
+	 */
 	activity: string,
 	instanceName: string | null,
 	mcVersion: string | null,

@@ -10,6 +10,16 @@ describe("taskbarState", () => {
     expect(taskbarState({ launch: 140, jobs: [] })).toEqual({ status: "normal", percent: 100 });
   });
 
+  it("stays busy while the game opens, over other jobs", () => {
+    expect(taskbarState({ launch: null, opening: true, jobs: [] })).toEqual({
+      status: "indeterminate",
+    });
+    expect(taskbarState({ launch: null, opening: true, jobs: [55] })).toEqual({
+      status: "indeterminate",
+    });
+    expect(taskbarState({ launch: null, opening: false, jobs: [] })).toEqual({ status: "none" });
+  });
+
   it("averages other jobs, indeterminate only when none can tell", () => {
     expect(taskbarState({ launch: null, jobs: [20, 60, undefined] })).toEqual({
       status: "normal",

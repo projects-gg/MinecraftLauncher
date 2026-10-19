@@ -1,6 +1,6 @@
 [package]
 name = "pl-desktop"
-description = "Desktop integration without Tauri: projects:// links, desktop shortcuts, shortcut icons, process identity"
+description = "Desktop integration without Tauri: projects:// links, desktop shortcuts, shortcut icons, process identity, the game's window"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -15,9 +15,15 @@ url = { workspace = true }
 specta = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
-# Shell links through IShellLinkW. Only features Tauri's window layer already enables, so the
-# shared `windows` build is reused.
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell"] }
+# Shell links through IShellLinkW, the game's window (game_window). Only features Tauri's window
+# layer already enables, so the shared `windows` build is reused.
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+# Who started the process that owns a game window (a wrapper command's Java).
+sysinfo = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+
+[target.'cfg(windows)'.dev-dependencies]
+# Real windows in the game_window test.
+windows = { version = "0.62", features = ["Win32_Graphics_Gdi", "Win32_System_LibraryLoader"] }

@@ -1,7 +1,9 @@
 //! Starting the game and watching it: output is parsed into [`LogLine`]s and masked
 //! ([`masked_line`]), the last [`MAX_TAIL_LINES`] are kept in memory and everything is written to
 //! `logs/game-<instance>-<timestamp>.log` (capped at [`MAX_LOG_BYTES`]). Events go through a
-//! callback; when the run fails, the crash analyzer produces a [`CrashDiagnosis`].
+//! callback; [`GameEvent::WindowShown`] tells when the game's window is on screen
+//! ([`crate::launch::window`]); when the run fails, the crash analyzer produces a
+//! [`CrashDiagnosis`].
 
 use std::borrow::Cow;
 use std::collections::VecDeque;
@@ -24,6 +26,7 @@ use crate::launch::crash::{
     CrashDiagnosis, CrashInput, analyze_crash, find_crash_report, find_jvm_error_log, is_failure,
 };
 use crate::launch::log::{Log4jParser, LogLine};
+use crate::launch::window::{GIVE_UP_AFTER, ShownBy, WindowProbe, log_marker, probe_interval};
 use crate::mask::mask_secrets;
 use crate::paths::write_atomic;
 
@@ -31,8 +34,6 @@ use crate::paths::write_atomic;
 pub const MAX_TAIL_LINES: usize = 3000;
 /// Size cap of the captured log file.
 pub const MAX_LOG_BYTES: u64 = 8 * 1024 * 1024;
-/// Without a recognizable log line, assume the window is up after this long (legacy rule).
-pub const WINDOW_FALLBACK: Duration = Duration::from_secs(12);
 /// How long to wait for output pipes to close after the process exited.
 const DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
 /// Crash report bytes read for analysis.
@@ -45,8 +46,9 @@ pub enum GameEvent {
         pid: Option<u32>,
     },
     Line(LogLine),
-    /// The game window has most likely appeared (time to hide/minimize the launcher).
-    WindowLikelyShown,
+    /// The game's window is on screen (once per run, never after the exit): "Oyunda", the
+    /// presence and the launcher's own window follow it ([`crate::launch::window`]).
+    WindowShown,
     Exited {
         code: Option<i32>,
         runtime_secs: u64,
@@ -66,6 +68,8 @@ pub struct SpawnOptions {
     pub java_major: Option<u32>,
     pub required_java: Option<u32>,
     pub max_memory_mb: Option<u32>,
+    /// Looks for the game's window while it opens (Windows); without one the log alone tells.
+    pub window_probe: Option<WindowProbe>,
 }
 
 /// Final state of a run.
@@ -158,6 +162,12 @@ struct Shared {
     tail: Mutex<VecDeque<LogLine>>,
     log: Mutex<LogSink>,
     window_shown: AtomicBool,
+    /// A window probe looks too: only the lines logged once the window exists count.
+    probing: bool,
+    /// The game is being closed ([`GameProcess::kill`]) or has exited: its window no longer
+    /// counts as shown.
+    ending: AtomicBool,
+    started: Instant,
     on_event: GameEventFn,
 }
 
@@ -181,7 +191,8 @@ impl Shared {
     fn emit_line(&self, line: LogLine) {
         let line = masked_line(line);
         self.log.lock().write(&line.format());
-        let window = !self.window_shown.load(Ordering::Relaxed) && looks_like_window(&line.message);
+        let window = !self.window_shown.load(Ordering::Relaxed)
+            && log_marker(&line.message).is_some_and(|marker| marker.counts(self.probing));
         {
             let mut tail = self.tail.lock();
             if tail.len() >= MAX_TAIL_LINES {
@@ -191,14 +202,22 @@ impl Shared {
         }
         (self.on_event)(GameEvent::Line(line));
         if window {
-            self.mark_window_shown();
+            self.mark_window_shown(ShownBy::Log);
         }
     }
 
-    fn mark_window_shown(&self) {
-        if !self.window_shown.swap(true, Ordering::SeqCst) {
-            (self.on_event)(GameEvent::WindowLikelyShown);
+    fn mark_window_shown(&self, by: ShownBy) {
+        // Lines read while the game is closed or after its exit (the pipes drain) never make it
+        // "shown".
+        if self.ending.load(Ordering::SeqCst) || self.window_shown.swap(true, Ordering::SeqCst) {
+            return;
         }
+        tracing::info!(
+            ?by,
+            after_ms = self.started.elapsed().as_millis() as u64,
+            "game window shown"
+        );
+        (self.on_event)(GameEvent::WindowShown);
     }
 
     fn tail_text(&self) -> String {
@@ -224,16 +243,6 @@ pub fn launch_program(program: &Path) -> PathBuf {
     } else {
         program.to_path_buf()
     }
-}
-
-/// Log lines printed right around window creation, from LWJGL 2 era versions to today.
-pub fn looks_like_window(message: &str) -> bool {
-    message.contains("Backend library: LWJGL")
-        || message.starts_with("LWJGL Version")
-        || message.contains("Reloading ResourceManager")
-        || message.contains("Sound engine started")
-        || message.contains("OpenAL initialized")
-        || (message.starts_with("Created: ") && message.contains("atlas"))
 }
 
 /// A running (or finished) game.
@@ -294,6 +303,9 @@ impl GameProcess {
             tail: Mutex::new(VecDeque::with_capacity(512)),
             log: Mutex::new(sink),
             window_shown: AtomicBool::new(false),
+            probing: options.window_probe.is_some() && pid.is_some(),
+            ending: AtomicBool::new(false),
+            started,
             on_event,
         });
         (shared.on_event)(GameEvent::Started { pid });
@@ -346,6 +358,11 @@ impl GameProcess {
 
     pub fn is_running(&self) -> bool {
         self.exit.borrow().is_none()
+    }
+
+    /// The game's window has been on screen ([`GameEvent::WindowShown`] was sent).
+    pub fn window_shown(&self) -> bool {
+        self.shared.window_shown.load(Ordering::SeqCst)
     }
 
     /// The last [`MAX_TAIL_LINES`] lines.
@@ -446,23 +463,42 @@ async fn prepare_args(
 }
 
 async fn supervise(mut s: Supervision) {
-    let fallback = tokio::time::sleep(WINDOW_FALLBACK);
-    tokio::pin!(fallback);
+    // While the game opens its window is looked for (the probe, else the log alone tells) and,
+    // after `GIVE_UP_AFTER` without a sign, counted as shown. Nothing runs once it showed.
+    let probe = s.options.window_probe.zip(s.child.id());
+    let look = tokio::time::sleep(probe_interval(Duration::ZERO));
+    tokio::pin!(look);
+    let give_up = tokio::time::sleep(GIVE_UP_AFTER);
+    tokio::pin!(give_up);
     let mut killed = false;
     let status = loop {
+        let opening = !killed && !s.shared.window_shown.load(Ordering::Relaxed);
         tokio::select! {
             status = s.child.wait() => break status,
             _ = s.kill.cancelled(), if !killed => {
                 killed = true;
+                s.shared.ending.store(true, Ordering::SeqCst);
                 if let Err(error) = s.child.start_kill() {
                     tracing::warn!(%error, "could not kill the game");
                 }
             }
-            _ = &mut fallback, if !s.shared.window_shown.load(Ordering::Relaxed) => {
-                s.shared.mark_window_shown();
+            _ = &mut look, if opening && probe.is_some() => {
+                // The log may have told meanwhile; then this was the last look.
+                if let Some((probe, pid)) = probe
+                    && !s.shared.window_shown.load(Ordering::Relaxed)
+                {
+                    if probe(pid) {
+                        s.shared.mark_window_shown(ShownBy::Probe);
+                    } else {
+                        let next = probe_interval(s.started.elapsed());
+                        look.as_mut().reset(tokio::time::Instant::now() + next);
+                    }
+                }
             }
+            _ = &mut give_up, if opening => s.shared.mark_window_shown(ShownBy::GaveUp),
         }
     };
+    s.shared.ending.store(true, Ordering::SeqCst);
     let runtime = s.started.elapsed();
     for reader in s.readers {
         let abort = reader.abort_handle();
@@ -624,15 +660,122 @@ mod tests {
         assert!(started.elapsed() < DRAIN_TIMEOUT, "{:?}", started.elapsed());
     }
 
-    #[test]
-    fn window_markers() {
-        assert!(looks_like_window("Backend library: LWJGL version 3.3.3+5"));
-        assert!(looks_like_window("LWJGL Version: 2.9.4"));
-        assert!(looks_like_window(
-            "Created: 1024x512x4 minecraft:textures/atlas/blocks.png-atlas"
-        ));
-        assert!(looks_like_window("Sound engine started"));
-        assert!(!looks_like_window("Setting user: Steve"));
+    /// A shell command that prints `line` (a log line, or nothing) and then lives about a second
+    /// and a half, so the probe looks a few times.
+    fn opening_game(dir: &Path, line: Option<&str>) -> LaunchCommand {
+        let (program, args) = if cfg!(windows) {
+            let print = line.map(|l| format!("echo {l} & ")).unwrap_or_default();
+            (
+                PathBuf::from("cmd"),
+                vec!["/C".to_owned(), format!("{print}ping -n 3 127.0.0.1 >NUL")],
+            )
+        } else {
+            let print = line.map(|l| format!("echo '{l}'; ")).unwrap_or_default();
+            (
+                PathBuf::from("sh"),
+                vec!["-c".to_owned(), format!("{print}sleep 1.5")],
+            )
+        };
+        LaunchCommand::for_tests(program, args, dir.join("game"))
+    }
+
+    async fn window_events(
+        command: &LaunchCommand,
+        logs: &Path,
+        window_probe: Option<WindowProbe>,
+    ) -> (Vec<GameEvent>, bool) {
+        let events = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&events);
+        let process = GameProcess::spawn(
+            command,
+            SpawnOptions {
+                instance_id: "window".into(),
+                logs_dir: logs.to_path_buf(),
+                window_probe,
+                ..SpawnOptions::default()
+            },
+            Arc::new(move |event| {
+                if !matches!(event, GameEvent::Line(_)) {
+                    sink.lock().push(event);
+                }
+            }),
+        )
+        .await
+        .unwrap();
+        tokio::time::timeout(Duration::from_secs(20), process.wait())
+            .await
+            .unwrap();
+        let events = events.lock().clone();
+        (events, process.window_shown())
+    }
+
+    static LOOKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+    /// The window shows at the probe's second look.
+    fn second_look(_pid: u32) -> bool {
+        LOOKS.fetch_add(1, Ordering::SeqCst) >= 1
+    }
+
+    fn never(_pid: u32) -> bool {
+        false
+    }
+
+    /// The probe finds the window while the game opens: told once, between start and exit, and
+    /// nothing is asked after that.
+    #[tokio::test]
+    async fn the_probe_tells_when_the_window_shows() {
+        let tmp = tempfile::tempdir().unwrap();
+        let command = opening_game(tmp.path(), None);
+        let (events, shown) = window_events(&command, tmp.path(), Some(second_look)).await;
+        assert!(shown);
+        let shown_at = events
+            .iter()
+            .position(|e| *e == GameEvent::WindowShown)
+            .unwrap();
+        assert!(matches!(events[0], GameEvent::Started { .. }), "{events:?}");
+        assert!(shown_at > 0 && matches!(events[shown_at + 1], GameEvent::Exited { .. }));
+        assert_eq!(
+            events
+                .iter()
+                .filter(|e| **e == GameEvent::WindowShown)
+                .count(),
+            1
+        );
+        assert_eq!(
+            LOOKS.load(Ordering::SeqCst),
+            2,
+            "no look after the window showed"
+        );
+    }
+
+    /// With a probe, a line logged right before the window is created does not count (the probe
+    /// sees the window itself); without one it does.
+    #[tokio::test]
+    async fn lines_before_the_window_count_only_without_a_probe() {
+        let tmp = tempfile::tempdir().unwrap();
+        let line = "[12:00:00] [Render thread/INFO]: Backend library: LWJGL version 3.3.3+5";
+        let command = opening_game(tmp.path(), Some(line));
+        let (events, shown) = window_events(&command, tmp.path(), Some(never)).await;
+        assert!(!shown, "{events:?}");
+        assert!(!events.contains(&GameEvent::WindowShown));
+        let (events, shown) = window_events(&command, tmp.path(), None).await;
+        assert!(shown, "{events:?}");
+        // A line logged once the window exists counts either way.
+        let line = "[12:00:01] [Render thread/INFO]: Sound engine started";
+        let command = opening_game(tmp.path(), Some(line));
+        let (_, shown) = window_events(&command, tmp.path(), Some(never)).await;
+        assert!(shown);
+    }
+
+    /// A game that closes before any window showed is never "shown": its exit takes over.
+    #[tokio::test]
+    async fn a_game_that_closes_first_never_shows() {
+        let tmp = tempfile::tempdir().unwrap();
+        let command = opening_game(tmp.path(), None);
+        let (events, shown) = window_events(&command, tmp.path(), Some(never)).await;
+        assert!(!shown);
+        assert!(!events.contains(&GameEvent::WindowShown), "{events:?}");
+        assert!(matches!(events.last(), Some(GameEvent::Exited { .. })));
     }
 
     #[test]

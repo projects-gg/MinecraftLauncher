@@ -20,7 +20,7 @@ import { api, type ContentKind } from "@/lib/api";
 import { formatDuration, formatRelative } from "@/lib/format";
 import { InstanceIcon } from "@/shell/instance-icon";
 import { settingsChanged, useDrafts } from "@/stores/drafts";
-import { useLaunch } from "@/stores/launch";
+import { isOpening, useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { type InstanceTab, instanceTab } from "./instance-tab";
 import { OverviewTab } from "./overview/overview-tab";
@@ -57,9 +57,12 @@ export function InstancePage() {
   });
   const selectInstance = usePrefs((s) => s.selectInstance);
   const play = useLaunch((s) => s.play);
-  const launchKind = useLaunch((s) =>
-    s.instanceId === instanceId && s.phase.kind !== "error" ? s.phase.kind : "idle",
-  );
+  // Hazırlanıyor (files), Açılıyor (until the game's window is on screen), Oyunda.
+  const launchKind = useLaunch((s) => {
+    if (s.instanceId !== instanceId || s.phase.kind === "error") return "idle";
+    if (s.phase.kind === "working") return "preparing";
+    return isOpening(s.phase) ? "opening" : s.phase.kind;
+  });
   // Unsaved settings and unapplied mod choices wait in their tabs (stores/drafts.ts): the tab
   // shows a small marker so they are not forgotten.
   const settingsDraft = useDrafts((s) => s.settings[instanceId]);
@@ -188,9 +191,11 @@ export function InstancePage() {
           >
             {launchKind === "running"
               ? t("play.running")
-              : launchKind === "idle"
-                ? t("instance.play")
-                : t("play.launching")}
+              : launchKind === "opening"
+                ? t("playOpen.opening")
+                : launchKind === "preparing"
+                  ? t("playOpen.preparing")
+                  : t("instance.play")}
           </Button>
         </div>
       </header>

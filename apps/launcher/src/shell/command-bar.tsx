@@ -16,7 +16,7 @@ import { copyDetails } from "@/lib/clipboard";
 import { formatCount, formatDuration, formatRelative, formatSpeed } from "@/lib/format";
 import { detectOs } from "@/lib/platform";
 import { ariaKeyShortcuts } from "@/lib/shortcuts";
-import { useLaunch } from "@/stores/launch";
+import { isOpening, type LaunchPhase, useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { type PrepareHint, usePrepare } from "@/stores/prepare";
 import { InstanceIcon, prewarmInstanceIcons } from "./instance-icon";
@@ -206,6 +206,108 @@ function SessionTime({ since }: { since: number }) {
   return <>{t("play.session", { time: formatDuration((now - since) / 1000) })}</>;
 }
 
+/** "İlk açılış biraz sürebilir" after this long, on the first start with a version only. */
+const FIRST_START_NOTE_MS = 20_000;
+
+/**
+ * Whether the first-start note is due: one timer for the time left, nothing ticks meanwhile (a
+ * page that was away shows it at once when it comes back).
+ */
+function useFirstStartNote(phase: LaunchPhase): boolean {
+  const since = phase.kind === "running" && !phase.shown && phase.firstStart ? phase.since : null;
+  const [due, setDue] = useState<number | null>(null);
+  useEffect(() => {
+    if (since === null) return;
+    const left = since + FIRST_START_NOTE_MS - Date.now();
+    if (left <= 0) {
+      setDue(since);
+      return;
+    }
+    const timer = window.setTimeout(() => setDue(since), left);
+    return () => window.clearTimeout(timer);
+  }, [since]);
+  return since !== null && due === since;
+}
+
+/**
+ * While a launch prepares its files and while the game opens: the stage and its figures over the
+ * bar, then "Oyun açılıyor". The bar steps back when the files are ready (a full bar that stays
+ * reads as stuck); a first start that lasts says so where the bar was. The words stay in place.
+ */
+function LaunchStatus({ phase }: { phase: LaunchPhase }) {
+  const { t } = useTranslation();
+  const reduce = useReducedMotion() ?? false;
+  const note = useFirstStartNote(phase);
+  const working = phase.kind === "working" ? phase : null;
+  const label = working ? t(`play.stages.${working.stage}`) : t("playOpen.status");
+  const filesLabel = (done: number) =>
+    t("play.files", { done: formatCount(done), total: formatCount(working?.totalFiles ?? 0) });
+  return (
+    <div className="min-w-0" aria-live="polite">
+      <div className="flex items-baseline justify-between gap-4 text-[12px]">
+        {/* Stages follow each other in place; the opening line cross-fades in. */}
+        <span className="grid min-w-0 *:[grid-area:1/1]">
+          <AnimatePresence initial={false}>
+            <motion.span
+              key={working ? "stage" : "opening"}
+              className="truncate font-medium text-bone-100"
+              {...swapIn(reduce)}
+            >
+              {label}
+            </motion.span>
+          </AnimatePresence>
+        </span>
+        {working ? (
+          // Fixed, right-aligned slots: the figures change every tick and come and go between
+          // stages, so the line never slides sideways.
+          <span className="flex shrink-0 gap-3 text-ash-300 tabular-nums *:text-right">
+            {/* As wide as the count gets in this stage ("402 / 402 dosya"). */}
+            <span style={{ minWidth: `${filesLabel(working.totalFiles).length}ch` }}>
+              {working.totalFiles > 0 ? filesLabel(working.doneFiles) : null}
+            </span>
+            <span className="min-w-[10.5ch]">
+              {working.bytesPerSec > 0 ? formatSpeed(working.bytesPerSec) : null}
+            </span>
+            <span className="min-w-[11ch]">
+              {working.etaSecs ? t("play.eta", { time: formatDuration(working.etaSecs) }) : null}
+            </span>
+          </span>
+        ) : null}
+      </div>
+      {/* The bar's row keeps its height: the note hangs from it, so the line above stays put.
+          The bar leaves once it faded (its sheen would keep the page drawing frames). */}
+      <div className="relative mt-2 h-1.5">
+        <AnimatePresence initial={false}>
+          {working ? (
+            <motion.div
+              key="bar"
+              className="absolute inset-0"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { duration: 0.15, ease: easeOutExpo } }}
+              exit={{ opacity: 0, transition: { duration: 0.32, ease: easeOutExpo } }}
+            >
+              <Progress value={working.percent} label={label} />
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+        <AnimatePresence initial={false}>
+          {note ? (
+            <motion.p
+              key="first-start"
+              className="absolute top-[-4px] left-0 text-[12px] leading-4 whitespace-nowrap text-ash-300"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { duration: 0.4, ease: easeOutExpo } }}
+              exit={{ opacity: 0, transition: { duration: 0.12 } }}
+            >
+              {t("playOpen.firstStart")}
+            </motion.p>
+          ) : null}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
 function StatusArea({ selected }: { selected: InstanceSummary | undefined }) {
   const { t } = useTranslation();
   const reduce = useReducedMotion() ?? false;
@@ -216,79 +318,66 @@ function StatusArea({ selected }: { selected: InstanceSummary | undefined }) {
   const target = useResumeTarget(selected);
   const resume = phase.kind === "idle" ? target : target === undefined ? undefined : null;
 
-  if (phase.kind === "working") {
-    const filesLabel = (done: number) =>
-      t("play.files", { done: formatCount(done), total: formatCount(phase.totalFiles) });
-    return (
-      <div className="min-w-0 flex-1" aria-live="polite">
-        <div className="flex items-baseline justify-between gap-4 text-[12px]">
-          <span className="truncate font-medium text-bone-100">
-            {t(`play.stages.${phase.stage}`)}
-          </span>
-          {/* Fixed, right-aligned slots: the figures change every tick and come and go between
-              stages, so the line never slides sideways. */}
-          <span className="flex shrink-0 gap-3 text-ash-300 tabular-nums *:text-right">
-            {/* As wide as the count gets in this stage ("402 / 402 dosya"). */}
-            <span style={{ minWidth: `${filesLabel(phase.totalFiles).length}ch` }}>
-              {phase.totalFiles > 0 ? filesLabel(phase.doneFiles) : null}
-            </span>
-            <span className="min-w-[10.5ch]">
-              {phase.bytesPerSec > 0 ? formatSpeed(phase.bytesPerSec) : null}
-            </span>
-            <span className="min-w-[11ch]">
-              {phase.etaSecs ? t("play.eta", { time: formatDuration(phase.etaSecs) }) : null}
-            </span>
-          </span>
-        </div>
-        <Progress value={phase.percent} label={t(`play.stages.${phase.stage}`)} className="mt-2" />
-      </div>
-    );
-  }
-
+  // The launch's lines and the resting ones (last played, the session) cross-fade in one cell.
+  const launch = phase.kind === "working" || isOpening(phase);
   return (
-    <div className="flex min-w-0 flex-1 items-center justify-between gap-6">
-      {/* "Devam et" and the last-played line share one cell and cross-fade in place. */}
-      <div className="grid min-w-0 flex-1 *:[grid-area:1/1]">
-        <AnimatePresence initial={false}>
-          {selected && resume ? (
-            <motion.div key="resume" className="min-w-0" {...swapIn(reduce)}>
-              <ResumeButton instance={selected} target={resume} />
-            </motion.div>
-          ) : selected && resume === null ? (
-            <motion.div
-              key="status"
-              className="min-w-0 text-[12px] text-ash-300"
-              {...swapIn(reduce)}
-            >
-              <span className="block truncate tabular-nums">
-                {phase.kind === "running" ? (
-                  <SessionTime since={phase.since} />
-                ) : selected.lastPlayedAt ? (
-                  t("play.lastPlayed", { when: formatRelative(selected.lastPlayedAt) })
-                ) : // The session is recorded when the game closes: no "Henüz oynanmadı" while
-                // the first one starts.
-                phase.kind === "idle" ? (
-                  t("play.neverPlayed")
+    <div className="grid min-w-0 flex-1 items-center *:[grid-area:1/1]">
+      <AnimatePresence initial={false}>
+        {launch ? (
+          <motion.div key="launch" className="min-w-0" {...swapIn(reduce)}>
+            <LaunchStatus phase={phase} />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="rest"
+            className="flex min-w-0 items-center justify-between gap-6"
+            {...swapIn(reduce)}
+          >
+            {/* "Devam et" and the last-played line share one cell and cross-fade in place. */}
+            <div className="grid min-w-0 flex-1 *:[grid-area:1/1]">
+              <AnimatePresence initial={false}>
+                {selected && resume ? (
+                  <motion.div key="resume" className="min-w-0" {...swapIn(reduce)}>
+                    <ResumeButton instance={selected} target={resume} />
+                  </motion.div>
+                ) : selected && resume === null ? (
+                  <motion.div
+                    key="status"
+                    className="min-w-0 text-[12px] text-ash-300"
+                    {...swapIn(reduce)}
+                  >
+                    <span className="block truncate tabular-nums">
+                      {phase.kind === "running" ? (
+                        <SessionTime since={phase.since} />
+                      ) : selected.lastPlayedAt ? (
+                        t("play.lastPlayed", { when: formatRelative(selected.lastPlayedAt) })
+                      ) : // The session is recorded when the game closes: no "Henüz oynanmadı"
+                      // while the first one starts.
+                      phase.kind === "idle" ? (
+                        t("play.neverPlayed")
+                      ) : null}
+                    </span>
+                    {selected.playTimeSecs > 0 ? (
+                      <span className="block truncate">
+                        {t("play.playTime", { time: formatDuration(selected.playTimeSecs) })}
+                      </span>
+                    ) : null}
+                  </motion.div>
                 ) : null}
-              </span>
-              {selected.playTimeSecs > 0 ? (
-                <span className="block truncate">
-                  {t("play.playTime", { time: formatDuration(selected.playTimeSecs) })}
-                </span>
-              ) : null}
-            </motion.div>
-          ) : null}
-        </AnimatePresence>
-      </div>
-      {selected?.autoJoin ? (
-        <Switch
-          checked={autoJoin}
-          onCheckedChange={setAutoJoin}
-          label={t("play.autoJoin")}
-          description={selected.autoJoin}
-          className="shrink-0"
-        />
-      ) : null}
+              </AnimatePresence>
+            </div>
+            {selected?.autoJoin ? (
+              <Switch
+                checked={autoJoin}
+                onCheckedChange={setAutoJoin}
+                label={t("play.autoJoin")}
+                description={selected.autoJoin}
+                className="shrink-0"
+              />
+            ) : null}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -392,10 +481,13 @@ export function CommandBar() {
     switch (phase.kind) {
       case "working":
         return { kind: "working", percent: phase.percent, label: t(`play.stages.${phase.stage}`) };
+      // From the files being ready until the game's own window is on screen: "Açılıyor".
       case "launching":
-        return { kind: "launching", label: t("play.launching") };
+        return { kind: "opening", label: t("playOpen.opening") };
       case "running":
-        return { kind: "running" };
+        return phase.shown
+          ? { kind: "running" }
+          : { kind: "opening", label: t("playOpen.opening") };
       default:
         // "Güncelle" only for an installed game whose version or loader changed; a first
         // install is still "Oyna" (it downloads, then plays), as the welcome flow promises.

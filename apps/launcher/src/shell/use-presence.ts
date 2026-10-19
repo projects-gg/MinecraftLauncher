@@ -3,7 +3,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { api } from "@/lib/api";
 import { isTauri } from "@/lib/platform";
-import { useLaunch } from "@/stores/launch";
+import { isOpening, useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 
 /** Keeps Discord Rich Presence in sync with what the player is doing in the launcher. */
@@ -32,12 +32,15 @@ export function usePresenceSync() {
 
   const instance = instances?.find((i) => i.id === launchInstanceId);
   const percent = phase.kind === "working" ? Math.floor(phase.percent) : null;
-  const since = phase.kind === "running" ? phase.since : null;
+  // "Playing" from the moment the game's window is on screen, as OYNA says "Oyunda".
+  const since = phase.kind === "running" && phase.shown ? phase.since : null;
+  const opening = isOpening(phase);
 
   useEffect(() => {
     if (!isTauri() || !enabled) return;
     const page = pathname === "/" ? "home" : (pathname.split("/")[1] ?? "home");
-    const activity = since !== null ? "playing" : percent !== null ? "downloading" : page;
+    const activity =
+      since !== null ? "playing" : opening ? "starting" : percent !== null ? "downloading" : page;
     const joinsServer = Boolean(since !== null && autoJoin && instance?.autoJoin);
     void api.updatePresence({
       activity,
@@ -52,5 +55,5 @@ export function usePresenceSync() {
       showServer,
     });
     // Percent updates are coalesced by the backend's rate limiter.
-  }, [pathname, percent, since, enabled, showServer, autoJoin, instance, server]);
+  }, [pathname, percent, since, opening, enabled, showServer, autoJoin, instance, server]);
 }

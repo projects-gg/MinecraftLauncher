@@ -303,8 +303,8 @@ describe("DOM helpers", () => {
       expect(pressPlayButton(rootWith(b))).toBe(true);
       expect(b.click).toHaveBeenCalledOnce();
     }
-    // Preparing: a press would cancel. Starting, playing: the button is disabled.
-    for (const b of [button("working"), button("launching", true), button("running", true)]) {
+    // Preparing and opening: a press would cancel. Playing: the button is disabled.
+    for (const b of [button("working"), button("opening"), button("running", true)]) {
       expect(pressPlayButton(rootWith(b))).toBe(false);
       expect(b.click).not.toHaveBeenCalled();
     }

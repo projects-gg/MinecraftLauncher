@@ -269,7 +269,12 @@ export type LaunchEvent =
     }
   | { type: "offline" }
   | { type: "launching" }
-  | { type: "started"; pid: number | null }
+  /**
+   * The game process started; its window is not on screen yet ("Açılıyor"). `firstStart`: the
+   * first start with this version and loader, which takes longer.
+   */
+  | { type: "started"; pid: number | null; firstStart: boolean }
+  /** The game's window is on screen ("Oyunda"); once, never after the exit. */
   | { type: "windowShown" }
   | { type: "exited"; code: number | null; runtimeSecs: number }
   | {

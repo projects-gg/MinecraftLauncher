@@ -84,7 +84,8 @@ fn device_label() -> String {
     }
 }
 
-/// Follows one game session for presence: started, the log, exited.
+/// Follows one game session for presence: in game once its window is on screen (while it opens
+/// the player is still in the launcher), the log, exited.
 pub struct GamePresence {
     social: SocialService,
     quick_play: Option<String>,
@@ -106,7 +107,7 @@ impl GamePresence {
 
     pub fn on_event(&self, event: &GameEvent) {
         match event {
-            GameEvent::Started { .. } => self.social.game_started(self.quick_play.as_deref()),
+            GameEvent::WindowShown => self.social.game_started(self.quick_play.as_deref()),
             GameEvent::Line(line) => self.social.game_line(&line.message),
             GameEvent::Exited { .. } => self.social.game_stopped(),
             _ => {}

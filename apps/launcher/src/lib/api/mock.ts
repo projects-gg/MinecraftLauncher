@@ -20,6 +20,7 @@ import { mockLaunchStop } from "./mock-launch-stop";
 import { createMockLibrary, mockServers } from "./mock-library";
 import { createMockModCenter } from "./mock-modcenter";
 import { mockCrash, mockCrashScenario, mockModHealth } from "./mock-modhealth";
+import { mockOpening, mockWindowShown } from "./mock-opening";
 import { createMockSkins } from "./mock-skins";
 import { mockSocial } from "./mock-social";
 import { mockTrashedInstances } from "./mock-trash";
@@ -1055,15 +1056,20 @@ export const mockApi: LauncherApi = {
     }
     onEvent({ type: "launching" });
     await delay(1600);
-    onEvent({ type: "started", pid: 4242 });
+    // Preview switches (mock-opening.ts): how long the game's window takes, a first start.
+    const opening = mockOpening();
+    onEvent({ type: "started", pid: 4242, firstStart: opening.firstStart });
     if (instance) instance.state = "ready";
     const crash = mockCrashScenario();
     if (crash) {
+      // The game stops while it opens: its window never shows.
       await delay(2600);
       onEvent({ type: "crashed", ...mockCrash(instanceId, crash) });
       onEvent({ type: "exited", code: 1, runtimeSecs: 4 });
       return;
     }
+    // "Açılıyor" until the game's window shows; "İptal" closes the game meanwhile.
+    if (!(await mockWindowShown(opening, onEvent, job))) return;
     // `?shotcopy=fail`: a screenshot taken during the game could not go to the clipboard.
     if (mockFlag("shotcopy") === "fail") {
       await delay(1200);

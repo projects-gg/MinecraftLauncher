@@ -12,7 +12,8 @@ use crate::state::AppState;
 #[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PresenceContext {
-    /// "home" | "library" | "news" | "afk" | "settings" | "downloading" | "playing"
+    /// "home" | "library" | "news" | "afk" | "settings" | "downloading" | "starting" (the game's
+    /// window is not on screen yet) | "playing"
     pub activity: String,
     pub instance_name: Option<String>,
     pub mc_version: Option<String>,
@@ -84,6 +85,10 @@ fn build(ctx: &PresenceContext, lang: Lang) -> Activity {
             base.details(lang.pick("Oyunu hazırlıyor", "Getting the game ready"))
                 .state(lang.pick(format!("%{percent}"), format!("{percent}%")))
         }
+        // "Playing" only once the game's window is on screen, as in the launcher.
+        "starting" => base
+            .details(lang.pick("Oyunu açıyor", "Starting the game"))
+            .state(version_line),
         "afk" => base
             .details(lang.pick("AFK hesaplarını yönetiyor", "Managing AFK accounts"))
             .state(in_launcher),

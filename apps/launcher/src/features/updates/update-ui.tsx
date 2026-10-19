@@ -113,7 +113,9 @@ function previewUpdate() {
       break;
   }
   if (game === "running" || game === "closing") {
-    useLaunch.setState({ phase: { kind: "running", since: Date.now() } });
+    useLaunch.setState({
+      phase: { kind: "running", since: Date.now(), shown: true, firstStart: false },
+    });
   }
   if (game === "closing") {
     window.setTimeout(() => useLaunch.setState({ phase: { kind: "idle" } }), 2500);

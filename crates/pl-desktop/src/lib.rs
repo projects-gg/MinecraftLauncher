@@ -6,10 +6,13 @@
 //!   a shell link on Windows, a `.desktop` launcher on Linux, a `.webloc` on macOS.
 //! - [`ico`]: a PNG wrapped as a Windows icon (the shortcut's picture).
 //! - [`window`]: the main window's default size for the screen it first opens on.
+//! - [`game_window`]: whether the game's own window is on screen yet (Windows), so the launcher
+//!   says "Açılıyor" until it is and "Oyunda" from then on.
 //! - [`identity`]: the identity a process runs under (debug builds never share the installed
 //!   launcher's identifier, keychain service or data folder).
 
 mod error;
+pub mod game_window;
 pub mod ico;
 pub mod identity;
 pub mod link;

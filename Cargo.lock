@@ -3900,6 +3900,7 @@ version = "2.0.0"
 dependencies = [
  "serde",
  "specta",
+ "sysinfo",
  "tempfile",
  "thiserror 2.0.21",
  "url",

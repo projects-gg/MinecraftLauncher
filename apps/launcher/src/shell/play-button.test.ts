@@ -14,12 +14,15 @@ describe("playButtonName", () => {
     expect(playButtonName(working, labels, false)).toBe("Oyun dosyaları indiriliyor %42");
   });
 
+  it("offers to cancel a game that opens, once a press would", () => {
+    const opening = { kind: "opening", label: "Açılıyor" } as const;
+    expect(playButtonName(opening, labels, true)).toBe("İptal, Açılıyor");
+    expect(playButtonName(opening, labels, false)).toBe("Açılıyor");
+  });
+
   it("names the other states by their visible label", () => {
     expect(playButtonName({ kind: "ready" }, labels, true)).toBe("Oyna");
     expect(playButtonName({ kind: "update" }, labels, true)).toBe("Güncelle");
-    expect(playButtonName({ kind: "launching", label: "Başlatılıyor" }, labels, true)).toBe(
-      "Başlatılıyor",
-    );
     expect(playButtonName({ kind: "running" }, labels, true)).toBe("Oyunda");
     expect(playButtonName({ kind: "unavailable", label: "Hesap yok" }, labels, true)).toBe(
       "Hesap yok",

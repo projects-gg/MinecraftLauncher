@@ -187,8 +187,8 @@ export function hasOpenOverlay(root: Pick<ParentNode, "querySelector">): boolean
 
 /**
  * Presses OYNA the way a click does (its double-press guard included), and only when a click
- * starts a game ("Oyna", "Güncelle"): while a launch is prepared a click cancels it, and a
- * shortcut never does that. Returns whether it pressed.
+ * starts a game ("Oyna", "Güncelle"): while a launch is prepared or the game opens a click
+ * cancels it, and a shortcut never does that. Returns whether it pressed.
  */
 export function pressPlayButton(root: Pick<ParentNode, "querySelector">): boolean {
   const button = root.querySelector<HTMLButtonElement>("button[data-play-state]");
