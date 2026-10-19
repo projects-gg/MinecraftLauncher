@@ -41,6 +41,7 @@ import { api, type InstalledContent, type InstanceDetail, type ModEntry } from "
 import { formatBytes } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
 import { TabEmpty } from "../parts";
+import { modRowKeys } from "./mod-keys";
 
 /**
  * A vanilla instance's Modlar tab (and mod center): it cannot load mods; a new instance with a
@@ -290,6 +291,8 @@ export function ModsTab({
     () => (query.trim() ? listed.filter((m) => matchesQuery(m.name, query)) : listed),
     [listed, query],
   );
+  // From every file in the folder, so a row's key does not change with filters or removals.
+  const rowKeys = useMemo(() => modRowKeys(instance.mods.map((m) => m.fileName)), [instance.mods]);
   // Updates of the mods still listed: the update check is not run again after a removal, and a
   // removed mod (also one waiting for its "Geri al" toast) has nothing left to update.
   const updates = useMemo(() => {
@@ -407,8 +410,9 @@ export function ModsTab({
               const key = projectJobKey(instance.id, projectId ?? mod.fileName);
               return (
                 <ModRow
-                  // Without ".disabled": switching a mod off renames its file, and the row stays.
-                  key={mod.fileName.replace(/\.disabled$/, "")}
+                  // Without ".disabled": switching a mod off renames its file, and the row stays
+                  // (two copies of one mod keep a row each, mod-keys.ts).
+                  key={rowKeys.get(mod.fileName) ?? mod.fileName}
                   mod={mod}
                   entry={entry}
                   job={jobs[key]}
