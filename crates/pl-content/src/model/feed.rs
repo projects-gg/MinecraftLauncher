@@ -405,18 +405,18 @@ fn fingerprint_of<T: Serialize>(value: &T) -> String {
     sha256_hex(&bytes)
 }
 
-/// Studio's record of the feed item or event a Studio entry with the same id replaces or hides
-/// (`NewsItem.feedOverride`, `EventCountdown.feedOverride`). Launchers ignore it: Studio wins on
-/// a shared id with or without it. Studio compares `fingerprint` with the current feed entry's
-/// ([`FeedItem::fingerprint`], [`FeedEvent::fingerprint`]) to tell the admin that the Discord
-/// original changed since.
+/// Studio's record of the feed item, event or Minecraft entry a Studio entry with the same id
+/// replaces or hides (`NewsItem.feedOverride`, `EventCountdown.feedOverride`). Launchers ignore
+/// it: Studio wins on a shared id with or without it. Studio compares `fingerprint` with the
+/// current feed entry's ([`FeedItem::fingerprint`], [`FeedEvent::fingerprint`],
+/// [`MinecraftNews::fingerprint`]) to tell the admin that the original changed since.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct FeedOverride {
     /// Fingerprint of the feed entry when the admin took it over (or last accepted a change).
     pub fingerprint: String,
-    /// The original Discord message (`https://`), kept for Studio while the entry is gone from
-    /// the feed.
+    /// The original Discord message, or a Minecraft entry's article (`https://`), kept for
+    /// Studio while the entry is gone from the feed.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
 }
@@ -572,6 +572,33 @@ impl MinecraftNews {
     /// The official article: `source.url` (always set on an entry [`BotFeed::parse`] kept).
     pub fn article_url(&self) -> &str {
         self.source.url.as_deref().unwrap_or_default()
+    }
+
+    /// Like [`FeedItem::fingerprint`], for Studio's record of a hidden entry
+    /// ([`FeedOverride::fingerprint`]): the SHA-256 (lowercase hex) of what launchers show of it
+    /// (title, summary, body, the cover's SHA-256, `publishedAt` and the English texts), so Studio
+    /// can tell the admin that the bot rewrote an entry they hid. `id`, `version`, `kind`,
+    /// `expiresAt` and `source` are left out: they are not shown, and a new expiry is no rewrite.
+    pub fn fingerprint(&self) -> String {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Print<'a> {
+            title: &'a str,
+            summary: &'a str,
+            body: &'a str,
+            cover: Option<&'a str>,
+            published_at: Timestamp,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            en: Option<&'a MinecraftText>,
+        }
+        fingerprint_of(&Print {
+            title: &self.title,
+            summary: &self.summary,
+            body: &self.body,
+            cover: self.cover.as_ref().map(|cover| cover.sha256.as_str()),
+            published_at: self.published_at,
+            en: self.translations.as_ref().and_then(|t| t.en.as_ref()),
+        })
     }
 }
 
@@ -2261,6 +2288,65 @@ mod tests {
             problems.extend(found);
         }
         (kept, problems)
+    }
+
+    #[test]
+    fn minecraft_fingerprints_follow_what_players_see() {
+        let (feed, problems) = with_minecraft(json!([{
+            "id": "minecraft-26.3",
+            "version": "26.3",
+            "kind": "release",
+            "title": "T",
+            "summary": "S",
+            "body": "B",
+            "publishedAt": "2026-09-15T11:23:02Z",
+            "expiresAt": "2026-10-30T11:23:02Z",
+            "source": {
+                "kind": "minecraft",
+                "url": "https://www.minecraft.net/article/minecraft-java-edition-26-3"
+            }
+        }]));
+        assert!(problems.is_empty(), "{problems:?}");
+        let entry = &feed.minecraft[0];
+        // The exact shape is pinned: Studio publishes fingerprints, so a change would mark every
+        // hidden entry as rewritten.
+        assert_eq!(
+            entry.fingerprint(),
+            sha256_hex(
+                br#"{"title":"T","summary":"S","body":"B","cover":null,"publishedAt":"2026-09-15T11:23:02Z"}"#
+            )
+        );
+
+        // Nothing players see: the id, version, kind, expiry and article link.
+        let mut moved = entry.clone();
+        moved.id = "minecraft-26.3.1".into();
+        moved.version = "26.3.1".into();
+        moved.kind = MinecraftNewsKind::Snapshot;
+        moved.expires_at = ts("2026-10-20T00:00:00Z");
+        moved.source.url = Some("https://minecraft.net/article/minecraft-java-edition".into());
+        assert_eq!(moved.fingerprint(), entry.fingerprint());
+
+        // The texts, the picture and the English texts are.
+        let mut rewritten = entry.clone();
+        rewritten.body.push_str("\n- Yeni madde");
+        assert_ne!(rewritten.fingerprint(), entry.fingerprint());
+        let mut with_cover = entry.clone();
+        with_cover.cover = serde_json::from_value(cover()).unwrap();
+        assert_ne!(with_cover.fingerprint(), entry.fingerprint());
+        let mut english = entry.clone();
+        english.translations = Some(MinecraftTranslations {
+            en: Some(MinecraftText {
+                title: "T".into(),
+                summary: None,
+                body: None,
+            }),
+        });
+        assert_ne!(english.fingerprint(), entry.fingerprint());
+        let mut retold = english.clone();
+        if let Some(en) = retold.translations.as_mut().and_then(|t| t.en.as_mut()) {
+            en.body = Some("B".into());
+        }
+        assert_ne!(retold.fingerprint(), english.fingerprint());
     }
 
     #[test]
