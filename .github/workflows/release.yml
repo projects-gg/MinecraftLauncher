@@ -77,7 +77,10 @@ jobs:
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           if [ "$EVENT" = "push" ]; then raw="$GITHUB_REF_NAME"; else raw="$INPUT_VERSION"; fi
-          node scripts/release/version-info.mjs "$raw" | tee -a "$GITHUB_OUTPUT" > version.env
+          # Not piped (this shell has no pipefail): a version that is invalid, or that macOS
+          # cannot carry as CFBundleVersion, stops the release here, before any build.
+          node scripts/release/version-info.mjs "$raw" > version.env
+          cat version.env >> "$GITHUB_OUTPUT"
           . ./version.env
           echo "channel=${INPUT_CHANNEL:-beta}" >> "$GITHUB_OUTPUT"
           echo "dry_run=${INPUT_DRY_RUN:-false}" >> "$GITHUB_OUTPUT"
@@ -105,9 +108,11 @@ jobs:
         env:
           DRY_RUN: ${{ steps.meta.outputs.dry_run }}
           VERSION: ${{ steps.meta.outputs.version }}
+          MAC_BUNDLE_VERSION: ${{ steps.meta.outputs.mac_bundle_version }}
           SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
           SIGNPATH_ORGANIZATION_ID: ${{ secrets.SIGNPATH_ORGANIZATION_ID }}
         run: |
+          echo "macOS: CFBundleVersion $MAC_BUNDLE_VERSION" >> "$GITHUB_STEP_SUMMARY"
           windows='{"os":"windows-latest","key":"windows","args":"","targets":""}'
           macos='{"os":"macos-latest","key":"macos","args":"--target universal-apple-darwin","targets":"aarch64-apple-darwin,x86_64-apple-darwin"}'
           # RPM versions cannot contain "-", so prereleases (2.1.0-beta.1) ship AppImage and deb only.
@@ -233,6 +238,14 @@ jobs:
           releaseId: ${{ needs.prepare.outputs.release_id }}
           uploadUpdaterJson: false
           args: ${{ matrix.args }}
+
+      # The version stays CFBundleShortVersionString; CFBundleVersion is the numeric one that
+      # set-version.mjs stamped (docs: scripts/release/lib.mjs, macBundleVersion).
+      - name: Check the macOS bundle versions
+        if: runner.os == 'macOS'
+        env:
+          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+        run: node scripts/release/check-mac-bundle.mjs --version "$VERSION"
 
       - name: Collect the bundles
         env:
@@ -535,9 +548,16 @@ jobs:
       # Studio is for the team only: no updater, no public release; the installers stay on the
       # workflow run as artifacts (Actions > this run > Artifacts).
       - name: Build
+        id: tauri
         uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
         with:
           projectPath: apps/studio
           args: ${{ matrix.args }}
           uploadWorkflowArtifacts: true
           workflowArtifactNamePattern: studio-[platform]-[arch]-[bundle]
+
+      - name: Check the macOS bundle versions
+        if: runner.os == 'macOS'
+        env:
+          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
+        run: node scripts/release/check-mac-bundle.mjs --version "$VERSION"

@@ -9,7 +9,10 @@ import {
   classifyBundle,
   compareVersions,
   ghAssetName,
+  macBundleVersion,
   parseVersion,
+  plistString,
+  setMacBundleVersion,
   sha256Hex,
   signRequest,
 } from "./lib.mjs";
@@ -140,4 +143,103 @@ test("canonical JSON sorts keys and ends with a newline", () => {
     canonicalJson({ b: 1, a: { d: 2, c: [3] }, x: undefined }),
     '{\n  "a": {\n    "c": [\n      3\n    ],\n    "d": 2\n  },\n  "b": 1\n}\n',
   );
+});
+
+// How macOS orders CFBundleVersion: number by number, a missing number counts as 0.
+function compareBundleVersions(a, b) {
+  const x = a.split(".").map(Number);
+  const y = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) {
+    if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
+  }
+  return 0;
+}
+
+test("macOS bundle versions are three numbers", () => {
+  const cases = {
+    "2.0.0": "2.0.999",
+    "2.0.1-alpha": "2.0.1100",
+    "2.0.1-beta": "2.0.1200",
+    "2.0.1-beta.1": "2.0.1201",
+    "v2.0.1-beta.2": "2.0.1202",
+    "2.0.1-beta.11": "2.0.1211",
+    "2.0.1-rc.1": "2.0.1301",
+    "2.0.1-rc.99": "2.0.1399",
+    "2.0.1": "2.0.1999",
+    "2.0.12": "2.0.12999",
+    "2.1.0-beta.1": "2.1.201",
+    "2.1.0": "2.1.999",
+    "10.0.0": "10.0.999",
+    "0.0.0-alpha": "0.0.100",
+  };
+  for (const [version, expected] of Object.entries(cases)) {
+    assert.equal(macBundleVersion(version), expected, version);
+  }
+  assert.equal(macBundleVersion("2.0.2147482"), "2.0.2147482999");
+});
+
+test("macOS bundle versions sort like the versions", () => {
+  const pre = ["", "-alpha", "-alpha.1", "-alpha.99", "-beta", "-beta.1", "-beta.2", "-beta.10"];
+  pre.push("-beta.99", "-rc", "-rc.1", "-rc.99");
+  const versions = [];
+  for (const major of [0, 1, 2, 10]) {
+    for (const minor of [0, 1, 9, 10]) {
+      for (const patch of [0, 1, 2, 9, 10, 999]) {
+        for (const p of pre) versions.push(`${major}.${minor}.${patch}${p}`);
+      }
+    }
+  }
+  versions.sort(compareVersions);
+  for (let i = 1; i < versions.length; i++) {
+    const [a, b] = [versions[i - 1], versions[i]];
+    assert.ok(compareVersions(a, b) < 0, `${a} < ${b}`);
+    const [x, y] = [macBundleVersion(a), macBundleVersion(b)];
+    assert.match(y, /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/);
+    assert.ok(compareBundleVersions(x, y) < 0, `${a} (${x}) < ${b} (${y})`);
+  }
+  // A beta updates to its release. The shipped 2.0.1-beta.1 carried "2.0.1-beta.1", whose
+  // numbers macOS can read as 2.0.1 at most: below every later build.
+  assert.ok(compareBundleVersions(macBundleVersion("2.0.1-beta.9"), macBundleVersion("2.0.1")) < 0);
+  assert.ok(compareBundleVersions("2.0.1", macBundleVersion("2.0.1-beta.2")) < 0);
+});
+
+test("versions macOS could not order have no bundle version", () => {
+  const refused = ["2.1.0-beta.0", "2.1.0-beta.100", "2.1.0-beta.1.1", "2.1.0-beta.x"];
+  refused.push("2.1.0-Beta.1", "2.1.0-dev.1", "2.1.0-1", "2.1.0-rc-1", "2.0.2147483", "2.1");
+  for (const version of refused) {
+    assert.throws(() => macBundleVersion(version), /bundle version|not a valid version/, version);
+  }
+});
+
+test("the macOS bundle version is stamped into a Tauri config in place", () => {
+  const config = `{
+  "bundle": {
+    "targets": ["app", "dmg"],
+    "macOS": {
+      "bundleVersion": "2.0.999",
+      "signingIdentity": "-"
+    }
+  }
+}
+`;
+  assert.equal(setMacBundleVersion(config, "2.1.201"), config.replace('"2.0.999"', '"2.1.201"'));
+  assert.throws(
+    () => setMacBundleVersion('{ "bundle": { "macOS": {} } }', "2.1.201", "x.json"),
+    /no bundle\.macOS\.bundleVersion in x\.json/,
+  );
+  const twice = config.replace('"targets"', '"iOS": { "bundleVersion": "1" },\n    "targets"');
+  assert.throws(() => setMacBundleVersion(twice, "2.1.201"), /found 2/);
+  assert.throws(() => setMacBundleVersion(config, "2.1.0-beta.1"), /not a macOS bundle version/);
+});
+
+test("Info.plist strings are read by key", () => {
+  const plist = `<dict>
+\t<key>CFBundleShortVersionString</key>
+\t<string>2.0.1-beta.2</string>
+\t<key>CFBundleVersion</key>
+\t<string>2.0.1202</string>
+</dict>`;
+  assert.equal(plistString(plist, "CFBundleShortVersionString"), "2.0.1-beta.2");
+  assert.equal(plistString(plist, "CFBundleVersion"), "2.0.1202");
+  assert.equal(plistString(plist, "CFBundleName"), undefined);
 });

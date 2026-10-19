@@ -93,6 +93,77 @@ export function compareVersions(a, b) {
   return 0;
 }
 
+// --- macOS bundle version ------------------------------------------------------------------
+
+/** CFBundleVersion stage of each prerelease kind, in semver order; a release is MAC_RELEASE. */
+const MAC_STAGES = new Map([
+  ["alpha", 100],
+  ["beta", 200],
+  ["rc", 300],
+]);
+const MAC_RELEASE = 999;
+const MAC_MAX_PART = 2 ** 31 - 1;
+const MAC_BUNDLE_VERSION = /^(0|[1-9]\d*)(\.(0|[1-9]\d*)){0,2}$/;
+
+/**
+ * The macOS CFBundleVersion (`bundle.macOS.bundleVersion`) of a release version. Apple wants one
+ * to three period-separated integers there, growing with every build; CFBundleShortVersionString
+ * keeps the version players see (2.1.0-beta.1). MAJOR and MINOR stay, and the third number is
+ * PATCH × 1000 + a stage: 100 + N for alpha.N, 200 + N for beta.N, 300 + N for rc.N (N 1–99,
+ * 0 for a bare `beta`) and 999 for the release itself:
+ *
+ *   2.0.1-beta.1 → 2.0.1201   2.0.1-rc.2 → 2.0.1302   2.0.1 → 2.0.1999   2.1.0-beta.1 → 2.1.201
+ *
+ * So it sorts like semver: a prerelease above the release before it and below its own release.
+ * Other prerelease forms are refused rather than given a number that could sort wrong.
+ */
+export function macBundleVersion(text) {
+  const { raw, core, pre } = parseVersion(text);
+  let stage = MAC_RELEASE;
+  if (pre.length) {
+    const [kind, number, ...rest] = pre;
+    if (!MAC_STAGES.has(kind) || rest.length || !/^([1-9]\d?)?$/.test(number ?? "")) {
+      throw new Error(
+        `"${raw}" has no macOS bundle version: a prerelease is alpha, beta or rc, optionally ` +
+          "followed by .1 to .99 (2.1.0-beta.2)",
+      );
+    }
+    stage = MAC_STAGES.get(kind) + Number(number ?? 0);
+  }
+  const parts = [core[0], core[1], core[2] * 1000 + stage];
+  if (parts.some((part) => part > MAC_MAX_PART)) {
+    throw new Error(`"${raw}" is too large for a macOS bundle version`);
+  }
+  return parts.join(".");
+}
+
+/**
+ * Writes `bundle.macOS.bundleVersion` into a Tauri config's text in place; the rest of the file
+ * keeps its formatting. The key must be there already (the committed configs carry the value of
+ * the repository's placeholder version).
+ */
+export function setMacBundleVersion(configText, bundleVersion, name = "the Tauri config") {
+  if (!MAC_BUNDLE_VERSION.test(bundleVersion)) {
+    throw new Error(`"${bundleVersion}" is not a macOS bundle version`);
+  }
+  if (typeof JSON.parse(configText).bundle?.macOS?.bundleVersion !== "string") {
+    throw new Error(`no bundle.macOS.bundleVersion in ${name}`);
+  }
+  const key = /("bundleVersion"\s*:\s*)"[^"]*"/g;
+  const found = (configText.match(key) ?? []).length;
+  if (found !== 1) throw new Error(`expected one "bundleVersion" in ${name}, found ${found}`);
+  const next = configText.replace(key, (_, prefix) => `${prefix}"${bundleVersion}"`);
+  if (JSON.parse(next).bundle.macOS.bundleVersion !== bundleVersion) {
+    throw new Error(`the "bundleVersion" in ${name} is not bundle.macOS.bundleVersion`);
+  }
+  return next;
+}
+
+/** The `<string>` value of a key in an XML Info.plist (the Tauri bundler writes XML). */
+export function plistString(xml, key) {
+  return new RegExp(`<key>${key}</key>\\s*<string>([^<]*)</string>`).exec(xml)?.[1];
+}
+
 // --- Bundles -------------------------------------------------------------------------------
 
 /** GitHub's release asset sanitising, as tauri-action applies it (spaces become dots). */
