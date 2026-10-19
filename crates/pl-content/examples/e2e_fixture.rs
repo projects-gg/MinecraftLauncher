@@ -29,6 +29,13 @@
 //!
 //! `--join-event` adds a Studio event on the server (`join`) that runs now, so the event card offers
 //! "Katıl".
+//!
+//! `--afk <zip>` publishes an AFK client build for this computer's platform (the zip as the
+//! client's CI makes it: `Projects-Konsol-Hesap(.exe)` at its root) as version `--afk-version`
+//! (default `9.9.9-e2e`), served from `<out-dir>/v1/afk/<version>/<platform>.zip`. A run without it
+//! keeps the AFK entry of the previous index; `--no-afk` drops it. A fresh `<out-dir>` has none, so
+//! "the index predates the client's first publish" is: run once, start the launcher, run again
+//! with `--afk`, connect an account.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -378,7 +385,8 @@ async fn main() {
     let Some(out) = args.next().map(PathBuf::from) else {
         eprintln!(
             "usage: e2e_fixture <out-dir> [1|2] [--feed-key <public key> [--feed-mirror <url>]] \
-             [--overrides <feed.json>] [--files-url <url>] [--join-event]"
+             [--overrides <feed.json>] [--files-url <url>] [--join-event] \
+             [--afk <client zip> [--afk-version <version>] | --no-afk]"
         );
         std::process::exit(2);
     };
@@ -390,12 +398,19 @@ async fn main() {
     let mut overrides: Option<PathBuf> = None;
     // A Studio event on the server that runs now (`join`): the event card offers "Katıl".
     let mut join_event = false;
+    // An AFK client build to publish, or the previous index's to drop.
+    let mut afk_zip: Option<PathBuf> = None;
+    let mut afk_version = "9.9.9-e2e".to_owned();
+    let mut no_afk = false;
     while let Some(flag) = args.next() {
         match flag.as_str() {
             "--feed-key" => feed_key = args.next(),
             "--feed-mirror" => feed_mirror = args.next().expect("--feed-mirror <url>"),
             "--overrides" => overrides = args.next().map(PathBuf::from),
             "--join-event" => join_event = true,
+            "--afk" => afk_zip = Some(PathBuf::from(args.next().expect("--afk <zip>"))),
+            "--afk-version" => afk_version = args.next().expect("--afk-version <version>"),
+            "--no-afk" => no_afk = true,
             "--files-url" => {
                 let url = args.next().expect("--files-url <url>");
                 FILES_URL
@@ -570,6 +585,29 @@ async fn main() {
     builder
         .set_family_default("projects")
         .expect("default member");
+    if no_afk {
+        builder.set_afk(None);
+    }
+    if let Some(zip) = &afk_zip {
+        // Immutable like the real builds: a new build gets a new version.
+        let bytes = std::fs::read(zip).expect("AFK client zip");
+        let platform = pl_content::current_platform_key();
+        let path = pl_content::studio::afk_build_path(&afk_version, &platform);
+        write(&v1, &path, &bytes);
+        let build = pl_content::FileRef {
+            path: Some(path),
+            urls: Vec::new(),
+            sha256: pl_net::hash_bytes(&bytes, HashAlgo::Sha256),
+            sha1: None,
+            size: bytes.len() as u64,
+        };
+        builder.set_afk(Some(pl_content::AfkRelease {
+            version: afk_version.clone(),
+            builds: [(platform, build)].into_iter().collect(),
+            minecraft_versions: Vec::new(),
+            recommended_minecraft_version: None,
+        }));
+    }
     let built = builder.build(jiff::Timestamp::now()).expect("index");
 
     // Immutable documents first, then the signature, then the index (the commit point).
@@ -590,6 +628,14 @@ async fn main() {
             manifest.dependencies.minecraft,
             manifest.projects.items.len()
         );
+    }
+    match &built.index.afk {
+        Some(afk) => println!(
+            "afk client: {} ({})",
+            afk.version,
+            afk.builds.keys().cloned().collect::<Vec<_>>().join(", ")
+        ),
+        None => println!("afk client: none"),
     }
     println!(
         "public key: {}",
