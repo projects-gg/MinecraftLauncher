@@ -9,6 +9,7 @@ export {
   PlayerHead,
   Progress,
   Skeleton,
+  SwapLabel,
 } from "./components/bits";
 export { Button, type ButtonProps, IconButton, type IconButtonProps } from "./components/button";
 export { Countdown } from "./components/countdown";

@@ -24,6 +24,7 @@ import {
   PlayerHead,
   Segmented,
   Skeleton,
+  SwapLabel,
   scrimMotion,
   sheetMotion,
   toast,
@@ -905,7 +906,10 @@ function Editor({
           onClick={() => save.mutate()}
           disabled={!dirty || busy || putting}
         >
-          {save.isPending ? t("skins.saving") : t("skins.save")}
+          <SwapLabel
+            labels={[t("skins.save"), t("skins.saving")]}
+            active={save.isPending ? 1 : 0}
+          />
         </Button>
       </footer>
 

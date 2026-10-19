@@ -1,5 +1,5 @@
 import { CheckCircle, DownloadSimple } from "@phosphor-icons/react";
-import { Button, Dialog, Skeleton, toast } from "@pl/ui";
+import { Button, Dialog, Skeleton, SwapLabel, toast } from "@pl/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -108,7 +108,10 @@ export function MigrationDialog({
               disabled={!scan?.found || run.isPending}
               onClick={() => run.mutate()}
             >
-              {run.isPending ? t("migrate.working") : t("migrate.start")}
+              <SwapLabel
+                labels={[t("migrate.start"), t("migrate.working")]}
+                active={run.isPending ? 1 : 0}
+              />
             </Button>
           </>
         )

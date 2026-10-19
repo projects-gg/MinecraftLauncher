@@ -5,7 +5,7 @@ import {
   Lifebuoy,
   WarningCircle,
 } from "@phosphor-icons/react";
-import { Button, Dialog, Progress, Skeleton } from "@pl/ui";
+import { Button, Dialog, Progress, Skeleton, SwapLabel } from "@pl/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { type ReactNode, useEffect, useState } from "react";
@@ -417,7 +417,10 @@ function MoveDialog({
       );
       footer = (
         <Button variant="secondary" disabled={state.stopping} onClick={stop}>
-          {state.stopping ? t(`${m}.stopping`) : t(`${m}.stop`)}
+          <SwapLabel
+            labels={[t(`${m}.stop`), t(`${m}.stopping`)]}
+            active={state.stopping ? 1 : 0}
+          />
         </Button>
       );
       break;

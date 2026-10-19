@@ -1,5 +1,5 @@
 import { ArrowCounterClockwise, DotsThreeVertical, Package, Trash } from "@phosphor-icons/react";
-import { Button, cn, Dialog, IconButton, Menu, Skeleton, toast } from "@pl/ui";
+import { Button, cn, Dialog, IconButton, Menu, Skeleton, SwapLabel, toast } from "@pl/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, type Ref, useState } from "react";
@@ -262,7 +262,10 @@ export function TrashRow() {
               disabled={empty.isPending}
               onClick={() => empty.mutate()}
             >
-              {empty.isPending ? t(`${c}.emptying`) : t(`${c}.confirm`)}
+              <SwapLabel
+                labels={[t(`${c}.confirm`), t(`${c}.emptying`)]}
+                active={empty.isPending ? 1 : 0}
+              />
             </Button>
           </>
         }

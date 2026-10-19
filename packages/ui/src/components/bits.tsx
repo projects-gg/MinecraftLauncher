@@ -83,6 +83,32 @@ export function Skeleton({ className }: { className?: string }) {
   );
 }
 
+/**
+ * Words that change in place on a control ("Güncellemeleri denetle" → "Denetleniyor"): every
+ * wording sits in one grid cell, so the control keeps the width of the longest and nothing beside
+ * it moves; the outgoing words fade first, the new ones follow (POLISH2: the buttons next to
+ * "Güncellemeleri denetle" slid 60 px and back). Only the shown words are in the accessible name.
+ */
+export function SwapLabel({ labels, active }: { labels: string[]; active: number }) {
+  return (
+    <span className="inline-grid justify-items-center">
+      {labels.map((label, i) => (
+        <span
+          // biome-ignore lint/suspicious/noArrayIndexKey: the wordings are fixed, in order
+          key={i}
+          aria-hidden={i === active ? undefined : true}
+          className={cn(
+            "[grid-area:1/1] transition-opacity",
+            i === active ? "opacity-100 delay-[60ms] duration-150" : "opacity-0 duration-100",
+          )}
+        >
+          {label}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 export function Kbd({ children }: { children: ReactNode }) {
   return (
     <kbd className="inline-flex h-5 min-w-5 items-center justify-center rounded border border-white/12 bg-obsidian-800 px-1 font-sans text-[11px] font-semibold text-ash-300">

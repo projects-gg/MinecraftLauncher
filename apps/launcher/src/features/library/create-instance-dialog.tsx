@@ -1,5 +1,16 @@
 import { Sparkle } from "@phosphor-icons/react";
-import { Button, cn, Dialog, Field, Input, Segmented, Select, toast, useMotionPrefs } from "@pl/ui";
+import {
+  Button,
+  cn,
+  Dialog,
+  Field,
+  Input,
+  Segmented,
+  Select,
+  SwapLabel,
+  toast,
+  useMotionPrefs,
+} from "@pl/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -209,7 +220,10 @@ export function CreateInstanceDialog({
                 onClick={() => create.mutate()}
                 disabled={!canCreate}
               >
-                {create.isPending ? t("create.creating") : t("create.submit")}
+                <SwapLabel
+                  labels={[t("create.submit"), t("create.creating")]}
+                  active={create.isPending ? 1 : 0}
+                />
               </Button>
             </>
           ) : undefined
