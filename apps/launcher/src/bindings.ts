@@ -2194,10 +2194,6 @@ export type KeptReason =
 /**  A file of the player's sits where the new version puts one. */
 "theirs";
 
-/**
- *  Why the server keeps turning an account away, read from its kick message (English, Turkish,
- *  and the ASCII spelling AuthMe's Turkish messages use).
- */
 /**  A binding a key fix moves: one clash of the official pack's mods in `options.txt`. */
 export type KeyChangeView = {
 	/**  The key mapping (`key.wi_zoom.zoom`); the UI names its action. */
@@ -2225,6 +2221,10 @@ export type KeyFixView = {
 	changes: KeyChangeView[],
 };
 
+/**
+ *  Why the server keeps turning an account away, read from its kick message (English, Turkish,
+ *  and the ASCII spelling AuthMe's Turkish messages use).
+ */
 export type KickCause = "banned" | "notWhitelisted" | 
 /**  The login plugin refused the password the login commands sent. */
 "wrongPassword" | 
