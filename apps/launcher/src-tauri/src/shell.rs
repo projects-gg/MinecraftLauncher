@@ -15,6 +15,12 @@ pub use pl_desktop::DeepLink;
 static PENDING_LINK: Mutex<Option<DeepLink>> = Mutex::new(None);
 
 /// True when the OS started us at login (autostart passes `--minimized`): stay in the tray.
+///
+/// The main window is created without the focus (`"focus": false` in `tauri.conf.json`): with it,
+/// the hidden window and its WebView took the foreground at every start, so after a start in the
+/// tray the keys typed in another window went to an invisible one (E2E1). Every way the window is
+/// shown activates it: the page's first reveal and the fallback (`show`, which activates on
+/// Windows) and [`focus_main_window`] (tray, second launch, links).
 pub fn start_minimized() -> bool {
     std::env::args().any(|arg| arg == "--minimized")
 }

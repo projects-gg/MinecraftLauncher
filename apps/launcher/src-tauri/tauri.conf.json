@@ -21,6 +21,7 @@
         "center": true,
         "decorations": false,
         "visible": false,
+        "focus": false,
         "resizable": true,
         "dragDropEnabled": true,
         "backgroundColor": "#0b0907"

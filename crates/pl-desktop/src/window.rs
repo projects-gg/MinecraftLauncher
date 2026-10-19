@@ -79,4 +79,23 @@ mod tests {
         assert_eq!(default_window_size(f64::NAN, f64::INFINITY), (1200, 712));
         assert_eq!(default_window_size(-5.0, 900.0), (1200, 712));
     }
+
+    /// The launcher's main window starts hidden and without the focus: a start in the tray
+    /// (`--minimized`) must not make the invisible window the foreground one (E2E1); showing it
+    /// activates it (`apps/launcher/src-tauri/src/shell.rs` → `start_minimized`).
+    #[test]
+    fn the_launcher_window_starts_hidden_without_the_focus() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../apps/launcher/src-tauri/tauri.conf.json"
+        );
+        let config = std::fs::read_to_string(path).expect("launcher tauri.conf.json");
+        let main = config
+            .split('{')
+            .find(|object| object.contains("\"label\": \"main\""))
+            .expect("the main window in tauri.conf.json");
+        let main = &main[..main.find('}').unwrap_or(main.len())];
+        assert!(main.contains("\"visible\": false"), "{main}");
+        assert!(main.contains("\"focus\": false"), "{main}");
+    }
 }
