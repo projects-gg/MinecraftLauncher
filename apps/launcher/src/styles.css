@@ -15,6 +15,38 @@
   view-transition-name: toasts;
 }
 
+/* Radix's modal layers (dialogs, sheets, the palette, menus, selects) lock the page while they
+   are open: `pointer-events: none` inline on body and a scroll lock (`body[data-scroll-locked]`,
+   which also sets a scroll-bar variable). Both are inherited by every element, so the whole
+   document recomputed its style when a layer opened and again when it closed (POLISH5: 517
+   elements, ~23 ms each way on Home in a headless preview; E2E2 measured two such recalcs in the
+   palette's and the account menu's first frame). Body already has the lock's values, and the
+   app's root keeps its own `pointer-events`, so a lock now recomputes three elements; the shield
+   after the root (index.html) takes the clicks outside the layer instead, as the inherited
+   `none` did. It sits under every layer (they are portaled after it, at z-40 or higher) and over
+   the app (the title bar is z-30); toasts stay above it, clickable, as before. */
+body {
+  position: relative;
+  overscroll-behavior: contain;
+  --removed-body-scroll-bar-size: 0px;
+}
+
+#root {
+  pointer-events: auto;
+}
+
+#layer-shield {
+  display: none;
+}
+
+body[data-scroll-locked] > #layer-shield {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: auto;
+}
+
 ::view-transition-old(root),
 ::view-transition-new(root),
 ::view-transition-group(toasts),
