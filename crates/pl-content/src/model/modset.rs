@@ -1,7 +1,8 @@
-//! Ready-made mod sets ("Hazır setler"): curated lists of Modrinth mods, resource packs and
-//! shader packs that the team keeps in Studio. A player starts a new instance from a set or adds
-//! one to an existing instance; everything a set brings stays optional and follows the mod
-//! center rules (see `docs/content-format.md`, "Mod sets").
+//! Ready-made mod sets ("Hazır setler"): curated lists of mods, resource packs and shader packs
+//! from Modrinth (or files the content tree already hosts for a pack) that the team keeps in
+//! Studio. A player starts a new instance from a set or adds one to an existing instance;
+//! everything a set brings stays optional and follows the mod center rules (see
+//! `docs/content-format.md`, "Mod sets").
 //!
 //! A set has one variant per Minecraft version (and mod loader). A variant is a small pack: its
 //! `files` and `items` have exactly the shapes of a pack manifest's, so the launcher installs a
@@ -16,9 +17,11 @@ use super::{
     PackItem, PackLoader, PackManifest, ProjectsExtension, check_schema, default_schema,
     is_https_url, is_valid_id, is_valid_minecraft_version,
 };
+use crate::client::{GITHUB_MIRROR, PRIMARY_MIRROR};
 use crate::error::{Error, Result};
 use crate::fsutil::sha256_hex;
 use crate::items::resolve_items;
+use crate::studio::hosted_file_path;
 
 /// Highest [`ModSetCatalog::schema`] this build understands.
 pub const MOD_SET_CATALOG_SCHEMA: u32 = 1;
@@ -203,7 +206,8 @@ pub enum ModSetProblem {
         minecraft: String,
         path: String,
     },
-    /// An item has no Modrinth reference (sets only carry Modrinth files).
+    /// An item has no Modrinth reference and its file is not one Projects hosts
+    /// ([`is_projects_hosted`]): sets only carry Modrinth files and the content tree's own.
     NotModrinth {
         set: String,
         minecraft: String,
@@ -312,7 +316,8 @@ impl std::fmt::Display for ModSetProblem {
                 item,
             } => write!(
                 f,
-                "mod set {set} ({minecraft}): item {item} has no Modrinth reference"
+                "mod set {set} ({minecraft}): item {item} is neither on Modrinth nor hosted by \
+                 Projects"
             ),
             Self::Manifest {
                 set,
@@ -711,7 +716,12 @@ impl ModSetVariant {
             });
         }
         for item in &self.items {
-            if item.modrinth.is_none() {
+            let hosted = self
+                .files
+                .iter()
+                .find(|file| file.path == item.path)
+                .is_some_and(is_projects_hosted);
+            if item.modrinth.is_none() && !hosted {
                 problems.push(ModSetProblem::NotModrinth {
                     set: set(),
                     minecraft: mc(),
@@ -749,6 +759,20 @@ pub fn loader_name(loader: PackLoader) -> &'static str {
         PackLoader::Forge => "forge",
         PackLoader::NeoForge => "neoforge",
     }
+}
+
+/// Whether every download of `file` is the copy Projects hosts for packs on its content mirrors
+/// (`files/<sha1>` under [`PRIMARY_MIRROR`] or [`GITHUB_MIRROR`]): a file the content tree
+/// already carries, such as an official pack mod that is not on Modrinth (WI Zoom). A set item
+/// with such a file needs no Modrinth reference.
+pub fn is_projects_hosted(file: &PackFile) -> bool {
+    let path = hosted_file_path(&file.hashes.sha1);
+    !file.downloads.is_empty()
+        && file.downloads.iter().all(|url| {
+            [PRIMARY_MIRROR, GITHUB_MIRROR]
+                .iter()
+                .any(|mirror| url.strip_prefix(mirror) == Some(path.as_str()))
+        })
 }
 
 #[cfg(test)]
@@ -977,7 +1001,9 @@ mod tests {
         assert!(has("mods/readme.txt: wrong file extension"), "{problems:?}");
         assert!(has("shaderpacks/a.zip: download URLs must be HTTPS"));
         assert!(has("shaderpacks/a.zip: no file size"));
-        assert!(has("item shader has no Modrinth reference"));
+        assert!(has(
+            "item shader is neither on Modrinth nor hosted by Projects"
+        ));
         assert!(problems.iter().all(|problem| problem.set_id() == "pvp"));
         assert!(
             problems
@@ -1020,6 +1046,52 @@ mod tests {
                 .iter()
                 .any(|p| p.to_string().contains("requires the unknown item ghost"))
         );
+    }
+
+    #[test]
+    fn a_file_projects_hosts_needs_no_modrinth_reference() {
+        // The official pack's WI Zoom: not on Modrinth, hosted under files/<sha1>.
+        let hosted = |sha1: &str| {
+            vec![
+                format!("{PRIMARY_MIRROR}files/{sha1}"),
+                format!("{GITHUB_MIRROR}files/{sha1}"),
+            ]
+        };
+        let mut with_hosted = variant();
+        with_hosted.items[0].modrinth = None;
+        with_hosted.items[0].id = "wi-zoom".into();
+        let sha1 = with_hosted.files[0].hashes.sha1.clone();
+        with_hosted.files[0].downloads = hosted(&sha1);
+        assert!(is_projects_hosted(&with_hosted.files[0]));
+        assert_eq!(with_hosted.problems("pvp"), []);
+
+        // Another file's address, a foreign host or a mix is not the hosted copy.
+        let mut other_sha = with_hosted.clone();
+        other_sha.files[0].downloads = hosted(&"f".repeat(40));
+        let mut foreign = with_hosted.clone();
+        foreign.files[0].downloads = vec![format!("https://example.com/files/{sha1}")];
+        let mut mixed = with_hosted.clone();
+        mixed.files[0]
+            .downloads
+            .push("https://cdn.modrinth.com/data/x/versions/y/zoom.jar".into());
+        let mut none = with_hosted.clone();
+        none.files[0].downloads.clear();
+        for broken in [other_sha, foreign, mixed, none] {
+            assert!(!is_projects_hosted(&broken.files[0]));
+            assert!(
+                broken.problems("pvp").iter().any(
+                    |p| matches!(p, ModSetProblem::NotModrinth { item, .. } if item == "wi-zoom")
+                ),
+                "{:?}",
+                broken.files[0].downloads
+            );
+        }
+
+        // An instance whose pack has an item with that id leaves the set's copy out.
+        let provided: BTreeSet<String> = ["wi-zoom".to_owned()].into();
+        let manifest = with_hosted.manifest("pvp", "PvP", &provided);
+        assert!(manifest.projects.item("wi-zoom").is_none());
+        assert!(manifest.file("mods/zoom.jar").is_none());
     }
 
     #[test]

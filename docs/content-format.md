@@ -1255,8 +1255,9 @@ Moving from version A to version B:
 
 ## Mod sets
 
-Ready-made sets ("Hazır setler") are curated lists of Modrinth mods, resource packs and shader
-packs that the team keeps in Studio, for example for PvP or for performance. A player starts a
+Ready-made sets ("Hazır setler") are curated lists of mods, resource packs and shader packs from
+Modrinth (or files the content tree already hosts for a pack) that the team keeps in Studio, for
+example for PvP or for performance. A player starts a
 new instance from a set or adds a set to an existing instance; everything a set brings stays
 optional and follows the mod center rules. The index references the catalog as `modSets`
 (`modsets/modsets.<sha256>.json`).
@@ -1373,12 +1374,17 @@ optional and follows the mod center rules. The index references the catalog as `
       version, vanilla ones too. No two variants share the Minecraft version and the loader.
     - `files[]`: `.mrpack` file entries ([Modpacks](#modpacks)), each a single file directly in
       `mods/` (`.jar`), `resourcepacks/` or `shaderpacks/` (`.zip`), with HTTPS downloads and a
-      size. Studio writes only Modrinth files (`cdn.modrinth.com`): we never host set files
-      (many authors' licenses forbid copies).
+      size. A file comes from Modrinth (`cdn.modrinth.com`) or is one the content tree already
+      hosts for a pack: every download is `files/<sha1>` on the content mirrors
+      (`https://cdn.projects.gg/v1/`, the GitHub mirror), for example the official pack's WI Zoom,
+      which is not on Modrinth. Studio uploads no set files of its own (many authors' licenses
+      forbid copies).
     - `items[]` (1–64): pack items with the rules of `projects.items` (unique ids, one file each,
       a title, HTTPS icon and page, `requires` without cycles, `library`, `defaultEnabled`), each
-      with a `modrinth` reference; every file is installed by exactly one item. An item's kind
-      follows its file's folder: mod, resource pack or shader pack.
+      with a `modrinth` reference unless its file is a hosted one; every file is installed by
+      exactly one item. An item's kind follows its file's folder: mod, resource pack or shader
+      pack. An item that stands for an official pack item without a Modrinth project takes that
+      item's id (`wi-zoom`), so the pack's instances leave it out (below).
 - Studio refuses to publish a catalog that breaks a rule. A client leaves out the sets that break
   one (logged) and keeps the others.
 
@@ -1418,8 +1424,11 @@ What a set does in an instance:
 - **Shader packs** are shared too. When a set puts a shader pack in place for the first time and
   Iris has none chosen (`config/iris.properties` without a `shaderPack`), the launcher chooses it
   once (`shaderPack=<file>`, `enableShaders=true`); otherwise the player picks it in Iris.
-- **Old versions.** Sets carry Modrinth files only, for the versions the server supports with
-  Fabric or NeoForge. 1.8.9 with Forge and OptiFine is out of scope: OptiFine may not be
+- **Keys.** A new `options.txt` of an instance with sets gets the official pack's key table, as
+  the pack's instances do (the sets bring the pack's WI Zoom and Gamma Utils, whose own keys
+  clash with the game's), and the mod check offers the same one-tap fix for an older file.
+- **Old versions.** Sets carry Modrinth files (and the content tree's own) only, for the
+  versions the server supports with Fabric or NeoForge. 1.8.9 with Forge and OptiFine is out of scope: OptiFine may not be
   redistributed and has no Modrinth files.
 
 The launcher records the sets of a game directory in `<game dir>/.projects/mod-sets.json`, per

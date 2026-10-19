@@ -767,6 +767,15 @@ async fn settle_packs(game_dir: &Path, report: &SetApplyReport) {
     }
 }
 
+/// Whether a ready-made set is added to the game directory. Such an instance gets the official
+/// pack's key table like the pack's own instances (a new `options.txt`, the clash check): the
+/// sets bring the pack's WI Zoom and Gamma Utils, whose own keys clash with the game's.
+pub(crate) async fn has_sets(game_dir: &Path) -> bool {
+    ModSetStates::load(game_dir)
+        .await
+        .is_ok_and(|states| !states.sets.is_empty())
+}
+
 /// Turns on the resource packs sets installed that wait for `options.txt` (each once). Called
 /// after a set changes files and right before a launch, after the first `options.txt` is
 /// written. Never fails a launch.

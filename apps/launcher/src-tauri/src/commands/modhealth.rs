@@ -230,11 +230,13 @@ async fn check_instance(
     let snapshot = scan(game_dir.join("mods")).await;
     let (origins, titles) = sources_for(state, instance, &instance_dir, &game_dir, &snapshot).await;
     let report = check_mods(&snapshot, &env, &origins);
-    let keys = if instance.managed_pack.is_some() {
-        pl_mc::instance::key_clashes_in(&game_dir).await
-    } else {
-        Vec::new()
-    };
+    // The pack's key table: the official pack's instances and those with ready-made sets.
+    let keys =
+        if instance.managed_pack.is_some() || crate::commands::modsets::has_sets(&game_dir).await {
+            pl_mc::instance::key_clashes_in(&game_dir).await
+        } else {
+            Vec::new()
+        };
     Ok(Checked {
         env,
         snapshot,
@@ -979,8 +981,9 @@ async fn options_free(
     Ok(guard)
 }
 
-/// "Düzelt" for the key clash of an official pack instance: backs up `options.txt` and moves only
-/// the clashing bindings to the pack's table (`pl_mc::instance::fix_key_clashes_in`).
+/// "Düzelt" for the key clash of an official pack instance (or one with ready-made sets): backs
+/// up `options.txt` and moves only the clashing bindings to the pack's table
+/// (`pl_mc::instance::fix_key_clashes_in`).
 #[tauri::command]
 #[specta::specta]
 pub async fn mods_fix_keys(
@@ -998,13 +1001,13 @@ pub async fn mods_fix_keys(
         backup: None,
         changes: Vec::new(),
     };
-    if instance.managed_pack.is_none() {
-        return Ok(nothing);
-    }
     let game_dir = state
         .instances
         .game_dir(&instance_id)
         .map_err(CmdError::from)?;
+    if instance.managed_pack.is_none() && !crate::commands::modsets::has_sets(&game_dir).await {
+        return Ok(nothing);
+    }
     Ok(
         match pl_mc::instance::fix_key_clashes_in(&game_dir)
             .await

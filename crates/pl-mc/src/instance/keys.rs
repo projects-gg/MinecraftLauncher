@@ -1,5 +1,6 @@
 //! Key bindings a new `options.txt` of the official pack starts with, and the one-tap fix for an
-//! older file that still has the clashes.
+//! older file that still has the clashes. The desktop launcher uses the same table for an instance
+//! with ready-made sets, which bring the pack's WI Zoom and Gamma Utils.
 //!
 //! The pack's mods ship default keys that clash with each other and with the game (WI Zoom and
 //! Simple Voice Chat's menu both on V, …), and since 26.1 one key press fires every mapping bound

@@ -40,7 +40,7 @@ pub use jiff::Timestamp;
 pub use modset::{
     MAX_MOD_SET_ITEMS, MAX_MOD_SET_NAME_CHARS, MAX_MOD_SET_SUMMARY_CHARS, MAX_MOD_SET_VARIANTS,
     MAX_MOD_SETS, MOD_SET_CATALOG_SCHEMA, ModSet, ModSetCatalog, ModSetItemKind, ModSetProblem,
-    ModSetPurpose, ModSetText, ModSetVariant, loader_name,
+    ModSetPurpose, ModSetText, ModSetVariant, is_projects_hosted, loader_name,
 };
 pub use news::{NEWS_FEED_SCHEMA, NewsCategory, NewsFeed, NewsItem, compare_news};
 pub use pack::{
