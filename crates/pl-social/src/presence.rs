@@ -33,7 +33,7 @@ use url::Url;
 use crate::auth::SessionToken;
 use crate::backoff::{Backoff, BackoffPolicy, jitter};
 use crate::error::{ErrorCode, Result, SocialError, parse_retry_after};
-use crate::model::{PublicProfile, StatusMode};
+use crate::model::{FriendGroups, PublicProfile, StatusMode, Team, TeamExit, TeamInvite};
 use crate::protocol::{ClientMessage, Invite, LocalStatus, Presence, ServerMessage};
 use crate::tls;
 
@@ -66,15 +66,27 @@ impl Default for PresenceOptions {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum PresenceEvent {
-    /// After every (re)connect: your status mode, the friends who are online right now (replace
-    /// the whole online list) and invites that waited for you (show them as a quiet list).
+    /// After every (re)connect: your status mode, the friends and teammates who are online right
+    /// now (replace the whole online list) and invites that waited for you (show them as a quiet
+    /// list).
     Connected {
         status: StatusMode,
         friends: Vec<Presence>,
         invites: Vec<Invite>,
     },
-    /// A friend's presence changed.
+    /// A friend's or a teammate's presence changed.
     Presence(Presence),
+    /// Your team changed (members, roles, name, code), or you are no longer in one (None, with
+    /// the reason; `by` is who made the change).
+    TeamChanged {
+        team: Option<Team>,
+        reason: Option<TeamExit>,
+        by: Option<String>,
+    },
+    /// A friend invited you to their team.
+    TeamInvited(TeamInvite),
+    /// Your friend categories changed on another device.
+    GroupsChanged(FriendGroups),
     /// A request was accepted (by either side): a new friend, with their current presence.
     FriendAdded {
         friend: PublicProfile,
@@ -601,7 +613,8 @@ async fn on_text(
         ServerMessage::Hello {
             status: mode,
             keepalive_seconds,
-            friends,
+            mut friends,
+            team,
             invites,
         } => {
             state.greeted = true;
@@ -610,6 +623,8 @@ async fn on_text(
             if let Some(seconds) = keepalive_seconds.filter(|s| (15..=300).contains(s)) {
                 state.keepalive = state.keepalive.min(Duration::from_secs(seconds));
             }
+            // Everyone online the player may see: friends, then teammates who are not friends.
+            friends.extend(team);
             let _ = events.send(PresenceEvent::Connected {
                 status: mode,
                 friends,
@@ -629,6 +644,9 @@ async fn on_text(
         ServerMessage::Invite { invite } => PresenceEvent::Invite(invite),
         ServerMessage::Invites { invites } => PresenceEvent::QueuedInvites(invites),
         ServerMessage::Status { status } => PresenceEvent::StatusChanged(status),
+        ServerMessage::Team { team, reason, by } => PresenceEvent::TeamChanged { team, reason, by },
+        ServerMessage::TeamInvite { invite } => PresenceEvent::TeamInvited(invite),
+        ServerMessage::Groups { groups } => PresenceEvent::GroupsChanged(groups),
         ServerMessage::Ack { rid, delivered } => {
             if let Some(reply) = rid.and_then(|rid| pending.remove(&rid)) {
                 let outcome = if delivered == Some(true) {

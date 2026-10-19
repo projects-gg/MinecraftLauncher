@@ -39,6 +39,29 @@ pub enum ErrorCode {
     LimitOutgoingRequests,
     LimitIncomingRequests,
     SettingsSecretKey,
+    /// The friend categories document does not add up.
+    InvalidGroups,
+    InvalidTeamName,
+    InvalidTeamTag,
+    /// The team name or tag is on the service's word list.
+    TeamNameRejected,
+    /// Unknown team code, or a team you are not in (also when someone in it blocked you).
+    TeamNotFound,
+    TeamInviteNotFound,
+    /// Not a member of this team (removing, handing on the founder role).
+    MemberNotFound,
+    /// You are in a team already; leave it first.
+    AlreadyInTeam,
+    /// The friend you invited is in this team already.
+    AlreadyMember,
+    /// Only the founder can do this.
+    TeamFounderOnly,
+    /// A founder with members hands the role on before leaving.
+    FounderMustTransfer,
+    /// You blocked someone in this team.
+    BlockedMember,
+    LimitTeamMembers,
+    LimitTeamInvites,
     UpgradeRequired,
     RateLimited,
     Internal,
@@ -74,6 +97,20 @@ const CODES: &[(&str, ErrorCode)] = &[
     ("limit_outgoing_requests", ErrorCode::LimitOutgoingRequests),
     ("limit_incoming_requests", ErrorCode::LimitIncomingRequests),
     ("settings_secret_key", ErrorCode::SettingsSecretKey),
+    ("invalid_groups", ErrorCode::InvalidGroups),
+    ("invalid_team_name", ErrorCode::InvalidTeamName),
+    ("invalid_team_tag", ErrorCode::InvalidTeamTag),
+    ("team_name_rejected", ErrorCode::TeamNameRejected),
+    ("team_not_found", ErrorCode::TeamNotFound),
+    ("team_invite_not_found", ErrorCode::TeamInviteNotFound),
+    ("member_not_found", ErrorCode::MemberNotFound),
+    ("already_in_team", ErrorCode::AlreadyInTeam),
+    ("already_member", ErrorCode::AlreadyMember),
+    ("team_founder_only", ErrorCode::TeamFounderOnly),
+    ("founder_must_transfer", ErrorCode::FounderMustTransfer),
+    ("blocked_member", ErrorCode::BlockedMember),
+    ("limit_team_members", ErrorCode::LimitTeamMembers),
+    ("limit_team_invites", ErrorCode::LimitTeamInvites),
     ("upgrade_required", ErrorCode::UpgradeRequired),
     ("rate_limited", ErrorCode::RateLimited),
     ("internal", ErrorCode::Internal),

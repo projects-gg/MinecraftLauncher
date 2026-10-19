@@ -2,10 +2,11 @@
 //! for moments worth a toast or a notification. camelCase JSON; the launcher exports the
 //! TypeScript types with tauri-specta. Nothing here carries a token or an internal error.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    Limits, Me, Privacy, PublicProfile, Relation, SettingsMeta, StatusMode, discord_avatar_url,
+    FriendGroup, Limits, Me, Privacy, PublicProfile, Relation, SettingsMeta, StatusMode, TeamExit,
+    TeamRelation, TeamRole, discord_avatar_url,
 };
 use crate::protocol::{Game, LocalStatus, PresenceState};
 use crate::qr::QrPath;
@@ -45,6 +46,108 @@ pub struct SocialView {
     pub limits: Option<Limits>,
     /// What this launcher tells friends right now.
     pub activity: ActivityView,
+    /// The player's friend categories; None while the service does not offer them (an older
+    /// service) or the list has not arrived.
+    pub groups: Option<FriendGroupsView>,
+    /// Teams are on (signed config `features.teams`) and the service offers them.
+    pub teams: bool,
+    /// The player's team (only while `teams`).
+    pub team: Option<TeamView>,
+    /// Invites to teams, newest first (only while `teams`).
+    pub team_invites: Vec<TeamInviteView>,
+}
+
+/// The player's friend categories, in their order, and who is in which.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FriendGroupsView {
+    /// The saved version (0 before the first save).
+    pub version: u64,
+    pub groups: Vec<FriendGroup>,
+    /// Friends without an entry are in the implicit "Arkadaşlar" category.
+    pub members: Vec<GroupMember>,
+}
+
+/// One friend's category.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct GroupMember {
+    pub friend: String,
+    pub group: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamView {
+    pub id: String,
+    pub name: String,
+    pub tag: String,
+    /// `sword`, `shield`, … (the launcher draws a bundled icon).
+    pub emblem: String,
+    /// `TKM-XXXX-XXXX`
+    pub code: String,
+    /// `YYYY-MM-DD`
+    pub created_on: String,
+    /// The player's own role.
+    pub role: TeamRole,
+    /// Founder first, then by joining time; the player is among them.
+    pub members: Vec<TeamMemberView>,
+    /// Friends the player invited who have not answered yet.
+    pub invited: Vec<String>,
+    /// How many may be in a team.
+    pub limit: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamMemberView {
+    pub id: String,
+    pub name: String,
+    pub username: String,
+    pub avatar: String,
+    pub avatar_url: Option<String>,
+    pub role: TeamRole,
+    /// The player themself.
+    pub me: bool,
+    /// Also on the friend list.
+    pub friend: bool,
+    /// The player blocked them (they see each other offline).
+    pub blocked: bool,
+    pub state: PresenceState,
+    pub dnd: bool,
+    /// Where they play; `projects` means "Katıl". Never another server's address.
+    pub game: Option<Game>,
+    pub discord_url: String,
+    /// Unix seconds.
+    pub joined_at: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamInviteView {
+    pub team_id: String,
+    pub name: String,
+    pub tag: String,
+    pub emblem: String,
+    /// How many are in the team.
+    pub members: u32,
+    /// The friend who invited.
+    pub from: ProfileView,
+    /// Unix seconds.
+    pub sent_at: i64,
+}
+
+/// What a team code leads to.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamLookupView {
+    pub team_id: String,
+    pub name: String,
+    pub tag: String,
+    pub emblem: String,
+    pub members: u32,
+    pub relation: TeamRelation,
+    /// `TKM-XXXX-XXXX`, for joining.
+    pub code: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
@@ -240,6 +343,16 @@ pub enum SocialNotice {
     /// Signed in. `restore` is a settings backup saved by another computer, worth offering.
     SignedIn {
         restore: Option<SettingsMeta>,
+    },
+    /// A friend invited the player to their team (only while teams are on).
+    TeamInvite {
+        invite: Box<TeamInviteView>,
+    },
+    /// The founder removed the player from the team, or ended it.
+    TeamGone {
+        reason: TeamExit,
+        /// The team's name, for the sentence.
+        name: Option<String>,
     },
     SignInFailed {
         reason: SignInFailure,

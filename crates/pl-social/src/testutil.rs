@@ -24,6 +24,10 @@ impl Recorded {
     pub fn json(&self) -> serde_json::Value {
         serde_json::from_slice(&self.body).expect("request body is JSON")
     }
+
+    pub fn body_text(&self) -> String {
+        String::from_utf8_lossy(&self.body).into_owned()
+    }
 }
 
 pub(crate) struct MockReply {
@@ -38,6 +42,15 @@ impl MockReply {
             status,
             headers: vec![("Content-Type".into(), "application/json".into())],
             body: body.to_owned(),
+        }
+    }
+
+    /// A reply without a body (`204`).
+    pub fn empty(status: u16) -> Self {
+        Self {
+            status,
+            headers: Vec::new(),
+            body: String::new(),
         }
     }
 

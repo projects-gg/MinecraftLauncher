@@ -20,11 +20,12 @@ use url::Url;
 
 use crate::auth::{LoginAttempt, SessionToken, SignedIn, is_auth_code};
 use crate::backoff::jitter;
-use crate::codes::{friend_share_link, normalize_friend_code};
+use crate::codes::{friend_share_link, normalize_friend_code, normalize_team_code};
 use crate::error::{ErrorCode, Result, SocialError, from_response};
 use crate::model::{
-    CodeLookup, Friend, FriendsOverview, Me, ProfileUpdate, RequestOutcome, SessionInfo,
-    SettingsBackup, SettingsMeta, SettingsPrecondition,
+    CodeLookup, Friend, FriendGroups, FriendsOverview, Me, ProfileUpdate, RequestOutcome,
+    SessionInfo, SettingsBackup, SettingsMeta, SettingsPrecondition, TeamAnswer, TeamEdit,
+    TeamLookup, TeamsOverview,
 };
 use crate::presence::{PresenceHandle, PresenceOptions};
 
@@ -368,6 +369,18 @@ fn user_id(id: &str) -> Result<&str> {
     }
 }
 
+fn team_id(id: &str) -> Result<&str> {
+    if id.len() == 16
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+    {
+        Ok(id)
+    } else {
+        Err(SocialError::InvalidInput("not a team id"))
+    }
+}
+
 /// An authenticated client for one session. Cheap to clone.
 #[derive(Clone)]
 pub struct Session {
@@ -544,6 +557,124 @@ impl Session {
     pub async fn unblock(&self, id: &str) -> Result<()> {
         let path = format!("v1/blocks/{}", user_id(id)?);
         self.call(Method::DELETE, &path, None).await.map(drop)
+    }
+
+    // --- friend categories --------------------------------------------------------------------
+
+    /// Replaces the player's friend categories (the whole document); returns the new version.
+    /// Only the player ever sees them; their other devices get them over the presence socket.
+    pub async fn put_friend_groups(&self, groups: &FriendGroups) -> Result<u64> {
+        #[derive(Deserialize)]
+        struct Saved {
+            version: u64,
+        }
+        let body = serde_json::json!({ "groups": groups.groups, "members": groups.members });
+        let saved: Saved = self
+            .call(Method::PUT, "v1/friends/groups", Some(body))
+            .await?
+            .json()?;
+        Ok(saved.version)
+    }
+
+    // --- teams --------------------------------------------------------------------------------
+
+    /// The player's team, invites to them and their own waiting invites (also part of
+    /// [`Session::friends`]).
+    pub async fn teams(&self) -> Result<TeamsOverview> {
+        self.get("v1/teams").await
+    }
+
+    /// Founds a team (the player must not be in one).
+    pub async fn create_team(&self, name: &str, tag: &str, emblem: &str) -> Result<TeamAnswer> {
+        let body = serde_json::json!({ "name": name, "tag": tag, "emblem": emblem });
+        self.call(Method::POST, "v1/teams", Some(body))
+            .await?
+            .json()
+    }
+
+    /// Renames the team, changes its tag or emblem (founder).
+    pub async fn update_team(&self, team: &str, edit: &TeamEdit) -> Result<TeamAnswer> {
+        let body =
+            serde_json::to_value(edit).map_err(|error| SocialError::Protocol(error.to_string()))?;
+        let path = format!("v1/teams/{}", team_id(team)?);
+        self.call(Method::PATCH, &path, Some(body)).await?.json()
+    }
+
+    /// Ends the team for everyone (founder).
+    pub async fn disband_team(&self, team: &str) -> Result<()> {
+        let path = format!("v1/teams/{}", team_id(team)?);
+        self.call(Method::DELETE, &path, None).await.map(drop)
+    }
+
+    /// Leaves the team. A founder with members hands the role on first.
+    pub async fn leave_team(&self, team: &str) -> Result<()> {
+        let path = format!("v1/teams/{}/leave", team_id(team)?);
+        self.call(Method::POST, &path, None).await.map(drop)
+    }
+
+    /// A new team code (founder); the old one stops working at once.
+    pub async fn rotate_team_code(&self, team: &str) -> Result<String> {
+        #[derive(Deserialize)]
+        struct Rotated {
+            code: String,
+        }
+        let path = format!("v1/teams/{}/code", team_id(team)?);
+        let rotated: Rotated = self.call(Method::POST, &path, None).await?.json()?;
+        Ok(rotated.code)
+    }
+
+    /// Invites one of the player's friends to their team.
+    pub async fn invite_to_team(&self, team: &str, friend: &str) -> Result<()> {
+        let path = format!("v1/teams/{}/invites", team_id(team)?);
+        let body = serde_json::json!({ "to": user_id(friend)? });
+        self.call(Method::POST, &path, Some(body)).await.map(drop)
+    }
+
+    /// Removes a member (founder); the team code is renewed with it.
+    pub async fn remove_team_member(&self, team: &str, member: &str) -> Result<()> {
+        let path = format!("v1/teams/{}/members/{}", team_id(team)?, user_id(member)?);
+        self.call(Method::DELETE, &path, None).await.map(drop)
+    }
+
+    /// Hands the founder role to another member.
+    pub async fn transfer_team_founder(&self, team: &str, member: &str) -> Result<TeamAnswer> {
+        let path = format!("v1/teams/{}/founder", team_id(team)?);
+        let body = serde_json::json!({ "to": user_id(member)? });
+        self.call(Method::POST, &path, Some(body)).await?.json()
+    }
+
+    /// What a team code leads to (counts against the daily code lookup quota).
+    pub async fn lookup_team(&self, code: &str) -> Result<TeamLookup> {
+        let code = normalize_team_code(code).ok_or(SocialError::InvalidInput("not a team code"))?;
+        self.call(
+            Method::POST,
+            "v1/teams/lookup",
+            Some(serde_json::json!({ "code": code })),
+        )
+        .await?
+        .json()
+    }
+
+    /// Joins the team of a code.
+    pub async fn join_team(&self, code: &str) -> Result<TeamAnswer> {
+        let code = normalize_team_code(code).ok_or(SocialError::InvalidInput("not a team code"))?;
+        self.call(
+            Method::POST,
+            "v1/teams/join",
+            Some(serde_json::json!({ "code": code })),
+        )
+        .await?
+        .json()
+    }
+
+    pub async fn accept_team_invite(&self, team: &str) -> Result<TeamAnswer> {
+        let path = format!("v1/teams/invites/{}/accept", team_id(team)?);
+        self.call(Method::POST, &path, None).await?.json()
+    }
+
+    pub async fn decline_team_invite(&self, team: &str) -> Result<()> {
+        let path = format!("v1/teams/invites/{}/decline", team_id(team)?);
+        self.call(Method::POST, &path, None).await.map(drop)
     }
 
     /// The settings backup, or None if there is none.
@@ -748,6 +879,124 @@ mod tests {
             session.block("../me").await,
             Err(SocialError::InvalidInput(_))
         ));
+        assert_eq!(server.requests().len(), before);
+    }
+
+    const TEAM: &str = r#"{"team":{"id":"0123456789abcdef","name":"Gece Kartalları","tag":"GKR",
+        "emblem":"sword","code":"TKM-ABCD-EFGH","createdOn":"2026-10-19","members":[{"id":"123456789012345678",
+        "username":"ayse","displayName":null,"avatar":"discord","avatarHash":null,"role":"founder",
+        "joinedAt":5}]},"invited":[]}"#;
+
+    #[tokio::test]
+    async fn team_and_category_calls() {
+        let server = MockServer::start(|req| match (req.method.as_str(), req.path.as_str()) {
+            ("POST", "/v1/teams") => {
+                let body = req.json();
+                assert_eq!(body["name"], "Gece Kartalları");
+                assert_eq!(body["emblem"], "sword");
+                MockReply::json(201, TEAM)
+            }
+            ("POST", "/v1/teams/join") | ("POST", "/v1/teams/lookup") => {
+                assert_eq!(req.json()["code"], "TKM-ABCD-EFGH");
+                if req.path.ends_with("lookup") {
+                    MockReply::json(
+                        200,
+                        r#"{"team":{"id":"0123456789abcdef","name":"Gece Kartalları","tag":"GKR",
+                                "emblem":"sword","members":3},"relation":"elsewhere"}"#,
+                    )
+                } else {
+                    MockReply::json(200, TEAM)
+                }
+            }
+            ("PATCH", "/v1/teams/0123456789abcdef") => {
+                assert_eq!(req.body_text(), r#"{"tag":"PVP"}"#);
+                MockReply::json(200, TEAM)
+            }
+            ("POST", "/v1/teams/0123456789abcdef/invites") => {
+                assert_eq!(req.json()["to"], "223456789012345678");
+                MockReply::empty(204)
+            }
+            ("POST", "/v1/teams/0123456789abcdef/code") => {
+                MockReply::json(200, r#"{"code":"TKM-WXYZ-1234"}"#)
+            }
+            ("DELETE", "/v1/teams/0123456789abcdef/members/223456789012345678")
+            | ("POST", "/v1/teams/0123456789abcdef/leave")
+            | ("POST", "/v1/teams/invites/fedcba9876543210/decline") => MockReply::empty(204),
+            ("POST", "/v1/teams/invites/fedcba9876543210/accept") => MockReply::json(
+                409,
+                r#"{"error":{"code":"already_in_team","message":"Leave your team first"}}"#,
+            ),
+            ("PUT", "/v1/friends/groups") => {
+                let body = req.json();
+                assert_eq!(body["groups"][0]["id"], "okul");
+                assert_eq!(body["members"]["223456789012345678"], "okul");
+                assert!(body.get("version").is_none());
+                MockReply::json(200, r#"{"version":4}"#)
+            }
+            _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+        })
+        .await;
+        let session = client(&server).session(token());
+        let created = session
+            .create_team("Gece Kartalları", "gkr", "sword")
+            .await
+            .unwrap();
+        assert_eq!(created.team.unwrap().code, "TKM-ABCD-EFGH");
+        let lookup = session.lookup_team("tkm abcd efgh").await.unwrap();
+        assert_eq!(lookup.relation, crate::model::TeamRelation::Elsewhere);
+        assert_eq!(lookup.team.members, 3);
+        assert!(session.join_team("abcdefgh").await.unwrap().team.is_some());
+        let edit = TeamEdit {
+            tag: Some("PVP".into()),
+            ..TeamEdit::default()
+        };
+        session
+            .update_team("0123456789abcdef", &edit)
+            .await
+            .unwrap();
+        session
+            .invite_to_team("0123456789abcdef", "223456789012345678")
+            .await
+            .unwrap();
+        assert_eq!(
+            session.rotate_team_code("0123456789abcdef").await.unwrap(),
+            "TKM-WXYZ-1234"
+        );
+        session
+            .remove_team_member("0123456789abcdef", "223456789012345678")
+            .await
+            .unwrap();
+        session.leave_team("0123456789abcdef").await.unwrap();
+        session
+            .decline_team_invite("fedcba9876543210")
+            .await
+            .unwrap();
+        let refused = session
+            .accept_team_invite("fedcba9876543210")
+            .await
+            .unwrap_err();
+        assert_eq!(refused.code(), Some(&ErrorCode::AlreadyInTeam));
+
+        let mut groups = FriendGroups::default();
+        groups.groups.push(crate::model::FriendGroup {
+            id: "okul".into(),
+            name: "Okul".into(),
+        });
+        groups
+            .members
+            .insert("223456789012345678".into(), "okul".into());
+        assert_eq!(session.put_friend_groups(&groups).await.unwrap(), 4);
+
+        // Malformed codes and ids never reach the service.
+        let before = server.requests().len();
+        assert!(session.join_team("PRJ-ABCD-EFGH").await.is_err());
+        assert!(session.leave_team("../me").await.is_err());
+        assert!(
+            session
+                .invite_to_team("0123456789abcdef", "x")
+                .await
+                .is_err()
+        );
         assert_eq!(server.requests().len(), before);
     }
 

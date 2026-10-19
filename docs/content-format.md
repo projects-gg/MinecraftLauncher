@@ -348,7 +348,7 @@ cache file extension.
 
 Every field is optional (`{}` is a valid config). Defaults: no maintenance, no banners, bundled
 hero art with `particles: embers`, `season: none`, all feature flags `true` except `friends`
-(`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
+and `teams` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
 news feed, the launcher's built-in recommended Minecraft version.
 
 - `banners[].level`: `info | warning | event | critical`; a banner is shown while
@@ -385,6 +385,15 @@ news feed, the launcher's built-in recommended Minecraft version.
   "Birlikte oyna"). Off by default; while it is `false` (or missing) launchers show nothing of
   it and never contact the friends service. Turn it on only once `social.projects.gg` is live.
   Writers omit it while it is `false`, so existing configs keep their exact shape.
+- `features.teams`: teams inside the friends feature (create or join a team, invites, the team
+  section in the friends panel, teammates' presence). Off by default and only shown while
+  `features.friends` is on too. Launchers also hide it while the friends service does not
+  announce team limits (a service without the teams routes). Friend categories need no flag:
+  they follow `features.friends` and the service's support. Turn it on only after the service
+  with the teams routes and its database migration is live. Writers omit it while it is
+  `false`. Launchers that do not know the field ignore it; Studio 2.0 has no switch for it yet
+  and rejects configs that carry unknown feature fields, so add the switch to Studio before
+  publishing `teams: true`.
 - `newsFeed`: the Discord bot's feed ([News feed (Discord bot)](#news-feed-discord-bot)).
   `mirrors`: 1–4 distinct `https://` bases with a host, ending in `/`, without credentials, query
   or fragment. `keys`: 1–4 distinct `{ keyId, publicKey }`, `publicKey` the base64 of a 32-byte

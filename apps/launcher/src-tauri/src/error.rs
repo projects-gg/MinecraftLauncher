@@ -227,6 +227,17 @@ impl From<pl_social::SocialError> for CmdError {
                 "SOSYAL-KOD",
                 pick("Bu bir arkadaşlık kodu değil.", "That's not a friend code."),
             ),
+            E::InvalidInput("not a team code") => (
+                "SOSYAL-TAKIM-KOD",
+                pick("Bu bir takım kodu değil.", "That's not a team code."),
+            ),
+            E::InvalidInput("friend categories") => (
+                "SOSYAL-KATEGORI",
+                pick(
+                    "Kategoriler kaydedilemedi.",
+                    "Couldn't save your categories.",
+                ),
+            ),
             E::InvalidInput(_) | E::Protocol(_) => (
                 "SOSYAL",
                 pick(
@@ -306,6 +317,98 @@ impl From<pl_social::SocialError> for CmdError {
                     pick(
                         "Bu oturum zaten kapanmış.",
                         "This session is already closed.",
+                    ),
+                ),
+                C::InvalidGroups => (
+                    "SOSYAL-KATEGORI",
+                    pick(
+                        "Kategoriler kaydedilemedi.",
+                        "Couldn't save your categories.",
+                    ),
+                ),
+                C::InvalidTeamName => (
+                    "SOSYAL-TAKIM-AD",
+                    pick(
+                        "Takım adı 3 ile 24 karakter arasında olmalı: harf, rakam ve boşluk.",
+                        "A team name has 3 to 24 letters, digits or spaces.",
+                    ),
+                ),
+                C::InvalidTeamTag => (
+                    "SOSYAL-TAKIM-ETIKET",
+                    pick(
+                        "Etiket 2 ile 4 harf ya da rakam olmalı.",
+                        "A tag has 2 to 4 letters or digits.",
+                    ),
+                ),
+                C::TeamNameRejected => (
+                    "SOSYAL-TAKIM-AD",
+                    pick(
+                        "Bu ad kullanılamaz. Başka bir tane seç.",
+                        "That name can't be used. Pick another one.",
+                    ),
+                ),
+                C::TeamNotFound => (
+                    "SOSYAL-TAKIM-YOK",
+                    pick("Bu koda ait bir takım yok.", "No team has this code."),
+                ),
+                C::TeamInviteNotFound => (
+                    "SOSYAL-TAKIM-DAVET-YOK",
+                    pick(
+                        "Bu davet artık geçerli değil.",
+                        "This invite isn't valid anymore.",
+                    ),
+                ),
+                C::MemberNotFound => (
+                    "SOSYAL-TAKIM-UYE-YOK",
+                    pick(
+                        "Bu oyuncu artık takımda değil.",
+                        "This player isn't in the team anymore.",
+                    ),
+                ),
+                C::AlreadyInTeam => (
+                    "SOSYAL-TAKIM-VAR",
+                    pick(
+                        "Zaten bir takımdasın. Önce ondan ayrıl.",
+                        "You're already in a team. Leave it first.",
+                    ),
+                ),
+                C::AlreadyMember => (
+                    "SOSYAL-TAKIM-UYE",
+                    pick(
+                        "Bu oyuncu zaten takımda.",
+                        "This player is already in the team.",
+                    ),
+                ),
+                C::TeamFounderOnly => (
+                    "SOSYAL-TAKIM-KURUCU",
+                    pick(
+                        "Bunu yalnız takımın kurucusu yapabilir.",
+                        "Only the team's founder can do that.",
+                    ),
+                ),
+                C::FounderMustTransfer => (
+                    "SOSYAL-TAKIM-DEVRET",
+                    pick(
+                        "Ayrılmadan önce kuruculuğu başka bir üyeye devret.",
+                        "Hand the founder role to another member before you leave.",
+                    ),
+                ),
+                C::BlockedMember => (
+                    "SOSYAL-TAKIM-ENGEL",
+                    pick(
+                        "Bu takımda engellediğin biri var.",
+                        "You blocked someone in this team.",
+                    ),
+                ),
+                C::LimitTeamMembers => (
+                    "SOSYAL-TAKIM-DOLU",
+                    pick("Takım dolu.", "The team is full."),
+                ),
+                C::LimitTeamInvites => (
+                    "SOSYAL-TAKIM-DAVET-SINIR",
+                    pick(
+                        "Takımın bekleyen çok daveti var. Biraz sonra tekrar dene.",
+                        "The team has too many invites waiting. Try again later.",
                     ),
                 ),
                 C::Unauthorized => (

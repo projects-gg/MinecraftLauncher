@@ -1,15 +1,16 @@
 //! The optional friends feature ("Arkadaşlar"): thin commands over `pl_social::SocialService`.
 //! The service emits `social-view` (a full `SocialView` after every change) and `social-notice`
 //! (moments worth a toast). The feature flag comes from the signed launcher config; debug builds
-//! may point it at a local `wrangler dev` with `PROJECTS_SOCIAL_URL`.
+//! may point it at a local `wrangler dev` with `PROJECTS_SOCIAL_URL`. Teams follow
+//! `features.teams` (debug builds: also `PROJECTS_SOCIAL_TEAMS=1`).
 
 use std::sync::Arc;
 
 use pl_lang::pick;
 use pl_mc::launch::{GameEvent, QuickPlay};
 use pl_social::{
-    InviteResult, LookupView, ProfileUpdate, SendOutcome, SessionInfo, SettingsMeta, SocialService,
-    SocialUpdate, SocialView, StatusMode,
+    FriendGroup, GroupMember, InviteResult, LookupView, ProfileUpdate, SendOutcome, SessionInfo,
+    SettingsMeta, SocialService, SocialUpdate, SocialView, StatusMode, TeamEdit, TeamLookupView,
 };
 use tauri::{AppHandle, Emitter, State};
 
@@ -50,13 +51,29 @@ pub fn create(
         runtime,
         sink,
     );
+    service.set_teams_enabled(debug_teams());
     service.configure(pl_social::service_url(false, debug_override().as_deref()));
     service
 }
 
-/// Turns the feature on or off from the signed config's `features.friends`.
-pub fn apply_flag(service: &SocialService, friends: bool) {
+/// Turns the feature on or off from the signed config's `features.friends`, and teams from
+/// `features.teams` (they need friends on too).
+pub fn apply_flag(service: &SocialService, friends: bool, teams: bool) {
+    service.set_teams_enabled(teams || debug_teams());
     service.configure(pl_social::service_url(friends, debug_override().as_deref()));
+}
+
+/// `PROJECTS_SOCIAL_TEAMS=1` (debug builds only): teams on whatever the config says, for a
+/// local `wrangler dev`.
+fn debug_teams() -> bool {
+    #[cfg(debug_assertions)]
+    {
+        std::env::var("PROJECTS_SOCIAL_TEAMS").is_ok_and(|value| value == "1")
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        false
+    }
 }
 
 /// `PROJECTS_SOCIAL_URL` (debug builds only): forces the feature on against that service.
@@ -333,4 +350,111 @@ pub async fn social_backup_download(state: State<'_, AppState>) -> CmdResult<Opt
 #[specta::specta]
 pub async fn social_backup_delete(state: State<'_, AppState>) -> CmdResult<()> {
     Ok(state.social.delete_settings().await?)
+}
+
+/// Saves the player's friend categories: their order, names and who is in which (friends left
+/// out are in the implicit "Arkadaşlar"). Shown at once; saved in the background.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_groups_save(
+    state: State<'_, AppState>,
+    groups: Vec<FriendGroup>,
+    members: Vec<GroupMember>,
+) -> CmdResult<()> {
+    Ok(state.social.save_groups(groups, members).await?)
+}
+
+/// Founds a team. `emblem` is one of the service's emblem names.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_create(
+    state: State<'_, AppState>,
+    name: String,
+    tag: String,
+    emblem: String,
+) -> CmdResult<()> {
+    Ok(state.social.create_team(&name, &tag, &emblem).await?)
+}
+
+/// Renames the team, changes its tag or emblem (founder); unset fields stay.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_edit(
+    state: State<'_, AppState>,
+    name: Option<String>,
+    tag: Option<String>,
+    emblem: Option<String>,
+) -> CmdResult<()> {
+    Ok(state
+        .social
+        .edit_team(TeamEdit { name, tag, emblem })
+        .await?)
+}
+
+/// Ends the team for everyone (founder).
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_disband(state: State<'_, AppState>) -> CmdResult<()> {
+    Ok(state.social.disband_team().await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_leave(state: State<'_, AppState>) -> CmdResult<()> {
+    Ok(state.social.leave_team().await?)
+}
+
+/// A new team code (founder); the old one stops working.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_rotate_code(state: State<'_, AppState>) -> CmdResult<String> {
+    Ok(state.social.rotate_team_code().await?)
+}
+
+/// Invites a friend to the player's team.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_invite(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    Ok(state.social.invite_to_team(&id).await?)
+}
+
+/// Removes a member (founder); the code is renewed with it.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_remove(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    Ok(state.social.remove_team_member(&id).await?)
+}
+
+/// Hands the founder role to another member.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_transfer(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    Ok(state.social.transfer_team_founder(&id).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_lookup(
+    state: State<'_, AppState>,
+    code: String,
+) -> CmdResult<TeamLookupView> {
+    Ok(state.social.lookup_team(&code).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_join(state: State<'_, AppState>, code: String) -> CmdResult<()> {
+    Ok(state.social.join_team(&code).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_accept(state: State<'_, AppState>, team: String) -> CmdResult<()> {
+    Ok(state.social.accept_team_invite(&team).await?)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_decline(state: State<'_, AppState>, team: String) -> CmdResult<()> {
+    Ok(state.social.decline_team_invite(&team).await?)
 }

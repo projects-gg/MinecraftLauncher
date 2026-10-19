@@ -3,6 +3,7 @@ import { trAfkAlerts } from "./tr-afk-alerts";
 import { trAfkConnect } from "./tr-afk-connect";
 import { trDisk } from "./tr-disk";
 import { trEventJoin } from "./tr-event-join";
+import { trFriendGroups } from "./tr-friend-groups";
 import { trGraphics } from "./tr-graphics";
 import { trImport } from "./tr-import";
 import { trKeyClash } from "./tr-key-clash";
@@ -17,6 +18,7 @@ import { trReminders } from "./tr-reminders";
 import { trShortcuts } from "./tr-shortcuts";
 import { trShotCopy } from "./tr-shot-copy";
 import { trSocial } from "./tr-social";
+import { trTeams } from "./tr-teams";
 import { trTuning } from "./tr-tuning";
 import { trUpdates } from "./tr-updates";
 
@@ -32,6 +34,8 @@ export const tr = {
   shortcuts: trShortcuts,
   prepare: trPrepare,
   social: trSocial,
+  friendGroups: trFriendGroups,
+  teams: trTeams,
   minecraft: trMinecraft,
   eventJoin: trEventJoin,
   shotCopy: trShotCopy,

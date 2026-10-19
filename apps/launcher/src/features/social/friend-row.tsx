@@ -5,30 +5,59 @@
 import {
   DiscordLogo,
   DotsThree,
+  FolderSimple,
+  FolderSimplePlus,
   PaperPlaneTilt,
   Play,
   Prohibit,
   Star,
   UserMinus,
+  UsersThree,
 } from "@phosphor-icons/react";
-import { Button, ContextMenu, cn, easeOutExpo, IconButton, type MenuItem, Tooltip } from "@pl/ui";
+import {
+  Button,
+  ContextMenu,
+  cn,
+  easeOutExpo,
+  IconButton,
+  type MenuItem,
+  Select,
+  Tooltip,
+} from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu, Popover } from "radix-ui";
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, type PointerEvent as ReactPointerEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCalm } from "@/features/accounts/calm";
 import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
-import type { Friend } from "@/lib/api/social-types";
+import type { Friend, FriendGroup } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
 import { useLaunch } from "@/stores/launch";
 import { attempt, inviteCoolingDown, inviteFriend } from "./actions";
 import { DiscordButton } from "./discord-button";
+import { REST } from "./groups";
 import { gameBusy, joinProjects } from "./join";
 import { isJoinable, presenceLine } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
+
+/** The friend's category and where else they may go (categories mode of the list). */
+export interface RowCategories {
+  groups: FriendGroup[];
+  /** The friend's category id, or REST. */
+  current: string;
+  onMove: (group: string) => void;
+  /** A new category with this friend in it (its name is asked in the list). */
+  onNew: () => void;
+}
+
+/** The player's team, for "Takıma davet et". */
+export interface RowTeam {
+  state: "invitable" | "invited" | "member";
+  onInvite: () => void;
+}
 
 // In the interface's language, looked up at each call (the language can change live).
 const dateFormat = () => dateTimeFormat({ day: "numeric", month: "long", year: "numeric" });
@@ -78,11 +107,15 @@ type Confirm = "remove" | "block";
 function FriendCard({
   friend,
   initialConfirm,
+  categories,
+  team,
   onDone,
 }: {
   friend: Friend;
   /** Opened from the right-click menu's remove or block: the card starts at that question. */
   initialConfirm: Confirm | null;
+  categories?: RowCategories | null;
+  team?: RowTeam | null;
   onDone: () => void;
 }) {
   const { t } = useTranslation();
@@ -164,7 +197,34 @@ function FriendCard({
         <DiscordButton className="w-full" onClick={() => void api.openUrl(friend.discordUrl)}>
           {t("social.actions.message")}
         </DiscordButton>
+        {team && team.state !== "member" ? (
+          <Button
+            variant="secondary"
+            className="w-full"
+            icon={<UsersThree size={16} />}
+            disabled={team.state === "invited"}
+            onClick={team.onInvite}
+          >
+            {team.state === "invited" ? t("teams.invite.sent") : t("teams.invite.toTeam")}
+          </Button>
+        ) : null}
       </div>
+
+      {categories && categories.groups.length > 0 ? (
+        <div className="mt-3 flex items-center gap-3">
+          <span className="shrink-0 text-[12.5px] text-ash-400">{t("friendGroups.category")}</span>
+          <Select
+            className="h-8 min-w-0 flex-1"
+            label={t("friendGroups.category")}
+            value={categories.current}
+            onValueChange={(group) => categories.onMove(group)}
+            options={[
+              ...categories.groups.map((g) => ({ value: g.id, label: g.name })),
+              { value: REST, label: t("friendGroups.rest") },
+            ]}
+          />
+        </div>
+      ) : null}
 
       <div className="mt-3 border-t border-white/8 pt-2">
         <AnimatePresence mode="popLayout" initial={false}>
@@ -299,10 +359,19 @@ export function FriendRow({
   friend,
   favorite,
   onKeyDown,
+  categories,
+  team,
+  onPress,
 }: {
   friend: Friend;
   favorite: boolean;
   onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void;
+  /** Categories mode: the friend's category and the others (null: not offered). */
+  categories?: RowCategories | null;
+  /** The player's team, for "Takıma davet et" (null: no team, or teams off). */
+  team?: RowTeam | null;
+  /** A press that may become a drag into another category. */
+  onPress?: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
   const { t } = useTranslation();
   const calm = useCalm();
@@ -351,6 +420,45 @@ export function FriendRow({
       icon: <Star size={16} weight={favorite ? "fill" : "regular"} />,
       onSelect: () => toggleFavorite(friend.id),
     },
+    ...(categories
+      ? [
+          {
+            label: t("friendGroups.moveTo"),
+            icon: <FolderSimple size={16} />,
+            onSelect: () => {},
+            items: [
+              ...categories.groups.map((g) => ({
+                label: g.name,
+                checked: categories.current === g.id,
+                radio: true,
+                onSelect: () => categories.onMove(g.id),
+              })),
+              {
+                label: t("friendGroups.rest"),
+                checked: categories.current === REST,
+                radio: true,
+                onSelect: () => categories.onMove(REST),
+              },
+              null,
+              {
+                label: t("friendGroups.addMenu"),
+                icon: <FolderSimplePlus size={16} />,
+                onSelect: categories.onNew,
+              },
+            ],
+          },
+        ]
+      : []),
+    ...(team && team.state !== "member"
+      ? [
+          {
+            label: team.state === "invited" ? t("teams.invite.sent") : t("teams.invite.toTeam"),
+            icon: <UsersThree size={16} />,
+            disabled: team.state === "invited",
+            onSelect: team.onInvite,
+          },
+        ]
+      : []),
     null,
     {
       label: t("social.actions.remove"),
@@ -367,7 +475,10 @@ export function FriendRow({
 
   return (
     <ContextMenu items={items}>
-      <div className="group/friend flex items-center gap-2 rounded-[var(--radius-panel)] pr-2 transition-colors duration-150 hover:bg-white/[0.045] data-[state=open]:bg-white/[0.06] has-[[data-state=open]]:bg-white/[0.06]">
+      <div
+        onPointerDown={onPress}
+        className="group/friend flex items-center gap-2 rounded-[var(--radius-panel)] pr-2 transition-colors duration-150 hover:bg-white/[0.045] data-[state=open]:bg-white/[0.06] has-[[data-state=open]]:bg-white/[0.06]"
+      >
         <Popover.Root
           open={open}
           onOpenChange={(next) => {
@@ -449,6 +560,8 @@ export function FriendRow({
                       key={intent ?? "card"}
                       friend={friend}
                       initialConfirm={intent}
+                      categories={categories}
+                      team={team}
                       onDone={() => {
                         setOpen(false);
                         setIntent(null);
@@ -462,7 +575,7 @@ export function FriendRow({
         </Popover.Root>
         <AnimatePresence initial={false}>
           {joinable ? (
-            <motion.span key="join" className="flex" {...rise(reduce, 0, 0.2)}>
+            <motion.span key="join" className="flex" data-no-drag {...rise(reduce, 0, 0.2)}>
               <JoinButton />
             </motion.span>
           ) : null}

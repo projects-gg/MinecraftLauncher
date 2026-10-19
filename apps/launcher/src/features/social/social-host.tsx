@@ -118,6 +118,38 @@ function handleNotice(notice: SocialNotice) {
         },
       });
       break;
+    case "teamInvite": {
+      const text = i18n.t("teams.notices.invite", {
+        name: notice.invite.from.name,
+        team: notice.invite.name,
+      });
+      void notifyOutside(text);
+      // The open list already shows it, in place.
+      if (listInView()) {
+        announce(text);
+        break;
+      }
+      toast(text, {
+        action: {
+          label: i18n.t("social.notices.show"),
+          onClick: () => useSocialUi.getState().openPanel({ page: "list" }),
+        },
+      });
+      break;
+    }
+    case "teamGone": {
+      const name = notice.name;
+      const text =
+        notice.reason === "kicked"
+          ? name
+            ? i18n.t("teams.notices.kicked", { team: name })
+            : i18n.t("teams.notices.kickedUnnamed")
+          : name
+            ? i18n.t("teams.notices.disbanded", { team: name })
+            : i18n.t("teams.notices.disbandedUnnamed");
+      toast(text);
+      break;
+    }
   }
 }
 

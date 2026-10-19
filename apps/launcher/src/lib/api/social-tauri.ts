@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   type CmdError,
   commands,
+  type FriendGroupsView,
   type FriendView,
   type InviteView,
   type MeView,
@@ -10,9 +11,13 @@ import {
   type ProfileView,
   type RequestView,
   type SocialView,
+  type TeamInviteView,
+  type TeamMemberView,
+  type TeamView,
 } from "@/bindings";
 import type {
   Friend,
+  FriendGroups,
   FriendRequest,
   SocialApi,
   SocialGame,
@@ -21,6 +26,9 @@ import type {
   SocialNotice,
   SocialProfile,
   SocialSnapshot,
+  SocialTeam,
+  TeamInvite,
+  TeamMember,
 } from "./social-types";
 
 /** A failed friends command: friendly `message`, plus `code`/`details` for "copy details". */
@@ -108,6 +116,60 @@ function me(v: MeView): SocialMe {
   };
 }
 
+function groups(v: FriendGroupsView): FriendGroups {
+  return {
+    version: v.version,
+    groups: v.groups,
+    members: Object.fromEntries(v.members.map((m) => [m.friend, m.group])),
+  };
+}
+
+function teamMember(v: TeamMemberView): TeamMember {
+  return {
+    id: v.id,
+    name: v.name,
+    username: v.username,
+    avatar: v.avatar,
+    avatarUrl: opt(v.avatarUrl),
+    role: v.role,
+    me: v.me,
+    friend: v.friend,
+    blocked: v.blocked,
+    state: v.state,
+    dnd: v.dnd,
+    game: game(v.game),
+    discordUrl: v.discordUrl,
+    joinedAt: v.joinedAt,
+  };
+}
+
+function team(v: TeamView): SocialTeam {
+  return {
+    id: v.id,
+    name: v.name,
+    tag: v.tag,
+    emblem: v.emblem,
+    code: v.code,
+    createdOn: v.createdOn,
+    role: v.role,
+    members: v.members.map(teamMember),
+    invited: v.invited,
+    limit: v.limit,
+  };
+}
+
+function teamInvite(v: TeamInviteView): TeamInvite {
+  return {
+    teamId: v.teamId,
+    name: v.name,
+    tag: v.tag,
+    emblem: v.emblem,
+    members: v.members,
+    from: profile(v.from),
+    sentAt: v.sentAt,
+  };
+}
+
 export function snapshot(v: SocialView): SocialSnapshot {
   return {
     seq: v.seq,
@@ -125,6 +187,10 @@ export function snapshot(v: SocialView): SocialSnapshot {
       v.activity.state === "playing"
         ? { state: "playing", host: opt(v.activity.host) }
         : { state: v.activity.state },
+    groups: v.groups ? groups(v.groups) : undefined,
+    teams: v.teams,
+    team: v.team ? team(v.team) : undefined,
+    teamInvites: v.teamInvites.map(teamInvite),
   };
 }
 
@@ -146,6 +212,10 @@ function notice(v: NoticeBinding): SocialNotice {
       return { kind: "signInFailed", reason: v.reason };
     case "signedOutRemotely":
       return { kind: "signedOutRemotely" };
+    case "teamInvite":
+      return { kind: "teamInvite", invite: teamInvite(v.invite) };
+    case "teamGone":
+      return { kind: "teamGone", reason: v.reason, name: opt(v.name) };
   }
 }
 
@@ -235,5 +305,47 @@ export const tauriSocial: SocialApi = {
   },
   async deleteBackup() {
     await ok(commands.socialBackupDelete());
+  },
+  async saveGroups(list, members) {
+    await ok(
+      commands.socialGroupsSave(
+        list,
+        Object.entries(members).map(([friend, group]) => ({ friend, group })),
+      ),
+    );
+  },
+  async createTeam({ name, tag, emblem }) {
+    await ok(commands.socialTeamCreate(name, tag, emblem));
+  },
+  async editTeam(change) {
+    await ok(
+      commands.socialTeamEdit(change.name ?? null, change.tag ?? null, change.emblem ?? null),
+    );
+  },
+  async disbandTeam() {
+    await ok(commands.socialTeamDisband());
+  },
+  async leaveTeam() {
+    await ok(commands.socialTeamLeave());
+  },
+  rotateTeamCode: () => ok(commands.socialTeamRotateCode()),
+  async inviteToTeam(friendId) {
+    await ok(commands.socialTeamInvite(friendId));
+  },
+  async removeTeamMember(memberId) {
+    await ok(commands.socialTeamRemove(memberId));
+  },
+  async transferTeam(memberId) {
+    await ok(commands.socialTeamTransfer(memberId));
+  },
+  lookupTeam: (code) => ok(commands.socialTeamLookup(code)),
+  async joinTeam(code) {
+    await ok(commands.socialTeamJoin(code));
+  },
+  async acceptTeamInvite(teamId) {
+    await ok(commands.socialTeamAccept(teamId));
+  },
+  async declineTeamInvite(teamId) {
+    await ok(commands.socialTeamDecline(teamId));
   },
 };

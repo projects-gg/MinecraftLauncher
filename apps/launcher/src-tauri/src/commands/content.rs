@@ -241,7 +241,11 @@ pub struct HomeView {
 /// accounts' game versions and whether the friends feature is on.
 pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
     APPLIED_SEQUENCE.store(snapshot.index.sequence, Ordering::SeqCst);
-    crate::commands::social::apply_flag(&state.social, snapshot.config.features.friends);
+    crate::commands::social::apply_flag(
+        &state.social,
+        snapshot.config.features.friends,
+        snapshot.config.features.teams,
+    );
     state
         .afk
         .set_client_release(afk_client_release(state, snapshot));

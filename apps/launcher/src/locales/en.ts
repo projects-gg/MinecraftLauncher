@@ -2,6 +2,7 @@ import { enAfkAlerts } from "./en-afk-alerts";
 import { enAfkConnect } from "./en-afk-connect";
 import { enDisk } from "./en-disk";
 import { enEventJoin } from "./en-event-join";
+import { enFriendGroups } from "./en-friend-groups";
 import { enGraphics } from "./en-graphics";
 import { enImport } from "./en-import";
 import { enKeyClash } from "./en-key-clash";
@@ -15,6 +16,7 @@ import { enPrepare } from "./en-prepare";
 import { enReminders } from "./en-reminders";
 import { enShortcuts } from "./en-shortcuts";
 import { enShotCopy } from "./en-shot-copy";
+import { enTeams } from "./en-teams";
 import { enTuning } from "./en-tuning";
 import { enUpdates } from "./en-updates";
 import type { Strings } from "./tr";
@@ -238,6 +240,8 @@ export const en: DeepPartial<Strings> = {
       noneOnline: "No one's online right now",
     },
   },
+  friendGroups: enFriendGroups,
+  teams: enTeams,
   minecraft: enMinecraft,
   eventJoin: enEventJoin,
   shotCopy: enShotCopy,

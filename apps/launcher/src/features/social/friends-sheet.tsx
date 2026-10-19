@@ -1,7 +1,7 @@
 // The friends panel: a sheet from the right, like the account center. The header carries the
 // player's own card and status; pages (list, add, settings) slide in from the side they belong
 // to. Signed out it is the opt-in screen; while a saved session is checked, skeletons.
-import { CaretLeft, GearSix, UserPlus, X } from "@phosphor-icons/react";
+import { CaretLeft, GearSix, UserPlus, UsersThree, X } from "@phosphor-icons/react";
 import {
   EntranceGate,
   GatedMotion,
@@ -22,6 +22,7 @@ import { crossfade, pageVariants, useSocialMotion } from "./motion";
 import { SocialSettings } from "./settings-page";
 import { MeCard } from "./status-menu";
 import { type SocialPage, useSocialUi } from "./store";
+import { TeamPage } from "./team-page";
 
 function HeaderSkeleton() {
   return (
@@ -38,8 +39,16 @@ function HeaderSkeleton() {
 function Header({ page }: { page: SocialPage | "consent" | "restoring" }) {
   const { t } = useTranslation();
   const me = useSocialUi((s) => s.view.me);
+  const teams = useSocialUi((s) => s.view.teams);
+  const teamName = useSocialUi((s) => s.view.team?.name);
   const goTo = useSocialUi((s) => s.goTo);
-  const sub = page === "add" || page === "settings";
+  const sub = page === "add" || page === "settings" || page === "team";
+  const subTitle =
+    page === "add"
+      ? t("social.add.title")
+      : page === "team"
+        ? (teamName ?? t("teams.title"))
+        : t("social.settings.title");
   return (
     <header className="flex h-[68px] shrink-0 items-center gap-2 border-b border-white/8 pr-3 pl-5">
       <div className="relative flex min-w-0 flex-1 items-center">
@@ -58,7 +67,7 @@ function Header({ page }: { page: SocialPage | "consent" | "restoring" }) {
                   onClick={() => goTo("list")}
                 />
                 <Dialog.Title className="truncate font-display text-[20px] leading-tight font-semibold text-bone-50">
-                  {page === "add" ? t("social.add.title") : t("social.settings.title")}
+                  {subTitle}
                 </Dialog.Title>
               </>
             ) : page === "list" && me ? (
@@ -81,6 +90,13 @@ function Header({ page }: { page: SocialPage | "consent" | "restoring" }) {
       </div>
       {page === "list" && me ? (
         <>
+          {teams ? (
+            <IconButton
+              label={t("teams.title")}
+              icon={<UsersThree size={19} />}
+              onClick={() => goTo("team")}
+            />
+          ) : null}
           <IconButton
             label={t("social.actions.add")}
             icon={<UserPlus size={19} />}
@@ -114,7 +130,7 @@ export function FriendsSheet() {
 
   const shown: SocialPage | "consent" | "restoring" =
     view.auth === "signedIn"
-      ? view.me
+      ? view.me && (page !== "team" || view.teams)
         ? page
         : "list"
       : view.auth === "restoring"
@@ -187,6 +203,8 @@ export function FriendsSheet() {
                             <RestoringBody />
                           ) : shown === "add" ? (
                             <AddPage />
+                          ) : shown === "team" ? (
+                            <TeamPage />
                           ) : shown === "settings" ? (
                             <div className="px-1">
                               <SocialSettings />

@@ -387,6 +387,19 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_backup_upload,
             commands::social::social_backup_download,
             commands::social::social_backup_delete,
+            commands::social::social_groups_save,
+            commands::social::social_team_create,
+            commands::social::social_team_edit,
+            commands::social::social_team_disband,
+            commands::social::social_team_leave,
+            commands::social::social_team_rotate_code,
+            commands::social::social_team_invite,
+            commands::social::social_team_remove,
+            commands::social::social_team_transfer,
+            commands::social::social_team_lookup,
+            commands::social::social_team_join,
+            commands::social::social_team_accept,
+            commands::social::social_team_decline,
         ])
 }
 

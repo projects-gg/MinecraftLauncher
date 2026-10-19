@@ -3,10 +3,10 @@ import { persist } from "zustand/middleware";
 import { HIDDEN_SNAPSHOT, type SignInFailure, type SocialSnapshot } from "@/lib/api/social-types";
 import type { HomeHint } from "./model";
 
-export type SocialPage = "list" | "add" | "settings";
+export type SocialPage = "list" | "add" | "settings" | "team";
 
 /** Pages deeper in the panel than the list slide in from the right. */
-const DEPTH: Record<SocialPage, number> = { list: 0, add: 1, settings: 1 };
+const DEPTH: Record<SocialPage, number> = { list: 0, add: 1, settings: 1, team: 1 };
 
 interface SocialUi {
   /** The latest snapshot from the backend (hidden until the first one arrives). */
@@ -106,15 +106,19 @@ interface SocialPrefs {
   backupFingerprint: string | null;
   /** Home's invitations the player closed (only on this computer, not in the backup). */
   closedHints: HomeHint[];
+  /** Folded friend categories and the team section (a view of this computer only: the
+   * categories themselves live with the account). */
+  collapsed: string[];
   setConsent: () => void;
   toggleFavorite: (id: string) => void;
   closeHint: (hint: HomeHint) => void;
+  toggleCollapsed: (id: string) => void;
   set: <K extends keyof SocialPrefValues>(key: K, value: SocialPrefValues[K]) => void;
 }
 
 export type SocialPrefValues = Omit<
   SocialPrefs,
-  "setConsent" | "toggleFavorite" | "closeHint" | "set"
+  "setConsent" | "toggleFavorite" | "closeHint" | "toggleCollapsed" | "set"
 >;
 
 export const useSocialPrefs = create<SocialPrefs>()(
@@ -127,6 +131,7 @@ export const useSocialPrefs = create<SocialPrefs>()(
       backup: true,
       backupFingerprint: null,
       closedHints: [],
+      collapsed: [],
       setConsent: () => set({ consentAt: Date.now() }),
       toggleFavorite: (id) =>
         set((s) => ({
@@ -136,6 +141,12 @@ export const useSocialPrefs = create<SocialPrefs>()(
         })),
       closeHint: (hint) =>
         set((s) => (s.closedHints.includes(hint) ? s : { closedHints: [...s.closedHints, hint] })),
+      toggleCollapsed: (id) =>
+        set((s) => ({
+          collapsed: s.collapsed.includes(id)
+            ? s.collapsed.filter((c) => c !== id)
+            : [...s.collapsed, id].slice(-64),
+        })),
       set: (key, value) => set({ [key]: value } as Partial<SocialPrefs>),
     }),
     { name: "pl.social", version: 1 },

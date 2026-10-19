@@ -97,6 +97,88 @@ export type SocialActivity =
   | { state: "playing"; host?: string }
   | { state: "singleplayer" };
 
+/** One of the player's own friend categories ("Okul", "PvP"). */
+export interface FriendGroup {
+  /** 1-12 lower case letters or digits, made here. */
+  id: string;
+  /** 1-24 characters. */
+  name: string;
+}
+
+/** The player's friend categories: their order, and friend id → category id. Friends without an
+ * entry are in the implicit "Arkadaşlar" category. Only the player sees them. */
+export interface FriendGroups {
+  version: number;
+  groups: FriendGroup[];
+  members: Record<string, string>;
+}
+
+export type TeamRole = "founder" | "member";
+/** How a team code relates to the player. */
+export type TeamRelation = "none" | "member" | "elsewhere" | "blocked" | "full";
+/** Why the player is no longer in their team. */
+export type TeamExit = "left" | "kicked" | "disbanded" | "other";
+
+export interface TeamMember extends SocialProfile {
+  role: TeamRole;
+  /** The player themself. */
+  me: boolean;
+  /** Also on the friend list. */
+  friend: boolean;
+  /** The player blocked them: they see each other offline. */
+  blocked: boolean;
+  state: PresenceState;
+  dnd: boolean;
+  /** Never another server's address for teammates. */
+  game?: SocialGame;
+  discordUrl: string;
+  /** Unix seconds. */
+  joinedAt: number;
+}
+
+export interface SocialTeam {
+  id: string;
+  name: string;
+  /** 2-4 letters or digits, upper case. */
+  tag: string;
+  /** `sword`, `shield`, … (team-emblem.tsx draws it). */
+  emblem: string;
+  /** `TKM-XXXX-XXXX` */
+  code: string;
+  /** `YYYY-MM-DD` */
+  createdOn: string;
+  /** The player's own role. */
+  role: TeamRole;
+  /** Founder first, then by joining time; the player is among them. */
+  members: TeamMember[];
+  /** Friends the player invited who have not answered yet. */
+  invited: string[];
+  /** How many may be in a team. */
+  limit: number;
+}
+
+export interface TeamInvite {
+  teamId: string;
+  name: string;
+  tag: string;
+  emblem: string;
+  members: number;
+  from: SocialProfile;
+  /** Unix seconds. */
+  sentAt: number;
+}
+
+export interface TeamLookup {
+  teamId: string;
+  name: string;
+  tag: string;
+  emblem: string;
+  members: number;
+  relation: TeamRelation;
+  /** `TKM-XXXX-XXXX` */
+  code: string;
+}
+
 export interface SocialSnapshot {
   /** Grows with every snapshot; older ones are ignored. */
   seq: number;
@@ -113,6 +195,14 @@ export interface SocialSnapshot {
   blocked: SocialProfile[];
   invites: SocialInvite[];
   activity: SocialActivity;
+  /** The player's friend categories; undefined while the service does not offer them. */
+  groups?: FriendGroups;
+  /** Teams are on (signed config) and the service offers them. */
+  teams: boolean;
+  /** The player's team (only while `teams`). */
+  team?: SocialTeam;
+  /** Invites to teams, newest first (only while `teams`). */
+  teamInvites: TeamInvite[];
 }
 
 export type SocialNotice =
@@ -123,7 +213,9 @@ export type SocialNotice =
   | { kind: "friendOnProjects"; id: string }
   | { kind: "signedIn"; restore?: BackupMeta }
   | { kind: "signInFailed"; reason: SignInFailure }
-  | { kind: "signedOutRemotely" };
+  | { kind: "signedOutRemotely" }
+  | { kind: "teamInvite"; invite: TeamInvite }
+  | { kind: "teamGone"; reason: TeamExit; name?: string };
 
 export interface CodeLookup {
   profile: SocialProfile;
@@ -154,6 +246,8 @@ export const HIDDEN_SNAPSHOT: SocialSnapshot = {
   blocked: [],
   invites: [],
   activity: { state: "launcher" },
+  teams: false,
+  teamInvites: [],
 };
 
 export interface SocialApi {
@@ -190,4 +284,22 @@ export interface SocialApi {
   uploadBackup(data: Record<string, unknown>): Promise<BackupMeta>;
   downloadBackup(): Promise<Record<string, unknown> | null>;
   deleteBackup(): Promise<void>;
+  /** Saves the friend categories (the whole document; shown at once, saved in the background). */
+  saveGroups(groups: FriendGroup[], members: Record<string, string>): Promise<void>;
+  createTeam(team: { name: string; tag: string; emblem: string }): Promise<void>;
+  editTeam(change: { name?: string; tag?: string; emblem?: string }): Promise<void>;
+  /** Ends the team for everyone (founder). */
+  disbandTeam(): Promise<void>;
+  leaveTeam(): Promise<void>;
+  /** A new team code (founder); the old one stops working. */
+  rotateTeamCode(): Promise<string>;
+  inviteToTeam(friendId: string): Promise<void>;
+  /** Removes a member (founder); the code is renewed with it. */
+  removeTeamMember(memberId: string): Promise<void>;
+  /** Hands the founder role to another member. */
+  transferTeam(memberId: string): Promise<void>;
+  lookupTeam(code: string): Promise<TeamLookup>;
+  joinTeam(code: string): Promise<void>;
+  acceptTeamInvite(teamId: string): Promise<void>;
+  declineTeamInvite(teamId: string): Promise<void>;
 }

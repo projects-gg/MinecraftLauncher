@@ -1,0 +1,28 @@
+// Friend categories ("Okul", "PvP") in the friends panel.
+export const trFriendGroups = {
+  /** The implicit category of friends without one. */
+  rest: "Arkadaşlar",
+  add: "Yeni kategori",
+  addMenu: "Yeni kategori…",
+  name: "Kategori adı",
+  create: "Ekle",
+  save: "Kaydet",
+  cancel: "Vazgeç",
+  empty: "Boş",
+  dropHere: "Buraya bırak",
+  category: "Kategori",
+  moveTo: "Kategoriye taşı",
+  rename: "Yeniden adlandır",
+  remove: "Kategoriyi sil",
+  removed: "{{name}} silindi",
+  undo: "Geri al",
+  moveUp: "Yukarı taşı",
+  moveDown: "Aşağı taşı",
+  grip: "{{name}} kategorisini taşı",
+  options: "{{name}} seçenekleri",
+  summary: "{{name}}, {{online}} çevrimiçi, {{count}} arkadaş",
+  moved: "{{name}}, {{group}} kategorisine taşındı",
+  groupMoved: "{{name}}, {{position}}. sırada",
+  limit: "En fazla 20 kategori olabilir.",
+  failed: "Kategoriler kaydedilemedi.",
+};

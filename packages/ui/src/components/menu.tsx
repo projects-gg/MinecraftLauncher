@@ -1,4 +1,4 @@
-import { Check } from "@phosphor-icons/react";
+import { CaretRight, Check } from "@phosphor-icons/react";
 import { DropdownMenu, ContextMenu as RadixContextMenu } from "radix-ui";
 import type { ReactElement, ReactNode } from "react";
 import { cn } from "../lib/cn";
@@ -15,22 +15,85 @@ export interface MenuItem {
    */
   checked?: boolean;
   radio?: boolean;
+  /** A submenu (opens to the side on hover, → or Enter); `onSelect` is not used then. */
+  items?: Array<MenuItem | null>;
 }
 
 const contentClass =
   "glass-strong pop-motion z-50 min-w-[190px] rounded-[var(--radius-panel)] p-1 shadow-[0_24px_60px_rgb(34_6_6/0.55)]";
 
+const rowClass =
+  "flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-45";
+
+interface MenuParts {
+  Item: typeof DropdownMenu.Item | typeof RadixContextMenu.Item;
+  Separator: typeof DropdownMenu.Separator | typeof RadixContextMenu.Separator;
+  Sub: typeof DropdownMenu.Sub | typeof RadixContextMenu.Sub;
+  SubTrigger: typeof DropdownMenu.SubTrigger | typeof RadixContextMenu.SubTrigger;
+  SubContent: typeof DropdownMenu.SubContent | typeof RadixContextMenu.SubContent;
+  Portal: typeof DropdownMenu.Portal | typeof RadixContextMenu.Portal;
+}
+
+const DROPDOWN: MenuParts = {
+  Item: DropdownMenu.Item,
+  Separator: DropdownMenu.Separator,
+  Sub: DropdownMenu.Sub,
+  SubTrigger: DropdownMenu.SubTrigger,
+  SubContent: DropdownMenu.SubContent,
+  Portal: DropdownMenu.Portal,
+};
+
+const CONTEXT: MenuParts = {
+  Item: RadixContextMenu.Item,
+  Separator: RadixContextMenu.Separator,
+  Sub: RadixContextMenu.Sub,
+  SubTrigger: RadixContextMenu.SubTrigger,
+  SubContent: RadixContextMenu.SubContent,
+  Portal: RadixContextMenu.Portal,
+};
+
+function Icon({ item }: { item: MenuItem }) {
+  return item.icon ? (
+    <span className={cn("flex", item.danger ? "text-flare-400" : "text-ash-300")}>{item.icon}</span>
+  ) : null;
+}
+
 /** The rows of a menu; both menus share them (one look for "more" buttons and right clicks). */
-function menuRows(
-  items: Array<MenuItem | null>,
-  Item: typeof DropdownMenu.Item | typeof RadixContextMenu.Item,
-  Separator: typeof DropdownMenu.Separator | typeof RadixContextMenu.Separator,
-) {
-  return items.map((item, i) =>
-    item === null ? (
+function menuRows(items: Array<MenuItem | null>, parts: MenuParts): ReactNode[] {
+  const { Item, Separator, Sub, SubTrigger, SubContent, Portal } = parts;
+  return items.map((item, i) => {
+    if (item === null) {
       // biome-ignore lint/suspicious/noArrayIndexKey: separators have no identity
-      <Separator key={`sep-${i}`} className="my-1.5 h-px bg-white/8" />
-    ) : (
+      return <Separator key={`sep-${i}`} className="my-1.5 h-px bg-white/8" />;
+    }
+    if (item.items) {
+      return (
+        <Sub key={item.label}>
+          <SubTrigger
+            disabled={item.disabled}
+            className={cn(
+              rowClass,
+              "text-bone-100 data-[highlighted]:bg-white/8 data-[state=open]:bg-white/8",
+            )}
+          >
+            <Icon item={item} />
+            <span className="min-w-0 flex-1">{item.label}</span>
+            <CaretRight size={13} weight="bold" aria-hidden className="shrink-0 text-ash-400" />
+          </SubTrigger>
+          <Portal>
+            <SubContent
+              sideOffset={6}
+              alignOffset={-4}
+              collisionPadding={8}
+              className={cn(contentClass, "max-h-[360px] overflow-y-auto")}
+            >
+              {menuRows(item.items, parts)}
+            </SubContent>
+          </Portal>
+        </Sub>
+      );
+    }
+    return (
       <Item
         key={item.label}
         disabled={item.disabled}
@@ -44,17 +107,13 @@ function menuRows(
         }
         aria-checked={item.checked}
         className={cn(
-          "flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-45",
+          rowClass,
           item.danger
             ? "text-flare-400 data-[highlighted]:bg-flare-400/12"
             : "text-bone-100 data-[highlighted]:bg-white/8",
         )}
       >
-        {item.icon ? (
-          <span className={cn("flex", item.danger ? "text-flare-400" : "text-ash-300")}>
-            {item.icon}
-          </span>
-        ) : null}
+        <Icon item={item} />
         <span className="min-w-0 flex-1">{item.label}</span>
         {item.checked === undefined ? null : (
           <Check
@@ -65,8 +124,8 @@ function menuRows(
           />
         )}
       </Item>
-    ),
-  );
+    );
+  });
 }
 
 /** Action menu for "more" buttons and instance cards. Use `null` for a separator. */
@@ -86,7 +145,7 @@ export function Menu({
       <DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content align={align} side={side} sideOffset={6} className={contentClass}>
-          {menuRows(items, DropdownMenu.Item, DropdownMenu.Separator)}
+          {menuRows(items, DROPDOWN)}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
     </DropdownMenu.Root>
@@ -131,7 +190,7 @@ export function ContextMenu({
           className={contentClass}
           onCloseAutoFocus={onCloseAutoFocus}
         >
-          {menuRows(items, RadixContextMenu.Item, RadixContextMenu.Separator)}
+          {menuRows(items, CONTEXT)}
         </RadixContextMenu.Content>
       </RadixContextMenu.Portal>
     </RadixContextMenu.Root>

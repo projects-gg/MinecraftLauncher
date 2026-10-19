@@ -7,16 +7,21 @@ use std::collections::HashMap;
 use serde::Serialize;
 
 use crate::model::{
-    BlockedUser, Friend, FriendRequest, FriendsOverview, Limits, Me, PublicProfile, RequestOutcome,
-    SettingsMeta,
+    BlockedUser, Friend, FriendGroups, FriendRequest, FriendsOverview, Limits, Me, PublicProfile,
+    RequestOutcome, SettingsMeta, Team, TeamAnswer, TeamExit, TeamInvite, TeamRole,
 };
 use crate::presence::{PresenceEvent, StopReason};
 use crate::protocol::{Game, Invite, OnlineStatus, Presence, PresenceState};
-use crate::view::{FriendView, InviteView, ProfileView, RequestView, SocialNotice};
+use crate::view::{
+    FriendGroupsView, FriendView, GroupMember, InviteView, ProfileView, RequestView, SocialNotice,
+    TeamInviteView, TeamMemberView, TeamView,
+};
 
 /// How long a received invite stays worth answering (the service delivers them for an hour).
 pub const INVITE_LIFETIME_SECS: i64 = 3_600;
 const MAX_INVITES: usize = 30;
+/// Team invites shown at a time (the service lists at most this many too).
+const MAX_TEAM_INVITES: usize = 20;
 /// A dropped connection that comes back within this long counts as "reconnecting", not as an
 /// outage.
 const RECONNECT_GRACE_SECS: u64 = 30;
@@ -138,17 +143,72 @@ impl SocialState {
                     let was_on_projects = before
                         .and_then(|p| p.game.as_ref())
                         .is_some_and(Game::joinable);
-                    if before.is_none() {
+                    // Coming online is news about friends; teammates show it in the team only.
+                    let friend = self.is_listed_friend(&presence.id);
+                    if friend && before.is_none() {
                         notices.push(SocialNotice::FriendOnline {
                             id: presence.id.clone(),
                         });
                     }
-                    if !was_on_projects && presence.game.as_ref().is_some_and(Game::joinable) {
+                    if friend
+                        && !was_on_projects
+                        && presence.game.as_ref().is_some_and(Game::joinable)
+                    {
                         notices.push(SocialNotice::FriendOnProjects {
                             id: presence.id.clone(),
                         });
                     }
                     self.online.insert(presence.id.clone(), presence.clone());
+                }
+            }
+            PresenceEvent::TeamChanged { team, reason, by } => {
+                let me = self.me.as_ref().map(|me| me.profile.id.clone());
+                if let Some(overview) = &mut self.overview {
+                    let before = overview.team.take();
+                    match team {
+                        Some(team) => {
+                            overview
+                                .team_invited
+                                .retain(|id| !team.members.iter().any(|m| &m.profile.id == id));
+                            overview.team_invites.retain(|i| i.team.id != team.id);
+                            overview.team = Some(team.clone());
+                        }
+                        None => {
+                            overview.team_invited.clear();
+                            let told =
+                                matches!(reason, Some(TeamExit::Kicked | TeamExit::Disbanded))
+                                    && by.is_some()
+                                    && *by != me;
+                            if told {
+                                notices.push(SocialNotice::TeamGone {
+                                    reason: reason.unwrap_or(TeamExit::Other),
+                                    name: before.map(|team| team.name),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            PresenceEvent::TeamInvited(invite) => {
+                if let Some(overview) = &mut self.overview {
+                    overview
+                        .team_invites
+                        .retain(|i| i.team.id != invite.team.id);
+                    overview.team_invites.insert(0, invite.clone());
+                    overview.team_invites.truncate(MAX_TEAM_INVITES);
+                    notices.push(SocialNotice::TeamInvite {
+                        invite: Box::new(team_invite_view(invite)),
+                    });
+                }
+            }
+            PresenceEvent::GroupsChanged(groups) => {
+                if let Some(overview) = &mut self.overview
+                    && overview
+                        .groups
+                        .as_ref()
+                        .is_none_or(|current| groups.version >= current.version)
+                {
+                    overview.groups = Some(groups.clone());
                 }
             }
             PresenceEvent::FriendAdded { friend, presence } => {
@@ -312,6 +372,163 @@ impl SocialState {
         }
     }
 
+    // --- friend categories --------------------------------------------------------------------
+
+    /// The player's categories as last saved or received (None: the service has none to offer).
+    pub fn groups(&self) -> Option<&FriendGroups> {
+        self.overview.as_ref()?.groups.as_ref()
+    }
+
+    pub fn set_groups(&mut self, groups: FriendGroups) {
+        if let Some(overview) = &mut self.overview {
+            overview.groups = Some(groups);
+        }
+    }
+
+    /// The categories for the UI: entries of people who are no longer friends are left out (the
+    /// next save drops them).
+    pub fn groups_view(&self) -> Option<FriendGroupsView> {
+        let overview = self.overview.as_ref()?;
+        let groups = overview.groups.as_ref()?;
+        Some(FriendGroupsView {
+            version: groups.version,
+            groups: groups.groups.clone(),
+            members: groups
+                .members
+                .iter()
+                .filter(|(friend, group)| {
+                    overview.friends.iter().any(|f| &f.profile.id == *friend)
+                        && groups.groups.iter().any(|g| &g.id == *group)
+                })
+                .map(|(friend, group)| GroupMember {
+                    friend: friend.clone(),
+                    group: group.clone(),
+                })
+                .collect(),
+        })
+    }
+
+    // --- teams --------------------------------------------------------------------------------
+
+    /// The service offers teams (an older one sends no team limit).
+    pub fn teams_supported(&self) -> bool {
+        self.overview
+            .as_ref()
+            .is_some_and(|o| o.limits.team_members.is_some())
+    }
+
+    pub fn team(&self) -> Option<&Team> {
+        self.overview.as_ref()?.team.as_ref()
+    }
+
+    /// The answer of a call that changed the player's own team.
+    pub fn team_answer(&mut self, answer: TeamAnswer) {
+        if let Some(overview) = &mut self.overview {
+            if let Some(team) = &answer.team {
+                overview.team_invites.retain(|i| i.team.id != team.id);
+            }
+            overview.team = answer.team;
+            overview.team_invited = answer.invited;
+        }
+    }
+
+    /// The player left (or ended) their team.
+    pub fn team_left(&mut self) {
+        if let Some(overview) = &mut self.overview {
+            overview.team = None;
+            overview.team_invited.clear();
+        }
+    }
+
+    pub fn team_code(&mut self, code: String) {
+        if let Some(team) = self.overview.as_mut().and_then(|o| o.team.as_mut()) {
+            team.code = code;
+        }
+    }
+
+    /// The player invited a friend to their team.
+    pub fn team_invite_sent(&mut self, friend: &str) {
+        if let Some(overview) = &mut self.overview
+            && !overview.team_invited.iter().any(|id| id == friend)
+        {
+            overview.team_invited.push(friend.to_owned());
+        }
+    }
+
+    /// An invite to a team was answered (or turned out to be gone).
+    pub fn team_invite_answered(&mut self, team_id: &str) {
+        if let Some(overview) = &mut self.overview {
+            overview.team_invites.retain(|i| i.team.id != team_id);
+        }
+    }
+
+    /// The player's team with everyone's presence.
+    pub fn team_view(&self) -> Option<TeamView> {
+        let overview = self.overview.as_ref()?;
+        let team = overview.team.as_ref()?;
+        let me = self.me.as_ref().map(|me| me.profile.id.as_str());
+        let members: Vec<TeamMemberView> = team
+            .members
+            .iter()
+            .map(|member| {
+                let id = member.profile.id.as_str();
+                let mine = Some(id) == me;
+                let presence = if mine {
+                    None
+                } else {
+                    self.online
+                        .get(id)
+                        .filter(|p| p.state != PresenceState::Offline)
+                };
+                TeamMemberView {
+                    id: id.to_owned(),
+                    name: member.profile.name().to_owned(),
+                    username: member.profile.username.clone(),
+                    avatar: member.profile.avatar.clone(),
+                    avatar_url: member.profile.discord_avatar_url(128),
+                    role: member.role,
+                    me: mine,
+                    friend: overview.friends.iter().any(|f| f.profile.id == id),
+                    blocked: overview.blocked.iter().any(|b| b.profile.id == id),
+                    state: presence.map_or(PresenceState::Offline, |p| p.state),
+                    dnd: presence.is_some_and(|p| p.status == Some(OnlineStatus::Dnd)),
+                    game: presence
+                        .filter(|p| p.state == PresenceState::Playing)
+                        .and_then(|p| p.game.clone())
+                        .map(|game| Game {
+                            location: game.location,
+                            host: None,
+                        }),
+                    discord_url: member.profile.discord_profile_url(),
+                    joined_at: member.joined_at,
+                }
+            })
+            .collect();
+        let role = members
+            .iter()
+            .find(|m| m.me)
+            .map_or(TeamRole::Member, |m| m.role);
+        Some(TeamView {
+            id: team.id.clone(),
+            name: team.name.clone(),
+            tag: team.tag.clone(),
+            emblem: team.emblem.clone(),
+            code: team.code.clone(),
+            created_on: team.created_on.clone(),
+            role,
+            members,
+            invited: overview.team_invited.clone(),
+            limit: overview.limits.team_members.unwrap_or(30),
+        })
+    }
+
+    pub fn team_invites(&self) -> Vec<TeamInviteView> {
+        self.overview
+            .as_ref()
+            .map(|o| o.team_invites.iter().map(team_invite_view).collect())
+            .unwrap_or_default()
+    }
+
     pub fn dismiss_invite(&mut self, id: &str) {
         if let Some(invite) = self.invites.iter().find(|i| i.id == id) {
             let at = self
@@ -379,6 +596,13 @@ impl SocialState {
             .as_ref()
             // Before the list arrives, an invite can only come from a friend.
             .is_none_or(|o| o.friends.iter().any(|f| f.profile.id == id))
+    }
+
+    /// On the friend list that has arrived (teammates who are not friends are not).
+    fn is_listed_friend(&self, id: &str) -> bool {
+        self.overview
+            .as_ref()
+            .is_some_and(|o| o.friends.iter().any(|f| f.profile.id == id))
     }
 
     fn friend_mut(&mut self, id: &str) -> Option<&mut Friend> {
@@ -505,6 +729,18 @@ fn friend_view(friend: &Friend, presence: Option<&Presence>) -> FriendView {
     }
 }
 
+fn team_invite_view(invite: &TeamInvite) -> TeamInviteView {
+    TeamInviteView {
+        team_id: invite.team.id.clone(),
+        name: invite.team.name.clone(),
+        tag: invite.team.tag.clone(),
+        emblem: invite.team.emblem.clone(),
+        members: invite.team.members,
+        from: ProfileView::from(&invite.from),
+        sent_at: invite.sent_at,
+    }
+}
+
 fn request_view(request: &FriendRequest) -> RequestView {
     let profile = ProfileView::from(&request.profile);
     RequestView {
@@ -577,7 +813,13 @@ mod tests {
             limits: Limits {
                 friends: 200,
                 outgoing_requests: 50,
+                team_members: Some(30),
+                groups: Some(20),
             },
+            groups: Some(FriendGroups::default()),
+            team: None,
+            team_invited: vec![],
+            team_invites: vec![],
         });
         state
     }
@@ -938,6 +1180,175 @@ mod tests {
         assert_eq!(state.connection(), Connection::Replaced);
         state.apply(&PresenceEvent::StatusChanged(StatusMode::Invisible), NOW);
         assert_eq!(state.me().unwrap().status, StatusMode::Invisible);
+    }
+
+    fn team(members: &[(&str, &str, TeamRole)]) -> Team {
+        Team {
+            id: "0123456789abcdef".into(),
+            name: "Gece Kartalları".into(),
+            tag: "GKR".into(),
+            emblem: "sword".into(),
+            code: "TKM-ABCD-EFGH".into(),
+            created_on: "2026-10-19".into(),
+            members: members
+                .iter()
+                .enumerate()
+                .map(|(i, (id, name, role))| crate::model::TeamMember {
+                    profile: profile(id, name),
+                    role: *role,
+                    joined_at: i64::try_from(i).unwrap(),
+                })
+                .collect(),
+        }
+    }
+
+    #[test]
+    fn teammates_have_presence_but_no_friend_notices() {
+        let mut state = loaded();
+        state.team_answer(TeamAnswer {
+            team: Some(team(&[
+                ("100000000000000000", "Ben", TeamRole::Founder),
+                ("1", "Ayşe", TeamRole::Member),
+                ("9", "Zeki", TeamRole::Member),
+            ])),
+            invited: vec!["2".into()],
+        });
+        // Zeki is a teammate, not a friend: presence yes, "came online" toasts no.
+        let notices = state.apply(
+            &PresenceEvent::Presence(presence(
+                "9",
+                PresenceState::Playing,
+                Some(GameLocation::Projects),
+            )),
+            NOW,
+        );
+        assert!(notices.is_empty());
+        let view = state.team_view().unwrap();
+        assert_eq!(view.role, TeamRole::Founder);
+        assert_eq!(view.invited, vec!["2".to_owned()]);
+        let zeki = view.members.iter().find(|m| m.id == "9").unwrap();
+        assert!(!zeki.friend && !zeki.me);
+        assert_eq!(zeki.state, PresenceState::Playing);
+        assert!(zeki.game.as_ref().unwrap().joinable());
+        assert_eq!(zeki.game.as_ref().unwrap().host, None);
+        let me = view.members.iter().find(|m| m.me).unwrap();
+        assert_eq!(me.state, PresenceState::Offline);
+        assert!(view.members.iter().find(|m| m.id == "1").unwrap().friend);
+        // A reconnect lists teammates with the friends.
+        state.apply(
+            &PresenceEvent::Connected {
+                status: StatusMode::Online,
+                friends: vec![presence("9", PresenceState::Launcher, None)],
+                invites: vec![],
+            },
+            NOW,
+        );
+        let zeki = state.team_view().unwrap().members[2].clone();
+        assert_eq!(zeki.state, PresenceState::Launcher);
+    }
+
+    #[test]
+    fn team_changes_invites_and_leaving() {
+        let mut state = loaded();
+        let invite = TeamInvite {
+            team: crate::model::TeamSummary {
+                id: "fedcba9876543210".into(),
+                name: "PvP".into(),
+                tag: "PVP".into(),
+                emblem: "bolt".into(),
+                members: 4,
+            },
+            from: profile("2", "Bora"),
+            sent_at: NOW,
+        };
+        let notices = state.apply(&PresenceEvent::TeamInvited(invite.clone()), NOW);
+        assert!(
+            matches!(&notices[..], [SocialNotice::TeamInvite { invite }] if invite.name == "PvP" && invite.from.name == "Bora")
+        );
+        // The same invite again replaces it.
+        state.apply(&PresenceEvent::TeamInvited(invite), NOW);
+        assert_eq!(state.team_invites().len(), 1);
+
+        // Joining that team (on another device): the invite goes, the team comes.
+        let mut joined = team(&[
+            ("2", "Bora", TeamRole::Founder),
+            ("100000000000000000", "Ben", TeamRole::Member),
+        ]);
+        joined.id = "fedcba9876543210".into();
+        state.apply(
+            &PresenceEvent::TeamChanged {
+                team: Some(joined),
+                reason: None,
+                by: None,
+            },
+            NOW,
+        );
+        assert!(state.team_invites().is_empty());
+        assert_eq!(state.team_view().unwrap().role, TeamRole::Member);
+
+        // Removed by the founder: told once, with the team's name.
+        let removed = state.apply(
+            &PresenceEvent::TeamChanged {
+                team: None,
+                reason: Some(TeamExit::Kicked),
+                by: Some("2".into()),
+            },
+            NOW,
+        );
+        assert!(
+            matches!(&removed[..], [SocialNotice::TeamGone { reason: TeamExit::Kicked, name: Some(name) }] if name == "Gece Kartalları")
+        );
+        assert!(state.team_view().is_none());
+
+        // Leaving on another device says nothing.
+        state.team_answer(TeamAnswer {
+            team: Some(team(&[("100000000000000000", "Ben", TeamRole::Founder)])),
+            invited: vec![],
+        });
+        let left = state.apply(
+            &PresenceEvent::TeamChanged {
+                team: None,
+                reason: Some(TeamExit::Disbanded),
+                by: Some("100000000000000000".into()),
+            },
+            NOW,
+        );
+        assert!(left.is_empty());
+        assert!(state.teams_supported());
+    }
+
+    #[test]
+    fn categories_follow_other_devices_and_drop_old_friends() {
+        let mut state = loaded();
+        let mut groups = FriendGroups {
+            version: 2,
+            ..FriendGroups::default()
+        };
+        groups.groups.push(crate::model::FriendGroup {
+            id: "okul".into(),
+            name: "Okul".into(),
+        });
+        groups.members.insert("1".into(), "okul".into());
+        groups.members.insert("777".into(), "okul".into());
+        groups.members.insert("2".into(), "gone".into());
+        state.apply(&PresenceEvent::GroupsChanged(groups.clone()), NOW);
+        let view = state.groups_view().unwrap();
+        assert_eq!(view.version, 2);
+        // Only friends, and only into categories that exist.
+        assert_eq!(
+            view.members,
+            vec![GroupMember {
+                friend: "1".into(),
+                group: "okul".into()
+            }]
+        );
+        // An older document (a save that crossed this one) does not win.
+        let older = FriendGroups {
+            version: 1,
+            ..FriendGroups::default()
+        };
+        state.apply(&PresenceEvent::GroupsChanged(older), NOW);
+        assert_eq!(state.groups_view().unwrap().version, 2);
     }
 
     #[test]

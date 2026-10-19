@@ -7,18 +7,25 @@
 // - `off`: the feature is off (nothing shows); `signedOut`: the opt-in screen;
 // - `signingIn`: waiting for the browser; `loading`: skeletons; `empty`: no friends yet;
 // - `down`: the service is unavailable; `replaced`: another device took over;
-// - `invite`: a live invite arrives shortly after start; `restore`: the "getireyim mi?" offer.
+// - `invite`: a live invite arrives shortly after start; `restore`: the "getireyim mi?" offer;
+// - `groups`: the friend list in the player's categories;
+// - `team`: teams on, the player founded a team (with categories); `teamMember`: a member of one;
+// - `teamNew`: teams on, no team yet, an invite to one waiting; `teamInvite`: one arrives live.
 import { pick } from "./mock-lang";
 import type {
   BackupMeta,
   CodeLookup,
   Friend,
+  FriendGroups,
   FriendRequest,
   SocialApi,
   SocialNotice,
   SocialSession,
   SocialSnapshot,
+  SocialTeam,
   StatusMode,
+  TeamInvite,
+  TeamMember,
 } from "./social-types";
 
 const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -165,6 +172,103 @@ const backup: BackupMeta = {
   size: 840,
 };
 
+/** The player's categories in the `groups` and `team` previews. */
+function previewGroups(): FriendGroups {
+  return {
+    version: 4,
+    groups: [
+      { id: "okul", name: pick("Okul", "School") },
+      { id: "pvp", name: "PvP" },
+      { id: "skyblock", name: "Skyblock" },
+    ],
+    members: { "301": "okul", "305": "okul", "307": "okul", "302": "pvp", "304": "pvp" },
+  };
+}
+
+function teamMember(
+  friend: Friend | undefined,
+  extra: Partial<TeamMember> & Pick<TeamMember, "id" | "name">,
+): TeamMember {
+  return {
+    username: extra.name.toLowerCase().replace(/\s+/g, ""),
+    avatar: "discord",
+    role: "member",
+    me: false,
+    friend: Boolean(friend),
+    blocked: false,
+    state: "offline",
+    dnd: false,
+    discordUrl: `https://discord.com/users/${extra.id}`,
+    joinedAt: now() - 86_400 * 20,
+    ...(friend
+      ? {
+          username: friend.username,
+          avatar: friend.avatar,
+          avatarUrl: friend.avatarUrl,
+          state: friend.state,
+          dnd: friend.dnd,
+          game: friend.game?.where === "other" ? { where: "other" as const } : friend.game,
+        }
+      : {}),
+    ...extra,
+  };
+}
+
+/** "Gece Kartalları", founded by the player (or led by Ayşe in `teamMember`). */
+function previewTeam(founder: boolean): SocialTeam {
+  const friends = friendsList();
+  const byId = (id: string) => friends.find((f) => f.id === id);
+  return {
+    id: "0123456789abcdef",
+    name: "Gece Kartalları",
+    tag: "GKR",
+    emblem: "shield",
+    code: "TKM-7Q2X-9KDA",
+    createdOn: "2026-09-28",
+    role: founder ? "founder" : "member",
+    members: [
+      teamMember(undefined, {
+        id: "100",
+        name: "EjderAvcısı",
+        avatar: "preset:golden-dragon",
+        me: true,
+        role: founder ? "founder" : "member",
+        state: "launcher",
+        joinedAt: now() - 86_400 * 21,
+      }),
+      teamMember(byId("301"), { id: "301", name: "Ayşe", role: founder ? "member" : "founder" }),
+      teamMember(byId("302"), { id: "302", name: "KorAteşi" }),
+      teamMember(undefined, {
+        id: "701",
+        name: "Yusuf",
+        avatar: "preset:knight",
+        state: "playing",
+        game: { where: "projects", host: "play.projects.gg" },
+      }),
+      teamMember(undefined, {
+        id: "702",
+        name: "Melis",
+        avatar: "preset:axolotl",
+        state: "launcher",
+      }),
+      teamMember(byId("306"), { id: "306", name: "Bora" }),
+      teamMember(undefined, { id: "703", name: "Arda", avatar: "preset:wolf" }),
+    ],
+    invited: ["305"],
+    limit: 30,
+  };
+}
+
+const teamInvite = (): TeamInvite => ({
+  teamId: "fedcba9876543210",
+  name: "Skyblock Ustaları",
+  tag: "SKY",
+  emblem: "cube",
+  members: 6,
+  from: { id: "303", name: "Mert", username: "mert.yildiz", avatar: "preset:knight" },
+  sentAt: now() - 1_800,
+});
+
 function initial(): SocialSnapshot {
   const name = scenario();
   const base: SocialSnapshot = {
@@ -220,8 +324,21 @@ function initial(): SocialSnapshot {
       },
     ],
     activity: { state: "launcher" },
+    groups: { version: 0, groups: [], members: {} },
+    teams: false,
+    teamInvites: [],
   };
   switch (name) {
+    case "groups":
+      return { ...base, groups: previewGroups() };
+    case "team":
+      return { ...base, groups: previewGroups(), teams: true, team: previewTeam(true) };
+    case "teamMember":
+      return { ...base, groups: previewGroups(), teams: true, team: previewTeam(false) };
+    case "teamNew":
+      return { ...base, teams: true, teamInvites: [teamInvite()] };
+    case "teamInvite":
+      return { ...base, teams: true };
     case "signedOut":
       return signedOut(base);
     case "signingIn":
@@ -256,6 +373,8 @@ function signedOut(base: SocialSnapshot): SocialSnapshot {
     outgoing: [],
     blocked: [],
     invites: [],
+    team: undefined,
+    teamInvites: [],
   };
 }
 
@@ -292,6 +411,61 @@ if (typeof window !== "undefined") {
   if (name === "restore") {
     setTimeout(() => tell({ kind: "signedIn", restore: backup }), 1200);
   }
+  if (name === "teamInvite") {
+    setTimeout(() => {
+      const invite = { ...teamInvite(), sentAt: now() };
+      commit((v) => ({ ...v, teamInvites: [invite, ...v.teamInvites] }));
+      tell({ kind: "teamInvite", invite });
+    }, 1600);
+  }
+}
+
+/** The team as it is, or an error worded like the backend when there is none. */
+function currentTeam(): SocialTeam {
+  if (!view.team) {
+    throw new MockSocialError("SOSYAL-TAKIM-YOK", pick("Takımın yok.", "You're not in a team."));
+  }
+  return view.team;
+}
+
+function setTeam(change: (team: SocialTeam) => SocialTeam | undefined) {
+  commit((v) => (v.team ? { ...v, team: change(v.team) } : v));
+}
+
+/** Team codes the preview knows. */
+const previewTeams: Record<string, { teamId: string; name: string; tag: string; emblem: string }> =
+  {
+    "TKM-4F8A-2KQX": {
+      teamId: "1111222233334444",
+      name: "Gece Kartalları",
+      tag: "GKR",
+      emblem: "shield",
+    },
+    "TKM-9WQ2-XM4C": {
+      teamId: "fedcba9876543210",
+      name: "Skyblock Ustaları",
+      tag: "SKY",
+      emblem: "cube",
+    },
+  };
+
+function joinedTeam(source: {
+  teamId: string;
+  name: string;
+  tag: string;
+  emblem: string;
+}): SocialTeam {
+  const base = previewTeam(false);
+  return {
+    ...base,
+    id: source.teamId,
+    name: source.name,
+    tag: source.tag,
+    emblem: source.emblem,
+    code: "TKM-WXYZ-1234",
+    members: base.members.map((m) => (m.me ? { ...m, joinedAt: now() } : m)),
+    invited: [],
+  };
 }
 
 const people: Record<string, CodeLookup["profile"]> = {
@@ -545,5 +719,129 @@ export const mockSocial: SocialApi = {
   async deleteBackup() {
     await delay(300);
     commit((v) => (v.me ? { ...v, me: { ...v.me, backup: undefined } } : v));
+  },
+  async saveGroups(groups, members) {
+    // Shown at once, like the app; the "save" takes a moment.
+    commit((v) => ({ ...v, groups: { version: v.groups?.version ?? 0, groups, members } }));
+    await delay(250);
+    commit((v) =>
+      v.groups ? { ...v, groups: { ...v.groups, version: v.groups.version + 1 } } : v,
+    );
+  },
+  async createTeam({ name, tag, emblem }) {
+    await delay(500);
+    const me = view.me;
+    commit((v) => ({
+      ...v,
+      team: {
+        ...previewTeam(true),
+        id: "abcdef0123456789",
+        name,
+        tag,
+        emblem,
+        code: "TKM-3HXN-8RWE",
+        createdOn: new Date().toISOString().slice(0, 10),
+        members: previewTeam(true).members.filter((m) => m.me && me),
+        invited: [],
+      },
+    }));
+  },
+  async editTeam(change) {
+    await delay(300);
+    currentTeam();
+    setTeam((team) => ({ ...team, ...change }));
+  },
+  async disbandTeam() {
+    await delay(400);
+    currentTeam();
+    commit((v) => ({ ...v, team: undefined }));
+  },
+  async leaveTeam() {
+    await delay(400);
+    currentTeam();
+    commit((v) => ({ ...v, team: undefined }));
+  },
+  async rotateTeamCode() {
+    await delay(400);
+    currentTeam();
+    const code = "TKM-R2N8-HW6P";
+    setTeam((team) => ({ ...team, code }));
+    return code;
+  },
+  async inviteToTeam(friendId) {
+    await delay(350);
+    setTeam((team) => ({ ...team, invited: [...new Set([...team.invited, friendId])] }));
+  },
+  async removeTeamMember(memberId) {
+    await delay(350);
+    setTeam((team) => ({
+      ...team,
+      code: "TKM-K7MD-2QPC",
+      members: team.members.filter((m) => m.id !== memberId),
+    }));
+  },
+  async transferTeam(memberId) {
+    await delay(350);
+    setTeam((team) => ({
+      ...team,
+      role: "member",
+      members: team.members.map((m) => ({
+        ...m,
+        role: m.id === memberId ? "founder" : "member",
+      })),
+    }));
+  },
+  async lookupTeam(code) {
+    await delay(500);
+    const normalized = code.toUpperCase();
+    if (view.team?.code === normalized) {
+      const team = view.team;
+      return {
+        teamId: team.id,
+        name: team.name,
+        tag: team.tag,
+        emblem: team.emblem,
+        members: team.members.length,
+        relation: "member",
+        code: normalized,
+      };
+    }
+    const found = previewTeams[normalized];
+    if (!found) {
+      throw new MockSocialError(
+        "SOSYAL-TAKIM-YOK",
+        pick("Bu koda ait bir takım yok.", "No team has this code."),
+      );
+    }
+    return {
+      ...found,
+      members: 6,
+      relation: view.team ? "elsewhere" : "none",
+      code: normalized,
+    };
+  },
+  async joinTeam(code) {
+    await delay(500);
+    const found = previewTeams[code.toUpperCase()];
+    if (!found) {
+      throw new MockSocialError(
+        "SOSYAL-TAKIM-YOK",
+        pick("Bu koda ait bir takım yok.", "No team has this code."),
+      );
+    }
+    commit((v) => ({ ...v, team: joinedTeam(found) }));
+  },
+  async acceptTeamInvite(teamId) {
+    await delay(450);
+    const invite = view.teamInvites.find((i) => i.teamId === teamId);
+    commit((v) => ({
+      ...v,
+      teamInvites: v.teamInvites.filter((i) => i.teamId !== teamId),
+      team: invite ? joinedTeam(invite) : v.team,
+    }));
+  },
+  async declineTeamInvite(teamId) {
+    await delay(250);
+    commit((v) => ({ ...v, teamInvites: v.teamInvites.filter((i) => i.teamId !== teamId) }));
   },
 };

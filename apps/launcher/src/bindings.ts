@@ -795,6 +795,30 @@ export const commands = {
 	socialBackupDownload: () => typedError<string | null, CmdError>(__TAURI_INVOKE("social_backup_download")),
 	/**  Turns the backup off and deletes the stored copy. */
 	socialBackupDelete: () => typedError<null, CmdError>(__TAURI_INVOKE("social_backup_delete")),
+	/**
+	 *  Saves the player's friend categories: their order, names and who is in which (friends left
+	 *  out are in the implicit "Arkadaşlar"). Shown at once; saved in the background.
+	 */
+	socialGroupsSave: (groups: FriendGroup[], members: GroupMember[]) => typedError<null, CmdError>(__TAURI_INVOKE("social_groups_save", { groups, members })),
+	/**  Founds a team. `emblem` is one of the service's emblem names. */
+	socialTeamCreate: (name: string, tag: string, emblem: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_create", { name, tag, emblem })),
+	/**  Renames the team, changes its tag or emblem (founder); unset fields stay. */
+	socialTeamEdit: (name: string | null, tag: string | null, emblem: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_edit", { name, tag, emblem })),
+	/**  Ends the team for everyone (founder). */
+	socialTeamDisband: () => typedError<null, CmdError>(__TAURI_INVOKE("social_team_disband")),
+	socialTeamLeave: () => typedError<null, CmdError>(__TAURI_INVOKE("social_team_leave")),
+	/**  A new team code (founder); the old one stops working. */
+	socialTeamRotateCode: () => typedError<string, CmdError>(__TAURI_INVOKE("social_team_rotate_code")),
+	/**  Invites a friend to the player's team. */
+	socialTeamInvite: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_invite", { id })),
+	/**  Removes a member (founder); the code is renewed with it. */
+	socialTeamRemove: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_remove", { id })),
+	/**  Hands the founder role to another member. */
+	socialTeamTransfer: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_transfer", { id })),
+	socialTeamLookup: (code: string) => typedError<TeamLookupView, CmdError>(__TAURI_INVOKE("social_team_lookup", { code })),
+	socialTeamJoin: (code: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_join", { code })),
+	socialTeamAccept: (team: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_accept", { team })),
+	socialTeamDecline: (team: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_decline", { team })),
 };
 
 /* Types */
@@ -1548,6 +1572,23 @@ export type FixOfferView = {
 	count: number,
 };
 
+/**  One of the player's friend categories ("Okul", "PvP"). */
+export type FriendGroup = {
+	/**  1-12 lower case letters or digits, made by the launcher. */
+	id: string,
+	/**  1-24 characters. */
+	name: string,
+};
+
+/**  The player's friend categories, in their order, and who is in which. */
+export type FriendGroupsView = {
+	/**  The saved version (0 before the first save). */
+	version: number,
+	groups: FriendGroup[],
+	/**  Friends without an entry are in the implicit "Arkadaşlar" category. */
+	members: GroupMember[],
+};
+
 export type FriendView = FriendView_Serialize | FriendView_Deserialize;
 
 export type FriendView_Deserialize = {
@@ -1658,6 +1699,12 @@ export type GraphicsState =
 { kind: "firstLaunch"; preset: GraphicsPreset } | 
 /**  A Minecraft version before 1.7.2, whose options presets do not cover. */
 { kind: "unsupported" };
+
+/**  One friend's category. */
+export type GroupMember = {
+	friend: string,
+	group: string,
+};
 
 export type HeroView = {
 	/**  Local file path of the cached art (convert with `convertFileSrc`); `None` = bundled art. */
@@ -2354,6 +2401,10 @@ export type LegacyScan = {
 export type Limits = {
 	friends: number,
 	outgoingRequests: number,
+	/**  Members of a team (None from a service without teams). */
+	teamMembers?: number | null,
+	/**  Friend categories (None from a service without them). */
+	groups?: number | null,
 };
 
 /**  A link Studio publishes (`LauncherConfig.links.custom`). */
@@ -3928,36 +3979,48 @@ export type SocialNotice = SocialNotice_Serialize | SocialNotice_Deserialize;
 /**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
 export type SocialNotice_Deserialize = 
 /**  A live invite (never while on do-not-disturb: those wait as quiet invites). */
-({ kind: "invite"; invite: InviteView_Deserialize }) & { friend?: never; id?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "invite"; invite: InviteView_Deserialize }) & { friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  Someone sent a friend request. */
-({ kind: "request"; request: RequestView }) & { friend?: never; id?: never; invite?: never; reason?: never; restore?: never } | 
+({ kind: "request"; request: RequestView }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; restore?: never } | 
 /**  A request was accepted (by them, or on another device): a new friend. */
-({ kind: "friendAdded"; friend: FriendView_Deserialize }) & { id?: never; invite?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendAdded"; friend: FriendView_Deserialize }) & { id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  A friend came online. */
-({ kind: "friendOnline"; id: string }) & { friend?: never; invite?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendOnline"; id: string }) & { friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  A friend started playing on projects.gg. */
-({ kind: "friendOnProjects"; id: string }) & { friend?: never; invite?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendOnProjects"; id: string }) & { friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  Signed in. `restore` is a settings backup saved by another computer, worth offering. */
-({ kind: "signedIn"; restore: SettingsMeta | null }) & { friend?: never; id?: never; invite?: never; reason?: never; request?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { friend?: never; id?: never; invite?: never; request?: never; restore?: never } | 
+({ kind: "signedIn"; restore: SettingsMeta | null }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never } | 
+/**  A friend invited the player to their team (only while teams are on). */
+({ kind: "teamInvite"; invite: TeamInviteView }) & { friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+/**  The founder removed the player from the team, or ended it. */
+({ kind: "teamGone"; reason: TeamExit; 
+/**  The team's name, for the sentence. */
+name: string | null }) & { friend?: never; id?: never; invite?: never; request?: never; restore?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { friend?: never; id?: never; invite?: never; name?: never; request?: never; restore?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
-({ kind: "signedOutRemotely" }) & { friend?: never; id?: never; invite?: never; reason?: never; request?: never; restore?: never };
+({ kind: "signedOutRemotely" }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never };
 
 /**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
 export type SocialNotice_Serialize = 
 /**  A live invite (never while on do-not-disturb: those wait as quiet invites). */
-({ kind: "invite"; invite: InviteView_Serialize }) & { friend?: never; id?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "invite"; invite: InviteView_Serialize }) & { friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  Someone sent a friend request. */
-({ kind: "request"; request: RequestView }) & { friend?: never; id?: never; invite?: never; reason?: never; restore?: never } | 
+({ kind: "request"; request: RequestView }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; restore?: never } | 
 /**  A request was accepted (by them, or on another device): a new friend. */
-({ kind: "friendAdded"; friend: FriendView_Serialize }) & { id?: never; invite?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendAdded"; friend: FriendView_Serialize }) & { id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  A friend came online. */
-({ kind: "friendOnline"; id: string }) & { friend?: never; invite?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendOnline"; id: string }) & { friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  A friend started playing on projects.gg. */
-({ kind: "friendOnProjects"; id: string }) & { friend?: never; invite?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendOnProjects"; id: string }) & { friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  Signed in. `restore` is a settings backup saved by another computer, worth offering. */
-({ kind: "signedIn"; restore: SettingsMeta | null }) & { friend?: never; id?: never; invite?: never; reason?: never; request?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { friend?: never; id?: never; invite?: never; request?: never; restore?: never } | 
+({ kind: "signedIn"; restore: SettingsMeta | null }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never } | 
+/**  A friend invited the player to their team (only while teams are on). */
+({ kind: "teamInvite"; invite: TeamInviteView }) & { friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+/**  The founder removed the player from the team, or ended it. */
+({ kind: "teamGone"; reason: TeamExit; 
+/**  The team's name, for the sentence. */
+name: string | null }) & { friend?: never; id?: never; invite?: never; request?: never; restore?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { friend?: never; id?: never; invite?: never; name?: never; request?: never; restore?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
-({ kind: "signedOutRemotely" }) & { friend?: never; id?: never; invite?: never; reason?: never; request?: never; restore?: never };
+({ kind: "signedOutRemotely" }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never };
 
 export type SocialView = SocialView_Serialize | SocialView_Deserialize;
 
@@ -3980,6 +4043,17 @@ export type SocialView_Deserialize = {
 	limits: Limits | null,
 	/**  What this launcher tells friends right now. */
 	activity: ActivityView,
+	/**
+	 *  The player's friend categories; None while the service does not offer them (an older
+	 *  service) or the list has not arrived.
+	 */
+	groups: FriendGroupsView | null,
+	/**  Teams are on (signed config `features.teams`) and the service offers them. */
+	teams: boolean,
+	/**  The player's team (only while `teams`). */
+	team: TeamView_Deserialize | null,
+	/**  Invites to teams, newest first (only while `teams`). */
+	teamInvites: TeamInviteView[],
 };
 
 export type SocialView_Serialize = {
@@ -4001,6 +4075,17 @@ export type SocialView_Serialize = {
 	limits: Limits | null,
 	/**  What this launcher tells friends right now. */
 	activity: ActivityView,
+	/**
+	 *  The player's friend categories; None while the service does not offer them (an older
+	 *  service) or the list has not arrived.
+	 */
+	groups: FriendGroupsView | null,
+	/**  Teams are on (signed config `features.teams`) and the service offers them. */
+	teams: boolean,
+	/**  The player's team (only while `teams`). */
+	team: TeamView_Serialize | null,
+	/**  Invites to teams, newest first (only while `teams`). */
+	teamInvites: TeamInviteView[],
 };
 
 /**  The launcher a source belongs to. Names are brand names: the UI shows them as they are. */
@@ -4197,6 +4282,146 @@ export type SyncSummary = {
 	downloadBytes: number,
 	/**  Bytes deleted from the disk (removals and the old files of updated items). */
 	removeBytes: number,
+};
+
+/**
+ *  Why the player is no longer in their team (presence `{"t":"team","team":null}`). A reason this
+ *  version does not know reads as `Other`.
+ */
+export type TeamExit = "left" | 
+/**  The founder removed them. */
+"kicked" | 
+/**  The founder ended the team. */
+"disbanded" | "other";
+
+export type TeamInviteView = {
+	teamId: string,
+	name: string,
+	tag: string,
+	emblem: string,
+	/**  How many are in the team. */
+	members: number,
+	/**  The friend who invited. */
+	from: ProfileView,
+	/**  Unix seconds. */
+	sentAt: number,
+};
+
+/**  What a team code leads to. */
+export type TeamLookupView = {
+	teamId: string,
+	name: string,
+	tag: string,
+	emblem: string,
+	members: number,
+	relation: TeamRelation,
+	/**  `TKM-XXXX-XXXX`, for joining. */
+	code: string,
+};
+
+export type TeamMemberView = TeamMemberView_Serialize | TeamMemberView_Deserialize;
+
+export type TeamMemberView_Deserialize = {
+	id: string,
+	name: string,
+	username: string,
+	avatar: string,
+	avatarUrl: string | null,
+	role: TeamRole,
+	/**  The player themself. */
+	me: boolean,
+	/**  Also on the friend list. */
+	friend: boolean,
+	/**  The player blocked them (they see each other offline). */
+	blocked: boolean,
+	state: PresenceState,
+	dnd: boolean,
+	/**  Where they play; `projects` means "Katıl". Never another server's address. */
+	game: Game_Deserialize | null,
+	discordUrl: string,
+	/**  Unix seconds. */
+	joinedAt: number,
+};
+
+export type TeamMemberView_Serialize = {
+	id: string,
+	name: string,
+	username: string,
+	avatar: string,
+	avatarUrl: string | null,
+	role: TeamRole,
+	/**  The player themself. */
+	me: boolean,
+	/**  Also on the friend list. */
+	friend: boolean,
+	/**  The player blocked them (they see each other offline). */
+	blocked: boolean,
+	state: PresenceState,
+	dnd: boolean,
+	/**  Where they play; `projects` means "Katıl". Never another server's address. */
+	game: Game_Serialize | null,
+	discordUrl: string,
+	/**  Unix seconds. */
+	joinedAt: number,
+};
+
+/**  How a team code relates to the player. */
+export type TeamRelation = "none" | 
+/**  Already in this team. */
+"member" | 
+/**  In another team: leave it first. */
+"elsewhere" | 
+/**  The player blocked someone in it. */
+"blocked" | 
+/**  No room left. */
+"full";
+
+export type TeamRole = 
+/**  Edits the team, renews its code, removes members, hands the role on, disbands it. */
+"founder" | 
+/**  Invites friends, may leave. */
+"member";
+
+export type TeamView = TeamView_Serialize | TeamView_Deserialize;
+
+export type TeamView_Deserialize = {
+	id: string,
+	name: string,
+	tag: string,
+	/**  `sword`, `shield`, … (the launcher draws a bundled icon). */
+	emblem: string,
+	/**  `TKM-XXXX-XXXX` */
+	code: string,
+	/**  `YYYY-MM-DD` */
+	createdOn: string,
+	/**  The player's own role. */
+	role: TeamRole,
+	/**  Founder first, then by joining time; the player is among them. */
+	members: TeamMemberView_Deserialize[],
+	/**  Friends the player invited who have not answered yet. */
+	invited: string[],
+	/**  How many may be in a team. */
+	limit: number,
+};
+
+export type TeamView_Serialize = {
+	id: string,
+	name: string,
+	tag: string,
+	/**  `sword`, `shield`, … (the launcher draws a bundled icon). */
+	emblem: string,
+	/**  `TKM-XXXX-XXXX` */
+	code: string,
+	/**  `YYYY-MM-DD` */
+	createdOn: string,
+	/**  The player's own role. */
+	role: TeamRole,
+	/**  Founder first, then by joining time; the player is among them. */
+	members: TeamMemberView_Serialize[],
+	/**  Friends the player invited who have not answered yet. */
+	invited: string[],
+	/**  How many may be in a team. */
+	limit: number,
 };
 
 /**  Something in the launcher trash. */

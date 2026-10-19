@@ -19,11 +19,12 @@ use url::Url;
 
 use crate::auth::{LoginAttempt, SignedIn, auth_code_from_deep_link};
 use crate::client::{Session, SocialClient, SocialConfig};
-use crate::codes::normalize_friend_code;
+use crate::codes::{normalize_friend_code, normalize_team_code};
 use crate::error::{ErrorCode, Result, SocialError};
 use crate::game::{self, GameActivity};
 use crate::model::{
-    ProfileUpdate, RequestOutcome, SessionInfo, SettingsMeta, SettingsPrecondition,
+    FriendGroup, FriendGroups, MAX_FRIEND_GROUPS, ProfileUpdate, RequestOutcome, SessionInfo,
+    SettingsMeta, SettingsPrecondition, TeamAnswer, TeamEdit,
 };
 use crate::presence::{PresenceControl, PresenceEvent, PresenceOptions, StopReason};
 use crate::protocol::LocalStatus;
@@ -31,8 +32,8 @@ use crate::qr::{QrPath, qr_path};
 use crate::state::{Connection, SocialState};
 use crate::store::TokenStore;
 use crate::view::{
-    ActivityView, AuthPhase, InviteResult, LookupView, ProfileView, SendOutcome, SignInFailure,
-    SocialNotice, SocialView, me_view,
+    ActivityView, AuthPhase, GroupMember, InviteResult, LookupView, ProfileView, SendOutcome,
+    SignInFailure, SocialNotice, SocialView, TeamLookupView, me_view,
 };
 
 /// After a reconnect the friend list is fetched again only when it is older than this.
@@ -104,6 +105,15 @@ struct Core {
     deleting: bool,
     /// Share link and its QR, computed once per friend code.
     qr: Option<(String, Option<QrPath>)>,
+    /// Teams are on in the signed config (`features.teams`). Survives sign-outs.
+    teams: bool,
+    /// A friend categories save is on its way; the newest wanted document waits in
+    /// `groups_next` (one save at a time, so the service keeps the newest).
+    groups_saving: bool,
+    groups_next: Option<FriendGroups>,
+    /// While saves are on their way: the document the service last confirmed, shown again
+    /// when one fails.
+    groups_saved: Option<FriendGroups>,
 }
 
 impl SocialService {
@@ -155,6 +165,18 @@ impl SocialService {
 
     fn notify(&self, notice: SocialNotice) {
         (self.inner.sink)(SocialUpdate::Notice(notice));
+    }
+
+    /// Teams on or off (signed config `features.teams`); the friends feature must be on too.
+    pub fn set_teams_enabled(&self, on: bool) {
+        {
+            let mut core = self.lock();
+            if core.teams == on {
+                return;
+            }
+            core.teams = on;
+        }
+        self.emit_view();
     }
 
     /// Turns the feature on with this service, or off (None). A saved session is restored.
@@ -271,7 +293,19 @@ impl SocialService {
             if core.generation != generation || core.epoch != epoch {
                 return;
             }
-            let notices = core.state.apply(&event, unix_now());
+            if matches!(event, PresenceEvent::GroupsChanged(_)) && core.groups_saving {
+                // This device's own save is on its way and wins; its echo arrives after it.
+                return;
+            }
+            let mut notices = core.state.apply(&event, unix_now());
+            if !core.teams {
+                notices.retain(|notice| {
+                    !matches!(
+                        notice,
+                        SocialNotice::TeamInvite { .. } | SocialNotice::TeamGone { .. }
+                    )
+                });
+            }
             match &event {
                 PresenceEvent::Connected { .. } => {
                     refetch = core.state.me().is_none()
@@ -706,6 +740,263 @@ impl SocialService {
         Ok(())
     }
 
+    // --- friend categories ----------------------------------------------------------------
+
+    /// Saves the player's friend categories (the whole document: their order, names and who is
+    /// in which). The UI shows the change at once; saves go out one at a time and only the
+    /// newest waiting one is sent, so the service always ends with the latest. On failure the
+    /// last saved document comes back and the error is returned.
+    pub async fn save_groups(
+        &self,
+        groups: Vec<FriendGroup>,
+        members: Vec<GroupMember>,
+    ) -> Result<()> {
+        let wanted = groups_document(groups, members)?;
+        let generation = {
+            let mut core = self.lock();
+            if core.auth != AuthPhase::SignedIn || core.state.groups().is_none() {
+                return Err(SocialError::Unavailable { retry_after: None });
+            }
+            let version = core.state.groups().map_or(0, |g| g.version);
+            if core.groups_saved.is_none() {
+                core.groups_saved = core.state.groups().cloned();
+            }
+            core.state.set_groups(FriendGroups {
+                version,
+                ..wanted.clone()
+            });
+            if core.groups_saving {
+                core.groups_next = Some(wanted);
+                drop(core);
+                self.emit_view();
+                return Ok(());
+            }
+            core.groups_saving = true;
+            core.generation
+        };
+        self.emit_view();
+        let mut next = Some(wanted);
+        let mut outcome = Ok(());
+        while let Some(document) = next.take() {
+            let session = match self.signed_in() {
+                Ok((session, current)) if current == generation => session,
+                _ => return Ok(()),
+            };
+            match session.put_friend_groups(&document).await {
+                Ok(version) => {
+                    let mut core = self.lock();
+                    if core.generation != generation {
+                        return Ok(());
+                    }
+                    let saved = FriendGroups {
+                        version,
+                        ..document
+                    };
+                    next = core.groups_next.take();
+                    if next.is_none() {
+                        // What is shown is what the service has. The next save goes back to
+                        // what is shown then on failure (other devices' changes included).
+                        core.state.set_groups(saved);
+                        core.groups_saving = false;
+                        core.groups_saved = None;
+                    } else {
+                        core.groups_saved = Some(saved);
+                    }
+                }
+                Err(error) => {
+                    {
+                        let mut core = self.lock();
+                        if core.generation == generation {
+                            core.groups_saving = false;
+                            core.groups_next = None;
+                            if let Some(saved) = core.groups_saved.take() {
+                                core.state.set_groups(saved);
+                            }
+                        }
+                    }
+                    if matches!(error, SocialError::Unauthorized) {
+                        self.end_session(generation, false);
+                        return Err(error);
+                    }
+                    outcome = Err(error);
+                }
+            }
+        }
+        self.emit_view();
+        outcome
+    }
+
+    // --- teams ----------------------------------------------------------------------------
+
+    fn current_team(&self) -> Result<String> {
+        self.lock()
+            .state
+            .team()
+            .map(|team| team.id.clone())
+            .ok_or(SocialError::InvalidInput("not in a team"))
+    }
+
+    /// Founds a team: a name, a tag (2-4 letters or digits) and an emblem.
+    pub async fn create_team(&self, name: &str, tag: &str, emblem: &str) -> Result<()> {
+        let (name, tag, emblem) = (name.to_owned(), tag.to_owned(), emblem.to_owned());
+        let (answer, generation) = self
+            .call(|session| async move { session.create_team(&name, &tag, &emblem).await })
+            .await?;
+        self.update(generation, |core| core.state.team_answer(answer));
+        Ok(())
+    }
+
+    /// Renames the team, changes its tag or emblem (founder).
+    pub async fn edit_team(&self, edit: TeamEdit) -> Result<()> {
+        let team = self.current_team()?;
+        let (answer, generation) = self
+            .call(|session| async move { session.update_team(&team, &edit).await })
+            .await?;
+        self.update(generation, |core| core.state.team_answer(answer));
+        Ok(())
+    }
+
+    /// Ends the team for everyone (founder).
+    pub async fn disband_team(&self) -> Result<()> {
+        let team = self.current_team()?;
+        let (_, generation) = self
+            .call(|session| async move { session.disband_team(&team).await })
+            .await?;
+        self.update(generation, |core| core.state.team_left());
+        Ok(())
+    }
+
+    /// Leaves the team (a founder with members hands the role on first).
+    pub async fn leave_team(&self) -> Result<()> {
+        let team = self.current_team()?;
+        let (_, generation) = self
+            .call(|session| async move { session.leave_team(&team).await })
+            .await?;
+        self.update(generation, |core| core.state.team_left());
+        Ok(())
+    }
+
+    /// A new team code (founder); the old one stops working.
+    pub async fn rotate_team_code(&self) -> Result<String> {
+        let team = self.current_team()?;
+        let (code, generation) = self
+            .call(|session| async move { session.rotate_team_code(&team).await })
+            .await?;
+        let shown = code.clone();
+        self.update(generation, |core| core.state.team_code(shown));
+        Ok(code)
+    }
+
+    /// Invites a friend to the player's team.
+    pub async fn invite_to_team(&self, friend: &str) -> Result<()> {
+        let team = self.current_team()?;
+        let to = friend.to_owned();
+        let (_, generation) = self
+            .call(|session| async move { session.invite_to_team(&team, &to).await })
+            .await?;
+        self.update(generation, |core| core.state.team_invite_sent(friend));
+        Ok(())
+    }
+
+    /// Removes a member (founder). The code is renewed with it, so the team is read again.
+    pub async fn remove_team_member(&self, member: &str) -> Result<()> {
+        let team = self.current_team()?;
+        let member = member.to_owned();
+        let (overview, generation) = self
+            .call(|session| async move {
+                session.remove_team_member(&team, &member).await?;
+                session.teams().await
+            })
+            .await?;
+        self.update(generation, |core| {
+            core.state.team_answer(TeamAnswer {
+                team: overview.team,
+                invited: overview.invited,
+            });
+        });
+        Ok(())
+    }
+
+    /// Hands the founder role to another member.
+    pub async fn transfer_team_founder(&self, member: &str) -> Result<()> {
+        let team = self.current_team()?;
+        let member = member.to_owned();
+        let (answer, generation) = self
+            .call(|session| async move { session.transfer_team_founder(&team, &member).await })
+            .await?;
+        self.update(generation, |core| core.state.team_answer(answer));
+        Ok(())
+    }
+
+    /// What a team code leads to (counts against the daily code lookup quota).
+    pub async fn lookup_team(&self, code: &str) -> Result<TeamLookupView> {
+        let normalized =
+            normalize_team_code(code).ok_or(SocialError::InvalidInput("not a team code"))?;
+        let request = normalized.clone();
+        let (lookup, _) = self
+            .call(|session| async move { session.lookup_team(&request).await })
+            .await?;
+        Ok(TeamLookupView {
+            team_id: lookup.team.id,
+            name: lookup.team.name,
+            tag: lookup.team.tag,
+            emblem: lookup.team.emblem,
+            members: lookup.team.members,
+            relation: lookup.relation,
+            code: normalized,
+        })
+    }
+
+    /// Joins the team of a code.
+    pub async fn join_team(&self, code: &str) -> Result<()> {
+        let code = code.to_owned();
+        let (answer, generation) = self
+            .call(|session| async move { session.join_team(&code).await })
+            .await?;
+        self.update(generation, |core| core.state.team_answer(answer));
+        Ok(())
+    }
+
+    /// Accepts an invite to a team. An invite that is gone leaves the list either way.
+    pub async fn accept_team_invite(&self, team: &str) -> Result<()> {
+        let id = team.to_owned();
+        match self
+            .call(|session| async move { session.accept_team_invite(&id).await })
+            .await
+        {
+            Ok((answer, generation)) => {
+                self.update(generation, |core| core.state.team_answer(answer));
+                Ok(())
+            }
+            Err(error) => {
+                if error.code() == Some(&ErrorCode::TeamInviteNotFound) {
+                    let generation = self.lock().generation;
+                    self.update(generation, |core| core.state.team_invite_answered(team));
+                }
+                Err(error)
+            }
+        }
+    }
+
+    pub async fn decline_team_invite(&self, team: &str) -> Result<()> {
+        let id = team.to_owned();
+        let result = self
+            .call(|session| async move { session.decline_team_invite(&id).await })
+            .await;
+        match result {
+            Ok((_, generation)) => {
+                self.update(generation, |core| core.state.team_invite_answered(team));
+                Ok(())
+            }
+            Err(error) if error.code() == Some(&ErrorCode::TeamInviteNotFound) => {
+                let generation = self.lock().generation;
+                self.update(generation, |core| core.state.team_invite_answered(team));
+                Ok(())
+            }
+            Err(error) => Err(error),
+        }
+    }
+
     /// "Birlikte oyna" (no text; one per friend per 5 minutes, 30 a day).
     pub async fn invite(&self, id: &str) -> Result<InviteResult> {
         let control = {
@@ -903,6 +1194,40 @@ fn reset(core: &mut Core) {
     core.fetching = false;
     core.deleting = false;
     core.qr = None;
+    core.groups_saving = false;
+    core.groups_next = None;
+    core.groups_saved = None;
+}
+
+/// The categories the UI wants saved, checked as the service will check them.
+fn groups_document(groups: Vec<FriendGroup>, members: Vec<GroupMember>) -> Result<FriendGroups> {
+    let invalid = SocialError::InvalidInput("friend categories");
+    if groups.len() > MAX_FRIEND_GROUPS {
+        return Err(invalid);
+    }
+    let mut document = FriendGroups::default();
+    for group in groups {
+        let name = group.name.split_whitespace().collect::<Vec<_>>().join(" ");
+        let valid_id = (1..=12).contains(&group.id.len())
+            && group
+                .id
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit());
+        let length = name.chars().count();
+        if !valid_id
+            || !(1..=24).contains(&length)
+            || document.groups.iter().any(|g| g.id == group.id)
+        {
+            return Err(invalid);
+        }
+        document.groups.push(FriendGroup { id: group.id, name });
+    }
+    for member in members {
+        if document.groups.iter().any(|g| g.id == member.group) {
+            document.members.insert(member.friend, member.group);
+        }
+    }
+    Ok(document)
 }
 
 fn build_view(core: &mut Core) -> SocialView {
@@ -921,6 +1246,7 @@ fn build_view(core: &mut Core) -> SocialView {
         let qr = core.qr.as_ref().and_then(|(_, qr)| qr.clone());
         (link, qr)
     });
+    let teams = core.teams && core.state.teams_supported();
     SocialView {
         seq: core.seq,
         enabled: core.url.is_some(),
@@ -935,6 +1261,14 @@ fn build_view(core: &mut Core) -> SocialView {
         invites: core.state.invites(now),
         limits: core.state.limits(),
         activity: ActivityView::from(&core.activity),
+        groups: core.state.groups_view(),
+        teams,
+        team: if teams { core.state.team_view() } else { None },
+        team_invites: if teams {
+            core.state.team_invites()
+        } else {
+            Vec::new()
+        },
     }
 }
 
@@ -948,7 +1282,7 @@ fn unix_now() -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
     use super::*;
     use crate::auth::SessionToken;
@@ -1094,6 +1428,124 @@ mod tests {
         harness.service.configure(None);
         assert!(!harness.service.view().enabled);
         assert!(harness.tokens.load().is_some());
+    }
+
+    const FRIENDS_WITH_TEAM: &str = r#"{"friends":[{"id":"223456789012345678","username":"bora",
+        "displayName":"Bora","avatar":"preset:fox","avatarHash":null,"since":"2026-10-01","lastSeen":"today"}],
+        "incoming":[],"outgoing":[],"blocked":[],
+        "limits":{"friends":200,"outgoingRequests":50,"teamMembers":30,"groups":20},
+        "groups":{"version":0,"groups":[],"members":{}},
+        "team":{"id":"0123456789abcdef","name":"Gece Kartalları","tag":"GKR","emblem":"sword",
+          "code":"TKM-ABCD-EFGH","createdOn":"2026-10-19","members":[{"id":"123456789012345678",
+          "username":"ayse","displayName":"Ayşe","avatar":"discord","avatarHash":null,
+          "role":"founder","joinedAt":5}]},
+        "teamInvited":[],"teamInvites":[]}"#;
+
+    #[tokio::test]
+    async fn teams_wait_for_the_flag_and_categories_save_in_order() {
+        let puts = Arc::new(AtomicUsize::new(0));
+        let elsewhere = Arc::new(AtomicBool::new(false));
+        let failing = Arc::new(AtomicBool::new(false));
+        let server = MockServer::start({
+            let puts = puts.clone();
+            let elsewhere = elsewhere.clone();
+            let failing = failing.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| match req.path.as_str() {
+                    "/v1/me" => MockReply::json(200, ME),
+                    // Another computer saved its own categories in between.
+                    "/v1/friends" if elsewhere.load(Ordering::SeqCst) => MockReply::json(
+                        200,
+                        &FRIENDS_WITH_TEAM.replace(
+                            r#""groups":{"version":0,"groups":[],"members":{}}"#,
+                            r#""groups":{"version":5,"groups":[{"id":"pvp","name":"PvP"}],"members":{}}"#,
+                        ),
+                    ),
+                    "/v1/friends" => MockReply::json(200, FRIENDS_WITH_TEAM),
+                    "/v1/friends/groups" if failing.load(Ordering::SeqCst) => MockReply::json(
+                        503,
+                        r#"{"error":{"code":"unavailable","message":"x"}}"#,
+                    ),
+                    "/v1/friends/groups" => {
+                        let n = puts.fetch_add(1, Ordering::SeqCst) + 1;
+                        MockReply::json(200, &format!(r#"{{"version":{n}}}"#))
+                    }
+                    "/v1/teams/0123456789abcdef/invites" => MockReply::empty(204),
+                    _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.configure(url(&server));
+        let view = harness.until("friends", |view| view.loaded).await;
+        // The service has teams, but the signed config has not turned them on.
+        assert!(!view.teams && view.team.is_none());
+        assert_eq!(view.groups.as_ref().unwrap().version, 0);
+        harness.service.set_teams_enabled(true);
+        let team = harness.service.view().team.unwrap();
+        assert_eq!(team.role, crate::model::TeamRole::Founder);
+        assert!(team.members[0].me);
+
+        harness
+            .service
+            .invite_to_team("223456789012345678")
+            .await
+            .unwrap();
+        assert_eq!(
+            harness.service.view().team.unwrap().invited,
+            vec!["223456789012345678".to_owned()]
+        );
+
+        let okul = FriendGroup {
+            id: "okul".into(),
+            name: "  Okul  ".into(),
+        };
+        let member = GroupMember {
+            friend: "223456789012345678".into(),
+            group: "okul".into(),
+        };
+        harness
+            .service
+            .save_groups(vec![okul.clone()], vec![member.clone()])
+            .await
+            .unwrap();
+        let groups = harness.service.view().groups.unwrap();
+        assert_eq!(groups.version, 1);
+        assert_eq!(groups.groups[0].name, "Okul");
+        assert_eq!(groups.members, vec![member]);
+        // A category that does not add up never leaves the launcher.
+        let bad = FriendGroup {
+            id: "Okul!".into(),
+            name: "x".into(),
+        };
+        assert!(
+            harness
+                .service
+                .save_groups(vec![bad], vec![])
+                .await
+                .is_err()
+        );
+        assert_eq!(puts.load(Ordering::SeqCst), 1);
+
+        // A failed save shows what was there before it, including what another computer saved
+        // since this one's last save.
+        elsewhere.store(true, Ordering::SeqCst);
+        harness.service.refresh().await;
+        assert_eq!(harness.service.view().groups.unwrap().version, 5);
+        failing.store(true, Ordering::SeqCst);
+        assert!(
+            harness
+                .service
+                .save_groups(vec![okul], vec![])
+                .await
+                .is_err()
+        );
+        let groups = harness.service.view().groups.unwrap();
+        assert_eq!(groups.version, 5);
+        assert_eq!(groups.groups[0].name, "PvP");
     }
 
     #[tokio::test]

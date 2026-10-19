@@ -1,9 +1,13 @@
-// The friend list: waiting invites, requests, then friends in game, in the launcher and offline,
-// and the requests the player sent. One list, so a friend who comes online glides from
-// "Çevrimdışı" up to "Çevrimiçi" instead of vanishing and reappearing; section headers glide
-// with it and fade when their section empties.
+// The friend list: waiting invites (to play and to teams), requests, the player's team, then
+// friends, and the requests the player sent. Friends are in game / in the launcher / offline, or,
+// once the player made categories ("Okul", "PvP"), in those categories and "Arkadaşlar" for the
+// rest, each in presence order. One list, so a friend who comes online (or moves to another
+// category) glides to the new place instead of vanishing and reappearing; section headers glide
+// with them and fade when their section empties. Friends and categories are dragged to move them;
+// menus and Alt+↑/↓ do the same from the keyboard.
 import {
   ArrowClockwise,
+  CaretDown,
   Check,
   Copy,
   DotsThree,
@@ -12,7 +16,7 @@ import {
   WifiSlash,
   X,
 } from "@phosphor-icons/react";
-import { Button, easeOutExpo, IconButton, Progress, SearchInput, Skeleton } from "@pl/ui";
+import { Button, easeOutExpo, IconButton, Progress, SearchInput, Skeleton, toast } from "@pl/ui";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -20,17 +24,55 @@ import { useTranslation } from "react-i18next";
 import { useCalm } from "@/features/accounts/calm";
 import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
-import type { Friend, FriendRequest, SocialInvite } from "@/lib/api/social-types";
+import type {
+  Friend,
+  FriendGroups,
+  FriendRequest,
+  SocialInvite,
+  SocialTeam,
+  TeamInvite,
+  TeamMember,
+} from "@/lib/api/social-types";
 import { formatRelative } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
 import { attempt, copyText } from "./actions";
-import { FriendRow, JoinButton } from "./friend-row";
-import { groupFriends, isJoinable } from "./model";
+import {
+  CategoryHeader,
+  DragGhost,
+  DragSlot,
+  EmptyCategory,
+  NewCategoryRow,
+} from "./category-header";
+import { FriendRow, JoinButton, type RowTeam } from "./friend-row";
+import {
+  addGroup,
+  groupOf,
+  groupSections,
+  MAX_GROUPS,
+  moveFriend,
+  newGroupId,
+  pruneMembers,
+  REST,
+  removeGroup,
+  renameGroup,
+  reorderGroups,
+  sameGroups,
+  stepFriend,
+  stepGroup,
+} from "./groups";
+import { groupFriends, isJoinable, presenceLine } from "./model";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
+import { TeamMemberRow } from "./team-member";
+import { TeamHeader, TeamInviteRow } from "./team-section";
+import { teammates } from "./teams";
+import { useListDrag } from "./use-list-drag";
 
 const ago = (unixSeconds: number) => formatRelative(new Date(unixSeconds * 1000).toISOString());
+
+/** The team section's id among folded sections (category ids are 1-12 letters and digits). */
+const TEAM_SECTION = "team:";
 
 function Header({ label, count }: { label: string; count: number }) {
   const { reduce } = useSocialMotion();
@@ -343,12 +385,70 @@ function EmptyFriends() {
   );
 }
 
+/** How a dragged friend looks while lifted: their row, without the buttons. */
+function FriendGhost({ friend }: { friend: Friend }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center gap-3 py-2 pr-3 pl-2">
+      <SocialAvatar source={friend} size={36} state={friend.state} dnd={friend.dnd} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[14px] font-semibold text-bone-50">{friend.name}</span>
+        <span className="block truncate text-[12.5px] leading-[18px] text-ash-400">
+          {presenceLine(friend, t)}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/** How a lifted category looks: its header, with the faces of the friends it carries. */
+function GroupGhost({ name, friends }: { name: string; friends: Friend[] }) {
+  const online = friends.filter((f) => f.state !== "offline").length;
+  return (
+    <div className="flex items-center gap-1.5 px-3 py-2">
+      <CaretDown
+        size={12}
+        weight="bold"
+        aria-hidden
+        className="shrink-0 -rotate-90 text-gold-300"
+      />
+      <span className="min-w-0 truncate text-[12.5px] font-semibold text-bone-50">{name}</span>
+      <span className="font-display text-[12px] tabular-nums">
+        <span className={online > 0 ? "text-jade-400" : "text-ash-400"}>{online}</span>
+        <span className="text-ash-400">/{friends.length}</span>
+      </span>
+      <span className="ml-auto flex -space-x-1.5">
+        {friends.slice(0, 4).map((friend) => (
+          <SocialAvatar key={friend.id} source={friend} size={20} />
+        ))}
+      </span>
+    </div>
+  );
+}
+
 type Item =
   | { key: string; kind: "header"; label: string; count: number }
-  | { key: string; kind: "friend"; friend: Friend }
+  | { key: string; kind: "friend"; friend: Friend; group: string | null }
   | { key: string; kind: "request"; request: FriendRequest }
   | { key: string; kind: "sent"; request: FriendRequest }
-  | { key: string; kind: "invite"; invite: SocialInvite };
+  | { key: string; kind: "invite"; invite: SocialInvite }
+  | { key: string; kind: "teamInvite"; invite: TeamInvite }
+  | { key: string; kind: "teamHeader"; team: SocialTeam; folded: boolean }
+  | { key: string; kind: "teammate"; member: TeamMember; founder: boolean }
+  | {
+      key: string;
+      kind: "group";
+      id: string;
+      name: string | null;
+      online: number;
+      count: number;
+      folded: boolean;
+      index: number;
+      total: number;
+    }
+  | { key: string; kind: "groupEmpty"; id: string }
+  | { key: string; kind: "slot"; height: number; folded: boolean }
+  | { key: string; kind: "newGroup" };
 
 /** From this many friends the list gets a search field (a short list reads at a glance). */
 const SEARCH_FROM = 8;
@@ -357,7 +457,10 @@ export function ListPage() {
   const { t } = useTranslation();
   const { reduce, layout } = useSocialMotion();
   const view = useSocialUi((s) => s.view);
+  const goTo = useSocialUi((s) => s.goTo);
   const favorites = useSocialPrefs((s) => s.favorites);
+  const collapsed = useSocialPrefs((s) => s.collapsed);
+  const toggleCollapsed = useSocialPrefs((s) => s.toggleCollapsed);
   const listRef = useRef<HTMLUListElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -370,6 +473,72 @@ export function ListPage() {
   useEffect(() => {
     searching.current = Boolean(q);
   });
+
+  // The categories: what the service last said, or what was just changed here (shown at once,
+  // until the snapshot catches up).
+  const [pending, setPending] = useState<FriendGroups | null>(null);
+  const doc = pending ?? view.groups ?? null;
+  useEffect(() => {
+    if (pending && view.groups && sameGroups(pending, view.groups)) setPending(null);
+  }, [pending, view.groups]);
+  const save = (next: FriendGroups) => {
+    const clean = pruneMembers(next, view.friends);
+    setPending(clean);
+    void api.social.saveGroups(clean.groups, clean.members).catch(() => {
+      setPending(null);
+      toast.error(t("friendGroups.failed"));
+    });
+  };
+  /** A new category's name is asked here; `friend` goes into it once named. */
+  const [creating, setCreating] = useState<{ friend?: string } | null>(null);
+
+  const categoriesOn = doc !== null;
+  const grouped = Boolean(doc && doc.groups.length > 0) && !q;
+
+  const nameOf = (group: string) =>
+    group === REST
+      ? t("friendGroups.rest")
+      : (doc?.groups.find((g) => g.id === group)?.name ?? t("friendGroups.rest"));
+  const friendName = (id: string) => view.friends.find((f) => f.id === id)?.name ?? "";
+
+  const moveTo = (friendId: string, group: string) => {
+    if (!doc || groupOf(doc, friendId) === group) return;
+    save(moveFriend(doc, friendId, group));
+    announce(t("friendGroups.moved", { name: friendName(friendId), group: nameOf(group) }));
+  };
+
+  const { drag, press, ghost } = useListDrag({
+    listRef,
+    reduce,
+    onDropFriend: moveTo,
+    onDropGroup: (id, order) => {
+      if (!doc) return;
+      save(reorderGroups(doc, order));
+      announce(t("friendGroups.groupMoved", { name: nameOf(id), position: order.indexOf(id) + 1 }));
+    },
+  });
+
+  const team = view.teams ? view.team : undefined;
+  const teamFolded = team ? collapsed.includes(TEAM_SECTION) : false;
+  const teamRowFor = (friendId: string): RowTeam | null => {
+    if (!team) return null;
+    const state = team.members.some((m) => m.id === friendId)
+      ? "member"
+      : team.invited.includes(friendId)
+        ? "invited"
+        : "invitable";
+    return {
+      state,
+      onInvite: () => {
+        void attempt(() => api.social.inviteToTeam(friendId)).then((done) => {
+          if (done !== undefined) {
+            announce(t("teams.invite.sent"));
+            toast.success(t("teams.invite.sent"));
+          }
+        });
+      },
+    };
+  };
 
   const items = useMemo<Item[]>(() => {
     const list: Item[] = [];
@@ -386,6 +555,15 @@ export function ListPage() {
         .filter((invite) => hit(invite.name))
         .map((invite) => ({ key: `i:${invite.id}`, kind: "invite", invite })),
     );
+    if (view.teams) {
+      section(
+        "teamInvites",
+        t("teams.invites"),
+        view.teamInvites
+          .filter((invite) => hit(invite.name))
+          .map((invite) => ({ key: `ti:${invite.teamId}`, kind: "teamInvite", invite })),
+      );
+    }
     section(
       "requests",
       t("social.list.requests"),
@@ -393,15 +571,75 @@ export function ListPage() {
         .filter((request) => hit(request.name))
         .map((request) => ({ key: `r:${request.id}`, kind: "request", request })),
     );
-    const groups = groupFriends(
-      view.friends.filter((friend) => hit(friend.name, friend.username)),
-      favorites,
-    );
-    const rows = (friends: Friend[]): Item[] =>
-      friends.map((friend) => ({ key: `f:${friend.id}`, kind: "friend", friend }));
-    section("playing", t("social.list.playing"), rows(groups.playing));
-    section("online", t("social.list.online"), rows(groups.online));
-    section("offline", t("social.list.offline"), rows(groups.offline));
+
+    if (team) {
+      const mates = teammates(team).filter((m) => hit(m.name, m.username));
+      if (!q || mates.length) {
+        list.push({ key: "t:head", kind: "teamHeader", team, folded: teamFolded && !q });
+        if (!teamFolded || q) {
+          for (const member of mates) {
+            list.push({
+              key: `m:${member.id}`,
+              kind: "teammate",
+              member,
+              founder: team.role === "founder",
+            });
+          }
+        }
+      }
+    }
+
+    const friends = view.friends.filter((friend) => hit(friend.name, friend.username));
+    const rows = (entries: Friend[], group: string | null): Item[] =>
+      entries.map((friend) => ({ key: `f:${friend.id}`, kind: "friend", friend, group }));
+    if (grouped && doc) {
+      // While dragging, the list shows where the dragged one would land.
+      let shown = doc;
+      if (drag?.kind === "friend") shown = moveFriend(doc, drag.id, drag.over);
+      if (drag?.kind === "group") shown = reorderGroups(doc, drag.order);
+      const sections = groupSections(friends, shown, favorites);
+      const custom = sections.filter((s) => s.id !== REST);
+      sections.forEach((s) => {
+        if (drag?.kind === "group" && drag.id === s.id) {
+          // The lifted category: a slot where it would land, its friends folded into it.
+          list.push({ key: `g:${s.id}`, kind: "slot", height: drag.height, folded: false });
+          return;
+        }
+        const folded = collapsed.includes(s.id);
+        list.push({
+          key: `g:${s.id}`,
+          kind: "group",
+          id: s.id,
+          name: s.name,
+          online: s.online,
+          count: s.friends.length,
+          folded,
+          index: custom.indexOf(s),
+          total: custom.length,
+        });
+        if (folded) {
+          // A friend dragged over a folded category waits right under its header.
+          const waiting = drag?.kind === "friend" && drag.over === s.id && drag.over !== drag.from;
+          if (waiting) {
+            list.push({ key: `f:${drag.id}`, kind: "slot", height: drag.height, folded: true });
+          }
+          return;
+        }
+        if (!s.friends.length) {
+          list.push({ key: `e:${s.id}`, kind: "groupEmpty", id: s.id });
+          return;
+        }
+        list.push(...rows(s.friends, s.id));
+      });
+    } else {
+      const groups = groupFriends(friends, favorites);
+      section("playing", t("social.list.playing"), rows(groups.playing, null));
+      section("online", t("social.list.online"), rows(groups.online, null));
+      section("offline", t("social.list.offline"), rows(groups.offline, null));
+    }
+    if (categoriesOn && !q && view.friends.length > 0) {
+      list.push({ key: "new", kind: "newGroup" });
+    }
     section(
       "sent",
       t("social.list.sent"),
@@ -410,7 +648,24 @@ export function ListPage() {
         .map((request) => ({ key: `s:${request.id}`, kind: "sent", request })),
     );
     return list;
-  }, [view.invites, view.incoming, view.friends, view.outgoing, favorites, t, q]);
+  }, [
+    view.invites,
+    view.teams,
+    view.teamInvites,
+    view.incoming,
+    view.friends,
+    view.outgoing,
+    team,
+    teamFolded,
+    favorites,
+    collapsed,
+    doc,
+    grouped,
+    categoriesOn,
+    drag,
+    t,
+    q,
+  ]);
 
   // Ctrl+F finds a friend while the list is open.
   useEffect(() => {
@@ -434,14 +689,38 @@ export function ListPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [searchable]);
 
-  // Arrow keys move between friends (rows are buttons; Tab still visits the actions).
-  const onRowKey = (event: KeyboardEvent<HTMLButtonElement>) => {
+  /** Keeps the focus on what it was on while the list moves around it (Alt+↑/↓). */
+  const refocus = (selector: string) =>
+    requestAnimationFrame(() => listRef.current?.querySelector<HTMLElement>(selector)?.focus());
+
+  // Arrow keys move between friends (rows are buttons; Tab still visits the actions). Alt+↑/↓ on
+  // a friend moves them to the category above or below.
+  const onRowKey = (event: KeyboardEvent<HTMLButtonElement>, friendId?: string) => {
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    const rows = [...(listRef.current?.querySelectorAll<HTMLElement>("[data-friend-row]") ?? [])];
+    if (event.altKey) {
+      if (!friendId || !doc || !grouped) return;
+      event.preventDefault();
+      const next = stepFriend(doc, friendId, event.key === "ArrowUp" ? -1 : 1);
+      if (!next) return;
+      save(next);
+      announce(
+        t("friendGroups.moved", {
+          name: friendName(friendId),
+          group: nameOf(groupOf(next, friendId)),
+        }),
+      );
+      refocus(`[data-row-friend="${friendId}"] [data-friend-row]`);
+      return;
+    }
+    const rows = [
+      ...(listRef.current?.querySelectorAll<HTMLElement>(
+        "[data-friend-row], [data-category-header]",
+      ) ?? []),
+    ];
     const at = rows.indexOf(event.currentTarget);
     if (at < 0) return;
     event.preventDefault();
-    // ↑ from the first friend goes back up to the search field, when there is one.
+    // ↑ from the first row goes back up to the search field, when there is one.
     if (at === 0 && event.key === "ArrowUp" && searchRef.current) {
       searchRef.current.focus();
       return;
@@ -449,12 +728,169 @@ export function ListPage() {
     rows[(at + (event.key === "ArrowDown" ? 1 : -1) + rows.length) % rows.length]?.focus();
   };
 
+  const moveGroup = (id: string, step: -1 | 1) => {
+    if (!doc) return;
+    const next = stepGroup(doc, id, step);
+    if (!next) return;
+    save(next);
+    announce(
+      t("friendGroups.groupMoved", {
+        name: nameOf(id),
+        position: next.groups.findIndex((g) => g.id === id) + 1,
+      }),
+    );
+  };
+
+  const onHeaderKey = (event: KeyboardEvent<HTMLButtonElement>, id: string) => {
+    if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown") && id !== REST) {
+      event.preventDefault();
+      moveGroup(id, event.key === "ArrowUp" ? -1 : 1);
+      refocus(`[data-category-header="${id}"]`);
+      return;
+    }
+    onRowKey(event);
+  };
+
+  const removeCategory = (id: string) => {
+    if (!doc) return;
+    const before = doc;
+    const name = nameOf(id);
+    save(removeGroup(doc, id));
+    toast(t("friendGroups.removed", { name }), {
+      action: { label: t("friendGroups.undo"), onClick: () => save(before) },
+    });
+  };
+
+  const create = (name: string) => {
+    if (!doc) return;
+    const id = newGroupId(doc.groups);
+    const friend = creating?.friend;
+    setCreating(null);
+    save(addGroup(doc, id, name, friend));
+    if (friend) announce(t("friendGroups.moved", { name: friendName(friend), group: name }));
+  };
+
   const empty =
     view.loaded &&
     !view.friends.length &&
     !view.incoming.length &&
     !view.outgoing.length &&
-    !view.invites.length;
+    !view.invites.length &&
+    !view.teamInvites.length &&
+    !team;
+
+  const draggedFriend =
+    drag?.kind === "friend" ? view.friends.find((f) => f.id === drag.id) : undefined;
+  const draggedGroup = drag?.kind === "group" ? drag : undefined;
+
+  const render = (item: Item): ReactNode => {
+    switch (item.kind) {
+      case "header":
+        return <Header label={item.label} count={item.count} />;
+      case "friend": {
+        const friend = item.friend;
+        if (drag?.kind === "friend" && drag.id === friend.id) {
+          return <DragSlot height={drag.height} />;
+        }
+        return (
+          <div data-row-friend={friend.id}>
+            <FriendRow
+              friend={friend}
+              favorite={favorites.includes(friend.id)}
+              onKeyDown={(event) => onRowKey(event, friend.id)}
+              team={teamRowFor(friend.id)}
+              categories={
+                doc && categoriesOn
+                  ? {
+                      groups: doc.groups,
+                      current: groupOf(doc, friend.id),
+                      onMove: (group) => moveTo(friend.id, group),
+                      onNew: () => setCreating({ friend: friend.id }),
+                    }
+                  : null
+              }
+              onPress={
+                grouped && item.group
+                  ? (event) =>
+                      press(event, { kind: "friend", id: friend.id, from: item.group ?? REST })
+                  : undefined
+              }
+            />
+          </div>
+        );
+      }
+      case "request":
+        return <RequestRow request={item.request} />;
+      case "sent":
+        return <SentRow request={item.request} />;
+      case "invite":
+        return <InviteRow invite={item.invite} />;
+      case "teamInvite":
+        return <TeamInviteRow invite={item.invite} />;
+      case "teamHeader":
+        return (
+          <TeamHeader
+            team={item.team}
+            folded={item.folded}
+            onToggle={() => toggleCollapsed(TEAM_SECTION)}
+            onOpen={() => goTo("team")}
+          />
+        );
+      case "teammate":
+        return <TeamMemberRow member={item.member} founder={item.founder} onKeyDown={onRowKey} />;
+      case "group": {
+        const id = item.id;
+        const target =
+          drag?.kind === "friend" && drag.over === id && drag.over !== drag.from && !drag.settling;
+        return (
+          <div data-group-header={id}>
+            <CategoryHeader
+              id={id}
+              name={item.name ?? t("friendGroups.rest")}
+              online={item.online}
+              count={item.count}
+              folded={item.folded}
+              target={target}
+              onToggle={() => toggleCollapsed(id)}
+              onKeyDown={(event) => onHeaderKey(event, id)}
+              actions={
+                item.name === null || !doc
+                  ? null
+                  : {
+                      canMoveUp: item.index > 0,
+                      canMoveDown: item.index < item.total - 1,
+                      onMove: (step) => moveGroup(id, step),
+                      onRename: (name) => save(renameGroup(doc, id, name)),
+                      onRemove: () => removeCategory(id),
+                      onGrip: (event) =>
+                        press(
+                          event,
+                          { kind: "group", id, order: doc.groups.map((g) => g.id) },
+                          (event.currentTarget.closest("[data-group-header]") as HTMLElement) ??
+                            undefined,
+                        ),
+                    }
+              }
+            />
+          </div>
+        );
+      }
+      case "groupEmpty":
+        return <EmptyCategory dragging={drag?.kind === "friend" && !drag.settling} />;
+      case "slot":
+        return <DragSlot height={item.height} folded={item.folded} />;
+      case "newGroup":
+        return (
+          <NewCategoryRow
+            editing={creating !== null}
+            disabled={(doc?.groups.length ?? 0) >= MAX_GROUPS}
+            onStart={() => setCreating({})}
+            onCreate={create}
+            onCancel={() => setCreating(null)}
+          />
+        );
+    }
+  };
 
   return (
     <div>
@@ -477,7 +913,7 @@ export function ListPage() {
               />
             </div>
           ) : null}
-          {q && !items.length ? (
+          {q && !items.some((item) => item.kind !== "header" && item.kind !== "newGroup") ? (
             <p className="px-2 pt-8 text-center text-[13px] text-ash-400">
               {t("social.list.noMatch")}
             </p>
@@ -499,21 +935,7 @@ export function ListPage() {
                     animate={{ opacity: 1, y: 0, transition: enter(0.26) }}
                     exit={{ opacity: 0, transition: quiet ? { duration: 0 } : leave(0.22) }}
                   >
-                    {item.kind === "header" ? (
-                      <Header label={item.label} count={item.count} />
-                    ) : item.kind === "friend" ? (
-                      <FriendRow
-                        friend={item.friend}
-                        favorite={favorites.includes(item.friend.id)}
-                        onKeyDown={onRowKey}
-                      />
-                    ) : item.kind === "request" ? (
-                      <RequestRow request={item.request} />
-                    ) : item.kind === "sent" ? (
-                      <SentRow request={item.request} />
-                    ) : (
-                      <InviteRow invite={item.invite} />
-                    )}
+                    {render(item)}
                   </motion.li>
                 ))}
               </AnimatePresence>
@@ -521,6 +943,19 @@ export function ListPage() {
           </LayoutGroup>
         </>
       )}
+      {drag && draggedFriend ? (
+        <DragGhost left={drag.left} width={drag.width} {...ghost}>
+          <FriendGhost friend={draggedFriend} />
+        </DragGhost>
+      ) : null}
+      {draggedGroup && doc ? (
+        <DragGhost left={draggedGroup.left} width={draggedGroup.width} {...ghost}>
+          <GroupGhost
+            name={nameOf(draggedGroup.id)}
+            friends={view.friends.filter((f) => groupOf(doc, f.id) === draggedGroup.id)}
+          />
+        </DragGhost>
+      ) : null}
     </div>
   );
 }

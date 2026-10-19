@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{LastSeen, PublicProfile, StatusMode};
+use crate::model::{FriendGroups, LastSeen, PublicProfile, StatusMode, Team, TeamExit, TeamInvite};
 
 /// What this launcher is doing. Sent only when it changes.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -138,8 +138,27 @@ pub(crate) enum ServerMessage {
         keepalive_seconds: Option<u64>,
         #[serde(default)]
         friends: Vec<Presence>,
+        /// Online teammates who are not friends.
+        #[serde(default)]
+        team: Vec<Presence>,
         #[serde(default)]
         invites: Vec<Invite>,
+    },
+    /// The player's team changed, or they are no longer in one (`team` null).
+    Team {
+        team: Option<Team>,
+        #[serde(default)]
+        reason: Option<TeamExit>,
+        /// Who made the change.
+        #[serde(default)]
+        by: Option<String>,
+    },
+    TeamInvite {
+        invite: TeamInvite,
+    },
+    /// The player's friend categories changed on another device.
+    Groups {
+        groups: FriendGroups,
     },
     Presence {
         presence: Presence,
@@ -233,6 +252,7 @@ mod tests {
                 keepalive_seconds,
                 friends,
                 invites,
+                ..
             } => {
                 assert_eq!(status, StatusMode::Online);
                 assert_eq!(keepalive_seconds, Some(45));
@@ -260,6 +280,29 @@ mod tests {
         ));
         let future: ServerMessage = serde_json::from_str(r#"{"t":"emoji","x":1}"#).unwrap();
         assert!(matches!(future, ServerMessage::Unknown));
+        let gone: ServerMessage = serde_json::from_str(
+            r#"{"t":"team","team":null,"reason":"kicked","by":"123456789012345678"}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            gone,
+            ServerMessage::Team {
+                team: None,
+                reason: Some(TeamExit::Kicked),
+                by: Some(_)
+            }
+        ));
+        let groups: ServerMessage = serde_json::from_str(
+            r#"{"t":"groups","groups":{"version":2,"groups":[{"id":"a","name":"A"}],"members":{}}}"#,
+        )
+        .unwrap();
+        assert!(matches!(groups, ServerMessage::Groups { groups } if groups.version == 2));
+        let team_hello: ServerMessage = serde_json::from_str(
+            r#"{"t":"hello","v":1,"status":"online","friends":[],
+                "team":[{"id":"7","state":"launcher","status":"online"}],"invites":[]}"#,
+        )
+        .unwrap();
+        assert!(matches!(team_hello, ServerMessage::Hello { team, .. } if team.len() == 1));
         let error: ServerMessage =
             serde_json::from_str(r#"{"t":"error","rid":3,"code":"rate_limited","retryAfter":60}"#)
                 .unwrap();
