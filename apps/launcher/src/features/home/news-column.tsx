@@ -203,7 +203,7 @@ function PatchNotesBox({ notes }: { notes: PatchNotes }) {
             />
           </span>
         </span>
-        <span className="mt-1 block truncate text-[13px] font-semibold text-bone-100 group-hover:text-bone-50">
+        <span className="mt-1 block truncate text-[13px] font-semibold text-bone-100 transition-colors duration-150 group-hover:text-bone-50">
           {notes.title}
         </span>
         <Highlights lines={notes.highlights} />

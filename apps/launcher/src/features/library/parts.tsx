@@ -216,7 +216,8 @@ export function ToggleChip({
       aria-label={label}
       disabled={disabled}
       onClick={() => onPressedChange(!pressed)}
-      className="group relative isolate inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-[12px] font-semibold whitespace-nowrap [--cut:5px] focus-visible:outline-none disabled:cursor-default disabled:opacity-45"
+      // Presses and dims like a Button; a chip that is on also lights under the pointer.
+      className="group relative isolate inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-[12px] font-semibold whitespace-nowrap transition-[transform,scale,opacity] duration-150 ease-out [--cut:5px] focus-visible:outline-none active:scale-[0.97] disabled:cursor-default disabled:opacity-45"
     >
       <span
         aria-hidden
@@ -225,8 +226,10 @@ export function ToggleChip({
       <span
         aria-hidden
         className={cn(
-          "chamfer absolute inset-0 -z-10 transition-colors",
-          pressed ? toggleTones[tone] : "bg-white/[0.035] group-hover:bg-white/7",
+          "chamfer absolute inset-0 -z-10 transition-[background-color,filter] duration-150",
+          pressed
+            ? `${toggleTones[tone]} group-enabled:group-hover:brightness-125`
+            : "bg-white/[0.035] group-enabled:group-hover:bg-white/7",
         )}
       />
       <span

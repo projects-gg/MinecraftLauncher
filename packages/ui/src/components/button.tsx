@@ -83,11 +83,16 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
           layer.fill,
         )}
       />
-      {icon ? <span className={cn("flex shrink-0", layer.text)}>{icon}</span> : null}
+      {/* Icons fade with the label (a ghost button's icon used to snap to bone on hover). */}
+      {icon ? (
+        <span className={cn("flex shrink-0 transition-colors", layer.text)}>{icon}</span>
+      ) : null}
       {children ? (
         <span className={cn("leading-none transition-colors", layer.text)}>{children}</span>
       ) : null}
-      {iconRight ? <span className={cn("flex shrink-0", layer.text)}>{iconRight}</span> : null}
+      {iconRight ? (
+        <span className={cn("flex shrink-0 transition-colors", layer.text)}>{iconRight}</span>
+      ) : null}
     </button>
   );
 });

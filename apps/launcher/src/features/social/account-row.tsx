@@ -27,7 +27,7 @@ export function SocialAccountRow({ onOpen }: { onOpen: () => void }) {
           // The account center slides out first; the friends panel follows.
           window.setTimeout(() => openPanel({ page: "list" }), 160);
         }}
-        className="group flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] px-3.5 py-2.5 text-left ring-1 ring-white/[0.07] transition-colors hover:bg-white/[0.05] hover:ring-white/12 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none"
+        className="group flex min-h-14 w-full cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] px-3.5 py-2.5 text-left ring-1 ring-white/[0.07] transition-[background-color,box-shadow] duration-200 hover:bg-white/[0.05] hover:ring-white/12 focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none"
       >
         {me ? (
           <SocialAvatar

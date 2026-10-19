@@ -576,7 +576,7 @@ export function WorldsTab({ instance }: { instance: InstanceDetail }) {
                               type="button"
                               aria-expanded={open}
                               onClick={() => toggle(world.folder)}
-                              className="inline-flex cursor-pointer items-center gap-1 rounded-sm text-ash-300 hover:text-bone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+                              className="inline-flex cursor-pointer items-center gap-1 rounded-sm text-ash-300 transition-colors duration-150 hover:text-bone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
                             >
                               {t("instance.worlds.backupCount", { count: own.length })}
                               <CaretDown

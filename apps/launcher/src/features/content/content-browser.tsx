@@ -91,7 +91,7 @@ function HitRow({
           <button
             type="button"
             onClick={onOpen}
-            className="min-w-0 cursor-pointer truncate text-left text-[15px] font-semibold text-bone-50 outline-none after:absolute after:inset-0 after:rounded-[var(--radius-panel)] hover:text-gold-200 focus-visible:after:ring-2 focus-visible:after:ring-gold-300"
+            className="min-w-0 cursor-pointer truncate text-left text-[15px] font-semibold text-bone-50 outline-none transition-colors duration-150 after:absolute after:inset-0 after:rounded-[var(--radius-panel)] hover:text-gold-200 focus-visible:after:ring-2 focus-visible:after:ring-gold-300"
           >
             {hit.title}
           </button>

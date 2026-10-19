@@ -506,7 +506,7 @@ function Group({
           <CaretDown
             size={15}
             className={cn(
-              "shrink-0 text-ash-400 transition-transform duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/head:text-bone-100",
+              "shrink-0 text-ash-400 transition-[color,rotate] duration-200 ease-[cubic-bezier(0.23,1,0.32,1)] group-hover/head:text-bone-100",
               open && "rotate-180",
             )}
           />

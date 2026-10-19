@@ -33,7 +33,10 @@ export function Switch({
         disabled={disabled}
         className={cn(
           "group relative h-[20px] w-[34px] shrink-0 cursor-pointer rounded-full bg-obsidian-700 ring-1 ring-white/10 transition-[background-color,box-shadow,opacity] duration-200",
-          "data-[state=checked]:bg-gold-500 data-[state=checked]:ring-gold-400/60 disabled:cursor-not-allowed disabled:opacity-50",
+          // Under the pointer the track lifts a little, so a switch reads as something to press.
+          "data-[state=unchecked]:enabled:hover:bg-[color-mix(in_oklab,var(--color-obsidian-700),white_7%)] data-[state=unchecked]:enabled:hover:ring-white/20",
+          "data-[state=checked]:bg-gold-500 data-[state=checked]:ring-gold-400/60 data-[state=checked]:enabled:hover:bg-gold-400",
+          "disabled:cursor-not-allowed disabled:opacity-50",
         )}
       >
         {/* The thumb stretches toward its travel while pressed, like a physical switch. */}
