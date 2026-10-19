@@ -19,16 +19,10 @@ import { api, type HomeStatus, type Maintenance } from "@/lib/api";
 import { dateTimeFormat } from "@/lib/format";
 import { isWebLink, openWebLink } from "@/lib/links";
 import { useWindowAway } from "@/lib/window-away";
+import { nextLook } from "./status-recheck";
 
 /** Entrance length; the exit and the strips' glide follow it. */
 export const NOTICE_ENTER = 0.32;
-
-/** While a status notice is on screen the launcher looks again at most this often... */
-const RECHECK_MS = 5 * 60_000;
-/** ...and once more this long before it would expire (the bot renews it while it lasts). */
-const RECHECK_BEFORE_EXPIRY_MS = 60_000;
-/** Never sooner than this after the last look. */
-const RECHECK_MIN_MS = 30_000;
 
 type Tone = "maintenance" | HomeStatus["level"];
 
@@ -60,8 +54,9 @@ export function useActiveStatus(status: HomeStatus | undefined): HomeStatus | un
 
 /**
  * While a status notice is on screen (and the window is), asks the servers again now and then
- * and shortly before the notice expires: it leaves soon after the problem is over and stays
- * while the bot keeps renewing it. Nothing is polled otherwise.
+ * and once shortly before the notice expires (`nextLook`): it leaves soon after the problem is
+ * over and stays while the bot keeps renewing it (a renewal changes `expiresAt` and starts the
+ * plan over). Nothing is polled otherwise.
  */
 function useStatusRecheck(expiresAt: string | undefined) {
   const away = useWindowAway();
@@ -70,12 +65,12 @@ function useStatusRecheck(expiresAt: string | undefined) {
     const end = Date.parse(expiresAt);
     let id = 0;
     const schedule = () => {
-      const beforeExpiry = end - RECHECK_BEFORE_EXPIRY_MS - Date.now();
-      const wait = Math.max(RECHECK_MIN_MS, Math.min(beforeExpiry, RECHECK_MS));
+      const look = nextLook(end, Date.now());
+      if (!look) return;
       id = window.setTimeout(() => {
         void api.contentRecheck();
-        schedule();
-      }, wait);
+        if (!look.last) schedule();
+      }, look.wait);
     };
     schedule();
     return () => window.clearTimeout(id);
