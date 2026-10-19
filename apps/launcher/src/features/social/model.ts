@@ -68,6 +68,39 @@ export function onlineFriends(friends: readonly Friend[], favorites: readonly st
   return [...playing, ...online];
 }
 
+/** Home's invitations, closed for good with ×: sign in with Discord, then add a first friend. */
+export type HomeHint = "connect" | "add";
+/** What the friends line on Home shows. */
+export type HomeStrip = HomeHint | "playing";
+
+/**
+ * The friends line on Home. Friends in game always show. Signed out (or while the browser is
+ * open), the invitation to sign in; signed in with nobody on the list and no request either way,
+ * the invitation to add a first friend. A closed invitation never comes back on this computer;
+ * nothing shows while a saved session is checked or the list has not arrived.
+ */
+export function homeStrip(
+  view: Pick<
+    SocialSnapshot,
+    "enabled" | "auth" | "loaded" | "friends" | "incoming" | "outgoing" | "invites"
+  >,
+  closed: readonly HomeHint[],
+): HomeStrip | null {
+  if (!view.enabled) return null;
+  if (view.auth === "signedOut" || view.auth === "signingIn") {
+    return closed.includes("connect") ? null : "connect";
+  }
+  if (view.auth !== "signedIn") return null;
+  if (view.friends.some((f) => f.state === "playing")) return "playing";
+  const alone =
+    view.loaded &&
+    view.friends.length === 0 &&
+    view.incoming.length === 0 &&
+    view.outgoing.length === 0 &&
+    view.invites.length === 0;
+  return alone && !closed.includes("add") ? "add" : null;
+}
+
 /** One short line under a friend's name. */
 export function presenceLine(friend: Friend, t: TFunction): string {
   if (friend.state === "playing") {

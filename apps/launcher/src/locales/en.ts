@@ -5,6 +5,7 @@ import { enGraphics } from "./en-graphics";
 import { enLibraryDrop } from "./en-library-drop";
 import { enMinecraft } from "./en-minecraft";
 import { enOverview } from "./en-overview";
+import { enPlacement } from "./en-placement";
 import { enPrepare } from "./en-prepare";
 import { enReminders } from "./en-reminders";
 import { enShortcuts } from "./en-shortcuts";
@@ -235,6 +236,7 @@ export const en: DeepPartial<Strings> = {
   minecraft: enMinecraft,
   eventJoin: enEventJoin,
   shotCopy: enShotCopy,
+  placement: enPlacement,
   nav: {
     home: "Home",
     library: "Library",

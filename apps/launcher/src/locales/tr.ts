@@ -6,6 +6,7 @@ import { trGraphics } from "./tr-graphics";
 import { trLibraryDrop } from "./tr-library-drop";
 import { trMinecraft } from "./tr-minecraft";
 import { trOverview } from "./tr-overview";
+import { trPlacement } from "./tr-placement";
 import { trPrepare } from "./tr-prepare";
 import { trReminders } from "./tr-reminders";
 import { trShortcuts } from "./tr-shortcuts";
@@ -29,6 +30,7 @@ export const tr = {
   minecraft: trMinecraft,
   eventJoin: trEventJoin,
   shotCopy: trShotCopy,
+  placement: trPlacement,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",

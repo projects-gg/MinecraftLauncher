@@ -49,6 +49,23 @@ export const DiscordButton = forwardRef<
   );
 });
 
+/**
+ * The white symbol alone, uncoloured: an action that leads toward Discord without opening it yet
+ * (Home's invitation opens the opt-in screen first). Blurple stays on actions that open Discord.
+ */
+export function DiscordMark({ height = 13 }: { height?: number }) {
+  return (
+    <img
+      src={discordSymbol}
+      alt=""
+      aria-hidden
+      draggable={false}
+      style={{ width: Math.round(height * 1.32), height }}
+      className="shrink-0"
+    />
+  );
+}
+
 /** The logo alone on a Blurple square (rows that link to Discord sign-in). */
 export function DiscordTile({ size = 36, className }: { size?: number; className?: string }) {
   return (

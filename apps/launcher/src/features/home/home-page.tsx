@@ -5,7 +5,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FriendsInGameStrip } from "@/features/social/home-strip";
+import { FriendsHomeStrip } from "@/features/social/home-strip";
 import { api, type HomeContent } from "@/lib/api";
 import { isWebLink, openLink } from "@/lib/links";
 import { HomeBanners } from "./banners";
@@ -180,7 +180,7 @@ export function HomePage() {
                 banners (they used to jump once its fade ended). */}
             <LayoutGroup>
               <HomeBanners banners={data?.banners} />
-              <FriendsInGameStrip />
+              <FriendsHomeStrip />
               <ConnectionStrip />
             </LayoutGroup>
           </motion.div>

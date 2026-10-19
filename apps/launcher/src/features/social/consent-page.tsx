@@ -8,12 +8,17 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { presetAvatar } from "@/features/avatars/presets";
 import { api } from "@/lib/api";
+import { currentLanguage } from "@/lib/i18n";
 import { DiscordButton, DiscordTile } from "./discord-button";
 import { rise, useSocialMotion } from "./motion";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
 
-const PRIVACY_URL = "https://projects.gg/gizlilik/";
+/** The privacy page's friends section, in the launcher's language (one page, both languages). */
+const PRIVACY_URL = {
+  tr: "https://projects.gg/gizlilik/#arkadaslar",
+  en: "https://projects.gg/gizlilik/#friends",
+} as const;
 
 /** Three bundled faces with presence: the feature at a glance, no words needed. */
 function Cluster() {
@@ -86,7 +91,7 @@ export function ConsentPage() {
       </p>
       <button
         type="button"
-        onClick={() => void api.openUrl(PRIVACY_URL)}
+        onClick={() => void api.openUrl(PRIVACY_URL[currentLanguage()])}
         className="mt-2 inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-1 text-[13px] font-medium text-gold-300 underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
       >
         {t("social.consent.privacy")}

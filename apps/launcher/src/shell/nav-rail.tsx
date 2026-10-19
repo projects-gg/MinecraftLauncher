@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import logo from "@/assets/brand/logo-192.webp";
 import { AccountFace } from "@/features/accounts/account-face";
 import { useAccountsUi } from "@/features/accounts/store";
+import { FriendsRailEntry } from "@/features/social/rail-entry";
 import { api } from "@/lib/api";
 import { detectOs } from "@/lib/platform";
 import { ariaKeyShortcuts, type ShortcutId } from "@/lib/shortcuts";
@@ -149,6 +150,8 @@ export function NavRail() {
         ))}
       </div>
       <div className="mt-auto flex flex-col items-center gap-1.5">
+        {/* Only when the player moved the friends button here (its home is the title bar). */}
+        <FriendsRailEntry />
         <RailLink
           item={{ to: "/settings", icon: GearSix, label: t("nav.settings"), shortcut: "settings" }}
           active={isActive("/settings")}

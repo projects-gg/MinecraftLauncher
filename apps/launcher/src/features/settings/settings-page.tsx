@@ -1,4 +1,5 @@
 import {
+  AppWindow,
   ArrowsClockwise,
   ChatsCircle,
   Coffee,
@@ -8,6 +9,7 @@ import {
   HardDrives,
   Info,
   PaintBrush,
+  SidebarSimple,
   UserCircle,
   UsersThree,
 } from "@phosphor-icons/react";
@@ -55,6 +57,7 @@ import {
 } from "@/lib/i18n";
 import { openLink } from "@/lib/links";
 import { playSound } from "@/lib/sound";
+import { type Place, usePlace, usePlacement } from "@/stores/placement";
 import { type GameStartBehavior, usePrefs } from "@/stores/prefs";
 import { AccountsSection } from "./accounts-section";
 import { DataSection } from "./data-section";
@@ -245,9 +248,42 @@ function previewVolume() {
   playSound("success");
 }
 
+/**
+ * Where the friends button sits: the title bar (its home) or the side menu. The same choice as
+ * the button's right-click menu; the button moves while the plate glides.
+ */
+function FriendsButtonRow() {
+  const { t } = useTranslation();
+  const place = usePlace("friends");
+  const move = usePlacement((s) => s.move);
+  return (
+    <Row title={t("placement.friendsButton")}>
+      <Segmented<Place>
+        value={place}
+        onValueChange={(v) => move("friends", v)}
+        label={t("placement.friendsButton")}
+        // The same marks as the button's right-click menu.
+        options={[
+          {
+            value: "titlebar",
+            label: t("placement.titleBar"),
+            icon: <AppWindow size={15} aria-hidden />,
+          },
+          {
+            value: "rail",
+            label: t("placement.rail"),
+            icon: <SidebarSimple size={15} aria-hidden />,
+          },
+        ]}
+      />
+    </Row>
+  );
+}
+
 function Appearance() {
   const { t } = useTranslation();
   const p = usePrefs();
+  const friendsOn = useSocialUi((s) => s.view.enabled);
   return (
     <>
       <Row
@@ -280,7 +316,7 @@ function Appearance() {
         />
       </Row>
       {/* Always there (dimmed while sounds are off), so nothing below jumps. */}
-      <div className="py-4">
+      <div className={cn("py-4", friendsOn && "border-b border-white/6")}>
         <Slider
           label={t("settings.appearance.volume")}
           value={p.soundVolume}
@@ -295,6 +331,7 @@ function Appearance() {
           disabled={!p.sounds}
         />
       </div>
+      {friendsOn ? <FriendsButtonRow /> : null}
     </>
   );
 }

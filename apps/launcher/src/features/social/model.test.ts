@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { Friend, SocialNotice } from "@/lib/api/social-types";
+import type { Friend, FriendRequest, SocialInvite, SocialNotice } from "@/lib/api/social-types";
 import {
   BACKUP_PREFS,
   backupFingerprint,
   buildBackup,
   formatCodeInput,
   groupFriends,
+  homeStrip,
   isProjectsHost,
   NoticeThrottle,
   normalizeCode,
@@ -57,6 +58,60 @@ describe("groupFriends", () => {
     expect(groups.online[0]?.name).toBe("Çağrı");
     expect(groups.offline[0]?.name).toBe("Deniz");
     expect(onlineFriends(list, []).map((f) => f.id)).toEqual(["2", "8", "1", "4", "3"]);
+  });
+});
+
+describe("homeStrip", () => {
+  const empty = {
+    enabled: true,
+    auth: "signedIn" as const,
+    loaded: true,
+    friends: [] as Friend[],
+    incoming: [] as FriendRequest[],
+    outgoing: [] as FriendRequest[],
+    invites: [] as SocialInvite[],
+  };
+  const request: FriendRequest = {
+    id: "9",
+    name: "Yiğit",
+    username: "yigit",
+    avatar: "discord",
+    sentAt: 0,
+  };
+
+  it("shows nothing while the feature is off", () => {
+    expect(homeStrip({ ...empty, enabled: false, auth: "signedOut" }, [])).toBeNull();
+    expect(homeStrip({ ...empty, enabled: false }, [])).toBeNull();
+  });
+
+  it("invites to sign in until the player closes it", () => {
+    expect(homeStrip({ ...empty, auth: "signedOut", loaded: false }, [])).toBe("connect");
+    // The browser is open: the line stays, its button leads back to the waiting card.
+    expect(homeStrip({ ...empty, auth: "signingIn", loaded: false }, [])).toBe("connect");
+    expect(homeStrip({ ...empty, auth: "signedOut" }, ["connect"])).toBeNull();
+    expect(homeStrip({ ...empty, auth: "signedOut" }, ["add"])).toBe("connect");
+  });
+
+  it("waits while a saved session is checked or the list is on its way", () => {
+    expect(homeStrip({ ...empty, auth: "restoring", loaded: false }, [])).toBeNull();
+    expect(homeStrip({ ...empty, loaded: false }, [])).toBeNull();
+  });
+
+  it("invites to add a first friend only with nobody on the list and no request", () => {
+    expect(homeStrip(empty, [])).toBe("add");
+    expect(homeStrip(empty, ["add"])).toBeNull();
+    expect(homeStrip({ ...empty, outgoing: [request] }, [])).toBeNull();
+    expect(homeStrip({ ...empty, incoming: [request] }, [])).toBeNull();
+    expect(homeStrip({ ...empty, friends: [friend("1", "Ayşe")] }, [])).toBeNull();
+    expect(
+      homeStrip({ ...empty, friends: [friend("1", "Ayşe", { state: "launcher" })] }, []),
+    ).toBeNull();
+  });
+
+  it("shows friends in game, closed invitations or not", () => {
+    const playing = [friend("1", "Ayşe", { state: "playing", game: { where: "projects" } })];
+    expect(homeStrip({ ...empty, friends: playing }, [])).toBe("playing");
+    expect(homeStrip({ ...empty, friends: playing }, ["connect", "add"])).toBe("playing");
   });
 });
 

@@ -102,19 +102,35 @@ export function ContextMenu({
   children,
   items,
   disabled,
+  wrapTrigger,
+  onCloseAutoFocus,
 }: {
   /** The element that opens the menu on right click (one element; it receives the handlers). */
   children: ReactElement;
   items: Array<MenuItem | null>;
   disabled?: boolean;
+  /**
+   * Puts something around the trigger that also needs the element, such as a `Tooltip`: the
+   * trigger passes props and refs through, so both reach the element.
+   */
+  wrapTrigger?: (trigger: ReactElement) => ReactElement;
+  /** When the menu has closed; `preventDefault()` keeps the focus from going back. */
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
+  const trigger = (
+    <RadixContextMenu.Trigger asChild disabled={disabled}>
+      {children}
+    </RadixContextMenu.Trigger>
+  );
   return (
     <RadixContextMenu.Root>
-      <RadixContextMenu.Trigger asChild disabled={disabled}>
-        {children}
-      </RadixContextMenu.Trigger>
+      {wrapTrigger ? wrapTrigger(trigger) : trigger}
       <RadixContextMenu.Portal>
-        <RadixContextMenu.Content collisionPadding={8} className={contentClass}>
+        <RadixContextMenu.Content
+          collisionPadding={8}
+          className={contentClass}
+          onCloseAutoFocus={onCloseAutoFocus}
+        >
           {menuRows(items, RadixContextMenu.Item, RadixContextMenu.Separator)}
         </RadixContextMenu.Content>
       </RadixContextMenu.Portal>

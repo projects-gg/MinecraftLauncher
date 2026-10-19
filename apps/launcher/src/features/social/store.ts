@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { HIDDEN_SNAPSHOT, type SignInFailure, type SocialSnapshot } from "@/lib/api/social-types";
+import type { HomeHint } from "./model";
 
 export type SocialPage = "list" | "add" | "settings";
 
@@ -38,6 +39,11 @@ interface SocialUi {
   /** The new-computer question was answered (or not needed): backups may be written. */
   restoreSettled: boolean;
   setRestoreSettled: (settled: boolean) => void;
+
+  /** Grows when the friends button should light up once, wherever it is (a Home invitation was
+   * closed: this is where friends live). */
+  entryCue: number;
+  cueEntry: () => void;
 }
 
 export const useSocialUi = create<SocialUi>()((set, get) => ({
@@ -82,6 +88,9 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
 
   restoreSettled: true,
   setRestoreSettled: (restoreSettled) => set({ restoreSettled }),
+
+  entryCue: 0,
+  cueEntry: () => set((s) => ({ entryCue: s.entryCue + 1 })),
 }));
 
 /** Friend preferences kept on this computer (and in the settings backup). */
@@ -95,12 +104,18 @@ interface SocialPrefs {
   backup: boolean;
   /** Fingerprint of the last uploaded backup (skips uploads that change nothing). */
   backupFingerprint: string | null;
+  /** Home's invitations the player closed (only on this computer, not in the backup). */
+  closedHints: HomeHint[];
   setConsent: () => void;
   toggleFavorite: (id: string) => void;
+  closeHint: (hint: HomeHint) => void;
   set: <K extends keyof SocialPrefValues>(key: K, value: SocialPrefValues[K]) => void;
 }
 
-export type SocialPrefValues = Omit<SocialPrefs, "setConsent" | "toggleFavorite" | "set">;
+export type SocialPrefValues = Omit<
+  SocialPrefs,
+  "setConsent" | "toggleFavorite" | "closeHint" | "set"
+>;
 
 export const useSocialPrefs = create<SocialPrefs>()(
   persist(
@@ -111,6 +126,7 @@ export const useSocialPrefs = create<SocialPrefs>()(
       notifyFavoriteProjects: true,
       backup: true,
       backupFingerprint: null,
+      closedHints: [],
       setConsent: () => set({ consentAt: Date.now() }),
       toggleFavorite: (id) =>
         set((s) => ({
@@ -118,6 +134,8 @@ export const useSocialPrefs = create<SocialPrefs>()(
             ? s.favorites.filter((f) => f !== id)
             : [...s.favorites, id],
         })),
+      closeHint: (hint) =>
+        set((s) => (s.closedHints.includes(hint) ? s : { closedHints: [...s.closedHints, hint] })),
       set: (key, value) => set({ [key]: value } as Partial<SocialPrefs>),
     }),
     { name: "pl.social", version: 1 },
