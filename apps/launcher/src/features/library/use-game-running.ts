@@ -4,8 +4,11 @@ import { api } from "@/lib/api";
 import { useLaunch } from "@/stores/launch";
 
 /**
- * True while the game of `instanceId` is starting or running. The launch store covers launches
- * from this window; the backend answers after a reload of the UI (polled, it is cheap).
+ * True while the game of `instanceId` is starting or running. The launch store covers every
+ * launch (the tray's and shortcuts' go through it too); the backend answers once for a game that
+ * was already running when the page loaded, and again whenever a launch starts or ends. It used
+ * to be asked every 4 s as well, for as long as a worlds, logs or pack update view was open
+ * (OPT2: no polling while nothing happens).
  */
 export function useGameRunning(instanceId: string): boolean {
   const queryClient = useQueryClient();
@@ -17,9 +20,8 @@ export function useGameRunning(instanceId: string): boolean {
   const { data: runningId } = useQuery({
     queryKey: ["game-running"],
     queryFn: () => api.library.runningInstance(),
-    refetchInterval: 4000,
   });
-  // Ask again right away when a launch starts or ends instead of waiting for the next poll.
+  // Ask again right away when a launch starts or ends.
   useEffect(() => {
     void launching;
     void queryClient.invalidateQueries({ queryKey: ["game-running"] });
