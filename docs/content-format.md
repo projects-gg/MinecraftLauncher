@@ -391,9 +391,9 @@ news feed, the launcher's built-in recommended Minecraft version.
   announce team limits (a service without the teams routes). Friend categories need no flag:
   they follow `features.friends` and the service's support. Turn it on only after the service
   with the teams routes and its database migration is live. Writers omit it while it is
-  `false`. Launchers that do not know the field ignore it; Studio 2.0 has no switch for it yet
-  and rejects configs that carry unknown feature fields, so add the switch to Studio before
-  publishing `teams: true`.
+  `false`. Launchers that do not know the field ignore it. Studio sets it with "Takımlar" next
+  to "Arkadaşlar" (it can't be switched on while `friends` is off) and warns before a publish
+  that switches it on, or that has it on without `friends`.
 - `newsFeed`: the Discord bot's feed ([News feed (Discord bot)](#news-feed-discord-bot)).
   `mirrors`: 1–4 distinct `https://` bases with a host, ending in `/`, without credentials, query
   or fragment. `keys`: 1–4 distinct `{ keyId, publicKey }`, `publicKey` the base64 of a 32-byte
