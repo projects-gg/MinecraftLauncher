@@ -11,6 +11,8 @@ export const trImport = {
   /** Group headings: where the rows under them go. */
   groups: {
     projects: "Projects kurulumuna",
+    /** Each world goes into the instance of the version it was played on; one no instance fits stays. */
+    worlds: "Oynandıkları sürümün kurulumuna",
     instances: "Yeni kurulum olarak",
   },
   rows: {

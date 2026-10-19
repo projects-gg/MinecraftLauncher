@@ -29,8 +29,8 @@ function metaText(t: TFunction, part: MetaPart): string {
 
 /**
  * The picked launchers' rows in one quiet panel: each launcher by its own name, what goes into
- * the Projects instance (a two-column grid of small items), and what becomes new instances (one
- * row each, its size on the right). Rows rise in once, a few milliseconds apart; sizes fill in
+ * the Projects instance (a grid of small items), its worlds (each into the instance of the
+ * version it was played on) and what becomes new instances (one row each, its size on the right). Rows rise in once, a few milliseconds apart; sizes fill in
  * where their skeletons held the place, so nothing moves. Long lists scroll inside the panel,
  * with a soft edge while more is below.
  */
@@ -103,12 +103,15 @@ function SourceGroups({
   nextOrder: () => number;
 }) {
   const { t } = useTranslation();
+  // Worlds do not go into Projects: each goes into the instance of the version it was played on.
+  const intoProjects = source.shared.filter((row) => row.kind !== "worlds");
+  const worlds = source.shared.find((row) => row.kind === "worlds");
   return (
     <>
-      {source.shared.length > 0 ? (
+      {intoProjects.length > 0 ? (
         <Group heading={t("import.groups.projects")}>
           <div className="grid grid-cols-3 gap-x-0.5">
-            {source.shared.map((row) => (
+            {intoProjects.map((row) => (
               <SharedCell
                 key={row.key}
                 row={row}
@@ -118,6 +121,16 @@ function SourceGroups({
               />
             ))}
           </div>
+        </Group>
+      ) : null}
+      {worlds ? (
+        <Group heading={t("import.groups.worlds")}>
+          <WorldsLine
+            row={worlds}
+            checked={picker.ticks.has(worlds.key)}
+            onToggle={picker.toggle}
+            order={nextOrder()}
+          />
         </Group>
       ) : null}
       {source.profiles.length > 0 ? (
@@ -232,6 +245,45 @@ function SharedCell({
               </>
             ) : null}
           </span>
+        </span>
+      </label>
+    </Entrance>
+  );
+}
+
+/** The worlds of a launcher: one row like an instance's, its size on the right. */
+function WorldsLine({
+  row,
+  checked,
+  onToggle,
+  order,
+}: {
+  row: SharedRow;
+  checked: boolean;
+  onToggle: (key: RowKey, on: boolean) => void;
+  order: number;
+}) {
+  const { t } = useTranslation();
+  const id = useId();
+  return (
+    <Entrance order={order}>
+      <label htmlFor={id} className={cn(rowLabel, "gap-3")}>
+        <Check
+          id={id}
+          checked={checked}
+          disabled={row.state !== "ready"}
+          onCheckedChange={(on) => onToggle(row.key, on)}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13.5px] leading-tight text-bone-50">
+            {t("import.rows.worlds")}
+          </span>
+          <span className="mt-0.5 block truncate text-[12px] text-ash-400 tabular-nums">
+            {t("import.rows.worldsMeta", { count: row.count })}
+          </span>
+        </span>
+        <span className="w-[68px] shrink-0 text-right text-[12.5px] tabular-nums">
+          <Size bytes={row.bytes} on={checked} />
         </span>
       </label>
     </Entrance>

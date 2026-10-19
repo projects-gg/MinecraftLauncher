@@ -9,6 +9,7 @@ export const enImport = {
   },
   groups: {
     projects: "Into Projects",
+    worlds: "Into their version's instance",
     instances: "As new instances",
   },
   rows: {

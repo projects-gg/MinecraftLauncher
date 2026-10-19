@@ -4,7 +4,6 @@
 //! instance, lends the instance locks and runs the import as a content job (a data folder move
 //! or a cleanup waits for it, `content_cancel` stops it).
 
-use std::path::Path;
 use std::sync::Arc;
 
 use pl_import::{
@@ -30,7 +29,7 @@ const PROJECTS_NAME: &str = "Projects";
 fn locations() -> Locations {
     #[cfg(debug_assertions)]
     if let Some(home) = std::env::var_os("PROJECTS_IMPORT_HOME").filter(|h| !h.is_empty()) {
-        return Locations::under(Path::new(&home), pl_import::Os::current());
+        return Locations::under(std::path::Path::new(&home), pl_import::Os::current());
     }
     Locations::system()
 }
