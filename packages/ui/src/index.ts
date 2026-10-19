@@ -23,6 +23,7 @@ export {
 export { EmberField, type ParticleKind } from "./components/ember-field";
 export {
   Field,
+  type FieldInfo,
   Input,
   SEGMENTED_GLIDE_MS,
   SearchInput,
@@ -30,6 +31,7 @@ export {
   Select,
   type SelectOption,
   Slider,
+  useField,
 } from "./components/forms";
 export { ContextMenu, Menu, type MenuItem } from "./components/menu";
 export {

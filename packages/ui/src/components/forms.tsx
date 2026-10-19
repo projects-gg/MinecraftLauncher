@@ -2,10 +2,12 @@ import { CaretDown, Check, MagnifyingGlass, X } from "@phosphor-icons/react";
 import { MotionConfig, motion } from "motion/react";
 import { Popover, Select as RadixSelect, Slider as RadixSlider, ToggleGroup } from "radix-ui";
 import {
+  createContext,
   forwardRef,
   type InputHTMLAttributes,
   memo,
   type ReactNode,
+  useContext,
   useEffect,
   useId,
   useMemo,
@@ -16,7 +18,25 @@ import { cn } from "../lib/cn";
 import { matchesQuery } from "../search";
 import { Chip } from "./bits";
 
-/** Label above, helper or error below (never placeholder-as-label). */
+/** What a `Field` tells the control inside it: the id of its help or error line, and whether it
+ *  shows an error. */
+export interface FieldInfo {
+  descriptionId?: string;
+  invalid: boolean;
+}
+
+const FieldContext = createContext<FieldInfo>({ invalid: false });
+
+/** The surrounding `Field`'s help or error line (for `aria-describedby`) and error state. */
+export function useField(): FieldInfo {
+  return useContext(FieldContext);
+}
+
+/**
+ * Label above, helper or error below (never placeholder-as-label). The control inside is
+ * described by the line below it (`useField`; Input and Studio's date field use it), so a screen
+ * reader says "Boşsa hemen başlar." with the field, not only to someone who can see it.
+ */
 export function Field({
   label,
   help,
@@ -32,18 +52,26 @@ export function Field({
   htmlFor?: string;
   className?: string;
 }) {
+  const lineId = useId();
+  const described = Boolean(error || help);
+  const info = useMemo(
+    () => ({ descriptionId: described ? lineId : undefined, invalid: Boolean(error) }),
+    [described, lineId, error],
+  );
   return (
     <div className={cn("flex flex-col gap-1.5", className)}>
       <label htmlFor={htmlFor} className="text-[13px] font-medium text-bone-100">
         {label}
       </label>
-      {children}
+      <FieldContext.Provider value={info}>{children}</FieldContext.Provider>
       {error ? (
-        <p role="alert" className="text-[12.5px] text-flare-400">
+        <p id={lineId} role="alert" className="text-[12.5px] text-flare-400">
           {error}
         </p>
       ) : help ? (
-        <p className="text-[12.5px] text-ash-400">{help}</p>
+        <p id={lineId} className="text-[12.5px] text-ash-400">
+          {help}
+        </p>
       ) : null}
     </div>
   );
@@ -53,10 +81,12 @@ export const Input = forwardRef<
   HTMLInputElement,
   InputHTMLAttributes<HTMLInputElement> & { invalid?: boolean }
 >(function Input({ className, invalid, ...props }, ref) {
+  const field = useField();
   return (
     <input
       ref={ref}
       aria-invalid={invalid || undefined}
+      aria-describedby={field.descriptionId}
       className={cn(
         "h-[34px] w-full rounded-md border border-white/10 bg-obsidian-800/80 px-3 text-[13.5px] text-bone-50 transition-[border-color,box-shadow,opacity] duration-150 placeholder:text-ash-500",
         "hover:border-white/18 focus:border-gold-400/70 focus:outline-none focus-visible:outline-none focus:ring-2 focus:ring-gold-400/25",
