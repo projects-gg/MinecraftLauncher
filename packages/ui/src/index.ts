@@ -54,6 +54,7 @@ export {
 } from "./entrance";
 export { cn } from "./lib/cn";
 export * from "./motion";
+export { guardNativeContextMenu, keepsNativeMenu, type MenuDocument } from "./native-menu";
 export { PerfProvider, useAmbientMotion, useInteractionMotion, usePerf } from "./perf";
 export { guardReducedMotion, stillKeyframes } from "./reduced-motion";
 export { fold, matchesQuery } from "./search";
