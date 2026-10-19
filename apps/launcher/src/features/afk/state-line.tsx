@@ -101,17 +101,20 @@ export function stateText(state: AfkState, now: number, t: TFunction): string {
 export function StateLine({ state, className }: { state: AfkState; className?: string }) {
   const { t } = useTranslation();
   const { unseen } = usePerf();
-  const [, tick] = useState(0);
+  const [ticks, tick] = useState(0);
   // The clock is read on every render, so a new state never shows with an old time.
   const now = Date.now();
   const text = stateText(state, now, t);
   // Only the uptime and the reconnect countdown tick, and only while somebody can see them.
   const wait = unseen ? null : nextChangeMs(state, now);
   useEffect(() => {
+    // Armed again after every tick, also when the next wait equals the last one (two whole
+    // seconds in a row: the line stood still until the state changed).
+    void ticks;
     if (wait === null) return;
     const id = window.setTimeout(() => tick((n) => n + 1), wait);
     return () => window.clearTimeout(id);
-  }, [wait]);
+  }, [wait, ticks]);
   const detail =
     state.kind === "preparing" && state.percent !== undefined
       ? t("afkConnect.percent", { value: Math.floor(state.percent) })
