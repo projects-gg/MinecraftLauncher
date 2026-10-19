@@ -5,30 +5,25 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ContentKind, InstalledContent } from "@/lib/api";
 import { formatPercent, formatSpeed, numberFormat } from "@/lib/format";
+import { revealWait } from "./job-rules";
 import { jobAge, type RunningJob, stageLabel } from "./jobs";
 
 /** A job's × takes clicks this long after its bar appeared (OYNA waits 0.8 s the same way). */
 const CANCEL_ARM_MS = 600;
 
 /**
- * A job's bar takes its button's place only once the job has run this long. A job that fails at
- * once (no room on the disk, no connection) leaves the button where it was and its toast says
- * why, instead of a "Hazırlanıyor" bar that flashes for a tenth of a second first (POLISH2).
- */
-const JOB_REVEAL_MS = 150;
-
-/**
- * `job` once it has run `JOB_REVEAL_MS` (at once for a job that was already running when this
- * mounted), else `undefined`. A second press meanwhile changes nothing: the job is already there.
+ * `job` once it has run `JOB_REVEAL_MS` (job-rules.ts; at once for a job that was already
+ * running when this mounted), else `undefined`. A second press meanwhile changes nothing: the
+ * job is already there.
  */
 export function useShownJob(job: RunningJob | undefined): RunningJob | undefined {
   const jobId = job?.jobId;
   const [revealed, setRevealed] = useState(() =>
-    jobId !== undefined && jobAge(jobId) >= JOB_REVEAL_MS ? jobId : undefined,
+    jobId !== undefined && revealWait(jobAge(jobId)) === 0 ? jobId : undefined,
   );
   useEffect(() => {
     if (jobId === undefined) return;
-    const wait = JOB_REVEAL_MS - jobAge(jobId);
+    const wait = revealWait(jobAge(jobId));
     if (wait <= 0) {
       setRevealed(jobId);
       return;

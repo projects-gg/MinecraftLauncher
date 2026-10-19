@@ -14,6 +14,7 @@ import {
 import { notifyWhenAway } from "@/lib/attention";
 import { copyText } from "@/lib/clipboard";
 import i18n from "@/lib/i18n";
+import { projectJobKey, updateJobKey } from "./job-rules";
 
 /** A running install/update, keyed by `instanceId:projectId` (or `instanceId:kind:all`). */
 export interface RunningJob {
@@ -107,9 +108,7 @@ export function useUndoableRemoval(instanceId: string, kind: ContentKind) {
 /** How long a finished job waits for the refreshed list before it lets go anyway. */
 const REFRESH_WAIT_MS = 2500;
 
-export const projectJobKey = (instanceId: string, projectId: string) =>
-  `${instanceId}:${projectId}`;
-export const bulkJobKey = (instanceId: string, kind: ContentKind) => `${instanceId}:${kind}:all`;
+export { bulkJobKey, projectJobKey } from "./job-rules";
 
 /** When each running job started (`performance.now()`), for `useShownJob` (parts.tsx). */
 const jobStarts = new Map<string, number>();
@@ -282,13 +281,9 @@ export function useContentActions(instanceId: string, kind: ContentKind) {
     );
 
   const update = (entries: InstalledContent[]) => {
+    const key = updateJobKey(useContentJobs.getState().jobs, instanceId, kind, entries);
     // "Tümünü güncelle" already covers it (its bar may not show yet: `useShownJob`).
-    if (useContentJobs.getState().jobs[bulkJobKey(instanceId, kind)]) return Promise.resolve();
-    const single = entries.length === 1 ? entries[0] : undefined;
-    const key =
-      single?.projectId !== undefined
-        ? projectJobKey(instanceId, single.projectId)
-        : bulkJobKey(instanceId, kind);
+    if (key === null) return Promise.resolve();
     return run(
       key,
       async (jobId) => {
