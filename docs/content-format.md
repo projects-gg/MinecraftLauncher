@@ -838,7 +838,9 @@ What the bot publishes (informative): Java Edition releases for 45 days after th
 most 3 at a time; of several hotfixes of one game drop only the newest (26.1 and 26.1.2, not
 26.1.1); snapshots only when the owner turns them on. Admins hide an entry from Discord (the
 notice in the review channel, `/launcher kaldır`) or through the bot's API; a hidden entry is
-simply missing from the next feed. ProBot: `discord-bot/docs/launcher-feed.md` → "Minecraft news".
+simply missing from the next feed. Studio hides one with its own signed content instead
+([Studio overrides](#studio-overrides)): the entry stays in the feed and launchers leave it out.
+ProBot: `discord-bot/docs/launcher-feed.md` → "Minecraft news".
 
 ### Studio overrides
 
@@ -852,13 +854,18 @@ content and the "Studio wins" rule:
 - **Hide:** Studio publishes an entry with the feed entry's id and `hidden: true` (news items
   also get `expiresAt` = `publishedAt`, see [News](#news)). Hidden items carry no cover.
 - **Undo:** Studio stops publishing the entry; the feed entry shows again.
-- The same works for a `minecraft[]` entry by its id ([Minecraft news](#minecraft-news)). A Studio
-  copy of one is an ordinary Studio news item: it shows as Projects news, by the admin's choice.
+- The same works for a `minecraft[]` entry by its id ([Minecraft news](#minecraft-news)). Studio
+  only hides these: its hidden item carries the entry's id, title and `publishedAt` (as
+  `expiresAt` too), `category: update` and no text or cover; launchers that know `minecraft`
+  leave the entry out, readers that do not never show either. A Studio copy of one (an item with
+  the id that is not hidden) would be an ordinary Studio news item: it shows as Projects news.
 - `feedOverride: { fingerprint, sourceUrl? }` on the Studio entry records which feed entry it
   replaced or hid: `fingerprint` is Studio's digest of the feed entry's content when the admin
   took it over (an opaque string; Studio compares it with the current feed entry to report that
-  the Discord original changed since), `sourceUrl` the original message. Launchers ignore the
-  object; it is published so every admin (after "pull from live" or a rollback) sees the same.
+  the original changed since; for a `minecraft[]` entry it covers the texts, the English texts,
+  the cover and `publishedAt`, so a new `expiresAt` is no change), `sourceUrl` the original
+  message, or a `minecraft[]` entry's article. Launchers ignore the object; it is published so
+  every admin (after "pull from live" or a rollback) sees the same.
 
 ## Modpacks
 
