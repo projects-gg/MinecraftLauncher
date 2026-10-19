@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "about": "Key bindings the launchers write into a new options.txt of the official pack, so its mods share no key with each other or with the game in normal play (Minecraft fires every mapping bound to a pressed key). Desktop: pl-mc instance::keys; Android: the same lines. Only an options.txt the launcher creates gets them: keys the player changed and a pack's own options.txt always win. Vanilla keys are never changed. The key names are valid from Minecraft 1.13 on. Inventory and checks: crates/pl-mc/testdata/key-bindings.",
+  "bindings": [
+    {
+      "name": "key.wi_zoom.zoom",
+      "key": "key.keyboard.c",
+      "default": "key.keyboard.v",
+      "mod": "WI Zoom",
+      "action": "Zoom",
+      "why": "V also opens Simple Voice Chat's menu. C is the zoom key players know from OptiFine; the game uses it only with F3 or, in creative, as the save-hotbar modifier."
+    },
+    {
+      "name": "key.gammautils.gammaToggle",
+      "key": "key.keyboard.x",
+      "default": "key.keyboard.g",
+      "mod": "Gamma Utils",
+      "action": "Toggle gamma",
+      "why": "G is the game's Quick Actions key (dialogs a server offers). X is free in survival play; creative uses it only as the load-hotbar modifier."
+    },
+    {
+      "name": "key.push_to_talk",
+      "key": "key.keyboard.caps.lock",
+      "default": "key.keyboard.unknown",
+      "mod": "Simple Voice Chat",
+      "action": "Push to talk",
+      "why": "Unbound by default. Caps Lock was the mod's own default for years, the left little finger rests on it while moving and nothing else uses it. Not Left Alt: Left Alt+Shift (talking while sneaking) switches the Windows input language and Alt+F4 closes the game."
+    },
+    {
+      "name": "key.hide_icons",
+      "key": "key.keyboard.unknown",
+      "default": "key.keyboard.h",
+      "mod": "Simple Voice Chat",
+      "action": "Hide icons",
+      "why": "H is Gamma Utils' night vision; hiding the voice chat icons is rarely needed."
+    },
+    {
+      "name": "iris.keybind.reload",
+      "key": "key.keyboard.unknown",
+      "default": "key.keyboard.r",
+      "mod": "Iris",
+      "action": "Reload shaders",
+      "why": "R is Xaero's quick eat; reloading shaders is for shader authors (the shader pack screen, O, applies changes too)."
+    }
+  ]
+}

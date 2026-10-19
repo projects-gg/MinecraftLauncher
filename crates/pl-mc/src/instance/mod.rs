@@ -2,6 +2,7 @@
 //! memory and launch settings.
 
 pub mod defaults;
+pub mod keys;
 pub mod memory;
 pub mod model;
 pub mod options;
@@ -13,6 +14,7 @@ pub use defaults::{
     add_servers, client_data_version, game_language, has_accessibility_onboarding,
     seed_default_server, seed_options,
 };
+pub use keys::{FirstKeys, KeyBinding, official_pack_bindings, official_pack_key_lines};
 pub use memory::{
     AUTO_MAX_MB, MIN_HEAP_FLOOR_MB, MemoryIssue, MemoryLimits, MemoryValidation, auto_memory,
     auto_memory_at_least, clamp_memory, memory_limits, recommended_memory, system_memory_mb,

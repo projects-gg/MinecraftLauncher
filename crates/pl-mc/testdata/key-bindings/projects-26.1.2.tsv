@@ -1,0 +1,150 @@
+# Default key bindings of the official pack (projects 1.0.0: Minecraft 26.1.2, Fabric Loader 0.19.5),
+# read from the client jar and the mod jars with scripts/keys/KeyScan.java (19 October 2026).
+# Columns: options.txt name (after "key_"), default key, when it acts, where it comes from.
+# When it acts: game (in the world), creative (hotbar save/load modifiers), spectator, debug (only
+# with F3 held), recording (only while Replay Mod records; off in the pack), replay (only in Replay
+# Mod's viewer, which takes the key over there).
+key.forward	key.keyboard.w	game	Minecraft
+key.left	key.keyboard.a	game	Minecraft
+key.back	key.keyboard.s	game	Minecraft
+key.right	key.keyboard.d	game	Minecraft
+key.jump	key.keyboard.space	game	Minecraft
+key.sneak	key.keyboard.left.shift	game	Minecraft
+key.sprint	key.keyboard.left.control	game	Minecraft
+key.inventory	key.keyboard.e	game	Minecraft
+key.swapOffhand	key.keyboard.f	game	Minecraft
+key.drop	key.keyboard.q	game	Minecraft
+key.use	key.mouse.right	game	Minecraft
+key.attack	key.mouse.left	game	Minecraft
+key.pickItem	key.mouse.middle	game	Minecraft
+key.chat	key.keyboard.t	game	Minecraft
+key.playerlist	key.keyboard.tab	game	Minecraft
+key.command	key.keyboard.slash	game	Minecraft
+key.socialInteractions	key.keyboard.p	game	Minecraft
+key.screenshot	key.keyboard.f2	game	Minecraft
+key.togglePerspective	key.keyboard.f5	game	Minecraft
+key.fullscreen	key.keyboard.f11	game	Minecraft
+key.advancements	key.keyboard.l	game	Minecraft
+key.quickActions	key.keyboard.g	game	Minecraft
+key.toggleGui	key.keyboard.f1	game	Minecraft
+key.toggleSpectatorShaderEffects	key.keyboard.f4	spectator	Minecraft
+key.hotbar.1	key.keyboard.1	game	Minecraft
+key.hotbar.2	key.keyboard.2	game	Minecraft
+key.hotbar.3	key.keyboard.3	game	Minecraft
+key.hotbar.4	key.keyboard.4	game	Minecraft
+key.hotbar.5	key.keyboard.5	game	Minecraft
+key.hotbar.6	key.keyboard.6	game	Minecraft
+key.hotbar.7	key.keyboard.7	game	Minecraft
+key.hotbar.8	key.keyboard.8	game	Minecraft
+key.hotbar.9	key.keyboard.9	game	Minecraft
+key.saveToolbarActivator	key.keyboard.c	creative	Minecraft
+key.loadToolbarActivator	key.keyboard.x	creative	Minecraft
+key.spectatorHotbar	key.mouse.middle	spectator	Minecraft
+key.debug.overlay	key.keyboard.f3	game	Minecraft
+key.debug.modifier	key.keyboard.f3	debug	Minecraft
+key.debug.crash	key.keyboard.c	debug	Minecraft
+key.debug.reloadChunk	key.keyboard.a	debug	Minecraft
+key.debug.showHitboxes	key.keyboard.b	debug	Minecraft
+key.debug.clearChat	key.keyboard.d	debug	Minecraft
+key.debug.showChunkBorders	key.keyboard.g	debug	Minecraft
+key.debug.showAdvancedTooltips	key.keyboard.h	debug	Minecraft
+key.debug.copyRecreateCommand	key.keyboard.i	debug	Minecraft
+key.debug.spectate	key.keyboard.n	debug	Minecraft
+key.debug.switchGameMode	key.keyboard.f4	debug	Minecraft
+key.debug.debugOptions	key.keyboard.f6	debug	Minecraft
+key.debug.focusPause	key.keyboard.p	debug	Minecraft
+key.debug.dumpDynamicTextures	key.keyboard.s	debug	Minecraft
+key.debug.reloadResourcePacks	key.keyboard.t	debug	Minecraft
+key.debug.profiling	key.keyboard.l	debug	Minecraft
+key.debug.copyLocation	key.keyboard.c	debug	Minecraft
+key.debug.dumpVersion	key.keyboard.v	debug	Minecraft
+key.debug.profilingChart	key.keyboard.1	debug	Minecraft
+key.debug.fpsCharts	key.keyboard.2	debug	Minecraft
+key.debug.networkCharts	key.keyboard.3	debug	Minecraft
+key.debug.lightmapTexture	key.keyboard.4	debug	Minecraft
+key.smoothCamera	key.keyboard.unknown	game	Minecraft
+key.spectatorOutlines	key.keyboard.unknown	spectator	Minecraft
+key.dynamic_fps.toggle_forced	key.keyboard.unknown	game	Dynamic FPS
+key.dynamic_fps.toggle_disabled	key.keyboard.unknown	game	Dynamic FPS
+key.entityculling.toggle	key.keyboard.unknown	game	Entity Culling
+key.entityculling.toggleBoxes	key.keyboard.unknown	game	Entity Culling
+fpsreducer.key.openGui	key.keyboard.end	game	FPS Reducer
+fpsreducer.key.forceIdle	key.keyboard.pause	game	FPS Reducer
+key.gammautils.gammaToggle	key.keyboard.g	game	Gamma Utils
+key.gammautils.increaseGamma	key.keyboard.up	game	Gamma Utils
+key.gammautils.decreaseGamma	key.keyboard.down	game	Gamma Utils
+key.gammautils.maxGamma	key.keyboard.unknown	game	Gamma Utils
+key.gammautils.minGamma	key.keyboard.unknown	game	Gamma Utils
+key.gammautils.nightVisionToggle	key.keyboard.h	game	Gamma Utils
+key.gammautils.increaseNightVision	key.keyboard.right	game	Gamma Utils
+key.gammautils.decreaseNightVision	key.keyboard.left	game	Gamma Utils
+iris.keybind.reload	key.keyboard.r	game	Iris
+iris.keybind.toggleShaders	key.keyboard.k	game	Iris
+iris.keybind.shaderPackSelection	key.keyboard.o	game	Iris
+iris.keybind.wireframe	key.keyboard.unknown	game	Iris
+key.debug.reloadLanguages	key.keyboard.j	debug	Language Reload
+key.modmenu.open_menu	key.keyboard.unknown	game	Mod Menu
+key.optigui.inspect	key.keyboard.f12	game	OptiGUI
+key.replaymod.settings	key.keyboard.unknown	game	Replay Mod
+key.replaymod.marker	key.keyboard.m	recording	Replay Mod
+key.replaymod.lighting	key.keyboard.z	replay	Replay Mod
+key.replaymod.pathpreview	key.keyboard.h	replay	Replay Mod
+key.replaymod.playeroverview	key.keyboard.b	replay	Replay Mod
+key.replaymod.quickmode	key.keyboard.q	replay	Replay Mod
+key.replaymod.playpause	key.keyboard.p	replay	Replay Mod
+key.replaymod.resettilt	key.keyboard.k	replay	Replay Mod
+key.replaymod.rollclockwise	key.keyboard.l	replay	Replay Mod
+key.replaymod.rollcounterclockwise	key.keyboard.j	replay	Replay Mod
+key.replaymod.thumbnail	key.keyboard.n	replay	Replay Mod
+key.replaymod.clearkeyframes	key.keyboard.c	replay	Replay Mod
+key.replaymod.keyframerepository	key.keyboard.x	replay	Replay Mod
+key.replaymod.positionkeyframe	key.keyboard.i	replay	Replay Mod
+key.replaymod.synctimeline	key.keyboard.v	replay	Replay Mod
+key.replaymod.timekeyframe	key.keyboard.o	replay	Replay Mod
+key.replaymod.bothkeyframes	key.keyboard.unknown	replay	Replay Mod
+key.replaymod.positiononlykeyframe	key.keyboard.unknown	replay	Replay Mod
+key.mute_microphone	key.keyboard.m	game	Simple Voice Chat
+key.disable_voice_chat	key.keyboard.n	game	Simple Voice Chat
+key.hide_icons	key.keyboard.h	game	Simple Voice Chat
+key.voice_chat	key.keyboard.v	game	Simple Voice Chat
+key.push_to_talk	key.keyboard.unknown	game	Simple Voice Chat
+key.whisper	key.keyboard.unknown	game	Simple Voice Chat
+key.voice_chat_settings	key.keyboard.unknown	game	Simple Voice Chat
+key.voice_chat_group	key.keyboard.unknown	game	Simple Voice Chat
+key.voice_chat_toggle_recording	key.keyboard.unknown	game	Simple Voice Chat
+key.voice_chat_adjust_volumes	key.keyboard.unknown	game	Simple Voice Chat
+key.wi_zoom.zoom	key.keyboard.v	game	WI Zoom
+gui.xaero_zoom_in	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_zoom_out	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_new_waypoint	key.keyboard.b	game	Xaero's Better PvP
+gui.xaero_waypoints_key	key.keyboard.u	game	Xaero's Better PvP
+gui.xaero_enlarge_map	key.keyboard.z	game	Xaero's Better PvP
+gui.xaero_toggle_map	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_toggle_waypoints	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_toggle_map_waypoints	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_toggle_slime	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_toggle_grid	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_instant_waypoint	key.keyboard.keypad.add	game	Xaero's Better PvP
+gui.xaero_switch_waypoint_set	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_display_all_sets	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_toggle_light_overlay	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_toggle_entity_radar	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_reverse_entity_radar	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_toggle_manual_cave_mode	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_alternative_list_players	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_toggle_tracked_players_on_map	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_toggle_tracked_players_in_world	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_toggle_pac_chunk_claims	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_quick_eat	key.keyboard.r	game	Xaero's Better PvP
+gui.xaero_toggle_sneak	key.keyboard.unknown	game	Xaero's Better PvP
+gui.xaero_quick_use_1	key.keyboard.keypad.1	game	Xaero's Better PvP
+gui.xaero_quick_use_2	key.keyboard.keypad.2	game	Xaero's Better PvP
+gui.xaero_quick_use_3	key.keyboard.keypad.3	game	Xaero's Better PvP
+gui.xaero_quick_use_4	key.keyboard.keypad.4	game	Xaero's Better PvP
+gui.xaero_quick_use_5	key.keyboard.keypad.5	game	Xaero's Better PvP
+gui.xaero_quick_use_6	key.keyboard.keypad.6	game	Xaero's Better PvP
+gui.xaero_quick_use_7	key.keyboard.keypad.7	game	Xaero's Better PvP
+gui.xaero_quick_use_8	key.keyboard.keypad.8	game	Xaero's Better PvP
+gui.xaero_quick_use_9	key.keyboard.keypad.9	game	Xaero's Better PvP
+gui.xaero_better_pvp_settings	key.keyboard.y	game	Xaero's Better PvP
+gui.xaero_better_pvp_server_profiles	key.keyboard.unknown	game	Xaero's Better PvP

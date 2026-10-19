@@ -4,10 +4,11 @@
 //!   The caller records on the instance that this happened ([`Instance::default_server_seeded`])
 //!   and never does it again, so a server the player removed stays removed;
 //! - first-launch options when there is no `options.txt` yet ([`seed_options`]): the launcher's
-//!   language as the game language (Turkish or English, `pl_lang`), GUI scale 2 and a graphics
-//!   preset (the player's pick or the computer's, see [`super::options`]). An existing
-//!   `options.txt` (the player's or a modpack's) is never touched, except for a preset the player
-//!   picked before the first launch.
+//!   language as the game language (Turkish or English, `pl_lang`), GUI scale 2, a graphics
+//!   preset (the player's pick or the computer's, see [`super::options`]) and, for the official
+//!   pack, key bindings its mods do not share ([`super::keys`]). An existing `options.txt` (the
+//!   player's or a modpack's) is never touched, except for a preset the player picked before the
+//!   first launch.
 //!
 //! Files that cannot be read are left alone; the error is returned for logging.
 //!
@@ -18,6 +19,7 @@ use std::path::Path;
 
 use pl_lang::Lang;
 
+use super::keys::{FirstKeys, official_pack_key_lines};
 use super::options::{
     GraphicsPreset, apply_preset, clear_pending, pending_preset, preset_lines, this_machine_preset,
     write_options,
@@ -190,9 +192,10 @@ pub enum OptionsSeed {
 
 /// Right before every launch, when `<game_dir>/options.txt` does not exist: writes
 /// `version:<data version>` (read from `client_jar`), `lang:` in the launcher's language
-/// (`lang`, [`game_language`]), `guiScale:2` and a
+/// (`lang`, [`game_language`]), `guiScale:2`, a
 /// graphics preset ([`super::options`]): the one the player picked before the first launch, or
-/// the one that suits the computer. The game fills in the rest. An existing file is left as it
+/// the one that suits the computer, and the official pack's key bindings when `keys` asks for
+/// them ([`super::keys`]). The game fills in the rest. An existing file is left as it
 /// is, except that a preset the player picked while there was none is applied to it (a pack's
 /// `options.txt` arrived since).
 ///
@@ -205,8 +208,17 @@ pub async fn seed_options(
     minecraft: &str,
     client_jar: &Path,
     lang: Lang,
+    keys: FirstKeys,
 ) -> Result<OptionsSeed> {
-    seed_options_with(game_dir, minecraft, client_jar, lang, this_machine_preset).await
+    seed_options_with(
+        game_dir,
+        minecraft,
+        client_jar,
+        lang,
+        keys,
+        this_machine_preset,
+    )
+    .await
 }
 
 /// [`seed_options`] with the computer's preset given.
@@ -215,12 +227,14 @@ async fn seed_options_with(
     minecraft: &str,
     client_jar: &Path,
     lang: Lang,
+    keys: FirstKeys,
     machine: impl FnOnce() -> GraphicsPreset,
 ) -> Result<OptionsSeed> {
     // A preset picked while there was no options.txt is used at this launch or never: a later
     // launch must not change what the player set in the game meanwhile.
     let picked = pending_preset(game_dir).await;
-    let seeded = write_first_options(game_dir, minecraft, client_jar, lang, picked, machine).await;
+    let seeded =
+        write_first_options(game_dir, minecraft, client_jar, lang, keys, picked, machine).await;
     if picked.is_some() && seeded.is_ok() {
         clear_pending(game_dir).await;
     }
@@ -232,6 +246,7 @@ async fn write_first_options(
     minecraft: &str,
     client_jar: &Path,
     lang: Lang,
+    keys: FirstKeys,
     picked: Option<GraphicsPreset>,
     machine: impl FnOnce() -> GraphicsPreset,
 ) -> Result<OptionsSeed> {
@@ -257,6 +272,9 @@ async fn write_first_options(
     content.push_str(&format!("lang:{}\n", game_language(minecraft, lang)));
     content.push_str(&format!("guiScale:{DEFAULT_GUI_SCALE}\n"));
     content.push_str(&preset_lines(minecraft, picked.unwrap_or_else(machine)));
+    if keys == FirstKeys::OfficialPack {
+        content.push_str(&official_pack_key_lines(minecraft));
+    }
     let target = path.clone();
     let created = blocking(move || {
         if let Some(parent) = target.parent() {
@@ -451,9 +469,11 @@ mod tests {
         assert_eq!(client_data_version(&jar), Some(3955));
         let game = dir.path().join("minecraft");
         assert_eq!(
-            seed_options_with(&game, "1.21.1", &jar, Lang::Tr, || GraphicsPreset::Balanced)
-                .await
-                .unwrap(),
+            seed_options_with(&game, "1.21.1", &jar, Lang::Tr, FirstKeys::Defaults, || {
+                GraphicsPreset::Balanced
+            })
+            .await
+            .unwrap(),
             OptionsSeed::Written {
                 data_version: Some(3955)
             }
@@ -471,7 +491,9 @@ mod tests {
         );
         // Only once: from now on the file is the game's.
         assert_eq!(
-            seed_options(&game, "1.21.1", &jar, Lang::Tr).await.unwrap(),
+            seed_options(&game, "1.21.1", &jar, Lang::Tr, FirstKeys::Defaults)
+                .await
+                .unwrap(),
             OptionsSeed::Exists
         );
     }
@@ -481,15 +503,19 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let jar = client_jar(dir.path(), Some(r#"{"world_version":4790}"#));
         let game = dir.path().join("minecraft");
-        seed_options_with(&game, "26.1.2", &jar, Lang::En, || GraphicsPreset::Smooth)
-            .await
-            .unwrap();
+        seed_options_with(&game, "26.1.2", &jar, Lang::En, FirstKeys::Defaults, || {
+            GraphicsPreset::Smooth
+        })
+        .await
+        .unwrap();
         assert!(options(&game).starts_with("version:4790\nlang:en_us\nguiScale:2\n"));
         // Before 1.11 the game writes the region in capitals.
         let old = dir.path().join("old");
-        seed_options_with(&old, "1.8.9", &jar, Lang::En, || GraphicsPreset::Smooth)
-            .await
-            .unwrap();
+        seed_options_with(&old, "1.8.9", &jar, Lang::En, FirstKeys::Defaults, || {
+            GraphicsPreset::Smooth
+        })
+        .await
+        .unwrap();
         assert!(options(&old).contains("lang:en_US\n"));
     }
 
@@ -503,9 +529,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            seed_options_with(&game, "26.1.2", &jar, Lang::Tr, || GraphicsPreset::Smooth)
-                .await
-                .unwrap(),
+            seed_options_with(&game, "26.1.2", &jar, Lang::Tr, FirstKeys::Defaults, || {
+                GraphicsPreset::Smooth
+            })
+            .await
+            .unwrap(),
             OptionsSeed::Written {
                 data_version: Some(4790)
             }
@@ -521,9 +549,11 @@ mod tests {
         // What the player then sets in the game stays.
         std::fs::write(game.join(OPTIONS_FILE), "renderDistance:20\n").unwrap();
         assert_eq!(
-            seed_options_with(&game, "26.1.2", &jar, Lang::Tr, || GraphicsPreset::Smooth)
-                .await
-                .unwrap(),
+            seed_options_with(&game, "26.1.2", &jar, Lang::Tr, FirstKeys::Defaults, || {
+                GraphicsPreset::Smooth
+            })
+            .await
+            .unwrap(),
             OptionsSeed::Exists
         );
         assert_eq!(options(&game), "renderDistance:20\n");
@@ -541,9 +571,11 @@ mod tests {
         std::fs::create_dir_all(&game).unwrap();
         std::fs::write(game.join(OPTIONS_FILE), "version:3955\nfov:0.25\n").unwrap();
         assert_eq!(
-            seed_options_with(&game, "1.21.1", &jar, Lang::Tr, || GraphicsPreset::Balanced)
-                .await
-                .unwrap(),
+            seed_options_with(&game, "1.21.1", &jar, Lang::Tr, FirstKeys::Defaults, || {
+                GraphicsPreset::Balanced
+            })
+            .await
+            .unwrap(),
             OptionsSeed::Exists
         );
         let written = options(&game);
@@ -566,9 +598,14 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            seed_options_with(&game, "1.21.4", &no_json, Lang::Tr, || {
-                GraphicsPreset::Smooth
-            })
+            seed_options_with(
+                &game,
+                "1.21.4",
+                &no_json,
+                Lang::Tr,
+                FirstKeys::Defaults,
+                || { GraphicsPreset::Smooth }
+            )
             .await
             .unwrap(),
             OptionsSeed::Skipped
@@ -587,9 +624,14 @@ mod tests {
         // 1.19.3 and newer: no file, so the game's own first start keeps the onboarding.
         let new = dir.path().join("new");
         assert_eq!(
-            seed_options_with(&new, "1.21.4", &no_json, Lang::Tr, || {
-                GraphicsPreset::Smooth
-            })
+            seed_options_with(
+                &new,
+                "1.21.4",
+                &no_json,
+                Lang::Tr,
+                FirstKeys::Defaults,
+                || { GraphicsPreset::Smooth }
+            )
             .await
             .unwrap(),
             OptionsSeed::Skipped
@@ -599,9 +641,16 @@ mod tests {
         // Older versions have no onboarding: written without the version line.
         let old = dir.path().join("old");
         assert_eq!(
-            seed_options_with(&old, "1.8.9", &no_json, Lang::Tr, || GraphicsPreset::Smooth)
-                .await
-                .unwrap(),
+            seed_options_with(
+                &old,
+                "1.8.9",
+                &no_json,
+                Lang::Tr,
+                FirstKeys::Defaults,
+                || GraphicsPreset::Smooth
+            )
+            .await
+            .unwrap(),
             OptionsSeed::Written { data_version: None }
         );
         assert_eq!(
@@ -625,7 +674,9 @@ mod tests {
         std::fs::create_dir_all(&game).unwrap();
         std::fs::write(game.join(OPTIONS_FILE), "lang:en_us\nfov:0.5\n").unwrap();
         assert_eq!(
-            seed_options(&game, "1.21.1", &jar, Lang::Tr).await.unwrap(),
+            seed_options(&game, "1.21.1", &jar, Lang::Tr, FirstKeys::Defaults)
+                .await
+                .unwrap(),
             OptionsSeed::Exists
         );
         assert_eq!(options(&game), "lang:en_us\nfov:0.5\n");
@@ -634,9 +685,59 @@ mod tests {
         std::fs::create_dir_all(&pack).unwrap();
         std::fs::write(pack.join(OPTIONS_FILE), "").unwrap();
         assert_eq!(
-            seed_options(&pack, "1.21.1", &jar, Lang::Tr).await.unwrap(),
+            seed_options(&pack, "1.21.1", &jar, Lang::Tr, FirstKeys::Defaults)
+                .await
+                .unwrap(),
             OptionsSeed::Exists
         );
         assert_eq!(options(&pack), "");
+    }
+
+    #[tokio::test]
+    async fn the_official_pack_starts_with_its_key_bindings() {
+        let dir = tempfile::tempdir().unwrap();
+        let jar = client_jar(dir.path(), Some(r#"{"world_version":4790}"#));
+        let game = dir.path().join("official");
+        seed_options_with(
+            &game,
+            "26.1.2",
+            &jar,
+            Lang::Tr,
+            FirstKeys::OfficialPack,
+            || GraphicsPreset::Balanced,
+        )
+        .await
+        .unwrap();
+        let written = options(&game);
+        assert!(written.starts_with("version:4790\nlang:tr_tr\nguiScale:2\n"));
+        assert!(written.ends_with(&official_pack_key_lines("26.1.2")));
+        assert!(written.contains("key_key.wi_zoom.zoom:key.keyboard.c\n"));
+        assert_eq!(
+            detect_preset(written.as_bytes(), "26.1.2"),
+            Some(GraphicsPreset::Balanced)
+        );
+
+        // Instances the player put together keep the mods' own keys.
+        let own = dir.path().join("own");
+        seed_options_with(&own, "26.1.2", &jar, Lang::Tr, FirstKeys::Defaults, || {
+            GraphicsPreset::Balanced
+        })
+        .await
+        .unwrap();
+        assert!(!options(&own).contains("key_"));
+
+        // Keys in an existing options.txt (the player's, or a pack's own file) stay as they are.
+        std::fs::write(
+            game.join(OPTIONS_FILE),
+            "key_key.wi_zoom.zoom:key.keyboard.z\n",
+        )
+        .unwrap();
+        assert_eq!(
+            seed_options(&game, "26.1.2", &jar, Lang::Tr, FirstKeys::OfficialPack)
+                .await
+                .unwrap(),
+            OptionsSeed::Exists
+        );
+        assert_eq!(options(&game), "key_key.wi_zoom.zoom:key.keyboard.z\n");
     }
 }

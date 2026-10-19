@@ -941,12 +941,19 @@ async fn prepare_and_spawn(
     // Instances made before every instance got the Projects server: an empty list gets it once.
     crate::commands::instances::seed_default_server_once(state, &mut instance).await;
     // First launch without an options.txt (the player's, a modpack's or the pack's): the
-    // launcher's language, GUI scale 2 and the client's data version.
+    // launcher's language, GUI scale 2, the client's data version and, for the official pack,
+    // key bindings its mods do not share.
+    let first_keys = if instance.managed_pack.is_some() {
+        pl_mc::instance::FirstKeys::OfficialPack
+    } else {
+        pl_mc::instance::FirstKeys::Defaults
+    };
     match pl_mc::instance::seed_options(
         &game_dir,
         &instance.mc_version,
         &installed.client_jar,
         pl_lang::Lang::current(),
+        first_keys,
     )
     .await
     {
