@@ -21,6 +21,7 @@ import {
   Kbd,
   Skeleton,
   scrimMotion,
+  scrollBehavior,
   sheetMotion,
   springSnappy,
   useInteractionMotion,
@@ -692,7 +693,7 @@ export function AccountCenterSheet() {
                   target.focus({ preventScroll: true });
                   if (add) {
                     setTimeout(
-                      () => target.scrollIntoView({ block: "center", behavior: "smooth" }),
+                      () => target.scrollIntoView({ block: "center", behavior: scrollBehavior() }),
                       320,
                     );
                   }

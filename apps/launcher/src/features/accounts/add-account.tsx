@@ -1,6 +1,6 @@
 // "Hesap ekle": the Microsoft sign-in, or an offline name checked as it is typed.
 import { Check, CircleNotch, UserPlus } from "@phosphor-icons/react";
-import { Button, cn, easeOutExpo, Input } from "@pl/ui";
+import { Button, cn, easeOutExpo, Input, scrollBehavior } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { type FormEvent, type RefObject, useEffect, useId, useState } from "react";
@@ -57,7 +57,7 @@ function OfflineForm({
       announce(t("accounts.center.added", { name: account.username }));
       // The list grew above the field: once it has settled, bring the field back into view.
       setTimeout(
-        () => inputRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
+        () => inputRef.current?.scrollIntoView({ block: "nearest", behavior: scrollBehavior() }),
         380,
       );
     } catch (error) {
@@ -99,7 +99,7 @@ function OfflineForm({
           onFocus={() =>
             document
               .getElementById(messageId)
-              ?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+              ?.scrollIntoView({ block: "nearest", behavior: scrollBehavior() })
           }
         />
         <Button

@@ -1,4 +1,4 @@
-import { PerfProvider, Toaster, TooltipProvider } from "@pl/ui";
+import { guardReducedMotion, PerfProvider, Toaster, TooltipProvider } from "@pl/ui";
 import { focusManager, QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -65,6 +65,9 @@ function Providers() {
 
 const root = document.getElementById("root");
 if (!root) throw new Error("#root missing");
+
+// Under reduced motion, nothing that moves runs as a Web Animation either (@pl/ui reduced-motion).
+guardReducedMotion();
 
 /**
  * The backend writes the tray menu, the Discord presence and its errors in the same language,

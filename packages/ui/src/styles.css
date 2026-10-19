@@ -504,16 +504,31 @@
   }
 }
 
+/* Reduced motion keeps fades and drops movement (docs/design.md §5), as `MotionConfig
+   reducedMotion="user"` does for motion's own animations (and `guardReducedMotion`,
+   reduced-motion.ts, for the Web Animations it runs).
+   - Transitions keep their timing but carry only colour, opacity, visibility, shadow and filter,
+     so a change of transform, translate, scale, rotate, size or position lands at once while a
+     hover still fades (before POLISH3 every transition took 0.01 ms, fades included). The list
+     replaces each element's own (CSS cannot drop names from a list). Opacity comes first: an
+     inline `opacity 260ms, scale 700ms` keeps its 260 ms fade. An element without a transition
+     has no duration and stays instant.
+   - Keyframe animations end at once (most of them move); the fades among them are restored below.
+   - Smooth scrolling jumps. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
+    transition-property:
+      opacity, visibility, color, background-color, border-color, outline-color,
+      text-decoration-color, fill, stroke, box-shadow, filter, backdrop-filter, --tw-gradient-from,
+      --tw-gradient-via, --tw-gradient-to !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 
-  /* Reduced motion keeps fades (docs/design.md §5): these surfaces still fade, without moving. */
+  /* Popovers, menus, tooltips and swapped panels fade in place. */
   .pop-motion[data-state="open"],
   .pop-motion[data-state="delayed-open"],
   .panel-in {
@@ -521,6 +536,65 @@
   }
   .pop-motion[data-state="closed"] {
     animation: fade-out 100ms ease-out forwards !important;
+  }
+  /* A one-off `animate-[fade-in_…]` stays a short fade. */
+  [class*="animate-[fade-"] {
+    animation-duration: 150ms !important;
+  }
+
+  /* Loading without a sweep: a skeleton's sheen breathes where it is, an indeterminate bar fills
+     its track and breathes, and a progress fill drops its sheen (the fill itself shows the
+     progress). They run only while something loads, like the sweeps they replace. */
+  .animate-shimmer {
+    background-image: none !important;
+    background-color: rgb(255 255 255 / 0.05) !important;
+    animation: breathe 1.6s ease-in-out infinite alternate !important;
+  }
+  [role="progressbar"] .animate-shimmer {
+    display: none;
+  }
+  .animate-indeterminate {
+    width: 100% !important;
+    animation: breathe-dim 1.2s ease-in-out infinite alternate !important;
+  }
+
+  /* Toasts. Sonner turns every toast transition off under reduced motion; ours fade where they
+     stand instead (no rise in, no drop out: a leaving toast keeps its place while it fades, and
+     Sonner removes it after 200 ms, so the fade is as long). */
+  [data-sonner-toaster] [data-sonner-toast] {
+    transition: opacity 200ms ease-out !important;
+  }
+  [data-sonner-toaster] [data-sonner-toast] > * {
+    transition-property:
+      opacity, color, background-color, border-color, box-shadow, filter !important;
+    transition-duration: 150ms !important;
+    transition-timing-function: ease-out !important;
+  }
+  [data-sonner-toaster]
+    [data-sonner-toast][data-removed="true"][data-swipe-out="false"][data-front="true"] {
+    --y: translateY(0) !important;
+  }
+  [data-sonner-toaster]
+    [data-sonner-toast][data-removed="true"][data-swipe-out="false"][data-front="false"][data-expanded="true"] {
+    --y: translateY(calc(var(--lift) * var(--offset))) !important;
+  }
+  [data-sonner-toaster]
+    [data-sonner-toast][data-removed="true"][data-swipe-out="false"][data-front="false"][data-expanded="false"] {
+    --y: translateY(calc(var(--lift-amount) * var(--toasts-before))) scale(calc(-1 * var(--scale))) !important;
+  }
+}
+
+@keyframes breathe {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes breathe-dim {
+  from {
+    opacity: 0.85;
+  }
+  to {
+    opacity: 0.3;
   }
 }
 

@@ -55,5 +55,6 @@ export {
 export { cn } from "./lib/cn";
 export * from "./motion";
 export { PerfProvider, useAmbientMotion, useInteractionMotion, usePerf } from "./perf";
+export { guardReducedMotion, stillKeyframes } from "./reduced-motion";
 export { fold, matchesQuery } from "./search";
 export { observeSkippedViewTransitions } from "./view-transitions";

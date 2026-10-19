@@ -46,6 +46,16 @@ export function useMotionPrefs(): MotionPrefs {
   return { reduce, layout: !reduce && !performanceMode };
 }
 
+/**
+ * How a scroll the app starts itself moves: smoothly, or at once under reduced motion. For
+ * handlers and timers (`scrollIntoView({ behavior: scrollBehavior() })`): an explicit "smooth"
+ * ignores the CSS `scroll-behavior` that reduced motion sets.
+ */
+export function scrollBehavior(): ScrollBehavior {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "smooth";
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}
+
 export const fadeUp = {
   initial: { opacity: 0, y: 10 },
   animate: { opacity: 1, y: 0, transition: { duration: durations.panel, ease: easeOutExpo } },
