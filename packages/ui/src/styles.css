@@ -326,6 +326,15 @@
     0 18px 48px rgb(34 6 6 / 0.5);
 }
 
+/* A toast rises in on the entrance curve (Sonner's own 400 ms `ease` kept its buttons up to a
+   toast's height below their place for the first ~150 ms: a press aimed at them landed under
+   them; POLISH5, measured in a preview: the press works at once where the button is, and with
+   this curve it is within 6 px of its place after 120 ms). The stack's lift and the exit follow
+   the same curve; Sonner removes a leaving toast after 200 ms, when this exit has finished. */
+[data-sonner-toaster] [data-sonner-toast] {
+  transition-timing-function: var(--ease-out-expo);
+}
+
 @utility text-shadow-art {
   text-shadow:
     0 1px 2px rgb(10 9 12 / 0.65),
