@@ -71,7 +71,7 @@ function OfflineForm({
   return (
     <form onSubmit={(event) => void submit(event)} noValidate>
       <label htmlFor={inputId} className="text-[13px] font-medium text-bone-100">
-        {t("accounts.center.offlineLabel")}
+        {t("accounts.offline")}
       </label>
       <div className="mt-1.5 flex gap-2">
         <Input

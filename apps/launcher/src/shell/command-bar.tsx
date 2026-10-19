@@ -395,9 +395,10 @@ function AccountChip() {
         <span className="block max-w-[140px] truncate text-[13px] font-semibold text-bone-50">
           {active.username}
         </span>
-        <span className="block text-[11.5px] text-ash-300">
-          {active.kind === "microsoft" ? t("accounts.microsoft") : t("accounts.offline")}
-        </span>
+        {/* A Microsoft account says so; one with only a username needs no second line. */}
+        {active.kind === "microsoft" ? (
+          <span className="block text-[11.5px] text-ash-300">{t("accounts.microsoft")}</span>
+        ) : null}
       </div>
     </div>
   );

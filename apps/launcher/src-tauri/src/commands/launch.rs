@@ -141,6 +141,9 @@ pub enum LaunchEventView {
     JavaMismatch(crate::commands::java::JavaPromptView),
     /// Some mods will not work; the game starts anyway (shown once per set of warnings).
     ModsWarning(crate::commands::modhealth::ModCheckView),
+    /// The official pack's mod keys clash in an older `options.txt`: it was not started (asked
+    /// once per session; the player chooses "Düzelt" or "Yine de başlat").
+    KeyClash(crate::commands::modhealth::ModCheckView),
     /// The session took screenshots (sent right before `Exited`). `recent` are the newest
     /// files (at most three, newest first) for thumbnails; their folder is allowed in the asset
     /// protocol.
@@ -992,6 +995,10 @@ async fn prepare_and_spawn(
         }
         modhealth::Prelaunch::Warned(check) => {
             let _ = on_event.send(LaunchEventView::ModsWarning(check));
+        }
+        modhealth::Prelaunch::Keys(check) => {
+            let _ = on_event.send(LaunchEventView::KeyClash(check));
+            return Ok(());
         }
         modhealth::Prelaunch::Clear => {}
     }

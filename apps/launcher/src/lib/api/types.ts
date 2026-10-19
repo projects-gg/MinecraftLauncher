@@ -324,6 +324,11 @@ export type LaunchEvent =
   /** Some mods will not work; the game starts anyway. */
   | { type: "modsWarning"; check: ModCheck }
   /**
+   * The official pack's mod keys clash in an older `options.txt`: the game was not started
+   * (asked once per session: "Düzelt" or "Yine de başlat").
+   */
+  | { type: "keyClash"; check: ModCheck }
+  /**
    * The session took screenshots (sent right before `exited`); `recent` are image URLs (newest
    * first), `newest` is the newest one's file name ("Kopyala" copies it).
    */

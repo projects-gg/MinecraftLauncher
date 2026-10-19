@@ -309,7 +309,8 @@ function launchEvent(e: LaunchEventView): LaunchEvent {
       return { type, ...javaPrompt(prompt) };
     }
     case "modsBlocked":
-    case "modsWarning": {
+    case "modsWarning":
+    case "keyClash": {
       const { type, ...check } = e;
       return { type, check: modCheck(check) };
     }

@@ -286,6 +286,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::modhealth::mods_reinstall,
             commands::modhealth::instance_set_max_memory,
             commands::modhealth::instance_set_jvm_args,
+            commands::modhealth::mods_fix_keys,
+            commands::modhealth::mods_undo_keys,
             // Java: Settings → Java, runtime updates (the pre-launch check is part of the launch)
             commands::java::java_overview,
             commands::java::java_runtime_update,

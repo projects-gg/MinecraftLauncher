@@ -10,6 +10,7 @@ import type {
   StepStatus,
 } from "@/lib/api";
 import { listFormat } from "@/lib/format";
+import { keyClashText } from "./key-texts";
 
 /** "A", "A ve B", "A, B ve C" / "A, B and C" (the interface's language). */
 export function joinNames(names: string[]): string {
@@ -49,6 +50,8 @@ export function issueText(t: TFunction, issue: HealthIssue, minecraft: string): 
       return issue.java ? k("javaVersion", { java: issue.java }) : k("javaNewer");
     case "wrongLoader":
       return issue.madeFor ? k("wrongLoader", { loader: issue.madeFor }) : k("wrongLoaderOther");
+    case "keyClash":
+      return keyClashText(t, issue.keys ?? []);
     default:
       return k(issue.kind);
   }

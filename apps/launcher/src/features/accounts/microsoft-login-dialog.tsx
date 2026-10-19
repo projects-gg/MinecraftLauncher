@@ -286,7 +286,7 @@ export function MicrosoftLoginDialog({
               onUseOffline();
             }}
           >
-            {t("accounts.login.useOffline")}
+            {t("accounts.offline")}
           </Button>
         ) : null}
         <Button

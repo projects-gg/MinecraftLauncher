@@ -178,16 +178,19 @@ export function AccountSwitcher() {
                                     </Chip>
                                   ) : null}
                                 </span>
-                                <span
-                                  className={cn(
-                                    "block truncate text-[12px]",
-                                    expired ? "text-flare-400" : "text-ash-400",
-                                  )}
-                                >
-                                  {expired
-                                    ? t("accounts.switcher.expired")
-                                    : t(`accounts.kind.${account.kind}`)}
-                                </span>
+                                {/* Microsoft accounts say so; a username alone needs no line. */}
+                                {expired || account.kind === "microsoft" ? (
+                                  <span
+                                    className={cn(
+                                      "block truncate text-[12px]",
+                                      expired ? "text-flare-400" : "text-ash-400",
+                                    )}
+                                  >
+                                    {expired
+                                      ? t("accounts.switcher.expired")
+                                      : t("accounts.kind.microsoft")}
+                                  </span>
+                                ) : null}
                               </span>
                               <DropdownMenu.ItemIndicator className="flex shrink-0 pr-1">
                                 <Check size={17} weight="bold" className="text-gold-300" />

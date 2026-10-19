@@ -14,7 +14,10 @@ pub use defaults::{
     add_servers, client_data_version, game_language, has_accessibility_onboarding,
     seed_default_server, seed_options,
 };
-pub use keys::{FirstKeys, KeyBinding, official_pack_bindings, official_pack_key_lines};
+pub use keys::{
+    FirstKeys, KeyBinding, KeyClash, KeyFix, find_key_clashes, fix_key_clashes_in, key_clashes_in,
+    official_pack_bindings, official_pack_key_lines, undo_key_fix_in,
+};
 pub use memory::{
     AUTO_MAX_MB, MIN_HEAP_FLOOR_MB, MemoryIssue, MemoryLimits, MemoryValidation, auto_memory,
     auto_memory_at_least, clamp_memory, memory_limits, recommended_memory, system_memory_mb,

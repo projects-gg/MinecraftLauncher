@@ -3,6 +3,7 @@ import { Channel } from "@tauri-apps/api/core";
 import {
   type CmdError,
   commands,
+  type KeyChangeView,
   type ModCheckView,
   type ModHealthIssueView,
   type ReinstallProgressView,
@@ -12,6 +13,7 @@ import {
 import { ModCenterCommandError } from "./modcenter-tauri";
 import type {
   HealthIssue,
+  KeyChange,
   ModCheck,
   ModHealthApi,
   ReinstallProgress,
@@ -27,12 +29,15 @@ async function ok<T>(promise: Promise<Res<T>>): Promise<T> {
   return result.data;
 }
 
-const issue = (i: ModHealthIssueView): HealthIssue => ({
+const keyChange = (k: KeyChangeView): KeyChange => ({ ...k, to: k.to ?? undefined });
+
+const issue = ({ keys, ...i }: ModHealthIssueView): HealthIssue => ({
   ...i,
   target: i.target ?? undefined,
   madeFor: i.madeFor ?? undefined,
   java: i.java ?? undefined,
   offer: i.offer ? { ...i.offer, name: i.offer.name ?? undefined } : undefined,
+  keys: keys.length > 0 ? keys.map(keyChange) : undefined,
 });
 
 export const modCheck = (c: ModCheckView): ModCheck => ({ ...c, issues: c.issues.map(issue) });
@@ -72,4 +77,9 @@ export const tauriModHealth: ModHealthApi = {
   async cancel(jobId) {
     await commands.contentCancel(jobId);
   },
+  async fixKeys(instanceId) {
+    const fix = await ok(commands.modsFixKeys(instanceId));
+    return { backup: fix.backup ?? undefined, changes: fix.changes.map(keyChange) };
+  },
+  undoKeys: (instanceId, backup) => ok(commands.modsUndoKeys(instanceId, backup)),
 };

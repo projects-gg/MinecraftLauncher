@@ -233,7 +233,7 @@ pub fn supports_presets(version: &str) -> bool {
 }
 
 /// The lines of `content` as (text, line ending); the ending is empty on a last line without one.
-fn split_lines(content: &[u8]) -> Vec<(&[u8], &[u8])> {
+pub(super) fn split_lines(content: &[u8]) -> Vec<(&[u8], &[u8])> {
     let mut lines = Vec::new();
     let mut rest = content;
     while !rest.is_empty() {
@@ -258,7 +258,7 @@ fn split_lines(content: &[u8]) -> Vec<(&[u8], &[u8])> {
 }
 
 /// `key:value`, split at the first colon like the game does (values can hold colons).
-fn key_value(text: &[u8]) -> Option<(&str, &[u8])> {
+pub(super) fn key_value(text: &[u8]) -> Option<(&str, &[u8])> {
     let colon = text.iter().position(|&byte| byte == b':')?;
     let key = std::str::from_utf8(&text[..colon]).ok()?;
     (!key.is_empty()).then(|| (key, &text[colon + 1..]))

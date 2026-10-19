@@ -5,6 +5,11 @@
 //! repair (`RepairHost`: the official pack sync, the instance's loader and Java) and maps the
 //! results to views. Visible text is built by the UI from kinds and names; ids, file names and
 //! requirements only go to "copy details".
+//!
+//! Official pack instances also report the pack's mod keys that still clash in an older
+//! `options.txt` (KEYS2, `pl_mc::instance::keys`): one warning with "Düzelt" (`mods_fix_keys`,
+//! undone by `mods_undo_keys`), and once per session a question before the launch, since the
+//! game reads the file at start and writes its own keys back.
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
@@ -19,7 +24,7 @@ use pl_content::{PackManifest, PackSelection, PackState, SyncProgress, apply_syn
 use pl_lang::pick;
 use pl_mc::addons::{AddonIndex, Addons};
 use pl_mc::gamefiles::LauncherTrash;
-use pl_mc::instance::{Instance, MemorySettings};
+use pl_mc::instance::{Instance, KeyClash, MemorySettings};
 use pl_mc::java::JavaSetting;
 use pl_mc::launch::crash::{
     CrashDiagnosis, CrashKind, CrashSuspect, SuggestedAction, SuspectReason, attribute_crash,
@@ -66,6 +71,9 @@ pub struct ModHealth {
     attempted: Mutex<HashMap<String, HashSet<String>>>,
     /// Java major of custom Java executables.
     java: Mutex<HashMap<PathBuf, u32>>,
+    /// The key clashes asked about before a launch, per instance (the issue's key): asked once
+    /// per session, whatever the answer.
+    keys_asked: Mutex<HashMap<String, String>>,
 }
 
 /// The registry, created on first use.
@@ -201,6 +209,8 @@ struct Checked {
     origins: FileOrigins,
     titles: Titles,
     report: ModCheckReport,
+    /// Official pack instances: the pack's mod keys that still clash in `options.txt`.
+    keys: Vec<KeyClash>,
 }
 
 async fn check_instance(
@@ -220,12 +230,18 @@ async fn check_instance(
     let snapshot = scan(game_dir.join("mods")).await;
     let (origins, titles) = sources_for(state, instance, &instance_dir, &game_dir, &snapshot).await;
     let report = check_mods(&snapshot, &env, &origins);
+    let keys = if instance.managed_pack.is_some() {
+        pl_mc::instance::key_clashes_in(&game_dir).await
+    } else {
+        Vec::new()
+    };
     Ok(Checked {
         env,
         snapshot,
         origins,
         titles,
         report,
+        keys,
     })
 }
 
@@ -298,6 +314,65 @@ pub struct ModHealthIssueView {
     /// The files involved ("copy details" only).
     pub files: Vec<String>,
     pub offer: Option<FixOfferView>,
+    /// For a key clash: the bindings "Düzelt" moves.
+    pub keys: Vec<KeyChangeView>,
+}
+
+/// A binding a key fix moves: one clash of the official pack's mods in `options.txt`.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct KeyChangeView {
+    /// The key mapping (`key.wi_zoom.zoom`); the UI names its action.
+    pub name: String,
+    /// The mod it belongs to ("WI Zoom").
+    pub mod_name: String,
+    /// What it does, in English (for a mapping the UI has no words for).
+    pub action: String,
+    /// The mapping it shares the key with (`key.voice_chat`).
+    pub partner: String,
+    /// The shared key (`key.keyboard.v`).
+    pub key: String,
+    /// The key it gets (`key.keyboard.c`); `None` leaves it without one.
+    pub to: Option<String>,
+}
+
+fn key_change(clash: &KeyClash) -> KeyChangeView {
+    KeyChangeView {
+        name: clash.binding.name.clone(),
+        mod_name: clash.binding.mod_name.clone(),
+        action: clash.binding.action.clone(),
+        partner: clash.partner.to_owned(),
+        key: clash.key().to_owned(),
+        to: (clash.to() != pl_mc::instance::keys::UNBOUND).then(|| clash.to().to_owned()),
+    }
+}
+
+/// The one warning for the key clashes of an official pack instance (its button: "Düzelt").
+fn key_clash_view(clashes: &[KeyClash]) -> ModHealthIssueView {
+    let mut mods: Vec<String> = Vec::new();
+    for clash in clashes {
+        if !mods.contains(&clash.binding.mod_name) {
+            mods.push(clash.binding.mod_name.clone());
+        }
+    }
+    let names: Vec<&str> = clashes.iter().map(|c| c.binding.name.as_str()).collect();
+    ModHealthIssueView {
+        key: format!("{:?}|{}|", IssueKind::KeyClash, names.join(",")),
+        severity: Severity::Warning,
+        kind: IssueKind::KeyClash,
+        mods,
+        target: None,
+        made_for: None,
+        java: None,
+        bundled: false,
+        files: vec!["options.txt".to_owned()],
+        offer: Some(FixOfferView {
+            label: FixLabel::Fix,
+            name: None,
+            count: u32::try_from(clashes.len()).unwrap_or(u32::MAX),
+        }),
+        keys: clashes.iter().map(key_change).collect(),
+    }
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
@@ -453,6 +528,7 @@ fn issue_view(
             && (issue.mods.iter().any(|m| m.bundled) || target.is_some_and(|t| t.file.is_some())),
         files,
         offer: offer_view(issue, &fixes, titles),
+        keys: Vec::new(),
     }
 }
 
@@ -514,6 +590,10 @@ fn check_view(
                 issues.push(view);
             }
         }
+    }
+    // The pack's mod keys that still clash in options.txt: a warning of its own, after the mods'.
+    if !checked.keys.is_empty() {
+        issues.push(key_clash_view(&checked.keys));
     }
     let plan = plan_repair(&ctx, Some(&checked.report), None);
     ModCheckView {
@@ -794,10 +874,15 @@ pub(crate) enum Prelaunch {
     Blocked(ModCheckView),
     /// Something will not work; shown once without stopping the launch.
     Warned(ModCheckView),
+    /// The pack's mod keys clash in `options.txt`: the launch waits for the player's answer
+    /// ("Düzelt" or "Yine de başlat"), asked once per session. A fix has to come before the game
+    /// starts: the game reads the file then and writes its own keys back.
+    Keys(ModCheckView),
 }
 
 /// Checks the mods right before a launch, with the Java that will run. Never fails the launch:
-/// a problem with the check itself only skips it.
+/// a problem with the check itself only skips it. `ignore_blocking` ("Yine de başlat" after
+/// blocking problems, whose dialog listed the key clash too) also skips the key question.
 pub(crate) async fn prelaunch(
     app: &AppHandle,
     state: &AppState,
@@ -823,10 +908,20 @@ pub(crate) async fn prelaunch(
     if view.blocking > 0 && !ignore_blocking {
         return Prelaunch::Blocked(view);
     }
+    if let Some(keys) = view.issues.iter().find(|i| i.kind == IssueKind::KeyClash) {
+        let asked = health(app)
+            .keys_asked
+            .lock()
+            .insert(instance.id.clone(), keys.key.clone());
+        if asked.as_deref() != Some(keys.key.as_str()) && !ignore_blocking {
+            return Prelaunch::Keys(view);
+        }
+    }
+    // The key clash has its own question; the warning notice is for the mods.
     let warnings: Vec<&str> = view
         .issues
         .iter()
-        .filter(|i| i.severity == Severity::Warning)
+        .filter(|i| i.severity == Severity::Warning && i.kind != IssueKind::KeyClash)
         .map(|i| i.key.as_str())
         .collect();
     if warnings.is_empty() {
@@ -845,6 +940,103 @@ pub(crate) async fn prelaunch(
     } else {
         Prelaunch::Warned(view)
     }
+}
+
+// --- key clashes (KEYS2) -----------------------------------------------------------------------
+
+/// What "Düzelt" did to the key clash.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct KeyFixView {
+    /// The backup "Geri al" puts the keys back from (`mods_undo_keys`); `None` when nothing
+    /// clashed any more.
+    pub backup: Option<String>,
+    /// The bindings it moved.
+    pub changes: Vec<KeyChangeView>,
+}
+
+fn keys_running_error() -> CmdError {
+    CmdError::new(
+        "OYUN-ACIK-TUS",
+        pick(
+            "Oyun açıkken tuşlar değiştirilemez. Önce oyunu kapat.",
+            "You can't change keys while the game is open. Close the game first.",
+        ),
+        "the game of this instance is running",
+    )
+}
+
+/// Waits for the instance (a launch being prepared, a repair) and refuses while its game runs:
+/// the game writes its own copy of every key back to `options.txt`.
+async fn options_free(
+    app: &AppHandle,
+    state: &AppState,
+    instance_id: &str,
+) -> CmdResult<tokio::sync::OwnedMutexGuard<()>> {
+    refuse_while_running(state, instance_id).map_err(|_| keys_running_error())?;
+    let guard = instance_lock(app, instance_id).lock_owned().await;
+    refuse_while_running(state, instance_id).map_err(|_| keys_running_error())?;
+    Ok(guard)
+}
+
+/// "Düzelt" for the key clash of an official pack instance: backs up `options.txt` and moves only
+/// the clashing bindings to the pack's table (`pl_mc::instance::fix_key_clashes_in`).
+#[tauri::command]
+#[specta::specta]
+pub async fn mods_fix_keys(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+) -> CmdResult<KeyFixView> {
+    let _guard = options_free(&app, &state, &instance_id).await?;
+    let instance = state
+        .instances
+        .get(&instance_id)
+        .await
+        .map_err(CmdError::from)?;
+    let nothing = KeyFixView {
+        backup: None,
+        changes: Vec::new(),
+    };
+    if instance.managed_pack.is_none() {
+        return Ok(nothing);
+    }
+    let game_dir = state
+        .instances
+        .game_dir(&instance_id)
+        .map_err(CmdError::from)?;
+    Ok(
+        match pl_mc::instance::fix_key_clashes_in(&game_dir)
+            .await
+            .map_err(CmdError::from)?
+        {
+            Some(fix) => KeyFixView {
+                changes: fix.clashes.iter().map(key_change).collect(),
+                backup: Some(fix.backup),
+            },
+            None => nothing,
+        },
+    )
+}
+
+/// "Geri al" after `mods_fix_keys`: the keys go back from that backup. `false` when the backup is
+/// gone (nothing changed).
+#[tauri::command]
+#[specta::specta]
+pub async fn mods_undo_keys(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    instance_id: String,
+    backup: String,
+) -> CmdResult<bool> {
+    let _guard = options_free(&app, &state, &instance_id).await?;
+    let game_dir = state
+        .instances
+        .game_dir(&instance_id)
+        .map_err(CmdError::from)?;
+    pl_mc::instance::undo_key_fix_in(&game_dir, &backup)
+        .await
+        .map_err(CmdError::from)
 }
 
 // --- crashes -----------------------------------------------------------------------------------

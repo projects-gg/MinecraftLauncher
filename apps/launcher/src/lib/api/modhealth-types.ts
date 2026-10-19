@@ -18,7 +18,32 @@ export type HealthIssueKind =
   | "breaks"
   | "conflicts"
   | "brokenMetadata"
-  | "noMetadata";
+  | "noMetadata"
+  /** The official pack's mod keys still clash in an older `options.txt` (KEYS2). */
+  | "keyClash";
+
+/** A binding the key fix moves: one clash of the official pack's mods. */
+export interface KeyChange {
+  /** The key mapping (`key.wi_zoom.zoom`); the UI names its action. */
+  name: string;
+  /** The mod it belongs to ("WI Zoom"). */
+  modName: string;
+  /** What it does, in English (for a mapping the UI has no words for). */
+  action: string;
+  /** The mapping it shares the key with. */
+  partner: string;
+  /** The shared key (`key.keyboard.v`). */
+  key: string;
+  /** The key it gets (`key.keyboard.c`); none leaves it without one. */
+  to?: string;
+}
+
+/** What "Düzelt" did to the key clash. */
+export interface KeyFix {
+  /** "Geri al" puts the keys back from this backup; none when nothing clashed any more. */
+  backup?: string;
+  changes: KeyChange[];
+}
 
 /** What an issue's button says: "Düzelt", "Bu modu kapat", "<ad> modunu kapat", … */
 export type FixLabel = "fix" | "disable" | "disableNamed" | "disableOld" | "enable";
@@ -49,6 +74,8 @@ export interface HealthIssue {
   /** Files involved ("copy details" only). */
   files: string[];
   offer?: FixOffer;
+  /** A key clash: the bindings "Düzelt" moves. */
+  keys?: KeyChange[];
 }
 
 export interface ModCheck {
@@ -176,6 +203,10 @@ export interface ModHealthApi {
   /** Sets the instance's own JVM arguments ("" resets them); returns the ones it replaced. */
   setJvmArgs(instanceId: string, jvmArgs: string): Promise<string>;
   cancel(jobId: string): Promise<void>;
+  /** "Düzelt" for the key clash: backs up `options.txt`, moves only the clashing bindings. */
+  fixKeys(instanceId: string): Promise<KeyFix>;
+  /** "Geri al" after `fixKeys`; false when the backup is gone (nothing changed). */
+  undoKeys(instanceId: string, backup: string): Promise<boolean>;
 }
 
 // --- crashes -----------------------------------------------------------------------------------

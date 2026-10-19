@@ -488,6 +488,16 @@ export const commands = {
 	 */
 	instanceSetJvmArgs: (instanceId: string, jvmArgs: string) => typedError<string, CmdError>(__TAURI_INVOKE("instance_set_jvm_args", { instanceId, jvmArgs })),
 	/**
+	 *  "Düzelt" for the key clash of an official pack instance: backs up `options.txt` and moves only
+	 *  the clashing bindings to the pack's table (`pl_mc::instance::fix_key_clashes_in`).
+	 */
+	modsFixKeys: (instanceId: string) => typedError<KeyFixView, CmdError>(__TAURI_INVOKE("mods_fix_keys", { instanceId })),
+	/**
+	 *  "Geri al" after `mods_fix_keys`: the keys go back from that backup. `false` when the backup is
+	 *  gone (nothing changed).
+	 */
+	modsUndoKeys: (instanceId: string, backup: string) => typedError<boolean, CmdError>(__TAURI_INVOKE("mods_undo_keys", { instanceId, backup })),
+	/**
 	 *  Settings → Java: the launcher's runtimes, then the Javas on the computer, then custom paths
 	 *  that are neither, each with the instances that use it. `rescan` looks for system Javas again.
 	 */
@@ -1871,7 +1881,13 @@ export type IssueKind =
 /**  The jar's mod description cannot be read. */
 "brokenMetadata" | 
 /**  A jar without a mod description (a library, or not a mod for this loader). */
-"noMetadata";
+"noMetadata" | 
+/**
+ *  The official pack's mods still share keys in `options.txt` (a file from before the
+ *  launcher wrote the pack's key table; `instance::keys::find_key_clashes`). [`check_mods`]
+ *  never reports it: the launcher adds it for official pack instances.
+ */
+"keyClash";
 
 export type ItemOutcome = {
 	sourceId: string,
@@ -2056,6 +2072,33 @@ export type KeptReason =
  *  Why the server keeps turning an account away, read from its kick message (English, Turkish,
  *  and the ASCII spelling AuthMe's Turkish messages use).
  */
+/**  A binding a key fix moves: one clash of the official pack's mods in `options.txt`. */
+export type KeyChangeView = {
+	/**  The key mapping (`key.wi_zoom.zoom`); the UI names its action. */
+	name: string,
+	/**  The mod it belongs to ("WI Zoom"). */
+	modName: string,
+	/**  What it does, in English (for a mapping the UI has no words for). */
+	action: string,
+	/**  The mapping it shares the key with (`key.voice_chat`). */
+	partner: string,
+	/**  The shared key (`key.keyboard.v`). */
+	key: string,
+	/**  The key it gets (`key.keyboard.c`); `None` leaves it without one. */
+	to: string | null,
+};
+
+/**  What "Düzelt" did to the key clash. */
+export type KeyFixView = {
+	/**
+	 *  The backup "Geri al" puts the keys back from (`mods_undo_keys`); `None` when nothing
+	 *  clashed any more.
+	 */
+	backup: string | null,
+	/**  The bindings it moved. */
+	changes: KeyChangeView[],
+};
+
 export type KickCause = "banned" | "notWhitelisted" | 
 /**  The login plugin refused the password the login commands sent. */
 "wrongPassword" | 
@@ -2144,6 +2187,13 @@ firstStart: boolean }) & { changedFiles?: never; changelog?: never; code?: never
 /**  Some mods will not work; the game starts anyway (shown once per set of warnings). */
 {
 	type: "modsWarning",
+} & ModCheckView | 
+/**
+ *  The official pack's mod keys clash in an older `options.txt`: it was not started (asked
+ *  once per session; the player chooses "Düzelt" or "Yine de başlat").
+ */
+{
+	type: "keyClash",
 } & ModCheckView | 
 /**
  *  The session took screenshots (sent right before `Exited`). `recent` are the newest
@@ -2600,6 +2650,8 @@ export type ModHealthIssueView = {
 	/**  The files involved ("copy details" only). */
 	files: string[],
 	offer: FixOfferView | null,
+	/**  For a key clash: the bindings "Düzelt" moves. */
+	keys: KeyChangeView[],
 };
 
 export type ModIssueKind = 

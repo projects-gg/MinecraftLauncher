@@ -428,7 +428,7 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
                 t("palette.switchAccount", { name: account.username }),
                 <AccountFace account={account} size={24} />,
                 () => run(() => void switchAccount(queryClient, account, { notify: true })),
-                { extra: [t(`accounts.kind.${account.kind}`)] },
+                { extra: account.kind === "microsoft" ? [t("accounts.kind.microsoft")] : [] },
               ),
             ),
           ...(activeAccount?.kind === "microsoft"

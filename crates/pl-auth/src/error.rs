@@ -467,7 +467,7 @@ impl AuthError {
                 ..
             } => {
                 lang.pick("Microsoft ile giriş şu an kullanılamıyor. Sorun hesabında değil, launcher'da. Bu \
-                 sürede çevrimdışı hesapla oynayabilirsin.", "Signing in with Microsoft isn't working right now. The problem is in the launcher, not your account. Meanwhile you can play with an offline account.")
+                 sürede oyuncu adıyla oynayabilirsin.", "Signing in with Microsoft isn't working right now. The problem is in the launcher, not your account. Meanwhile you can play with a username.")
             }
             Self::MinecraftLogin { status, .. } => match status {
                 401 | 403 => {

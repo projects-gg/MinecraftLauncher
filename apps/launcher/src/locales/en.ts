@@ -4,6 +4,7 @@ import { enDisk } from "./en-disk";
 import { enEventJoin } from "./en-event-join";
 import { enGraphics } from "./en-graphics";
 import { enImport } from "./en-import";
+import { enKeyClash } from "./en-key-clash";
 import { enLibraryDrop } from "./en-library-drop";
 import { enMinecraft } from "./en-minecraft";
 import { enOverview } from "./en-overview";
@@ -243,6 +244,7 @@ export const en: DeepPartial<Strings> = {
   playOpen: enPlayOpen,
   afkConnect: enAfkConnect,
   import: enImport,
+  keyClash: enKeyClash,
   nav: {
     home: "Home",
     library: "Library",
@@ -477,11 +479,10 @@ export const en: DeepPartial<Strings> = {
   },
   accounts: {
     microsoft: "Microsoft account",
-    offline: "Offline account",
+    offline: "Play with a username",
     add: "Add account",
     kind: {
       microsoft: "Microsoft",
-      offline: "Offline",
     },
     center: {
       title: "Account center",
@@ -534,7 +535,6 @@ export const en: DeepPartial<Strings> = {
       afkNoneOnline: "none online",
       addTitle: "Add account",
       or: "or",
-      offlineLabel: "Offline username",
       addOffline: "Add",
       addedOffline: "Added",
       added: "{{name}} added",
@@ -577,7 +577,6 @@ export const en: DeepPartial<Strings> = {
       close: "Close",
       retry: "Try again",
       done: "Done",
-      useOffline: "Add an offline account",
       success: {
         added: "{{name}} added",
         alreadyAdded: "{{name}} was already added",
@@ -943,7 +942,7 @@ export const en: DeepPartial<Strings> = {
     stopAll: "Stop all",
     add: "Add account",
     nickname: "Username",
-    nicknameHelp: "Offline account name, 3 to 16 characters.",
+    nicknameHelp: "3 to 16 characters.",
     connect: "Connect",
     stop: "Stop",
     console: "Console",
@@ -985,7 +984,7 @@ export const en: DeepPartial<Strings> = {
     },
     empty: {
       title: "No AFK accounts yet",
-      body: "Add an offline account; the launcher keeps it on the server and reconnects it if it drops.",
+      body: "Add a username; the launcher keeps it on the server and reconnects it if it drops.",
     },
     consoleTitle: "{{name}} console",
     consoleInput: "Command or chat message",

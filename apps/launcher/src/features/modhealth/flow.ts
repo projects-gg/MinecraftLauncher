@@ -15,6 +15,8 @@ export type FlowOrigin = "crash" | "blocked" | "center";
 export type FlowStep =
   | { kind: "crash" }
   | { kind: "blocked"; check: ModCheck }
+  /** The pack's mod keys clash in an older options.txt: asked before the launch (KEYS2). */
+  | { kind: "keys"; check: ModCheck }
   | { kind: "repair"; scope: RepairScope }
   | { kind: "reinstall" };
 

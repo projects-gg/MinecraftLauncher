@@ -20,7 +20,7 @@ import { pick } from "./mock-lang";
 import { mockLaunchStop } from "./mock-launch-stop";
 import { createMockLibrary, mockServers } from "./mock-library";
 import { createMockModCenter } from "./mock-modcenter";
-import { mockCrash, mockCrashScenario, mockModHealth } from "./mock-modhealth";
+import { mockAskKeys, mockCrash, mockCrashScenario, mockModHealth } from "./mock-modhealth";
 import { mockOpening, mockWindowShown } from "./mock-opening";
 import { createMockSkins } from "./mock-skins";
 import { mockSocial } from "./mock-social";
@@ -1052,7 +1052,11 @@ export const mockApi: LauncherApi = {
         onEvent({ type: "modsBlocked", check });
         return;
       }
-      if (check.issues.some((i) => i.severity === "warning")) {
+      if (mockAskKeys(check, Boolean(options?.ignoreModIssues))) {
+        onEvent({ type: "keyClash", check });
+        return;
+      }
+      if (check.issues.some((i) => i.severity === "warning" && i.kind !== "keyClash")) {
         onEvent({ type: "modsWarning", check });
       }
     }

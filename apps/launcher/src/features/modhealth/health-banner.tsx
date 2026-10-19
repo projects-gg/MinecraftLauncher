@@ -9,6 +9,7 @@ import { glide, swap, useMotionPrefs } from "@/features/modcenter/motion";
 import { api, type HealthIssue, type ModCheck } from "@/lib/api";
 import { refreshAfterRepair, useModFlow } from "./flow";
 import { type FixingState, IssueList, SeverityIcon } from "./issue-list";
+import { fixKeysNow } from "./key-clash";
 import { stepNote, stepText } from "./texts";
 
 const FIRST = 3;
@@ -31,6 +32,11 @@ export function ModHealthSection({ instanceId, check }: { instanceId: string; ch
 
   const fix = async (issue: HealthIssue) => {
     setFixing({ key: issue.key });
+    if (issue.kind === "keyClash") {
+      await fixKeysNow(t, queryClient, instanceId);
+      setFixing(null);
+      return;
+    }
     try {
       const result = await api.modHealth.repair(
         instanceId,
@@ -49,6 +55,21 @@ export function ModHealthSection({ instanceId, check }: { instanceId: string; ch
       refreshAfterRepair(queryClient, instanceId);
     }
   };
+
+  // Only the pack's mod keys clash: the line says it all, with its own "Düzelt".
+  if (check.issues.every((issue) => issue.kind === "keyClash")) {
+    return (
+      <div className="pb-0.5">
+        <IssueList
+          issues={check.issues}
+          minecraft={check.minecraft}
+          label={t("keyClash.title")}
+          onFix={(issue) => void fix(issue)}
+          fixing={fixing}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="pt-0.5 pb-1">

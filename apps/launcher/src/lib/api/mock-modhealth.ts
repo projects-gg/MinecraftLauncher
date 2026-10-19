@@ -3,10 +3,13 @@
 //   warnings), "partial" (like "blocked", but one problem survives "Onar"); empty = healthy.
 // - `localStorage["pl.mock.crash"]`: the next launch crashes: "mod", "memory", "reserve",
 //   "graphics" or "java" (read by the mock launch in mock.ts).
+// - `localStorage["pl.mock.keys"]`: "clash": the official instance's options.txt still has the
+//   pack's clashing mod keys (KEYS2); the first launch of the preview asks about them.
 import type {
   CrashKind,
   CrashSuspect,
   HealthIssue,
+  KeyChange,
   MemoryAdvice,
   ModCheck,
   ModHealthApi,
@@ -28,6 +31,68 @@ function flag(key: string): string {
 
 export const mockModsScenario = () => flag("pl.mock.mods");
 export const mockCrashScenario = () => flag("pl.mock.crash");
+
+/** What the real table moves in a file from before it (crates/pl-mc/data/key-bindings.json). */
+const KEY_CHANGES: KeyChange[] = [
+  {
+    name: "key.wi_zoom.zoom",
+    modName: "WI Zoom",
+    action: "Zoom",
+    partner: "key.voice_chat",
+    key: "key.keyboard.v",
+    to: "key.keyboard.c",
+  },
+  {
+    name: "key.gammautils.gammaToggle",
+    modName: "Gamma Utils",
+    action: "Toggle gamma",
+    partner: "key.quickActions",
+    key: "key.keyboard.g",
+    to: "key.keyboard.x",
+  },
+  {
+    name: "key.hide_icons",
+    modName: "Simple Voice Chat",
+    action: "Hide icons",
+    partner: "key.gammautils.nightVisionToggle",
+    key: "key.keyboard.h",
+  },
+  {
+    name: "iris.keybind.reload",
+    modName: "Iris",
+    action: "Reload shaders",
+    partner: "gui.xaero_quick_eat",
+    key: "key.keyboard.r",
+  },
+];
+
+/** Official instances whose keys "Düzelt" fixed, and those asked about at a launch. */
+const keysFixed = new Set<string>();
+const keysAsked = new Set<string>();
+
+function keyIssue(instanceId: string): HealthIssue | null {
+  if (flag("pl.mock.keys") !== "clash" || instanceId !== "projects" || keysFixed.has(instanceId)) {
+    return null;
+  }
+  return {
+    key: `KeyClash|${KEY_CHANGES.map((k) => k.name).join(",")}|`,
+    severity: "warning",
+    kind: "keyClash",
+    mods: KEY_CHANGES.map((k) => k.modName),
+    bundled: false,
+    files: ["options.txt"],
+    offer: { label: "fix", count: KEY_CHANGES.length },
+    keys: KEY_CHANGES,
+  };
+}
+
+/** The mock launch's key question: asked once per preview session, like the launcher does. */
+export function mockAskKeys(check: ModCheck, ignoreModIssues: boolean): boolean {
+  const clash = check.issues.some((i) => i.kind === "keyClash");
+  if (!clash || keysAsked.has(check.instanceId)) return false;
+  keysAsked.add(check.instanceId);
+  return !ignoreModIssues;
+}
 
 interface MockIssue extends HealthIssue {
   /** Steps "Onar" runs for it. */
@@ -130,11 +195,12 @@ function open(instanceId: string): MockIssue[] {
 
 function check(instanceId: string): ModCheck {
   const list = open(instanceId);
+  const keys = keyIssue(instanceId);
   return {
     instanceId,
     minecraft: "1.21.1",
     loader: "fabric",
-    issues: list.map(({ fix: _fix, ...issue }) => issue),
+    issues: [...list.map(({ fix: _fix, ...issue }) => issue), ...(keys ? [keys] : [])],
     blocking: list.filter((i) => i.severity === "blocking").length,
     checkedFiles: 38,
     repairable: list.some((i) => !attempted.get(instanceId)?.has(i.key)),
@@ -304,6 +370,16 @@ export const mockModHealth: ModHealthApi = {
   },
   async cancel(jobId) {
     cancelled.add(jobId);
+  },
+  async fixKeys(instanceId) {
+    await delay(180);
+    if (!keyIssue(instanceId)) return { changes: [] };
+    keysFixed.add(instanceId);
+    return { backup: "options-20261019-201500.txt", changes: KEY_CHANGES };
+  },
+  async undoKeys(instanceId) {
+    await delay(140);
+    return keysFixed.delete(instanceId);
   },
 };
 

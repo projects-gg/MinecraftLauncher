@@ -5,6 +5,7 @@ import { trDisk } from "./tr-disk";
 import { trEventJoin } from "./tr-event-join";
 import { trGraphics } from "./tr-graphics";
 import { trImport } from "./tr-import";
+import { trKeyClash } from "./tr-key-clash";
 import { trLibraryDrop } from "./tr-library-drop";
 import { trMinecraft } from "./tr-minecraft";
 import { trOverview } from "./tr-overview";
@@ -37,6 +38,7 @@ export const tr = {
   playOpen: trPlayOpen,
   afkConnect: trAfkConnect,
   import: trImport,
+  keyClash: trKeyClash,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
@@ -241,10 +243,12 @@ export const tr = {
     neoForge: "NeoForge",
   },
   accounts: {
+    /** Under the name of a Microsoft account (an account with only a username has no such line). */
     microsoft: "Microsoft hesabı",
-    offline: "Çevrimdışı hesap",
+    /** Adding an account with only a username (KEYS2: the same words as the phone). */
+    offline: "Oyuncu adıyla oyna",
     add: "Hesap ekle",
-    kind: { microsoft: "Microsoft", offline: "Çevrimdışı" },
+    kind: { microsoft: "Microsoft" },
     center: {
       title: "Hesap merkezi",
       open: "Hesap merkezini aç",
@@ -295,7 +299,6 @@ export const tr = {
       afkNoneOnline: "hiçbiri açık değil",
       addTitle: "Hesap ekle",
       or: "ya da",
-      offlineLabel: "Çevrimdışı oyuncu adı",
       addOffline: "Ekle",
       addedOffline: "Eklendi",
       added: "{{name}} eklendi",
@@ -338,7 +341,6 @@ export const tr = {
       close: "Kapat",
       retry: "Tekrar dene",
       done: "Tamam",
-      useOffline: "Çevrimdışı hesap ekle",
       success: {
         added: "{{name}} eklendi",
         alreadyAdded: "{{name}} zaten ekliydi",
@@ -695,7 +697,7 @@ export const tr = {
     stopAll: "Tümünü durdur",
     add: "Hesap ekle",
     nickname: "Oyuncu adı",
-    nicknameHelp: "Çevrimdışı hesap adı, 3-16 karakter.",
+    nicknameHelp: "3-16 karakter.",
     connect: "Bağla",
     stop: "Durdur",
     console: "Konsol",
@@ -735,7 +737,7 @@ export const tr = {
     stats: { health: "Can", food: "Tokluk", players: "Oyuncu" },
     empty: {
       title: "Henüz AFK hesabın yok",
-      body: "Bir çevrimdışı hesap ekle; launcher onu sunucuda tutar, düşerse yeniden bağlar.",
+      body: "Bir oyuncu adı ekle; launcher onu sunucuda tutar, düşerse yeniden bağlar.",
     },
     consoleTitle: "{{name}} konsolu",
     consoleInput: "Komut ya da sohbet mesajı",

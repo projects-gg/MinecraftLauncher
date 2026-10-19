@@ -59,7 +59,7 @@ const palette: { id: string; entries: Candidate[] }[] = [
   {
     id: "accounts",
     entries: [
-      item("account:steve", "Hesap değiştir: Steve", undefined, ["Çevrimdışı"]),
+      item("account:steve", "Hesap değiştir: Steve", undefined, []),
       item("action:appearance", tr.tuning.palette.appearance, PALETTE_WORDS.appearance),
       item("action:add-account", tr.palette.addAccount, PALETTE_WORDS.addAccount, ["Microsoft"]),
       item("action:account-center", tr.palette.openAccountCenter, PALETTE_WORDS.accountCenter, [

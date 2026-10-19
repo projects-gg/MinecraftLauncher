@@ -107,6 +107,10 @@ pub enum IssueKind {
     BrokenMetadata,
     /// A jar without a mod description (a library, or not a mod for this loader).
     NoMetadata,
+    /// The official pack's mods still share keys in `options.txt` (a file from before the
+    /// launcher wrote the pack's key table; `instance::keys::find_key_clashes`). [`check_mods`]
+    /// never reports it: the launcher adds it for official pack instances.
+    KeyClash,
 }
 
 /// A mod named by an issue.

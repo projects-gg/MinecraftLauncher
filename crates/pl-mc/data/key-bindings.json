@@ -1,11 +1,12 @@
 {
   "schema": 1,
-  "about": "Key bindings the launchers write into a new options.txt of the official pack, so its mods share no key with each other or with the game in normal play (Minecraft fires every mapping bound to a pressed key). Desktop: pl-mc instance::keys; Android: the same lines. Only an options.txt the launcher creates gets them: keys the player changed and a pack's own options.txt always win. Vanilla keys are never changed. The key names are valid from Minecraft 1.13 on. Inventory and checks: crates/pl-mc/testdata/key-bindings.",
+  "about": "Key bindings the launchers write into a new options.txt of the official pack, so its mods share no key with each other or with the game in normal play (Minecraft fires every mapping bound to a pressed key). Desktop: pl-mc instance::keys; Android: the same lines. Only an options.txt the launcher creates gets them: keys the player changed and a pack's own options.txt always win. Vanilla keys are never changed. The key names are valid from Minecraft 1.13 on. clashesWith names the mapping that has the binding's default key in the pack: an older options.txt where both still have that key gets the binding's line moved, only when the player agrees (desktop: pl-mc instance::keys::find_key_clashes). Inventory and checks: crates/pl-mc/testdata/key-bindings.",
   "bindings": [
     {
       "name": "key.wi_zoom.zoom",
       "key": "key.keyboard.c",
       "default": "key.keyboard.v",
+      "clashesWith": "key.voice_chat",
       "mod": "WI Zoom",
       "action": "Zoom",
       "why": "V also opens Simple Voice Chat's menu. C is the zoom key players know from OptiFine; the game uses it only with F3 or, in creative, as the save-hotbar modifier."
@@ -14,6 +15,7 @@
       "name": "key.gammautils.gammaToggle",
       "key": "key.keyboard.x",
       "default": "key.keyboard.g",
+      "clashesWith": "key.quickActions",
       "mod": "Gamma Utils",
       "action": "Toggle gamma",
       "why": "G is the game's Quick Actions key (dialogs a server offers). X is free in survival play; creative uses it only as the load-hotbar modifier."
@@ -30,6 +32,7 @@
       "name": "key.hide_icons",
       "key": "key.keyboard.unknown",
       "default": "key.keyboard.h",
+      "clashesWith": "key.gammautils.nightVisionToggle",
       "mod": "Simple Voice Chat",
       "action": "Hide icons",
       "why": "H is Gamma Utils' night vision; hiding the voice chat icons is rarely needed."
@@ -38,6 +41,7 @@
       "name": "iris.keybind.reload",
       "key": "key.keyboard.unknown",
       "default": "key.keyboard.r",
+      "clashesWith": "gui.xaero_quick_eat",
       "mod": "Iris",
       "action": "Reload shaders",
       "why": "R is Xaero's quick eat; reloading shaders is for shader authors (the shader pack screen, O, applies changes too)."

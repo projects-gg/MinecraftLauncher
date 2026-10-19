@@ -286,6 +286,14 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
         case "modsWarning":
           announceModWarnings(instanceId);
           break;
+        case "keyClash":
+          // The pack's mod keys clash in an older options.txt (asked once per session): the
+          // game was not started, the player picks "Düzelt" or "Yine de başlat". A launch from
+          // the tray or a shortcut brings the window forward for the question.
+          set({ phase: { kind: "idle" } });
+          void restoreWindow();
+          useModFlow.getState().open(instanceId, "blocked", { kind: "keys", check: event.check });
+          break;
         case "javaMismatch": {
           // The custom Java does not suit the game: nothing was downloaded yet; the player picks
           // "Kur ve oyna", "Yine de dene" or cancels (features/java). A launch from the tray or a

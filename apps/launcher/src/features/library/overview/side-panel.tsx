@@ -10,12 +10,15 @@ import {
   Wrench,
 } from "@phosphor-icons/react";
 import { Button, Skeleton } from "@pl/ui";
+import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { fade, swap } from "@/features/modcenter/motion";
 import { useModCheck, useModFlow } from "@/features/modhealth/flow";
 import { SeverityIcon } from "@/features/modhealth/issue-list";
+import { fixKeysNow } from "@/features/modhealth/key-clash";
+import { keyClashText } from "@/features/modhealth/key-texts";
 import type { ContentKind, InstanceDetail } from "@/lib/api";
 import { formatBytes, listFormat } from "@/lib/format";
 import { incomingNames, useIncomingMods } from "../incoming-mods";
@@ -40,6 +43,10 @@ function ModHealth({ instance, onShow }: { instance: InstanceDetail; onShow: () 
   const check = useModCheck(instance.id, total > 0 && !waiting);
   const data = check.data;
   const problems = (data?.issues ?? []).filter((issue) => issue.severity !== "info");
+  // Only the pack's mod keys clash (KEYS2): the line names the keys and fixes them in one tap.
+  const keyClash = problems.every((issue) => issue.kind === "keyClash") ? problems[0] : undefined;
+  const queryClient = useQueryClient();
+  const [fixingKeys, setFixingKeys] = useState(false);
   const health: Health =
     incoming === undefined
       ? "pending"
@@ -72,7 +79,7 @@ function ModHealth({ instance, onShow }: { instance: InstanceDetail; onShow: () 
     pending: <Skeleton className="h-3.5 w-32" />,
     failed: t("overview.health.failed"),
     ok: t("overview.health.ok"),
-    warnings: t("modHealth.banner.warnings"),
+    warnings: keyClash ? keyClashText(t, keyClash.keys ?? []) : t("modHealth.banner.warnings"),
     blocked: t("modHealth.banner.blocked"),
   };
 
@@ -105,6 +112,20 @@ function ModHealth({ instance, onShow }: { instance: InstanceDetail; onShow: () 
     action = (
       <Button size="sm" variant="ghost" className="-mr-1" onClick={onShow}>
         {t("overview.health.show")}
+      </Button>
+    );
+  } else if (health === "warnings" && keyClash) {
+    action = (
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={fixingKeys}
+        onClick={() => {
+          setFixingKeys(true);
+          void fixKeysNow(t, queryClient, instance.id).finally(() => setFixingKeys(false));
+        }}
+      >
+        {t("keyClash.fix")}
       </Button>
     );
   } else if ((health === "warnings" || health === "blocked") && data) {

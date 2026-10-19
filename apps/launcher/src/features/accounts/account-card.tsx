@@ -75,12 +75,14 @@ function PinButton({ pinned, onToggle }: { pinned: boolean; onToggle: () => void
   );
 }
 
+/** "Microsoft" on Microsoft accounts; an account with only a username has no chip (KEYS2). */
 export function KindChip({ kind }: { kind: AccountSummary["kind"] }) {
   const { t } = useTranslation();
+  if (kind !== "microsoft") return null;
   return (
     <Chip className="shrink-0 gap-1.5 font-medium text-ash-300">
-      {kind === "microsoft" ? <MicrosoftMark size={10} /> : null}
-      {t(`accounts.kind.${kind}`)}
+      <MicrosoftMark size={10} />
+      {t("accounts.kind.microsoft")}
     </Chip>
   );
 }

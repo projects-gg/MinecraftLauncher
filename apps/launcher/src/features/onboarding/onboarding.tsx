@@ -510,9 +510,9 @@ function AccountStep({
               <AccountFace account={a} size={40} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[15px] font-semibold text-bone-50">{a.username}</p>
-                <p className="text-[12.5px] text-ash-400">
-                  {a.kind === "microsoft" ? t("accounts.microsoft") : t("accounts.offline")}
-                </p>
+                {a.kind === "microsoft" ? (
+                  <p className="text-[12.5px] text-ash-400">{t("accounts.microsoft")}</p>
+                ) : null}
               </div>
               {a.active ? <Check size={18} className="text-gold-300" aria-hidden /> : null}
             </li>

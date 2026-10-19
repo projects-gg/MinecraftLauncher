@@ -143,6 +143,8 @@ export const PALETTE_WORDS = {
   },
   addAccount: {
     keywords: ["giriş", "giriş yap", "oturum aç", "login", "microsoft", "premium"],
+    // "Oyuncu adıyla oyna" (KEYS2): the old word and the English ones still find it.
+    related: ["kullanıcı adı", "çevrimdışı", "offline", "username", "cracked"],
   },
   accountCenter: { keywords: ["hesap", "hesaplar", "çıkış yap", "logout", "accounts"] },
   friends: { keywords: ["arkadaş", "arkadaşlar", "discord", "friends"] },

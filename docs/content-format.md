@@ -1069,8 +1069,10 @@ a top-level `projects` object that other launchers ignore; Studio can export a r
 Not part of the format yet. A pack that ships its own `options.txt` decides the keys. Otherwise
 both launchers write the official pack's key bindings (`crates/pl-mc/data/key-bindings.json`, the
 mods' keys moved so that nothing shares a key in normal play) into the `options.txt` they create
-at the first launch, never into an existing one. Studio may take the table over later as a field
-of the manifest's `projects` extension, checked against the pack's jars when it publishes.
+at the first launch, never into an existing one by themselves: an older file that still has the
+clashes (`clashesWith`) gets only those lines moved, and only when the player accepts. Studio may
+take the table over later as a field of the manifest's `projects` extension, checked against the
+pack's jars when it publishes.
 
 ### Path rules
 

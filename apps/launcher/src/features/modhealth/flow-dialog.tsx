@@ -37,6 +37,7 @@ import { type CrashInfo, useLaunch } from "@/stores/launch";
 import { Checklist, type ChecklistRow } from "./checklist";
 import { type FlowStep, useModFlow } from "./flow";
 import { IssueList } from "./issue-list";
+import { useKeysStep } from "./key-clash";
 import {
   crashHint,
   crashTitle,
@@ -225,6 +226,8 @@ export function ModFlowDialog() {
     close();
     if (id) void play(id, ignoreModIssues ? { ignoreModIssues: true } : undefined);
   };
+  // The pack's mod keys clash (KEYS2): asked before the launch, in this dialog.
+  const keys = useKeysStep({ step, instanceId, session: flow.session, playNow: () => playNow() });
 
   let title: ReactNode = "";
   let titleKey = "none";
@@ -562,6 +565,8 @@ export function ModFlowDialog() {
         ) : null}
       </>
     );
+  } else if (keys) {
+    ({ titleKey, title, body, footer } = keys);
   } else if (step?.kind === "repair") {
     const result = repair.result;
     const steps: RepairStep[] = result?.steps ?? repair.progress?.steps ?? [];
@@ -573,7 +578,8 @@ export function ModFlowDialog() {
       note: stepNote(t, s),
       percent: s.status === "running" ? repair.progress?.percent : undefined,
     }));
-    const left: HealthIssue[] = result?.check.issues ?? [];
+    // The pack's key clash is no mod problem "Onar" leaves: it keeps its own "Düzelt".
+    const left: HealthIssue[] = (result?.check.issues ?? []).filter((i) => i.kind !== "keyClash");
     const blockingLeft = (result?.check.blocking ?? 0) > 0;
     dismissible = !running;
     titleKey = running
@@ -819,7 +825,7 @@ export function ModFlowDialog() {
     } else if (result) {
       const installed =
         result.reinstalled + (result.packSynced ? (preview.data?.packMods ?? 0) : 0);
-      const left = result.check.issues;
+      const left = result.check.issues.filter((i) => i.kind !== "keyClash");
       titleKey = result.cancelled ? "reinstall:stopped" : "reinstall:done";
       title = result.cancelled ? t("modHealth.reinstall.stopped") : t("modHealth.reinstall.done");
       const keptFolder = result.keptFolder;
