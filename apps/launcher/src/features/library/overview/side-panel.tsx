@@ -2,6 +2,7 @@
 // the instance is (Minecraft, loader, room it takes) and quick ways to add content.
 import {
   CheckCircle,
+  DownloadSimple,
   Palette,
   PuzzlePiece,
   SunHorizon,
@@ -16,37 +17,49 @@ import { fade, swap } from "@/features/modcenter/motion";
 import { useModCheck, useModFlow } from "@/features/modhealth/flow";
 import { SeverityIcon } from "@/features/modhealth/issue-list";
 import type { ContentKind, InstanceDetail } from "@/lib/api";
-import { formatBytes } from "@/lib/format";
+import { formatBytes, listFormat } from "@/lib/format";
+import { incomingNames, useIncomingMods } from "../incoming-mods";
 
-type Health = "noMods" | "pending" | "failed" | "ok" | "warnings" | "blocked";
+type Health = "noMods" | "incoming" | "pending" | "failed" | "ok" | "warnings" | "blocked";
 
 /**
  * The mod check in one line: fine, only warnings, or the game would not start; "Onar" when a
- * repair has something to do, else "Göster" (the mod center lists the problems). The second
- * line keeps the button's height in every state, so nothing moves when the answer arrives.
+ * repair has something to do, else "Göster" (the mod center lists the problems). Before the
+ * first download, the pack's mods on their way. The second line keeps the button's height in
+ * every state, so nothing moves when the answer arrives.
  */
 function ModHealth({ instance, onShow }: { instance: InstanceDetail; onShow: () => void }) {
   const { t } = useTranslation();
   const openFlow = useModFlow((s) => s.open);
   const total = instance.mods.length;
-  const check = useModCheck(instance.id, total > 0);
+  // Before the first download the pack's mods have not come yet (incoming-mods.ts): that is the
+  // line, also over mods the player added meanwhile, and the check waits for them (it would
+  // miss the libraries they bring). Asked only for such an instance; `[]` at once otherwise.
+  const incoming = useIncomingMods(instance);
+  const waiting = incoming === undefined || incoming.length > 0;
+  const check = useModCheck(instance.id, total > 0 && !waiting);
   const data = check.data;
   const problems = (data?.issues ?? []).filter((issue) => issue.severity !== "info");
   const health: Health =
-    total === 0
-      ? "noMods"
-      : check.isError
-        ? "failed"
-        : !data
-          ? "pending"
-          : data.blocking > 0
-            ? "blocked"
-            : problems.length > 0
-              ? "warnings"
-              : "ok";
+    incoming === undefined
+      ? "pending"
+      : incoming.length > 0
+        ? "incoming"
+        : total === 0
+          ? "noMods"
+          : check.isError
+            ? "failed"
+            : !data
+              ? "pending"
+              : data.blocking > 0
+                ? "blocked"
+                : problems.length > 0
+                  ? "warnings"
+                  : "ok";
 
   const icon: Record<Health, ReactNode> = {
     noMods: <PuzzlePiece size={18} weight="duotone" className="text-ash-400" aria-hidden />,
+    incoming: <DownloadSimple size={18} weight="duotone" className="text-gold-300" aria-hidden />,
     pending: <Skeleton className="size-[18px] rounded-full" />,
     failed: <WarningCircle size={18} className="text-ash-400" aria-hidden />,
     ok: <CheckCircle size={18} weight="fill" className="text-jade-400" aria-hidden />,
@@ -55,6 +68,7 @@ function ModHealth({ instance, onShow }: { instance: InstanceDetail; onShow: () 
   };
   const sentence: Record<Health, ReactNode> = {
     noMods: t("overview.health.noMods"),
+    incoming: t("overview.incoming.title"),
     pending: <Skeleton className="h-3.5 w-32" />,
     failed: t("overview.health.failed"),
     ok: t("overview.health.ok"),
@@ -62,8 +76,38 @@ function ModHealth({ instance, onShow }: { instance: InstanceDetail; onShow: () 
     blocked: t("modHealth.banner.blocked"),
   };
 
+  // Under the sentence: which mods are on their way, or how many are on. While the pack is asked
+  // the line is held for the answer that has one, so it does not push the facts down.
+  let detail: { key: string; content: ReactNode } | null = null;
+  if (incoming === undefined) {
+    detail = { key: "asking", content: <Skeleton className="h-3 w-28" /> };
+  } else if (incoming.length > 0) {
+    const { names, more } = incomingNames(incoming);
+    detail = {
+      key: "incoming",
+      content:
+        more > 0
+          ? t("overview.incoming.more", { name: names[0], count: more })
+          : listFormat().format(names),
+    };
+  } else if (total > 0) {
+    detail = {
+      key: "summary",
+      content: t("instance.mods.summary", {
+        enabled: instance.mods.filter((mod) => mod.enabled).length,
+        total,
+      }),
+    };
+  }
+
   let action: ReactNode = null;
-  if ((health === "warnings" || health === "blocked") && data) {
+  if (health === "incoming") {
+    action = (
+      <Button size="sm" variant="ghost" className="-mr-1" onClick={onShow}>
+        {t("overview.health.show")}
+      </Button>
+    );
+  } else if ((health === "warnings" || health === "blocked") && data) {
     action = data.repairable ? (
       <Button
         size="sm"
@@ -107,13 +151,18 @@ function ModHealth({ instance, onShow }: { instance: InstanceDetail; onShow: () 
             </motion.span>
           </AnimatePresence>
         </p>
-        {total > 0 ? (
+        {detail ? (
           <div className="flex h-8 items-center justify-between gap-2">
-            <span className="truncate text-[12.5px] text-ash-300 tabular-nums">
-              {t("instance.mods.summary", {
-                enabled: instance.mods.filter((mod) => mod.enabled).length,
-                total,
-              })}
+            <span className="relative flex min-w-0 flex-1 items-center">
+              <AnimatePresence mode="popLayout" initial={false}>
+                <motion.span
+                  key={detail.key}
+                  {...swap()}
+                  className="block truncate text-[12.5px] text-ash-300 tabular-nums"
+                >
+                  {detail.content}
+                </motion.span>
+              </AnimatePresence>
             </span>
             <AnimatePresence mode="popLayout" initial={false}>
               {action ? (
@@ -143,12 +192,15 @@ function Fact({ label, children }: { label: string; children: ReactNode }) {
 export function SidePanel({
   instance,
   sizeBytes,
+  notDownloaded,
   onOpenModCenter,
   onBrowse,
 }: {
   instance: InstanceDetail;
   /** The whole folder's size; null while it is first measured. */
   sizeBytes: number | null;
+  /** Never downloaded and nothing put in it: "İndirilmedi" rather than a few hundred bytes. */
+  notDownloaded: boolean;
   onOpenModCenter: () => void;
   onBrowse: (kind: ContentKind) => void;
 }) {
@@ -177,7 +229,11 @@ export function SidePanel({
         ) : null}
         <Fact label={t("overview.facts.size")}>
           <AnimatePresence mode="popLayout" initial={false}>
-            {sizeBytes === null ? (
+            {notDownloaded ? (
+              <motion.span key="notDownloaded" {...swap()} className="truncate text-ash-300">
+                {t("instances.needsInstall")}
+              </motion.span>
+            ) : sizeBytes === null ? (
               <motion.span key="pending" {...fade()} className="flex">
                 <Skeleton className="h-3 w-14" />
               </motion.span>

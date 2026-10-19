@@ -13,6 +13,7 @@ import { createMockCleanup } from "./mock-cleanup";
 import { createMockContent, mockExtraMods } from "./mock-content";
 import { createMockConveniences, mockNewScreenshots, mockSessionMs } from "./mock-conveniences";
 import { createMockData } from "./mock-data";
+import { mockFreshOfficial, mockFreshOwnMod } from "./mock-fresh";
 import { mockCustomJava, mockJava, mockJavaPrompt } from "./mock-java";
 import { pick } from "./mock-lang";
 import { mockLaunchStop } from "./mock-launch-stop";
@@ -601,6 +602,13 @@ const instances: InstanceSummary[] = [
 const joinOffline = mockFlag("join") === "offline";
 const projectsIndex = instances.findIndex((i) => i.managed);
 if (joinOffline && projectsIndex >= 0) instances.splice(projectsIndex, 1);
+// `?fresh=1`: the official instance was just added and never downloaded (mock-fresh.ts).
+const freshOfficial = mockFreshOfficial() ? instances.find((i) => i.managed) : undefined;
+if (freshOfficial) {
+  freshOfficial.lastPlayedAt = undefined;
+  freshOfficial.playTimeSecs = 0;
+  freshOfficial.state = "needsInstall";
+}
 
 const versions: McVersion[] = [
   ["26.3", "release", 30],
@@ -708,6 +716,28 @@ const projectsMods: ModEntry[] = [
  */
 function detailFor(summary: InstanceSummary): InstanceDetail {
   const detail = fullDetailFor(summary);
+  if (summary.managed && mockFreshOfficial()) {
+    const own = mockFreshOwnMod()
+      ? [
+          mod(
+            "Xaero's Minimap",
+            "25.2.10",
+            "xaero96",
+            "Displays a minimap with waypoints and entity radar.",
+            false,
+          ),
+        ]
+      : [];
+    return {
+      ...detail,
+      settings: { ...detail.settings, notes: "" },
+      mods: [...own, ...(mockExtraMods.get(summary.id) ?? [])],
+      resourcePacks: [],
+      shaderPacks: [],
+      worlds: [],
+      screenshots: [],
+    };
+  }
   if (summary.managed || mockFlag("emptyContent") !== "1") return detail;
   return {
     ...detail,

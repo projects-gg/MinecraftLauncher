@@ -2,6 +2,7 @@
 // (new, update, required, adopted manual changes, replaced file), versions with kept sets and a
 // migration plan.
 import type { JobProgress } from "./content-types";
+import { mockFreshOfficial } from "./mock-fresh";
 import type {
   InstanceVersions,
   MigrationCheck,
@@ -248,7 +249,10 @@ function resolve(choices: Record<string, boolean>): ModCenterItem[] {
 const choices: Record<string, boolean> = Object.fromEntries(
   seeds.filter((s) => !s.library).map((s) => [s.id, s.selected]),
 );
-const installed = new Set(seeds.filter((s) => s.selected || s.library).map((s) => s.id));
+// `?fresh=1` (mock-fresh.ts): nothing installed until the first start.
+const installed = new Set(
+  mockFreshOfficial() ? [] : seeds.filter((s) => s.selected || s.library).map((s) => s.id),
+);
 let seen = false;
 
 function preview(selection: ModSelection): ModCenterPreview {
@@ -390,6 +394,7 @@ export function createMockModCenter(): ModCenterApi {
     async view(instanceId) {
       await delay(260);
       const managed = instanceId === "projects";
+      const fresh = managed && mockFreshOfficial();
       return {
         instanceId,
         mcVersion: managed ? "26.1.2" : "1.21.1",
@@ -400,22 +405,23 @@ export function createMockModCenter(): ModCenterApi {
               id: "projects",
               name: "Projects",
               version: "2.4.0",
-              installedVersion: "2.3.0",
+              installedVersion: fresh ? undefined : "2.3.0",
               minecraft: "26.1.2",
             }
           : undefined,
         items: managed ? resolve(choices).map((i) => (seen ? { ...i, isNew: false } : i)) : [],
         reset: false,
-        issues: managed
-          ? [
-              {
-                fileName: "bozuk-mod.jar",
-                folder: "mods",
-                kind: "unreadable",
-                detail: "mods/bozuk-mod.jar: Erişim engellendi. (os error 5)",
-              },
-            ]
-          : [],
+        issues:
+          managed && !fresh
+            ? [
+                {
+                  fileName: "bozuk-mod.jar",
+                  folder: "mods",
+                  kind: "unreadable",
+                  detail: "mods/bozuk-mod.jar: Erişim engellendi. (os error 5)",
+                },
+              ]
+            : [],
         unavailable: false,
         gameRunning: false,
       };

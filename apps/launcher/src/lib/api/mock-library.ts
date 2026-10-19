@@ -19,6 +19,7 @@ import type {
   WorldBackup,
   WorldDetail,
 } from "./library-types";
+import { mockFreshOfficial } from "./mock-fresh";
 import { pick } from "./mock-lang";
 import type { SavedServer, ServerStatus } from "./types";
 
@@ -351,7 +352,7 @@ const jobs = new Map<string, { cancelled: boolean }>();
 function filesOf(instanceId: string): InstanceFiles {
   let entry = files.get(instanceId);
   if (!entry) {
-    const empty = instanceId === "vanilla";
+    const empty = instanceId === "vanilla" || (instanceId === "projects" && mockFreshOfficial());
     const art = [spawnArt, buildArt, pvpArt, winterArt, forgeArt];
     entry = {
       worlds: empty
@@ -858,7 +859,11 @@ export function createMockLibrary(options: {
       const sum = (items: Array<{ sizeBytes: number }>) =>
         items.reduce((total, item) => total + item.sizeBytes, 0);
       const rest =
-        instanceId === "vanilla" ? 6_400_000 : 412_000_000 + (hash(instanceId) % 9) * 37_000_000;
+        instanceId === "projects" && mockFreshOfficial()
+          ? 892
+          : instanceId === "vanilla"
+            ? 6_400_000
+            : 412_000_000 + (hash(instanceId) % 9) * 37_000_000;
       return sum(state.worlds) + sum(state.backups) + sum(state.screenshots) + rest;
     },
 

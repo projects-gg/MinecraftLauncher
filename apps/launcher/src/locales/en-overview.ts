@@ -14,6 +14,10 @@ export const enOverview = {
     failed: "Couldn't check the mods",
     show: "Show",
   },
+  incoming: {
+    title: "Mods install when you play",
+    more: "{{name}} and {{count}} more",
+  },
   facts: {
     minecraft: "Minecraft",
     size: "Space used",

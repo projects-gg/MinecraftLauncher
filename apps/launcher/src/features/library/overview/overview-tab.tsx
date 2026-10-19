@@ -167,7 +167,13 @@ export function OverviewTab({
     }
     if (known !== null) seen.current = known;
   }, [known, id, queryClient]);
-  const sizeBytes = folder.data ?? (folder.isError ? known : null);
+  // A never downloaded instance holds only its own small files (the instance, its server list):
+  // it says "İndirilmedi" rather than "892 B", unless the player already put things in it. Its
+  // size waits for the lists, so the bytes never flash before the words.
+  const neverInstalled = instance.state === "needsInstall";
+  const notDownloaded = neverInstalled && known === 0;
+  const sizeBytes =
+    neverInstalled && known === null ? null : (folder.data ?? (folder.isError ? known : null));
 
   return (
     <div className="grid max-w-[980px] items-start gap-x-6 gap-y-5 md:grid-cols-[minmax(0,1fr)_clamp(264px,32%,320px)]">
@@ -230,6 +236,7 @@ export function OverviewTab({
         <SidePanel
           instance={instance}
           sizeBytes={sizeBytes}
+          notDownloaded={notDownloaded}
           onOpenModCenter={() => onOpenTab("modcenter")}
           onBrowse={onBrowse}
         />

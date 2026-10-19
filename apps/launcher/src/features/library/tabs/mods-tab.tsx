@@ -40,7 +40,9 @@ import { PageDropZone } from "@/features/drop/page-zone";
 import { api, type InstalledContent, type InstanceDetail, type ModEntry } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
+import { useIncomingMods } from "../incoming-mods";
 import { TabEmpty } from "../parts";
+import { IncomingModsList, IncomingModsSkeleton, PackItemChip } from "./incoming-mods-list";
 import { modRowKeys } from "./mod-keys";
 
 /**
@@ -137,16 +139,7 @@ function ModRow({
           )}
           <span className="shrink-0 text-[12px] text-ash-300 tabular-nums">{mod.version}</span>
           {fromPack && onPackItem ? (
-            <button
-              type="button"
-              onClick={onPackItem}
-              aria-label={t("modCenter.fromMods.open")}
-              className="group/pack shrink-0 cursor-pointer transition-transform duration-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.97]"
-            >
-              <Chip className="transition-colors duration-150 group-hover/pack:bg-white/15">
-                {t("modCenter.fromMods.chip")}
-              </Chip>
-            </button>
+            <PackItemChip onClick={onPackItem} />
           ) : fromPack ? (
             <Chip className="shrink-0">{t("instance.mods.fromPack")}</Chip>
           ) : null}
@@ -307,6 +300,22 @@ export function ModsTab({
   useEffect(() => {
     wasEmpty.current = listed.length === 0;
   });
+  // Before the first download the pack's mods are on their way (incoming-mods.ts): they are
+  // listed under the overview's words, in place of the empty drop zone or under the player's
+  // own mods. `undefined` while the mod center is asked; never in "Kendi modların".
+  const incoming = useIncomingMods(instance, !ownOnly);
+  const hasIncoming = (incoming?.length ?? 0) > 0;
+  const incomingShown =
+    incoming && query.trim()
+      ? incoming.filter((item) => matchesQuery(item.title, query))
+      : (incoming ?? []);
+  // Shown once the mod center answered, the list fades in where it stood (once: a search swaps
+  // it in place).
+  const asked = useRef(false);
+  if (incoming === undefined) asked.current = true;
+  useEffect(() => {
+    if (incoming !== undefined) asked.current = false;
+  });
 
   if (!modded) return <VanillaModsEmpty />;
 
@@ -318,6 +327,15 @@ export function ModsTab({
     >
       {t("instance.mods.browse")}
     </Button>
+  );
+  // The search hides every mod: say so (the mods are still there) and offer the way back.
+  const noMatch = (
+    <div className="flex flex-col items-center gap-3 py-10 text-center">
+      <p className="text-[13.5px] text-ash-300">{t("modCenter.noMatch")}</p>
+      <Button variant="ghost" size="sm" onClick={() => setQuery("")}>
+        {t("library.clearSearch")}
+      </Button>
+    </div>
   );
 
   return (
@@ -384,50 +402,61 @@ export function ModsTab({
         </div>
       ) : null}
 
-      {listed.length === 0 ? (
+      {listed.length === 0 && incoming === undefined ? (
+        <IncomingModsSkeleton />
+      ) : listed.length === 0 && !hasIncoming ? (
         <PageDropZone
           kind="mod"
           label={ownOnly ? t("modCenter.own.emptyTitle") : t("instance.mods.emptyTitle")}
           actions={browseButton}
           className="-mt-1"
         />
-      ) : mods.length === 0 ? (
-        // The search hides every mod: say so (the mods are still there) and offer the way back.
-        <div className="flex flex-col items-center gap-3 py-10 text-center">
-          <p className="text-[13.5px] text-ash-300">{t("modCenter.noMatch")}</p>
-          <Button variant="ghost" size="sm" onClick={() => setQuery("")}>
-            {t("library.clearSearch")}
-          </Button>
-        </div>
+      ) : mods.length === 0 && incomingShown.length === 0 ? (
+        noMatch
       ) : (
-        // Searching swaps the list in place (no fades and glides while typing, as in the mod
-        // center); removals within it animate.
-        <ul key={query.trim()} className={cn("space-y-0.5", arriving && "panel-in")}>
-          <AnimatePresence initial={false} mode="popLayout">
-            {mods.map((mod) => {
-              const entry = entryOf(mod);
-              const projectId = mod.projectId ?? entry?.projectId;
-              const key = projectJobKey(instance.id, projectId ?? mod.fileName);
-              return (
-                <ModRow
-                  // Without ".disabled": switching a mod off renames its file, and the row stays
-                  // (two copies of one mod keep a row each, mod-keys.ts).
-                  key={rowKeys.get(mod.fileName) ?? mod.fileName}
-                  mod={mod}
-                  entry={entry}
-                  job={jobs[key]}
-                  onToggle={(enabled) => toggle.mutate({ mod, enabled })}
-                  onOpen={projectId ? () => setOpened({ projectId, mod }) : undefined}
-                  onUpdate={() => entry && void actions.update([entry])}
-                  onRemove={() => removal.remove(mod.fileName, mod.name)}
-                  onCancel={() => actions.cancel(key)}
-                  onPackItem={mod.itemId && onOpenModCenter ? onOpenModCenter : undefined}
-                  busy={Boolean(shownBulkJob)}
-                />
-              );
-            })}
-          </AnimatePresence>
-        </ul>
+        <>
+          {mods.length > 0 ? (
+            // Searching swaps the list in place (no fades and glides while typing, as in the mod
+            // center); removals within it animate.
+            <ul key={query.trim()} className={cn("space-y-0.5", arriving && "panel-in")}>
+              <AnimatePresence initial={false} mode="popLayout">
+                {mods.map((mod) => {
+                  const entry = entryOf(mod);
+                  const projectId = mod.projectId ?? entry?.projectId;
+                  const key = projectJobKey(instance.id, projectId ?? mod.fileName);
+                  return (
+                    <ModRow
+                      // Without ".disabled": switching a mod off renames its file, and the row
+                      // stays (two copies of one mod keep a row each, mod-keys.ts).
+                      key={rowKeys.get(mod.fileName) ?? mod.fileName}
+                      mod={mod}
+                      entry={entry}
+                      job={jobs[key]}
+                      onToggle={(enabled) => toggle.mutate({ mod, enabled })}
+                      onOpen={projectId ? () => setOpened({ projectId, mod }) : undefined}
+                      onUpdate={() => entry && void actions.update([entry])}
+                      onRemove={() => removal.remove(mod.fileName, mod.name)}
+                      onCancel={() => actions.cancel(key)}
+                      onPackItem={mod.itemId && onOpenModCenter ? onOpenModCenter : undefined}
+                      busy={Boolean(shownBulkJob)}
+                    />
+                  );
+                })}
+              </AnimatePresence>
+            </ul>
+          ) : null}
+          {incomingShown.length > 0 ? (
+            // Keyed by the search like the list above: it swaps in place while typing, and
+            // glides only when mods are added or removed above it.
+            <IncomingModsList
+              key={query.trim()}
+              items={incomingShown}
+              fadeIn={asked.current}
+              onOpenModCenter={onOpenModCenter}
+              className={mods.length > 0 ? "mt-6" : undefined}
+            />
+          ) : null}
+        </>
       )}
 
       <ProjectDialog

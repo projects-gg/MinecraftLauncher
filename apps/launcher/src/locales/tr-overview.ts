@@ -20,6 +20,15 @@ export const trOverview = {
     /** Opens the mod center, where the problems are listed. */
     show: "Göster",
   },
+  /**
+   * The pack's mods before the first download (side panel and Modlar tab): they come when the
+   * game starts, as the mod center's other notes say.
+   */
+  incoming: {
+    title: "Modlar oyunu açınca kurulur",
+    /** The first of them and how many more. */
+    more: "{{name}} ve {{count}} mod daha",
+  },
   facts: {
     minecraft: "Minecraft",
     size: "Kapladığı yer",
