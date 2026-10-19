@@ -2,8 +2,8 @@
 // AFK client is fetched for it, "Tekrar dene" after the client could not be had. The words change
 // in place on one button, so the focus stays on it.
 import { ArrowsClockwise, Play, Stop, X } from "@phosphor-icons/react";
-import { Button, SwapLabel } from "@pl/ui";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { Button, SwapLabel, usePressGuard } from "@pl/ui";
+import type { MouseEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { isAfkIdle } from "@/features/accounts/afk-match";
 import { type AfkAccount, type AfkState, api } from "@/lib/api";
@@ -16,44 +16,6 @@ export function primaryAction(state: AfkState): AfkAction {
   if (state.kind === "preparing") return "cancel";
   if (state.kind === "clientFailed") return "retry";
   return isAfkIdle(state) ? "connect" : "stop";
-}
-
-/** Delay before a control that replaced the one just pressed takes presses from the keyboard. */
-const ARM_MS = 800;
-
-/**
- * "İptal" and "Tekrar dene" take the place of the button just pressed: they take presses only
- * once the pointer has left the button, or 0.8 s later when it is not on it (the keyboard), so the
- * second press of a double click never cancels the download it just started (as OYNA does,
- * docs/design.md). Returns whether presses count, and the pointer handlers that arm it.
- */
-export function useArmed(action: AfkAction) {
-  const guarded = action === "cancel" || action === "retry";
-  // The action armed last (on the first render, the one shown: nothing was just pressed). A
-  // guarded action that takes over from another one is not armed yet.
-  const [armedFor, setArmedFor] = useState<AfkAction>(action);
-  const inside = useRef(false);
-  useEffect(() => {
-    if (!guarded) {
-      setArmedFor(action);
-      return;
-    }
-    if (armedFor === action) return;
-    const id = window.setTimeout(() => {
-      if (!inside.current) setArmedFor(action);
-    }, ARM_MS);
-    return () => window.clearTimeout(id);
-  }, [action, armedFor, guarded]);
-  return {
-    armed: !guarded || armedFor === action,
-    onPointerEnter: () => {
-      inside.current = true;
-    },
-    onPointerLeave: () => {
-      inside.current = false;
-      setArmedFor(action);
-    },
-  };
 }
 
 const ICONS: Record<AfkAction, (size: number) => ReactNode> = {
@@ -76,15 +38,19 @@ export function AfkPrimaryAction({
 }) {
   const { t } = useTranslation();
   const action = primaryAction(account.state);
-  const { armed, onPointerEnter, onPointerLeave } = useArmed(action);
+  // Each action takes the place of the one just pressed ("İptal" or "Durdur" after "Bağla",
+  // "Bağla" after "İptal"): it never takes the rest of that double click, and takes presses once
+  // the pointer has left the button or 0.8 s later, also under a resting pointer (@pl/ui
+  // press-guard; E2E2).
+  const guard = usePressGuard(action);
   const labels: Record<AfkAction, string> = {
     connect: t("afk.connect"),
     stop: t("afk.stop"),
     cancel: t("afkConnect.cancel"),
     retry: t("common.retry"),
   };
-  const press = () => {
-    if (!armed) return;
+  const press = (event: MouseEvent) => {
+    if (!guard.take(event)) return;
     if (action === "connect" || action === "retry") {
       runAfk(api.afkConnect(account.id), t("afk.connectFailed"));
     } else {
@@ -98,10 +64,9 @@ export function AfkPrimaryAction({
       icon={ICONS[action](size === "sm" ? 14 : 15)}
       // Already on its way out: it can be connected again once it has stopped.
       disabled={account.state.kind === "stopping"}
-      aria-disabled={armed ? undefined : true}
+      aria-disabled={guard.armed ? undefined : true}
       onClick={press}
-      onPointerEnter={onPointerEnter}
-      onPointerLeave={onPointerLeave}
+      {...guard.handlers}
       className={className}
     >
       <SwapLabel labels={ORDER.map((a) => labels[a])} active={ORDER.indexOf(action)} />

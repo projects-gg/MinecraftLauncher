@@ -25,6 +25,7 @@ import {
   Skeleton,
   toast,
   useMotionPrefs,
+  usePressGuard,
 } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -67,6 +68,10 @@ function JobProgress({
 }) {
   const { t } = useTranslation();
   const percent = jobPercent(job.progress);
+  // The bar takes the place of "Yedekle" or "Geri yükle" and its × sits at that button's end:
+  // the rest of the double click that started the job never cancels it (@pl/ui press-guard).
+  const [shownAt] = useState(() => performance.now());
+  const guard = usePressGuard(job.jobId, { since: shownAt });
   return (
     <div className="flex w-60 shrink-0 items-center gap-2">
       <div className="min-w-0 flex-1">
@@ -82,7 +87,10 @@ function JobProgress({
         label={t("instance.worlds.cancelJob")}
         icon={<X size={15} />}
         size="sm"
-        onClick={onCancel}
+        onClick={(event) => {
+          if (guard.take(event)) onCancel();
+        }}
+        {...guard.handlers}
       />
     </div>
   );

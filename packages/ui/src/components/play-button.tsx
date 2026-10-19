@@ -3,6 +3,7 @@ import { type ReactNode, type RefObject, useEffect, useRef, useState } from "rea
 import { cn } from "../lib/cn";
 import { easeOutExpo } from "../motion";
 import { useAmbientMotion, useInteractionMotion, usePerf } from "../perf";
+import { usePressGuard } from "../press-guard";
 
 export type PlayState =
   | { kind: "ready" }
@@ -72,6 +73,27 @@ export function playButtonName(
   }
 }
 
+/** What a press on OYNA does now. */
+export type PlayPress = "play" | "cancel" | "showCancel" | "nothing";
+
+/**
+ * What a press on OYNA does (tests: apps/launcher/src/shell/play-button.test.ts); "play" and
+ * "cancel" only if the press guard lets the press through (`usePressGuard`: never the rest of
+ * the double click that started or cancelled a launch). `armed`: the guard takes presses now.
+ * `cancelShown`: "İptal" may show under the pointer. A pointer press on a launch whose "İptal"
+ * is not shown yet (the pointer rested where it pressed OYNA, so the button says "%42" or
+ * "Açılıyor") shows it instead of cancelling: a press never does what the button did not say.
+ * The keyboard, whose name for the button already leads with "İptal", cancels.
+ */
+export function playPress(
+  kind: PlayState["kind"],
+  press: { cancellable: boolean; armed: boolean; cancelShown: boolean; pointer: boolean },
+): PlayPress {
+  if (kind === "ready" || kind === "update") return "play";
+  if ((kind !== "working" && kind !== "opening") || !press.cancellable) return "nothing";
+  return press.pointer && press.armed && !press.cancelShown ? "showCancel" : "cancel";
+}
+
 /**
  * How the faces and the fill change (the label cross-fades on its own, quicker). A gentle ease-out:
  * with `easeOutExpo` the gold was gone in 70 ms and "Açılıyor" → "Oyunda" read as a cut.
@@ -99,17 +121,6 @@ export function PlayButton({
   const animate = useInteractionMotion();
   const { performanceMode, unseen } = usePerf();
   const [hover, setHover] = useState(false);
-  // "İptal" waits after OYNA: until the pointer has left the button once (or, from the keyboard,
-  // a moment), so a double click or a resting pointer never cancels the launch it just started.
-  const [cancelArmed, setCancelArmed] = useState(true);
-  const pointerInside = useRef(false);
-  useEffect(() => {
-    if (cancelArmed) return;
-    const id = window.setTimeout(() => {
-      if (!pointerInside.current) setCancelArmed(true);
-    }, 800);
-    return () => window.clearTimeout(id);
-  }, [cancelArmed]);
 
   const isGold = state.kind === "ready" || state.kind === "update";
   const isWorking = state.kind === "working";
@@ -118,7 +129,19 @@ export function PlayButton({
   const cancellable = filled && Boolean(onCancel);
   const disabled =
     state.kind === "running" || state.kind === "unavailable" || (isOpening && !onCancel);
-  const showCancel = hover && cancellable && cancelArmed;
+  // "İptal" takes OYNA's place after a press, and OYNA takes "İptal"'s after a cancel: neither
+  // takes the rest of that double click, then each does once the pointer has left the button or
+  // 0.8 s later, also under a resting pointer (E2E2: the player who did not move could never
+  // cancel).
+  const guard = usePressGuard(isGold ? "play" : filled ? "cancel" : "rest");
+  // A pointer resting where it pressed OYNA keeps seeing the progress ("%42", "Açılıyor" with its
+  // light): "İptal" shows once it moves over the button, comes back to it or presses it.
+  const [cancelShownFor, setCancelShownFor] = useState<number | null>(null);
+  const cancelShown = guard.since === null || cancelShownFor === guard.since;
+  const showCancelLabel = () => {
+    if (guard.armed && !cancelShown) setCancelShownFor(guard.since);
+  };
+  const showCancel = hover && cancellable && guard.armed && cancelShown;
 
   // The swell behind the button and the light across it while the game opens.
   const swell = useRef<HTMLDivElement>(null);
@@ -187,13 +210,20 @@ export function PlayButton({
       break;
   }
 
-  const handleClick = () => {
-    if (filled) {
-      if (cancelArmed) onCancel?.();
-    } else if (isGold) {
-      setCancelArmed(false);
-      onPlay();
+  const handleClick = (event: { detail: number }) => {
+    const does = playPress(state.kind, {
+      cancellable,
+      armed: guard.armed,
+      cancelShown,
+      pointer: event.detail > 0,
+    });
+    if (does === "showCancel") {
+      showCancelLabel();
+      return;
     }
+    if (does === "nothing" || !guard.take(event)) return;
+    if (does === "play") onPlay();
+    else onCancel?.();
   };
 
   const face = { duration: animate ? FACE_S : 0.14, ease: FACE_EASE };
@@ -254,16 +284,19 @@ export function PlayButton({
         type="button"
         disabled={disabled}
         onClick={handleClick}
+        onKeyDown={guard.handlers.onKeyDown}
         onPointerEnter={() => {
-          pointerInside.current = true;
           setHover(true);
+          showCancelLabel();
         }}
-        onPointerLeave={() => {
-          pointerInside.current = false;
+        onPointerMove={showCancelLabel}
+        onPointerLeave={(event) => {
           setHover(false);
-          setCancelArmed(true);
+          guard.handlers.onPointerLeave(event);
+          // Back over the button, the pointer comes for "İptal".
+          if (guard.since !== null) setCancelShownFor(guard.since);
         }}
-        aria-label={playButtonName(state, labels, cancelArmed && Boolean(onCancel))}
+        aria-label={playButtonName(state, labels, guard.armed && Boolean(onCancel))}
         aria-keyshortcuts={keyShortcuts}
         // What a press does now: the app's shortcut presses only "ready" and "update".
         data-play-state={state.kind}

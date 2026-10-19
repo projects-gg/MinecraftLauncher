@@ -1,5 +1,5 @@
 import { ArrowsClockwise, DownloadSimple, Package, Trash, X } from "@phosphor-icons/react";
-import { Button, Chip, cn, IconButton, Progress } from "@pl/ui";
+import { Button, Chip, cn, IconButton, Progress, usePressGuard } from "@pl/ui";
 import type { TFunction } from "i18next";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -7,9 +7,6 @@ import type { ContentKind, InstalledContent } from "@/lib/api";
 import { formatPercent, formatSpeed, numberFormat } from "@/lib/format";
 import { revealWait } from "./job-rules";
 import { jobAge, type RunningJob, stageLabel } from "./jobs";
-
-/** A job's × takes clicks this long after its bar appeared (OYNA waits 0.8 s the same way). */
-const CANCEL_ARM_MS = 600;
 
 /**
  * `job` once it has run `JOB_REVEAL_MS` (job-rules.ts; at once for a job that was already
@@ -98,11 +95,14 @@ export function JobStatus({
 }) {
   const { t } = useTranslation();
   // The bar takes the place of "Yükle" or "Güncelle" and its × sits where the button's edge
-  // was: the second press of a double click must not cancel the job it just started (as OYNA).
-  const [shownAt] = useState(() => performance.now());
-  const cancel = () => {
-    if (performance.now() - shownAt >= CANCEL_ARM_MS) onCancel?.();
-  };
+  // was: the rest of the double click that started the job never cancels it (as OYNA). The ×
+  // takes presses 0.8 s after the job started (its bar shows after 0.15 s), or once the pointer
+  // has left it; a job that did not start here counts from its bar.
+  const [startedAt] = useState(() => {
+    const age = jobAge(job.jobId);
+    return performance.now() - (Number.isFinite(age) ? age : 0);
+  });
+  const guard = usePressGuard(job.jobId, { since: startedAt });
   const progress = job.progress;
   const percent = progress?.percent;
   const label = stageLabel(progress?.stage ?? "resolving");
@@ -145,7 +145,10 @@ export function JobStatus({
           label={t("content.actions.cancel")}
           icon={<X size={15} />}
           size="sm"
-          onClick={cancel}
+          onClick={(event) => {
+            if (guard.take(event)) onCancel?.();
+          }}
+          {...guard.handlers}
         />
       ) : null}
     </div>

@@ -37,8 +37,10 @@ export { ContextMenu, Menu, type MenuItem } from "./components/menu";
 export {
   PlayButton,
   type PlayButtonLabels,
+  type PlayPress,
   type PlayState,
   playButtonName,
+  playPress,
 } from "./components/play-button";
 export { SignalBars, type SignalState, signalLevel } from "./components/signal-bars";
 export { Switch } from "./components/switch";
@@ -56,6 +58,16 @@ export { cn } from "./lib/cn";
 export * from "./motion";
 export { guardNativeContextMenu, keepsNativeMenu, type MenuDocument } from "./native-menu";
 export { PerfProvider, useAmbientMotion, useInteractionMotion, usePerf } from "./perf";
+export {
+  ARM_MS,
+  guardElapsed,
+  guardLeave,
+  guardPress,
+  guardStart,
+  guardSwap,
+  type PressGuard,
+  usePressGuard,
+} from "./press-guard";
 export { guardReducedMotion, stillKeyframes } from "./reduced-motion";
 export { fold, matchesQuery } from "./search";
 export { observeSkippedViewTransitions } from "./view-transitions";
