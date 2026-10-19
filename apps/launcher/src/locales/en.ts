@@ -1,4 +1,5 @@
 import { enAfkAlerts } from "./en-afk-alerts";
+import { enAfkConnect } from "./en-afk-connect";
 import { enDisk } from "./en-disk";
 import { enEventJoin } from "./en-event-join";
 import { enGraphics } from "./en-graphics";
@@ -239,6 +240,7 @@ export const en: DeepPartial<Strings> = {
   shotCopy: enShotCopy,
   placement: enPlacement,
   playOpen: enPlayOpen,
+  afkConnect: enAfkConnect,
   nav: {
     home: "Home",
     library: "Library",
