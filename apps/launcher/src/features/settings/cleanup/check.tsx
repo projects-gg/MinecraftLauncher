@@ -10,7 +10,8 @@ const mark =
  * Small chamfered checkbox (the hextech cut of actions, docs/design.md §1) with a third
  * "partly" state for a group's own box. The tick and the bar crossfade, so a partly box never
  * flashes a tick on its way out; a press dips the box a little. The focus ring is a larger
- * chamfered layer (clip-path would cut an outline).
+ * chamfered layer (clip-path would cut an outline). Under the pointer an empty box's edge
+ * brightens and a ticked one goes gold-400, as a switch's track does.
  */
 export function Check({
   id,
@@ -39,6 +40,9 @@ export function Check({
         "group/check relative isolate inline-flex size-[18px] shrink-0 cursor-pointer items-center justify-center [--cut:4px]",
         "transition-transform duration-150 ease-[cubic-bezier(0.23,1,0.32,1)] active:scale-[0.9] focus-visible:outline-none",
         "disabled:cursor-default disabled:opacity-45",
+        // The box's colours: its edge, and its fill when ticked; both lighten under the pointer.
+        "[--check-edge:rgb(255_255_255/0.24)] [--check-on:var(--color-gold-500)]",
+        "enabled:hover:[--check-edge:rgb(255_255_255/0.4)] enabled:hover:[--check-on:var(--color-gold-400)]",
         className,
       )}
     >
@@ -49,15 +53,15 @@ export function Check({
       <span
         aria-hidden
         className={cn(
-          "chamfer absolute inset-0 -z-10 bg-white/24 transition-colors duration-150",
-          "group-hover/check:bg-white/40 group-data-[state=checked]/check:bg-gold-500 group-data-[state=indeterminate]/check:bg-gold-500",
+          "chamfer absolute inset-0 -z-10 bg-(--check-edge) transition-colors duration-150",
+          "group-data-[state=checked]/check:bg-(--check-on) group-data-[state=indeterminate]/check:bg-(--check-on)",
         )}
       />
       <span
         aria-hidden
         className={cn(
           "chamfer absolute inset-[1.5px] -z-10 bg-obsidian-900 transition-colors duration-150 [--cut:3px]",
-          "group-data-[state=checked]/check:bg-gold-500 group-data-[state=indeterminate]/check:bg-gold-500",
+          "group-data-[state=checked]/check:bg-(--check-on) group-data-[state=indeterminate]/check:bg-(--check-on)",
         )}
       />
       <Checkbox.Indicator forceMount className="absolute inset-0 text-gold-ink">
