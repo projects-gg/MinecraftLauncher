@@ -41,6 +41,7 @@ import { MicrosoftLoginDialog } from "@/features/settings/accounts-section";
 import { MicrosoftMark } from "@/features/settings/microsoft-mark";
 import { api, type InstanceSummary, type LegacyScan } from "@/lib/api";
 import { applyStartOnBoot } from "@/lib/autostart";
+import { listFormat, uiLocale } from "@/lib/format";
 import { isTauri } from "@/lib/platform";
 import { InstanceIcon } from "@/shell/instance-icon";
 import { TitleBar } from "@/shell/title-bar";
@@ -297,33 +298,43 @@ function LegacyStep({
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const items: Array<{ icon: ReactNode; text: string }> = [];
+  // Each line found, and its words in the sentence above the list ("oyuncu adını").
+  const items: Array<{ icon: ReactNode; text: string; thing: string }> = [];
   if (scan.nickname)
     items.push({
       icon: <User size={18} />,
       text: t("onboarding.legacy.nickname", { name: scan.nickname }),
+      thing: t("onboarding.legacy.things.nickname"),
     });
   if (scan.afkAccounts > 0)
     items.push({
       icon: <Robot size={18} />,
       text: t("onboarding.legacy.afk", { count: scan.afkAccounts }),
+      thing: t("onboarding.legacy.things.afk"),
     });
   if (scan.screenshots > 0)
     items.push({
       icon: <ImageIcon size={18} />,
       text: t("onboarding.legacy.screenshots", { count: scan.screenshots }),
+      thing: t("onboarding.legacy.things.screenshots"),
     });
   if (scan.worlds > 0)
     items.push({
       icon: <GlobeHemisphereWest size={18} />,
       text: t("onboarding.legacy.worlds", { count: scan.worlds }),
+      thing: t("onboarding.legacy.things.worlds"),
     });
+  // The sentence names only what was found (it promised worlds to players who had none).
+  const things = items.length
+    ? items.map((item) => item.thing)
+    : [t("onboarding.legacy.things.data")];
+  const body = t("onboarding.legacy.body", { things: listFormat().format(things) });
 
   return (
     <StepFrame
       headingRef={headingRef}
       title={t("onboarding.legacy.title")}
-      body={t("onboarding.legacy.body")}
+      body={body.charAt(0).toLocaleUpperCase(uiLocale()) + body.slice(1)}
     >
       {items.length ? (
         <ul className="mt-6 space-y-2.5">

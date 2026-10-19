@@ -483,7 +483,16 @@ export const tr = {
     },
     legacy: {
       title: "Eski launcher'ını bulduk",
-      body: "Oyuncu adını, AFK hesaplarını, ekran görüntülerini ve dünyalarını yeni launcher'a taşıyabilirsin. Eski dosyaların yerinde kalır.",
+      /** `things`: what the scan found, joined ("oyuncu adını, AFK hesaplarını ve dünyalarını"). */
+      body: "{{things}} yeni launcher'a taşıyabilirsin. Eski dosyaların yerinde kalır.",
+      things: {
+        nickname: "oyuncu adını",
+        afk: "AFK hesaplarını",
+        screenshots: "ekran görüntülerini",
+        worlds: "dünyalarını",
+        /** None of the above was found. */
+        data: "verilerini",
+      },
       nickname: "Oyuncu adı: {{name}}",
       afk: "{{count}} AFK hesabı",
       screenshots: "{{count}} ekran görüntüsü",
@@ -506,7 +515,7 @@ export const tr = {
     projects: {
       title: "Projects kurulumun hazır",
       preparing: "Kurulum hazırlanıyor",
-      body: "Oyun ilk Oyna'ya bastığında iner, sonra Projects sunucusuna kendiliğinden bağlanırsın.",
+      body: "Oyun, Oyna'ya ilk bastığında iner, sonra Projects sunucusuna kendiliğinden bağlanırsın.",
       pack: "{{name}} paketi, sunucu güncellendikçe kendiliğinden güncellenir.",
       noPack: "Sunucu kendi mod paketini yayınladığında bu kurulum ona geçer.",
       startOnBoot: "Bilgisayar açılınca başlat",

@@ -1054,15 +1054,19 @@ export const mockApi: LauncherApi = {
   async setPresenceEnabled() {},
   async setLanguage() {},
   async legacyScan() {
+    // `?legacy=noWorlds`: an old launcher without worlds; `?legacy=empty`: none of the kinds the
+    // welcome lists (its sentence names only what was found).
+    const legacy = mockFlag("legacy");
+    const empty = legacy === "empty";
     return {
       found: true,
       hasPremium: false,
-      nickname: "EjderAvcisi",
-      afkAccounts: 3,
-      hasAfkClient: true,
-      worlds: 4,
-      worldsBytes: 812_000_000,
-      screenshots: 37,
+      nickname: empty ? null : "EjderAvcisi",
+      afkAccounts: empty ? 0 : 3,
+      hasAfkClient: !empty,
+      worlds: legacy ? 0 : 4,
+      worldsBytes: legacy ? 0 : 812_000_000,
+      screenshots: empty ? 0 : 37,
       resourcePacks: 2,
       shaderPacks: 1,
       freeBytes: 6_700_000_000,

@@ -721,7 +721,14 @@ export const en: DeepPartial<Strings> = {
     },
     legacy: {
       title: "We found your old launcher",
-      body: "You can bring your username, AFK accounts, screenshots and worlds to the new launcher. Your old files stay where they are.",
+      body: "You can bring your {{things}} to the new launcher. Your old files stay where they are.",
+      things: {
+        nickname: "username",
+        afk: "AFK accounts",
+        screenshots: "screenshots",
+        worlds: "worlds",
+        data: "data",
+      },
       nickname: "Username: {{name}}",
       afk: "{{count}} AFK accounts",
       afk_one: "{{count}} AFK account",
