@@ -26,6 +26,10 @@ specta = { workspace = true }
 flate2 = "1.1"
 # Free space where the copies go (the version pl-mc and pl-data build).
 fs4 = "1.1.0"
+# The Modrinth App keeps its profiles in SQLite (app.db). SQLite is compiled in ("bundled"), so
+# nothing depends on the player's system; "serialize" reads a snapshot from memory, so the other
+# launcher's files are never opened by SQLite itself while it runs.
+rusqlite = { version = "0.40.2", default-features = false, features = ["bundled", "serialize"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

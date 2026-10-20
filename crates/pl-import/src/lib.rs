@@ -2,8 +2,10 @@
 //!
 //! - [`scan`] finds what other launchers left on this computer: Mojang's Minecraft Launcher,
 //!   TLauncher and SKlauncher (`.minecraft`), CurseForge, the Modrinth App, Prism Launcher, PolyMC
-//!   and MultiMC. It is cheap enough for the first-run screen: it reads small settings files and
-//!   lists folders, never walks worlds or opens mod jars.
+//!   and MultiMC, also where their settings moved them. It is cheap enough for the first-run
+//!   screen: it reads small settings files and the launchers' own lists of their instances (the
+//!   Modrinth App's database, read as a snapshot: [`sqlite`]), and lists folders, never walks
+//!   worlds or opens mod jars.
 //! - [`measure`] adds what the screen shows next, on demand: folder sizes and which mods fit the
 //!   version they would run with (the mod health check's own rules, `pl_mc::mods::check`).
 //! - [`run_import`] copies what the player picked: game settings, the server list, worlds,
@@ -31,6 +33,7 @@ pub mod model;
 pub mod options;
 mod run;
 pub mod servers;
+mod sqlite;
 mod version_json;
 mod worlds;
 

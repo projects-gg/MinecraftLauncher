@@ -33,6 +33,8 @@ pub struct Locations {
     pub data_dir: Option<PathBuf>,
     /// `%LOCALAPPDATA%` on Windows.
     pub local_data_dir: Option<PathBuf>,
+    /// Per-user settings: `%APPDATA%`, `~/Library/Application Support`, `~/.config`.
+    pub config_dir: Option<PathBuf>,
     pub home: Option<PathBuf>,
     pub documents: Option<PathBuf>,
 }
@@ -44,6 +46,7 @@ impl Locations {
             os: Os::current(),
             data_dir: dirs::data_dir(),
             local_data_dir: dirs::data_local_dir(),
+            config_dir: dirs::config_dir(),
             home: dirs::home_dir(),
             documents: dirs::document_dir(),
         }
@@ -51,18 +54,30 @@ impl Locations {
 
     /// The same layout under `root`, as a pretend home folder of `os`.
     pub fn under(root: &Path, os: Os) -> Self {
-        let (data, local) = match os {
-            Os::Windows => (
-                root.join("AppData").join("Roaming"),
-                Some(root.join("AppData").join("Local")),
+        let (data, local, config) = match os {
+            Os::Windows => {
+                let roaming = root.join("AppData").join("Roaming");
+                (
+                    roaming.clone(),
+                    Some(root.join("AppData").join("Local")),
+                    roaming,
+                )
+            }
+            Os::MacOs => {
+                let support = root.join("Library").join("Application Support");
+                (support.clone(), None, support)
+            }
+            Os::Linux => (
+                root.join(".local").join("share"),
+                None,
+                root.join(".config"),
             ),
-            Os::MacOs => (root.join("Library").join("Application Support"), None),
-            Os::Linux => (root.join(".local").join("share"), None),
         };
         Self {
             os,
             data_dir: Some(data),
             local_data_dir: local,
+            config_dir: Some(config),
             home: Some(root.to_path_buf()),
             documents: Some(root.join("Documents")),
         }
@@ -86,25 +101,53 @@ impl Locations {
         }
     }
 
-    /// CurseForge's instances (the app's default place; there is no Linux app).
+    /// CurseForge's instances in the app's default place (the player can move them: see
+    /// [`Self::curseforge_instance_lists`]).
     pub(crate) fn curseforge_instances(&self) -> Option<PathBuf> {
         let base = match self.os {
             Os::Windows => self.home.as_ref()?,
-            Os::MacOs => self.documents.as_ref()?,
-            Os::Linux => return None,
+            Os::MacOs | Os::Linux => self.documents.as_ref()?,
         };
         Some(base.join("curseforge").join("minecraft").join("Instances"))
     }
 
-    /// The Modrinth App's profile folders: its current one first, then the older app's.
-    pub(crate) fn modrinth_profiles(&self) -> Vec<PathBuf> {
-        let Some(data) = self.data_dir.as_ref() else {
-            return Vec::new();
+    /// The CurseForge app's own list of its Minecraft instances, each with its folder
+    /// (`installPath`), wherever the player moved the app's Minecraft folder: the app's agent
+    /// keeps it in `agent/GameInstances/MinecraftGameInstance.json` of the app's folder (the
+    /// Overwolf version of the app in `Overwolf/Curse`).
+    pub(crate) fn curseforge_instance_lists(&self) -> Vec<PathBuf> {
+        let list = |base: PathBuf| {
+            base.join("GameInstances")
+                .join("MinecraftGameInstance.json")
         };
-        vec![
-            data.join("ModrinthApp").join("profiles"),
-            data.join("com.modrinth.theseus").join("profiles"),
-        ]
+        let mut out = Vec::new();
+        if let Some(config) = self.config_dir.as_ref() {
+            let app = config.join("CurseForge");
+            out.push(list(app.join("agent")));
+            if self.os == Os::MacOs {
+                // CurseForge's own help spells it this way on macOS.
+                out.push(list(app.join("Agent")));
+            }
+        }
+        if self.os == Os::Windows
+            && let Some(local) = self.local_data_dir.as_ref()
+        {
+            out.push(list(local.join("Overwolf").join("Curse")));
+        }
+        out
+    }
+
+    /// The Modrinth App's folder: its settings and database (`app.db`), and its profiles unless
+    /// the player moved them (the database says where).
+    pub(crate) fn modrinth_app(&self) -> Option<PathBuf> {
+        self.data_dir.as_ref().map(|d| d.join("ModrinthApp"))
+    }
+
+    /// The Modrinth App's folder before 2024, with a `profile.json` in each profile folder.
+    pub(crate) fn modrinth_old_app(&self) -> Option<PathBuf> {
+        self.config_dir
+            .as_ref()
+            .map(|d| d.join("com.modrinth.theseus"))
     }
 
     /// Prism Launcher, PolyMC and MultiMC data folders worth a look. MultiMC is portable on
@@ -172,7 +215,31 @@ mod tests {
         );
         let linux = Locations::under(root, Os::Linux);
         assert_eq!(linux.minecraft(), Some(root.join(".minecraft")));
-        assert_eq!(linux.curseforge_instances(), None);
+        assert_eq!(
+            linux.curseforge_instances(),
+            Some(root.join("Documents/curseforge/minecraft/Instances"))
+        );
+        assert_eq!(
+            linux.curseforge_instance_lists(),
+            [root.join(".config/CurseForge/agent/GameInstances/MinecraftGameInstance.json")]
+        );
+        assert_eq!(
+            linux.modrinth_old_app(),
+            Some(root.join(".config/com.modrinth.theseus"))
+        );
+        assert_eq!(
+            windows.curseforge_instance_lists(),
+            [
+                root.join(
+                    "AppData/Roaming/CurseForge/agent/GameInstances/MinecraftGameInstance.json"
+                ),
+                root.join("AppData/Local/Overwolf/Curse/GameInstances/MinecraftGameInstance.json"),
+            ]
+        );
+        assert_eq!(
+            windows.modrinth_app(),
+            Some(root.join("AppData/Roaming/ModrinthApp"))
+        );
         assert!(
             linux
                 .multimc_family()

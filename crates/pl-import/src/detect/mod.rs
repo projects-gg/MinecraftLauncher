@@ -1,10 +1,12 @@
 //! Finding other launchers' data. Every detector is cheap: it checks folders, lists their
-//! entries and reads small settings files. Nothing big is opened (worlds, mod jars), nothing is
-//! written.
+//! entries and reads small settings files, and the launchers' own lists of their instances (the
+//! Modrinth App's database, CurseForge's instance list). Nothing big is opened (worlds, mod
+//! jars), nothing is written.
 
 mod curseforge;
 mod folder;
 mod modrinth;
+mod modrinth_db;
 mod multimc;
 
 use std::path::Path;
@@ -104,6 +106,15 @@ pub(crate) fn is_screenshot_entry(entry: &std::fs::DirEntry) -> bool {
     let name = entry.file_name().to_string_lossy().to_ascii_lowercase();
     entry.file_type().is_ok_and(|t| t.is_file())
         && (name.ends_with(".png") || name.ends_with(".jpg") || name.ends_with(".jpeg"))
+}
+
+/// A folder name as the file system compares it (Windows ignores case).
+pub(crate) fn folder_key(name: &str) -> String {
+    if cfg!(windows) {
+        name.to_lowercase()
+    } else {
+        name.to_owned()
+    }
 }
 
 /// Mod files (`.jar`, `.jar.disabled`) in a mods folder.
