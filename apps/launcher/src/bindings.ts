@@ -87,7 +87,7 @@ export const commands = {
 	packNotes: PackNotesView | null,
 	/**  The newest patch notes in `news` (the patch notes box; `pack_notes` when there is none). */
 	patchNotesId: string | null,
-	/**  Studio's links (Settings → Hakkında). */
+	/**  Studio's links (Settings → Hakkında, Home's community row). */
 	links: LinksView,
 	offline: boolean,
 	fromCache: boolean,
@@ -123,10 +123,33 @@ export const commands = {
 	/**
 	 *  Applies the graphics preset the player picked: into `options.txt` (only the preset's keys
 	 *  change), or kept for the first launch while there is no such file. Refused while the
-	 *  instance's game runs: the game keeps its options in memory and writes them back over any
-	 *  change.
+	 *  instance's game runs.
 	 */
 	instanceSetGraphics: (id: string, preset: GraphicsPreset) => typedError<GraphicsState, CmdError>(__TAURI_INVOKE("instance_set_graphics", { id, preset })),
+	/**
+	 *  Settings → Grafik ve FPS: the pick applies at once like `instance_set_graphics`, after a copy
+	 *  of `options.txt` for "Geri al" (`instance_undo_graphics`).
+	 */
+	instanceSwitchGraphics: (id: string, preset: GraphicsPreset) => typedError<GraphicsSwitch, CmdError>(__TAURI_INVOKE("instance_switch_graphics", { id, preset })),
+	/**
+	 *  "Geri al" after `instance_switch_graphics`: the preset's options go back from that copy.
+	 *  `None` when the copy is gone (nothing changed).
+	 */
+	instanceUndoGraphics: (id: string, backup: string) => typedError<
+/**  The file has this preset's values. */
+{ kind: "preset"; preset: GraphicsPreset } | 
+/**
+ *  The file has values of its own ("Özel"): changed in the game, a modpack's or the game's
+ *  defaults.
+ */
+{ kind: "custom" } | 
+/**
+ *  No `options.txt` yet: the first launch writes this preset (the one the player picked, or
+ *  the computer's).
+ */
+{ kind: "firstLaunch"; preset: GraphicsPreset } | 
+/**  A Minecraft version before 1.7.2, whose options presets do not cover. */
+{ kind: "unsupported" } | null, CmdError>(__TAURI_INVOKE("instance_undo_graphics", { id, backup })),
 	/**
 	 *  Switches a mod on or off. A recommended mod of the official pack changes the mod center
 	 *  selection (its file is installed or removed by the pack sync); other mods are renamed
@@ -1267,6 +1290,15 @@ export type CmdError = {
 	details: string,
 };
 
+/**  One link of the launcher's community row. */
+export type CommunityLink = {
+	platform: CommunityPlatform,
+	url: string,
+};
+
+/**  A community or social platform the launcher shows with its own mark. */
+export type CommunityPlatform = "wiki" | "discord" | "forum" | "instagram" | "tiktok" | "youtube" | "x" | "twitch" | "kick";
+
 /**  The presence connection as the player should understand it. */
 export type Connection = 
 /**  No connection (signed out, or the feature is off). */
@@ -1701,6 +1733,17 @@ export type GraphicsState =
 /**  A Minecraft version before 1.7.2, whose options presets do not cover. */
 { kind: "unsupported" };
 
+/**  What [`switch_graphics_preset`] did. */
+export type GraphicsSwitch = {
+	/**  The instance's graphics now. */
+	state: GraphicsState,
+	/**
+	 *  The copy of `options.txt` from before, for [`undo_graphics_switch`]; `None` when there was
+	 *  no file yet (the pick waits for the first launch) or the file already had the preset.
+	 */
+	backup: string | null,
+};
+
 /**  One friend's category. */
 export type GroupMember = {
 	friend: string,
@@ -1737,7 +1780,7 @@ export type HomeView = {
 	packNotes: PackNotesView | null,
 	/**  The newest patch notes in `news` (the patch notes box; `pack_notes` when there is none). */
 	patchNotesId: string | null,
-	/**  Studio's links (Settings → Hakkında). */
+	/**  Studio's links (Settings → Hakkında, Home's community row). */
 	links: LinksView,
 	offline: boolean,
 	fromCache: boolean,
@@ -2428,7 +2471,13 @@ export type LinksView = {
 	discord: string | null,
 	store: string | null,
 	support: string | null,
+	/**  The other links, by label (Settings → Hakkında); the community platforms are `community`. */
 	custom: LinkView[],
+	/**
+	 *  Wiki, Discord, forum and the social accounts with their marks (Home's news column,
+	 *  Settings → Hakkında), built-in addresses included (`pl_content::Links::community`).
+	 */
+	community: CommunityLink[],
 };
 
 export type LoaderKind = "vanilla" | "fabric" | "quilt" | "forge" | "neoForge";

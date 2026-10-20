@@ -33,6 +33,7 @@ import { createMockSkins } from "./mock-skins";
 import { mockSocial } from "./mock-social";
 import { mockTrashedInstances } from "./mock-trash";
 import type {
+  ContentLinks,
   HomeContent,
   HomeStatus,
   InstanceDetail,
@@ -469,6 +470,40 @@ function mockStatus(): HomeStatus | undefined {
   }
 }
 
+/**
+ * Studio's links as the backend shows them (`pl_content::Links::community`). `?links=studio`: every
+ * platform published; `few`: only YouTube (the others hidden); `none`: every platform hidden
+ * (Discord stays). Default: nothing published, the built-in addresses.
+ */
+function mockLinks(): ContentLinks {
+  const builtIn: ContentLinks["community"] = [
+    { platform: "wiki", url: "https://wiki.projects.gg" },
+    { platform: "discord", url: "https://discord.gg/projects" },
+    { platform: "forum", url: "https://forum.projects.gg" },
+    { platform: "instagram", url: "https://www.instagram.com/projects.oyun/" },
+    { platform: "tiktok", url: "https://www.tiktok.com/@projects.oyun" },
+    { platform: "youtube", url: "https://www.youtube.com/@projectsoyun" },
+  ];
+  const discord = builtIn[1] ?? { platform: "discord", url: "https://discord.gg/projects" };
+  const variants: Record<string, ContentLinks["community"]> = {
+    studio: [
+      ...builtIn,
+      { platform: "x", url: "https://x.com/projectsoyun" },
+      { platform: "twitch", url: "https://www.twitch.tv/projectsoyun" },
+      { platform: "kick", url: "https://kick.com/projectsoyun" },
+    ],
+    few: [discord, { platform: "youtube", url: "https://www.youtube.com/@projectsoyun" }],
+    none: [discord],
+  };
+  return {
+    website: "https://projects.gg",
+    discord: "https://discord.gg/projects",
+    store: "https://store.projects.gg",
+    custom: [{ label: "Kurallar", url: "https://projects.gg/kurallar" }],
+    community: variants[mockFlag("links")] ?? builtIn,
+  };
+}
+
 /** The home content as the backend merges it: the newest patch notes news leads the box. */
 function mockHome(): HomeContent {
   const projects = Number.parseInt(mockFlag("projects"), 10);
@@ -497,12 +532,7 @@ function mockHome(): HomeContent {
     maintenance,
     // Like the backend: Studio's maintenance notice wins over the status notice.
     status: maintenance ? undefined : mockStatus(),
-    links: {
-      website: "https://projects.gg",
-      discord: "https://discord.gg/projects",
-      store: "https://store.projects.gg",
-      custom: [{ label: "YouTube", url: "https://youtube.com/@projectsgg" }],
-    },
+    links: mockLinks(),
     banners:
       banners === "none"
         ? []

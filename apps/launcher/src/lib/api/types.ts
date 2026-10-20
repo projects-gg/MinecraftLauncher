@@ -136,13 +136,37 @@ export interface HomeStatus {
   expiresAt: string;
 }
 
+/** A community or social platform shown with its own mark. */
+export type CommunityPlatform =
+  | "wiki"
+  | "discord"
+  | "forum"
+  | "instagram"
+  | "tiktok"
+  | "youtube"
+  | "x"
+  | "twitch"
+  | "kick";
+
+/** A link of the community row (`https://` only). */
+export interface CommunityLink {
+  platform: CommunityPlatform;
+  url: string;
+}
+
 /** Studio's links (Settings → Hakkında): only https:// and projects:// ones arrive here. */
 export interface ContentLinks {
   website?: string;
   discord?: string;
   store?: string;
   support?: string;
+  /** The other links, by label; the community platforms are in `community`. */
   custom: Array<{ label: string; url: string }>;
+  /**
+   * Wiki, Discord, forum, then the social accounts, in this order (Home's news column, Settings →
+   * Hakkında). Studio's addresses, or the built-in ones while it publishes none.
+   */
+  community: CommunityLink[];
 }
 
 export interface HomeContent {

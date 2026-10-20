@@ -262,6 +262,7 @@ function home(v: HomeView): HomeContent {
       store: v.links.store ?? undefined,
       support: v.links.support ?? undefined,
       custom: v.links.custom,
+      community: v.links.community,
     },
     offline: v.offline,
   };

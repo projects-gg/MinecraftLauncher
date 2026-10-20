@@ -201,4 +201,9 @@ export const tauriLibrary: LibraryApi = {
 
   graphics: (instanceId) => ok(commands.instanceGraphics(instanceId)),
   setGraphics: (instanceId, preset) => ok(commands.instanceSetGraphics(instanceId, preset)),
+  async switchGraphics(instanceId, preset) {
+    const result = await ok(commands.instanceSwitchGraphics(instanceId, preset));
+    return { state: result.state, backup: result.backup ?? undefined };
+  },
+  undoGraphics: (instanceId, backup) => ok(commands.instanceUndoGraphics(instanceId, backup)),
 };

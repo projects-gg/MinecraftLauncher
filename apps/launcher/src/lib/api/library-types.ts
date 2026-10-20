@@ -223,4 +223,18 @@ export interface LibraryApi {
   graphics(instanceId: string): Promise<GraphicsState>;
   /** Writes the preset the player picked (not while the instance's game runs). */
   setGraphics(instanceId: string, preset: GraphicsPreset): Promise<GraphicsState>;
+  /**
+   * `setGraphics` that applies at once (Settings → Grafik ve FPS): options.txt is copied first,
+   * so `undoGraphics` brings back what was there, the player's own values included.
+   */
+  switchGraphics(instanceId: string, preset: GraphicsPreset): Promise<GraphicsSwitch>;
+  /** "Geri al" after `switchGraphics`; `null` when its copy is gone (nothing changed). */
+  undoGraphics(instanceId: string, backup: string): Promise<GraphicsState | null>;
+}
+
+/** What `switchGraphics` did. */
+export interface GraphicsSwitch {
+  state: GraphicsState;
+  /** The copy of options.txt from before; missing without a file yet or when nothing changed. */
+  backup?: string;
 }

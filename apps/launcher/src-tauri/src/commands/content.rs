@@ -119,7 +119,11 @@ pub struct LinksView {
     pub discord: Option<String>,
     pub store: Option<String>,
     pub support: Option<String>,
+    /// The other links, by label (Settings → Hakkında); the community platforms are `community`.
     pub custom: Vec<LinkView>,
+    /// Wiki, Discord, forum and the social accounts with their marks (Home's news column,
+    /// Settings → Hakkında), built-in addresses included (`pl_content::Links::community`).
+    pub community: Vec<pl_content::CommunityLink>,
 }
 
 impl LinksView {
@@ -131,14 +135,14 @@ impl LinksView {
             store: safe(&links.store),
             support: safe(&links.support),
             custom: links
-                .custom
-                .iter()
+                .other_custom()
                 .filter(|l| !l.label.trim().is_empty() && pl_content::is_safe_link(&l.url))
                 .map(|l| LinkView {
                     label: l.label.clone(),
                     url: l.url.clone(),
                 })
                 .collect(),
+            community: links.community(),
         }
     }
 }
@@ -231,7 +235,7 @@ pub struct HomeView {
     pub pack_notes: Option<PackNotesView>,
     /// The newest patch notes in `news` (the patch notes box; `pack_notes` when there is none).
     pub patch_notes_id: Option<String>,
-    /// Studio's links (Settings → Hakkında).
+    /// Studio's links (Settings → Hakkında, Home's community row).
     pub links: LinksView,
     pub offline: bool,
     pub from_cache: bool,

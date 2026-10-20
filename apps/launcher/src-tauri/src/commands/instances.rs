@@ -764,18 +764,14 @@ pub async fn instance_graphics(
     Ok(pl_mc::instance::graphics_state(&game_dir, &instance.mc_version).await)
 }
 
-/// Applies the graphics preset the player picked: into `options.txt` (only the preset's keys
-/// change), or kept for the first launch while there is no such file. Refused while the
-/// instance's game runs: the game keeps its options in memory and writes them back over any
-/// change.
-#[tauri::command]
-#[specta::specta]
-pub async fn instance_set_graphics(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    id: String,
-    preset: pl_mc::instance::GraphicsPreset,
-) -> CmdResult<pl_mc::instance::GraphicsState> {
+/// Waits for the instance (a launch preparing its game files, first-launch options included) and
+/// refuses while its game runs: the game keeps its options in memory and writes them back over
+/// any change.
+async fn graphics_free(
+    app: &AppHandle,
+    state: &AppState,
+    id: &str,
+) -> CmdResult<tokio::sync::OwnedMutexGuard<()>> {
     let running = || {
         state
             .running
@@ -796,15 +792,66 @@ pub async fn instance_set_graphics(
     if running() {
         return Err(refuse_running());
     }
-    // After a launch has prepared the game files (its first-launch options included).
-    let lock = crate::commands::modrinth::instance_lock(&app, &id);
-    let _guard = lock.lock().await;
+    let guard = crate::commands::modrinth::instance_lock(app, id)
+        .lock_owned()
+        .await;
     if running() {
         return Err(refuse_running());
     }
+    Ok(guard)
+}
+
+/// Applies the graphics preset the player picked: into `options.txt` (only the preset's keys
+/// change), or kept for the first launch while there is no such file. Refused while the
+/// instance's game runs.
+#[tauri::command]
+#[specta::specta]
+pub async fn instance_set_graphics(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    preset: pl_mc::instance::GraphicsPreset,
+) -> CmdResult<pl_mc::instance::GraphicsState> {
+    let _guard = graphics_free(&app, &state, &id).await?;
     let instance = state.instances.get(&id).await.map_err(CmdError::from)?;
     let game_dir = state.instances.game_dir(&id).map_err(CmdError::from)?;
     pl_mc::instance::set_graphics_preset(&game_dir, &instance.mc_version, preset)
+        .await
+        .map_err(CmdError::from)
+}
+
+/// Settings → Grafik ve FPS: the pick applies at once like `instance_set_graphics`, after a copy
+/// of `options.txt` for "Geri al" (`instance_undo_graphics`).
+#[tauri::command]
+#[specta::specta]
+pub async fn instance_switch_graphics(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    preset: pl_mc::instance::GraphicsPreset,
+) -> CmdResult<pl_mc::instance::GraphicsSwitch> {
+    let _guard = graphics_free(&app, &state, &id).await?;
+    let instance = state.instances.get(&id).await.map_err(CmdError::from)?;
+    let game_dir = state.instances.game_dir(&id).map_err(CmdError::from)?;
+    pl_mc::instance::switch_graphics_preset(&game_dir, &instance.mc_version, preset)
+        .await
+        .map_err(CmdError::from)
+}
+
+/// "Geri al" after `instance_switch_graphics`: the preset's options go back from that copy.
+/// `None` when the copy is gone (nothing changed).
+#[tauri::command]
+#[specta::specta]
+pub async fn instance_undo_graphics(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    backup: String,
+) -> CmdResult<Option<pl_mc::instance::GraphicsState>> {
+    let _guard = graphics_free(&app, &state, &id).await?;
+    let instance = state.instances.get(&id).await.map_err(CmdError::from)?;
+    let game_dir = state.instances.game_dir(&id).map_err(CmdError::from)?;
+    pl_mc::instance::undo_graphics_switch(&game_dir, &instance.mc_version, &backup)
         .await
         .map_err(CmdError::from)
 }

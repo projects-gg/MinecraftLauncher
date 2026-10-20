@@ -584,6 +584,9 @@ function toTrash(
 // --- Graphics presets ------------------------------------------------------------------------
 
 const graphicsStates = new Map<string, GraphicsState>();
+/** `switchGraphics` copies: what each one undoes to. */
+const graphicsBackups = new Map<string, GraphicsState>();
+let graphicsCopies = 0;
 
 /**
  * Each sample instance shows another state: Projects a preset, Vanilla (never played) the first
@@ -911,6 +914,48 @@ export function createMockLibrary(options: {
           : { kind: "preset", preset };
       graphicsStates.set(instanceId, next);
       return next;
+    },
+    async switchGraphics(instanceId, preset) {
+      await delay(180);
+      if (liveInstance === instanceId) {
+        throw failure(
+          pick(
+            "Oyun açıkken grafik ayarı değiştirilemez. Önce oyunu kapat.",
+            "You can't change the graphics setting while the game is open. Close the game first.",
+          ),
+          "OYUN-ACIK",
+        );
+      }
+      const before = graphicsOf(instanceId);
+      const state: GraphicsState =
+        before.kind === "firstLaunch"
+          ? { kind: "firstLaunch", preset }
+          : { kind: "preset", preset };
+      graphicsStates.set(instanceId, state);
+      // Like the backend: a copy only when a file changed.
+      const changed =
+        before.kind === "custom" || (before.kind === "preset" && before.preset !== preset);
+      if (!changed) return { state };
+      const backup = `options-mock-${++graphicsCopies}.txt`;
+      graphicsBackups.set(backup, before);
+      return { state, backup };
+    },
+    async undoGraphics(instanceId, backup) {
+      await delay(120);
+      if (liveInstance === instanceId) {
+        throw failure(
+          pick(
+            "Oyun açıkken grafik ayarı değiştirilemez. Önce oyunu kapat.",
+            "You can't change the graphics setting while the game is open. Close the game first.",
+          ),
+          "OYUN-ACIK",
+        );
+      }
+      const before = graphicsBackups.get(backup);
+      if (!before) return null;
+      graphicsBackups.delete(backup);
+      graphicsStates.set(instanceId, before);
+      return before;
     },
   };
 }
