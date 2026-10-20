@@ -166,6 +166,27 @@ export function groupSections(
 }
 
 /**
+ * Where `element` sits in `list`'s layout: px from the list's top, leaving out the transforms of
+ * everything in between (rows gliding aside). The offsets are added up the offset parents to the
+ * list, because a gliding row is the offset parent of what it holds (a transform makes one): its
+ * header's own `offsetTop` reads 0 then, and every drop fell back into the friend's own category
+ * (FIX2). `null` when `element` is not laid out inside `list` (the caller measures on screen).
+ */
+export function layoutTop(element: HTMLElement, list: HTMLElement): number | null {
+  let top = 0;
+  let node: HTMLElement | null = element;
+  while (node !== list) {
+    if (!node) return null;
+    top += node.offsetTop;
+    const parent = node.offsetParent as HTMLElement | null;
+    // An offset is measured to the parent's padding edge; its border sits above that.
+    if (parent && parent !== list) top += parent.clientTop;
+    node = parent;
+  }
+  return top;
+}
+
+/**
  * Where a dragged friend lands: the category whose block holds `y`. `headers` are the categories'
  * header tops in list order (layout positions, so rows gliding by do not move the target).
  */

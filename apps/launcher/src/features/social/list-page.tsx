@@ -457,7 +457,7 @@ type Item =
       total: number;
     }
   | { key: string; kind: "groupEmpty"; id: string }
-  | { key: string; kind: "slot"; height: number; folded: boolean }
+  | { key: string; kind: "slot"; height: number; folded: boolean; origin?: boolean }
   | { key: string; kind: "newGroup" };
 
 /** From this many friends the list gets a search field (a short list reads at a glance). */
@@ -609,6 +609,15 @@ export function ListPage() {
       if (drag?.kind === "group") shown = reorderGroups(doc, drag.order);
       const sections = groupSections(friends, shown, favorites);
       const custom = sections.filter((s) => s.id !== REST);
+      // A friend over another category leaves its place open until the drop: closing it would
+      // move everything below it, the target too, from under the pointer (FIX2).
+      const away =
+        drag?.kind === "friend" && drag.over !== drag.from && !drag.settling ? drag : null;
+      const origin = away
+        ? (groupSections(friends, doc, favorites)
+            .find((s) => s.id === away.from)
+            ?.friends.findIndex((f) => f.id === away.id) ?? -1)
+        : -1;
       sections.forEach((s) => {
         if (drag?.kind === "group" && drag.id === s.id) {
           // The lifted category: a slot where it would land, its friends folded into it.
@@ -635,11 +644,21 @@ export function ListPage() {
           }
           return;
         }
-        if (!s.friends.length) {
+        const entries = rows(s.friends, s.id);
+        if (away && s.id === away.from && origin >= 0) {
+          entries.splice(origin, 0, {
+            key: `o:${away.id}`,
+            kind: "slot",
+            height: away.height,
+            folded: false,
+            origin: true,
+          });
+        }
+        if (!entries.length) {
           list.push({ key: `e:${s.id}`, kind: "groupEmpty", id: s.id });
           return;
         }
-        list.push(...rows(s.friends, s.id));
+        list.push(...entries);
       });
     } else {
       const groups = groupFriends(friends, favorites);
@@ -891,7 +910,7 @@ export function ListPage() {
       case "groupEmpty":
         return <EmptyCategory dragging={drag?.kind === "friend" && !drag.settling} />;
       case "slot":
-        return <DragSlot height={item.height} folded={item.folded} />;
+        return <DragSlot height={item.height} folded={item.folded} origin={item.origin} />;
       case "newGroup":
         return (
           <NewCategoryRow

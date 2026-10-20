@@ -8,6 +8,7 @@ import {
   EMPTY_GROUPS,
   groupOf,
   groupSections,
+  layoutTop,
   MAX_GROUPS,
   moveFriend,
   newGroupId,
@@ -169,5 +170,24 @@ describe("dragging", () => {
     expect(dragOrder(order, "drag", 60, -1, blocks)).toEqual(order);
     expect(dragOrder(order, "drag", 40, -1, blocks)).toEqual(["drag", "okul", "pvp", "aile"]);
     expect(dragOrder(["drag"], "drag", 500, 1, blocks)).toEqual(["drag"]);
+  });
+
+  // Stand-ins for laid out elements: what `layoutTop` reads of them.
+  const box = (offsetTop: number, offsetParent: object | null, clientTop = 0) =>
+    ({ offsetTop, offsetParent, clientTop }) as unknown as HTMLElement;
+
+  it("a header is measured in the list's layout while its row glides (FIX2)", () => {
+    const list = box(0, null);
+    // At rest the list is the header's offset parent.
+    expect(layoutTop(box(95, list), list)).toBe(95);
+    // Gliding, the row (a transform) is the offset parent: the header's own offset reads 0.
+    const gliding = box(95, list);
+    expect(layoutTop(box(0, gliding), list)).toBe(95);
+    // A bordered parent on the way adds its border.
+    const framed = box(40, list, 1);
+    expect(layoutTop(box(10, framed), list)).toBe(51);
+    // Not laid out inside the list: the caller measures on screen.
+    expect(layoutTop(box(10, null), list)).toBeNull();
+    expect(layoutTop(box(10, box(0, null)), list)).toBeNull();
   });
 });

@@ -389,17 +389,34 @@ export function NewCategoryRow({
   );
 }
 
-/** Where a dragged row or category would land: its height, a soft gold outline. */
-export function DragSlot({ height, folded }: { height: number; folded?: boolean }) {
+/**
+ * Where a dragged row or category would land: its height, a soft gold outline. `origin`: the place
+ * a friend over another category came from, kept open until the drop (a faint outline).
+ */
+export function DragSlot({
+  height,
+  folded,
+  origin,
+}: {
+  height: number;
+  folded?: boolean;
+  origin?: boolean;
+}) {
   return (
     <div
-      data-drag-slot
+      data-drag-slot={origin ? undefined : true}
+      data-drag-origin={origin ? true : undefined}
       data-folded={folded ? "1" : undefined}
       aria-hidden
       style={{ height }}
       className="py-0.5"
     >
-      <div className="h-full rounded-[var(--radius-panel)] border border-dashed border-gold-400/35 bg-gold-500/[0.06]" />
+      <div
+        className={cn(
+          "h-full rounded-[var(--radius-panel)] border border-dashed",
+          origin ? "border-white/10" : "border-gold-400/35 bg-gold-500/[0.06]",
+        )}
+      />
     </div>
   );
 }

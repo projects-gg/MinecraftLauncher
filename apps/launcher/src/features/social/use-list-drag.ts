@@ -12,7 +12,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { dragOrder, dropTarget } from "./groups";
+import { dragOrder, dropTarget, layoutTop } from "./groups";
 
 /** Pointer travel before a press becomes a drag (a click stays a click). */
 const THRESHOLD = 6;
@@ -69,6 +69,9 @@ export function useListDrag({ listRef, reduce, onDropFriend, onDropGroup }: Opti
       setDrag(next);
     };
     const list = () => listRef.current;
+    /** `element`'s top in the list's layout; on screen if it is not laid out in the list. */
+    const topIn = (element: HTMLElement, within: HTMLElement, withinTop: number) =>
+      layoutTop(element, within) ?? element.getBoundingClientRect().top - withinTop;
 
     const hitTest = () => {
       const element = list();
@@ -76,13 +79,14 @@ export function useListDrag({ listRef, reduce, onDropFriend, onDropGroup }: Opti
       if (!element || !d || d.settling) return;
       const top = element.getBoundingClientRect().top;
       const headers = [...element.querySelectorAll<HTMLElement>("[data-group-header]")];
+      const tops = headers.map((header) => topIn(header, element, top));
       if (d.kind === "friend") {
         const target =
           dropTarget(
             pointer.current.y - top,
-            headers.map((header) => ({
+            headers.map((header, index) => ({
               id: header.dataset.groupHeader ?? "",
-              top: header.offsetTop,
+              top: tops[index] ?? 0,
             })),
           ) ?? headers[0]?.dataset.groupHeader;
         if (target && target !== d.over) set({ ...d, over: target });
@@ -90,11 +94,9 @@ export function useListDrag({ listRef, reduce, onDropFriend, onDropGroup }: Opti
       }
       const blocks = new Map<string, { top: number; bottom: number }>();
       headers.forEach((header, index) => {
-        const id = header.dataset.groupHeader ?? "";
-        const next = headers[index + 1];
-        blocks.set(id, {
-          top: header.offsetTop,
-          bottom: next ? next.offsetTop : element.scrollHeight,
+        blocks.set(header.dataset.groupHeader ?? "", {
+          top: tops[index] ?? 0,
+          bottom: tops[index + 1] ?? element.scrollHeight,
         });
       });
       // The middle of the lifted header, in the list's own coordinates.
@@ -171,7 +173,8 @@ export function useListDrag({ listRef, reduce, onDropFriend, onDropGroup }: Opti
         return;
       }
       // The slot's place once the rows have glided (its layout box, not where it is mid-glide).
-      const target = element.getBoundingClientRect().top + slot.offsetTop;
+      const listTop = element.getBoundingClientRect().top;
+      const target = listTop + topIn(slot, element, listTop);
       if (slot.dataset.folded === "1") {
         // Into a folded category: the ghost sinks into its header.
         void animate(y, target - d.height * 0.6, SETTLE);
@@ -184,6 +187,8 @@ export function useListDrag({ listRef, reduce, onDropFriend, onDropGroup }: Opti
     };
 
     const finish = (commit: boolean) => {
+      // Where the pointer is now decides, also when no frame ran since it last moved.
+      if (commit) hitTest();
       const d = current.current;
       if (!d || d.settling) return;
       if (frame.current !== null) cancelAnimationFrame(frame.current);
@@ -217,11 +222,18 @@ export function useListDrag({ listRef, reduce, onDropFriend, onDropGroup }: Opti
       if (delta !== 0) pointer.current.direction = delta > 0 ? 1 : -1;
       pointer.current.y = event.clientY;
       y.set(event.clientY - grab.current);
+      // The target follows the pointer itself; the frame loop adds the list scrolling under it.
+      hitTest();
     };
 
-    const onUp = () => {
+    const onUp = (event: PointerEvent) => {
       pending.current = null;
-      if (current.current) finish(true);
+      const d = current.current;
+      if (d) {
+        // Released here (a cancelled pointer has no place of its own).
+        if (event.type === "pointerup" && !d.settling) pointer.current.y = event.clientY;
+        finish(true);
+      }
       // A click right after a drag belongs to the drag; nothing else may take it.
       window.setTimeout(() => {
         suppressClick.current = false;
