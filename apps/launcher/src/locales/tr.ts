@@ -17,6 +17,7 @@ import { trModSets } from "./tr-modsets";
 import { trOverview } from "./tr-overview";
 import { trPlacement } from "./tr-placement";
 import { trPlayOpen } from "./tr-play-open";
+import { trPlayTogether } from "./tr-play-together";
 import { trPrepare } from "./tr-prepare";
 import { trReminders } from "./tr-reminders";
 import { trShortcuts } from "./tr-shortcuts";
@@ -41,6 +42,7 @@ export const tr = {
   social: trSocial,
   friendGroups: trFriendGroups,
   friendMenus: trFriendMenus,
+  playTogether: trPlayTogether,
   teams: trTeams,
   minecraft: trMinecraft,
   eventJoin: trEventJoin,

@@ -52,7 +52,7 @@ import {
   EmptyCategory,
   NewCategoryRow,
 } from "./category-header";
-import { FriendRow, JoinButton, type RowTeam } from "./friend-row";
+import { FriendRow, type RowTeam } from "./friend-row";
 import {
   addGroup,
   groupOf,
@@ -69,7 +69,8 @@ import {
   stepFriend,
   stepGroup,
 } from "./groups";
-import { groupFriends, isJoinable, presenceLine } from "./model";
+import { canJoinInvite, joinInvite } from "./join-dialog";
+import { groupFriends, presenceLine } from "./model";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -292,7 +293,11 @@ function InviteRow({ invite }: { invite: SocialInvite }) {
           {t("social.list.invitedYou")}, {ago(invite.at)}
         </span>
       </span>
-      {isJoinable(invite.server) ? <JoinButton /> : null}
+      {canJoinInvite(invite) ? (
+        <Button size="sm" variant="secondary" onClick={() => joinInvite(invite)}>
+          {t("social.actions.join")}
+        </Button>
+      ) : null}
       <IconButton
         label={t("social.actions.dismiss")}
         icon={<X size={16} />}

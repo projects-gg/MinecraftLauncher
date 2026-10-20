@@ -14,7 +14,8 @@ pub mod window;
 
 pub use command::{
     LAUNCHER_NAME, LAUNCHER_VERSION, LaunchCommand, LaunchOptions, QuickPlay, WindowOptions,
-    build_launch_command, java_argfile, legacy_jvm_arguments, split_args, substitute,
+    build_launch_command, java_argfile, legacy_jvm_arguments, pick_quick_play, split_args,
+    substitute,
 };
 pub use crash::{
     CrashDiagnosis, CrashInput, CrashKind, SHORT_RUN, SuggestedAction, analyze_crash,

@@ -47,6 +47,7 @@ import { openMenuFromKey } from "./menu-key";
 import { friendMenu, rowsOf } from "./menus";
 import { isJoinable, notifiesOnline, presenceLine } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
+import { canInvite } from "./play-together";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
 
@@ -68,6 +69,15 @@ export interface RowTeam {
 
 // In the interface's language, looked up at each call (the language can change live).
 const dateFormat = () => dateTimeFormat({ day: "numeric", month: "long", year: "numeric" });
+
+/**
+ * "Birlikte oyna" is offered only from a server the invite will carry: projects.gg, or another
+ * server while the player shares its address (play-together.ts). No hint otherwise: in the
+ * launcher or in singleplayer there is nothing to join yet.
+ */
+function useCanInvite(): boolean {
+  return useSocialUi((s) => canInvite(s.view.activity, s.view.me?.privacy.shareServer ?? false));
+}
 
 /**
  * "Katıl": disabled (with the reason) while a game is being prepared or running. A disabled
@@ -132,6 +142,7 @@ function FriendCard({
   const notify = useSocialPrefs((s) => notifiesOnline(s, friend.id));
   const setOnlineAlert = useSocialPrefs((s) => s.setOnlineAlert);
   const cooldown = useSocialUi((s) => s.inviteCooldown);
+  const invitable = useCanInvite();
   const [confirm, setConfirm] = useState<Confirm | null>(initialConfirm);
   const [busy, setBusy] = useState(false);
   const joinable = friend.state === "playing" && isJoinable(friend.game);
@@ -194,15 +205,17 @@ function FriendCard({
 
       <div className="mt-4 flex flex-col gap-2">
         {joinable ? <JoinButton size="md" variant="primary" className="w-full" /> : null}
-        <Button
-          variant="secondary"
-          className="w-full"
-          icon={<PaperPlaneTilt size={16} />}
-          disabled={coolingDown}
-          onClick={() => void inviteFriend(friend)}
-        >
-          {coolingDown ? t("social.actions.invited") : t("social.actions.invite")}
-        </Button>
+        {invitable ? (
+          <Button
+            variant="secondary"
+            className="w-full"
+            icon={<PaperPlaneTilt size={16} />}
+            disabled={coolingDown}
+            onClick={() => void inviteFriend(friend)}
+          >
+            {coolingDown ? t("social.actions.invited") : t("social.actions.invite")}
+          </Button>
+        ) : null}
         <DiscordButton className="w-full" onClick={() => void openInDiscord(friend)}>
           {t("social.actions.message")}
         </DiscordButton>
@@ -417,6 +430,7 @@ export function FriendRow({
   const notify = useSocialPrefs((s) => notifiesOnline(s, friend.id));
   const setOnlineAlert = useSocialPrefs((s) => s.setOnlineAlert);
   const cooldown = useSocialUi((s) => s.inviteCooldown);
+  const invitable = useCanInvite();
   const busy = useLaunch((s) => gameBusy(s.phase.kind));
   const joinable = friend.state === "playing" && isJoinable(friend.game);
   const coolingDown = inviteCoolingDown(friend.id, cooldown);
@@ -434,7 +448,7 @@ export function FriendRow({
     friendMenu({
       joinable,
       gameBusy: busy,
-      invite: coolingDown ? "waiting" : "ready",
+      invite: !invitable ? "hidden" : coolingDown ? "waiting" : "ready",
       notifyOnline: notify,
       categories: Boolean(categories),
       team: team?.state ?? null,

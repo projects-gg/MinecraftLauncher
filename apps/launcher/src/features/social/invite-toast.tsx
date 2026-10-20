@@ -1,22 +1,19 @@
 // "Birlikte oyna" arriving live: a toast with the friend's face, where they play, and "Katıl"
-// when that is projects.gg. It stays a little longer than other toasts (it asks for an
-// answer), and the invite also waits in the panel for an hour.
+// when the invite leads to a server (projects.gg, or another one whose address the friend shares).
+// "Katıl" asks before it starts the game (join-dialog.tsx). The toast stays a little longer than
+// other toasts (it asks for an answer), and the invite also waits in the panel for an hour.
 import { X } from "@phosphor-icons/react";
 import { Button, IconButton, toast } from "@pl/ui";
 import { useTranslation } from "react-i18next";
-import { api } from "@/lib/api";
 import type { SocialInvite } from "@/lib/api/social-types";
-import { useLaunch } from "@/stores/launch";
-import { gameBusy, joinProjects } from "./join";
+import { canJoinInvite, joinInvite } from "./join-dialog";
 import { isJoinable } from "./model";
 import { SocialAvatar } from "./social-face";
 
 function InviteToast({ toastId, invite }: { toastId: string | number; invite: SocialInvite }) {
   const { t } = useTranslation();
-  const busy = useLaunch((s) => gameBusy(s.phase.kind));
   const name = invite.name ?? t("social.notices.someone");
-  const joinable = isJoinable(invite.server);
-  const where = joinable
+  const where = isJoinable(invite.server)
     ? t("social.presence.projects")
     : invite.server?.host
       ? t("social.presence.otherHost", { host: invite.server.host })
@@ -34,15 +31,13 @@ function InviteToast({ toastId, invite }: { toastId: string | number; invite: So
         </p>
         {where ? <p className="truncate text-[12.5px] text-jade-400">{where}</p> : null}
       </div>
-      {joinable ? (
+      {canJoinInvite(invite) ? (
         <Button
           size="sm"
           variant="primary"
-          disabled={busy}
           onClick={() => {
             toast.dismiss(toastId);
-            void api.social.dismissInvite(invite.id);
-            void joinProjects();
+            joinInvite(invite);
           }}
         >
           {t("social.actions.join")}

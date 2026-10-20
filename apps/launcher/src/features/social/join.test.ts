@@ -15,11 +15,14 @@ vi.mock("@/lib/api", () => ({
 vi.mock("@/stores/launch", () => ({
   useLaunch: { getState: () => ({ phase: { kind: "idle" }, play }) },
 }));
-vi.mock("@/stores/prefs", () => ({ usePrefs: { getState: () => ({ selectInstance }) } }));
+let selectedInstanceId: string | null = null;
+vi.mock("@/stores/prefs", () => ({
+  usePrefs: { getState: () => ({ selectInstance, selectedInstanceId }) },
+}));
 vi.mock("@/features/content/jobs", () => ({ showError: (error: unknown) => showError(error) }));
 vi.mock("@/lib/i18n", () => ({ default: { t: (key: string) => key } }));
 
-const { joinProjects } = await import("./join");
+const { joinProjects, joinServer } = await import("./join");
 
 describe("joinProjects", () => {
   beforeEach(() => {
@@ -56,5 +59,43 @@ describe("joinProjects", () => {
     const shown = showError.mock.calls[0]?.[0] as Error & { details?: string };
     expect(shown.message).toBe("eventJoin.failed");
     expect(shown.details).toBe("ipc channel closed");
+  });
+});
+
+describe("joinServer", () => {
+  const server = { host: "survival.example.net", port: 25570 };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    selectedInstanceId = null;
+  });
+
+  it("starts the instance OYNA would start, straight into the inviter's server", async () => {
+    selectedInstanceId = "fabric-1-21";
+    instances.mockResolvedValue([{ id: "projects" }, { id: "fabric-1-21" }]);
+    await joinServer(server);
+    expect(selectInstance).toHaveBeenCalledWith("fabric-1-21");
+    expect(play).toHaveBeenCalledWith("fabric-1-21", {
+      autoJoin: false,
+      quickPlay: { kind: "multiplayer", host: "survival.example.net", port: 25570 },
+    });
+    expect(ensureOfficialInstance).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the Projects instance, as OYNA does", async () => {
+    selectedInstanceId = "deleted";
+    instances.mockResolvedValue([{ id: "vanilla" }]);
+    ensureOfficialInstance.mockResolvedValue({ id: "projects" });
+    await joinServer({ host: "survival.example.net", port: null });
+    expect(play).toHaveBeenCalledWith("projects", {
+      autoJoin: false,
+      quickPlay: { kind: "multiplayer", host: "survival.example.net", port: null },
+    });
+  });
+
+  it("says why it could not start", async () => {
+    instances.mockRejectedValue("ipc channel closed");
+    await joinServer(server);
+    expect(showError).toHaveBeenCalledTimes(1);
+    expect(play).not.toHaveBeenCalled();
   });
 });

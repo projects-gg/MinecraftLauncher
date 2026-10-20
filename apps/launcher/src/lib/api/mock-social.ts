@@ -7,7 +7,10 @@
 // - `off`: the feature is off (nothing shows); `signedOut`: the opt-in screen;
 // - `signingIn`: waiting for the browser; `loading`: skeletons; `empty`: no friends yet;
 // - `down`: the service is unavailable; `replaced`: another device took over;
-// - `invite`: a live invite arrives shortly after start; `restore`: the "getireyim mi?" offer;
+// - `invite`: a live invite (to projects.gg) arrives shortly after start, `inviteOther` one to
+//   another server (`&inviteAt=<ms>` delays it); `restore`: the "getireyim mi?" offer;
+// - `playing` / `playingOther`: the player is on projects.gg / on another server, its address
+//   shared ("Birlikte oyna" is offered only then);
 // - `groups`: the friend list in the player's categories;
 // - `team`: teams on, the player founded a team (with categories); `teamMember`: a member of one;
 // - `teamNew`: teams on, no team yet, an invite to one waiting; `teamInvite`: one arrives live;
@@ -20,6 +23,7 @@ import type {
   FriendGroups,
   FriendRequest,
   SocialApi,
+  SocialInvite,
   SocialNotice,
   SocialSession,
   SocialSnapshot,
@@ -343,6 +347,16 @@ function initial(): SocialSnapshot {
     case "legacy":
       // A service without categories and teams (the live one until SOC4 is deployed).
       return { ...base, groups: undefined };
+    case "playing":
+      // The player is on projects.gg: "Birlikte oyna" is offered.
+      return { ...base, activity: { state: "playing", host: "play.projects.gg" } };
+    case "playingOther":
+      // On another server, its address shared with friends: "Birlikte oyna" is offered too.
+      return {
+        ...base,
+        activity: { state: "playing", host: "survival.example.net" },
+        me: base.me ? { ...base.me, privacy: { ...base.me.privacy, shareServer: true } } : base.me,
+      };
     case "signedOut":
       return signedOut(base);
     case "signingIn":
@@ -397,20 +411,33 @@ function tell(notice: SocialNotice) {
 
 if (typeof window !== "undefined") {
   const name = scenario();
-  if (name === "invite") {
+  if (name === "invite" || name === "inviteOther") {
+    // `?inviteAt=<ms>`: when it arrives (a game started in the preview first, for example).
+    const at = Number(new URLSearchParams(window.location.search).get("inviteAt")) || 1600;
     setTimeout(() => {
-      const invite = {
-        id: "i-live",
-        from: "301",
-        name: "Ayşe",
-        avatar: "preset:fox",
-        at: now(),
-        server: { where: "projects" as const, host: "play.projects.gg" },
-        quiet: false,
-      };
+      const invite: SocialInvite =
+        name === "invite"
+          ? {
+              id: "i-live",
+              from: "301",
+              name: "Ayşe",
+              avatar: "preset:fox",
+              at: now(),
+              server: { where: "projects", host: "play.projects.gg" },
+              quiet: false,
+            }
+          : {
+              id: "i-live",
+              from: "304",
+              name: "Deniz",
+              avatar: "preset:wizard",
+              at: now(),
+              server: { where: "other", host: "survival.example.net" },
+              quiet: false,
+            };
       commit((v) => ({ ...v, invites: [invite, ...v.invites] }));
       tell({ kind: "invite", invite });
-    }, 1600);
+    }, at);
   }
   if (name === "restore") {
     setTimeout(() => tell({ kind: "signedIn", restore: backup }), 1200);

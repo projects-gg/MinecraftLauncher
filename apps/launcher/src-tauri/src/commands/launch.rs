@@ -1063,15 +1063,17 @@ async fn prepare_and_spawn(
     options.max_memory_mb = Some(memory.max_mb);
     options.launcher_name = "Projects Launcher".to_owned();
     options.launcher_version = launcher_version;
-    options.quick_play = match (&settings.quick_play, &instance.auto_join, auto_join) {
-        // "Devam et": only versions with quick play can join a world directly.
-        (Some(target), _, _) if resolved.supports_quick_play() => Some(target.clone()),
-        (_, Some(server), true) => Some(QuickPlay::Multiplayer {
-            host: server.host.clone(),
-            port: server.port,
-        }),
-        _ => None,
-    };
+    // "Devam et" and an invite's "Katıl" first (a server on every version, a world only with
+    // quick play), else the instance's server when auto-join is on.
+    options.quick_play = pl_mc::launch::pick_quick_play(
+        settings.quick_play.as_ref(),
+        instance
+            .auto_join
+            .as_ref()
+            .map(|server| (server.host.as_str(), server.port)),
+        auto_join,
+        resolved.supports_quick_play(),
+    );
     let command = build_launch_command(&state.mc.dirs, &resolved, &installed, &identity, &options)
         .map_err(CmdError::from)?;
     tracing::info!(command = %command.display_redacted(), "launching");

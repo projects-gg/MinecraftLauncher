@@ -13,6 +13,7 @@ import { usePrefs } from "@/stores/prefs";
 import { attempt, notifyOutside } from "./actions";
 import { FriendsSheet } from "./friends-sheet";
 import { showInviteToast } from "./invite-toast";
+import { JoinDialog } from "./join-dialog";
 import {
   BACKUP_PREFS,
   type BackupPrefKey,
@@ -334,6 +335,7 @@ export function SocialHost() {
     <>
       <FriendsSheet />
       <RestoreDialog />
+      <JoinDialog />
     </>
   );
 }

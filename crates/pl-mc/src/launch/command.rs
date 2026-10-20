@@ -37,6 +37,27 @@ pub enum QuickPlay {
     Realms { realm_id: String },
 }
 
+/// What the game joins right after start. The launch's own target ("Devam et", an invite's
+/// "Katıl") comes first: a server joins on every version (`--server`/`--port` before 1.20), a
+/// world or a realm only with the game's quick play (`supported`). Otherwise the instance's own
+/// server, when auto-join is on.
+pub fn pick_quick_play(
+    requested: Option<&QuickPlay>,
+    instance_server: Option<(&str, Option<u16>)>,
+    auto_join: bool,
+    supported: bool,
+) -> Option<QuickPlay> {
+    match (requested, instance_server, auto_join) {
+        (Some(target @ QuickPlay::Multiplayer { .. }), _, _) => Some(target.clone()),
+        (Some(target), _, _) if supported => Some(target.clone()),
+        (_, Some((host, port)), true) => Some(QuickPlay::Multiplayer {
+            host: host.to_owned(),
+            port,
+        }),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct WindowOptions {
@@ -575,6 +596,56 @@ mod tests {
         let v: VersionJson = serde_json::from_str(json).unwrap();
         let id = v.id.clone();
         resolve_with(&id, |_| Ok(v.clone())).unwrap()
+    }
+
+    #[test]
+    fn quick_play_choice() {
+        let invite = QuickPlay::Multiplayer {
+            host: "mc.example.net".into(),
+            port: Some(25570),
+        };
+        let world = QuickPlay::Singleplayer {
+            world: "Yeni Dünya".into(),
+        };
+        let projects = Some(("play.projects.gg", None));
+        let pick = pick_quick_play;
+
+        // A requested server wins over the instance's own, on old versions too (`--server`).
+        assert_eq!(
+            pick(Some(&invite), projects, true, true),
+            Some(invite.clone())
+        );
+        assert_eq!(
+            pick(Some(&invite), projects, true, false),
+            Some(invite.clone())
+        );
+        assert_eq!(
+            pick(Some(&invite), None, false, false),
+            Some(invite.clone())
+        );
+        // A world needs quick play; without it the instance's server (or the title screen).
+        assert_eq!(
+            pick(Some(&world), projects, false, true),
+            Some(world.clone())
+        );
+        assert_eq!(
+            pick(Some(&world), projects, true, false),
+            Some(QuickPlay::Multiplayer {
+                host: "play.projects.gg".into(),
+                port: None
+            })
+        );
+        assert_eq!(pick(Some(&world), projects, false, false), None);
+        // Nothing requested: auto-join decides.
+        assert_eq!(
+            pick(None, Some(("play.projects.gg", Some(25566))), true, true),
+            Some(QuickPlay::Multiplayer {
+                host: "play.projects.gg".into(),
+                port: Some(25566)
+            })
+        );
+        assert_eq!(pick(None, projects, false, true), None);
+        assert_eq!(pick(None, None, true, true), None);
     }
 
     fn installed(platform: Platform, layout: AssetLayout, index: &str) -> InstalledVersion {

@@ -16,6 +16,7 @@ import { enModSets } from "./en-modsets";
 import { enOverview } from "./en-overview";
 import { enPlacement } from "./en-placement";
 import { enPlayOpen } from "./en-play-open";
+import { enPlayTogether } from "./en-play-together";
 import { enPrepare } from "./en-prepare";
 import { enReminders } from "./en-reminders";
 import { enShortcuts } from "./en-shortcuts";
@@ -247,6 +248,7 @@ export const en: DeepPartial<Strings> = {
   },
   friendGroups: enFriendGroups,
   friendMenus: enFriendMenus,
+  playTogether: enPlayTogether,
   teams: enTeams,
   minecraft: enMinecraft,
   eventJoin: enEventJoin,
