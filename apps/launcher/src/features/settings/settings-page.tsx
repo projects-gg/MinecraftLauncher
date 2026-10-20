@@ -8,6 +8,7 @@ import {
   Gear,
   HardDrives,
   Info,
+  Mountains,
   PaintBrush,
   SidebarSimple,
   UserCircle,
@@ -32,16 +33,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
-import {
-  type ComponentProps,
-  cloneElement,
-  isValidElement,
-  type ReactNode,
-  useId,
-  useMemo,
-} from "react";
+import { type ReactNode, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import logo from "@/assets/brand/logo-96.webp";
+import { platformName } from "@/features/home/community-links";
 import { FriendsSettingsSection } from "@/features/social/settings-section";
 import { useSocialUi } from "@/features/social/store";
 import { UpdateSettingsAction } from "@/features/updates/update-settings";
@@ -61,10 +56,14 @@ import { type Place, usePlace, usePlacement } from "@/stores/placement";
 import { type GameStartBehavior, usePrefs } from "@/stores/prefs";
 import { AccountsSection } from "./accounts-section";
 import { DataSection } from "./data-section";
+import { GraphicsSection } from "./graphics-section";
 import { JavaSection } from "./java-section";
+import { Row } from "./row";
 
 const sections = [
   { id: "general", icon: Gear },
+  // "Grafik ve FPS": second, where players looking for FPS find it first (HOME1).
+  { id: "graphics", icon: Mountains },
   { id: "appearance", icon: PaintBrush },
   { id: "game", icon: GameController },
   { id: "java", icon: Coffee },
@@ -80,56 +79,9 @@ const sections = [
 
 type SectionId = (typeof sections)[number]["id"];
 
-export function Row({
-  title,
-  help,
-  children,
-}: {
-  title: string;
-  help?: string;
-  children: ReactNode;
-}) {
-  const id = useId();
-  const helpId = `${id}-help`;
-  // A row whose control is a switch also toggles on a click on its words: its title and help
-  // become the switch's label (a target as wide as the row, POLISH2). The switch is named by
-  // the title and described by the help (POLISH3: a screen reader read the title only).
-  const toggle =
-    isValidElement<ComponentProps<typeof Switch>>(children) && children.type === Switch;
-  const control = toggle
-    ? cloneElement(children, { id, describedBy: help ? helpId : undefined })
-    : children;
-  const words = (
-    <>
-      <span className="block text-[13.5px] font-medium text-bone-50">{title}</span>
-      {help ? (
-        <span id={helpId} className="mt-0.5 block max-w-[56ch] text-[12.5px] text-ash-300">
-          {help}
-        </span>
-      ) : null}
-    </>
-  );
-  return (
-    <div
-      className={cn(
-        "flex items-center justify-between gap-6 border-b border-white/6 py-3.5 last:border-b-0",
-        // The switch lifts while the pointer is on its words too (`hovered:`).
-        toggle && "switch-row",
-      )}
-    >
-      {toggle ? (
-        <label
-          htmlFor={id}
-          className={cn("min-w-0", children.props.disabled ? "cursor-default" : "cursor-pointer")}
-        >
-          {words}
-        </label>
-      ) : (
-        <div className="min-w-0">{words}</div>
-      )}
-      <div className="shrink-0">{control}</div>
-    </div>
-  );
+/** A section's name: "Grafik ve FPS" keeps its words in its own module (locales/tr-fps.ts). */
+function sectionTitle(t: TFunction, id: SectionId): string {
+  return id === "graphics" ? t("fps.title") : t(`settings.sections.${id}`);
 }
 
 /**
@@ -496,6 +448,10 @@ function About() {
     { label: t("settings.about.discord"), url: links?.discord ?? "https://projects.gg/discord" },
     ...(links?.store ? [{ label: t("settings.about.store"), url: links.store }] : []),
     ...(links?.support ? [{ label: t("settings.about.support"), url: links.support }] : []),
+    // Wiki, forum and the social accounts, as Home's community row shows them.
+    ...(links?.community ?? [])
+      .filter((link) => link.platform !== "discord")
+      .map((link) => ({ label: platformName(link.platform), url: link.url })),
     ...(links?.custom ?? []),
   ];
   return (
@@ -514,7 +470,11 @@ function About() {
       </div>
       <div className="flex flex-wrap gap-2.5">
         {linkButtons.map((link) => (
-          <Button key={link.url} variant="secondary" onClick={() => openLink(link.url)}>
+          <Button
+            key={`${link.label} ${link.url}`}
+            variant="secondary"
+            onClick={() => openLink(link.url)}
+          >
             {link.label}
           </Button>
         ))}
@@ -627,6 +587,7 @@ export function SettingsPage() {
 
   const body: Record<SectionId, ReactNode> = {
     general: <General />,
+    graphics: <GraphicsSection />,
     appearance: <Appearance />,
     game: <GameDefaults />,
     java: <JavaSection />,
@@ -674,7 +635,7 @@ export function SettingsPage() {
                     weight={on ? "duotone" : "regular"}
                     className={on ? "text-gold-300" : undefined}
                   />
-                  {t(`settings.sections.${s.id}`)}
+                  {sectionTitle(t, s.id)}
                 </button>
               </li>
             );
@@ -685,7 +646,7 @@ export function SettingsPage() {
         {/* A new section rises into place; the panel itself stays. */}
         <div key={active} className="panel-in">
           <h2 className="mb-1 font-display text-section font-semibold text-bone-50">
-            {t(`settings.sections.${active}`)}
+            {sectionTitle(t, active)}
           </h2>
           {body[active]}
         </div>

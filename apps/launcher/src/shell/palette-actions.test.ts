@@ -45,7 +45,6 @@ const palette: { id: string; entries: Candidate[] }[] = [
   {
     id: "instance",
     entries: [
-      item("instance:graphics", tr.graphics.palette, PALETTE_WORDS.graphics),
       item("instance:memory", tr.tuning.palette.memory, PALETTE_WORDS.memory),
       item("instance:mods", tr.instance.tabs.mods, PALETTE_WORDS.mods),
       item("instance:resource-packs", tr.instance.tabs.resourcePacks, PALETTE_WORDS.resourcePacks),
@@ -70,6 +69,7 @@ const palette: { id: string; entries: Candidate[] }[] = [
   {
     id: "settings",
     entries: [
+      item("setting:graphics", tr.fps.title, PALETTE_WORDS.graphics),
       item("setting:performance", tr.palette.performanceOn, PALETTE_WORDS.performance, [
         tr.palette.performanceOn,
         tr.palette.performanceOff,
@@ -124,17 +124,21 @@ function rank(query: string): string[] {
 
 describe("palette search", () => {
   it.each([
-    // In-game lag: the graphics preset is the fix; the launcher's Performance mode follows.
-    ["kasiyor", "instance:graphics"],
-    ["kasıyor", "instance:graphics"],
-    ["KASIYOR", "instance:graphics"],
-    ["fps", "instance:graphics"],
-    ["fps düşük", "instance:graphics"],
-    ["lag", "instance:graphics"],
-    ["grafik", "instance:graphics"],
-    ["görüş mesafesi", "instance:graphics"],
-    ["render", "instance:graphics"],
-    ["akıcı", "instance:graphics"],
+    // In-game lag: the graphics preset is the fix (Settings → Grafik ve FPS); the launcher's
+    // Performance mode follows.
+    ["kasiyor", "setting:graphics"],
+    ["kasıyor", "setting:graphics"],
+    ["KASIYOR", "setting:graphics"],
+    ["fps", "setting:graphics"],
+    ["FPS", "setting:graphics"],
+    ["fps düşük", "setting:graphics"],
+    ["fps arttırma", "setting:graphics"],
+    ["fps boost", "setting:graphics"],
+    ["lag", "setting:graphics"],
+    ["grafik", "setting:graphics"],
+    ["görüş mesafesi", "setting:graphics"],
+    ["render", "setting:graphics"],
+    ["akıcı", "setting:graphics"],
     ["launcher kasıyor", "setting:performance"],
     ["performans modu", "setting:performance"],
     ["ip", "action:copy-address"],
@@ -180,13 +184,13 @@ describe("palette search", () => {
   });
 
   it("reads past the filler and the Turkish endings players type", () => {
-    expect(rank("oyun neden kasıyor")[0]).toBe("instance:graphics");
+    expect(rank("oyun neden kasıyor")[0]).toBe("setting:graphics");
     expect(rank("ram nasıl arttırılır")[0]).toBe("instance:memory");
     expect(rank("skinimi değiştir")[0]).toBe("action:appearance");
     expect(rank("loglar")[0]).toBe("instance:logs");
     expect(rank("shader yükle")[0]).toBe("instance:shaders");
-    expect(rank("bilgisayar donuyor")[0]).toBe("instance:graphics");
-    expect(rank("grafik ayarları")[0]).toBe("instance:graphics");
+    expect(rank("bilgisayar donuyor")[0]).toBe("setting:graphics");
+    expect(rank("grafik ayarları")[0]).toBe("setting:graphics");
   });
 
   it("folds Turkish letters both ways", () => {
@@ -218,11 +222,10 @@ describe("palette search", () => {
 
 describe("rankGroups", () => {
   it("leads with the group holding the best match, not the first one that matches", () => {
-    expect(
-      rankGroups(palette, "launcher kasıyor")
-        .map((group) => group.id)
-        .slice(0, 2),
-    ).toEqual(["settings", "instance"]);
+    // The instance group matches too (memory knows "kasıyor") and comes first in the list.
+    const order = rankGroups(palette, "launcher kasıyor").map((group) => group.id);
+    expect(order[0]).toBe("settings");
+    expect(order).toContain("instance");
     expect(rankGroups(palette, "ip")[0]?.id).toBe("actions");
   });
 

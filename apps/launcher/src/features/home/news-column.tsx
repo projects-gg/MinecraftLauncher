@@ -25,6 +25,7 @@ import i18n from "@/lib/i18n";
 import { isWebLink, openLink } from "@/lib/links";
 import { columnFill, liveMinecraft, NEWS_COLUMN_ROWS } from "@/lib/minecraft";
 import { isNewsNew, useNewsSeen } from "@/stores/news-seen";
+import { CommunityRow } from "./community-links";
 import { EventJoin } from "./event-join";
 import { ReminderBell } from "./event-reminders";
 
@@ -633,7 +634,13 @@ export function NewsColumn({ content, loading }: { content?: HomeContent; loadin
       </div>
 
       {event ? <EventBlock event={event} live={live} others={others} /> : null}
-      <div className="h-2.5" />
+      {/* Wiki, Discord, forum and the social accounts: outside the scrolling part, so they stay
+          in view at every window size. */}
+      {loading || content?.links?.community.length ? (
+        <CommunityRow links={content?.links?.community} loading={loading} />
+      ) : (
+        <div className="h-2.5" />
+      )}
     </motion.aside>
   );
 }

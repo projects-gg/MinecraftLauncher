@@ -1,11 +1,4 @@
-import {
-  CaretDown,
-  FloppyDisk,
-  Lightning,
-  Scales,
-  SlidersHorizontal,
-  Sparkle,
-} from "@phosphor-icons/react";
+import { CaretDown, FloppyDisk } from "@phosphor-icons/react";
 import {
   Button,
   cn,
@@ -39,9 +32,9 @@ import {
 } from "@/stores/drafts";
 import { useLaunch } from "@/stores/launch";
 import { ChangeBar, glideBeforeShrink, revealAboveBar } from "../change-bar";
+import { GraphicsPicker } from "./graphics-picker";
 import {
   type GraphicsChoice,
-  graphicsChoices,
   hasAdvanced,
   pickFor,
   replacesCustom,
@@ -82,13 +75,6 @@ function Group({
 
 /** Memory sizes on the sliders ("4,5 GB" / "4.5 GB"; they start at 1 GB). */
 const gb = (mb: number) => formatMemory(mb);
-
-const graphicsIcons: Record<GraphicsChoice, ReactNode> = {
-  smooth: <Lightning size={15} />,
-  balanced: <Scales size={15} />,
-  quality: <Sparkle size={15} />,
-  custom: <SlidersHorizontal size={15} />,
-};
 
 /**
  * An instance's settings. Edits are a draft (stores/drafts.ts): it survives tab switches and
@@ -285,16 +271,11 @@ export function SettingsTab({ instance }: { instance: InstanceDetail }) {
         </Group>
       ) : savedGraphics === null ? null : (
         <Group title={t("graphics.title")} glide={glide} ref={graphicsRef}>
-          <Segmented<GraphicsChoice>
+          <GraphicsPicker
             className="justify-self-start"
+            saved={savedGraphics}
             value={pickedGraphics ?? savedGraphics}
             onValueChange={chooseGraphics}
-            label={t("graphics.title")}
-            options={graphicsChoices(savedGraphics).map((choice) => ({
-              value: choice,
-              label: choice === "custom" ? t("graphics.custom") : t(`graphics.preset.${choice}`),
-              icon: graphicsIcons[choice],
-            }))}
           />
           {/* Only a pick over the player's own values says something: saving replaces them. */}
           <AnimatePresence mode="popLayout" initial={false}>

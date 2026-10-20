@@ -343,13 +343,6 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
           searching && selected
             ? [
                 entry(
-                  "instance:graphics",
-                  t("graphics.palette"),
-                  <Mountains size={18} />,
-                  setting("graphics"),
-                  { words: PALETTE_WORDS.graphics },
-                ),
-                entry(
                   "instance:memory",
                   t("tuning.palette.memory"),
                   <Memory size={18} />,
@@ -503,6 +496,14 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
         id: "settings",
         heading: t("nav.settings"),
         entries: [
+          // In-game lag: the one-tap graphics preset of the instance Play launches (HOME1).
+          entry(
+            "setting:graphics",
+            t("fps.title"),
+            <Mountains size={18} />,
+            () => run(() => openSettings("graphics")),
+            { words: PALETTE_WORDS.graphics },
+          ),
           entry(
             "setting:performance",
             performanceMode ? t("palette.performanceOff") : t("palette.performanceOn"),

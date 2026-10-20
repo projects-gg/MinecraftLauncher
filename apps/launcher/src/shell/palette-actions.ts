@@ -26,9 +26,9 @@ export const PALETTE_WORDS = {
     related: ["dil", "language", "ingilizce", "english", "türkçe", "turkish"],
   },
 
-  // The selected instance (shown only while searching)
-  // In-game lag is what the graphics preset fixes, so the lag words lead here first; the
-  // launcher's own Performance mode keeps "launcher", effects and blur.
+  // In-game lag is what the graphics preset fixes, so the lag words lead to Settings → Grafik ve
+  // FPS (the preset of the instance Play launches, one tap; HOME1); the launcher's own
+  // Performance mode keeps "launcher", effects and blur.
   graphics: {
     keywords: [
       "grafik",
@@ -61,8 +61,15 @@ export const PALETTE_WORDS = {
       "graphics",
       "quality",
       "stutter",
+      "boost",
+      // "fps arttırma": the words players put after "fps" (RAM has them too).
+      "arttır",
+      "artır",
+      "yükselt",
     ],
   },
+
+  // The selected instance (shown only while searching)
   memory: {
     keywords: [
       "ram",
