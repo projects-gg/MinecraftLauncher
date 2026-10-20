@@ -15,10 +15,11 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use pl_social::{
-    ErrorCode, InviteOutcome, LocalStatus, LoginAttempt, PresenceEvent, PresenceHandle,
-    PresenceOptions, PresenceState, ProfileUpdate, Relation, RequestOutcome, Session,
-    SettingsPrecondition, SocialClient, SocialConfig, SocialError, StatusMode, StopReason,
-    auth_code_from_deep_link,
+    CallAnswer, CallKind, ErrorCode, InviteOutcome, LocalStatus, LoginAttempt, PermissionLevel,
+    PermissionsEdit, PresenceEvent, PresenceHandle, PresenceOptions, PresenceState, ProfileUpdate,
+    Relation, RequestOutcome, Session, SettingsPrecondition, SocialClient, SocialConfig,
+    SocialError, StatusMode, StopReason, TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK, TEAM_FEATURE_ROLES,
+    TeamEdit, TeamLook, auth_code_from_deep_link, crew_code,
 };
 use url::Url;
 
@@ -353,4 +354,210 @@ async fn sessions_codes_and_errors() {
         .unwrap_err();
     assert_eq!(used_up.code(), Some(&ErrorCode::AuthPendingNotFound));
     second.delete_account().await.unwrap();
+}
+
+/// Crews against a local Worker: looks, codes, moderators and permissions, and "Ekibi çağır" where
+/// the service offers them (`teamFeatures`); against a Worker from before them (point
+/// `PL_SOCIAL_URL` at one), what the launcher relies on there: no features, today's look, codes
+/// without a prefix.
+#[tokio::test]
+#[ignore = "needs `pnpm dev` and `pnpm dev:discord` in services/social"]
+async fn crews_look_roles_and_calls() {
+    let client = client();
+    client.health().await.expect("wrangler dev is running");
+    let leader_id = new_user_id(4);
+    let mate_id = new_user_id(5);
+    let leader = sign_in(&client, &leader_id, "lider").await;
+    let mate = sign_in(&client, &mate_id, "uye").await;
+    let features = leader.teams().await.unwrap().team_features;
+    let look = features.iter().any(|f| f == TEAM_FEATURE_LOOK);
+    let roles = features.iter().any(|f| f == TEAM_FEATURE_ROLES);
+    let calls = features.iter().any(|f| f == TEAM_FEATURE_CALLS);
+
+    // Founding: the look goes only where the service has looks.
+    let wanted = TeamLook {
+        color: "teal".into(),
+        frame: "banner".into(),
+        motto: "Birlikte güçlüyüz!".into(),
+    };
+    let emblem = if look { "controller" } else { "sword" };
+    let created = leader
+        .create_team("Gece Kartalları", "GKR", emblem, look.then_some(&wanted))
+        .await
+        .unwrap()
+        .team
+        .unwrap();
+    if look {
+        assert_eq!(
+            (
+                created.color.as_str(),
+                created.frame.as_str(),
+                created.motto.as_str()
+            ),
+            ("teal", "banner", "Birlikte güçlüyüz!")
+        );
+    } else {
+        assert_eq!(
+            (created.color.as_str(), created.frame.as_str()),
+            ("gold", "cut")
+        );
+        assert!(created.motto.is_empty());
+    }
+
+    // The code as players see it (EKP-) finds the crew on every service: it goes without prefix.
+    let shown = crew_code(&created.code);
+    assert!(shown.starts_with("EKP-"));
+    let lookup = mate.lookup_team(&shown).await.unwrap();
+    assert_eq!(lookup.team.id, created.id);
+    assert_eq!(lookup.team.color, if look { "teal" } else { "gold" });
+    let joined = mate.join_team(&shown).await.unwrap().team.unwrap();
+    assert_eq!(joined.members.len(), 2);
+
+    if look {
+        let edit = TeamEdit {
+            color: Some("crimson".into()),
+            motto: Some(String::new()),
+            ..TeamEdit::default()
+        };
+        let team = leader
+            .update_team(&created.id, &edit)
+            .await
+            .unwrap()
+            .team
+            .unwrap();
+        assert_eq!((team.color.as_str(), team.motto.as_str()), ("crimson", ""));
+        let bad = TeamEdit {
+            motto: Some("discord.gg/abc".into()),
+            ..TeamEdit::default()
+        };
+        let refused = leader.update_team(&created.id, &bad).await.unwrap_err();
+        assert_eq!(refused.code(), Some(&ErrorCode::InvalidTeamMotto));
+    }
+
+    if roles {
+        // The leader names a moderator and lets moderators edit the look.
+        let named = leader
+            .set_team_moderator(&created.id, &mate_id, true)
+            .await
+            .unwrap()
+            .team
+            .unwrap();
+        assert!(
+            named
+                .members
+                .iter()
+                .any(|m| m.profile.id == mate_id && m.moderator)
+        );
+        let recolour = TeamEdit {
+            color: Some("navy".into()),
+            ..TeamEdit::default()
+        };
+        let not_yet = mate.update_team(&created.id, &recolour).await.unwrap_err();
+        assert_eq!(not_yet.code(), Some(&ErrorCode::TeamNotPermitted));
+        let open = TeamEdit {
+            permissions: Some(PermissionsEdit {
+                edit: Some(PermissionLevel::Moderators),
+                ..PermissionsEdit::default()
+            }),
+            ..TeamEdit::default()
+        };
+        let opened = leader
+            .update_team(&created.id, &open)
+            .await
+            .unwrap()
+            .team
+            .unwrap();
+        assert_eq!(opened.permissions.edit, PermissionLevel::Moderators);
+        let recoloured = mate
+            .update_team(&created.id, &recolour)
+            .await
+            .unwrap()
+            .team
+            .unwrap();
+        assert_eq!(recoloured.color, "navy");
+        // The name stays the leader's.
+        let rename = TeamEdit {
+            name: Some("Başka Ad".into()),
+            ..TeamEdit::default()
+        };
+        let refused = mate.update_team(&created.id, &rename).await.unwrap_err();
+        assert_eq!(refused.code(), Some(&ErrorCode::TeamFounderOnly));
+        leader
+            .set_team_moderator(&created.id, &mate_id, false)
+            .await
+            .unwrap();
+    }
+
+    // "Ekibi çağır" on the socket, where the service has it.
+    let mut leader_presence = leader.connect_presence(options());
+    let mut mate_presence = mate.connect_presence(options());
+    for presence in [&mut leader_presence, &mut mate_presence] {
+        expect(presence, "connected", |e| {
+            matches!(e, PresenceEvent::Connected { .. })
+        })
+        .await;
+    }
+    if calls {
+        mate_presence.call_crew().await.unwrap();
+        let call = match expect(&mut leader_presence, "the call", |e| {
+            matches!(e, PresenceEvent::Call { .. })
+        })
+        .await
+        {
+            PresenceEvent::Call { call, quiet, clock } => {
+                assert!(!quiet, "a teammate's live call is announced");
+                assert!(clock.is_some(), "the hub's clock comes with it");
+                assert_eq!(call.from, mate_id);
+                assert_eq!(call.kind, CallKind::Ready);
+                assert_eq!(call.until - call.at, 20 * 60);
+                call
+            }
+            _ => unreachable!(),
+        };
+        leader_presence
+            .answer_call(&call.id, CallAnswer::Yes)
+            .await
+            .unwrap();
+        expect(&mut mate_presence, "the answer", |e| {
+            matches!(e, PresenceEvent::CallAnswered { by, answer: CallAnswer::Yes, .. } if *by == leader_id)
+        })
+        .await;
+        // The caller goes to projects.gg: the call turns into a "join" call.
+        mate_presence.set_status(LocalStatus::Playing {
+            host: Some("play.projects.gg".into()),
+        });
+        expect(&mut leader_presence, "the join call", |e| {
+            matches!(e, PresenceEvent::Call { call, .. } if call.kind == CallKind::Join)
+        })
+        .await;
+        // One call at a time, and not again so soon.
+        let again = leader_presence.call_crew().await.unwrap_err();
+        assert_eq!(again.code(), Some(&ErrorCode::CallActive));
+        mate_presence.end_call(&call.id).await.unwrap();
+        expect(
+            &mut leader_presence,
+            "the end",
+            |e| matches!(e, PresenceEvent::CallEnded { call: id, .. } if *id == call.id),
+        )
+        .await;
+        let soon = mate_presence.call_crew().await.unwrap_err();
+        assert!(matches!(
+            soon,
+            SocialError::RateLimited {
+                retry_after: Some(_)
+            }
+        ));
+        let gone = leader_presence
+            .answer_call(&call.id, CallAnswer::No)
+            .await
+            .unwrap_err();
+        assert_eq!(gone.code(), Some(&ErrorCode::CallNotFound));
+    } else {
+        // A service without calls refuses the message (the launcher never sends it there).
+        let refused = mate_presence.call_crew().await.unwrap_err();
+        assert_eq!(refused.code(), Some(&ErrorCode::BadRequest));
+    }
+
+    mate.delete_account().await.unwrap();
+    leader.delete_account().await.unwrap();
 }

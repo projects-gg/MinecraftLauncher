@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TeamMember } from "@/lib/api/social-types";
 import {
+  callMenu,
   categoryMenu,
   type FriendInput,
   friendMenu,
@@ -24,6 +25,7 @@ const member = (id: string): TeamMember => ({
   username: id,
   avatar: "discord",
   role: "member",
+  moderator: false,
   me: false,
   friend: true,
   blocked: false,
@@ -146,6 +148,38 @@ describe("memberMenu", () => {
     ]);
   });
 
+  it("lets the leader name and un-name moderators where the service has roles", () => {
+    const leader = { ...base, founder: true, roles: true };
+    expect(words(memberMenu(leader))).toEqual([
+      "message",
+      "-",
+      "makeModerator",
+      "makeFounder",
+      "remove",
+      "-",
+      "block",
+    ]);
+    expect(words(memberMenu({ ...leader, moderator: true }))).toContain("unmakeModerator");
+    expect(words(memberMenu({ ...leader, moderatorsFull: true }))).toContain("makeModerator(off)");
+    // A service without roles: no moderators at all.
+    expect(words(memberMenu({ ...leader, roles: false }))).not.toContain("makeModerator");
+  });
+
+  it("lets a moderator remove where the crew lets them, and nothing more", () => {
+    expect(words(memberMenu({ ...base, roles: true, removable: true }))).toEqual([
+      "message",
+      "-",
+      "remove",
+      "-",
+      "block",
+    ]);
+    expect(words(memberMenu({ ...base, roles: true, removable: false }))).toEqual([
+      "message",
+      "-",
+      "block",
+    ]);
+  });
+
   it("offers no Katıl to someone blocked, and lifts the block", () => {
     expect(words(memberMenu({ ...base, joinable: true, blocked: true }))).toEqual([
       "message",
@@ -222,9 +256,54 @@ describe("teamMenu", () => {
     );
   });
 
+  it("calls the crew where the player may, waiting out its five minutes", () => {
+    const plan = (call: "ready" | "waiting" | "hidden") =>
+      words(teamMenu({ team: team("member", 4), friendsOutside: 3, call }));
+    expect(plan("ready")).toEqual([
+      "open",
+      "toggle",
+      "-",
+      "call",
+      "copyCode",
+      "invite",
+      "-",
+      "leave",
+    ]);
+    expect(plan("waiting")).toContain("call(off)");
+    expect(plan("hidden")).not.toContain("call");
+  });
+
+  it("invites and edits only where the crew lets the player", () => {
+    const plan = words(
+      teamMenu({ team: team("member", 4), friendsOutside: 3, canInvite: false, canEdit: true }),
+    );
+    expect(plan).toEqual(["open", "toggle", "-", "copyCode", "edit", "-", "leave"]);
+  });
+
   it("names the way out like the team page", () => {
     expect(leavingOf(team("member", 1))).toBe("leave");
     expect(leavingOf(team("founder", 1))).toBe("close");
     expect(leavingOf(team("founder", 2))).toBe("disband");
+  });
+});
+
+describe("callMenu", () => {
+  it("answers, joins the caller on Projects and opens the crew", () => {
+    expect(words(callMenu({ joinable: true, gameBusy: false }))).toEqual([
+      "yes",
+      "soon",
+      "no",
+      "-",
+      "join",
+      "open",
+    ]);
+    expect(words(callMenu({ joinable: false, gameBusy: false, answer: "soon" }))).toEqual([
+      "yes",
+      "soon✓",
+      "no",
+      "-",
+      "open",
+    ]);
+    expect(words(callMenu({ joinable: true, gameBusy: true }))).toContain("join(off)");
   });
 });

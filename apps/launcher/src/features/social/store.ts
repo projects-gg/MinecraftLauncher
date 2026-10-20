@@ -65,6 +65,15 @@ interface SocialUi {
   /** A status just chosen, shown until the service confirms it (the old one comes back on failure). */
   statusPending: StatusMode | null;
   setStatusPending: (status: StatusMode | null) => void;
+
+  /** Crew calls whose Home line the player closed with × (this session only; not an answer). */
+  closedCalls: string[];
+  closeCall: (id: string) => void;
+  /** "Ekibi çağır" waits until then (ms): the service refused a call that came too soon. */
+  callRefusedUntil: number;
+  /** When the player last called from here (ms), for the five minutes between calls. */
+  lastCallAt: number | null;
+  setCallWait: (change: { refusedUntil?: number; lastCallAt?: number }) => void;
 }
 
 export const useSocialUi = create<SocialUi>()((set, get) => ({
@@ -134,6 +143,19 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
 
   statusPending: null,
   setStatusPending: (statusPending) => set({ statusPending }),
+
+  closedCalls: [],
+  closeCall: (id) =>
+    set((s) =>
+      s.closedCalls.includes(id) ? s : { closedCalls: [...s.closedCalls, id].slice(-32) },
+    ),
+  callRefusedUntil: 0,
+  lastCallAt: null,
+  setCallWait: ({ refusedUntil, lastCallAt }) =>
+    set((s) => ({
+      callRefusedUntil: refusedUntil ?? s.callRefusedUntil,
+      lastCallAt: lastCallAt ?? s.lastCallAt,
+    })),
 }));
 
 /** Friend preferences kept on this computer (and in the settings backup). */
@@ -148,6 +170,10 @@ interface SocialPrefs {
    * entry follow the favourites' setting ("Favorilerim çevrimiçi olunca").
    */
   onlineAlerts: Record<string, boolean>;
+  /** "Ekip çağrıları": a teammate's call shows a toast and a notification (on by default). */
+  notifyCrewCalls: boolean;
+  /** "Ekip arkadaşların Projects'e girince" (off by default). */
+  notifyCrewProjects: boolean;
   /** Back up launcher preferences to the friends service. */
   backup: boolean;
   /** Fingerprint of the last uploaded backup (skips uploads that change nothing). */
@@ -178,6 +204,8 @@ export const useSocialPrefs = create<SocialPrefs>()(
       notifyFavoriteOnline: true,
       notifyFavoriteProjects: true,
       onlineAlerts: {},
+      notifyCrewCalls: true,
+      notifyCrewProjects: false,
       backup: true,
       backupFingerprint: null,
       closedHints: [],

@@ -18,6 +18,7 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AddPage } from "./add-page";
 import { ConsentPage } from "./consent-page";
+import { CrewNotifyButton } from "./crew-notify";
 import { ListPage } from "./list-page";
 import { crossfade, pageVariants, useSocialMotion } from "./motion";
 import { openPanelMenuFromKey, PanelContextMenu, PanelMenuButton } from "./panel-menu";
@@ -42,14 +43,15 @@ function Header({ page }: { page: SocialPage | "consent" | "restoring" }) {
   const { t } = useTranslation();
   const me = useSocialUi((s) => s.view.me);
   const teams = useSocialUi((s) => s.view.teams);
-  const teamName = useSocialUi((s) => s.view.team?.name);
+  const inCrew = useSocialUi((s) => Boolean(s.view.team));
   const goTo = useSocialUi((s) => s.goTo);
   const sub = page === "add" || page === "settings" || page === "team";
+  // The crew card says the crew's name in large: the header just says where this is.
   const subTitle =
     page === "add"
       ? t("social.add.title")
       : page === "team"
-        ? (teamName ?? t("teams.title"))
+        ? t("teams.title")
         : t("social.settings.title");
   return (
     <header className="flex h-[68px] shrink-0 items-center gap-2 border-b border-white/8 pr-3 pl-5">
@@ -90,6 +92,7 @@ function Header({ page }: { page: SocialPage | "consent" | "restoring" }) {
           </motion.div>
         </AnimatePresence>
       </div>
+      {page === "team" && inCrew ? <CrewNotifyButton /> : null}
       {page === "list" && me ? (
         <>
           {teams ? (

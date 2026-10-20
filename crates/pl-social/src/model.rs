@@ -225,7 +225,18 @@ pub struct FriendsOverview {
     /// Invites to other teams, newest first.
     #[serde(default)]
     pub team_invites: Vec<TeamInvite>,
+    /// What this service offers of crews beyond the first version (`look`, `calls`, …). An older
+    /// service sends none; unknown values are kept but mean nothing to this launcher.
+    #[serde(default)]
+    pub team_features: Vec<String>,
 }
+
+/// `teamFeatures`: crew looks (colour, frame, motto, the newer emblems).
+pub const TEAM_FEATURE_LOOK: &str = "look";
+/// `teamFeatures`: "Ekibi çağır" on the presence socket.
+pub const TEAM_FEATURE_CALLS: &str = "calls";
+/// `teamFeatures`: moderators and the crew's permissions.
+pub const TEAM_FEATURE_ROLES: &str = "roles";
 
 /// One of the player's friend categories ("Okul", "PvP").
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -250,13 +261,44 @@ pub struct FriendGroups {
 /// At most this many categories (the service refuses more).
 pub const MAX_FRIEND_GROUPS: usize = 20;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+/// The wire keeps the first names: players see "Lider" (leader) for `founder`. A role this
+/// version does not know reads as `Member`, so a newer service never breaks the friend list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum TeamRole {
-    /// Edits the team, renews its code, removes members, hands the role on, disbands it.
+    /// The leader: edits the crew, renews its code, removes members, hands the role on,
+    /// disbands it.
     Founder,
     /// Invites friends, may leave.
     Member,
+}
+
+impl<'de> Deserialize<'de> for TeamRole {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match String::deserialize(deserializer)?.as_str() {
+            "founder" => Self::Founder,
+            _ => Self::Member,
+        })
+    }
+}
+
+/// A crew's colour, frame and motto before looks existed (and from a service without them).
+pub const DEFAULT_TEAM_COLOR: &str = "gold";
+pub const DEFAULT_TEAM_FRAME: &str = "cut";
+
+/// The emblems every service accepts; the other 16 came with crew looks ([`TEAM_FEATURE_LOOK`]),
+/// and a service without them refuses those.
+pub const FIRST_EMBLEMS: [&str; 20] = [
+    "sword", "shield", "crown", "flame", "bolt", "star", "skull", "diamond", "heart", "rocket",
+    "tree", "paw", "ghost", "cube", "axe", "trophy", "moon", "flag", "target", "planet",
+];
+
+fn default_team_color() -> String {
+    DEFAULT_TEAM_COLOR.to_owned()
+}
+
+fn default_team_frame() -> String {
+    DEFAULT_TEAM_FRAME.to_owned()
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -265,11 +307,105 @@ pub struct TeamMember {
     #[serde(flatten)]
     pub profile: PublicProfile,
     pub role: TeamRole,
+    /// A moderator ("Moderatör"): a member the leader gave more rights ([`TEAM_FEATURE_ROLES`];
+    /// at most 4, never the leader).
+    #[serde(default)]
+    pub moderator: bool,
     /// Unix seconds.
     pub joined_at: i64,
 }
 
-/// A team as its members see it.
+/// Who may do something in a crew: the lowest role that may (every role above it may too).
+/// A level this version does not know reads as `Leader`: the button stays away and the service
+/// decides anyway.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum PermissionLevel {
+    Members,
+    Moderators,
+    Leader,
+}
+
+impl<'de> Deserialize<'de> for PermissionLevel {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match String::deserialize(deserializer)?.as_str() {
+            "members" => Self::Members,
+            "moderators" => Self::Moderators,
+            _ => Self::Leader,
+        })
+    }
+}
+
+/// A crew's permissions (a service with [`TEAM_FEATURE_ROLES`]). A service without them sends
+/// none: everyone invites (and would call), only the leader removes and edits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct TeamPermissions {
+    /// Invite friends to the crew (`members`, `moderators` or `leader`).
+    #[serde(default = "PermissionLevel::members")]
+    pub invite: PermissionLevel,
+    /// "Ekibi çağır" (`members`, `moderators` or `leader`).
+    #[serde(default = "PermissionLevel::members")]
+    pub call: PermissionLevel,
+    /// Remove plain members (`moderators` or `leader`; the code is renewed with it).
+    #[serde(default = "PermissionLevel::leader")]
+    pub kick: PermissionLevel,
+    /// Edit the emblem, colour, frame and motto (`moderators` or `leader`; the name and the tag
+    /// are always the leader's).
+    #[serde(default = "PermissionLevel::leader")]
+    pub edit: PermissionLevel,
+}
+
+impl PermissionLevel {
+    fn members() -> Self {
+        Self::Members
+    }
+
+    fn leader() -> Self {
+        Self::Leader
+    }
+
+    /// Whether a crew member with this role has the right.
+    pub fn allows(self, role: TeamRole, moderator: bool) -> bool {
+        match self {
+            Self::Members => true,
+            Self::Moderators => role == TeamRole::Founder || moderator,
+            Self::Leader => role == TeamRole::Founder,
+        }
+    }
+}
+
+impl Default for TeamPermissions {
+    fn default() -> Self {
+        Self {
+            invite: PermissionLevel::Members,
+            call: PermissionLevel::Members,
+            kick: PermissionLevel::Leader,
+            edit: PermissionLevel::Leader,
+        }
+    }
+}
+
+/// A change of permissions (`PATCH /v1/teams/:id {"permissions": {…}}`, leader); unset rights
+/// stay as they are.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct PermissionsEdit {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invite: Option<PermissionLevel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call: Option<PermissionLevel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kick: Option<PermissionLevel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edit: Option<PermissionLevel>,
+}
+
+impl PermissionsEdit {
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// A team ("Ekip" to players) as its members see it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Team {
@@ -279,12 +415,25 @@ pub struct Team {
     pub tag: String,
     /// One of the service's emblem names (`sword`, `shield`, …), drawn with a bundled icon.
     pub emblem: String,
-    /// `TKM-XXXX-XXXX`
+    /// A key of the launcher's crew palette (`gold`, `teal`, …).
+    #[serde(default = "default_team_color")]
+    pub color: String,
+    /// The shape around the emblem (`cut`, `shield`, `banner`, `hex`).
+    #[serde(default = "default_team_frame")]
+    pub frame: String,
+    /// Up to 40 characters; empty when there is none.
+    #[serde(default)]
+    pub motto: String,
+    /// `TKM-XXXX-XXXX` (the launcher shows `EKP-XXXX-XXXX`).
     pub code: String,
     /// `YYYY-MM-DD`
     pub created_on: String,
     /// Founder first, then by joining time.
     pub members: Vec<TeamMember>,
+    /// Who may invite, call, remove and edit ([`TeamPermissions::default`] from a service
+    /// without roles).
+    #[serde(default)]
+    pub permissions: TeamPermissions,
 }
 
 /// What an invite or a code shows of a team before joining it.
@@ -294,8 +443,24 @@ pub struct TeamSummary {
     pub name: String,
     pub tag: String,
     pub emblem: String,
+    #[serde(default = "default_team_color")]
+    pub color: String,
+    #[serde(default = "default_team_frame")]
+    pub frame: String,
+    #[serde(default)]
+    pub motto: String,
     /// How many are in it.
     pub members: u32,
+}
+
+/// A crew's colour, frame and motto, sent only to a service that offers looks
+/// ([`TEAM_FEATURE_LOOK`]): an older one refuses keys it does not know.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TeamLook {
+    pub color: String,
+    pub frame: String,
+    /// Empty: no motto.
+    pub motto: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -345,6 +510,8 @@ pub struct TeamsOverview {
     pub invited: Vec<String>,
     #[serde(default)]
     pub team_invites: Vec<TeamInvite>,
+    #[serde(default)]
+    pub team_features: Vec<String>,
 }
 
 /// Why the player is no longer in their team (presence `{"t":"team","team":null}`). A reason this
@@ -371,7 +538,9 @@ impl<'de> Deserialize<'de> for TeamExit {
     }
 }
 
-/// `PATCH /v1/teams/:id`; unset fields stay as they are.
+/// `PATCH /v1/teams/:id`; unset fields stay as they are. Colour, frame and motto only go to a
+/// service that offers looks, permissions to one that offers roles; `motto: Some("")` takes the
+/// motto away.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct TeamEdit {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -380,6 +549,41 @@ pub struct TeamEdit {
     pub tag: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub emblem: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub frame: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub motto: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub permissions: Option<PermissionsEdit>,
+}
+
+impl TeamEdit {
+    /// Nothing would change.
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// It changes a text the service counts (name, tag, motto: 10 a day per crew).
+    pub fn changes_text(&self) -> bool {
+        self.name.is_some() || self.tag.is_some() || self.motto.is_some()
+    }
+
+    /// Without what a service would refuse: the look without looks, permissions without roles
+    /// (and an empty permissions change).
+    pub fn limited_to(self, look: bool, roles: bool) -> Self {
+        let mut edit = self;
+        if !look {
+            edit.color = None;
+            edit.frame = None;
+            edit.motto = None;
+        }
+        if !roles || edit.permissions.is_some_and(|p| p.is_empty()) {
+            edit.permissions = None;
+        }
+        edit
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -599,6 +803,140 @@ mod tests {
             .unwrap(),
             r#"{"emblem":"crown"}"#
         );
+    }
+
+    #[test]
+    fn crew_looks_and_features_with_and_without_them() {
+        let overview: FriendsOverview = serde_json::from_str(
+            r#"{"friends":[],"incoming":[],"outgoing":[],"blocked":[],
+                "limits":{"friends":200,"outgoingRequests":50,"teamMembers":30,"groups":20},
+                "team":{"id":"0a1b2c3d4e5f6a7b","name":"Gece Kartalları","tag":"GKR",
+                  "emblem":"controller","color":"teal","frame":"banner","motto":"Birlikte güçlüyüz!",
+                  "code":"TKM-ABCD-EFGH","createdOn":"2026-10-20",
+                  "members":[{"id":"1","username":"a","displayName":null,"avatar":"discord",
+                    "avatarHash":null,"role":"founder","joinedAt":5},
+                    {"id":"2","username":"b","displayName":null,"avatar":"discord",
+                    "avatarHash":null,"role":"officer","joinedAt":6}]},
+                "teamInvites":[{"team":{"id":"fedcba9876543210","name":"PvP","tag":"PVP",
+                  "emblem":"robot","color":"crimson","frame":"hex","motto":"","members":4},
+                  "from":{"id":"3","username":"c","displayName":null,"avatar":"discord",
+                  "avatarHash":null},"sentAt":9}],
+                "teamFeatures":["look","calls","plans"]}"#,
+        )
+        .unwrap();
+        let team = overview.team.as_ref().unwrap();
+        assert_eq!(
+            (
+                team.color.as_str(),
+                team.frame.as_str(),
+                team.motto.as_str()
+            ),
+            ("teal", "banner", "Birlikte güçlüyüz!")
+        );
+        // A role this version does not know is a member, never a broken list.
+        assert_eq!(team.members[1].role, TeamRole::Member);
+        assert_eq!(overview.team_invites[0].team.frame, "hex");
+        assert!(
+            overview
+                .team_features
+                .iter()
+                .any(|f| f == TEAM_FEATURE_CALLS)
+        );
+
+        // The Worker before looks: today's look, no features.
+        let older: TeamsOverview = serde_json::from_str(
+            r#"{"team":{"id":"0a1b2c3d4e5f6a7b","name":"Gece","tag":"GKR","emblem":"sword",
+                "code":"TKM-ABCD-EFGH","createdOn":"2026-10-20","members":[]},"invited":[],
+                "teamInvites":[]}"#,
+        )
+        .unwrap();
+        let team = older.team.unwrap();
+        assert_eq!(
+            (
+                team.color.as_str(),
+                team.frame.as_str(),
+                team.motto.as_str()
+            ),
+            (DEFAULT_TEAM_COLOR, DEFAULT_TEAM_FRAME, "")
+        );
+        assert!(older.team_features.is_empty());
+        let summary: TeamLookup = serde_json::from_str(
+            r#"{"team":{"id":"x","name":"PvP","tag":"PVP","emblem":"bolt","members":3},
+                "relation":"none"}"#,
+        )
+        .unwrap();
+        assert_eq!(summary.team.color, "gold");
+
+        let edit = TeamEdit {
+            color: Some("teal".into()),
+            motto: Some(String::new()),
+            ..TeamEdit::default()
+        };
+        assert_eq!(
+            serde_json::to_string(&edit).unwrap(),
+            r#"{"color":"teal","motto":""}"#
+        );
+        assert!(edit.changes_text());
+        assert!(edit.clone().limited_to(false, true).is_empty());
+        assert_eq!(edit.clone().limited_to(true, false), edit);
+        assert!(
+            !TeamEdit {
+                color: Some("teal".into()),
+                ..TeamEdit::default()
+            }
+            .changes_text()
+        );
+    }
+
+    #[test]
+    fn moderators_and_permissions_with_and_without_roles() {
+        let team: Team = serde_json::from_str(
+            r#"{"id":"0a1b2c3d4e5f6a7b","name":"Gece","tag":"GKR","emblem":"sword",
+                "code":"TKM-ABCD-EFGH","createdOn":"2026-10-20",
+                "members":[{"id":"1","username":"a","displayName":null,"avatar":"discord",
+                  "avatarHash":null,"role":"founder","moderator":false,"joinedAt":5},
+                  {"id":"2","username":"b","displayName":null,"avatar":"discord",
+                  "avatarHash":null,"role":"member","moderator":true,"joinedAt":6}],
+                "permissions":{"invite":"moderators","call":"members","kick":"moderators",
+                  "edit":"everyone"}}"#,
+        )
+        .unwrap();
+        assert!(team.members[1].moderator && !team.members[0].moderator);
+        assert_eq!(team.permissions.invite, PermissionLevel::Moderators);
+        assert_eq!(team.permissions.call, PermissionLevel::Members);
+        // A level this version does not know keeps the right with the leader.
+        assert_eq!(team.permissions.edit, PermissionLevel::Leader);
+        assert!(PermissionLevel::Members < PermissionLevel::Moderators);
+
+        // A service without roles: nobody is a moderator, everyone invites, the leader removes.
+        let older: Team = serde_json::from_str(
+            r#"{"id":"x","name":"Gece","tag":"GKR","emblem":"sword","code":"TKM-ABCD-EFGH",
+                "createdOn":"2026-10-20","members":[{"id":"1","username":"a","displayName":null,
+                "avatar":"discord","avatarHash":null,"role":"founder","joinedAt":5}]}"#,
+        )
+        .unwrap();
+        assert!(!older.members[0].moderator);
+        assert_eq!(older.permissions, TeamPermissions::default());
+        assert_eq!(older.permissions.kick, PermissionLevel::Leader);
+
+        let edit = TeamEdit {
+            permissions: Some(PermissionsEdit {
+                edit: Some(PermissionLevel::Moderators),
+                ..PermissionsEdit::default()
+            }),
+            ..TeamEdit::default()
+        };
+        assert_eq!(
+            serde_json::to_string(&edit).unwrap(),
+            r#"{"permissions":{"edit":"moderators"}}"#
+        );
+        assert!(!edit.changes_text());
+        assert!(edit.clone().limited_to(true, false).is_empty());
+        let nothing = TeamEdit {
+            permissions: Some(PermissionsEdit::default()),
+            ..TeamEdit::default()
+        };
+        assert!(nothing.limited_to(true, true).is_empty());
     }
 
     #[test]

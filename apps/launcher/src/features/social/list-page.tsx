@@ -34,6 +34,7 @@ import { useCalm } from "@/features/accounts/calm";
 import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import type {
+  CrewCall,
   Friend,
   FriendGroups,
   FriendRequest,
@@ -45,6 +46,7 @@ import type {
 import { formatRelative } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
 import { attempt, copyText } from "./actions";
+import { theirCalls } from "./calls";
 import {
   CategoryHeader,
   DragGhost,
@@ -52,6 +54,7 @@ import {
   EmptyCategory,
   NewCategoryRow,
 } from "./category-header";
+import { CallRow } from "./crew-call";
 import { FriendRow, type RowTeam } from "./friend-row";
 import {
   addGroup,
@@ -76,7 +79,8 @@ import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
 import { TeamMemberRow } from "./team-member";
 import { TeamHeader, TeamInviteRow } from "./team-section";
-import { teammates } from "./teams";
+import { crewRights, teammates } from "./teams";
+import { useCallClock } from "./use-call-clock";
 import { useListDrag } from "./use-list-drag";
 
 const ago = (unixSeconds: number) => formatRelative(new Date(unixSeconds * 1000).toISOString());
@@ -449,7 +453,8 @@ type Item =
   | { key: string; kind: "invite"; invite: SocialInvite }
   | { key: string; kind: "teamInvite"; invite: TeamInvite }
   | { key: string; kind: "teamHeader"; team: SocialTeam; folded: boolean }
-  | { key: string; kind: "teammate"; member: TeamMember; founder: boolean }
+  | { key: string; kind: "call"; call: CrewCall; team: SocialTeam }
+  | { key: string; kind: "teammate"; member: TeamMember; team: SocialTeam }
   | {
       key: string;
       kind: "group";
@@ -541,8 +546,12 @@ export function ListPage() {
 
   const team = view.teams ? view.team : undefined;
   const teamFolded = team ? collapsed.includes(TEAM_SECTION) : false;
+  // Teammates' calls sit under the crew's header (the player's own is on the crew page).
+  const now = useCallClock((s) => s.now);
+  const calls = useMemo(() => (team ? theirCalls(view.calls, now) : []), [team, view.calls, now]);
   const teamRowFor = (friendId: string): RowTeam | null => {
-    if (!team) return null;
+    // Only where the crew lets the player invite (everyone on a service without roles).
+    if (!team || !crewRights(team, view.crew).invite) return null;
     const state = team.members.some((m) => m.id === friendId)
       ? "member"
       : team.invited.includes(friendId)
@@ -597,14 +606,13 @@ export function ListPage() {
       const mates = teammates(team).filter((m) => hit(m.name, m.username));
       if (!q || mates.length) {
         list.push({ key: "t:head", kind: "teamHeader", team, folded: teamFolded && !q });
+        // A call waits for an answer even while the crew is folded.
+        if (!q) {
+          for (const call of calls) list.push({ key: `c:${call.id}`, kind: "call", call, team });
+        }
         if (!teamFolded || q) {
           for (const member of mates) {
-            list.push({
-              key: `m:${member.id}`,
-              kind: "teammate",
-              member,
-              founder: team.role === "founder",
-            });
+            list.push({ key: `m:${member.id}`, kind: "teammate", member, team });
           }
         }
       }
@@ -697,6 +705,7 @@ export function ListPage() {
     view.outgoing,
     team,
     teamFolded,
+    calls,
     favorites,
     collapsed,
     doc,
@@ -881,8 +890,10 @@ export function ListPage() {
             onKeyDown={onRowKey}
           />
         );
+      case "call":
+        return <CallRow call={item.call} team={item.team} />;
       case "teammate":
-        return <TeamMemberRow member={item.member} founder={item.founder} onKeyDown={onRowKey} />;
+        return <TeamMemberRow member={item.member} team={item.team} onKeyDown={onRowKey} />;
       case "group": {
         const id = item.id;
         const target =

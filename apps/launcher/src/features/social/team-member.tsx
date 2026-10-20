@@ -1,9 +1,20 @@
-// One teammate: picture with presence, name (a crown for the founder), where they are, and "Katıl"
-// when they are on projects.gg. The row opens their card beside the panel: join, "Discord'dan mesaj
-// at", and in a quieter corner what the player may do about them (the founder hands on the role or
-// removes them; anyone may block), each confirmed in place with one sentence. The same actions are
-// in the row's menu: a right click, Shift+F10 or the menu key, or its "…".
-import { Crown, DiscordLogo, DotsThree, Play, Prohibit, UserMinus } from "@phosphor-icons/react";
+// One crewmate: picture with presence, name (a crown for the leader, a starred shield for a
+// moderator), where they are when the group above does not say it, and "Katıl" when they are on
+// projects.gg. The row opens their card beside the panel: how long they have been in the crew, join,
+// "Discord'dan mesaj at", and in a quieter corner what the player may do about them (the leader names
+// moderators, hands on the leadership and removes anyone; a moderator removes plain members where
+// the crew lets them; anyone may block). Irreversible steps are confirmed in place with one
+// sentence; naming a moderator is not (it is undone the same way). The same actions are in the row's
+// menu: a right click, Shift+F10 or the menu key, or its "…".
+import {
+  Crown,
+  DiscordLogo,
+  DotsThree,
+  Play,
+  Prohibit,
+  ShieldStar,
+  UserMinus,
+} from "@phosphor-icons/react";
 import {
   Button,
   ContextMenu,
@@ -16,12 +27,12 @@ import {
 } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu, Popover } from "radix-ui";
-import { type KeyboardEvent, useState } from "react";
+import { type KeyboardEvent, type ReactElement, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useCalm } from "@/features/accounts/calm";
 import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
-import type { TeamMember } from "@/lib/api/social-types";
+import type { SocialTeam, TeamMember } from "@/lib/api/social-types";
 import { useLaunch } from "@/stores/launch";
 import { attempt } from "./actions";
 import { DiscordButton } from "./discord-button";
@@ -29,22 +40,74 @@ import { openInDiscord } from "./discord-link";
 import { JoinButton } from "./friend-row";
 import { gameBusy, joinProjects } from "./join";
 import { openMenuFromKey } from "./menu-key";
-import { memberMenu, rowsOf } from "./menus";
+import { type MemberAction, memberMenu, rowsOf } from "./menus";
 import { isJoinable, presenceLine } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
 import { SocialAvatar } from "./social-face";
+import { useSocialUi } from "./store";
+import { afterHandingOn, canRemove, daysSince, MAX_MODERATORS } from "./teams";
 
 type Question = "founder" | "remove" | "block" | "unblock";
 
+/** A crown for the leader, a starred shield for a moderator (gold, quieter). */
+export function RoleBadge({
+  member,
+  size = 12,
+}: {
+  member: Pick<TeamMember, "role" | "moderator">;
+  size?: number;
+}) {
+  const { t } = useTranslation();
+  if (member.role === "founder") {
+    return (
+      <Crown
+        size={size}
+        weight="fill"
+        className="shrink-0 text-gold-300"
+        aria-label={t("teams.founder")}
+      />
+    );
+  }
+  if (!member.moderator) return null;
+  return (
+    <ShieldStar
+      size={size + 1}
+      weight="fill"
+      className="shrink-0 text-gold-300/75"
+      aria-label={t("teams.moderator")}
+    />
+  );
+}
+
+/** What the player may do about a crewmate, from the crew's roles and permissions. */
+function memberPlan(team: SocialTeam, member: TeamMember, busy: boolean, roles: boolean) {
+  const moderators = team.members.filter((m) => m.moderator).length;
+  return memberMenu({
+    joinable: member.state === "playing" && isJoinable(member.game),
+    gameBusy: busy,
+    founder: team.role === "founder",
+    blocked: member.blocked,
+    roles,
+    moderator: member.moderator,
+    moderatorsFull: moderators >= MAX_MODERATORS,
+    removable: canRemove(team, member, roles),
+  });
+}
+
+/** Naming or un-naming a moderator: no question, the badge says it in place. */
+async function setModerator(member: TeamMember, moderator: boolean, said: string) {
+  const done = await attempt(() => api.social.setModerator(member.id, moderator));
+  if (done !== undefined) announce(said);
+}
+
 function MemberCard({
   member,
-  founder,
+  team,
   initialQuestion,
   onDone,
 }: {
   member: TeamMember;
-  /** The player founded the team (may hand on the role or remove). */
-  founder: boolean;
+  team: SocialTeam;
   /** Opened from the row's menu: the card starts at that question. */
   initialQuestion: Question | null;
   onDone: () => void;
@@ -52,10 +115,17 @@ function MemberCard({
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
   const calm = useCalm();
+  const roles = useSocialUi((s) => s.view.crew.roles);
+  const busyGame = useLaunch((s) => gameBusy(s.phase.kind));
   const [question, setQuestion] = useState<Question | null>(initialQuestion);
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const joinable = member.state === "playing" && isJoinable(member.game);
+  const days = daysSince(member.joinedAt, Date.now());
+  const plan = memberPlan(team, member, busyGame, roles).filter(
+    (row): row is NonNullable<typeof row> =>
+      row !== null && row.action !== "join" && row.action !== "message",
+  );
 
   const run = async (action: Question) => {
     setBusy(true);
@@ -84,7 +154,10 @@ function MemberCard({
   };
 
   const asks: Record<Question, string> = {
-    founder: t("teams.member.makeFounderAsk", { name: member.name }),
+    founder:
+      afterHandingOn(team, member.id, roles) === "moderator"
+        ? t("teams.member.makeFounderAskModerator", { name: member.name })
+        : t("teams.member.makeFounderAsk", { name: member.name }),
     remove: t("teams.member.removeAsk", { name: member.name }),
     block: t("social.actions.blockAsk"),
     unblock: t("social.actions.unblock"),
@@ -94,6 +167,50 @@ function MemberCard({
     remove: t("teams.member.remove"),
     block: t("social.actions.block"),
     unblock: t("social.actions.unblock"),
+  };
+
+  const select = (action: MemberAction) => {
+    switch (action) {
+      case "makeModerator":
+        void setModerator(member, true, t("teams.member.madeModerator", { name: member.name }));
+        return;
+      case "unmakeModerator":
+        void setModerator(member, false, t("teams.member.unmadeModerator", { name: member.name }));
+        return;
+      case "makeFounder":
+        setQuestion("founder");
+        return;
+      case "remove":
+        setQuestion("remove");
+        return;
+      case "block":
+        setQuestion("block");
+        return;
+      case "unblock":
+        void run("unblock");
+        return;
+      default:
+        return;
+    }
+  };
+
+  const itemClass =
+    "flex h-10 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[13.5px] outline-none select-none data-[highlighted]:bg-white/8 data-[disabled]:cursor-default data-[disabled]:opacity-45";
+  const words: Record<string, string> = {
+    makeModerator: t("teams.member.makeModerator"),
+    unmakeModerator: t("teams.member.unmakeModerator"),
+    makeFounder: t("teams.member.makeFounder"),
+    remove: t("teams.member.remove"),
+    block: t("social.actions.block"),
+    unblock: t("social.actions.unblock"),
+  };
+  const icons: Record<string, ReactElement> = {
+    makeModerator: <ShieldStar size={16} className="text-ash-300" aria-hidden />,
+    unmakeModerator: <ShieldStar size={16} className="text-ash-300" aria-hidden />,
+    makeFounder: <Crown size={16} className="text-ash-300" aria-hidden />,
+    remove: <UserMinus size={16} className="text-ash-300" aria-hidden />,
+    block: <Prohibit size={16} aria-hidden />,
+    unblock: <Prohibit size={16} aria-hidden />,
   };
 
   return (
@@ -109,14 +226,7 @@ function MemberCard({
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 truncate font-display text-[18px] leading-tight font-semibold text-bone-50">
             <span className="truncate">{member.name}</span>
-            {member.role === "founder" ? (
-              <Crown
-                size={15}
-                weight="fill"
-                className="shrink-0 text-gold-300"
-                aria-label={t("teams.founder")}
-              />
-            ) : null}
+            <RoleBadge member={member} size={15} />
           </p>
           <p className="truncate text-[12.5px] text-ash-400" data-selectable>
             @{member.username}
@@ -137,8 +247,11 @@ function MemberCard({
           </p>
         </div>
       </div>
+      <p className="mt-3 text-[12.5px] text-ash-400">
+        {days >= 1 ? t("teams.member.since", { count: days }) : t("teams.member.sinceToday")}
+      </p>
 
-      <div className="mt-4 flex flex-col gap-2">
+      <div className="mt-3 flex flex-col gap-2">
         {joinable && !member.blocked ? (
           <JoinButton size="md" variant="primary" className="w-full" />
         ) : null}
@@ -175,7 +288,11 @@ function MemberCard({
               {...rise(reduce, 4, 0.2)}
             >
               <span className="px-1 text-[12px] text-ash-400">
-                {member.role === "founder" ? t("teams.founder") : null}
+                {member.role === "founder"
+                  ? t("teams.founder")
+                  : member.moderator
+                    ? t("teams.moderator")
+                    : null}
               </span>
               <DropdownMenu.Root open={menu} onOpenChange={setMenu} modal={false}>
                 <DropdownMenu.Trigger asChild>
@@ -198,7 +315,7 @@ function MemberCard({
                         loop
                       >
                         <motion.div
-                          className="z-[60] w-[220px] rounded-[var(--radius-panel)] border border-white/8 bg-obsidian-900/96 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_24px_60px_rgb(34_6_6/0.55)] backdrop-blur-xl outline-none [html[data-perf=on]_&]:backdrop-blur-none"
+                          className="z-[60] w-[230px] rounded-[var(--radius-panel)] border border-white/8 bg-obsidian-900/96 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_24px_60px_rgb(34_6_6/0.55)] backdrop-blur-xl outline-none [html[data-perf=on]_&]:backdrop-blur-none"
                           style={{
                             transformOrigin: "var(--radix-dropdown-menu-content-transform-origin)",
                           }}
@@ -211,39 +328,27 @@ function MemberCard({
                           })}
                           exit={calm({ opacity: 0, scale: 0.98, transition: { duration: 0.12 } })}
                         >
-                          {founder ? (
-                            <>
-                              <DropdownMenu.Item
-                                onSelect={() => setQuestion("founder")}
-                                className="flex h-10 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[13.5px] text-bone-100 outline-none select-none data-[highlighted]:bg-white/8"
-                              >
-                                <Crown size={16} className="text-ash-300" aria-hidden />
-                                {t("teams.member.makeFounder")}
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Item
-                                onSelect={() => setQuestion("remove")}
-                                className="flex h-10 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[13.5px] text-bone-100 outline-none select-none data-[highlighted]:bg-white/8"
-                              >
-                                <UserMinus size={16} className="text-ash-300" aria-hidden />
-                                {t("teams.member.remove")}
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Separator className="my-1.5 h-px bg-white/8" />
-                            </>
-                          ) : null}
-                          <DropdownMenu.Item
-                            onSelect={() =>
-                              member.blocked ? void run("unblock") : setQuestion("block")
-                            }
-                            className={cn(
-                              "flex h-10 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[13.5px] outline-none select-none data-[highlighted]:bg-white/8",
-                              member.blocked ? "text-bone-100" : "text-flare-400",
-                            )}
-                          >
-                            <Prohibit size={16} aria-hidden />
-                            {member.blocked
-                              ? t("social.actions.unblock")
-                              : t("social.actions.block")}
-                          </DropdownMenu.Item>
+                          {plan.map((row, index) =>
+                            row === null ? null : (
+                              <div key={row.action}>
+                                {index > 0 &&
+                                (row.action === "block" || row.action === "unblock") ? (
+                                  <DropdownMenu.Separator className="my-1.5 h-px bg-white/8" />
+                                ) : null}
+                                <DropdownMenu.Item
+                                  disabled={row.disabled}
+                                  onSelect={() => select(row.action)}
+                                  className={cn(
+                                    itemClass,
+                                    row.action === "block" ? "text-flare-400" : "text-bone-100",
+                                  )}
+                                >
+                                  {icons[row.action]}
+                                  {words[row.action]}
+                                </DropdownMenu.Item>
+                              </div>
+                            ),
+                          )}
                         </motion.div>
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
@@ -258,23 +363,43 @@ function MemberCard({
   );
 }
 
+/**
+ * `line`: "presence" (the friend list: where they are, always) or "where" (the crew page, whose
+ * group heading says it already: only another server, singleplayer or a friend's "last seen").
+ */
 export function TeamMemberRow({
   member,
-  founder,
+  team,
+  line = "presence",
   onKeyDown,
 }: {
   member: TeamMember;
-  founder: boolean;
+  team: SocialTeam;
+  line?: "presence" | "where";
   onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void;
 }) {
   const { t } = useTranslation();
   const calm = useCalm();
   const { reduce } = useSocialMotion();
+  const roles = useSocialUi((s) => s.view.crew.roles);
   const [open, setOpen] = useState(false);
   const [intent, setIntent] = useState<Question | null>(null);
   const busy = useLaunch((s) => gameBusy(s.phase.kind));
+  // A friend's coarse "last seen" lives on the friend list (crewmates who are not friends never
+  // share it).
+  const friend = useSocialUi((s) =>
+    member.friend ? s.view.friends.find((f) => f.id === member.id) : undefined,
+  );
   const joinable = member.state === "playing" && isJoinable(member.game) && !member.blocked;
-  const line = member.blocked ? t("teams.member.blocked") : presenceLine(member, t);
+  const presence = member.blocked
+    ? t("teams.member.blocked")
+    : presenceLine(friend && member.state === "offline" ? friend : member, t);
+  const shown =
+    line === "presence" ||
+    member.blocked ||
+    (member.state === "playing" && !joinable) ||
+    (member.state === "offline" && Boolean(friend?.lastSeen));
+  const sub = shown ? presence : null;
 
   // Questions are asked in the card: it opens at the question once the menu is gone.
   const openAt = (question: Question) =>
@@ -283,61 +408,72 @@ export function TeamMemberRow({
       setOpen(true);
     }, 0);
 
-  const items = rowsOf(
-    memberMenu({
-      joinable: member.state === "playing" && isJoinable(member.game),
-      gameBusy: busy,
-      founder,
-      blocked: member.blocked,
-    }),
-    (row): MenuItem | null => {
-      switch (row.action) {
-        case "join":
-          return {
-            label: t("social.actions.join"),
-            icon: <Play size={16} />,
-            disabled: row.disabled,
-            onSelect: () => void joinProjects(),
-          };
-        case "message":
-          return {
-            label: t("social.actions.message"),
-            icon: <DiscordLogo size={16} />,
-            onSelect: () => void openInDiscord(member),
-          };
-        case "makeFounder":
-          return {
-            label: t("teams.member.makeFounder"),
-            icon: <Crown size={16} />,
-            onSelect: () => openAt("founder"),
-          };
-        case "remove":
-          return {
-            label: t("teams.member.remove"),
-            icon: <UserMinus size={16} />,
-            onSelect: () => openAt("remove"),
-          };
-        case "block":
-          return {
-            label: t("social.actions.block"),
-            icon: <Prohibit size={16} />,
-            danger: true,
-            onSelect: () => openAt("block"),
-          };
-        case "unblock":
-          return {
-            label: t("social.actions.unblock"),
-            icon: <Prohibit size={16} />,
-            onSelect: () =>
-              void attempt(() => api.social.unblock(member.id)).then((done) => {
-                if (done !== undefined) {
-                  announce(t("social.actions.unblocked", { name: member.name }));
-                }
-              }),
-          };
-      }
-    },
-  );
+  const items = rowsOf(memberPlan(team, member, busy, roles), (row): MenuItem | null => {
+    switch (row.action) {
+      case "join":
+        return {
+          label: t("social.actions.join"),
+          icon: <Play size={16} />,
+          disabled: row.disabled,
+          onSelect: () => void joinProjects(),
+        };
+      case "message":
+        return {
+          label: t("social.actions.message"),
+          icon: <DiscordLogo size={16} />,
+          onSelect: () => void openInDiscord(member),
+        };
+      case "makeModerator":
+        return {
+          label: t("teams.member.makeModerator"),
+          icon: <ShieldStar size={16} />,
+          disabled: row.disabled,
+          onSelect: () =>
+            void setModerator(member, true, t("teams.member.madeModerator", { name: member.name })),
+        };
+      case "unmakeModerator":
+        return {
+          label: t("teams.member.unmakeModerator"),
+          icon: <ShieldStar size={16} />,
+          onSelect: () =>
+            void setModerator(
+              member,
+              false,
+              t("teams.member.unmadeModerator", { name: member.name }),
+            ),
+        };
+      case "makeFounder":
+        return {
+          label: t("teams.member.makeFounder"),
+          icon: <Crown size={16} />,
+          onSelect: () => openAt("founder"),
+        };
+      case "remove":
+        return {
+          label: t("teams.member.remove"),
+          icon: <UserMinus size={16} />,
+          onSelect: () => openAt("remove"),
+        };
+      case "block":
+        return {
+          label: t("social.actions.block"),
+          icon: <Prohibit size={16} />,
+          danger: true,
+          onSelect: () => openAt("block"),
+        };
+      case "unblock":
+        return {
+          label: t("social.actions.unblock"),
+          icon: <Prohibit size={16} />,
+          onSelect: () =>
+            void attempt(() => api.social.unblock(member.id)).then((done) => {
+              if (done !== undefined) {
+                announce(t("social.actions.unblocked", { name: member.name }));
+              }
+            }),
+        };
+    }
+  });
 
   return (
     <ContextMenu items={items}>
@@ -360,12 +496,16 @@ export function TeamMemberRow({
               onClick={(event) => {
                 if (event.detail > 1 && open) event.preventDefault();
               }}
-              aria-label={`${member.name}, ${line}`}
-              className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+              aria-label={`${member.name}, ${presence}`}
+              className={cn(
+                "flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300",
+                line === "where" ? "py-1.5" : "py-2",
+              )}
             >
               <SocialAvatar
                 source={member}
-                size={36}
+                // The crew page keeps one size for everyone (most rows there have one line).
+                size={line === "where" ? 32 : 36}
                 state={member.blocked ? "offline" : member.state}
                 dnd={member.dnd}
               />
@@ -374,34 +514,31 @@ export function TeamMemberRow({
                   <span
                     className={cn(
                       "truncate text-[14px] font-semibold",
-                      member.state === "offline" ? "text-bone-100/70" : "text-bone-50",
+                      member.state === "offline" || member.blocked
+                        ? "text-bone-100/70"
+                        : "text-bone-50",
                     )}
                   >
                     {member.name}
                   </span>
-                  {member.role === "founder" ? (
-                    <Crown
-                      size={12}
-                      weight="fill"
-                      className="shrink-0 text-gold-300"
-                      aria-label={t("teams.founder")}
-                    />
-                  ) : null}
+                  <RoleBadge member={member} />
                 </span>
-                <span className="relative block h-[18px] overflow-hidden">
-                  <AnimatePresence mode="popLayout" initial={false}>
-                    <motion.span
-                      key={line}
-                      className={cn(
-                        "absolute inset-x-0 truncate text-[12.5px] leading-[18px]",
-                        joinable ? "text-jade-400" : "text-ash-400",
-                      )}
-                      {...swap(reduce)}
-                    >
-                      {line}
-                    </motion.span>
-                  </AnimatePresence>
-                </span>
+                {sub ? (
+                  <span className="relative block h-[18px] overflow-hidden">
+                    <AnimatePresence mode="popLayout" initial={false}>
+                      <motion.span
+                        key={sub}
+                        className={cn(
+                          "absolute inset-x-0 truncate text-[12.5px] leading-[18px]",
+                          joinable ? "text-jade-400" : "text-ash-400",
+                        )}
+                        {...swap(reduce)}
+                      >
+                        {sub}
+                      </motion.span>
+                    </AnimatePresence>
+                  </span>
+                ) : null}
               </span>
             </button>
           </Popover.Trigger>
@@ -433,7 +570,7 @@ export function TeamMemberRow({
                       // A question asked from the menu while the card is open starts it afresh.
                       key={intent ?? "card"}
                       member={member}
-                      founder={founder}
+                      team={team}
                       initialQuestion={intent}
                       onDone={() => {
                         setOpen(false);

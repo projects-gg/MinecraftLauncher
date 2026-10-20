@@ -62,6 +62,18 @@ pub enum ErrorCode {
     BlockedMember,
     LimitTeamMembers,
     LimitTeamInvites,
+    /// The motto does not follow the rules (40 characters, the name's characters plus `,` `?`).
+    InvalidTeamMotto,
+    /// The motto is on the service's word list.
+    TeamMottoRejected,
+    /// A crew call is open already (the player's own, or one of a teammate they see).
+    CallActive,
+    /// The call is gone (ended, ran out, hidden), or it is the player's own when answering.
+    CallNotFound,
+    /// The crew's permissions do not let the player's role do this.
+    TeamNotPermitted,
+    /// A crew has at most 4 moderators.
+    LimitTeamModerators,
     UpgradeRequired,
     RateLimited,
     Internal,
@@ -111,6 +123,12 @@ const CODES: &[(&str, ErrorCode)] = &[
     ("blocked_member", ErrorCode::BlockedMember),
     ("limit_team_members", ErrorCode::LimitTeamMembers),
     ("limit_team_invites", ErrorCode::LimitTeamInvites),
+    ("invalid_team_motto", ErrorCode::InvalidTeamMotto),
+    ("team_motto_rejected", ErrorCode::TeamMottoRejected),
+    ("call_active", ErrorCode::CallActive),
+    ("call_not_found", ErrorCode::CallNotFound),
+    ("team_not_permitted", ErrorCode::TeamNotPermitted),
+    ("limit_team_moderators", ErrorCode::LimitTeamModerators),
     ("upgrade_required", ErrorCode::UpgradeRequired),
     ("rate_limited", ErrorCode::RateLimited),
     ("internal", ErrorCode::Internal),

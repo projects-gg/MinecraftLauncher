@@ -1,4 +1,5 @@
-// "Katıl" on a "Birlikte oyna" invite (its toast or its row in the list). With the game closed:
+// "Katıl" on a "Birlikte oyna" invite (its toast or its row in the list), and "Geliyorum" to a crew
+// call from projects.gg (joinCall). With the game closed:
 // one question, "Minecraft açılsın mı?", and "Evet" starts the game straight into the inviter's
 // server (projects.gg as every "Katıl" does; another server with the instance OYNA would start).
 // With a game open or opening it is never closed for this (unsaved singleplayer progress would be
@@ -19,7 +20,8 @@ import { type JoinTarget, joinStep, joinTarget, targetAddress, targetName } from
 import { useSocialUi } from "./store";
 
 interface Ask {
-  invite: SocialInvite;
+  /** The invite answered by joining (it leaves the list on "Evet"); none for a crew call. */
+  inviteId?: string;
   target: JoinTarget;
   step: "confirm" | "gameOpen";
 }
@@ -37,7 +39,20 @@ export function joinInvite(invite: SocialInvite) {
     void api.social.dismissInvite(invite.id);
     return;
   }
-  useJoinAsk.setState({ ask: { invite, target, step } });
+  useJoinAsk.setState({ ask: { inviteId: invite.id, target, step } });
+}
+
+/**
+ * "Geliyorum" to a crew call from projects.gg, or its "Katıl": the same question as an invite's
+ * (the game opens straight into Projects, or the open game is never closed for it). Already on
+ * Projects, the answer says it all.
+ */
+export function joinCall() {
+  const target: JoinTarget = { kind: "projects" };
+  const busy = gameBusy(useLaunch.getState().phase.kind);
+  const step = joinStep(target, busy, useSocialUi.getState().view.activity);
+  if (step === "already") return;
+  useJoinAsk.setState({ ask: { target, step } });
 }
 
 /** Whether an invite leads somewhere "Katıl" can go. */
@@ -58,7 +73,7 @@ export function JoinDialog() {
 
   const yes = () => {
     close();
-    void api.social.dismissInvite(shown.invite.id);
+    if (shown.inviteId) void api.social.dismissInvite(shown.inviteId);
     const target = shown.target;
     if (target.kind === "projects") void joinProjects();
     else void joinServer(target);

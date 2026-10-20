@@ -6,15 +6,18 @@ use std::collections::HashMap;
 
 use serde::Serialize;
 
+use crate::codes::crew_code;
 use crate::model::{
     BlockedUser, Friend, FriendGroups, FriendRequest, FriendsOverview, Limits, Me, PublicProfile,
     RequestOutcome, SettingsMeta, Team, TeamAnswer, TeamExit, TeamInvite, TeamRole,
 };
 use crate::presence::{PresenceEvent, StopReason};
-use crate::protocol::{Game, Invite, OnlineStatus, Presence, PresenceState};
+use crate::protocol::{
+    CallAnswer, CallKind, CrewCall, Game, Invite, OnlineStatus, Presence, PresenceState,
+};
 use crate::view::{
-    FriendGroupsView, FriendView, GroupMember, InviteView, ProfileView, RequestView, SocialNotice,
-    TeamInviteView, TeamMemberView, TeamView,
+    CallAnswerView, CrewCallView, FriendGroupsView, FriendView, GroupMember, InviteView,
+    ProfileView, RequestView, SocialNotice, TeamInviteView, TeamMemberView, TeamView,
 };
 
 /// How long a received invite stays worth answering (the service delivers them for an hour).
@@ -54,6 +57,29 @@ pub struct SocialState {
     /// Every `hello` lists the invites of the last hour again; those stay closed.
     dismissed: HashMap<String, i64>,
     connection: Connection,
+    /// Open crew calls the player sees (their own too), oldest first.
+    calls: Vec<OpenCall>,
+}
+
+/// A crew call with its times on this computer's clock.
+#[derive(Debug, Clone)]
+struct OpenCall {
+    call: CrewCall,
+    started: i64,
+    ends: i64,
+}
+
+impl OpenCall {
+    /// The service's clock may differ from this one: the call keeps the time it has left, not the
+    /// time of day it ends at (`clock` is the service's time when the message left it).
+    fn new(call: &CrewCall, clock: Option<i64>, now: i64) -> Self {
+        let skew = clock.map_or(0, |clock| now - clock);
+        Self {
+            call: call.clone(),
+            started: call.at + skew,
+            ends: call.until + skew,
+        }
+    }
 }
 
 impl SocialState {
@@ -68,8 +94,10 @@ impl SocialState {
     pub fn set_connection(&mut self, connection: Connection) {
         self.connection = connection;
         if connection == Connection::Unavailable {
-            // Nobody's presence is known during an outage: never show stale "in game".
+            // Nobody's presence is known during an outage: never show stale "in game", nor a
+            // call that may have ended meanwhile (the next `hello` lists the open ones again).
             self.online.clear();
+            self.calls.clear();
         }
     }
 
@@ -111,6 +139,8 @@ impl SocialState {
                 status,
                 friends,
                 invites,
+                calls,
+                clock,
             } => {
                 self.connection = Connection::Online;
                 if let Some(me) = &mut self.me {
@@ -128,6 +158,13 @@ impl SocialState {
                 for invite in invites {
                     self.add_invite(invite, true, now);
                 }
+                // Every open call, quietly: whatever is not listed has ended.
+                self.calls = calls
+                    .iter()
+                    .map(|call| OpenCall::new(call, *clock, now))
+                    .filter(|call| call.ends > now)
+                    .collect();
+                self.calls.sort_by_key(|call| call.started);
             }
             PresenceEvent::Presence(presence) => {
                 self.absorb_picture(presence);
@@ -143,6 +180,7 @@ impl SocialState {
                     let was_on_projects = before
                         .and_then(|p| p.game.as_ref())
                         .is_some_and(Game::joinable);
+                    let on_projects = presence.game.as_ref().is_some_and(Game::joinable);
                     // Coming online is news about friends; teammates show it in the team only.
                     let friend = self.is_listed_friend(&presence.id);
                     if friend && before.is_none() {
@@ -150,11 +188,15 @@ impl SocialState {
                             id: presence.id.clone(),
                         });
                     }
-                    if friend
-                        && !was_on_projects
-                        && presence.game.as_ref().is_some_and(Game::joinable)
-                    {
+                    if friend && !was_on_projects && on_projects {
                         notices.push(SocialNotice::FriendOnProjects {
+                            id: presence.id.clone(),
+                        });
+                    }
+                    // Crewmates (friends or not) joining Projects: the launcher announces it only
+                    // when the player asked for it ("Ekip arkadaşların Projects'e girince").
+                    if !was_on_projects && on_projects && self.is_teammate(&presence.id) {
+                        notices.push(SocialNotice::CrewmateOnProjects {
                             id: presence.id.clone(),
                         });
                     }
@@ -170,6 +212,17 @@ impl SocialState {
                             overview
                                 .team_invited
                                 .retain(|id| !team.members.iter().any(|m| &m.profile.id == id));
+                            // Invites go with the right to send them (the service withdraws them).
+                            let may_invite = team
+                                .members
+                                .iter()
+                                .find(|m| Some(&m.profile.id) == me.as_ref())
+                                .is_some_and(|m| {
+                                    team.permissions.invite.allows(m.role, m.moderator)
+                                });
+                            if !may_invite {
+                                overview.team_invited.clear();
+                            }
                             overview.team_invites.retain(|i| i.team.id != team.id);
                             overview.team = Some(team.clone());
                         }
@@ -188,7 +241,64 @@ impl SocialState {
                         }
                     }
                 }
+                // Calls live in the crew: someone who left it takes their call along.
+                match team {
+                    Some(team) => self
+                        .calls
+                        .retain(|open| team.members.iter().any(|m| m.profile.id == open.call.from)),
+                    None => self.calls.clear(),
+                }
             }
+            PresenceEvent::Call { call, quiet, clock } => {
+                self.prune_calls(now);
+                let next = OpenCall::new(call, *clock, now);
+                let at = self.calls.iter().position(|open| open.call.id == call.id);
+                if next.ends <= now {
+                    if let Some(at) = at {
+                        self.calls.remove(at);
+                    }
+                } else {
+                    let me = self.me.as_ref().map(|me| me.profile.id.as_str());
+                    let theirs = me != Some(call.from.as_str());
+                    match at {
+                        None if !*quiet && theirs => notices.push(SocialNotice::CrewCall {
+                            call: Box::new(self.call_view(&next)),
+                        }),
+                        Some(at) if !*quiet && theirs => {
+                            let before = &self.calls[at];
+                            let answer = me.and_then(|me| {
+                                next.call
+                                    .answers
+                                    .get(me)
+                                    .or_else(|| before.call.answers.get(me))
+                            });
+                            let coming = matches!(answer, Some(CallAnswer::Yes | CallAnswer::Soon));
+                            if coming
+                                && before.call.kind != CallKind::Join
+                                && next.call.kind == CallKind::Join
+                            {
+                                notices.push(SocialNotice::CrewCallJoin {
+                                    call: Box::new(self.call_view(&next)),
+                                });
+                            }
+                        }
+                        _ => {}
+                    }
+                    match at {
+                        Some(at) => self.calls[at] = next,
+                        None => {
+                            self.calls.push(next);
+                            self.calls.sort_by_key(|call| call.started);
+                        }
+                    }
+                }
+            }
+            PresenceEvent::CallAnswered { call, by, answer } => {
+                if let Some(open) = self.calls.iter_mut().find(|open| &open.call.id == call) {
+                    open.call.answers.insert(by.clone(), *answer);
+                }
+            }
+            PresenceEvent::CallEnded { call, .. } => self.call_gone(call),
             PresenceEvent::TeamInvited(invite) => {
                 if let Some(overview) = &mut self.overview {
                     overview
@@ -285,6 +395,7 @@ impl SocialState {
             }
             PresenceEvent::Stopped(reason) => {
                 self.online.clear();
+                self.calls.clear();
                 self.connection = match reason {
                     StopReason::Replaced => Connection::Replaced,
                     StopReason::SignedOut | StopReason::AccountDeleted | StopReason::Shutdown => {
@@ -350,9 +461,11 @@ impl SocialState {
             .cloned()
     }
 
-    /// Blocking removes friendship and requests both ways and hides presence both ways.
+    /// Blocking removes friendship and requests both ways and hides presence both ways (and the
+    /// calls of the one blocked).
     pub fn blocked(&mut self, profile: PublicProfile) {
         self.forget(&profile.id);
+        self.calls.retain(|open| open.call.from != profile.id);
         if let Some(overview) = &mut self.overview
             && !overview.blocked.iter().any(|b| b.profile.id == profile.id)
         {
@@ -417,8 +530,98 @@ impl SocialState {
             .is_some_and(|o| o.limits.team_members.is_some())
     }
 
+    /// What the service offers of crews beyond the first version (`teamFeatures`).
+    pub fn team_features(&self) -> &[String] {
+        self.overview
+            .as_ref()
+            .map_or(&[], |o| o.team_features.as_slice())
+    }
+
+    /// The service offers this part of crews (`look`, `calls`, …).
+    pub fn offers(&self, feature: &str) -> bool {
+        self.team_features().iter().any(|f| f == feature)
+    }
+
     pub fn team(&self) -> Option<&Team> {
         self.overview.as_ref()?.team.as_ref()
+    }
+
+    /// The player's own open call, if any.
+    pub fn my_call(&self) -> Option<&CrewCall> {
+        let me = self.me.as_ref()?.profile.id.as_str();
+        self.calls
+            .iter()
+            .map(|open| &open.call)
+            .find(|call| call.from == me)
+    }
+
+    /// Answered here (the service also echoes it to every device of the player).
+    pub fn call_answered(&mut self, call: &str, answer: CallAnswer) {
+        let Some(me) = self.me.as_ref().map(|me| me.profile.id.clone()) else {
+            return;
+        };
+        if let Some(open) = self.calls.iter_mut().find(|open| open.call.id == call) {
+            open.call.answers.insert(me, answer);
+        }
+    }
+
+    /// A call ended, or turned out to be gone.
+    pub fn call_gone(&mut self, call: &str) {
+        self.calls.retain(|open| open.call.id != call);
+    }
+
+    /// Open calls at `now` (local Unix seconds), oldest first. Calls that ran out are left out:
+    /// no message says they ended.
+    pub fn calls(&self, now: i64) -> Vec<CrewCallView> {
+        self.calls
+            .iter()
+            .filter(|open| open.ends > now)
+            .map(|open| self.call_view(open))
+            .collect()
+    }
+
+    fn prune_calls(&mut self, now: i64) {
+        self.calls.retain(|open| open.ends > now);
+    }
+
+    fn call_view(&self, open: &OpenCall) -> CrewCallView {
+        let me = self.me.as_ref().map(|me| me.profile.id.as_str());
+        let members = self.team().map_or(&[][..], |team| team.members.as_slice());
+        let caller = members.iter().find(|m| m.profile.id == open.call.from);
+        CrewCallView {
+            id: open.call.id.clone(),
+            from: open.call.from.clone(),
+            mine: me == Some(open.call.from.as_str()),
+            name: caller.map(|m| m.profile.name().to_owned()),
+            avatar: caller.map(|m| m.profile.avatar.clone()),
+            avatar_url: caller.and_then(|m| m.profile.discord_avatar_url(128)),
+            kind: open.call.kind,
+            started_at: open.started,
+            ends_at: open.ends,
+            // In the crew's order; answers of people no longer in it are not shown.
+            answers: members
+                .iter()
+                .filter_map(|m| {
+                    open.call
+                        .answers
+                        .get(&m.profile.id)
+                        .map(|answer| CallAnswerView {
+                            id: m.profile.id.clone(),
+                            answer: *answer,
+                        })
+                })
+                .collect(),
+            my_answer: me.and_then(|me| open.call.answers.get(me).copied()),
+        }
+    }
+
+    /// In the player's crew (themself left out).
+    fn is_teammate(&self, id: &str) -> bool {
+        let me = self.me.as_ref().map(|me| me.profile.id.as_str());
+        Some(id) != me
+            && self
+                .team()
+                .is_some_and(|team| team.members.iter().any(|m| m.profile.id == id))
     }
 
     /// The answer of a call that changed the player's own team.
@@ -487,6 +690,7 @@ impl SocialState {
                     avatar: member.profile.avatar.clone(),
                     avatar_url: member.profile.discord_avatar_url(128),
                     role: member.role,
+                    moderator: member.moderator && member.role != TeamRole::Founder,
                     me: mine,
                     friend: overview.friends.iter().any(|f| f.profile.id == id),
                     blocked: overview.blocked.iter().any(|b| b.profile.id == id),
@@ -504,18 +708,22 @@ impl SocialState {
                 }
             })
             .collect();
-        let role = members
-            .iter()
-            .find(|m| m.me)
-            .map_or(TeamRole::Member, |m| m.role);
+        let mine = members.iter().find(|m| m.me);
+        let role = mine.map_or(TeamRole::Member, |m| m.role);
+        let moderator = mine.is_some_and(|m| m.moderator);
         Some(TeamView {
             id: team.id.clone(),
             name: team.name.clone(),
             tag: team.tag.clone(),
             emblem: team.emblem.clone(),
-            code: team.code.clone(),
+            color: team.color.clone(),
+            frame: team.frame.clone(),
+            motto: team.motto.clone(),
+            code: crew_code(&team.code),
             created_on: team.created_on.clone(),
             role,
+            moderator,
+            permissions: team.permissions,
             members,
             invited: overview.team_invited.clone(),
             limit: overview.limits.team_members.unwrap_or(30),
@@ -735,6 +943,9 @@ fn team_invite_view(invite: &TeamInvite) -> TeamInviteView {
         name: invite.team.name.clone(),
         tag: invite.team.tag.clone(),
         emblem: invite.team.emblem.clone(),
+        color: invite.team.color.clone(),
+        frame: invite.team.frame.clone(),
+        motto: invite.team.motto.clone(),
         members: invite.team.members,
         from: ProfileView::from(&invite.from),
         sent_at: invite.sent_at,
@@ -820,6 +1031,7 @@ mod tests {
             team: None,
             team_invited: vec![],
             team_invites: vec![],
+            team_features: vec!["look".into(), "calls".into()],
         });
         state
     }
@@ -871,6 +1083,8 @@ mod tests {
                     presence("2", PresenceState::Launcher, None),
                 ],
                 invites: vec![invite("i1", "1", NOW - 10, false)],
+                calls: vec![],
+                clock: None,
             },
             NOW,
         );
@@ -897,6 +1111,8 @@ mod tests {
                 status: StatusMode::Online,
                 friends: vec![],
                 invites: vec![],
+                calls: vec![],
+                clock: None,
             },
             NOW,
         );
@@ -1085,6 +1301,8 @@ mod tests {
             status: StatusMode::Online,
             friends: vec![],
             invites,
+            calls: vec![],
+            clock: None,
         }
     }
 
@@ -1155,6 +1373,8 @@ mod tests {
                 status: StatusMode::Online,
                 friends: vec![presence("1", PresenceState::Launcher, None)],
                 invites: vec![],
+                calls: vec![],
+                clock: None,
             },
             NOW,
         );
@@ -1188,6 +1408,9 @@ mod tests {
             name: "Gece Kartalları".into(),
             tag: "GKR".into(),
             emblem: "sword".into(),
+            color: "teal".into(),
+            frame: "banner".into(),
+            motto: "Birlikte güçlüyüz!".into(),
             code: "TKM-ABCD-EFGH".into(),
             created_on: "2026-10-19".into(),
             members: members
@@ -1196,9 +1419,11 @@ mod tests {
                 .map(|(i, (id, name, role))| crate::model::TeamMember {
                     profile: profile(id, name),
                     role: *role,
+                    moderator: false,
                     joined_at: i64::try_from(i).unwrap(),
                 })
                 .collect(),
+            permissions: crate::model::TeamPermissions::default(),
         }
     }
 
@@ -1213,7 +1438,8 @@ mod tests {
             ])),
             invited: vec!["2".into()],
         });
-        // Zeki is a teammate, not a friend: presence yes, "came online" toasts no.
+        // Zeki is a teammate, not a friend: presence yes, "came online" toasts no; joining
+        // Projects is crew news (the launcher says it only when the player asked for it).
         let notices = state.apply(
             &PresenceEvent::Presence(presence(
                 "9",
@@ -1222,10 +1448,20 @@ mod tests {
             )),
             NOW,
         );
-        assert!(notices.is_empty());
+        assert_eq!(
+            notices,
+            vec![SocialNotice::CrewmateOnProjects { id: "9".into() }]
+        );
         let view = state.team_view().unwrap();
         assert_eq!(view.role, TeamRole::Founder);
         assert_eq!(view.invited, vec!["2".to_owned()]);
+        // The crew shows its code with the crew prefix, and its look.
+        assert_eq!(view.code, "EKP-ABCD-EFGH");
+        assert_eq!(
+            (view.color.as_str(), view.frame.as_str()),
+            ("teal", "banner")
+        );
+        assert_eq!(view.motto, "Birlikte güçlüyüz!");
         let zeki = view.members.iter().find(|m| m.id == "9").unwrap();
         assert!(!zeki.friend && !zeki.me);
         assert_eq!(zeki.state, PresenceState::Playing);
@@ -1240,11 +1476,276 @@ mod tests {
                 status: StatusMode::Online,
                 friends: vec![presence("9", PresenceState::Launcher, None)],
                 invites: vec![],
+                calls: vec![],
+                clock: None,
             },
             NOW,
         );
         let zeki = state.team_view().unwrap().members[2].clone();
         assert_eq!(zeki.state, PresenceState::Launcher);
+    }
+
+    fn crew_call(id: &str, from: &str, kind: CallKind, at: i64, until: i64) -> CrewCall {
+        CrewCall {
+            id: id.into(),
+            from: from.into(),
+            kind,
+            at,
+            until,
+            answers: std::collections::BTreeMap::new(),
+        }
+    }
+
+    const ME: &str = "100000000000000000";
+
+    fn crewed() -> SocialState {
+        let mut state = loaded();
+        state.team_answer(TeamAnswer {
+            team: Some(team(&[
+                (ME, "Ben", TeamRole::Founder),
+                ("1", "Ayşe", TeamRole::Member),
+                ("9", "Zeki", TeamRole::Member),
+            ])),
+            invited: vec![],
+        });
+        state
+    }
+
+    #[test]
+    fn calls_keep_their_time_left_on_this_clock_and_say_only_what_is_new() {
+        let mut state = crewed();
+        // The service's clock is 5 minutes behind this computer's: a call with 15 minutes left
+        // there has 15 minutes left here too.
+        let service_now = NOW - 300;
+        let notices = state.apply(
+            &PresenceEvent::Connected {
+                status: StatusMode::Online,
+                friends: vec![],
+                invites: vec![],
+                calls: vec![crew_call(
+                    "c1",
+                    "9",
+                    CallKind::Ready,
+                    service_now - 300,
+                    service_now + 900,
+                )],
+                clock: Some(service_now),
+            },
+            NOW,
+        );
+        assert!(notices.is_empty(), "calls listed on connect are quiet");
+        let calls = state.calls(NOW);
+        assert_eq!(calls.len(), 1);
+        assert_eq!(
+            (calls[0].started_at, calls[0].ends_at),
+            (NOW - 300, NOW + 900)
+        );
+        assert_eq!(calls[0].name.as_deref(), Some("Zeki"));
+        assert!(!calls[0].mine);
+
+        // A new call, live: announced once with the caller's name.
+        let ayse = crew_call("c2", "1", CallKind::Join, NOW, NOW + 1200);
+        let live = state.apply(
+            &PresenceEvent::Call {
+                call: ayse.clone(),
+                quiet: false,
+                clock: Some(NOW),
+            },
+            NOW,
+        );
+        assert!(
+            matches!(&live[..], [SocialNotice::CrewCall { call }] if call.id == "c2" && call.kind == CallKind::Join && call.name.as_deref() == Some("Ayşe"))
+        );
+        // The same call again (a resend) and quiet ones say nothing.
+        for quiet in [false, true] {
+            assert!(
+                state
+                    .apply(
+                        &PresenceEvent::Call {
+                            call: ayse.clone(),
+                            quiet,
+                            clock: Some(NOW)
+                        },
+                        NOW
+                    )
+                    .is_empty()
+            );
+        }
+        // The player's own call (on every device) is never news.
+        let mine = state.apply(
+            &PresenceEvent::Call {
+                call: crew_call("c3", ME, CallKind::Ready, NOW, NOW + 1200),
+                quiet: false,
+                clock: Some(NOW),
+            },
+            NOW,
+        );
+        assert!(mine.is_empty());
+        assert_eq!(state.my_call().map(|c| c.id.as_str()), Some("c3"));
+
+        // "Geliyorum" to Zeki's call, then Zeki goes to projects.gg: "Zeki Projects'te".
+        state.call_answered("c1", CallAnswer::Yes);
+        state.apply(
+            &PresenceEvent::CallAnswered {
+                call: "c1".into(),
+                by: "1".into(),
+                answer: CallAnswer::No,
+            },
+            NOW,
+        );
+        let view = state.calls(NOW).into_iter().find(|c| c.id == "c1").unwrap();
+        assert_eq!(view.my_answer, Some(CallAnswer::Yes));
+        // In the crew's order: the player (founder) first, then Ayşe.
+        assert_eq!(
+            view.answers
+                .iter()
+                .map(|a| (a.id.as_str(), a.answer))
+                .collect::<Vec<_>>(),
+            vec![(ME, CallAnswer::Yes), ("1", CallAnswer::No)]
+        );
+        let mut joined = crew_call(
+            "c1",
+            "9",
+            CallKind::Join,
+            service_now - 300,
+            service_now + 900,
+        );
+        joined.answers.insert(ME.into(), CallAnswer::Yes);
+        let arrived = state.apply(
+            &PresenceEvent::Call {
+                call: joined,
+                quiet: false,
+                clock: Some(service_now + 60),
+            },
+            NOW + 60,
+        );
+        assert!(matches!(&arrived[..], [SocialNotice::CrewCallJoin { call }] if call.id == "c1"));
+        // The service's copy replaced the old one (answers that went away are gone).
+        assert_eq!(
+            state
+                .calls(NOW + 60)
+                .into_iter()
+                .find(|c| c.id == "c1")
+                .unwrap()
+                .answers
+                .len(),
+            1
+        );
+
+        // Running out needs no message; ending does.
+        assert!(state.calls(NOW + 901).iter().all(|c| c.id != "c1"));
+        state.apply(
+            &PresenceEvent::CallEnded {
+                call: "c2".into(),
+                reason: crate::protocol::CallEndReason::Ended,
+            },
+            NOW,
+        );
+        assert_eq!(
+            state
+                .calls(NOW)
+                .iter()
+                .map(|c| c.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["c1", "c3"]
+        );
+
+        // An outage, or leaving the crew, takes every call away.
+        state.set_connection(Connection::Unavailable);
+        assert!(state.calls(NOW).is_empty());
+        state.apply(
+            &PresenceEvent::Call {
+                call: crew_call("c4", "1", CallKind::Ready, NOW, NOW + 1200),
+                quiet: true,
+                clock: Some(NOW),
+            },
+            NOW,
+        );
+        state.apply(
+            &PresenceEvent::TeamChanged {
+                team: None,
+                reason: Some(TeamExit::Left),
+                by: Some(ME.into()),
+            },
+            NOW,
+        );
+        assert!(state.calls(NOW).is_empty());
+    }
+
+    #[test]
+    fn moderators_and_permissions_reach_the_view_and_take_invites_along() {
+        use crate::model::PermissionLevel;
+        let mut state = loaded();
+        // The player is a moderator in Ayşe's crew, where only moderators invite.
+        let mut led = team(&[
+            ("1", "Ayşe", TeamRole::Founder),
+            (ME, "Ben", TeamRole::Member),
+            ("9", "Zeki", TeamRole::Member),
+        ]);
+        led.members[1].moderator = true;
+        led.permissions.invite = PermissionLevel::Moderators;
+        state.team_answer(TeamAnswer {
+            team: Some(led.clone()),
+            invited: vec!["2".into()],
+        });
+        let view = state.team_view().unwrap();
+        assert!(view.moderator && view.role == TeamRole::Member);
+        assert_eq!(view.permissions.invite, PermissionLevel::Moderators);
+        assert!(view.members.iter().find(|m| m.me).unwrap().moderator);
+        assert!(!view.members.iter().find(|m| m.id == "1").unwrap().moderator);
+        assert_eq!(view.invited, vec!["2".to_owned()]);
+
+        // The leader takes the flag back: the player's waiting invites go with the right.
+        led.members[1].moderator = false;
+        state.apply(
+            &PresenceEvent::TeamChanged {
+                team: Some(led),
+                reason: None,
+                by: Some("1".into()),
+            },
+            NOW,
+        );
+        let view = state.team_view().unwrap();
+        assert!(!view.moderator);
+        assert!(view.invited.is_empty());
+    }
+
+    #[test]
+    fn a_call_of_someone_who_left_or_was_blocked_goes() {
+        let mut state = crewed();
+        state.apply(
+            &PresenceEvent::Call {
+                call: crew_call("c1", "9", CallKind::Ready, NOW, NOW + 1200),
+                quiet: true,
+                clock: Some(NOW),
+            },
+            NOW,
+        );
+        state.apply(
+            &PresenceEvent::Call {
+                call: crew_call("c2", "1", CallKind::Ready, NOW, NOW + 1200),
+                quiet: true,
+                clock: Some(NOW),
+            },
+            NOW,
+        );
+        // Zeki left the crew.
+        state.apply(
+            &PresenceEvent::TeamChanged {
+                team: Some(team(&[
+                    (ME, "Ben", TeamRole::Founder),
+                    ("1", "Ayşe", TeamRole::Member),
+                ])),
+                reason: None,
+                by: None,
+            },
+            NOW,
+        );
+        assert_eq!(state.calls(NOW).len(), 1);
+        // Blocking Ayşe hides hers.
+        let ayse = state.profile("1").unwrap();
+        state.blocked(ayse);
+        assert!(state.calls(NOW).is_empty());
     }
 
     #[test]
@@ -1256,6 +1757,9 @@ mod tests {
                 name: "PvP".into(),
                 tag: "PVP".into(),
                 emblem: "bolt".into(),
+                color: "crimson".into(),
+                frame: "hex".into(),
+                motto: String::new(),
                 members: 4,
             },
             from: profile("2", "Bora"),

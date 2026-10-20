@@ -1,6 +1,8 @@
 //! Presence WebSocket protocol (`GET /v1/presence`, JSON text frames).
 
-use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::model::{FriendGroups, LastSeen, PublicProfile, StatusMode, Team, TeamExit, TeamInvite};
 
@@ -91,6 +93,91 @@ pub struct Invite {
     pub quiet: bool,
 }
 
+/// What a crew call asks: come to projects.gg, where the caller plays, or "are you ready?" (the
+/// caller is in the launcher or elsewhere). It follows the caller's status. A kind this version
+/// does not know reads as `Ready` (an answer, nothing to join).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum CallKind {
+    Join,
+    Ready,
+}
+
+impl<'de> Deserialize<'de> for CallKind {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match String::deserialize(deserializer)?.as_str() {
+            "join" => Self::Join,
+            _ => Self::Ready,
+        })
+    }
+}
+
+/// An answer to a crew call: "Geliyorum", "Birazdan", "Gelemem".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum CallAnswer {
+    Yes,
+    Soon,
+    No,
+}
+
+impl CallAnswer {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "yes" => Some(Self::Yes),
+            "soon" => Some(Self::Soon),
+            "no" => Some(Self::No),
+            _ => None,
+        }
+    }
+}
+
+/// "Ekibi çağır": an open call as the service shows it (`{"t":"call"}`, `hello.calls`). Times are
+/// Unix seconds on the service's clock; the message that carries the call also says what time it
+/// is there (`now`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct CrewCall {
+    pub id: String,
+    /// The caller's user id (the player's own id for their own call).
+    pub from: String,
+    pub kind: CallKind,
+    pub at: i64,
+    /// The call ends by itself at this time; no message says so.
+    pub until: i64,
+    /// Who answered what (answers this version does not know are left out).
+    #[serde(default, deserialize_with = "known_answers")]
+    pub answers: BTreeMap<String, CallAnswer>,
+}
+
+fn known_answers<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<String, CallAnswer>, D::Error> {
+    let raw = BTreeMap::<String, String>::deserialize(deserializer)?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|(id, answer)| CallAnswer::parse(&answer).map(|answer| (id, answer)))
+        .collect())
+}
+
+/// Why a call ended: the caller ended it, or it went away (the caller went offline, left the crew,
+/// the crew ended, the player left it, or a block hid it). Unknown reasons read as `Ended`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum CallEndReason {
+    #[default]
+    Ended,
+    Left,
+}
+
+impl<'de> Deserialize<'de> for CallEndReason {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match String::deserialize(deserializer)?.as_str() {
+            "left" => Self::Left,
+            _ => Self::Ended,
+        })
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(tag = "t", rename_all = "snake_case")]
 pub(crate) enum ClientMessage {
@@ -103,6 +190,20 @@ pub(crate) enum ClientMessage {
     },
     Invite {
         to: String,
+        rid: u32,
+    },
+    /// "Ekibi çağır".
+    Call {
+        rid: u32,
+    },
+    CallAnswer {
+        call: String,
+        answer: CallAnswer,
+        rid: u32,
+    },
+    /// Ends the player's own call.
+    CallEnd {
+        call: String,
         rid: u32,
     },
 }
@@ -143,6 +244,32 @@ pub(crate) enum ServerMessage {
         team: Vec<Presence>,
         #[serde(default)]
         invites: Vec<Invite>,
+        /// Every open crew call the player sees, their own included (a service with calls).
+        #[serde(default)]
+        calls: Vec<CrewCall>,
+        /// The service's clock (Unix seconds), for the calls' deadlines.
+        #[serde(default)]
+        now: Option<i64>,
+    },
+    /// A crew call, new or changed (its kind, or answers that went away): replaces the one with
+    /// the same id. `quiet`: show it, never announce it.
+    Call {
+        call: CrewCall,
+        #[serde(default)]
+        quiet: bool,
+        #[serde(default)]
+        now: Option<i64>,
+    },
+    /// Someone answered a call (the player too, from another device).
+    CallAnswer {
+        call: String,
+        by: String,
+        answer: String,
+    },
+    CallEnd {
+        call: String,
+        #[serde(default)]
+        reason: CallEndReason,
     },
     /// The player's team changed, or they are no longer in one (`team` null).
     Team {
@@ -314,5 +441,93 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn crew_call_messages() {
+        let json = |message: &ClientMessage| serde_json::to_string(message).unwrap();
+        assert_eq!(
+            json(&ClientMessage::Call { rid: 8 }),
+            r#"{"t":"call","rid":8}"#
+        );
+        assert_eq!(
+            json(&ClientMessage::CallAnswer {
+                call: "3f9c0a1b2c3d4e5f".into(),
+                answer: CallAnswer::Yes,
+                rid: 9
+            }),
+            r#"{"t":"call_answer","call":"3f9c0a1b2c3d4e5f","answer":"yes","rid":9}"#
+        );
+        assert_eq!(
+            json(&ClientMessage::CallEnd {
+                call: "3f9c0a1b2c3d4e5f".into(),
+                rid: 10
+            }),
+            r#"{"t":"call_end","call":"3f9c0a1b2c3d4e5f","rid":10}"#
+        );
+
+        let call: ServerMessage = serde_json::from_str(
+            r#"{"t":"call","call":{"id":"3f9c0a1b2c3d4e5f","from":"7","kind":"join","at":1792521000,
+                "until":1792522200,"answers":{"8":"yes","9":"soon","10":"maybe"}},"quiet":false,
+                "now":1792521005}"#,
+        )
+        .unwrap();
+        match call {
+            ServerMessage::Call { call, quiet, now } => {
+                assert_eq!(call.kind, CallKind::Join);
+                assert!(!quiet);
+                assert_eq!(now, Some(1_792_521_005));
+                // An answer this version does not know is left out, not the whole message.
+                assert_eq!(call.answers.len(), 2);
+                assert_eq!(call.answers["9"], CallAnswer::Soon);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        let later: ServerMessage = serde_json::from_str(
+            r#"{"t":"call","call":{"id":"a","from":"7","kind":"party","at":1,"until":2,"answers":{}}}"#,
+        )
+        .unwrap();
+        assert!(
+            matches!(later, ServerMessage::Call { call, quiet: false, now: None } if call.kind == CallKind::Ready)
+        );
+        let answer: ServerMessage = serde_json::from_str(
+            r#"{"t":"call_answer","call":"3f9c0a1b2c3d4e5f","by":"8","answer":"soon"}"#,
+        )
+        .unwrap();
+        assert!(matches!(answer, ServerMessage::CallAnswer { answer, .. } if answer == "soon"));
+        let ended: ServerMessage =
+            serde_json::from_str(r#"{"t":"call_end","call":"a","reason":"expired"}"#).unwrap();
+        assert!(matches!(
+            ended,
+            ServerMessage::CallEnd {
+                reason: CallEndReason::Ended,
+                ..
+            }
+        ));
+        let left: ServerMessage =
+            serde_json::from_str(r#"{"t":"call_end","call":"a","reason":"left"}"#).unwrap();
+        assert!(matches!(
+            left,
+            ServerMessage::CallEnd {
+                reason: CallEndReason::Left,
+                ..
+            }
+        ));
+        let hello: ServerMessage = serde_json::from_str(
+            r#"{"t":"hello","v":1,"status":"online","keepaliveSeconds":45,"friends":[],"team":[],
+                "invites":[],"calls":[{"id":"b","from":"7","kind":"ready","at":1792521000,
+                "until":1792522200,"answers":{}}],"now":1792521300}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            hello,
+            ServerMessage::Hello { calls, now: Some(1_792_521_300), .. } if calls.len() == 1
+        ));
+        // A service before calls: no calls, no clock.
+        let older: ServerMessage = serde_json::from_str(
+            r#"{"t":"hello","v":1,"status":"online","friends":[],"invites":[]}"#,
+        )
+        .unwrap();
+        assert!(matches!(older, ServerMessage::Hello { calls, now: None, .. } if calls.is_empty()));
     }
 }

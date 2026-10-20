@@ -34,7 +34,10 @@ use crate::auth::SessionToken;
 use crate::backoff::{Backoff, BackoffPolicy, jitter};
 use crate::error::{ErrorCode, Result, SocialError, parse_retry_after};
 use crate::model::{FriendGroups, PublicProfile, StatusMode, Team, TeamExit, TeamInvite};
-use crate::protocol::{ClientMessage, Invite, LocalStatus, Presence, ServerMessage};
+use crate::protocol::{
+    CallAnswer, CallEndReason, ClientMessage, CrewCall, Invite, LocalStatus, Presence,
+    ServerMessage,
+};
 use crate::tls;
 
 #[derive(Debug, Clone, Copy)]
@@ -47,7 +50,8 @@ pub struct PresenceOptions {
     /// A connection that stayed up this long resets the backoff.
     pub stable_after: Duration,
     pub connect_timeout: Duration,
-    /// How long [`PresenceHandle::invite`] waits for the service's answer.
+    /// How long [`PresenceHandle::invite`] (and a crew call request) waits for the service's
+    /// answer.
     pub invite_timeout: Duration,
 }
 
@@ -67,12 +71,33 @@ impl Default for PresenceOptions {
 #[derive(Debug, Clone, PartialEq)]
 pub enum PresenceEvent {
     /// After every (re)connect: your status mode, the friends and teammates who are online right
-    /// now (replace the whole online list) and invites that waited for you (show them as a quiet
-    /// list).
+    /// now (replace the whole online list), invites that waited for you (show them as a quiet
+    /// list) and every open crew call you see (replace the list; show them without a
+    /// notification). `clock` is the service's time (Unix seconds) for the calls' deadlines.
     Connected {
         status: StatusMode,
         friends: Vec<Presence>,
         invites: Vec<Invite>,
+        calls: Vec<CrewCall>,
+        clock: Option<i64>,
+    },
+    /// A crew call, new or changed: replaces the one with the same id. `quiet`: show it but do
+    /// not announce it (your own call, do-not-disturb, or a call that is only new to you).
+    Call {
+        call: CrewCall,
+        quiet: bool,
+        clock: Option<i64>,
+    },
+    /// Someone answered a call (you too, from another device).
+    CallAnswered {
+        call: String,
+        by: String,
+        answer: CallAnswer,
+    },
+    /// A call ended before its time (calls that run out end without a message).
+    CallEnded {
+        call: String,
+        reason: CallEndReason,
     },
     /// A friend's or a teammate's presence changed.
     Presence(Presence),
@@ -136,16 +161,40 @@ pub enum InviteOutcome {
     Queued,
 }
 
+/// What a crew call request asks of the service ("Ekibi çağır", an answer, "Bitir").
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum CrewRequest {
+    Call,
+    Answer { call: String, answer: CallAnswer },
+    End { call: String },
+}
+
 enum Command {
     Invite {
         to: String,
         reply: oneshot::Sender<Result<InviteOutcome>>,
     },
+    Crew {
+        request: CrewRequest,
+        reply: oneshot::Sender<Result<()>>,
+    },
     Shutdown,
 }
 
-/// Controls the background presence task: status and invites. Cheap to clone; once every
-/// control is gone the task closes the connection cleanly and stops.
+impl Command {
+    /// The service cannot be reached for a while: the request fails at once.
+    fn refuse(self, retry_after: Option<Duration>) {
+        let error = || SocialError::Unavailable { retry_after };
+        match self {
+            Self::Invite { reply, .. } => drop(reply.send(Err(error()))),
+            Self::Crew { reply, .. } => drop(reply.send(Err(error()))),
+            Self::Shutdown => {}
+        }
+    }
+}
+
+/// Controls the background presence task: status, invites and crew calls. Cheap to clone; once
+/// every control is gone the task closes the connection cleanly and stops.
 #[derive(Clone)]
 pub struct PresenceControl {
     status: Arc<watch::Sender<LocalStatus>>,
@@ -185,6 +234,45 @@ impl PresenceControl {
                 to: friend_id.to_owned(),
                 reply,
             })
+            .await
+            .map_err(|_| SocialError::Unavailable { retry_after: None })?;
+        match timeout(self.invite_timeout, answer).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) => Err(SocialError::Network("presence connection closed".into())),
+            Err(_) => Err(SocialError::Network("no answer from the service".into())),
+        }
+    }
+
+    /// "Ekibi çağır" (limits: one open call among teammates who see each other, one every 5
+    /// minutes and 10 a day per player). The call itself arrives as [`PresenceEvent::Call`]
+    /// before this returns. Fails with `RateLimited` (with the wait), `Refused` `call_active` or
+    /// `team_not_found`, or `Unavailable` while disconnected.
+    pub async fn call_crew(&self) -> Result<()> {
+        self.crew(CrewRequest::Call).await
+    }
+
+    /// Answers (or changes the answer to) a teammate's call. `Refused` `call_not_found` when the
+    /// call is gone.
+    pub async fn answer_call(&self, call: &str, answer: CallAnswer) -> Result<()> {
+        self.crew(CrewRequest::Answer {
+            call: call.to_owned(),
+            answer,
+        })
+        .await
+    }
+
+    /// Ends the player's own call ("Bitir").
+    pub async fn end_call(&self, call: &str) -> Result<()> {
+        self.crew(CrewRequest::End {
+            call: call.to_owned(),
+        })
+        .await
+    }
+
+    async fn crew(&self, request: CrewRequest) -> Result<()> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(Command::Crew { request, reply })
             .await
             .map_err(|_| SocialError::Unavailable { retry_after: None })?;
         match timeout(self.invite_timeout, answer).await {
@@ -282,6 +370,21 @@ impl PresenceHandle {
     /// day). Fails with `Unavailable` while disconnected.
     pub async fn invite(&self, friend_id: &str) -> Result<InviteOutcome> {
         self.control.invite(friend_id).await
+    }
+
+    /// "Ekibi çağır"; see [`PresenceControl::call_crew`].
+    pub async fn call_crew(&self) -> Result<()> {
+        self.control.call_crew().await
+    }
+
+    /// See [`PresenceControl::answer_call`].
+    pub async fn answer_call(&self, call: &str, answer: CallAnswer) -> Result<()> {
+        self.control.answer_call(call, answer).await
+    }
+
+    /// See [`PresenceControl::end_call`].
+    pub async fn end_call(&self, call: &str) -> Result<()> {
+        self.control.end_call(call).await
     }
 
     /// The next event; None after the task has stopped and every event was read.
@@ -454,9 +557,8 @@ async fn run(
                         let _ = events.send(PresenceEvent::Stopped(StopReason::Shutdown));
                         return;
                     }
-                    Some(Command::Invite { reply, .. }) => {
-                        let left = deadline.saturating_duration_since(Instant::now());
-                        let _ = reply.send(Err(SocialError::Unavailable { retry_after: Some(left) }));
+                    Some(command) => {
+                        command.refuse(Some(deadline.saturating_duration_since(Instant::now())));
                     }
                 },
             }
@@ -465,7 +567,23 @@ async fn run(
 }
 
 type Sink = SplitSink<Socket, Message>;
-type Pending = HashMap<u32, oneshot::Sender<Result<InviteOutcome>>>;
+
+/// Who waits for the service's `ack` (or `error`) of a request, by its `rid`.
+enum Reply {
+    Invite(oneshot::Sender<Result<InviteOutcome>>),
+    Crew(oneshot::Sender<Result<()>>),
+}
+
+impl Reply {
+    fn fail(self, error: SocialError) {
+        match self {
+            Self::Invite(reply) => drop(reply.send(Err(error))),
+            Self::Crew(reply) => drop(reply.send(Err(error))),
+        }
+    }
+}
+
+type Pending = HashMap<u32, Reply>;
 
 /// One connection, from the handshake to its end.
 async fn session(
@@ -529,17 +647,25 @@ async fn session(
                         .await;
                     break Outcome::Stop(StopReason::Shutdown);
                 }
-                Some(Command::Invite { to, reply }) => {
+                Some(command) => {
                     if !state.greeted {
-                        let _ = reply.send(Err(SocialError::Unavailable { retry_after: None }));
+                        command.refuse(None);
                         continue;
                     }
                     state.next_rid = state.next_rid.wrapping_add(1) % 1_000_000;
                     let rid = state.next_rid;
-                    let message = serde_json::to_string(&ClientMessage::Invite { to, rid })
-                        .unwrap_or_default();
-                    if sink.send(Message::text(message)).await.is_err() {
-                        let _ = reply.send(Err(SocialError::Network("presence connection lost".into())));
+                    let (message, reply) = match command {
+                        Command::Invite { to, reply } => {
+                            (ClientMessage::Invite { to, rid }, Reply::Invite(reply))
+                        }
+                        Command::Crew { request, reply } => {
+                            (crew_message(request, rid), Reply::Crew(reply))
+                        }
+                        Command::Shutdown => continue,
+                    };
+                    let text = serde_json::to_string(&message).unwrap_or_default();
+                    if sink.send(Message::text(text)).await.is_err() {
+                        reply.fail(SocialError::Network("presence connection lost".into()));
                         break RETRY_NOW;
                     }
                     pending.insert(rid, reply);
@@ -561,9 +687,17 @@ async fn session(
         }
     };
     for (_, reply) in pending.drain() {
-        let _ = reply.send(Err(SocialError::Network("presence connection lost".into())));
+        reply.fail(SocialError::Network("presence connection lost".into()));
     }
     outcome
+}
+
+fn crew_message(request: CrewRequest, rid: u32) -> ClientMessage {
+    match request {
+        CrewRequest::Call => ClientMessage::Call { rid },
+        CrewRequest::Answer { call, answer } => ClientMessage::CallAnswer { call, answer, rid },
+        CrewRequest::End { call } => ClientMessage::CallEnd { call, rid },
+    }
 }
 
 /// Pings every `keepalive` ± 10 %, so clients do not ping in step.
@@ -616,6 +750,8 @@ async fn on_text(
             mut friends,
             team,
             invites,
+            calls,
+            now,
         } => {
             state.greeted = true;
             // Every connection starts as "launcher" on the service.
@@ -629,11 +765,25 @@ async fn on_text(
                 status: mode,
                 friends,
                 invites,
+                calls,
+                clock: now,
             });
             return send_status(state, sink, status)
                 .await
                 .map_err(|_| RETRY_NOW);
         }
+        ServerMessage::Call { call, quiet, now } => PresenceEvent::Call {
+            call,
+            quiet,
+            clock: now,
+        },
+        ServerMessage::CallAnswer { call, by, answer } => {
+            let Some(answer) = CallAnswer::parse(&answer) else {
+                return Ok(());
+            };
+            PresenceEvent::CallAnswered { call, by, answer }
+        }
+        ServerMessage::CallEnd { call, reason } => PresenceEvent::CallEnded { call, reason },
         ServerMessage::Presence { presence } => PresenceEvent::Presence(presence),
         ServerMessage::FriendAdded { friend, presence } => {
             PresenceEvent::FriendAdded { friend, presence }
@@ -648,13 +798,19 @@ async fn on_text(
         ServerMessage::TeamInvite { invite } => PresenceEvent::TeamInvited(invite),
         ServerMessage::Groups { groups } => PresenceEvent::GroupsChanged(groups),
         ServerMessage::Ack { rid, delivered } => {
-            if let Some(reply) = rid.and_then(|rid| pending.remove(&rid)) {
-                let outcome = if delivered == Some(true) {
-                    InviteOutcome::Delivered
-                } else {
-                    InviteOutcome::Queued
-                };
-                let _ = reply.send(Ok(outcome));
+            match rid.and_then(|rid| pending.remove(&rid)) {
+                Some(Reply::Invite(reply)) => {
+                    let outcome = if delivered == Some(true) {
+                        InviteOutcome::Delivered
+                    } else {
+                        InviteOutcome::Queued
+                    };
+                    let _ = reply.send(Ok(outcome));
+                }
+                Some(Reply::Crew(reply)) => {
+                    let _ = reply.send(Ok(()));
+                }
+                None => {}
             }
             return Ok(());
         }
@@ -664,7 +820,7 @@ async fn on_text(
             retry_after,
         } => {
             if let Some(reply) = rid.and_then(|rid| pending.remove(&rid)) {
-                let _ = reply.send(Err(invite_error(&code, retry_after)));
+                reply.fail(socket_error(&code, retry_after));
             } else {
                 tracing::debug!(%code, "presence error");
             }
@@ -681,21 +837,23 @@ async fn on_text(
         .map_err(|_| Outcome::Stop(StopReason::Shutdown))
 }
 
-fn invite_error(code: &str, retry_after: Option<u64>) -> SocialError {
-    match code {
-        "rate_limited" => SocialError::RateLimited {
-            retry_after: retry_after.map(Duration::from_secs),
-        },
-        "friend_not_found" => SocialError::Refused {
-            status: 404,
-            code: ErrorCode::FriendNotFound,
-            message: "not a friend".into(),
-        },
-        other => SocialError::Refused {
-            status: 400,
-            code: ErrorCode::parse(other),
-            message: String::new(),
-        },
+/// The error of a socket request (an invite or a crew call request).
+fn socket_error(code: &str, retry_after: Option<u64>) -> SocialError {
+    let status = match code {
+        "rate_limited" => {
+            return SocialError::RateLimited {
+                retry_after: retry_after.map(Duration::from_secs),
+            };
+        }
+        "friend_not_found" | "team_not_found" | "call_not_found" => 404,
+        "team_not_permitted" => 403,
+        "call_active" => 409,
+        _ => 400,
+    };
+    SocialError::Refused {
+        status,
+        code: ErrorCode::parse(code),
+        message: String::new(),
     }
 }
 
@@ -1024,12 +1182,163 @@ mod tests {
             }
         );
         assert!(matches!(
-            invite_error("rate_limited", Some(30)),
+            socket_error("rate_limited", Some(30)),
             SocialError::RateLimited { retry_after: Some(d) } if d == Duration::from_secs(30)
         ));
         assert_eq!(
-            invite_error("friend_not_found", None).code(),
+            socket_error("friend_not_found", None).code(),
             Some(&ErrorCode::FriendNotFound)
         );
+        assert_eq!(
+            socket_error("call_active", None).code(),
+            Some(&ErrorCode::CallActive)
+        );
+        assert!(matches!(
+            socket_error("call_not_found", None),
+            SocialError::Refused {
+                status: 404,
+                code: ErrorCode::CallNotFound,
+                ..
+            }
+        ));
+    }
+
+    #[tokio::test]
+    async fn crew_calls_go_out_with_their_rid_and_come_back_as_events() {
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut handle = client.session(token()).connect_presence(fast());
+        let mut server = accept(&listener, None, seen).await.unwrap();
+        let mut greeting = hello();
+        greeting["calls"] = serde_json::json!([{"id": "c0", "from": "111111111111111111",
+            "kind": "ready", "at": 1_792_521_000, "until": 1_792_522_200, "answers": {}}]);
+        greeting["now"] = serde_json::json!(1_792_521_300);
+        send_json(&mut server, greeting).await;
+        match handle.next_event().await.unwrap() {
+            PresenceEvent::Connected { calls, clock, .. } => {
+                assert_eq!(calls.len(), 1);
+                assert_eq!(clock, Some(1_792_521_300));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+
+        // "Ekibi çağır": the own call arrives first, then the ack.
+        let call = tokio::spawn({
+            let control = handle.control();
+            async move { control.call_crew().await }
+        });
+        let sent = next_json(&mut server).await;
+        assert_eq!(sent["t"], "call");
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "call", "call": {"id": "c1", "from": "100",
+                "kind": "join", "at": 10, "until": 1210, "answers": {}}, "quiet": true, "now": 12}),
+        )
+        .await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "ack", "rid": sent["rid"]}),
+        )
+        .await;
+        call.await.unwrap().unwrap();
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::Call { call, quiet: true, clock: Some(12) } if call.id == "c1"
+        ));
+
+        // An answer to a call that is gone, and one more call too soon.
+        let answer = tokio::spawn({
+            let control = handle.control();
+            async move { control.answer_call("c0", CallAnswer::Soon).await }
+        });
+        let sent = next_json(&mut server).await;
+        assert_eq!(sent["t"], "call_answer");
+        assert_eq!(sent["call"], "c0");
+        assert_eq!(sent["answer"], "soon");
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "error", "rid": sent["rid"], "code": "call_not_found"}),
+        )
+        .await;
+        assert_eq!(
+            answer.await.unwrap().unwrap_err().code(),
+            Some(&ErrorCode::CallNotFound)
+        );
+        let again = tokio::spawn({
+            let control = handle.control();
+            async move { control.call_crew().await }
+        });
+        let sent = next_json(&mut server).await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "error", "rid": sent["rid"], "code": "rate_limited",
+                "retryAfter": 240}),
+        )
+        .await;
+        assert_eq!(
+            again.await.unwrap().unwrap_err().retry_after(),
+            Some(Duration::from_secs(240))
+        );
+
+        // Answers and ends arrive as events; an unknown answer is skipped.
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "call_answer", "call": "c1", "by": "7", "answer": "maybe"}),
+        )
+        .await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "call_answer", "call": "c1", "by": "7", "answer": "yes"}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::CallAnswered {
+                call: "c1".into(),
+                by: "7".into(),
+                answer: CallAnswer::Yes
+            }
+        );
+        let end = tokio::spawn({
+            let control = handle.control();
+            async move { control.end_call("c1").await }
+        });
+        let sent = next_json(&mut server).await;
+        assert_eq!(sent["t"], "call_end");
+        assert_eq!(sent["call"], "c1");
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "call_end", "call": "c1", "reason": "ended"}),
+        )
+        .await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "ack", "rid": sent["rid"]}),
+        )
+        .await;
+        end.await.unwrap().unwrap();
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::CallEnded {
+                call: "c1".into(),
+                reason: CallEndReason::Ended
+            }
+        );
+
+        // While the connection is down (a flood closes it for a minute), a call fails at once.
+        server
+            .close(Some(CloseFrame {
+                code: CloseCode::from(4008),
+                reason: "rate_limited".into(),
+            }))
+            .await
+            .unwrap();
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::Disconnected { retry_in } if retry_in >= Duration::from_secs(60)
+        ));
+        let error = handle.call_crew().await.unwrap_err();
+        assert!(matches!(error, SocialError::Unavailable { .. }));
+        handle.shutdown().await;
     }
 }

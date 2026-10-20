@@ -1,12 +1,14 @@
-// The team in the friend list: its header (emblem, name, tag, teammates online; folds like a
-// category; the arrow opens the team page; its menu opens, folds, shares the code, invites, edits
-// and leaves) and invites to other teams, answered in place.
+// The crew in the friend list: its header (the crew's mark, name, tinted tag, crewmates online;
+// folds like a category; the arrow opens the crew page; its menu opens, folds, calls the crew,
+// shares the code, invites, edits and leaves, each where the crew lets the player) and invites to
+// other crews, answered in place.
 import {
   CaretDown,
   CaretRight,
   Check,
   Copy,
   DotsThree,
+  MegaphoneSimple,
   PencilSimple,
   SignOut,
   Trash,
@@ -23,12 +25,15 @@ import { api } from "@/lib/api";
 import type { SocialTeam, TeamInvite } from "@/lib/api/social-types";
 import { formatRelative } from "@/lib/format";
 import { attempt, copyText } from "./actions";
+import { callCrew } from "./call-actions";
+import { callWaitUntil, liveCalls } from "./calls";
 import { openMenuFromKey } from "./menu-key";
 import { rowsOf, teamMenu } from "./menus";
 import { swap, useSocialMotion } from "./motion";
 import { useSocialUi } from "./store";
-import { TeamEmblem, TeamTag } from "./team-emblem";
-import { teammatesOnline } from "./teams";
+import { CrewMark, TeamTag } from "./team-emblem";
+import { crewRights, teammatesOnline } from "./teams";
+import { useCallClock } from "./use-call-clock";
 
 const ago = (unixSeconds: number) => formatRelative(new Date(unixSeconds * 1000).toISOString());
 
@@ -36,11 +41,38 @@ const ago = (unixSeconds: number) => formatRelative(new Date(unixSeconds * 1000)
 function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
   const { t } = useTranslation();
   const friends = useSocialUi((s) => s.view.friends);
+  const crew = useSocialUi((s) => s.view.crew);
+  const calls = useSocialUi((s) => s.view.calls);
+  const refusedUntil = useSocialUi((s) => s.callRefusedUntil);
+  const lastCallAt = useSocialUi((s) => s.lastCallAt);
+  const now = useCallClock((s) => s.now);
   const openTeam = useSocialUi((s) => s.openTeam);
   const members = new Set(team.members.map((m) => m.id));
   const friendsOutside = friends.filter((f) => !members.has(f.id)).length;
-  return rowsOf(teamMenu({ team, friendsOutside }), (row): MenuItem | null => {
+  const rights = crewRights(team, crew);
+  // A call that is on (anyone's) takes the button's place on the crew page: none here either.
+  const call =
+    !rights.call || liveCalls(calls, now).length
+      ? "hidden"
+      : callWaitUntil(calls, refusedUntil, lastCallAt) > now
+        ? "waiting"
+        : "ready";
+  const plan = teamMenu({
+    team,
+    friendsOutside,
+    call,
+    canInvite: rights.invite,
+    canEdit: rights.look,
+  });
+  return rowsOf(plan, (row): MenuItem | null => {
     switch (row.action) {
+      case "call":
+        return {
+          label: t("teams.call.start"),
+          icon: <MegaphoneSimple size={16} />,
+          disabled: row.disabled,
+          onSelect: () => void callCrew(),
+        };
       case "open":
         return {
           label: t("teams.open"),
@@ -136,11 +168,11 @@ export function TeamHeader({
               folded && "-rotate-90",
             )}
           />
-          <TeamEmblem emblem={team.emblem} size={22} />
+          <CrewMark look={team} size={22} />
           <span className="min-w-0 truncate text-[13px] font-semibold text-bone-50">
             {team.name}
           </span>
-          <TeamTag tag={team.tag} />
+          <TeamTag tag={team.tag} color={team.color} />
           <span className="relative ml-0.5 inline-flex font-display text-[12px] tabular-nums">
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.span key={online} className="flex" {...swap(reduce, 0.18)}>
@@ -172,7 +204,7 @@ export function TeamHeader({
   );
 }
 
-/** An invite to a team: its emblem and name, who sent it, "Kabul et" and ×. */
+/** An invite to a crew: its mark and name, who sent it, "Kabul et" and ×. */
 export function TeamInviteRow({ invite }: { invite: TeamInvite }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
@@ -188,11 +220,11 @@ export function TeamInviteRow({ invite }: { invite: TeamInvite }) {
   };
   return (
     <div className="mb-1.5 flex items-center gap-3 rounded-[var(--radius-panel)] bg-gold-500/[0.07] py-2 pr-1.5 pl-2 ring-1 ring-gold-400/15">
-      <TeamEmblem emblem={invite.emblem} size={36} />
+      <CrewMark look={invite} size={36} />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           <span className="truncate text-[14px] font-semibold text-bone-50">{invite.name}</span>
-          <TeamTag tag={invite.tag} />
+          <TeamTag tag={invite.tag} color={invite.color} />
         </span>
         <span className="block truncate text-[12.5px] text-ash-300">
           {t("teams.invitedBy", { name: invite.from.name })}, {ago(invite.sentAt)}

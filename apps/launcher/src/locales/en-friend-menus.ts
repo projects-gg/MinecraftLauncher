@@ -10,7 +10,7 @@ export const enFriendMenus: typeof trFriendMenus = {
   notifyOnline: "Notify when online",
   collapse: "Collapse",
   expand: "Expand",
-  copyTeamCode: "Copy team code",
-  teamCodeCopied: "Team code copied",
-  editTeam: "Edit team",
+  copyTeamCode: "Copy crew code",
+  teamCodeCopied: "Crew code copied",
+  editTeam: "Edit crew",
 };

@@ -12,13 +12,20 @@
 // - `playing` / `playingOther`: the player is on projects.gg / on another server, its address
 //   shared ("Birlikte oyna" is offered only then);
 // - `groups`: the friend list in the player's categories;
-// - `team`: teams on, the player founded a team (with categories); `teamMember`: a member of one;
-// - `teamNew`: teams on, no team yet, an invite to one waiting; `teamInvite`: one arrives live;
+// - `team`: crews on, the player leads a crew (with categories); `teamMember`: a member of one;
+//   `teamModerator`: a moderator of one;
+// - `teamNew`: crews on, no crew yet, an invite to one waiting; `teamInvite`: one arrives live;
+// - `crewCall`: a crewmate's call from projects.gg arrives live (`&callAt=<ms>`);
+//   `crewCallOpen`: one is on already, unanswered ("Hazır mısın?"); `crewCallMine`: the player's
+//   own call is on, with answers;
+// - `crewOld`: crews on a service from before looks, calls and roles (today's editor and card);
 // - `legacy`: a service that offers neither categories nor teams (their menu rows stay away).
 import { pick } from "./mock-lang";
 import type {
   BackupMeta,
   CodeLookup,
+  CrewCall,
+  CrewLook,
   Friend,
   FriendGroups,
   FriendRequest,
@@ -198,6 +205,7 @@ function teamMember(
     username: extra.name.toLowerCase().replace(/\s+/g, ""),
     avatar: "discord",
     role: "member",
+    moderator: false,
     me: false,
     friend: Boolean(friend),
     blocked: false,
@@ -219,18 +227,37 @@ function teamMember(
   };
 }
 
-/** "Gece Kartalları", founded by the player (or led by Ayşe in `teamMember`). */
-function previewTeam(founder: boolean): SocialTeam {
+/** Where the preview's crews come from: a service before looks, calls and roles (`crewOld`). */
+const OLD_CREWS = scenario() === "crewOld";
+const PREVIEW_LOOK: CrewLook = OLD_CREWS
+  ? { emblem: "shield", color: "gold", frame: "cut" }
+  : { emblem: "controller", color: "teal", frame: "banner" };
+
+/** "Gece Kartalları", led by the player (or by Ayşe in `teamMember` and `teamModerator`). */
+function previewTeam(founder: boolean, moderator = false): SocialTeam {
   const friends = friendsList();
   const byId = (id: string) => friends.find((f) => f.id === id);
+  // Founded a month ago today: the card shows the month's anniversary line.
+  const founded = new Date();
+  founded.setMonth(founded.getMonth() - 1);
+  const day = (date: Date) =>
+    `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   return {
     id: "0123456789abcdef",
     name: "Gece Kartalları",
     tag: "GKR",
-    emblem: "shield",
-    code: "TKM-7Q2X-9KDA",
-    createdOn: "2026-09-28",
+    ...PREVIEW_LOOK,
+    motto: OLD_CREWS ? "" : pick("Birlikte güçlüyüz!", "Stronger together!"),
+    code: "EKP-7Q2X-9KDA",
+    createdOn: day(founded),
     role: founder ? "founder" : "member",
+    moderator: !founder && moderator,
+    permissions: {
+      invite: "members",
+      call: "members",
+      kick: OLD_CREWS ? "leader" : "moderators",
+      edit: moderator ? "moderators" : "leader",
+    },
     members: [
       teamMember(undefined, {
         id: "100",
@@ -238,11 +265,12 @@ function previewTeam(founder: boolean): SocialTeam {
         avatar: "preset:golden-dragon",
         me: true,
         role: founder ? "founder" : "member",
+        moderator: !founder && moderator,
         state: "launcher",
         joinedAt: now() - 86_400 * 21,
       }),
       teamMember(byId("301"), { id: "301", name: "Ayşe", role: founder ? "member" : "founder" }),
-      teamMember(byId("302"), { id: "302", name: "KorAteşi" }),
+      teamMember(byId("302"), { id: "302", name: "KorAteşi", moderator: !OLD_CREWS }),
       teamMember(undefined, {
         id: "701",
         name: "Yusuf",
@@ -268,11 +296,42 @@ const teamInvite = (): TeamInvite => ({
   teamId: "fedcba9876543210",
   name: "Skyblock Ustaları",
   tag: "SKY",
-  emblem: "cube",
+  emblem: OLD_CREWS ? "cube" : "castle",
+  color: OLD_CREWS ? "gold" : "purple",
+  frame: OLD_CREWS ? "cut" : "hex",
+  motto: OLD_CREWS ? "" : pick("Adadan adaya", "Island to island"),
   members: 6,
   from: { id: "303", name: "Mert", username: "mert.yildiz", avatar: "preset:knight" },
   sentAt: now() - 1_800,
 });
+
+/** A crew call: Ayşe's from projects.gg (`join`), Melis's from the launcher (`ready`), or the
+ * player's own with a few answers (`mine`). Twenty minutes, a few already gone. */
+function previewCall(kind: "join" | "ready" | "mine"): CrewCall {
+  const started = now() - 180;
+  const who = {
+    mine: { from: "100", name: "EjderAvcısı", avatar: "preset:golden-dragon" },
+    join: { from: "301", name: "Ayşe", avatar: "preset:fox" },
+    ready: { from: "702", name: "Melis", avatar: "preset:axolotl" },
+  }[kind];
+  return {
+    id: `call-${kind}`,
+    ...who,
+    mine: kind === "mine",
+    kind: kind === "ready" ? "ready" : "join",
+    startedAt: started,
+    endsAt: started + 20 * 60,
+    answers:
+      kind === "mine"
+        ? [
+            { id: "301", answer: "yes" },
+            { id: "701", answer: "yes" },
+            { id: "302", answer: "soon" },
+            { id: "703", answer: "no" },
+          ]
+        : [{ id: "302", answer: "soon" }],
+  };
+}
 
 function initial(): SocialSnapshot {
   const name = scenario();
@@ -331,19 +390,41 @@ function initial(): SocialSnapshot {
     activity: { state: "launcher" },
     groups: { version: 0, groups: [], members: {} },
     teams: false,
+    crew: { look: false, calls: false, roles: false },
     teamInvites: [],
+    calls: [],
   };
+  // Crews on, with what the service offers of them.
+  const crewed = (team: SocialTeam | undefined, extra: Partial<SocialSnapshot> = {}) => ({
+    ...base,
+    groups: previewGroups(),
+    teams: true,
+    crew: OLD_CREWS
+      ? { look: false, calls: false, roles: false }
+      : { look: true, calls: true, roles: true },
+    team,
+    ...extra,
+  });
   switch (name) {
     case "groups":
       return { ...base, groups: previewGroups() };
     case "team":
-      return { ...base, groups: previewGroups(), teams: true, team: previewTeam(true) };
+    case "crewOld":
+      return crewed(previewTeam(true));
     case "teamMember":
-      return { ...base, groups: previewGroups(), teams: true, team: previewTeam(false) };
+      return crewed(previewTeam(false));
+    case "teamModerator":
+      return crewed(previewTeam(false, true));
+    case "crewCall":
+      return crewed(previewTeam(false));
+    case "crewCallOpen":
+      return crewed(previewTeam(false), { calls: [previewCall("ready")] });
+    case "crewCallMine":
+      return crewed(previewTeam(true), { calls: [previewCall("mine")] });
     case "teamNew":
-      return { ...base, teams: true, teamInvites: [teamInvite()] };
+      return crewed(undefined, { teamInvites: [teamInvite()] });
     case "teamInvite":
-      return { ...base, teams: true };
+      return crewed(undefined);
     case "legacy":
       // A service without categories and teams (the live one until SOC4 is deployed).
       return { ...base, groups: undefined };
@@ -449,12 +530,29 @@ if (typeof window !== "undefined") {
       tell({ kind: "teamInvite", invite });
     }, 1600);
   }
+  if (name === "crewCall") {
+    // `?callAt=<ms>`: when it arrives.
+    const at = Number(new URLSearchParams(window.location.search).get("callAt")) || 1600;
+    setTimeout(() => {
+      const call: CrewCall = {
+        ...previewCall("join"),
+        startedAt: now(),
+        endsAt: now() + 20 * 60,
+        answers: [],
+      };
+      commit((v) => ({ ...v, calls: [...v.calls, call] }));
+      tell({ kind: "crewCall", call });
+    }, at);
+  }
 }
 
 /** The team as it is, or an error worded like the backend when there is none. */
 function currentTeam(): SocialTeam {
   if (!view.team) {
-    throw new MockSocialError("SOSYAL-TAKIM-YOK", pick("Takımın yok.", "You're not in a team."));
+    throw new MockSocialError(
+      "SOSYAL-TAKIM-YOK",
+      pick("Artık bir ekipte değilsin.", "You're not in a crew anymore."),
+    );
   }
   return view.team;
 }
@@ -463,28 +561,39 @@ function setTeam(change: (team: SocialTeam) => SocialTeam | undefined) {
   commit((v) => (v.team ? { ...v, team: change(v.team) } : v));
 }
 
-/** Team codes the preview knows. */
-const previewTeams: Record<string, { teamId: string; name: string; tag: string; emblem: string }> =
-  {
-    "TKM-4F8A-2KQX": {
-      teamId: "1111222233334444",
-      name: "Gece Kartalları",
-      tag: "GKR",
-      emblem: "shield",
-    },
-    "TKM-9WQ2-XM4C": {
-      teamId: "fedcba9876543210",
-      name: "Skyblock Ustaları",
-      tag: "SKY",
-      emblem: "cube",
-    },
-  };
+/** Crew codes the preview knows. */
+const previewTeams: Record<
+  string,
+  CrewLook & { teamId: string; name: string; tag: string; motto: string }
+> = {
+  "EKP-4F8A-2KQX": {
+    teamId: "1111222233334444",
+    name: "Gece Kartalları",
+    tag: "GKR",
+    emblem: "controller",
+    color: "teal",
+    frame: "banner",
+    motto: pick("Birlikte güçlüyüz!", "Stronger together!"),
+  },
+  "EKP-9WQ2-XM4C": {
+    teamId: "fedcba9876543210",
+    name: "Skyblock Ustaları",
+    tag: "SKY",
+    emblem: "castle",
+    color: "purple",
+    frame: "hex",
+    motto: "",
+  },
+};
 
 function joinedTeam(source: {
   teamId: string;
   name: string;
   tag: string;
   emblem: string;
+  color?: string;
+  frame?: string;
+  motto?: string;
 }): SocialTeam {
   const base = previewTeam(false);
   return {
@@ -493,7 +602,10 @@ function joinedTeam(source: {
     name: source.name,
     tag: source.tag,
     emblem: source.emblem,
-    code: "TKM-WXYZ-1234",
+    color: source.color ?? "gold",
+    frame: source.frame ?? "cut",
+    motto: source.motto ?? "",
+    code: "EKP-WXYZ-1234",
     members: base.members.map((m) => (m.me ? { ...m, joinedAt: now() } : m)),
     invited: [],
   };
@@ -764,7 +876,7 @@ export const mockSocial: SocialApi = {
       v.groups ? { ...v, groups: { ...v.groups, version: v.groups.version + 1 } } : v,
     );
   },
-  async createTeam({ name, tag, emblem }) {
+  async createTeam({ name, tag, emblem, color, frame, motto }) {
     await delay(500);
     const me = view.me;
     commit((v) => ({
@@ -775,17 +887,65 @@ export const mockSocial: SocialApi = {
         name,
         tag,
         emblem,
-        code: "TKM-3HXN-8RWE",
+        color: color ?? "gold",
+        frame: frame ?? "cut",
+        motto: motto ?? "",
+        code: "EKP-3HXN-8RWE",
         createdOn: new Date().toISOString().slice(0, 10),
         members: previewTeam(true).members.filter((m) => m.me && me),
         invited: [],
       },
     }));
   },
-  async editTeam(change) {
+  async editTeam({ permissions, ...change }) {
     await delay(300);
     currentTeam();
-    setTeam((team) => ({ ...team, ...change }));
+    setTeam((team) => ({
+      ...team,
+      ...change,
+      permissions: { ...team.permissions, ...permissions },
+    }));
+  },
+  async setModerator(memberId, moderator) {
+    await delay(250);
+    setTeam((team) => ({
+      ...team,
+      members: team.members.map((m) => (m.id === memberId ? { ...m, moderator } : m)),
+    }));
+  },
+  async callCrew() {
+    await delay(300);
+    currentTeam();
+    if (view.calls.some((c) => c.endsAt > now())) return { status: "active" };
+    const call: CrewCall = {
+      ...previewCall("mine"),
+      startedAt: now(),
+      endsAt: now() + 20 * 60,
+      answers: [],
+    };
+    commit((v) => ({ ...v, calls: [...v.calls, call] }));
+    return { status: "called" };
+  },
+  async answerCall(callId, answer) {
+    await delay(250);
+    if (!view.calls.some((c) => c.id === callId)) return false;
+    commit((v) => ({
+      ...v,
+      calls: v.calls.map((c) =>
+        c.id === callId
+          ? {
+              ...c,
+              myAnswer: answer,
+              answers: [...c.answers.filter((a) => a.id !== "100"), { id: "100", answer }],
+            }
+          : c,
+      ),
+    }));
+    return true;
+  },
+  async endCall(callId) {
+    await delay(250);
+    commit((v) => ({ ...v, calls: v.calls.filter((c) => c.id !== callId) }));
   },
   async disbandTeam() {
     await delay(400);
@@ -800,7 +960,7 @@ export const mockSocial: SocialApi = {
   async rotateTeamCode() {
     await delay(400);
     currentTeam();
-    const code = "TKM-R2N8-HW6P";
+    const code = "EKP-R2N8-HW6P";
     setTeam((team) => ({ ...team, code }));
     return code;
   },
@@ -812,7 +972,7 @@ export const mockSocial: SocialApi = {
     await delay(350);
     setTeam((team) => ({
       ...team,
-      code: "TKM-K7MD-2QPC",
+      code: "EKP-K7MD-2QPC",
       members: team.members.filter((m) => m.id !== memberId),
     }));
   },
@@ -821,9 +981,11 @@ export const mockSocial: SocialApi = {
     setTeam((team) => ({
       ...team,
       role: "member",
+      moderator: true,
       members: team.members.map((m) => ({
         ...m,
         role: m.id === memberId ? "founder" : "member",
+        moderator: m.me ? true : m.id === memberId ? false : m.moderator,
       })),
     }));
   },
@@ -837,6 +999,9 @@ export const mockSocial: SocialApi = {
         name: team.name,
         tag: team.tag,
         emblem: team.emblem,
+        color: team.color,
+        frame: team.frame,
+        motto: team.motto,
         members: team.members.length,
         relation: "member",
         code: normalized,
@@ -846,7 +1011,7 @@ export const mockSocial: SocialApi = {
     if (!found) {
       throw new MockSocialError(
         "SOSYAL-TAKIM-YOK",
-        pick("Bu koda ait bir takım yok.", "No team has this code."),
+        pick("Bu koda ait bir ekip yok.", "No crew has this code."),
       );
     }
     return {
@@ -862,7 +1027,7 @@ export const mockSocial: SocialApi = {
     if (!found) {
       throw new MockSocialError(
         "SOSYAL-TAKIM-YOK",
-        pick("Bu koda ait bir takım yok.", "No team has this code."),
+        pick("Bu koda ait bir ekip yok.", "No crew has this code."),
       );
     }
     commit((v) => ({ ...v, team: joinedTeam(found) }));

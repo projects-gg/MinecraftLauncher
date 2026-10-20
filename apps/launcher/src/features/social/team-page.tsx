@@ -1,245 +1,128 @@
-// The team page of the friends panel. Without a team: invites to teams, "Takım kur" (name, tag,
-// emblem, with a live preview of how it will look) and "Kodla katıl" (a code, then what it leads
-// to). In a team: its card (emblem, name, tag, size, code), the members with their presence,
-// friends to invite, and leaving (the founder edits, renews the code, hands the role on or
-// disbands instead). Every irreversible step asks once, in place, with one sentence.
+// The crew page of the friends panel. Without a crew: invites to crews, "Ekip kur" (crew-editor:
+// name, tag, motto and look, with a live preview) and "Kodla katıl" (a code, then what it leads to).
+// In a crew: its card (the mark, name, tag, motto, size and founding day, a month's or a year's
+// anniversary that day, the emblem's faint watermark) whose strip shows who is online with "Ekibi
+// çağır", or the call that is on; the members grouped by where they are ("Projects'te 4", with
+// "Katıl"); friends to invite; the crew code; the leader's "Yetkiler"; leaving. Every irreversible
+// step asks once, in place, with one sentence; nothing else asks.
 import {
   ArrowsClockwise,
+  CalendarBlank,
   Check,
   Copy,
-  Crown,
   MagnifyingGlass,
+  MegaphoneSimple,
   PencilSimple,
   SignOut,
+  Sparkle,
   Trash,
   UserPlus,
+  UsersThree,
   WarningCircle,
 } from "@phosphor-icons/react";
-import { Button, cn, SearchInput, Skeleton } from "@pl/ui";
-import { AnimatePresence, motion } from "motion/react";
-import { type FormEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
+import { Button, cn, IconButton, SearchInput, Skeleton, Switch, Tooltip } from "@pl/ui";
+import { AnimatePresence, LayoutGroup, motion } from "motion/react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { announce, friendlyError } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
-import type { Friend, SocialTeam, TeamLookup } from "@/lib/api/social-types";
+import type {
+  Friend,
+  SocialTeam,
+  TeamChange,
+  TeamLookup,
+  TeamMember,
+  TeamPermissions,
+} from "@/lib/api/social-types";
+import { dateTimeFormat } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
 import { attempt, copyText } from "./actions";
+import { callCrew } from "./call-actions";
+import { callWaitUntil, liveCalls, waitMinutes } from "./calls";
+import { CallStrip } from "./crew-call";
+import {
+  type CrewDraft,
+  CrewEditor,
+  CrewPreview,
+  draftOf,
+  draftReady,
+  fieldClass,
+  NEW_CREW,
+} from "./crew-editor";
 import { type Leaving, leavingOf } from "./menus";
-import { rise, swap, useSocialMotion } from "./motion";
-import { SocialAvatar } from "./social-face";
+import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
+import { SocialAvatar, SocialFace } from "./social-face";
 import { useSocialUi } from "./store";
-import { TeamEmblem, TeamTag } from "./team-emblem";
-import { TeamMemberRow } from "./team-member";
+import { CrewMark, CrewWatermark, TeamTag } from "./team-emblem";
+import { RoleBadge, TeamMemberRow } from "./team-member";
 import { TeamInviteRow } from "./team-section";
 import {
-  EMBLEMS,
-  type Emblem,
+  cleanCrewText,
+  crewAnniversary,
+  crewRights,
   formatTeamCodeInput,
-  formatTeamTag,
+  localDay,
+  membersMayHave,
   normalizeTeamCode,
-  rosterOrder,
-  TEAM_NAME_MAX,
-  TEAM_TAG_MAX,
-  teamNameProblem,
-  teamTagValid,
+  RIGHTS,
+  type Right,
+  rosterGroups,
+  switchesOf,
+  switchLevel,
 } from "./teams";
-
-const fieldClass =
-  "h-10 w-full min-w-0 rounded-md border border-white/10 bg-obsidian-800/80 px-3 text-[14px] text-bone-50 transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-ash-500 hover:border-white/16 focus:border-gold-400/70 focus:ring-2 focus:ring-gold-300/25 aria-[invalid=true]:border-flare-400/70";
+import { useCallClock } from "./use-call-clock";
 
 function SectionTitle({ children }: { children: string }) {
   return <h3 className="mb-2.5 text-[12.5px] font-medium text-ash-400">{children}</h3>;
 }
 
-/** The emblem picker: a radio group of 20 tiles, arrow keys move, the chosen one is gold-framed. */
-function EmblemPicker({ value, onChange }: { value: Emblem; onChange: (emblem: Emblem) => void }) {
-  const { t } = useTranslation();
-  const group = useRef<HTMLDivElement>(null);
-  const onKey = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
-    const columns = 10;
-    const step =
-      event.key === "ArrowRight"
-        ? 1
-        : event.key === "ArrowLeft"
-          ? -1
-          : event.key === "ArrowDown"
-            ? columns
-            : event.key === "ArrowUp"
-              ? -columns
-              : 0;
-    if (!step) return;
-    event.preventDefault();
-    const next = EMBLEMS[(index + step + EMBLEMS.length) % EMBLEMS.length] as Emblem;
-    onChange(next);
-    group.current?.querySelector<HTMLElement>(`[data-emblem="${next}"]`)?.focus();
-  };
-  return (
-    <div
-      ref={group}
-      role="radiogroup"
-      aria-label={t("teams.create.emblem")}
-      className="grid grid-cols-10 gap-1.5"
-    >
-      {EMBLEMS.map((emblem, index) => {
-        const chosen = emblem === value;
-        return (
-          // biome-ignore lint/a11y/useSemanticElements: an icon tile; the group handles arrows (APG radio group).
-          <button
-            key={emblem}
-            type="button"
-            role="radio"
-            aria-checked={chosen}
-            aria-label={t(`teams.emblems.${emblem}`)}
-            data-emblem={emblem}
-            tabIndex={chosen ? 0 : -1}
-            onClick={() => onChange(emblem)}
-            onKeyDown={(event) => onKey(event, index)}
-            className={cn(
-              "flex aspect-square cursor-pointer items-center justify-center rounded-md outline-none transition-[background-color,box-shadow,transform,scale] duration-150 focus-visible:ring-2 focus-visible:ring-gold-300 active:scale-[0.94]",
-              chosen
-                ? "bg-gold-500/15 ring-1 ring-gold-400/60"
-                : "bg-white/[0.035] ring-1 ring-white/8 hover:bg-white/[0.07]",
-            )}
-          >
-            <TeamEmblem emblem={emblem} size={28} className="bg-transparent ring-0" />
-          </button>
-        );
-      })}
-    </div>
-  );
+function useCrewFeatures() {
+  return useSocialUi((s) => s.view.crew);
 }
 
-/** The card a team gets: emblem, name, tag. Live while it is being made. */
-function TeamCardPreview({
-  name,
-  tag,
-  emblem,
-  meta,
-  placeholder = false,
-}: {
-  name: string;
-  tag: string;
-  emblem: string;
-  meta: string;
-  /** No name typed yet: the name's place says what goes there, quietly. */
-  placeholder?: boolean;
-}) {
-  const { reduce } = useSocialMotion();
-  return (
-    <div className="flex items-center gap-3.5">
-      <AnimatePresence mode="popLayout" initial={false}>
-        <motion.span key={emblem} className="flex" {...swap(reduce, 0.2)}>
-          <TeamEmblem emblem={emblem} size={52} />
-        </motion.span>
-      </AnimatePresence>
-      <div className="min-w-0">
-        <p className="flex items-center gap-2">
-          <span
-            className={cn(
-              "truncate font-display text-[19px] leading-tight font-semibold transition-colors duration-150",
-              placeholder ? "text-ash-400" : "text-bone-50",
-            )}
-          >
-            {name}
-          </span>
-          {tag ? <TeamTag tag={tag} /> : null}
-        </p>
-        <p className="mt-0.5 text-[12.5px] text-ash-400">{meta}</p>
-      </div>
-    </div>
-  );
-}
-
-function CreateTeam() {
+function CreateCrew() {
   const { t } = useTranslation();
-  const { reduce } = useSocialMotion();
-  const nameId = useId();
-  const tagId = useId();
-  const [name, setName] = useState("");
-  const [tag, setTag] = useState("");
-  const [emblem, setEmblem] = useState<Emblem>("shield");
+  const crew = useCrewFeatures();
+  const [draft, setDraft] = useState<CrewDraft>(NEW_CREW);
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
-  const problem = teamNameProblem(name);
-  const tagOk = teamTagValid(tag);
-  const ready = !problem && tagOk;
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
+  const submit = async () => {
     setTouched(true);
-    if (!ready) return;
+    if (busy || !draftReady(draft, crew.look, true)) return;
     setBusy(true);
-    const done = await attempt(() => api.social.createTeam({ name: name.trim(), tag, emblem }));
+    const name = cleanCrewText(draft.name);
+    const done = await attempt(() =>
+      api.social.createTeam({
+        name,
+        tag: draft.tag,
+        emblem: draft.emblem,
+        ...(crew.look
+          ? { color: draft.color, frame: draft.frame, motto: cleanCrewText(draft.motto) }
+          : {}),
+      }),
+    );
     setBusy(false);
-    if (done !== undefined) announce(t("teams.create.done", { name: name.trim() }));
+    if (done !== undefined) announce(t("teams.create.done", { name }));
   };
-
-  const nameError = touched && problem ? t(`teams.create.${problem}`) : null;
-  const tagError = touched && !tagOk ? t("teams.create.tagInvalid") : null;
 
   return (
     <section className="rounded-[var(--radius-panel)] bg-obsidian-950/40 p-4 ring-1 ring-white/8">
       <SectionTitle>{t("teams.create.title")}</SectionTitle>
-      <TeamCardPreview
-        name={name.trim() || t("teams.create.name")}
-        placeholder={!name.trim()}
-        tag={tag}
-        emblem={emblem}
+      <CrewEditor
+        draft={draft}
+        onChange={setDraft}
+        look={crew.look}
+        texts
         meta={t("teams.members", { count: 1 })}
+        showErrors={touched}
+        onSubmit={() => void submit()}
+        footer={
+          <Button type="submit" variant="primary" className="w-full" disabled={busy}>
+            {t("teams.create.submit")}
+          </Button>
+        }
       />
-      <form className="mt-4 space-y-3" onSubmit={(event) => void submit(event)} noValidate>
-        <div className="flex gap-2">
-          <div className="min-w-0 flex-1">
-            <label htmlFor={nameId} className="mb-1 block text-[12.5px] text-ash-400">
-              {t("teams.create.name")}
-            </label>
-            <input
-              id={nameId}
-              value={name}
-              maxLength={TEAM_NAME_MAX + 8}
-              onChange={(event) => setName(event.target.value)}
-              aria-invalid={Boolean(nameError)}
-              autoComplete="off"
-              spellCheck={false}
-              className={fieldClass}
-            />
-          </div>
-          <div className="w-[84px] shrink-0">
-            <label htmlFor={tagId} className="mb-1 block text-[12.5px] text-ash-400">
-              {t("teams.create.tag")}
-            </label>
-            <input
-              id={tagId}
-              value={tag}
-              maxLength={TEAM_TAG_MAX}
-              onChange={(event) => setTag(formatTeamTag(event.target.value))}
-              aria-invalid={Boolean(tagError)}
-              autoComplete="off"
-              spellCheck={false}
-              className={cn(fieldClass, "font-display tracking-[0.08em] uppercase")}
-            />
-          </div>
-        </div>
-        <AnimatePresence initial={false}>
-          {nameError || tagError ? (
-            <motion.p
-              key="error"
-              role="alert"
-              className="text-[12.5px] text-flare-300"
-              {...rise(reduce, 4, 0.2)}
-            >
-              {nameError ?? tagError}
-            </motion.p>
-          ) : null}
-        </AnimatePresence>
-        <div>
-          <p className="mb-1.5 text-[12.5px] text-ash-400">{t("teams.create.emblem")}</p>
-          <EmblemPicker value={emblem} onChange={setEmblem} />
-        </div>
-        <Button type="submit" variant="primary" className="w-full" disabled={busy}>
-          {t("teams.create.submit")}
-        </Button>
-      </form>
     </section>
   );
 }
@@ -250,7 +133,7 @@ type Found =
   | { kind: "found"; lookup: TeamLookup }
   | { kind: "error"; message: string };
 
-function JoinTeam() {
+function JoinCrew() {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
   const inputId = useId();
@@ -319,7 +202,7 @@ function JoinTeam() {
               }
               if (found.kind !== "looking") setFound({ kind: "idle" });
             }}
-            placeholder="TKM-XXXX-XXXX"
+            placeholder="EKP-XXXX-XXXX"
             spellCheck={false}
             autoComplete="off"
             aria-invalid={invalid}
@@ -365,11 +248,13 @@ function JoinTeam() {
               className="rounded-[var(--radius-panel)] bg-white/[0.04] p-3 ring-1 ring-white/8"
               {...rise(reduce, 6, 0.26)}
             >
-              <TeamCardPreview
+              <CrewPreview
                 name={found.lookup.name}
                 tag={found.lookup.tag}
-                emblem={found.lookup.emblem}
+                look={found.lookup}
+                motto={found.lookup.motto}
                 meta={t("teams.members", { count: found.lookup.members })}
+                size={52}
               />
               {status(found.lookup) ? (
                 <p className="mt-3 text-[12.5px] text-ash-300">{status(found.lookup)}</p>
@@ -401,7 +286,7 @@ function JoinTeam() {
   );
 }
 
-/** "Takım kodu" with copy; the founder can renew it (asked once, in place). */
+/** "Ekip kodu" with copy; the leader can renew it (asked once, in place). */
 function CodeRow({ team }: { team: SocialTeam }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
@@ -416,7 +301,7 @@ function CodeRow({ team }: { team: SocialTeam }) {
     if (code) announce(t("teams.code.rotated"));
   };
   return (
-    <div className="mt-4 border-t border-white/7 pt-3">
+    <section className="mt-5 rounded-[var(--radius-panel)] bg-obsidian-950/40 px-4 py-3 ring-1 ring-white/8">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-[12px] text-ash-400">{t("teams.code.label")}</p>
@@ -493,98 +378,309 @@ function CodeRow({ team }: { team: SocialTeam }) {
           </AnimatePresence>
         </div>
       ) : null}
-    </div>
+    </section>
   );
 }
 
-/** The founder's in-place edit of name, tag and emblem. */
-function EditTeam({ team, onDone }: { team: SocialTeam; onDone: () => void }) {
+/** The crew's "Düzenle": the leader edits everything, a moderator the look and the motto. */
+function EditCrew({ team, onDone }: { team: SocialTeam; onDone: () => void }) {
   const { t } = useTranslation();
-  const { reduce } = useSocialMotion();
-  const [name, setName] = useState(team.name);
-  const [tag, setTag] = useState(team.tag);
-  const [emblem, setEmblem] = useState<Emblem>(
-    (EMBLEMS as readonly string[]).includes(team.emblem) ? (team.emblem as Emblem) : "shield",
-  );
+  const crew = useCrewFeatures();
+  const texts = team.role === "founder";
+  const [draft, setDraft] = useState<CrewDraft>(() => draftOf(team));
   const [busy, setBusy] = useState(false);
-  const problem = teamNameProblem(name);
-  const tagOk = teamTagValid(tag);
-  const ready = !problem && tagOk;
-  // As in "Takım kur": one line says what to fix (the tag too, not only the name), and it fades
-  // in and out instead of snapping while the player types (POLISH6).
-  const error = problem
-    ? t(`teams.create.${problem}`)
-    : tagOk
-      ? null
-      : t("teams.create.tagInvalid");
+  const ready = draftReady(draft, crew.look, texts);
+
   const save = async () => {
-    if (!ready) return;
+    if (!ready || busy) return;
+    const before = draftOf(team);
+    const change: TeamChange = {};
+    if (texts) {
+      const name = cleanCrewText(draft.name);
+      if (name !== team.name) change.name = name;
+      if (draft.tag !== team.tag) change.tag = draft.tag;
+    }
+    if (draft.emblem !== before.emblem) change.emblem = draft.emblem;
+    if (crew.look) {
+      if (draft.color !== before.color) change.color = draft.color;
+      if (draft.frame !== before.frame) change.frame = draft.frame;
+      const motto = cleanCrewText(draft.motto);
+      if (motto !== team.motto) change.motto = motto;
+    }
+    if (!Object.keys(change).length) {
+      onDone();
+      return;
+    }
     setBusy(true);
-    const change = {
-      ...(name.trim() !== team.name ? { name: name.trim() } : {}),
-      ...(tag !== team.tag ? { tag } : {}),
-      ...(emblem !== team.emblem ? { emblem } : {}),
-    };
-    const done = Object.keys(change).length
-      ? await attempt(() => api.social.editTeam(change))
-      : null;
+    const done = await attempt(() => api.social.editTeam(change));
     setBusy(false);
     if (done === undefined) return;
-    if (Object.keys(change).length) announce(t("teams.edit.saved"));
+    announce(t("teams.edit.saved"));
     onDone();
   };
+
   return (
-    <div className="space-y-3">
-      <TeamCardPreview
-        name={name.trim() || team.name}
-        tag={tag}
-        emblem={emblem}
-        meta={t("teams.membersOf", { count: team.members.length, limit: team.limit })}
-      />
-      <div className="flex gap-2">
-        <input
-          aria-label={t("teams.create.name")}
-          value={name}
-          maxLength={TEAM_NAME_MAX + 8}
-          onChange={(event) => setName(event.target.value)}
-          aria-invalid={Boolean(problem)}
-          className={fieldClass}
-        />
-        <input
-          aria-label={t("teams.create.tag")}
-          value={tag}
-          maxLength={TEAM_TAG_MAX}
-          onChange={(event) => setTag(formatTeamTag(event.target.value))}
-          aria-invalid={!tagOk}
-          className={cn(fieldClass, "w-[84px] shrink-0 font-display tracking-[0.08em]")}
-        />
-      </div>
-      <AnimatePresence initial={false}>
-        {error ? (
-          <motion.p
-            key="error"
-            role="alert"
-            className="text-[12.5px] text-flare-300"
-            {...rise(reduce, 4, 0.2)}
-          >
-            {error}
-          </motion.p>
+    <CrewEditor
+      draft={draft}
+      onChange={setDraft}
+      look={crew.look}
+      texts={texts}
+      meta={t("teams.membersOf", { count: team.members.length, limit: team.limit })}
+      showErrors
+      onSubmit={() => void save()}
+      footer={
+        <div className="flex justify-end gap-2 pt-1">
+          <Button type="button" size="sm" variant="ghost" onClick={onDone}>
+            {t("teams.cancel")}
+          </Button>
+          <Button type="submit" size="sm" variant="primary" disabled={busy || !ready}>
+            {t("teams.edit.save")}
+          </Button>
+        </div>
+      }
+    />
+  );
+}
+
+/** "Ekibi çağır", soft while the five minutes since the last call run (it says how long). */
+function CallButton() {
+  const { t } = useTranslation();
+  const now = useCallClock((s) => s.now);
+  const calls = useSocialUi((s) => s.view.calls);
+  const refusedUntil = useSocialUi((s) => s.callRefusedUntil);
+  const lastCallAt = useSocialUi((s) => s.lastCallAt);
+  const until = callWaitUntil(calls, refusedUntil, lastCallAt);
+  const waiting = until > now;
+  return (
+    <Tooltip content={t("teams.call.wait", { count: waitMinutes(until, now) })} disabled={!waiting}>
+      <span className="inline-flex shrink-0">
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<MegaphoneSimple size={15} />}
+          disabled={waiting}
+          onClick={() => void callCrew()}
+        >
+          {t("teams.call.start")}
+        </Button>
+      </span>
+    </Tooltip>
+  );
+}
+
+/** The card's strip: who is online and "Ekibi çağır", or the call(s) that are on. */
+function CrewStrip({ team, canCall }: { team: SocialTeam; canCall: boolean }) {
+  const { t } = useTranslation();
+  const { reduce } = useSocialMotion();
+  const now = useCallClock((s) => s.now);
+  const calls = liveCalls(
+    useSocialUi((s) => s.view.calls),
+    now,
+  ).sort((a, b) => Number(b.mine) - Number(a.mine) || b.startedAt - a.startedAt);
+  const online = team.members.filter((m) => !m.me && !m.blocked && m.state !== "offline");
+  return (
+    <AnimatePresence mode="popLayout" initial={false}>
+      {calls.length ? (
+        <motion.div
+          key={`calls:${calls.map((c) => c.id).join()}`}
+          className="space-y-4"
+          {...rise(reduce, 0, 0.22)}
+        >
+          {calls.map((call) => (
+            <CallStrip key={call.id} call={call} team={team} />
+          ))}
+        </motion.div>
+      ) : (
+        <motion.div
+          key="online"
+          className="flex min-h-8 items-center gap-2.5"
+          {...rise(reduce, 0, 0.22)}
+        >
+          {online.length ? (
+            <span className="flex items-center">
+              {online.slice(0, 4).map((member, index) => (
+                <span
+                  key={member.id}
+                  className="relative flex rounded-[5px] ring-2 ring-obsidian-900"
+                  style={{ marginLeft: index ? -7 : 0, zIndex: 4 - index }}
+                >
+                  <SocialFace source={member} size={24} />
+                </span>
+              ))}
+            </span>
+          ) : null}
+          <span className="min-w-0 flex-1 truncate text-[13px] text-ash-300">
+            {online.length ? (
+              <>
+                <span className="relative inline-flex font-display font-semibold text-jade-400 tabular-nums">
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    <motion.span key={online.length} {...swap(reduce, 0.18)}>
+                      {online.length}
+                    </motion.span>
+                  </AnimatePresence>
+                </span>{" "}
+                {t("teams.card.online")}
+              </>
+            ) : (
+              t("social.account.noneOnline")
+            )}
+          </span>
+          {canCall ? <CallButton /> : null}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+function CrewCard({
+  team,
+  canEdit,
+  canCall,
+  onEdit,
+}: {
+  team: SocialTeam;
+  canEdit: boolean;
+  canCall: boolean;
+  onEdit: () => void;
+}) {
+  const { t } = useTranslation();
+  const founded = localDay(team.createdOn);
+  const anniversary = crewAnniversary(team.createdOn, new Date());
+  return (
+    <div className="relative">
+      <CrewWatermark look={team} />
+      <div className="relative flex items-start gap-3.5">
+        <CrewMark look={team} size={64} />
+        <div className="min-w-0 flex-1">
+          <p className="flex items-center gap-2 pr-1">
+            <span className="truncate font-display text-[20px] leading-tight font-semibold text-bone-50">
+              {team.name}
+            </span>
+            <TeamTag tag={team.tag} color={team.color} />
+          </p>
+          {team.motto ? (
+            <p className="mt-0.5 text-[13px] leading-snug text-ash-300" data-selectable>
+              {team.motto}
+            </p>
+          ) : null}
+          <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12.5px] text-ash-400">
+            <span className="inline-flex items-center gap-1">
+              <UsersThree size={14} aria-hidden />
+              {t("teams.membersOf", { count: team.members.length, limit: team.limit })}
+            </span>
+            {founded ? (
+              <span className="inline-flex items-center gap-1">
+                <CalendarBlank size={14} aria-hidden />
+                {t("teams.card.founded", {
+                  date: dateTimeFormat({ day: "numeric", month: "long", year: "numeric" }).format(
+                    founded,
+                  ),
+                })}
+              </span>
+            ) : null}
+          </p>
+          {anniversary ? (
+            <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] font-medium text-gold-300">
+              <Sparkle size={14} weight="fill" aria-hidden />
+              {"years" in anniversary
+                ? t("teams.card.yearsToday", { count: anniversary.years })
+                : t("teams.card.monthsToday", { count: anniversary.months })}
+            </p>
+          ) : null}
+        </div>
+        {canEdit ? (
+          <IconButton
+            label={t("teams.edit.action")}
+            icon={<PencilSimple size={16} />}
+            size="sm"
+            className="-mt-1 -mr-1"
+            onClick={onEdit}
+          />
         ) : null}
-      </AnimatePresence>
-      <EmblemPicker value={emblem} onChange={setEmblem} />
-      <div className="flex justify-end gap-2">
-        <Button size="sm" variant="ghost" onClick={onDone}>
-          {t("teams.cancel")}
-        </Button>
-        <Button size="sm" variant="primary" disabled={busy || !ready} onClick={() => void save()}>
-          {t("teams.edit.save")}
-        </Button>
+      </div>
+      <div className="relative mt-4 border-t border-white/7 pt-3">
+        <CrewStrip team={team} canCall={canCall} />
       </div>
     </div>
   );
 }
 
-/** Friends to invite: those not in the team, "Davet edildi" once asked. */
+/** The player's own row: their face, their badge, "Sen". */
+function MeRow({ member }: { member: TeamMember }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex items-center gap-3 py-1.5 pr-2 pl-2">
+      <SocialAvatar source={member} size={32} />
+      <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="truncate text-[14px] font-semibold text-bone-50">{member.name}</span>
+        <RoleBadge member={member} />
+      </span>
+      <span className="text-[12px] text-ash-400">{t("teams.you")}</span>
+    </div>
+  );
+}
+
+type RosterItem =
+  | { key: string; kind: "group"; label: string; count: number }
+  | { key: string; kind: "member"; member: TeamMember };
+
+/**
+ * Everyone, grouped by where they are; inside a group the leader, the moderators, then names. One
+ * list, so someone who joins Projects glides into its group instead of vanishing and reappearing.
+ */
+function CrewRoster({ team }: { team: SocialTeam }) {
+  const { t } = useTranslation();
+  const { reduce, layout } = useSocialMotion();
+  const activity = useSocialUi((s) => s.view.activity);
+  const items = useMemo<RosterItem[]>(
+    () =>
+      rosterGroups(team, activity).flatMap(({ where, members }) => [
+        {
+          key: `g:${where}`,
+          kind: "group" as const,
+          label: t(`teams.roster.${where}`),
+          count: members.length,
+        },
+        ...members.map((member) => ({ key: `m:${member.id}`, kind: "member" as const, member })),
+      ]),
+    [team, activity, t],
+  );
+  return (
+    <ul aria-label={team.name} className="relative flex flex-col">
+      <AnimatePresence initial={false} mode="popLayout">
+        {items.map((item) => (
+          <motion.li
+            key={item.key}
+            layout={layout ? "position" : false}
+            transition={{ layout: glide }}
+            initial={{ opacity: 0, y: reduce ? 0 : 6 }}
+            animate={{ opacity: 1, y: 0, transition: enter(0.26) }}
+            exit={{ opacity: 0, transition: leave(0.22) }}
+          >
+            {item.kind === "group" ? (
+              <h3 className="flex items-center gap-2 px-2 pt-3 pb-1 text-[12.5px] font-medium text-ash-400">
+                {item.label}
+                <span className="relative inline-flex font-display tabular-nums">
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    <motion.span key={item.count} {...swap(reduce, 0.18)}>
+                      {item.count}
+                    </motion.span>
+                  </AnimatePresence>
+                </span>
+              </h3>
+            ) : item.member.me ? (
+              <MeRow member={item.member} />
+            ) : (
+              <TeamMemberRow member={item.member} team={team} line="where" />
+            )}
+          </motion.li>
+        ))}
+      </AnimatePresence>
+    </ul>
+  );
+}
+
+/** Friends to invite: those not in the crew, "Davet edildi" once asked. */
 function InviteFriends({ team }: { team: SocialTeam }) {
   const { t } = useTranslation();
   const friends = useSocialUi((s) => s.view.friends);
@@ -648,26 +744,128 @@ function InviteFriends({ team }: { team: SocialTeam }) {
   );
 }
 
+/**
+ * "Yetkiler" (the leader, on a service with roles): each right has a switch for moderators and,
+ * where members may have it, one for members. A right is a level (the lowest role that has it), so
+ * the switches move together where they must: giving it to members gives it to moderators too,
+ * taking it from moderators takes it from members too. Each switch saves at once.
+ */
+function CrewPermissions({ team }: { team: SocialTeam }) {
+  const { t } = useTranslation();
+  const [pending, setPending] = useState<Partial<TeamPermissions>>({});
+  const levels: TeamPermissions = { ...team.permissions, ...pending };
+  // A pending level stays until the crew says so (the answer and the update cross).
+  useEffect(() => {
+    setPending((current) => {
+      const left = Object.fromEntries(
+        Object.entries(current).filter(
+          ([right, level]) => team.permissions[right as Right] !== level,
+        ),
+      );
+      return Object.keys(left).length === Object.keys(current).length ? current : left;
+    });
+  }, [team.permissions]);
+
+  const change = async (right: Right, role: "moderators" | "members", on: boolean) => {
+    const next = switchLevel(levels[right], role, on);
+    if (next === levels[right]) return;
+    setPending((current) => ({ ...current, [right]: next }));
+    const done = await attempt(() => api.social.editTeam({ permissions: { [right]: next } }));
+    if (done === undefined) {
+      setPending((current) => {
+        const { [right]: _, ...rest } = current;
+        return rest;
+      });
+      return;
+    }
+    announce(t("teams.roles.saved"));
+  };
+
+  return (
+    <section className="mt-5">
+      <SectionTitle>{t("teams.roles.title")}</SectionTitle>
+      <div className="rounded-[var(--radius-panel)] bg-obsidian-950/40 px-3 py-1.5 ring-1 ring-white/8">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="text-[12px] text-ash-400">
+              <th scope="col" className="py-1.5 text-left font-medium">
+                <span className="sr-only">{t("teams.roles.title")}</span>
+              </th>
+              <th scope="col" className="w-[92px] py-1.5 text-center font-medium">
+                {t("teams.roles.moderators")}
+              </th>
+              <th scope="col" className="w-[64px] py-1.5 text-center font-medium">
+                {t("teams.roles.members")}
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {RIGHTS.map((right) => {
+              const on = switchesOf(levels[right]);
+              const label = t(`teams.roles.${right}`);
+              return (
+                <tr key={right} className="border-t border-white/6">
+                  <th
+                    scope="row"
+                    className="py-2.5 pr-2 text-left text-[13.5px] font-normal text-bone-100"
+                  >
+                    {label}
+                  </th>
+                  <td className="py-2.5">
+                    <Switch
+                      className="justify-center"
+                      hideLabel
+                      label={`${label}: ${t("teams.roles.moderators")}`}
+                      checked={on.moderators}
+                      onCheckedChange={(value) => void change(right, "moderators", value)}
+                    />
+                  </td>
+                  <td className="py-2.5">
+                    {membersMayHave(right) ? (
+                      <Switch
+                        className="justify-center"
+                        hideLabel
+                        label={`${label}: ${t("teams.roles.members")}`}
+                        checked={on.members}
+                        onCheckedChange={(value) => void change(right, "members", value)}
+                      />
+                    ) : null}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 /** How long the page takes to slide in (motion.ts `pageVariants`), plus a frame. */
 const PAGE_SETTLE_MS = 340;
 
-function TeamView({ team }: { team: SocialTeam }) {
+function CrewView({ team }: { team: SocialTeam }) {
   const { t } = useTranslation();
-  const { reduce } = useSocialMotion();
+  const { reduce, layout } = useSocialMotion();
+  const crew = useCrewFeatures();
+  const rights = crewRights(team, crew);
   const [editing, setEditing] = useState(false);
   const [asking, setAsking] = useState<Leaving | null>(null);
   const [busy, setBusy] = useState(false);
-  const founder = team.role === "founder";
   const leaving = leavingOf(team);
   const inviteRef = useRef<HTMLDivElement>(null);
   const leaveRef = useRef<HTMLDivElement>(null);
+  // Rights taken away while editing close the editor (the crew says so live).
+  useEffect(() => {
+    if (!rights.look) setEditing(false);
+  }, [rights.look]);
 
   // A menu in the list sent the player here to edit, invite or leave: the page opens there.
   const intent = useSocialUi((s) => s.teamIntent);
   useEffect(() => {
     if (!intent) return;
     useSocialUi.getState().takeTeamIntent();
-    if (intent === "edit" && founder) setEditing(true);
+    if (intent === "edit" && rights.look) setEditing(true);
     if (intent === "leave") setAsking(leaving);
     const place = intent === "invite" ? inviteRef : intent === "leave" ? leaveRef : null;
     if (!place) return;
@@ -678,7 +876,8 @@ function TeamView({ team }: { team: SocialTeam }) {
         place.current?.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" }),
       PAGE_SETTLE_MS,
     );
-  }, [intent, founder, leaving, reduce]);
+  }, [intent, rights.look, leaving, reduce]);
+
   const run = async (what: Leaving) => {
     setBusy(true);
     const done = await attempt(() =>
@@ -699,106 +898,94 @@ function TeamView({ team }: { team: SocialTeam }) {
     close: t("teams.leave.close"),
     disband: t("teams.leave.disband"),
   };
+  // Sections below the card glide when the card grows (a call) or shrinks.
+  const glideBox = {
+    layout: layout ? ("position" as const) : false,
+    transition: { layout: glide },
+  };
+
   return (
-    <div className="pt-1">
-      <section className="rounded-[var(--radius-panel)] bg-obsidian-950/40 p-4 ring-1 ring-white/8">
-        <AnimatePresence mode="popLayout" initial={false}>
-          {editing ? (
-            <motion.div key="edit" {...rise(reduce, 4, 0.22)}>
-              <EditTeam team={team} onDone={() => setEditing(false)} />
-            </motion.div>
-          ) : (
-            <motion.div key="card" className="flex items-start gap-2" {...rise(reduce, 4, 0.22)}>
-              <div className="min-w-0 flex-1">
-                <TeamCardPreview
-                  name={team.name}
-                  tag={team.tag}
-                  emblem={team.emblem}
-                  meta={t("teams.membersOf", { count: team.members.length, limit: team.limit })}
+    <LayoutGroup>
+      <div className="pt-1">
+        <section className="relative overflow-hidden rounded-[var(--radius-panel)] bg-obsidian-950/40 p-4 ring-1 ring-white/8">
+          <AnimatePresence mode="popLayout" initial={false}>
+            {editing ? (
+              <motion.div key="edit" {...rise(reduce, 4, 0.22)}>
+                <EditCrew team={team} onDone={() => setEditing(false)} />
+              </motion.div>
+            ) : (
+              <motion.div key="card" {...rise(reduce, 4, 0.22)}>
+                <CrewCard
+                  team={team}
+                  canEdit={rights.look}
+                  canCall={rights.call}
+                  onEdit={() => setEditing(true)}
                 />
-              </div>
-              {founder ? (
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </section>
+
+        <motion.section className="mt-3" {...glideBox}>
+          <CrewRoster team={team} />
+        </motion.section>
+
+        {rights.invite ? (
+          <motion.div ref={inviteRef} {...glideBox}>
+            <InviteFriends team={team} />
+          </motion.div>
+        ) : null}
+
+        <motion.div {...glideBox}>
+          <CodeRow team={team} />
+        </motion.div>
+
+        {rights.lead && crew.roles ? (
+          <motion.div {...glideBox}>
+            <CrewPermissions team={team} />
+          </motion.div>
+        ) : null}
+
+        <motion.p className="mt-5 px-1 text-[12px] leading-snug text-ash-400" {...glideBox}>
+          {t("teams.privacy")}
+        </motion.p>
+
+        <motion.div ref={leaveRef} className="mt-3 border-t border-white/8 pt-3" {...glideBox}>
+          <AnimatePresence mode="popLayout" initial={false}>
+            {asking ? (
+              <motion.div key={asking} {...rise(reduce, 4, 0.2)}>
+                <p className="text-[13px] leading-snug text-bone-100">{asks[asking]}</p>
+                <div className="mt-2.5 flex justify-end gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => setAsking(null)}>
+                    {t("teams.cancel")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    disabled={busy}
+                    onClick={() => void run(asking)}
+                  >
+                    {labels[asking]}
+                  </Button>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div key="idle" {...rise(reduce, 4, 0.2)}>
                 <Button
                   size="sm"
                   variant="ghost"
-                  icon={<PencilSimple size={14} />}
-                  onClick={() => setEditing(true)}
+                  className="text-flare-400"
+                  icon={leaving === "leave" ? <SignOut size={14} /> : <Trash size={14} />}
+                  onClick={() => setAsking(leaving)}
                 >
-                  {t("teams.edit.action")}
+                  {labels[leaving]}
                 </Button>
-              ) : null}
-            </motion.div>
-          )}
-        </AnimatePresence>
-        <CodeRow team={team} />
-      </section>
-
-      <section className="mt-5">
-        <ul aria-label={team.name} className="flex flex-col">
-          {rosterOrder(team).map((member) =>
-            member.me ? (
-              <li key={member.id} className="flex items-center gap-3 py-2 pr-2 pl-2">
-                <SocialAvatar source={member} size={36} />
-                <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                  <span className="truncate text-[14px] font-semibold text-bone-50">
-                    {member.name}
-                  </span>
-                  {member.role === "founder" ? (
-                    <Crown
-                      size={12}
-                      weight="fill"
-                      className="shrink-0 text-gold-300"
-                      aria-label={t("teams.founder")}
-                    />
-                  ) : null}
-                </span>
-                <span className="text-[12px] text-ash-400">{t("teams.you")}</span>
-              </li>
-            ) : (
-              <li key={member.id}>
-                <TeamMemberRow member={member} founder={founder} />
-              </li>
-            ),
-          )}
-        </ul>
-      </section>
-
-      <div ref={inviteRef}>
-        <InviteFriends team={team} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </motion.div>
       </div>
-
-      <p className="mt-5 px-1 text-[12px] leading-snug text-ash-400">{t("teams.privacy")}</p>
-
-      <div ref={leaveRef} className="mt-3 border-t border-white/8 pt-3">
-        <AnimatePresence mode="popLayout" initial={false}>
-          {asking ? (
-            <motion.div key={asking} {...rise(reduce, 4, 0.2)}>
-              <p className="text-[13px] leading-snug text-bone-100">{asks[asking]}</p>
-              <div className="mt-2.5 flex justify-end gap-2">
-                <Button size="sm" variant="ghost" onClick={() => setAsking(null)}>
-                  {t("teams.cancel")}
-                </Button>
-                <Button size="sm" variant="danger" disabled={busy} onClick={() => void run(asking)}>
-                  {labels[asking]}
-                </Button>
-              </div>
-            </motion.div>
-          ) : (
-            <motion.div key="idle" {...rise(reduce, 4, 0.2)}>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-flare-400"
-                icon={leaving === "leave" ? <SignOut size={14} /> : <Trash size={14} />}
-                onClick={() => setAsking(leaving)}
-              >
-                {labels[leaving]}
-              </Button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-    </div>
+    </LayoutGroup>
   );
 }
 
@@ -811,7 +998,7 @@ export function TeamPage() {
     <AnimatePresence mode="popLayout" initial={false}>
       {team ? (
         <motion.div key={`team:${team.id}`} {...rise(reduce, 6, 0.28)}>
-          <TeamView team={team} />
+          <CrewView team={team} />
         </motion.div>
       ) : (
         <motion.div key="none" className="pt-1" {...rise(reduce, 6, 0.28)}>
@@ -823,8 +1010,8 @@ export function TeamPage() {
               ))}
             </section>
           ) : null}
-          <CreateTeam />
-          <JoinTeam />
+          <CreateCrew />
+          <JoinCrew />
           <p className="mt-4 px-1 text-[12px] leading-snug text-ash-400">{t("teams.privacy")}</p>
         </motion.div>
       )}

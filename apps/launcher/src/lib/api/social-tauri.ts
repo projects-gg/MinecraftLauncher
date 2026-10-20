@@ -2,6 +2,7 @@
 import { listen } from "@tauri-apps/api/event";
 import {
   type CmdError,
+  type CrewCallView,
   commands,
   type FriendGroupsView,
   type FriendView,
@@ -16,6 +17,8 @@ import {
   type TeamView,
 } from "@/bindings";
 import type {
+  CrewCall,
+  CrewFeatures,
   Friend,
   FriendGroups,
   FriendRequest,
@@ -132,6 +135,7 @@ function teamMember(v: TeamMemberView): TeamMember {
     avatar: v.avatar,
     avatarUrl: opt(v.avatarUrl),
     role: v.role,
+    moderator: v.moderator,
     me: v.me,
     friend: v.friend,
     blocked: v.blocked,
@@ -149,9 +153,20 @@ function team(v: TeamView): SocialTeam {
     name: v.name,
     tag: v.tag,
     emblem: v.emblem,
+    color: v.color,
+    frame: v.frame,
+    motto: v.motto,
     code: v.code,
     createdOn: v.createdOn,
     role: v.role,
+    moderator: v.moderator,
+    // A service without roles sends none: everyone invites, only the leader removes and edits.
+    permissions: {
+      invite: v.permissions.invite ?? "members",
+      call: v.permissions.call ?? "members",
+      kick: v.permissions.kick ?? "leader",
+      edit: v.permissions.edit ?? "leader",
+    },
     members: v.members.map(teamMember),
     invited: v.invited,
     limit: v.limit,
@@ -164,9 +179,37 @@ function teamInvite(v: TeamInviteView): TeamInvite {
     name: v.name,
     tag: v.tag,
     emblem: v.emblem,
+    color: v.color,
+    frame: v.frame,
+    motto: v.motto,
     members: v.members,
     from: profile(v.from),
     sentAt: v.sentAt,
+  };
+}
+
+function call(v: CrewCallView): CrewCall {
+  return {
+    id: v.id,
+    from: v.from,
+    mine: v.mine,
+    name: opt(v.name),
+    avatar: opt(v.avatar),
+    avatarUrl: opt(v.avatarUrl),
+    kind: v.kind,
+    startedAt: v.startedAt,
+    endsAt: v.endsAt,
+    answers: v.answers.map((a) => ({ id: a.id, answer: a.answer })),
+    myAnswer: opt(v.myAnswer),
+  };
+}
+
+/** `teamFeatures` as switches (values this launcher does not know mean nothing here). */
+export function crewFeatures(list: readonly string[]): CrewFeatures {
+  return {
+    look: list.includes("look"),
+    calls: list.includes("calls"),
+    roles: list.includes("roles"),
   };
 }
 
@@ -189,8 +232,10 @@ export function snapshot(v: SocialView): SocialSnapshot {
         : { state: v.activity.state },
     groups: v.groups ? groups(v.groups) : undefined,
     teams: v.teams,
+    crew: crewFeatures(v.teamFeatures),
     team: v.team ? team(v.team) : undefined,
     teamInvites: v.teamInvites.map(teamInvite),
+    calls: v.calls.map(call),
   };
 }
 
@@ -216,6 +261,12 @@ function notice(v: NoticeBinding): SocialNotice {
       return { kind: "teamInvite", invite: teamInvite(v.invite) };
     case "teamGone":
       return { kind: "teamGone", reason: v.reason, name: opt(v.name) };
+    case "crewCall":
+      return { kind: "crewCall", call: call(v.call) };
+    case "crewCallJoin":
+      return { kind: "crewCallJoin", call: call(v.call) };
+    case "crewmateOnProjects":
+      return { kind: "crewmateOnProjects", id: v.id };
   }
 }
 
@@ -315,13 +366,39 @@ export const tauriSocial: SocialApi = {
       ),
     );
   },
-  async createTeam({ name, tag, emblem }) {
-    await ok(commands.socialTeamCreate(name, tag, emblem));
+  async createTeam({ name, tag, emblem, color, frame, motto }) {
+    await ok(
+      commands.socialTeamCreate(name, tag, emblem, color ?? null, frame ?? null, motto ?? null),
+    );
   },
   async editTeam(change) {
+    const permissions = change.permissions;
     await ok(
-      commands.socialTeamEdit(change.name ?? null, change.tag ?? null, change.emblem ?? null),
+      commands.socialTeamEdit(
+        change.name ?? null,
+        change.tag ?? null,
+        change.emblem ?? null,
+        change.color ?? null,
+        change.frame ?? null,
+        change.motto ?? null,
+        permissions
+          ? {
+              invite: permissions.invite ?? null,
+              call: permissions.call ?? null,
+              kick: permissions.kick ?? null,
+              edit: permissions.edit ?? null,
+            }
+          : null,
+      ),
     );
+  },
+  async setModerator(memberId, moderator) {
+    await ok(commands.socialTeamModerator(memberId, moderator));
+  },
+  callCrew: () => ok(commands.socialTeamCall()),
+  answerCall: (callId, answer) => ok(commands.socialTeamCallAnswer(callId, answer)),
+  async endCall(callId) {
+    await ok(commands.socialTeamCallEnd(callId));
   },
   async disbandTeam() {
     await ok(commands.socialTeamDisband());

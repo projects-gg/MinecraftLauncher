@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::model::{
     FriendGroup, Limits, Me, Privacy, PublicProfile, Relation, SettingsMeta, StatusMode, TeamExit,
-    TeamRelation, TeamRole, discord_avatar_url,
+    TeamPermissions, TeamRelation, TeamRole, discord_avatar_url,
 };
-use crate::protocol::{Game, LocalStatus, PresenceState};
+use crate::protocol::{CallAnswer, CallKind, Game, LocalStatus, PresenceState};
 use crate::qr::QrPath;
 use crate::state::Connection;
 
@@ -51,10 +51,60 @@ pub struct SocialView {
     pub groups: Option<FriendGroupsView>,
     /// Teams are on (signed config `features.teams`) and the service offers them.
     pub teams: bool,
+    /// What the service offers of crews beyond the first version (`look`, `calls`, …; only
+    /// while `teams`). The launcher uses each part only while it is listed.
+    pub team_features: Vec<String>,
     /// The player's team (only while `teams`).
     pub team: Option<TeamView>,
     /// Invites to teams, newest first (only while `teams`).
     pub team_invites: Vec<TeamInviteView>,
+    /// Open crew calls the player sees, their own included (only while `teams` and the service
+    /// offers calls). They end by themselves at `endsAt`: the launcher hides them then.
+    pub calls: Vec<CrewCallView>,
+}
+
+/// "Ekibi çağır": an open crew call.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CrewCallView {
+    pub id: String,
+    /// The caller: a teammate, or the player (`mine`).
+    pub from: String,
+    pub mine: bool,
+    /// The caller's name and picture as the crew shows them (None when not in the crew list).
+    pub name: Option<String>,
+    pub avatar: Option<String>,
+    pub avatar_url: Option<String>,
+    /// `join`: the caller plays on projects.gg ("Geliyorum" can join them); `ready`: "Hazır
+    /// mısın?".
+    pub kind: CallKind,
+    /// Unix seconds on this computer's clock (the service's times moved by the difference
+    /// between the two clocks when the call arrived).
+    pub started_at: i64,
+    pub ends_at: i64,
+    /// Who answered what, in the crew's order.
+    pub answers: Vec<CallAnswerView>,
+    /// The player's own answer (any of their devices).
+    pub my_answer: Option<CallAnswer>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CallAnswerView {
+    pub id: String,
+    pub answer: CallAnswer,
+}
+
+/// What "Ekibi çağır" led to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum CallOutcome {
+    /// The crew is called (the call is in the view).
+    Called,
+    /// Called too recently (every 5 minutes, 10 a day): again in this many seconds.
+    Wait { seconds: u32 },
+    /// A call is open already (the player's own or a teammate's).
+    Active,
 }
 
 /// The player's friend categories, in their order, and who is in which.
@@ -83,12 +133,23 @@ pub struct TeamView {
     pub tag: String,
     /// `sword`, `shield`, … (the launcher draws a bundled icon).
     pub emblem: String,
-    /// `TKM-XXXX-XXXX`
+    /// A key of the crew palette (`gold` from a service without looks).
+    pub color: String,
+    /// `cut`, `shield`, `banner` or `hex` (`cut` from a service without looks).
+    pub frame: String,
+    /// Empty when there is none.
+    pub motto: String,
+    /// `EKP-XXXX-XXXX`
     pub code: String,
     /// `YYYY-MM-DD`
     pub created_on: String,
     /// The player's own role.
     pub role: TeamRole,
+    /// The player is one of the crew's moderators.
+    pub moderator: bool,
+    /// Who may invite, call, remove and edit (defaults from a service without roles: everyone
+    /// invites, only the leader removes and edits).
+    pub permissions: TeamPermissions,
     /// Founder first, then by joining time; the player is among them.
     pub members: Vec<TeamMemberView>,
     /// Friends the player invited who have not answered yet.
@@ -106,6 +167,8 @@ pub struct TeamMemberView {
     pub avatar: String,
     pub avatar_url: Option<String>,
     pub role: TeamRole,
+    /// A moderator (never the leader).
+    pub moderator: bool,
     /// The player themself.
     pub me: bool,
     /// Also on the friend list.
@@ -128,6 +191,9 @@ pub struct TeamInviteView {
     pub name: String,
     pub tag: String,
     pub emblem: String,
+    pub color: String,
+    pub frame: String,
+    pub motto: String,
     /// How many are in the team.
     pub members: u32,
     /// The friend who invited.
@@ -144,9 +210,12 @@ pub struct TeamLookupView {
     pub name: String,
     pub tag: String,
     pub emblem: String,
+    pub color: String,
+    pub frame: String,
+    pub motto: String,
     pub members: u32,
     pub relation: TeamRelation,
-    /// `TKM-XXXX-XXXX`, for joining.
+    /// `EKP-XXXX-XXXX`, for joining.
     pub code: String,
 }
 
@@ -353,6 +422,19 @@ pub enum SocialNotice {
         reason: TeamExit,
         /// The team's name, for the sentence.
         name: Option<String>,
+    },
+    /// A teammate called the crew, live (never for the player's own call, on do-not-disturb or
+    /// for a call that is only new to this launcher).
+    CrewCall {
+        call: Box<CrewCallView>,
+    },
+    /// The caller of a call the player said "Geliyorum" or "Birazdan" to is on projects.gg now.
+    CrewCallJoin {
+        call: Box<CrewCallView>,
+    },
+    /// A teammate (a friend or not) started playing on projects.gg.
+    CrewmateOnProjects {
+        id: String,
     },
     SignInFailed {
         reason: SignInFailure,

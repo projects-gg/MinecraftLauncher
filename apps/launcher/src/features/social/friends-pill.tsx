@@ -10,11 +10,13 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { MovableMenu, openMenuFromKeyboard } from "@/shell/movable-menu";
 import { usePlace } from "@/stores/placement";
+import { unansweredCall } from "./calls";
 import { EntryCue, entryLabel, moveMotion, openAction, useArrived } from "./entry";
 import { onlineFriends } from "./model";
 import { enter, glide, leave, pop, swap, useSocialMotion } from "./motion";
 import { SocialFace } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
+import { useCallClock } from "./use-call-clock";
 
 export function FriendsPill() {
   const enabled = useSocialUi((s) => s.view.enabled);
@@ -41,7 +43,13 @@ function Pill() {
   const named = view.auth === "signedOut" || view.auth === "signingIn";
   const online = signedIn ? onlineFriends(view.friends, favorites) : [];
   const faces = online.slice(0, 3);
-  const pending = signedIn && (view.incoming.length > 0 || view.invites.length > 0);
+  const now = useCallClock((s) => s.now);
+  // A request, an invite or a crewmate's call waits for the player.
+  const pending =
+    signedIn &&
+    (view.incoming.length > 0 ||
+      view.invites.length > 0 ||
+      Boolean(unansweredCall(view.calls, now)));
   const open = () => openPanel({ from: trigger.current });
 
   return (

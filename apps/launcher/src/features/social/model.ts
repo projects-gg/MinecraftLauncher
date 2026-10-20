@@ -8,7 +8,9 @@ import type {
   SocialNotice,
   SocialSnapshot,
   StatusMode,
+  TeamMember,
 } from "@/lib/api/social-types";
+import { unansweredCall } from "./calls";
 
 const collator = new Intl.Collator("tr", { sensitivity: "base" });
 
@@ -71,27 +73,56 @@ export function onlineFriends(friends: readonly Friend[], favorites: readonly st
 /** Home's invitations, closed for good with ×: sign in with Discord, then add a first friend. */
 export type HomeHint = "connect" | "add";
 /** What the friends line on Home shows. */
-export type HomeStrip = HomeHint | "playing";
+export type HomeStrip = HomeHint | "playing" | "call" | "crew";
+
+/** What else decides Home's line: calls closed there, a game being open, the call clock. */
+export interface HomeContext {
+  closedCalls: readonly string[];
+  /** A game is being prepared or running: the crew's lines wait (the game is what matters). */
+  gameBusy: boolean;
+  now: number;
+}
+
+const NO_CONTEXT: HomeContext = { closedCalls: [], gameBusy: false, now: 0 };
+
+/** Crewmates on projects.gg now ("Katıl"), the player and anyone blocked left out. */
+export function crewmatesOnProjects(team: { members: readonly TeamMember[] } | undefined) {
+  return (team?.members ?? []).filter(
+    (m) => !m.me && !m.blocked && m.state === "playing" && isJoinable(m.game),
+  );
+}
 
 /**
- * The friends line on Home. Friends in game always show. Signed out (or while the browser is
- * open), the invitation to sign in; signed in with nobody on the list and no request either way,
- * the invitation to add a first friend. A closed invitation never comes back on this computer;
- * nothing shows while a saved session is checked or the list has not arrived.
+ * The friends line on Home, most pressing first (one line at a time):
+ * 1. a teammate's call the player has not answered (nor closed here), while no game is open;
+ * 2. two or more crewmates on Projects ("Ekibinden 4 kişi Projects'te"), while no game is open;
+ * 3. friends in game, or the one crewmate on Projects (said as for a friend);
+ * 4. signed out (or while the browser is open), the invitation to sign in; signed in with nobody
+ *    on the list and no request either way, the invitation to add a first friend.
+ * A closed invitation never comes back on this computer; nothing shows while a saved session is
+ * checked or the list has not arrived.
  */
 export function homeStrip(
   view: Pick<
     SocialSnapshot,
     "enabled" | "auth" | "loaded" | "friends" | "incoming" | "outgoing" | "invites"
-  >,
+  > &
+    Partial<Pick<SocialSnapshot, "teams" | "team" | "calls">>,
   closed: readonly HomeHint[],
+  context: HomeContext = NO_CONTEXT,
 ): HomeStrip | null {
   if (!view.enabled) return null;
   if (view.auth === "signedOut" || view.auth === "signingIn") {
     return closed.includes("connect") ? null : "connect";
   }
   if (view.auth !== "signedIn") return null;
-  if (view.friends.some((f) => f.state === "playing")) return "playing";
+  const team = view.teams ? view.team : undefined;
+  const crew = crewmatesOnProjects(team);
+  if (team && !context.gameBusy) {
+    if (unansweredCall(view.calls ?? [], context.now, context.closedCalls)) return "call";
+    if (crew.length >= 2) return "crew";
+  }
+  if (view.friends.some((f) => f.state === "playing") || crew.length > 0) return "playing";
   const alone =
     view.loaded &&
     view.friends.length === 0 &&
@@ -99,6 +130,31 @@ export function homeStrip(
     view.outgoing.length === 0 &&
     view.invites.length === 0;
   return alone && !closed.includes("add") ? "add" : null;
+}
+
+/** Someone on Home's "playing" line: a friend in game, or a crewmate on Projects. */
+export interface PlayingPerson {
+  id: string;
+  name: string;
+  avatar?: string;
+  avatarUrl?: string;
+  game?: SocialGame;
+}
+
+/**
+ * Who Home's "playing" line is about: friends in game in the list's order, then crewmates on
+ * Projects who are not friends (teammates see each other's game, never another server).
+ */
+export function playingPeople(
+  view: Pick<SocialSnapshot, "friends"> & Partial<Pick<SocialSnapshot, "teams" | "team">>,
+  favorites: readonly string[],
+): PlayingPerson[] {
+  const friends: PlayingPerson[] = groupFriends(view.friends, favorites).playing;
+  const known = new Set(view.friends.map((f) => f.id));
+  const crew = crewmatesOnProjects(view.teams ? view.team : undefined).filter(
+    (m) => !known.has(m.id),
+  );
+  return [...friends, ...crew];
 }
 
 /** One short line under a friend's name. */
@@ -182,6 +238,19 @@ export interface NoticePrefs {
   notifyFavoriteProjects: boolean;
   /** "Çevrimiçi olunca bildir" chosen for one friend (on or off); absent: the favourites' rule. */
   onlineAlerts?: Readonly<Record<string, boolean>>;
+  /** "Ekip çağrıları" (on unless turned off). */
+  notifyCrewCalls?: boolean;
+  /** "Ekip arkadaşların Projects'e girince" (off unless turned on). */
+  notifyCrewProjects?: boolean;
+}
+
+/**
+ * Whether a crewmate joining Projects is said: when the player asked for it, and not when the
+ * favourite friend notice already says it about the same person.
+ */
+export function notifiesCrewProjects(prefs: NoticePrefs, id: string): boolean {
+  if (!prefs.notifyCrewProjects) return false;
+  return !(prefs.notifyFavoriteProjects && prefs.favorites.includes(id));
 }
 
 /**
@@ -213,6 +282,11 @@ export function wantsNotice(
       return prefs.notifyFavoriteProjects && prefs.favorites.includes(notice.id);
     case "invite":
       return !notice.invite.quiet;
+    case "crewCall":
+    case "crewCallJoin":
+      return prefs.notifyCrewCalls ?? true;
+    case "crewmateOnProjects":
+      return notifiesCrewProjects(prefs, notice.id);
     default:
       return true;
   }
@@ -266,6 +340,9 @@ export interface BackupFriends {
   notifyFavoriteProjects: boolean;
   /** Per-friend "Çevrimiçi olunca bildir"; left out while empty (older backups have none). */
   onlineAlerts?: Record<string, boolean>;
+  /** "Ekip bildirimleri" (older backups have none: the defaults stay). */
+  notifyCrewCalls?: boolean;
+  notifyCrewProjects?: boolean;
 }
 
 /** Friend ids with a yes or no, at most 200 (what a backup may carry). */
@@ -301,6 +378,12 @@ export function buildBackup(
       notifyFavoriteOnline: friends.notifyFavoriteOnline,
       notifyFavoriteProjects: friends.notifyFavoriteProjects,
       ...(Object.keys(alerts).length ? { onlineAlerts: alerts } : {}),
+      ...(typeof friends.notifyCrewCalls === "boolean"
+        ? { notifyCrewCalls: friends.notifyCrewCalls }
+        : {}),
+      ...(typeof friends.notifyCrewProjects === "boolean"
+        ? { notifyCrewProjects: friends.notifyCrewProjects }
+        : {}),
     },
   };
 }
@@ -349,6 +432,12 @@ export function readBackup(data: unknown): {
     }
     if (friends.onlineAlerts !== undefined) {
       out.friends.onlineAlerts = cleanAlerts(friends.onlineAlerts);
+    }
+    if (typeof friends.notifyCrewCalls === "boolean") {
+      out.friends.notifyCrewCalls = friends.notifyCrewCalls;
+    }
+    if (typeof friends.notifyCrewProjects === "boolean") {
+      out.friends.notifyCrewProjects = friends.notifyCrewProjects;
     }
   }
   return out;

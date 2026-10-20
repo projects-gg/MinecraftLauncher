@@ -19,21 +19,22 @@ use url::Url;
 
 use crate::auth::{LoginAttempt, SignedIn, auth_code_from_deep_link};
 use crate::client::{Session, SocialClient, SocialConfig};
-use crate::codes::{normalize_friend_code, normalize_team_code};
+use crate::codes::{crew_code, normalize_friend_code, normalize_team_code};
 use crate::error::{ErrorCode, Result, SocialError};
 use crate::game::{self, GameActivity};
 use crate::model::{
-    FriendGroup, FriendGroups, MAX_FRIEND_GROUPS, ProfileUpdate, RequestOutcome, SessionInfo,
-    SettingsMeta, SettingsPrecondition, TeamAnswer, TeamEdit,
+    FIRST_EMBLEMS, FriendGroup, FriendGroups, MAX_FRIEND_GROUPS, ProfileUpdate, RequestOutcome,
+    SessionInfo, SettingsMeta, SettingsPrecondition, TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK,
+    TEAM_FEATURE_ROLES, TeamAnswer, TeamEdit, TeamLook,
 };
 use crate::presence::{PresenceControl, PresenceEvent, PresenceOptions, StopReason};
-use crate::protocol::LocalStatus;
+use crate::protocol::{CallAnswer, LocalStatus};
 use crate::qr::{QrPath, qr_path};
 use crate::state::{Connection, SocialState};
 use crate::store::TokenStore;
 use crate::view::{
-    ActivityView, AuthPhase, GroupMember, InviteResult, LookupView, ProfileView, SendOutcome,
-    SignInFailure, SocialNotice, SocialView, TeamLookupView, me_view,
+    ActivityView, AuthPhase, CallOutcome, GroupMember, InviteResult, LookupView, ProfileView,
+    SendOutcome, SignInFailure, SocialNotice, SocialView, TeamLookupView, me_view,
 };
 
 /// After a reconnect the friend list is fetched again only when it is older than this.
@@ -298,14 +299,15 @@ impl SocialService {
                 return;
             }
             let mut notices = core.state.apply(&event, unix_now());
-            if !core.teams {
-                notices.retain(|notice| {
-                    !matches!(
-                        notice,
-                        SocialNotice::TeamInvite { .. } | SocialNotice::TeamGone { .. }
-                    )
-                });
-            }
+            let teams = core.teams && core.state.teams_supported();
+            let calls = teams && core.state.offers(TEAM_FEATURE_CALLS);
+            notices.retain(|notice| match notice {
+                SocialNotice::TeamInvite { .. }
+                | SocialNotice::TeamGone { .. }
+                | SocialNotice::CrewmateOnProjects { .. } => core.teams,
+                SocialNotice::CrewCall { .. } | SocialNotice::CrewCallJoin { .. } => calls,
+                _ => true,
+            });
             match &event {
                 PresenceEvent::Connected { .. } => {
                     refetch = core.state.me().is_none()
@@ -836,19 +838,55 @@ impl SocialService {
             .ok_or(SocialError::InvalidInput("not in a team"))
     }
 
-    /// Founds a team: a name, a tag (2-4 letters or digits) and an emblem.
-    pub async fn create_team(&self, name: &str, tag: &str, emblem: &str) -> Result<()> {
+    /// The service offers this part of crews (`teamFeatures`).
+    fn offers(&self, feature: &str) -> bool {
+        self.lock().state.offers(feature)
+    }
+
+    /// Founds a team: a name, a tag (2-4 letters or digits), an emblem and, where the service
+    /// offers looks, a colour, a frame and a motto. Without looks the look stays home and only
+    /// the first 20 emblems may be sent (an older service refuses the rest).
+    pub async fn create_team(
+        &self,
+        name: &str,
+        tag: &str,
+        emblem: &str,
+        look: Option<TeamLook>,
+    ) -> Result<()> {
+        let look = look.filter(|_| self.offers(TEAM_FEATURE_LOOK));
+        if look.is_none() && !FIRST_EMBLEMS.contains(&emblem) {
+            return Err(SocialError::InvalidInput("emblem"));
+        }
         let (name, tag, emblem) = (name.to_owned(), tag.to_owned(), emblem.to_owned());
         let (answer, generation) = self
-            .call(|session| async move { session.create_team(&name, &tag, &emblem).await })
+            .call(|session| async move {
+                session
+                    .create_team(&name, &tag, &emblem, look.as_ref())
+                    .await
+            })
             .await?;
         self.update(generation, |core| core.state.team_answer(answer));
         Ok(())
     }
 
-    /// Renames the team, changes its tag or emblem (founder).
+    /// Renames the team, changes its tag, emblem, look or permissions (the leader; a moderator
+    /// the look where the crew lets them). What the service cannot take (a look without looks,
+    /// permissions without roles) is left out; nothing left, nothing is sent.
     pub async fn edit_team(&self, edit: TeamEdit) -> Result<()> {
         let team = self.current_team()?;
+        let look = self.offers(TEAM_FEATURE_LOOK);
+        if !look
+            && edit
+                .emblem
+                .as_deref()
+                .is_some_and(|emblem| !FIRST_EMBLEMS.contains(&emblem))
+        {
+            return Err(SocialError::InvalidInput("emblem"));
+        }
+        let edit = edit.limited_to(look, self.offers(TEAM_FEATURE_ROLES));
+        if edit.is_empty() {
+            return Ok(());
+        }
         let (answer, generation) = self
             .call(|session| async move { session.update_team(&team, &edit).await })
             .await?;
@@ -898,7 +936,24 @@ impl SocialService {
         Ok(())
     }
 
-    /// Removes a member (founder). The code is renewed with it, so the team is read again.
+    /// Makes a member a moderator, or a moderator a member again (leader; a service with roles).
+    pub async fn set_team_moderator(&self, member: &str, moderator: bool) -> Result<()> {
+        if !self.offers(TEAM_FEATURE_ROLES) {
+            return Err(SocialError::InvalidInput("crew roles"));
+        }
+        let team = self.current_team()?;
+        let member = member.to_owned();
+        let (answer, generation) =
+            self.call(|session| async move {
+                session.set_team_moderator(&team, &member, moderator).await
+            })
+            .await?;
+        self.update(generation, |core| core.state.team_answer(answer));
+        Ok(())
+    }
+
+    /// Removes a member (the leader anyone; a moderator plain members, where the crew lets
+    /// them). The code is renewed with it, so the team is read again.
     pub async fn remove_team_member(&self, member: &str) -> Result<()> {
         let team = self.current_team()?;
         let member = member.to_owned();
@@ -928,7 +983,8 @@ impl SocialService {
         Ok(())
     }
 
-    /// What a team code leads to (counts against the daily code lookup quota).
+    /// What a crew code leads to (counts against the daily code lookup quota). Takes `EKP-…`,
+    /// `TKM-…` or the symbols alone.
     pub async fn lookup_team(&self, code: &str) -> Result<TeamLookupView> {
         let normalized =
             normalize_team_code(code).ok_or(SocialError::InvalidInput("not a team code"))?;
@@ -941,9 +997,12 @@ impl SocialService {
             name: lookup.team.name,
             tag: lookup.team.tag,
             emblem: lookup.team.emblem,
+            color: lookup.team.color,
+            frame: lookup.team.frame,
+            motto: lookup.team.motto,
             members: lookup.team.members,
             relation: lookup.relation,
-            code: normalized,
+            code: crew_code(&normalized),
         })
     }
 
@@ -995,6 +1054,81 @@ impl SocialService {
             }
             Err(error) => Err(error),
         }
+    }
+
+    // --- crew calls ("Ekibi çağır") ---------------------------------------------------------
+
+    /// The presence control, while signed in to a crew of a service that offers calls.
+    fn crew_presence(&self) -> Result<PresenceControl> {
+        let core = self.lock();
+        if core.auth != AuthPhase::SignedIn {
+            return Err(SocialError::Unauthorized);
+        }
+        if !(core.teams && core.state.teams_supported() && core.state.offers(TEAM_FEATURE_CALLS)) {
+            return Err(SocialError::InvalidInput("crew calls"));
+        }
+        if core.state.team().is_none() {
+            return Err(SocialError::InvalidInput("not in a team"));
+        }
+        core.presence
+            .clone()
+            .ok_or(SocialError::Unavailable { retry_after: None })
+    }
+
+    /// "Ekibi çağır" (one open call among teammates who see each other, one every 5 minutes, 10
+    /// a day). The call reaches the view through the socket before this returns.
+    pub async fn call_crew(&self) -> Result<CallOutcome> {
+        let control = self.crew_presence()?;
+        match control.call_crew().await {
+            Ok(()) => Ok(CallOutcome::Called),
+            Err(SocialError::RateLimited { retry_after }) => Ok(CallOutcome::Wait {
+                seconds: retry_after
+                    .map_or(300, |wait| {
+                        u32::try_from(wait.as_secs()).unwrap_or(u32::MAX)
+                    })
+                    .max(1),
+            }),
+            Err(error) if error.code() == Some(&ErrorCode::CallActive) => Ok(CallOutcome::Active),
+            Err(error) if error.code() == Some(&ErrorCode::TeamNotFound) => {
+                // The crew went away in the meantime: the list is read again.
+                let generation = self.lock().generation;
+                let service = self.clone();
+                self.spawn(async move { service.refetch(generation).await });
+                Err(SocialError::InvalidInput("not in a team"))
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Answers (or changes the answer to) a teammate's call: "Geliyorum", "Birazdan",
+    /// "Gelemem". False when the call is gone; it leaves the view.
+    pub async fn answer_call(&self, call: &str, answer: CallAnswer) -> Result<bool> {
+        let control = self.crew_presence()?;
+        let generation = self.lock().generation;
+        match control.answer_call(call, answer).await {
+            Ok(()) => {
+                self.update(generation, |core| core.state.call_answered(call, answer));
+                Ok(true)
+            }
+            Err(error) if error.code() == Some(&ErrorCode::CallNotFound) => {
+                self.update(generation, |core| core.state.call_gone(call));
+                Ok(false)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// "Bitir": ends the player's own call (one that is gone already is simply gone).
+    pub async fn end_call(&self, call: &str) -> Result<()> {
+        let control = self.crew_presence()?;
+        let generation = self.lock().generation;
+        match control.end_call(call).await {
+            Ok(()) => {}
+            Err(error) if error.code() == Some(&ErrorCode::CallNotFound) => {}
+            Err(error) => return Err(error),
+        }
+        self.update(generation, |core| core.state.call_gone(call));
+        Ok(())
     }
 
     /// "Birlikte oyna" (no text; one per friend per 5 minutes, 30 a day).
@@ -1247,6 +1381,7 @@ fn build_view(core: &mut Core) -> SocialView {
         (link, qr)
     });
     let teams = core.teams && core.state.teams_supported();
+    let calls = teams && core.state.offers(TEAM_FEATURE_CALLS);
     SocialView {
         seq: core.seq,
         enabled: core.url.is_some(),
@@ -1263,9 +1398,19 @@ fn build_view(core: &mut Core) -> SocialView {
         activity: ActivityView::from(&core.activity),
         groups: core.state.groups_view(),
         teams,
+        team_features: if teams {
+            core.state.team_features().to_vec()
+        } else {
+            Vec::new()
+        },
         team: if teams { core.state.team_view() } else { None },
         team_invites: if teams {
             core.state.team_invites()
+        } else {
+            Vec::new()
+        },
+        calls: if calls {
+            core.state.calls(now)
         } else {
             Vec::new()
         },
@@ -1546,6 +1691,134 @@ mod tests {
         let groups = harness.service.view().groups.unwrap();
         assert_eq!(groups.version, 5);
         assert_eq!(groups.groups[0].name, "PvP");
+    }
+
+    const TEAM_ANSWER: &str = r#"{"team":{"id":"0123456789abcdef","name":"Gece Kartalları",
+        "tag":"GKR","emblem":"sword","code":"TKM-ABCD-EFGH","createdOn":"2026-10-19",
+        "members":[{"id":"123456789012345678","username":"ayse","displayName":"Ayşe",
+        "avatar":"discord","avatarHash":null,"role":"founder","joinedAt":5}]},"invited":[]}"#;
+
+    #[tokio::test]
+    async fn crew_looks_and_calls_wait_for_the_service_to_offer_them() {
+        let offers = Arc::new(AtomicBool::new(false));
+        let bodies = Arc::new(Mutex::new(Vec::<String>::new()));
+        let server = MockServer::start({
+            let offers = offers.clone();
+            let bodies = bodies.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| match req.path.as_str() {
+                    "/v1/me" => MockReply::json(200, ME),
+                    "/v1/friends" if offers.load(Ordering::SeqCst) => MockReply::json(
+                        200,
+                        &FRIENDS_WITH_TEAM.replace(
+                            r#""teamInvites":[]"#,
+                            r#""teamInvites":[],"teamFeatures":["look","calls"]"#,
+                        ),
+                    ),
+                    "/v1/friends" => MockReply::json(200, FRIENDS_WITH_TEAM),
+                    "/v1/teams" | "/v1/teams/0123456789abcdef" => {
+                        bodies.lock().unwrap().push(req.body_text().to_owned());
+                        MockReply::json(200, TEAM_ANSWER)
+                    }
+                    _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.set_teams_enabled(true);
+        harness.service.configure(url(&server));
+        let view = harness.until("friends", |view| view.loaded).await;
+        // The Worker before crews' looks and calls: today's look, no calls, nothing new sent.
+        assert!(view.team_features.is_empty() && view.calls.is_empty());
+        let team = view.team.unwrap();
+        assert_eq!((team.color.as_str(), team.frame.as_str()), ("gold", "cut"));
+        assert_eq!(team.code, "EKP-ABCD-EFGH");
+        let look = TeamLook {
+            color: "teal".into(),
+            frame: "banner".into(),
+            motto: "Birlikte güçlüyüz!".into(),
+        };
+        // A newer emblem would be refused there: it never leaves the launcher.
+        assert!(matches!(
+            harness
+                .service
+                .create_team("Gece Kartalları", "GKR", "controller", Some(look.clone()))
+                .await,
+            Err(SocialError::InvalidInput("emblem"))
+        ));
+        harness
+            .service
+            .create_team("Gece Kartalları", "GKR", "sword", Some(look.clone()))
+            .await
+            .unwrap();
+        // Only a look to change: nothing to send.
+        harness
+            .service
+            .edit_team(TeamEdit {
+                color: Some("teal".into()),
+                ..TeamEdit::default()
+            })
+            .await
+            .unwrap();
+        harness
+            .service
+            .edit_team(TeamEdit {
+                name: Some("Gece Kuşları".into()),
+                motto: Some("Merhaba".into()),
+                ..TeamEdit::default()
+            })
+            .await
+            .unwrap();
+        assert!(matches!(
+            harness.service.call_crew().await,
+            Err(SocialError::InvalidInput("crew calls"))
+        ));
+        assert_eq!(
+            *bodies.lock().unwrap(),
+            vec![
+                r#"{"emblem":"sword","name":"Gece Kartalları","tag":"GKR"}"#.to_owned(),
+                r#"{"name":"Gece Kuşları"}"#.to_owned(),
+            ]
+        );
+
+        // The service announces them: they go out, and the view says so.
+        offers.store(true, Ordering::SeqCst);
+        harness.service.refresh().await;
+        let view = harness.service.view();
+        assert_eq!(
+            view.team_features,
+            vec!["look".to_owned(), "calls".to_owned()]
+        );
+        bodies.lock().unwrap().clear();
+        harness
+            .service
+            .create_team("Gece Kartalları", "GKR", "controller", Some(look))
+            .await
+            .unwrap();
+        harness
+            .service
+            .edit_team(TeamEdit {
+                color: Some("teal".into()),
+                motto: Some(String::new()),
+                ..TeamEdit::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            *bodies.lock().unwrap(),
+            vec![
+                r#"{"color":"teal","emblem":"controller","frame":"banner","motto":"Birlikte güçlüyüz!","name":"Gece Kartalları","tag":"GKR"}"#.to_owned(),
+                r#"{"color":"teal","motto":""}"#.to_owned(),
+            ]
+        );
+        // Calls are offered now, but the socket is down: the request fails quietly.
+        assert!(matches!(
+            harness.service.call_crew().await,
+            Err(SocialError::Unavailable { .. })
+        ));
     }
 
     #[tokio::test]

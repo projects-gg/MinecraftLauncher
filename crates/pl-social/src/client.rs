@@ -25,7 +25,7 @@ use crate::error::{ErrorCode, Result, SocialError, from_response};
 use crate::model::{
     CodeLookup, Friend, FriendGroups, FriendsOverview, Me, ProfileUpdate, RequestOutcome,
     SessionInfo, SettingsBackup, SettingsMeta, SettingsPrecondition, TeamAnswer, TeamEdit,
-    TeamLookup, TeamsOverview,
+    TeamLook, TeamLookup, TeamsOverview,
 };
 use crate::presence::{PresenceHandle, PresenceOptions};
 
@@ -584,15 +584,27 @@ impl Session {
         self.get("v1/teams").await
     }
 
-    /// Founds a team (the player must not be in one).
-    pub async fn create_team(&self, name: &str, tag: &str, emblem: &str) -> Result<TeamAnswer> {
-        let body = serde_json::json!({ "name": name, "tag": tag, "emblem": emblem });
+    /// Founds a team (the player must not be in one). `look` only for a service that offers
+    /// looks (an older one refuses the keys).
+    pub async fn create_team(
+        &self,
+        name: &str,
+        tag: &str,
+        emblem: &str,
+        look: Option<&TeamLook>,
+    ) -> Result<TeamAnswer> {
+        let mut body = serde_json::json!({ "name": name, "tag": tag, "emblem": emblem });
+        if let Some(look) = look {
+            body["color"] = look.color.clone().into();
+            body["frame"] = look.frame.clone().into();
+            body["motto"] = look.motto.clone().into();
+        }
         self.call(Method::POST, "v1/teams", Some(body))
             .await?
             .json()
     }
 
-    /// Renames the team, changes its tag or emblem (founder).
+    /// Renames the team, changes its tag, emblem or look (founder).
     pub async fn update_team(&self, team: &str, edit: &TeamEdit) -> Result<TeamAnswer> {
         let body =
             serde_json::to_value(edit).map_err(|error| SocialError::Protocol(error.to_string()))?;
@@ -641,6 +653,27 @@ impl Session {
         let path = format!("v1/teams/{}/founder", team_id(team)?);
         let body = serde_json::json!({ "to": user_id(member)? });
         self.call(Method::POST, &path, Some(body)).await?.json()
+    }
+
+    /// Makes a member a moderator, or a moderator a member again (leader; a service with
+    /// roles). Asking for what already is answers the crew as it is.
+    pub async fn set_team_moderator(
+        &self,
+        team: &str,
+        member: &str,
+        moderator: bool,
+    ) -> Result<TeamAnswer> {
+        let path = format!(
+            "v1/teams/{}/moderators/{}",
+            team_id(team)?,
+            user_id(member)?
+        );
+        let method = if moderator {
+            Method::PUT
+        } else {
+            Method::DELETE
+        };
+        self.call(method, &path, None).await?.json()
     }
 
     /// What a team code leads to (counts against the daily code lookup quota).
@@ -893,11 +926,20 @@ mod tests {
             ("POST", "/v1/teams") => {
                 let body = req.json();
                 assert_eq!(body["name"], "Gece Kartalları");
-                assert_eq!(body["emblem"], "sword");
+                if body["emblem"] == "sword" {
+                    // No look: only the keys every service takes.
+                    assert!(body.get("color").is_none() && body.get("motto").is_none());
+                } else {
+                    assert_eq!(body["emblem"], "controller");
+                    assert_eq!(body["color"], "teal");
+                    assert_eq!(body["frame"], "banner");
+                    assert_eq!(body["motto"], "");
+                }
                 MockReply::json(201, TEAM)
             }
             ("POST", "/v1/teams/join") | ("POST", "/v1/teams/lookup") => {
-                assert_eq!(req.json()["code"], "TKM-ABCD-EFGH");
+                // Without a prefix: every service version takes the symbols alone.
+                assert_eq!(req.json()["code"], "ABCD-EFGH");
                 if req.path.ends_with("lookup") {
                     MockReply::json(
                         200,
@@ -919,6 +961,10 @@ mod tests {
             ("POST", "/v1/teams/0123456789abcdef/code") => {
                 MockReply::json(200, r#"{"code":"TKM-WXYZ-1234"}"#)
             }
+            ("PUT" | "DELETE", "/v1/teams/0123456789abcdef/moderators/223456789012345678") => {
+                assert!(req.body_text().is_empty());
+                MockReply::json(200, TEAM)
+            }
             ("DELETE", "/v1/teams/0123456789abcdef/members/223456789012345678")
             | ("POST", "/v1/teams/0123456789abcdef/leave")
             | ("POST", "/v1/teams/invites/fedcba9876543210/decline") => MockReply::empty(204),
@@ -938,10 +984,20 @@ mod tests {
         .await;
         let session = client(&server).session(token());
         let created = session
-            .create_team("Gece Kartalları", "gkr", "sword")
+            .create_team("Gece Kartalları", "gkr", "sword", None)
             .await
             .unwrap();
         assert_eq!(created.team.unwrap().code, "TKM-ABCD-EFGH");
+        let look = TeamLook {
+            color: "teal".into(),
+            frame: "banner".into(),
+            motto: String::new(),
+        };
+        session
+            .create_team("Gece Kartalları", "GKR", "controller", Some(&look))
+            .await
+            .unwrap();
+        assert!(session.lookup_team("ekp abcd efgh").await.is_ok());
         let lookup = session.lookup_team("tkm abcd efgh").await.unwrap();
         assert_eq!(lookup.relation, crate::model::TeamRelation::Elsewhere);
         assert_eq!(lookup.team.members, 3);
@@ -966,6 +1022,19 @@ mod tests {
             .remove_team_member("0123456789abcdef", "223456789012345678")
             .await
             .unwrap();
+        for moderator in [true, false] {
+            session
+                .set_team_moderator("0123456789abcdef", "223456789012345678", moderator)
+                .await
+                .unwrap();
+        }
+        let methods: Vec<String> = server
+            .requests()
+            .iter()
+            .filter(|r| r.path.contains("/moderators/"))
+            .map(|r| r.method.clone())
+            .collect();
+        assert_eq!(methods, vec!["PUT".to_owned(), "DELETE".to_owned()]);
         session.leave_team("0123456789abcdef").await.unwrap();
         session
             .decline_team_invite("fedcba9876543210")

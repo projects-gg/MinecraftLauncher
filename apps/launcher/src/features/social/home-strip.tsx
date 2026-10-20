@@ -1,6 +1,10 @@
 // Home screen's friends line: one quiet glass pill over the art, under the banners (model.ts →
-// homeStrip decides which):
-// - friends in game, with "Katıl" when some of them are on projects.gg;
+// homeStrip decides which, most pressing first):
+// - a crewmate's call the player has not answered: their face with a small megaphone, "Ayşe ekibi
+//   çağırıyor" and "Geliyorum"; × closes it here, for this call only (it is not an answer);
+// - two or more crewmates on Projects: the crew's mark and their faces, "Ekibinden 4 kişi
+//   Projects'te" and "Katıl";
+// - friends in game (or the one crewmate on Projects), with "Katıl" when some are on projects.gg;
 // - before sign-in, the invitation: three faces, "Arkadaşlarınla birlikte oyna" and "Discord ile
 //   bağlan", which opens the friends panel on its opt-in screen (what is shared, the privacy page,
 //   and the button that opens Discord);
@@ -8,19 +12,26 @@
 // The invitations close for good with ×; the friends button then lights up once wherever it is,
 // to show where friends live (from the keyboard the focus goes there too). A line that replaces
 // another cross-fades in place; the strips below glide.
-import { UserPlus, X } from "@phosphor-icons/react";
+import { MegaphoneSimple, Play, UserPlus, X } from "@phosphor-icons/react";
 import { cn, easeOutExpo, IconButton } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { presetAvatar } from "@/features/avatars/presets";
+import { useLaunch } from "@/stores/launch";
 import { entrySelector, usePlace } from "@/stores/placement";
+import { answerCall } from "./call-actions";
+import { unansweredCall } from "./calls";
+import { callerOf, callSentence } from "./crew-call";
 import { DiscordMark } from "./discord-button";
 import { JoinButton } from "./friend-row";
-import { groupFriends, type HomeHint, homeStrip, isJoinable } from "./model";
+import { gameBusy } from "./join";
+import { crewmatesOnProjects, type HomeHint, homeStrip, isJoinable, playingPeople } from "./model";
 import { enter, leave, useSocialMotion } from "./motion";
 import { type FaceSource, SocialFace } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
+import { CrewMark } from "./team-emblem";
+import { useCallClock } from "./use-call-clock";
 
 /** The opt-in screen's three faces: the same friends greet the player there. */
 const INVITE_FACES: FaceSource[] = ["fox", "golden-dragon", "wizard"].map((slug) => ({
@@ -122,7 +133,7 @@ function PlayingLine() {
   const view = useSocialUi((s) => s.view);
   const favorites = useSocialPrefs((s) => s.favorites);
   const openPanel = useSocialUi((s) => s.openPanel);
-  const playing = groupFriends(view.friends, favorites).playing;
+  const playing = playingPeople(view, favorites);
   const onProjects = playing.filter((f) => isJoinable(f.game));
   // projects.gg first: that is where "Katıl" leads.
   const shown = onProjects.length ? onProjects : playing;
@@ -150,11 +161,88 @@ function PlayingLine() {
   );
 }
 
+/** A crewmate's call the player has not answered: "Geliyorum" answers (and joins from Projects). */
+function CallLine() {
+  const { t } = useTranslation();
+  const view = useSocialUi((s) => s.view);
+  const closed = useSocialUi((s) => s.closedCalls);
+  const closeCall = useSocialUi((s) => s.closeCall);
+  const openPanel = useSocialUi((s) => s.openPanel);
+  const now = useCallClock((s) => s.now);
+  const call = unansweredCall(view.calls, now, closed);
+  if (!call) return null;
+  const text = callSentence(call, view.team, t);
+  const joins = call.kind === "join";
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={`${text}. ${t("teams.call.open")}`}
+        onClick={(event) => openPanel({ page: "team", from: event.currentTarget })}
+        className="flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-0.5 pr-2 pl-0.5 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
+      >
+        <span className="relative flex">
+          <SocialFace source={callerOf(call, view.team)} size={26} />
+          <span className="absolute -right-1.5 -bottom-1 flex size-[14px] items-center justify-center rounded-full bg-obsidian-950 text-gold-300 ring-1 ring-gold-400/40">
+            <MegaphoneSimple size={9} weight="fill" aria-hidden />
+          </span>
+        </span>
+        <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => void answerCall(call, "yes")}
+        className="group flex shrink-0 cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+      >
+        <ActionLook icon={joins ? <Play size={12} weight="fill" aria-hidden /> : null}>
+          {t("teams.call.yes")}
+        </ActionLook>
+      </button>
+      <IconButton
+        size="sm"
+        label={t("social.actions.dismiss")}
+        icon={<X size={13} weight="bold" />}
+        onClick={() => closeCall(call.id)}
+        className="shrink-0 rounded-full"
+      />
+    </>
+  );
+}
+
+/** Two or more crewmates on Projects: the crew's mark and faces, then "Katıl". */
+function CrewLine() {
+  const { t } = useTranslation();
+  const view = useSocialUi((s) => s.view);
+  const openPanel = useSocialUi((s) => s.openPanel);
+  const team = view.team;
+  const crew = crewmatesOnProjects(team);
+  if (!team) return null;
+  const text = t("teams.home.crewProjects", { count: crew.length });
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={`${text}. ${t("teams.open")}`}
+        onClick={(event) => openPanel({ page: "team", from: event.currentTarget })}
+        className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-full py-0.5 pr-2.5 pl-1 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
+      >
+        <CrewMark look={team} size={28} />
+        <Faces sources={crew} />
+        <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
+      </button>
+      <JoinButton />
+    </>
+  );
+}
+
 export function FriendsHomeStrip() {
   const { reduce, layout } = useSocialMotion();
   const view = useSocialUi((s) => s.view);
   const closed = useSocialPrefs((s) => s.closedHints);
-  const kind = homeStrip(view, closed);
+  const closedCalls = useSocialUi((s) => s.closedCalls);
+  const busy = useLaunch((s) => gameBusy(s.phase.kind));
+  const now = useCallClock((s) => s.now);
+  const kind = homeStrip(view, closed, { closedCalls, gameBusy: busy, now });
 
   return (
     <AnimatePresence initial={false} mode="popLayout">
@@ -167,7 +255,7 @@ export function FriendsHomeStrip() {
           transition={{ layout: { duration: 0.32, ease: easeOutExpo } }}
           className={cn(
             "glass flex w-fit max-w-[560px] items-center rounded-full py-1.5 pl-1.5",
-            kind === "playing" ? "gap-3 pr-1.5" : "gap-1 pr-1",
+            kind === "playing" || kind === "crew" ? "gap-3 pr-1.5" : "gap-1 pr-1",
           )}
           initial={{ opacity: 0, transform: reduce ? "none" : "translateY(8px)" }}
           animate={{ opacity: 1, transform: "translateY(0px)", transition: enter(0.42) }}
@@ -177,7 +265,15 @@ export function FriendsHomeStrip() {
             transition: leave(0.3),
           }}
         >
-          {kind === "playing" ? <PlayingLine /> : <InviteLine hint={kind} />}
+          {kind === "playing" ? (
+            <PlayingLine />
+          ) : kind === "call" ? (
+            <CallLine />
+          ) : kind === "crew" ? (
+            <CrewLine />
+          ) : (
+            <InviteLine hint={kind} />
+          )}
         </motion.div>
       ) : null}
     </AnimatePresence>

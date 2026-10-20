@@ -831,10 +831,29 @@ export const commands = {
 	 *  out are in the implicit "Arkadaşlar"). Shown at once; saved in the background.
 	 */
 	socialGroupsSave: (groups: FriendGroup[], members: GroupMember[]) => typedError<null, CmdError>(__TAURI_INVOKE("social_groups_save", { groups, members })),
-	/**  Founds a team. `emblem` is one of the service's emblem names. */
-	socialTeamCreate: (name: string, tag: string, emblem: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_create", { name, tag, emblem })),
-	/**  Renames the team, changes its tag or emblem (founder); unset fields stay. */
-	socialTeamEdit: (name: string | null, tag: string | null, emblem: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_edit", { name, tag, emblem })),
+	/**
+	 *  Founds a crew. `emblem` is one of the service's emblem names; `color` and `frame` (and the
+	 *  motto) are its look, sent only to a service that offers looks.
+	 */
+	socialTeamCreate: (name: string, tag: string, emblem: string, color: string | null, frame: string | null, motto: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_create", { name, tag, emblem, color, frame, motto })),
+	/**
+	 *  Renames the crew, changes its tag, emblem, look or permissions (the leader; a moderator the
+	 *  look where the crew lets them); unset fields stay, `motto: ""` takes the motto away.
+	 */
+	socialTeamEdit: (name: string | null, tag: string | null, emblem: string | null, color: string | null, frame: string | null, motto: string | null, permissions: {
+	invite?: PermissionLevel | null,
+	call?: PermissionLevel | null,
+	kick?: PermissionLevel | null,
+	edit?: PermissionLevel | null,
+} | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_edit", { name, tag, emblem, color, frame, motto, permissions })),
+	/**  Makes a member a moderator, or a moderator a member again (leader). */
+	socialTeamModerator: (id: string, moderator: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_moderator", { id, moderator })),
+	/**  "Ekibi çağır". A wait (called too recently) and an open call are answers, not errors. */
+	socialTeamCall: () => typedError<CallOutcome, CmdError>(__TAURI_INVOKE("social_team_call")),
+	/**  "Geliyorum", "Birazdan" or "Gelemem" to a teammate's call. False: the call is gone. */
+	socialTeamCallAnswer: (call: string, answer: CallAnswer) => typedError<boolean, CmdError>(__TAURI_INVOKE("social_team_call_answer", { call, answer })),
+	/**  "Bitir": ends the player's own call. */
+	socialTeamCallEnd: (call: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_call_end", { call })),
 	/**  Ends the team for everyone (founder). */
 	socialTeamDisband: () => typedError<null, CmdError>(__TAURI_INVOKE("social_team_disband")),
 	socialTeamLeave: () => typedError<null, CmdError>(__TAURI_INVOKE("social_team_leave")),
@@ -1171,6 +1190,30 @@ export type BannerView = {
 	endsAt: string | null,
 };
 
+/**  An answer to a crew call: "Geliyorum", "Birazdan", "Gelemem". */
+export type CallAnswer = "yes" | "soon" | "no";
+
+export type CallAnswerView = {
+	id: string,
+	answer: CallAnswer,
+};
+
+/**
+ *  What a crew call asks: come to projects.gg, where the caller plays, or "are you ready?" (the
+ *  caller is in the launcher or elsewhere). It follows the caller's status. A kind this version
+ *  does not know reads as `Ready` (an answer, nothing to join).
+ */
+export type CallKind = "join" | "ready";
+
+/**  What "Ekibi çağır" led to. */
+export type CallOutcome = 
+/**  The crew is called (the call is in the view). */
+{ status: "called" } | 
+/**  Called too recently (every 5 minutes, 10 a day): again in this many seconds. */
+{ status: "wait"; seconds: number } | 
+/**  A call is open already (the player's own or a teammate's). */
+{ status: "active" };
+
 /**  A cape the profile owns. */
 export type Cape = {
 	id: string,
@@ -1445,6 +1488,33 @@ export type CrashView = {
 export type CreatedInstance = {
 	id: string,
 	name: string,
+};
+
+/**  "Ekibi çağır": an open crew call. */
+export type CrewCallView = {
+	id: string,
+	/**  The caller: a teammate, or the player (`mine`). */
+	from: string,
+	mine: boolean,
+	/**  The caller's name and picture as the crew shows them (None when not in the crew list). */
+	name: string | null,
+	avatar: string | null,
+	avatarUrl: string | null,
+	/**
+	 *  `join`: the caller plays on projects.gg ("Geliyorum" can join them); `ready`: "Hazır
+	 *  mısın?".
+	 */
+	kind: CallKind,
+	/**
+	 *  Unix seconds on this computer's clock (the service's times moved by the difference
+	 *  between the two clocks when the call arrived).
+	 */
+	startedAt: number,
+	endsAt: number,
+	/**  Who answered what, in the crew's order. */
+	answers: CallAnswerView[],
+	/**  The player's own answer (any of their devices). */
+	myAnswer: CallAnswer | null,
 };
 
 /**  A mod name and page from `modlist.html`, to show the user what is missing. */
@@ -3403,6 +3473,41 @@ export type PatternProblem =
  */
 "tooComplex";
 
+/**
+ *  Who may do something in a crew: the lowest role that may (every role above it may too).
+ *  A level this version does not know reads as `Leader`: the button stays away and the service
+ *  decides anyway.
+ */
+export type PermissionLevel = "members" | "moderators" | "leader";
+
+/**
+ *  A change of permissions (`PATCH /v1/teams/:id {"permissions": {…}}`, leader); unset rights
+ *  stay as they are.
+ */
+export type PermissionsEdit = PermissionsEdit_Serialize | PermissionsEdit_Deserialize;
+
+/**
+ *  A change of permissions (`PATCH /v1/teams/:id {"permissions": {…}}`, leader); unset rights
+ *  stay as they are.
+ */
+export type PermissionsEdit_Deserialize = {
+	invite?: PermissionLevel | null,
+	call?: PermissionLevel | null,
+	kick?: PermissionLevel | null,
+	edit?: PermissionLevel | null,
+};
+
+/**
+ *  A change of permissions (`PATCH /v1/teams/:id {"permissions": {…}}`, leader); unset rights
+ *  stay as they are.
+ */
+export type PermissionsEdit_Serialize = {
+	invite?: PermissionLevel | null,
+	call?: PermissionLevel | null,
+	kick?: PermissionLevel | null,
+	edit?: PermissionLevel | null,
+};
+
 /**  What the command bar shows (`prepare-status`, `prepare_status`). */
 export type PrepareStatusView = 
 /**  Nothing to show. */
@@ -4049,48 +4154,66 @@ export type SocialNotice = SocialNotice_Serialize | SocialNotice_Deserialize;
 /**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
 export type SocialNotice_Deserialize = 
 /**  A live invite (never while on do-not-disturb: those wait as quiet invites). */
-({ kind: "invite"; invite: InviteView_Deserialize }) & { friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "invite"; invite: InviteView_Deserialize }) & { call?: never; friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  Someone sent a friend request. */
-({ kind: "request"; request: RequestView }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; restore?: never } | 
+({ kind: "request"; request: RequestView }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; reason?: never; restore?: never } | 
 /**  A request was accepted (by them, or on another device): a new friend. */
-({ kind: "friendAdded"; friend: FriendView_Deserialize }) & { id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendAdded"; friend: FriendView_Deserialize }) & { call?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  A friend came online. */
-({ kind: "friendOnline"; id: string }) & { friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendOnline"; id: string }) & { call?: never; friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  A friend started playing on projects.gg. */
-({ kind: "friendOnProjects"; id: string }) & { friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendOnProjects"; id: string }) & { call?: never; friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  Signed in. `restore` is a settings backup saved by another computer, worth offering. */
-({ kind: "signedIn"; restore: SettingsMeta | null }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never } | 
+({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never } | 
 /**  A friend invited the player to their team (only while teams are on). */
-({ kind: "teamInvite"; invite: TeamInviteView }) & { friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  The founder removed the player from the team, or ended it. */
 ({ kind: "teamGone"; reason: TeamExit; 
 /**  The team's name, for the sentence. */
-name: string | null }) & { friend?: never; id?: never; invite?: never; request?: never; restore?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { friend?: never; id?: never; invite?: never; name?: never; request?: never; restore?: never } | 
+name: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; request?: never; restore?: never } | 
+/**
+ *  A teammate called the crew, live (never for the player's own call, on do-not-disturb or
+ *  for a call that is only new to this launcher).
+ */
+({ kind: "crewCall"; call: CrewCallView }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+/**  The caller of a call the player said "Geliyorum" or "Birazdan" to is on projects.gg now. */
+({ kind: "crewCallJoin"; call: CrewCallView }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+/**  A teammate (a friend or not) started playing on projects.gg. */
+({ kind: "crewmateOnProjects"; id: string }) & { call?: never; friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; request?: never; restore?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
-({ kind: "signedOutRemotely" }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never };
+({ kind: "signedOutRemotely" }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never };
 
 /**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
 export type SocialNotice_Serialize = 
 /**  A live invite (never while on do-not-disturb: those wait as quiet invites). */
-({ kind: "invite"; invite: InviteView_Serialize }) & { friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "invite"; invite: InviteView_Serialize }) & { call?: never; friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  Someone sent a friend request. */
-({ kind: "request"; request: RequestView }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; restore?: never } | 
+({ kind: "request"; request: RequestView }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; reason?: never; restore?: never } | 
 /**  A request was accepted (by them, or on another device): a new friend. */
-({ kind: "friendAdded"; friend: FriendView_Serialize }) & { id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendAdded"; friend: FriendView_Serialize }) & { call?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  A friend came online. */
-({ kind: "friendOnline"; id: string }) & { friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendOnline"; id: string }) & { call?: never; friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  A friend started playing on projects.gg. */
-({ kind: "friendOnProjects"; id: string }) & { friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendOnProjects"; id: string }) & { call?: never; friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  Signed in. `restore` is a settings backup saved by another computer, worth offering. */
-({ kind: "signedIn"; restore: SettingsMeta | null }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never } | 
+({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never } | 
 /**  A friend invited the player to their team (only while teams are on). */
-({ kind: "teamInvite"; invite: TeamInviteView }) & { friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  The founder removed the player from the team, or ended it. */
 ({ kind: "teamGone"; reason: TeamExit; 
 /**  The team's name, for the sentence. */
-name: string | null }) & { friend?: never; id?: never; invite?: never; request?: never; restore?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { friend?: never; id?: never; invite?: never; name?: never; request?: never; restore?: never } | 
+name: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; request?: never; restore?: never } | 
+/**
+ *  A teammate called the crew, live (never for the player's own call, on do-not-disturb or
+ *  for a call that is only new to this launcher).
+ */
+({ kind: "crewCall"; call: CrewCallView }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+/**  The caller of a call the player said "Geliyorum" or "Birazdan" to is on projects.gg now. */
+({ kind: "crewCallJoin"; call: CrewCallView }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+/**  A teammate (a friend or not) started playing on projects.gg. */
+({ kind: "crewmateOnProjects"; id: string }) & { call?: never; friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; request?: never; restore?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
-({ kind: "signedOutRemotely" }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never };
+({ kind: "signedOutRemotely" }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never };
 
 export type SocialView = SocialView_Serialize | SocialView_Deserialize;
 
@@ -4120,10 +4243,20 @@ export type SocialView_Deserialize = {
 	groups: FriendGroupsView | null,
 	/**  Teams are on (signed config `features.teams`) and the service offers them. */
 	teams: boolean,
+	/**
+	 *  What the service offers of crews beyond the first version (`look`, `calls`, …; only
+	 *  while `teams`). The launcher uses each part only while it is listed.
+	 */
+	teamFeatures: string[],
 	/**  The player's team (only while `teams`). */
 	team: TeamView_Deserialize | null,
 	/**  Invites to teams, newest first (only while `teams`). */
 	teamInvites: TeamInviteView[],
+	/**
+	 *  Open crew calls the player sees, their own included (only while `teams` and the service
+	 *  offers calls). They end by themselves at `endsAt`: the launcher hides them then.
+	 */
+	calls: CrewCallView[],
 };
 
 export type SocialView_Serialize = {
@@ -4152,10 +4285,20 @@ export type SocialView_Serialize = {
 	groups: FriendGroupsView | null,
 	/**  Teams are on (signed config `features.teams`) and the service offers them. */
 	teams: boolean,
+	/**
+	 *  What the service offers of crews beyond the first version (`look`, `calls`, …; only
+	 *  while `teams`). The launcher uses each part only while it is listed.
+	 */
+	teamFeatures: string[],
 	/**  The player's team (only while `teams`). */
 	team: TeamView_Serialize | null,
 	/**  Invites to teams, newest first (only while `teams`). */
 	teamInvites: TeamInviteView[],
+	/**
+	 *  Open crew calls the player sees, their own included (only while `teams` and the service
+	 *  offers calls). They end by themselves at `endsAt`: the launcher hides them then.
+	 */
+	calls: CrewCallView[],
 };
 
 /**  The launcher a source belongs to. Names are brand names: the UI shows them as they are. */
@@ -4369,6 +4512,9 @@ export type TeamInviteView = {
 	name: string,
 	tag: string,
 	emblem: string,
+	color: string,
+	frame: string,
+	motto: string,
 	/**  How many are in the team. */
 	members: number,
 	/**  The friend who invited. */
@@ -4383,9 +4529,12 @@ export type TeamLookupView = {
 	name: string,
 	tag: string,
 	emblem: string,
+	color: string,
+	frame: string,
+	motto: string,
 	members: number,
 	relation: TeamRelation,
-	/**  `TKM-XXXX-XXXX`, for joining. */
+	/**  `EKP-XXXX-XXXX`, for joining. */
 	code: string,
 };
 
@@ -4398,6 +4547,8 @@ export type TeamMemberView_Deserialize = {
 	avatar: string,
 	avatarUrl: string | null,
 	role: TeamRole,
+	/**  A moderator (never the leader). */
+	moderator: boolean,
 	/**  The player themself. */
 	me: boolean,
 	/**  Also on the friend list. */
@@ -4420,6 +4571,8 @@ export type TeamMemberView_Serialize = {
 	avatar: string,
 	avatarUrl: string | null,
 	role: TeamRole,
+	/**  A moderator (never the leader). */
+	moderator: boolean,
 	/**  The player themself. */
 	me: boolean,
 	/**  Also on the friend list. */
@@ -4435,6 +4588,24 @@ export type TeamMemberView_Serialize = {
 	joinedAt: number,
 };
 
+/**
+ *  A crew's permissions (a service with [`TEAM_FEATURE_ROLES`]). A service without them sends
+ *  none: everyone invites (and would call), only the leader removes and edits.
+ */
+export type TeamPermissions = {
+	/**  Invite friends to the crew (`members`, `moderators` or `leader`). */
+	invite?: PermissionLevel,
+	/**  "Ekibi çağır" (`members`, `moderators` or `leader`). */
+	call?: PermissionLevel,
+	/**  Remove plain members (`moderators` or `leader`; the code is renewed with it). */
+	kick?: PermissionLevel,
+	/**
+	 *  Edit the emblem, colour, frame and motto (`moderators` or `leader`; the name and the tag
+	 *  are always the leader's).
+	 */
+	edit?: PermissionLevel,
+};
+
 /**  How a team code relates to the player. */
 export type TeamRelation = "none" | 
 /**  Already in this team. */
@@ -4446,8 +4617,15 @@ export type TeamRelation = "none" |
 /**  No room left. */
 "full";
 
+/**
+ *  The wire keeps the first names: players see "Lider" (leader) for `founder`. A role this
+ *  version does not know reads as `Member`, so a newer service never breaks the friend list.
+ */
 export type TeamRole = 
-/**  Edits the team, renews its code, removes members, hands the role on, disbands it. */
+/**
+ *  The leader: edits the crew, renews its code, removes members, hands the role on,
+ *  disbands it.
+ */
 "founder" | 
 /**  Invites friends, may leave. */
 "member";
@@ -4460,12 +4638,25 @@ export type TeamView_Deserialize = {
 	tag: string,
 	/**  `sword`, `shield`, … (the launcher draws a bundled icon). */
 	emblem: string,
-	/**  `TKM-XXXX-XXXX` */
+	/**  A key of the crew palette (`gold` from a service without looks). */
+	color: string,
+	/**  `cut`, `shield`, `banner` or `hex` (`cut` from a service without looks). */
+	frame: string,
+	/**  Empty when there is none. */
+	motto: string,
+	/**  `EKP-XXXX-XXXX` */
 	code: string,
 	/**  `YYYY-MM-DD` */
 	createdOn: string,
 	/**  The player's own role. */
 	role: TeamRole,
+	/**  The player is one of the crew's moderators. */
+	moderator: boolean,
+	/**
+	 *  Who may invite, call, remove and edit (defaults from a service without roles: everyone
+	 *  invites, only the leader removes and edits).
+	 */
+	permissions: TeamPermissions,
 	/**  Founder first, then by joining time; the player is among them. */
 	members: TeamMemberView_Deserialize[],
 	/**  Friends the player invited who have not answered yet. */
@@ -4480,12 +4671,25 @@ export type TeamView_Serialize = {
 	tag: string,
 	/**  `sword`, `shield`, … (the launcher draws a bundled icon). */
 	emblem: string,
-	/**  `TKM-XXXX-XXXX` */
+	/**  A key of the crew palette (`gold` from a service without looks). */
+	color: string,
+	/**  `cut`, `shield`, `banner` or `hex` (`cut` from a service without looks). */
+	frame: string,
+	/**  Empty when there is none. */
+	motto: string,
+	/**  `EKP-XXXX-XXXX` */
 	code: string,
 	/**  `YYYY-MM-DD` */
 	createdOn: string,
 	/**  The player's own role. */
 	role: TeamRole,
+	/**  The player is one of the crew's moderators. */
+	moderator: boolean,
+	/**
+	 *  Who may invite, call, remove and edit (defaults from a service without roles: everyone
+	 *  invites, only the leader removes and edits).
+	 */
+	permissions: TeamPermissions,
 	/**  Founder first, then by joining time; the player is among them. */
 	members: TeamMemberView_Serialize[],
 	/**  Friends the player invited who have not answered yet. */

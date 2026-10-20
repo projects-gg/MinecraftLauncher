@@ -9,8 +9,9 @@ use std::sync::Arc;
 use pl_lang::pick;
 use pl_mc::launch::{GameEvent, QuickPlay};
 use pl_social::{
-    FriendGroup, GroupMember, InviteResult, LookupView, ProfileUpdate, SendOutcome, SessionInfo,
-    SettingsMeta, SocialService, SocialUpdate, SocialView, StatusMode, TeamEdit, TeamLookupView,
+    CallAnswer, CallOutcome, FriendGroup, GroupMember, InviteResult, LookupView, PermissionsEdit,
+    ProfileUpdate, SendOutcome, SessionInfo, SettingsMeta, SocialError, SocialService,
+    SocialUpdate, SocialView, StatusMode, TeamEdit, TeamLook, TeamLookupView,
 };
 use tauri::{AppHandle, Emitter, State};
 
@@ -382,7 +383,8 @@ pub async fn social_groups_save(
     Ok(state.social.save_groups(groups, members).await?)
 }
 
-/// Founds a team. `emblem` is one of the service's emblem names.
+/// Founds a crew. `emblem` is one of the service's emblem names; `color` and `frame` (and the
+/// motto) are its look, sent only to a service that offers looks.
 #[tauri::command]
 #[specta::specta]
 pub async fn social_team_create(
@@ -390,23 +392,95 @@ pub async fn social_team_create(
     name: String,
     tag: String,
     emblem: String,
+    color: Option<String>,
+    frame: Option<String>,
+    motto: Option<String>,
 ) -> CmdResult<()> {
-    Ok(state.social.create_team(&name, &tag, &emblem).await?)
+    let look = match (color, frame) {
+        (Some(color), Some(frame)) => Some(TeamLook {
+            color,
+            frame,
+            motto: motto.unwrap_or_default(),
+        }),
+        _ => None,
+    };
+    Ok(state.social.create_team(&name, &tag, &emblem, look).await?)
 }
 
-/// Renames the team, changes its tag or emblem (founder); unset fields stay.
+/// Renames the crew, changes its tag, emblem, look or permissions (the leader; a moderator the
+/// look where the crew lets them); unset fields stay, `motto: ""` takes the motto away.
 #[tauri::command]
 #[specta::specta]
+#[allow(clippy::too_many_arguments)]
 pub async fn social_team_edit(
     state: State<'_, AppState>,
     name: Option<String>,
     tag: Option<String>,
     emblem: Option<String>,
+    color: Option<String>,
+    frame: Option<String>,
+    motto: Option<String>,
+    permissions: Option<PermissionsEdit>,
 ) -> CmdResult<()> {
-    Ok(state
-        .social
-        .edit_team(TeamEdit { name, tag, emblem })
-        .await?)
+    let edit = TeamEdit {
+        name,
+        tag,
+        emblem,
+        color,
+        frame,
+        motto,
+        permissions,
+    };
+    let text = edit.changes_text();
+    match state.social.edit_team(edit).await {
+        // A crew's name, tag and motto change at most 10 times a day: the service says so with a
+        // plain "too often", which reads better as the rule itself.
+        Err(error @ SocialError::RateLimited { .. }) if text => Err(crate::error::CmdError::new(
+            "SOSYAL-EKIP-METIN",
+            pick(
+                "Ekibin adı, etiketi ve sloganı günde en çok 10 kez değişebilir. Yarın yeniden dene.",
+                "A crew's name, tag and motto can change 10 times a day. Try again tomorrow.",
+            ),
+            error.to_string(),
+        )),
+        other => Ok(other?),
+    }
+}
+
+/// Makes a member a moderator, or a moderator a member again (leader).
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_moderator(
+    state: State<'_, AppState>,
+    id: String,
+    moderator: bool,
+) -> CmdResult<()> {
+    Ok(state.social.set_team_moderator(&id, moderator).await?)
+}
+
+/// "Ekibi çağır". A wait (called too recently) and an open call are answers, not errors.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_call(state: State<'_, AppState>) -> CmdResult<CallOutcome> {
+    Ok(state.social.call_crew().await?)
+}
+
+/// "Geliyorum", "Birazdan" or "Gelemem" to a teammate's call. False: the call is gone.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_call_answer(
+    state: State<'_, AppState>,
+    call: String,
+    answer: CallAnswer,
+) -> CmdResult<bool> {
+    Ok(state.social.answer_call(&call, answer).await?)
+}
+
+/// "Bitir": ends the player's own call.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_call_end(state: State<'_, AppState>, call: String) -> CmdResult<()> {
+    Ok(state.social.end_call(&call).await?)
 }
 
 /// Ends the team for everyone (founder).

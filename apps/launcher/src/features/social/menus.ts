@@ -129,25 +129,55 @@ export function friendMenu(input: FriendInput): Plan<FriendAction> {
 
 // --- a teammate's row --------------------------------------------------------------------------------
 
-export type MemberAction = "join" | "message" | "makeFounder" | "remove" | "block" | "unblock";
+export type MemberAction =
+  | "join"
+  | "message"
+  | "makeModerator"
+  | "unmakeModerator"
+  | "makeFounder"
+  | "remove"
+  | "block"
+  | "unblock";
 
 export interface MemberInput {
   /** They are on projects.gg ("Katıl"). */
   joinable: boolean;
   gameBusy: boolean;
-  /** The player founded the team: hands the role on, removes. */
+  /** The player leads the crew: hands the role on, names moderators, removes. */
   founder: boolean;
   /** The player blocked them (they see each other offline). */
   blocked: boolean;
+  /** The service has moderators (`teamFeatures: roles`). */
+  roles?: boolean;
+  /** They are a moderator. */
+  moderator?: boolean;
+  /** The crew is at its moderators' limit (4): no one more can be named. */
+  moderatorsFull?: boolean;
+  /** The player may remove them (the leader anyone, a moderator plain members). */
+  removable?: boolean;
+}
+
+/** The rows of one group that apply (a `null` in a plan is a separator, never a missing row). */
+function only<A extends string>(...rows: Array<Row<A> | false>): Array<Row<A>> {
+  return rows.filter((row): row is Row<A> => row !== false);
 }
 
 export function memberMenu(input: MemberInput): Plan<MemberAction> {
+  const naming = input.founder && input.roles;
   return tidy<MemberAction>([
-    input.joinable && !input.blocked ? { action: "join", disabled: input.gameBusy } : null,
-    { action: "message" },
+    ...only<MemberAction>(
+      input.joinable && !input.blocked && { action: "join", disabled: input.gameBusy },
+      { action: "message" },
+    ),
     null,
-    input.founder ? { action: "makeFounder" } : null,
-    input.founder ? { action: "remove" } : null,
+    ...only<MemberAction>(
+      Boolean(naming) &&
+        (input.moderator
+          ? { action: "unmakeModerator" }
+          : { action: "makeModerator", disabled: Boolean(input.moderatorsFull) }),
+      input.founder && { action: "makeFounder" },
+      (input.removable ?? input.founder) && { action: "remove" },
+    ),
     null,
     { action: input.blocked ? "unblock" : "block" },
   ]);
@@ -181,24 +211,67 @@ export function categoryMenu(input: CategoryInput): Plan<CategoryAction> {
 
 // --- the team's header ------------------------------------------------------------------------------
 
-export type TeamAction = "open" | "toggle" | "copyCode" | "invite" | "edit" | Leaving;
+export type TeamAction = "open" | "toggle" | "call" | "copyCode" | "invite" | "edit" | Leaving;
 
 export interface TeamInput {
   team: Pick<SocialTeam, "role" | "members" | "invited" | "limit">;
   /** Friends who are not in the team yet (invited or not). */
   friendsOutside: number;
+  /**
+   * "Ekibi çağır": offered (and waiting out its five minutes, or not) or not at all (no calls on
+   * the service, no right to call, or a call is on already). Older callers leave it out.
+   */
+  call?: "ready" | "waiting" | "hidden";
+  /** The player may invite (the crew's permissions; everyone on a service without roles). */
+  canInvite?: boolean;
+  /** The player may edit the crew (the leader; a moderator the look where the crew lets them). */
+  canEdit?: boolean;
 }
 
-export function teamMenu({ team, friendsOutside }: TeamInput): Plan<TeamAction> {
+export function teamMenu({
+  team,
+  friendsOutside,
+  call = "hidden",
+  canInvite = true,
+  canEdit,
+}: TeamInput): Plan<TeamAction> {
   const full = team.members.length >= team.limit;
   return tidy<TeamAction>([
     { action: "open" },
     { action: "toggle" },
     null,
-    { action: "copyCode" },
-    { action: "invite", disabled: full || friendsOutside === 0 },
-    team.role === "founder" ? { action: "edit" } : null,
+    ...only<TeamAction>(
+      call !== "hidden" && { action: "call", disabled: call === "waiting" },
+      { action: "copyCode" },
+      canInvite && { action: "invite", disabled: full || friendsOutside === 0 },
+      (canEdit ?? team.role === "founder") && { action: "edit" },
+    ),
     null,
     { action: leavingOf(team) },
+  ]);
+}
+
+// --- a crew call's row --------------------------------------------------------------------------
+
+export type CallAction = "yes" | "soon" | "no" | "join" | "open";
+
+export interface CallInput {
+  /** The caller plays on projects.gg ("Katıl"). */
+  joinable: boolean;
+  gameBusy: boolean;
+  /** The player's answer so far (shown with a check). */
+  answer?: "yes" | "soon" | "no";
+}
+
+/** A teammate's call in the list: the three answers, joining the caller, the crew page. */
+export function callMenu(input: CallInput): Plan<CallAction> {
+  return tidy<CallAction>([
+    { action: "yes", checked: input.answer === "yes" },
+    { action: "soon", checked: input.answer === "soon" },
+    { action: "no", checked: input.answer === "no" },
+    null,
+    ...only<CallAction>(input.joinable && { action: "join", disabled: input.gameBusy }, {
+      action: "open",
+    }),
   ]);
 }

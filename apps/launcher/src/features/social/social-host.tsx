@@ -1,6 +1,6 @@
 // Everything the friends feature runs in the background, mounted once with the main window's
 // title bar: the snapshot subscription, notices (toasts and, while the launcher is not in front,
-// system notifications), the settings backup and the new-computer question.
+// system notifications), the crew calls' clock, the settings backup and the new-computer question.
 import { Button, Dialog, toast } from "@pl/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,8 +11,10 @@ import { formatRelative } from "@/lib/format";
 import i18n from "@/lib/i18n";
 import { usePrefs } from "@/stores/prefs";
 import { attempt, notifyOutside } from "./actions";
+import { callSentence, showCallToast } from "./crew-call";
 import { FriendsSheet } from "./friends-sheet";
 import { showInviteToast } from "./invite-toast";
+import { joinProjects } from "./join";
 import { JoinDialog } from "./join-dialog";
 import {
   BACKUP_PREFS,
@@ -24,9 +26,45 @@ import {
   wantsNotice,
 } from "./model";
 import { useSocialPrefs, useSocialUi } from "./store";
+import { useCallTicker } from "./use-call-clock";
 
 /** A friend coming online or joining projects.gg notifies at most this often. */
 const FRIEND_NOTICE_GAP_MS = 10 * 60_000;
+/** Crewmates joining Projects within this long are told together ("Ayşe ve 2 ekip arkadaşın"). */
+const CREW_GATHER_MS = 5_000;
+
+const crewThrottle = new NoticeThrottle(FRIEND_NOTICE_GAP_MS);
+/** Crewmates who joined Projects while the gathering window is open, and its timer. */
+const crewArrivals: { ids: string[]; timer: number | null } = { ids: [], timer: null };
+
+function crewmateName(id: string): string | null {
+  return useSocialUi.getState().view.team?.members.find((m) => m.id === id)?.name ?? null;
+}
+
+/** "Ayşe Projects'e girdi" (or "Ayşe ve 2 ekip arkadaşın…"), gathered over 5 s, with "Katıl". */
+function showCrewArrival(id: string) {
+  if (!crewThrottle.allow(`crew:${id}`, Date.now())) return;
+  if (!crewArrivals.ids.includes(id)) crewArrivals.ids.push(id);
+  if (crewArrivals.timer !== null) return;
+  crewArrivals.timer = window.setTimeout(() => {
+    const ids = crewArrivals.ids.filter((one) => crewmateName(one));
+    crewArrivals.ids = [];
+    crewArrivals.timer = null;
+    const first = ids[0];
+    if (!first) return;
+    const name = crewmateName(first) ?? "";
+    const text =
+      ids.length > 1
+        ? i18n.t("teams.notify.crewJoinedMany", { name, count: ids.length - 1 })
+        : i18n.t("teams.notify.crewJoined", { name });
+    void notifyOutside(text).then((sent) => {
+      if (sent) return;
+      toast(text, {
+        action: { label: i18n.t("social.actions.join"), onClick: () => void joinProjects() },
+      });
+    });
+  }, CREW_GATHER_MS);
+}
 /** Preference changes are gathered for a while before one upload (60 writes a day at most). */
 const BACKUP_DEBOUNCE_MS = 3 * 60_000;
 const BACKUP_FIRST_CHECK_MS = 20_000;
@@ -138,6 +176,28 @@ function handleNotice(notice: SocialNotice) {
       });
       break;
     }
+    case "crewCall": {
+      const team = useSocialUi.getState().view.team;
+      const text = callSentence(notice.call, team, i18n.t);
+      void notifyOutside(text);
+      announce(text);
+      // The open panel shows it already, with its answers (the crew page and the list).
+      if (!callInView()) showCallToast(notice.call);
+      break;
+    }
+    case "crewCallJoin": {
+      const team = useSocialUi.getState().view.team;
+      const name =
+        team?.members.find((m) => m.id === notice.call.from)?.name ?? notice.call.name ?? "";
+      const text = i18n.t("teams.call.arrived", { name });
+      showCallToast(notice.call, true);
+      void notifyOutside(text);
+      announce(text);
+      break;
+    }
+    case "crewmateOnProjects":
+      showCrewArrival(notice.id);
+      break;
     case "teamGone": {
       const name = notice.name;
       const text =
@@ -158,6 +218,12 @@ function handleNotice(notice: SocialNotice) {
 function listInView(): boolean {
   const ui = useSocialUi.getState();
   return ui.open && ui.page === "list";
+}
+
+/** A crew call is on screen: the panel is open on the list or the crew page. */
+function callInView(): boolean {
+  const ui = useSocialUi.getState();
+  return ui.open && (ui.page === "list" || ui.page === "team");
 }
 
 /** Set by the mounted restore dialog: opens it with a backup's details. */
@@ -192,6 +258,8 @@ function currentBackup() {
     notifyFavoriteOnline: social.notifyFavoriteOnline,
     notifyFavoriteProjects: social.notifyFavoriteProjects,
     onlineAlerts: social.onlineAlerts,
+    notifyCrewCalls: social.notifyCrewCalls,
+    notifyCrewProjects: social.notifyCrewProjects,
   });
 }
 
@@ -234,7 +302,9 @@ function useBackupSync() {
         now.favorites !== before.favorites ||
         now.notifyFavoriteOnline !== before.notifyFavoriteOnline ||
         now.notifyFavoriteProjects !== before.notifyFavoriteProjects ||
-        now.onlineAlerts !== before.onlineAlerts
+        now.onlineAlerts !== before.onlineAlerts ||
+        now.notifyCrewCalls !== before.notifyCrewCalls ||
+        now.notifyCrewProjects !== before.notifyCrewProjects
       ) {
         schedule(BACKUP_DEBOUNCE_MS);
       }
@@ -287,6 +357,12 @@ function RestoreDialog() {
         social.set("notifyFavoriteProjects", read.friends.notifyFavoriteProjects);
       }
       if (read.friends.onlineAlerts) social.set("onlineAlerts", read.friends.onlineAlerts);
+      if (read.friends.notifyCrewCalls !== undefined) {
+        social.set("notifyCrewCalls", read.friends.notifyCrewCalls);
+      }
+      if (read.friends.notifyCrewProjects !== undefined) {
+        social.set("notifyCrewProjects", read.friends.notifyCrewProjects);
+      }
       // What came down is what is stored: no upload needed until something changes.
       useSocialPrefs.getState().set("backupFingerprint", backupFingerprint(currentBackup()));
       toast.success(t("social.restore.applied"));
@@ -331,6 +407,7 @@ function RestoreDialog() {
 export function SocialHost() {
   useSocialSync();
   useBackupSync();
+  useCallTicker();
   return (
     <>
       <FriendsSheet />
