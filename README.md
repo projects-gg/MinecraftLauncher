@@ -47,7 +47,6 @@ launchers update themselves in the background.
 
 ```
 apps/launcher     Tauri 2 app: React UI (src) + Rust shell (src-tauri)
-apps/studio       Projects Studio: publishes news, home, packs, AFK client and launcher releases
 crates/pl-net     HTTP + parallel verified downloads
 crates/pl-mc      Minecraft: versions, install, Java, launch, instances, loaders, mods, Modrinth, modpacks
 crates/pl-auth    Microsoft + offline accounts, keychain secrets, skins
@@ -57,18 +56,19 @@ crates/pl-discord Discord Rich Presence
 crates/pl-data    Data folder: usage, cleanup policy, support bundles, logs, moving the folder
 crates/pl-desktop Desktop integration: projects:// links, desktop shortcuts and their icons
 crates/pl-social  Client for the optional friends service (HTTP API, presence WebSocket)
-crates/pl-team    Client for the Studio team gate (Discord sign-in, invites, staff proposals)
-services/social   Friends service: Cloudflare Worker, D1 and a presence Durable Object
-services/studio-team  Studio team gate: Cloudflare Worker, D1 and a private R2 bucket
 packages/ui       Shared design system
 docs/             Content format specification
 ```
 
+Projects Studio (the team's publishing tool) and the online services the launcher talks to (the
+friends service, the Studio team gate) are developed in a separate repository that uses this one
+as a submodule. Nothing from it is built into the launcher.
+
 The signed content tree that Studio publishes and the launcher reads is specified in
 [`docs/content-format.md`](docs/content-format.md); its JSON examples are checked by the tests.
 
-Conventions: crates never depend on Tauri; the app crates expose typed commands
-(tauri-specta generates `apps/*/src/bindings.ts`, regenerate with
+Conventions: crates never depend on Tauri; the app crate exposes typed commands
+(tauri-specta generates `apps/launcher/src/bindings.ts`, regenerate with
 `cargo run -p projects-launcher --features export-bindings --bin export-bindings`; the feature keeps
 the tool out of the installers). Runtime secrets live in the OS keychain,
 never in files or in the repository. User-facing text is Turkish; code, comments, commit messages
@@ -82,7 +82,6 @@ Requirements: Rust stable (see `rust-toolchain.toml`), Node 22+, pnpm 10, and th
 ```sh
 pnpm install
 pnpm --filter @pl/launcher tauri dev     # launcher with hot reload
-pnpm --filter @pl/studio tauri dev       # Projects Studio
 pnpm --filter @pl/launcher dev           # UI only, in a browser with mock data
 cargo test --workspace                   # Rust tests
 pnpm lint && pnpm typecheck              # Biome + TypeScript

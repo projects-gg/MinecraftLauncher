@@ -1,6 +1,6 @@
-//! Client for the Projects Launcher friends service (`services/social`): Discord sign-in,
-//! friends, blocks, privacy, friend categories, teams, settings backup and the presence
-//! WebSocket.
+//! Client for the Projects Launcher friends service (`services/social` in the Studio
+//! repository): Discord sign-in, friends, blocks, privacy, friend categories, teams, settings
+//! backup and the presence WebSocket.
 //!
 //! Two layers:
 //! - [`SocialClient`] / [`Session`] / [`PresenceHandle`]: the HTTP API and the presence socket,

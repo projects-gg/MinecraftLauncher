@@ -8,7 +8,6 @@
   "scripts": {
     "dev": "pnpm --filter @pl/launcher tauri dev",
     "dev:web": "pnpm --filter @pl/launcher dev",
-    "dev:studio": "pnpm --filter @pl/studio tauri dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",

@@ -205,7 +205,10 @@ describe("wantsNotice", () => {
   });
 });
 
-/** The service's own rule (services/social/src/settings.ts): it refuses these key words. */
+/**
+ * The service's own rule (services/social/src/settings.ts in the Studio repository): it refuses
+ * these key words.
+ */
 const DENY = new Set([
   "password",
   "passwords",

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "apps/launcher/src-tauri", "apps/studio/src-tauri"]
+members = ["crates/*", "apps/launcher/src-tauri"]
 
 [workspace.package]
 version = "2.0.0"
@@ -22,7 +22,6 @@ pl-discord = { path = "crates/pl-discord" }
 pl-data = { path = "crates/pl-data" }
 pl-social = { path = "crates/pl-social" }
 pl-desktop = { path = "crates/pl-desktop" }
-pl-team = { path = "crates/pl-team" }
 pl-lang = { path = "crates/pl-lang" }
 pl-import = { path = "crates/pl-import" }
 

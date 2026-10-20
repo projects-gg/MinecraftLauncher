@@ -1,13 +1,13 @@
-//! Integration tests against a local `wrangler dev` of services/social with its fake Discord.
-//! Never point these at the production service.
+//! Integration tests against a local `wrangler dev` of the friends service (`services/social` in
+//! the Studio repository) with its fake Discord. Never point these at the production service.
 //!
 //! ```sh
-//! cd services/social
+//! cd services/social   # in the Studio repository
 //! cp .dev.vars.example .dev.vars
 //! pnpm db:migrate:local
 //! pnpm dev:discord     # fake Discord on 127.0.0.1:8798
 //! pnpm dev             # Worker on 127.0.0.1:8797
-//! cargo test -p pl-social --test live -- --ignored --test-threads=1
+//! cargo test -p pl-social --test live -- --ignored --test-threads=1   # here
 //! ```
 //!
 //! `PL_SOCIAL_URL` overrides the service URL (default `http://127.0.0.1:8797/`).

@@ -1,7 +1,6 @@
 # Builds Projects Launcher for Windows, macOS (universal) and Linux, attaches the bundles and
 # latest.json to a DRAFT GitHub release, and (when the R2 secrets exist) publishes them to
 # https://cdn.projects.gg/v1/releases/<version>/ plus the beta channel file.
-# Projects Studio is built alongside and kept as workflow artifacts (it is not for players).
 # Secrets: TAURI_SIGNING_PRIVATE_KEY (required), R2_* (CDN publish), SIGNPATH_* and APPLE_* (code signing).
 
 name: Release
@@ -509,55 +508,3 @@ jobs:
         run: >-
           node scripts/release/publish-r2.mjs publish --dir release-files --version "$VERSION"
           --channel "$CHANNEL" --notes-file notes/notes.md --require "$REQUIRED_PLATFORMS"
-
-  studio:
-    name: Studio (${{ matrix.key }})
-    needs: prepare
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: windows-latest, key: windows, args: "", targets: "" }
-          - os: macos-latest
-            key: macos
-            args: --target universal-apple-darwin
-            targets: aarch64-apple-darwin,x86_64-apple-darwin
-          - { os: ubuntu-22.04, key: linux, args: "", targets: "" }
-    env:
-      VERSION: ${{ needs.prepare.outputs.version }}
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: ./.github/actions/setup-node-pnpm
-
-      - uses: ./.github/actions/setup-rust
-        with:
-          targets: ${{ matrix.targets }}
-          cache: "false"
-
-      - name: Stamp the version
-        run: node scripts/release/set-version.mjs "$VERSION"
-
-      # Studio is for the team only: no updater, no public release; the installers stay on the
-      # workflow run as artifacts (Actions > this run > Artifacts).
-      - name: Build
-        id: tauri
-        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # v1.0.0
-        with:
-          projectPath: apps/studio
-          args: ${{ matrix.args }}
-          uploadWorkflowArtifacts: true
-          workflowArtifactNamePattern: studio-[platform]-[arch]-[bundle]
-
-      - name: Check the macOS bundle versions
-        if: runner.os == 'macOS'
-        env:
-          ARTIFACT_PATHS: ${{ steps.tauri.outputs.artifactPaths }}
-        run: node scripts/release/check-mac-bundle.mjs --version "$VERSION"

@@ -57,15 +57,13 @@ jobs:
 
       - uses: ./.github/actions/setup-rust
 
-      # tauri::generate_context!() embeds `frontendDist` at compile time, so the app crates only
-      # compile when the folder exists. Lints and tests do not need the real UI build.
-      - name: Placeholder frontend builds
+      # tauri::generate_context!() embeds `frontendDist` at compile time, so the app crate only
+      # compiles when the folder exists. Lints and tests do not need the real UI build.
+      - name: Placeholder frontend build
         shell: bash
         run: |
-          for app in launcher studio; do
-            mkdir -p "apps/$app/dist"
-            [ -f "apps/$app/dist/index.html" ] || echo '<!doctype html><title>ci</title>' > "apps/$app/dist/index.html"
-          done
+          mkdir -p apps/launcher/dist
+          [ -f apps/launcher/dist/index.html ] || echo '<!doctype html><title>ci</title>' > apps/launcher/dist/index.html
 
       - name: Format
         run: cargo fmt --all --check

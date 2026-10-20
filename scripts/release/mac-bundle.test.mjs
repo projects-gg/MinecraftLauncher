@@ -15,7 +15,7 @@ import { macBundleVersion } from "./lib.mjs";
 const run = promisify(execFile);
 const here = fileURLToPath(new URL(".", import.meta.url));
 const root = fileURLToPath(new URL("../../", import.meta.url));
-const configs = ["launcher", "studio"].map((app) => `apps/${app}/src-tauri/tauri.conf.json`);
+const configs = ["launcher"].map((app) => `apps/${app}/src-tauri/tauri.conf.json`);
 
 function workspaceVersion() {
   const cargo = readFileSync(join(root, "Cargo.toml"), "utf8");
@@ -36,7 +36,7 @@ test("the committed Tauri configs carry the workspace version's bundle version",
   }
 });
 
-test("set-version.mjs stamps the macOS bundle version of both apps", async () => {
+test("set-version.mjs stamps the launcher's macOS bundle version", async () => {
   const before = configs.map((path) => readFileSync(join(root, path), "utf8"));
   const { stdout } = await run(process.execPath, [
     join(here, "set-version.mjs"),

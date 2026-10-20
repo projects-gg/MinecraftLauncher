@@ -40,12 +40,13 @@ graphify-out/
 /AGENTS.md
 /CLAUDE.local.md
 
-# Cloudflare Workers local state and local secrets (services/social)
+# Cloudflare Workers local state and local secrets (the Workers now live in the Studio
+# repository; kept so a stale local copy never gets committed here)
 .wrangler/
 .dev.vars
 
 # Internal development notes stay on the maintainers' machines. The content format spec stays
-# tracked: pl-content and Studio tests check its JSON examples.
+# tracked: pl-content tests (and Studio's, in its own repository) check its JSON examples.
 /CLAUDE.md
 /todo.md
 /docs/*

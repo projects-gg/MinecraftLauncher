@@ -1,4 +1,4 @@
-"""Generate the branded NSIS installer bitmaps for Projects Launcher and Projects Studio.
+"""Generate the branded NSIS installer bitmaps for Projects Launcher.
 
 Usage (from the repo root, after `pnpm install` so the Tektur font is available):
 
@@ -8,8 +8,9 @@ Writes 24-bit BMP files (the only format NSIS accepts):
 
     apps/launcher/src-tauri/nsis/header.bmp    150x57   inner pages (MUI header image)
     apps/launcher/src-tauri/nsis/sidebar.bmp   164x314  welcome / finish pages
-    apps/studio/src-tauri/nsis/header.bmp
-    apps/studio/src-tauri/nsis/sidebar.bmp
+
+`header(name)` and `sidebar(name)` draw the same art for another app name; the Projects Studio
+repository imports them for its installer.
 
 Sources: assets/brand/ProjectsLogo.png (dragon emblem) and assets/brand/ProjectsLogoLong.png
 (PROJECTS.GG wordmark). Colors follow docs/design.md (obsidian + gold, ember shadows).
@@ -165,7 +166,6 @@ def main() -> None:
 
     apps = {
         "launcher": {"header": header("Launcher"), "sidebar": sidebar(None)},
-        "studio": {"header": header("Studio"), "sidebar": sidebar("Studio")},
     }
     for app, images in apps.items():
         for name, img in images.items():

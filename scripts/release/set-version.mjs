@@ -2,9 +2,9 @@
 // Stamps the release version into the working tree before a CI build (never committed).
 // The tag is the single source of the version (todo.md §0): this writes it to
 // `[workspace.package] version` in Cargo.toml (Rust crates, Tauri bundles, updater) and to the
-// app package.json files, and its numeric macOS bundle version (CFBundleVersion; macBundleVersion
-// in lib.mjs) to `bundle.macOS.bundleVersion` in both apps' tauri.conf.json. A local macOS build
-// of another version than the committed one runs this first, too.
+// launcher's package.json, and its numeric macOS bundle version (CFBundleVersion; macBundleVersion
+// in lib.mjs) to `bundle.macOS.bundleVersion` in the launcher's tauri.conf.json. A local macOS
+// build of another version than the committed one runs this first, too.
 //
 //   node scripts/release/set-version.mjs 2.1.0 [--dry-run]
 
@@ -43,7 +43,7 @@ run(async () => {
 
   // Everything is worked out before the first write, so a failure leaves the tree untouched.
   const writes = [[cargoPath, nextCargo, version]];
-  for (const app of ["launcher", "studio"]) {
+  for (const app of ["launcher"]) {
     const path = `${root}apps/${app}/package.json`;
     const pkg = JSON.parse(readFileSync(path, "utf8"));
     pkg.version = version;

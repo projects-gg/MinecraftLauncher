@@ -9,7 +9,8 @@
 ; yeniden tanımladığı için derlemede "set multiple times" uyarısı çıkar; beklenen bir durumdur.
 ;
 ; {{product_name}} kurulum sırasında uygulama adıyla değiştirilir, silmeyin.
-; Projects Studio'daki kopyası: apps/studio/src-tauri/nsis/Turkish.nsh (iki dosya birlikte güncellenir)
+; Projects Studio'daki kopyası: projects-studio deposunda apps/studio/src-tauri/nsis/Turkish.nsh
+; (iki dosya birlikte güncellenir)
 
 ; --- Tauri metinleri ---------------------------------------------------------------------------
 LangString addOrReinstall ${LANG_TURKISH} "Bileşenleri ekle veya yeniden kur"
