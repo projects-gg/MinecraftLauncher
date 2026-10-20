@@ -78,6 +78,9 @@ impl ScreenshotWatcher {
     ) -> Result<(Self, mpsc::UnboundedReceiver<ScreenshotEvent>)> {
         let dir = game_dir.join("screenshots");
         std::fs::create_dir_all(&dir).map_err(|e| Error::io(&dir, e))?;
+        // FSEvents names a change by the folder's real path (macOS's temporary folder `/var/…`
+        // is `/private/var/…`), the other systems by the path that is watched.
+        let real_dir = std::fs::canonicalize(&dir).ok().filter(|real| *real != dir);
         let (changes_tx, changes) = mpsc::unbounded_channel();
         let mut watcher = notify::recommended_watcher(
             move |result: notify::Result<notify::Event>| match result {
@@ -101,7 +104,13 @@ impl ScreenshotWatcher {
             .filter_map(|entry| entry.ok().map(|entry| entry.file_name()))
             .collect();
         let (events_tx, events) = mpsc::unbounded_channel();
-        let task = tokio::spawn(follow(dir, existing, timing, changes, events_tx));
+        let task = tokio::spawn(follow(
+            Folder { dir, real_dir },
+            existing,
+            timing,
+            changes,
+            events_tx,
+        ));
         Ok((
             Self {
                 _watcher: watcher,
@@ -138,6 +147,27 @@ pub fn is_screenshot_name(name: &str) -> bool {
     !name.starts_with('.') && name.to_ascii_lowercase().ends_with(".png")
 }
 
+/// The watched folder, as the caller named it and, when that differs, its real path.
+struct Folder {
+    dir: PathBuf,
+    real_dir: Option<PathBuf>,
+}
+
+impl Folder {
+    /// The name of the picture a change is about, when it is one right in this folder, however
+    /// the system spelled the folder.
+    fn picture_name(&self, path: &Path) -> Option<OsString> {
+        let parent = path.parent()?;
+        if parent != self.dir && Some(parent) != self.real_dir.as_deref() {
+            return None;
+        }
+        let name = path.file_name()?;
+        name.to_str()
+            .is_some_and(is_screenshot_name)
+            .then(|| name.to_owned())
+    }
+}
+
 /// Whether `tail` (the last bytes of a file) closes a complete PNG.
 pub fn ends_like_png(tail: &[u8]) -> bool {
     tail.ends_with(&PNG_END)
@@ -172,7 +202,7 @@ struct Pending {
 }
 
 async fn follow(
-    dir: PathBuf,
+    folder: Folder,
     existing: HashSet<OsString>,
     timing: Timing,
     mut changes: mpsc::UnboundedReceiver<PathBuf>,
@@ -185,13 +215,11 @@ async fn follow(
         tokio::select! {
             change = changes.recv() => {
                 let Some(path) = change else { break };
-                let Some(name) = path.file_name().map(OsString::from) else { continue };
-                let wanted = path.parent() == Some(dir.as_path())
-                    && name.to_str().is_some_and(is_screenshot_name)
-                    && !existing.contains(&name)
-                    && !done.contains(&name);
-                if wanted {
+                let Some(name) = folder.picture_name(&path) else { continue };
+                if !existing.contains(&name) && !done.contains(&name) {
                     let now = Instant::now();
+                    // Reported in the caller's spelling of the folder, whichever one came.
+                    let path = folder.dir.join(&name);
                     pending.insert(path, Pending { due: now + timing.settle, changed: now });
                 }
             }
@@ -280,6 +308,42 @@ mod tests {
         let bytes = png();
         assert!(ends_like_png(&bytes));
         assert!(!ends_like_png(&bytes[..bytes.len() - 1]));
+    }
+
+    #[test]
+    fn knows_the_folder_by_either_spelling() {
+        // FSEvents names changes by the real path: macOS's `/var/folders/…` is
+        // `/private/var/folders/…`.
+        let folder = Folder {
+            dir: PathBuf::from("/var/folders/ab/T/game/screenshots"),
+            real_dir: Some(PathBuf::from("/private/var/folders/ab/T/game/screenshots")),
+        };
+        let name = Some(OsString::from("2026-10-18_20.15.03.png"));
+        let real = folder.real_dir.clone().unwrap();
+        assert_eq!(
+            folder.picture_name(&folder.dir.join("2026-10-18_20.15.03.png")),
+            name
+        );
+        assert_eq!(
+            folder.picture_name(&real.join("2026-10-18_20.15.03.png")),
+            name
+        );
+        assert_eq!(folder.picture_name(&folder.dir.join("notes.txt")), None);
+        assert_eq!(folder.picture_name(&real.join(".hidden.png")), None);
+        assert_eq!(
+            folder.picture_name(&folder.dir.join("old").join("2026-10-18_20.15.03.png")),
+            None
+        );
+        assert_eq!(folder.picture_name(&folder.dir), None);
+        // Without a real path of its own, another folder stays another folder.
+        let plain = Folder {
+            dir: folder.dir.clone(),
+            real_dir: None,
+        };
+        assert_eq!(
+            plain.picture_name(&real.join("2026-10-18_20.15.03.png")),
+            None
+        );
     }
 
     #[test]
