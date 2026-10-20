@@ -71,6 +71,18 @@ describe("crew looks", () => {
     }
   });
 
+  it("keeps the tag's bone text readable on every colour's tint", () => {
+    const panel = [0x16, 0x13, 0x1a];
+    for (const color of COLORS) {
+      const edge = Number.parseInt(CREW_COLORS[color].edge.slice(1), 16);
+      const tint = [(edge >> 16) & 255, (edge >> 8) & 255, edge & 255].map((c, i) =>
+        Math.round(c * 0.24 + (panel[i] ?? 0) * 0.76),
+      );
+      const hex = `#${tint.map((c) => c.toString(16).padStart(2, "0")).join("")}`;
+      expect(contrast("#fbf6ec", hex), `${color} tag`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("falls back to today's look for what it does not know", () => {
     expect(crewColor("chartreuse")).toBe("gold");
     expect(crewColor(undefined)).toBe("gold");

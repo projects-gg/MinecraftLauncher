@@ -120,6 +120,10 @@ function MemberCard({
   const [question, setQuestion] = useState<Question | null>(initialQuestion);
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
+  // A friend's coarse "last seen" lives on the friend list.
+  const friend = useSocialUi((s) =>
+    member.friend ? s.view.friends.find((f) => f.id === member.id) : undefined,
+  );
   const joinable = member.state === "playing" && isJoinable(member.game);
   const days = daysSince(member.joinedAt, Date.now());
   const plan = memberPlan(team, member, busyGame, roles).filter(
@@ -243,7 +247,9 @@ function MemberCard({
                     : "text-ash-300",
             )}
           >
-            {member.blocked ? t("teams.member.blocked") : presenceLine(member, t)}
+            {member.blocked
+              ? t("teams.member.blocked")
+              : presenceLine(friend && member.state === "offline" ? friend : member, t)}
           </p>
         </div>
       </div>

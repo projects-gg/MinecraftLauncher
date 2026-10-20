@@ -199,9 +199,12 @@ export function CallStrip({ call, team }: { call: CrewCall; team: SocialTeam }) 
             <span className="block truncate text-[14px] font-semibold text-bone-50">
               {t("teams.call.mine")}
             </span>
-            <span className="block text-[12.5px] text-ash-300">
-              {call.kind === "join" ? t("social.presence.projects") : t("teams.call.ready")}
-            </span>
+            {/* Where the crew is called to; "Hazır mısın?" is the teammates' question. */}
+            {call.kind === "join" ? (
+              <span className="block text-[12.5px] text-jade-400">
+                {t("social.presence.projects")}
+              </span>
+            ) : null}
           </span>
           <MinutesLeft call={call} className="text-ash-300" />
           <Button size="sm" variant="ghost" onClick={() => void endCall(call)}>
