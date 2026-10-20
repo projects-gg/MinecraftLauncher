@@ -274,9 +274,9 @@ export function AddSetDialog({
       morph={prefs.layout}
       dismissOnOutsideClick={false}
       footer={footer}
-      // The sets arrive while the panel still rises in, and the panel jumped to their height in
-      // one frame (286 → 460 px at 1024 × 640, measured with morph on): it opens at the list's
-      // height, so the skeleton turns into the cards in place (POLISH6).
+      // The sets arrive just as the panel has risen in, and it then grew a second time to their
+      // height (286 → 460 px at 1024 × 640): it opens at the list's height, so the skeleton turns
+      // into the cards in place and the entrance is the only movement (POLISH6).
       className="min-h-[min(460px,80vh)]"
     >
       <AnimatePresence initial={false} mode="popLayout" custom={direction}>

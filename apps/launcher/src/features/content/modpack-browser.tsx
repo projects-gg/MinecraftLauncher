@@ -26,6 +26,9 @@ import { useDebounced } from "./use-content";
 
 const PAGE_SIZE = 20;
 
+/** Loading rows: enough to fill the dialog's full height in a window up to ~1100 px tall. */
+const SKELETON_ROWS = Array.from({ length: 10 }, (_, i) => i);
+
 function PackRow({
   hit,
   selected,
@@ -203,8 +206,11 @@ export function useModpackBrowser({
         clearLabel={t("library.clearSearch")}
       />
       {search.isPending ? (
+        // As many rows as a tall window shows: the dialog glides to its full height once, when the
+        // player picks this tab, and the results then fill it in place. With four rows it glided to
+        // 503 px, stopped, and grew again to 563 px when they came (1024 × 640; POLISH6).
         <div className="space-y-2">
-          {[0, 1, 2, 3].map((i) => (
+          {SKELETON_ROWS.map((i) => (
             <Skeleton key={i} className="h-[66px] w-full" />
           ))}
         </div>
