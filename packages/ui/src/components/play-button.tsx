@@ -489,11 +489,12 @@ function useOpeningCycle(
 /**
  * The sheen's one crossing when the pointer or the keyboard's focus arrives on the gold face (the
  * owner, MOTION1: it crossed every 7 s while somebody used the window, OPT2). The band starts just
- * off the left edge, so it shows at once, and leaves the right edge before the curve slows down.
- * Nothing runs between crossings, nothing at all under reduced motion or in Performance mode.
+ * off the left edge on a curve that starts fast, so it shows in the next frames (with an ease-in it
+ * showed only after 120 ms), and crosses the gold in about 0.4 s. Nothing runs between crossings,
+ * nothing at all under reduced motion or in Performance mode.
  */
-const SHEEN_SWEEP_MS = 900;
-const SHEEN_EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
+const SHEEN_SWEEP_MS = 850;
+const SHEEN_EASE = "cubic-bezier(0.3, 0.5, 0.35, 1)";
 const SHEEN_FRAMES: Keyframe[] = [
   { transform: "translateX(40%) skewX(-18deg)" },
   { transform: "translateX(560%) skewX(-18deg)" },
