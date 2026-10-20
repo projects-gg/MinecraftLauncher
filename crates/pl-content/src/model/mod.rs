@@ -7,6 +7,7 @@ mod common;
 mod config;
 mod feed;
 mod index;
+mod links;
 mod modset;
 mod news;
 mod pack;
@@ -37,6 +38,7 @@ pub use index::{
     compare_minecraft_versions, current_platform_key, family_problems,
 };
 pub use jiff::Timestamp;
+pub use links::{CommunityLink, CommunityPlatform};
 pub use modset::{
     MAX_MOD_SET_ITEMS, MAX_MOD_SET_NAME_CHARS, MAX_MOD_SET_SUMMARY_CHARS, MAX_MOD_SET_VARIANTS,
     MAX_MOD_SETS, MOD_SET_CATALOG_SCHEMA, ModSet, ModSetCatalog, ModSetItemKind, ModSetProblem,

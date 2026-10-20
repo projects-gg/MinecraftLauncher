@@ -90,9 +90,12 @@ impl LauncherConfig {
     }
 
     /// Drops what writers leave out of a published config: a `newsFeed` that is not enabled
-    /// (Studio keeps it in its workspace so turning the feed back on loses nothing) and an empty
-    /// `recommendedMinecraftVersion` (launchers then use their built-in default).
+    /// (Studio keeps it in its workspace so turning the feed back on loses nothing), an empty
+    /// `recommendedMinecraftVersion` (launchers then use their built-in default) and community
+    /// platforms emptied in Studio while another one has an address
+    /// ([`Links::drop_empty_platforms`]).
     pub fn normalize_for_publish(&mut self) {
+        self.links.drop_empty_platforms();
         if self.news_feed.as_ref().is_some_and(|feed| !feed.enabled) {
             self.news_feed = None;
         }
@@ -334,7 +337,9 @@ pub struct Links {
     pub store: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub support: Option<String>,
-    /// Additional links (social media, wiki, …).
+    /// Additional links. Entries whose `id` or `icon` names a community platform (wiki, forum,
+    /// Instagram, …) are the launcher's community row ([`Links::community`]); the others are
+    /// listed by label ([`Links::other_custom`]).
     pub custom: Vec<CustomLink>,
 }
 
@@ -344,7 +349,7 @@ pub struct CustomLink {
     pub id: String,
     pub label: String,
     pub url: String,
-    /// Icon name from the launcher's icon set.
+    /// A community platform's key (`instagram`, …; [`crate::CommunityPlatform::key`]).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
 }

@@ -321,7 +321,9 @@ cache file extension.
     "store": "https://store.projects.gg",
     "support": "https://projects.gg/destek",
     "custom": [
-      { "id": "youtube", "label": "YouTube", "url": "https://youtube.com/@projectsgg", "icon": "youtube" }
+      { "id": "wiki", "label": "Wiki", "url": "https://wiki.projects.gg", "icon": "wiki" },
+      { "id": "youtube", "label": "YouTube", "url": "https://www.youtube.com/@projectsoyun", "icon": "youtube" },
+      { "id": "kurallar", "label": "Kurallar", "url": "https://projects.gg/kurallar" }
     ]
   },
   "discord": {
@@ -408,6 +410,34 @@ news feed, the launcher's built-in recommended Minecraft version.
   omit the object while it is disabled, so existing configs keep their exact shape. Studio
   refuses to publish an enabled feed that breaks these rules; launchers use the valid mirrors
   and keys and the default for an out-of-range `maxAgeDays`.
+- `links`: `website`, `discord`, `store` and `support` are listed in Settings → Hakkında (missing:
+  `https://projects.gg` and `https://projects.gg/discord` stand in for the first two). `custom`
+  entries need an `id`, a `label` and an `http(s)://` `url`; launchers list them by label in
+  Settings → Hakkında, `https://` and `projects://` ones only.
+  **Community platforms** (HOME1, 20 Oct 2026): a `custom` entry whose `id` or `icon` is one of
+  `wiki`, `forum`, `instagram`, `tiktok`, `youtube`, `x` (`twitter` too), `twitch`, `kick` (ASCII
+  case-insensitive, surrounding spaces ignored) is that platform. Launchers after HOME1 show the
+  community row at the bottom of Home's news column, marks only, in this order: wiki, Discord,
+  forum, then instagram, tiktok, youtube, x, twitch, kick; Settings → Hakkında lists them by the
+  platform's name. Rules (`pl_content::Links::community`):
+  - Discord comes from `links.discord`; missing or not `https://`, the built-in
+    `https://projects.gg/discord`. Discord is never hidden, and a `custom` entry named `discord`
+    is an ordinary link.
+  - While `custom` names none of the platforms, launchers show their built-in addresses:
+    `https://wiki.projects.gg`, `https://forum.projects.gg`,
+    `https://www.instagram.com/projects.oyun/`, `https://www.tiktok.com/@projects.oyun`,
+    `https://www.youtube.com/@projectsoyun` (none for x, twitch, kick).
+  - Once `custom` names one, the config decides: a platform it leaves out, or whose `url` is
+    empty or not `https://` with a host and without credentials, is not shown. The first entry of
+    a platform wins; Studio warns about a second one.
+  - Studio writes platform entries as `{ "id": key, "label": name, "url", "icon": key }`. A
+    platform emptied in Studio is left out of the published config while another one has an
+    address (`LauncherConfig::normalize_for_publish`); when every platform is emptied they are
+    all published with `"url": ""`, which hides them all instead of bringing back the built-in
+    addresses. Only Studios after HOME1 accept such an empty entry (older ones report it as a
+    broken link), so hiding every platform needs every publishing Studio updated.
+  - No new field: older Studios carry the entries unchanged, older launchers list them by label
+    in Settings → Hakkında.
 - Discord templates exist for `idle`, `browsing`, `downloading`, `inGame`, `afk`. Text fields
   accept `{instance}`, `{version}`, `{loader}`, `{server}`, `{players}`, `{maxPlayers}`,
   `{percent}`, `{afkCount}`, `{player}`; unknown placeholders render empty, empty fields are
