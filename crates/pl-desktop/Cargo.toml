@@ -1,6 +1,6 @@
 [package]
 name = "pl-desktop"
-description = "Desktop integration without Tauri: projects:// links, desktop shortcuts, shortcut icons, process identity, the game's window"
+description = "Desktop integration without Tauri: projects:// links, desktop shortcuts, shortcut icons, process identity, the game's window, what closing the window does"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,8 @@ publish = false
 
 [dependencies]
 serde = { workspace = true }
+# The page's close choice (close::parse_choice).
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 url = { workspace = true }
 # DeepLink is exported to TypeScript by the launcher (tauri-specta).

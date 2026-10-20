@@ -3858,6 +3858,7 @@ name = "pl-desktop"
 version = "2.0.0"
 dependencies = [
  "serde",
+ "serde_json",
  "specta",
  "sysinfo",
  "tempfile",
