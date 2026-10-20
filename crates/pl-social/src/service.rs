@@ -25,7 +25,7 @@ use crate::game::{self, GameActivity};
 use crate::model::{
     FIRST_EMBLEMS, FriendGroup, FriendGroups, MAX_FRIEND_GROUPS, ProfileUpdate, RequestOutcome,
     SessionInfo, SettingsMeta, SettingsPrecondition, TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK,
-    TEAM_FEATURE_ROLES, TeamAnswer, TeamEdit, TeamLook,
+    TEAM_FEATURE_MUTE, TEAM_FEATURE_ROLES, TeamAnswer, TeamEdit, TeamLook, TeamNotificationsEdit,
 };
 use crate::presence::{PresenceControl, PresenceEvent, PresenceOptions, StopReason};
 use crate::protocol::{CallAnswer, LocalStatus};
@@ -33,8 +33,9 @@ use crate::qr::{QrPath, qr_path};
 use crate::state::{Connection, SocialState};
 use crate::store::TokenStore;
 use crate::view::{
-    ActivityView, AuthPhase, CallOutcome, GroupMember, InviteResult, LookupView, ProfileView,
-    SendOutcome, SignInFailure, SocialNotice, SocialView, TeamLookupView, me_view,
+    ActivityView, AuthPhase, CallOutcome, CrewNotificationsView, GroupMember, InviteResult,
+    LookupView, ProfileView, SendOutcome, SignInFailure, SocialNotice, SocialView, TeamLookupView,
+    me_view,
 };
 
 /// After a reconnect the friend list is fetched again only when it is older than this.
@@ -964,6 +965,9 @@ impl SocialService {
             })
             .await?;
         self.update(generation, |core| {
+            if let Some(settings) = overview.team_notifications {
+                core.state.set_team_notifications(settings);
+            }
             core.state.team_answer(TeamAnswer {
                 team: overview.team,
                 invited: overview.invited,
@@ -1054,6 +1058,34 @@ impl SocialService {
             }
             Err(error) => Err(error),
         }
+    }
+
+    // --- crew notifications ("Sessize al") -----------------------------------------------------
+
+    /// Changes the player's crew notification settings on a service that keeps them (`mute`):
+    /// "Sessize al" until a time or until unmuted, "Sesi aç", crew calls on or off. The answer
+    /// reaches the view; the player's other devices hear it through the socket.
+    pub async fn set_crew_notifications(&self, edit: TeamNotificationsEdit) -> Result<()> {
+        {
+            let core = self.lock();
+            if !(core.teams && core.state.teams_supported() && core.state.offers(TEAM_FEATURE_MUTE))
+            {
+                return Err(SocialError::InvalidInput("crew mute"));
+            }
+        }
+        if !edit.valid_at(unix_now()) {
+            return Err(SocialError::InvalidInput("mute until"));
+        }
+        if edit.is_empty() {
+            return Ok(());
+        }
+        let (settings, generation) = self
+            .call(|session| async move { session.set_team_notifications(&edit).await })
+            .await?;
+        self.update(generation, |core| {
+            core.state.set_team_notifications(settings)
+        });
+        Ok(())
     }
 
     // --- crew calls ("Ekibi çağır") ---------------------------------------------------------
@@ -1414,6 +1446,18 @@ fn build_view(core: &mut Core) -> SocialView {
         } else {
             Vec::new()
         },
+        crew_notifications: if teams {
+            core.state.team_notifications().map(|settings| {
+                let settings = settings.at(now);
+                CrewNotificationsView {
+                    calls: settings.calls,
+                    muted: settings.muted,
+                    mute_until: settings.mute_until,
+                }
+            })
+        } else {
+            None
+        },
     }
 }
 
@@ -1431,6 +1475,7 @@ mod tests {
 
     use super::*;
     use crate::auth::SessionToken;
+    use crate::model::MAX_MUTE_SECS;
     use crate::store::MemoryTokenStore;
     use crate::testutil::{MockReply, MockServer};
 
@@ -1819,6 +1864,138 @@ mod tests {
             harness.service.call_crew().await,
             Err(SocialError::Unavailable { .. })
         ));
+    }
+
+    #[tokio::test]
+    async fn crew_mutes_wait_for_the_service_to_keep_them() {
+        let offers = Arc::new(AtomicBool::new(false));
+        let bodies = Arc::new(Mutex::new(Vec::<String>::new()));
+        let server = MockServer::start({
+            let offers = offers.clone();
+            let bodies = bodies.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| match req.path.as_str() {
+                    "/v1/me" => MockReply::json(200, ME),
+                    "/v1/friends" if offers.load(Ordering::SeqCst) => MockReply::json(
+                        200,
+                        &FRIENDS_WITH_TEAM.replace(
+                            r#""teamInvites":[]"#,
+                            r#""teamInvites":[],"teamFeatures":["look","calls","roles","mute"],
+                              "teamNotifications":{"calls":true,"muted":false,"muteUntil":null}"#,
+                        ),
+                    ),
+                    "/v1/friends" => MockReply::json(200, FRIENDS_WITH_TEAM),
+                    "/v1/teams/notifications" => {
+                        bodies.lock().unwrap().push(req.body_text().to_owned());
+                        // What the service keeps now: the change on top of the defaults.
+                        let body = req.json();
+                        let muted = body["muted"].as_bool().unwrap_or(false);
+                        MockReply::json(
+                            200,
+                            &serde_json::json!({
+                                "calls": body["calls"].as_bool().unwrap_or(true),
+                                "muted": muted,
+                                "muteUntil": if muted { body["muteUntil"].clone() } else {
+                                    serde_json::Value::Null
+                                },
+                            })
+                            .to_string(),
+                        )
+                    }
+                    _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.set_teams_enabled(true);
+        harness.service.configure(url(&server));
+        let view = harness.until("friends", |view| view.loaded).await;
+        // A service that keeps no settings: the launcher's own switches decide, nothing is sent.
+        assert_eq!(view.crew_notifications, None);
+        let mute = |until: Option<i64>| TeamNotificationsEdit {
+            muted: Some(true),
+            mute_until: until,
+            ..TeamNotificationsEdit::default()
+        };
+        assert!(matches!(
+            harness.service.set_crew_notifications(mute(None)).await,
+            Err(SocialError::InvalidInput("crew mute"))
+        ));
+
+        offers.store(true, Ordering::SeqCst);
+        harness.service.refresh().await;
+        assert_eq!(
+            harness.service.view().crew_notifications,
+            Some(CrewNotificationsView {
+                calls: true,
+                muted: false,
+                mute_until: None
+            })
+        );
+        // "1 saat": out with its end, back in the view.
+        let until = unix_now() + 3_600;
+        harness
+            .service
+            .set_crew_notifications(mute(Some(until)))
+            .await
+            .unwrap();
+        assert_eq!(
+            harness.service.view().crew_notifications,
+            Some(CrewNotificationsView {
+                calls: true,
+                muted: true,
+                mute_until: Some(until)
+            })
+        );
+        // What the service would refuse never leaves: an end without a mute, one in the past or
+        // too far ahead; nothing to change, nothing sent.
+        for refused in [
+            TeamNotificationsEdit {
+                mute_until: Some(until),
+                ..TeamNotificationsEdit::default()
+            },
+            mute(Some(unix_now() - 1)),
+            mute(Some(unix_now() + MAX_MUTE_SECS + 60)),
+        ] {
+            assert!(matches!(
+                harness.service.set_crew_notifications(refused).await,
+                Err(SocialError::InvalidInput("mute until"))
+            ));
+        }
+        harness
+            .service
+            .set_crew_notifications(TeamNotificationsEdit::default())
+            .await
+            .unwrap();
+        // "Ekip çağrıları" off, from this computer: it goes with the account now.
+        harness
+            .service
+            .set_crew_notifications(TeamNotificationsEdit {
+                calls: Some(false),
+                ..TeamNotificationsEdit::default()
+            })
+            .await
+            .unwrap();
+        assert!(
+            harness
+                .service
+                .view()
+                .crew_notifications
+                .is_some_and(|settings| !settings.calls && !settings.muted)
+        );
+        assert_eq!(
+            *bodies.lock().unwrap(),
+            vec![
+                format!(r#"{{"muteUntil":{until},"muted":true}}"#),
+                r#"{"calls":false}"#.to_owned(),
+            ]
+        );
+        // Without crews (the signed config), none of it shows.
+        harness.service.set_teams_enabled(false);
+        assert_eq!(harness.service.view().crew_notifications, None);
     }
 
     #[tokio::test]

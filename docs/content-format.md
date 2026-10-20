@@ -398,7 +398,7 @@ news feed, the launcher's built-in recommended Minecraft version.
   friends panel, crewmates' presence. Off by default and only shown while `features.friends` is
   on too. Launchers also hide it while the friends service does not announce team limits (a
   service without the teams routes). What else crews offer (looks, "Ekibi çağır", moderators and
-  permissions) follows the service's `teamFeatures`, not this flag. Friend categories need no
+  permissions, "Sessize al") follows the service's `teamFeatures`, not this flag. Friend categories need no
   flag: they follow `features.friends` and the service's support. Turn it on only after the
   service with the teams routes and its database migration is live. Writers omit it while it is
   `false`. Launchers that do not know the field ignore it. Studio sets it with "Ekipler" next

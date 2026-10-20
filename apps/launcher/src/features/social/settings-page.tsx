@@ -13,7 +13,7 @@ import { api } from "@/lib/api";
 import type { SocialMe, SocialSession } from "@/lib/api/social-types";
 import { formatRelative } from "@/lib/format";
 import { attempt } from "./actions";
-import { CrewNotifySwitches } from "./crew-notify";
+import { CrewNotifyGroup } from "./crew-notify";
 import { rise, useSocialMotion } from "./motion";
 import { SocialAvatar, SocialFace } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -120,7 +120,7 @@ function NotificationSection() {
   const online = useSocialPrefs((s) => s.notifyFavoriteOnline);
   const projects = useSocialPrefs((s) => s.notifyFavoriteProjects);
   const set = useSocialPrefs((s) => s.set);
-  // The crew's own switches, while crews are on (the crew page's bell shows them too).
+  // The crew's own group, while the player is in one (the crew page's bell shows it too).
   const crews = useSocialUi((s) => s.view.teams && Boolean(s.view.team));
   return (
     <Section title={t("social.settings.notifications")}>
@@ -135,8 +135,12 @@ function NotificationSection() {
           onCheckedChange={(on) => set("notifyFavoriteProjects", on)}
           label={t("social.settings.favoriteProjects")}
         />
-        {crews ? <CrewNotifySwitches /> : null}
       </div>
+      {crews ? (
+        <div className="mt-5">
+          <CrewNotifyGroup titleClassName="text-[13.5px] font-semibold text-bone-50" />
+        </div>
+      ) : null}
     </Section>
   );
 }

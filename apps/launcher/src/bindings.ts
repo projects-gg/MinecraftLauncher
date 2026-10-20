@@ -848,6 +848,11 @@ export const commands = {
 } | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_edit", { name, tag, emblem, color, frame, motto, permissions })),
 	/**  Makes a member a moderator, or a moderator a member again (leader). */
 	socialTeamModerator: (id: string, moderator: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_moderator", { id, moderator })),
+	/**
+	 *  The player's crew notification settings, on a service that keeps them: "Sessize al" (until
+	 *  `muteUntil`, or until unmuted without it), "Sesi aç" (`muted: false`), crew calls on or off.
+	 */
+	socialTeamNotifications: (change: TeamNotificationsEdit_Deserialize) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_notifications", { change })),
 	/**  "Ekibi çağır". A wait (called too recently) and an open call are answers, not errors. */
 	socialTeamCall: () => typedError<CallOutcome, CmdError>(__TAURI_INVOKE("social_team_call")),
 	/**  "Geliyorum", "Birazdan" or "Gelemem" to a teammate's call. False: the call is gone. */
@@ -1515,6 +1520,22 @@ export type CrewCallView = {
 	answers: CallAnswerView[],
 	/**  The player's own answer (any of their devices). */
 	myAnswer: CallAnswer | null,
+};
+
+/**
+ *  What the player hears of their crew ("Sessize al", "Ekip çağrıları"), the same on all their
+ *  devices.
+ */
+export type CrewNotificationsView = {
+	/**  Crew call notifications are on. */
+	calls: boolean,
+	/**
+	 *  "Sessizde": every crew notification is silent until `mute_until`, or until the player
+	 *  unmutes (`mute_until` None).
+	 */
+	muted: boolean,
+	/**  Unix seconds. A timed mute ends by itself (no view says so): compare it with the clock. */
+	muteUntil: number | null,
 };
 
 /**  A mod name and page from `modlist.html`, to show the user what is missing. */
@@ -4257,6 +4278,11 @@ export type SocialView_Deserialize = {
 	 *  offers calls). They end by themselves at `endsAt`: the launcher hides them then.
 	 */
 	calls: CrewCallView[],
+	/**
+	 *  The player's crew notification settings, kept by the service (only while `teams` and the
+	 *  service offers `mute`; otherwise the launcher's own switches decide).
+	 */
+	crewNotifications: CrewNotificationsView | null,
 };
 
 export type SocialView_Serialize = {
@@ -4299,6 +4325,11 @@ export type SocialView_Serialize = {
 	 *  offers calls). They end by themselves at `endsAt`: the launcher hides them then.
 	 */
 	calls: CrewCallView[],
+	/**
+	 *  The player's crew notification settings, kept by the service (only while `teams` and the
+	 *  service offers `mute`; otherwise the launcher's own switches decide).
+	 */
+	crewNotifications: CrewNotificationsView | null,
 };
 
 /**  The launcher a source belongs to. Names are brand names: the UI shows them as they are. */
@@ -4586,6 +4617,34 @@ export type TeamMemberView_Serialize = {
 	discordUrl: string,
 	/**  Unix seconds. */
 	joinedAt: number,
+};
+
+/**
+ *  `PATCH /v1/teams/notifications`: what changes. `mute_until` goes only with `muted: true`
+ *  (without it the mute lasts until the player unmutes).
+ */
+export type TeamNotificationsEdit = TeamNotificationsEdit_Serialize | TeamNotificationsEdit_Deserialize;
+
+/**
+ *  `PATCH /v1/teams/notifications`: what changes. `mute_until` goes only with `muted: true`
+ *  (without it the mute lasts until the player unmutes).
+ */
+export type TeamNotificationsEdit_Deserialize = {
+	calls?: boolean | null,
+	muted?: boolean | null,
+	/**  Unix seconds, in the next 30 days. */
+	muteUntil?: number | null,
+};
+
+/**
+ *  `PATCH /v1/teams/notifications`: what changes. `mute_until` goes only with `muted: true`
+ *  (without it the mute lasts until the player unmutes).
+ */
+export type TeamNotificationsEdit_Serialize = {
+	calls?: boolean | null,
+	muted?: boolean | null,
+	/**  Unix seconds, in the next 30 days. */
+	muteUntil?: number | null,
 };
 
 /**

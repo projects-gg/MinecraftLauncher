@@ -4,7 +4,10 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
-use crate::model::{FriendGroups, LastSeen, PublicProfile, StatusMode, Team, TeamExit, TeamInvite};
+use crate::model::{
+    FriendGroups, LastSeen, PublicProfile, StatusMode, Team, TeamExit, TeamInvite,
+    TeamNotifications,
+};
 
 /// What this launcher is doing. Sent only when it changes.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -283,6 +286,10 @@ pub(crate) enum ServerMessage {
     TeamInvite {
         invite: TeamInvite,
     },
+    /// The player's crew notification settings changed (on any of their devices).
+    TeamNotifications {
+        notifications: TeamNotifications,
+    },
     /// The player's friend categories changed on another device.
     Groups {
         groups: FriendGroups,
@@ -529,5 +536,27 @@ mod tests {
         )
         .unwrap();
         assert!(matches!(older, ServerMessage::Hello { calls, now: None, .. } if calls.is_empty()));
+    }
+
+    #[test]
+    fn crew_notification_settings_arrive_on_every_device() {
+        let changed: ServerMessage = serde_json::from_str(
+            r#"{"t":"team_notifications","notifications":{"calls":true,"muted":true,"muteUntil":1792600000}}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            changed,
+            ServerMessage::TeamNotifications { notifications }
+                if notifications.muted && notifications.mute_until == Some(1_792_600_000)
+        ));
+        let unmuted: ServerMessage = serde_json::from_str(
+            r#"{"t":"team_notifications","notifications":{"calls":false,"muted":false,"muteUntil":null}}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            unmuted,
+            ServerMessage::TeamNotifications { notifications }
+                if !notifications.calls && !notifications.muted && notifications.mute_until.is_none()
+        ));
     }
 }

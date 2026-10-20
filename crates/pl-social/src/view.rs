@@ -61,6 +61,23 @@ pub struct SocialView {
     /// Open crew calls the player sees, their own included (only while `teams` and the service
     /// offers calls). They end by themselves at `endsAt`: the launcher hides them then.
     pub calls: Vec<CrewCallView>,
+    /// The player's crew notification settings, kept by the service (only while `teams` and the
+    /// service offers `mute`; otherwise the launcher's own switches decide).
+    pub crew_notifications: Option<CrewNotificationsView>,
+}
+
+/// What the player hears of their crew ("Sessize al", "Ekip çağrıları"), the same on all their
+/// devices.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CrewNotificationsView {
+    /// Crew call notifications are on.
+    pub calls: bool,
+    /// "Sessizde": every crew notification is silent until `mute_until`, or until the player
+    /// unmutes (`mute_until` None).
+    pub muted: bool,
+    /// Unix seconds. A timed mute ends by itself (no view says so): compare it with the clock.
+    pub mute_until: Option<i64>,
 }
 
 /// "Ekibi çağır": an open crew call.

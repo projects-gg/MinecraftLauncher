@@ -71,11 +71,12 @@ pub use gate::service_url;
 pub use model::{
     Avatar, BlockedUser, CodeLookup, DEFAULT_TEAM_COLOR, DEFAULT_TEAM_FRAME, FIRST_EMBLEMS, Friend,
     FriendGroup, FriendGroups, FriendRequest, FriendsOverview, LastSeen, Limits, MAX_FRIEND_GROUPS,
-    Me, PermissionLevel, PermissionsEdit, Privacy, ProfileUpdate, PublicProfile, Relation,
-    RequestOutcome, SessionInfo, SettingsBackup, SettingsMeta, SettingsPrecondition, StatusMode,
-    TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK, TEAM_FEATURE_ROLES, Team, TeamAnswer, TeamEdit,
-    TeamExit, TeamInvite, TeamLook, TeamLookup, TeamMember, TeamPermissions, TeamRelation,
-    TeamRole, TeamSummary, TeamsOverview, discord_avatar_url,
+    MAX_MUTE_SECS, Me, PermissionLevel, PermissionsEdit, Privacy, ProfileUpdate, PublicProfile,
+    Relation, RequestOutcome, SessionInfo, SettingsBackup, SettingsMeta, SettingsPrecondition,
+    StatusMode, TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK, TEAM_FEATURE_MUTE, TEAM_FEATURE_ROLES, Team,
+    TeamAnswer, TeamEdit, TeamExit, TeamInvite, TeamLook, TeamLookup, TeamMember,
+    TeamNotifications, TeamNotificationsEdit, TeamPermissions, TeamRelation, TeamRole, TeamSummary,
+    TeamsOverview, discord_avatar_url,
 };
 pub use presence::{
     InviteOutcome, PresenceControl, PresenceEvent, PresenceEvents, PresenceHandle, PresenceOptions,
@@ -90,8 +91,8 @@ pub use service::{ServiceConfig, SocialService, SocialUpdate, UpdateSink};
 pub use state::{Connection, INVITE_LIFETIME_SECS, SocialState};
 pub use store::{KEYRING_SERVICE, KeyringTokenStore, MemoryTokenStore, TokenStore};
 pub use view::{
-    ActivityView, AuthPhase, CallAnswerView, CallOutcome, CrewCallView, FriendGroupsView,
-    FriendView, GroupMember, InviteResult, InviteView, LookupView, MeView, ProfileView,
-    RequestView, SendOutcome, SignInFailure, SocialNotice, SocialView, TeamInviteView,
+    ActivityView, AuthPhase, CallAnswerView, CallOutcome, CrewCallView, CrewNotificationsView,
+    FriendGroupsView, FriendView, GroupMember, InviteResult, InviteView, LookupView, MeView,
+    ProfileView, RequestView, SendOutcome, SignInFailure, SocialNotice, SocialView, TeamInviteView,
     TeamLookupView, TeamMemberView, TeamView,
 };

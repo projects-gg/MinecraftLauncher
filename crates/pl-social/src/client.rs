@@ -25,7 +25,7 @@ use crate::error::{ErrorCode, Result, SocialError, from_response};
 use crate::model::{
     CodeLookup, Friend, FriendGroups, FriendsOverview, Me, ProfileUpdate, RequestOutcome,
     SessionInfo, SettingsBackup, SettingsMeta, SettingsPrecondition, TeamAnswer, TeamEdit,
-    TeamLook, TeamLookup, TeamsOverview,
+    TeamLook, TeamLookup, TeamNotifications, TeamNotificationsEdit, TeamsOverview,
 };
 use crate::presence::{PresenceHandle, PresenceOptions};
 
@@ -657,6 +657,19 @@ impl Session {
 
     /// Makes a member a moderator, or a moderator a member again (leader; a service with
     /// roles). Asking for what already is answers the crew as it is.
+    /// The player's crew notification settings (`PATCH /v1/teams/notifications`, a service with
+    /// `mute`): answers what the service keeps now.
+    pub async fn set_team_notifications(
+        &self,
+        edit: &TeamNotificationsEdit,
+    ) -> Result<TeamNotifications> {
+        let body =
+            serde_json::to_value(edit).map_err(|error| SocialError::Protocol(error.to_string()))?;
+        self.call(Method::PATCH, "v1/teams/notifications", Some(body))
+            .await?
+            .json()
+    }
+
     pub async fn set_team_moderator(
         &self,
         team: &str,
@@ -961,6 +974,10 @@ mod tests {
             ("POST", "/v1/teams/0123456789abcdef/code") => {
                 MockReply::json(200, r#"{"code":"TKM-WXYZ-1234"}"#)
             }
+            ("PATCH", "/v1/teams/notifications") => {
+                assert_eq!(req.body_text(), r#"{"muteUntil":1792600000,"muted":true}"#);
+                MockReply::json(200, r#"{"calls":true,"muted":true,"muteUntil":1792600000}"#)
+            }
             ("PUT" | "DELETE", "/v1/teams/0123456789abcdef/moderators/223456789012345678") => {
                 assert!(req.body_text().is_empty());
                 MockReply::json(200, TEAM)
@@ -1035,6 +1052,15 @@ mod tests {
             .map(|r| r.method.clone())
             .collect();
         assert_eq!(methods, vec!["PUT".to_owned(), "DELETE".to_owned()]);
+        let muted = session
+            .set_team_notifications(&TeamNotificationsEdit {
+                muted: Some(true),
+                mute_until: Some(1_792_600_000),
+                ..TeamNotificationsEdit::default()
+            })
+            .await
+            .unwrap();
+        assert!(muted.calls && muted.muted && muted.mute_until == Some(1_792_600_000));
         session.leave_team("0123456789abcdef").await.unwrap();
         session
             .decline_team_invite("fedcba9876543210")

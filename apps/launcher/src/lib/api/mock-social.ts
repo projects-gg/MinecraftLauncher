@@ -19,6 +19,9 @@
 //   `crewCallOpen`: one is on already, unanswered ("Hazır mısın?"); `crewCallMine`: the player's
 //   own call is on, with answers;
 // - `crewOld`: crews on a service from before looks, calls and roles (today's editor and card);
+// - `&muted=<minutes>|forever` on any crew scenario: the player muted their crew (`crewMuted`:
+//   a member who did, for about two and a half hours); `&noMute=1`: a service with calls but
+//   without crew notification settings (the launcher's own switches);
 // - `legacy`: a service that offers neither categories nor teams (their menu rows stay away).
 import { pick } from "./mock-lang";
 import type {
@@ -59,6 +62,25 @@ const codeNotFound = () =>
     "SOSYAL-KOD-YOK",
     pick("Bu koda ait kimse bulunamadı.", "Nobody has this code."),
   );
+
+function searchParam(key: string): string | null {
+  if (typeof window === "undefined") return null;
+  const fromSearch = new URLSearchParams(window.location.search).get(key);
+  const fromHash = new URLSearchParams(window.location.hash.split("?")[1] ?? "").get(key);
+  return fromSearch ?? fromHash;
+}
+
+/** `&muted=`: until when the preview's crew is muted (Unix seconds; null: until unmuted), or
+ * undefined when it is not. `crewMuted` mutes it to the half hour after the next two hours. */
+function previewMute(): number | null | undefined {
+  const asked = searchParam("muted") ?? (scenario() === "crewMuted" ? "auto" : null);
+  if (asked === null) return undefined;
+  if (asked === "forever") return null;
+  const minutes = Number(asked);
+  if (Number.isFinite(minutes) && minutes > 0) return now() + Math.round(minutes * 60);
+  const halfHour = 30 * 60;
+  return Math.ceil((now() + 2 * 3600) / halfHour) * halfHour;
+}
 
 function scenario(): string {
   if (typeof window === "undefined") return "friends";
@@ -390,18 +412,27 @@ function initial(): SocialSnapshot {
     activity: { state: "launcher" },
     groups: { version: 0, groups: [], members: {} },
     teams: false,
-    crew: { look: false, calls: false, roles: false },
+    crew: { look: false, calls: false, roles: false, mute: false },
     teamInvites: [],
     calls: [],
   };
   // Crews on, with what the service offers of them.
+  const keepsMutes = !OLD_CREWS && searchParam("noMute") === null;
+  const mutedUntil = previewMute();
   const crewed = (team: SocialTeam | undefined, extra: Partial<SocialSnapshot> = {}) => ({
     ...base,
     groups: previewGroups(),
     teams: true,
     crew: OLD_CREWS
-      ? { look: false, calls: false, roles: false }
-      : { look: true, calls: true, roles: true },
+      ? { look: false, calls: false, roles: false, mute: false }
+      : { look: true, calls: true, roles: true, mute: keepsMutes },
+    crewNotifications: keepsMutes
+      ? {
+          calls: true,
+          muted: mutedUntil !== undefined,
+          muteUntil: mutedUntil ?? null,
+        }
+      : undefined,
     team,
     ...extra,
   });
@@ -412,6 +443,7 @@ function initial(): SocialSnapshot {
     case "crewOld":
       return crewed(previewTeam(true));
     case "teamMember":
+    case "crewMuted":
       return crewed(previewTeam(false));
     case "teamModerator":
       return crewed(previewTeam(false, true));
@@ -946,6 +978,28 @@ export const mockSocial: SocialApi = {
   async endCall(callId) {
     await delay(250);
     commit((v) => ({ ...v, calls: v.calls.filter((c) => c.id !== callId) }));
+  },
+  async setCrewNotifications(change) {
+    await delay(250);
+    const current = view.crewNotifications;
+    if (!current) {
+      throw new MockSocialError(
+        "SOSYAL",
+        pick(
+          "Bir sorun oluştu. Biraz sonra tekrar dene.",
+          "Something went wrong. Try again in a bit.",
+        ),
+      );
+    }
+    const muted = change.muted ?? current.muted;
+    commit((v) => ({
+      ...v,
+      crewNotifications: {
+        calls: change.calls ?? current.calls,
+        muted,
+        muteUntil: !muted ? null : change.muted ? (change.muteUntil ?? null) : current.muteUntil,
+      },
+    }));
   },
   async disbandTeam() {
     await delay(400);

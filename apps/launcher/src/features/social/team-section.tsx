@@ -1,8 +1,10 @@
-// The crew in the friend list: its header (the crew's mark, name, tinted tag, crewmates online;
-// folds like a category; the arrow opens the crew page; its menu opens, folds, calls the crew,
-// shares the code, invites, edits and leaves, each where the crew lets the player) and invites to
-// other crews, answered in place.
+// The crew in the friend list: its header (the crew's mark, name, tinted tag, crewmates online, a
+// struck-through bell while muted; folds like a category; the arrow opens the crew page; its menu
+// opens, folds, calls the crew, shares the code, invites, edits, mutes and leaves, each where the
+// crew and the service let the player) and invites to other crews, answered in place.
 import {
+  Bell,
+  BellSlash,
   CaretDown,
   CaretRight,
   Check,
@@ -27,9 +29,10 @@ import { formatRelative } from "@/lib/format";
 import { attempt, copyText } from "./actions";
 import { callCrew } from "./call-actions";
 import { callWaitUntil, liveCalls } from "./calls";
+import { muteItems, unmuteCrew, useCrewMute } from "./crew-notify";
 import { openMenuFromKey } from "./menu-key";
 import { rowsOf, teamMenu } from "./menus";
-import { swap, useSocialMotion } from "./motion";
+import { pop, swap, useSocialMotion } from "./motion";
 import { useSocialUi } from "./store";
 import { CrewMark, TeamTag } from "./team-emblem";
 import { crewRights, teammatesOnline } from "./teams";
@@ -50,6 +53,7 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
   const members = new Set(team.members.map((m) => m.id));
   const friendsOutside = friends.filter((f) => !members.has(f.id)).length;
   const rights = crewRights(team, crew);
+  const mute = useCrewMute();
   // A call that is on (anyone's) takes the button's place on the crew page: none here either.
   const call =
     !rights.call || liveCalls(calls, now).length
@@ -63,9 +67,23 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
     call,
     canInvite: rights.invite,
     canEdit: rights.look,
+    mute: mute.settings ? (mute.muted ? "muted" : "unmuted") : "hidden",
   });
   return rowsOf(plan, (row): MenuItem | null => {
     switch (row.action) {
+      case "mute":
+        return {
+          label: t("teams.mute.action"),
+          icon: <BellSlash size={16} />,
+          items: muteItems(t),
+          onSelect: () => {},
+        };
+      case "unmute":
+        return {
+          label: t("teams.mute.undo"),
+          icon: <Bell size={16} />,
+          onSelect: () => void unmuteCrew(),
+        };
       case "call":
         return {
           label: t("teams.call.start"),
@@ -145,6 +163,7 @@ export function TeamHeader({
   const { reduce } = useSocialMotion();
   const online = teammatesOnline(team);
   const items = useTeamItems(team, folded, onToggle);
+  const { muted } = useCrewMute();
   return (
     <ContextMenu items={items}>
       <div className="group/team flex items-center gap-1 pt-3 pr-1 pb-1">
@@ -152,7 +171,10 @@ export function TeamHeader({
           type="button"
           data-team-header
           aria-expanded={!folded}
-          aria-label={t("teams.summary", { name: team.name, online })}
+          aria-label={t(muted ? "teams.summaryMuted" : "teams.summary", {
+            name: team.name,
+            online,
+          })}
           onClick={onToggle}
           onKeyDown={(event) => {
             if (!openMenuFromKey(event)) onKeyDown?.(event);
@@ -181,6 +203,13 @@ export function TeamHeader({
               </motion.span>
             </AnimatePresence>
           </span>
+          <AnimatePresence initial={false}>
+            {muted ? (
+              <motion.span key="muted" className="flex text-ash-400" {...pop(reduce, 0.18)}>
+                <BellSlash size={13} aria-hidden />
+              </motion.span>
+            ) : null}
+          </AnimatePresence>
         </button>
         <Menu
           items={items}

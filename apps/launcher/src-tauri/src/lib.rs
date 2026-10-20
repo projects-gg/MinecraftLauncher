@@ -407,6 +407,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_team_create,
             commands::social::social_team_edit,
             commands::social::social_team_moderator,
+            commands::social::social_team_notifications,
             commands::social::social_team_call,
             commands::social::social_team_call_answer,
             commands::social::social_team_call_end,

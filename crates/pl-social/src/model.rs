@@ -229,6 +229,10 @@ pub struct FriendsOverview {
     /// service sends none; unknown values are kept but mean nothing to this launcher.
     #[serde(default)]
     pub team_features: Vec<String>,
+    /// The player's own crew notification settings (a service with [`TEAM_FEATURE_MUTE`]; also
+    /// outside a crew).
+    #[serde(default)]
+    pub team_notifications: Option<TeamNotifications>,
 }
 
 /// `teamFeatures`: crew looks (colour, frame, motto, the newer emblems).
@@ -237,6 +241,95 @@ pub const TEAM_FEATURE_LOOK: &str = "look";
 pub const TEAM_FEATURE_CALLS: &str = "calls";
 /// `teamFeatures`: moderators and the crew's permissions.
 pub const TEAM_FEATURE_ROLES: &str = "roles";
+/// `teamFeatures`: the player's crew notification settings ("Sessize al", crew calls on or off).
+pub const TEAM_FEATURE_MUTE: &str = "mute";
+
+/// The longest timed mute the service takes; longer is "until I unmute".
+pub const MAX_MUTE_SECS: i64 = 30 * 86_400;
+
+/// `teamNotifications`: what the player hears of their crew, on every device of theirs and in
+/// any crew. Nobody else sees it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamNotifications {
+    /// Crew call notifications ("Ekip çağrıları"), on unless turned off.
+    #[serde(default = "calls_on")]
+    pub calls: bool,
+    /// "Sessize al": every crew notification is silent, until `mute_until` or until the player
+    /// unmutes (`mute_until` None).
+    #[serde(default)]
+    pub muted: bool,
+    /// Unix seconds (the service's clock) when a timed mute ends; nothing is sent then.
+    #[serde(default)]
+    pub mute_until: Option<i64>,
+}
+
+fn calls_on() -> bool {
+    true
+}
+
+impl Default for TeamNotifications {
+    fn default() -> Self {
+        Self {
+            calls: true,
+            muted: false,
+            mute_until: None,
+        }
+    }
+}
+
+impl TeamNotifications {
+    /// Muted at `now` (Unix seconds): a timed mute ends by itself.
+    pub fn muted_at(&self, now: i64) -> bool {
+        self.muted && self.mute_until.is_none_or(|until| until > now)
+    }
+
+    /// Crew calls are announced at `now`: switched on and not muted.
+    pub fn calls_at(&self, now: i64) -> bool {
+        self.calls && !self.muted_at(now)
+    }
+
+    /// As it reads at `now`: a timed mute that ran out is no mute.
+    pub fn at(self, now: i64) -> Self {
+        if self.muted_at(now) {
+            self
+        } else {
+            Self {
+                muted: false,
+                mute_until: None,
+                ..self
+            }
+        }
+    }
+}
+
+/// `PATCH /v1/teams/notifications`: what changes. `mute_until` goes only with `muted: true`
+/// (without it the mute lasts until the player unmutes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamNotificationsEdit {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub calls: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub muted: Option<bool>,
+    /// Unix seconds, in the next 30 days.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mute_until: Option<i64>,
+}
+
+impl TeamNotificationsEdit {
+    pub fn is_empty(&self) -> bool {
+        self.calls.is_none() && self.muted.is_none() && self.mute_until.is_none()
+    }
+
+    /// A timed mute needs `muted: true` and an end in the next 30 days (the service's rule).
+    pub fn valid_at(&self, now: i64) -> bool {
+        match self.mute_until {
+            None => true,
+            Some(until) => self.muted == Some(true) && until > now && until <= now + MAX_MUTE_SECS,
+        }
+    }
+}
 
 /// One of the player's friend categories ("Okul", "PvP").
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -512,6 +605,8 @@ pub struct TeamsOverview {
     pub team_invites: Vec<TeamInvite>,
     #[serde(default)]
     pub team_features: Vec<String>,
+    #[serde(default)]
+    pub team_notifications: Option<TeamNotifications>,
 }
 
 /// Why the player is no longer in their team (presence `{"t":"team","team":null}`). A reason this
@@ -937,6 +1032,71 @@ mod tests {
             ..TeamEdit::default()
         };
         assert!(nothing.limited_to(true, true).is_empty());
+    }
+
+    #[test]
+    fn crew_mutes_end_by_themselves_and_go_out_as_little_as_changes() {
+        let overview: TeamsOverview = serde_json::from_str(
+            r#"{"team":null,"invited":[],"teamInvites":[],"teamFeatures":["look","mute"],
+                "teamNotifications":{"calls":false,"muted":true,"muteUntil":1000}}"#,
+        )
+        .unwrap();
+        let settings = overview.team_notifications.unwrap();
+        assert!(!settings.calls && settings.muted_at(999) && !settings.muted_at(1000));
+        assert!(!settings.calls_at(999));
+        // A timed mute that ran out reads as no mute; calls keep their own switch.
+        assert_eq!(
+            settings.at(1000),
+            TeamNotifications {
+                calls: false,
+                muted: false,
+                mute_until: None
+            }
+        );
+        let forever = TeamNotifications {
+            muted: true,
+            ..TeamNotifications::default()
+        };
+        assert!(forever.muted_at(i64::MAX - 1) && !forever.calls_at(0));
+        assert!(TeamNotifications::default().calls_at(0));
+        // An older service sends none; one with half of it gets the defaults for the rest.
+        let older: TeamsOverview =
+            serde_json::from_str(r#"{"team":null,"invited":[],"teamInvites":[]}"#).unwrap();
+        assert_eq!(older.team_notifications, None);
+        let partial: TeamNotifications = serde_json::from_str(r#"{"muted":false}"#).unwrap();
+        assert_eq!(partial, TeamNotifications::default());
+
+        let mute = TeamNotificationsEdit {
+            muted: Some(true),
+            mute_until: Some(4_600),
+            ..TeamNotificationsEdit::default()
+        };
+        assert_eq!(
+            serde_json::to_string(&mute).unwrap(),
+            r#"{"muted":true,"muteUntil":4600}"#
+        );
+        assert!(mute.valid_at(1_000) && !mute.valid_at(4_600));
+        assert!(!mute.valid_at(4_600 - MAX_MUTE_SECS - 1));
+        let until_unmuted = TeamNotificationsEdit {
+            muted: Some(true),
+            ..TeamNotificationsEdit::default()
+        };
+        assert_eq!(
+            serde_json::to_string(&until_unmuted).unwrap(),
+            r#"{"muted":true}"#
+        );
+        let stray = TeamNotificationsEdit {
+            muted: Some(false),
+            mute_until: Some(4_600),
+            ..TeamNotificationsEdit::default()
+        };
+        assert!(!stray.valid_at(1_000));
+        let calls = TeamNotificationsEdit {
+            calls: Some(false),
+            ..TeamNotificationsEdit::default()
+        };
+        assert_eq!(serde_json::to_string(&calls).unwrap(), r#"{"calls":false}"#);
+        assert!(TeamNotificationsEdit::default().is_empty() && !calls.is_empty());
     }
 
     #[test]

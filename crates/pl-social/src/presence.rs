@@ -33,7 +33,9 @@ use url::Url;
 use crate::auth::SessionToken;
 use crate::backoff::{Backoff, BackoffPolicy, jitter};
 use crate::error::{ErrorCode, Result, SocialError, parse_retry_after};
-use crate::model::{FriendGroups, PublicProfile, StatusMode, Team, TeamExit, TeamInvite};
+use crate::model::{
+    FriendGroups, PublicProfile, StatusMode, Team, TeamExit, TeamInvite, TeamNotifications,
+};
 use crate::protocol::{
     CallAnswer, CallEndReason, ClientMessage, CrewCall, Invite, LocalStatus, Presence,
     ServerMessage,
@@ -112,6 +114,8 @@ pub enum PresenceEvent {
     TeamInvited(TeamInvite),
     /// Your friend categories changed on another device.
     GroupsChanged(FriendGroups),
+    /// Your crew notification settings changed (on any of your devices).
+    CrewNotifications(TeamNotifications),
     /// A request was accepted (by either side): a new friend, with their current presence.
     FriendAdded {
         friend: PublicProfile,
@@ -797,6 +801,9 @@ async fn on_text(
         ServerMessage::Team { team, reason, by } => PresenceEvent::TeamChanged { team, reason, by },
         ServerMessage::TeamInvite { invite } => PresenceEvent::TeamInvited(invite),
         ServerMessage::Groups { groups } => PresenceEvent::GroupsChanged(groups),
+        ServerMessage::TeamNotifications { notifications } => {
+            PresenceEvent::CrewNotifications(notifications)
+        }
         ServerMessage::Ack { rid, delivered } => {
             match rid.and_then(|rid| pending.remove(&rid)) {
                 Some(Reply::Invite(reply)) => {
@@ -1323,6 +1330,22 @@ mod tests {
                 call: "c1".into(),
                 reason: CallEndReason::Ended
             }
+        );
+
+        // "Sessize al" on another device of the player's.
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "team_notifications", "notifications": {"calls": true,
+                "muted": true, "muteUntil": null}}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::CrewNotifications(TeamNotifications {
+                calls: true,
+                muted: true,
+                mute_until: None
+            })
         );
 
         // While the connection is down (a flood closes it for a minute), a call fails at once.

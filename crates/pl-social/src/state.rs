@@ -9,7 +9,8 @@ use serde::Serialize;
 use crate::codes::crew_code;
 use crate::model::{
     BlockedUser, Friend, FriendGroups, FriendRequest, FriendsOverview, Limits, Me, PublicProfile,
-    RequestOutcome, SettingsMeta, Team, TeamAnswer, TeamExit, TeamInvite, TeamRole,
+    RequestOutcome, SettingsMeta, TEAM_FEATURE_MUTE, Team, TeamAnswer, TeamExit, TeamInvite,
+    TeamNotifications, TeamRole,
 };
 use crate::presence::{PresenceEvent, StopReason};
 use crate::protocol::{
@@ -194,8 +195,13 @@ impl SocialState {
                         });
                     }
                     // Crewmates (friends or not) joining Projects: the launcher announces it only
-                    // when the player asked for it ("Ekip arkadaşların Projects'e girince").
-                    if !was_on_projects && on_projects && self.is_teammate(&presence.id) {
+                    // when the player asked for it ("Ekip arkadaşların Projects'e girince") and
+                    // has not muted the crew ("Sessize al").
+                    if !was_on_projects
+                        && on_projects
+                        && self.is_teammate(&presence.id)
+                        && !self.crew_muted(now)
+                    {
                         notices.push(SocialNotice::CrewmateOnProjects {
                             id: presence.id.clone(),
                         });
@@ -259,12 +265,15 @@ impl SocialState {
                     }
                 } else {
                     let me = self.me.as_ref().map(|me| me.profile.id.as_str());
-                    let theirs = me != Some(call.from.as_str());
+                    // The service quiets calls for a player who muted the crew or switched calls
+                    // off; a setting that changed a moment ago here counts too.
+                    let announce =
+                        !*quiet && me != Some(call.from.as_str()) && self.crew_calls_on(now);
                     match at {
-                        None if !*quiet && theirs => notices.push(SocialNotice::CrewCall {
+                        None if announce => notices.push(SocialNotice::CrewCall {
                             call: Box::new(self.call_view(&next)),
                         }),
-                        Some(at) if !*quiet && theirs => {
+                        Some(at) if announce => {
                             let before = &self.calls[at];
                             let answer = me.and_then(|me| {
                                 next.call
@@ -311,6 +320,7 @@ impl SocialState {
                     });
                 }
             }
+            PresenceEvent::CrewNotifications(settings) => self.set_team_notifications(*settings),
             PresenceEvent::GroupsChanged(groups) => {
                 if let Some(overview) = &mut self.overview
                     && overview
@@ -544,6 +554,36 @@ impl SocialState {
 
     pub fn team(&self) -> Option<&Team> {
         self.overview.as_ref()?.team.as_ref()
+    }
+
+    /// The player's crew notification settings, from a service that keeps them (`mute`).
+    pub fn team_notifications(&self) -> Option<TeamNotifications> {
+        if !self.offers(TEAM_FEATURE_MUTE) {
+            return None;
+        }
+        Some(
+            self.overview
+                .as_ref()?
+                .team_notifications
+                .unwrap_or_default(),
+        )
+    }
+
+    /// The service answered, or another device of the player's changed them.
+    pub fn set_team_notifications(&mut self, settings: TeamNotifications) {
+        if let Some(overview) = &mut self.overview {
+            overview.team_notifications = Some(settings);
+        }
+    }
+
+    /// Crew notifications are silent at `now` ("Sessize al"; a timed mute ends by itself).
+    fn crew_muted(&self, now: i64) -> bool {
+        self.team_notifications().is_some_and(|n| n.muted_at(now))
+    }
+
+    /// Crew calls may be announced at `now`: switched on and not muted.
+    fn crew_calls_on(&self, now: i64) -> bool {
+        self.team_notifications().is_none_or(|n| n.calls_at(now))
     }
 
     /// The player's own open call, if any.
@@ -1032,6 +1072,7 @@ mod tests {
             team_invited: vec![],
             team_invites: vec![],
             team_features: vec!["look".into(), "calls".into()],
+            team_notifications: None,
         });
         state
     }
@@ -1509,6 +1550,89 @@ mod tests {
             invited: vec![],
         });
         state
+    }
+
+    #[test]
+    fn a_muted_crew_stays_quiet_until_the_mute_ends() {
+        let mut state = crewed();
+        let call = |id: &str| PresenceEvent::Call {
+            call: crew_call(id, "1", CallKind::Ready, NOW, NOW + 1200),
+            quiet: false,
+            clock: Some(NOW),
+        };
+        let projects = |id: &str, state: PresenceState| {
+            PresenceEvent::Presence(presence(
+                id,
+                state,
+                (state == PresenceState::Playing).then_some(GameLocation::Projects),
+            ))
+        };
+        // A service without `mute` keeps no settings: nothing is muted, the launcher's own
+        // switches decide.
+        state.apply(
+            &PresenceEvent::CrewNotifications(TeamNotifications {
+                calls: false,
+                muted: true,
+                mute_until: None,
+            }),
+            NOW,
+        );
+        assert_eq!(state.team_notifications(), None);
+        assert_eq!(state.apply(&call("c0"), NOW).len(), 1);
+
+        // With `mute`: settings from another device arrive live and silence the crew.
+        if let Some(overview) = &mut state.overview {
+            overview.team_features.push(TEAM_FEATURE_MUTE.into());
+            overview.team_notifications = None;
+        }
+        assert_eq!(
+            state.team_notifications(),
+            Some(TeamNotifications::default()),
+            "a service with `mute` that sent nothing yet: the defaults"
+        );
+        let until = NOW + 3_600;
+        state.apply(
+            &PresenceEvent::CrewNotifications(TeamNotifications {
+                calls: true,
+                muted: true,
+                mute_until: Some(until),
+            }),
+            NOW,
+        );
+        assert!(state.apply(&call("c1"), NOW).is_empty());
+        assert!(
+            state
+                .apply(&projects("9", PresenceState::Playing), NOW)
+                .is_empty()
+        );
+        // Quiet, but there to answer.
+        assert_eq!(state.calls(NOW).len(), 2);
+
+        // The mute ends by itself: no message, the clock says so.
+        state.apply(&projects("9", PresenceState::Launcher), until);
+        assert_eq!(
+            state.apply(&projects("9", PresenceState::Playing), until),
+            vec![SocialNotice::CrewmateOnProjects { id: "9".into() }]
+        );
+        assert!(matches!(
+            &state.apply(&call("c2"), until)[..],
+            [SocialNotice::CrewCall { call }] if call.id == "c2"
+        ));
+
+        // Crew calls switched off: calls are quiet, a crewmate joining Projects is not.
+        state.set_team_notifications(TeamNotifications {
+            calls: false,
+            muted: false,
+            mute_until: None,
+        });
+        assert!(state.apply(&call("c3"), until).is_empty());
+        state.apply(&projects("9", PresenceState::Launcher), until);
+        assert_eq!(
+            state
+                .apply(&projects("9", PresenceState::Playing), until)
+                .len(),
+            1
+        );
     }
 
     #[test]

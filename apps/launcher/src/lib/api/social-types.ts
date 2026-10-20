@@ -141,6 +141,27 @@ export interface CrewFeatures {
   calls: boolean;
   /** Moderators and permissions. */
   roles: boolean;
+  /** "Sessize al" and crew calls on or off, kept by the service (the same on every device). */
+  mute: boolean;
+}
+
+/** What the player hears of their crew, kept by the service (all their devices). */
+export interface CrewNotifications {
+  /** "Ekip çağrıları". */
+  calls: boolean;
+  /** "Sessizde": until `muteUntil`, or until the player unmutes (`muteUntil` null). */
+  muted: boolean;
+  /** Unix seconds. A timed mute ends by itself (nothing says so): compare it with the clock. */
+  muteUntil: number | null;
+}
+
+/** "Sessize al" (`muted: true`, until `muteUntil` or until unmuted without it), "Sesi aç"
+ * (`muted: false`), crew calls on or off. */
+export interface CrewNotificationsChange {
+  calls?: boolean;
+  muted?: boolean;
+  /** Unix seconds, in the next 30 days; only with `muted: true`. */
+  muteUntil?: number;
 }
 
 export interface TeamMember extends SocialProfile {
@@ -287,6 +308,9 @@ export interface SocialSnapshot {
   teamInvites: TeamInvite[];
   /** Open crew calls, oldest first (only while the service offers calls). */
   calls: CrewCall[];
+  /** The player's crew notification settings (only while the service keeps them: `crew.mute`;
+   * otherwise the launcher's own switches decide). */
+  crewNotifications?: CrewNotifications;
 }
 
 export type SocialNotice =
@@ -337,7 +361,7 @@ export const HIDDEN_SNAPSHOT: SocialSnapshot = {
   invites: [],
   activity: { state: "launcher" },
   teams: false,
-  crew: { look: false, calls: false, roles: false },
+  crew: { look: false, calls: false, roles: false, mute: false },
   teamInvites: [],
   calls: [],
 };
@@ -402,6 +426,8 @@ export interface SocialApi {
   answerCall(callId: string, answer: CallAnswer): Promise<boolean>;
   /** "Bitir": ends the player's own call. */
   endCall(callId: string): Promise<void>;
+  /** "Sessize al", "Sesi aç", crew calls on or off (a service that keeps them). */
+  setCrewNotifications(change: CrewNotificationsChange): Promise<void>;
   /** Ends the team for everyone (founder). */
   disbandTeam(): Promise<void>;
   leaveTeam(): Promise<void>;

@@ -9,9 +9,10 @@ use std::sync::Arc;
 use pl_lang::pick;
 use pl_mc::launch::{GameEvent, QuickPlay};
 use pl_social::{
-    CallAnswer, CallOutcome, FriendGroup, GroupMember, InviteResult, LookupView, PermissionsEdit,
-    ProfileUpdate, SendOutcome, SessionInfo, SettingsMeta, SocialError, SocialService,
-    SocialUpdate, SocialView, StatusMode, TeamEdit, TeamLook, TeamLookupView,
+    CallAnswer, CallOutcome, ErrorCode, FriendGroup, GroupMember, InviteResult, LookupView,
+    PermissionsEdit, ProfileUpdate, SendOutcome, SessionInfo, SettingsMeta, SocialError,
+    SocialService, SocialUpdate, SocialView, StatusMode, TeamEdit, TeamLook, TeamLookupView,
+    TeamNotificationsEdit,
 };
 use tauri::{AppHandle, Emitter, State};
 
@@ -456,6 +457,31 @@ pub async fn social_team_moderator(
     moderator: bool,
 ) -> CmdResult<()> {
     Ok(state.social.set_team_moderator(&id, moderator).await?)
+}
+
+/// The player's crew notification settings, on a service that keeps them: "Sessize al" (until
+/// `muteUntil`, or until unmuted without it), "Sesi aç" (`muted: false`), crew calls on or off.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_notifications(
+    state: State<'_, AppState>,
+    change: TeamNotificationsEdit,
+) -> CmdResult<()> {
+    match state.social.set_crew_notifications(change).await {
+        // The service turns down a mute whose end its clock reads as past or too far ahead: this
+        // computer's clock is off (a plain 400 reads as a wrong friend code elsewhere).
+        Err(error) if error.code() == Some(&ErrorCode::BadRequest) => {
+            Err(crate::error::CmdError::new(
+                "SOSYAL-EKIP-SESSIZ",
+                pick(
+                    "Sessize alınamadı. Bilgisayarının saatini kontrol et.",
+                    "Couldn't mute. Check your computer's clock.",
+                ),
+                error.to_string(),
+            ))
+        }
+        other => Ok(other?),
+    }
 }
 
 /// "Ekibi çağır". A wait (called too recently) and an open call are answers, not errors.

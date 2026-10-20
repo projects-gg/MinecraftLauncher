@@ -3,6 +3,7 @@
 // every rule has a unit test (model.test.ts).
 import type { TFunction } from "i18next";
 import type {
+  CrewNotifications,
   Friend,
   SocialGame,
   SocialNotice,
@@ -11,6 +12,7 @@ import type {
   TeamMember,
 } from "@/lib/api/social-types";
 import { unansweredCall } from "./calls";
+import { crewCallsHeard, mutedNow } from "./mute";
 
 const collator = new Intl.Collator("tr", { sensitivity: "base" });
 
@@ -130,6 +132,24 @@ export function homeStrip(
     view.outgoing.length === 0 &&
     view.invites.length === 0;
   return alone && !closed.includes("add") ? "add" : null;
+}
+
+/**
+ * Something waits for the player (the friends entry's gold dot): a request, an invite, or a
+ * crewmate's call they have not answered, unless crew calls are off or the crew is muted (the
+ * call itself stays on the crew page and the Home line).
+ */
+export function somethingWaits(
+  view: Pick<SocialSnapshot, "incoming" | "invites" | "calls"> &
+    Partial<Pick<SocialSnapshot, "crewNotifications">>,
+  localCrewCalls: boolean,
+  nowMs: number,
+): boolean {
+  if (view.incoming.length > 0 || view.invites.length > 0) return true;
+  return (
+    Boolean(unansweredCall(view.calls, nowMs)) &&
+    crewCallsHeard(view.crewNotifications, localCrewCalls, nowMs)
+  );
 }
 
 /** Someone on Home's "playing" line: a friend in game, or a crewmate on Projects. */
@@ -264,12 +284,16 @@ export function notifiesOnline(prefs: NoticePrefs, id: string): boolean {
 /**
  * Whether a notice should reach the player at all. Do-not-disturb silences everything (friends
  * still see the status); a friend coming online counts when the player asked for it (for that
- * friend, or for favourites), joining projects.gg only for favourites.
+ * friend, or for favourites), joining projects.gg only for favourites. A crew muted with "Sessize
+ * al" says nothing (its calls stay on the crew page and the Home line); where the service keeps
+ * the crew's settings (`crew`), its "Ekip çağrıları" wins over this computer's.
  */
 export function wantsNotice(
   notice: SocialNotice,
   status: StatusMode | undefined,
   prefs: NoticePrefs,
+  crew?: CrewNotifications,
+  nowMs: number = Date.now(),
 ): boolean {
   if (status === "dnd") {
     // Signing out still has to be said: the panel looks different afterwards.
@@ -284,9 +308,9 @@ export function wantsNotice(
       return !notice.invite.quiet;
     case "crewCall":
     case "crewCallJoin":
-      return prefs.notifyCrewCalls ?? true;
+      return crewCallsHeard(crew, prefs.notifyCrewCalls ?? true, nowMs);
     case "crewmateOnProjects":
-      return notifiesCrewProjects(prefs, notice.id);
+      return !mutedNow(crew, nowMs) && notifiesCrewProjects(prefs, notice.id);
     default:
       return true;
   }

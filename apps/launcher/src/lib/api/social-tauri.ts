@@ -210,6 +210,7 @@ export function crewFeatures(list: readonly string[]): CrewFeatures {
     look: list.includes("look"),
     calls: list.includes("calls"),
     roles: list.includes("roles"),
+    mute: list.includes("mute"),
   };
 }
 
@@ -236,6 +237,13 @@ export function snapshot(v: SocialView): SocialSnapshot {
     team: v.team ? team(v.team) : undefined,
     teamInvites: v.teamInvites.map(teamInvite),
     calls: v.calls.map(call),
+    crewNotifications: v.crewNotifications
+      ? {
+          calls: v.crewNotifications.calls,
+          muted: v.crewNotifications.muted,
+          muteUntil: v.crewNotifications.muteUntil ?? null,
+        }
+      : undefined,
   };
 }
 
@@ -399,6 +407,15 @@ export const tauriSocial: SocialApi = {
   answerCall: (callId, answer) => ok(commands.socialTeamCallAnswer(callId, answer)),
   async endCall(callId) {
     await ok(commands.socialTeamCallEnd(callId));
+  },
+  async setCrewNotifications(change) {
+    await ok(
+      commands.socialTeamNotifications({
+        calls: change.calls ?? null,
+        muted: change.muted ?? null,
+        muteUntil: change.muteUntil ?? null,
+      }),
+    );
   },
   async disbandTeam() {
     await ok(commands.socialTeamDisband());

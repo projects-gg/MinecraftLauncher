@@ -9,9 +9,8 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { MovableMenu, openMenuFromKeyboard } from "@/shell/movable-menu";
 import { usePlace } from "@/stores/placement";
-import { unansweredCall } from "./calls";
 import { EntryCue, entryLabel, moveMotion, openAction, useArrived } from "./entry";
-import { onlineFriends } from "./model";
+import { onlineFriends, somethingWaits } from "./model";
 import { pop, swap, useSocialMotion } from "./motion";
 import { useSocialPrefs, useSocialUi } from "./store";
 import { useCallClock } from "./use-call-clock";
@@ -40,12 +39,9 @@ function RailEntry() {
   const signedIn = view.auth === "signedIn";
   const online = signedIn ? onlineFriends(view.friends, favorites).length : 0;
   const now = useCallClock((s) => s.now);
+  const crewCalls = useSocialPrefs((s) => s.notifyCrewCalls);
   // A request, an invite or a crewmate's call waits for the player.
-  const pending =
-    signedIn &&
-    (view.incoming.length > 0 ||
-      view.invites.length > 0 ||
-      Boolean(unansweredCall(view.calls, now)));
+  const pending = signedIn && somethingWaits(view, crewCalls, now);
   const open = () => openPanel({ from: trigger.current });
 
   return (

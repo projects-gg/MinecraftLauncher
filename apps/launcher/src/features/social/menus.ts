@@ -211,7 +211,16 @@ export function categoryMenu(input: CategoryInput): Plan<CategoryAction> {
 
 // --- the team's header ------------------------------------------------------------------------------
 
-export type TeamAction = "open" | "toggle" | "call" | "copyCode" | "invite" | "edit" | Leaving;
+export type TeamAction =
+  | "open"
+  | "toggle"
+  | "call"
+  | "copyCode"
+  | "invite"
+  | "edit"
+  | "mute"
+  | "unmute"
+  | Leaving;
 
 export interface TeamInput {
   team: Pick<SocialTeam, "role" | "members" | "invited" | "limit">;
@@ -226,6 +235,11 @@ export interface TeamInput {
   canInvite?: boolean;
   /** The player may edit the crew (the leader; a moderator the look where the crew lets them). */
   canEdit?: boolean;
+  /**
+   * "Sessize al" (its submenu says how long) or, while muted, "Sesi aç": only where the service
+   * keeps the crew's notification settings. Older callers leave it out.
+   */
+  mute?: "muted" | "unmuted" | "hidden";
 }
 
 export function teamMenu({
@@ -234,6 +248,7 @@ export function teamMenu({
   call = "hidden",
   canInvite = true,
   canEdit,
+  mute = "hidden",
 }: TeamInput): Plan<TeamAction> {
   const full = team.members.length >= team.limit;
   return tidy<TeamAction>([
@@ -246,6 +261,8 @@ export function teamMenu({
       canInvite && { action: "invite", disabled: full || friendsOutside === 0 },
       (canEdit ?? team.role === "founder") && { action: "edit" },
     ),
+    null,
+    mute === "hidden" ? null : { action: mute === "muted" ? "unmute" : "mute" },
     null,
     { action: leavingOf(team) },
   ]);

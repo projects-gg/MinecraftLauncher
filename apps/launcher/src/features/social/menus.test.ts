@@ -280,6 +280,26 @@ describe("teamMenu", () => {
     expect(plan).toEqual(["open", "toggle", "-", "copyCode", "edit", "-", "leave"]);
   });
 
+  it("mutes the crew, or unmutes it, where the service keeps its settings", () => {
+    const plan = (mute?: "muted" | "unmuted" | "hidden") =>
+      words(teamMenu({ team: team("member", 4), friendsOutside: 3, mute }));
+    expect(plan("unmuted")).toEqual([
+      "open",
+      "toggle",
+      "-",
+      "copyCode",
+      "invite",
+      "-",
+      "mute",
+      "-",
+      "leave",
+    ]);
+    expect(plan("muted")).toContain("unmute");
+    expect(plan("muted")).not.toContain("mute");
+    expect(plan("hidden")).toEqual(plan());
+    expect(plan()).not.toContain("mute");
+  });
+
   it("names the way out like the team page", () => {
     expect(leavingOf(team("member", 1))).toBe("leave");
     expect(leavingOf(team("founder", 1))).toBe("close");

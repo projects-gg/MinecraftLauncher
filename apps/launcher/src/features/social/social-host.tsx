@@ -25,6 +25,7 @@ import {
   readBackup,
   wantsNotice,
 } from "./model";
+import { mutedNow } from "./mute";
 import { useSocialPrefs, useSocialUi } from "./store";
 import { useCallTicker } from "./use-call-clock";
 
@@ -51,7 +52,8 @@ function showCrewArrival(id: string) {
     crewArrivals.ids = [];
     crewArrivals.timer = null;
     const first = ids[0];
-    if (!first) return;
+    // Muted meanwhile ("Sessize al" while the arrivals were gathered): nothing to say.
+    if (!first || mutedNow(useSocialUi.getState().view.crewNotifications, Date.now())) return;
     const name = crewmateName(first) ?? "";
     const text =
       ids.length > 1
@@ -113,7 +115,7 @@ function handleNotice(notice: SocialNotice) {
     return;
   }
   const prefs = useSocialPrefs.getState();
-  if (!wantsNotice(notice, ui.view.me?.status, prefs)) return;
+  if (!wantsNotice(notice, ui.view.me?.status, prefs, ui.view.crewNotifications)) return;
   switch (notice.kind) {
     case "invite": {
       showInviteToast(notice.invite);

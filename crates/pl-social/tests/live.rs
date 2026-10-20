@@ -18,8 +18,9 @@ use pl_social::{
     CallAnswer, CallKind, ErrorCode, InviteOutcome, LocalStatus, LoginAttempt, PermissionLevel,
     PermissionsEdit, PresenceEvent, PresenceHandle, PresenceOptions, PresenceState, ProfileUpdate,
     Relation, RequestOutcome, Session, SettingsPrecondition, SocialClient, SocialConfig,
-    SocialError, StatusMode, StopReason, TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK, TEAM_FEATURE_ROLES,
-    TeamEdit, TeamLook, auth_code_from_deep_link, crew_code,
+    SocialError, StatusMode, StopReason, TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK, TEAM_FEATURE_MUTE,
+    TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamNotifications, TeamNotificationsEdit,
+    auth_code_from_deep_link, crew_code,
 };
 use url::Url;
 
@@ -373,6 +374,7 @@ async fn crews_look_roles_and_calls() {
     let look = features.iter().any(|f| f == TEAM_FEATURE_LOOK);
     let roles = features.iter().any(|f| f == TEAM_FEATURE_ROLES);
     let calls = features.iter().any(|f| f == TEAM_FEATURE_CALLS);
+    let mute = features.iter().any(|f| f == TEAM_FEATURE_MUTE);
 
     // Founding: the look goes only where the service has looks.
     let wanted = TeamLook {
@@ -526,9 +528,11 @@ async fn crews_look_roles_and_calls() {
         mate_presence.set_status(LocalStatus::Playing {
             host: Some("play.projects.gg".into()),
         });
-        expect(&mut leader_presence, "the join call", |e| {
-            matches!(e, PresenceEvent::Call { call, .. } if call.kind == CallKind::Join)
-        })
+        expect(
+            &mut leader_presence,
+            "the join call",
+            |e| matches!(e, PresenceEvent::Call { call, .. } if call.kind == CallKind::Join),
+        )
         .await;
         // One call at a time, and not again so soon.
         let again = leader_presence.call_crew().await.unwrap_err();
@@ -556,6 +560,92 @@ async fn crews_look_roles_and_calls() {
         // A service without calls refuses the message (the launcher never sends it there).
         let refused = mate_presence.call_crew().await.unwrap_err();
         assert_eq!(refused.code(), Some(&ErrorCode::BadRequest));
+    }
+
+    // "Sessize al": the player's own settings, on all their devices; a muted player's crew calls
+    // arrive quiet (and still arrive).
+    let settings = mate.teams().await.unwrap().team_notifications;
+    if mute {
+        assert_eq!(settings, Some(TeamNotifications::default()));
+        let now = i64::try_from(
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs(),
+        )
+        .unwrap();
+        let hour = TeamNotificationsEdit {
+            muted: Some(true),
+            mute_until: Some(now + 3_600),
+            ..TeamNotificationsEdit::default()
+        };
+        let muted = mate.set_team_notifications(&hour).await.unwrap();
+        assert!(muted.calls && muted.muted && muted.mute_until == Some(now + 3_600));
+        expect(
+            &mut mate_presence,
+            "the settings on the socket",
+            |e| matches!(e, PresenceEvent::CrewNotifications(settings) if settings.muted),
+        )
+        .await;
+        // The same again changes nothing; an end without a mute is refused.
+        assert_eq!(mate.set_team_notifications(&hour).await.unwrap(), muted);
+        let stray = TeamNotificationsEdit {
+            mute_until: Some(now + 3_600),
+            ..TeamNotificationsEdit::default()
+        };
+        let refused = mate.set_team_notifications(&stray).await.unwrap_err();
+        assert_eq!(refused.code(), Some(&ErrorCode::BadRequest));
+        if calls {
+            leader_presence.call_crew().await.unwrap();
+            match expect(
+                &mut mate_presence,
+                "the muted call",
+                |e| matches!(e, PresenceEvent::Call { call, .. } if call.from == leader_id),
+            )
+            .await
+            {
+                PresenceEvent::Call { quiet, .. } => {
+                    assert!(quiet, "a muted player's call is quiet")
+                }
+                _ => unreachable!(),
+            }
+        }
+        let open = mate
+            .set_team_notifications(&TeamNotificationsEdit {
+                muted: Some(false),
+                ..TeamNotificationsEdit::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(open, TeamNotifications::default());
+        let forever = mate
+            .set_team_notifications(&TeamNotificationsEdit {
+                muted: Some(true),
+                ..TeamNotificationsEdit::default()
+            })
+            .await
+            .unwrap();
+        assert!(forever.muted && forever.mute_until.is_none());
+        let calls_off = mate
+            .set_team_notifications(&TeamNotificationsEdit {
+                calls: Some(false),
+                muted: Some(false),
+                ..TeamNotificationsEdit::default()
+            })
+            .await
+            .unwrap();
+        assert!(!calls_off.calls && !calls_off.muted);
+        // The friend list carries them too (outside a crew as well).
+        let listed = mate.friends().await.unwrap().team_notifications.unwrap();
+        assert_eq!(listed, calls_off);
+    } else {
+        assert_eq!(settings, None);
+        // An older service has no such route (the launcher never calls it there).
+        let edit = TeamNotificationsEdit {
+            muted: Some(true),
+            ..TeamNotificationsEdit::default()
+        };
+        assert!(mate.set_team_notifications(&edit).await.is_err());
     }
 
     mate.delete_account().await.unwrap();

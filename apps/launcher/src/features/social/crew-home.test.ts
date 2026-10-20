@@ -8,7 +8,14 @@ import type {
   SocialTeam,
   TeamMember,
 } from "@/lib/api/social-types";
-import { buildBackup, homeStrip, playingPeople, readBackup, wantsNotice } from "./model";
+import {
+  buildBackup,
+  homeStrip,
+  playingPeople,
+  readBackup,
+  somethingWaits,
+  wantsNotice,
+} from "./model";
 
 const NOW = 1_792_521_000_000;
 
@@ -173,6 +180,47 @@ describe("crew notices", () => {
         notifyFavoriteProjects: false,
       }),
     ).toBe(true);
+  });
+
+  it("keeps a muted crew quiet until the mute ends, and follows the service's call switch", () => {
+    const at = NOW / 1000;
+    const on = { calls: true, muted: false, muteUntil: null };
+    const muted = { calls: true, muted: true, muteUntil: at + 3_600 };
+    const joined: SocialNotice = { kind: "crewmateOnProjects", id: "2" };
+    const asked = { ...prefs, notifyCrewProjects: true };
+    expect(wantsNotice(crewCall, "online", prefs, muted, NOW)).toBe(false);
+    expect(wantsNotice(joined, "online", asked, muted, NOW)).toBe(false);
+    // A timed mute ends by itself.
+    expect(wantsNotice(crewCall, "online", prefs, muted, NOW + 3_600_000)).toBe(true);
+    expect(wantsNotice(joined, "online", asked, muted, NOW + 3_600_000)).toBe(true);
+    // "Ben açana kadar" does not.
+    const forever = { ...muted, muteUntil: null };
+    expect(wantsNotice(crewCall, "online", prefs, forever, NOW + 86_400_000)).toBe(false);
+    // Where the service keeps the switch, it wins over this computer's.
+    expect(wantsNotice(crewCall, "online", { ...prefs, notifyCrewCalls: false }, on, NOW)).toBe(
+      true,
+    );
+    expect(wantsNotice(crewCall, "online", prefs, { ...on, calls: false }, NOW)).toBe(false);
+    // Calls off is not a mute: crewmates joining Projects are still said.
+    expect(wantsNotice(joined, "online", asked, { ...on, calls: false }, NOW)).toBe(true);
+    // Friends' notices are no crew notices.
+    expect(wantsNotice({ kind: "friendOnline", id: "1" }, "online", prefs, forever, NOW)).toBe(
+      true,
+    );
+  });
+
+  it("lights the gold dot for a call only while calls are heard", () => {
+    const waiting = { incoming: [], invites: [], calls: [call()] };
+    const at = NOW / 1000;
+    expect(somethingWaits(waiting, true, NOW)).toBe(true);
+    expect(somethingWaits(waiting, false, NOW)).toBe(false);
+    const muted = { calls: true, muted: true, muteUntil: at + 60 };
+    expect(somethingWaits({ ...waiting, crewNotifications: muted }, true, NOW)).toBe(false);
+    expect(somethingWaits({ ...waiting, crewNotifications: muted }, true, NOW + 60_000)).toBe(true);
+    // A request still waits, muted or not.
+    const request = { ...waiting, incoming: [{} as FriendRequest], crewNotifications: muted };
+    expect(somethingWaits(request, true, NOW)).toBe(true);
+    expect(somethingWaits({ incoming: [], invites: [], calls: [] }, true, NOW)).toBe(false);
   });
 
   it("carries the crew switches in the settings backup, older backups keeping the defaults", () => {
