@@ -61,7 +61,7 @@ impl CmdError {
             lang.pick(
                 format!("Diskte yeterli yer yok. Oyun için {needed} gerekiyor, {free} boş."),
                 format!(
-                    "There isn't enough space on the disk. The game needs {needed}, {free} is free."
+                    "There isn't enough space on the disk. The game needs {needed}, but only {free} is free."
                 ),
             ),
             details,
@@ -78,7 +78,7 @@ impl CmdError {
             lang.pick(
                 format!("Diskte yeterli yer yok. Bunun için {needed} gerekiyor, {free} boş."),
                 format!(
-                    "There isn't enough space on the disk. This needs {needed}, {free} is free."
+                    "There isn't enough space on the disk. This needs {needed}, but only {free} is free."
                 ),
             ),
             details,
@@ -270,7 +270,7 @@ impl From<pl_social::SocialError> for CmdError {
                     "SOSYAL-ENGEL",
                     pick(
                         "Bu kişiyi engellemişsin. Önce engeli kaldır.",
-                        "You blocked this person. Unblock them first.",
+                        "You've blocked this person. Unblock them first.",
                     ),
                 ),
                 C::LimitFriends => (
@@ -397,7 +397,7 @@ impl From<pl_social::SocialError> for CmdError {
                     "SOSYAL-TAKIM-ENGEL",
                     pick(
                         "Bu takımda engellediğin biri var.",
-                        "You blocked someone in this team.",
+                        "You've blocked someone in this team.",
                     ),
                 ),
                 C::LimitTeamMembers => (

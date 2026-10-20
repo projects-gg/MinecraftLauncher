@@ -125,7 +125,7 @@ impl From<pl_afk::AfkError> for CmdError {
             AfkError::DuplicateNickname => (
                 "AFK-AD",
                 pick(
-                    "Bu isimde bir AFK hesabı zaten var.",
+                    "Bu adla bir AFK hesabı zaten var.",
                     "There's already an AFK account with this name.",
                 ),
             ),

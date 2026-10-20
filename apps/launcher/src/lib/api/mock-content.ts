@@ -57,7 +57,7 @@ function refuseWhenDiskLow() {
     "DISK-DOLU",
     pick(
       `Diskte yeterli yer yok. Bunun için 1,2${nb}GB gerekiyor, 300${nb}MB boş.`,
-      `There isn't enough space on the disk. This needs 1.2${nb}GB, 300${nb}MB is free.`,
+      `There isn't enough space on the disk. This needs 1.2${nb}GB, but only 300${nb}MB is free.`,
     ),
   );
 }
