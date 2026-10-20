@@ -1,7 +1,7 @@
 import type { trFriendGroups } from "./tr-friend-groups";
 
-// Friend categories in the friends panel.
-export const enFriendGroups: typeof trFriendGroups = {
+// Friend categories in the friends panel. English adds the singular of a count.
+export const enFriendGroups: typeof trFriendGroups & { summary_one: string } = {
   rest: "Friends",
   add: "New category",
   addMenu: "New category…",
@@ -22,6 +22,7 @@ export const enFriendGroups: typeof trFriendGroups = {
   grip: "Move {{name}}",
   options: "{{name}} options",
   summary: "{{name}}, {{online}} online, {{count}} friends",
+  summary_one: "{{name}}, {{online}} online, {{count}} friend",
   moved: "{{name}} moved to {{group}}",
   groupMoved: "{{name}} is now number {{position}}",
   limit: "You can have up to 20 categories.",

@@ -8,7 +8,7 @@ export const enGraphics = {
   },
   custom: "Custom",
   replacesCustom: "Your in-game video settings will change.",
-  waitsForGame: "You can save the graphics once the game closes.",
+  waitsForGame: "You can save graphics settings once the game closes.",
   palette: "Graphics settings",
   advanced: "Advanced",
   jvmHelp: "Leaving it empty is usually best.",

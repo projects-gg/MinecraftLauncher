@@ -7,7 +7,7 @@ export const enTuning = {
     turnOn: "Turn on",
   },
   palette: {
-    memory: "Memory",
+    memory: "Memory settings",
     java: "Java settings",
     cleanup: "Free up space",
     support: "Create a support bundle",

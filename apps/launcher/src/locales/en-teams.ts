@@ -26,7 +26,7 @@ export const enTeams: typeof trTeams = {
     done: "{{name}} is ready",
     short: "At least 3 letters or digits.",
     long: "24 characters at most.",
-    chars: "Only letters, digits, spaces and ' & ! _ -.",
+    chars: "Only letters, digits, spaces and ' & ! _ - are allowed.",
     tagInvalid: "2 to 4 letters or digits.",
   },
   join: {
@@ -35,9 +35,9 @@ export const enTeams: typeof trTeams = {
     find: "Find",
     submit: "Join team",
     invalid: "That's not a team code.",
-    member: "You're in this team.",
+    member: "You're already in this team.",
     elsewhere: "Leave your team first.",
-    blocked: "You blocked someone in this team.",
+    blocked: "You've blocked someone in this team.",
     full: "The team is full.",
   },
   code: {
@@ -59,7 +59,7 @@ export const enTeams: typeof trTeams = {
   },
   member: {
     makeFounder: "Make founder",
-    makeFounderAsk: "{{name}} becomes the founder and you a member.",
+    makeFounderAsk: "{{name}} becomes the founder, and you become a member.",
     madeFounder: "{{name}} is the founder now",
     remove: "Remove from team",
     removeAsk: "{{name}} leaves the team and the team code changes.",

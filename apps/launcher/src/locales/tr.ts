@@ -239,7 +239,7 @@ export const tr = {
     pickerLabel: "Kurulum seç",
     openLibrary: "Kütüphaneyi aç",
     create: "Yeni kurulum",
-    managed: "Resmi paket",
+    managed: "Resmî paket",
     needsInstall: "İndirilmedi",
     needsUpdate: "Güncelleme var",
   },
@@ -581,7 +581,7 @@ export const tr = {
     search: "Kurulumlarda ara",
     create: "Yeni kurulum",
     import: "İçe aktar",
-    official: "Resmi paketler",
+    official: "Resmî paketler",
     mine: "Kurulumlarım",
     noResults: "Aramana uyan kurulum yok.",
     empty: {
@@ -637,7 +637,7 @@ export const tr = {
     title: "Yeni kurulum",
     sourceNew: "Sıfırdan",
     sourceImport: "Dosyadan içe aktar",
-    name: "İsim",
+    name: "Ad",
     icon: "Simge",
     iconNames: {
       grass: "Çimen bloğu",
@@ -756,7 +756,7 @@ export const tr = {
     showScript: "Giriş komutlarını göster",
     invalidName:
       "Oyuncu adı 3-16 karakter olmalı ve yalnızca harf, rakam ya da alt çizgi içermeli.",
-    duplicate: "Bu isimde bir AFK hesabı zaten var.",
+    duplicate: "Bu adla bir AFK hesabı zaten var.",
     settingsChanged: "Yeni ayarlar yeniden bağlanınca geçerli olur.",
     reconnect: "Yeniden bağlan",
     versionPinned: "Sürüm {{version}}",
@@ -825,7 +825,7 @@ export const tr = {
       versionSearch: "Sürüm ara",
       versionNone: "Bu aramayla eşleşen sürüm yok.",
       autoStart: "Launcher açılınca otomatik bağlan",
-      resourcePacks: "Doku paketlerine izin ver",
+      resourcePacks: "Kaynak paketlerine izin ver",
       resourcePacksHelp:
         "Kapalıyken paket indirilmez ama sunucuya yüklendi denir; açıkken sohbet çevirileri doğru görünür.",
     },
@@ -968,7 +968,7 @@ export const tr = {
     discard: {
       title: "Değişiklikler kaydedilmedi",
       body: "Kaydetmeden kapatırsan yaptığın değişiklikler silinir.",
-      confirm: "Değişiklikleri at",
+      confirm: "Kaydetmeden kapat",
       keep: "Düzenlemeye dön",
     },
     errors: {
@@ -1812,7 +1812,7 @@ export const tr = {
       done: "Mod paketi kaydedildi",
       doneBody: "{{hosted}} dosya bağlantı olarak, {{bundled}} dosya paketin içinde.",
       offline: "Modrinth'e ulaşılamadı; tüm modlar dosyanın içine eklendi.",
-      nameRequired: "Pakete bir isim ver.",
+      nameRequired: "Pakete bir ad ver.",
     },
     update: {
       card: "Mod paketi",

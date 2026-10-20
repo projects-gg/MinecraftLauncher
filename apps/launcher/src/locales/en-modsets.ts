@@ -77,7 +77,7 @@ export const enModSets = {
     removed: "Removed the {{name}} set.",
     undo: "Undo",
     applied: "Applied the changes to the {{name}} set.",
-    issues: "Some files couldn't be changed; they'll be tried again later.",
+    issues: "Some files couldn't be changed; we'll try again later.",
     unavailable: "Couldn't load the latest sets; showing what's installed.",
   },
   add: {
