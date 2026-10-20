@@ -51,9 +51,10 @@ import {
   setLanguage,
 } from "@/lib/i18n";
 import { openLink } from "@/lib/links";
+import { detectOs } from "@/lib/platform";
 import { playSound } from "@/lib/sound";
 import { type Place, usePlace, usePlacement } from "@/stores/placement";
-import { type GameStartBehavior, usePrefs } from "@/stores/prefs";
+import { type CloseBehavior, type GameStartBehavior, usePrefs } from "@/stores/prefs";
 import { AccountsSection } from "./accounts-section";
 import { DataSection } from "./data-section";
 import { GraphicsSection } from "./graphics-section";
@@ -123,6 +124,35 @@ function LanguageRow() {
   );
 }
 
+/**
+ * What the close button does (TRAY1): quit unless a game or AFK accounts keep the launcher (a job
+ * the player started finishes first), or always stay in the tray, for friends' notifications. Next
+ * to "Oyun açılınca launcher", worded the same way. macOS has no such row: its red button only
+ * hides the window (shell::close_requested).
+ */
+function CloseBehaviorRow() {
+  const { t } = useTranslation();
+  const choice = usePrefs((s) => s.closeBehavior);
+  const set = usePrefs((s) => s.set);
+  const mac = useMemo(() => detectOs() === "macos", []);
+  if (mac) return null;
+  return (
+    <Row title={t("tray.closeSetting")}>
+      <div className="w-64">
+        <Select<CloseBehavior>
+          value={choice}
+          onValueChange={(v) => set("closeBehavior", v)}
+          label={t("tray.closeSetting")}
+          options={[
+            { value: "quit", label: t("tray.closeQuit") },
+            { value: "tray", label: t("tray.closeTray") },
+          ]}
+        />
+      </div>
+    </Row>
+  );
+}
+
 function General() {
   const { t } = useTranslation();
   const p = usePrefs();
@@ -145,6 +175,7 @@ function General() {
           />
         </div>
       </Row>
+      <CloseBehaviorRow />
       <Row title={t("shotCopy.setting")} help={t("shotCopy.settingHelp")}>
         <Switch
           checked={p.copyScreenshots}
@@ -168,14 +199,6 @@ function General() {
             });
           }}
           label={t("settings.general.startOnBoot")}
-          hideLabel
-        />
-      </Row>
-      <Row title={t("settings.general.closeToTray")}>
-        <Switch
-          checked={p.closeToTray}
-          onCheckedChange={(v) => p.set("closeToTray", v)}
-          label={t("settings.general.closeToTray")}
           hideLabel
         />
       </Row>

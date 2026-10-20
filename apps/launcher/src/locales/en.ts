@@ -20,6 +20,7 @@ import { enReminders } from "./en-reminders";
 import { enShortcuts } from "./en-shortcuts";
 import { enShotCopy } from "./en-shot-copy";
 import { enTeams } from "./en-teams";
+import { enTray } from "./en-tray";
 import { enTuning } from "./en-tuning";
 import { enUpdates } from "./en-updates";
 import type { Strings } from "./tr";
@@ -257,6 +258,7 @@ export const en: DeepPartial<Strings> = {
   keyClash: enKeyClash,
   fps: enFps,
   homeLinks: enHomeLinks,
+  tray: enTray,
   nav: {
     home: "Home",
     library: "Library",
@@ -785,11 +787,6 @@ export const en: DeepPartial<Strings> = {
       finish: "I'm ready",
     },
   },
-  tray: {
-    hintTitle: "Projects Launcher is still running",
-    hint: "The launcher keeps running in the tray.",
-    hintAfk: "Your AFK accounts are on, so the launcher keeps running in the tray.",
-  },
   official: {
     added: "{{name}} was added to your library. It downloads the first time you play.",
   },
@@ -1270,7 +1267,6 @@ export const en: DeepPartial<Strings> = {
       tray: "Hide in the tray",
       close: "Close",
       startOnBoot: "Launch at startup",
-      closeToTray: "Keep running in the tray when closed",
       notifications: "Desktop notifications",
       startOnBootFailed: "Couldn't change this setting right now. Try again.",
     },

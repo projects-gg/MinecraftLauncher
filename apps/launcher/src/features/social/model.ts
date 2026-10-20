@@ -237,7 +237,8 @@ export const BACKUP_PREFS = {
   soundVolume: "volume",
   autoJoin: "boolean",
   onGameStart: ["keep", "minimize", "tray", "close"],
-  closeToTray: "boolean",
+  // Since TRAY1; a backup's older `closeToTray` (on by default, so no choice) stays behind.
+  closeBehavior: ["quit", "tray"],
   updateChannel: ["stable", "beta"],
   autoDownloadUpdates: "boolean",
   discordEnabled: "boolean",

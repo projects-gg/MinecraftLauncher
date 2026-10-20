@@ -169,7 +169,7 @@ export function useDesktopEvents() {
         useLaunch.getState().phase.kind,
       );
       const prefs = usePrefs.getState();
-      if (!prefs.closeToTray && !afkActive && !gameBusy) {
+      if (prefs.closeBehavior !== "tray" && !afkActive && !gameBusy) {
         await api.quitApp();
         return;
       }

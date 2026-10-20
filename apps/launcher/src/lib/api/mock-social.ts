@@ -714,7 +714,7 @@ export const mockSocial: SocialApi = {
   },
   async downloadBackup() {
     await delay(500);
-    return { v: 1, prefs: { sounds: true, particles: true, closeToTray: true } };
+    return { v: 1, prefs: { sounds: true, particles: true, closeBehavior: "tray" } };
   },
   async deleteBackup() {
     await delay(300);

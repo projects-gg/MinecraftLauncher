@@ -260,7 +260,7 @@ describe("settings backup", () => {
     soundVolume: 40,
     autoJoin: true,
     onGameStart: "tray",
-    closeToTray: true,
+    closeBehavior: "tray",
     updateChannel: "stable",
     autoDownloadUpdates: true,
     discordEnabled: true,
@@ -313,6 +313,16 @@ describe("settings backup", () => {
     expect(read.friends).toEqual({ favorites: ["1"], notifyFavoriteOnline: false });
     expect(readBackup(null)).toEqual({ prefs: {}, friends: {} });
     expect(readBackup("nope")).toEqual({ prefs: {}, friends: {} });
+  });
+
+  it("brings the close choice back, but never the old tray switch", () => {
+    // `closeToTray` was on by default, so an older backup's `true` was rarely a choice: the
+    // computer keeps its own (TRAY1).
+    expect(readBackup({ v: 1, prefs: { closeToTray: true } }).prefs).toEqual({});
+    expect(readBackup({ v: 1, prefs: { closeBehavior: "tray" } }).prefs).toEqual({
+      closeBehavior: "tray",
+    });
+    expect(readBackup({ v: 1, prefs: { closeBehavior: "exit" } }).prefs).toEqual({});
   });
 
   it("fingerprints regardless of key order", () => {

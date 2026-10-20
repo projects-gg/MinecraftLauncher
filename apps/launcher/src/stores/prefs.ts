@@ -3,6 +3,11 @@ import { persist } from "zustand/middleware";
 import type { LanguageChoice } from "@/lib/i18n";
 
 export type GameStartBehavior = "keep" | "minimize" | "tray" | "close";
+/**
+ * Settings → Genel → "Pencereyi kapatınca launcher": "quit" unless a game or AFK accounts keep it
+ * (a job the player started finishes first), or always stay in the tray (shell/close-button.ts).
+ */
+export type CloseBehavior = "quit" | "tray";
 export type CleanupSetDays = 30 | 60 | 90;
 export type UpdateChannel = "stable" | "beta";
 /**
@@ -29,7 +34,7 @@ interface PrefsState {
   autoJoin: boolean;
   onGameStart: GameStartBehavior;
   startOnBoot: boolean;
-  closeToTray: boolean;
+  closeBehavior: CloseBehavior;
   /** System notifications while the launcher is in the background (long installs, friends). */
   desktopNotifications: boolean;
   /** Settings → Genel: every screenshot taken in game goes to the clipboard (src-tauri shot_copy). */
@@ -85,7 +90,7 @@ export const usePrefs = create<PrefsState>()(
       autoJoin: true,
       onGameStart: "minimize",
       startOnBoot: false,
-      closeToTray: true,
+      closeBehavior: "quit",
       desktopNotifications: true,
       copyScreenshots: false,
       updateChannel: "stable",
@@ -109,19 +114,32 @@ export const usePrefs = create<PrefsState>()(
       setAutoJoin: (autoJoin) => set({ autoJoin }),
       setPerformanceMode: (performanceMode) => set({ performanceMode, perfTouched: true }),
     }),
-    { name: "pl.prefs", version: 3, migrate: migratePrefs },
+    { name: "pl.prefs", version: 4, migrate: migratePrefs },
   ),
 );
 
 /**
- * Saved preferences of older versions. Version 3 (L1, 18 Oct 2026): the language is automatic
- * (Turkish in Turkey or on a Turkish system, English otherwise) unless the player picks one. A
- * saved "tr" was never a choice (Turkish was the only language then), so it becomes "auto":
- * players in Turkey see no change, players abroad on an English system get English. A saved "en"
- * stays the player's.
+ * Saved preferences of older versions.
+ *
+ * Version 3 (L1, 18 Oct 2026): the language is automatic (Turkish in Turkey or on a Turkish
+ * system, English otherwise) unless the player picks one. A saved "tr" was never a choice
+ * (Turkish was the only language then), so it becomes "auto": players in Turkey see no change,
+ * players abroad on an English system get English. A saved "en" stays the player's.
+ *
+ * Version 4 (TRAY1, 20 Oct 2026): the switch "Kapatınca tepside çalışmaya devam etsin"
+ * (`closeToTray`, on by default) gives way to `closeBehavior`, and everyone starts on the new
+ * default "quit". The store saves every value, so a saved `true` cannot tell the untouched
+ * default from a choice; nearly all of them are the default, and a saved `false` already meant
+ * quitting.
  */
 export function migratePrefs(persisted: unknown, version: number): PrefValues {
-  const prefs = { ...(persisted as Partial<PrefValues> & { language?: string }) };
+  const prefs = {
+    ...(persisted as Partial<PrefValues> & { language?: string; closeToTray?: unknown }),
+  };
   if (version < 3) prefs.language = prefs.language === "en" ? "en" : "auto";
+  if (version < 4) {
+    delete prefs.closeToTray;
+    prefs.closeBehavior = "quit";
+  }
   return prefs as PrefValues;
 }

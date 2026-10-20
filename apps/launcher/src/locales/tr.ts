@@ -22,6 +22,7 @@ import { trShortcuts } from "./tr-shortcuts";
 import { trShotCopy } from "./tr-shot-copy";
 import { trSocial } from "./tr-social";
 import { trTeams } from "./tr-teams";
+import { trTray } from "./tr-tray";
 import { trTuning } from "./tr-tuning";
 import { trUpdates } from "./tr-updates";
 
@@ -51,6 +52,7 @@ export const tr = {
   keyClash: trKeyClash,
   fps: trFps,
   homeLinks: trHomeLinks,
+  tray: trTray,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
@@ -549,11 +551,6 @@ export const tr = {
       finish: "Hazırım",
     },
   },
-  tray: {
-    hintTitle: "Projects Launcher arka planda",
-    hint: "Launcher tepside çalışmaya devam ediyor.",
-    hintAfk: "AFK hesapların açık, launcher tepside çalışıyor.",
-  },
   official: {
     added: "{{name}} paketi kütüphanene eklendi. İlk oynayışta indirilecek.",
   },
@@ -1021,7 +1018,6 @@ export const tr = {
       tray: "Tepsiye gizlensin",
       close: "Kapansın",
       startOnBoot: "Bilgisayar açılınca başlat",
-      closeToTray: "Kapatınca tepside çalışmaya devam etsin",
       notifications: "Masaüstü bildirimleri",
       startOnBootFailed: "Bu ayar şu an değiştirilemedi. Tekrar dene.",
     },
