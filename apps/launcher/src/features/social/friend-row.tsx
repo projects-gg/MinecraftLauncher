@@ -1,8 +1,10 @@
 // One friend in the list: picture with presence, name, where they are, and "Katıl" when they are
-// on projects.gg. The row opens their card (beside the panel): join, "Birlikte oyna",
-// "Discord'dan mesaj at", favourite, and in a quieter corner remove and block, each confirmed in
-// place with one sentence.
+// on projects.gg. The row opens their card (beside the panel; a click, Enter or a double click):
+// join, "Birlikte oyna", "Discord'dan mesaj at", favourite, the online notice, and in a quieter
+// corner remove and block, each confirmed in place with one sentence. The same actions are in the
+// row's menu: a right click, Shift+F10 or the menu key, or its "…".
 import {
+  Bell,
   DiscordLogo,
   DotsThree,
   FolderSimple,
@@ -20,6 +22,7 @@ import {
   cn,
   easeOutExpo,
   IconButton,
+  Menu,
   type MenuItem,
   returnFocusAfterKeys,
   Select,
@@ -40,7 +43,9 @@ import { DiscordButton } from "./discord-button";
 import { openInDiscord } from "./discord-link";
 import { REST } from "./groups";
 import { gameBusy, joinProjects } from "./join";
-import { isJoinable, presenceLine } from "./model";
+import { openMenuFromKey } from "./menu-key";
+import { friendMenu, rowsOf } from "./menus";
+import { isJoinable, notifiesOnline, presenceLine } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -124,6 +129,8 @@ function FriendCard({
   const { reduce } = useSocialMotion();
   const favorite = useSocialPrefs((s) => s.favorites.includes(friend.id));
   const toggleFavorite = useSocialPrefs((s) => s.toggleFavorite);
+  const notify = useSocialPrefs((s) => notifiesOnline(s, friend.id));
+  const setOnlineAlert = useSocialPrefs((s) => s.setOnlineAlert);
   const cooldown = useSocialUi((s) => s.inviteCooldown);
   const [confirm, setConfirm] = useState<Confirm | null>(initialConfirm);
   const [busy, setBusy] = useState(false);
@@ -252,11 +259,7 @@ function FriendCard({
               </div>
             </motion.div>
           ) : (
-            <motion.div
-              key="tools"
-              className="flex items-center justify-between"
-              {...rise(reduce, 4, 0.2)}
-            >
+            <motion.div key="tools" className="flex items-center gap-1" {...rise(reduce, 4, 0.2)}>
               <button
                 type="button"
                 aria-pressed={favorite}
@@ -289,6 +292,35 @@ function FriendCard({
                   </AnimatePresence>
                 </span>
               </button>
+              <IconButton
+                label={t("friendMenus.notifyOnline")}
+                aria-pressed={notify}
+                size="sm"
+                className="ml-auto"
+                onClick={() => setOnlineAlert(friend.id, !notify)}
+                icon={
+                  <motion.span
+                    key={String(notify)}
+                    initial={
+                      reduce
+                        ? { opacity: 0 }
+                        : { opacity: 0, transform: "scale(0.7) rotate(-16deg)" }
+                    }
+                    animate={{
+                      opacity: 1,
+                      transform: "scale(1) rotate(0deg)",
+                      transition: { type: "spring", stiffness: 520, damping: 22 },
+                    }}
+                    className="flex"
+                  >
+                    <Bell
+                      size={16}
+                      weight={notify ? "fill" : "regular"}
+                      className={notify ? "text-gold-300" : undefined}
+                    />
+                  </motion.span>
+                }
+              />
               <MoreMenu onPick={setConfirm} />
             </motion.div>
           )}
@@ -382,6 +414,8 @@ export function FriendRow({
   const [open, setOpen] = useState(false);
   const [intent, setIntent] = useState<Confirm | null>(null);
   const toggleFavorite = useSocialPrefs((s) => s.toggleFavorite);
+  const notify = useSocialPrefs((s) => notifiesOnline(s, friend.id));
+  const setOnlineAlert = useSocialPrefs((s) => s.setOnlineAlert);
   const cooldown = useSocialUi((s) => s.inviteCooldown);
   const busy = useLaunch((s) => gameBusy(s.phase.kind));
   const joinable = friend.state === "playing" && isJoinable(friend.game);
@@ -395,86 +429,104 @@ export function FriendRow({
       setOpen(true);
     }, 0);
 
-  // The card's actions, a right click away on the row.
-  const items: Array<MenuItem | null> = [
-    ...(joinable
-      ? [
-          {
+  // The card's actions: a right click, Shift+F10 or the menu key, or "…" away on the row.
+  const items = rowsOf(
+    friendMenu({
+      joinable,
+      gameBusy: busy,
+      invite: coolingDown ? "waiting" : "ready",
+      notifyOnline: notify,
+      categories: Boolean(categories),
+      team: team?.state ?? null,
+    }),
+    (row): MenuItem | null => {
+      switch (row.action) {
+        case "join":
+          return {
             label: t("social.actions.join"),
             icon: <Play size={16} />,
-            disabled: busy,
+            disabled: row.disabled,
             onSelect: () => void joinProjects(),
-          },
-        ]
-      : []),
-    {
-      label: coolingDown ? t("social.actions.invited") : t("social.actions.invite"),
-      icon: <PaperPlaneTilt size={16} />,
-      disabled: coolingDown,
-      onSelect: () => void inviteFriend(friend),
+          };
+        case "invite":
+          return {
+            label: coolingDown ? t("social.actions.invited") : t("social.actions.invite"),
+            icon: <PaperPlaneTilt size={16} />,
+            disabled: row.disabled,
+            onSelect: () => void inviteFriend(friend),
+          };
+        case "message":
+          return {
+            label: t("social.actions.message"),
+            icon: <DiscordLogo size={16} />,
+            onSelect: () => void openInDiscord(friend),
+          };
+        case "favorite":
+          return {
+            label: favorite ? t("social.actions.unfavorite") : t("social.actions.favorite"),
+            icon: <Star size={16} weight={favorite ? "fill" : "regular"} />,
+            onSelect: () => toggleFavorite(friend.id),
+          };
+        case "notifyOnline":
+          return {
+            label: t("friendMenus.notifyOnline"),
+            icon: <Bell size={16} weight={notify ? "fill" : "regular"} />,
+            checked: notify,
+            onSelect: () => setOnlineAlert(friend.id, !notify),
+          };
+        case "category":
+          return categories
+            ? {
+                label: t("friendGroups.moveTo"),
+                icon: <FolderSimple size={16} />,
+                onSelect: () => {},
+                items: [
+                  ...categories.groups.map((g) => ({
+                    label: g.name,
+                    checked: categories.current === g.id,
+                    radio: true,
+                    onSelect: () => categories.onMove(g.id),
+                  })),
+                  {
+                    label: t("friendGroups.rest"),
+                    checked: categories.current === REST,
+                    radio: true,
+                    onSelect: () => categories.onMove(REST),
+                  },
+                  null,
+                  {
+                    label: t("friendGroups.addMenu"),
+                    icon: <FolderSimplePlus size={16} />,
+                    onSelect: categories.onNew,
+                  },
+                ],
+              }
+            : null;
+        case "teamInvite":
+          return team
+            ? {
+                label: team.state === "invited" ? t("teams.invite.sent") : t("teams.invite.toTeam"),
+                icon: <UsersThree size={16} />,
+                disabled: row.disabled,
+                onSelect: team.onInvite,
+              }
+            : null;
+        case "remove":
+          return {
+            label: t("social.actions.remove"),
+            icon: <UserMinus size={16} />,
+            onSelect: () => openAt("remove"),
+          };
+        case "block":
+          return {
+            label: t("social.actions.block"),
+            icon: <Prohibit size={16} />,
+            danger: true,
+            onSelect: () => openAt("block"),
+          };
+      }
     },
-    {
-      label: t("social.actions.message"),
-      icon: <DiscordLogo size={16} />,
-      onSelect: () => void openInDiscord(friend),
-    },
-    {
-      label: favorite ? t("social.actions.unfavorite") : t("social.actions.favorite"),
-      icon: <Star size={16} weight={favorite ? "fill" : "regular"} />,
-      onSelect: () => toggleFavorite(friend.id),
-    },
-    ...(categories
-      ? [
-          {
-            label: t("friendGroups.moveTo"),
-            icon: <FolderSimple size={16} />,
-            onSelect: () => {},
-            items: [
-              ...categories.groups.map((g) => ({
-                label: g.name,
-                checked: categories.current === g.id,
-                radio: true,
-                onSelect: () => categories.onMove(g.id),
-              })),
-              {
-                label: t("friendGroups.rest"),
-                checked: categories.current === REST,
-                radio: true,
-                onSelect: () => categories.onMove(REST),
-              },
-              null,
-              {
-                label: t("friendGroups.addMenu"),
-                icon: <FolderSimplePlus size={16} />,
-                onSelect: categories.onNew,
-              },
-            ],
-          },
-        ]
-      : []),
-    ...(team && team.state !== "member"
-      ? [
-          {
-            label: team.state === "invited" ? t("teams.invite.sent") : t("teams.invite.toTeam"),
-            icon: <UsersThree size={16} />,
-            disabled: team.state === "invited",
-            onSelect: team.onInvite,
-          },
-        ]
-      : []),
-    null,
-    {
-      label: t("social.actions.remove"),
-      icon: <UserMinus size={16} />,
-      onSelect: () => openAt("remove"),
-    },
-    {
-      label: t("social.actions.block"),
-      icon: <Prohibit size={16} />,
-      danger: true,
-      onSelect: () => openAt("block"),
-    },
-  ];
+  );
 
   return (
     <ContextMenu items={items}>
@@ -493,7 +545,13 @@ export function FriendRow({
             <button
               type="button"
               data-friend-row
-              onKeyDown={onKeyDown}
+              onKeyDown={(event) => {
+                if (!openMenuFromKey(event)) onKeyDown?.(event);
+              }}
+              // A double click opens the card and leaves it open (its second click would close it).
+              onClick={(event) => {
+                if (event.detail > 1 && open) event.preventDefault();
+              }}
               aria-label={`${friend.name}, ${line}`}
               className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
             >
@@ -583,6 +641,19 @@ export function FriendRow({
             </motion.span>
           ) : null}
         </AnimatePresence>
+        <span className="flex" data-no-drag>
+          <Menu
+            items={items}
+            trigger={
+              <IconButton
+                label={t("friendMenus.options", { name: friend.name })}
+                icon={<DotsThree size={18} weight="bold" />}
+                size="sm"
+                className="opacity-0 transition-opacity duration-150 group-hover/friend:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+              />
+            }
+          />
+        </span>
       </div>
     </ContextMenu>
   );

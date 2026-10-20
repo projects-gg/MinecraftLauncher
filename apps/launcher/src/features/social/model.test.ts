@@ -10,6 +10,7 @@ import {
   isProjectsHost,
   NoticeThrottle,
   normalizeCode,
+  notifiesOnline,
   onlineFriends,
   presenceLine,
   readBackup,
@@ -196,6 +197,20 @@ describe("wantsNotice", () => {
     ).toBe(false);
   });
 
+  it("lets the player choose for one friend, over the favourites' rule", () => {
+    const chosen = { ...prefs, onlineAlerts: { "8": true, "9": false } };
+    expect(notifiesOnline(chosen, "8")).toBe(true);
+    expect(notifiesOnline(chosen, "9")).toBe(false);
+    expect(notifiesOnline(chosen, "7")).toBe(false);
+    expect(wantsNotice({ kind: "friendOnline", id: "8" }, "online", chosen)).toBe(true);
+    expect(wantsNotice({ kind: "friendOnline", id: "9" }, "online", chosen)).toBe(false);
+    // Do-not-disturb still wins, and joining projects.gg stays a favourites' notice.
+    expect(wantsNotice({ kind: "friendOnline", id: "8" }, "dnd", chosen)).toBe(false);
+    expect(wantsNotice({ kind: "friendOnProjects", id: "8" }, "online", chosen)).toBe(false);
+    // Favourites follow the setting while nothing was chosen for them.
+    expect(notifiesOnline({ ...prefs, notifyFavoriteOnline: false }, "9")).toBe(false);
+  });
+
   it("throttles a flapping friend", () => {
     const throttle = new NoticeThrottle(60_000);
     expect(throttle.allow("9", 0)).toBe(true);
@@ -323,6 +338,22 @@ describe("settings backup", () => {
       closeBehavior: "tray",
     });
     expect(readBackup({ v: 1, prefs: { closeBehavior: "exit" } }).prefs).toEqual({});
+  });
+
+  it("carries per-friend online notices only when there are some", () => {
+    expect(buildBackup(prefs, friends).friends).not.toHaveProperty("onlineAlerts");
+    const document = buildBackup(prefs, {
+      ...friends,
+      onlineAlerts: { "123456789012345678": true, "223456789012345678": false, "../x": true },
+    });
+    expect(document.friends.onlineAlerts).toEqual({
+      "123456789012345678": true,
+      "223456789012345678": false,
+    });
+    expect(
+      readBackup({ friends: { onlineAlerts: { "1": false, "2": "yes", x: true } } }).friends,
+    ).toEqual({ onlineAlerts: { "1": false } });
+    expect(readBackup({ friends: { onlineAlerts: ["1"] } }).friends).toEqual({ onlineAlerts: {} });
   });
 
   it("fingerprints regardless of key order", () => {

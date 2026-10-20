@@ -17,13 +17,14 @@ import {
 } from "@phosphor-icons/react";
 import { Button, cn, SearchInput, Skeleton } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
-import { type FormEvent, type KeyboardEvent, useId, useRef, useState } from "react";
+import { type FormEvent, type KeyboardEvent, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { announce, friendlyError } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import type { Friend, SocialTeam, TeamLookup } from "@/lib/api/social-types";
 import { matchesQuery } from "@/lib/search";
 import { attempt, copyText } from "./actions";
+import { type Leaving, leavingOf } from "./menus";
 import { rise, swap, useSocialMotion } from "./motion";
 import { SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
@@ -647,7 +648,8 @@ function InviteFriends({ team }: { team: SocialTeam }) {
   );
 }
 
-type Leaving = "leave" | "close" | "disband";
+/** How long the page takes to slide in (motion.ts `pageVariants`), plus a frame. */
+const PAGE_SETTLE_MS = 340;
 
 function TeamView({ team }: { team: SocialTeam }) {
   const { t } = useTranslation();
@@ -656,8 +658,27 @@ function TeamView({ team }: { team: SocialTeam }) {
   const [asking, setAsking] = useState<Leaving | null>(null);
   const [busy, setBusy] = useState(false);
   const founder = team.role === "founder";
-  const alone = team.members.length <= 1;
-  const leaving: Leaving = founder ? (alone ? "close" : "disband") : "leave";
+  const leaving = leavingOf(team);
+  const inviteRef = useRef<HTMLDivElement>(null);
+  const leaveRef = useRef<HTMLDivElement>(null);
+
+  // A menu in the list sent the player here to edit, invite or leave: the page opens there.
+  const intent = useSocialUi((s) => s.teamIntent);
+  useEffect(() => {
+    if (!intent) return;
+    useSocialUi.getState().takeTeamIntent();
+    if (intent === "edit" && founder) setEditing(true);
+    if (intent === "leave") setAsking(leaving);
+    const place = intent === "invite" ? inviteRef : intent === "leave" ? leaveRef : null;
+    if (!place) return;
+    // After the page has slid in (its entrance scrolls the panel to the top). Taking the intent
+    // re-runs this effect, so the timer is not cleared with it; gone, the ref is simply empty.
+    window.setTimeout(
+      () =>
+        place.current?.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" }),
+      PAGE_SETTLE_MS,
+    );
+  }, [intent, founder, leaving, reduce]);
   const run = async (what: Leaving) => {
     setBusy(true);
     const done = await attempt(() =>
@@ -742,11 +763,13 @@ function TeamView({ team }: { team: SocialTeam }) {
         </ul>
       </section>
 
-      <InviteFriends team={team} />
+      <div ref={inviteRef}>
+        <InviteFriends team={team} />
+      </div>
 
       <p className="mt-5 px-1 text-[12px] leading-snug text-ash-400">{t("teams.privacy")}</p>
 
-      <div className="mt-3 border-t border-white/8 pt-3">
+      <div ref={leaveRef} className="mt-3 border-t border-white/8 pt-3">
         <AnimatePresence mode="popLayout" initial={false}>
           {asking ? (
             <motion.div key={asking} {...rise(reduce, 4, 0.2)}>

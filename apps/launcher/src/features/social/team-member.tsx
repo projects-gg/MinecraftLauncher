@@ -1,9 +1,19 @@
 // One teammate: picture with presence, name (a crown for the founder), where they are, and "Katıl"
 // when they are on projects.gg. The row opens their card beside the panel: join, "Discord'dan mesaj
 // at", and in a quieter corner what the player may do about them (the founder hands on the role or
-// removes them; anyone may block), each confirmed in place with one sentence.
-import { Crown, DotsThree, Prohibit, UserMinus } from "@phosphor-icons/react";
-import { Button, cn, easeOutExpo, IconButton, returnFocusAfterKeys } from "@pl/ui";
+// removes them; anyone may block), each confirmed in place with one sentence. The same actions are
+// in the row's menu: a right click, Shift+F10 or the menu key, or its "…".
+import { Crown, DiscordLogo, DotsThree, Play, Prohibit, UserMinus } from "@phosphor-icons/react";
+import {
+  Button,
+  ContextMenu,
+  cn,
+  easeOutExpo,
+  IconButton,
+  Menu,
+  type MenuItem,
+  returnFocusAfterKeys,
+} from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu, Popover } from "radix-ui";
 import { type KeyboardEvent, useState } from "react";
@@ -12,10 +22,14 @@ import { useCalm } from "@/features/accounts/calm";
 import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import type { TeamMember } from "@/lib/api/social-types";
+import { useLaunch } from "@/stores/launch";
 import { attempt } from "./actions";
 import { DiscordButton } from "./discord-button";
 import { openInDiscord } from "./discord-link";
 import { JoinButton } from "./friend-row";
+import { gameBusy, joinProjects } from "./join";
+import { openMenuFromKey } from "./menu-key";
+import { memberMenu, rowsOf } from "./menus";
 import { isJoinable, presenceLine } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
 import { SocialAvatar } from "./social-face";
@@ -25,17 +39,20 @@ type Question = "founder" | "remove" | "block" | "unblock";
 function MemberCard({
   member,
   founder,
+  initialQuestion,
   onDone,
 }: {
   member: TeamMember;
   /** The player founded the team (may hand on the role or remove). */
   founder: boolean;
+  /** Opened from the row's menu: the card starts at that question. */
+  initialQuestion: Question | null;
   onDone: () => void;
 }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
   const calm = useCalm();
-  const [question, setQuestion] = useState<Question | null>(null);
+  const [question, setQuestion] = useState<Question | null>(initialQuestion);
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const joinable = member.state === "playing" && isJoinable(member.game);
@@ -254,100 +271,202 @@ export function TeamMemberRow({
   const calm = useCalm();
   const { reduce } = useSocialMotion();
   const [open, setOpen] = useState(false);
+  const [intent, setIntent] = useState<Question | null>(null);
+  const busy = useLaunch((s) => gameBusy(s.phase.kind));
   const joinable = member.state === "playing" && isJoinable(member.game) && !member.blocked;
   const line = member.blocked ? t("teams.member.blocked") : presenceLine(member, t);
 
+  // Questions are asked in the card: it opens at the question once the menu is gone.
+  const openAt = (question: Question) =>
+    window.setTimeout(() => {
+      setIntent(question);
+      setOpen(true);
+    }, 0);
+
+  const items = rowsOf(
+    memberMenu({
+      joinable: member.state === "playing" && isJoinable(member.game),
+      gameBusy: busy,
+      founder,
+      blocked: member.blocked,
+    }),
+    (row): MenuItem | null => {
+      switch (row.action) {
+        case "join":
+          return {
+            label: t("social.actions.join"),
+            icon: <Play size={16} />,
+            disabled: row.disabled,
+            onSelect: () => void joinProjects(),
+          };
+        case "message":
+          return {
+            label: t("social.actions.message"),
+            icon: <DiscordLogo size={16} />,
+            onSelect: () => void openInDiscord(member),
+          };
+        case "makeFounder":
+          return {
+            label: t("teams.member.makeFounder"),
+            icon: <Crown size={16} />,
+            onSelect: () => openAt("founder"),
+          };
+        case "remove":
+          return {
+            label: t("teams.member.remove"),
+            icon: <UserMinus size={16} />,
+            onSelect: () => openAt("remove"),
+          };
+        case "block":
+          return {
+            label: t("social.actions.block"),
+            icon: <Prohibit size={16} />,
+            danger: true,
+            onSelect: () => openAt("block"),
+          };
+        case "unblock":
+          return {
+            label: t("social.actions.unblock"),
+            icon: <Prohibit size={16} />,
+            onSelect: () =>
+              void attempt(() => api.social.unblock(member.id)).then((done) => {
+                if (done !== undefined) {
+                  announce(t("social.actions.unblocked", { name: member.name }));
+                }
+              }),
+          };
+      }
+    },
+  );
+
   return (
-    <div className="group/friend flex items-center gap-2 rounded-[var(--radius-panel)] pr-2 transition-colors duration-150 hover:bg-white/[0.045] has-[[data-state=open]]:bg-white/[0.06]">
-      <Popover.Root open={open} onOpenChange={setOpen}>
-        <Popover.Trigger asChild>
-          <button
-            type="button"
-            data-friend-row
-            onKeyDown={onKeyDown}
-            aria-label={`${member.name}, ${line}`}
-            className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
-          >
-            <SocialAvatar
-              source={member}
-              size={36}
-              state={member.blocked ? "offline" : member.state}
-              dnd={member.dnd}
-            />
-            <span className="min-w-0 flex-1">
-              <span className="flex items-center gap-1.5">
-                <span
-                  className={cn(
-                    "truncate text-[14px] font-semibold",
-                    member.state === "offline" ? "text-bone-100/70" : "text-bone-50",
-                  )}
-                >
-                  {member.name}
-                </span>
-                {member.role === "founder" ? (
-                  <Crown
-                    size={12}
-                    weight="fill"
-                    className="shrink-0 text-gold-300"
-                    aria-label={t("teams.founder")}
-                  />
-                ) : null}
-              </span>
-              <span className="relative block h-[18px] overflow-hidden">
-                <AnimatePresence mode="popLayout" initial={false}>
-                  <motion.span
-                    key={line}
+    <ContextMenu items={items}>
+      <div className="group/friend flex items-center gap-2 rounded-[var(--radius-panel)] pr-2 transition-colors duration-150 hover:bg-white/[0.045] has-[[data-state=open]]:bg-white/[0.06]">
+        <Popover.Root
+          open={open}
+          onOpenChange={(next) => {
+            setOpen(next);
+            if (!next) setIntent(null);
+          }}
+        >
+          <Popover.Trigger asChild>
+            <button
+              type="button"
+              data-friend-row
+              onKeyDown={(event) => {
+                if (!openMenuFromKey(event)) onKeyDown?.(event);
+              }}
+              // A double click opens the card and leaves it open.
+              onClick={(event) => {
+                if (event.detail > 1 && open) event.preventDefault();
+              }}
+              aria-label={`${member.name}, ${line}`}
+              className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+            >
+              <SocialAvatar
+                source={member}
+                size={36}
+                state={member.blocked ? "offline" : member.state}
+                dnd={member.dnd}
+              />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center gap-1.5">
+                  <span
                     className={cn(
-                      "absolute inset-x-0 truncate text-[12.5px] leading-[18px]",
-                      joinable ? "text-jade-400" : "text-ash-400",
+                      "truncate text-[14px] font-semibold",
+                      member.state === "offline" ? "text-bone-100/70" : "text-bone-50",
                     )}
-                    {...swap(reduce)}
                   >
-                    {line}
-                  </motion.span>
-                </AnimatePresence>
+                    {member.name}
+                  </span>
+                  {member.role === "founder" ? (
+                    <Crown
+                      size={12}
+                      weight="fill"
+                      className="shrink-0 text-gold-300"
+                      aria-label={t("teams.founder")}
+                    />
+                  ) : null}
+                </span>
+                <span className="relative block h-[18px] overflow-hidden">
+                  <AnimatePresence mode="popLayout" initial={false}>
+                    <motion.span
+                      key={line}
+                      className={cn(
+                        "absolute inset-x-0 truncate text-[12.5px] leading-[18px]",
+                        joinable ? "text-jade-400" : "text-ash-400",
+                      )}
+                      {...swap(reduce)}
+                    >
+                      {line}
+                    </motion.span>
+                  </AnimatePresence>
+                </span>
               </span>
-            </span>
-          </button>
-        </Popover.Trigger>
-        <AnimatePresence>
-          {open ? (
-            <Popover.Portal forceMount>
-              <Popover.Content
-                forceMount
-                asChild
-                side="left"
-                align="start"
-                sideOffset={14}
-                collisionPadding={16}
-                aria-label={member.name}
-              >
-                <motion.div
-                  className="z-50 rounded-[var(--radius-panel)] border border-white/8 bg-obsidian-900/96 p-4 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_30px_80px_rgb(34_6_6/0.6)] backdrop-blur-xl outline-none [html[data-perf=on]_&]:backdrop-blur-none"
-                  style={{ transformOrigin: "var(--radix-popover-content-transform-origin)" }}
-                  initial={calm({ opacity: 0, scale: 0.96, x: 8 })}
-                  animate={calm({
-                    opacity: 1,
-                    scale: 1,
-                    x: 0,
-                    transition: { duration: 0.22, ease: easeOutExpo },
-                  })}
-                  exit={calm({ opacity: 0, scale: 0.98, transition: { duration: 0.14 } })}
+            </button>
+          </Popover.Trigger>
+          <AnimatePresence>
+            {open ? (
+              <Popover.Portal forceMount>
+                <Popover.Content
+                  forceMount
+                  asChild
+                  side="left"
+                  align="start"
+                  sideOffset={14}
+                  collisionPadding={16}
+                  aria-label={member.name}
                 >
-                  <MemberCard member={member} founder={founder} onDone={() => setOpen(false)} />
-                </motion.div>
-              </Popover.Content>
-            </Popover.Portal>
+                  <motion.div
+                    className="z-50 rounded-[var(--radius-panel)] border border-white/8 bg-obsidian-900/96 p-4 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_30px_80px_rgb(34_6_6/0.6)] backdrop-blur-xl outline-none [html[data-perf=on]_&]:backdrop-blur-none"
+                    style={{ transformOrigin: "var(--radix-popover-content-transform-origin)" }}
+                    initial={calm({ opacity: 0, scale: 0.96, x: 8 })}
+                    animate={calm({
+                      opacity: 1,
+                      scale: 1,
+                      x: 0,
+                      transition: { duration: 0.22, ease: easeOutExpo },
+                    })}
+                    exit={calm({ opacity: 0, scale: 0.98, transition: { duration: 0.14 } })}
+                  >
+                    <MemberCard
+                      // A question asked from the menu while the card is open starts it afresh.
+                      key={intent ?? "card"}
+                      member={member}
+                      founder={founder}
+                      initialQuestion={intent}
+                      onDone={() => {
+                        setOpen(false);
+                        setIntent(null);
+                      }}
+                    />
+                  </motion.div>
+                </Popover.Content>
+              </Popover.Portal>
+            ) : null}
+          </AnimatePresence>
+        </Popover.Root>
+        <AnimatePresence initial={false}>
+          {joinable ? (
+            <motion.span key="join" className="flex" data-no-drag {...rise(reduce, 0, 0.2)}>
+              <JoinButton />
+            </motion.span>
           ) : null}
         </AnimatePresence>
-      </Popover.Root>
-      <AnimatePresence initial={false}>
-        {joinable ? (
-          <motion.span key="join" className="flex" data-no-drag {...rise(reduce, 0, 0.2)}>
-            <JoinButton />
-          </motion.span>
-        ) : null}
-      </AnimatePresence>
-    </div>
+        <span className="flex" data-no-drag>
+          <Menu
+            items={items}
+            trigger={
+              <IconButton
+                label={t("friendMenus.options", { name: member.name })}
+                icon={<DotsThree size={18} weight="bold" />}
+                size="sm"
+                className="opacity-0 transition-opacity duration-150 group-hover/friend:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
+              />
+            }
+          />
+        </span>
+      </div>
+    </ContextMenu>
   );
 }

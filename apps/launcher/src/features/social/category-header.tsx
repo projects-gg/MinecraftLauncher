@@ -1,10 +1,11 @@
 // Friend category pieces of the list: a category's header (folds its friends; a grip on the left
-// lifts it to move it; its menu renames, moves and deletes), the row that makes a new category,
-// the slot a dragged row or category leaves where it would land, and the lifted ghosts.
+// lifts it to move it; its menu folds, renames, moves, adds and deletes), the row that makes a new
+// category, the slot a dragged row or category leaves where it would land, and the lifted ghosts.
 import {
   ArrowDown,
   ArrowUp,
   CaretDown,
+  CaretRight,
   Check,
   DotsSixVertical,
   DotsThree,
@@ -13,7 +14,16 @@ import {
   Trash,
   X,
 } from "@phosphor-icons/react";
-import { cn, easeOutExpo, IconButton, Kbd, returnFocusAfterKeys } from "@pl/ui";
+import {
+  ContextMenu,
+  cn,
+  easeOutExpo,
+  IconButton,
+  Kbd,
+  Menu,
+  type MenuItem,
+  returnFocusAfterKeys,
+} from "@pl/ui";
 import { AnimatePresence, type MotionValue, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import {
@@ -28,6 +38,8 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useCalm } from "@/features/accounts/calm";
 import { GROUP_NAME_MAX } from "./groups";
+import { openMenuFromKey } from "./menu-key";
+import { categoryMenu, rowsOf } from "./menus";
 import { swap, useSocialMotion } from "./motion";
 
 const menuItemClass =
@@ -121,9 +133,10 @@ export interface CategoryActions {
 
 /**
  * A category's header. The name folds and unfolds its friends; the count is friends online over
- * all. For the player's own categories, a grip in the gutter (shown on hover or focus) lifts it
- * (a plain click on it opens "Yukarı taşı / Aşağı taşı"), and "…" holds rename, move and delete.
- * The implicit "Arkadaşlar" has neither.
+ * all. Its menu (a right click, Shift+F10 or the menu key, or "…" shown on hover or focus) folds
+ * it and makes another category; for the player's own it also renames, moves and deletes, and a
+ * grip in the gutter (shown on hover or focus) lifts it (a plain click on it opens "Yukarı taşı /
+ * Aşağı taşı"). The implicit "Arkadaşlar" is neither renamed, moved nor deleted.
  */
 export function CategoryHeader({
   id,
@@ -133,6 +146,8 @@ export function CategoryHeader({
   folded,
   target,
   actions,
+  canAdd,
+  onNewCategory,
   onToggle,
   onKeyDown,
 }: {
@@ -144,13 +159,72 @@ export function CategoryHeader({
   /** A dragged friend would land here (and it is not where they came from). */
   target: boolean;
   actions: CategoryActions | null;
+  /** Another category may be made (fewer than the service keeps). */
+  canAdd: boolean;
+  onNewCategory: () => void;
   onToggle: () => void;
   onKeyDown?: (event: KeyboardEvent<HTMLButtonElement>) => void;
 }) {
   const { t } = useTranslation();
   const calm = useCalm();
-  const [menu, setMenu] = useState<"none" | "options" | "grip">("none");
+  const [grip, setGrip] = useState(false);
   const [renaming, setRenaming] = useState(false);
+
+  const items = rowsOf(
+    categoryMenu({
+      custom: actions !== null,
+      canMoveUp: actions?.canMoveUp ?? false,
+      canMoveDown: actions?.canMoveDown ?? false,
+      canAdd,
+    }),
+    (row): MenuItem | null => {
+      switch (row.action) {
+        case "toggle":
+          return {
+            label: folded ? t("friendMenus.expand") : t("friendMenus.collapse"),
+            icon: folded ? <CaretDown size={16} /> : <CaretRight size={16} />,
+            onSelect: onToggle,
+          };
+        case "rename":
+          return {
+            label: t("friendGroups.rename"),
+            icon: <PencilSimple size={16} />,
+            // Once the menu is gone: the name field takes the focus.
+            onSelect: () => window.setTimeout(() => setRenaming(true), 0),
+          };
+        case "moveUp":
+          return {
+            label: t("friendGroups.moveUp"),
+            icon: <ArrowUp size={16} />,
+            shortcut: "Alt ↑",
+            disabled: row.disabled,
+            onSelect: () => actions?.onMove(-1),
+          };
+        case "moveDown":
+          return {
+            label: t("friendGroups.moveDown"),
+            icon: <ArrowDown size={16} />,
+            shortcut: "Alt ↓",
+            disabled: row.disabled,
+            onSelect: () => actions?.onMove(1),
+          };
+        case "newCategory":
+          return {
+            label: t("friendGroups.addMenu"),
+            icon: <FolderSimplePlus size={16} />,
+            disabled: row.disabled,
+            onSelect: () => window.setTimeout(onNewCategory, 0),
+          };
+        case "remove":
+          return {
+            label: t("friendGroups.remove"),
+            icon: <Trash size={16} />,
+            danger: true,
+            onSelect: () => actions?.onRemove(),
+          };
+      }
+    },
+  );
 
   if (renaming && actions) {
     return (
@@ -210,138 +284,94 @@ export function CategoryHeader({
   );
 
   return (
-    <div className="group/header relative flex items-center gap-1 pt-3 pr-1 pb-1">
-      {actions ? (
-        <DropdownMenu.Root
-          open={menu === "grip"}
-          onOpenChange={(open) => setMenu(open ? "grip" : "none")}
-          modal={false}
+    <ContextMenu items={items}>
+      <div className="group/header relative flex items-center gap-1 pt-3 pr-1 pb-1">
+        {actions ? (
+          <DropdownMenu.Root open={grip} onOpenChange={setGrip} modal={false}>
+            <DropdownMenu.Trigger asChild>
+              <button
+                type="button"
+                aria-label={t("friendGroups.grip", { name })}
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
+                  // Keeps the menu shut on press (Radix opens on pointerdown); a click opens it
+                  // (the click that ends a drag never arrives).
+                  event.preventDefault();
+                  actions.onGrip(event);
+                }}
+                onClick={(event) => {
+                  if (event.detail === 0) return;
+                  setGrip(true);
+                }}
+                className="absolute top-3 -left-[15px] flex h-7 w-[15px] cursor-grab touch-none items-center justify-center rounded-l-md text-ash-400 opacity-0 transition-[opacity,color] duration-150 group-hover/header:opacity-100 hover:text-bone-100 focus-visible:opacity-100 active:cursor-grabbing data-[state=open]:text-gold-300 data-[state=open]:opacity-100"
+              >
+                <DotsSixVertical size={14} weight="bold" aria-hidden />
+              </button>
+            </DropdownMenu.Trigger>
+            <AnimatePresence>
+              {grip ? (
+                <DropdownMenu.Portal forceMount>
+                  <DropdownMenu.Content
+                    onCloseAutoFocus={returnFocusAfterKeys}
+                    forceMount
+                    asChild
+                    side="bottom"
+                    align="start"
+                    sideOffset={4}
+                    collisionPadding={12}
+                    loop
+                  >
+                    {menuPanel(moveItems)}
+                  </DropdownMenu.Content>
+                </DropdownMenu.Portal>
+              ) : null}
+            </AnimatePresence>
+          </DropdownMenu.Root>
+        ) : null}
+        <button
+          type="button"
+          data-category-header={id}
+          aria-expanded={!folded}
+          aria-label={t("friendGroups.summary", { name, online, count })}
+          onClick={onToggle}
+          onKeyDown={(event) => {
+            if (!openMenuFromKey(event)) onKeyDown?.(event);
+          }}
+          className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-left outline-none transition-colors duration-150 hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-gold-300"
         >
-          <DropdownMenu.Trigger asChild>
-            <button
-              type="button"
-              aria-label={t("friendGroups.grip", { name })}
-              onPointerDown={(event) => {
-                if (event.button !== 0) return;
-                // Keeps the menu shut on press (Radix opens on pointerdown); a click opens it
-                // (the click that ends a drag never arrives).
-                event.preventDefault();
-                actions.onGrip(event);
-              }}
-              onClick={(event) => {
-                if (event.detail === 0) return;
-                setMenu("grip");
-              }}
-              className="absolute top-3 -left-[15px] flex h-7 w-[15px] cursor-grab touch-none items-center justify-center rounded-l-md text-ash-400 opacity-0 transition-[opacity,color] duration-150 group-hover/header:opacity-100 hover:text-bone-100 focus-visible:opacity-100 active:cursor-grabbing data-[state=open]:text-gold-300 data-[state=open]:opacity-100"
-            >
-              <DotsSixVertical size={14} weight="bold" aria-hidden />
-            </button>
-          </DropdownMenu.Trigger>
-          <AnimatePresence>
-            {menu === "grip" ? (
-              <DropdownMenu.Portal forceMount>
-                <DropdownMenu.Content
-                  onCloseAutoFocus={returnFocusAfterKeys}
-                  forceMount
-                  asChild
-                  side="bottom"
-                  align="start"
-                  sideOffset={4}
-                  collisionPadding={12}
-                  loop
-                >
-                  {menuPanel(moveItems)}
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            ) : null}
-          </AnimatePresence>
-        </DropdownMenu.Root>
-      ) : null}
-      <button
-        type="button"
-        data-category-header={id}
-        aria-expanded={!folded}
-        aria-label={t("friendGroups.summary", { name, online, count })}
-        onClick={onToggle}
-        onKeyDown={onKeyDown}
-        className="flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-left outline-none transition-colors duration-150 hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-gold-300"
-      >
-        <CaretDown
-          size={12}
-          weight="bold"
-          aria-hidden
-          className={cn(
-            "shrink-0 transition-[rotate,color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
-            folded && "-rotate-90",
-            target ? "text-gold-300" : "text-ash-400",
-          )}
-        />
-        <span
-          className={cn(
-            "min-w-0 truncate text-[12.5px] font-semibold transition-colors duration-150",
-            target ? "text-gold-200" : "text-bone-100/85",
-          )}
-        >
-          {name}
-        </span>
-        <Count online={online} count={count} />
-      </button>
-      {actions ? (
-        <DropdownMenu.Root
-          open={menu === "options"}
-          onOpenChange={(open) => setMenu(open ? "options" : "none")}
-          modal={false}
-        >
-          <DropdownMenu.Trigger asChild>
+          <CaretDown
+            size={12}
+            weight="bold"
+            aria-hidden
+            className={cn(
+              "shrink-0 transition-[rotate,color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
+              folded && "-rotate-90",
+              target ? "text-gold-300" : "text-ash-400",
+            )}
+          />
+          <span
+            className={cn(
+              "min-w-0 truncate text-[12.5px] font-semibold transition-colors duration-150",
+              target ? "text-gold-200" : "text-bone-100/85",
+            )}
+          >
+            {name}
+          </span>
+          <Count online={online} count={count} />
+        </button>
+        <Menu
+          items={items}
+          trigger={
             <IconButton
               label={t("friendGroups.options", { name })}
               icon={<DotsThree size={18} weight="bold" />}
               size="sm"
               className="opacity-0 transition-opacity duration-150 group-hover/header:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100"
             />
-          </DropdownMenu.Trigger>
-          <AnimatePresence>
-            {menu === "options" ? (
-              <DropdownMenu.Portal forceMount>
-                <DropdownMenu.Content
-                  onCloseAutoFocus={returnFocusAfterKeys}
-                  forceMount
-                  asChild
-                  align="end"
-                  sideOffset={4}
-                  collisionPadding={12}
-                  loop
-                >
-                  {menuPanel(
-                    <>
-                      <DropdownMenu.Item
-                        onSelect={() => window.setTimeout(() => setRenaming(true), 0)}
-                        className={menuItemClass}
-                      >
-                        <PencilSimple size={16} className="text-ash-300" aria-hidden />
-                        {t("friendGroups.rename")}
-                      </DropdownMenu.Item>
-                      {moveItems}
-                      <DropdownMenu.Separator className="my-1.5 h-px bg-white/8" />
-                      <DropdownMenu.Item
-                        onSelect={actions.onRemove}
-                        className={cn(
-                          menuItemClass,
-                          "text-flare-400 data-[highlighted]:bg-flare-400/12",
-                        )}
-                      >
-                        <Trash size={16} aria-hidden />
-                        {t("friendGroups.remove")}
-                      </DropdownMenu.Item>
-                    </>,
-                  )}
-                </DropdownMenu.Content>
-              </DropdownMenu.Portal>
-            ) : null}
-          </AnimatePresence>
-        </DropdownMenu.Root>
-      ) : null}
-    </div>
+          }
+        />
+      </div>
+    </ContextMenu>
   );
 }
 

@@ -1,6 +1,6 @@
 // The player's own card in the panel header: picture with presence, name, and the status picker
 // (Çevrimiçi / Rahatsız etmeyin / Görünmez). The chosen status shows at once and settles when
-// the service confirms; a failure puts the old one back.
+// the service confirms; a failure puts the old one back. The panel's menu changes it too.
 import { CaretDown, Check } from "@phosphor-icons/react";
 import { easeOutExpo, returnFocusAfterKeys } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -11,14 +11,29 @@ import { useCalm } from "@/features/accounts/calm";
 import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import type { SocialMe, StatusMode } from "@/lib/api/social-types";
+import i18n from "@/lib/i18n";
 import { attempt } from "./actions";
 import { swap, useSocialMotion } from "./motion";
 import { PresenceDot, SocialAvatar } from "./social-face";
+import { useSocialUi } from "./store";
 
-const STATUSES: StatusMode[] = ["online", "dnd", "invisible"];
+export const STATUSES: StatusMode[] = ["online", "dnd", "invisible"];
 
-const dotOf = (status: StatusMode) =>
+export const dotOf = (status: StatusMode) =>
   status === "online" ? "launcher" : status === "dnd" ? "dnd" : "invisible";
+
+/** Sets the player's status: shown at once, the old one back if the service refuses. */
+export function changeStatus(next: StatusMode) {
+  const ui = useSocialUi.getState();
+  if (next === (ui.statusPending ?? ui.view.me?.status)) return;
+  ui.setStatusPending(next);
+  void attempt(() => api.social.setStatus(next)).then((done) => {
+    useSocialUi.getState().setStatusPending(null);
+    if (done !== undefined) {
+      announce(i18n.t("social.status.changed", { status: i18n.t(`social.status.${next}`) }));
+    }
+  });
+}
 
 const itemClass =
   "flex h-11 cursor-pointer items-center gap-3 rounded-md px-2.5 text-[13.5px] text-bone-100 outline-none select-none data-[highlighted]:bg-white/8";
@@ -28,19 +43,9 @@ export function MeCard({ me }: { me: SocialMe }) {
   const calm = useCalm();
   const { reduce } = useSocialMotion();
   const [open, setOpen] = useState(false);
-  const [pending, setPending] = useState<StatusMode | null>(null);
+  const pending = useSocialUi((s) => s.statusPending);
   const status = pending ?? me.status;
-
-  const choose = (next: StatusMode) => {
-    if (next === me.status) return;
-    setPending(next);
-    void attempt(() => api.social.setStatus(next)).then((done) => {
-      setPending(null);
-      if (done !== undefined) {
-        announce(t("social.status.changed", { status: t(`social.status.${next}`) }));
-      }
-    });
-  };
+  const choose = changeStatus;
 
   return (
     <div className="flex min-w-0 flex-1 items-center gap-3">

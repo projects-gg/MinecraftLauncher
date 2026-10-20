@@ -20,6 +20,7 @@ import { AddPage } from "./add-page";
 import { ConsentPage } from "./consent-page";
 import { ListPage } from "./list-page";
 import { crossfade, pageVariants, useSocialMotion } from "./motion";
+import { openPanelMenuFromKey, PanelContextMenu, PanelMenuButton } from "./panel-menu";
 import { SocialSettings } from "./settings-page";
 import { MeCard } from "./status-menu";
 import { type SocialPage, useSocialUi } from "./store";
@@ -108,6 +109,7 @@ function Header({ page }: { page: SocialPage | "consent" | "restoring" }) {
             icon={<GearSix size={19} />}
             onClick={() => goTo("settings")}
           />
+          <PanelMenuButton />
         </>
       ) : null}
       <Dialog.Close asChild>
@@ -127,6 +129,7 @@ export function FriendsSheet() {
   const animate = useInteractionMotion();
   const { reduce } = useSocialMotion();
   const scroller = useRef<HTMLDivElement>(null);
+  const body = useRef<HTMLDivElement>(null);
   const variants = pageVariants(reduce);
 
   const shown: SocialPage | "consent" | "restoring" =
@@ -179,43 +182,46 @@ export function FriendsSheet() {
                 <GatedMotion.aside
                   tabIndex={-1}
                   className="glass-strong fixed top-0 right-0 bottom-0 z-40 flex w-[min(440px,94vw)] flex-col shadow-[-30px_0_80px_rgb(34_6_6/0.5)] outline-none"
+                  onKeyDown={(event) => openPanelMenuFromKey(event, shown === "list", body.current)}
                   {...sheetMotion(!animate)}
                 >
                   <MotionConfig reducedMotion="user">
-                    <Header page={shown} />
-                    <div
-                      ref={scroller}
-                      className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
-                    >
-                      <AnimatePresence mode="popLayout" initial={false} custom={direction}>
-                        <motion.div
-                          key={shown}
-                          custom={direction}
-                          variants={variants}
-                          initial="enter"
-                          animate="center"
-                          exit="exit"
-                          onAnimationStart={() => scroller.current?.scrollTo({ top: 0 })}
-                          className="px-4 pt-3 pb-8"
-                        >
-                          {shown === "consent" ? (
-                            <ConsentPage />
-                          ) : shown === "restoring" ? (
-                            <RestoringBody />
-                          ) : shown === "add" ? (
-                            <AddPage />
-                          ) : shown === "team" ? (
-                            <TeamPage />
-                          ) : shown === "settings" ? (
-                            <div className="px-1">
-                              <SocialSettings />
-                            </div>
-                          ) : (
-                            <ListPage />
-                          )}
-                        </motion.div>
-                      </AnimatePresence>
-                    </div>
+                    <PanelContextMenu enabled={shown === "list"} bodyRef={body}>
+                      <Header page={shown} />
+                      <div
+                        ref={scroller}
+                        className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+                      >
+                        <AnimatePresence mode="popLayout" initial={false} custom={direction}>
+                          <motion.div
+                            key={shown}
+                            custom={direction}
+                            variants={variants}
+                            initial="enter"
+                            animate="center"
+                            exit="exit"
+                            onAnimationStart={() => scroller.current?.scrollTo({ top: 0 })}
+                            className="px-4 pt-3 pb-8"
+                          >
+                            {shown === "consent" ? (
+                              <ConsentPage />
+                            ) : shown === "restoring" ? (
+                              <RestoringBody />
+                            ) : shown === "add" ? (
+                              <AddPage />
+                            ) : shown === "team" ? (
+                              <TeamPage />
+                            ) : shown === "settings" ? (
+                              <div className="px-1">
+                                <SocialSettings />
+                              </div>
+                            ) : (
+                              <ListPage />
+                            )}
+                          </motion.div>
+                        </AnimatePresence>
+                      </div>
+                    </PanelContextMenu>
                   </MotionConfig>
                 </GatedMotion.aside>
               </Dialog.Content>

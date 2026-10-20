@@ -180,12 +180,22 @@ export interface NoticePrefs {
   favorites: readonly string[];
   notifyFavoriteOnline: boolean;
   notifyFavoriteProjects: boolean;
+  /** "Çevrimiçi olunca bildir" chosen for one friend (on or off); absent: the favourites' rule. */
+  onlineAlerts?: Readonly<Record<string, boolean>>;
+}
+
+/**
+ * Whether the player hears about `id` coming online: their choice for that friend ("Çevrimiçi
+ * olunca bildir"), else favourites while "Favorilerim çevrimiçi olunca" is on.
+ */
+export function notifiesOnline(prefs: NoticePrefs, id: string): boolean {
+  return prefs.onlineAlerts?.[id] ?? (prefs.notifyFavoriteOnline && prefs.favorites.includes(id));
 }
 
 /**
  * Whether a notice should reach the player at all. Do-not-disturb silences everything (friends
- * still see the status); a friend coming online or joining projects.gg only counts for
- * favourites, when the player asked for it.
+ * still see the status); a friend coming online counts when the player asked for it (for that
+ * friend, or for favourites), joining projects.gg only for favourites.
  */
 export function wantsNotice(
   notice: SocialNotice,
@@ -198,7 +208,7 @@ export function wantsNotice(
   }
   switch (notice.kind) {
     case "friendOnline":
-      return prefs.notifyFavoriteOnline && prefs.favorites.includes(notice.id);
+      return notifiesOnline(prefs, notice.id);
     case "friendOnProjects":
       return prefs.notifyFavoriteProjects && prefs.favorites.includes(notice.id);
     case "invite":
@@ -254,6 +264,18 @@ export interface BackupFriends {
   favorites: string[];
   notifyFavoriteOnline: boolean;
   notifyFavoriteProjects: boolean;
+  /** Per-friend "Çevrimiçi olunca bildir"; left out while empty (older backups have none). */
+  onlineAlerts?: Record<string, boolean>;
+}
+
+/** Friend ids with a yes or no, at most 200 (what a backup may carry). */
+function cleanAlerts(value: unknown): Record<string, boolean> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([id, on]) => isUserId(id) && typeof on === "boolean")
+      .slice(0, 200),
+  ) as Record<string, boolean>;
 }
 
 export interface BackupDocument {
@@ -270,6 +292,7 @@ export function buildBackup(
   for (const key of Object.keys(BACKUP_PREFS) as BackupPrefKey[]) {
     if (prefs[key] !== undefined) picked[key] = prefs[key];
   }
+  const alerts = cleanAlerts(friends.onlineAlerts);
   return {
     v: 1,
     prefs: picked,
@@ -277,6 +300,7 @@ export function buildBackup(
       favorites: [...new Set(friends.favorites)].filter(isUserId).slice(0, 200),
       notifyFavoriteOnline: friends.notifyFavoriteOnline,
       notifyFavoriteProjects: friends.notifyFavoriteProjects,
+      ...(Object.keys(alerts).length ? { onlineAlerts: alerts } : {}),
     },
   };
 }
@@ -322,6 +346,9 @@ export function readBackup(data: unknown): {
     }
     if (typeof friends.notifyFavoriteProjects === "boolean") {
       out.friends.notifyFavoriteProjects = friends.notifyFavoriteProjects;
+    }
+    if (friends.onlineAlerts !== undefined) {
+      out.friends.onlineAlerts = cleanAlerts(friends.onlineAlerts);
     }
   }
   return out;

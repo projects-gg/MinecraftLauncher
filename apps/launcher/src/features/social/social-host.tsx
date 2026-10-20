@@ -190,6 +190,7 @@ function currentBackup() {
     favorites: social.favorites,
     notifyFavoriteOnline: social.notifyFavoriteOnline,
     notifyFavoriteProjects: social.notifyFavoriteProjects,
+    onlineAlerts: social.onlineAlerts,
   });
 }
 
@@ -231,7 +232,8 @@ function useBackupSync() {
       if (
         now.favorites !== before.favorites ||
         now.notifyFavoriteOnline !== before.notifyFavoriteOnline ||
-        now.notifyFavoriteProjects !== before.notifyFavoriteProjects
+        now.notifyFavoriteProjects !== before.notifyFavoriteProjects ||
+        now.onlineAlerts !== before.onlineAlerts
       ) {
         schedule(BACKUP_DEBOUNCE_MS);
       }
@@ -283,6 +285,7 @@ function RestoreDialog() {
       if (read.friends.notifyFavoriteProjects !== undefined) {
         social.set("notifyFavoriteProjects", read.friends.notifyFavoriteProjects);
       }
+      if (read.friends.onlineAlerts) social.set("onlineAlerts", read.friends.onlineAlerts);
       // What came down is what is stored: no upload needed until something changes.
       useSocialPrefs.getState().set("backupFingerprint", backupFingerprint(currentBackup()));
       toast.success(t("social.restore.applied"));

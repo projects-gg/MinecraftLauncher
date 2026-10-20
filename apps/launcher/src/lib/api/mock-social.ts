@@ -10,7 +10,8 @@
 // - `invite`: a live invite arrives shortly after start; `restore`: the "getireyim mi?" offer;
 // - `groups`: the friend list in the player's categories;
 // - `team`: teams on, the player founded a team (with categories); `teamMember`: a member of one;
-// - `teamNew`: teams on, no team yet, an invite to one waiting; `teamInvite`: one arrives live.
+// - `teamNew`: teams on, no team yet, an invite to one waiting; `teamInvite`: one arrives live;
+// - `legacy`: a service that offers neither categories nor teams (their menu rows stay away).
 import { pick } from "./mock-lang";
 import type {
   BackupMeta,
@@ -339,6 +340,9 @@ function initial(): SocialSnapshot {
       return { ...base, teams: true, teamInvites: [teamInvite()] };
     case "teamInvite":
       return { ...base, teams: true };
+    case "legacy":
+      // A service without categories and teams (the live one until SOC4 is deployed).
+      return { ...base, groups: undefined };
     case "signedOut":
       return signedOut(base);
     case "signingIn":

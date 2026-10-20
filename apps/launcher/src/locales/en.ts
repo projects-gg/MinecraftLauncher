@@ -5,6 +5,7 @@ import { enDisk } from "./en-disk";
 import { enEventJoin } from "./en-event-join";
 import { enFps } from "./en-fps";
 import { enFriendGroups } from "./en-friend-groups";
+import { enFriendMenus } from "./en-friend-menus";
 import { enGraphics } from "./en-graphics";
 import { enHomeLinks } from "./en-home-links";
 import { enImport } from "./en-import";
@@ -245,6 +246,7 @@ export const en: DeepPartial<Strings> = {
     },
   },
   friendGroups: enFriendGroups,
+  friendMenus: enFriendMenus,
   teams: enTeams,
   minecraft: enMinecraft,
   eventJoin: enEventJoin,

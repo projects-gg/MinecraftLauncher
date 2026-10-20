@@ -3,6 +3,7 @@ import { DropdownMenu, ContextMenu as RadixContextMenu } from "radix-ui";
 import type { ReactElement, ReactNode } from "react";
 import { returnFocusAfterKeys } from "../input-modality";
 import { cn } from "../lib/cn";
+import { Kbd } from "./bits";
 
 export interface MenuItem {
   label: string;
@@ -18,6 +19,8 @@ export interface MenuItem {
   radio?: boolean;
   /** A submenu (opens to the side on hover, → or Enter); `onSelect` is not used then. */
   items?: Array<MenuItem | null>;
+  /** The keys that do the same outside the menu ("Alt ↑"), shown at the row's end. */
+  shortcut?: string;
 }
 
 const contentClass =
@@ -133,6 +136,7 @@ function menuRows(items: Array<MenuItem | null>, parts: MenuParts): ReactNode[] 
       >
         <Icon item={item} />
         <span className="min-w-0 flex-1">{item.label}</span>
+        {item.shortcut ? <Kbd>{item.shortcut}</Kbd> : null}
         {item.checked === undefined ? null : (
           <Check
             size={15}

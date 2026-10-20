@@ -6,6 +6,7 @@ import { trDisk } from "./tr-disk";
 import { trEventJoin } from "./tr-event-join";
 import { trFps } from "./tr-fps";
 import { trFriendGroups } from "./tr-friend-groups";
+import { trFriendMenus } from "./tr-friend-menus";
 import { trGraphics } from "./tr-graphics";
 import { trHomeLinks } from "./tr-home-links";
 import { trImport } from "./tr-import";
@@ -39,6 +40,7 @@ export const tr = {
   prepare: trPrepare,
   social: trSocial,
   friendGroups: trFriendGroups,
+  friendMenus: trFriendMenus,
   teams: trTeams,
   minecraft: trMinecraft,
   eventJoin: trEventJoin,

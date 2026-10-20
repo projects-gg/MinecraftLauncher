@@ -499,8 +499,14 @@ export function ListPage() {
       toast.error(t("friendGroups.failed"));
     });
   };
-  /** A new category's name is asked here; `friend` goes into it once named. */
-  const [creating, setCreating] = useState<{ friend?: string } | null>(null);
+  /** A new category's name is asked here (the panel's and the headers' menus too); `friend` goes
+   * into it once named. */
+  const creating = useSocialUi((s) => s.categoryDraft);
+  const setCreating = useSocialUi((s) => s.setCategoryDraft);
+  // The name field sits under the whole list: a search would hide it.
+  useEffect(() => {
+    if (creating) setQuery("");
+  }, [creating]);
 
   const categoriesOn = doc !== null;
   const grouped = Boolean(doc && doc.groups.length > 0) && !q;
@@ -746,7 +752,7 @@ export function ListPage() {
     }
     const rows = [
       ...(listRef.current?.querySelectorAll<HTMLElement>(
-        "[data-friend-row], [data-category-header]",
+        "[data-friend-row], [data-category-header], [data-team-header]",
       ) ?? []),
     ];
     const at = rows.indexOf(event.currentTarget);
@@ -837,7 +843,8 @@ export function ListPage() {
                       groups: doc.groups,
                       current: groupOf(doc, friend.id),
                       onMove: (group) => moveTo(friend.id, group),
-                      onNew: () => setCreating({ friend: friend.id }),
+                      // After the menu: the name field takes the focus.
+                      onNew: () => window.setTimeout(() => setCreating({ friend: friend.id }), 0),
                     }
                   : null
               }
@@ -866,6 +873,7 @@ export function ListPage() {
             folded={item.folded}
             onToggle={() => toggleCollapsed(TEAM_SECTION)}
             onOpen={() => goTo("team")}
+            onKeyDown={onRowKey}
           />
         );
       case "teammate":
@@ -883,6 +891,8 @@ export function ListPage() {
               count={item.count}
               folded={item.folded}
               target={target}
+              canAdd={(doc?.groups.length ?? 0) < MAX_GROUPS}
+              onNewCategory={() => setCreating({})}
               onToggle={() => toggleCollapsed(id)}
               onKeyDown={(event) => onHeaderKey(event, id)}
               actions={

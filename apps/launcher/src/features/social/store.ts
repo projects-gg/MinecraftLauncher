@@ -1,9 +1,17 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import { HIDDEN_SNAPSHOT, type SignInFailure, type SocialSnapshot } from "@/lib/api/social-types";
+import {
+  HIDDEN_SNAPSHOT,
+  type SignInFailure,
+  type SocialSnapshot,
+  type StatusMode,
+} from "@/lib/api/social-types";
 import type { HomeHint } from "./model";
 
 export type SocialPage = "list" | "add" | "settings" | "team";
+
+/** Where a menu sends the player on the team page: editing, the invite list, or leaving. */
+export type TeamIntent = "edit" | "invite" | "leave";
 
 /** Pages deeper in the panel than the list slide in from the right. */
 const DEPTH: Record<SocialPage, number> = { list: 0, add: 1, settings: 1, team: 1 };
@@ -44,6 +52,19 @@ interface SocialUi {
    * closed: this is where friends live). */
   entryCue: number;
   cueEntry: () => void;
+
+  /** A new category's name is asked under the list (`friend` goes into it once it is named). */
+  categoryDraft: { friend?: string } | null;
+  setCategoryDraft: (draft: { friend?: string } | null) => void;
+
+  /** The team page opens at this (a menu's "Takımı düzenle", "Davet et", "Takımdan ayrıl"). */
+  teamIntent: TeamIntent | null;
+  openTeam: (intent?: TeamIntent) => void;
+  takeTeamIntent: () => TeamIntent | null;
+
+  /** A status just chosen, shown until the service confirms it (the old one comes back on failure). */
+  statusPending: StatusMode | null;
+  setStatusPending: (status: StatusMode | null) => void;
 }
 
 export const useSocialUi = create<SocialUi>()((set, get) => ({
@@ -71,8 +92,13 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
         (document.activeElement instanceof HTMLElement ? document.activeElement : null),
     }));
   },
-  closePanel: () => set({ open: false }),
-  goTo: (page) => set((s) => ({ page, direction: DEPTH[page] >= DEPTH[s.page] ? 1 : -1 })),
+  closePanel: () => set({ open: false, categoryDraft: null, teamIntent: null }),
+  goTo: (page) =>
+    set((s) => ({
+      page,
+      direction: DEPTH[page] >= DEPTH[s.page] ? 1 : -1,
+      categoryDraft: page === "list" ? s.categoryDraft : null,
+    })),
   takePrefill: () => {
     const code = get().prefillCode;
     if (code) set({ prefillCode: null });
@@ -91,6 +117,23 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
 
   entryCue: 0,
   cueEntry: () => set((s) => ({ entryCue: s.entryCue + 1 })),
+
+  categoryDraft: null,
+  setCategoryDraft: (categoryDraft) => set({ categoryDraft }),
+
+  teamIntent: null,
+  openTeam: (intent) => {
+    get().goTo("team");
+    set({ teamIntent: intent ?? null });
+  },
+  takeTeamIntent: () => {
+    const intent = get().teamIntent;
+    if (intent) set({ teamIntent: null });
+    return intent;
+  },
+
+  statusPending: null,
+  setStatusPending: (statusPending) => set({ statusPending }),
 }));
 
 /** Friend preferences kept on this computer (and in the settings backup). */
@@ -100,6 +143,11 @@ interface SocialPrefs {
   favorites: string[];
   notifyFavoriteOnline: boolean;
   notifyFavoriteProjects: boolean;
+  /**
+   * "Çevrimiçi olunca bildir" chosen for one friend: on (true) or off (false). Friends without an
+   * entry follow the favourites' setting ("Favorilerim çevrimiçi olunca").
+   */
+  onlineAlerts: Record<string, boolean>;
   /** Back up launcher preferences to the friends service. */
   backup: boolean;
   /** Fingerprint of the last uploaded backup (skips uploads that change nothing). */
@@ -111,6 +159,7 @@ interface SocialPrefs {
   collapsed: string[];
   setConsent: () => void;
   toggleFavorite: (id: string) => void;
+  setOnlineAlert: (id: string, on: boolean) => void;
   closeHint: (hint: HomeHint) => void;
   toggleCollapsed: (id: string) => void;
   set: <K extends keyof SocialPrefValues>(key: K, value: SocialPrefValues[K]) => void;
@@ -118,7 +167,7 @@ interface SocialPrefs {
 
 export type SocialPrefValues = Omit<
   SocialPrefs,
-  "setConsent" | "toggleFavorite" | "closeHint" | "toggleCollapsed" | "set"
+  "setConsent" | "toggleFavorite" | "setOnlineAlert" | "closeHint" | "toggleCollapsed" | "set"
 >;
 
 export const useSocialPrefs = create<SocialPrefs>()(
@@ -128,6 +177,7 @@ export const useSocialPrefs = create<SocialPrefs>()(
       favorites: [],
       notifyFavoriteOnline: true,
       notifyFavoriteProjects: true,
+      onlineAlerts: {},
       backup: true,
       backupFingerprint: null,
       closedHints: [],
@@ -139,6 +189,7 @@ export const useSocialPrefs = create<SocialPrefs>()(
             ? s.favorites.filter((f) => f !== id)
             : [...s.favorites, id],
         })),
+      setOnlineAlert: (id, on) => set((s) => ({ onlineAlerts: { ...s.onlineAlerts, [id]: on } })),
       closeHint: (hint) =>
         set((s) => (s.closedHints.includes(hint) ? s : { closedHints: [...s.closedHints, hint] })),
       toggleCollapsed: (id) =>
