@@ -1,11 +1,11 @@
 // English for tr-fps.ts. Missing keys fall back to Turkish.
 export const enFps = {
-  title: "Graphics & FPS",
+  title: "Graphics and FPS",
   instance: "Instance",
   preset: "Graphics preset",
   effect: {
-    smooth: "Most FPS.",
-    balanced: "FPS and looks in balance.",
+    smooth: "Highest FPS.",
+    balanced: "A balance of FPS and looks.",
     quality: "Best looks, lower FPS.",
     custom: "Your own in-game settings.",
   },
