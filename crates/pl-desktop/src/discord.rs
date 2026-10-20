@@ -315,33 +315,39 @@ mod platform {
     }
 }
 
-#[cfg(target_os = "linux")]
-mod platform {
-    use std::path::PathBuf;
+/// Asks `program` (`xdg-mime`) which app takes `discord:` links, and whether its desktop entry is
+/// installed. False without an answer: no `xdg-mime`, no handler, or an app removed since. Built
+/// on every platform in tests, so the Linux path is checked everywhere.
+#[cfg(any(target_os = "linux", test))]
+fn xdg_handler_installed(program: &str) -> bool {
     use std::process::{Command, Stdio};
 
+    let Ok(output) = Command::new(program)
+        .args(["query", "default", "x-scheme-handler/discord"])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+    else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    let output = String::from_utf8_lossy(&output.stdout);
+    let Some(id) = desktop_entry_id(&output) else {
+        return false;
+    };
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    let data_home = std::env::var("XDG_DATA_HOME").ok();
+    let data_dirs = std::env::var("XDG_DATA_DIRS").ok();
+    let dirs = xdg_data_dirs(home.as_deref(), data_home.as_deref(), data_dirs.as_deref());
+    desktop_entry_installed(id, &dirs)
+}
+
+#[cfg(target_os = "linux")]
+mod platform {
     pub fn handler_installed() -> bool {
-        let Ok(output) = Command::new("xdg-mime")
-            .args(["query", "default", "x-scheme-handler/discord"])
-            .stdin(Stdio::null())
-            .stderr(Stdio::null())
-            .output()
-        else {
-            return false;
-        };
-        if !output.status.success() {
-            return false;
-        }
-        let output = String::from_utf8_lossy(&output.stdout);
-        let Some(id) = super::desktop_entry_id(&output) else {
-            return false;
-        };
-        let home = std::env::var_os("HOME").map(PathBuf::from);
-        let data_home = std::env::var("XDG_DATA_HOME").ok();
-        let data_dirs = std::env::var("XDG_DATA_DIRS").ok();
-        let dirs =
-            super::xdg_data_dirs(home.as_deref(), data_home.as_deref(), data_dirs.as_deref());
-        super::desktop_entry_installed(id, &dirs)
+        super::xdg_handler_installed("xdg-mime")
     }
 }
 
@@ -578,6 +584,11 @@ mod tests {
         assert!(desktop_entry_installed("discord-canary.desktop", &dirs));
         // A default left behind by an uninstalled app.
         assert!(!desktop_entry_installed("discord.desktop", &dirs));
+    }
+
+    #[test]
+    fn no_xdg_mime_means_no_app() {
+        assert!(!xdg_handler_installed("pl-desktop-test-no-such-program"));
     }
 
     #[test]
