@@ -17,6 +17,8 @@
 //!   starting `mods/` + `config/` per Minecraft version with a crash-safe switch.
 //! - [`modsets`]: ready-made mod sets in a game directory ([`ModSetStates`]): installing,
 //!   updating and removing a [`ModSet`] with the sync engine, per version like the pack state.
+//! - [`needs`]: mods that need another mod in practice although they declare it optional
+//!   ([`hidden_needs`]).
 //! - [`studio`]: [`IndexBuilder`] and helpers to publish content; [`json`] gives the
 //!   deterministic serialization Studio uploads.
 //! - [`feed`]: the Discord bot's news feed ([`FeedClient`]: delegated-key verification,
@@ -33,6 +35,7 @@ pub mod items;
 pub mod json;
 pub mod model;
 pub mod modsets;
+pub mod needs;
 pub mod path;
 pub mod sets;
 pub mod signing;
@@ -60,6 +63,7 @@ pub use modsets::{
     AddedSet, MOD_SETS_FILE, ModSetStates, SetApplyReport, SetChange, apply_set, keep_shared_files,
     plan_set, plan_set_removal, provided_projects,
 };
+pub use needs::{HIDDEN_NEEDS, HiddenNeed, hidden_needs};
 pub use sets::{ParkedSet, SetInfo, SwitchJournal, SwitchRequest, SwitchStep, VersionSets};
 pub use signing::{
     CONTENT_PUBLIC_KEYS, SignatureFile, SigningKey, TrustedKey, VerifyingKey, content_public_keys,
