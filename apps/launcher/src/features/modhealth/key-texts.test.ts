@@ -1,7 +1,15 @@
 import { afterEach, describe, expect, it } from "vitest";
 import type { HealthIssue, KeyChange } from "@/lib/api";
 import i18n, { loadEnglish } from "@/lib/i18n";
-import { actionName, changeSpoken, keyClashText, keyLabel, newKeysLine } from "./key-texts";
+import {
+  actionName,
+  changeSpoken,
+  fixedLines,
+  isUnbound,
+  keyClashText,
+  keyLabel,
+  newKeysLine,
+} from "./key-texts";
 import { issueText } from "./texts";
 
 const t = i18n.t.bind(i18n);
@@ -38,6 +46,14 @@ const SHADERS: KeyChange = {
   key: "key.keyboard.r",
 };
 const CHANGES = [ZOOM, GAMMA, ICONS, SHADERS];
+// No clash: the fix gives an unbound push to talk its key along (KEYS3).
+const TALK: KeyChange = {
+  name: "key.push_to_talk",
+  modName: "Simple Voice Chat",
+  action: "Push to talk",
+  key: "key.keyboard.unknown",
+  to: "key.keyboard.caps.lock",
+};
 
 afterEach(async () => {
   await i18n.changeLanguage("tr");
@@ -91,6 +107,36 @@ describe("key clash texts", () => {
     expect(changeSpoken(t, ICONS, false)).toBe("H tuşu kaldırılır");
     expect(changeSpoken(t, ZOOM, true)).toBe("Artık C");
     expect(changeSpoken(t, ICONS, true)).toBe("Artık atanmamış");
+    expect(changeSpoken(t, TALK, false)).toBe("Caps Lock atanır");
+    expect(changeSpoken(t, TALK, true)).toBe("Artık Caps Lock");
+  });
+
+  it("keeps push to talk out of the clash and gives it a toast line of its own", () => {
+    const all = [...CHANGES, TALK];
+    expect(isUnbound(TALK.key)).toBe(true);
+    expect(isUnbound(ZOOM.key)).toBe(false);
+    expect(actionName(t, TALK)).toBe("Bas-konuş");
+    expect(keyClashText(t, all)).toBe("Mod tuşları çakışıyor: V, G, H ve R.");
+    expect(newKeysLine(t, all)).toBe("Yeni tuşlar: Yakınlaştır C ve Tam parlaklık X.");
+    expect(fixedLines(t, all)).toEqual([
+      "Yeni tuşlar: Yakınlaştır C ve Tam parlaklık X.",
+      "Bas-konuş: Caps Lock.",
+    ]);
+    // Without it, the toast is as before; with only keys taken away, its line alone.
+    expect(fixedLines(t, CHANGES)).toEqual(["Yeni tuşlar: Yakınlaştır C ve Tam parlaklık X."]);
+    expect(fixedLines(t, [ICONS, SHADERS, TALK])).toEqual(["Bas-konuş: Caps Lock."]);
+    expect(fixedLines(t, [ICONS, SHADERS])).toEqual([]);
+    const issue: HealthIssue = {
+      key: "KeyClash|key.wi_zoom.zoom|",
+      severity: "warning",
+      kind: "keyClash",
+      mods: ["WI Zoom"],
+      bundled: false,
+      files: ["options.txt"],
+      offer: { label: "fix", count: 1 },
+      keys: [ZOOM, TALK],
+    };
+    expect(issueText(t, issue, "26.1.2")).toBe("Mod tuşları çakışıyor: V.");
   });
 
   it("speaks English too", async () => {
@@ -98,8 +144,13 @@ describe("key clash texts", () => {
     await i18n.changeLanguage("en");
     expect(keyClashText(t, CHANGES)).toBe("Some mods share keys: V, G, H and R.");
     expect(newKeysLine(t, CHANGES)).toBe("New keys: Zoom C and Full brightness X.");
+    expect(fixedLines(t, [...CHANGES, TALK])).toEqual([
+      "New keys: Zoom C and Full brightness X.",
+      "Push to talk: Caps Lock.",
+    ]);
     expect(keyLabel(t, undefined)).toBe("Not bound");
     expect(keyLabel(t, "key.mouse.5")).toBe("Mouse 5");
     expect(changeSpoken(t, ZOOM, false)).toBe("V becomes C");
+    expect(changeSpoken(t, TALK, false)).toBe("Set to Caps Lock");
   });
 });

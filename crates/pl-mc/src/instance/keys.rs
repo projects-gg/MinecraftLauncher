@@ -12,7 +12,8 @@
 //! A file from before the table keeps its keys until the player agrees to a fix (KEYS2): the mod
 //! check reports the clashes it still has ([`find_key_clashes`]: both mappings on their shared
 //! default key), and "Düzelt" moves just those lines ([`fix_key_clashes_in`], after a backup) with
-//! "Geri al" ([`undo_key_fix_in`]).
+//! "Geri al" ([`undo_key_fix_in`]). Along with them it gives a push to talk the file still leaves
+//! unbound its key (KEYS3, [`find_unbound_keys`]); that alone never makes a fix.
 //!
 //! `testdata/key-bindings` holds the pack's default keys per Minecraft version (read from the
 //! jars with `scripts/keys/KeyScan.java`); the tests check the table against them.
@@ -72,31 +73,70 @@ pub struct KeyBinding {
     pub action: String,
 }
 
+/// A row of `data/key-bindings.json`: the binding, and whether the fix also binds it while a file
+/// leaves it unbound (`bindIfUnbound`, KEYS3: [`find_unbound_keys`]). The flag stays out of
+/// [`KeyBinding`], whose fields other crates spell out.
+#[derive(Deserialize)]
+struct Row {
+    #[serde(flatten)]
+    binding: KeyBinding,
+    #[serde(default, rename = "bindIfUnbound")]
+    bind_if_unbound: bool,
+}
+
 #[derive(Deserialize)]
 struct Table {
     schema: u32,
-    bindings: Vec<KeyBinding>,
+    bindings: Vec<Row>,
 }
 
-static TABLE: LazyLock<Vec<KeyBinding>> =
+/// The table as loaded: its bindings and, in the same order, their `bindIfUnbound`.
+#[derive(Default)]
+struct Loaded {
+    bindings: Vec<KeyBinding>,
+    bind_if_unbound: Vec<bool>,
+}
+
+static TABLE: LazyLock<Loaded> =
     LazyLock::new(|| match serde_json::from_str::<Table>(TABLE_JSON) {
-        Ok(table) if table.schema == TABLE_SCHEMA => table.bindings,
+        Ok(table) if table.schema == TABLE_SCHEMA => {
+            let (bindings, bind_if_unbound): (Vec<KeyBinding>, Vec<bool>) = table
+                .bindings
+                .into_iter()
+                .map(|row| (row.binding, row.bind_if_unbound))
+                .unzip();
+            Loaded {
+                bindings,
+                bind_if_unbound,
+            }
+        }
         Ok(table) => {
             tracing::error!(
                 schema = table.schema,
                 "key binding table has an unknown schema"
             );
-            Vec::new()
+            Loaded::default()
         }
         Err(error) => {
             tracing::error!(%error, "key binding table is unreadable");
-            Vec::new()
+            Loaded::default()
         }
     });
 
 /// The official pack's bindings (`data/key-bindings.json`).
 pub fn official_pack_bindings() -> &'static [KeyBinding] {
-    &TABLE
+    &TABLE.bindings
+}
+
+/// The table's bindings with `bindIfUnbound` (push to talk).
+fn bind_if_unbound() -> impl Iterator<Item = &'static KeyBinding> {
+    let table: &'static Loaded = &TABLE;
+    table
+        .bindings
+        .iter()
+        .zip(&table.bind_if_unbound)
+        .filter(|(_, bind)| **bind)
+        .map(|(binding, _)| binding)
 }
 
 /// The `options.txt` lines (`key_<name>:<key>`) a new file of Minecraft `version` gets: none
@@ -167,6 +207,15 @@ fn key_lines(options: &[u8]) -> HashMap<&str, &[u8]> {
     keys
 }
 
+/// Whether another mapping that acts in normal play already has the table's key for `binding` in
+/// `keys`: giving it that key would only make a new clash. Leaving a binding unbound takes none.
+fn key_taken(keys: &HashMap<&str, &[u8]>, binding: &KeyBinding) -> bool {
+    binding.key != UNBOUND
+        && keys.iter().any(|(name, key)| {
+            *name != binding.name && *key == binding.key.as_bytes() && acts_in_play(name)
+        })
+}
+
 /// The clashes the official pack's table ends that `options` (an `options.txt`) still has: the
 /// table's binding and the mapping it shares its default key with
 /// ([`KeyBinding::clashes_with`]) are both written there, both on that key. A mapping without a
@@ -184,16 +233,71 @@ pub fn find_key_clashes(options: &[u8]) -> Vec<KeyClash> {
                 keys.get(name)
                     .is_some_and(|key| *key == binding.default.as_bytes())
             };
-            if !(on_default(&binding.name) && on_default(partner)) {
-                return None;
-            }
-            let taken = binding.key != UNBOUND
-                && keys.iter().any(|(name, key)| {
-                    *name != binding.name && *key == binding.key.as_bytes() && acts_in_play(name)
-                });
-            (!taken).then_some(KeyClash { binding, partner })
+            (on_default(&binding.name) && on_default(partner) && !key_taken(&keys, binding))
+                .then_some(KeyClash { binding, partner })
         })
         .collect()
+}
+
+/// The table's bindings with `bindIfUnbound` (push to talk) that `options` leaves unbound,
+/// exactly [`UNBOUND`], while no other mapping that acts in normal play has their key: "Düzelt"
+/// gives them that key along with the clashes it ends (KEYS3). Such a binding has no default key,
+/// so an unbound line is the mod's default, not the player's choice. A mapping without a line
+/// gets none (its mod did not load the last time the game saved), and a key the player gave it
+/// never changes.
+pub fn find_unbound_keys(options: &[u8]) -> Vec<&'static KeyBinding> {
+    let keys = key_lines(options);
+    bind_if_unbound()
+        .filter(|binding| {
+            keys.get(binding.name.as_str())
+                .is_some_and(|key| *key == UNBOUND.as_bytes())
+                && !key_taken(&keys, binding)
+        })
+        .collect()
+}
+
+/// What "Düzelt" changes in an `options.txt` ([`plan_key_fix`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KeyFixPlan {
+    /// The clashes it ends ([`find_key_clashes`]).
+    pub clashes: Vec<KeyClash>,
+    /// The bindings it gives their key along with them while the file leaves them unbound
+    /// ([`find_unbound_keys`]: push to talk).
+    pub binds: Vec<&'static KeyBinding>,
+}
+
+impl KeyFixPlan {
+    /// Nothing to change.
+    pub fn is_empty(&self) -> bool {
+        self.clashes.is_empty() && self.binds.is_empty()
+    }
+
+    /// Its line changes as (mapping, from, to).
+    fn moves(&self) -> Vec<(&'static str, &'static str, &'static str)> {
+        let clashes = self.clashes.iter().map(|clash| {
+            let binding: &'static KeyBinding = clash.binding;
+            (binding.name.as_str(), clash.key(), clash.to())
+        });
+        let binds = self
+            .binds
+            .iter()
+            .map(|&binding| (binding.name.as_str(), UNBOUND, binding.key.as_str()));
+        clashes.chain(binds).collect()
+    }
+}
+
+/// What "Düzelt" changes in `options`: its clashes and, along with them, the unbound bindings
+/// that get their key. Nothing when nothing clashes: an unbound push to talk alone is no reason
+/// to touch the file (KEYS3; the mod check and the question before a launch are about clashes).
+pub fn plan_key_fix(options: &[u8]) -> KeyFixPlan {
+    let clashes = find_key_clashes(options);
+    if clashes.is_empty() {
+        return KeyFixPlan::default();
+    }
+    KeyFixPlan {
+        clashes,
+        binds: find_unbound_keys(options),
+    }
 }
 
 /// `options` with `key_<name>:<from>` lines turned into `key_<name>:<to>` for each move (every copy
@@ -221,36 +325,35 @@ fn move_keys(options: &[u8], moves: &[(&str, &str, &str)]) -> Vec<u8> {
     out
 }
 
-/// `options` with the binding of each clash moved to the table's key. Only those lines change.
-pub fn fix_key_clashes(options: &[u8], clashes: &[KeyClash]) -> Vec<u8> {
-    let moves: Vec<(&str, &str, &str)> = clashes
-        .iter()
-        .map(|clash| (clash.binding.name.as_str(), clash.key(), clash.to()))
-        .collect();
-    move_keys(options, &moves)
+/// `options` with `plan` applied: the binding of each clash moved to the table's key, and each
+/// unbound binding of it given its key. Only those lines change.
+pub fn apply_key_fix(options: &[u8], plan: &KeyFixPlan) -> Vec<u8> {
+    move_keys(options, &plan.moves())
 }
 
-/// Undoes [`fix_key_clashes`] on `current`, given the file as it was before (`backup`). When
+/// Undoes [`apply_key_fix`] on `current`, given the file as it was before (`backup`). When
 /// nothing else changed since, the old file comes back byte for byte; when the game saved the
-/// file meanwhile, only the lines still on the table's keys go back to their old key.
+/// file meanwhile, only the lines still on the table's keys go back to their old key (push to
+/// talk to unbound).
 pub fn undo_key_fix(current: &[u8], backup: &[u8]) -> Vec<u8> {
-    let clashes = find_key_clashes(backup);
-    if fix_key_clashes(backup, &clashes) == current {
+    let plan = plan_key_fix(backup);
+    if apply_key_fix(backup, &plan) == current {
         return backup.to_vec();
     }
-    let moves: Vec<(&str, &str, &str)> = clashes
-        .iter()
-        .map(|clash| (clash.binding.name.as_str(), clash.to(), clash.key()))
+    let back: Vec<(&str, &str, &str)> = plan
+        .moves()
+        .into_iter()
+        .map(|(name, from, to)| (name, to, from))
         .collect();
-    move_keys(current, &moves)
+    move_keys(current, &back)
 }
 
-/// [`find_key_clashes`] of `<game_dir>/options.txt`; none when there is no such file or it
-/// cannot be read.
-pub async fn key_clashes_in(game_dir: &Path) -> Vec<KeyClash> {
+/// [`plan_key_fix`] of `<game_dir>/options.txt`; nothing when there is no such file or it cannot
+/// be read.
+pub async fn plan_key_fix_in(game_dir: &Path) -> KeyFixPlan {
     match tokio::fs::read(game_dir.join(OPTIONS_FILE)).await {
-        Ok(options) => find_key_clashes(&options),
-        Err(_) => Vec::new(),
+        Ok(options) => plan_key_fix(&options),
+        Err(_) => KeyFixPlan::default(),
     }
 }
 
@@ -261,6 +364,8 @@ pub struct KeyFix {
     pub backup: String,
     /// The clashes it ended.
     pub clashes: Vec<KeyClash>,
+    /// The unbound bindings it gave their key along with them (push to talk).
+    pub binds: Vec<&'static KeyBinding>,
 }
 
 fn backups_dir(game_dir: &Path) -> Result<PathBuf> {
@@ -339,9 +444,9 @@ async fn prune_backups(dir: &Path) {
 }
 
 /// Backs up `<game_dir>/options.txt` and moves the bindings of its clashes
-/// ([`find_key_clashes`]) to the table's keys; nothing else in the file changes. `None` when
-/// nothing clashes (or there is no file). The game must not be running: it writes its own copy of
-/// every key back.
+/// ([`find_key_clashes`]) to the table's keys, giving an unbound push to talk its key along
+/// ([`plan_key_fix`]); nothing else in the file changes. `None` when nothing clashes (or there is
+/// no file). The game must not be running: it writes its own copy of every key back.
 pub async fn fix_key_clashes_in(game_dir: &Path) -> Result<Option<KeyFix>> {
     let path = game_dir.join(OPTIONS_FILE);
     let options = match tokio::fs::read(&path).await {
@@ -349,17 +454,27 @@ pub async fn fix_key_clashes_in(game_dir: &Path) -> Result<Option<KeyFix>> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(Error::io(&path, error)),
     };
-    let clashes = find_key_clashes(&options);
-    if clashes.is_empty() {
+    let plan = plan_key_fix(&options);
+    if plan.is_empty() {
         return Ok(None);
     }
     let dir = backups_dir(game_dir)?;
     let backup = new_backup_name(&dir).await;
     write_durable(&dir.join(&backup), &options).await?;
-    write_options(&path, fix_key_clashes(&options, &clashes)).await?;
+    write_options(&path, apply_key_fix(&options, &plan)).await?;
     prune_backups(&dir).await;
-    tracing::info!(clashes = clashes.len(), backup = %backup, "options.txt key clashes fixed");
-    Ok(Some(KeyFix { backup, clashes }))
+    tracing::info!(
+        clashes = plan.clashes.len(),
+        binds = plan.binds.len(),
+        backup = %backup,
+        "options.txt key clashes fixed"
+    );
+    let KeyFixPlan { clashes, binds } = plan;
+    Ok(Some(KeyFix {
+        backup,
+        clashes,
+        binds,
+    }))
 }
 
 /// Undoes a fix of [`fix_key_clashes_in`] from its backup ([`undo_key_fix`]; a file that is gone
@@ -494,6 +609,30 @@ mod tests {
                 assert_ne!(binding.default, UNBOUND, "{binding:?}: no key, no clash");
             }
         }
+        // KEYS3: a binding the fix binds while unbound has no default key (an unbound line is the
+        // mod's default, not the player's choice), gets one, and ends no clash.
+        assert_eq!(TABLE.bind_if_unbound.len(), table.len());
+        let bound: Vec<&str> = bind_if_unbound()
+            .map(|binding| binding.name.as_str())
+            .collect();
+        assert_eq!(bound, ["key.push_to_talk"]);
+        for binding in bind_if_unbound() {
+            assert_eq!(binding.default, UNBOUND, "{binding:?}");
+            assert_ne!(binding.key, UNBOUND, "{binding:?}");
+            assert_eq!(binding.clashes_with, None, "{binding:?}");
+        }
+    }
+
+    #[test]
+    fn the_table_file_stays_as_the_android_app_copies_it() {
+        // The phone app keeps a byte copy (assets/key-bindings.json): LF only, two-space indent,
+        // `bindIfUnbound` right after `default`.
+        assert!(!TABLE_JSON.contains('\r'));
+        assert!(TABLE_JSON.starts_with("{\n  \"schema\": 1,\n"));
+        assert!(TABLE_JSON.ends_with("\n  ]\n}\n"));
+        assert!(TABLE_JSON.contains(
+            "      \"default\": \"key.keyboard.unknown\",\n      \"bindIfUnbound\": true,\n"
+        ));
     }
 
     #[test]
@@ -632,12 +771,31 @@ mod tests {
             .collect()
     }
 
+    fn bound_names(binds: &[&KeyBinding]) -> Vec<String> {
+        binds.iter().map(|binding| binding.name.clone()).collect()
+    }
+
+    /// The lines that differ between two files of the same lines (CRLF).
+    fn changed_lines<'a>(before: &'a str, after: &'a str) -> Vec<(&'a str, &'a str)> {
+        assert_eq!(
+            before.matches("\r\n").count(),
+            after.matches("\r\n").count()
+        );
+        before
+            .split("\r\n")
+            .zip(after.split("\r\n"))
+            .filter(|(old, new)| old != new)
+            .collect()
+    }
+
     #[test]
     fn a_file_from_before_the_table_gets_only_its_clashing_lines_moved() {
         let before = game_file();
-        let clashes = find_key_clashes(before.as_bytes());
+        let plan = plan_key_fix(before.as_bytes());
+        let clashes = &plan.clashes;
+        assert_eq!(clashes, &find_key_clashes(before.as_bytes()));
         assert_eq!(
-            clash_names(&clashes),
+            clash_names(clashes),
             [
                 "key.wi_zoom.zoom",
                 "key.gammautils.gammaToggle",
@@ -650,15 +808,14 @@ mod tests {
             (clashes[0].key(), clashes[0].to()),
             ("key.keyboard.v", "key.keyboard.c")
         );
-        let after = fix_key_clashes(before.as_bytes(), &clashes);
-        let after = String::from_utf8(after).unwrap();
-        let changed: Vec<(&str, &str)> = before
-            .split("\r\n")
-            .zip(after.split("\r\n"))
-            .filter(|(old, new)| old != new)
-            .collect();
+        // Push to talk is no clash, but the pack leaves it unbound and Caps Lock free: it comes
+        // along (KEYS3).
+        assert_eq!(bound_names(&plan.binds), ["key.push_to_talk"]);
+        let after = String::from_utf8(apply_key_fix(before.as_bytes(), &plan)).unwrap();
+        // Same lines, same endings (CRLF), every other byte the same.
+        assert_eq!(after.matches('\n').count(), after.matches("\r\n").count());
         assert_eq!(
-            changed,
+            changed_lines(&before, &after),
             [
                 (
                     "key_key.gammautils.gammaToggle:key.keyboard.g",
@@ -673,18 +830,17 @@ mod tests {
                     "key_key.hide_icons:key.keyboard.unknown"
                 ),
                 (
+                    "key_key.push_to_talk:key.keyboard.unknown",
+                    "key_key.push_to_talk:key.keyboard.caps.lock"
+                ),
+                (
                     "key_key.wi_zoom.zoom:key.keyboard.v",
                     "key_key.wi_zoom.zoom:key.keyboard.c"
                 ),
             ]
         );
-        // Same lines, same endings, nothing else: push to talk stays unbound (it is no clash).
-        assert_eq!(
-            before.matches("\r\n").count(),
-            after.matches("\r\n").count()
-        );
-        assert!(after.contains("key_key.push_to_talk:key.keyboard.unknown\r\n"));
-        assert!(find_key_clashes(after.as_bytes()).is_empty());
+        assert!(plan_key_fix(after.as_bytes()).is_empty());
+        assert!(find_unbound_keys(after.as_bytes()).is_empty());
         // Undo right after: the old file byte for byte.
         assert_eq!(
             undo_key_fix(after.as_bytes(), before.as_bytes()),
@@ -716,17 +872,19 @@ mod tests {
             "",
         ] {
             assert!(find_key_clashes(file.as_bytes()).is_empty(), "{file:?}");
-            assert_eq!(fix_key_clashes(file.as_bytes(), &[]), file.as_bytes());
+            let plan = plan_key_fix(file.as_bytes());
+            assert!(plan.is_empty(), "{file:?}");
+            assert_eq!(apply_key_fix(file.as_bytes(), &plan), file.as_bytes());
         }
         // The last line of a mapping counts, as in the game.
         let twice = format!("{base}key_key.wi_zoom.zoom:key.keyboard.b\n");
         assert!(find_key_clashes(twice.as_bytes()).is_empty());
         let back = format!("key_key.wi_zoom.zoom:key.keyboard.b\n{base}");
-        let clashes = find_key_clashes(back.as_bytes());
-        assert_eq!(clash_names(&clashes), ["key.wi_zoom.zoom"]);
+        let plan = plan_key_fix(back.as_bytes());
+        assert_eq!(clash_names(&plan.clashes), ["key.wi_zoom.zoom"]);
         // Only the copy still on V moves.
         assert_eq!(
-            fix_key_clashes(back.as_bytes(), &clashes),
+            apply_key_fix(back.as_bytes(), &plan),
             b"key_key.wi_zoom.zoom:key.keyboard.b\nkey_key.wi_zoom.zoom:key.keyboard.c\nkey_key.voice_chat:key.keyboard.v\n"
         );
     }
@@ -762,7 +920,7 @@ mod tests {
     #[test]
     fn undo_after_the_game_saved_moves_back_only_the_fixed_lines() {
         let before = game_file();
-        let fixed = fix_key_clashes(before.as_bytes(), &find_key_clashes(before.as_bytes()));
+        let fixed = apply_key_fix(before.as_bytes(), &plan_key_fix(before.as_bytes()));
         // The game saved since: another option changed and the player moved gamma again.
         let saved = String::from_utf8(fixed)
             .unwrap()
@@ -776,14 +934,143 @@ mod tests {
         assert!(undone.contains("key_key.wi_zoom.zoom:key.keyboard.v\r\n"));
         assert!(undone.contains("key_key.hide_icons:key.keyboard.h\r\n"));
         assert!(undone.contains("key_iris.keybind.reload:key.keyboard.r\r\n"));
+        assert!(undone.contains("key_key.push_to_talk:key.keyboard.unknown\r\n"));
         // The player's own later choice stays.
         assert!(undone.contains("key_key.gammautils.gammaToggle:key.keyboard.j\r\n"));
-        let changed = saved
-            .split("\r\n")
-            .zip(undone.split("\r\n"))
-            .filter(|(a, b)| a != b)
-            .count();
-        assert_eq!(changed, 3);
+        assert_eq!(changed_lines(&saved, &undone).len(), 4);
+    }
+
+    // --- KEYS3 ---------------------------------------------------------------------------------
+
+    /// Zoom and the voice chat menu both on V: a clash, so "Düzelt" is offered.
+    const ZOOM_ON_V: &str =
+        "key_key.wi_zoom.zoom:key.keyboard.v\nkey_key.voice_chat:key.keyboard.v\n";
+
+    #[test]
+    fn an_unbound_push_to_talk_gets_caps_lock_along_with_the_fix() {
+        let file = format!(
+            "{ZOOM_ON_V}key_key.push_to_talk:key.keyboard.unknown\nkey_key.sprint:key.keyboard.left.control\n"
+        );
+        let plan = plan_key_fix(file.as_bytes());
+        assert_eq!(clash_names(&plan.clashes), ["key.wi_zoom.zoom"]);
+        assert_eq!(bound_names(&plan.binds), ["key.push_to_talk"]);
+        assert_eq!(
+            String::from_utf8(apply_key_fix(file.as_bytes(), &plan)).unwrap(),
+            "key_key.wi_zoom.zoom:key.keyboard.c\nkey_key.voice_chat:key.keyboard.v\n\
+             key_key.push_to_talk:key.keyboard.caps.lock\nkey_key.sprint:key.keyboard.left.control\n"
+        );
+        // Mappings that act only outside normal play may share Caps Lock (F3 combinations,
+        // creative mode's hotbar, Replay Mod).
+        let outside = format!(
+            "{file}key_key.debug.reloadChunk:key.keyboard.caps.lock\nkey_key.saveToolbarActivator:key.keyboard.caps.lock\n\
+             key_key.replaymod.marker:key.keyboard.caps.lock\n"
+        );
+        assert_eq!(
+            bound_names(&plan_key_fix(outside.as_bytes()).binds),
+            ["key.push_to_talk"]
+        );
+    }
+
+    #[test]
+    fn push_to_talk_keeps_a_key_it_has_and_gets_no_line_or_taken_key() {
+        for (file, why) in [
+            (
+                ZOOM_ON_V.to_owned(),
+                "no line: the mod did not load, none is added",
+            ),
+            (
+                format!("{ZOOM_ON_V}key_key.push_to_talk:key.keyboard.k\n"),
+                "the player's key",
+            ),
+            (
+                format!("{ZOOM_ON_V}key_key.push_to_talk:key.keyboard.caps.lock\n"),
+                "already Caps Lock",
+            ),
+            (
+                format!("{ZOOM_ON_V}key_key.push_to_talk:key.keyboard.unknown \n"),
+                "not quite unbound (the game would not read it either)",
+            ),
+            (
+                format!(
+                    "{ZOOM_ON_V}key_key.push_to_talk:key.keyboard.unknown\nkey_key.push_to_talk:key.keyboard.k\n"
+                ),
+                "the last line counts, as in the game",
+            ),
+            (
+                format!(
+                    "{ZOOM_ON_V}key_key.push_to_talk:key.keyboard.unknown\nkey_key.sprint:key.keyboard.caps.lock\n"
+                ),
+                "Caps Lock sprints",
+            ),
+            (
+                format!(
+                    "{ZOOM_ON_V}key_key.push_to_talk:key.keyboard.unknown\nkey_key.voice_chat_group:key.keyboard.caps.lock\n"
+                ),
+                "Caps Lock opens a mod's screen",
+            ),
+        ] {
+            assert!(find_unbound_keys(file.as_bytes()).is_empty(), "{why}");
+            let plan = plan_key_fix(file.as_bytes());
+            assert_eq!(clash_names(&plan.clashes), ["key.wi_zoom.zoom"], "{why}");
+            assert!(plan.binds.is_empty(), "{why}");
+            // Only the clash's line changes.
+            assert_eq!(
+                String::from_utf8(apply_key_fix(file.as_bytes(), &plan)).unwrap(),
+                file.replacen(
+                    "key_key.wi_zoom.zoom:key.keyboard.v",
+                    "key_key.wi_zoom.zoom:key.keyboard.c",
+                    1
+                ),
+                "{why}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unbound_push_to_talk_alone_makes_no_fix() {
+        // The mod check and the question before a launch are about clashes: nothing clashes, so
+        // nothing changes, though push to talk is unbound and Caps Lock free.
+        let file = "key_key.wi_zoom.zoom:key.keyboard.c\nkey_key.voice_chat:key.keyboard.v\n\
+                    key_key.push_to_talk:key.keyboard.unknown\n";
+        assert_eq!(
+            bound_names(&find_unbound_keys(file.as_bytes())),
+            ["key.push_to_talk"]
+        );
+        let plan = plan_key_fix(file.as_bytes());
+        assert_eq!(plan, KeyFixPlan::default());
+        assert!(plan.is_empty());
+        assert_eq!(apply_key_fix(file.as_bytes(), &plan), file.as_bytes());
+    }
+
+    #[test]
+    fn undo_gives_push_to_talk_back_its_old_state() {
+        let before = game_file();
+        let fixed = apply_key_fix(before.as_bytes(), &plan_key_fix(before.as_bytes()));
+        // Right after: the old file byte for byte.
+        assert_eq!(undo_key_fix(&fixed, before.as_bytes()), before.as_bytes());
+        // The game saved since: push to talk, still on Caps Lock, is unbound again ...
+        let saved = String::from_utf8(fixed)
+            .unwrap()
+            .replace("fov:0.0", "fov:0.5");
+        let undone = String::from_utf8(undo_key_fix(saved.as_bytes(), before.as_bytes())).unwrap();
+        assert_eq!(undone, before.replace("fov:0.0", "fov:0.5"));
+        // ... unless the player gave it a key of their own meanwhile.
+        let rebound = saved.replace(
+            "key_key.push_to_talk:key.keyboard.caps.lock",
+            "key_key.push_to_talk:key.keyboard.b",
+        );
+        let undone =
+            String::from_utf8(undo_key_fix(rebound.as_bytes(), before.as_bytes())).unwrap();
+        assert_eq!(
+            changed_lines(&before, &undone),
+            [
+                ("fov:0.0", "fov:0.5"),
+                (
+                    "key_key.push_to_talk:key.keyboard.unknown",
+                    "key_key.push_to_talk:key.keyboard.b"
+                ),
+            ]
+        );
     }
 
     #[test]
@@ -842,9 +1129,11 @@ mod tests {
         let before = game_file();
         let (dir, game) = instance(&before);
         let path = game.join(OPTIONS_FILE);
-        assert_eq!(key_clashes_in(&game).await.len(), 4);
+        let plan = plan_key_fix_in(&game).await;
+        assert_eq!((plan.clashes.len(), plan.binds.len()), (4, 1));
         let fix = fix_key_clashes_in(&game).await.unwrap().unwrap();
-        assert_eq!(fix.clashes.len(), 4);
+        assert_eq!(fix.clashes, plan.clashes);
+        assert_eq!(bound_names(&fix.binds), ["key.push_to_talk"]);
         // The backup sits beside the game folder, not in it, and holds the old file.
         assert_eq!(backups(&game), std::slice::from_ref(&fix.backup));
         let backup = dir
@@ -854,8 +1143,8 @@ mod tests {
             .join(&fix.backup);
         assert_eq!(std::fs::read(&backup).unwrap(), before.as_bytes());
         let fixed = std::fs::read(&path).unwrap();
-        assert_eq!(fixed, fix_key_clashes(before.as_bytes(), &fix.clashes));
-        assert!(key_clashes_in(&game).await.is_empty());
+        assert_eq!(fixed, apply_key_fix(before.as_bytes(), &plan));
+        assert!(plan_key_fix_in(&game).await.is_empty());
         // Nothing left to fix: no new backup.
         assert_eq!(fix_key_clashes_in(&game).await.unwrap(), None);
         assert_eq!(backups(&game).len(), 1);
@@ -883,7 +1172,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let game = dir.path().join("minecraft");
         std::fs::create_dir_all(&game).unwrap();
-        assert!(key_clashes_in(&game).await.is_empty());
+        assert!(plan_key_fix_in(&game).await.is_empty());
         assert_eq!(fix_key_clashes_in(&game).await.unwrap(), None);
         assert!(!dir.path().join(".launcher").exists());
 
@@ -902,6 +1191,20 @@ mod tests {
         expected.sort();
         assert_eq!(kept, expected);
         assert!(kept.contains(made.last().unwrap()));
+    }
+
+    #[tokio::test]
+    async fn an_unbound_push_to_talk_alone_leaves_the_file_on_disk() {
+        let file =
+            "key_key.voice_chat:key.keyboard.v\r\nkey_key.push_to_talk:key.keyboard.unknown\r\n";
+        let (dir, game) = instance(file);
+        assert!(plan_key_fix_in(&game).await.is_empty());
+        assert_eq!(fix_key_clashes_in(&game).await.unwrap(), None);
+        assert_eq!(
+            std::fs::read(game.join(OPTIONS_FILE)).unwrap(),
+            file.as_bytes()
+        );
+        assert!(!dir.path().join(".launcher").exists());
     }
 
     #[tokio::test]

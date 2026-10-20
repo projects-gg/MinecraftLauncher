@@ -16,8 +16,9 @@ pub use defaults::{
     seed_default_server, seed_options,
 };
 pub use keys::{
-    FirstKeys, KeyBinding, KeyClash, KeyFix, find_key_clashes, fix_key_clashes_in, key_clashes_in,
-    official_pack_bindings, official_pack_key_lines, undo_key_fix_in,
+    FirstKeys, KeyBinding, KeyClash, KeyFix, KeyFixPlan, find_key_clashes, find_unbound_keys,
+    fix_key_clashes_in, official_pack_bindings, official_pack_key_lines, plan_key_fix_in,
+    undo_key_fix_in,
 };
 pub use memory::{
     AUTO_MAX_MB, MIN_HEAP_FLOOR_MB, MemoryIssue, MemoryLimits, MemoryValidation, auto_memory,

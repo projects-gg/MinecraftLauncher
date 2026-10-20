@@ -29,7 +29,11 @@ async function ok<T>(promise: Promise<Res<T>>): Promise<T> {
   return result.data;
 }
 
-const keyChange = (k: KeyChangeView): KeyChange => ({ ...k, to: k.to ?? undefined });
+const keyChange = (k: KeyChangeView): KeyChange => ({
+  ...k,
+  partner: k.partner ?? undefined,
+  to: k.to ?? undefined,
+});
 
 const issue = ({ keys, ...i }: ModHealthIssueView): HealthIssue => ({
   ...i,

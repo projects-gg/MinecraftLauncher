@@ -1085,9 +1085,11 @@ Not part of the format yet. A pack that ships its own `options.txt` decides the 
 both launchers write the official pack's key bindings (`crates/pl-mc/data/key-bindings.json`, the
 mods' keys moved so that nothing shares a key in normal play) into the `options.txt` they create
 at the first launch, never into an existing one by themselves: an older file that still has the
-clashes (`clashesWith`) gets only those lines moved, and only when the player accepts. Studio may
-take the table over later as a field of the manifest's `projects` extension, checked against the
-pack's jars when it publishes.
+clashes (`clashesWith`) gets only those lines moved, and only when the player accepts. The same
+fix gives a binding marked `bindIfUnbound` (push to talk) its key while the file still leaves it
+unbound and no binding that acts in normal play has that key; that alone is never offered. Studio
+may take the table over later as a field of the manifest's `projects` extension, checked against
+the pack's jars when it publishes.
 
 ### Path rules
 

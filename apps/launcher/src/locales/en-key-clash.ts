@@ -12,10 +12,12 @@ export const enKeyClash = {
   unbound: "Not bound",
   fixed: "Mod keys fixed.",
   newKeys: "New keys: {{keys}}.",
+  bound: "{{action}}: {{key}}.",
   undone: "Your old keys are back.",
   actions: {
     zoom: "Zoom",
     gamma: "Full brightness",
+    pushToTalk: "Push to talk",
     hideIcons: "Hide icons",
     reloadShaders: "Reload shaders",
   },
@@ -23,6 +25,7 @@ export const enKeyClash = {
   sr: {
     change: "{{from}} becomes {{to}}",
     changeOff: "{{from}} is unbound",
+    bind: "Set to {{to}}",
     changed: "Now {{to}}",
     changedOff: "Now not bound",
   },

@@ -22,7 +22,10 @@ export type HealthIssueKind =
   /** The official pack's mod keys still clash in an older `options.txt` (KEYS2). */
   | "keyClash";
 
-/** A binding the key fix moves: one clash of the official pack's mods. */
+/**
+ * A binding the key fix changes: one clash of the official pack's mods, or (no `partner`) an
+ * unbound push to talk it gives its key along with them (KEYS3).
+ */
 export interface KeyChange {
   /** The key mapping (`key.wi_zoom.zoom`); the UI names its action. */
   name: string;
@@ -30,9 +33,9 @@ export interface KeyChange {
   modName: string;
   /** What it does, in English (for a mapping the UI has no words for). */
   action: string;
-  /** The mapping it shares the key with. */
-  partner: string;
-  /** The shared key (`key.keyboard.v`). */
+  /** The mapping it shares the key with; none for a binding that only gets a key. */
+  partner?: string;
+  /** The key it has (`key.keyboard.v`); `key.keyboard.unknown` for one that only gets a key. */
   key: string;
   /** The key it gets (`key.keyboard.c`); none leaves it without one. */
   to?: string;
@@ -74,7 +77,7 @@ export interface HealthIssue {
   /** Files involved ("copy details" only). */
   files: string[];
   offer?: FixOffer;
-  /** A key clash: the bindings "Düzelt" moves. */
+  /** A key clash: the bindings "Düzelt" changes (the clashes, then an unbound push to talk). */
   keys?: KeyChange[];
 }
 

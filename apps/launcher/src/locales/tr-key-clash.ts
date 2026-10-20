@@ -18,12 +18,18 @@ export const trKeyClash = {
   /** The toast after "Düzelt" in the mod center; `keys`: "Yakınlaştır C ve Tam parlaklık X". */
   fixed: "Mod tuşları düzeltildi.",
   newKeys: "Yeni tuşlar: {{keys}}.",
+  /**
+   * The toast's line when the fix also gave an unbound push to talk its key (KEYS3): "Bas-konuş:
+   * Caps Lock."
+   */
+  bound: "{{action}}: {{key}}.",
   /** Announced when "Geri al" put the old keys back. */
   undone: "Eski tuşların geri geldi.",
-  /** The bindings the pack's table moves, by what they do. */
+  /** The bindings the pack's table changes, by what they do (push to talk: the mod's own word). */
   actions: {
     zoom: "Yakınlaştır",
     gamma: "Tam parlaklık",
+    pushToTalk: "Bas-konuş",
     hideIcons: "Simgeleri gizle",
     reloadShaders: "Gölgelendiricileri yenile",
   },
@@ -33,6 +39,8 @@ export const trKeyClash = {
   sr: {
     change: "{{from}} yerine {{to}}",
     changeOff: "{{from}} tuşu kaldırılır",
+    /** An unbound binding that gets a key. */
+    bind: "{{to}} atanır",
     changed: "Artık {{to}}",
     changedOff: "Artık atanmamış",
   },

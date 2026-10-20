@@ -6,6 +6,11 @@ import { listFormat } from "@/lib/format";
 
 const UNBOUND = "key.keyboard.unknown";
 
+/** No key: the change gives the binding one (an unbound push to talk, KEYS3), or takes it away. */
+export function isUnbound(key: string | undefined): boolean {
+  return !key || key === UNBOUND;
+}
+
 /** "V", "V ve G", "V, G ve H" / "V, G and H" (the interface's language), each once. */
 function joinNames(names: string[]): string {
   const unique = names.filter((name, i) => names.indexOf(name) === i);
@@ -16,10 +21,11 @@ function joinNames(names: string[]): string {
   }
 }
 
-/** The bindings the pack's table moves (crates/pl-mc/data/key-bindings.json) → `keyClash.actions`. */
+/** The bindings the pack's table changes (crates/pl-mc/data/key-bindings.json) → `keyClash.actions`. */
 const ACTIONS: Record<string, string> = {
   "key.wi_zoom.zoom": "zoom",
   "key.gammautils.gammaToggle": "gamma",
+  "key.push_to_talk": "pushToTalk",
   "key.hide_icons": "hideIcons",
   "iris.keybind.reload": "reloadShaders",
 };
@@ -47,21 +53,40 @@ export function actionName(t: TFunction, change: KeyChange): string {
   return key ? t(`keyClash.actions.${key}`) : change.action;
 }
 
-/** The finding's line: "Mod tuşları çakışıyor: V, G, H ve R." */
+/**
+ * The finding's line: "Mod tuşları çakışıyor: V, G, H ve R." Only the clashes: a push to talk
+ * the fix binds along shares no key.
+ */
 export function keyClashText(t: TFunction, changes: readonly KeyChange[]): string {
-  return t("keyClash.issue", { keys: joinNames(changes.map((c) => keyLabel(t, c.key))) });
+  const clashes = changes.filter((c) => c.partner);
+  return t("keyClash.issue", { keys: joinNames(clashes.map((c) => keyLabel(t, c.key))) });
 }
 
 /**
- * The fix toast's second line, for the bindings that got a key: "Yeni tuşlar: Yakınlaştır C ve
- * Tam parlaklık X." None when every change only took a key away.
+ * The fix toast's line for the clashing bindings that got a key: "Yeni tuşlar: Yakınlaştır C ve
+ * Tam parlaklık X." None when every clash only took a key away.
  */
 export function newKeysLine(t: TFunction, changes: readonly KeyChange[]): string | undefined {
-  const moved = changes.filter((c) => c.to);
+  const moved = changes.filter((c) => c.partner && c.to);
   if (moved.length === 0) return undefined;
   return t("keyClash.newKeys", {
     keys: joinNames(moved.map((c) => `${actionName(t, c)} ${keyLabel(t, c.to)}`)),
   });
+}
+
+/**
+ * The fix toast's lines under its title: the clashing bindings' new keys, then a line for each
+ * unbound binding it gave a key along (KEYS3: "Bas-konuş: Caps Lock.").
+ */
+export function fixedLines(t: TFunction, changes: readonly KeyChange[]): string[] {
+  const lines: string[] = [];
+  const moved = newKeysLine(t, changes);
+  if (moved) lines.push(moved);
+  for (const change of changes) {
+    if (change.partner || !change.to) continue;
+    lines.push(t("keyClash.bound", { action: actionName(t, change), key: keyLabel(t, change.to) }));
+  }
+  return lines;
 }
 
 /** What a screen reader says for one row, before and after "Düzelt". */
@@ -69,5 +94,6 @@ export function changeSpoken(t: TFunction, change: KeyChange, fixed: boolean): s
   const from = keyLabel(t, change.key);
   const to = keyLabel(t, change.to);
   if (fixed) return change.to ? t("keyClash.sr.changed", { to }) : t("keyClash.sr.changedOff");
+  if (isUnbound(change.key) && change.to) return t("keyClash.sr.bind", { to });
   return change.to ? t("keyClash.sr.change", { from, to }) : t("keyClash.sr.changeOff", { from });
 }

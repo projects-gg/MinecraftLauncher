@@ -525,8 +525,9 @@ export const commands = {
 	 */
 	instanceSetJvmArgs: (instanceId: string, jvmArgs: string) => typedError<string, CmdError>(__TAURI_INVOKE("instance_set_jvm_args", { instanceId, jvmArgs })),
 	/**
-	 *  "Düzelt" for the key clash of an official pack instance: backs up `options.txt` and moves only
-	 *  the clashing bindings to the pack's table (`pl_mc::instance::fix_key_clashes_in`).
+	 *  "Düzelt" for the key clash of an official pack instance (or one with ready-made sets): backs
+	 *  up `options.txt` and moves only the clashing bindings to the pack's table, giving an unbound
+	 *  push to talk its key along (`pl_mc::instance::fix_key_clashes_in`).
 	 */
 	modsFixKeys: (instanceId: string) => typedError<KeyFixView, CmdError>(__TAURI_INVOKE("mods_fix_keys", { instanceId })),
 	/**
@@ -2194,7 +2195,10 @@ export type KeptReason =
 /**  A file of the player's sits where the new version puts one. */
 "theirs";
 
-/**  A binding a key fix moves: one clash of the official pack's mods in `options.txt`. */
+/**
+ *  A binding a key fix changes: one clash of the official pack's mods in `options.txt`, or an
+ *  unbound push to talk it gives its key along with them (KEYS3).
+ */
 export type KeyChangeView = {
 	/**  The key mapping (`key.wi_zoom.zoom`); the UI names its action. */
 	name: string,
@@ -2202,9 +2206,12 @@ export type KeyChangeView = {
 	modName: string,
 	/**  What it does, in English (for a mapping the UI has no words for). */
 	action: string,
-	/**  The mapping it shares the key with (`key.voice_chat`). */
-	partner: string,
-	/**  The shared key (`key.keyboard.v`). */
+	/**
+	 *  The mapping it shares the key with (`key.voice_chat`); `None` for a binding that only gets
+	 *  a key (push to talk).
+	 */
+	partner: string | null,
+	/**  The key it has (`key.keyboard.v`); `key.keyboard.unknown` for one that only gets a key. */
 	key: string,
 	/**  The key it gets (`key.keyboard.c`); `None` leaves it without one. */
 	to: string | null,
@@ -2217,7 +2224,7 @@ export type KeyFixView = {
 	 *  clashed any more.
 	 */
 	backup: string | null,
-	/**  The bindings it moved. */
+	/**  The bindings it changed: the clashes it ended, then an unbound push to talk it gave a key. */
 	changes: KeyChangeView[],
 };
 
@@ -2780,7 +2787,7 @@ export type ModHealthIssueView = {
 	/**  The files involved ("copy details" only). */
 	files: string[],
 	offer: FixOfferView | null,
-	/**  For a key clash: the bindings "Düzelt" moves. */
+	/**  For a key clash: the bindings "Düzelt" changes (the clashes, then an unbound push to talk). */
 	keys: KeyChangeView[],
 };
 

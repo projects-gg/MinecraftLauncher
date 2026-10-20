@@ -1,7 +1,9 @@
 // The official pack's mod keys that still clash in an older options.txt (KEYS2). The launcher
 // never edits the file by itself: the mod check reports the clash, "Düzelt" moves only the
 // clashing bindings (after a backup) and "Geri al" puts them back. Before a launch the question
-// is a step of the mod health dialog, so the fix lands before the game reads the file.
+// is a step of the mod health dialog, so the fix lands before the game reads the file. Along with
+// the clashes, "Düzelt" gives a still unbound push to talk its key (KEYS3): a row of its own
+// before the fix and a line of the toast after it.
 import { ArrowRight } from "@phosphor-icons/react";
 import { Button, cn, easeOutExpo, toast } from "@pl/ui";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
@@ -13,7 +15,7 @@ import { showError } from "@/features/content/jobs";
 import { stagger, swap, useMotionPrefs } from "@/features/modcenter/motion";
 import { api, type KeyChange, type KeyFix } from "@/lib/api";
 import { type FlowStep, modCheckKey } from "./flow";
-import { actionName, changeSpoken, keyLabel, newKeysLine } from "./key-texts";
+import { actionName, changeSpoken, fixedLines, isUnbound, keyLabel } from "./key-texts";
 
 /** The mod check and the mod center read the file again. */
 function recheck(queryClient: QueryClient, instanceId: string) {
@@ -21,8 +23,9 @@ function recheck(queryClient: QueryClient, instanceId: string) {
 }
 
 /**
- * "Düzelt" on the mod center's line: fixes at once, then a toast with the new keys and "Geri
- * al". Refused (with its reason) while the game runs, since the game writes its own keys back.
+ * "Düzelt" on the mod center's line: fixes at once, then a toast with the new keys (a line of its
+ * own for a push to talk that got one) and "Geri al". Refused (with its reason) while the game
+ * runs, since the game writes its own keys back.
  */
 export async function fixKeysNow(t: TFunction, queryClient: QueryClient, instanceId: string) {
   let fix: KeyFix;
@@ -36,8 +39,17 @@ export async function fixKeysNow(t: TFunction, queryClient: QueryClient, instanc
   }
   const backup = fix.backup;
   if (!backup) return;
+  const lines = fixedLines(t, fix.changes);
   toast.success(t("keyClash.fixed"), {
-    description: newKeysLine(t, fix.changes),
+    // One sentence per line; the small gap keeps a wrapped line apart from the next sentence.
+    description:
+      lines.length > 0
+        ? lines.map((line, index) => (
+            <span key={line} className={cn("block", index > 0 && "mt-1")}>
+              {line}
+            </span>
+          ))
+        : undefined,
     duration: 8000,
     action: {
       label: t("keyClash.undo"),
@@ -94,8 +106,9 @@ function KeyCap({
 }
 
 /**
- * The bindings a fix moves, one row each: what it does and its mod, then the key it has and the
- * key it gets. Once fixed, the old caps fade back and the new ones light up row by row.
+ * The bindings a fix changes, one row each: what it does and its mod, then the key it has and the
+ * key it gets ("Atanmamış" on either side when there is none). Once fixed, the old caps fade back
+ * and the new ones light up row by row.
  */
 export function KeyChangeList({
   changes,
@@ -123,9 +136,23 @@ export function KeyChangeList({
             </div>
             <span className="sr-only">{changeSpoken(t, change, fixed)}</span>
             <span aria-hidden className="flex shrink-0 items-center gap-2">
-              <KeyCap tone={fixed ? "spent" : "old"} delay={delay} settle={false}>
-                {keyLabel(t, change.key)}
-              </KeyCap>
+              {isUnbound(change.key) ? (
+                // No key yet (push to talk): the word, fading back like an old cap.
+                <span
+                  style={{ transitionDelay: `${Math.round(delay * 1000)}ms` }}
+                  className={cn(
+                    "flex h-7 items-center text-[12.5px]",
+                    "transition-[opacity,color] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
+                    fixed ? "text-ash-400 opacity-60" : "text-ash-300",
+                  )}
+                >
+                  {keyLabel(t, undefined)}
+                </span>
+              ) : (
+                <KeyCap tone={fixed ? "spent" : "old"} delay={delay} settle={false}>
+                  {keyLabel(t, change.key)}
+                </KeyCap>
+              )}
               <ArrowRight
                 size={12}
                 weight="bold"
@@ -134,8 +161,9 @@ export function KeyChangeList({
                   fixed ? "text-gold-400/70" : "text-ash-500",
                 )}
               />
-              {/* The new key's slot is as wide as the widest word, so the arrows line up. */}
-              <span className="flex min-w-[76px]">
+              {/* The new key's slot is as wide as its widest content (the Caps Lock cap), so the
+                  arrows line up. */}
+              <span className="flex min-w-[80px]">
                 {change.to ? (
                   <KeyCap
                     tone={fixed ? "set" : "next"}

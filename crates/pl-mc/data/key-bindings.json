@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "about": "Key bindings the launchers write into a new options.txt of the official pack, so its mods share no key with each other or with the game in normal play (Minecraft fires every mapping bound to a pressed key). Desktop: pl-mc instance::keys; Android: the same lines. Only an options.txt the launcher creates gets them: keys the player changed and a pack's own options.txt always win. Vanilla keys are never changed. The key names are valid from Minecraft 1.13 on. clashesWith names the mapping that has the binding's default key in the pack: an older options.txt where both still have that key gets the binding's line moved, only when the player agrees (desktop: pl-mc instance::keys::find_key_clashes). Inventory and checks: crates/pl-mc/testdata/key-bindings.",
+  "about": "Key bindings the launchers write into a new options.txt of the official pack, so its mods share no key with each other or with the game in normal play (Minecraft fires every mapping bound to a pressed key). Desktop: pl-mc instance::keys; Android: the same lines. Only an options.txt the launcher creates gets them: keys the player changed and a pack's own options.txt always win. Vanilla keys are never changed. The key names are valid from Minecraft 1.13 on. clashesWith names the mapping that has the binding's default key in the pack: an older options.txt where both still have that key gets the binding's line moved, only when the player agrees (desktop: pl-mc instance::keys::find_key_clashes). bindIfUnbound: that fix also gives the binding its key while its line is exactly key.keyboard.unknown and nothing that acts in normal play uses the key; a file without the line gets none, and this alone never makes a fix (desktop: pl-mc instance::keys::find_unbound_keys). Inventory and checks: crates/pl-mc/testdata/key-bindings.",
   "bindings": [
     {
       "name": "key.wi_zoom.zoom",
@@ -24,6 +24,7 @@
       "name": "key.push_to_talk",
       "key": "key.keyboard.caps.lock",
       "default": "key.keyboard.unknown",
+      "bindIfUnbound": true,
       "mod": "Simple Voice Chat",
       "action": "Push to talk",
       "why": "Unbound by default. Caps Lock was the mod's own default for years, the left little finger rests on it while moving and nothing else uses it. Not Left Alt: Left Alt+Shift (talking while sneaking) switches the Windows input language and Alt+F4 closes the game."

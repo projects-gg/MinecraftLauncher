@@ -9,7 +9,8 @@
 //! Official pack instances also report the pack's mod keys that still clash in an older
 //! `options.txt` (KEYS2, `pl_mc::instance::keys`): one warning with "Düzelt" (`mods_fix_keys`,
 //! undone by `mods_undo_keys`), and once per session a question before the launch, since the
-//! game reads the file at start and writes its own keys back.
+//! game reads the file at start and writes its own keys back. Along with the clashes, "Düzelt"
+//! gives a still unbound push to talk its key (KEYS3, a row of its own); that alone raises nothing.
 
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
@@ -24,7 +25,7 @@ use pl_content::{PackManifest, PackSelection, PackState, SyncProgress, apply_syn
 use pl_lang::pick;
 use pl_mc::addons::{AddonIndex, Addons};
 use pl_mc::gamefiles::LauncherTrash;
-use pl_mc::instance::{Instance, KeyClash, MemorySettings};
+use pl_mc::instance::{Instance, KeyBinding, KeyClash, KeyFixPlan, MemorySettings};
 use pl_mc::java::JavaSetting;
 use pl_mc::launch::crash::{
     CrashDiagnosis, CrashKind, CrashSuspect, SuggestedAction, SuspectReason, attribute_crash,
@@ -209,8 +210,9 @@ struct Checked {
     origins: FileOrigins,
     titles: Titles,
     report: ModCheckReport,
-    /// Official pack instances: the pack's mod keys that still clash in `options.txt`.
-    keys: Vec<KeyClash>,
+    /// Official pack instances: what "Düzelt" would change in `options.txt` (the pack's mod keys
+    /// that still clash and, along with them, an unbound push to talk).
+    keys: KeyFixPlan,
 }
 
 async fn check_instance(
@@ -233,9 +235,9 @@ async fn check_instance(
     // The pack's key table: the official pack's instances and those with ready-made sets.
     let keys =
         if instance.managed_pack.is_some() || crate::commands::modsets::has_sets(&game_dir).await {
-            pl_mc::instance::key_clashes_in(&game_dir).await
+            pl_mc::instance::plan_key_fix_in(&game_dir).await
         } else {
-            Vec::new()
+            KeyFixPlan::default()
         };
     Ok(Checked {
         env,
@@ -316,11 +318,12 @@ pub struct ModHealthIssueView {
     /// The files involved ("copy details" only).
     pub files: Vec<String>,
     pub offer: Option<FixOfferView>,
-    /// For a key clash: the bindings "Düzelt" moves.
+    /// For a key clash: the bindings "Düzelt" changes (the clashes, then an unbound push to talk).
     pub keys: Vec<KeyChangeView>,
 }
 
-/// A binding a key fix moves: one clash of the official pack's mods in `options.txt`.
+/// A binding a key fix changes: one clash of the official pack's mods in `options.txt`, or an
+/// unbound push to talk it gives its key along with them (KEYS3).
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct KeyChangeView {
@@ -330,9 +333,10 @@ pub struct KeyChangeView {
     pub mod_name: String,
     /// What it does, in English (for a mapping the UI has no words for).
     pub action: String,
-    /// The mapping it shares the key with (`key.voice_chat`).
-    pub partner: String,
-    /// The shared key (`key.keyboard.v`).
+    /// The mapping it shares the key with (`key.voice_chat`); `None` for a binding that only gets
+    /// a key (push to talk).
+    pub partner: Option<String>,
+    /// The key it has (`key.keyboard.v`); `key.keyboard.unknown` for one that only gets a key.
     pub key: String,
     /// The key it gets (`key.keyboard.c`); `None` leaves it without one.
     pub to: Option<String>,
@@ -343,14 +347,38 @@ fn key_change(clash: &KeyClash) -> KeyChangeView {
         name: clash.binding.name.clone(),
         mod_name: clash.binding.mod_name.clone(),
         action: clash.binding.action.clone(),
-        partner: clash.partner.to_owned(),
+        partner: Some(clash.partner.to_owned()),
         key: clash.key().to_owned(),
         to: (clash.to() != pl_mc::instance::keys::UNBOUND).then(|| clash.to().to_owned()),
     }
 }
 
-/// The one warning for the key clashes of an official pack instance (its button: "Düzelt").
-fn key_clash_view(clashes: &[KeyClash]) -> ModHealthIssueView {
+/// An unbound binding the fix gives its key along with the clashes (push to talk, KEYS3).
+fn key_bind(binding: &KeyBinding) -> KeyChangeView {
+    KeyChangeView {
+        name: binding.name.clone(),
+        mod_name: binding.mod_name.clone(),
+        action: binding.action.clone(),
+        partner: None,
+        key: pl_mc::instance::keys::UNBOUND.to_owned(),
+        to: Some(binding.key.clone()),
+    }
+}
+
+/// The rows of a key fix: the clashes, then the unbound bindings that get a key along.
+fn key_changes(clashes: &[KeyClash], binds: &[&KeyBinding]) -> Vec<KeyChangeView> {
+    clashes
+        .iter()
+        .map(key_change)
+        .chain(binds.iter().copied().map(key_bind))
+        .collect()
+}
+
+/// The one warning for the key clashes of an official pack instance (its button: "Düzelt"). The
+/// clashes make it and name it (its key, so the question before a launch comes back only when
+/// they change); its rows also show an unbound push to talk the fix binds along.
+fn key_clash_view(plan: &KeyFixPlan) -> ModHealthIssueView {
+    let clashes = &plan.clashes;
     let mut mods: Vec<String> = Vec::new();
     for clash in clashes {
         if !mods.contains(&clash.binding.mod_name) {
@@ -373,7 +401,7 @@ fn key_clash_view(clashes: &[KeyClash]) -> ModHealthIssueView {
             name: None,
             count: u32::try_from(clashes.len()).unwrap_or(u32::MAX),
         }),
-        keys: clashes.iter().map(key_change).collect(),
+        keys: key_changes(&plan.clashes, &plan.binds),
     }
 }
 
@@ -953,7 +981,7 @@ pub struct KeyFixView {
     /// The backup "Geri al" puts the keys back from (`mods_undo_keys`); `None` when nothing
     /// clashed any more.
     pub backup: Option<String>,
-    /// The bindings it moved.
+    /// The bindings it changed: the clashes it ended, then an unbound push to talk it gave a key.
     pub changes: Vec<KeyChangeView>,
 }
 
@@ -982,8 +1010,8 @@ async fn options_free(
 }
 
 /// "Düzelt" for the key clash of an official pack instance (or one with ready-made sets): backs
-/// up `options.txt` and moves only the clashing bindings to the pack's table
-/// (`pl_mc::instance::fix_key_clashes_in`).
+/// up `options.txt` and moves only the clashing bindings to the pack's table, giving an unbound
+/// push to talk its key along (`pl_mc::instance::fix_key_clashes_in`).
 #[tauri::command]
 #[specta::specta]
 pub async fn mods_fix_keys(
@@ -1014,7 +1042,7 @@ pub async fn mods_fix_keys(
             .map_err(CmdError::from)?
         {
             Some(fix) => KeyFixView {
-                changes: fix.clashes.iter().map(key_change).collect(),
+                changes: key_changes(&fix.clashes, &fix.binds),
                 backup: Some(fix.backup),
             },
             None => nothing,

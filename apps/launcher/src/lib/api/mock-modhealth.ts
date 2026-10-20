@@ -4,7 +4,8 @@
 // - `localStorage["pl.mock.crash"]`: the next launch crashes: "mod", "memory", "reserve",
 //   "graphics" or "java" (read by the mock launch in mock.ts).
 // - `localStorage["pl.mock.keys"]`: "clash": the official instance's options.txt still has the
-//   pack's clashing mod keys (KEYS2); the first launch of the preview asks about them.
+//   pack's clashing mod keys (KEYS2) and an unbound push to talk (KEYS3); the first launch of the
+//   preview asks about them.
 import type {
   CrashKind,
   CrashSuspect,
@@ -32,7 +33,10 @@ function flag(key: string): string {
 export const mockModsScenario = () => flag("pl.mock.mods");
 export const mockCrashScenario = () => flag("pl.mock.crash");
 
-/** What the real table moves in a file from before it (crates/pl-mc/data/key-bindings.json). */
+/**
+ * What the real table changes in a file from before it (crates/pl-mc/data/key-bindings.json):
+ * the clashes, then push to talk, which gets its key along (KEYS3).
+ */
 const KEY_CHANGES: KeyChange[] = [
   {
     name: "key.wi_zoom.zoom",
@@ -64,7 +68,15 @@ const KEY_CHANGES: KeyChange[] = [
     partner: "gui.xaero_quick_eat",
     key: "key.keyboard.r",
   },
+  {
+    name: "key.push_to_talk",
+    modName: "Simple Voice Chat",
+    action: "Push to talk",
+    key: "key.keyboard.unknown",
+    to: "key.keyboard.caps.lock",
+  },
 ];
+const KEY_CLASHES = KEY_CHANGES.filter((k) => k.partner);
 
 /** Official instances whose keys "Düzelt" fixed, and those asked about at a launch. */
 const keysFixed = new Set<string>();
@@ -75,13 +87,13 @@ function keyIssue(instanceId: string): HealthIssue | null {
     return null;
   }
   return {
-    key: `KeyClash|${KEY_CHANGES.map((k) => k.name).join(",")}|`,
+    key: `KeyClash|${KEY_CLASHES.map((k) => k.name).join(",")}|`,
     severity: "warning",
     kind: "keyClash",
-    mods: KEY_CHANGES.map((k) => k.modName),
+    mods: [...new Set(KEY_CLASHES.map((k) => k.modName))],
     bundled: false,
     files: ["options.txt"],
-    offer: { label: "fix", count: KEY_CHANGES.length },
+    offer: { label: "fix", count: KEY_CLASHES.length },
     keys: KEY_CHANGES,
   };
 }
