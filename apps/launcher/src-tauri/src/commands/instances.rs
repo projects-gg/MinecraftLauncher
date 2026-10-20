@@ -286,7 +286,15 @@ pub async fn instance_restore(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn instance_duplicate(state: State<'_, AppState>, id: String) -> CmdResult<InstanceView> {
+pub async fn instance_duplicate(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+) -> CmdResult<InstanceView> {
+    // A copy with big worlds takes a while: as a job, it finishes before a closed window quits
+    // (shell::close_requested), and a data folder move or a cleanup waits for it.
+    let _job =
+        crate::commands::modrinth::start_job(&app, &format!("duplicate:{}", uuid::Uuid::new_v4()));
     let source = state.instances.get(&id).await.map_err(CmdError::from)?;
     // The copy's name, in the interface's language ("Vanilla (kopya)" / "Vanilla (copy)").
     let name = pick(
