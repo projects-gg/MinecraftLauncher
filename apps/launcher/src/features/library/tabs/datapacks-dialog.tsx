@@ -154,6 +154,9 @@ export function DatapacksDialog({
       description={world?.name}
       closeLabel={t("common.close")}
       width={600}
+      // The world's packs and the Modrinth results arrive after it opens: the panel glides to
+      // their height instead of jumping twice (480 → 409 → 420 px at 1024 × 640; POLISH6).
+      morph={layout}
     >
       <section aria-label={t("datapacks.installed")}>
         <h3 className="mb-2 text-[12.5px] font-medium text-ash-300">{t("datapacks.installed")}</h3>
