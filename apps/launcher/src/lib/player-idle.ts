@@ -2,10 +2,11 @@
 // embers, the art's slow drift and the OYNA sheen used to run for as long as the window was on
 // screen. In WebView2 every frame of them is a composite of the whole scene (the art, the glass
 // blurs, the grain), so at 144 Hz Home cost 89 % of a CPU core with nobody looking, and 71 %
-// behind another window, which WebView2 still counts as visible (E2E3). Now they play while the
-// player uses the window and for IDLE_AFTER_MS after the last input, rest at once when another
-// window takes the focus, and come back with the next input. main.tsx hands the answer to
-// PerfProvider as `resting`.
+// behind another window, which WebView2 still counts as visible (E2E3). Now the embers and the
+// drift play while the player uses the window and for IDLE_AFTER_MS after the last input, rest at
+// once when another window takes the focus, and come back with the next input (the sheen crosses
+// only when the pointer reaches OYNA since MOTION1). main.tsx hands the answer to PerfProvider as
+// `resting`.
 import { useSyncExternalStore } from "react";
 
 /** Ambient motion keeps going this long after the player's last input. */

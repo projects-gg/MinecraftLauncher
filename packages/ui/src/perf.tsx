@@ -106,9 +106,9 @@ export function useResting() {
 }
 
 /**
- * True when decorative, user-independent motion (embers, the art's drift, the OYNA sheen) may
- * run: not under reduced motion or in Performance mode, the window in sight, no game, and
- * somebody using the window.
+ * True when decorative, user-independent motion (embers, the art's drift) may run: not under
+ * reduced motion or in Performance mode, the window in sight, no game, and somebody using the
+ * window. OYNA's sheen is not ambient any more: it crosses when the pointer arrives (MOTION1).
  */
 export function useAmbientMotion() {
   const reduce = useReducedMotion();

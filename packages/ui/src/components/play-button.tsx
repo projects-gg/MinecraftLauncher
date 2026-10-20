@@ -2,7 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import { cn } from "../lib/cn";
 import { easeOutExpo } from "../motion";
-import { useAmbientMotion, useInteractionMotion, usePerf } from "../perf";
+import { useInteractionMotion, usePerf } from "../perf";
 import { usePressGuard } from "../press-guard";
 
 export type PlayState =
@@ -102,13 +102,13 @@ const FACE_S = 0.34;
 const FACE_EASE = [0.33, 1, 0.68, 1] as const;
 
 /**
- * The one loud element: a gold, chamfered PLAY button on a darker socket, with a soft glow
- * and a periodic sheen when ready. While the files are prepared a gold fill shows how far; once
- * they are ready the fill is full and, while the game opens, a light crosses it and its glow
- * swells every 2.4 s ("Açılıyor"); when the game's window is on screen the gold gives way to the
- * dark "Oyunda" face with one jade bloom. The faces are stacked layers that cross-fade (a
- * gradient cannot transition). Ambient effects respect reduced motion and Performance mode, and
- * the sheen crosses only while somebody uses the window.
+ * The one loud element: a gold, chamfered PLAY button on a darker socket, with a soft glow and a
+ * sheen that crosses the gold once when the pointer (or the keyboard's focus) arrives. While the
+ * files are prepared a gold fill shows how far; once they are ready the fill is full and, while
+ * the game opens, a light crosses it and its glow swells every 2.4 s ("Açılıyor"); when the game's
+ * window is on screen the gold gives way to the dark "Oyunda" face with one jade bloom. The faces
+ * are stacked layers that cross-fade (a gradient cannot transition). Effects respect reduced
+ * motion and Performance mode.
  */
 export function PlayButton({
   state,
@@ -118,7 +118,6 @@ export function PlayButton({
   className,
   keyShortcuts,
 }: PlayButtonProps) {
-  const ambient = useAmbientMotion();
   const animate = useInteractionMotion();
   const { performanceMode, unseen } = usePerf();
   const [hover, setHover] = useState(false);
@@ -153,6 +152,22 @@ export function PlayButton({
     { sweep, wash, swell },
     animate && !performanceMode,
   );
+  // The sheen across the gold when the pointer or the keyboard's focus arrives.
+  const sheen = useRef<HTMLSpanElement>(null);
+  const crossing = useRef<Animation | null>(null);
+  const crossSheen = () => {
+    const band = sheen.current;
+    if (!isGold || !animate || performanceMode || !band || typeof band.animate !== "function") {
+      return;
+    }
+    // A crossing under way finishes: the band never jumps back to start again.
+    const under = crossing.current;
+    if (under && (under.pending || under.playState === "running")) return;
+    crossing.current = band.animate(SHEEN_FRAMES, {
+      duration: SHEEN_SWEEP_MS,
+      easing: SHEEN_EASE,
+    });
+  };
   // One jade bloom when the game's window shows (not when the page loads with a game on).
   const bloom = useRef<HTMLDivElement>(null);
   const previous = useRef(state.kind);
@@ -289,6 +304,11 @@ export function PlayButton({
         onPointerEnter={() => {
           setHover(true);
           showCancelLabel();
+          crossSheen();
+        }}
+        onFocus={(event) => {
+          // The keyboard's focus only: a click focuses the button too, after the pointer came.
+          if (event.currentTarget.matches(":focus-visible")) crossSheen();
         }}
         onPointerMove={showCancelLabel}
         onPointerLeave={(event) => {
@@ -359,7 +379,19 @@ export function PlayButton({
           </motion.span>
           {/* Inner bevel */}
           <span className="chamfer absolute inset-[2px] [--cut:11px] shadow-[inset_0_1px_0_rgb(255_255_255/0.55),inset_0_-2px_0_rgb(63_10_10/0.35)]" />
-          {isGold ? <PlaySheen active={ambient} /> : null}
+          {/* The sheen. Leaving the gold face (OYNA pressed) fades a crossing under way with it. */}
+          <motion.span
+            aria-hidden
+            className="pointer-events-none absolute inset-0"
+            initial={false}
+            animate={{ opacity: isGold ? 1 : 0 }}
+            transition={face}
+          >
+            <span
+              ref={sheen}
+              className="absolute inset-y-0 -left-1/2 w-1/3 -skew-x-[18deg] bg-[linear-gradient(90deg,transparent,rgb(255_255_255/0.55),transparent)]"
+            />
+          </motion.span>
         </span>
         <span className="relative z-10 flex size-full flex-col items-center justify-center">
           <AnimatePresence mode="popLayout" initial={false}>
@@ -454,49 +486,15 @@ function useOpeningCycle(
   }, [active, moving, sweep, wash, swell]);
 }
 
-/** The sheen crosses the button in the last 28 % of every 7 s; the rest of the time it waits. */
-const SHEEN_CYCLE_MS = 7000;
-const SHEEN_SWEEP_MS = 1960;
-
 /**
- * The periodic sheen across a ready OYNA, while ambient motion may run (`active`: somebody uses
- * the window, which is in sight). Each crossing is a short animation of its own and nothing runs
- * in between: as one endless keyframe animation that stood still for 5 s of every 7, it kept the
- * compositor drawing a frame per display refresh on every page, about 6 % of a CPU core for a
- * picture that did not change (OPT1); crossing every 7 s for as long as the window was open kept
- * the Library at 16 % of a core at 144 Hz (OPT2). When it stops, a crossing under way finishes:
- * a band that vanished mid-button read as a glitch. Leaving the gold face (OYNA pressed) ends it.
+ * The sheen's one crossing when the pointer or the keyboard's focus arrives on the gold face (the
+ * owner, MOTION1: it crossed every 7 s while somebody used the window, OPT2). The band starts just
+ * off the left edge, so it shows at once, and leaves the right edge before the curve slows down.
+ * Nothing runs between crossings, nothing at all under reduced motion or in Performance mode.
  */
-function PlaySheen({ active }: { active: boolean }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const crossing = useRef<Animation | undefined>(undefined);
-  useEffect(() => () => crossing.current?.cancel(), []);
-  useEffect(() => {
-    const sheen = ref.current;
-    if (!active || !sheen || typeof sheen.animate !== "function") return;
-    const cross = () => {
-      crossing.current = sheen.animate(
-        [
-          { transform: "translateX(0) skewX(-18deg)" },
-          { transform: "translateX(560%) skewX(-18deg)" },
-        ],
-        { duration: SHEEN_SWEEP_MS, easing: "ease-in-out" },
-      );
-    };
-    let every: number | undefined;
-    const first = window.setTimeout(() => {
-      cross();
-      every = window.setInterval(cross, SHEEN_CYCLE_MS);
-    }, SHEEN_CYCLE_MS - SHEEN_SWEEP_MS);
-    return () => {
-      window.clearTimeout(first);
-      window.clearInterval(every);
-    };
-  }, [active]);
-  return (
-    <span
-      ref={ref}
-      className="ambient-motion pointer-events-none absolute inset-y-0 -left-1/2 w-1/3 -skew-x-[18deg] bg-[linear-gradient(90deg,transparent,rgb(255_255_255/0.55),transparent)]"
-    />
-  );
-}
+const SHEEN_SWEEP_MS = 900;
+const SHEEN_EASE = "cubic-bezier(0.4, 0, 0.2, 1)";
+const SHEEN_FRAMES: Keyframe[] = [
+  { transform: "translateX(40%) skewX(-18deg)" },
+  { transform: "translateX(560%) skewX(-18deg)" },
+];

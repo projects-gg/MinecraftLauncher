@@ -641,7 +641,3 @@
     opacity: 0.3;
   }
 }
-
-html[data-perf="on"] .ambient-motion {
-  animation: none !important;
-}
