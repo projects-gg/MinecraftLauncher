@@ -89,4 +89,9 @@ export const trModSets = {
   },
   /** The chip on a file a set installed. */
   badge: "{{name}} seti",
+  /** The crash dialog, when the set of the mod the crash points at has an update. */
+  crash: {
+    update: "{{name}} setinin güncellemesi var. Bu sorunu düzeltebilir.",
+    open: "Setlerde güncelle",
+  },
 };

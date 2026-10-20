@@ -1,6 +1,7 @@
 import { Plus, WarningCircle } from "@phosphor-icons/react";
 import { Button, EmptyState, Segmented, Skeleton } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -57,9 +58,23 @@ export function ModCenter({
 }) {
   const { t } = useTranslation();
   const prefs = useMotionPrefs();
-  const [section, setSection] = useState<ModCenterSection>(
-    instance.managed ? "recommended" : "own",
+  // The crash dialog's "Setlerde güncelle" opens the sets (FIX2); the request is then dropped
+  // from the address.
+  const { focus } = useSearch({ from: "/library/$instanceId" });
+  const navigate = useNavigate();
+  const [section, setSection] = useState<ModCenterSection>(() =>
+    focus === "sets" ? "sets" : instance.managed ? "recommended" : "own",
   );
+  useEffect(() => {
+    if (focus !== "sets") return;
+    setSection("sets");
+    void navigate({
+      to: "/library/$instanceId",
+      params: { instanceId: instance.id },
+      search: (prev) => ({ ...prev, focus: undefined }),
+      replace: true,
+    });
+  }, [focus, instance.id, navigate]);
   const [project, setProject] = useState<ModCenterItem | null>(null);
   const [migrating, setMigrating] = useState(false);
   const [addingSet, setAddingSet] = useState(false);

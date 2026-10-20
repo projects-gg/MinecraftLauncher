@@ -208,6 +208,40 @@ export function summaryKindKey(kind: SetItemKind): string {
   return `modSets.summary.${kindKeys[kind]}`;
 }
 
+/**
+ * The set the crash dialog suggests updating (FIX2): installed, changed by the team since, and
+ * one of its mods is what the crash strongly points at (by name, or the file "Bu modu kapat"
+ * would turn off). A new PvP instance crashed on TipTapShow until the set's update brought the
+ * library it needed.
+ */
+export function setToUpdate<
+  S extends {
+    installed: boolean;
+    available: boolean;
+    updateAvailable: boolean;
+    items: ReadonlyArray<{ title: string; fileName: string }>;
+  },
+>(
+  crash: {
+    suspects: ReadonlyArray<{ name: string; strong: boolean }>;
+    turnOff: { file: string } | null;
+  },
+  sets: readonly S[],
+): S | null {
+  const norm = (text: string) => text.trim().toLowerCase();
+  const names = new Set(crash.suspects.filter((s) => s.strong).map((s) => norm(s.name)));
+  const file = crash.turnOff ? norm(crash.turnOff.file) : null;
+  return (
+    sets.find(
+      (set) =>
+        set.installed &&
+        set.available &&
+        set.updateAvailable &&
+        set.items.some((item) => names.has(norm(item.title)) || norm(item.fileName) === file),
+    ) ?? null
+  );
+}
+
 /** The instance icon a new instance from a set gets. */
 export function iconFor(purpose: SetPurpose): InstanceIcon {
   switch (purpose) {

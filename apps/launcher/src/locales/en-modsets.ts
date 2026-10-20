@@ -88,4 +88,8 @@ export const enModSets = {
     newInstance: "Open as a new instance",
   },
   badge: "{{name}} set",
+  crash: {
+    update: "The {{name}} set has an update. It may fix this.",
+    open: "Update in Sets",
+  },
 };

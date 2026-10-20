@@ -16,6 +16,7 @@ import {
   neededBy,
   setName,
   setSummary,
+  setToUpdate,
   splitItems,
   summaryWords,
 } from "./model";
@@ -224,6 +225,37 @@ function keys(tree: unknown, prefix = ""): string[] {
     keys(child, prefix ? `${prefix}.${name}` : name),
   );
 }
+
+describe("set update after a crash", () => {
+  const set = (extra: Partial<Parameters<typeof setToUpdate>[1][number]> = {}) => ({
+    installed: true,
+    available: true,
+    updateAvailable: true,
+    items: [
+      { title: "TipTapShow", fileName: "TipTapShow-2.0.0.jar" },
+      { title: "AppleSkin", fileName: "appleskin-3.0.10.jar" },
+    ],
+    ...extra,
+  });
+  const crash = (name: string, strong = true, file: string | null = null) => ({
+    suspects: [{ name, strong }],
+    turnOff: file ? { file } : null,
+  });
+
+  it("suggests the update of the set whose mod the crash points at (FIX2)", () => {
+    const pvp = set();
+    expect(setToUpdate(crash("TipTapShow"), [pvp])).toBe(pvp);
+    expect(setToUpdate(crash("Mod", true, "tiptapshow-2.0.0.jar"), [pvp])).toBe(pvp);
+  });
+
+  it("stays quiet otherwise", () => {
+    expect(setToUpdate(crash("Sodium"), [set()])).toBeNull();
+    expect(setToUpdate(crash("TipTapShow", false), [set()])).toBeNull();
+    expect(setToUpdate(crash("TipTapShow"), [set({ updateAvailable: false })])).toBeNull();
+    expect(setToUpdate(crash("TipTapShow"), [set({ installed: false })])).toBeNull();
+    expect(setToUpdate(crash("TipTapShow"), [set({ available: false })])).toBeNull();
+  });
+});
 
 describe("set words", () => {
   it("exist in both languages", () => {

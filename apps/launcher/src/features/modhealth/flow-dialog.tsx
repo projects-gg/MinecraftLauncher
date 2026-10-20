@@ -1,5 +1,6 @@
 import {
   ArrowCounterClockwise,
+  ArrowsClockwise,
   CaretDown,
   CheckCircle,
   Copy,
@@ -31,6 +32,7 @@ import {
   useMotionPrefs,
 } from "@/features/modcenter/motion";
 import { Percent } from "@/features/modcenter/parts";
+import { setName, setToUpdate } from "@/features/modsets/model";
 import { api, type HealthIssue, type ReinstallPhase, type RepairStep } from "@/lib/api";
 import { copyDetails as copySupportText } from "@/lib/clipboard";
 import { type CrashInfo, useLaunch } from "@/stores/launch";
@@ -129,7 +131,7 @@ const settingsKinds = new Set(["invalidJvmArgument", "javaTooNew", "javaTooOld"]
  * from. While files change it cannot be dismissed; stopping is offered while it is safe.
  */
 export function ModFlowDialog() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const prefs = useMotionPrefs();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -203,6 +205,19 @@ export function ModFlowDialog() {
     enabled: open && javaCrash && Boolean(instanceId),
   });
   const customJava = javaCrash && crashedInstance.data?.settings.javaMode === "custom";
+
+  // A crash in a ready-made set's mod: when the team has changed that set since, its update may
+  // fix it, so the dialog points at "Güncelle" in the mod center's sets (FIX2).
+  const modCrash = step?.kind === "crash" && Boolean(crash?.suspects.length);
+  const instanceSets = useQuery({
+    queryKey: ["mod-sets-instance", instanceId],
+    queryFn: () => api.modSets.instance(instanceId ?? ""),
+    enabled: open && modCrash && Boolean(instanceId),
+    staleTime: 15_000,
+    retry: false,
+  });
+  const updateSet =
+    modCrash && crash && instanceSets.data ? setToUpdate(crash, instanceSets.data.sets) : null;
 
   const close = () => {
     flow.close();
@@ -370,6 +385,37 @@ export function ModFlowDialog() {
             </ul>
           </section>
         ) : null}
+        <AnimatePresence initial={false}>
+          {updateSet && instanceId ? (
+            <motion.div
+              key="set-update"
+              {...rise(prefs.reduce, 4, 0.24)}
+              className="flex items-center gap-3 rounded-[var(--radius-panel)] bg-gold-500/[0.07] py-2 pr-2 pl-3.5 ring-1 ring-gold-400/15"
+            >
+              <ArrowsClockwise size={18} className="shrink-0 text-gold-300" aria-hidden />
+              <p className="min-w-0 flex-1 text-[13.5px] text-bone-100">
+                {t("modSets.crash.update", {
+                  name: setName(updateSet, i18n.language.startsWith("en")),
+                })}
+              </p>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  const id = instanceId;
+                  close();
+                  void navigate({
+                    to: "/library/$instanceId",
+                    params: { instanceId: id },
+                    search: { tab: "modcenter", focus: "sets" },
+                  });
+                }}
+              >
+                {t("modSets.crash.open")}
+              </Button>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </div>
     );
     const settings = kind && settingsKinds.has(kind) && !crash.repairable;
