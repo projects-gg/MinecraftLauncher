@@ -64,6 +64,7 @@ export {
   rebase,
   settleTime,
   springAt,
+  underlineFrames,
 } from "./glide";
 export {
   focusPanel,

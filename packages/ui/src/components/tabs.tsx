@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { Tabs as RadixTabs } from "radix-ui";
-import { type ReactNode, useEffect, useId, useRef, type WheelEvent } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, type WheelEvent } from "react";
+import { type Glide, glideUnderline } from "../glide";
 import { focusTabQuietly } from "../input-modality";
 import { cn } from "../lib/cn";
 import { enter, leave } from "../motion";
@@ -20,6 +21,10 @@ export interface TabItem<T extends string> {
  * Underline tabs with a gold indicator that slides between items. Labels never wrap: when the
  * row is wider than its room it scrolls sideways (the mouse wheel scrolls it too) and the
  * chosen tab is kept in view.
+ *
+ * A pick glides the underline along the row (glide.ts): measured inside the list, so a dialog or
+ * sheet that resizes, re-centres or scrolls with the new tab never carries it along. It glides in
+ * Performance mode too (FIX1); under reduced motion it is simply under the new tab.
  */
 export function Tabs<T extends string>({
   value,
@@ -36,8 +41,18 @@ export function Tabs<T extends string>({
   label: string;
   className?: string;
 }) {
-  const layoutId = useId();
   const listRef = useRef<HTMLDivElement>(null);
+  // The tab whose underline shows, and the glide under way.
+  const shown = useRef<string>(value);
+  const glide = useRef<Glide | null>(null);
+  useLayoutEffect(() => {
+    const from = shown.current;
+    if (from === value) return;
+    shown.current = value;
+    // Before the first paint of the new tab: its underline starts where the old one is.
+    const list = listRef.current;
+    glide.current = list ? glideUnderline(list, from, value, glide.current) : null;
+  }, [value]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the chosen tab changes
   useEffect(() => {
@@ -72,6 +87,7 @@ export function Tabs<T extends string>({
           <RadixTabs.Trigger
             key={item.value}
             value={item.value}
+            data-tab={item.value}
             onMouseDown={focusTabQuietly}
             className="group relative flex h-[34px] shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-[13px] font-medium whitespace-nowrap text-ash-300 transition-colors duration-150 hover:text-bone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:ring-inset data-[state=active]:text-bone-50"
           >
@@ -95,13 +111,14 @@ export function Tabs<T extends string>({
                 </motion.span>
               ) : null}
             </AnimatePresence>
-            {value === item.value ? (
-              <motion.span
-                layoutId={layoutId}
-                className="absolute inset-x-2 bottom-0 h-[2px] bg-gold-400"
-                transition={{ type: "spring", stiffness: 480, damping: 38 }}
-              />
-            ) : null}
+            {/* Every tab has its underline; only the chosen one shows (glide.ts measures the
+                hidden one of the tab it leaves). */}
+            <span
+              aria-hidden
+              data-underline=""
+              data-on={value === item.value ? "" : undefined}
+              className="pointer-events-none invisible absolute inset-x-2 bottom-0 h-[2px] origin-left bg-gold-400 data-[on]:visible"
+            />
           </RadixTabs.Trigger>
         ))}
       </RadixTabs.List>

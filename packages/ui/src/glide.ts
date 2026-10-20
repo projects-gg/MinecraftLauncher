@@ -16,6 +16,11 @@
 // light beside it, never pale. The motion is the sliding markers' spring (480/38), solved exactly
 // and sampled into keyframes, so a pick during a glide starts from where the plate is, with the
 // speed it has.
+//
+// `Tabs`' underline had the same shared layout animation and the same flaw inside a dialog or sheet
+// that resizes, re-centres or scrolls with the new tab. It glides the same way (INTEGRATE1): at rest
+// it is a bar inside the chosen tab; a pick measures the old and the new bar inside the tab list at
+// the same moment and moves the new tab's own bar there from the old place, on the same spring.
 
 export interface Spring {
   stiffness: number;
@@ -307,6 +312,78 @@ export function glidePlate(
     () => {},
   );
   return { option: target, control, token, drift, duration: frames.duration, animations };
+}
+
+/**
+ * Keyframes that glide `Tabs`' underline (a plain bar, `width` px wide at rest) from `drift` to rest:
+ * the bar moves its left edge and stretches from it to its right edge (`scaleX` from the left), so
+ * both edges follow the spring. Only the left and right drift count: the underline keeps to its row.
+ * `null` when nothing would move.
+ */
+export function underlineFrames(
+  spring: Spring,
+  drift: PlateDrift,
+  width: number,
+): { duration: number; frames: Keyframe[] } | null {
+  if (!(width > 0)) return null;
+  const flat: PlateDrift = { left: drift.left, right: drift.right, top: STILL };
+  const seconds = settleTime(spring, flat);
+  if (seconds <= 0) return null;
+  const steps = Math.max(1, Math.ceil(seconds / SAMPLE_S));
+  const frames: Keyframe[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const last = i === steps;
+    const offset = last ? 1 : i / steps;
+    const now = last ? AT_REST : plateAt(spring, flat, offset * seconds);
+    const scale = Math.max(0, (width + now.right.x - now.left.x) / width);
+    frames.push({
+      offset,
+      transform: `translateX(${round(now.left.x, 3)}px) scaleX(${round(scale, 5)})`,
+    });
+  }
+  return { duration: Math.round(seconds * 1000), frames };
+}
+
+/**
+ * Glides `Tabs`' underline from the tab of `from` (or from where a glide under way has it) to the
+ * tab of `to`, and returns the glide. Both underlines (`data-underline`, inside the tabs'
+ * `data-tab`) are measured inside the tab list at the same moment, so whatever moved the list on
+ * the screen (a dialog that resized and re-centred, a scroller that clamped) is not in the motion;
+ * the new tab's own underline then moves from the old place to its own (transform only, on the
+ * compositor). `null` when nothing moves; under reduced motion the underline is simply there.
+ */
+export function glideUnderline(
+  list: HTMLElement,
+  from: string,
+  to: string,
+  previous: Glide | null,
+): Glide | null {
+  const tabs = [...list.querySelectorAll<HTMLElement>("[data-tab]")];
+  const source = tabs.find((tab) => tab.dataset.tab === from);
+  const target = tabs.find((tab) => tab.dataset.tab === to);
+  const now = previous && previous.option === source ? glideNow(previous) : AT_REST;
+  // Stopped before measuring: the old bar is measured where it rests.
+  if (previous) stopGlide(previous);
+  if (!source || !target || source === target || reducedMotion()) return null;
+  const fromBar = source.querySelector<HTMLElement>("[data-underline]");
+  const toBar = target.querySelector<HTMLElement>("[data-underline]");
+  if (!fromBar || !toBar || typeof toBar.animate !== "function") return null;
+  const boxes = boxesIn(list, [fromBar, toBar]);
+  const fromBox = boxes?.[0];
+  const toBox = boxes?.[1];
+  if (!fromBox || !toBox) return null;
+  const drift: PlateDrift = { ...rebase(now, fromBox, toBox), top: STILL };
+  const frames = underlineFrames(PLATE_SPRING, drift, toBox.right - toBox.left);
+  if (!frames) return null;
+  serial += 1;
+  return {
+    option: target,
+    control: list,
+    token: String(serial),
+    drift,
+    duration: frames.duration,
+    animations: [toBar.animate(frames.frames, { duration: frames.duration })],
+  };
 }
 
 function reducedMotion(): boolean {
