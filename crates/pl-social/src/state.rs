@@ -788,6 +788,27 @@ impl SocialState {
         self.invites.retain(|i| i.id != id);
     }
 
+    /// Per friend, the time of the newest invite the player answered or closed (kept on disk by
+    /// the service, so a restart within the hour does not bring them back).
+    pub fn closed_invites(&self) -> &HashMap<String, i64> {
+        &self.dismissed
+    }
+
+    /// Invites answered or closed in an earlier run: the service lists the last hour's again on
+    /// every connection, and these stay closed until they expire. One already listed goes away.
+    pub fn remember_closed_invites(&mut self, closed: HashMap<String, i64>, now: i64) {
+        for (from, at) in closed {
+            if now - at >= INVITE_LIFETIME_SECS {
+                continue;
+            }
+            let newest = self.dismissed.entry(from).or_insert(at);
+            *newest = (*newest).max(at);
+        }
+        let dismissed = &self.dismissed;
+        self.invites
+            .retain(|i| !dismissed.get(&i.from).is_some_and(|at| i.at <= *at));
+    }
+
     /// Friends with their presence, in the service's order.
     pub fn friends(&self) -> Vec<FriendView> {
         self.overview
@@ -1404,6 +1425,49 @@ mod tests {
         );
         assert_eq!(live.len(), 1);
         assert!(state.invites(NOW + 400).iter().any(|i| i.id == "i3"));
+    }
+
+    #[test]
+    fn invites_closed_before_a_restart_stay_closed() {
+        let mut before = loaded();
+        before.apply(&PresenceEvent::Invite(invite("i1", "1", NOW, false)), NOW);
+        before.dismiss_invite("i1");
+        let closed = before.closed_invites().clone();
+        assert_eq!(closed.get("1"), Some(&NOW));
+        // The launcher restarts within the hour: a new state, the closed invites from disk,
+        // then the `hello` lists the last hour's invites again.
+        let mut after = loaded();
+        after.remember_closed_invites(closed.clone(), NOW + 300);
+        after.apply(
+            &reconnect_with(vec![
+                invite("i2", "2", NOW + 10, true),
+                invite("i1", "1", NOW, true),
+            ]),
+            NOW + 300,
+        );
+        let invites = after.invites(NOW + 300);
+        assert_eq!(invites.len(), 1);
+        assert_eq!(invites[0].id, "i2");
+        // A newer invite from the same friend shows as usual, with its toast.
+        let live = after.apply(
+            &PresenceEvent::Invite(invite("i3", "1", NOW + 400, false)),
+            NOW + 400,
+        );
+        assert_eq!(live.len(), 1);
+        // The profile came after the `hello` (the service was down at start): the listed
+        // invite goes away once the closed ones are known.
+        let mut late = loaded();
+        late.apply(
+            &reconnect_with(vec![invite("i1", "1", NOW, true)]),
+            NOW + 300,
+        );
+        assert_eq!(late.invites(NOW + 300).len(), 1);
+        late.remember_closed_invites(closed.clone(), NOW + 300);
+        assert!(late.invites(NOW + 300).is_empty());
+        // An hour after the invite there is nothing left to keep closed.
+        let mut later = loaded();
+        later.remember_closed_invites(closed, NOW + INVITE_LIFETIME_SECS);
+        assert!(later.closed_invites().is_empty());
     }
 
     #[test]

@@ -41,6 +41,7 @@
 mod auth;
 mod backoff;
 mod client;
+mod closed;
 mod codes;
 mod error;
 mod game;

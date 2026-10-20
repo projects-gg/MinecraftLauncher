@@ -20,12 +20,14 @@ use crate::error::CmdResult;
 use crate::state::AppState;
 
 /// Builds the service; it stays off until [`apply_flag`] (or the debug override) turns it on.
+/// `data_root` keeps the invites the player closed over a restart.
 pub fn create(
     app: &AppHandle,
     http: &pl_net::Http,
     version: &str,
     runtime: tokio::runtime::Handle,
     ephemeral_secrets: bool,
+    data_root: &std::path::Path,
 ) -> SocialService {
     let emitter = app.clone();
     let sink: pl_social::UpdateSink = Arc::new(move |update| {
@@ -53,6 +55,7 @@ pub fn create(
         runtime,
         sink,
     );
+    service.keep_closed_invites_in(data_root.join("social").join("closed-invites.json"));
     service.set_teams_enabled(debug_teams());
     service.configure(pl_social::service_url(false, debug_override().as_deref()));
     service

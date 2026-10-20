@@ -11,6 +11,7 @@
 //! presence task backs off by itself, a manual "try again" is throttled).
 
 use std::future::Future;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -19,6 +20,7 @@ use url::Url;
 
 use crate::auth::{LoginAttempt, SignedIn, auth_code_from_deep_link};
 use crate::client::{Session, SocialClient, SocialConfig};
+use crate::closed::ClosedInvitesFile;
 use crate::codes::{crew_code, normalize_friend_code, normalize_team_code};
 use crate::error::{ErrorCode, Result, SocialError};
 use crate::game::{self, GameActivity};
@@ -116,6 +118,9 @@ struct Core {
     /// While saves are on their way: the document the service last confirmed, shown again
     /// when one fails.
     groups_saved: Option<FriendGroups>,
+    /// Where answered and closed invites outlive a restart (None: for this run only). Kept
+    /// across sign-outs, like the configuration.
+    closed_invites: Option<ClosedInvitesFile>,
 }
 
 impl SocialService {
@@ -167,6 +172,12 @@ impl SocialService {
 
     fn notify(&self, notice: SocialNotice) {
         (self.inner.sink)(SocialUpdate::Notice(notice));
+    }
+
+    /// Keeps answered and closed invites in this file, so the ones the service sends again after
+    /// a restart (it lists the last hour's on every connection) stay closed.
+    pub fn keep_closed_invites_in(&self, path: impl Into<PathBuf>) {
+        self.lock().closed_invites = Some(ClosedInvitesFile::new(path));
     }
 
     /// Teams on or off (signed config `features.teams`); the friends feature must be on too.
@@ -221,6 +232,7 @@ impl SocialService {
                     }
                     core.settings_version = me.settings.as_ref().map(|s| s.version);
                     core.state.set_me(me);
+                    remember_closed_invites(&mut core);
                     core.auth = AuthPhase::SignedIn;
                     self.start_presence(&mut core);
                 }
@@ -399,6 +411,8 @@ impl SocialService {
                 Ok(me) => {
                     core.settings_version = me.settings.as_ref().map(|s| s.version);
                     core.state.set_me(me);
+                    // The profile may come only now (the service was down at start).
+                    remember_closed_invites(&mut core);
                 }
                 Err(SocialError::Unauthorized) => ended = true,
                 Err(error) => {
@@ -554,6 +568,7 @@ impl SocialService {
                     core.settings_version = me.settings.as_ref().map(|s| s.version);
                     core.state = SocialState::default();
                     core.state.set_me(me);
+                    remember_closed_invites(&mut core);
                     core.auth = AuthPhase::SignedIn;
                     self.start_presence(&mut core);
                 }
@@ -1177,9 +1192,25 @@ impl SocialService {
         Ok(control.invite(id).await?.into())
     }
 
+    /// Answered or closed: the invite leaves the lists and stays closed until it expires, also
+    /// over a restart.
     pub fn dismiss_invite(&self, id: &str) {
         let generation = self.lock().generation;
         self.update(generation, |core| core.state.dismiss_invite(id));
+        let (file, account, closed) = {
+            let core = self.lock();
+            let (Some(file), Some(me)) = (&core.closed_invites, core.state.me()) else {
+                return;
+            };
+            (
+                file.clone(),
+                me.profile.id.clone(),
+                core.state.closed_invites().clone(),
+            )
+        };
+        if let Err(error) = file.save(&account, &closed, unix_now()) {
+            tracing::info!(%error, "closed invites are kept for this run only");
+        }
     }
 
     pub async fn sessions(&self) -> Result<Vec<SessionInfo>> {
@@ -1343,6 +1374,19 @@ impl SocialService {
             }
         }
         self.emit_view();
+    }
+}
+
+/// The invites this account answered or closed in an earlier run stay closed (once the profile
+/// says whose they are).
+fn remember_closed_invites(core: &mut Core) {
+    let (Some(file), Some(me)) = (&core.closed_invites, core.state.me()) else {
+        return;
+    };
+    let now = unix_now();
+    let closed = file.load(&me.profile.id, now);
+    if !closed.is_empty() {
+        core.state.remember_closed_invites(closed, now);
     }
 }
 
@@ -1561,6 +1605,79 @@ mod tests {
             MockReply::json(503, r#"{"error":{"code":"unavailable","message":"x"}}"#)
                 .with_header("Retry-After", "600")
         })
+    }
+
+    /// An invite the player closed is listed again by the service on every connection, also
+    /// after the launcher restarts: it stays closed until it expires.
+    #[tokio::test]
+    async fn a_closed_invite_stays_closed_after_a_restart() {
+        let server = MockServer::start(|req| {
+            presence_refused(&req.path).unwrap_or_else(|| match req.path.as_str() {
+                "/v1/me" => MockReply::json(200, ME),
+                "/v1/friends" => MockReply::json(200, FRIENDS),
+                _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+            })
+        })
+        .await;
+        let dir =
+            std::env::temp_dir().join(format!("pl-social-closed-restart-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let file = dir.join("social").join("closed-invites.json");
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let bora = crate::protocol::Invite {
+            id: "inv-1".into(),
+            from: "223456789012345678".into(),
+            at: unix_now() - 120,
+            server: None,
+            quiet: false,
+        };
+        let hello = |invite: &crate::protocol::Invite| PresenceEvent::Connected {
+            status: crate::model::StatusMode::Online,
+            friends: vec![],
+            invites: vec![crate::protocol::Invite {
+                quiet: true,
+                ..invite.clone()
+            }],
+            calls: vec![],
+            clock: None,
+        };
+        let signed_in = |view: &SocialView| view.loaded && view.auth == AuthPhase::SignedIn;
+
+        // First run: Bora's invite arrives and the player closes it ("Kapat").
+        let first = Harness::new(tokens.clone());
+        first.service.keep_closed_invites_in(&file);
+        first.service.configure(url(&server));
+        first.until("signed in", signed_in).await;
+        first
+            .service
+            .lock()
+            .state
+            .apply(&PresenceEvent::Invite(bora.clone()), unix_now());
+        assert_eq!(first.service.view().invites.len(), 1);
+        first.service.dismiss_invite("inv-1");
+        assert!(first.service.view().invites.is_empty());
+        assert!(file.exists());
+
+        // The launcher restarts within the hour; the service lists the invite again.
+        let second = Harness::new(tokens.clone());
+        second.service.keep_closed_invites_in(&file);
+        second.service.configure(url(&server));
+        second.until("signed in", signed_in).await;
+        second.service.lock().state.apply(&hello(&bora), unix_now());
+        assert!(second.service.view().invites.is_empty());
+
+        // Without the file (as before) it came back.
+        let forgetful = Harness::new(tokens);
+        forgetful.service.configure(url(&server));
+        forgetful.until("signed in", signed_in).await;
+        forgetful
+            .service
+            .lock()
+            .state
+            .apply(&hello(&bora), unix_now());
+        assert_eq!(forgetful.service.view().invites.len(), 1);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]

@@ -168,8 +168,14 @@ impl AppState {
         // Setup runs outside the async runtime, so hand the actor Tauri's tokio handle.
         let tauri::async_runtime::RuntimeHandle::Tokio(handle) = tauri::async_runtime::handle();
         let presence = PresenceManager::start_on(&handle, PresenceConfig::new(DISCORD_CLIENT_ID));
-        let social =
-            crate::commands::social::create(app, &http, version, handle.clone(), ephemeral_secrets);
+        let social = crate::commands::social::create(
+            app,
+            &http,
+            version,
+            handle.clone(),
+            ephemeral_secrets,
+            &root,
+        );
 
         // AFK accounts (Projects Console Client sessions). Events go straight to the UI (and
         // state changes to the tray's summary). A connect that finds no client installed and no
