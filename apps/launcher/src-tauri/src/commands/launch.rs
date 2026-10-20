@@ -1177,7 +1177,6 @@ async fn prepare_and_spawn(
     .await
     .map_err(CmdError::from)?;
     let process = Arc::new(process);
-    let started = Instant::now();
     *state.running.lock() = Some(RunningGame {
         instance_id: instance.id.clone(),
         process: Arc::clone(&process),
@@ -1241,9 +1240,20 @@ async fn prepare_and_spawn(
                 modhealth::crash_view(&app, &state, &crashed_instance, java_major, diagnosis).await;
             let _ = events.send(LaunchEventView::Crashed(view));
         }
-        let played = started.elapsed();
-        if let Err(error) = state.instances.record_session(&id, played).await {
-            tracing::warn!(%error, "could not record play time");
+        // A start that never reached the game (closed or crashed while it opened, or crashed on
+        // its loading screen) adds no play time and does not count as played.
+        match exit.play_time() {
+            Some(played) => {
+                if let Err(error) = state.instances.record_session(&id, played).await {
+                    tracing::warn!(%error, "could not record play time");
+                }
+            }
+            None => tracing::info!(
+                runtime_secs = exit.runtime_secs,
+                on_screen_secs = ?exit.on_screen_secs,
+                crashed = exit.crash.is_some(),
+                "the game never got to play; no play time recorded"
+            ),
         }
         if let Some(post) = post_exit
             && let Err(detail) = run_hook(&post, &hook_env, &game_dir).await

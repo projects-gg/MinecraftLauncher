@@ -23,7 +23,8 @@ pub use crash::{
 pub use identity::{LaunchIdentity, UserType, is_valid_offline_name, offline_uuid};
 pub use log::{Log4jParser, LogLevel, LogLine, guess_level, parse_event, parse_plain_line};
 pub use process::{
-    GameEvent, GameEventFn, GameExit, GameProcess, MAX_LOG_BYTES, MAX_TAIL_LINES, SpawnOptions,
+    GameEvent, GameEventFn, GameExit, GameProcess, LOADING_GRACE, MAX_LOG_BYTES, MAX_TAIL_LINES,
+    SpawnOptions,
 };
 pub use resume::{ResumeTarget, quick_play_log_path, resume_target, supports_quick_play};
 pub use window::{GIVE_UP_AFTER, LogMarker, WindowProbe, log_marker};

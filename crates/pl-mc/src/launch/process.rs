@@ -72,16 +72,38 @@ pub struct SpawnOptions {
     pub window_probe: Option<WindowProbe>,
 }
 
+/// A crash within this long of the game's window showing is a failed start, not a session: the
+/// game was still on its loading screen (it takes up to about a minute after the window shows).
+pub const LOADING_GRACE: Duration = Duration::from_secs(60);
+
 /// Final state of a run.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct GameExit {
     pub code: Option<i32>,
     pub runtime_secs: u64,
+    /// How long the game's window was on screen before the exit ([`GameEvent::WindowShown`]);
+    /// `None` when it never showed.
+    #[serde(default)]
+    pub on_screen_secs: Option<u64>,
     /// Ended by [`GameProcess::kill`].
     pub killed: bool,
     pub crash: Option<CrashDiagnosis>,
     pub log_file: Option<PathBuf>,
+}
+
+impl GameExit {
+    /// What this run adds to its instance's play time, the whole run as it always was; `None`
+    /// when the player never got to play (FIX2): the window never showed (the game was closed or
+    /// crashed while it opened, the launcher still said "Açılıyor"), or it crashed within
+    /// [`LOADING_GRACE`] of showing (still loading). Such a run is not "last played" either.
+    pub fn play_time(&self) -> Option<Duration> {
+        let on_screen = Duration::from_secs(self.on_screen_secs?);
+        if self.crash.is_some() && on_screen < LOADING_GRACE {
+            return None;
+        }
+        Some(Duration::from_secs(self.runtime_secs))
+    }
 }
 
 struct LogSink {
@@ -162,6 +184,8 @@ struct Shared {
     tail: Mutex<VecDeque<LogLine>>,
     log: Mutex<LogSink>,
     window_shown: AtomicBool,
+    /// When the window showed, counted from the start.
+    shown_after: Mutex<Option<Duration>>,
     /// A window probe looks too: only the lines logged once the window exists count.
     probing: bool,
     /// The game is being closed ([`GameProcess::kill`]) or has exited: its window no longer
@@ -212,9 +236,11 @@ impl Shared {
         if self.ending.load(Ordering::SeqCst) || self.window_shown.swap(true, Ordering::SeqCst) {
             return;
         }
+        let after = self.started.elapsed();
+        *self.shown_after.lock() = Some(after);
         tracing::info!(
             ?by,
-            after_ms = self.started.elapsed().as_millis() as u64,
+            after_ms = after.as_millis() as u64,
             "game window shown"
         );
         (self.on_event)(GameEvent::WindowShown);
@@ -303,6 +329,7 @@ impl GameProcess {
             tail: Mutex::new(VecDeque::with_capacity(512)),
             log: Mutex::new(sink),
             window_shown: AtomicBool::new(false),
+            shown_after: Mutex::new(None),
             probing: options.window_probe.is_some() && pid.is_some(),
             ending: AtomicBool::new(false),
             started,
@@ -389,6 +416,7 @@ fn lost_exit(shared: &Shared) -> GameExit {
     GameExit {
         code: None,
         runtime_secs: 0,
+        on_screen_secs: None,
         killed: false,
         crash: None,
         log_file: shared.log.lock().path.clone(),
@@ -500,6 +528,7 @@ async fn supervise(mut s: Supervision) {
     };
     s.shared.ending.store(true, Ordering::SeqCst);
     let runtime = s.started.elapsed();
+    let on_screen = (*s.shared.shown_after.lock()).map(|after| runtime.saturating_sub(after));
     for reader in s.readers {
         let abort = reader.abort_handle();
         if tokio::time::timeout(DRAIN_TIMEOUT, reader).await.is_err() {
@@ -556,6 +585,7 @@ async fn supervise(mut s: Supervision) {
     let _ = s.exit.send(Some(GameExit {
         code,
         runtime_secs: runtime.as_secs(),
+        on_screen_secs: on_screen.map(|time| time.as_secs()),
         killed,
         crash,
         log_file,
@@ -683,7 +713,7 @@ mod tests {
         command: &LaunchCommand,
         logs: &Path,
         window_probe: Option<WindowProbe>,
-    ) -> (Vec<GameEvent>, bool) {
+    ) -> (Vec<GameEvent>, bool, GameExit) {
         let events = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&events);
         let process = GameProcess::spawn(
@@ -702,11 +732,11 @@ mod tests {
         )
         .await
         .unwrap();
-        tokio::time::timeout(Duration::from_secs(20), process.wait())
+        let exit = tokio::time::timeout(Duration::from_secs(20), process.wait())
             .await
             .unwrap();
         let events = events.lock().clone();
-        (events, process.window_shown())
+        (events, process.window_shown(), exit)
     }
 
     static LOOKS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -726,8 +756,17 @@ mod tests {
     async fn the_probe_tells_when_the_window_shows() {
         let tmp = tempfile::tempdir().unwrap();
         let command = opening_game(tmp.path(), None);
-        let (events, shown) = window_events(&command, tmp.path(), Some(second_look)).await;
+        let (events, shown, exit) = window_events(&command, tmp.path(), Some(second_look)).await;
         assert!(shown);
+        // The window was on screen for the rest of the run, which counts as played.
+        assert!(
+            exit.on_screen_secs
+                .is_some_and(|secs| secs <= exit.runtime_secs)
+        );
+        assert_eq!(
+            exit.play_time(),
+            Some(Duration::from_secs(exit.runtime_secs))
+        );
         let shown_at = events
             .iter()
             .position(|e| *e == GameEvent::WindowShown)
@@ -755,27 +794,79 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let line = "[12:00:00] [Render thread/INFO]: Backend library: LWJGL version 3.3.3+5";
         let command = opening_game(tmp.path(), Some(line));
-        let (events, shown) = window_events(&command, tmp.path(), Some(never)).await;
+        let (events, shown, _) = window_events(&command, tmp.path(), Some(never)).await;
         assert!(!shown, "{events:?}");
         assert!(!events.contains(&GameEvent::WindowShown));
-        let (events, shown) = window_events(&command, tmp.path(), None).await;
+        let (events, shown, _) = window_events(&command, tmp.path(), None).await;
         assert!(shown, "{events:?}");
         // A line logged once the window exists counts either way.
         let line = "[12:00:01] [Render thread/INFO]: Sound engine started";
         let command = opening_game(tmp.path(), Some(line));
-        let (_, shown) = window_events(&command, tmp.path(), Some(never)).await;
+        let (_, shown, _) = window_events(&command, tmp.path(), Some(never)).await;
         assert!(shown);
     }
 
-    /// A game that closes before any window showed is never "shown": its exit takes over.
+    /// A game that closes before any window showed is never "shown": its exit takes over, and
+    /// the run adds no play time.
     #[tokio::test]
     async fn a_game_that_closes_first_never_shows() {
         let tmp = tempfile::tempdir().unwrap();
         let command = opening_game(tmp.path(), None);
-        let (events, shown) = window_events(&command, tmp.path(), Some(never)).await;
+        let (events, shown, exit) = window_events(&command, tmp.path(), Some(never)).await;
         assert!(!shown);
         assert!(!events.contains(&GameEvent::WindowShown), "{events:?}");
         assert!(matches!(events.last(), Some(GameEvent::Exited { .. })));
+        assert_eq!(exit.on_screen_secs, None);
+        assert_eq!(exit.play_time(), None);
+    }
+
+    /// Play time (FIX2): a run counts once the player got to play: its window showed, and a crash
+    /// came after the loading screen. A start that crashed or was closed while the game opened,
+    /// or that crashed while it was still loading, adds nothing.
+    #[test]
+    fn only_runs_that_reached_the_game_count_as_played() {
+        let crash = analyze_crash(&CrashInput {
+            output: "",
+            crash_report: None,
+            exit_code: Some(1),
+            runtime: Duration::from_secs(30),
+            java_major: None,
+            required_java: None,
+            max_memory_mb: None,
+            player_jvm_args: &[],
+        });
+        let run = |runtime_secs, on_screen_secs, crashed: bool, killed| GameExit {
+            code: Some(i32::from(crashed)),
+            runtime_secs,
+            on_screen_secs,
+            killed,
+            crash: crashed.then(|| crash.clone()),
+            log_file: None,
+        };
+        let secs = Duration::from_secs;
+        // Played and closed, or closed from the launcher while playing.
+        assert_eq!(
+            run(3600, Some(3570), false, false).play_time(),
+            Some(secs(3600))
+        );
+        assert_eq!(
+            run(900, Some(870), false, true).play_time(),
+            Some(secs(900))
+        );
+        // Crashed after a long session: every minute of it counts.
+        assert_eq!(
+            run(7200, Some(7170), true, false).play_time(),
+            Some(secs(7200))
+        );
+        let grace = LOADING_GRACE.as_secs();
+        assert_eq!(
+            run(40 + grace, Some(grace), true, false).play_time(),
+            Some(secs(40 + grace))
+        );
+        // Crashed (or was closed) before the window showed, or on the loading screen.
+        assert_eq!(run(27, None, true, false).play_time(), None);
+        assert_eq!(run(15, None, false, true).play_time(), None);
+        assert_eq!(run(70, Some(grace - 1), true, false).play_time(), None);
     }
 
     #[test]
