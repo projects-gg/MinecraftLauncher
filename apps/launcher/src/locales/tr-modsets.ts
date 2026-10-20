@@ -45,7 +45,7 @@ export const trModSets = {
   create: {
     source: "Hazır set",
     pick: "Bir set seç.",
-    next: "Devam",
+    next: "Devam et",
     back: "Setlere dön",
     version: "Minecraft sürümü",
     contents: "İçindekiler",

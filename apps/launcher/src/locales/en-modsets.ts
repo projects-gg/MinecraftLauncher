@@ -46,7 +46,7 @@ export const enModSets = {
   create: {
     source: "Ready-made set",
     pick: "Pick a set.",
-    next: "Next",
+    next: "Continue",
     back: "Back to sets",
     version: "Minecraft version",
     contents: "What's inside",
