@@ -812,7 +812,7 @@ function fullDetailFor(summary: InstanceSummary): InstanceDetail {
       postExit: "",
       wrapper: "",
       notes: summary.managed
-        ? "Resmi paket. Mod listesi otomatik güncellenir; eklediğin modlara dokunulmaz."
+        ? "Resmî paket. Mod listesi otomatik güncellenir; eklediğin modlara dokunulmaz."
         : "",
     },
     mods: [
