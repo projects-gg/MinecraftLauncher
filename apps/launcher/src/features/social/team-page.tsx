@@ -499,6 +499,7 @@ function CodeRow({ team }: { team: SocialTeam }) {
 /** The founder's in-place edit of name, tag and emblem. */
 function EditTeam({ team, onDone }: { team: SocialTeam; onDone: () => void }) {
   const { t } = useTranslation();
+  const { reduce } = useSocialMotion();
   const [name, setName] = useState(team.name);
   const [tag, setTag] = useState(team.tag);
   const [emblem, setEmblem] = useState<Emblem>(
@@ -506,7 +507,15 @@ function EditTeam({ team, onDone }: { team: SocialTeam; onDone: () => void }) {
   );
   const [busy, setBusy] = useState(false);
   const problem = teamNameProblem(name);
-  const ready = !problem && teamTagValid(tag);
+  const tagOk = teamTagValid(tag);
+  const ready = !problem && tagOk;
+  // As in "Takım kur": one line says what to fix (the tag too, not only the name), and it fades
+  // in and out instead of snapping while the player types (POLISH6).
+  const error = problem
+    ? t(`teams.create.${problem}`)
+    : tagOk
+      ? null
+      : t("teams.create.tagInvalid");
   const save = async () => {
     if (!ready) return;
     setBusy(true);
@@ -545,13 +554,22 @@ function EditTeam({ team, onDone }: { team: SocialTeam; onDone: () => void }) {
           value={tag}
           maxLength={TEAM_TAG_MAX}
           onChange={(event) => setTag(formatTeamTag(event.target.value))}
-          aria-invalid={!teamTagValid(tag)}
+          aria-invalid={!tagOk}
           className={cn(fieldClass, "w-[84px] shrink-0 font-display tracking-[0.08em]")}
         />
       </div>
-      {problem ? (
-        <p className="text-[12.5px] text-flare-300">{t(`teams.create.${problem}`)}</p>
-      ) : null}
+      <AnimatePresence initial={false}>
+        {error ? (
+          <motion.p
+            key="error"
+            role="alert"
+            className="text-[12.5px] text-flare-300"
+            {...rise(reduce, 4, 0.2)}
+          >
+            {error}
+          </motion.p>
+        ) : null}
+      </AnimatePresence>
       <EmblemPicker value={emblem} onChange={setEmblem} />
       <div className="flex justify-end gap-2">
         <Button size="sm" variant="ghost" onClick={onDone}>

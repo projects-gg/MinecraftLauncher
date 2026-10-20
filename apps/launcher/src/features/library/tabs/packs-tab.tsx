@@ -139,10 +139,12 @@ export function PacksTab({
         </div>
       ) : (
         <ul
-          // Searching swaps the list in place (no fades and glides while typing).
+          // Searching swaps the list in place (no fades and glides while typing). Two columns at
+          // every window size: with 300 px a 1280 px window made three 318 px cards in the 980 px
+          // column and cut names a 1024 px window showed whole (POLISH6).
           key={query.trim()}
           className={cn(
-            "grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-3",
+            "grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-3",
             arriving && "panel-in",
           )}
         >
