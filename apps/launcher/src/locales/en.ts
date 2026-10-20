@@ -3,8 +3,10 @@ import { enAfkConnect } from "./en-afk-connect";
 import { enAfkReconnect } from "./en-afk-reconnect";
 import { enDisk } from "./en-disk";
 import { enEventJoin } from "./en-event-join";
+import { enFps } from "./en-fps";
 import { enFriendGroups } from "./en-friend-groups";
 import { enGraphics } from "./en-graphics";
+import { enHomeLinks } from "./en-home-links";
 import { enImport } from "./en-import";
 import { enKeyClash } from "./en-key-clash";
 import { enLibraryDrop } from "./en-library-drop";
@@ -253,6 +255,8 @@ export const en: DeepPartial<Strings> = {
   import: enImport,
   modSets: enModSets,
   keyClash: enKeyClash,
+  fps: enFps,
+  homeLinks: enHomeLinks,
   nav: {
     home: "Home",
     library: "Library",

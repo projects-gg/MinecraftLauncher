@@ -4,8 +4,10 @@ import { trAfkConnect } from "./tr-afk-connect";
 import { trAfkReconnect } from "./tr-afk-reconnect";
 import { trDisk } from "./tr-disk";
 import { trEventJoin } from "./tr-event-join";
+import { trFps } from "./tr-fps";
 import { trFriendGroups } from "./tr-friend-groups";
 import { trGraphics } from "./tr-graphics";
+import { trHomeLinks } from "./tr-home-links";
 import { trImport } from "./tr-import";
 import { trKeyClash } from "./tr-key-clash";
 import { trLibraryDrop } from "./tr-library-drop";
@@ -47,6 +49,8 @@ export const tr = {
   import: trImport,
   modSets: trModSets,
   keyClash: trKeyClash,
+  fps: trFps,
+  homeLinks: trHomeLinks,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
