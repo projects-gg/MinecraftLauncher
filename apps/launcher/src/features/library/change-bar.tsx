@@ -99,7 +99,10 @@ export function ChangeBar({
               exit={{ opacity: 0, transform: shift(12), transition: leave(0.3) }}
               className="absolute inset-x-0 bottom-3"
             >
-              <div className="glass-strong relative flex min-h-[58px] items-center gap-4 overflow-hidden rounded-[var(--radius-panel)] px-4 py-2.5 shadow-[0_18px_50px_rgb(34_6_6/0.55)]">
+              {/* The toasts' near-solid surface, not glass: inside the tab's scroller the blur
+                  never reaches the rows under the bar, and their text showed through its tint
+                  over "1 mod to remove." (POLISH6; the toasts had the same problem). */}
+              <div className="toast-surface relative flex min-h-[58px] items-center gap-4 overflow-hidden rounded-[var(--radius-panel)] px-4 py-2.5">
                 {children}
               </div>
             </motion.section>
