@@ -1,4 +1,4 @@
-import { guardNativeContextMenu, keepsNativeMenu, type MenuDocument } from "@pl/ui";
+import { fromPortal, guardNativeContextMenu, keepsNativeMenu, type MenuDocument } from "@pl/ui";
 import { describe, expect, it } from "vitest";
 
 // WebView2's own context menu (Back, Refresh, Print...) stays only where it helps (E2E2).
@@ -89,5 +89,29 @@ describe("guardNativeContextMenu", () => {
     remove();
     expect(listening()).toBe(false);
     expect(() => guardNativeContextMenu(undefined)()).not.toThrow();
+  });
+});
+
+describe("fromPortal", () => {
+  // A trigger (a friend row, the friends panel) and what lies inside it in the page.
+  const row = at(null);
+  const button = at(null);
+  const trigger = { contains: (node: unknown) => node === row || node === button };
+  // An item of a menu that opened from the row: in a portal, outside the trigger in the page,
+  // though React passes its events up through the trigger (E2E5).
+  const menuItem = at(null);
+
+  it("leaves right clicks on the trigger itself alone", () => {
+    expect(fromPortal(trigger, row, "")).toBe(false);
+    expect(fromPortal(trigger, button, "")).toBe(false);
+  });
+
+  it("catches the ones that come out of an open menu or a dialog", () => {
+    expect(fromPortal(trigger, menuItem, "")).toBe(true);
+  });
+
+  it("leaves text fields and selected text there to the system's menu", () => {
+    expect(fromPortal(trigger, at({ tagName: "INPUT", type: "text" }), "")).toBe(false);
+    expect(fromPortal(trigger, menuItem, "Ayse")).toBe(false);
   });
 });

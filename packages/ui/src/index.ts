@@ -74,7 +74,12 @@ export {
 } from "./input-modality";
 export { cn } from "./lib/cn";
 export * from "./motion";
-export { guardNativeContextMenu, keepsNativeMenu, type MenuDocument } from "./native-menu";
+export {
+  fromPortal,
+  guardNativeContextMenu,
+  keepsNativeMenu,
+  type MenuDocument,
+} from "./native-menu";
 export {
   PerfProvider,
   useAmbientMotion,

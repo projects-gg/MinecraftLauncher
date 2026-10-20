@@ -32,6 +32,25 @@ export function keepsNativeMenu(target: unknown, selectedText: string): boolean 
   return field.isContentEditable === true;
 }
 
+/** What `fromPortal` reads of a menu's trigger element. */
+interface TriggerLike {
+  contains(node: unknown): boolean;
+}
+
+/**
+ * A right click (or the keyboard's) that reaches a context menu's trigger only through React, from
+ * a portal rendered inside its tree: an open menu, a dialog. React passes such an event up its own
+ * tree, so the panel around a friend row heard the menu key's `contextmenu` (WebView2 sends it on
+ * keyup to the focused item of the row's menu, which had just opened) and opened its own menu over
+ * the row's; a right click on an open menu's item opened a second menu the same way (E2E5,
+ * 20 Oct 2026). It is not a click on the trigger, so the trigger's menu stays shut. In a text field
+ * or over selected text the click is left alone, as anywhere else.
+ */
+export function fromPortal(trigger: TriggerLike, target: unknown, selectedText: string): boolean {
+  if (trigger.contains(target)) return false;
+  return !keepsNativeMenu(target, selectedText);
+}
+
 /** The document calls the guard needs, so tests can stand in. */
 export interface MenuDocument {
   addEventListener(type: "contextmenu", listener: (event: MouseEvent) => void): void;

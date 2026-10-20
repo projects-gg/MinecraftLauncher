@@ -1,8 +1,9 @@
 import { CaretRight, Check } from "@phosphor-icons/react";
 import { DropdownMenu, ContextMenu as RadixContextMenu } from "radix-ui";
-import type { ReactElement, ReactNode } from "react";
+import type { ReactElement, MouseEvent as ReactMouseEvent, ReactNode } from "react";
 import { returnFocusAfterKeys } from "../input-modality";
 import { cn } from "../lib/cn";
+import { fromPortal } from "../native-menu";
 import { Kbd } from "./bits";
 
 export interface MenuItem {
@@ -181,6 +182,15 @@ export function Menu({
 }
 
 /**
+ * A right click that only passes through the trigger on React's tree (it started in an open menu or
+ * a dialog rendered inside it) opens nothing: Radix opens the menu unless the event is prevented.
+ */
+function skipPortalClicks(event: ReactMouseEvent<HTMLElement>) {
+  const selected = event.currentTarget.ownerDocument.getSelection()?.toString() ?? "";
+  if (fromPortal(event.currentTarget, event.target, selected)) event.preventDefault();
+}
+
+/**
  * The right-click menu a desktop player expects on rows and tiles (screenshots, worlds, servers):
  * the same rows and look as `Menu`, opening at the pointer. Keep the same actions reachable
  * without it (a "more" button), since nothing tells the player it is there.
@@ -205,7 +215,7 @@ export function ContextMenu({
   onCloseAutoFocus?: (event: Event) => void;
 }) {
   const trigger = (
-    <RadixContextMenu.Trigger asChild disabled={disabled}>
+    <RadixContextMenu.Trigger asChild disabled={disabled} onContextMenu={skipPortalClicks}>
       {children}
     </RadixContextMenu.Trigger>
   );
