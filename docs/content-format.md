@@ -755,12 +755,14 @@ never starts the game by itself. Without `join` the card looks as before.
 ### Status notice
 
 `status` tells players about a problem on the server's status page while it lasts: services
-that are down or reachable only in part, or a warning posted on the status page. The bot writes
-it only while there is such a problem (example in [News feed (Discord bot)](#news-feed-discord-bot)).
+that are down or reachable only in part, or a warning posted on the status page. It also carries
+a maintenance posted on the status page, upcoming or under way, until its window ends. The bot
+writes it only while there is such a problem or post (example in
+[News feed (Discord bot)](#news-feed-discord-bot)).
 
 | Field | Rule |
 | --- | --- |
-| `level` | `outage` (services down), `degraded` (services reachable only in part) or `notice` (a warning posted on the status page). Missing or unknown: `notice`. |
+| `level` | `outage` (services down), `degraded` (services reachable only in part) or `notice` (a warning or a maintenance posted on the status page). Missing or unknown: `notice`. |
 | `title` | Required, 1–80 characters, not blank. |
 | `message` | Optional, at most 200 characters; default empty. |
 | `services` | Optional, at most 20 `{ name, state }`: `name` 1–64 characters, not blank; `state` `down` or `degraded` (unknown: `unknown`). |
@@ -779,9 +781,17 @@ it only while there is such a problem (example in [News feed (Discord bot)](#new
   bot publishes the notice again before it expires (new `updatedAt` and `expiresAt`, a new
   `sequence`); when the problem is over, it publishes the feed without `status`. It publishes
   only on a change or to renew the notice, debounced.
+- A maintenance post is a `notice`: its own title and its time window in the message
+  ("24 Ekim Cumartesi 00:01–03:00. …", while it runs "Şu an sürüyor: …"). It announces planned
+  work; it is not a sign that anything is unavailable. Its `expiresAt` never passes the end of
+  the window, so clients drop it on time without a new feed, and the bot leaves it out afterwards
+  even while the post stays on the page. During the window, services the post affects that are
+  down or degraded may be listed in its `services` instead of an `outage`. Services the status
+  page has in maintenance mode are never reported as down.
 - Studio's maintenance notice (`LauncherConfig.maintenance`) wins: while it is active, the status
-  notice is not shown. The notice is informational and never blocks playing. Launchers show
-  `title`, `message` and a link to `url`; `services` is for readers that list the services.
+  notice is not shown. The status notice is information only: it never blocks or turns off
+  anything (playing, joining, direct connect, mod sync, AFK). Launchers show `title`, `message`
+  and a link to `url`; `services` is for readers that list the services.
 
 ### Minecraft news
 
