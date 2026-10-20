@@ -49,3 +49,7 @@ fs4 = "1.1.0"
 
 [dev-dependencies]
 tempfile = { workspace = true }
+
+# The thread's CPU time for the mod check's time budget (mods::test_support).
+[target.'cfg(unix)'.dev-dependencies]
+libc = "0.2"

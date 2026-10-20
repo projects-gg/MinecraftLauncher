@@ -1223,7 +1223,7 @@ mod tests {
     use std::time::Instant;
 
     use super::super::scan::test_jars::*;
-    use super::super::test_support::zip_bytes;
+    use super::super::test_support::{thread_cpu_time, zip_bytes};
     use super::*;
 
     fn env(loader: LoaderKind, minecraft: &str) -> CheckEnvironment {
@@ -2051,7 +2051,10 @@ mod tests {
         assert_eq!(older[0].file_name, "jei-old.jar");
     }
 
-    /// A warm check of 200 mods (cached jars) must stay far below 200 ms.
+    /// A warm check of 200 mods (cached jars, all on this thread) must stay far below 200 ms. The
+    /// budget is the thread's CPU time: the wall clock also counts the time the thread waits for
+    /// a core, and on a busy machine it read 210–262 ms against 19 ms when quiet (FIX2). Slower
+    /// work still shows; another machine's load does not.
     #[test]
     fn warm_check_of_200_mods_is_fast() {
         let dir = tempfile::tempdir().unwrap();
@@ -2088,19 +2091,28 @@ mod tests {
         assert!(cold.issues.is_empty(), "{:#?}", cold.issues);
         assert_eq!(cold.checked_files, 200);
 
-        let mut warm_times = Vec::new();
+        let mut warm_cpu = Vec::new();
+        let mut warm_wall = Vec::new();
         for _ in 0..5 {
+            let cpu = thread_cpu_time();
             let start = Instant::now();
             let (snapshot, report) = check_mods_dir(&scanner, &mods, &env, &origins);
-            warm_times.push(start.elapsed());
+            warm_wall.push(start.elapsed());
+            warm_cpu.push(thread_cpu_time().saturating_sub(cpu));
             assert_eq!(report.checked_files, 200);
             assert!(
                 Arc::strong_count(&snapshot.jars[0].contents) >= 2,
                 "served from the cache"
             );
         }
-        let warm = warm_times.iter().max().unwrap();
-        println!("mod check, 200 jars: cold {cold_time:?}, warm max {warm:?} ({warm_times:?})");
-        assert!(warm.as_millis() < 200, "warm check took {warm:?}");
+        let warm = warm_cpu.iter().max().unwrap();
+        println!(
+            "mod check, 200 jars: cold {cold_time:?}, warm CPU max {warm:?} ({warm_cpu:?}), \
+             wall {warm_wall:?}"
+        );
+        assert!(
+            warm.as_millis() < 200,
+            "warm check used {warm:?} of CPU time"
+        );
     }
 }

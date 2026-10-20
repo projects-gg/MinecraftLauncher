@@ -267,6 +267,67 @@ pub(crate) mod test_support {
         bytes.resize(len.max(8), 0);
         bytes
     }
+
+    /// CPU time the calling thread has used so far. Unlike the wall clock it does not grow while
+    /// the thread waits for a core, so a time budget for single-threaded work holds on a busy
+    /// machine. Windows counts it in 15.6 ms ticks.
+    #[cfg(windows)]
+    pub fn thread_cpu_time() -> std::time::Duration {
+        use std::ffi::c_void;
+
+        #[repr(C)]
+        #[derive(Default)]
+        struct FileTime {
+            low: u32,
+            high: u32,
+        }
+        #[link(name = "kernel32")]
+        unsafe extern "system" {
+            fn GetCurrentThread() -> *mut c_void;
+            fn GetThreadTimes(
+                thread: *mut c_void,
+                creation: *mut FileTime,
+                exit: *mut FileTime,
+                kernel: *mut FileTime,
+                user: *mut FileTime,
+            ) -> i32;
+        }
+        let mut creation = FileTime::default();
+        let mut exit = FileTime::default();
+        let mut kernel = FileTime::default();
+        let mut user = FileTime::default();
+        // SAFETY: the current thread's pseudo handle is always valid, and the four out pointers
+        // point to live FILETIME-shaped values.
+        let ok = unsafe {
+            GetThreadTimes(
+                GetCurrentThread(),
+                &mut creation,
+                &mut exit,
+                &mut kernel,
+                &mut user,
+            )
+        };
+        assert_ne!(ok, 0, "GetThreadTimes failed");
+        let hundreds_of_ns = |t: &FileTime| (u64::from(t.high) << 32) | u64::from(t.low);
+        std::time::Duration::from_nanos((hundreds_of_ns(&kernel) + hundreds_of_ns(&user)) * 100)
+    }
+
+    /// CPU time the calling thread has used so far (see the Windows version).
+    #[cfg(unix)]
+    pub fn thread_cpu_time() -> std::time::Duration {
+        let mut now = std::mem::MaybeUninit::<libc::timespec>::uninit();
+        // SAFETY: the clock id is libc's own constant, and `clock_gettime` fills the whole
+        // timespec when it returns 0 (checked before it is read).
+        let now = unsafe {
+            let rc = libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, now.as_mut_ptr());
+            assert_eq!(rc, 0, "clock_gettime failed");
+            now.assume_init()
+        };
+        std::time::Duration::new(
+            u64::try_from(now.tv_sec).unwrap_or(0),
+            u32::try_from(now.tv_nsec).unwrap_or(0),
+        )
+    }
 }
 
 #[cfg(test)]
