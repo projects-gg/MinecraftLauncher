@@ -290,6 +290,8 @@ export const en: DeepPartial<Strings> = {
     offlineBanner: "You're offline. You can still play installed games.",
     backOnline: "You're back online.",
     maintenanceUntil: "Expected to end {{when}}",
+    maintenanceUntilToday: "Expected to end today at {{time}}",
+    maintenanceUntilTomorrow: "Expected to end tomorrow at {{time}}",
     statusPage: "Status page",
     dismissBanner: "Dismiss",
     moreEvents: "+{{count}} events",

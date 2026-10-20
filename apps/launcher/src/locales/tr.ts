@@ -84,6 +84,8 @@ export const tr = {
     offlineBanner: "Çevrimdışısın. Kurulu oyunları oynayabilirsin.",
     backOnline: "Yeniden çevrimiçisin.",
     maintenanceUntil: "Tahmini bitiş {{when}}",
+    maintenanceUntilToday: "Tahmini bitiş bugün {{time}}",
+    maintenanceUntilTomorrow: "Tahmini bitiş yarın {{time}}",
     statusPage: "Durum sayfası",
     dismissBanner: "Kapat",
     moreEvents: "+{{count}} etkinlik",

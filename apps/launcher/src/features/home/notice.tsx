@@ -115,14 +115,41 @@ function NoticeCard({
   );
 }
 
-function maintenanceUntil(until: string | undefined): string | null {
-  if (!until) return null;
-  return dateTimeFormat({
-    day: "numeric",
-    month: "long",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(until));
+/**
+ * When a maintenance should end, from the player's day: "Tahmini bitiş bugün 12:48", "… yarın
+ * 03:30", later ones with their date ("… 22 Ekim 12:48"). The date alone made the player work out
+ * whether 20 October is today (POLISH6). "Bugün" turns into the date at midnight, "yarın" into
+ * "bugün".
+ */
+function MaintenanceEnd({ until }: { until: string }) {
+  const { t } = useTranslation();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    const wait = Math.min(midnight.getTime() - now + 500, 2_000_000_000);
+    const id = window.setTimeout(() => setNow(Date.now()), wait);
+    return () => window.clearTimeout(id);
+  }, [now]);
+  const at = new Date(until);
+  if (Number.isNaN(at.getTime())) return null;
+  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((day(at) - day(new Date(now))) / 86_400_000);
+  const time = dateTimeFormat({ hour: "2-digit", minute: "2-digit" }).format(at);
+  const text =
+    days === 0
+      ? t("home.maintenanceUntilToday", { time })
+      : days === 1
+        ? t("home.maintenanceUntilTomorrow", { time })
+        : t("home.maintenanceUntil", {
+            when: dateTimeFormat({
+              day: "numeric",
+              month: "long",
+              hour: "2-digit",
+              minute: "2-digit",
+            }).format(at),
+          });
+  return <p className="mt-1.5 text-[12.5px] text-ash-300 tabular-nums">{text}</p>;
 }
 
 function StatusPageLink({ url }: { url: string }) {
@@ -150,7 +177,6 @@ export function HomeNotice({
   maintenance: Maintenance | undefined;
   status: HomeStatus | undefined;
 }) {
-  const { t } = useTranslation();
   const { reduce, layout } = useMotionPrefs();
   const shownStatus = maintenance ? undefined : status;
   useStatusRecheck(shownStatus?.expiresAt);
@@ -158,20 +184,13 @@ export function HomeNotice({
   let key: string | null = null;
   let card: ReactNode = null;
   if (maintenance) {
-    const until = maintenanceUntil(maintenance.until);
     key = "maintenance";
     card = (
       <NoticeCard
         tone="maintenance"
         title={maintenance.title}
         message={maintenance.message}
-        footer={
-          until ? (
-            <p className="mt-1.5 text-[12.5px] text-ash-300">
-              {t("home.maintenanceUntil", { when: until })}
-            </p>
-          ) : null
-        }
+        footer={maintenance.until ? <MaintenanceEnd until={maintenance.until} /> : null}
       />
     );
   } else if (shownStatus) {
