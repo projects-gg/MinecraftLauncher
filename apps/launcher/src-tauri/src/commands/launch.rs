@@ -352,6 +352,7 @@ pub async fn launch_instance(
     if let Some(previous) = previous {
         previous.cancel.cancel();
     }
+    crate::commands::cleanup::status_changed(&app);
     // Background preparation stops (what it finished, and its half-done files, are this launch's
     // head start) and a Java runtime update downloading in the background leaves the network to
     // the launch.
@@ -375,6 +376,7 @@ pub async fn launch_instance(
             current.take();
         }
     }
+    crate::commands::cleanup::status_changed(&app);
     // A launch that ended without a game lets background preparation go on after a while (a game
     // that started tells it when it closes).
     if state.running.lock().is_none() {
@@ -1180,6 +1182,7 @@ async fn prepare_and_spawn(
         instance_id: instance.id.clone(),
         process: Arc::clone(&process),
     });
+    crate::commands::cleanup::status_changed(app);
     // A cancel that came while the game was being started (after the last checkpoint, before it
     // counted as running) still stops it: the page already went back to OYNA.
     if cancel.is_cancelled() {
@@ -1227,6 +1230,7 @@ async fn prepare_and_spawn(
         crate::webview_rest::wake(&app, "the game exited");
         let state = app.state::<AppState>();
         state.running.lock().take();
+        crate::commands::cleanup::status_changed(&app);
         crate::shot_copy::session_ended(&app);
         // Java runtime updates waiting for the game can take their place now.
         crate::commands::java::game_exited(&app);

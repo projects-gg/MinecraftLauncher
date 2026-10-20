@@ -58,6 +58,7 @@ struct JobGuard {
 impl Drop for JobGuard {
     fn drop(&mut self) {
         library_jobs(&self.app).tokens.lock().remove(&self.id);
+        crate::commands::cleanup::status_changed(&self.app);
     }
 }
 
@@ -70,6 +71,7 @@ fn start_job(app: &AppHandle, job_id: &str) -> JobGuard {
     {
         previous.cancel();
     }
+    crate::commands::cleanup::status_changed(app);
     JobGuard {
         app: app.clone(),
         id: job_id.to_owned(),

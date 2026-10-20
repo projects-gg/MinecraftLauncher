@@ -115,6 +115,7 @@ pub(crate) struct JobGuard {
 impl Drop for JobGuard {
     fn drop(&mut self) {
         data_jobs(&self.app).current.lock().take();
+        crate::commands::cleanup::status_changed(&self.app);
     }
 }
 
@@ -143,6 +144,8 @@ pub(crate) fn begin_job(app: &AppHandle, job: DataJob) -> CmdResult<JobGuard> {
         ));
     }
     *current = Some(job);
+    drop(current);
+    crate::commands::cleanup::status_changed(app);
     Ok(JobGuard { app: app.clone() })
 }
 

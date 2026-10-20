@@ -23,7 +23,7 @@ use pl_mc::shared_files::{self, GameRef, ScanOptions, SharedGroup, SharedItem};
 use pl_net::CancellationToken;
 use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::commands::data::{DataJob, begin_job};
 use crate::error::{CmdError, CmdResult};
@@ -156,6 +156,16 @@ fn ensure_quiet(app: &AppHandle, state: &AppState) -> CmdResult<()> {
         Some(block) => Err(block_error(block)),
         None => Ok(()),
     }
+}
+
+/// Settings → Veri listens for this instead of asking every few seconds; it then asks for
+/// [`cleanup_status`] once. Nothing listens (and nothing runs) while that page is closed.
+pub(crate) const STATUS_CHANGED: &str = "cleanup-status-changed";
+
+/// What [`blocked`] reads changed: a game started or ended, began or stopped getting ready, or an
+/// install, backup, Java download or data job began or ended (the free space moves with them).
+pub(crate) fn status_changed(app: &AppHandle) {
+    let _ = app.emit(STATUS_CHANGED, ());
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]

@@ -1182,6 +1182,7 @@ async fn stage_one(
         });
     }
     changed(app);
+    crate::commands::cleanup::status_changed(app);
     let id = managed_id(&runtime.component, &runtime.platform);
     let progress: ProgressFn = {
         let app = app.clone();
@@ -1222,6 +1223,7 @@ async fn stage_one(
     )
     .await;
     svc.job.lock().take();
+    crate::commands::cleanup::status_changed(app);
     let done = match result {
         Ok(_) => {
             svc.requested.lock().remove(&key);

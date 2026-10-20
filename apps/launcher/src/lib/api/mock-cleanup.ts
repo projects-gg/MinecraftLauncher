@@ -221,6 +221,8 @@ export function createMockCleanup(): CleanupApi {
       const blocked: CleanupBlock | undefined = mode() === "blocked" ? "gameRunning" : undefined;
       return { blocked, freeBytes: state.free, diskBytes: Math.round(476.9 * GB) };
     },
+    // Nothing runs in the preview: no game, no jobs to report.
+    onStatusChanged: () => () => {},
     async oldSets(olderThanDays) {
       await delay(380 * slow());
       const list = offered(olderThanDays);

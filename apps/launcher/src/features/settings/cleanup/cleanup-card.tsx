@@ -1,8 +1,8 @@
 import { Broom, CaretDown, CheckCircle, WarningCircle } from "@phosphor-icons/react";
 import { Button, cn, Segmented, Skeleton } from "@pl/ui";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
-import { type ReactNode, type Ref, useId, useMemo, useState } from "react";
+import { type ReactNode, type Ref, useEffect, useId, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { enter, fade, glide, stagger, useMotionPrefs } from "@/features/modcenter/motion";
 import { api, type Leftover, type OldSet, type SharedItem } from "@/lib/api";
@@ -58,11 +58,23 @@ export function CleanupCard({ root }: { root?: string }) {
   const prefs = useMotionPrefs();
   const days = usePrefs((s) => s.cleanupSetDays);
   const setPref = usePrefs((s) => s.set);
+  const queryClient = useQueryClient();
+  // Asked again only when it can have changed (nothing runs while the page just sits there): the
+  // backend says when a game or a job starts or ends, and the window coming back covers what
+  // other programs did to the disk meanwhile.
   const status = useQuery({
     queryKey: cleanupKeys.status,
     queryFn: () => api.cleanup.status(),
-    refetchInterval: 4000,
+    staleTime: 0,
+    refetchOnWindowFocus: true,
   });
+  useEffect(
+    () =>
+      api.cleanup.onStatusChanged(() => {
+        void queryClient.invalidateQueries({ queryKey: cleanupKeys.status });
+      }),
+    [queryClient],
+  );
   const setsQuery = useQuery({
     queryKey: cleanupKeys.sets,
     queryFn: () => api.cleanup.oldSets(MIN_DAYS),

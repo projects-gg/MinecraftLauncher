@@ -1,5 +1,6 @@
 // Tauri implementation of `api.cleanup`: maps the generated bindings onto the UI shapes.
 import { Channel } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { type CleanupProgressView, type CmdError, commands } from "@/bindings";
 import type { CleanupApi, SharedItem } from "./cleanup-types";
 import { DataCommandError } from "./data-tauri";
@@ -21,6 +22,21 @@ export const tauriCleanup: CleanupApi = {
       blocked: defined(s.blocked),
       freeBytes: defined(s.freeBytes),
       diskBytes: defined(s.diskBytes),
+    };
+  },
+  onStatusChanged(listener) {
+    // A launch moves through a few states in a row: one refresh per frame, none while hidden.
+    let frame: number | undefined;
+    const unlisten = listen("cleanup-status-changed", () => {
+      if (frame !== undefined) return;
+      frame = requestAnimationFrame(() => {
+        frame = undefined;
+        listener();
+      });
+    });
+    return () => {
+      if (frame !== undefined) cancelAnimationFrame(frame);
+      void unlisten.then((fn) => fn());
     };
   },
   async oldSets(olderThanDays) {

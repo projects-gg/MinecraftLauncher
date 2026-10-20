@@ -173,6 +173,11 @@ export interface CleanupProgress {
 /** `api.cleanup`: everything the Temizlik card asks of the backend. */
 export interface CleanupApi {
   status(): Promise<CleanupStatus>;
+  /**
+   * Calls `listener` when the status may have changed (a game started or ended, an install,
+   * backup, Java download or data job began or ended). Returns the unsubscribe.
+   */
+  onStatusChanged(listener: () => void): () => void;
   oldSets(olderThanDays: number): Promise<OldSets>;
   /** Moves the sets into the launcher trash (each one checked again first). */
   removeSets(
