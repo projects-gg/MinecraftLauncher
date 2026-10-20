@@ -88,6 +88,23 @@ export function formatPercent(percent: number): string {
   );
 }
 
+/**
+ * `formatPercent` in two parts, for a figure and a sign set in different type: the figure and
+ * whether the language writes the sign before it ("%42") or after it ("42%").
+ */
+export function percentParts(percent: number): { figure: string; signFirst: boolean } {
+  const parts = numberFormat({ style: "percent", maximumFractionDigits: 0 }).formatToParts(
+    Math.round(percent) / 100,
+  );
+  return {
+    figure: parts
+      .filter((part) => part.type !== "percentSign")
+      .map((part) => part.value)
+      .join(""),
+    signFirst: parts[0]?.type === "percentSign",
+  };
+}
+
 /** Memory: `6144` → "6 GB", `4608` → "4,5 GB" / "4.5 GB", `768` → "768 MB". */
 export function formatMemory(mb: number): string {
   if (mb < 1024) return `${Math.round(mb)} MB`;

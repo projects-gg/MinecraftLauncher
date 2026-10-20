@@ -9,6 +9,7 @@ import {
   formatRelative,
   formatSpeed,
   listFormat,
+  percentParts,
   uiLocale,
 } from "./format";
 import i18n, { loadEnglish } from "./i18n";
@@ -75,8 +76,11 @@ describe("numbers and shares", () => {
   it("put the percent sign where the language puts it", async () => {
     expect(formatPercent(42)).toBe("%42");
     expect(formatPercent(99.6)).toBe("%100");
+    expect(percentParts(85)).toEqual({ figure: "85", signFirst: true });
     await inEnglish();
     expect(formatPercent(42)).toBe("42%");
+    expect(percentParts(85)).toEqual({ figure: "85", signFirst: false });
+    expect(percentParts(7.4)).toEqual({ figure: "7", signFirst: false });
   });
 
   it("say memory in GB from a gigabyte on", async () => {
