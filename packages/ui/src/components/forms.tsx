@@ -14,6 +14,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useTransition,
 } from "react";
 import { type Glide, glidePlate, PLATE_CUT } from "../glide";
 import { cn } from "../lib/cn";
@@ -575,24 +576,35 @@ export function Segmented<T extends string>({
   /** Id of a line that describes the control (what the choice does, or why it waits). */
   describedBy?: string;
 }) {
+  // A pick shows at once and the caller's update follows as a transition: what the pick brings
+  // (a dialog's next tab, a long list) renders after the plate has set off, so a slow render never
+  // holds the plate back, and the page stays responsive while it renders. A caller that keeps its
+  // value sees the plate glide back.
+  const [settling, startTransition] = useTransition();
+  const [picked, setPicked] = useState<T | null>(null);
+  const current = settling && picked !== null ? picked : value;
   const control = useRef<HTMLDivElement>(null);
   // The value whose option shows the plate, and the glide under way.
-  const shown = useRef(value);
+  const shown = useRef(current);
   const glide = useRef<Glide | null>(null);
   useLayoutEffect(() => {
     const from = shown.current;
-    if (from === value) return;
-    shown.current = value;
+    if (from === current) return;
+    shown.current = current;
     // Before the first paint of the pick: the new option's plate starts where the old one is.
     const element = control.current;
-    glide.current = element ? glidePlate(element, from, value, glide.current) : null;
-  }, [value]);
+    glide.current = element ? glidePlate(element, from, current, glide.current) : null;
+  }, [current]);
   return (
     <ToggleGroup.Root
       ref={control}
       type="single"
-      value={value}
-      onValueChange={(v) => v && onValueChange(v as T)}
+      value={current}
+      onValueChange={(v) => {
+        if (!v) return;
+        setPicked(v as T);
+        startTransition(() => onValueChange(v as T));
+      }}
       onPointerEnter={onIntent}
       onFocus={onIntent}
       aria-label={label}
@@ -616,7 +628,7 @@ export function Segmented<T extends string>({
             "hover:text-bone-50 focus-visible:outline-none",
           )}
         >
-          <OptionPlate on={value === o.value} />
+          <OptionPlate on={current === o.value} />
           <span
             aria-hidden
             className="chamfer pointer-events-none absolute inset-0 -z-10 opacity-0 shadow-[inset_0_0_0_2px_var(--color-gold-300)] group-focus-visible/option:opacity-100"
