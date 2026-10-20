@@ -53,9 +53,13 @@ export function fitFor(set: SetCard, mcVersion: string, loader: LoaderKind): Set
   return { kind: "otherVersion", versions: set.variants.map((v) => v.minecraft) };
 }
 
-/** The variant a new instance from the set starts with: the newest Minecraft version. */
-export function newestVariant(set: SetCard): SetVariant | undefined {
-  return set.variants[0];
+/**
+ * The variant a new instance from the set starts with: the recommended Minecraft version's when
+ * the set has one (the version "Sıfırdan" and the official pack lead with, whose game files the
+ * player most likely has already), else the newest.
+ */
+export function defaultVariant(set: SetCard, recommended?: string): SetVariant | undefined {
+  return set.variants.find((v) => recommended && v.minecraft === recommended) ?? set.variants[0];
 }
 
 /** Item icons a card shows: the first `max` choices (not libraries) with an icon, and how many

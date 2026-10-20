@@ -13,7 +13,7 @@ import { api, type InstanceSummary, type SetCard } from "@/lib/api";
 import { notifyWhenAway } from "@/lib/attention";
 import { formatBytes } from "@/lib/format";
 import { trackTask } from "@/stores/progress";
-import { bytesOf, changedChoices, enabledItems, iconFor, newestVariant, setName } from "./model";
+import { bytesOf, changedChoices, defaultVariant, enabledItems, iconFor, setName } from "./model";
 import { PurposeMark, SetCardSkeletons, SetContents, SetPicker, useWords } from "./parts";
 
 /** The catalog query (shared by the new-instance dialog and the mod center). */
@@ -28,9 +28,10 @@ export function useSetCatalog(enabled: boolean) {
 }
 
 /**
- * "Hazır set" in the new-instance dialog: pick a set (its newest Minecraft version unless the
- * player picks another), look at what it brings and switch items off, then create an instance
- * with the set installed. Returns the body and the footer for the dialog.
+ * "Hazır set" in the new-instance dialog: pick a set (on the recommended Minecraft version when
+ * the set has it, else its newest, unless the player picks another), look at what it brings and
+ * switch items off, then create an instance with the set installed. Returns the body and the
+ * footer for the dialog.
  */
 export function useSetSource({
   active,
@@ -48,6 +49,14 @@ export function useSetSource({
   const words = useWords();
   const prefs = useMotionPrefs();
   const catalog = useSetCatalog(active);
+  // The recommended Minecraft version: the "Sıfırdan" list's query, usually loaded already.
+  const versions = useQuery({
+    queryKey: ["mc-versions"],
+    queryFn: () => api.minecraftVersions(),
+    enabled: active,
+    staleTime: 5 * 60_000,
+  });
+  const recommended = versions.data?.find((v) => v.recommended)?.id;
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [version, setVersion] = useState<string>("");
@@ -68,7 +77,7 @@ export function useSetSource({
   const selected: SetCard | undefined = sets.find((set) => set.id === selectedId);
   const variant =
     selected?.variants.find((v) => v.minecraft === version) ??
-    (selected ? newestVariant(selected) : undefined);
+    (selected ? defaultVariant(selected, recommended) : undefined);
   const enabled = variant ? enabledItems(variant.items, choices) : new Set<string>();
   const defaultName = selected
     ? defaultInstanceName(
@@ -81,7 +90,7 @@ export function useSetSource({
     setSelectedId(id);
     setChoices({});
     const set = sets.find((s) => s.id === id);
-    setVersion(set ? (newestVariant(set)?.minecraft ?? "") : "");
+    setVersion(set ? (defaultVariant(set, recommended)?.minecraft ?? "") : "");
   };
 
   const start = async () => {
@@ -154,7 +163,7 @@ export function useSetSource({
         value={selectedId}
         onChange={pick}
         label={t("modSets.create.source")}
-        variantOf={(set) => newestVariant(set)}
+        variantOf={(set) => defaultVariant(set, recommended)}
       />
     );
   }

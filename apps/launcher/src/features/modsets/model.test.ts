@@ -6,6 +6,7 @@ import {
   bytesOf,
   changedChoices,
   countWords,
+  defaultVariant,
   describeSummary,
   enabledItems,
   fitFor,
@@ -13,7 +14,6 @@ import {
   iconFor,
   iconStrip,
   neededBy,
-  newestVariant,
   setName,
   setSummary,
   splitItems,
@@ -106,9 +106,12 @@ describe("set fit", () => {
     }
   });
 
-  it("starts new instances on the newest version", () => {
-    expect(newestVariant(card())?.minecraft).toBe("26.3");
-    expect(newestVariant(card({ variants: [] }))).toBeUndefined();
+  it("starts new instances on the recommended version, else the newest", () => {
+    const three = card({ variants: [variant("26.3"), variant("26.2"), variant("26.1.2")] });
+    expect(defaultVariant(three, "26.1.2")?.minecraft).toBe("26.1.2");
+    expect(defaultVariant(three)?.minecraft).toBe("26.3");
+    expect(defaultVariant(card(), "26.1.2")?.minecraft).toBe("26.3");
+    expect(defaultVariant(card({ variants: [] }), "26.1.2")).toBeUndefined();
   });
 });
 
