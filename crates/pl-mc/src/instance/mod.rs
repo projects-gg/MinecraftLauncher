@@ -30,8 +30,9 @@ pub use model::{
     MemorySettings, NewInstance, ServerAddress, WindowSettings,
 };
 pub use options::{
-    GraphicsPreset, GraphicsState, apply_preset, detect_preset, graphics_state, preset_for_machine,
-    set_graphics_preset, supports_presets, this_machine_preset,
+    GraphicsPreset, GraphicsState, GraphicsSwitch, apply_preset, detect_preset, graphics_state,
+    preset_for_machine, set_graphics_preset, supports_presets, switch_graphics_preset,
+    this_machine_preset, undo_graphics_switch,
 };
 pub use packs::{
     PackListChange, choose_shader_once, disable_resource_packs, enable_resource_packs,

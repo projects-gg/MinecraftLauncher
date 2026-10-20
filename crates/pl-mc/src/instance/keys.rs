@@ -443,6 +443,42 @@ async fn prune_backups(dir: &Path) {
     }
 }
 
+/// Keeps `options` (the instance's `options.txt` before a change) as a new backup and drops the
+/// oldest beyond [`KEPT_BACKUPS`]; returns the backup's name. Key fixes and graphics switches
+/// share the folder and the limit.
+pub(super) async fn save_backup(game_dir: &Path, options: &[u8]) -> Result<String> {
+    let dir = backups_dir(game_dir)?;
+    let backup = new_backup_name(&dir).await;
+    write_durable(&dir.join(&backup), options).await?;
+    prune_backups(&dir).await;
+    Ok(backup)
+}
+
+/// The content of the backup named `backup`; `None` when it is gone. Any other name is refused.
+pub(super) async fn read_backup(game_dir: &Path, backup: &str) -> Result<Option<Vec<u8>>> {
+    if backup_order(backup).is_none() {
+        return Err(Error::Invalid(format!(
+            "not an options.txt backup: {backup}"
+        )));
+    }
+    let file = backups_dir(game_dir)?.join(backup);
+    match tokio::fs::read(&file).await {
+        Ok(saved) => Ok(Some(saved)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(Error::io(&file, error)),
+    }
+}
+
+/// Deletes a backup once it is used. Failures only leave the file (the oldest go anyway).
+pub(super) async fn remove_backup(game_dir: &Path, backup: &str) {
+    let Ok(dir) = backups_dir(game_dir) else {
+        return;
+    };
+    if let Err(error) = tokio::fs::remove_file(dir.join(backup)).await {
+        tracing::warn!(%error, backup = %backup, "could not remove a used options.txt backup");
+    }
+}
+
 /// Backs up `<game_dir>/options.txt` and moves the bindings of its clashes
 /// ([`find_key_clashes`]) to the table's keys, giving an unbound push to talk its key along
 /// ([`plan_key_fix`]); nothing else in the file changes. `None` when nothing clashes (or there is
@@ -458,11 +494,8 @@ pub async fn fix_key_clashes_in(game_dir: &Path) -> Result<Option<KeyFix>> {
     if plan.is_empty() {
         return Ok(None);
     }
-    let dir = backups_dir(game_dir)?;
-    let backup = new_backup_name(&dir).await;
-    write_durable(&dir.join(&backup), &options).await?;
+    let backup = save_backup(game_dir, &options).await?;
     write_options(&path, apply_key_fix(&options, &plan)).await?;
-    prune_backups(&dir).await;
     tracing::info!(
         clashes = plan.clashes.len(),
         binds = plan.binds.len(),
@@ -481,16 +514,8 @@ pub async fn fix_key_clashes_in(game_dir: &Path) -> Result<Option<KeyFix>> {
 /// meanwhile comes back whole). The backup goes once it is used. `false` when that backup no
 /// longer exists: nothing changes then.
 pub async fn undo_key_fix_in(game_dir: &Path, backup: &str) -> Result<bool> {
-    if backup_order(backup).is_none() {
-        return Err(Error::Invalid(format!(
-            "not an options.txt backup: {backup}"
-        )));
-    }
-    let file = backups_dir(game_dir)?.join(backup);
-    let saved = match tokio::fs::read(&file).await {
-        Ok(saved) => saved,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-        Err(error) => return Err(Error::io(&file, error)),
+    let Some(saved) = read_backup(game_dir, backup).await? else {
+        return Ok(false);
     };
     let path = game_dir.join(OPTIONS_FILE);
     let (current, restored) = match tokio::fs::read(&path).await {
@@ -504,9 +529,7 @@ pub async fn undo_key_fix_in(game_dir: &Path, backup: &str) -> Result<bool> {
     if current.as_deref() != Some(restored.as_slice()) {
         write_options(&path, restored).await?;
     }
-    if let Err(error) = tokio::fs::remove_file(&file).await {
-        tracing::warn!(%error, backup = %backup, "could not remove a used options.txt backup");
-    }
+    remove_backup(game_dir, backup).await;
     tracing::info!(backup = %backup, "options.txt key fix undone");
     Ok(true)
 }

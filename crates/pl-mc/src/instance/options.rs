@@ -3,7 +3,8 @@
 //! A preset sets a few video options, with the keys the instance's Minecraft version reads
 //! ([`SETTINGS`]); every other line of the file stays exactly as it was (unknown keys, their
 //! order, line endings, a file linked from elsewhere). The launcher writes one only when the
-//! player picks it ([`set_graphics_preset`]), or into a brand-new `options.txt` at the first
+//! player picks it ([`set_graphics_preset`]; [`switch_graphics_preset`] keeps a copy first, for
+//! "Geri al"), or into a brand-new `options.txt` at the first
 //! launch ([`super::seed_options`]): the preset the player picked before the game ever ran, or
 //! the one that suits the computer ([`this_machine_preset`]). It never changes the player's own
 //! settings by itself; values that match no preset are "Özel" ([`GraphicsState::Custom`]).
@@ -519,6 +520,113 @@ pub async fn set_graphics_preset(
     }
 }
 
+/// What [`switch_graphics_preset`] did.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct GraphicsSwitch {
+    /// The instance's graphics now.
+    pub state: GraphicsState,
+    /// The copy of `options.txt` from before, for [`undo_graphics_switch`]; `None` when there was
+    /// no file yet (the pick waits for the first launch) or the file already had the preset.
+    pub backup: Option<String>,
+}
+
+/// [`set_graphics_preset`] for a pick that applies at once (Settings → Grafik ve FPS): the file
+/// is copied first, so "Geri al" ([`undo_graphics_switch`]) brings back what was there, the
+/// player's own values included. The copies share the key fixes' folder
+/// (`<instance>/.launcher/options-backups/`) and its limit. The game must not be running.
+pub async fn switch_graphics_preset(
+    game_dir: &Path,
+    version: &str,
+    preset: GraphicsPreset,
+) -> Result<GraphicsSwitch> {
+    let path = game_dir.join(OPTIONS_FILE);
+    let backup = if supports_presets(version) {
+        match tokio::fs::read(&path).await {
+            Ok(content) if apply_preset(&content, version, preset) != content => {
+                Some(super::keys::save_backup(game_dir, &content).await?)
+            }
+            Ok(_) => None,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+            Err(error) => return Err(Error::io(&path, error)),
+        }
+    } else {
+        None
+    };
+    let state = set_graphics_preset(game_dir, version, preset).await?;
+    Ok(GraphicsSwitch { state, backup })
+}
+
+/// `current` (an `options.txt` after a preset was applied to `backup`) with the preset's options
+/// back at their values in `backup`. When nothing else changed since, that is `backup` itself;
+/// when the game saved the file meanwhile, only the preset's lines change (a line the preset
+/// added goes) and the game's other changes stay.
+fn undo_preset(current: &[u8], backup: &[u8], version: &str) -> Vec<u8> {
+    if GraphicsPreset::ALL
+        .into_iter()
+        .any(|preset| apply_preset(backup, version, preset) == current)
+    {
+        return backup.to_vec();
+    }
+    let mut before: HashMap<&str, &[u8]> = HashMap::new();
+    for (text, _) in split_lines(backup) {
+        if let Some((key, value)) = key_value(text) {
+            before.insert(key, value);
+        }
+    }
+    let mut out = Vec::with_capacity(current.len());
+    for (text, ending) in split_lines(current) {
+        let preset_key = key_value(text).map(|(key, _)| key).filter(|key| {
+            SETTINGS
+                .iter()
+                .any(|setting| setting.key == *key && role(setting, version) != Role::Newer)
+        });
+        match preset_key {
+            Some(key) => {
+                if let Some(value) = before.get(key) {
+                    out.extend_from_slice(key.as_bytes());
+                    out.push(b':');
+                    out.extend_from_slice(value);
+                    out.extend_from_slice(ending);
+                }
+            }
+            None => {
+                out.extend_from_slice(text);
+                out.extend_from_slice(ending);
+            }
+        }
+    }
+    out
+}
+
+/// Undoes a [`switch_graphics_preset`] from its copy ([`undo_preset`]; a file that is gone
+/// meanwhile comes back whole) and deletes the copy. Returns the graphics state afterwards, or
+/// `None` when that copy no longer exists (nothing changes then). The game must not be running.
+pub async fn undo_graphics_switch(
+    game_dir: &Path,
+    version: &str,
+    backup: &str,
+) -> Result<Option<GraphicsState>> {
+    let Some(saved) = super::keys::read_backup(game_dir, backup).await? else {
+        return Ok(None);
+    };
+    let path = game_dir.join(OPTIONS_FILE);
+    let (current, restored) = match tokio::fs::read(&path).await {
+        Ok(current) => {
+            let restored = undo_preset(&current, &saved, version);
+            (Some(current), restored)
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => (None, saved),
+        Err(error) => return Err(Error::io(&path, error)),
+    };
+    if current.as_deref() != Some(restored.as_slice()) {
+        write_options(&path, restored).await?;
+    }
+    super::keys::remove_backup(game_dir, backup).await;
+    tracing::info!(backup = %backup, "graphics preset switch undone");
+    Ok(Some(graphics_state(game_dir, version).await))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -903,5 +1011,125 @@ mod tests {
         let shared_now = std::fs::read(&shared).unwrap();
         assert_eq!(detect_preset(&shared_now, "1.21.1"), Some(Smooth));
         assert!(shared_now.starts_with(b"fov:0.5\n"));
+    }
+
+    fn backups(game: &Path) -> PathBuf {
+        game.parent()
+            .unwrap()
+            .join(".launcher")
+            .join("options-backups")
+    }
+
+    #[tokio::test]
+    async fn a_switch_undoes_back_to_the_players_own_values() {
+        let (_dir, game) = instance();
+        let path = game.join(OPTIONS_FILE);
+        std::fs::write(&path, GAME_FILE).unwrap();
+        let switch = switch_graphics_preset(&game, "26.1.2", Smooth)
+            .await
+            .unwrap();
+        assert_eq!(switch.state, GraphicsState::Preset { preset: Smooth });
+        let backup = switch.backup.expect("a copy of the player's file");
+        assert_eq!(
+            std::fs::read(&path).unwrap(),
+            apply_preset(GAME_FILE.as_bytes(), "26.1.2", Smooth)
+        );
+        // In the key fixes' folder, beside the game folder.
+        assert!(backups(&game).join(&backup).is_file());
+
+        assert_eq!(
+            undo_graphics_switch(&game, "26.1.2", &backup)
+                .await
+                .unwrap(),
+            Some(GraphicsState::Custom)
+        );
+        assert_eq!(std::fs::read(&path).unwrap(), GAME_FILE.as_bytes());
+        // The copy is used up: a second undo changes nothing.
+        assert!(!backups(&game).join(&backup).exists());
+        assert_eq!(
+            undo_graphics_switch(&game, "26.1.2", &backup)
+                .await
+                .unwrap(),
+            None
+        );
+        assert!(
+            undo_graphics_switch(&game, "26.1.2", "../options.txt")
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_switch_that_changes_no_file_keeps_no_copy() {
+        let (_dir, game) = instance();
+        // No file yet: the pick waits for the first launch (undone by picking again).
+        assert_eq!(
+            switch_graphics_preset(&game, "26.1.2", Quality)
+                .await
+                .unwrap(),
+            GraphicsSwitch {
+                state: GraphicsState::FirstLaunch { preset: Quality },
+                backup: None,
+            }
+        );
+        // The file already has the preset.
+        let path = game.join(OPTIONS_FILE);
+        std::fs::write(&path, apply_preset(b"lang:tr_tr\n", "26.1.2", Balanced)).unwrap();
+        let switch = switch_graphics_preset(&game, "26.1.2", Balanced)
+            .await
+            .unwrap();
+        assert_eq!(switch.state, GraphicsState::Preset { preset: Balanced });
+        assert_eq!(switch.backup, None);
+        assert!(!backups(&game).exists());
+        assert!(
+            switch_graphics_preset(&game, "1.6.4", Smooth)
+                .await
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn an_undo_after_the_game_saved_puts_back_only_the_preset() {
+        let before = "version:4790\nrenderDistance:12\nparticles:0\nlang:tr_tr\n";
+        let switched = text(apply_preset(before.as_bytes(), "26.1.2", Smooth));
+        assert_eq!(
+            text(undo_preset(
+                switched.as_bytes(),
+                before.as_bytes(),
+                "26.1.2"
+            )),
+            before,
+            "nothing else changed: the file comes back byte for byte"
+        );
+        // The game saved the file since, in another language.
+        let saved = switched.replace("lang:tr_tr", "lang:en_us");
+        assert_eq!(
+            text(undo_preset(saved.as_bytes(), before.as_bytes(), "26.1.2")),
+            "version:4790\nrenderDistance:12\nparticles:0\nlang:en_us\n",
+            "the preset's values go back, the lines it added go, the game's change stays"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_undo_brings_back_a_file_deleted_meanwhile() {
+        let (_dir, game) = instance();
+        let path = game.join(OPTIONS_FILE);
+        std::fs::write(&path, "fov:0.5\nrenderDistance:20\n").unwrap();
+        let backup = switch_graphics_preset(&game, "1.21.1", Quality)
+            .await
+            .unwrap()
+            .backup
+            .unwrap();
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(
+            undo_graphics_switch(&game, "1.21.1", &backup)
+                .await
+                .unwrap(),
+            Some(GraphicsState::Custom)
+        );
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "fov:0.5\nrenderDistance:20\n"
+        );
     }
 }
