@@ -399,10 +399,10 @@ export function LogViewer({
     if (match) list.current?.scrollToRow(match.row);
   };
 
-  // Ctrl+F focuses the search field while the logs are open.
+  // Ctrl+F focuses the search field while the logs are open (not AltGr, which is Ctrl+Alt).
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "f") {
         e.preventDefault();
         searchRef.current?.querySelector("input")?.focus();
       }

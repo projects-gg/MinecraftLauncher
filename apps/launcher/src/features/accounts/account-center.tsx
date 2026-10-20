@@ -524,7 +524,9 @@ export function AccountCenter({
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     const typing = target.tagName === "INPUT" || target.tagName === "TEXTAREA";
-    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z" && !typing) {
+    // Not with Alt: Windows reports AltGr as Ctrl+Alt (Turkish Q types with it).
+    const ctrlOnly = (event.ctrlKey || event.metaKey) && !event.altKey;
+    if (ctrlOnly && event.key.toLowerCase() === "z" && !typing) {
       event.preventDefault();
       void undoLatestRemoval(queryClient);
     }

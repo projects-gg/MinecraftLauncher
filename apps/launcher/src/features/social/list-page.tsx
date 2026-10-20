@@ -680,7 +680,10 @@ export function ListPage() {
         first.focus();
         return;
       }
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "f") return;
+      // Not with Alt: Windows reports AltGr as Ctrl+Alt (Turkish Q types with it).
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== "f") {
+        return;
+      }
       event.preventDefault();
       field?.focus();
       field?.select();

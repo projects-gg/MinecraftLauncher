@@ -124,8 +124,8 @@ export function Lightbox({
     } else if (e.key === "Delete") {
       e.preventDefault();
       onDelete(shot);
-    } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") {
-      // Ctrl+C copies the picture, as in any image viewer.
+    } else if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "c") {
+      // Ctrl+C copies the picture, as in any image viewer (not AltGr, which is Ctrl+Alt).
       e.preventDefault();
       onCopy(shot);
     }

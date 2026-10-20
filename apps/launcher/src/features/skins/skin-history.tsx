@@ -422,7 +422,9 @@ export const SkinHistorySection = memo(function SkinHistorySection({
   // center), when the focus is in this panel.
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== "z") return;
+      if (!(event.ctrlKey || event.metaKey) || event.altKey || event.key.toLowerCase() !== "z") {
+        return;
+      }
       const removal = lastRemoval.current;
       if (!removal || Date.now() - removal.at > HISTORY_UNDO_MS) return;
       const panel = sectionRef.current?.closest("aside");
