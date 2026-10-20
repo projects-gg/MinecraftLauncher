@@ -1,5 +1,15 @@
 import { CaretUpDown, Check, Plus, SquaresFour } from "@phosphor-icons/react";
-import { Chip, cn, easeOutExpo, PlayButton, type PlayState, Progress, Switch, toast } from "@pl/ui";
+import {
+  Chip,
+  cn,
+  easeOutExpo,
+  PlayButton,
+  type PlayState,
+  Progress,
+  returnFocusAfterKeys,
+  Switch,
+  toast,
+} from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -125,6 +135,7 @@ function InstancePicker({
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
+          onCloseAutoFocus={returnFocusAfterKeys}
           side="top"
           align="start"
           sideOffset={10}

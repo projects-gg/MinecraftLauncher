@@ -1,7 +1,7 @@
 // Title bar account switcher: the active account's head and name; opens a menu of every account
 // (arrow keys, Enter, Esc, typeahead) with "Hesap ekle" and "Hesap merkezini aç".
 import { CaretDown, Check, PushPin, UserPlus, UsersThree } from "@phosphor-icons/react";
-import { Chip, cn, easeOutExpo, springSnappy } from "@pl/ui";
+import { Chip, cn, easeOutExpo, returnFocusAfterKeys, springSnappy } from "@pl/ui";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useRef, useState } from "react";
@@ -122,6 +122,8 @@ export function AccountSwitcher() {
                     handoff.current = false;
                     event.preventDefault();
                   }
+                  // After a click the chip would light up with its ring (POLISH6).
+                  returnFocusAfterKeys(event);
                 }}
               >
                 <motion.div

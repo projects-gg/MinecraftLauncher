@@ -5,6 +5,7 @@ import {
   cn,
   dialogMotion,
   EntranceGate,
+  focusPanel,
   GatedMotion,
   IconButton,
   scrimMotion,
@@ -175,7 +176,7 @@ export default function NewsArticle({
                   // pop open): the keyboard scrolls the article right away.
                   onOpenAutoFocus={(event) => {
                     event.preventDefault();
-                    scroller.current?.focus({ preventScroll: true });
+                    if (scroller.current) focusPanel(scroller.current);
                   }}
                 >
                   <GatedMotion.div

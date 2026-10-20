@@ -3,6 +3,7 @@ import { AnimatePresence, MotionConfig, motion, useReducedMotion } from "motion/
 import { Dialog as RadixDialog } from "radix-ui";
 import type { ReactNode } from "react";
 import { EntranceGate, GatedMotion } from "../entrance";
+import { focusPanel } from "../input-modality";
 import { cn } from "../lib/cn";
 import { dialogMotion, easeOutExpo, scrimMotion } from "../motion";
 import { IconButton } from "./button";
@@ -92,7 +93,7 @@ export function Dialog({
                   // field keeps the focus it took.
                   onOpenAutoFocus={(event) => {
                     event.preventDefault();
-                    (event.currentTarget as HTMLElement).focus({ preventScroll: true });
+                    focusPanel(event.currentTarget as HTMLElement);
                   }}
                 >
                   <GatedMotion.div

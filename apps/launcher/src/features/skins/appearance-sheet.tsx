@@ -18,6 +18,7 @@ import {
   DropZone,
   EntranceGate,
   easeOutExpo,
+  focusPanel,
   GatedMotion,
   IconButton,
   PixelBrackets,
@@ -1075,7 +1076,7 @@ function AppearanceSheetPanel({
                 // The panel takes the focus, not the close button (its tooltip would pop open).
                 onOpenAutoFocus={(event) => {
                   event.preventDefault();
-                  (event.currentTarget as HTMLElement).focus({ preventScroll: true });
+                  focusPanel(event.currentTarget as HTMLElement);
                 }}
                 // Toasts live outside the sheet: "Geri al" or "Ayrıntıları kopyala" there must not
                 // close it.

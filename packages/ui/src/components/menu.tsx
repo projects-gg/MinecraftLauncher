@@ -1,6 +1,7 @@
 import { CaretRight, Check } from "@phosphor-icons/react";
 import { DropdownMenu, ContextMenu as RadixContextMenu } from "radix-ui";
 import type { ReactElement, ReactNode } from "react";
+import { returnFocusAfterKeys } from "../input-modality";
 import { cn } from "../lib/cn";
 
 export interface MenuItem {
@@ -21,6 +22,15 @@ export interface MenuItem {
 
 const contentClass =
   "glass-strong pop-motion z-50 min-w-[190px] rounded-[var(--radius-panel)] p-1 shadow-[0_24px_60px_rgb(34_6_6/0.55)]";
+
+/**
+ * `onCloseAutoFocus` of both menus: the trigger gets the focus back only after keyboard use
+ * (after a plain click it lit up with its ring and popped its tooltip; `input-modality.ts`).
+ */
+function focusBackAfterKeys(event: Event, own?: (event: Event) => void) {
+  own?.(event);
+  returnFocusAfterKeys(event);
+}
 
 const rowClass =
   "flex cursor-pointer items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-45";
@@ -98,6 +108,14 @@ function menuRows(items: Array<MenuItem | null>, parts: MenuParts): ReactNode[] 
         key={item.label}
         disabled={item.disabled}
         onSelect={item.onSelect}
+        // A closing menu leaves the focus alone: when the item opened a sheet or a dialog, the
+        // layer coming up under the pointer made Radix focus the fading menu again, and the
+        // layer's focus trap took the focus back as keyboard focus (rings on every tab after a
+        // plain click; POLISH6).
+        onPointerLeave={(event) => {
+          const menu = event.currentTarget.closest("[role=menu]");
+          if (menu?.getAttribute("data-state") === "closed") event.preventDefault();
+        }}
         role={
           item.checked === undefined
             ? "menuitem"
@@ -144,7 +162,13 @@ export function Menu({
     <DropdownMenu.Root>
       <DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
       <DropdownMenu.Portal>
-        <DropdownMenu.Content align={align} side={side} sideOffset={6} className={contentClass}>
+        <DropdownMenu.Content
+          align={align}
+          side={side}
+          sideOffset={6}
+          className={contentClass}
+          onCloseAutoFocus={(event) => focusBackAfterKeys(event)}
+        >
           {menuRows(items, DROPDOWN)}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
@@ -188,7 +212,7 @@ export function ContextMenu({
         <RadixContextMenu.Content
           collisionPadding={8}
           className={contentClass}
-          onCloseAutoFocus={onCloseAutoFocus}
+          onCloseAutoFocus={(event) => focusBackAfterKeys(event, onCloseAutoFocus)}
         >
           {menuRows(items, CONTEXT)}
         </RadixContextMenu.Content>

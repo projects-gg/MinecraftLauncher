@@ -3,7 +3,7 @@
 // at", and in a quieter corner what the player may do about them (the founder hands on the role or
 // removes them; anyone may block), each confirmed in place with one sentence.
 import { Crown, DotsThree, Prohibit, UserMinus } from "@phosphor-icons/react";
-import { Button, cn, easeOutExpo, IconButton } from "@pl/ui";
+import { Button, cn, easeOutExpo, IconButton, returnFocusAfterKeys } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu, Popover } from "radix-ui";
 import { type KeyboardEvent, useState } from "react";
@@ -171,6 +171,7 @@ function MemberCard({
                   {menu ? (
                     <DropdownMenu.Portal forceMount>
                       <DropdownMenu.Content
+                        onCloseAutoFocus={returnFocusAfterKeys}
                         forceMount
                         asChild
                         align="end"

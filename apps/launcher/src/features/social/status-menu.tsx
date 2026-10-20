@@ -2,7 +2,7 @@
 // (Çevrimiçi / Rahatsız etmeyin / Görünmez). The chosen status shows at once and settles when
 // the service confirms; a failure puts the old one back.
 import { CaretDown, Check } from "@phosphor-icons/react";
-import { easeOutExpo } from "@pl/ui";
+import { easeOutExpo, returnFocusAfterKeys } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { useState } from "react";
@@ -79,6 +79,7 @@ export function MeCard({ me }: { me: SocialMe }) {
             {open ? (
               <DropdownMenu.Portal forceMount>
                 <DropdownMenu.Content
+                  onCloseAutoFocus={returnFocusAfterKeys}
                   forceMount
                   asChild
                   align="start"

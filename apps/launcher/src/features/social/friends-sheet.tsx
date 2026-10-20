@@ -4,6 +4,7 @@
 import { CaretLeft, GearSix, UserPlus, UsersThree, X } from "@phosphor-icons/react";
 import {
   EntranceGate,
+  focusPanel,
   GatedMotion,
   IconButton,
   Skeleton,
@@ -155,7 +156,7 @@ export function FriendsSheet() {
                 aria-describedby={undefined}
                 onOpenAutoFocus={(event) => {
                   event.preventDefault();
-                  (event.currentTarget as HTMLElement).focus({ preventScroll: true });
+                  focusPanel(event.currentTarget as HTMLElement);
                 }}
                 onCloseAutoFocus={(event) => {
                   if (returnFocus?.isConnected) {

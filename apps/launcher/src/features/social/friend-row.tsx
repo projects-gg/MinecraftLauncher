@@ -21,6 +21,7 @@ import {
   easeOutExpo,
   IconButton,
   type MenuItem,
+  returnFocusAfterKeys,
   Select,
   Tooltip,
 } from "@pl/ui";
@@ -313,6 +314,7 @@ function MoreMenu({ onPick }: { onPick: (action: "remove" | "block") => void }) 
         {open ? (
           <DropdownMenu.Portal forceMount>
             <DropdownMenu.Content
+              onCloseAutoFocus={returnFocusAfterKeys}
               forceMount
               asChild
               align="end"

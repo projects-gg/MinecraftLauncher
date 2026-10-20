@@ -13,7 +13,7 @@ import {
   Trash,
   X,
 } from "@phosphor-icons/react";
-import { cn, easeOutExpo, IconButton, Kbd } from "@pl/ui";
+import { cn, easeOutExpo, IconButton, Kbd, returnFocusAfterKeys } from "@pl/ui";
 import { AnimatePresence, type MotionValue, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import {
@@ -241,6 +241,7 @@ export function CategoryHeader({
             {menu === "grip" ? (
               <DropdownMenu.Portal forceMount>
                 <DropdownMenu.Content
+                  onCloseAutoFocus={returnFocusAfterKeys}
                   forceMount
                   asChild
                   side="bottom"
@@ -303,6 +304,7 @@ export function CategoryHeader({
             {menu === "options" ? (
               <DropdownMenu.Portal forceMount>
                 <DropdownMenu.Content
+                  onCloseAutoFocus={returnFocusAfterKeys}
                   forceMount
                   asChild
                   align="end"

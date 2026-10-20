@@ -16,9 +16,11 @@ import {
   EntranceGate,
   easeOutExpo,
   exitOf,
+  focusPanel,
   GatedMotion,
   IconButton,
   Kbd,
+  returnFocusAfterKeys,
   Skeleton,
   scrimMotion,
   scrollBehavior,
@@ -161,6 +163,7 @@ function DragHandle({
         {menuOpen ? (
           <DropdownMenu.Portal forceMount>
             <DropdownMenu.Content
+              onCloseAutoFocus={returnFocusAfterKeys}
               forceMount
               asChild
               side="bottom"
@@ -692,7 +695,7 @@ export function AccountCenterSheet() {
                       : sheet;
                   if (!target) return;
                   event.preventDefault();
-                  target.focus({ preventScroll: true });
+                  focusPanel(target);
                   if (add) {
                     setTimeout(
                       () => target.scrollIntoView({ block: "center", behavior: scrollBehavior() }),

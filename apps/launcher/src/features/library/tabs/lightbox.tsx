@@ -11,6 +11,7 @@ import {
   Button,
   dialogMotion,
   EntranceGate,
+  focusPanel,
   GatedMotion,
   IconButton,
   scrimMotion,
@@ -154,7 +155,7 @@ export function Lightbox({
                 // The viewer takes the focus, not the first header button (its tooltip would open).
                 onOpenAutoFocus={(event) => {
                   event.preventDefault();
-                  (event.currentTarget as HTMLElement).focus({ preventScroll: true });
+                  focusPanel(event.currentTarget as HTMLElement);
                 }}
               >
                 <GatedMotion.div

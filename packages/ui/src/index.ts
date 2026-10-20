@@ -55,6 +55,12 @@ export {
   prewarmImages,
   useEntranceReady,
 } from "./entrance";
+export {
+  focusPanel,
+  focusTabQuietly,
+  lastInputWasPointer,
+  returnFocusAfterKeys,
+} from "./input-modality";
 export { cn } from "./lib/cn";
 export * from "./motion";
 export { guardNativeContextMenu, keepsNativeMenu, type MenuDocument } from "./native-menu";

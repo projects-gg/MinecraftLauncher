@@ -19,6 +19,8 @@ import {
   Dialog as ConfirmDialog,
   cn,
   EntranceGate,
+  focusPanel,
+  focusTabQuietly,
   GatedMotion,
   IconButton,
   Skeleton,
@@ -365,6 +367,7 @@ function Editor({
               <Tabs.Trigger
                 key={id}
                 value={id}
+                onMouseDown={focusTabQuietly}
                 className={cn(
                   "flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-left text-[13px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:outline-none",
                   on
@@ -524,7 +527,7 @@ export function AfkSettingsSheet({
                 // The panel takes the focus, not the close button (its tooltip would pop open).
                 onOpenAutoFocus={(event) => {
                   event.preventDefault();
-                  (event.currentTarget as HTMLElement).focus({ preventScroll: true });
+                  focusPanel(event.currentTarget as HTMLElement);
                 }}
                 // A form saved as a whole: a stray click beside the panel never closes it (Esc
                 // and the close button still do, asking first when something changed).

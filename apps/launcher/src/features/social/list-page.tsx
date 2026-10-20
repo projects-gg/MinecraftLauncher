@@ -16,7 +16,16 @@ import {
   WifiSlash,
   X,
 } from "@phosphor-icons/react";
-import { Button, easeOutExpo, IconButton, Progress, SearchInput, Skeleton, toast } from "@pl/ui";
+import {
+  Button,
+  easeOutExpo,
+  IconButton,
+  Progress,
+  returnFocusAfterKeys,
+  SearchInput,
+  Skeleton,
+  toast,
+} from "@pl/ui";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { DropdownMenu } from "radix-ui";
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
@@ -202,6 +211,7 @@ function RequestRow({ request }: { request: FriendRequest }) {
           {open ? (
             <DropdownMenu.Portal forceMount>
               <DropdownMenu.Content
+                onCloseAutoFocus={returnFocusAfterKeys}
                 forceMount
                 asChild
                 align="end"

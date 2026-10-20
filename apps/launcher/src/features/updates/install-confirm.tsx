@@ -1,4 +1,4 @@
-import { Button } from "@pl/ui";
+import { Button, focusPanel } from "@pl/ui";
 import { Popover } from "radix-ui";
 import { type ReactNode, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -50,7 +50,7 @@ export function InstallConfirm({ from, children }: { from: AskFrom; children: Re
           // The panel takes the focus, not "Güncelle": Enter must not stop the AFK accounts.
           onOpenAutoFocus={(event) => {
             event.preventDefault();
-            panel.current?.focus({ preventScroll: true });
+            if (panel.current) focusPanel(panel.current);
           }}
           onInteractOutside={onInteractOutside}
           className="glass-strong pop-motion z-50 w-[280px] rounded-[var(--radius-panel)] p-3.5 shadow-[0_24px_60px_rgb(34_6_6/0.55)] outline-none"

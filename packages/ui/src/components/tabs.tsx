@@ -1,6 +1,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { Tabs as RadixTabs } from "radix-ui";
 import { type ReactNode, useEffect, useId, useRef, type WheelEvent } from "react";
+import { focusTabQuietly } from "../input-modality";
 import { cn } from "../lib/cn";
 import { enter, leave } from "../motion";
 
@@ -71,6 +72,7 @@ export function Tabs<T extends string>({
           <RadixTabs.Trigger
             key={item.value}
             value={item.value}
+            onMouseDown={focusTabQuietly}
             className="group relative flex h-[34px] shrink-0 cursor-pointer items-center gap-1.5 px-2.5 text-[13px] font-medium whitespace-nowrap text-ash-300 transition-colors duration-150 hover:text-bone-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-300 focus-visible:ring-inset data-[state=active]:text-bone-50"
           >
             {item.label}
