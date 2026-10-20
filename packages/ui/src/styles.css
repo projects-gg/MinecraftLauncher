@@ -301,6 +301,22 @@
   );
 }
 
+/* Each cut of `chamfer` alone: the two clipping layers of `Segmented`'s gliding plate (glide.ts),
+   one holding its left edge, one its right, so the plate takes any width without stretching. */
+@utility chamfer-start {
+  clip-path: polygon(var(--cut, 8px) 0, 100% 0, 100% 100%, 0 100%, 0 var(--cut, 8px));
+}
+
+@utility chamfer-end {
+  clip-path: polygon(
+    0 0,
+    100% 0,
+    100% calc(100% - var(--cut, 8px)),
+    calc(100% - var(--cut, 8px)) 100%,
+    0 100%
+  );
+}
+
 /* Translucent obsidian over the art. Falls back to solid in Performance mode.
    Write only `backdrop-filter`: the build adds the -webkit- prefix where a target needs it. */
 @utility glass {

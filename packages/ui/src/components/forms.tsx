@@ -1,7 +1,7 @@
 import { CaretDown, Check, MagnifyingGlass, X } from "@phosphor-icons/react";
-import { MotionConfig, motion } from "motion/react";
 import { Popover, Select as RadixSelect, Slider as RadixSlider, ToggleGroup } from "radix-ui";
 import {
+  type CSSProperties,
   createContext,
   forwardRef,
   type InputHTMLAttributes,
@@ -10,10 +10,12 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { type Glide, glidePlate, PLATE_CUT } from "../glide";
 import { cn } from "../lib/cn";
 import { matchesQuery } from "../search";
 import { Chip } from "./bits";
@@ -504,9 +506,6 @@ export function Select<T extends string>({
   );
 }
 
-/** The plate's spring (sliding markers, docs/design.md §5). */
-const PLATE_SPRING = { type: "spring", stiffness: 480, damping: 38 } as const;
-
 /**
  * About when the plate has arrived after a pick (within a few pixels on its spring), for work
  * that should wait for it: the language picker's window cross-fade (a view transition) freezes
@@ -515,6 +514,33 @@ const PLATE_SPRING = { type: "spring", stiffness: 480, damping: 38 } as const;
  */
 export const SEGMENTED_GLIDE_MS = 170;
 
+/** One choice of a `Segmented`. */
+interface SegmentedOption<T extends string> {
+  value: T;
+  label: string;
+  icon?: ReactNode;
+  hint?: string;
+  lang?: string;
+  hintLang?: string;
+}
+
+/** The option's cut corners, shared by its plate and its focus ring (`chamfer`). */
+const optionCut = { "--cut": `${PLATE_CUT}px` } as CSSProperties;
+
+/**
+ * An option's gold plate, shown under the chosen one at rest. While the plate glides
+ * (`data-gliding` on the control) the window over the row takes its place (glide.ts).
+ */
+function OptionPlate({ on }: { on: boolean }) {
+  return (
+    <span
+      aria-hidden
+      data-on={on ? "" : undefined}
+      className="chamfer pointer-events-none absolute inset-0 -z-10 hidden bg-gold-500 data-[on]:block group-data-[gliding]/control:invisible"
+    />
+  );
+}
+
 /**
  * Mutually exclusive options shown inline (loader kind, view mode, release channel). An option's
  * `hint` follows its label in a quieter weight ("Otomatik (Türkçe)"); `lang` and `hintLang` name
@@ -522,6 +548,12 @@ export const SEGMENTED_GLIDE_MS = 170;
  * `onIntent` runs when the pointer or the focus reaches the control (to load what a pick needs
  * before the click). `disabled` keeps the choice on screen and dims it (150 ms, like the other
  * controls); say why next to it.
+ *
+ * A pick glides the gold plate along the row to the chosen option (glide.ts): measured inside the
+ * control, so a dialog that changes size or moves with the choice never carries the plate along,
+ * and a pick during a glide starts from where the plate is. Labels are dark exactly where the plate
+ * is over them. It glides in Performance mode too (it answers the player's own click and runs on
+ * the compositor); under reduced motion the plate is simply there and the labels fade.
  */
 export function Segmented<T extends string>({
   value,
@@ -535,14 +567,7 @@ export function Segmented<T extends string>({
 }: {
   value: T;
   onValueChange: (value: T) => void;
-  options: Array<{
-    value: T;
-    label: string;
-    icon?: ReactNode;
-    hint?: string;
-    lang?: string;
-    hintLang?: string;
-  }>;
+  options: Array<SegmentedOption<T>>;
   label: string;
   className?: string;
   onIntent?: () => void;
@@ -550,10 +575,21 @@ export function Segmented<T extends string>({
   /** Id of a line that describes the control (what the choice does, or why it waits). */
   describedBy?: string;
 }) {
-  // The gold plate slides to the chosen option (shared layout id, unique per control).
-  const layoutId = useId();
+  const control = useRef<HTMLDivElement>(null);
+  // The value whose option shows the plate, and the glide under way.
+  const shown = useRef(value);
+  const glide = useRef<Glide | null>(null);
+  useLayoutEffect(() => {
+    const from = shown.current;
+    if (from === value) return;
+    shown.current = value;
+    // Before the first paint of the pick: the new option's plate starts where the old one is.
+    const element = control.current;
+    glide.current = element ? glidePlate(element, from, value, glide.current) : null;
+  }, [value]);
   return (
     <ToggleGroup.Root
+      ref={control}
       type="single"
       value={value}
       onValueChange={(v) => v && onValueChange(v as T)}
@@ -563,48 +599,102 @@ export function Segmented<T extends string>({
       aria-describedby={describedBy}
       disabled={disabled}
       className={cn(
-        "isolate inline-flex rounded-md border border-white/10 bg-obsidian-850/80 p-[3px] transition-opacity duration-150",
+        "group/control relative isolate inline-flex rounded-md border border-white/10 bg-obsidian-850/80 p-[3px] transition-opacity duration-150",
         disabled && "pointer-events-none opacity-45",
         className,
       )}
     >
-      <MotionConfig reducedMotion="user">
-        {/* One stacking context for the control: the moving plate stays under every label.
-            The chosen label darkens a beat later, as the plate arrives under it. */}
-        {options.map((o) => (
-          <ToggleGroup.Item
-            key={o.value}
-            value={o.value}
-            className={cn(
-              "group relative flex h-[26px] cursor-pointer items-center px-3 text-[13px] font-medium text-ash-300 transition-colors duration-150 [--cut:5px]",
-              "hover:text-bone-50 data-[state=on]:text-gold-ink data-[state=on]:delay-[70ms] focus-visible:outline-none",
-            )}
-          >
-            {value === o.value ? (
-              <motion.span
-                aria-hidden
-                layoutId={layoutId}
-                className="chamfer absolute inset-0 -z-10 bg-gold-500"
-                transition={PLATE_SPRING}
-              />
-            ) : null}
-            <span
-              aria-hidden
-              className="chamfer pointer-events-none absolute inset-0 -z-10 opacity-0 shadow-[inset_0_0_0_2px_var(--color-gold-300)] group-focus-visible:opacity-100"
-            />
-            <span className="flex items-center gap-1.5 whitespace-nowrap">
-              {o.icon}
-              <span lang={o.lang}>{o.label}</span>
-              {o.hint ? (
-                <span lang={o.hintLang} className="-ml-0.5 font-normal opacity-75">
-                  {o.hint}
+      {/* One stacking context for the control: the plate at rest stays under every label. */}
+      {options.map((o) => (
+        <ToggleGroup.Item
+          key={o.value}
+          value={o.value}
+          data-option={o.value}
+          style={optionCut}
+          className={cn(
+            "group/option relative flex h-[26px] cursor-pointer items-center px-3 text-[13px] font-medium text-ash-300 transition-colors duration-150",
+            "hover:text-bone-50 focus-visible:outline-none",
+          )}
+        >
+          <OptionPlate on={value === o.value} />
+          <span
+            aria-hidden
+            className="chamfer pointer-events-none absolute inset-0 -z-10 opacity-0 shadow-[inset_0_0_0_2px_var(--color-gold-300)] group-focus-visible/option:opacity-100"
+          />
+          {/* The label twice in one cell: in its own colour and in the plate's ink. */}
+          <span className="grid">
+            <OptionLabel option={o} />
+            <OptionLabel option={o} ink />
+          </span>
+        </ToggleGroup.Item>
+      ))}
+      {/* The plate while it glides (glide.ts): a window over the row, gold, with every label in
+          ink where the labels are. Two clipping layers hold its two edges and cut corners. */}
+      <span
+        aria-hidden
+        data-glide=""
+        style={optionCut}
+        className="pointer-events-none invisible absolute inset-0 z-10 group-data-[gliding]/control:visible"
+      >
+        <span data-glide-right="" className="chamfer-end absolute">
+          <span data-glide-left="" className="chamfer-start absolute h-full bg-gold-500">
+            <span data-glide-ink="" className="absolute text-[13px] font-medium text-gold-ink">
+              {options.map((o) => (
+                <span
+                  key={o.value}
+                  data-glide-label=""
+                  className="absolute flex items-center gap-1.5 whitespace-nowrap"
+                >
+                  <LabelContent option={o} />
                 </span>
-              ) : null}
+              ))}
             </span>
-          </ToggleGroup.Item>
-        ))}
-      </MotionConfig>
+          </span>
+        </span>
+      </span>
     </ToggleGroup.Root>
+  );
+}
+
+/**
+ * One copy of an option's label. The chosen option shows the ink copy at rest; while the plate
+ * glides, every option shows its own colour and the window carries the ink (glide.ts). Under
+ * reduced motion the two copies fade (150 ms). The ink copy is hidden from screen readers.
+ */
+function OptionLabel<T extends string>({
+  option,
+  ink = false,
+}: {
+  option: SegmentedOption<T>;
+  ink?: boolean;
+}) {
+  return (
+    <span
+      data-label={ink ? "ink" : "base"}
+      aria-hidden={ink || undefined}
+      className={cn(
+        "flex items-center gap-1.5 whitespace-nowrap [grid-area:1/1] motion-reduce:transition-opacity motion-reduce:duration-150",
+        ink
+          ? "text-gold-ink opacity-0 group-data-[state=on]/option:opacity-100 group-data-[gliding]/control:opacity-0!"
+          : "group-data-[state=on]/option:opacity-0 group-data-[gliding]/control:opacity-100!",
+      )}
+    >
+      <LabelContent option={option} />
+    </span>
+  );
+}
+
+function LabelContent<T extends string>({ option }: { option: SegmentedOption<T> }) {
+  return (
+    <>
+      {option.icon}
+      <span lang={option.lang}>{option.label}</span>
+      {option.hint ? (
+        <span lang={option.hintLang} className="-ml-0.5 font-normal opacity-75">
+          {option.hint}
+        </span>
+      ) : null}
+    </>
   );
 }
 

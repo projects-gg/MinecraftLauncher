@@ -56,6 +56,16 @@ export {
   useEntranceReady,
 } from "./entrance";
 export {
+  glideFrames,
+  type OptionBox,
+  PLATE_SPRING,
+  type PlateDrift,
+  plateAt,
+  rebase,
+  settleTime,
+  springAt,
+} from "./glide";
+export {
   focusPanel,
   focusTabQuietly,
   lastInputWasPointer,
