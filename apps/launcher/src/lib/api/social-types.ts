@@ -276,6 +276,11 @@ export interface SocialApi {
   setAvatar(avatar: string): Promise<void>;
   invite(id: string): Promise<"delivered" | "queued">;
   dismissInvite(id: string): Promise<void>;
+  /**
+   * "Discord'dan mesaj at": the person's profile in the Discord app when it is installed. False
+   * when it is not (or would not open): the caller opens their `discordUrl` in the browser.
+   */
+  openInDiscord(id: string): Promise<boolean>;
   sessions(): Promise<SocialSession[]>;
   revokeSession(id: string): Promise<void>;
   revokeOtherSessions(): Promise<number>;

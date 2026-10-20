@@ -395,6 +395,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_set_avatar,
             commands::social::social_invite,
             commands::social::social_dismiss_invite,
+            commands::social::social_open_in_discord,
             commands::social::social_sessions,
             commands::social::social_revoke_session,
             commands::social::social_revoke_other_sessions,

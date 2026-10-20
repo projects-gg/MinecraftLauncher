@@ -286,6 +286,7 @@ export const tauriSocial: SocialApi = {
   async dismissInvite(id) {
     await commands.socialDismissInvite(id);
   },
+  openInDiscord: (id) => commands.socialOpenInDiscord(id),
   sessions: () => ok(commands.socialSessions()),
   async revokeSession(id) {
     await ok(commands.socialRevokeSession(id));

@@ -37,6 +37,7 @@ import { dateTimeFormat } from "@/lib/format";
 import { useLaunch } from "@/stores/launch";
 import { attempt, inviteCoolingDown, inviteFriend } from "./actions";
 import { DiscordButton } from "./discord-button";
+import { openInDiscord } from "./discord-link";
 import { REST } from "./groups";
 import { gameBusy, joinProjects } from "./join";
 import { isJoinable, presenceLine } from "./model";
@@ -195,7 +196,7 @@ function FriendCard({
         >
           {coolingDown ? t("social.actions.invited") : t("social.actions.invite")}
         </Button>
-        <DiscordButton className="w-full" onClick={() => void api.openUrl(friend.discordUrl)}>
+        <DiscordButton className="w-full" onClick={() => void openInDiscord(friend)}>
           {t("social.actions.message")}
         </DiscordButton>
         {team && team.state !== "member" ? (
@@ -415,7 +416,7 @@ export function FriendRow({
     {
       label: t("social.actions.message"),
       icon: <DiscordLogo size={16} />,
-      onSelect: () => void api.openUrl(friend.discordUrl),
+      onSelect: () => void openInDiscord(friend),
     },
     {
       label: favorite ? t("social.actions.unfavorite") : t("social.actions.favorite"),

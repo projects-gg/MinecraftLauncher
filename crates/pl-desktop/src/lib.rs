@@ -11,8 +11,11 @@
 //!   says "Açılıyor" until it is and "Oyunda" from then on.
 //! - [`identity`]: the identity a process runs under (debug builds never share the installed
 //!   launcher's identifier, keychain service or data folder).
+//! - [`discord`]: whether the Discord app is installed, and the one link handed to it (a
+//!   friend's profile, `discord://-/users/<id>`), for "Discord'dan mesaj at".
 
 pub mod close;
+pub mod discord;
 mod error;
 pub mod game_window;
 pub mod ico;

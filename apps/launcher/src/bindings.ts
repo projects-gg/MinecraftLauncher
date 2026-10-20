@@ -805,6 +805,13 @@ export const commands = {
 	/**  "Birlikte oyna". */
 	socialInvite: (id: string) => typedError<InviteResult, CmdError>(__TAURI_INVOKE("social_invite", { id })),
 	socialDismissInvite: (id: string) => __TAURI_INVOKE<void>("social_dismiss_invite", { id }),
+	/**
+	 *  "Discord'dan mesaj at": the person's profile in the Discord app when it is installed (Message
+	 *  is one click away there). Only `discord://-/users/<id>` with a numeric Discord user id is ever
+	 *  opened; the generic opener stays `https://`-only. False when there is no app (or it would not
+	 *  open): the UI opens the web profile instead.
+	 */
+	socialOpenInDiscord: (id: string) => __TAURI_INVOKE<boolean>("social_open_in_discord", { id }),
 	socialSessions: () => typedError<SessionInfo[], CmdError>(__TAURI_INVOKE("social_sessions")),
 	socialRevokeSession: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_revoke_session", { id })),
 	socialRevokeOtherSessions: () => typedError<number, CmdError>(__TAURI_INVOKE("social_revoke_other_sessions")),

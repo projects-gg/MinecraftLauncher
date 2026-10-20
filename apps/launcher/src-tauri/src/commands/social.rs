@@ -291,6 +291,24 @@ pub fn social_dismiss_invite(state: State<'_, AppState>, id: String) {
     state.social.dismiss_invite(&id);
 }
 
+/// "Discord'dan mesaj at": the person's profile in the Discord app when it is installed (Message
+/// is one click away there). Only `discord://-/users/<id>` with a numeric Discord user id is ever
+/// opened; the generic opener stays `https://`-only. False when there is no app (or it would not
+/// open): the UI opens the web profile instead.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_open_in_discord(id: String) -> bool {
+    tauri::async_runtime::spawn_blocking(move || {
+        pl_desktop::discord::open_profile_in_app(&id, |link| {
+            tauri_plugin_opener::open_url(link, None::<&str>)
+                .inspect_err(|error| tracing::warn!(%error, "could not open the Discord app"))
+                .is_ok()
+        })
+    })
+    .await
+    .unwrap_or(false)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn social_sessions(state: State<'_, AppState>) -> CmdResult<Vec<SessionInfo>> {

@@ -669,6 +669,11 @@ export const mockSocial: SocialApi = {
   async dismissInvite(id) {
     commit((v) => ({ ...v, invites: v.invites.filter((i) => i.id !== id) }));
   },
+  async openInDiscord() {
+    // A browser has no Discord app to hand the profile to: the web profile opens instead.
+    await delay(60);
+    return false;
+  },
   async sessions(): Promise<SocialSession[]> {
     await delay(500);
     return [

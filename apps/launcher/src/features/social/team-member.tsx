@@ -14,6 +14,7 @@ import { api } from "@/lib/api";
 import type { TeamMember } from "@/lib/api/social-types";
 import { attempt } from "./actions";
 import { DiscordButton } from "./discord-button";
+import { openInDiscord } from "./discord-link";
 import { JoinButton } from "./friend-row";
 import { isJoinable, presenceLine } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
@@ -124,7 +125,7 @@ function MemberCard({
         {joinable && !member.blocked ? (
           <JoinButton size="md" variant="primary" className="w-full" />
         ) : null}
-        <DiscordButton className="w-full" onClick={() => void api.openUrl(member.discordUrl)}>
+        <DiscordButton className="w-full" onClick={() => void openInDiscord(member)}>
           {t("social.actions.message")}
         </DiscordButton>
       </div>
