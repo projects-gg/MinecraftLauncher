@@ -120,6 +120,16 @@ pub fn wake(app: &AppHandle, why: &'static str) {
     let _ = (app, why);
 }
 
+/// Wakes the page right now if it is suspended, and leaves an awake one alone (its rest stays
+/// on time). Main thread only, so what is sent to the page next reaches it awake: the close
+/// button of a window that rested minimized (`shell::close_requested`).
+pub fn wake_if_suspended(app: &AppHandle, why: &'static str) {
+    #[cfg(windows)]
+    platform::wake_now(app, why, true);
+    #[cfg(not(windows))]
+    let _ = (app, why);
+}
+
 fn check_soon(app: &AppHandle) {
     #[cfg(windows)]
     platform::check_soon(app);
@@ -453,30 +463,37 @@ mod platform {
 
     pub fn wake(app: &AppHandle, why: &'static str) {
         let main = app.clone();
-        let _ = app.run_on_main_thread(move || {
-            let page = with_rest(|rest| {
-                // A new absence for the timers (and for a suspension still on its way): the page
-                // has a while to do its work before it may rest again.
-                rest.epoch += 1;
-                let suspended = std::mem::take(&mut rest.suspended);
-                (rest.controller.clone(), rest.epoch, suspended, rest.away)
-            });
-            let Some((controller, epoch, suspended, away)) = page else {
-                return;
-            };
-            if suspended
-                && let Some(core) = unsafe { controller.CoreWebView2() }
-                    .ok()
-                    .and_then(|c| c.cast::<ICoreWebView2_3>().ok())
-                && let Err(error) = unsafe { core.Resume() }
-            {
-                tracing::debug!(%error, "webview did not resume");
+        let _ = app.run_on_main_thread(move || wake_now(&main, why, false));
+    }
+
+    /// Wakes the page (main thread). `only_if_suspended`: an awake page is left alone.
+    pub fn wake_now(app: &AppHandle, why: &'static str, only_if_suspended: bool) {
+        let page = with_rest(|rest| {
+            if only_if_suspended && !rest.suspended {
+                return None;
             }
-            tracing::debug!(why, suspended, "webview woken");
-            if away {
-                schedule(&main, epoch, CHECK_AGAIN);
-            }
-        });
+            // A new absence for the timers (and for a suspension still on its way): the page
+            // has a while to do its work before it may rest again.
+            rest.epoch += 1;
+            let suspended = std::mem::take(&mut rest.suspended);
+            Some((rest.controller.clone(), rest.epoch, suspended, rest.away))
+        })
+        .flatten();
+        let Some((controller, epoch, suspended, away)) = page else {
+            return;
+        };
+        if suspended
+            && let Some(core) = unsafe { controller.CoreWebView2() }
+                .ok()
+                .and_then(|c| c.cast::<ICoreWebView2_3>().ok())
+            && let Err(error) = unsafe { core.Resume() }
+        {
+            tracing::debug!(%error, "webview did not resume");
+        }
+        tracing::debug!(why, suspended, "webview woken");
+        if away {
+            schedule(app, epoch, CHECK_AGAIN);
+        }
     }
 
     pub fn check_soon(app: &AppHandle) {

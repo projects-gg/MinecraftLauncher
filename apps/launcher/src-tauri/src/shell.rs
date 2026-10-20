@@ -1,8 +1,11 @@
-//! Desktop integration: tray icon, `projects://` links and the hidden-start mode used by
-//! "start with the computer". Link parsing lives in `pl_desktop` (tested there).
+//! Desktop integration: tray icon, `projects://` links, the close button and the hidden-start
+//! mode used by "start with the computer". Link parsing and the close decision live in
+//! `pl_desktop` (tested there).
 
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
+use pl_desktop::close::{self, CloseAction, CloseChoice};
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::state::AppState;
@@ -120,8 +123,10 @@ pub fn parse_link(raw: &str) -> Option<DeepLink> {
 }
 
 /// Shows the main window and brings it to the front: the tray icon, a second launch, a
-/// `projects://` link, the launcher coming back after a game ([`window_bring_forward`]).
+/// `projects://` link, the launcher coming back after a game ([`window_bring_forward`]). The
+/// player is back, so a quit waiting for jobs is called off.
 pub fn focus_main_window(app: &AppHandle) {
+    QUIT_WAIT.store(0, Ordering::Relaxed);
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
@@ -237,7 +242,11 @@ pub fn app_quit(app: AppHandle) {
     quit(&app);
 }
 
-fn quit(app: &AppHandle) {
+/// Leaves for real (the tray's "Çıkış", the close button when nothing keeps the launcher):
+/// AFK sessions are stopped cleanly first. Exiting runs the plugins' last steps (the window's
+/// size and place are saved) and removes the tray icon; the single-instance lock goes with the
+/// process.
+pub(crate) fn quit(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let state = app.state::<AppState>();
@@ -247,6 +256,129 @@ fn quit(app: &AppHandle) {
         }
         app.exit(0);
     });
+}
+
+// --- the close button (TRAY1) -------------------------------------------------------------------
+
+/// The player's choice in Settings → Genel, told by the page at its start and on every change
+/// (`pl_desktop::close::CHOICE_EVENT`). Until then (or without a page) the default: quit unless
+/// something keeps the launcher.
+static CLOSE_TO_TRAY: AtomicBool = AtomicBool::new(false);
+
+/// The quit that waits for jobs to end ([`CloseAction::HideUntilDone`]), by number; 0: none.
+static QUIT_WAIT: AtomicU64 = AtomicU64::new(0);
+static NEXT_QUIT_WAIT: AtomicU64 = AtomicU64::new(1);
+
+/// Hears the page's close choice (call once, in setup, before the page runs).
+pub fn setup_close(app: &tauri::App) {
+    use tauri::Listener;
+
+    app.listen_any(close::CHOICE_EVENT, |event| {
+        if let Some(choice) = close::parse_choice(event.payload()) {
+            CLOSE_TO_TRAY.store(choice == CloseChoice::Tray, Ordering::Relaxed);
+        }
+    });
+}
+
+/// Jobs the player started that must not stop halfway: content jobs (Modrinth installs and
+/// updates, modpacks, version switches, repairs, imports, ready-made sets, a copy of an instance),
+/// world backups and restores, and data jobs (a data folder move, cleanups). Not here: background
+/// work that simply resumes at the next start (the chosen instance's preparation, Java runtime
+/// updates) and a launcher update download, which is kept in memory: finishing it before quitting
+/// would gain nothing.
+fn player_jobs_running(app: &AppHandle) -> bool {
+    crate::commands::modrinth::jobs_running(app)
+        || crate::commands::library::jobs_running(app)
+        || crate::commands::data::job_running(app)
+}
+
+/// What keeps the launcher busy now, for the close button and the quit that waits.
+fn close_activity(app: &AppHandle) -> close::Activity {
+    let Some(state) = app.try_state::<AppState>() else {
+        return close::Activity::default();
+    };
+    close::Activity {
+        game: state.running.lock().is_some() || state.launch_cancel.lock().is_some(),
+        afk: state.afk.any_active(),
+        jobs: player_jobs_running(app),
+    }
+}
+
+/// The main window's close button, Alt+F4 and the taskbar's "Close window" (lib.rs keeps the
+/// window open and sends `CloseRequested` here, on the main thread). `pl_desktop::close` decides:
+/// quit, stay in the tray, or go to the tray and quit once the player's jobs are done. The page
+/// has no part in the decision, so a suspended page (`webview_rest`) never holds a close up.
+pub fn close_requested(app: &AppHandle) {
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let choice = if CLOSE_TO_TRAY.load(Ordering::Relaxed) {
+        CloseChoice::Tray
+    } else {
+        CloseChoice::Quit
+    };
+    let activity = close_activity(app);
+    let action = close::decide(close::Platform::current(), choice, activity);
+    tracing::info!(?action, ?choice, ?activity, "window closed");
+    if action == CloseAction::Quit {
+        // Out of sight at once; the process ends right after.
+        let _ = window.hide();
+        quit(app);
+        return;
+    }
+    // The page of a window that rested minimized may be suspended: it wakes for the notice.
+    if window.is_minimized().unwrap_or(false) {
+        crate::webview_rest::wake_if_suspended(app, "the window was closed");
+    }
+    let _ = window.hide();
+    if let Some(closed) = action.closed() {
+        let _ = app.emit(close::CLOSED_EVENT, closed);
+    }
+    if action == CloseAction::HideUntilDone {
+        quit_when_done(app);
+    }
+}
+
+/// Quits once the player's jobs are done, unless the player comes back first (the window shows
+/// again: [`focus_main_window`] calls it off at once) or a game or an AFK account starts. Looks
+/// every [`close::CHECK_EVERY`], and only while it waits.
+fn quit_when_done(app: &AppHandle) {
+    let number = NEXT_QUIT_WAIT.fetch_add(1, Ordering::Relaxed);
+    QUIT_WAIT.store(number, Ordering::Relaxed);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mut wait = close::QuitWhenDone::default();
+        loop {
+            tokio::time::sleep(close::CHECK_EVERY).await;
+            if QUIT_WAIT.load(Ordering::Relaxed) != number {
+                return;
+            }
+            let shown = app
+                .get_webview_window("main")
+                .is_some_and(|window| window.is_visible().unwrap_or(false));
+            let step = wait.check(std::time::Instant::now(), close_activity(&app), shown);
+            if step == close::Waiting::Wait {
+                continue;
+            }
+            // Only the wait still current acts (the player may have come back meanwhile).
+            let current = QUIT_WAIT
+                .compare_exchange(number, 0, Ordering::Relaxed, Ordering::Relaxed)
+                .is_ok();
+            if current && step == close::Waiting::Quit {
+                tracing::info!("the jobs are done: quitting as the closed window asked");
+                quit(&app);
+            } else if current {
+                tracing::info!("the launcher stays: the window came back or a game started");
+            }
+            return;
+        }
+    });
+}
+
+/// The window was closed while a job ran, and the launcher quits once it is done
+/// (`commands::data`: a finished data folder move then quits instead of restarting).
+pub fn quit_pending() -> bool {
+    QUIT_WAIT.load(Ordering::Relaxed) != 0
 }
 
 /// The tray icon's id and the first line of its tooltip.

@@ -48,7 +48,18 @@ pub fn run() {
                     .build(),
             )
             .plugin(tauri_plugin_updater::Builder::new().build())
-            .plugin(shell::autostart_plugin());
+            .plugin(shell::autostart_plugin())
+            // The close button, Alt+F4 and the taskbar's "Close window" never close the main
+            // window itself: the shell quits, goes to the tray, or goes to the tray and quits once
+            // the player's jobs are done (shell::close_requested).
+            .on_window_event(|window, event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event
+                    && window.label() == "main"
+                {
+                    api.prevent_close();
+                    shell::close_requested(window.app_handle());
+                }
+            });
     }
 
     builder
@@ -82,6 +93,8 @@ pub fn run() {
             // A data folder move finishes once this start succeeded: the old folder goes.
             commands::data::finish_pending_move(app.handle());
             shell::setup_deep_links(app);
+            // The page's choice for the close button (Settings → Genel).
+            shell::setup_close(app);
             #[cfg(desktop)]
             shell::setup_tray(app)?;
             // First start: a window size that suits the screen; later starts: the player's own

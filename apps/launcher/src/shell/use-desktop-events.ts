@@ -1,21 +1,17 @@
 import { toast } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { commands } from "@/bindings";
 import { useAfkWatch } from "@/features/afk/use-afk-watch";
 import { useSocialUi } from "@/features/social/store";
 import { api, type DeepLink } from "@/lib/api";
-import { notify } from "@/lib/attention";
 import { readStartOnBoot } from "@/lib/autostart";
 import i18n from "@/lib/i18n";
 import { onAppLink } from "@/lib/links";
-import { isTauri } from "@/lib/platform";
-import { refreshWindowAway } from "@/lib/window-away";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
+import { useCloseButton } from "./close-button";
 
 /** A desktop shortcut (`projects://play/<instance>`) starts that instance like OYNA would. */
 async function playInstance(id: string) {
@@ -44,8 +40,8 @@ async function playPreferred() {
 
 /**
  * Desktop glue: content published in the background, the official pack appearing, tray actions,
- * `projects://` links, the close button (AFK accounts keep running in the tray) and the notice
- * when an AFK account stops for good.
+ * `projects://` links, the close button (shell/close-button.ts) and the notice when an AFK
+ * account stops for good.
  */
 export function useDesktopEvents() {
   const { t } = useTranslation();
@@ -53,6 +49,7 @@ export function useDesktopEvents() {
   const navigate = useNavigate();
   const onboarded = usePrefs((s) => s.onboarded);
   useAfkWatch();
+  useCloseButton();
 
   useEffect(
     () =>
@@ -157,32 +154,4 @@ export function useDesktopEvents() {
       if (on !== null) usePrefs.getState().set("startOnBoot", on);
     });
   }, []);
-
-  useEffect(() => {
-    if (!isTauri()) return;
-    const win = getCurrentWindow();
-    const unlisten = win.onCloseRequested(async (event) => {
-      event.preventDefault();
-      const afkActive = await commands.afkAnyActive();
-      // A running game keeps its play time and crash help only while we keep watching it.
-      const gameBusy = ["working", "launching", "running"].includes(
-        useLaunch.getState().phase.kind,
-      );
-      const prefs = usePrefs.getState();
-      if (prefs.closeBehavior !== "tray" && !afkActive && !gameBusy) {
-        await api.quitApp();
-        return;
-      }
-      await win.hide();
-      // Hiding sends no window event: ambient motion stops on this answer.
-      void refreshWindowAway();
-      if (!prefs.trayHintShown) {
-        prefs.set("trayHintShown", true);
-        await notify(t("tray.hintTitle"), afkActive ? t("tray.hintAfk") : t("tray.hint"));
-      }
-    });
-    return () => {
-      void unlisten.then((fn) => fn());
-    };
-  }, [t]);
 }

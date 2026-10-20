@@ -747,7 +747,14 @@ pub async fn data_move_start(
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(Duration::from_millis(1500)).await;
-        handle.request_restart();
+        if crate::shell::quit_pending() {
+            // The player closed the window during the copy: the launcher quits as it said it
+            // would once the move was done, and its next start runs from the new place.
+            tracing::info!("the window was closed during the move: quitting instead of restarting");
+            crate::shell::quit(&handle);
+        } else {
+            handle.request_restart();
+        }
     });
     Ok(())
 }

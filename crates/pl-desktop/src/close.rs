@@ -410,4 +410,33 @@ mod tests {
             Waiting::Wait
         );
     }
+
+    /// The shell owns the close (`apps/launcher/src-tauri/src/lib.rs` → `on_window_event`): a page
+    /// that listened to close requests itself would make Tauri hold every close for it, and a
+    /// suspended page (`webview_rest`) would never answer.
+    #[test]
+    fn the_page_never_handles_close_requests() {
+        for (path, lines) in crate::test_support::launcher_sources("src", &["ts", "tsx"]) {
+            for (number, line) in lines.iter().enumerate() {
+                assert!(
+                    !line.contains("onCloseRequested") && !line.contains("tauri://close-requested"),
+                    "{path}:{}: the shell decides what closing does (shell.rs close_requested)",
+                    number + 1
+                );
+            }
+        }
+    }
+
+    /// The page and the shell use the same event names.
+    #[test]
+    fn the_page_speaks_the_shells_events() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../apps/launcher/src/shell/close-button.ts"
+        );
+        let page = std::fs::read_to_string(path).expect("close-button.ts");
+        for name in [CHOICE_EVENT, CLOSED_EVENT] {
+            assert!(page.contains(&format!("\"{name}\"")), "{name}");
+        }
+    }
 }
