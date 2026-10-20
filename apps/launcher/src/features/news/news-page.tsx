@@ -227,7 +227,9 @@ export function NewsPage() {
           options={options}
         />
       </header>
-      <div className={cn("-mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-6")}>
+      {/* Positioned: what a filter change takes away pops out of the flow here, clipped with
+          the list, even when the list is scrolled. */}
+      <div className={cn("relative -mx-2 min-h-0 flex-1 overflow-y-auto px-2 pb-6")}>
         {isPending ? (
           <>
             <Skeleton className="h-[clamp(200px,38vh,320px)] w-full rounded-[14px]" />
@@ -237,75 +239,90 @@ export function NewsPage() {
               ))}
             </div>
           </>
-        ) : featured || leadMinecraft ? (
-          <>
-            {/* A filter change cross-fades the big card in place, like the cards below it. */}
-            <div className="relative">
-              <AnimatePresence initial={false} mode="popLayout">
-                <motion.div
-                  key={featured?.id ?? leadMinecraft?.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1, transition: { duration: 0.2 } }}
-                  exit={{ opacity: 0, transition: { duration: 0.12 } }}
-                >
-                  {featured ? (
-                    <Featured face={featuredFace(featured, isNewsNew(featured, seen, now))} />
-                  ) : leadMinecraft ? (
-                    <MinecraftFeatured item={leadMinecraft} />
-                  ) : null}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-            <ul className="relative mt-4 grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3">
-              <AnimatePresence initial={false} mode="popLayout">
-                {rest.map((item) => (
-                  <Card key={item.id} face={cardFace(item, isNewsNew(item, seen, now))} />
-                ))}
-                {moreMinecraft.map((item) => (
-                  <MinecraftCard key={item.id} item={item} />
-                ))}
-              </AnimatePresence>
-            </ul>
-            <AnimatePresence initial={false}>
-              {sectionMinecraft.length ? (
-                <motion.section
-                  key="minecraft"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1, transition: { duration: 0.2 } }}
-                  exit={{ opacity: 0, transition: { duration: 0.12 } }}
-                  aria-labelledby="news-minecraft"
-                  className="mt-7"
-                >
-                  <h2
-                    id="news-minecraft"
-                    className="mb-2.5 flex items-center gap-2 px-1 font-display text-[15px] font-semibold text-ash-300"
-                  >
-                    <Cube size={15} aria-hidden />
-                    {t("minecraft.label")}
-                  </h2>
-                  <ul className="relative grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3">
-                    {sectionMinecraft.map((item) => (
+        ) : (
+          // A category with nothing in it cross-fades with the news like one category with
+          // another (it used to snap in and out; POLISH6).
+          <AnimatePresence initial={false} mode="popLayout">
+            {featured || leadMinecraft ? (
+              <motion.div key="news" {...LIST_FADE}>
+                {/* A filter change cross-fades the big card in place, like the cards below it. */}
+                <div className="relative">
+                  <AnimatePresence initial={false} mode="popLayout">
+                    <motion.div
+                      key={featured?.id ?? leadMinecraft?.id}
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1, transition: { duration: 0.2 } }}
+                      exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                    >
+                      {featured ? (
+                        <Featured face={featuredFace(featured, isNewsNew(featured, seen, now))} />
+                      ) : leadMinecraft ? (
+                        <MinecraftFeatured item={leadMinecraft} />
+                      ) : null}
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
+                <ul className="relative mt-4 grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3">
+                  <AnimatePresence initial={false} mode="popLayout">
+                    {rest.map((item) => (
+                      <Card key={item.id} face={cardFace(item, isNewsNew(item, seen, now))} />
+                    ))}
+                    {moreMinecraft.map((item) => (
                       <MinecraftCard key={item.id} item={item} />
                     ))}
-                  </ul>
-                </motion.section>
-              ) : null}
-            </AnimatePresence>
-          </>
-        ) : (
-          <EmptyState
-            title={active === "all" ? t("home.newsEmpty") : t("home.newsEmptyCategory")}
-            action={
-              active === "all" ? undefined : (
-                <Button variant="secondary" onClick={() => setFilter("all")}>
-                  {t("home.showAllNews")}
-                </Button>
-              )
-            }
-            className="pt-16"
-          />
+                  </AnimatePresence>
+                </ul>
+                <AnimatePresence initial={false}>
+                  {sectionMinecraft.length ? (
+                    <motion.section
+                      key="minecraft"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1, transition: { duration: 0.2 } }}
+                      exit={{ opacity: 0, transition: { duration: 0.12 } }}
+                      aria-labelledby="news-minecraft"
+                      className="mt-7"
+                    >
+                      <h2
+                        id="news-minecraft"
+                        className="mb-2.5 flex items-center gap-2 px-1 font-display text-[15px] font-semibold text-ash-300"
+                      >
+                        <Cube size={15} aria-hidden />
+                        {t("minecraft.label")}
+                      </h2>
+                      <ul className="relative grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-3">
+                        {sectionMinecraft.map((item) => (
+                          <MinecraftCard key={item.id} item={item} />
+                        ))}
+                      </ul>
+                    </motion.section>
+                  ) : null}
+                </AnimatePresence>
+              </motion.div>
+            ) : (
+              <motion.div key="empty" {...LIST_FADE}>
+                <EmptyState
+                  title={active === "all" ? t("home.newsEmpty") : t("home.newsEmptyCategory")}
+                  action={
+                    active === "all" ? undefined : (
+                      <Button variant="secondary" onClick={() => setFilter("all")}>
+                        {t("home.showAllNews")}
+                      </Button>
+                    )
+                  }
+                  className="pt-16"
+                />
+              </motion.div>
+            )}
+          </AnimatePresence>
         )}
       </div>
     </div>
   );
 }
+
+/** The news and the empty category trade places with the cards' own fade. */
+const LIST_FADE = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1, transition: { duration: 0.2 } },
+  exit: { opacity: 0, transition: { duration: 0.12 } },
+} as const;
