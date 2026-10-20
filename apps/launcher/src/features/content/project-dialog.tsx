@@ -316,6 +316,10 @@ export function ProjectDialog({
       description={hint?.author ? t("content.browse.by", { author: hint.author }) : undefined}
       closeLabel={t("common.close")}
       width={880}
+      // One height from the first frame: the panel used to open at the skeleton's height and
+      // jump twice as the page and its description arrived (453 → 381 → 563 px at 1024 × 640),
+      // and again on every tab change. Now only what is inside it changes; it scrolls (POLISH6).
+      className="h-[min(600px,88vh)]"
       footer={
         <>
           {project ? (
