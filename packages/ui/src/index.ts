@@ -11,6 +11,7 @@ export {
   Skeleton,
   SwapLabel,
 } from "./components/bits";
+export { type Brand, BrandMark } from "./components/brand-mark";
 export { Button, type ButtonProps, IconButton, type IconButtonProps } from "./components/button";
 export { Countdown, countdownCells, countdownTickMs } from "./components/countdown";
 export { Dialog } from "./components/dialog";

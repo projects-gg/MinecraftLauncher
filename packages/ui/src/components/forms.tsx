@@ -520,7 +520,8 @@ export const SEGMENTED_GLIDE_MS = 170;
  * `hint` follows its label in a quieter weight ("Otomatik (Türkçe)"); `lang` and `hintLang` name
  * the language of text in another language than the page's, so screen readers say it right.
  * `onIntent` runs when the pointer or the focus reaches the control (to load what a pick needs
- * before the click).
+ * before the click). `disabled` keeps the choice on screen and dims it (150 ms, like the other
+ * controls); say why next to it.
  */
 export function Segmented<T extends string>({
   value,
@@ -529,6 +530,8 @@ export function Segmented<T extends string>({
   label,
   className,
   onIntent,
+  disabled = false,
+  describedBy,
 }: {
   value: T;
   onValueChange: (value: T) => void;
@@ -543,6 +546,9 @@ export function Segmented<T extends string>({
   label: string;
   className?: string;
   onIntent?: () => void;
+  disabled?: boolean;
+  /** Id of a line that describes the control (what the choice does, or why it waits). */
+  describedBy?: string;
 }) {
   // The gold plate slides to the chosen option (shared layout id, unique per control).
   const layoutId = useId();
@@ -554,8 +560,11 @@ export function Segmented<T extends string>({
       onPointerEnter={onIntent}
       onFocus={onIntent}
       aria-label={label}
+      aria-describedby={describedBy}
+      disabled={disabled}
       className={cn(
-        "isolate inline-flex rounded-md border border-white/10 bg-obsidian-850/80 p-[3px]",
+        "isolate inline-flex rounded-md border border-white/10 bg-obsidian-850/80 p-[3px] transition-opacity duration-150",
+        disabled && "pointer-events-none opacity-45",
         className,
       )}
     >
