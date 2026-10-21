@@ -1,8 +1,8 @@
 // The friends button in the title bar (its home; the player can move it to the side menu from its
 // right-click menu or Settings → Görünüm, see rail-entry.tsx). Signed in: the faces of friends who
-// are online and how many, with a gold mark while a request or an invite waits (the icon alone
-// while nobody is on). Before sign-in it also carries its name, so the feature is found at a
-// glance. Hidden entirely while the feature is off.
+// are online and how many, with a gold mark while a request, an invite or a crewmate's call waits
+// (its tooltip and name say which; the icon alone while nobody is on). Before sign-in it also
+// carries its name, so the feature is found at a glance. Hidden entirely while the feature is off.
 import { UsersThree } from "@phosphor-icons/react";
 import { cn, Tooltip } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -10,8 +10,16 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { MovableMenu, openMenuFromKeyboard } from "@/shell/movable-menu";
 import { usePlace } from "@/stores/placement";
-import { EntryCue, entryLabel, moveMotion, openAction, useArrived } from "./entry";
-import { onlineFriends, somethingWaits } from "./model";
+import {
+  EntryCue,
+  EntryTip,
+  entryLabel,
+  moveMotion,
+  openAction,
+  useArrived,
+  waitingWords,
+} from "./entry";
+import { onlineFriends, whatWaits } from "./model";
 import { enter, glide, leave, pop, swap, useSocialMotion } from "./motion";
 import { SocialFace } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -44,8 +52,10 @@ function Pill() {
   const faces = online.slice(0, 3);
   const now = useCallClock((s) => s.now);
   const crewCalls = useSocialPrefs((s) => s.notifyCrewCalls);
-  // A request, an invite or a crewmate's call waits for the player.
-  const pending = signedIn && somethingWaits(view, crewCalls, now);
+  // A request, an invite or a crewmate's call waits for the player: the gold mark, named in the
+  // label and the tooltip.
+  const waiting = signedIn ? waitingWords(t, whatWaits(view, crewCalls, now), view.team) : [];
+  const pending = waiting.length > 0;
   const open = () => openPanel({ from: trigger.current });
 
   return (
@@ -55,7 +65,7 @@ function Pill() {
         actions={[openAction(t, open)]}
         // The name is on the pill while signed out: no tooltip repeating it.
         wrapTrigger={(menuTrigger) => (
-          <Tooltip content={t("social.pill.label")} disabled={named}>
+          <Tooltip content={<EntryTip waiting={waiting} />} disabled={named}>
             {menuTrigger}
           </Tooltip>
         )}
@@ -63,7 +73,7 @@ function Pill() {
         <button
           ref={trigger}
           type="button"
-          aria-label={entryLabel(t, online.length, pending)}
+          aria-label={entryLabel(t, online.length, waiting)}
           aria-haspopup="dialog"
           data-movable="friends"
           data-place="titlebar"

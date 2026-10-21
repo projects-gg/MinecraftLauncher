@@ -3,6 +3,7 @@
 // every rule has a unit test (model.test.ts).
 import type { TFunction } from "i18next";
 import type {
+  CrewCall,
   CrewNotifications,
   Friend,
   SocialGame,
@@ -134,22 +135,35 @@ export function homeStrip(
   return alone && !closed.includes("add") ? "add" : null;
 }
 
+/** What waits for the player behind the friends entry's gold dot. */
+export interface Waiting {
+  /** A friend request or a "Birlikte oyna" invite. */
+  asks: boolean;
+  /** A crewmate's call the player has not answered. */
+  call: CrewCall | null;
+}
+
+type WaitingView = Pick<SocialSnapshot, "incoming" | "invites" | "calls"> &
+  Partial<Pick<SocialSnapshot, "crewNotifications">>;
+
 /**
- * Something waits for the player (the friends entry's gold dot): a request, an invite, or a
+ * What waits for the player (the friends entry's gold dot): a request or an invite, and a
  * crewmate's call they have not answered, unless crew calls are off or the crew is muted (the
- * call itself stays on the crew page and the Home line).
+ * call itself stays on the crew page and the Home line). The two are told apart: a call is
+ * neither a request nor an invite, and the entry says which waits (E2E6).
  */
-export function somethingWaits(
-  view: Pick<SocialSnapshot, "incoming" | "invites" | "calls"> &
-    Partial<Pick<SocialSnapshot, "crewNotifications">>,
-  localCrewCalls: boolean,
-  nowMs: number,
-): boolean {
-  if (view.incoming.length > 0 || view.invites.length > 0) return true;
-  return (
-    Boolean(unansweredCall(view.calls, nowMs)) &&
-    crewCallsHeard(view.crewNotifications, localCrewCalls, nowMs)
-  );
+export function whatWaits(view: WaitingView, localCrewCalls: boolean, nowMs: number): Waiting {
+  const call = unansweredCall(view.calls, nowMs);
+  return {
+    asks: view.incoming.length > 0 || view.invites.length > 0,
+    call: call && crewCallsHeard(view.crewNotifications, localCrewCalls, nowMs) ? call : null,
+  };
+}
+
+/** Something waits for the player (`whatWaits`): the gold dot is on. */
+export function somethingWaits(view: WaitingView, localCrewCalls: boolean, nowMs: number): boolean {
+  const { asks, call } = whatWaits(view, localCrewCalls, nowMs);
+  return asks || call !== null;
 }
 
 /** Someone on Home's "playing" line: a friend in game, or a crewmate on Projects. */

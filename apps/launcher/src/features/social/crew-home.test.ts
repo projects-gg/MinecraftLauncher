@@ -15,6 +15,7 @@ import {
   readBackup,
   somethingWaits,
   wantsNotice,
+  whatWaits,
 } from "./model";
 
 const NOW = 1_792_521_000_000;
@@ -221,6 +222,28 @@ describe("crew notices", () => {
     const request = { ...waiting, incoming: [{} as FriendRequest], crewNotifications: muted };
     expect(somethingWaits(request, true, NOW)).toBe(true);
     expect(somethingWaits({ incoming: [], invites: [], calls: [] }, true, NOW)).toBe(false);
+  });
+
+  it("tells a waiting call from a request or an invite (E2E6)", () => {
+    const open = call();
+    // A call alone is neither a request nor an invite.
+    expect(whatWaits({ incoming: [], invites: [], calls: [open] }, true, NOW)).toEqual({
+      asks: false,
+      call: open,
+    });
+    // Both at once: both are said.
+    const both = { incoming: [{} as FriendRequest], invites: [], calls: [open] };
+    expect(whatWaits(both, true, NOW)).toEqual({ asks: true, call: open });
+    // An answered call, the player's own call and a call not heard wait for nothing.
+    for (const view of [
+      { incoming: [], invites: [], calls: [call({ myAnswer: "soon" })] },
+      { incoming: [], invites: [], calls: [call({ mine: true })] },
+    ]) {
+      expect(whatWaits(view, true, NOW)).toEqual({ asks: false, call: null });
+    }
+    expect(
+      whatWaits({ incoming: [], invites: [{} as SocialInvite], calls: [open] }, false, NOW),
+    ).toEqual({ asks: true, call: null });
   });
 
   it("carries the crew switches in the settings backup, older backups keeping the defaults", () => {

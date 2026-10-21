@@ -1,7 +1,8 @@
 // The friends button in the side menu (the rail), for players who moved it there from the title
 // bar pill's right-click menu or Settings → Görünüm. It sits above Settings like the rail's links:
 // the friends icon, how many friends are online (a small jade count) and a gold mark while a
-// request or an invite waits. Its right-click menu moves it back to the title bar.
+// request, an invite or a crewmate's call waits (its tooltip and name say which). Its right-click
+// menu moves it back to the title bar.
 import { UsersThree } from "@phosphor-icons/react";
 import { cn, Tooltip } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -9,8 +10,16 @@ import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { MovableMenu, openMenuFromKeyboard } from "@/shell/movable-menu";
 import { usePlace } from "@/stores/placement";
-import { EntryCue, entryLabel, moveMotion, openAction, useArrived } from "./entry";
-import { onlineFriends, somethingWaits } from "./model";
+import {
+  EntryCue,
+  EntryTip,
+  entryLabel,
+  moveMotion,
+  openAction,
+  useArrived,
+  waitingWords,
+} from "./entry";
+import { onlineFriends, whatWaits } from "./model";
 import { pop, swap, useSocialMotion } from "./motion";
 import { useSocialPrefs, useSocialUi } from "./store";
 import { useCallClock } from "./use-call-clock";
@@ -40,8 +49,10 @@ function RailEntry() {
   const online = signedIn ? onlineFriends(view.friends, favorites).length : 0;
   const now = useCallClock((s) => s.now);
   const crewCalls = useSocialPrefs((s) => s.notifyCrewCalls);
-  // A request, an invite or a crewmate's call waits for the player.
-  const pending = signedIn && somethingWaits(view, crewCalls, now);
+  // A request, an invite or a crewmate's call waits for the player: the gold mark, named in the
+  // label and the tooltip.
+  const waiting = signedIn ? waitingWords(t, whatWaits(view, crewCalls, now), view.team) : [];
+  const pending = waiting.length > 0;
   const open = () => openPanel({ from: trigger.current });
 
   return (
@@ -50,7 +61,7 @@ function RailEntry() {
         id="friends"
         actions={[openAction(t, open)]}
         wrapTrigger={(menuTrigger) => (
-          <Tooltip content={t("social.pill.label")} side="right">
+          <Tooltip content={<EntryTip waiting={waiting} />} side="right">
             {menuTrigger}
           </Tooltip>
         )}
@@ -58,7 +69,7 @@ function RailEntry() {
         <button
           ref={trigger}
           type="button"
-          aria-label={entryLabel(t, online, pending)}
+          aria-label={entryLabel(t, online, waiting)}
           aria-haspopup="dialog"
           data-movable="friends"
           data-place="rail"

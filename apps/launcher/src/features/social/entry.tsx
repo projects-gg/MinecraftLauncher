@@ -6,18 +6,53 @@ import { cn, type MenuItem } from "@pl/ui";
 import type { TFunction } from "i18next";
 import { motion } from "motion/react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { SocialTeam } from "@/lib/api/social-types";
 import { justMoved } from "@/stores/placement";
+import { callSentence } from "./crew-call";
+import type { Waiting } from "./model";
 import { enter, leave } from "./motion";
 
-/** "Arkadaşlar, 3 arkadaşın çevrimiçi, Seni bekleyen istek ya da davet var". */
-export function entryLabel(t: TFunction, online: number, pending: boolean): string {
-  return [
-    t("social.pill.label"),
-    online ? t("social.pill.online", { count: online }) : null,
-    pending ? t("social.pill.pending") : null,
-  ]
+/**
+ * What the gold mark stands for, in words: "Seni bekleyen istek ya da davet var" for a request or
+ * an invite, "Kaan ekibi çağırıyor" for a crewmate's call (a call is neither; E2E6). Empty while
+ * nothing waits.
+ */
+export function waitingWords(
+  t: TFunction,
+  waiting: Waiting,
+  team: SocialTeam | undefined,
+): string[] {
+  const words: string[] = [];
+  if (waiting.asks) words.push(t("social.pill.pending"));
+  if (waiting.call) words.push(callSentence(waiting.call, team, t));
+  return words;
+}
+
+/** "Arkadaşlar, 3 arkadaşın çevrimiçi, Kaan ekibi çağırıyor". */
+export function entryLabel(t: TFunction, online: number, waiting: readonly string[]): string {
+  return [t("social.pill.label"), online ? t("social.pill.online", { count: online }) : null]
+    .concat(waiting)
     .filter(Boolean)
     .join(", ");
+}
+
+/**
+ * The entry's tooltip: its name and, quieter under it, what the gold mark stands for, so a pointer
+ * learns what a screen reader hears without opening the panel.
+ */
+export function EntryTip({ waiting }: { waiting: readonly string[] }) {
+  const { t } = useTranslation();
+  return (
+    <span className="block">
+      {t("social.pill.label")}
+      {waiting.map((line) => (
+        <span key={line} className="block font-normal text-ash-300">
+          {line}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 /** The right-click menu leads with what a click does, as on rows and tiles. */
