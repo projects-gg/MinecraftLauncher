@@ -21,8 +21,6 @@ pub const MAX_LINE_CHARS: usize = 4096;
 pub const MASK: &str = "******";
 /// Prefix of client stderr lines (legacy).
 pub const STDERR_PREFIX: &str = "[hata] ";
-/// Prefix of lines the user typed into the console.
-pub const INPUT_PREFIX: &str = "> ";
 
 /// Visibility class of a console line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -44,7 +42,8 @@ pub enum ConsoleOrigin {
     Client,
     /// Client stderr (text starts with `[hata] `).
     ClientError,
-    /// Typed by the user (text starts with `> `).
+    /// Typed by the user. No longer produced: typed lines are not echoed, the server's answer is
+    /// the feedback. Kept so the bindings stay as they are.
     User,
 }
 

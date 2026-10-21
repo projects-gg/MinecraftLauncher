@@ -28,8 +28,7 @@ use crate::config::{
     write_config, write_login_script,
 };
 use crate::console::{
-    ConsoleBuffer, ConsoleLine, ConsoleLineKind, ConsoleOrigin, INPUT_PREFIX, LineFilter,
-    STDERR_PREFIX,
+    ConsoleBuffer, ConsoleLine, ConsoleLineKind, ConsoleOrigin, LineFilter, STDERR_PREFIX,
 };
 use crate::error::{AfkError, Result};
 use crate::housekeeping::{ConsoleLog, rotate_account_logs};
@@ -501,12 +500,10 @@ impl Actor {
         let Some(stdin) = self.process.as_ref().map(|p| p.stdin.clone()) else {
             return;
         };
+        // No echo line of our own: the server answers a chat message or a command, and that answer
+        // is the player's feedback (owner, 22 Oct). A sensitive line is still remembered, so the
+        // client's own echo of it stays masked.
         self.filter.add_user_command(&line);
-        self.append_console(
-            &format!("{INPUT_PREFIX}{line}"),
-            ConsoleOrigin::User,
-            Some(ConsoleLineKind::Normal),
-        );
 
         let command = line.trim().split([' ', '\t']).next().unwrap_or_default();
         if ["/quit", "/exit"]

@@ -563,7 +563,8 @@ async fn console_masks_login_commands_and_tracks_the_script_file() {
             sound: true
         }));
 
-    // User input: echoed (masked when sensitive) and written to stdin.
+    // User input: written to stdin, never echoed by the launcher (the server's answer is the
+    // feedback), and the password never reaches the console.
     manager.send(&id, "/l topsecret99").unwrap();
     manager.send(&id, "selam herkese").unwrap();
     until("input delivered", LONG, || s.received.lock().len() == 2).await;
@@ -571,13 +572,9 @@ async fn console_masks_login_commands_and_tracks_the_script_file() {
         s.received.lock().as_slice(),
         ["/l topsecret99", "selam herkese"]
     );
-    let echoes: Vec<String> = manager
-        .console(&id)
-        .into_iter()
-        .filter(|l| l.origin == ConsoleOrigin::User)
-        .map(|l| l.text)
-        .collect();
-    assert_eq!(echoes, vec!["> /l ******", "> selam herkese"]);
+    let console = manager.console(&id);
+    assert!(console.iter().all(|l| l.origin != ConsoleOrigin::User));
+    assert!(console.iter().all(|l| !l.text.contains("topsecret99")));
 
     // An in-client reconnect needs the script again.
     manager.send(&id, "/reco").unwrap();

@@ -47,8 +47,8 @@ pub use config::{
     build_config_in, has_login_commands, write_config,
 };
 pub use console::{
-    CONSOLE_CAPACITY, ConsoleLine, ConsoleLineKind, ConsoleOrigin, INPUT_PREFIX, LineFilter, MASK,
-    STDERR_PREFIX, is_sensitive_command, sensitive_command_names,
+    CONSOLE_CAPACITY, ConsoleLine, ConsoleLineKind, ConsoleOrigin, LineFilter, MASK, STDERR_PREFIX,
+    is_sensitive_command, sensitive_command_names,
 };
 pub use error::{AfkError, Result};
 pub use form::{
