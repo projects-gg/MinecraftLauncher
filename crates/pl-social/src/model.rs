@@ -232,6 +232,10 @@ pub struct FriendsOverview {
     /// Invites to other teams, newest first.
     #[serde(default)]
     pub team_invites: Vec<TeamInvite>,
+    /// The player's own join requests that wait, newest first (a service with
+    /// [`TEAM_FEATURE_REQUESTS`]; at most 3).
+    #[serde(default)]
+    pub team_requests: Vec<TeamRequest>,
     /// What this service offers of crews beyond the first version (`look`, `calls`, …). An older
     /// service sends none; unknown values are kept but mean nothing to this launcher.
     #[serde(default)]
@@ -268,6 +272,16 @@ pub const TEAM_FEATURE_MUTE: &str = "mute";
 pub const TEAM_FEATURE_MULTI: &str = "multi";
 /// `teamFeatures`: crew calls start only on a multiplayer server and carry it (CALL1).
 pub const TEAM_FEATURE_CALL_SERVER: &str = "callServer";
+/// `teamFeatures`: the join setting (a crew that approves newcomers), join requests and
+/// `permissions.admit` (TEAM5).
+pub const TEAM_FEATURE_REQUESTS: &str = "requests";
+/// `teamFeatures`: crew invite links and their page (TEAM5).
+pub const TEAM_FEATURE_LINK: &str = "link";
+/// `teamFeatures`: crew plans on the presence socket (TEAM5).
+pub const TEAM_FEATURE_PLANS: &str = "plans";
+
+/// A join request waits this long; then it goes without a message (the service's rule).
+pub const JOIN_REQUEST_LIFETIME_SECS: i64 = 7 * 86_400;
 
 /// How many crews a player may be in when a service with several crews does not say.
 pub const DEFAULT_CREW_LIMIT: u32 = 5;
@@ -315,6 +329,10 @@ pub struct CrewEntry {
     /// The player's own mute of this crew.
     #[serde(default)]
     pub notifications: CrewMute,
+    /// The crew's waiting join requests, oldest first, for a player whose role may answer them
+    /// (`permissions.admit`; a service with [`TEAM_FEATURE_REQUESTS`]); empty for everyone else.
+    #[serde(default)]
+    pub requests: Vec<JoinRequest>,
 }
 
 /// The player's crews in their order: `crews` from a service with several crews, else the one
@@ -329,6 +347,7 @@ pub(crate) fn crews_of(
             team,
             invited,
             notifications: CrewMute::default(),
+            requests: Vec::new(),
         })
         .into_iter()
         .collect()
@@ -555,11 +574,19 @@ pub struct TeamPermissions {
     /// are always the leader's).
     #[serde(default = "PermissionLevel::leader")]
     pub edit: PermissionLevel,
+    /// Answer join requests and make, renew or switch off the invite link (`moderators` or
+    /// `leader`; a service with [`TEAM_FEATURE_REQUESTS`]).
+    #[serde(default = "PermissionLevel::moderators")]
+    pub admit: PermissionLevel,
 }
 
 impl PermissionLevel {
     fn members() -> Self {
         Self::Members
+    }
+
+    fn moderators() -> Self {
+        Self::Moderators
     }
 
     fn leader() -> Self {
@@ -583,12 +610,13 @@ impl Default for TeamPermissions {
             call: PermissionLevel::Members,
             kick: PermissionLevel::Leader,
             edit: PermissionLevel::Leader,
+            admit: PermissionLevel::Moderators,
         }
     }
 }
 
 /// A change of permissions (`PATCH /v1/teams/:id {"permissions": {…}}`, leader); unset rights
-/// stay as they are.
+/// stay as they are. `admit` only goes to a service with [`TEAM_FEATURE_REQUESTS`].
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct PermissionsEdit {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -599,6 +627,29 @@ pub struct PermissionsEdit {
     pub kick: Option<PermissionLevel>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub edit: Option<PermissionLevel>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub admit: Option<PermissionLevel>,
+}
+
+/// How newcomers who come with the crew's code or invite link get in (a service with
+/// [`TEAM_FEATURE_REQUESTS`]): at once (`open`: every crew from before), or once the crew's leaders
+/// take their request (`approval`). A member's invite lets a friend in either way. A value this
+/// version does not know reads as `Approval`: the button asks, the service decides.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum JoinMode {
+    #[default]
+    Open,
+    Approval,
+}
+
+impl<'de> Deserialize<'de> for JoinMode {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match String::deserialize(deserializer)?.as_str() {
+            "open" => Self::Open,
+            _ => Self::Approval,
+        })
+    }
 }
 
 impl PermissionsEdit {
@@ -640,9 +691,16 @@ pub struct Team {
     /// (Unix seconds; MOD1).
     #[serde(default)]
     pub text_locked_until: Option<i64>,
+    /// How newcomers with the code or the invite link get in (`open` from a service without
+    /// [`TEAM_FEATURE_REQUESTS`]).
+    #[serde(default)]
+    pub join: JoinMode,
+    /// The crew's invite link, `XXXX-XXXX-XXXX` (a service with [`TEAM_FEATURE_LINK`]), or none.
+    #[serde(default)]
+    pub link: Option<String>,
 }
 
-/// What an invite or a code shows of a team before joining it.
+/// What an invite, a code or a link shows of a team before joining it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeamSummary {
     pub id: String,
@@ -657,6 +715,52 @@ pub struct TeamSummary {
     pub motto: String,
     /// How many are in it.
     pub members: u32,
+    /// How newcomers get in (`open` from an older service).
+    #[serde(default)]
+    pub join: JoinMode,
+}
+
+/// One of the player's own join requests that waits (`teamRequests`; the request of a lookup
+/// carries only `sentAt`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamRequest {
+    pub team: TeamSummary,
+    /// Unix seconds.
+    pub sent_at: i64,
+}
+
+/// Someone who asked to join one of the player's crews (`crews[].requests`, the
+/// `team_requests` socket message).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JoinRequest {
+    pub from: PublicProfile,
+    /// Unix seconds.
+    pub sent_at: i64,
+}
+
+/// The player's join request to a crew they looked up, while it waits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WaitingRequest {
+    /// Unix seconds.
+    pub sent_at: i64,
+}
+
+/// What asking to join a crew led to: in at once (an open crew, or a crew that invited the
+/// player), or a request that waits for the crew's leaders (a crew that approves newcomers).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum JoinOutcome {
+    Joined(TeamAnswer),
+    Requested(TeamRequest),
+}
+
+/// A crew's invite link as the service made it: `XXXX-XXXX-XXXX` and its page.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct CrewLink {
+    pub link: String,
+    pub url: String,
 }
 
 /// A crew's colour, frame and motto, sent only to a service that offers looks
@@ -700,6 +804,10 @@ pub enum TeamRelation {
 pub struct TeamLookup {
     pub team: TeamSummary,
     pub relation: TeamRelation,
+    /// The player's join request to this crew, while it waits (a service with
+    /// [`TEAM_FEATURE_REQUESTS`]).
+    #[serde(default)]
+    pub request: Option<WaitingRequest>,
 }
 
 /// What team calls that change the player's team answer.
@@ -719,6 +827,9 @@ pub struct TeamsOverview {
     pub invited: Vec<String>,
     #[serde(default)]
     pub team_invites: Vec<TeamInvite>,
+    /// The player's own join requests that wait (a service with [`TEAM_FEATURE_REQUESTS`]).
+    #[serde(default)]
+    pub team_requests: Vec<TeamRequest>,
     #[serde(default)]
     pub team_features: Vec<String>,
     #[serde(default)]
@@ -755,8 +866,8 @@ impl<'de> Deserialize<'de> for TeamExit {
 }
 
 /// `PATCH /v1/teams/:id`; unset fields stay as they are. Colour, frame and motto only go to a
-/// service that offers looks, permissions to one that offers roles; `motto: Some("")` takes the
-/// motto away.
+/// service that offers looks, permissions to one that offers roles, the join setting and
+/// `permissions.admit` to one that offers join requests; `motto: Some("")` takes the motto away.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct TeamEdit {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -773,6 +884,20 @@ pub struct TeamEdit {
     pub motto: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub permissions: Option<PermissionsEdit>,
+    /// The join setting (the leader; [`TEAM_FEATURE_REQUESTS`]).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub join: Option<JoinMode>,
+}
+
+/// What a service offers that a crew change may use (`teamFeatures`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct EditFeatures {
+    /// [`TEAM_FEATURE_LOOK`]: colour, frame, motto.
+    pub look: bool,
+    /// [`TEAM_FEATURE_ROLES`]: permissions.
+    pub roles: bool,
+    /// [`TEAM_FEATURE_REQUESTS`]: the join setting and `permissions.admit`.
+    pub requests: bool,
 }
 
 impl TeamEdit {
@@ -786,16 +911,22 @@ impl TeamEdit {
         self.name.is_some() || self.tag.is_some() || self.motto.is_some()
     }
 
-    /// Without what a service would refuse: the look without looks, permissions without roles
-    /// (and an empty permissions change).
-    pub fn limited_to(self, look: bool, roles: bool) -> Self {
+    /// Without what a service would refuse: the look without looks, permissions without roles,
+    /// the join setting and `admit` without join requests (and an empty permissions change).
+    pub fn limited_to(self, offers: EditFeatures) -> Self {
         let mut edit = self;
-        if !look {
+        if !offers.look {
             edit.color = None;
             edit.frame = None;
             edit.motto = None;
         }
-        if !roles || edit.permissions.is_some_and(|p| p.is_empty()) {
+        if !offers.requests {
+            edit.join = None;
+            if let Some(permissions) = &mut edit.permissions {
+                permissions.admit = None;
+            }
+        }
+        if !offers.roles || edit.permissions.is_some_and(|p| p.is_empty()) {
             edit.permissions = None;
         }
         edit
@@ -922,6 +1053,10 @@ pub enum LimitedKey {
     SettingsBackup,
     /// Chat messages a day.
     ChatMessages,
+    /// Making or renewing a crew's invite link (TEAM5).
+    CrewLink,
+    /// Making crew plans (answering them is fine; TEAM5).
+    CrewPlans,
     Other,
 }
 
@@ -933,6 +1068,8 @@ impl LimitedKey {
             "code_lookups" => Self::CodeLookups,
             "settings_backup" => Self::SettingsBackup,
             "chat_messages" => Self::ChatMessages,
+            "crew_link" => Self::CrewLink,
+            "crew_plans" => Self::CrewPlans,
             _ => Self::Other,
         }
     }
@@ -1331,8 +1468,17 @@ mod tests {
             r#"{"color":"teal","motto":""}"#
         );
         assert!(edit.changes_text());
-        assert!(edit.clone().limited_to(false, true).is_empty());
-        assert_eq!(edit.clone().limited_to(true, false), edit);
+        let roles_only = EditFeatures {
+            roles: true,
+            requests: true,
+            ..EditFeatures::default()
+        };
+        assert!(edit.clone().limited_to(roles_only).is_empty());
+        let look_only = EditFeatures {
+            look: true,
+            ..EditFeatures::default()
+        };
+        assert_eq!(edit.clone().limited_to(look_only), edit);
         assert!(
             !TeamEdit {
                 color: Some("teal".into()),
@@ -1385,12 +1531,109 @@ mod tests {
             r#"{"permissions":{"edit":"moderators"}}"#
         );
         assert!(!edit.changes_text());
-        assert!(edit.clone().limited_to(true, false).is_empty());
+        let without_roles = EditFeatures {
+            look: true,
+            requests: true,
+            ..EditFeatures::default()
+        };
+        assert!(edit.clone().limited_to(without_roles).is_empty());
         let nothing = TeamEdit {
             permissions: Some(PermissionsEdit::default()),
             ..TeamEdit::default()
         };
-        assert!(nothing.limited_to(true, true).is_empty());
+        let everything = EditFeatures {
+            look: true,
+            roles: true,
+            requests: true,
+        };
+        assert!(nothing.limited_to(everything).is_empty());
+    }
+
+    #[test]
+    fn joining_settings_requests_and_links_with_and_without_them() {
+        let entry: CrewEntry = serde_json::from_str(
+            r#"{"team":{"id":"0a1b2c3d4e5f6a7b","name":"Gece","tag":"GKR","emblem":"sword",
+                "code":"TKM-ABCD-EFGH","createdOn":"2026-10-20","members":[],
+                "permissions":{"invite":"members","call":"members","kick":"moderators",
+                  "edit":"leader","admit":"leader"},
+                "join":"approval","link":"ABCD-EFGH-JKMN"},
+              "requests":[{"from":{"id":"2","username":"b","displayName":"Bora","avatar":"discord",
+                "avatarHash":null},"sentAt":1792520000}]}"#,
+        )
+        .unwrap();
+        assert_eq!(entry.team.join, JoinMode::Approval);
+        assert_eq!(entry.team.link.as_deref(), Some("ABCD-EFGH-JKMN"));
+        assert_eq!(entry.team.permissions.admit, PermissionLevel::Leader);
+        assert_eq!(entry.requests[0].from.name(), "Bora");
+        assert_eq!(entry.requests[0].sent_at, 1_792_520_000);
+
+        // From before join requests: open, no link, moderators would answer, nobody asks.
+        let older: CrewEntry = serde_json::from_str(
+            r#"{"team":{"id":"0a1b2c3d4e5f6a7b","name":"Gece","tag":"GKR","emblem":"sword",
+                "code":"TKM-ABCD-EFGH","createdOn":"2026-10-20","members":[]}}"#,
+        )
+        .unwrap();
+        assert_eq!(older.team.join, JoinMode::Open);
+        assert_eq!(older.team.link, None);
+        assert_eq!(older.team.permissions.admit, PermissionLevel::Moderators);
+        assert!(older.requests.is_empty());
+        // A join setting this version does not know asks rather than lets in.
+        let unknown: JoinMode = serde_json::from_str(r#""invite_only""#).unwrap();
+        assert_eq!(unknown, JoinMode::Approval);
+
+        let overview: TeamsOverview = serde_json::from_str(
+            r#"{"team":null,"invited":[],"teamInvites":[],
+                "teamRequests":[{"team":{"id":"fedcba9876543210","name":"PvP","tag":"PVP",
+                  "emblem":"bolt","members":12,"join":"approval"},"sentAt":1792519000}],
+                "teamFeatures":["requests","link","plans"]}"#,
+        )
+        .unwrap();
+        assert_eq!(overview.team_requests[0].team.join, JoinMode::Approval);
+        assert_eq!(overview.team_requests[0].sent_at, 1_792_519_000);
+        let lookup: TeamLookup = serde_json::from_str(
+            r#"{"team":{"id":"x","name":"PvP","tag":"PVP","emblem":"bolt","members":3,
+                "join":"approval"},"relation":"none","request":{"sentAt":1792519000}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            lookup.request,
+            Some(WaitingRequest {
+                sent_at: 1_792_519_000
+            })
+        );
+        let plain: TeamLookup = serde_json::from_str(
+            r#"{"team":{"id":"x","name":"PvP","tag":"PVP","emblem":"bolt","members":3},
+                "relation":"none","request":null}"#,
+        )
+        .unwrap();
+        assert_eq!((plain.team.join, plain.request), (JoinMode::Open, None));
+
+        // The join setting and `admit` go only where the service takes them.
+        let edit = TeamEdit {
+            join: Some(JoinMode::Approval),
+            permissions: Some(PermissionsEdit {
+                admit: Some(PermissionLevel::Leader),
+                ..PermissionsEdit::default()
+            }),
+            ..TeamEdit::default()
+        };
+        assert_eq!(
+            serde_json::to_string(&edit).unwrap(),
+            r#"{"permissions":{"admit":"leader"},"join":"approval"}"#
+        );
+        let everything = EditFeatures {
+            look: true,
+            roles: true,
+            requests: true,
+        };
+        assert_eq!(edit.clone().limited_to(everything), edit);
+        let older = EditFeatures {
+            requests: false,
+            ..everything
+        };
+        assert!(edit.limited_to(older).is_empty());
+        assert_eq!(LimitedKey::parse("crew_link"), LimitedKey::CrewLink);
+        assert_eq!(LimitedKey::parse("crew_plans"), LimitedKey::CrewPlans);
     }
 
     #[test]

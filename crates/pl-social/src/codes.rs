@@ -16,6 +16,50 @@ const TEAM_PREFIXES: [&str; 2] = [CREW_CODE_PREFIX, "TKM"];
 /// The deep link the QR landing page opens: `projects://friend/<code>`.
 pub const FRIEND_DEEP_LINK_PREFIX: &str = "projects://friend/";
 
+/// A crew invite link's symbols (TEAM5): 12, longer than a code on purpose (its page names the
+/// crew without signing in), with no prefix (the length tells them apart).
+const LINK_LENGTH: usize = 12;
+
+/// Normalises a crew invite link (`ABCD-EFGH-JKMN`, `abcd efgh jkmn`, `ABCDEFGHJKMN`, the same
+/// alphabet and mapping as codes) into `XXXX-XXXX-XXXX`, or None when it cannot be one. A code
+/// (8 symbols) is never a link.
+pub fn normalize_crew_link(input: &str) -> Option<String> {
+    if input.len() > 40 {
+        return None;
+    }
+    let raw: String = input
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '-' && *c != '_')
+        .map(|c| c.to_ascii_uppercase())
+        .collect();
+    if raw.chars().count() != LINK_LENGTH {
+        return None;
+    }
+    let mut out = String::with_capacity(LINK_LENGTH + 2);
+    for (index, c) in raw.chars().enumerate() {
+        if index > 0 && index % 4 == 0 {
+            out.push('-');
+        }
+        let c = match c {
+            'O' => '0',
+            'I' | 'L' => '1',
+            other => other,
+        };
+        if !c.is_ascii() || !ALPHABET.contains(&(c as u8)) {
+            return None;
+        }
+        out.push(c);
+    }
+    Some(out)
+}
+
+/// The invite link's page: `<service>/e/XXXX-XXXX-XXXX` (what players share; it opens
+/// `projects://crew/<link>`).
+pub fn crew_link_url(base: &Url, link: &str) -> Option<Url> {
+    let link = normalize_crew_link(link)?;
+    base.join(&format!("e/{link}")).ok()
+}
+
 /// Normalises what a player typed or scanned into `PRJ-XXXX-XXXX`, or None when it cannot be
 /// a code. Accepts `prj abcd efgh`, `ABCDEFGH`, `abcd-efgh`; maps I/L to 1 and O to 0.
 pub fn normalize_friend_code(input: &str) -> Option<String> {
@@ -173,5 +217,38 @@ mod tests {
             Some("PRJ-ABCD-EFGH")
         );
         assert_eq!(friend_code_from_deep_link("projects://news/1"), None);
+    }
+
+    #[test]
+    fn crew_links_are_twelve_symbols_and_never_a_code() {
+        assert_eq!(
+            normalize_crew_link("abcd efgh jkmn").as_deref(),
+            Some("ABCD-EFGH-JKMN")
+        );
+        assert_eq!(
+            normalize_crew_link("ABCDEFGHJKMN").as_deref(),
+            Some("ABCD-EFGH-JKMN")
+        );
+        assert_eq!(
+            normalize_crew_link("o0il-1234-5678").as_deref(),
+            Some("0011-1234-5678")
+        );
+        // A code, a friend code or a broken link is not a link.
+        assert_eq!(normalize_crew_link("ABCD-EFGH"), None);
+        assert_eq!(normalize_crew_link("PRJ-ABCD-EFGH"), None);
+        assert_eq!(normalize_crew_link("ABCD-EFGH-JKMU"), None);
+        assert_eq!(normalize_crew_link("ABCD-EFGH-JKMŞ"), None);
+        assert_eq!(normalize_crew_link(&"A".repeat(41)), None);
+        let base = Url::parse("https://social.projects.gg/").unwrap();
+        assert_eq!(
+            crew_link_url(&base, "abcd efgh jkmn").unwrap().as_str(),
+            "https://social.projects.gg/e/ABCD-EFGH-JKMN"
+        );
+        let local = Url::parse("http://127.0.0.1:8797/").unwrap();
+        assert_eq!(
+            crew_link_url(&local, "ABCDEFGHJKMN").unwrap().as_str(),
+            "http://127.0.0.1:8797/e/ABCD-EFGH-JKMN"
+        );
+        assert!(crew_link_url(&base, "nope").is_none());
     }
 }

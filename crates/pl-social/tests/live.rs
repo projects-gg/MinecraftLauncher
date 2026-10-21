@@ -18,15 +18,16 @@ use std::sync::atomic::AtomicI64;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use pl_social::{
-    CallAnswer, CallEndReason, CallKind, ChatRejection, ChatSetup, CrewMuteEdit, ErrorCode,
-    FEATURE_CHAT, GameLocation, InviteOutcome, LimitedKey, LocalStatus, LoginAttempt,
-    PermissionLevel, PermissionsEdit, PresenceEvent, PresenceHandle, PresenceOptions,
-    PresenceState, ProfileUpdate, Relation, ReportReason, RequestOutcome, Session,
-    SettingsPrecondition, SocialClient, SocialConfig, SocialError, StatusMode, StopReason,
-    TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI,
-    TEAM_FEATURE_MUTE, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamNotifications,
+    CallAnswer, CallEndReason, CallKind, ChatRejection, ChatSetup, CrewKey, CrewMuteEdit,
+    ErrorCode, FEATURE_CHAT, GameLocation, InviteOutcome, JoinMode, JoinOutcome, LimitedKey,
+    LocalStatus, LoginAttempt, PermissionLevel, PermissionsEdit, PlanAnswer, PresenceEvent,
+    PresenceHandle, PresenceOptions, PresenceState, ProfileUpdate, Relation, ReportReason,
+    RequestOutcome, Session, SettingsPrecondition, SocialClient, SocialConfig, SocialError,
+    StatusMode, StopReason, TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS, TEAM_FEATURE_LINK,
+    TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, TEAM_FEATURE_PLANS,
+    TEAM_FEATURE_REQUESTS, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamNotifications,
     TeamNotificationsEdit, TeamRelation, auth_code_from_deep_link, crew_code, crew_conversation,
-    direct_conversation,
+    direct_conversation, normalize_crew_link,
 };
 use serde_json::json;
 use url::Url;
@@ -1296,4 +1297,235 @@ async fn limited_accounts_and_their_limits() {
     }
 
     fresh.delete_account().await.unwrap();
+}
+
+/// The crews' second wave (TEAM5): a crew that approves newcomers, a join request by invite link
+/// that reaches the leader live and is taken, a withdrawn request, the link renewed when the crew
+/// opens again (the old one stops working), a plan made, answered and cancelled over the socket.
+#[tokio::test]
+#[ignore = "needs `pnpm dev` and `pnpm dev:discord` in services/social"]
+async fn crew_join_requests_links_and_plans() {
+    let client = client();
+    client.health().await.expect("wrangler dev is running");
+    let leader_id = new_user_id(11);
+    let asker_id = new_user_id(12);
+    let other_id = new_user_id(13);
+    let leader = sign_in(&client, &leader_id, "lider").await;
+    let asker = sign_in(&client, &asker_id, "istekli").await;
+    let other = sign_in(&client, &other_id, "baska").await;
+    let features = leader.teams().await.unwrap().team_features;
+    let has = |name: &str| features.iter().any(|f| f == name);
+    if !(has(TEAM_FEATURE_REQUESTS) && has(TEAM_FEATURE_LINK) && has(TEAM_FEATURE_PLANS)) {
+        eprintln!("this service has no join requests, links or plans: nothing to try");
+        for session in [other, asker, leader] {
+            session.delete_account().await.unwrap();
+        }
+        return;
+    }
+    let crew = leader
+        .create_team("Gece Kartalları", "GKR", "sword", None, true)
+        .await
+        .unwrap()
+        .team
+        .unwrap();
+    assert_eq!(crew.join, JoinMode::Open);
+    assert_eq!(crew.permissions.admit, PermissionLevel::Moderators);
+    let approval = TeamEdit {
+        join: Some(JoinMode::Approval),
+        ..TeamEdit::default()
+    };
+    leader.update_team(&crew.id, &approval).await.unwrap();
+
+    // The invite link: 12 symbols on the service's own page.
+    let made = leader.create_team_link(&crew.id).await.unwrap();
+    assert_eq!(
+        normalize_crew_link(&made.link).as_deref(),
+        Some(made.link.as_str())
+    );
+    assert!(
+        made.url.ends_with(&format!("/e/{}", made.link)),
+        "{}",
+        made.url
+    );
+    let link = CrewKey::Link(made.link.to_lowercase().replace('-', " "));
+
+    let mut leader_presence = leader.connect_presence(options());
+    expect(&mut leader_presence, "the leader connected", |e| {
+        matches!(e, PresenceEvent::Connected { plans: Some(_), .. })
+    })
+    .await;
+
+    // The asker finds the crew by its link and asks: the leader hears it live.
+    let found = asker.lookup_crew(&link, true).await.unwrap();
+    assert_eq!(found.team.id, crew.id);
+    assert_eq!(found.team.join, JoinMode::Approval);
+    assert_eq!(found.relation, TeamRelation::None);
+    assert!(found.request.is_none());
+    let sent_at = match asker.join_crew(&link, true, true).await.unwrap() {
+        JoinOutcome::Requested(request) => {
+            assert_eq!(request.team.id, crew.id);
+            request.sent_at
+        }
+        JoinOutcome::Joined(_) => panic!("an approving crew takes a request"),
+    };
+    // Asking again answers the same request.
+    match asker.join_crew(&link, true, true).await.unwrap() {
+        JoinOutcome::Requested(again) => assert_eq!(again.sent_at, sent_at),
+        JoinOutcome::Joined(_) => panic!("still a request"),
+    }
+    // Without `request` an approving crew says so (what older launchers get).
+    let old_way = other.join_crew(&link, true, false).await.unwrap_err();
+    assert_eq!(old_way.code(), Some(&ErrorCode::TeamApprovalRequired));
+    expect(&mut leader_presence, "the request on the socket", |e| {
+        matches!(
+            e,
+            PresenceEvent::TeamRequests { crew: id, requests, added }
+                if *id == crew.id
+                    && requests.len() == 1
+                    && added.as_deref() == Some(asker_id.as_str())
+        )
+    })
+    .await;
+    let waiting = asker.lookup_crew(&link, true).await.unwrap();
+    assert_eq!(waiting.request.map(|r| r.sent_at), Some(sent_at));
+    let own = asker.teams().await.unwrap().team_requests;
+    assert_eq!(own.len(), 1);
+    assert_eq!(own[0].team.id, crew.id);
+    let listed = leader.friends().await.unwrap().crews.unwrap();
+    assert_eq!(listed[0].requests.len(), 1);
+    assert_eq!(listed[0].requests[0].from.id, asker_id);
+
+    // A request by code, withdrawn.
+    let code = CrewKey::Code(crew_code(&crew.code));
+    assert!(matches!(
+        other.join_crew(&code, true, true).await.unwrap(),
+        JoinOutcome::Requested(_)
+    ));
+    other.withdraw_team_request(&crew.id).await.unwrap();
+    assert!(other.teams().await.unwrap().team_requests.is_empty());
+    let gone = other.withdraw_team_request(&crew.id).await.unwrap_err();
+    assert_eq!(gone.code(), Some(&ErrorCode::TeamRequestNotFound));
+
+    // The leader takes the asker in.
+    let taken = leader
+        .accept_team_request(&crew.id, &asker_id)
+        .await
+        .unwrap();
+    assert!(
+        taken
+            .team
+            .unwrap()
+            .members
+            .iter()
+            .any(|m| m.profile.id == asker_id)
+    );
+    expect(&mut leader_presence, "the emptied list", |e| {
+        matches!(
+            e,
+            PresenceEvent::TeamRequests { crew: id, requests, .. }
+                if *id == crew.id && requests.is_empty()
+        )
+    })
+    .await;
+    assert!(asker.teams().await.unwrap().team_requests.is_empty());
+
+    // Open again: the link is renewed, the old one looks unknown, the new one lets anyone in.
+    let open = TeamEdit {
+        join: Some(JoinMode::Open),
+        ..TeamEdit::default()
+    };
+    let renewed = leader
+        .update_team(&crew.id, &open)
+        .await
+        .unwrap()
+        .team
+        .unwrap()
+        .link
+        .expect("the crew keeps a link");
+    assert_ne!(renewed, made.link);
+    let stale = other.lookup_crew(&link, true).await.unwrap_err();
+    assert_eq!(stale.code(), Some(&ErrorCode::TeamNotFound));
+    assert!(matches!(
+        other
+            .join_crew(&CrewKey::Link(renewed.clone()), true, true)
+            .await
+            .unwrap(),
+        JoinOutcome::Joined(_)
+    ));
+
+    // A plan: made by the leader, seen by the asker (not quiet), answered, then cancelled.
+    let mut asker_presence = asker.connect_presence(options());
+    expect(&mut asker_presence, "the asker connected", |e| {
+        matches!(e, PresenceEvent::Connected { plans: Some(_), .. })
+    })
+    .await;
+    let at = (unix_now() / 900 + 5) * 900;
+    let plan = leader_presence
+        .control()
+        .make_plan(&crew.id, at)
+        .await
+        .unwrap();
+    assert_eq!(plan.at, at);
+    assert_eq!(plan.until, at + 7_200);
+    assert_eq!(plan.answers.get(&leader_id), Some(&PlanAnswer::Yes));
+    let seen = expect(
+        &mut asker_presence,
+        "the new plan",
+        |e| matches!(e, PresenceEvent::Plan { plan: p, .. } if p.id == plan.id),
+    )
+    .await;
+    assert!(matches!(seen, PresenceEvent::Plan { quiet: false, .. }));
+    let twice = leader_presence
+        .control()
+        .make_plan(&crew.id, at)
+        .await
+        .unwrap_err();
+    assert_eq!(twice.code(), Some(&ErrorCode::PlanExists));
+    let odd = leader_presence
+        .control()
+        .make_plan(&crew.id, at + 60)
+        .await
+        .unwrap_err();
+    assert_eq!(odd.code(), Some(&ErrorCode::PlanTime));
+    asker_presence
+        .control()
+        .answer_plan(&plan.id, PlanAnswer::Maybe)
+        .await
+        .unwrap();
+    expect(&mut leader_presence, "the answer", |e| {
+        matches!(
+            e,
+            PresenceEvent::Plan { plan: p, .. }
+                if p.answers.get(&asker_id) == Some(&PlanAnswer::Maybe)
+        )
+    })
+    .await;
+    // Only its maker or the crew's leaders cancel it.
+    let not_theirs = asker_presence
+        .control()
+        .cancel_plan(&plan.id)
+        .await
+        .unwrap_err();
+    assert_eq!(not_theirs.code(), Some(&ErrorCode::TeamNotPermitted));
+    leader_presence
+        .control()
+        .cancel_plan(&plan.id)
+        .await
+        .unwrap();
+    expect(
+        &mut asker_presence,
+        "the plan's end",
+        |e| matches!(e, PresenceEvent::PlanRemoved { plan: id, .. } if *id == plan.id),
+    )
+    .await;
+
+    // The link off: nobody gets in by it any more.
+    leader.delete_team_link(&crew.id).await.unwrap();
+    assert!(leader.teams().await.unwrap().team.unwrap().link.is_none());
+
+    asker_presence.shutdown().await;
+    leader_presence.shutdown().await;
+    for session in [other, asker, leader] {
+        session.delete_account().await.unwrap();
+    }
 }

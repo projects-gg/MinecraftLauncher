@@ -375,7 +375,13 @@ export const commands = {
  *  Add a friend by code (`projects://friend/PRJ-XXXX-XXXX`, from the QR page): the friends
  *  panel shows who it is; nothing is sent until the player confirms.
  */
-{ kind: "friend"; code: string } | null>("deep_link_pending"),
+{ kind: "friend"; code: string } | 
+/**
+ *  A crew's invite link (`projects://crew/XXXX-XXXX-XXXX`, from the link's page): the crew
+ *  page shows the crew with "Katıl" (or "Katılma isteği gönder"); nothing is sent until the
+ *  player confirms.
+ */
+{ kind: "crew"; link: string } | null>("deep_link_pending"),
 	/**  Leaves for real: AFK sessions are stopped cleanly first. */
 	appQuit: () => __TAURI_INVOKE<void>("app_quit"),
 	/**
@@ -926,6 +932,7 @@ export const commands = {
 	call?: PermissionLevel | null,
 	kick?: PermissionLevel | null,
 	edit?: PermissionLevel | null,
+	admit?: PermissionLevel | null,
 } | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_edit", { team, name, tag, emblem, color, frame, motto, permissions })),
 	/**
 	 *  Makes a member of one of the player's crews a moderator, or a moderator a member again
@@ -967,9 +974,38 @@ export const commands = {
 	/**  Hands the founder role of one of the player's crews to another member. */
 	socialTeamTransfer: (team: string, id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_transfer", { team, id })),
 	socialTeamLookup: (code: string) => typedError<TeamLookupView, CmdError>(__TAURI_INVOKE("social_team_lookup", { code })),
-	socialTeamJoin: (code: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_join", { code })),
+	/**  Joins the crew of a code; a crew that approves newcomers takes a join request instead. */
+	socialTeamJoin: (code: string) => typedError<JoinResult, CmdError>(__TAURI_INVOKE("social_team_join", { code })),
 	socialTeamAccept: (team: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_accept", { team })),
 	socialTeamDecline: (team: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_decline", { team })),
+	/**  What a crew's invite link (`XXXX-XXXX-XXXX`) leads to. */
+	socialTeamLookupLink: (link: string) => typedError<TeamLookupView, CmdError>(__TAURI_INVOKE("social_team_lookup_link", { link })),
+	/**  Joins the crew of an invite link, or asks to (a crew that approves newcomers). */
+	socialTeamJoinLink: (link: string) => typedError<JoinResult, CmdError>(__TAURI_INVOKE("social_team_join_link", { link })),
+	/**  Withdraws the player's waiting join request to a crew. */
+	socialTeamRequestWithdraw: (team: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_request_withdraw", { team })),
+	/**  Takes a player who asked into one of the player's crews (`accept`), or declines (silently). */
+	socialTeamRequestAnswer: (team: string, id: string, accept: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_request_answer", { team, id, accept })),
+	/**
+	 *  A new invite link for one of the player's crews (`on`, in place of the old one), or none.
+	 *  Answers the link it has now.
+	 */
+	socialTeamLink: (team: string, on: boolean) => typedError<string | null, CmdError>(__TAURI_INVOKE("social_team_link", { team, on })),
+	/**  How newcomers with the code or the invite link get in (the leader). */
+	socialTeamJoinMode: (team: string, join: JoinMode) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_join_mode", { team, join })),
+	/**
+	 *  A new plan in one of the player's crews at `at` (Unix seconds, a whole quarter of an hour).
+	 *  Answers its id.
+	 */
+	socialPlanMake: (crew: string, at: number) => typedError<string, CmdError>(__TAURI_INVOKE("social_plan_make", { crew, at })),
+	/**  "Geliyorum", "Belki" or "Gelemem" to a plan. False: the plan is gone. */
+	socialPlanAnswer: (plan: string, answer: PlanAnswer) => typedError<boolean, CmdError>(__TAURI_INVOKE("social_plan_answer", { plan, answer })),
+	/**  "Planı sil". */
+	socialPlanCancel: (plan: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_plan_cancel", { plan })),
+	/**  "Birlikte oynanan süre" on or off on this computer (off deletes what was kept). */
+	socialTogether: (on: boolean) => __TAURI_INVOKE<void>("social_together", { on }),
+	/**  Deletes the time played together kept on this computer. */
+	socialTogetherClear: () => __TAURI_INVOKE<void>("social_together_clear"),
 	/**  A conversation's newest messages (`before` None) or those before a message id, oldest first. */
 	socialChatPage: (conv: string, before: number | null) => __TAURI_INVOKE<ChatPage>("social_chat_page", { conv, before }),
 	/**  Sends a message: it shows at once and goes in the order typed. Returns its key. */
@@ -1471,6 +1507,31 @@ export type ChatView = {
 	conversations: ConversationView[],
 };
 
+/**  One row of the troubleshooter, in the order the rows are shown. */
+export type Check = "internet" | 
+/**  The Projects Minecraft server (server list ping). */
+"server" | 
+/**  The signed content (packs, news, the launcher's settings from Studio). */
+"content" | 
+/**  The friends service, while the feature is on. */
+"friends" | 
+/**  Microsoft's sign-in and Minecraft services, when a Microsoft account is added. */
+"microsoft" | 
+/**  Discord (friends sign-in, the support channel), while the friends feature is on. */
+"discord" | 
+/**  This computer's clock; a row only when it is wrong. */
+"clock" | 
+/**  Free space on the data folder's disk. */
+"disk" | 
+/**  The Java the instance Play starts would run with. */
+"java" | 
+/**  That instance's memory; a row only when it is too high. */
+"memory" | 
+/**  That instance's mod check. */
+"mods" | 
+/**  That instance's last crash. */
+"crash";
+
 export type CleanupBlock = 
 /**  A game runs. */
 "gameRunning" | 
@@ -1507,31 +1568,6 @@ export type CleanupSummaryView = {
 };
 
 /**
-/**  One row of the troubleshooter, in the order the rows are shown. */
-export type Check = "internet" | 
-/**  The Projects Minecraft server (server list ping). */
-"server" | 
-/**  The signed content (packs, news, the launcher's settings from Studio). */
-"content" | 
-/**  The friends service, while the feature is on. */
-"friends" | 
-/**  Microsoft's sign-in and Minecraft services, when a Microsoft account is added. */
-"microsoft" | 
-/**  Discord (friends sign-in, the support channel), while the friends feature is on. */
-"discord" | 
-/**  This computer's clock; a row only when it is wrong. */
-"clock" | 
-/**  Free space on the data folder's disk. */
-"disk" | 
-/**  The Java the instance Play starts would run with. */
-"java" | 
-/**  That instance's memory; a row only when it is too high. */
-"memory" | 
-/**  That instance's mod check. */
-"mods" | 
-/**  That instance's last crash. */
-"crash";
-
  *  Why the AFK client could not be had, in the player's terms (the UI words each one; the cause
  *  itself goes to the log).
  */
@@ -1588,6 +1624,39 @@ export type CmdError = {
 	details: string,
 };
 
+/**  What a check found, stable for support (the summary writes it as `SERVER-UNREACHABLE`). */
+export type Code = "internetOk" | "internetSlow" | 
+/**  The system has no network at all. */
+"internetOffline" | 
+/**  A network without internet (a router that lost its line). */
+"internetLocal" | 
+/**  A network behind a sign-in page (a café, a school, a hotel). */
+"internetSignIn" | 
+/**  No address resolves (DNS). */
+"internetNoDns" | 
+/**  Secure connections fail (the clock, security software or a proxy that reads HTTPS). */
+"internetInsecure" | "internetDown" | "serverOk" | "serverSlow" | 
+/**  The server refused the connection. */
+"serverDown" | 
+/**  The server's name does not resolve. */
+"serverNotFound" | "serverUnreachable" | "serverNeedsInternet" | "contentOk" | 
+/**  Out of reach; the launcher goes on with what it saved. */
+"contentUnreachable" | 
+/**  Out of reach with nothing saved yet. */
+"contentMissing" | "contentNeedsInternet" | "friendsOk" | 
+/**  The service answered with an error. */
+"friendsDown" | "friendsUnreachable" | "friendsNeedsInternet" | "microsoftOk" | "microsoftDown" | "microsoftUnreachable" | "microsoftNeedsInternet" | "discordOk" | "discordUnreachable" | "discordNeedsInternet" | "clockWrong" | "diskOk" | "diskLow" | "diskFull" | "diskUnknown" | 
+/**  "Otomatik": the launcher's runtime is installed. */
+"javaReady" | 
+/**  "Otomatik": the runtime comes with the first start. */
+"javaDownloads" | "javaCustomOk" | 
+/**  A 32-bit Java on a 64-bit computer: the game gets little memory. */
+"javaX86" | "javaMissing" | "javaBroken" | "javaTooOld" | "javaTooNew" | "javaUnknown" | "memoryTooHigh" | "memoryHigh" | "modsOk" | "modsWarning" | "modsBlocking" | "modsUnknown" | "crashNone" | 
+/**  The game ran fine after its last crash. */
+"crashResolved" | "crashRecent" | 
+/**  The check could not run (an error, or its time ran out). */
+"checkFailed";
+
 /**  One link of the launcher's community row. */
 export type CommunityLink = {
 	platform: CommunityPlatform,
@@ -1624,39 +1693,6 @@ export type ConsoleLine = {
 export type ConsoleLineKind = 
 /**  Always visible. */
 "normal" | 
-/**  What a check found, stable for support (the summary writes it as `SERVER-UNREACHABLE`). */
-export type Code = "internetOk" | "internetSlow" | 
-/**  The system has no network at all. */
-"internetOffline" | 
-/**  A network without internet (a router that lost its line). */
-"internetLocal" | 
-/**  A network behind a sign-in page (a café, a school, a hotel). */
-"internetSignIn" | 
-/**  No address resolves (DNS). */
-"internetNoDns" | 
-/**  Secure connections fail (the clock, security software or a proxy that reads HTTPS). */
-"internetInsecure" | "internetDown" | "serverOk" | "serverSlow" | 
-/**  The server refused the connection. */
-"serverDown" | 
-/**  The server's name does not resolve. */
-"serverNotFound" | "serverUnreachable" | "serverNeedsInternet" | "contentOk" | 
-/**  Out of reach; the launcher goes on with what it saved. */
-"contentUnreachable" | 
-/**  Out of reach with nothing saved yet. */
-"contentMissing" | "contentNeedsInternet" | "friendsOk" | 
-/**  The service answered with an error. */
-"friendsDown" | "friendsUnreachable" | "friendsNeedsInternet" | "microsoftOk" | "microsoftDown" | "microsoftUnreachable" | "microsoftNeedsInternet" | "discordOk" | "discordUnreachable" | "discordNeedsInternet" | "clockWrong" | "diskOk" | "diskLow" | "diskFull" | "diskUnknown" | 
-/**  "Otomatik": the launcher's runtime is installed. */
-"javaReady" | 
-/**  "Otomatik": the runtime comes with the first start. */
-"javaDownloads" | "javaCustomOk" | 
-/**  A 32-bit Java on a 64-bit computer: the game gets little memory. */
-"javaX86" | "javaMissing" | "javaBroken" | "javaTooOld" | "javaTooNew" | "javaUnknown" | "memoryTooHigh" | "memoryHigh" | "modsOk" | "modsWarning" | "modsBlocking" | "modsUnknown" | "crashNone" | 
-/**  The game ran fine after its last crash. */
-"crashResolved" | "crashRecent" | 
-/**  The check could not run (an error, or its time ran out). */
-"checkFailed";
-
 /**  Output of a login command: visible only when "show script commands" is on. */
 "script" | 
 /**  Output of a login/register/password command: never visible (already masked anyway). */
@@ -1961,7 +1997,13 @@ export type DeepLink = { kind: "home" } |
  *  Add a friend by code (`projects://friend/PRJ-XXXX-XXXX`, from the QR page): the friends
  *  panel shows who it is; nothing is sent until the player confirms.
  */
-{ kind: "friend"; code: string };
+{ kind: "friend"; code: string } | 
+/**
+ *  A crew's invite link (`projects://crew/XXXX-XXXX-XXXX`, from the link's page): the crew
+ *  page shows the crew with "Katıl" (or "Katılma isteği gönder"); nothing is sent until the
+ *  player confirms.
+ */
+{ kind: "crew"; link: string };
 
 /**  Where an item's copies went. */
 export type Destination = {
@@ -2028,6 +2070,26 @@ export type EventView = {
 	fromFeed: boolean,
 };
 
+/**  Numbers and names a row's words use. Never personal data. */
+export type Facts = {
+	latencyMs: number | null,
+	players: number | null,
+	freeBytes: number | null,
+	/**  A Java major version (the one there is). */
+	major: number | null,
+	/**  The Java the game needs (the lowest, or the highest for a Java that is too new). */
+	need: number | null,
+	/**  Mod issues, or mods. */
+	count: number | null,
+	/**  How far the clock is off (positive: ahead). */
+	minutes: number | null,
+	/**  When the last crash happened. */
+	at: string | null,
+	crash: CrashKind | null,
+	/**  The mod a crash points at (its display name). */
+	name: string | null,
+};
+
 /**
  *  Why a session stopped or is reconnecting. Messages come from the server or the client
  *  (formatting codes removed, flattened to one line) and are meant for display.
@@ -2057,68 +2119,6 @@ export type FailureReason =
  */
 { kind: "refused"; cause: KickCause; message: string | null };
 
-/**  What the button of an issue says. */
-export type FixLabel = 
-/**  "Düzelt". */
-"fix" | 
-/**  "Bu modu kapat". */
-"disable" | 
-/**  "<ad> modunu kapat" (the issue names several mods). */
-"disableNamed" | 
-/**  "Eski kopyayı kapat". */
-"disableOld" | 
-/**  "Aç". */
-"enable";
-
-/**  Numbers and names a row's words use. Never personal data. */
-export type Facts = {
-	latencyMs: number | null,
-	players: number | null,
-	freeBytes: number | null,
-	/**  A Java major version (the one there is). */
-	major: number | null,
-	/**  The Java the game needs (the lowest, or the highest for a Java that is too new). */
-	need: number | null,
-	/**  Mod issues, or mods. */
-	count: number | null,
-	/**  How far the clock is off (positive: ahead). */
-	minutes: number | null,
-	/**  When the last crash happened. */
-	at: string | null,
-	crash: CrashKind | null,
-	/**  The mod a crash points at (its display name). */
-	name: string | null,
-};
-
-export type FixOfferView = {
-	label: FixLabel,
-	/**  The mod the button acts on, for `disableNamed`. */
-	name: string | null,
-	/**  Files it changes (older copies of a duplicate can be several). */
-	count: number,
-};
-
-/**  One of the player's friend categories ("Okul", "PvP"). */
-export type FriendGroup = {
-	/**  1-12 lower case letters or digits, made by the launcher. */
-	id: string,
-	/**  1-24 characters. */
-	name: string,
-};
-
-/**  The player's friend categories, in their order, and who is in which. */
-export type FriendGroupsView = {
-	/**  The saved version (0 before the first save). */
-	version: number,
-	groups: FriendGroup[],
-	/**  Friends without an entry are in the implicit "Arkadaşlar" category. */
-	members: GroupMember[],
-};
-
-export type FriendView = FriendView_Serialize | FriendView_Deserialize;
-
-export type FriendView_Deserialize = {
-	id: string,
 /**  What one check found. */
 export type Finding = {
 	check: Check,
@@ -2149,6 +2149,48 @@ export type Fix =
 /**  The status page of an announcement. */
 "statusPage";
 
+/**  What the button of an issue says. */
+export type FixLabel = 
+/**  "Düzelt". */
+"fix" | 
+/**  "Bu modu kapat". */
+"disable" | 
+/**  "<ad> modunu kapat" (the issue names several mods). */
+"disableNamed" | 
+/**  "Eski kopyayı kapat". */
+"disableOld" | 
+/**  "Aç". */
+"enable";
+
+export type FixOfferView = {
+	label: FixLabel,
+	/**  The mod the button acts on, for `disableNamed`. */
+	name: string | null,
+	/**  Files it changes (older copies of a duplicate can be several). */
+	count: number,
+};
+
+/**  One of the player's friend categories ("Okul", "PvP"). */
+export type FriendGroup = {
+	/**  1-12 lower case letters or digits, made by the launcher. */
+	id: string,
+	/**  1-24 characters. */
+	name: string,
+};
+
+/**  The player's friend categories, in their order, and who is in which. */
+export type FriendGroupsView = {
+	/**  The saved version (0 before the first save). */
+	version: number,
+	groups: FriendGroup[],
+	/**  Friends without an entry are in the implicit "Arkadaşlar" category. */
+	members: GroupMember[],
+};
+
+export type FriendView = FriendView_Serialize | FriendView_Deserialize;
+
+export type FriendView_Deserialize = {
+	id: string,
 	name: string,
 	username: string,
 	avatar: string,
@@ -2426,6 +2468,11 @@ export type InstanceDiskUsageView = {
 	files: number,
 };
 
+/**  The kind of instance, for the summary (never its name). */
+export type InstanceKind = 
+/**  Kept up to date from the Projects pack. */
+"official" | "custom";
+
 /**  A set an instance has. */
 export type InstanceSetView = {
 	id: string,
@@ -2468,11 +2515,6 @@ export type InstanceSettingsView = {
 	/**  "auto" | "custom" */
 	javaMode: string,
 	javaPath: string | null,
-/**  The kind of instance, for the summary (never its name). */
-export type InstanceKind = 
-/**  Kept up to date from the Projects pack. */
-"official" | "custom";
-
 	minMemoryMb: number,
 	maxMemoryMb: number,
 	/**
@@ -2750,6 +2792,32 @@ export type JobProgressView = {
 	bytesPerSec: number,
 };
 
+/**
+ *  How newcomers who come with the crew's code or invite link get in (a service with
+ *  [`TEAM_FEATURE_REQUESTS`]): at once (`open`: every crew from before), or once the crew's leaders
+ *  take their request (`approval`). A member's invite lets a friend in either way. A value this
+ *  version does not know reads as `Approval`: the button asks, the service decides.
+ */
+export type JoinMode = "open" | "approval";
+
+/**  Someone who asked to join one of the player's crews. */
+export type JoinRequestView = {
+	id: string,
+	name: string,
+	username: string,
+	avatar: string,
+	avatarUrl: string | null,
+	/**  Unix seconds. */
+	sentAt: number,
+};
+
+/**  What asking to join a crew led to. */
+export type JoinResult = 
+/**  In the crew now (it is in the view). */
+"joined" | 
+/**  The crew approves newcomers: the request waits for its leaders. */
+"requested";
+
 export type KeptChangeView = {
 	item: PackChangeView,
 	reason: KeptReason,
@@ -2986,6 +3054,13 @@ export type LegacyScan = {
 	freeBytes: number | null,
 };
 
+/**  How a check went. The calm states first: only `Warning` and `Problem` count as findings. */
+export type Level = "ok" | 
+/**  Worth knowing, nothing to fix (a planned maintenance). */
+"note" | "warning" | "problem" | 
+/**  Could not be judged (no internet for it, no instance, the check failed). */
+"skipped";
+
 /**  One limit of a limited account (`perDay` for the daily ones). */
 export type LimitedItem = {
 	key: LimitedKey,
@@ -3007,7 +3082,11 @@ export type LimitedKey =
 /**  The settings backup. */
 "settingsBackup" | 
 /**  Chat messages a day. */
-"chatMessages" | "other";
+"chatMessages" | 
+/**  Making or renewing a crew's invite link (TEAM5). */
+"crewLink" | 
+/**  Making crew plans (answering them is fine; TEAM5). */
+"crewPlans" | "other";
 
 /**
  *  A limited account ("Sınırlı hesap", a new Discord account): until when, and what is limited
@@ -3054,13 +3133,6 @@ export type LoaderKind = "vanilla" | "fabric" | "quilt" | "forge" | "neoForge";
 export type LoaderVersionView = {
 	version: string,
 	stable: boolean,
-/**  How a check went. The calm states first: only `Warning` and `Problem` count as findings. */
-export type Level = "ok" | 
-/**  Worth knowing, nothing to fix (a planned maintenance). */
-"note" | "warning" | "problem" | 
-/**  Could not be judged (no internet for it, no instance, the check failed). */
-"skipped";
-
 };
 
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
@@ -4010,30 +4082,70 @@ export type PermissionLevel = "members" | "moderators" | "leader";
 
 /**
  *  A change of permissions (`PATCH /v1/teams/:id {"permissions": {…}}`, leader); unset rights
- *  stay as they are.
+ *  stay as they are. `admit` only goes to a service with [`TEAM_FEATURE_REQUESTS`].
  */
 export type PermissionsEdit = PermissionsEdit_Serialize | PermissionsEdit_Deserialize;
 
 /**
  *  A change of permissions (`PATCH /v1/teams/:id {"permissions": {…}}`, leader); unset rights
- *  stay as they are.
+ *  stay as they are. `admit` only goes to a service with [`TEAM_FEATURE_REQUESTS`].
  */
 export type PermissionsEdit_Deserialize = {
 	invite?: PermissionLevel | null,
 	call?: PermissionLevel | null,
 	kick?: PermissionLevel | null,
 	edit?: PermissionLevel | null,
+	admit?: PermissionLevel | null,
 };
 
 /**
  *  A change of permissions (`PATCH /v1/teams/:id {"permissions": {…}}`, leader); unset rights
- *  stay as they are.
+ *  stay as they are. `admit` only goes to a service with [`TEAM_FEATURE_REQUESTS`].
  */
 export type PermissionsEdit_Serialize = {
 	invite?: PermissionLevel | null,
 	call?: PermissionLevel | null,
 	kick?: PermissionLevel | null,
 	edit?: PermissionLevel | null,
+	admit?: PermissionLevel | null,
+};
+
+/**  An answer to a crew plan: "Geliyorum", "Belki", "Gelemem" (TEAM5). */
+export type PlanAnswer = "yes" | "maybe" | "no";
+
+export type PlanAnswerView = {
+	id: string,
+	answer: PlanAnswer,
+};
+
+/**  "Planlar": a time to meet on Projects in one of the player's crews. */
+export type PlanView = {
+	id: string,
+	/**  The crew's id. */
+	crew: string,
+	/**  Who made it, and their name as the crew shows it (None when they are not in the list). */
+	by: string,
+	byName: string | null,
+	/**  The player made it. */
+	mine: boolean,
+	/**  "Planı sil" may go: the player made it, or leads or moderates the crew. */
+	canCancel: boolean,
+	/**
+	 *  The plan's time as the service keeps it (Unix seconds, a whole quarter of an hour): the
+	 *  time to show.
+	 */
+	at: number,
+	/**
+	 *  The same moment and the plan's end on this computer's clock (moved by the difference
+	 *  between the two clocks): for reminders and for hiding it.
+	 */
+	startsAt: number,
+	endsAt: number,
+	/**  When it was made, on this computer's clock (Unix seconds). */
+	createdAt: number,
+	/**  Who answered what, in the crew's order. */
+	answers: PlanAnswerView[],
+	myAnswer: PlanAnswer | null,
 };
 
 /**  What the command bar shows (`prepare-status`, `prepare_status`). */
@@ -4745,25 +4857,25 @@ export type SocialNotice = SocialNotice_Serialize | SocialNotice_Deserialize;
 /**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
 export type SocialNotice_Deserialize = 
 /**  A live invite (never while on do-not-disturb: those wait as quiet invites). */
-({ kind: "invite"; invite: InviteView_Deserialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "invite"; invite: InviteView_Deserialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Someone sent a friend request. */
-({ kind: "request"; request: RequestView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "request"; request: RequestView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
 /**  A request was accepted (by them, or on another device): a new friend. */
-({ kind: "friendAdded"; friend: FriendView_Deserialize }) & { call?: never; conv?: never; crew?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendAdded"; friend: FriendView_Deserialize }) & { call?: never; conv?: never; crew?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A friend came online. */
-({ kind: "friendOnline"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendOnline"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A friend started playing on projects.gg. */
-({ kind: "friendOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Signed in. `restore` is a settings backup saved by another computer, worth offering. */
-({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; staff?: never; until?: never } | 
+({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; staff?: never; until?: never } | 
 /**  A friend invited the player to their team (only while teams are on). */
-({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The founder removed the player from the team, or ended it. */
 ({ kind: "teamGone"; reason: TeamExit; 
 /**  The team's name, for the sentence. */
 name: string | null; 
 /**  Projects' moderators did it (community rules). */
-staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; request?: never; restore?: never; until?: never } | 
+staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; plan?: never; request?: never; restore?: never; until?: never } | 
 /**
  *  A new chat message from someone else, live (never one of the player's own, nor one a sync
  *  brought): the launcher decides whether to say it.
@@ -4772,46 +4884,58 @@ staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; 
 /**  The sender's name as the lists show it. */
 name: string | null; 
 /**  The crew of a crew's chat. */
-crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Moderators suspended or banned the account: every session ended. */
-({ kind: "restricted"; until: number | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never } | 
+({ kind: "restricted"; until: number | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never } | 
 /**
  *  A teammate called the crew, live (never for the player's own call, on do-not-disturb or
  *  for a call that is only new to this launcher).
  */
-({ kind: "crewCall"; call: CrewCallView_Deserialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewCall"; call: CrewCallView_Deserialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**
  *  The caller of a call the player said "Geliyorum" or "Birazdan" to moved: to projects.gg (a
  *  call that was "Hazır mısın?"), or to another server (the call's `server` says where).
  */
-({ kind: "crewCallJoin"; call: CrewCallView_Deserialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewCallJoin"; call: CrewCallView_Deserialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A teammate (a friend or not) started playing on projects.gg. */
-({ kind: "crewmateOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewmateOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+/**
+ *  Someone asked to join one of the player's crews, live (only for a player who may answer,
+ *  never while every crew or that crew is muted).
+ */
+({ kind: "joinRequest"; crew: string; request: JoinRequestView }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
+/**  A join request of the player's was taken: they are in that crew now. */
+({ kind: "requestAccepted"; crew: string; name: string }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+/**
+ *  A crewmate made a plan, live (never the player's own, never while that crew or every crew
+ *  is muted).
+ */
+({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
-({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never };
+({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never };
 
 /**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
 export type SocialNotice_Serialize = 
 /**  A live invite (never while on do-not-disturb: those wait as quiet invites). */
-({ kind: "invite"; invite: InviteView_Serialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "invite"; invite: InviteView_Serialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Someone sent a friend request. */
-({ kind: "request"; request: RequestView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "request"; request: RequestView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
 /**  A request was accepted (by them, or on another device): a new friend. */
-({ kind: "friendAdded"; friend: FriendView_Serialize }) & { call?: never; conv?: never; crew?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendAdded"; friend: FriendView_Serialize }) & { call?: never; conv?: never; crew?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A friend came online. */
-({ kind: "friendOnline"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendOnline"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A friend started playing on projects.gg. */
-({ kind: "friendOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Signed in. `restore` is a settings backup saved by another computer, worth offering. */
-({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; staff?: never; until?: never } | 
+({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; staff?: never; until?: never } | 
 /**  A friend invited the player to their team (only while teams are on). */
-({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The founder removed the player from the team, or ended it. */
 ({ kind: "teamGone"; reason: TeamExit; 
 /**  The team's name, for the sentence. */
 name: string | null; 
 /**  Projects' moderators did it (community rules). */
-staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; request?: never; restore?: never; until?: never } | 
+staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; plan?: never; request?: never; restore?: never; until?: never } | 
 /**
  *  A new chat message from someone else, live (never one of the player's own, nor one a sync
  *  brought): the launcher decides whether to say it.
@@ -4820,23 +4944,35 @@ staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; 
 /**  The sender's name as the lists show it. */
 name: string | null; 
 /**  The crew of a crew's chat. */
-crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Moderators suspended or banned the account: every session ended. */
-({ kind: "restricted"; until: number | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never } | 
+({ kind: "restricted"; until: number | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never } | 
 /**
  *  A teammate called the crew, live (never for the player's own call, on do-not-disturb or
  *  for a call that is only new to this launcher).
  */
-({ kind: "crewCall"; call: CrewCallView_Serialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewCall"; call: CrewCallView_Serialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**
  *  The caller of a call the player said "Geliyorum" or "Birazdan" to moved: to projects.gg (a
  *  call that was "Hazır mısın?"), or to another server (the call's `server` says where).
  */
-({ kind: "crewCallJoin"; call: CrewCallView_Serialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewCallJoin"; call: CrewCallView_Serialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A teammate (a friend or not) started playing on projects.gg. */
-({ kind: "crewmateOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewmateOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+/**
+ *  Someone asked to join one of the player's crews, live (only for a player who may answer,
+ *  never while every crew or that crew is muted).
+ */
+({ kind: "joinRequest"; crew: string; request: JoinRequestView }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
+/**  A join request of the player's was taken: they are in that crew now. */
+({ kind: "requestAccepted"; crew: string; name: string }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+/**
+ *  A crewmate made a plan, live (never the player's own, never while that crew or every crew
+ *  is muted).
+ */
+({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
-({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never };
+({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never };
 
 export type SocialView = SocialView_Serialize | SocialView_Deserialize;
 
@@ -4880,6 +5016,19 @@ export type SocialView_Deserialize = {
 	crewLimit: number,
 	/**  Invites to teams, newest first (only while `teams`). */
 	teamInvites: TeamInviteView[],
+	/**
+	 *  The player's own join requests that wait, newest first (only while `teams` and the
+	 *  service offers `requests`). They go by themselves 7 days after `sentAt`.
+	 */
+	teamRequests: TeamRequestView[],
+	/**
+	 *  The plans of the player's crews they see, soonest first, those under way included (only
+	 *  while `teams` and the service offers `plans` on this connection). They are over at
+	 *  `endsAt`: the launcher hides them then.
+	 */
+	plans: PlanView[],
+	/**  "Birlikte oynanan süre" is kept on this computer (the player may switch it off). */
+	together: boolean,
 	/**
 	 *  Open crew calls the player sees, their own included (only while `teams` and the service
 	 *  offers calls). They end by themselves at `endsAt`: the launcher hides them then.
@@ -4950,6 +5099,19 @@ export type SocialView_Serialize = {
 	crewLimit: number,
 	/**  Invites to teams, newest first (only while `teams`). */
 	teamInvites: TeamInviteView[],
+	/**
+	 *  The player's own join requests that wait, newest first (only while `teams` and the
+	 *  service offers `requests`). They go by themselves 7 days after `sentAt`.
+	 */
+	teamRequests: TeamRequestView[],
+	/**
+	 *  The plans of the player's crews they see, soonest first, those under way included (only
+	 *  while `teams` and the service offers `plans` on this connection). They are over at
+	 *  `endsAt`: the launcher hides them then.
+	 */
+	plans: PlanView[],
+	/**  "Birlikte oynanan süre" is kept on this computer (the player may switch it off). */
+	together: boolean,
 	/**
 	 *  Open crew calls the player sees, their own included (only while `teams` and the service
 	 *  offers calls). They end by themselves at `endsAt`: the launcher hides them then.
@@ -5213,8 +5375,14 @@ export type TeamLookupView = {
 	motto: string,
 	members: number,
 	relation: TeamRelation,
-	/**  `EKP-XXXX-XXXX`, for joining. */
+	/**  `EKP-XXXX-XXXX`, for joining (empty when it was looked up by its invite link). */
 	code: string,
+	/**  The invite link it was looked up by (`XXXX-XXXX-XXXX`), for joining. */
+	link: string | null,
+	/**  How newcomers get in: with `approval` "Katıl" sends a join request. */
+	join: JoinMode,
+	/**  The player's join request to it waits, since then (Unix seconds). */
+	requestedAt: number | null,
 };
 
 export type TeamMemberView = TeamMemberView_Serialize | TeamMemberView_Deserialize;
@@ -5241,6 +5409,11 @@ export type TeamMemberView_Deserialize = {
 	discordUrl: string,
 	/**  Unix seconds. */
 	joinedAt: number,
+	/**
+	 *  Seconds the player and they were on Projects together this month, as this computer kept
+	 *  it ("Birlikte oynanan süre"; 0 while it is off).
+	 */
+	togetherMonth: number,
 };
 
 export type TeamMemberView_Serialize = {
@@ -5265,6 +5438,11 @@ export type TeamMemberView_Serialize = {
 	discordUrl: string,
 	/**  Unix seconds. */
 	joinedAt: number,
+	/**
+	 *  Seconds the player and they were on Projects together this month, as this computer kept
+	 *  it ("Birlikte oynanan süre"; 0 while it is off).
+	 */
+	togetherMonth: number,
 };
 
 /**
@@ -5311,6 +5489,11 @@ export type TeamPermissions = {
 	 *  are always the leader's).
 	 */
 	edit?: PermissionLevel,
+	/**
+	 *  Answer join requests and make, renew or switch off the invite link (`moderators` or
+	 *  `leader`; a service with [`TEAM_FEATURE_REQUESTS`]).
+	 */
+	admit?: PermissionLevel,
 };
 
 /**  How a team code relates to the player. */
@@ -5328,6 +5511,20 @@ export type TeamRelation = "none" |
  *  `multi: true`).
  */
 "limit";
+
+/**  One of the player's own join requests that waits. */
+export type TeamRequestView = {
+	teamId: string,
+	name: string,
+	tag: string,
+	emblem: string,
+	color: string,
+	frame: string,
+	motto: string,
+	members: number,
+	/**  Unix seconds. */
+	sentAt: number,
+};
 
 /**
  *  The wire keeps the first names: players see "Lider" (leader) for `founder`. A role this
@@ -5385,6 +5582,21 @@ export type TeamView_Deserialize = {
 	 *  (Unix seconds; None when not locked).
 	 */
 	textLockedUntil: number | null,
+	/**
+	 *  How newcomers with the code or the invite link get in (`open` from a service without
+	 *  `requests`).
+	 */
+	join: JoinMode,
+	/**  The crew's invite link, `XXXX-XXXX-XXXX`, and its page (a service with `link`). */
+	link: string | null,
+	linkUrl: string | null,
+	/**  Players who asked to join, oldest first: only for a player whose role may answer them. */
+	requests: JoinRequestView[],
+	/**
+	 *  Seconds the player was on Projects this week with someone of this crew there too, as this
+	 *  computer kept it ("Birlikte oynanan süre"; 0 while it is off).
+	 */
+	togetherWeek: number,
 };
 
 export type TeamView_Serialize = {
@@ -5428,6 +5640,21 @@ export type TeamView_Serialize = {
 	 *  (Unix seconds; None when not locked).
 	 */
 	textLockedUntil: number | null,
+	/**
+	 *  How newcomers with the code or the invite link get in (`open` from a service without
+	 *  `requests`).
+	 */
+	join: JoinMode,
+	/**  The crew's invite link, `XXXX-XXXX-XXXX`, and its page (a service with `link`). */
+	link: string | null,
+	linkUrl: string | null,
+	/**  Players who asked to join, oldest first: only for a player whose role may answer them. */
+	requests: JoinRequestView[],
+	/**
+	 *  Seconds the player was on Projects this week with someone of this crew there too, as this
+	 *  computer kept it ("Birlikte oynanan süre"; 0 while it is off).
+	 */
+	togetherWeek: number,
 };
 
 /**  Something in the launcher trash. */
@@ -5513,6 +5740,40 @@ export type TrashedSetView = {
 	minecraft: string,
 	deletedAt: string | null,
 	sizeBytes: number,
+};
+
+/**  What a run sends while it goes. */
+export type TroubleshootEvent = 
+/**  The rows checked (the memory and clock rows come only with a finding). */
+{ type: "plan"; checks: Check[] } | 
+/**  A row settled (or changed). */
+{ type: "finding"; finding: Finding };
+
+/**  The instance the checks looked at, for the summary. */
+export type TroubleshootInstance = {
+	kind: InstanceKind,
+	minecraft: string,
+	loader: LoaderKind,
+	loaderVersion: string | null,
+	/**  The Projects pack's version. */
+	packVersion: string | null,
+};
+
+/**  A run's result. */
+export type TroubleshootReport = {
+	findings: Finding[],
+	system: TroubleshootSystem,
+	instance: TroubleshootInstance | null,
+};
+
+/**  The computer, for the summary. */
+export type TroubleshootSystem = {
+	launcher: string,
+	debug: boolean,
+	/**  "Windows 11 Pro 24H2". */
+	os: string,
+	arch: string,
+	memoryMb: number,
 };
 
 /**  A mod the crash dialog can turn off. */
@@ -5666,38 +5927,4 @@ async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; dat
         return { status: "error", error: e as any };
     }
 }
-
-/**  What a run sends while it goes. */
-export type TroubleshootEvent = 
-/**  The rows checked (the memory and clock rows come only with a finding). */
-{ type: "plan"; checks: Check[] } | 
-/**  A row settled (or changed). */
-{ type: "finding"; finding: Finding };
-
-/**  The instance the checks looked at, for the summary. */
-export type TroubleshootInstance = {
-	kind: InstanceKind,
-	minecraft: string,
-	loader: LoaderKind,
-	loaderVersion: string | null,
-	/**  The Projects pack's version. */
-	packVersion: string | null,
-};
-
-/**  A run's result. */
-export type TroubleshootReport = {
-	findings: Finding[],
-	system: TroubleshootSystem,
-	instance: TroubleshootInstance | null,
-};
-
-/**  The computer, for the summary. */
-export type TroubleshootSystem = {
-	launcher: string,
-	debug: boolean,
-	/**  "Windows 11 Pro 24H2". */
-	os: string,
-	arch: string,
-	memoryMb: number,
-};
 

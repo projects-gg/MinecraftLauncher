@@ -19,6 +19,8 @@ tracing = { workspace = true }
 sha2 = { workspace = true }
 base64 = { workspace = true }
 rand = { workspace = true }
+# "Birlikte oynanan süre" counts by the local week and month.
+jiff = { workspace = true }
 # UI-facing views are exported to TypeScript by the launcher (tauri-specta).
 specta = { workspace = true }
 # The session token lives in the OS keychain (same service as the rest of the launcher).

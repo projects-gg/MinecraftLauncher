@@ -11,9 +11,10 @@ use pl_lang::pick;
 use pl_mc::launch::{GameEvent, QuickPlay};
 use pl_social::{
     CallAnswer, CallOutcome, ChatPage, CrewMuteEdit, ErrorCode, FriendGroup, GroupMember,
-    InviteResult, LookupView, PermissionsEdit, ProfileUpdate, ReportReason, ReportTarget,
-    SendOutcome, SessionInfo, SettingsMeta, SocialError, SocialService, SocialUpdate, SocialView,
-    StatusMode, TeamEdit, TeamLook, TeamLookupView, TeamNotificationsEdit,
+    InviteResult, JoinMode, JoinResult, LookupView, PermissionsEdit, PlanAnswer, ProfileUpdate,
+    ReportReason, ReportTarget, SendOutcome, SessionInfo, SettingsMeta, SocialError, SocialService,
+    SocialUpdate, SocialView, StatusMode, TeamEdit, TeamLook, TeamLookupView,
+    TeamNotificationsEdit,
 };
 use tauri::{AppHandle, Emitter, State};
 
@@ -59,6 +60,7 @@ pub fn create(
     );
     service.keep_closed_invites_in(data_root.join("social").join("closed-invites.json"));
     service.keep_chat_in(data_root.join("social").join("chat"));
+    service.keep_together_in(data_root.join("social").join("together.json"));
     service.set_teams_enabled(debug_teams());
     service.set_chat_enabled(debug_chat());
     service.configure(pl_social::service_url(false, debug_override().as_deref()));
@@ -454,6 +456,7 @@ pub async fn social_team_edit(
         frame,
         motto,
         permissions,
+        join: None,
     };
     let text = edit.changes_text();
     match state.social.edit_team(&team, edit).await {
@@ -631,10 +634,220 @@ pub async fn social_team_lookup(
     Ok(state.social.lookup_team(&code).await?)
 }
 
+/// A daily limit (about a day to wait) reads better as the rule itself than as "too often".
+fn daily(result: Result<JoinResult, SocialError>) -> CmdResult<JoinResult> {
+    match result {
+        Err(error @ SocialError::RateLimited { .. })
+            if error
+                .retry_after()
+                .is_some_and(|wait| wait.as_secs() >= 3_600) =>
+        {
+            Err(crate::error::CmdError::new(
+                "SOSYAL-EKIP-GUNLUK",
+                pick(
+                    "Bugünlük sınıra ulaştın. Yarın yeniden dene.",
+                    "You've reached today's limit. Try again tomorrow.",
+                ),
+                error.to_string(),
+            ))
+        }
+        other => Ok(other?),
+    }
+}
+
+/// Joins the crew of a code; a crew that approves newcomers takes a join request instead.
 #[tauri::command]
 #[specta::specta]
-pub async fn social_team_join(state: State<'_, AppState>, code: String) -> CmdResult<()> {
-    Ok(state.social.join_team(&code).await?)
+pub async fn social_team_join(state: State<'_, AppState>, code: String) -> CmdResult<JoinResult> {
+    daily(state.social.join_team(&code).await)
+}
+
+/// A link that was renewed or switched off looks like no crew: said as the link's, not a code's.
+fn gone_link(error: SocialError) -> crate::error::CmdError {
+    if error.code() == Some(&ErrorCode::TeamNotFound) {
+        return crate::error::CmdError::new(
+            "SOSYAL-EKIP-BAGLANTI-YOK",
+            pick(
+                "Bu davet bağlantısı artık geçerli değil.",
+                "This invite link doesn't work anymore.",
+            ),
+            error.to_string(),
+        );
+    }
+    error.into()
+}
+
+/// What a crew's invite link (`XXXX-XXXX-XXXX`) leads to.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_lookup_link(
+    state: State<'_, AppState>,
+    link: String,
+) -> CmdResult<TeamLookupView> {
+    state
+        .social
+        .lookup_crew_link(&link)
+        .await
+        .map_err(gone_link)
+}
+
+/// Joins the crew of an invite link, or asks to (a crew that approves newcomers).
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_join_link(
+    state: State<'_, AppState>,
+    link: String,
+) -> CmdResult<JoinResult> {
+    match state.social.join_crew_link(&link).await {
+        Err(error) if error.code() == Some(&ErrorCode::TeamNotFound) => Err(gone_link(error)),
+        other => daily(other),
+    }
+}
+
+/// Withdraws the player's waiting join request to a crew.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_request_withdraw(
+    state: State<'_, AppState>,
+    team: String,
+) -> CmdResult<()> {
+    Ok(state.social.withdraw_team_request(&team).await?)
+}
+
+/// Takes a player who asked into one of the player's crews (`accept`), or declines (silently).
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_request_answer(
+    state: State<'_, AppState>,
+    team: String,
+    id: String,
+    accept: bool,
+) -> CmdResult<()> {
+    match state.social.answer_team_request(&team, &id, accept).await {
+        // The player is in as many crews as they may be: say who cannot come, not "you".
+        Err(error) if error.code() == Some(&ErrorCode::LimitCrews) => {
+            Err(crate::error::CmdError::new(
+                "SOSYAL-EKIP-ISTEK-SINIR",
+                pick(
+                    "Bu oyuncu daha fazla ekibe katılamıyor. İsteği bekliyor.",
+                    "This player can't join any more crews. Their request keeps waiting.",
+                ),
+                error.to_string(),
+            ))
+        }
+        other => Ok(other?),
+    }
+}
+
+/// A new invite link for one of the player's crews (`on`, in place of the old one), or none.
+/// Answers the link it has now.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_link(
+    state: State<'_, AppState>,
+    team: String,
+    on: bool,
+) -> CmdResult<Option<String>> {
+    match state.social.set_team_link(&team, on).await {
+        // The code and the link share 5 renewals a day.
+        Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
+            "SOSYAL-EKIP-BAGLANTI",
+            pick(
+                "Kodu ve bağlantıyı bugün çok yeniledin. Yarın yeniden dene.",
+                "You've renewed the code and the link a lot today. Try again tomorrow.",
+            ),
+            error.to_string(),
+        )),
+        other => Ok(other?),
+    }
+}
+
+/// How newcomers with the code or the invite link get in (the leader).
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_join_mode(
+    state: State<'_, AppState>,
+    team: String,
+    join: JoinMode,
+) -> CmdResult<()> {
+    match state.social.set_join_mode(&team, join).await {
+        // A PATCH counts against the 60 crew changes a day.
+        Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
+            "SOSYAL-EKIP-DEGISIKLIK",
+            pick(
+                "Ekibi bugün çok değiştirdin. Yarın yeniden dene.",
+                "You've changed the crew a lot today. Try again tomorrow.",
+            ),
+            error.to_string(),
+        )),
+        other => Ok(other?),
+    }
+}
+
+/// A new plan in one of the player's crews at `at` (Unix seconds, a whole quarter of an hour).
+/// Answers its id.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_plan_make(
+    state: State<'_, AppState>,
+    crew: String,
+    at: i64,
+) -> CmdResult<String> {
+    match state.social.make_plan(&crew, at).await {
+        // Five new plans a day.
+        Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
+            "SOSYAL-PLAN-SINIR",
+            pick(
+                "Bugün en çok 5 plan yapabilirsin. Yarın yeniden dene.",
+                "You can make up to 5 plans a day. Try again tomorrow.",
+            ),
+            error.to_string(),
+        )),
+        other => Ok(other?),
+    }
+}
+
+/// "Geliyorum", "Belki" or "Gelemem" to a plan. False: the plan is gone.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_plan_answer(
+    state: State<'_, AppState>,
+    plan: String,
+    answer: PlanAnswer,
+) -> CmdResult<bool> {
+    match state.social.answer_plan(&plan, answer).await {
+        // Twenty changed answers a day; the answer stays as it was.
+        Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
+            "SOSYAL-PLAN-YANIT",
+            pick(
+                "Yanıtını bugün çok değiştirdin. Yarın yeniden dene.",
+                "You've changed your answer a lot today. Try again tomorrow.",
+            ),
+            error.to_string(),
+        )),
+        other => Ok(other?),
+    }
+}
+
+/// "Planı sil".
+#[tauri::command]
+#[specta::specta]
+pub async fn social_plan_cancel(state: State<'_, AppState>, plan: String) -> CmdResult<()> {
+    Ok(state.social.cancel_plan(&plan).await?)
+}
+
+/// "Birlikte oynanan süre" on or off on this computer (off deletes what was kept).
+#[tauri::command]
+#[specta::specta]
+pub fn social_together(state: State<'_, AppState>, on: bool) {
+    state.social.set_together(on);
+}
+
+/// Deletes the time played together kept on this computer.
+#[tauri::command]
+#[specta::specta]
+pub fn social_together_clear(state: State<'_, AppState>) {
+    state.social.clear_together();
 }
 
 #[tauri::command]

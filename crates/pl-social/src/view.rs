@@ -5,11 +5,13 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    CrewMute, FriendGroup, LimitedItem, LimitedKey, Limits, Me, NoticeKind, Privacy, PublicProfile,
-    Relation, ReportReason, SettingsMeta, StatusMode, TeamExit, TeamPermissions, TeamRelation,
-    TeamRole, discord_avatar_url,
+    CrewMute, FriendGroup, JoinMode, LimitedItem, LimitedKey, Limits, Me, NoticeKind, Privacy,
+    PublicProfile, Relation, ReportReason, SettingsMeta, StatusMode, TeamExit, TeamPermissions,
+    TeamRelation, TeamRole, discord_avatar_url,
 };
-use crate::protocol::{CallAnswer, CallKind, Game, LocalStatus, PresenceState, is_projects_host};
+use crate::protocol::{
+    CallAnswer, CallKind, Game, LocalStatus, PlanAnswer, PresenceState, is_projects_host,
+};
 use crate::qr::QrPath;
 use crate::state::Connection;
 
@@ -62,6 +64,15 @@ pub struct SocialView {
     pub crew_limit: u32,
     /// Invites to teams, newest first (only while `teams`).
     pub team_invites: Vec<TeamInviteView>,
+    /// The player's own join requests that wait, newest first (only while `teams` and the
+    /// service offers `requests`). They go by themselves 7 days after `sentAt`.
+    pub team_requests: Vec<TeamRequestView>,
+    /// The plans of the player's crews they see, soonest first, those under way included (only
+    /// while `teams` and the service offers `plans` on this connection). They are over at
+    /// `endsAt`: the launcher hides them then.
+    pub plans: Vec<PlanView>,
+    /// "Birlikte oynanan süre" is kept on this computer (the player may switch it off).
+    pub together: bool,
     /// Open crew calls the player sees, their own included (only while `teams` and the service
     /// offers calls). They end by themselves at `endsAt`: the launcher hides them then.
     pub calls: Vec<CrewCallView>,
@@ -418,6 +429,91 @@ pub struct TeamView {
     /// Projects' moderators reset the crew's name, tag and motto; they stay locked until then
     /// (Unix seconds; None when not locked).
     pub text_locked_until: Option<i64>,
+    /// How newcomers with the code or the invite link get in (`open` from a service without
+    /// `requests`).
+    pub join: JoinMode,
+    /// The crew's invite link, `XXXX-XXXX-XXXX`, and its page (a service with `link`).
+    pub link: Option<String>,
+    pub link_url: Option<String>,
+    /// Players who asked to join, oldest first: only for a player whose role may answer them.
+    pub requests: Vec<JoinRequestView>,
+    /// Seconds the player was on Projects this week with someone of this crew there too, as this
+    /// computer kept it ("Birlikte oynanan süre"; 0 while it is off).
+    pub together_week: u32,
+}
+
+/// Someone who asked to join one of the player's crews.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct JoinRequestView {
+    pub id: String,
+    pub name: String,
+    pub username: String,
+    pub avatar: String,
+    pub avatar_url: Option<String>,
+    /// Unix seconds.
+    pub sent_at: i64,
+}
+
+/// One of the player's own join requests that waits.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TeamRequestView {
+    pub team_id: String,
+    pub name: String,
+    pub tag: String,
+    pub emblem: String,
+    pub color: String,
+    pub frame: String,
+    pub motto: String,
+    pub members: u32,
+    /// Unix seconds.
+    pub sent_at: i64,
+}
+
+/// "Planlar": a time to meet on Projects in one of the player's crews.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanView {
+    pub id: String,
+    /// The crew's id.
+    pub crew: String,
+    /// Who made it, and their name as the crew shows it (None when they are not in the list).
+    pub by: String,
+    pub by_name: Option<String>,
+    /// The player made it.
+    pub mine: bool,
+    /// "Planı sil" may go: the player made it, or leads or moderates the crew.
+    pub can_cancel: bool,
+    /// The plan's time as the service keeps it (Unix seconds, a whole quarter of an hour): the
+    /// time to show.
+    pub at: i64,
+    /// The same moment and the plan's end on this computer's clock (moved by the difference
+    /// between the two clocks): for reminders and for hiding it.
+    pub starts_at: i64,
+    pub ends_at: i64,
+    /// When it was made, on this computer's clock (Unix seconds).
+    pub created_at: i64,
+    /// Who answered what, in the crew's order.
+    pub answers: Vec<PlanAnswerView>,
+    pub my_answer: Option<PlanAnswer>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanAnswerView {
+    pub id: String,
+    pub answer: PlanAnswer,
+}
+
+/// What asking to join a crew led to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum JoinResult {
+    /// In the crew now (it is in the view).
+    Joined,
+    /// The crew approves newcomers: the request waits for its leaders.
+    Requested,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -444,6 +540,9 @@ pub struct TeamMemberView {
     pub discord_url: String,
     /// Unix seconds.
     pub joined_at: i64,
+    /// Seconds the player and they were on Projects together this month, as this computer kept
+    /// it ("Birlikte oynanan süre"; 0 while it is off).
+    pub together_month: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -477,8 +576,14 @@ pub struct TeamLookupView {
     pub motto: String,
     pub members: u32,
     pub relation: TeamRelation,
-    /// `EKP-XXXX-XXXX`, for joining.
+    /// `EKP-XXXX-XXXX`, for joining (empty when it was looked up by its invite link).
     pub code: String,
+    /// The invite link it was looked up by (`XXXX-XXXX-XXXX`), for joining.
+    pub link: Option<String>,
+    /// How newcomers get in: with `approval` "Katıl" sends a join request.
+    pub join: JoinMode,
+    /// The player's join request to it waits, since then (Unix seconds).
+    pub requested_at: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
@@ -720,6 +825,22 @@ pub enum SocialNotice {
     /// A teammate (a friend or not) started playing on projects.gg.
     CrewmateOnProjects {
         id: String,
+    },
+    /// Someone asked to join one of the player's crews, live (only for a player who may answer,
+    /// never while every crew or that crew is muted).
+    JoinRequest {
+        crew: String,
+        request: JoinRequestView,
+    },
+    /// A join request of the player's was taken: they are in that crew now.
+    RequestAccepted {
+        crew: String,
+        name: String,
+    },
+    /// A crewmate made a plan, live (never the player's own, never while that crew or every crew
+    /// is muted).
+    CrewPlan {
+        plan: Box<PlanView>,
     },
     SignInFailed {
         reason: SignInFailure,

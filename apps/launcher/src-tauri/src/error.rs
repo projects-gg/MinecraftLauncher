@@ -340,6 +340,16 @@ fn social_special(error: &pl_social::SocialError) -> Option<(&'static str, Strin
                     "Your Discord account is new, so you've reached today's message limit.",
                     true,
                 ),
+                LimitedKey::CrewLink => (
+                    "Discord hesabın yeni olduğu için davet bağlantısı oluşturamazsın.",
+                    "Your Discord account is new, so you can't make an invite link yet.",
+                    false,
+                ),
+                LimitedKey::CrewPlans => (
+                    "Discord hesabın yeni olduğu için plan yapamazsın.",
+                    "Your Discord account is new, so you can't make plans yet.",
+                    false,
+                ),
                 LimitedKey::Other => (
                     "Discord hesabın yeni olduğu için bu şimdilik yapılamıyor.",
                     "Your Discord account is new, so this can't be done yet.",
@@ -437,6 +447,24 @@ impl From<pl_social::SocialError> for CmdError {
                     "Artık bir ekipte değilsin.",
                     "You're not in a crew anymore.",
                 ),
+            ),
+            E::InvalidInput("not a crew link") => (
+                "SOSYAL-EKIP-BAGLANTI-GECERSIZ",
+                pick(
+                    "Bu bir ekip davet bağlantısı değil.",
+                    "That's not a crew invite link.",
+                ),
+            ),
+            E::InvalidInput("crew links" | "join requests" | "crew plans") => (
+                "SOSYAL-EKIP-YENI",
+                pick(
+                    "Bu şu an kullanılamıyor. Biraz sonra tekrar dene.",
+                    "This isn't available right now. Try again in a bit.",
+                ),
+            ),
+            E::InvalidInput("plan time") => (
+                "SOSYAL-PLAN-SAAT",
+                pick("Bu saat seçilemez.", "That time can't be picked."),
             ),
             E::InvalidInput("friend categories") => (
                 "SOSYAL-KATEGORI",
@@ -754,6 +782,59 @@ impl From<pl_social::SocialError> for CmdError {
                         "Ekibin bekleyen çok daveti var. Biraz sonra tekrar dene.",
                         "The crew has too many invites waiting. Try again later.",
                     ),
+                ),
+                C::TeamApprovalRequired => (
+                    "SOSYAL-EKIP-ONAY",
+                    pick(
+                        "Bu ekibe liderler onaylayınca katılınır.",
+                        "This crew's leaders approve newcomers.",
+                    ),
+                ),
+                C::TeamRequestNotFound => (
+                    "SOSYAL-EKIP-ISTEK-YOK",
+                    pick(
+                        "Bu istek artık geçerli değil.",
+                        "This request isn't valid anymore.",
+                    ),
+                ),
+                C::LimitTeamRequests => (
+                    "SOSYAL-EKIP-ISTEK-DOLU",
+                    pick(
+                        "Bu ekibin bekleyen çok isteği var. Biraz sonra tekrar dene.",
+                        "This crew has too many requests waiting. Try again later.",
+                    ),
+                ),
+                C::LimitOutgoingTeamRequests => (
+                    "SOSYAL-EKIP-ISTEK-SINIR",
+                    pick(
+                        "Bekleyen 3 isteğin var. Önce birini geri çek.",
+                        "You have 3 requests waiting. Withdraw one first.",
+                    ),
+                ),
+                C::PlanTime => (
+                    "SOSYAL-PLAN-SAAT",
+                    pick(
+                        "Bu saat seçilemez. Önümüzdeki 7 günden bir saat seç.",
+                        "That time can't be picked. Pick one in the next 7 days.",
+                    ),
+                ),
+                C::LimitTeamPlans => (
+                    "SOSYAL-PLAN-DOLU",
+                    pick(
+                        "Ekipte en çok 3 plan olabilir.",
+                        "A crew can have up to 3 plans.",
+                    ),
+                ),
+                C::PlanExists => (
+                    "SOSYAL-PLAN-VAR",
+                    pick(
+                        "Bu saatte zaten bir plan var.",
+                        "There's a plan at that time already.",
+                    ),
+                ),
+                C::PlanNotFound => (
+                    "SOSYAL-PLAN-YOK",
+                    pick("Bu plan artık yok.", "This plan is gone."),
                 ),
                 C::Unauthorized => (
                     "SOSYAL-OTURUM",

@@ -25,28 +25,31 @@ use crate::chat::{
     EDIT_WINDOW_MS, PAGE_SIZE, REPORT_CONTEXT, RESEND_WINDOW_MS, TOO_FAST_WAIT_MAX, Viewer,
     change_view, entry_view, failure_of, merge, message_view, new_nonce, prepare_text,
 };
-use crate::client::{Session, SocialClient, SocialConfig};
+use crate::client::{CrewKey, Session, SocialClient, SocialConfig};
 use crate::closed::ClosedInvitesFile;
-use crate::codes::{crew_code, normalize_friend_code, normalize_team_code};
+use crate::codes::{crew_code, normalize_crew_link, normalize_friend_code, normalize_team_code};
 use crate::error::{ErrorCode, Result, SocialError};
 use crate::game::{self, GameActivity};
 use crate::history::{Change, Conversation, History};
 use crate::model::{
-    ChatMessage, ChatStatus, CrewMuteEdit, FIRST_EMBLEMS, FriendGroup, FriendGroups, LimitedKey,
-    MAX_FRIEND_GROUPS, ProfileUpdate, ReportReason, RequestOutcome, SessionInfo, SettingsMeta,
-    SettingsPrecondition, TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI,
-    TEAM_FEATURE_MUTE, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamNotificationsEdit, TeamRole,
+    ChatMessage, ChatStatus, CrewMuteEdit, EditFeatures, FIRST_EMBLEMS, FriendGroup, FriendGroups,
+    JoinMode, JoinOutcome, LimitedKey, MAX_FRIEND_GROUPS, ProfileUpdate, ReportReason,
+    RequestOutcome, SessionInfo, SettingsMeta, SettingsPrecondition, TEAM_FEATURE_CALLS,
+    TEAM_FEATURE_LINK, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE,
+    TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamLookup,
+    TeamNotificationsEdit, TeamRole,
 };
 use crate::presence::{ChatSetup, PresenceControl, PresenceEvent, PresenceOptions, StopReason};
-use crate::protocol::{CallAnswer, LocalStatus};
+use crate::protocol::{CallAnswer, LocalStatus, PlanAnswer};
 use crate::qr::{QrPath, qr_path};
 use crate::state::{Connection, SocialState};
 use crate::store::TokenStore;
+use crate::together::{Periods, Together, TogetherLog};
 use crate::view::{
     ActivityView, AuthPhase, CallOutcome, CallPlace, ChatChangeView, ChatPage, ChatView,
-    ConversationView, CrewNotificationsView, GroupMember, InviteResult, LastMessageView,
-    LookupView, ProfileView, ReportTarget, RestrictionView, SendFailure, SendOutcome,
-    SignInFailure, SocialNotice, SocialView, TeamLookupView, me_view,
+    ConversationView, CrewNotificationsView, GroupMember, InviteResult, JoinResult,
+    LastMessageView, LookupView, ProfileView, ReportTarget, RestrictionView, SendFailure,
+    SendOutcome, SignInFailure, SocialNotice, SocialView, TeamLookupView, me_view,
 };
 
 /// After a reconnect the friend list is fetched again only when it is older than this.
@@ -162,6 +165,8 @@ struct Core {
     restriction: Option<RestrictionView>,
     /// The settings backup waits until then (Unix seconds; storage protection).
     backup_waits_until: Option<i64>,
+    /// "Birlikte oynanan süre", kept on this computer (TEAM5). Survives sign-outs.
+    together: TogetherLog,
 }
 
 impl SocialService {
@@ -223,6 +228,35 @@ impl SocialService {
     /// a restart (it lists the last hour's on every connection) stay closed.
     pub fn keep_closed_invites_in(&self, path: impl Into<PathBuf>) {
         self.lock().closed_invites = Some(ClosedInvitesFile::new(path));
+    }
+
+    /// Keeps "Birlikte oynanan süre" in this file (only on this computer; without it, for this
+    /// run only).
+    pub fn keep_together_in(&self, path: impl Into<PathBuf>) {
+        self.lock().together = TogetherLog::new(Some(path.into()));
+    }
+
+    /// "Birlikte oynanan süre" on or off on this computer. Off deletes what was kept.
+    pub fn set_together(&self, on: bool) {
+        {
+            let mut core = self.lock();
+            if let Err(error) = core.together.set_enabled(on) {
+                tracing::info!(%error, "the time played together switch holds for this run only");
+            }
+            observe_together(&mut core);
+        }
+        self.emit_view();
+    }
+
+    /// Deletes the time played together kept on this computer (it counts on from now).
+    pub fn clear_together(&self) {
+        {
+            let mut core = self.lock();
+            if let Err(error) = core.together.clear(unix_now()) {
+                tracing::info!(%error, "could not delete the time played together");
+            }
+        }
+        self.emit_view();
     }
 
     /// Teams on or off (signed config `features.teams`); the friends feature must be on too.
@@ -386,13 +420,18 @@ impl SocialService {
                 return;
             }
             let mut notices = core.state.apply(&event, unix_now());
+            observe_together(&mut core);
             let teams = core.teams && core.state.teams_supported();
             let calls = teams && core.state.offers(TEAM_FEATURE_CALLS);
+            let requests = teams && core.state.offers(TEAM_FEATURE_REQUESTS);
+            let plans = teams && core.state.offers(TEAM_FEATURE_PLANS);
             notices.retain(|notice| match notice {
                 SocialNotice::TeamInvite { .. }
                 | SocialNotice::TeamGone { .. }
                 | SocialNotice::CrewmateOnProjects { .. } => core.teams,
                 SocialNotice::CrewCall { .. } | SocialNotice::CrewCallJoin { .. } => calls,
+                SocialNotice::JoinRequest { .. } | SocialNotice::RequestAccepted { .. } => requests,
+                SocialNotice::CrewPlan { .. } => plans,
                 _ => true,
             });
             match &event {
@@ -461,6 +500,7 @@ impl SocialService {
                     }
                     core.state.set_overview(overview);
                     core.fetched_at = Some(Instant::now());
+                    observe_together(&mut core);
                 }
                 self.emit_view();
             }
@@ -517,6 +557,7 @@ impl SocialService {
                 Some(Ok(overview)) => {
                     core.state.set_overview(overview);
                     core.fetched_at = Some(Instant::now());
+                    observe_together(&mut core);
                 }
                 Some(Err(SocialError::Unauthorized)) => ended = true,
                 Some(Err(SocialError::Restricted { until })) => restricted = Some(until),
@@ -1007,7 +1048,11 @@ impl SocialService {
         {
             return Err(SocialError::InvalidInput("emblem"));
         }
-        let edit = edit.limited_to(look, self.offers(TEAM_FEATURE_ROLES));
+        let edit = edit.limited_to(EditFeatures {
+            look,
+            roles: self.offers(TEAM_FEATURE_ROLES),
+            requests: self.offers(TEAM_FEATURE_REQUESTS),
+        });
         if edit.is_empty() {
             return Ok(());
         }
@@ -1161,33 +1206,241 @@ impl SocialService {
     pub async fn lookup_team(&self, code: &str) -> Result<TeamLookupView> {
         let normalized =
             normalize_team_code(code).ok_or(SocialError::InvalidInput("not a team code"))?;
-        let request = normalized.clone();
-        let multi = self.offers(TEAM_FEATURE_MULTI);
-        let (lookup, _) = self
-            .call(|session| async move { session.lookup_team(&request, multi).await })
-            .await?;
-        Ok(TeamLookupView {
-            team_id: lookup.team.id,
-            name: lookup.team.name,
-            tag: lookup.team.tag,
-            emblem: lookup.team.emblem,
-            color: lookup.team.color,
-            frame: lookup.team.frame,
-            motto: lookup.team.motto,
-            members: lookup.team.members,
-            relation: lookup.relation,
-            code: crew_code(&normalized),
-        })
+        let lookup = self.lookup_crew(CrewKey::Code(normalized.clone())).await?;
+        Ok(lookup_view(lookup, crew_code(&normalized), None))
     }
 
-    /// Joins the crew of a code (one more, where the service has several crews).
-    pub async fn join_team(&self, code: &str) -> Result<()> {
-        let code = code.to_owned();
+    /// What a crew's invite link leads to (a service with `link`; the code lookup quota): the
+    /// crew, whether it approves newcomers and the player's request to it while that waits.
+    pub async fn lookup_crew_link(&self, link: &str) -> Result<TeamLookupView> {
+        if !self.offers(TEAM_FEATURE_LINK) {
+            return Err(SocialError::InvalidInput("crew links"));
+        }
+        let normalized =
+            normalize_crew_link(link).ok_or(SocialError::InvalidInput("not a crew link"))?;
+        let lookup = self.lookup_crew(CrewKey::Link(normalized.clone())).await?;
+        Ok(lookup_view(lookup, String::new(), Some(normalized)))
+    }
+
+    async fn lookup_crew(&self, key: CrewKey) -> Result<TeamLookup> {
         let multi = self.offers(TEAM_FEATURE_MULTI);
-        let (answer, generation) = self
-            .call(|session| async move { session.join_team(&code, multi).await })
+        let (lookup, _) = self
+            .call(|session| async move { session.lookup_crew(&key, multi).await })
             .await?;
-        self.update(generation, |core| core.state.team_answer(answer));
+        Ok(lookup)
+    }
+
+    /// Joins the crew of a code (one more, where the service has several crews). A crew that
+    /// approves newcomers takes a join request instead (a service with `requests`).
+    pub async fn join_team(&self, code: &str) -> Result<JoinResult> {
+        self.join_crew(CrewKey::Code(code.to_owned())).await
+    }
+
+    /// Joins the crew of an invite link (a service with `link`), or asks to.
+    pub async fn join_crew_link(&self, link: &str) -> Result<JoinResult> {
+        if !self.offers(TEAM_FEATURE_LINK) {
+            return Err(SocialError::InvalidInput("crew links"));
+        }
+        self.join_crew(CrewKey::Link(link.to_owned())).await
+    }
+
+    async fn join_crew(&self, key: CrewKey) -> Result<JoinResult> {
+        let multi = self.offers(TEAM_FEATURE_MULTI);
+        let request = self.offers(TEAM_FEATURE_REQUESTS);
+        let (outcome, generation) = self
+            .call(|session| async move { session.join_crew(&key, multi, request).await })
+            .await?;
+        match outcome {
+            JoinOutcome::Joined(answer) => {
+                self.update(generation, |core| core.state.team_answer(answer));
+                Ok(JoinResult::Joined)
+            }
+            JoinOutcome::Requested(request) => {
+                self.update(generation, |core| core.state.join_requested(request));
+                Ok(JoinResult::Requested)
+            }
+        }
+    }
+
+    /// Withdraws the player's waiting join request to a crew; one that is gone already leaves the
+    /// list either way.
+    pub async fn withdraw_team_request(&self, team: &str) -> Result<()> {
+        let id = team.to_owned();
+        match self
+            .call(|session| async move { session.withdraw_team_request(&id).await })
+            .await
+        {
+            Ok((_, generation)) => {
+                self.update(generation, |core| core.state.join_request_withdrawn(team));
+                Ok(())
+            }
+            Err(error) if error.code() == Some(&ErrorCode::TeamRequestNotFound) => {
+                let generation = self.lock().generation;
+                self.update(generation, |core| core.state.join_request_withdrawn(team));
+                Ok(())
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// Takes a player who asked to join one of the player's crews (`accept`), or declines the
+    /// request (silent for them). A request that is gone leaves the list (taking it says so); a
+    /// full crew, or a player in as many crews as they may be, keeps it waiting.
+    pub async fn answer_team_request(&self, team: &str, user: &str, accept: bool) -> Result<()> {
+        let team = self.crew_id(team)?;
+        let id = team.clone();
+        let who = user.to_owned();
+        let result = if accept {
+            self.call(
+                |session| async move { session.accept_team_request(&team, &who).await.map(Some) },
+            )
+            .await
+        } else {
+            self.call(|session| async move {
+                session
+                    .decline_team_request(&team, &who)
+                    .await
+                    .map(|()| None)
+            })
+            .await
+        };
+        match result {
+            Ok((answer, generation)) => {
+                self.update(generation, |core| {
+                    core.state.join_request_answered(&id, user);
+                    if let Some(answer) = answer {
+                        core.state.team_answer(answer);
+                    }
+                });
+                Ok(())
+            }
+            Err(error) if error.code() == Some(&ErrorCode::TeamRequestNotFound) => {
+                let generation = self.lock().generation;
+                self.update(generation, |core| {
+                    core.state.join_request_answered(&id, user)
+                });
+                if accept { Err(error) } else { Ok(()) }
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// A new invite link for one of the player's crews, in place of the old one (`on`), or none
+    /// (a service with `link`; `permissions.admit`). Answers the link it has now.
+    pub async fn set_team_link(&self, team: &str, on: bool) -> Result<Option<String>> {
+        if !self.offers(TEAM_FEATURE_LINK) {
+            return Err(SocialError::InvalidInput("crew links"));
+        }
+        let team = self.crew_id(team)?;
+        let id = team.clone();
+        if on {
+            let (made, generation) = self
+                .call(|session| async move { session.create_team_link(&team).await })
+                .await?;
+            let link = made.link.clone();
+            self.update(generation, |core| {
+                core.state.team_link(&id, Some(made.link))
+            });
+            Ok(Some(link))
+        } else {
+            let (_, generation) = self
+                .call(|session| async move { session.delete_team_link(&team).await })
+                .await?;
+            self.update(generation, |core| core.state.team_link(&id, None));
+            Ok(None)
+        }
+    }
+
+    /// How newcomers with the code or the invite link get in: at once or once approved (the
+    /// leader; a service with `requests`).
+    pub async fn set_join_mode(&self, team: &str, join: JoinMode) -> Result<()> {
+        if !self.offers(TEAM_FEATURE_REQUESTS) {
+            return Err(SocialError::InvalidInput("join requests"));
+        }
+        self.edit_team(
+            team,
+            TeamEdit {
+                join: Some(join),
+                ..TeamEdit::default()
+            },
+        )
+        .await
+    }
+
+    // --- crew plans ("Planlar", TEAM5) -----------------------------------------------------------
+
+    /// The presence control, while signed in to a crew of a service that offers plans.
+    fn plan_presence(&self) -> Result<PresenceControl> {
+        let core = self.lock();
+        if core.auth != AuthPhase::SignedIn {
+            return Err(SocialError::Unauthorized);
+        }
+        if !(core.teams && core.state.teams_supported() && core.state.offers(TEAM_FEATURE_PLANS)) {
+            return Err(SocialError::InvalidInput("crew plans"));
+        }
+        if core.state.crews().is_empty() {
+            return Err(SocialError::InvalidInput("not in a team"));
+        }
+        core.presence
+            .clone()
+            .ok_or(SocialError::Unavailable { retry_after: None })
+    }
+
+    /// A new plan in one of the player's crews at `at` (Unix seconds, a whole quarter of an
+    /// hour; the service checks it is later than its clock and at most 7 days ahead). Answers
+    /// the plan's id; the plan is in the view.
+    pub async fn make_plan(&self, crew: &str, at: i64) -> Result<String> {
+        let control = self.plan_presence()?;
+        let crew = self.crew_id(crew)?;
+        if at % 900 != 0 {
+            return Err(SocialError::InvalidInput("plan time"));
+        }
+        let generation = self.lock().generation;
+        match control.make_plan(&crew, at).await {
+            Ok(plan) => {
+                let id = plan.id.clone();
+                self.update(generation, |core| core.state.upsert_plan(plan));
+                Ok(id)
+            }
+            Err(error) if error.code() == Some(&ErrorCode::TeamNotFound) => {
+                // The crew went away in the meantime: the list is read again.
+                let service = self.clone();
+                self.spawn(async move { service.refetch(generation).await });
+                Err(SocialError::InvalidInput("not in a team"))
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// "Geliyorum", "Belki" or "Gelemem" to a plan. False when the plan is gone (it leaves the
+    /// view); a changed answer the service turns down (20 a day) keeps the old one.
+    pub async fn answer_plan(&self, plan: &str, answer: PlanAnswer) -> Result<bool> {
+        let control = self.plan_presence()?;
+        let generation = self.lock().generation;
+        match control.answer_plan(plan, answer).await {
+            Ok(()) => {
+                self.update(generation, |core| core.state.plan_answered(plan, answer));
+                Ok(true)
+            }
+            Err(error) if error.code() == Some(&ErrorCode::PlanNotFound) => {
+                self.update(generation, |core| core.state.plan_gone(plan));
+                Ok(false)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// "Planı sil" (its maker, the crew's leader or a moderator); one that is gone already is
+    /// simply gone.
+    pub async fn cancel_plan(&self, plan: &str) -> Result<()> {
+        let control = self.plan_presence()?;
+        let generation = self.lock().generation;
+        match control.cancel_plan(plan).await {
+            Ok(()) => {}
+            Err(error) if error.code() == Some(&ErrorCode::PlanNotFound) => {}
+            Err(error) => return Err(error),
+        }
+        self.update(generation, |core| core.state.plan_gone(plan));
         Ok(())
     }
 
@@ -2114,6 +2367,7 @@ impl SocialService {
             if let Some(presence) = &core.presence {
                 presence.set_status(core.activity.clone());
             }
+            observe_together(&mut core);
         }
         self.emit_view();
     }
@@ -2132,6 +2386,7 @@ impl SocialService {
             if let Some(presence) = &core.presence {
                 presence.set_status(next);
             }
+            observe_together(&mut core);
         }
         self.emit_view();
     }
@@ -2147,8 +2402,46 @@ impl SocialService {
             if let Some(presence) = &core.presence {
                 presence.set_status(LocalStatus::Launcher);
             }
+            observe_together(&mut core);
         }
         self.emit_view();
+    }
+}
+
+/// Who is on Projects together with the player now ("Birlikte oynanan süre"): the time since the
+/// last change is kept when it changes. Nobody while signed out or without crews on.
+fn observe_together(core: &mut Core) {
+    let now = unix_now();
+    let account = if core.auth == AuthPhase::SignedIn {
+        core.state.me().map(|me| me.profile.id.clone())
+    } else {
+        None
+    };
+    let with = if core.teams && account.is_some() {
+        core.state.together_now(&core.activity)
+    } else {
+        Together::default()
+    };
+    core.together
+        .observe(account.as_deref(), with, now, || Periods::at(now));
+}
+
+/// What a crew code or link led to, for the UI.
+fn lookup_view(lookup: TeamLookup, code: String, link: Option<String>) -> TeamLookupView {
+    TeamLookupView {
+        team_id: lookup.team.id,
+        name: lookup.team.name,
+        tag: lookup.team.tag,
+        emblem: lookup.team.emblem,
+        color: lookup.team.color,
+        frame: lookup.team.frame,
+        motto: lookup.team.motto,
+        members: lookup.team.members,
+        relation: lookup.relation,
+        code,
+        link,
+        join: lookup.team.join,
+        requested_at: lookup.request.map(|request| request.sent_at),
     }
 }
 
@@ -2167,6 +2460,10 @@ fn remember_closed_invites(core: &mut Core) {
 
 /// Back to signed out, keeping the configuration and the saved token.
 fn reset(core: &mut Core) {
+    // The time played together so far is kept before the account goes.
+    let now = unix_now();
+    core.together
+        .observe(None, Together::default(), now, || Periods::at(now));
     core.generation += 1;
     // Dropping the control closes the presence connection cleanly.
     core.presence = None;
@@ -2554,6 +2851,35 @@ fn build_view(core: &mut Core) -> SocialView {
     let teams = core.teams && core.state.teams_supported();
     let calls = teams && core.state.offers(TEAM_FEATURE_CALLS);
     let share_server = core.state.me().is_some_and(|me| me.privacy.share_server);
+    let mut crews = if teams {
+        core.state.crew_views(now)
+    } else {
+        Vec::new()
+    };
+    // Invite links as this service shares them (`<service>/e/XXXX-XXXX-XXXX`).
+    if let Some(client) = core.client.as_ref() {
+        for crew in &mut crews {
+            crew.link_url = crew
+                .link
+                .as_deref()
+                .and_then(|link| client.crew_link_url(link))
+                .map(|url| url.to_string());
+        }
+    }
+    // "Birlikte oynanan süre", from this computer only.
+    let together = core.together.enabled();
+    if together
+        && !crews.is_empty()
+        && let Some(me) = core.state.me().map(|me| me.profile.id.clone())
+    {
+        let periods = Periods::at(now);
+        for crew in &mut crews {
+            crew.together_week = core.together.crew_week(&me, &crew.id, now, &periods);
+            for member in crew.members.iter_mut().filter(|member| !member.me) {
+                member.together_month = core.together.person_month(&me, &member.id, now, &periods);
+            }
+        }
+    }
     SocialView {
         seq: core.seq,
         enabled: core.url.is_some(),
@@ -2575,17 +2901,24 @@ fn build_view(core: &mut Core) -> SocialView {
         } else {
             Vec::new()
         },
-        crews: if teams {
-            core.state.crew_views(now)
-        } else {
-            Vec::new()
-        },
+        crews,
         crew_limit: core.state.crew_limit(),
         team_invites: if teams {
             core.state.team_invites()
         } else {
             Vec::new()
         },
+        team_requests: if teams && core.state.offers(TEAM_FEATURE_REQUESTS) {
+            core.state.team_requests(now)
+        } else {
+            Vec::new()
+        },
+        plans: if teams && core.state.offers(TEAM_FEATURE_PLANS) {
+            core.state.plans(now)
+        } else {
+            Vec::new()
+        },
+        together,
         calls: if calls {
             core.state.calls(now)
         } else {
@@ -2749,6 +3082,7 @@ mod tests {
             calls: vec![],
             clock: None,
             chat: None,
+            plans: None,
         };
         let signed_in = |view: &SocialView| view.loaded && view.auth == AuthPhase::SignedIn;
 
@@ -3446,6 +3780,285 @@ mod tests {
                 r#"{"muted":true}"#.to_owned(),
             ]
         );
+    }
+
+    /// A service with the crews' second wave: the player leads Gece Kartalları, which approves
+    /// newcomers, has an invite link and a request from Can; the player's own request to PvP
+    /// waits. `features` are the service's `teamFeatures`.
+    fn friends_with_requests(features: &str) -> String {
+        let crew = CREW_A.replace(
+            r#""members":["#,
+            r#""join":"approval","link":"ABCD-EFGH-JKMN","members":["#,
+        );
+        format!(
+            r#"{{"friends":[],"incoming":[],"outgoing":[],"blocked":[],
+            "limits":{{"friends":200,"outgoingRequests":50,"teamMembers":30,"groups":20}},
+            "team":{crew},"teamInvited":[],
+            "crews":[{{"team":{crew},"invited":[],"notifications":{{"muted":false,"muteUntil":null}},
+              "requests":[{{"from":{{"id":"323456789012345678","username":"can","displayName":"Can",
+                "avatar":"discord","avatarHash":null}},"sentAt":{sent}}}]}}],
+            "crewLimit":5,"teamInvites":[],
+            "teamRequests":[{{"team":{{"id":"fedcba9876543210","name":"PvP","tag":"PVP",
+              "emblem":"bolt","members":4,"join":"approval"}},"sentAt":{sent}}}],
+            "teamFeatures":{features}}}"#,
+            sent = unix_now() - 60,
+        )
+    }
+
+    #[tokio::test]
+    async fn joining_by_approval_requests_links_and_the_join_setting() {
+        let bodies = Arc::new(Mutex::new(Vec::<String>::new()));
+        let server = MockServer::start({
+            let bodies = bodies.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| {
+                    if req.method != "GET" {
+                        bodies
+                            .lock()
+                            .unwrap()
+                            .push(format!("{} {} {}", req.method, req.path, req.body_text()));
+                    }
+                    match (req.method.as_str(), req.path.as_str()) {
+                        ("GET", "/v1/me") => MockReply::json(200, ME),
+                        ("GET", "/v1/friends") => MockReply::json(
+                            200,
+                            &friends_with_requests(r#"["look","roles","multi","requests","link"]"#),
+                        ),
+                        ("POST", "/v1/teams/lookup") => MockReply::json(
+                            200,
+                            r#"{"team":{"id":"9999aaaabbbbcccc","name":"Skyblock","tag":"SKY",
+                                "emblem":"castle","members":6,"join":"approval"},"relation":"none",
+                                "request":null}"#,
+                        ),
+                        ("POST", "/v1/teams/join") => MockReply::json(
+                            202,
+                            r#"{"request":{"team":{"id":"9999aaaabbbbcccc","name":"Skyblock",
+                                "tag":"SKY","emblem":"castle","members":6,"join":"approval"},
+                                "sentAt":1792519000}}"#,
+                        ),
+                        ("DELETE", "/v1/teams/requests/fedcba9876543210") => MockReply::empty(204),
+                        ("POST", path) if path.ends_with("/accept") => MockReply::json(
+                            200,
+                            &format!(
+                                r#"{{"team":{},"invited":[]}}"#,
+                                CREW_A.replace(
+                                    r#""members":["#,
+                                    r#""members":[{"id":"323456789012345678","username":"can",
+                                    "displayName":"Can","avatar":"discord","avatarHash":null,
+                                    "role":"member","joinedAt":9},"#
+                                )
+                            ),
+                        ),
+                        ("POST", "/v1/teams/0123456789abcdef/link") => MockReply::json(
+                            200,
+                            r#"{"link":"WXYZ-1234-5678","url":"https://social.projects.gg/e/WXYZ-1234-5678"}"#,
+                        ),
+                        ("PATCH", "/v1/teams/0123456789abcdef") => {
+                            MockReply::json(200, &format!(r#"{{"team":{CREW_A},"invited":[]}}"#))
+                        }
+                        _ => {
+                            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+                        }
+                    }
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.set_teams_enabled(true);
+        harness.service.configure(url(&server));
+        let view = harness.until("friends", |view| view.loaded).await;
+        let crew = &view.crews[0];
+        assert_eq!(crew.join, JoinMode::Approval);
+        assert_eq!(crew.link.as_deref(), Some("ABCD-EFGH-JKMN"));
+        // The page is this service's own.
+        assert_eq!(
+            crew.link_url.as_deref(),
+            Some(format!("{}e/ABCD-EFGH-JKMN", server.base()).as_str())
+        );
+        assert_eq!(crew.requests[0].name, "Can");
+        assert_eq!(view.team_requests[0].name, "PvP");
+
+        // A link that leads to a crew that approves newcomers: asking sends a request.
+        let found = harness
+            .service
+            .lookup_crew_link("abcd efgh jkmn")
+            .await
+            .unwrap();
+        assert_eq!((found.join, found.code.as_str()), (JoinMode::Approval, ""));
+        assert_eq!(found.link.as_deref(), Some("ABCD-EFGH-JKMN"));
+        assert_eq!(
+            harness
+                .service
+                .join_crew_link("ABCD-EFGH-JKMN")
+                .await
+                .unwrap(),
+            JoinResult::Requested
+        );
+        let view = harness.service.view();
+        assert_eq!(view.team_requests[0].name, "Skyblock");
+        // Withdrawn; Can taken in (his row goes, he is in the crew).
+        harness
+            .service
+            .withdraw_team_request("fedcba9876543210")
+            .await
+            .unwrap();
+        assert_eq!(harness.service.view().team_requests.len(), 1);
+        harness
+            .service
+            .answer_team_request("0123456789abcdef", "323456789012345678", true)
+            .await
+            .unwrap();
+        let view = harness.service.view();
+        assert!(view.crews[0].requests.is_empty());
+        assert_eq!(view.crews[0].members.len(), 2);
+        // A new link; the join setting.
+        assert_eq!(
+            harness
+                .service
+                .set_team_link("0123456789abcdef", true)
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("WXYZ-1234-5678")
+        );
+        assert_eq!(
+            harness.service.view().crews[0].link.as_deref(),
+            Some("WXYZ-1234-5678")
+        );
+        harness
+            .service
+            .set_join_mode("0123456789abcdef", JoinMode::Open)
+            .await
+            .unwrap();
+        let sent = bodies.lock().unwrap().clone();
+        assert!(
+            sent[0].starts_with("POST /v1/teams/lookup")
+                && sent[0].contains(r#""link":"ABCD-EFGH-JKMN""#)
+        );
+        assert!(sent[1].contains(r#""request":true"#) && sent[1].contains(r#""multi":true"#));
+        assert_eq!(sent[2], "DELETE /v1/teams/requests/fedcba9876543210 ");
+        assert_eq!(
+            sent.last().unwrap(),
+            r#"PATCH /v1/teams/0123456789abcdef {"join":"open"}"#
+        );
+    }
+
+    #[tokio::test]
+    async fn an_older_service_never_hears_of_requests_links_or_plans() {
+        let bodies = Arc::new(Mutex::new(Vec::<String>::new()));
+        let server = MockServer::start({
+            let bodies = bodies.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| {
+                    if req.method != "GET" {
+                        bodies.lock().unwrap().push(req.body_text());
+                    }
+                    match (req.method.as_str(), req.path.as_str()) {
+                        ("GET", "/v1/me") => MockReply::json(200, ME),
+                        ("GET", "/v1/friends") => MockReply::json(
+                            200,
+                            &friends_with_requests(r#"["look","roles","multi"]"#),
+                        ),
+                        ("POST", "/v1/teams/join") => {
+                            MockReply::json(200, &format!(r#"{{"team":{CREW_B},"invited":[]}}"#))
+                        }
+                        ("PATCH", "/v1/teams/0123456789abcdef") => {
+                            MockReply::json(200, &format!(r#"{{"team":{CREW_A},"invited":[]}}"#))
+                        }
+                        _ => {
+                            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+                        }
+                    }
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.set_teams_enabled(true);
+        harness.service.configure(url(&server));
+        let view = harness.until("friends", |view| view.loaded).await;
+        // What an older service would never send stays out of the view.
+        assert!(view.team_requests.is_empty() && view.plans.is_empty());
+        assert_eq!(
+            harness.service.join_team("EKP-ABCD-EFGH").await.unwrap(),
+            JoinResult::Joined
+        );
+        assert!(matches!(
+            harness.service.lookup_crew_link("ABCD-EFGH-JKMN").await,
+            Err(SocialError::InvalidInput("crew links"))
+        ));
+        assert!(matches!(
+            harness
+                .service
+                .set_join_mode("0123456789abcdef", JoinMode::Approval)
+                .await,
+            Err(SocialError::InvalidInput("join requests"))
+        ));
+        assert!(matches!(
+            harness
+                .service
+                .make_plan("0123456789abcdef", 1_792_612_800)
+                .await,
+            Err(SocialError::InvalidInput("crew plans"))
+        ));
+        // `admit` is left out of a permissions change; nothing else was in it, so nothing goes.
+        harness
+            .service
+            .edit_team(
+                "0123456789abcdef",
+                TeamEdit {
+                    permissions: Some(crate::model::PermissionsEdit {
+                        admit: Some(crate::model::PermissionLevel::Leader),
+                        ..crate::model::PermissionsEdit::default()
+                    }),
+                    ..TeamEdit::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            *bodies.lock().unwrap(),
+            vec![r#"{"code":"ABCD-EFGH","multi":true}"#.to_owned()]
+        );
+    }
+
+    #[tokio::test]
+    async fn the_time_played_together_switch_outlives_a_restart() {
+        let server = MockServer::start(|req| {
+            presence_refused(&req.path).unwrap_or_else(|| match req.path.as_str() {
+                "/v1/me" => MockReply::json(200, ME),
+                "/v1/friends" => MockReply::json(200, &friends_with_crews()),
+                _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+            })
+        })
+        .await;
+        let dir =
+            std::env::temp_dir().join(format!("pl-social-together-svc-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let file = dir.join("social").join("together.json");
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens.clone());
+        harness.service.keep_together_in(&file);
+        harness.service.set_teams_enabled(true);
+        harness.service.configure(url(&server));
+        let view = harness.until("friends", |view| view.loaded).await;
+        assert!(view.together);
+        assert_eq!(view.crews[0].together_week, 0);
+        harness.service.set_together(false);
+        assert!(!harness.service.view().together);
+        // Another run on this computer keeps it off.
+        let again = Harness::new(tokens);
+        again.service.keep_together_in(&file);
+        assert!(!again.service.view().together);
+        again.service.set_together(true);
+        assert!(again.service.view().together);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[tokio::test]

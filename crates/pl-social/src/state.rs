@@ -9,19 +9,21 @@ use serde::Serialize;
 use crate::codes::crew_code;
 use crate::model::{
     BlockedUser, CrewEntry, CrewMute, DEFAULT_CREW_LIMIT, Friend, FriendGroups, FriendRequest,
-    FriendsOverview, Limits, Me, ModNotice, NoticeKind, PublicProfile, RequestOutcome,
-    SettingsMeta, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, Team, TeamAnswer, TeamExit, TeamInvite,
-    TeamMember, TeamNotifications, TeamRole, TeamsOverview, crews_of,
+    FriendsOverview, JOIN_REQUEST_LIFETIME_SECS, JoinRequest, Limits, Me, ModNotice, NoticeKind,
+    PublicProfile, RequestOutcome, SettingsMeta, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, Team,
+    TeamAnswer, TeamExit, TeamInvite, TeamMember, TeamNotifications, TeamRequest, TeamRole,
+    TeamsOverview, crews_of,
 };
 use crate::presence::{PresenceEvent, StopReason};
 use crate::protocol::{
-    CallAnswer, CallKind, CrewCall, Game, GameLocation, Invite, OnlineStatus, Presence,
-    PresenceState,
+    CallAnswer, CallKind, CrewCall, CrewPlan, Game, GameLocation, Invite, LocalStatus,
+    OnlineStatus, PlanAnswer, Presence, PresenceState, is_projects_host,
 };
+use crate::together::Together;
 use crate::view::{
     CallAnswerView, CrewCallView, FriendGroupsView, FriendView, GroupMember, InviteView,
-    ModNoticeView, ProfileView, RequestView, SocialNotice, TeamInviteView, TeamMemberView,
-    TeamView,
+    JoinRequestView, ModNoticeView, PlanAnswerView, PlanView, ProfileView, RequestView,
+    SocialNotice, TeamInviteView, TeamMemberView, TeamRequestView, TeamView,
 };
 
 /// How long a received invite stays worth answering (the service delivers them for an hour).
@@ -66,6 +68,11 @@ pub struct SocialState {
     /// Moderators' one-time notes still to be shown, and those shown in this run.
     notices: Vec<ModNotice>,
     seen_notices: HashSet<String>,
+    /// The plans of the player's crews they see, as the service keeps them (TEAM5).
+    plans: Vec<CrewPlan>,
+    /// This computer's clock minus the service's (seconds), from the last `hello`: plans carry
+    /// the service's times.
+    plan_skew: i64,
 }
 
 /// A crew call with its times on this computer's clock.
@@ -159,9 +166,18 @@ impl SocialState {
                 invites,
                 calls,
                 clock,
+                plans,
                 ..
             } => {
                 self.connection = Connection::Online;
+                if let Some(clock) = clock {
+                    self.plan_skew = now - clock;
+                }
+                // Every plan the player sees: whatever is not listed is gone.
+                if let Some(plans) = plans {
+                    self.plans = plans.clone();
+                    self.prune_plans(now);
+                }
                 if let Some(me) = &mut self.me {
                     me.status = *status;
                 }
@@ -235,7 +251,55 @@ impl SocialState {
                     notices.push(notice);
                 }
                 self.prune_crew_calls();
+                self.prune_crew_plans();
             }
+            PresenceEvent::TeamRequests {
+                crew,
+                requests,
+                added,
+            } => {
+                let heard = self.crew_heard(crew, now);
+                if let Some(entry) = self
+                    .crews_mut()
+                    .and_then(|crews| crews.iter_mut().find(|entry| &entry.team.id == crew))
+                {
+                    entry.requests = requests.clone();
+                    let fresh = added
+                        .as_deref()
+                        .and_then(|id| requests.iter().find(|r| r.from.id == id))
+                        .filter(|r| now - r.sent_at < JOIN_REQUEST_LIFETIME_SECS);
+                    if let Some(request) = fresh.filter(|_| heard) {
+                        notices.push(SocialNotice::JoinRequest {
+                            crew: crew.clone(),
+                            request: join_request_view(request),
+                        });
+                    }
+                }
+            }
+            PresenceEvent::Plan { plan, quiet } => {
+                let known = self.plans.iter().any(|p| p.id == plan.id);
+                let me = self.me.as_ref().map(|me| me.profile.id.as_str());
+                let upcoming = plan.at + self.plan_skew > now;
+                // Said once: a plan new to this launcher, live, someone else's, in a crew that
+                // is not muted (the service quiets it too; a mute set a moment ago counts here).
+                let announce = !known
+                    && !*quiet
+                    && upcoming
+                    && me != Some(plan.by.as_str())
+                    && self.crew_heard(&plan.crew, now);
+                self.upsert_plan(plan.clone());
+                if announce && let Some(view) = self.plan_view(plan) {
+                    notices.push(SocialNotice::CrewPlan {
+                        plan: Box::new(view),
+                    });
+                }
+            }
+            PresenceEvent::Plans { crew, plans } => {
+                self.plans.retain(|plan| &plan.crew != crew);
+                self.plans.extend(plans.iter().cloned());
+                self.prune_plans(now);
+            }
+            PresenceEvent::PlanRemoved { plan, .. } => self.plan_gone(plan),
             PresenceEvent::CrewMuted {
                 crew,
                 notifications,
@@ -496,10 +560,15 @@ impl SocialState {
     }
 
     /// Blocking removes friendship and requests both ways and hides presence both ways (and the
-    /// calls of the one blocked).
+    /// calls of the one blocked, and their requests to join the player's crews).
     pub fn blocked(&mut self, profile: PublicProfile) {
         self.forget(&profile.id);
         self.calls.retain(|open| open.call.from != profile.id);
+        if let Some(crews) = self.crews_mut() {
+            for entry in crews {
+                entry.requests.retain(|r| r.from.id != profile.id);
+            }
+        }
         if let Some(overview) = &mut self.overview
             && !overview.blocked.iter().any(|b| b.profile.id == profile.id)
         {
@@ -642,10 +711,12 @@ impl SocialState {
         if let Some(overview) = &mut self.overview {
             overview.crews = Some(crews_of(teams.crews, teams.team, teams.invited));
             overview.crew_limit = teams.crew_limit.or(overview.crew_limit);
+            overview.team_requests = teams.team_requests;
             if let Some(settings) = teams.team_notifications {
                 overview.team_notifications = Some(settings);
             }
         }
+        self.prune_crew_plans();
     }
 
     /// The player's crew notification settings, from a service that keeps them (`mute`).
@@ -754,12 +825,20 @@ impl SocialState {
         match team {
             Some(team) => {
                 overview.team_invites.retain(|i| i.team.id != team.id);
-                // Invites go with the right to send them (the service withdraws them).
-                let may_invite = team
+                // A join request of the player's that a leader took: the crew comes with it.
+                let asked = overview.team_requests.iter().any(|r| r.team.id == team.id);
+                overview.team_requests.retain(|r| r.team.id != team.id);
+                let mine = team
                     .members
                     .iter()
-                    .find(|m| Some(&m.profile.id) == me.as_ref())
-                    .is_some_and(|m| team.permissions.invite.allows(m.role, m.moderator));
+                    .find(|m| Some(&m.profile.id) == me.as_ref());
+                // Invites go with the right to send them (the service withdraws them), and the
+                // crew's join requests with the right to answer them.
+                let may_invite =
+                    mine.is_some_and(|m| team.permissions.invite.allows(m.role, m.moderator));
+                let may_admit =
+                    mine.is_some_and(|m| team.permissions.admit.allows(m.role, m.moderator));
+                let new = !crews.iter().any(|entry| entry.team.id == team.id);
                 let at = match crews.iter().position(|entry| entry.team.id == team.id) {
                     Some(at) => at,
                     None => {
@@ -770,6 +849,7 @@ impl SocialState {
                             team: team.clone(),
                             invited: Vec::new(),
                             notifications: CrewMute::default(),
+                            requests: Vec::new(),
                         });
                         crews.len() - 1
                     }
@@ -782,7 +862,19 @@ impl SocialState {
                 if !may_invite {
                     entry.invited.clear();
                 }
-                None
+                if !may_admit {
+                    entry.requests.clear();
+                }
+                // Someone who joined meanwhile is no longer asking.
+                entry
+                    .requests
+                    .retain(|r| !team.members.iter().any(|m| m.profile.id == r.from.id));
+                (new && asked && by.is_some() && by.map(str::to_owned) != me).then(|| {
+                    SocialNotice::RequestAccepted {
+                        crew: team.id.clone(),
+                        name: team.name.clone(),
+                    }
+                })
             }
             None => {
                 let at = match crew {
@@ -904,6 +996,37 @@ impl SocialState {
         }
     }
 
+    /// Who is on Projects together with the player now ("Birlikte oynanan süre"): nobody unless
+    /// the player plays on projects.gg; then the crewmates there too (not those blocked) and the
+    /// crews they are in.
+    pub fn together_now(&self, activity: &LocalStatus) -> Together {
+        let mut together = Together::default();
+        let on_projects = matches!(
+            activity,
+            LocalStatus::Playing { host: Some(host) } if is_projects_host(host)
+        );
+        let Some(overview) = self.overview.as_ref().filter(|_| on_projects) else {
+            return together;
+        };
+        let me = self.me.as_ref().map(|me| me.profile.id.as_str());
+        for entry in self.crews() {
+            for member in &entry.team.members {
+                let id = member.profile.id.as_str();
+                let there = Some(id) != me
+                    && !overview.blocked.iter().any(|b| b.profile.id == id)
+                    && self.online.get(id).is_some_and(|p| {
+                        p.state == PresenceState::Playing
+                            && p.game.as_ref().is_some_and(Game::joinable)
+                    });
+                if there {
+                    together.crews.insert(entry.team.id.clone());
+                    together.people.insert(id.to_owned());
+                }
+            }
+        }
+        together
+    }
+
     /// In one of the player's crews (themself left out).
     fn is_teammate(&self, id: &str) -> bool {
         let me = self.me.as_ref().map(|me| me.profile.id.as_str());
@@ -925,9 +1048,14 @@ impl SocialState {
             return;
         };
         overview.team_invites.retain(|i| i.team.id != team.id);
+        overview.team_requests.retain(|r| r.team.id != team.id);
         let crews = overview.crews.get_or_insert_with(Vec::new);
         match crews.iter_mut().find(|entry| entry.team.id == team.id) {
             Some(entry) => {
+                // Someone the player just took in is no longer asking.
+                entry
+                    .requests
+                    .retain(|r| !team.members.iter().any(|m| m.profile.id == r.from.id));
                 entry.team = team;
                 entry.invited = answer.invited;
             }
@@ -939,6 +1067,7 @@ impl SocialState {
                     team,
                     invited: answer.invited,
                     notifications: CrewMute::default(),
+                    requests: Vec::new(),
                 });
             }
         }
@@ -950,6 +1079,7 @@ impl SocialState {
             crews.retain(|entry| entry.team.id != team_id);
         }
         self.prune_crew_calls();
+        self.prune_crew_plans();
     }
 
     pub fn team_code(&mut self, team_id: &str, code: String) {
@@ -958,6 +1088,16 @@ impl SocialState {
             .and_then(|crews| crews.iter_mut().find(|entry| entry.team.id == team_id))
         {
             entry.team.code = code;
+        }
+    }
+
+    /// One of the player's crews has a new invite link, or none.
+    pub fn team_link(&mut self, team_id: &str, link: Option<String>) {
+        if let Some(entry) = self
+            .crews_mut()
+            .and_then(|crews| crews.iter_mut().find(|entry| entry.team.id == team_id))
+        {
+            entry.team.link = link;
         }
     }
 
@@ -977,6 +1117,148 @@ impl SocialState {
         if let Some(overview) = &mut self.overview {
             overview.team_invites.retain(|i| i.team.id != team_id);
         }
+    }
+
+    // --- joining a crew (TEAM5) -----------------------------------------------------------------
+
+    /// A crew's news may be told at `now`: not every crew muted, nor this one on its own.
+    fn crew_heard(&self, crew: &str, now: i64) -> bool {
+        !self.crew_muted(now)
+            && self
+                .crew(crew)
+                .is_none_or(|entry| !entry.notifications.muted_at(now))
+    }
+
+    /// The player's join request waits now (sent here, or the service said so again).
+    pub fn join_requested(&mut self, request: TeamRequest) {
+        if let Some(overview) = &mut self.overview {
+            overview
+                .team_requests
+                .retain(|r| r.team.id != request.team.id);
+            overview.team_requests.insert(0, request);
+        }
+    }
+
+    /// The player's join request to a crew is gone: withdrawn, or no longer there.
+    pub fn join_request_withdrawn(&mut self, team_id: &str) {
+        if let Some(overview) = &mut self.overview {
+            overview.team_requests.retain(|r| r.team.id != team_id);
+        }
+    }
+
+    /// A join request to one of the player's crews was answered (or turned out to be gone).
+    pub fn join_request_answered(&mut self, team_id: &str, user: &str) {
+        if let Some(entry) = self
+            .crews_mut()
+            .and_then(|crews| crews.iter_mut().find(|entry| entry.team.id == team_id))
+        {
+            entry.requests.retain(|r| r.from.id != user);
+        }
+    }
+
+    /// The player's own join requests that still wait at `now`, newest first.
+    pub fn team_requests(&self, now: i64) -> Vec<TeamRequestView> {
+        self.overview
+            .as_ref()
+            .map(|o| {
+                o.team_requests
+                    .iter()
+                    .filter(|r| now - r.sent_at < JOIN_REQUEST_LIFETIME_SECS)
+                    .map(team_request_view)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    // --- crew plans (TEAM5) ---------------------------------------------------------------------
+
+    /// A plan, new or changed: replaces the one with its id.
+    pub fn upsert_plan(&mut self, plan: CrewPlan) {
+        match self.plans.iter_mut().find(|p| p.id == plan.id) {
+            Some(known) => *known = plan,
+            None => self.plans.push(plan),
+        }
+    }
+
+    /// The player answered a plan here (the service also sends it to every device of theirs).
+    pub fn plan_answered(&mut self, plan: &str, answer: PlanAnswer) {
+        let Some(me) = self.me.as_ref().map(|me| me.profile.id.clone()) else {
+            return;
+        };
+        if let Some(known) = self.plans.iter_mut().find(|p| p.id == plan) {
+            known.answers.insert(me, answer);
+        }
+    }
+
+    /// A plan was cancelled, or turned out to be gone.
+    pub fn plan_gone(&mut self, plan: &str) {
+        self.plans.retain(|p| p.id != plan);
+    }
+
+    /// Plans that are over at `now` (on this computer's clock) go: nothing says so.
+    fn prune_plans(&mut self, now: i64) {
+        let skew = self.plan_skew;
+        self.plans.retain(|plan| plan.until + skew > now);
+    }
+
+    /// Plans live in crews: those of a crew the player left go (the service says so too).
+    fn prune_crew_plans(&mut self) {
+        if self.overview.is_none() {
+            return;
+        }
+        let crews: HashSet<String> = self.crew_order().into_iter().collect();
+        self.plans.retain(|plan| crews.contains(&plan.crew));
+    }
+
+    /// The plans the player sees at `now` (local Unix seconds), soonest first, those under way
+    /// included.
+    pub fn plans(&self, now: i64) -> Vec<PlanView> {
+        let mut plans: Vec<PlanView> = self
+            .plans
+            .iter()
+            .filter(|plan| plan.until + self.plan_skew > now)
+            .filter_map(|plan| self.plan_view(plan))
+            .collect();
+        plans.sort_by(|a, b| a.at.cmp(&b.at).then_with(|| a.id.cmp(&b.id)));
+        plans
+    }
+
+    fn plan_view(&self, plan: &CrewPlan) -> Option<PlanView> {
+        let entry = self.crew(&plan.crew)?;
+        let me = self.me.as_ref().map(|me| me.profile.id.as_str());
+        let members = &entry.team.members;
+        let maker = members.iter().find(|m| m.profile.id == plan.by);
+        let leads = members
+            .iter()
+            .find(|m| Some(m.profile.id.as_str()) == me)
+            .is_some_and(|m| m.role == TeamRole::Founder || m.moderator);
+        let mine = me == Some(plan.by.as_str());
+        let skew = self.plan_skew;
+        Some(PlanView {
+            id: plan.id.clone(),
+            crew: plan.crew.clone(),
+            by: plan.by.clone(),
+            by_name: maker.map(|m| m.profile.name().to_owned()),
+            mine,
+            can_cancel: mine || leads,
+            at: plan.at,
+            starts_at: plan.at + skew,
+            ends_at: plan.until + skew,
+            created_at: plan.created_at + skew,
+            // In the crew's order; answers of people no longer in it are not shown.
+            answers: members
+                .iter()
+                .filter_map(|m| {
+                    plan.answers
+                        .get(&m.profile.id)
+                        .map(|answer| PlanAnswerView {
+                            id: m.profile.id.clone(),
+                            answer: *answer,
+                        })
+                })
+                .collect(),
+            my_answer: me.and_then(|me| plan.answers.get(me).copied()),
+        })
     }
 
     /// The player's crews with everyone's presence, in the player's order.
@@ -1027,12 +1309,19 @@ impl SocialState {
                         }),
                     discord_url: member.profile.discord_profile_url(),
                     joined_at: member.joined_at,
+                    together_month: 0,
                 }
             })
             .collect();
         let mine = members.iter().find(|m| m.me);
         let role = mine.map_or(TeamRole::Member, |m| m.role);
         let moderator = mine.is_some_and(|m| m.moderator);
+        let requests = entry
+            .requests
+            .iter()
+            .filter(|r| now - r.sent_at < JOIN_REQUEST_LIFETIME_SECS)
+            .map(join_request_view)
+            .collect();
         Some(TeamView {
             id: team.id.clone(),
             name: team.name.clone(),
@@ -1051,6 +1340,11 @@ impl SocialState {
             limit: overview.limits.team_members.unwrap_or(30),
             notifications: entry.notifications.at(now),
             text_locked_until: team.text_locked_until.filter(|until| *until > now),
+            join: team.join,
+            link: team.link.clone(),
+            link_url: None,
+            requests,
+            together_week: 0,
         })
     }
 
@@ -1304,6 +1598,33 @@ fn team_invite_view(invite: &TeamInvite) -> TeamInviteView {
     }
 }
 
+fn join_request_view(request: &JoinRequest) -> JoinRequestView {
+    let profile = ProfileView::from(&request.from);
+    JoinRequestView {
+        id: profile.id,
+        name: profile.name,
+        username: profile.username,
+        avatar: profile.avatar,
+        avatar_url: profile.avatar_url,
+        sent_at: request.sent_at,
+    }
+}
+
+fn team_request_view(request: &TeamRequest) -> TeamRequestView {
+    let team = &request.team;
+    TeamRequestView {
+        team_id: team.id.clone(),
+        name: team.name.clone(),
+        tag: team.tag.clone(),
+        emblem: team.emblem.clone(),
+        color: team.color.clone(),
+        frame: team.frame.clone(),
+        motto: team.motto.clone(),
+        members: team.members,
+        sent_at: request.sent_at,
+    }
+}
+
 fn request_view(request: &FriendRequest) -> RequestView {
     let profile = ProfileView::from(&request.profile);
     RequestView {
@@ -1385,6 +1706,7 @@ mod tests {
             team: None,
             team_invited: vec![],
             team_invites: vec![],
+            team_requests: vec![],
             team_features: vec!["look".into(), "calls".into()],
             team_notifications: None,
             crews: None,
@@ -1449,6 +1771,7 @@ mod tests {
                 calls: vec![],
                 clock: None,
                 chat: None,
+                plans: None,
             },
             NOW,
         );
@@ -1478,6 +1801,7 @@ mod tests {
                 calls: vec![],
                 clock: None,
                 chat: None,
+                plans: None,
             },
             NOW,
         );
@@ -1669,6 +1993,7 @@ mod tests {
             calls: vec![],
             clock: None,
             chat: None,
+            plans: None,
         }
     }
 
@@ -1785,6 +2110,7 @@ mod tests {
                 calls: vec![],
                 clock: None,
                 chat: None,
+                plans: None,
             },
             NOW,
         );
@@ -1835,6 +2161,8 @@ mod tests {
                 .collect(),
             permissions: crate::model::TeamPermissions::default(),
             text_locked_until: None,
+            join: crate::model::JoinMode::Open,
+            link: None,
         }
     }
 
@@ -1890,6 +2218,7 @@ mod tests {
                 calls: vec![],
                 clock: None,
                 chat: None,
+                plans: None,
             },
             NOW,
         );
@@ -2028,6 +2357,7 @@ mod tests {
                 )],
                 clock: Some(service_now),
                 chat: None,
+                plans: None,
             },
             NOW,
         );
@@ -2262,6 +2592,7 @@ mod tests {
                 frame: "hex".into(),
                 motto: String::new(),
                 members: 4,
+                join: crate::model::JoinMode::Open,
             },
             from: profile("2", "Bora"),
             sent_at: NOW,
@@ -2370,6 +2701,7 @@ mod tests {
             team,
             invited: vec![],
             notifications: CrewMute::default(),
+            requests: vec![],
         }
     }
 
@@ -2714,5 +3046,354 @@ mod tests {
         assert_eq!(ayse.avatar, "preset:fox");
         assert_eq!(ayse.avatar_url, None);
         assert_eq!(ayse.discord_url, "https://discord.com/users/1");
+    }
+
+    fn join_request(id: &str, name: &str, sent_at: i64) -> JoinRequest {
+        JoinRequest {
+            from: profile(id, name),
+            sent_at,
+        }
+    }
+
+    #[test]
+    fn join_requests_reach_those_who_answer_and_go_with_the_right() {
+        let mut state = multi();
+        // The leader of Gece Kartalları (A) hears a new request; an old one is not shown.
+        let notices = state.apply(
+            &PresenceEvent::TeamRequests {
+                crew: CREW_A.into(),
+                requests: vec![
+                    join_request("7", "Eski", NOW - JOIN_REQUEST_LIFETIME_SECS),
+                    join_request("8", "Ece", NOW - 5),
+                ],
+                added: Some("8".into()),
+            },
+            NOW,
+        );
+        assert!(matches!(
+            notices.as_slice(),
+            [SocialNotice::JoinRequest { crew, request }] if crew == CREW_A && request.name == "Ece"
+        ));
+        let crews = state.crew_views(NOW);
+        assert_eq!(
+            crews[0]
+                .requests
+                .iter()
+                .map(|r| r.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Ece"]
+        );
+        // A muted crew says nothing, the list still changes.
+        state.set_crew_mute(
+            CREW_A,
+            CrewMute {
+                muted: true,
+                mute_until: None,
+            },
+        );
+        let quiet = state.apply(
+            &PresenceEvent::TeamRequests {
+                crew: CREW_A.into(),
+                requests: vec![
+                    join_request("8", "Ece", NOW - 5),
+                    join_request("6", "Fe", NOW),
+                ],
+                added: Some("6".into()),
+            },
+            NOW,
+        );
+        assert!(quiet.is_empty());
+        assert_eq!(state.crew_views(NOW)[0].requests.len(), 2);
+        // Answered here: the row goes; blocking someone takes their request too.
+        state.join_request_answered(CREW_A, "6");
+        state.blocked(profile("8", "Ece"));
+        assert!(state.crew_views(NOW)[0].requests.is_empty());
+
+        // Losing the right (`admit` for the leader alone, the player only a member) drops them.
+        state.apply(
+            &PresenceEvent::TeamRequests {
+                crew: CREW_B.into(),
+                requests: vec![join_request("5", "Gül", NOW)],
+                added: None,
+            },
+            NOW,
+        );
+        assert_eq!(state.crew_views(NOW)[1].requests.len(), 1);
+        let mut pvp = state.crew(CREW_B).unwrap().team.clone();
+        pvp.permissions.admit = crate::model::PermissionLevel::Leader;
+        state.apply(
+            &PresenceEvent::TeamChanged {
+                team: Some(pvp),
+                crew: Some(CREW_B.into()),
+                reason: None,
+                by: Some("2".into()),
+            },
+            NOW,
+        );
+        assert!(state.crew_views(NOW)[1].requests.is_empty());
+    }
+
+    #[test]
+    fn a_request_of_the_players_waits_and_its_crew_comes_when_taken() {
+        let mut state = multi();
+        let summary = crate::model::TeamSummary {
+            id: "5555666677778888".into(),
+            name: "Skyblock".into(),
+            tag: "SKY".into(),
+            emblem: "castle".into(),
+            color: "purple".into(),
+            frame: "hex".into(),
+            motto: String::new(),
+            members: 4,
+            join: crate::model::JoinMode::Approval,
+        };
+        state.join_requested(TeamRequest {
+            team: summary.clone(),
+            sent_at: NOW - 60,
+        });
+        assert_eq!(state.team_requests(NOW)[0].name, "Skyblock");
+        // A week later it is gone without a word.
+        assert!(
+            state
+                .team_requests(NOW + JOIN_REQUEST_LIFETIME_SECS)
+                .is_empty()
+        );
+        // Withdrawn here.
+        state.join_request_withdrawn("5555666677778888");
+        assert!(state.team_requests(NOW).is_empty());
+        // Sent again, then a leader takes it: the crew arrives with a word for the player.
+        state.join_requested(TeamRequest {
+            team: summary,
+            sent_at: NOW,
+        });
+        let mut sky = team(&[
+            ("801", "Deniz", TeamRole::Founder),
+            (ME, "Ben", TeamRole::Member),
+        ]);
+        sky.id = "5555666677778888".into();
+        sky.name = "Skyblock".into();
+        let notices = state.apply(
+            &PresenceEvent::TeamChanged {
+                team: Some(sky.clone()),
+                crew: Some(sky.id.clone()),
+                reason: None,
+                by: Some("801".into()),
+            },
+            NOW,
+        );
+        assert!(matches!(
+            notices.as_slice(),
+            [SocialNotice::RequestAccepted { name, .. }] if name == "Skyblock"
+        ));
+        assert!(state.team_requests(NOW).is_empty());
+        assert_eq!(state.crew_views(NOW).len(), 3);
+        // The same crew changing later is no news.
+        let again = state.apply(
+            &PresenceEvent::TeamChanged {
+                team: Some(sky),
+                crew: Some("5555666677778888".into()),
+                reason: None,
+                by: Some("801".into()),
+            },
+            NOW,
+        );
+        assert!(again.is_empty());
+    }
+
+    fn plan(id: &str, crew: &str, by: &str, at: i64) -> CrewPlan {
+        CrewPlan {
+            id: id.into(),
+            crew: crew.into(),
+            by: by.into(),
+            at,
+            until: at + 7_200,
+            created_at: at - 3_600,
+            answers: [(by.to_owned(), PlanAnswer::Yes)].into_iter().collect(),
+        }
+    }
+
+    fn hello_with_plans(plans: Vec<CrewPlan>, clock: i64) -> PresenceEvent {
+        PresenceEvent::Connected {
+            status: StatusMode::Online,
+            friends: vec![],
+            invites: vec![],
+            calls: vec![],
+            clock: Some(clock),
+            chat: None,
+            plans: Some(plans),
+        }
+    }
+
+    #[test]
+    fn plans_keep_the_services_time_and_end_on_this_clock() {
+        let mut state = multi();
+        // This computer is 30 s ahead of the service.
+        state.apply(
+            &hello_with_plans(
+                vec![
+                    plan("p2", CREW_A, "1", NOW + 7_200),
+                    plan("p1", CREW_B, "2", NOW + 900),
+                    plan("over", CREW_A, "1", NOW - 7_300),
+                    plan("elsewhere", "9999aaaabbbbcccc", "3", NOW + 900),
+                ],
+                NOW - 30,
+            ),
+            NOW,
+        );
+        let plans = state.plans(NOW);
+        // Soonest first; one that is over or of a crew the player is not in is not there.
+        assert_eq!(
+            plans.iter().map(|p| p.id.as_str()).collect::<Vec<_>>(),
+            vec!["p1", "p2"]
+        );
+        let p1 = &plans[0];
+        assert_eq!(p1.at, NOW + 900);
+        assert_eq!(p1.starts_at, NOW + 930);
+        assert_eq!(p1.ends_at, NOW + 900 + 7_200 + 30);
+        assert_eq!(p1.by_name.as_deref(), Some("Bora"));
+        assert!(!p1.mine && !p1.can_cancel);
+        assert_eq!(p1.answers.len(), 1);
+        // The player leads A: they may cancel Ayşe's plan there.
+        assert!(plans[1].can_cancel);
+        // Answered here; the hello's list replaces everything.
+        state.plan_answered("p1", PlanAnswer::Maybe);
+        assert_eq!(state.plans(NOW)[0].my_answer, Some(PlanAnswer::Maybe));
+        assert_eq!(state.plans(NOW)[0].answers.len(), 2);
+        // Over two hours after its time, by this computer's clock with the difference.
+        assert_eq!(state.plans(NOW + 900 + 7_200 + 29).len(), 2);
+        assert_eq!(state.plans(NOW + 900 + 7_200 + 30).len(), 1);
+    }
+
+    #[test]
+    fn new_plans_are_said_once_and_follow_the_crews() {
+        let mut state = multi();
+        state.apply(&hello_with_plans(vec![], NOW), NOW);
+        let new = state.apply(
+            &PresenceEvent::Plan {
+                plan: plan("p1", CREW_B, "2", NOW + 3_600),
+                quiet: false,
+            },
+            NOW,
+        );
+        assert!(matches!(
+            new.as_slice(),
+            [SocialNotice::CrewPlan { plan }] if plan.id == "p1" && plan.by_name.as_deref() == Some("Bora")
+        ));
+        // The same plan again (an answer) is no news; a quiet one or the player's own neither.
+        let mut answered = plan("p1", CREW_B, "2", NOW + 3_600);
+        answered.answers.insert("9".into(), PlanAnswer::No);
+        assert!(
+            state
+                .apply(
+                    &PresenceEvent::Plan {
+                        plan: answered,
+                        quiet: false
+                    },
+                    NOW
+                )
+                .is_empty()
+        );
+        assert_eq!(state.plans(NOW)[0].answers.len(), 2);
+        assert!(
+            state
+                .apply(
+                    &PresenceEvent::Plan {
+                        plan: plan("p2", CREW_B, "2", NOW + 7_200),
+                        quiet: true
+                    },
+                    NOW
+                )
+                .is_empty()
+        );
+        assert!(
+            state
+                .apply(
+                    &PresenceEvent::Plan {
+                        plan: plan("p3", CREW_A, ME, NOW + 7_200),
+                        quiet: false
+                    },
+                    NOW
+                )
+                .is_empty()
+        );
+        // A muted crew's plan is shown, not said.
+        state.set_crew_mute(
+            CREW_A,
+            CrewMute {
+                muted: true,
+                mute_until: None,
+            },
+        );
+        assert!(
+            state
+                .apply(
+                    &PresenceEvent::Plan {
+                        plan: plan("p4", CREW_A, "1", NOW + 10_800),
+                        quiet: false
+                    },
+                    NOW
+                )
+                .is_empty()
+        );
+        assert_eq!(state.plans(NOW).len(), 4);
+        // A crew's whole list (also empty), a cancel, and leaving a crew.
+        state.apply(
+            &PresenceEvent::Plans {
+                crew: CREW_B.into(),
+                plans: vec![],
+            },
+            NOW,
+        );
+        assert_eq!(state.plans(NOW).len(), 2);
+        state.apply(
+            &PresenceEvent::PlanRemoved {
+                plan: "p3".into(),
+                crew: CREW_A.into(),
+                by: ME.into(),
+            },
+            NOW,
+        );
+        assert_eq!(state.plans(NOW).len(), 1);
+        state.team_left(CREW_A);
+        assert!(state.plans(NOW).is_empty());
+    }
+
+    #[test]
+    fn together_means_on_projects_at_the_same_time() {
+        let mut state = multi();
+        let projects = |id: &str| {
+            PresenceEvent::Presence(presence(
+                id,
+                PresenceState::Playing,
+                Some(GameLocation::Projects),
+            ))
+        };
+        state.apply(&projects("9"), NOW);
+        state.apply(&projects("1"), NOW);
+        state.apply(
+            &PresenceEvent::Presence(presence("2", PresenceState::Launcher, None)),
+            NOW,
+        );
+        let on_projects = LocalStatus::Playing {
+            host: Some("play.projects.gg".into()),
+        };
+        let together = state.together_now(&on_projects);
+        // Zeki (both crews) and Ayşe (A); Bora is only in the launcher.
+        assert_eq!(
+            together.people.iter().cloned().collect::<Vec<_>>(),
+            vec!["1".to_owned(), "9".to_owned()]
+        );
+        assert_eq!(together.crews.len(), 2);
+        // Elsewhere the player is with nobody.
+        assert!(state.together_now(&LocalStatus::Launcher).is_empty());
+        let other = LocalStatus::Playing {
+            host: Some("mc.example.com".into()),
+        };
+        assert!(state.together_now(&other).is_empty());
+        // Someone the player blocked does not count.
+        state.blocked(profile("9", "Zeki"));
+        let together = state.together_now(&on_projects);
+        assert_eq!(together.people.len(), 1);
+        assert_eq!(together.crews.len(), 1);
     }
 }

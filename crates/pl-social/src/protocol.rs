@@ -5,14 +5,17 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::model::{
-    ChatDeletion, ChatMessage, ChatStatus, CrewMute, FriendGroups, LastSeen, ModNotice,
-    PublicProfile, StatusMode, Team, TeamExit, TeamInvite, TeamNotifications,
+    ChatDeletion, ChatMessage, ChatStatus, CrewMute, FriendGroups, JoinRequest, LastSeen,
+    ModNotice, PublicProfile, StatusMode, Team, TeamExit, TeamInvite, TeamNotifications,
 };
 
 /// What this launcher understands on the presence socket (`GET /v1/presence?caps=…`): crew calls
-/// that carry their server and may end with `server` (`callServer`), and several crews (`crews`).
-/// Older services ignore the query.
-pub const PRESENCE_CAPS: &str = "callServer,crews";
+/// that carry their server and may end with `server` (`callServer`), several crews (`crews`) and
+/// crew plans (`plans`, TEAM5). Older services ignore the query.
+pub const PRESENCE_CAPS: &str = "callServer,crews,plans";
+
+/// Crew plans (TEAM5): the capability the service names in `hello.caps` when it took it.
+pub const PLANS_CAP: &str = "plans";
 
 /// Crew chat and direct messages (CHAT1): asked for only while the signed content allows chat.
 pub const CHAT_CAP: &str = "chat";
@@ -204,6 +207,90 @@ fn known_answers<'de, D: Deserializer<'de>>(
         .collect())
 }
 
+/// An answer to a crew plan: "Geliyorum", "Belki", "Gelemem" (TEAM5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum PlanAnswer {
+    Yes,
+    Maybe,
+    No,
+}
+
+impl PlanAnswer {
+    pub(crate) fn parse(value: &str) -> Option<Self> {
+        match value {
+            "yes" => Some(Self::Yes),
+            "maybe" => Some(Self::Maybe),
+            "no" => Some(Self::No),
+            _ => None,
+        }
+    }
+}
+
+/// "Planlar": a time to meet on Projects in one of the player's crews (`hello.plans`,
+/// `{"t":"plan"}`, `{"t":"plans"}`). It carries no text. Times are Unix seconds on the service's
+/// clock; `at` is a whole quarter of an hour, and the plan is over at `until` (`at` + 2 hours),
+/// without a message.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrewPlan {
+    pub id: String,
+    /// The crew's id.
+    pub crew: String,
+    /// Who made it.
+    pub by: String,
+    pub at: i64,
+    pub until: i64,
+    #[serde(default)]
+    pub created_at: i64,
+    /// The answers the player may see (theirs and those of crewmates who see them there); answers
+    /// this version does not know are left out.
+    #[serde(default, deserialize_with = "known_plan_answers")]
+    pub answers: BTreeMap<String, PlanAnswer>,
+}
+
+fn known_plan_answers<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<BTreeMap<String, PlanAnswer>, D::Error> {
+    let raw = BTreeMap::<String, String>::deserialize(deserializer)?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|(id, answer)| PlanAnswer::parse(&answer).map(|answer| (id, answer)))
+        .collect())
+}
+
+/// A list of plans where one this version cannot read is left out (it never costs the rest, nor
+/// the `hello` that carries them).
+fn readable_plans<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Vec<CrewPlan>, D::Error> {
+    let raw = Vec::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|value| serde_json::from_value(value).ok())
+        .collect())
+}
+
+fn readable_plans_opt<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Vec<CrewPlan>>, D::Error> {
+    let raw = Option::<Vec<serde_json::Value>>::deserialize(deserializer)?;
+    Ok(raw.map(|list| {
+        list.into_iter()
+            .filter_map(|value| serde_json::from_value(value).ok())
+            .collect()
+    }))
+}
+
+/// Join requests where one this version cannot read is left out.
+fn readable_requests<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Vec<JoinRequest>, D::Error> {
+    let raw = Vec::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(raw
+        .into_iter()
+        .filter_map(|value| serde_json::from_value(value).ok())
+        .collect())
+}
+
 /// Why a call ended: the caller ended it, it went away (the caller went offline, left the crew,
 /// the crew ended, the player left it, or a block hid it), or the caller is no longer on a server
 /// it allows (`server`, with `callServer`). Unknown reasons read as `Ended`.
@@ -281,6 +368,24 @@ pub(crate) enum ClientMessage {
         after: Option<String>,
         rid: u32,
     },
+    /// A new crew plan: a time (Unix seconds, a whole quarter of an hour) in one of the player's
+    /// crews.
+    Plan {
+        crew: String,
+        at: i64,
+        rid: u32,
+    },
+    /// "Geliyorum", "Belki" or "Gelemem" to a plan.
+    PlanAnswer {
+        plan: String,
+        answer: PlanAnswer,
+        rid: u32,
+    },
+    /// "Planı sil" (its maker, the crew's leader or a moderator).
+    PlanCancel {
+        plan: String,
+        rid: u32,
+    },
 }
 
 impl ClientMessage {
@@ -331,6 +436,9 @@ pub(crate) enum ServerMessage {
         /// The chat state (only with `chat` in the capabilities).
         #[serde(default)]
         chat: Option<ChatStatus>,
+        /// Every plan of the player's crews they see (only with `plans` in the capabilities).
+        #[serde(default, deserialize_with = "readable_plans_opt")]
+        plans: Option<Vec<CrewPlan>>,
     },
     /// A crew call, new or changed (its server or kind, its crews, or answers that went away):
     /// replaces the one with the same id. `quiet`: show it, never announce it.
@@ -366,6 +474,36 @@ pub(crate) enum ServerMessage {
     },
     TeamInvite {
         invite: TeamInvite,
+    },
+    /// The waiting join requests of a crew the player may answer for changed (or the player
+    /// gained the right): replace them. `added` is the sender of a new one.
+    TeamRequests {
+        crew: String,
+        #[serde(default, deserialize_with = "readable_requests")]
+        requests: Vec<JoinRequest>,
+        #[serde(default)]
+        added: Option<String>,
+    },
+    /// A plan the player sees, new or changed (answers): replaces the one with the same id.
+    /// `quiet`: show it, never announce it.
+    Plan {
+        plan: CrewPlan,
+        #[serde(default)]
+        quiet: bool,
+    },
+    /// Everything the player sees of one crew's plans now (also empty): replace that crew's.
+    Plans {
+        crew: String,
+        #[serde(default, deserialize_with = "readable_plans")]
+        plans: Vec<CrewPlan>,
+    },
+    /// A plan was cancelled (`by`: its maker, or the crew's leader or a moderator).
+    PlanRemoved {
+        plan: String,
+        #[serde(default)]
+        crew: String,
+        #[serde(default)]
+        by: String,
     },
     /// The player's crew notification settings for all crews changed (on any of their devices).
     TeamNotifications {
@@ -455,6 +593,9 @@ pub(crate) enum ServerMessage {
         /// A chat message as stored (sending and editing).
         #[serde(default)]
         msg: Option<ChatMessage>,
+        /// A plan as stored (making one).
+        #[serde(default)]
+        plan: Option<CrewPlan>,
     },
     Error {
         #[serde(default)]
@@ -465,9 +606,12 @@ pub(crate) enum ServerMessage {
         /// `chat_rejected`: `link`, `phone` or `words`.
         #[serde(default)]
         reason: Option<String>,
-        /// `chat_muted`: Unix seconds.
+        /// `chat_muted`, `account_limited`: Unix seconds.
         #[serde(default)]
         until: Option<i64>,
+        /// `account_limited`: what is limited (`crew_plans`).
+        #[serde(default)]
+        item: Option<String>,
     },
     Bye {
         #[serde(default)]
@@ -808,8 +952,8 @@ mod tests {
 
     #[test]
     fn chat_frames_both_ways() {
-        assert_eq!(presence_caps(false), "callServer,crews");
-        assert_eq!(presence_caps(true), "callServer,crews,chat");
+        assert_eq!(presence_caps(false), "callServer,crews,plans");
+        assert_eq!(presence_caps(true), "callServer,crews,plans,chat");
         let json = |message: &ClientMessage| serde_json::to_string(message).unwrap();
         assert_eq!(
             json(&ClientMessage::Chat {
@@ -937,5 +1081,107 @@ mod tests {
         let bye: ServerMessage =
             serde_json::from_str(r#"{"t":"bye","reason":"restricted","until":null}"#).unwrap();
         assert!(matches!(bye, ServerMessage::Bye { until: None, .. }));
+    }
+
+    #[test]
+    fn plan_frames_and_join_requests_both_ways() {
+        let json = |message: &ClientMessage| serde_json::to_string(message).unwrap();
+        assert_eq!(
+            json(&ClientMessage::Plan {
+                crew: "0a1b2c3d4e5f6a7b".into(),
+                at: 1_792_609_200,
+                rid: 15
+            }),
+            r#"{"t":"plan","crew":"0a1b2c3d4e5f6a7b","at":1792609200,"rid":15}"#
+        );
+        assert_eq!(
+            json(&ClientMessage::PlanAnswer {
+                plan: "3f9c0a1b2c3d4e5f".into(),
+                answer: PlanAnswer::Maybe,
+                rid: 16
+            }),
+            r#"{"t":"plan_answer","plan":"3f9c0a1b2c3d4e5f","answer":"maybe","rid":16}"#
+        );
+        assert_eq!(
+            json(&ClientMessage::PlanCancel {
+                plan: "3f9c0a1b2c3d4e5f".into(),
+                rid: 17
+            }),
+            r#"{"t":"plan_cancel","plan":"3f9c0a1b2c3d4e5f","rid":17}"#
+        );
+
+        // `hello.plans` keeps what it can read: an answer or a plan from a newer service never
+        // costs the rest (nor the hello).
+        let hello: ServerMessage = serde_json::from_str(
+            r#"{"t":"hello","v":1,"status":"online","caps":["callServer","crews","plans"],"now":9,
+                "plans":[{"id":"p1","crew":"0a1b2c3d4e5f6a7b","by":"1","at":1792609200,
+                  "until":1792616400,"createdAt":1792520000,"answers":{"1":"yes","2":"maybe","3":"later"}},
+                  {"id":"broken"}]}"#,
+        )
+        .unwrap();
+        match hello {
+            ServerMessage::Hello {
+                plans: Some(plans),
+                caps,
+                ..
+            } => {
+                assert!(caps.iter().any(|cap| cap == PLANS_CAP));
+                assert_eq!(plans.len(), 1);
+                assert_eq!(plans[0].until - plans[0].at, 7_200);
+                assert_eq!(plans[0].answers.len(), 2);
+                assert_eq!(plans[0].answers["2"], PlanAnswer::Maybe);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        // Without the capability there are none at all (not an empty list).
+        let older: ServerMessage =
+            serde_json::from_str(r#"{"t":"hello","v":1,"status":"online","now":9}"#).unwrap();
+        assert!(matches!(older, ServerMessage::Hello { plans: None, .. }));
+
+        let plan: ServerMessage = serde_json::from_str(
+            r#"{"t":"plan","plan":{"id":"p1","crew":"c","by":"1","at":900,"until":8100,
+                "createdAt":1,"answers":{}},"quiet":false}"#,
+        )
+        .unwrap();
+        assert!(matches!(plan, ServerMessage::Plan { quiet: false, plan } if plan.id == "p1"));
+        let empty: ServerMessage =
+            serde_json::from_str(r#"{"t":"plans","crew":"c","plans":[]}"#).unwrap();
+        assert!(matches!(empty, ServerMessage::Plans { plans, .. } if plans.is_empty()));
+        let removed: ServerMessage =
+            serde_json::from_str(r#"{"t":"plan_removed","plan":"p1","crew":"c","by":"2"}"#)
+                .unwrap();
+        assert!(matches!(removed, ServerMessage::PlanRemoved { by, .. } if by == "2"));
+        let ack: ServerMessage = serde_json::from_str(
+            r#"{"t":"ack","rid":15,"plan":{"id":"p2","crew":"c","by":"1","at":900,"until":8100,
+                "createdAt":1,"answers":{"1":"yes"}}}"#,
+        )
+        .unwrap();
+        assert!(matches!(ack, ServerMessage::Ack { plan: Some(plan), .. } if plan.id == "p2"));
+        let limited: ServerMessage = serde_json::from_str(
+            r#"{"t":"error","rid":15,"code":"account_limited","item":"crew_plans","until":1792600000}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            limited,
+            ServerMessage::Error { item: Some(item), until: Some(1_792_600_000), .. } if item == "crew_plans"
+        ));
+
+        let requests: ServerMessage = serde_json::from_str(
+            r#"{"t":"team_requests","crew":"c","added":"2","requests":[{"from":{"id":"2","username":"b",
+                "displayName":null,"avatar":"discord","avatarHash":null},"sentAt":5},{"from":7}]}"#,
+        )
+        .unwrap();
+        match requests {
+            ServerMessage::TeamRequests {
+                crew,
+                requests,
+                added,
+            } => {
+                assert_eq!((crew.as_str(), added.as_deref()), ("c", Some("2")));
+                assert_eq!(requests.len(), 1);
+                assert_eq!(requests[0].sent_at, 5);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
     }
 }

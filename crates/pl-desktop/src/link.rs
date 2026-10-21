@@ -30,6 +30,12 @@ pub enum DeepLink {
     Friend {
         code: String,
     },
+    /// A crew's invite link (`projects://crew/XXXX-XXXX-XXXX`, from the link's page): the crew
+    /// page shows the crew with "Katıl" (or "Katılma isteği gönder"); nothing is sent until the
+    /// player confirms.
+    Crew {
+        link: String,
+    },
 }
 
 /// Ids that may travel in a link: 1–64 ASCII letters, digits, `-`, `_` or `.`.
@@ -49,8 +55,13 @@ pub fn play_link(instance_id: &str) -> Option<String> {
 }
 
 /// Parses `projects://<route>[/<id>]`. Anything unknown is ignored rather than guessed.
-/// `friend_code` normalizes friend codes (the friends service owns their format).
-pub fn parse_link(raw: &str, friend_code: impl Fn(&str) -> Option<String>) -> Option<DeepLink> {
+/// `friend_code` and `crew_link` normalize friend codes and crew invite links (the friends service
+/// owns their formats).
+pub fn parse_link(
+    raw: &str,
+    friend_code: impl Fn(&str) -> Option<String>,
+    crew_link: impl Fn(&str) -> Option<String>,
+) -> Option<DeepLink> {
     let url = Url::parse(raw.trim()).ok()?;
     if url.scheme() != SCHEME {
         return None;
@@ -85,6 +96,7 @@ pub fn parse_link(raw: &str, friend_code: impl Fn(&str) -> Option<String>) -> Op
         ("friend" | "arkadas", Some(code)) => {
             friend_code(code).map(|code| DeepLink::Friend { code })
         }
+        ("crew" | "ekip", Some(link)) => crew_link(link).map(|link| DeepLink::Crew { link }),
         _ => None,
     }
 }
@@ -106,8 +118,19 @@ mod tests {
             .map(|rest| format!("PRJ-{}-{}", &rest[..4], &rest[4..]))
     }
 
+    /// Stand-in for the friends service's crew link normalizer: 12 symbols.
+    fn link(input: &str) -> Option<String> {
+        let compact: String = input
+            .chars()
+            .filter(|c| *c != '-')
+            .map(|c| c.to_ascii_uppercase())
+            .collect();
+        (compact.len() == 12 && compact.chars().all(|c| c.is_ascii_alphanumeric()))
+            .then(|| format!("{}-{}-{}", &compact[..4], &compact[4..8], &compact[8..]))
+    }
+
     fn parse(raw: &str) -> Option<DeepLink> {
-        parse_link(raw, code)
+        parse_link(raw, code, link)
     }
 
     #[test]
@@ -141,6 +164,21 @@ mod tests {
         );
         assert_eq!(parse("projects://friend/nope"), None);
         assert_eq!(parse("projects://friend"), None);
+        // A crew's invite link (its page opens it), also by its Turkish name.
+        assert_eq!(
+            parse("projects://crew/abcd-efgh-jkmn"),
+            Some(DeepLink::Crew {
+                link: "ABCD-EFGH-JKMN".into()
+            })
+        );
+        assert_eq!(
+            parse("projects://ekip/ABCDEFGHJKMN/"),
+            Some(DeepLink::Crew {
+                link: "ABCD-EFGH-JKMN".into()
+            })
+        );
+        assert_eq!(parse("projects://crew/ABCD-EFGH"), None);
+        assert_eq!(parse("projects://crew"), None);
         // The sign-in link is not a navigation (the friends service takes it).
         assert_eq!(parse("projects://auth/done?c=abc"), None);
     }

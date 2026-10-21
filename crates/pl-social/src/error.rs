@@ -106,6 +106,23 @@ pub enum ErrorCode {
     ChatNotPermitted,
     /// Too late to edit (15 minutes) or delete (7 days).
     ChatTooOld,
+    /// The crew approves newcomers: ask with a request (what launchers from before join requests
+    /// hear; TEAM5).
+    TeamApprovalRequired,
+    /// No join request waits (any more) from that player, or to that crew.
+    TeamRequestNotFound,
+    /// The crew has 20 join requests waiting.
+    LimitTeamRequests,
+    /// The player has 3 join requests waiting.
+    LimitOutgoingTeamRequests,
+    /// A plan's time is not a quarter of an hour, is past, or is more than 7 days ahead.
+    PlanTime,
+    /// A crew has at most 3 upcoming plans.
+    LimitTeamPlans,
+    /// The crew has a plan at that time already.
+    PlanExists,
+    /// The plan is gone (cancelled, over, or no longer seen).
+    PlanNotFound,
     UpgradeRequired,
     RateLimited,
     Internal,
@@ -177,6 +194,17 @@ const CODES: &[(&str, ErrorCode)] = &[
     ("message_not_found", ErrorCode::MessageNotFound),
     ("chat_not_permitted", ErrorCode::ChatNotPermitted),
     ("chat_too_old", ErrorCode::ChatTooOld),
+    ("team_approval_required", ErrorCode::TeamApprovalRequired),
+    ("team_request_not_found", ErrorCode::TeamRequestNotFound),
+    ("limit_team_requests", ErrorCode::LimitTeamRequests),
+    (
+        "limit_outgoing_team_requests",
+        ErrorCode::LimitOutgoingTeamRequests,
+    ),
+    ("plan_time", ErrorCode::PlanTime),
+    ("limit_team_plans", ErrorCode::LimitTeamPlans),
+    ("plan_exists", ErrorCode::PlanExists),
+    ("plan_not_found", ErrorCode::PlanNotFound),
     ("upgrade_required", ErrorCode::UpgradeRequired),
     ("rate_limited", ErrorCode::RateLimited),
     ("internal", ErrorCode::Internal),

@@ -38,12 +38,13 @@ use crate::auth::SessionToken;
 use crate::backoff::{Backoff, BackoffPolicy, jitter};
 use crate::error::{ErrorCode, Result, SocialError, parse_retry_after};
 use crate::model::{
-    ChatDeletion, ChatMessage, ChatRejection, ChatStatus, CrewMute, FriendGroups, ModNotice,
-    PublicProfile, StatusMode, Team, TeamExit, TeamInvite, TeamNotifications,
+    ChatDeletion, ChatMessage, ChatRejection, ChatStatus, CrewMute, FriendGroups, JoinRequest,
+    LimitedKey, ModNotice, PublicProfile, StatusMode, Team, TeamExit, TeamInvite,
+    TeamNotifications,
 };
 use crate::protocol::{
-    CHAT_CAP, CallAnswer, CallEndReason, ClientMessage, CrewCall, Invite, LocalStatus, Presence,
-    ServerMessage,
+    CHAT_CAP, CallAnswer, CallEndReason, ClientMessage, CrewCall, CrewPlan, Invite, LocalStatus,
+    PLANS_CAP, PlanAnswer, Presence, ServerMessage,
 };
 use crate::tls;
 
@@ -101,6 +102,33 @@ pub enum PresenceEvent {
         /// The chat state, when chat was asked for and the service took it (None: no chat on
         /// this connection).
         chat: Option<ChatStatus>,
+        /// Every plan of the player's crews they see, when the service took `plans` (keep
+        /// exactly these); None: no plans on this connection.
+        plans: Option<Vec<CrewPlan>>,
+    },
+    /// The waiting join requests of one of the player's crews they may answer for (replace
+    /// them); `added` is the player who just asked.
+    TeamRequests {
+        crew: String,
+        requests: Vec<JoinRequest>,
+        added: Option<String>,
+    },
+    /// A crew plan, new or changed (answers): replaces the one with the same id. `quiet`: show it,
+    /// never announce it.
+    Plan {
+        plan: CrewPlan,
+        quiet: bool,
+    },
+    /// Everything the player sees of one crew's plans now (also none): replace that crew's.
+    Plans {
+        crew: String,
+        plans: Vec<CrewPlan>,
+    },
+    /// A plan was cancelled (`by`: its maker, the crew's leader or a moderator).
+    PlanRemoved {
+        plan: String,
+        crew: String,
+        by: String,
     },
     /// The chat state changed: the service's switch, the mailbox, the daily limit or a mute.
     ChatState(ChatStatus),
@@ -230,6 +258,14 @@ enum CrewRequest {
     End { call: String },
 }
 
+/// What a crew plan request asks of the service (TEAM5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PlanRequest {
+    Make { crew: String, at: i64 },
+    Answer { plan: String, answer: PlanAnswer },
+    Cancel { plan: String },
+}
+
 /// What a chat request asks of the service.
 #[derive(Debug, Clone, PartialEq)]
 enum ChatRequest {
@@ -260,6 +296,10 @@ enum Command {
         request: ChatRequest,
         reply: oneshot::Sender<Result<Option<ChatMessage>>>,
     },
+    Plan {
+        request: PlanRequest,
+        reply: oneshot::Sender<Result<Option<CrewPlan>>>,
+    },
     Shutdown,
 }
 
@@ -271,6 +311,7 @@ impl Command {
             Self::Invite { reply, .. } => drop(reply.send(Err(error()))),
             Self::Crew { reply, .. } => drop(reply.send(Err(error()))),
             Self::Chat { reply, .. } => drop(reply.send(Err(error()))),
+            Self::Plan { reply, .. } => drop(reply.send(Err(error()))),
             Self::Shutdown => {}
         }
     }
@@ -409,6 +450,55 @@ impl PresenceControl {
         let (reply, answer) = oneshot::channel();
         self.commands
             .send(Command::Chat { request, reply })
+            .await
+            .map_err(|_| SocialError::Unavailable { retry_after: None })?;
+        match timeout(self.invite_timeout, answer).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) => Err(SocialError::Network("presence connection closed".into())),
+            Err(_) => Err(SocialError::Network("no answer from the service".into())),
+        }
+    }
+
+    /// A new crew plan (TEAM5): `at` in Unix seconds on the service's clock, a whole quarter of an
+    /// hour, later than now and at most 7 days ahead. Returns the plan as the service stored it
+    /// (the maker is coming); the crewmates who see the player get it too. Limits: 3 upcoming
+    /// plans per crew, one per crew and time, 5 a day per player, the right to call the crew.
+    /// Fails with `Refused` (`plan_time`, `limit_team_plans`, `plan_exists`, `team_not_found`,
+    /// `team_not_permitted`), `RateLimited`, `Limited` (`crew_plans`) or `Unavailable`.
+    pub async fn make_plan(&self, crew: &str, at: i64) -> Result<CrewPlan> {
+        self.plan(PlanRequest::Make {
+            crew: crew.to_owned(),
+            at,
+        })
+        .await?
+        .ok_or_else(|| SocialError::Protocol("a plan answer without its plan".into()))
+    }
+
+    /// "Geliyorum", "Belki" or "Gelemem" to a plan; a new answer replaces the old one. Changing
+    /// an answer counts (20 a day): `RateLimited` keeps the old one. `Refused` `plan_not_found`
+    /// when the plan is gone or over.
+    pub async fn answer_plan(&self, plan: &str, answer: PlanAnswer) -> Result<()> {
+        self.plan(PlanRequest::Answer {
+            plan: plan.to_owned(),
+            answer,
+        })
+        .await
+        .map(drop)
+    }
+
+    /// "Planı sil": the plan's maker, or the crew's leader or a moderator.
+    pub async fn cancel_plan(&self, plan: &str) -> Result<()> {
+        self.plan(PlanRequest::Cancel {
+            plan: plan.to_owned(),
+        })
+        .await
+        .map(drop)
+    }
+
+    async fn plan(&self, request: PlanRequest) -> Result<Option<CrewPlan>> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(Command::Plan { request, reply })
             .await
             .map_err(|_| SocialError::Unavailable { retry_after: None })?;
         match timeout(self.invite_timeout, answer).await {
@@ -727,6 +817,7 @@ enum Reply {
     Invite(oneshot::Sender<Result<InviteOutcome>>),
     Crew(oneshot::Sender<Result<()>>),
     Chat(oneshot::Sender<Result<Option<ChatMessage>>>),
+    Plan(oneshot::Sender<Result<Option<CrewPlan>>>),
 }
 
 impl Reply {
@@ -735,6 +826,7 @@ impl Reply {
             Self::Invite(reply) => drop(reply.send(Err(error))),
             Self::Crew(reply) => drop(reply.send(Err(error))),
             Self::Chat(reply) => drop(reply.send(Err(error))),
+            Self::Plan(reply) => drop(reply.send(Err(error))),
         }
     }
 }
@@ -759,6 +851,7 @@ async fn session(
         keepalive: options.keepalive,
         chat: chat.cloned(),
         chat_on: false,
+        plans_on: false,
         sync: None,
         sync_again: None,
         restricted: None,
@@ -833,6 +926,14 @@ async fn session(
                             }
                             (chat_message(request, rid), Reply::Chat(reply))
                         }
+                        Command::Plan { request, reply } => {
+                            if !state.plans_on {
+                                // No plans on this connection: what an older service would say.
+                                let _ = reply.send(Err(plans_off()));
+                                continue;
+                            }
+                            (plan_message(request, rid), Reply::Plan(reply))
+                        }
                         Command::Shutdown => continue,
                     };
                     if send(&mut sink, &message).await.is_err() {
@@ -899,6 +1000,23 @@ fn chat_off() -> SocialError {
     }
 }
 
+fn plan_message(request: PlanRequest, rid: u32) -> ClientMessage {
+    match request {
+        PlanRequest::Make { crew, at } => ClientMessage::Plan { crew, at, rid },
+        PlanRequest::Answer { plan, answer } => ClientMessage::PlanAnswer { plan, answer, rid },
+        PlanRequest::Cancel { plan } => ClientMessage::PlanCancel { plan, rid },
+    }
+}
+
+/// Plans are not on this connection (an older service): what it would answer a plan frame.
+fn plans_off() -> SocialError {
+    SocialError::Refused {
+        status: 400,
+        code: ErrorCode::BadRequest,
+        message: String::new(),
+    }
+}
+
 /// Pings every `keepalive` ± 10 %, so clients do not ping in step.
 fn spread(keepalive: Duration) -> Duration {
     jitter(keepalive.mul_f64(0.9), keepalive.mul_f64(1.1))
@@ -914,6 +1032,8 @@ struct SessionState {
     chat: Option<ChatSetup>,
     /// The service took chat on this connection.
     chat_on: bool,
+    /// The service took crew plans on this connection (TEAM5).
+    plans_on: bool,
     /// The sync under way: its `rid` and where it started (ms).
     sync: Option<(u32, i64)>,
     /// A refused sync is asked again then.
@@ -1000,6 +1120,7 @@ async fn on_text(
             now,
             caps,
             chat,
+            plans,
         } => {
             tracing::debug!(?caps, "presence connected");
             state.greeted = true;
@@ -1012,6 +1133,8 @@ async fn on_text(
             let chat_on =
                 state.chat.is_some() && caps.iter().any(|cap| cap == CHAT_CAP) && chat.is_some();
             state.chat_on = chat_on;
+            // Plans flow only when the service took them (an older one ignores the capability).
+            state.plans_on = caps.iter().any(|cap| cap == PLANS_CAP);
             state.sync = None;
             state.sync_again = None;
             // Everyone online the player may see: friends, then teammates who are not friends.
@@ -1023,6 +1146,11 @@ async fn on_text(
                 calls,
                 clock: now,
                 chat: chat.filter(|_| chat_on),
+                plans: if state.plans_on {
+                    Some(plans.unwrap_or_default())
+                } else {
+                    None
+                },
             });
             send_status(state, sink, status)
                 .await
@@ -1063,6 +1191,24 @@ async fn on_text(
             by,
         },
         ServerMessage::TeamInvite { invite } => PresenceEvent::TeamInvited(invite),
+        ServerMessage::TeamRequests {
+            crew,
+            requests,
+            added,
+        } => PresenceEvent::TeamRequests {
+            crew,
+            requests,
+            added,
+        },
+        ServerMessage::Plan { plan, quiet } if state.plans_on => {
+            PresenceEvent::Plan { plan, quiet }
+        }
+        ServerMessage::Plans { crew, plans } if state.plans_on => {
+            PresenceEvent::Plans { crew, plans }
+        }
+        ServerMessage::PlanRemoved { plan, crew, by } if state.plans_on => {
+            PresenceEvent::PlanRemoved { plan, crew, by }
+        }
         ServerMessage::Groups { groups } => PresenceEvent::GroupsChanged(groups),
         ServerMessage::TeamNotifications { notifications } => {
             PresenceEvent::CrewNotifications(notifications)
@@ -1122,6 +1268,7 @@ async fn on_text(
             rid,
             delivered,
             msg,
+            plan,
         } => {
             match rid.and_then(|rid| pending.remove(&rid)) {
                 Some(Reply::Invite(reply)) => {
@@ -1137,6 +1284,9 @@ async fn on_text(
                 }
                 Some(Reply::Chat(reply)) => {
                     let _ = reply.send(Ok(msg.clone()));
+                }
+                Some(Reply::Plan(reply)) => {
+                    let _ = reply.send(Ok(plan));
                 }
                 None => {}
             }
@@ -1156,6 +1306,7 @@ async fn on_text(
             retry_after,
             reason,
             until,
+            item,
         } => {
             if let Some(rid) = rid {
                 if state.sync.is_some_and(|(sync, _)| sync == rid) {
@@ -1173,7 +1324,13 @@ async fn on_text(
                         .map_err(gone);
                 }
                 if let Some(reply) = pending.remove(&rid) {
-                    reply.fail(socket_error(&code, retry_after, reason.as_deref(), until));
+                    reply.fail(socket_error(
+                        &code,
+                        retry_after,
+                        reason.as_deref(),
+                        until,
+                        item.as_deref(),
+                    ));
                     return Ok(());
                 }
             }
@@ -1192,17 +1349,21 @@ async fn on_text(
         | ServerMessage::ChatEdited { .. }
         | ServerMessage::ChatDeleted { .. }
         | ServerMessage::ChatSync { .. }
-        | ServerMessage::ChatState { .. } => return Ok(()),
+        | ServerMessage::ChatState { .. }
+        | ServerMessage::Plan { .. }
+        | ServerMessage::Plans { .. }
+        | ServerMessage::PlanRemoved { .. } => return Ok(()),
     };
     events.send(event).map_err(gone)
 }
 
-/// The error of a socket request (an invite, a crew call request or a chat request).
+/// The error of a socket request (an invite, a crew call, chat or plan request).
 fn socket_error(
     code: &str,
     retry_after: Option<u64>,
     reason: Option<&str>,
     until: Option<i64>,
+    item: Option<&str>,
 ) -> SocialError {
     let status = match code {
         "rate_limited" => {
@@ -1216,11 +1377,22 @@ fn socket_error(
             };
         }
         "chat_muted" => return SocialError::ChatMuted { until },
+        // A new Discord account may not do this (a plan); the limits end at `until`.
+        "account_limited" => {
+            return SocialError::Limited {
+                item: LimitedKey::parse(item.unwrap_or_default()),
+                until,
+                retry_after: retry_after.map(Duration::from_secs),
+            };
+        }
         // An unexpected failure of the service: the frame may be sent again.
         "internal" => return SocialError::Unavailable { retry_after: None },
-        "friend_not_found" | "team_not_found" | "call_not_found" | "message_not_found" => 404,
+        "friend_not_found" | "team_not_found" | "call_not_found" | "message_not_found"
+        | "plan_not_found" => 404,
         "team_not_permitted" | "chat_off" | "chat_not_permitted" => 403,
-        "call_active" | "call_needs_server" | "call_server_hidden" | "chat_too_old" => 409,
+        "call_active" | "call_needs_server" | "call_server_hidden" | "chat_too_old"
+        | "plan_exists" => 409,
+        "plan_time" | "limit_team_plans" => 422,
         _ => 400,
     };
     SocialError::Refused {
@@ -1351,7 +1523,7 @@ mod tests {
             assert!(
                 headers
                     .iter()
-                    .any(|(k, v)| k == ":uri" && v == "/v1/presence?caps=callServer,crews")
+                    .any(|(k, v)| k == ":uri" && v == "/v1/presence?caps=callServer,crews,plans")
             );
         }
         send_json(&mut server, hello()).await;
@@ -1562,22 +1734,49 @@ mod tests {
             }
         );
         assert!(matches!(
-            socket_error("rate_limited", Some(30), None, None),
+            socket_error("rate_limited", Some(30), None, None, None),
             SocialError::RateLimited { retry_after: Some(d) } if d == Duration::from_secs(30)
         ));
         assert_eq!(
-            socket_error("friend_not_found", None, None, None).code(),
+            socket_error("friend_not_found", None, None, None, None).code(),
             Some(&ErrorCode::FriendNotFound)
         );
         assert_eq!(
-            socket_error("call_active", None, None, None).code(),
+            socket_error("call_active", None, None, None, None).code(),
             Some(&ErrorCode::CallActive)
         );
         assert!(matches!(
-            socket_error("call_not_found", None, None, None),
+            socket_error("call_not_found", None, None, None, None),
             SocialError::Refused {
                 status: 404,
                 code: ErrorCode::CallNotFound,
+                ..
+            }
+        ));
+        // Plans (TEAM5): a new Discord account is told what and until when.
+        assert!(matches!(
+            socket_error(
+                "account_limited",
+                None,
+                None,
+                Some(1_792_600_000),
+                Some("crew_plans")
+            ),
+            SocialError::Limited {
+                item: LimitedKey::CrewPlans,
+                until: Some(1_792_600_000),
+                ..
+            }
+        ));
+        assert_eq!(
+            socket_error("plan_exists", None, None, None, None).code(),
+            Some(&ErrorCode::PlanExists)
+        );
+        assert!(matches!(
+            socket_error("plan_not_found", None, None, None, None),
+            SocialError::Refused {
+                status: 404,
+                code: ErrorCode::PlanNotFound,
                 ..
             }
         ));
@@ -1793,6 +1992,175 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn plans_go_out_with_their_rid_and_join_requests_come_live() {
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut handle = client.session(token()).connect_presence(fast());
+        let mut server = accept(&listener, None, seen.clone()).await.unwrap();
+        // Plans are asked for on every connection (older services ignore it).
+        assert!(
+            seen.lock()
+                .unwrap()
+                .iter()
+                .any(|(k, v)| k == ":uri" && v == "/v1/presence?caps=callServer,crews,plans")
+        );
+        let mut greeting = hello();
+        greeting["caps"] = serde_json::json!(["callServer", "crews", "plans"]);
+        greeting["now"] = serde_json::json!(1_792_521_300);
+        greeting["plans"] = serde_json::json!([{"id": "p0", "crew": "0a1b2c3d4e5f6a7b",
+            "by": "111111111111111111", "at": 1_792_609_200, "until": 1_792_616_400,
+            "createdAt": 1_792_521_000, "answers": {"111111111111111111": "yes"}}]);
+        send_json(&mut server, greeting).await;
+        match handle.next_event().await.unwrap() {
+            PresenceEvent::Connected { plans, .. } => {
+                assert_eq!(plans.map(|p| p.len()), Some(1));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+
+        // A new plan: the frame goes with its rid and the stored plan comes back in the ack.
+        let make = tokio::spawn({
+            let control = handle.control();
+            async move { control.make_plan("0a1b2c3d4e5f6a7b", 1_792_612_800).await }
+        });
+        let sent = next_json(&mut server).await;
+        assert_eq!(sent["t"], "plan");
+        assert_eq!(sent["crew"], "0a1b2c3d4e5f6a7b");
+        assert_eq!(sent["at"], 1_792_612_800_i64);
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "ack", "rid": sent["rid"], "plan": {"id": "p1",
+                "crew": "0a1b2c3d4e5f6a7b", "by": "100", "at": 1_792_612_800,
+                "until": 1_792_620_000, "createdAt": 1_792_521_310, "answers": {"100": "yes"}}}),
+        )
+        .await;
+        let made = make.await.unwrap().unwrap();
+        assert_eq!(made.id, "p1");
+        assert_eq!(made.answers["100"], PlanAnswer::Yes);
+
+        // The same time again; a changed answer over the day's limit; a cancel.
+        let twice = tokio::spawn({
+            let control = handle.control();
+            async move { control.make_plan("0a1b2c3d4e5f6a7b", 1_792_612_800).await }
+        });
+        let sent = next_json(&mut server).await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "error", "rid": sent["rid"], "code": "plan_exists", "plan": "p1"}),
+        )
+        .await;
+        assert_eq!(
+            twice.await.unwrap().unwrap_err().code(),
+            Some(&ErrorCode::PlanExists)
+        );
+        let answer = tokio::spawn({
+            let control = handle.control();
+            async move { control.answer_plan("p0", PlanAnswer::No).await }
+        });
+        let sent = next_json(&mut server).await;
+        assert_eq!(sent["t"], "plan_answer");
+        assert_eq!(sent["answer"], "no");
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "error", "rid": sent["rid"], "code": "rate_limited",
+                "retryAfter": 3600}),
+        )
+        .await;
+        assert_eq!(
+            answer.await.unwrap().unwrap_err().retry_after(),
+            Some(Duration::from_secs(3_600))
+        );
+        let cancel = tokio::spawn({
+            let control = handle.control();
+            async move { control.cancel_plan("p1").await }
+        });
+        let sent = next_json(&mut server).await;
+        assert_eq!(sent["t"], "plan_cancel");
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "ack", "rid": sent["rid"]}),
+        )
+        .await;
+        cancel.await.unwrap().unwrap();
+
+        // What others do arrives as events.
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "plan_removed", "plan": "p0", "crew": "0a1b2c3d4e5f6a7b",
+                "by": "111111111111111111"}),
+        )
+        .await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::PlanRemoved { plan, .. } if plan == "p0"
+        ));
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "plans", "crew": "0a1b2c3d4e5f6a7b", "plans": []}),
+        )
+        .await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::Plans { plans, .. } if plans.is_empty()
+        ));
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "team_requests", "crew": "0a1b2c3d4e5f6a7b",
+                "added": "222222222222222222", "requests": [{"from": {"id": "222222222222222222",
+                "username": "bora", "displayName": null, "avatar": "discord", "avatarHash": null},
+                "sentAt": 1_792_521_320}]}),
+        )
+        .await;
+        match handle.next_event().await.unwrap() {
+            PresenceEvent::TeamRequests {
+                requests, added, ..
+            } => {
+                assert_eq!(requests.len(), 1);
+                assert_eq!(added.as_deref(), Some("222222222222222222"));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        handle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn without_plans_on_the_connection_none_go_out() {
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut handle = client.session(token()).connect_presence(fast());
+        let mut server = accept(&listener, None, seen).await.unwrap();
+        // An older service: no `plans` in `caps`.
+        send_json(&mut server, hello()).await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::Connected { plans: None, .. }
+        ));
+        let refused = handle
+            .control()
+            .make_plan("0a1b2c3d4e5f6a7b", 1_792_612_800)
+            .await
+            .unwrap_err();
+        assert_eq!(refused.code(), Some(&ErrorCode::BadRequest));
+        // A plan message would be ignored too (it never reaches the owner).
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "plan", "plan": {"id": "p1", "crew": "c", "by": "1", "at": 900,
+                "until": 8100, "answers": {}}, "quiet": false}),
+        )
+        .await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "status", "status": "dnd"}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::StatusChanged(StatusMode::Dnd)
+        );
+        handle.shutdown().await;
+    }
+
+    #[tokio::test]
     async fn chat_syncs_after_connecting_and_answers_by_rid() {
         let (listener, client) = start().await;
         let seen = Arc::new(Mutex::new(Vec::new()));
@@ -1806,7 +2174,7 @@ mod tests {
             seen.lock()
                 .unwrap()
                 .iter()
-                .any(|(k, v)| k == ":uri" && v == "/v1/presence?caps=callServer,crews,chat"),
+                .any(|(k, v)| k == ":uri" && v == "/v1/presence?caps=callServer,crews,plans,chat"),
             "chat is asked for"
         );
         let mut greeting = hello();

@@ -3990,6 +3990,7 @@ version = "2.0.0"
 dependencies = [
  "base64 0.23.1",
  "futures",
+ "jiff",
  "keyring",
  "qrcode",
  "rand 0.10.3",

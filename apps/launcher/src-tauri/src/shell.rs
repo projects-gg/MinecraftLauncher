@@ -119,7 +119,11 @@ pub fn fit_main_window(app: &tauri::App) {
 /// Parses `projects://<route>[/<id>]` (desktop shortcuts pass `projects://play/<instance>`).
 /// Anything unknown is ignored rather than guessed.
 pub fn parse_link(raw: &str) -> Option<DeepLink> {
-    pl_desktop::parse_link(raw, pl_social::normalize_friend_code)
+    pl_desktop::parse_link(
+        raw,
+        pl_social::normalize_friend_code,
+        pl_social::normalize_crew_link,
+    )
 }
 
 /// Shows the main window and brings it to the front: the tray icon, a second launch, a

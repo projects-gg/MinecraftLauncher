@@ -20,13 +20,15 @@ use url::Url;
 
 use crate::auth::{LoginAttempt, SessionToken, SignedIn, is_auth_code};
 use crate::backoff::jitter;
-use crate::codes::{friend_share_link, normalize_friend_code, normalize_team_code};
+use crate::codes::{
+    friend_share_link, normalize_crew_link, normalize_friend_code, normalize_team_code,
+};
 use crate::error::{ErrorCode, Result, SocialError, from_response};
 use crate::model::{
-    CodeLookup, CrewMute, CrewMuteEdit, Friend, FriendGroups, FriendsOverview, Me, ProfileUpdate,
-    ReportReason, RequestOutcome, SessionInfo, SettingsBackup, SettingsMeta, SettingsPrecondition,
-    TeamAnswer, TeamEdit, TeamLook, TeamLookup, TeamNotifications, TeamNotificationsEdit,
-    TeamsOverview,
+    CodeLookup, CrewLink, CrewMute, CrewMuteEdit, Friend, FriendGroups, FriendsOverview,
+    JoinOutcome, Me, ProfileUpdate, ReportReason, RequestOutcome, SessionInfo, SettingsBackup,
+    SettingsMeta, SettingsPrecondition, TeamAnswer, TeamEdit, TeamLook, TeamLookup,
+    TeamNotifications, TeamNotificationsEdit, TeamRequest, TeamsOverview,
 };
 use crate::presence::{ChatSetup, PresenceHandle, PresenceOptions};
 use crate::protocol::presence_caps;
@@ -202,6 +204,11 @@ impl SocialClient {
     /// The link a QR code points to: `<service>/f/PRJ-XXXX-XXXX`.
     pub fn friend_share_link(&self, code: &str) -> Option<Url> {
         friend_share_link(&self.inner.base, code)
+    }
+
+    /// A crew invite link's page on this service: `<service>/e/XXXX-XXXX-XXXX` (TEAM5).
+    pub fn crew_link_url(&self, link: &str) -> Option<Url> {
+        crate::codes::crew_link_url(&self.inner.base, link)
     }
 
     /// Cheap availability probe (no database access on the service).
@@ -397,6 +404,28 @@ fn with_multi(mut body: serde_json::Value, multi: bool) -> serde_json::Value {
         body["multi"] = true.into();
     }
     body
+}
+
+/// What a crew is reached by before joining it: its code (`EKP-…`, `TKM-…` or the symbols
+/// alone), or its invite link (the 12 symbols; a service with `link`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CrewKey {
+    Code(String),
+    Link(String),
+}
+
+impl CrewKey {
+    /// `{"code": "XXXX-XXXX"}` or `{"link": "XXXX-XXXX-XXXX"}`; None when it cannot be one.
+    fn body(&self) -> Result<serde_json::Value> {
+        match self {
+            Self::Code(code) => normalize_team_code(code)
+                .map(|code| serde_json::json!({ "code": code }))
+                .ok_or(SocialError::InvalidInput("not a team code")),
+            Self::Link(link) => normalize_crew_link(link)
+                .map(|link| serde_json::json!({ "link": link }))
+                .ok_or(SocialError::InvalidInput("not a crew link")),
+        }
+    }
 }
 
 /// An authenticated client for one session. Cheap to clone.
@@ -778,6 +807,88 @@ impl Session {
     pub async fn decline_team_invite(&self, team: &str) -> Result<()> {
         let path = format!("v1/teams/invites/{}/decline", team_id(team)?);
         self.call(Method::POST, &path, None).await.map(drop)
+    }
+
+    // --- joining a crew (TEAM5) -------------------------------------------------------------
+
+    /// What a crew code or invite link leads to (counts against the daily code lookup quota):
+    /// the crew, how it relates to the player, whether it approves newcomers and the player's
+    /// join request to it while that waits. `multi` as for [`Session::lookup_team`].
+    pub async fn lookup_crew(&self, key: &CrewKey, multi: bool) -> Result<TeamLookup> {
+        self.call(
+            Method::POST,
+            "v1/teams/lookup",
+            Some(with_multi(key.body()?, multi)),
+        )
+        .await?
+        .json()
+    }
+
+    /// Joins the crew of a code or an invite link. With `request` (a service with `requests`) a
+    /// crew that approves newcomers takes a join request instead (`202`); without it such a crew
+    /// answers `team_approval_required`. Asking again while a request waits answers the same.
+    pub async fn join_crew(
+        &self,
+        key: &CrewKey,
+        multi: bool,
+        request: bool,
+    ) -> Result<JoinOutcome> {
+        #[derive(Deserialize)]
+        struct Requested {
+            request: TeamRequest,
+        }
+        let mut body = with_multi(key.body()?, multi);
+        if request {
+            body["request"] = true.into();
+        }
+        let reply = self.call(Method::POST, "v1/teams/join", Some(body)).await?;
+        if reply.status == 202 {
+            let requested: Requested = reply.json()?;
+            Ok(JoinOutcome::Requested(requested.request))
+        } else {
+            Ok(JoinOutcome::Joined(reply.json()?))
+        }
+    }
+
+    /// Withdraws the player's waiting join request to a crew (`team_request_not_found` when
+    /// none waits).
+    pub async fn withdraw_team_request(&self, team: &str) -> Result<()> {
+        let path = format!("v1/teams/requests/{}", team_id(team)?);
+        self.call(Method::DELETE, &path, None).await.map(drop)
+    }
+
+    /// Takes a player who asked to join into one of the player's crews (`permissions.admit`);
+    /// answers the crew. `limit_team_members` and `limit_crews` leave the request waiting.
+    pub async fn accept_team_request(&self, team: &str, user: &str) -> Result<TeamAnswer> {
+        let path = format!(
+            "v1/teams/{}/requests/{}/accept",
+            team_id(team)?,
+            user_id(user)?
+        );
+        self.call(Method::POST, &path, None).await?.json()
+    }
+
+    /// Declines a join request (silent for the player who asked).
+    pub async fn decline_team_request(&self, team: &str, user: &str) -> Result<()> {
+        let path = format!(
+            "v1/teams/{}/requests/{}/decline",
+            team_id(team)?,
+            user_id(user)?
+        );
+        self.call(Method::POST, &path, None).await.map(drop)
+    }
+
+    /// A new invite link for one of the player's crews, or one in place of the old one (which
+    /// stops working at once; `permissions.admit`; shares the 5 code renewals a day).
+    pub async fn create_team_link(&self, team: &str) -> Result<CrewLink> {
+        let path = format!("v1/teams/{}/link", team_id(team)?);
+        self.call(Method::POST, &path, None).await?.json()
+    }
+
+    /// The crew has no invite link any more (`permissions.admit`).
+    pub async fn delete_team_link(&self, team: &str) -> Result<()> {
+        let path = format!("v1/teams/{}/link", team_id(team)?);
+        self.call(Method::DELETE, &path, None).await.map(drop)
     }
 
     /// The settings backup, or None if there is none.
@@ -1327,6 +1438,129 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn joining_by_request_or_link_and_answering_requests() {
+        let summary = r#"{"id":"fedcba9876543210","name":"PvP","tag":"PVP","emblem":"bolt",
+            "members":12,"join":"approval"}"#;
+        let requested = format!(r#"{{"request":{{"team":{summary},"sentAt":1792519000}}}}"#);
+        let lookup =
+            format!(r#"{{"team":{summary},"relation":"none","request":{{"sentAt":1792519000}}}}"#);
+        let server = MockServer::start(move |req| match (req.method.as_str(), req.path.as_str()) {
+            ("POST", "/v1/teams/lookup") => {
+                let body = req.json();
+                // The link goes as its 12 symbols, never with the code.
+                assert_eq!(body["link"], "ABCD-EFGH-JKMN");
+                assert!(body.get("code").is_none());
+                MockReply::json(200, &lookup)
+            }
+            ("POST", "/v1/teams/join") => {
+                let body = req.json();
+                assert_eq!(body["request"], true);
+                assert_eq!(body["multi"], true);
+                if body.get("link").is_some() {
+                    MockReply::json(202, &requested)
+                } else {
+                    assert_eq!(body["code"], "ABCD-EFGH");
+                    MockReply::json(200, TEAM)
+                }
+            }
+            ("DELETE", "/v1/teams/requests/fedcba9876543210") => MockReply::empty(204),
+            ("DELETE", "/v1/teams/requests/0123456789abcdef") => MockReply::json(
+                404,
+                r#"{"error":{"code":"team_request_not_found","message":"x"}}"#,
+            ),
+            ("POST", "/v1/teams/0123456789abcdef/requests/223456789012345678/accept") => {
+                MockReply::json(200, TEAM)
+            }
+            ("POST", "/v1/teams/0123456789abcdef/requests/323456789012345678/accept") => {
+                MockReply::json(
+                    422,
+                    r#"{"error":{"code":"limit_team_members","message":"x"}}"#,
+                )
+            }
+            ("POST", "/v1/teams/0123456789abcdef/requests/223456789012345678/decline")
+            | ("DELETE", "/v1/teams/0123456789abcdef/link") => MockReply::empty(204),
+            ("POST", "/v1/teams/0123456789abcdef/link") => MockReply::json(
+                200,
+                r#"{"link":"ABCD-EFGH-JKMN","url":"https://social.projects.gg/e/ABCD-EFGH-JKMN"}"#,
+            ),
+            _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+        })
+        .await;
+        let session = client(&server).session(token());
+        let link = CrewKey::Link("abcd efgh jkmn".into());
+        let found = session.lookup_crew(&link, true).await.unwrap();
+        assert_eq!(found.team.join, crate::model::JoinMode::Approval);
+        assert_eq!(found.request.map(|r| r.sent_at), Some(1_792_519_000));
+        match session.join_crew(&link, true, true).await.unwrap() {
+            JoinOutcome::Requested(request) => {
+                assert_eq!(request.team.name, "PvP");
+                assert_eq!(request.sent_at, 1_792_519_000);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        let code = CrewKey::Code("EKP-ABCD-EFGH".into());
+        assert!(matches!(
+            session.join_crew(&code, true, true).await.unwrap(),
+            JoinOutcome::Joined(TeamAnswer { team: Some(_), .. })
+        ));
+        session
+            .withdraw_team_request("fedcba9876543210")
+            .await
+            .unwrap();
+        assert_eq!(
+            session
+                .withdraw_team_request("0123456789abcdef")
+                .await
+                .unwrap_err()
+                .code(),
+            Some(&ErrorCode::TeamRequestNotFound)
+        );
+        assert!(
+            session
+                .accept_team_request("0123456789abcdef", "223456789012345678")
+                .await
+                .unwrap()
+                .team
+                .is_some()
+        );
+        assert_eq!(
+            session
+                .accept_team_request("0123456789abcdef", "323456789012345678")
+                .await
+                .unwrap_err()
+                .code(),
+            Some(&ErrorCode::LimitTeamMembers)
+        );
+        session
+            .decline_team_request("0123456789abcdef", "223456789012345678")
+            .await
+            .unwrap();
+        let made = session.create_team_link("0123456789abcdef").await.unwrap();
+        assert_eq!(made.link, "ABCD-EFGH-JKMN");
+        assert!(made.url.ends_with("/e/ABCD-EFGH-JKMN"));
+        session.delete_team_link("0123456789abcdef").await.unwrap();
+
+        // Malformed links and ids never reach the service.
+        let before = server.requests().len();
+        for broken in ["ABCD-EFGH", "PRJ-ABCD-EFGH", "nope"] {
+            let key = CrewKey::Link(broken.into());
+            assert!(matches!(
+                session.lookup_crew(&key, false).await,
+                Err(SocialError::InvalidInput(_))
+            ));
+        }
+        assert!(session.withdraw_team_request("../x").await.is_err());
+        assert!(
+            session
+                .accept_team_request("0123456789abcdef", "x")
+                .await
+                .is_err()
+        );
+        assert!(session.create_team_link("x").await.is_err());
+        assert_eq!(server.requests().len(), before);
+    }
+
+    #[tokio::test]
     async fn settings_round_trip_and_conflicts() {
         let server = MockServer::start(|req| match (req.method.as_str(), req.header("if-match")) {
             ("GET", _) => MockReply::json(
@@ -1447,11 +1681,15 @@ mod tests {
         let client = SocialClient::new(SocialConfig::production("ProjectsLauncher/test")).unwrap();
         assert_eq!(
             client.presence_url().as_str(),
-            "wss://social.projects.gg/v1/presence?caps=callServer,crews"
+            "wss://social.projects.gg/v1/presence?caps=callServer,crews,plans"
         );
         assert_eq!(
             client.friend_share_link("abcdefgh").unwrap().as_str(),
             "https://social.projects.gg/f/PRJ-ABCD-EFGH"
+        );
+        assert_eq!(
+            client.crew_link_url("abcd-efgh-jkmn").unwrap().as_str(),
+            "https://social.projects.gg/e/ABCD-EFGH-JKMN"
         );
         let local = SocialClient::new(SocialConfig::new(
             Url::parse("http://127.0.0.1:8797").unwrap(),
@@ -1460,7 +1698,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             local.presence_url().as_str(),
-            "ws://127.0.0.1:8797/v1/presence?caps=callServer,crews"
+            "ws://127.0.0.1:8797/v1/presence?caps=callServer,crews,plans"
         );
     }
 }
