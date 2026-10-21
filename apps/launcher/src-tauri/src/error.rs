@@ -197,8 +197,8 @@ impl From<pl_social::SocialError> for CmdError {
         use pl_social::{ErrorCode as C, SocialError as E};
         let details = error.to_string();
         let unavailable = pick(
-            "Arkadaşlar şu an kullanılamıyor. Biraz sonra tekrar dene.",
-            "Friends isn't available right now. Try again in a bit.",
+            "Arkadaş listene şu an ulaşılamıyor. Biraz sonra tekrar dene.",
+            "Can't reach your friends list right now. Try again in a bit.",
         );
         let (code, message) = match &error {
             E::Unauthorized => (

@@ -66,7 +66,7 @@ export const en: DeepPartial<Strings> = {
       reopen: "Open the browser again",
       cancel: "Cancel",
       expired: "Couldn't finish signing in. Try again.",
-      unavailable: "Friends isn't available right now. Try again in a bit.",
+      unavailable: "Can't sign in right now. Try again in a bit.",
       failed: "Couldn't finish signing in. Try again.",
     },
     status: {
@@ -212,7 +212,7 @@ export const en: DeepPartial<Strings> = {
       applied: "Settings restored",
     },
     service: {
-      unavailable: "Friends isn't available right now.",
+      unavailable: "Can't reach your friends list right now.",
       retry: "Try again",
       reconnecting: "Reconnecting",
       replaced: "Your account was opened on another device.",

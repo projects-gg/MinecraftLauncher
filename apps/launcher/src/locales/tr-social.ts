@@ -18,7 +18,7 @@ export const trSocial = {
     reopen: "Tarayıcıyı yeniden aç",
     cancel: "Vazgeç",
     expired: "Giriş tamamlanamadı. Yeniden dene.",
-    unavailable: "Arkadaşlar şu an kullanılamıyor. Biraz sonra tekrar dene.",
+    unavailable: "Şu an giriş yapılamıyor. Biraz sonra tekrar dene.",
     failed: "Giriş tamamlanamadı. Yeniden dene.",
   },
   status: {
@@ -164,7 +164,7 @@ export const trSocial = {
     applied: "Ayarların getirildi",
   },
   service: {
-    unavailable: "Arkadaşlar şu an kullanılamıyor.",
+    unavailable: "Arkadaş listene şu an ulaşılamıyor.",
     retry: "Tekrar dene",
     reconnecting: "Yeniden bağlanıyor",
     replaced: "Hesabın başka bir cihazda açıldı.",
