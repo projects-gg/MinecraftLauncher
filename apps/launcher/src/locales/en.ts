@@ -14,6 +14,7 @@ import { enHelp } from "./en-help";
 import { enHomeLinks } from "./en-home-links";
 import { enImport } from "./en-import";
 import { enKeyClash } from "./en-key-clash";
+import { enLib1 } from "./en-lib1";
 import { enLibraryDrop } from "./en-library-drop";
 import { enMinecraft } from "./en-minecraft";
 import { enModSets } from "./en-modsets";
@@ -279,6 +280,7 @@ export const en: DeepPartial<Strings> = {
   help: enHelp,
   crewWave2: enCrewWave2,
   overlay: enOverlay,
+  lib1: enLib1,
   nav: {
     home: "Home",
     library: "Library",

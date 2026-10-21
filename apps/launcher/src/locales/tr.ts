@@ -15,6 +15,7 @@ import { trHelp } from "./tr-help";
 import { trHomeLinks } from "./tr-home-links";
 import { trImport } from "./tr-import";
 import { trKeyClash } from "./tr-key-clash";
+import { trLib1 } from "./tr-lib1";
 import { trLibraryDrop } from "./tr-library-drop";
 import { trMinecraft } from "./tr-minecraft";
 import { trModSets } from "./tr-modsets";
@@ -73,6 +74,7 @@ export const tr = {
   help: trHelp,
   crewWave2: trCrewWave2,
   overlay: trOverlay,
+  lib1: trLib1,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
