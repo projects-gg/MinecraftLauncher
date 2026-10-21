@@ -47,7 +47,7 @@ export { SignalBars, type SignalState, signalLevel } from "./components/signal-b
 export { Switch } from "./components/switch";
 export { type TabItem, TabPanel, Tabs } from "./components/tabs";
 export { Toaster, toast } from "./components/toaster";
-export { Tooltip, TooltipProvider } from "./components/tooltip";
+export { isCut, OverflowTooltip, Tooltip, TooltipProvider } from "./components/tooltip";
 export {
   EntranceGate,
   GatedMotion,

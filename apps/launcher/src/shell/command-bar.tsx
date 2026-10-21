@@ -3,6 +3,7 @@ import {
   Chip,
   cn,
   easeOutExpo,
+  OverflowTooltip,
   PlayButton,
   type PlayState,
   Progress,
@@ -86,6 +87,50 @@ function PickerLine({
   );
 }
 
+/**
+ * One instance in the picker. A long name is cut to fit the row; pointing at the row (or reaching
+ * it with the arrows, which focus it) shows the whole name beside it, only when it was cut.
+ */
+function PickerItem({
+  instance,
+  chosen,
+  disabled,
+  onSelect,
+}: {
+  instance: InstanceSummary;
+  chosen: boolean;
+  disabled: boolean;
+  onSelect: () => void;
+}) {
+  const { t } = useTranslation();
+  const nameRef = useRef<HTMLSpanElement>(null);
+  return (
+    <OverflowTooltip text={instance.name} of={nameRef} side="right">
+      <DropdownMenu.Item
+        disabled={disabled}
+        onSelect={onSelect}
+        className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 outline-none data-[disabled]:cursor-default data-[disabled]:opacity-45 data-[highlighted]:bg-white/8"
+      >
+        <InstanceIcon icon={instance.icon} size={32} />
+        <span className="min-w-0 flex-1">
+          <span ref={nameRef} className="block truncate text-[13px] font-semibold text-bone-50">
+            {instance.name}
+          </span>
+          <span className="block truncate text-[12px] text-ash-300">
+            {loaderLine(instance, t(`loaders.${instance.loader}`))}
+          </span>
+        </span>
+        {instance.managed ? <Chip tone="gold">{t("instances.managed")}</Chip> : null}
+        {chosen ? (
+          <Check size={16} className="shrink-0 text-gold-400" />
+        ) : (
+          <span aria-hidden className="size-4 shrink-0" />
+        )}
+      </DropdownMenu.Item>
+    </OverflowTooltip>
+  );
+}
+
 function InstancePicker({
   instances,
   selected,
@@ -112,27 +157,41 @@ function InstancePicker({
     const sorted = sortInstances(instances, sort);
     return [...sorted.filter((i) => i.managed), ...sorted.filter((i) => !i.managed)];
   }, [instances, sort]);
+  // A long name is cut here: the tooltip shows all of it (only then). It sits on a wrapper, since
+  // on the button itself its `data-state` would replace the menu's (the open look).
+  const nameRef = useRef<HTMLSpanElement>(null);
   return (
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button
-          type="button"
-          aria-label={t("instances.pickerLabel")}
-          className="group flex h-[52px] w-[clamp(200px,20vw,264px)] shrink-0 cursor-pointer items-center gap-2.5 rounded-[var(--radius-panel)] px-2 text-left transition-[background-color,transform,scale] duration-150 ease-out hover:bg-white/6 active:scale-[0.985] data-[state=open]:bg-white/8"
-        >
-          {selected ? <InstanceIcon icon={selected.icon} size={36} /> : <span className="size-9" />}
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-display text-[15px] font-semibold text-bone-50">
-              {selected?.name ?? (loading ? t("common.loading") : t("instances.pickerLabel"))}
-            </span>
-            <PickerLine selected={selected} hint={hint} />
-          </span>
-          <CaretUpDown
-            size={16}
-            className="shrink-0 text-ash-400 transition-colors group-hover:text-bone-100"
-          />
-        </button>
-      </DropdownMenu.Trigger>
+      <OverflowTooltip text={selected?.name ?? ""} of={nameRef}>
+        <span className="flex shrink-0">
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              aria-label={t("instances.pickerLabel")}
+              className="group flex h-[52px] w-[clamp(200px,20vw,264px)] shrink-0 cursor-pointer items-center gap-2.5 rounded-[var(--radius-panel)] px-2 text-left transition-[background-color,transform,scale] duration-150 ease-out hover:bg-white/6 active:scale-[0.985] data-[state=open]:bg-white/8"
+            >
+              {selected ? (
+                <InstanceIcon icon={selected.icon} size={36} />
+              ) : (
+                <span className="size-9" />
+              )}
+              <span className="min-w-0 flex-1">
+                <span
+                  ref={nameRef}
+                  className="block truncate font-display text-[15px] font-semibold text-bone-50"
+                >
+                  {selected?.name ?? (loading ? t("common.loading") : t("instances.pickerLabel"))}
+                </span>
+                <PickerLine selected={selected} hint={hint} />
+              </span>
+              <CaretUpDown
+                size={16}
+                className="shrink-0 text-ash-400 transition-colors group-hover:text-bone-100"
+              />
+            </button>
+          </DropdownMenu.Trigger>
+        </span>
+      </OverflowTooltip>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           onCloseAutoFocus={returnFocusAfterKeys}
@@ -144,28 +203,13 @@ function InstancePicker({
           {/* A long library scrolls here; the two actions below always stay in view. */}
           <div className="max-h-[min(392px,calc(var(--radix-dropdown-menu-content-available-height)-88px))] overflow-y-auto">
             {ordered.map((i) => (
-              <DropdownMenu.Item
+              <PickerItem
                 key={i.id}
+                instance={i}
+                chosen={selected?.id === i.id}
                 disabled={locked && selected?.id !== i.id}
                 onSelect={() => onSelect(i.id)}
-                className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 outline-none data-[disabled]:cursor-default data-[disabled]:opacity-45 data-[highlighted]:bg-white/8"
-              >
-                <InstanceIcon icon={i.icon} size={32} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] font-semibold text-bone-50">
-                    {i.name}
-                  </span>
-                  <span className="block truncate text-[12px] text-ash-300">
-                    {loaderLine(i, t(`loaders.${i.loader}`))}
-                  </span>
-                </span>
-                {i.managed ? <Chip tone="gold">{t("instances.managed")}</Chip> : null}
-                {selected?.id === i.id ? (
-                  <Check size={16} className="shrink-0 text-gold-400" />
-                ) : (
-                  <span aria-hidden className="size-4 shrink-0" />
-                )}
-              </DropdownMenu.Item>
+              />
             ))}
           </div>
           <DropdownMenu.Separator className="my-1 h-px bg-white/8" />

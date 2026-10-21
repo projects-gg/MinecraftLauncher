@@ -8,10 +8,10 @@ import {
   Play,
   Trash,
 } from "@phosphor-icons/react";
-import { Chip, cn, easeOutExpo, IconButton, Menu, useMotionPrefs } from "@pl/ui";
+import { Chip, cn, easeOutExpo, IconButton, Menu, OverflowTooltip, useMotionPrefs } from "@pl/ui";
 import { Link } from "@tanstack/react-router";
 import { motion } from "motion/react";
-import { type Ref, useCallback } from "react";
+import { type Ref, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { CardDrop, useCardZone } from "@/features/drop/card-zone";
 import type { InstanceSummary } from "@/lib/api";
@@ -56,6 +56,8 @@ export function InstanceCard({
   const { t } = useTranslation();
   const { layout, reduce } = useMotionPrefs();
   const loader = instance.loader === "vanilla" ? "Minecraft" : t(`loaders.${instance.loader}`);
+  // A long name is cut on the card: pointing at the card (or tabbing to it) shows all of it.
+  const titleRef = useRef<HTMLHeadingElement>(null);
   // Files dragged over the library go into the card they are dropped on (features/drop).
   const zone = useCardZone(instance);
   const zoneRef = zone.ref;
@@ -114,15 +116,20 @@ export function InstanceCard({
               </div>
             </div>
 
-            <Link
-              to="/library/$instanceId"
-              params={{ instanceId: instance.id }}
-              className="mt-3 block rounded-sm outline-none after:absolute after:inset-0 after:rounded-[var(--radius-panel)] focus-visible:after:ring-2 focus-visible:after:ring-gold-300"
-            >
-              <h3 className="truncate font-display text-[15px] font-semibold text-bone-50">
-                {instance.name}
-              </h3>
-            </Link>
+            <OverflowTooltip text={instance.name} of={titleRef}>
+              <Link
+                to="/library/$instanceId"
+                params={{ instanceId: instance.id }}
+                className="mt-3 block rounded-sm outline-none after:absolute after:inset-0 after:rounded-[var(--radius-panel)] focus-visible:after:ring-2 focus-visible:after:ring-gold-300"
+              >
+                <h3
+                  ref={titleRef}
+                  className="truncate font-display text-[15px] font-semibold text-bone-50"
+                >
+                  {instance.name}
+                </h3>
+              </Link>
+            </OverflowTooltip>
             <p className="mt-0.5 truncate text-[12.5px] text-ash-300">
               {loader} {instance.mcVersion}
             </p>

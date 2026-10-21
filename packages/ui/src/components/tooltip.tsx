@@ -1,5 +1,13 @@
 import { Tooltip as RadixTooltip } from "radix-ui";
-import { type ReactElement, type ReactNode, useState } from "react";
+import {
+  cloneElement,
+  type FocusEvent,
+  type PointerEvent,
+  type ReactElement,
+  type ReactNode,
+  type RefObject,
+  useState,
+} from "react";
 
 export function TooltipProvider({ children }: { children: ReactNode }) {
   return (
@@ -41,5 +49,55 @@ export function Tooltip({
         </RadixTooltip.Content>
       </RadixTooltip.Portal>
     </RadixTooltip.Root>
+  );
+}
+
+/** A trigger whose pointer and focus handlers the tooltip below adds to. */
+type TriggerProps = {
+  onPointerEnter?: (event: PointerEvent<HTMLElement>) => void;
+  onFocus?: (event: FocusEvent<HTMLElement>) => void;
+};
+
+/** Cut with an ellipsis: wider than its box by more than a rounding pixel. */
+export function isCut(element: Pick<HTMLElement, "scrollWidth" | "clientWidth"> | null): boolean {
+  return element !== null && element.scrollWidth - element.clientWidth > 1;
+}
+
+/**
+ * The whole of a text that is cut with an ellipsis (a long instance name in a narrow place), in a
+ * tooltip; none while the text fits, since a tooltip repeating the words on screen is noise. `of`
+ * is the element that truncates. It is measured each time the pointer or the focus reaches the
+ * trigger, so a resized window or a renamed instance is always current, and nothing is watched in
+ * between. The focus opens it as well (the keyboard, and the rows of a menu, which take the focus
+ * under the pointer).
+ */
+export function OverflowTooltip({
+  text,
+  of,
+  side,
+  children,
+}: {
+  text: string;
+  of: RefObject<HTMLElement | null>;
+  side?: "top" | "right" | "bottom" | "left";
+  children: ReactElement<TriggerProps>;
+}) {
+  const [cut, setCut] = useState(false);
+  const measure = () => setCut(text !== "" && isCut(of.current));
+  const own = children.props;
+  const trigger = cloneElement(children, {
+    onPointerEnter: (event: PointerEvent<HTMLElement>) => {
+      own.onPointerEnter?.(event);
+      measure();
+    },
+    onFocus: (event: FocusEvent<HTMLElement>) => {
+      own.onFocus?.(event);
+      measure();
+    },
+  });
+  return (
+    <Tooltip content={text} side={side} disabled={!cut}>
+      {trigger}
+    </Tooltip>
   );
 }
