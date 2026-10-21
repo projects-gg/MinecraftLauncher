@@ -7,12 +7,15 @@
 //! - [`is_disk_full`] / [`mentions_disk_full`]: a full disk, however the error reached the caller.
 //! - [`background`]: when downloads nobody asked for yet may run (connection cost, battery saver,
 //!   other work) and when the next one is due.
+//! - [`probe`]: one short request that tells how an address answered (or why it did not), for the
+//!   troubleshooter.
 
 pub mod background;
 mod client;
 mod download;
 mod error;
 mod hash;
+pub mod probe;
 
 pub use client::{Http, HttpConfig};
 pub use download::{
@@ -21,4 +24,5 @@ pub use download::{
 };
 pub use error::{NetError, Result, is_disk_full, mentions_disk_full};
 pub use hash::{Checksum, HashAlgo, hash_bytes, hash_file, verify_file};
+pub use probe::{Probe, ProbeMethod, Reach};
 pub use tokio_util::sync::CancellationToken;
