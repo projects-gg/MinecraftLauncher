@@ -61,7 +61,7 @@ export function useCrewMute(crew?: string) {
 }
 
 /** "14:30'a kadar", "yarın 08:00'e kadar", "23 Ekim 14:30'a kadar". */
-function untilText(t: TFunction, untilMs: number, nowMs: number): string {
+export function untilText(t: TFunction, untilMs: number, nowMs: number): string {
   const end = new Date(untilMs);
   const time = dateTimeFormat({ hour: "2-digit", minute: "2-digit" }).format(end);
   const ending = timeDative(end.getHours(), end.getMinutes());

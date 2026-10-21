@@ -1,7 +1,8 @@
 // Everything the friends feature runs in the background, mounted once with the main window's
 // title bar: the snapshot subscription, notices (toasts and, while the launcher is not in front,
 // system notifications), the crew calls' clock, the settings backup, the new-computer question and
-// the crew picker of "Ekiplerini çağır".
+// the crew picker of "Ekiplerini çağır"; chat changes (CHAT1) and how a new message is told,
+// "Rapor et" and moderators' one-time notes (MOD1).
 import { Button, Dialog, toast } from "@pl/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -10,15 +11,20 @@ import { api } from "@/lib/api";
 import type { BackupMeta, Friend, SocialNotice } from "@/lib/api/social-types";
 import { formatRelative } from "@/lib/format";
 import i18n from "@/lib/i18n";
+import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { attempt, notifyOutside } from "./actions";
+import { useChat } from "./chat/chat-store";
+import { chatMutedNow, crewOf } from "./chat/conversations";
+import { chatNoticeWay, preview } from "./chat/notify";
 import { showCallToast } from "./crew-call";
 import { CrewCallDialog } from "./crew-call-picker";
 import { callerIn, callSentenceOf, callWhere } from "./crews";
 import { FriendsSheet } from "./friends-sheet";
 import { showInviteToast } from "./invite-toast";
-import { joinProjects } from "./join";
+import { gameBusy, joinProjects } from "./join";
 import { JoinDialog } from "./join-dialog";
+import { dayMonth } from "./limits";
 import {
   BACKUP_PREFS,
   type BackupPrefKey,
@@ -28,7 +34,9 @@ import {
   readBackup,
   wantsNotice,
 } from "./model";
-import { crewmateHeardIn, mutedNow } from "./mute";
+import { crewMutedNow, crewmateHeardIn, mutedNow } from "./mute";
+import { NoticeDialog } from "./notice-dialog";
+import { ReportDialog } from "./report-dialog";
 import { useSocialPrefs, useSocialUi } from "./store";
 import { useCallTicker } from "./use-call-clock";
 
@@ -226,17 +234,89 @@ function handleNotice(notice: SocialNotice) {
     case "teamGone": {
       const name = notice.name;
       const text =
-        notice.reason === "kicked"
+        notice.staff && notice.reason === "disbanded"
           ? name
-            ? i18n.t("teams.notices.kicked", { team: name })
-            : i18n.t("teams.notices.kickedUnnamed")
-          : name
-            ? i18n.t("teams.notices.disbanded", { team: name })
-            : i18n.t("teams.notices.disbandedUnnamed");
+            ? i18n.t("safety.crewDisbanded", { team: name })
+            : i18n.t("safety.crewDisbandedUnnamed")
+          : notice.reason === "kicked"
+            ? name
+              ? i18n.t("teams.notices.kicked", { team: name })
+              : i18n.t("teams.notices.kickedUnnamed")
+            : name
+              ? i18n.t("teams.notices.disbanded", { team: name })
+              : i18n.t("teams.notices.disbandedUnnamed");
       toast(text);
       break;
     }
+    case "chatMessage":
+      showChatMessage(notice);
+      break;
+    case "restricted": {
+      const text =
+        notice.until !== undefined
+          ? i18n.t("safety.restricted.until", { date: dayMonth(notice.until) })
+          : i18n.t("safety.restricted.forever");
+      toast(text, {
+        action: {
+          label: i18n.t("social.notices.show"),
+          onClick: () => useSocialUi.getState().openPanel(),
+        },
+      });
+      break;
+    }
   }
+}
+
+/** A conversation is on screen: a friend's chat page, or the crew page on that crew's "Sohbet". */
+function chatOnScreen(conv: string): boolean {
+  const ui = useSocialUi.getState();
+  if (!ui.open) return false;
+  if (ui.page === "chat") return ui.chatConv === conv;
+  const team = crewOf(conv);
+  if (ui.page !== "team" || ui.crewPane !== "chat" || !team) return false;
+  const shown =
+    ui.crewTab && ui.view.crews.some((c) => c.id === ui.crewTab)
+      ? ui.crewTab
+      : ui.view.crews[0]?.id;
+  return shown === team;
+}
+
+/** A new chat message from someone else: a toast, a system notification, or nothing (notify.ts). */
+function showChatMessage(notice: Extract<SocialNotice, { kind: "chatMessage" }>) {
+  const ui = useSocialUi.getState();
+  const prefs = useSocialPrefs.getState();
+  const now = Date.now();
+  const crew = notice.crew ? ui.view.crews.find((c) => c.id === notice.crew) : undefined;
+  const way = chatNoticeWay({
+    kind: notice.crew ? "crew" : "direct",
+    status: ui.view.me?.status,
+    gameBusy: gameBusy(useLaunch.getState().phase.kind),
+    inFront: document.hasFocus(),
+    onScreen: chatOnScreen(notice.conv),
+    mutedHere: chatMutedNow(notice.conv, prefs.chatMutes, now),
+    crewMuted: crew ? crewMutedNow(crew, ui.view.crewNotifications, now) : false,
+    crewChatOn: prefs.notifyCrewChat,
+  });
+  if (way === "none") return;
+  const name = notice.name ?? i18n.t("chat.list.someone");
+  const text = preview(notice.message.text);
+  const line = crew
+    ? i18n.t("chat.notices.crew", { name, crew: crew.name, text })
+    : i18n.t("chat.notices.direct", { name, text });
+  const toastIt = () =>
+    toast(line, {
+      action: {
+        label: i18n.t("chat.notices.reply"),
+        onClick: () => useSocialUi.getState().openChat(notice.conv),
+      },
+    });
+  if (way === "toast") {
+    toastIt();
+    return;
+  }
+  void notifyOutside(crew ? crew.name : name, crew ? `${name}: ${text}` : text).then((sent) => {
+    if (!sent) toastIt();
+  });
 }
 
 /** The friends list is on screen (the panel is open on it). */
@@ -257,8 +337,17 @@ const restoreOffer: { current: ((backup: BackupMeta) => void) | null } = { curre
 function useSocialSync() {
   useEffect(() => {
     let alive = true;
-    const stopView = api.social.onView((view) => useSocialUi.getState().setView(view));
+    // Another account (or none): the conversations shown here were the old one's.
+    let account: string | undefined;
+    const stopView = api.social.onView((view) => {
+      if (view.me?.id !== account) {
+        if (account !== undefined) useChat.getState().forget();
+        account = view.me?.id;
+      }
+      useSocialUi.getState().setView(view);
+    });
     const stopNotice = api.social.onNotice(handleNotice);
+    const stopChat = api.social.onChat((change) => useChat.getState().apply(change));
     void api.social
       .state()
       .then((view) => {
@@ -271,6 +360,7 @@ function useSocialSync() {
       alive = false;
       stopView();
       stopNotice();
+      stopChat();
     };
   }, []);
 }
@@ -292,7 +382,14 @@ function currentBackup() {
  * the new-computer question is answered). */
 function useBackupSync() {
   const ready = useSocialUi(
-    (s) => s.view.enabled && s.view.auth === "signedIn" && Boolean(s.view.me) && s.restoreSettled,
+    (s) =>
+      s.view.enabled &&
+      s.view.auth === "signedIn" &&
+      Boolean(s.view.me) &&
+      s.restoreSettled &&
+      // A new Discord account keeps no backup (SPAM1); storage protection makes uploads wait.
+      !s.view.me?.limited?.items.some((item) => item.key === "settingsBackup") &&
+      !(s.view.backupWaitsUntil && s.view.backupWaitsUntil * 1000 > Date.now()),
   );
   const enabled = useSocialPrefs((s) => s.backup);
   useEffect(() => {
@@ -439,6 +536,8 @@ export function SocialHost() {
       <RestoreDialog />
       <JoinDialog />
       <CrewCallDialog />
+      <ReportDialog />
+      <NoticeDialog />
     </>
   );
 }

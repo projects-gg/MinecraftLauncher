@@ -49,9 +49,12 @@ function RailEntry() {
   const online = signedIn ? onlineFriends(view.friends, favorites).length : 0;
   const now = useCallClock((s) => s.now);
   const crewCalls = useSocialPrefs((s) => s.notifyCrewCalls);
-  // A request, an invite or a crewmate's call waits for the player: the gold mark, named in the
-  // label and the tooltip.
-  const waiting = signedIn ? waitingWords(t, whatWaits(view, crewCalls, now), view.crews) : [];
+  const chatMutes = useSocialPrefs((s) => s.chatMutes);
+  // A request, an invite, a crewmate's call or an unread message waits for the player: the gold
+  // mark, named in the label and the tooltip.
+  const waiting = signedIn
+    ? waitingWords(t, whatWaits(view, crewCalls, now, chatMutes), view.crews)
+    : [];
   const pending = waiting.length > 0;
   const open = () => openPanel({ from: trigger.current });
 

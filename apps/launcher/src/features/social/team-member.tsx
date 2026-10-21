@@ -7,9 +7,11 @@
 // sentence; naming a moderator is not (it is undone the same way). The same actions are in the row's
 // menu: a right click, Shift+F10 or the menu key, or its "…".
 import {
+  ChatCircle,
   Crown,
   DiscordLogo,
   DotsThree,
+  Flag,
   Play,
   Prohibit,
   ShieldStar,
@@ -35,6 +37,7 @@ import { api } from "@/lib/api";
 import type { SocialTeam, TeamMember } from "@/lib/api/social-types";
 import { useLaunch } from "@/stores/launch";
 import { attempt } from "./actions";
+import { directConversation } from "./chat/conversations";
 import { DiscordButton } from "./discord-button";
 import { openInDiscord } from "./discord-link";
 import { JoinButton } from "./friend-row";
@@ -80,7 +83,13 @@ export function RoleBadge({
 }
 
 /** What the player may do about a crewmate, from the crew's roles and permissions. */
-function memberPlan(team: SocialTeam, member: TeamMember, busy: boolean, roles: boolean) {
+function memberPlan(
+  team: SocialTeam,
+  member: TeamMember,
+  busy: boolean,
+  roles: boolean,
+  chat = false,
+) {
   const moderators = team.members.filter((m) => m.moderator).length;
   return memberMenu({
     joinable: member.state === "playing" && isJoinable(member.game),
@@ -91,6 +100,26 @@ function memberPlan(team: SocialTeam, member: TeamMember, busy: boolean, roles: 
     moderator: member.moderator,
     moderatorsFull: moderators >= MAX_MODERATORS,
     removable: canRemove(team, member, roles),
+    chat: chat && member.friend,
+    report: !member.me,
+  });
+}
+
+/** "Mesaj" to a crewmate who is a friend (chat on), else nothing to offer. */
+function useMemberChat(member: TeamMember): (() => void) | null {
+  const chat = useSocialUi((s) => Boolean(s.view.chat));
+  const me = useSocialUi((s) => s.view.me?.id);
+  const openChat = useSocialUi((s) => s.openChat);
+  if (!chat || !me || !member.friend || member.blocked) return null;
+  return () => openChat(directConversation(me, member.id), { from: "team" });
+}
+
+/** "Rapor et" about a crewmate. */
+function reportMember(member: TeamMember) {
+  useSocialUi.getState().openReport({
+    target: { kind: "player", id: member.id },
+    name: member.name,
+    person: member,
   });
 }
 
@@ -131,9 +160,10 @@ function MemberCard({
   );
   const joinable = member.state === "playing" && isJoinable(member.game);
   const days = daysSince(member.joinedAt, Date.now());
+  const chat = useMemberChat(member);
   const plan = memberPlan(team, member, busyGame, roles).filter(
     (row): row is NonNullable<typeof row> =>
-      row !== null && row.action !== "join" && row.action !== "message",
+      row !== null && row.action !== "join" && row.action !== "message" && row.action !== "chat",
   );
 
   const run = async (action: Question) => {
@@ -208,6 +238,10 @@ function MemberCard({
       case "unblock":
         void run("unblock");
         return;
+      case "report":
+        onDone();
+        reportMember(member);
+        return;
       default:
         return;
     }
@@ -222,6 +256,7 @@ function MemberCard({
     remove: t("teams.member.remove"),
     block: t("social.actions.block"),
     unblock: t("social.actions.unblock"),
+    report: t("reports.action"),
   };
   const icons: Record<string, ReactElement> = {
     makeModerator: <ShieldStar size={16} className="text-ash-300" aria-hidden />,
@@ -230,6 +265,7 @@ function MemberCard({
     remove: <UserMinus size={16} className="text-ash-300" aria-hidden />,
     block: <Prohibit size={16} aria-hidden />,
     unblock: <Prohibit size={16} aria-hidden />,
+    report: <Flag size={16} className="text-ash-300" aria-hidden />,
   };
 
   return (
@@ -275,6 +311,19 @@ function MemberCard({
       <div className="mt-3 flex flex-col gap-2">
         {joinable && !member.blocked ? (
           <JoinButton size="md" variant="primary" className="w-full" />
+        ) : null}
+        {chat ? (
+          <Button
+            variant={joinable && !member.blocked ? "secondary" : "primary"}
+            className="w-full"
+            icon={<ChatCircle size={16} weight={joinable ? "regular" : "fill"} />}
+            onClick={() => {
+              onDone();
+              chat();
+            }}
+          >
+            {t("chat.actions.message")}
+          </Button>
         ) : null}
         <DiscordButton className="w-full" onClick={() => void openInDiscord(member)}>
           {t("social.actions.message")}
@@ -429,78 +478,92 @@ export function TeamMemberRow({
       setOpen(true);
     }, 0);
 
-  const items = rowsOf(memberPlan(team, member, busy, roles), (row): MenuItem | null => {
-    switch (row.action) {
-      case "join":
-        return {
-          label: t("social.actions.join"),
-          icon: <Play size={16} />,
-          disabled: row.disabled,
-          onSelect: () => void joinProjects(),
-        };
-      case "message":
-        return {
-          label: t("social.actions.message"),
-          icon: <DiscordLogo size={16} />,
-          onSelect: () => void openInDiscord(member),
-        };
-      case "makeModerator":
-        return {
-          label: t("teams.member.makeModerator"),
-          icon: <ShieldStar size={16} />,
-          disabled: row.disabled,
-          onSelect: () =>
-            void setModerator(
-              team,
-              member,
-              true,
-              t("teams.member.madeModerator", { name: member.name }),
-            ),
-        };
-      case "unmakeModerator":
-        return {
-          label: t("teams.member.unmakeModerator"),
-          icon: <ShieldStar size={16} />,
-          onSelect: () =>
-            void setModerator(
-              team,
-              member,
-              false,
-              t("teams.member.unmadeModerator", { name: member.name }),
-            ),
-        };
-      case "makeFounder":
-        return {
-          label: t("teams.member.makeFounder"),
-          icon: <Crown size={16} />,
-          onSelect: () => openAt("founder"),
-        };
-      case "remove":
-        return {
-          label: t("teams.member.remove"),
-          icon: <UserMinus size={16} />,
-          onSelect: () => openAt("remove"),
-        };
-      case "block":
-        return {
-          label: t("social.actions.block"),
-          icon: <Prohibit size={16} />,
-          danger: true,
-          onSelect: () => openAt("block"),
-        };
-      case "unblock":
-        return {
-          label: t("social.actions.unblock"),
-          icon: <Prohibit size={16} />,
-          onSelect: () =>
-            void attempt(() => api.social.unblock(member.id)).then((done) => {
-              if (done !== undefined) {
-                announce(t("social.actions.unblocked", { name: member.name }));
-              }
-            }),
-        };
-    }
-  });
+  const chat = useMemberChat(member);
+  const items = rowsOf(
+    memberPlan(team, member, busy, roles, Boolean(chat)),
+    (row): MenuItem | null => {
+      switch (row.action) {
+        case "join":
+          return {
+            label: t("social.actions.join"),
+            icon: <Play size={16} />,
+            disabled: row.disabled,
+            onSelect: () => void joinProjects(),
+          };
+        case "chat":
+          return chat
+            ? { label: t("chat.actions.message"), icon: <ChatCircle size={16} />, onSelect: chat }
+            : null;
+        case "report":
+          return {
+            label: t("reports.action"),
+            icon: <Flag size={16} />,
+            onSelect: () => reportMember(member),
+          };
+        case "message":
+          return {
+            label: t("social.actions.message"),
+            icon: <DiscordLogo size={16} />,
+            onSelect: () => void openInDiscord(member),
+          };
+        case "makeModerator":
+          return {
+            label: t("teams.member.makeModerator"),
+            icon: <ShieldStar size={16} />,
+            disabled: row.disabled,
+            onSelect: () =>
+              void setModerator(
+                team,
+                member,
+                true,
+                t("teams.member.madeModerator", { name: member.name }),
+              ),
+          };
+        case "unmakeModerator":
+          return {
+            label: t("teams.member.unmakeModerator"),
+            icon: <ShieldStar size={16} />,
+            onSelect: () =>
+              void setModerator(
+                team,
+                member,
+                false,
+                t("teams.member.unmadeModerator", { name: member.name }),
+              ),
+          };
+        case "makeFounder":
+          return {
+            label: t("teams.member.makeFounder"),
+            icon: <Crown size={16} />,
+            onSelect: () => openAt("founder"),
+          };
+        case "remove":
+          return {
+            label: t("teams.member.remove"),
+            icon: <UserMinus size={16} />,
+            onSelect: () => openAt("remove"),
+          };
+        case "block":
+          return {
+            label: t("social.actions.block"),
+            icon: <Prohibit size={16} />,
+            danger: true,
+            onSelect: () => openAt("block"),
+          };
+        case "unblock":
+          return {
+            label: t("social.actions.unblock"),
+            icon: <Prohibit size={16} />,
+            onSelect: () =>
+              void attempt(() => api.social.unblock(member.id)).then((done) => {
+                if (done !== undefined) {
+                  announce(t("social.actions.unblocked", { name: member.name }));
+                }
+              }),
+          };
+      }
+    },
+  );
 
   return (
     <ContextMenu items={items}>

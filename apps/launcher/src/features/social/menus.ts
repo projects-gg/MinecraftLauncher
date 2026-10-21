@@ -95,13 +95,15 @@ export function panelMenu(input: PanelInput): Plan<PanelAction> {
 export type FriendAction =
   | "join"
   | "invite"
+  | "chat"
   | "message"
   | "favorite"
   | "notifyOnline"
   | "category"
   | "teamInvite"
   | "remove"
-  | "block";
+  | "block"
+  | "report";
 
 export interface FriendInput {
   /** They are on projects.gg ("Katıl"). */
@@ -120,12 +122,18 @@ export interface FriendInput {
    * submenu of the crews.
    */
   team: "invitable" | "invited" | "member" | "full" | null;
+  /** Chat is on (CHAT1): "Mesaj" opens the conversation. */
+  chat?: boolean;
+  /** "Rapor et" (MOD1). */
+  report?: boolean;
 }
 
 export function friendMenu(input: FriendInput): Plan<FriendAction> {
   return tidy<FriendAction>([
     input.joinable ? { action: "join", disabled: input.gameBusy } : null,
     input.invite === "hidden" ? null : { action: "invite", disabled: input.invite === "waiting" },
+    // A `null` here would be a separator: no row while chat is off.
+    ...only<FriendAction>(Boolean(input.chat) && { action: "chat" }),
     { action: "message" },
     null,
     { action: "favorite" },
@@ -137,6 +145,7 @@ export function friendMenu(input: FriendInput): Plan<FriendAction> {
     null,
     { action: "remove" },
     { action: "block" },
+    input.report ? { action: "report" } : null,
   ]);
 }
 
@@ -144,13 +153,15 @@ export function friendMenu(input: FriendInput): Plan<FriendAction> {
 
 export type MemberAction =
   | "join"
+  | "chat"
   | "message"
   | "makeModerator"
   | "unmakeModerator"
   | "makeFounder"
   | "remove"
   | "block"
-  | "unblock";
+  | "unblock"
+  | "report";
 
 export interface MemberInput {
   /** They are on projects.gg ("Katıl"). */
@@ -168,6 +179,10 @@ export interface MemberInput {
   moderatorsFull?: boolean;
   /** The player may remove them (the leader anyone, a moderator plain members). */
   removable?: boolean;
+  /** Chat is on and they are a friend (CHAT1): "Mesaj" opens the conversation. */
+  chat?: boolean;
+  /** "Rapor et" (MOD1). */
+  report?: boolean;
 }
 
 /** The rows of one group that apply (a `null` in a plan is a separator, never a missing row). */
@@ -180,6 +195,7 @@ export function memberMenu(input: MemberInput): Plan<MemberAction> {
   return tidy<MemberAction>([
     ...only<MemberAction>(
       input.joinable && !input.blocked && { action: "join", disabled: input.gameBusy },
+      Boolean(input.chat) && !input.blocked && { action: "chat" },
       { action: "message" },
     ),
     null,
@@ -193,6 +209,7 @@ export function memberMenu(input: MemberInput): Plan<MemberAction> {
     ),
     null,
     { action: input.blocked ? "unblock" : "block" },
+    input.report ? { action: "report" } : null,
   ]);
 }
 
@@ -236,6 +253,8 @@ export type TeamAction =
   | "moveDown"
   | "mute"
   | "unmute"
+  | "chat"
+  | "report"
   | Leaving;
 
 export interface TeamInput {
@@ -261,6 +280,10 @@ export interface TeamInput {
    * crew; the others offer "Ana ekip yap". Left out with one crew.
    */
   order?: { first: boolean; last: boolean };
+  /** Chat is on (CHAT1): "Sohbet" opens the crew's chat. */
+  chat?: boolean;
+  /** "Ekibi rapor et" (MOD1). */
+  report?: boolean;
 }
 
 export function teamMenu({
@@ -271,6 +294,8 @@ export function teamMenu({
   canEdit,
   mute = "hidden",
   order,
+  chat = false,
+  report = false,
 }: TeamInput): Plan<TeamAction> {
   const full = team.members.length >= team.limit;
   return tidy<TeamAction>([
@@ -279,6 +304,7 @@ export function teamMenu({
     null,
     ...only<TeamAction>(
       call !== "hidden" && { action: "call", disabled: call === "waiting" },
+      chat && { action: "chat" },
       { action: "copyCode" },
       canInvite && { action: "invite", disabled: full || friendsOutside === 0 },
       (canEdit ?? team.role === "founder") && { action: "edit" },
@@ -294,6 +320,7 @@ export function teamMenu({
     null,
     mute === "hidden" ? null : { action: mute === "muted" ? "unmute" : "mute" },
     null,
+    report ? { action: "report" } : null,
     { action: leavingOf(team) },
   ]);
 }

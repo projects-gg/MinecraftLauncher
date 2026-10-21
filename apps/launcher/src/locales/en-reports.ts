@@ -1,0 +1,32 @@
+// "Report" (MOD1): one dialog for players, crews and messages.
+export const enReports = {
+  action: "Report",
+  title: "Report",
+  crewAction: "Report crew",
+  what: {
+    label: "What are you reporting?",
+    crew: "The crew",
+    inviter: "Who invited you",
+  },
+  reasonsLabel: "Reason",
+  reasons: {
+    playerName: "Inappropriate name",
+    crewName: "Inappropriate name or motto",
+    profile: "Inappropriate profile picture",
+    harassment: "Harassment or bullying",
+    inappropriate: "Inappropriate message",
+    spam: "Spam",
+    scam: "Scam",
+    other: "Something else",
+  },
+  note: "Note",
+  notePlaceholder: "Tell us briefly, if you like",
+  noteHelp: "Only staff see it.",
+  block: "Block them too",
+  private: "Nobody is ever told who reported them.",
+  message: "Message",
+  send: "Send",
+  cancel: "Cancel",
+  sent: "Your report was sent.",
+  failed: "Couldn't send the report.",
+};

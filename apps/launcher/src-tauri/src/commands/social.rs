@@ -2,17 +2,18 @@
 //! The service emits `social-view` (a full `SocialView` after every change) and `social-notice`
 //! (moments worth a toast). The feature flag comes from the signed launcher config; debug builds
 //! may point it at a local `wrangler dev` with `PROJECTS_SOCIAL_URL`. Teams follow
-//! `features.teams` (debug builds: also `PROJECTS_SOCIAL_TEAMS=1`).
+//! `features.teams` (debug builds: also `PROJECTS_SOCIAL_TEAMS=1`), chat `features.chat` (debug
+//! builds: also `PROJECTS_SOCIAL_CHAT=1`); chat changes go out as `social-chat`.
 
 use std::sync::Arc;
 
 use pl_lang::pick;
 use pl_mc::launch::{GameEvent, QuickPlay};
 use pl_social::{
-    CallAnswer, CallOutcome, CrewMuteEdit, ErrorCode, FriendGroup, GroupMember, InviteResult,
-    LookupView, PermissionsEdit, ProfileUpdate, SendOutcome, SessionInfo, SettingsMeta,
-    SocialError, SocialService, SocialUpdate, SocialView, StatusMode, TeamEdit, TeamLook,
-    TeamLookupView, TeamNotificationsEdit,
+    CallAnswer, CallOutcome, ChatPage, CrewMuteEdit, ErrorCode, FriendGroup, GroupMember,
+    InviteResult, LookupView, PermissionsEdit, ProfileUpdate, ReportReason, ReportTarget,
+    SendOutcome, SessionInfo, SettingsMeta, SocialError, SocialService, SocialUpdate, SocialView,
+    StatusMode, TeamEdit, TeamLook, TeamLookupView, TeamNotificationsEdit,
 };
 use tauri::{AppHandle, Emitter, State};
 
@@ -34,6 +35,7 @@ pub fn create(
         let _ = match update {
             SocialUpdate::View(view) => emitter.emit("social-view", &*view),
             SocialUpdate::Notice(notice) => emitter.emit("social-notice", &notice),
+            SocialUpdate::Chat(change) => emitter.emit("social-chat", &change),
         };
     });
     let tokens: Arc<dyn pl_social::TokenStore> =
@@ -56,16 +58,32 @@ pub fn create(
         sink,
     );
     service.keep_closed_invites_in(data_root.join("social").join("closed-invites.json"));
+    service.keep_chat_in(data_root.join("social").join("chat"));
     service.set_teams_enabled(debug_teams());
+    service.set_chat_enabled(debug_chat());
     service.configure(pl_social::service_url(false, debug_override().as_deref()));
     service
 }
 
-/// Turns the feature on or off from the signed config's `features.friends`, and teams from
-/// `features.teams` (they need friends on too).
-pub fn apply_flag(service: &SocialService, friends: bool, teams: bool) {
+/// Turns the feature on or off from the signed config's `features.friends`, teams from
+/// `features.teams` and chat from `features.chat` (both need friends on too).
+pub fn apply_flag(service: &SocialService, friends: bool, teams: bool, chat: bool) {
     service.set_teams_enabled(teams || debug_teams());
+    service.set_chat_enabled((friends && chat) || debug_chat());
     service.configure(pl_social::service_url(friends, debug_override().as_deref()));
+}
+
+/// `PROJECTS_SOCIAL_CHAT=1` (debug builds only): chat on whatever the config says, for a local
+/// `wrangler dev`.
+fn debug_chat() -> bool {
+    #[cfg(debug_assertions)]
+    {
+        std::env::var("PROJECTS_SOCIAL_CHAT").is_ok_and(|value| value == "1")
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        false
+    }
 }
 
 /// `PROJECTS_SOCIAL_TEAMS=1` (debug builds only): teams on whatever the config says, for a
@@ -629,4 +647,134 @@ pub async fn social_team_accept(state: State<'_, AppState>, team: String) -> Cmd
 #[specta::specta]
 pub async fn social_team_decline(state: State<'_, AppState>, team: String) -> CmdResult<()> {
     Ok(state.social.decline_team_invite(&team).await?)
+}
+
+// --- chat (CHAT1) ---------------------------------------------------------------------------
+
+/// A conversation's newest messages (`before` None) or those before a message id, oldest first.
+#[tauri::command]
+#[specta::specta]
+pub fn social_chat_page(state: State<'_, AppState>, conv: String, before: Option<i64>) -> ChatPage {
+    state.social.chat_page(&conv, before)
+}
+
+/// Sends a message: it shows at once and goes in the order typed. Returns its key.
+#[tauri::command]
+#[specta::specta]
+pub fn social_chat_send(
+    state: State<'_, AppState>,
+    conv: String,
+    text: String,
+) -> CmdResult<String> {
+    Ok(state.social.chat_send(&conv, &text)?)
+}
+
+/// "Tekrar dene" on a message that did not go.
+#[tauri::command]
+#[specta::specta]
+pub fn social_chat_retry(state: State<'_, AppState>, key: String) -> CmdResult<()> {
+    Ok(state.social.chat_retry(&key)?)
+}
+
+/// Drops a message that did not go.
+#[tauri::command]
+#[specta::specta]
+pub fn social_chat_discard(state: State<'_, AppState>, key: String) {
+    state.social.chat_discard(&key);
+}
+
+/// Edits the player's own message (within 15 minutes).
+#[tauri::command]
+#[specta::specta]
+pub async fn social_chat_edit(
+    state: State<'_, AppState>,
+    conv: String,
+    id: i64,
+    text: String,
+) -> CmdResult<()> {
+    match state.social.chat_edit(&conv, id, &text).await {
+        Err(error) if error.code() == Some(&ErrorCode::ChatTooOld) => {
+            Err(crate::error::CmdError::new(
+                "SOSYAL-SOHBET-SURE",
+                pick(
+                    "Bu mesajı düzenleme süresi doldu.",
+                    "It's too late to edit this message.",
+                ),
+                error.to_string(),
+            ))
+        }
+        other => Ok(other?),
+    }
+}
+
+/// "Herkesten sil".
+#[tauri::command]
+#[specta::specta]
+pub async fn social_chat_delete(
+    state: State<'_, AppState>,
+    conv: String,
+    id: i64,
+) -> CmdResult<()> {
+    match state.social.chat_delete(&conv, id).await {
+        Err(error) if error.code() == Some(&ErrorCode::ChatTooOld) => {
+            Err(crate::error::CmdError::new(
+                "SOSYAL-SOHBET-SURE",
+                pick(
+                    "Bu mesaj artık herkesten silinemez.",
+                    "This message can't be deleted for everyone anymore.",
+                ),
+                error.to_string(),
+            ))
+        }
+        other => Ok(other?),
+    }
+}
+
+/// Everything in a conversation is read (it is on screen at its newest message).
+#[tauri::command]
+#[specta::specta]
+pub fn social_chat_read(state: State<'_, AppState>, conv: String) {
+    state.social.chat_read(&conv);
+}
+
+/// "Geçmişi temizle": the conversation's messages leave this computer.
+#[tauri::command]
+#[specta::specta]
+pub fn social_chat_clear(state: State<'_, AppState>, conv: String) {
+    state.social.chat_clear(&conv);
+}
+
+// --- reports and moderators' notes (MOD1) -----------------------------------------------------
+
+/// "Rapor et": a player, a crew or a message, with a reason and an optional note (200
+/// characters); `block` also blocks the player.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_report(
+    state: State<'_, AppState>,
+    target: ReportTarget,
+    reason: ReportReason,
+    note: Option<String>,
+    block: bool,
+) -> CmdResult<()> {
+    match state.social.report(target, reason, note, block).await {
+        // Ten reports a day: the plain "too often" reads better as the rule itself.
+        Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
+            "SOSYAL-RAPOR-SINIR",
+            pick(
+                "Bugün çok rapor gönderdin. Yarın yeniden dene.",
+                "You've sent a lot of reports today. Try again tomorrow.",
+            ),
+            error.to_string(),
+        )),
+        other => Ok(other?),
+    }
+}
+
+/// The launcher showed these moderators' notes.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_notices_seen(state: State<'_, AppState>, ids: Vec<String>) -> CmdResult<()> {
+    state.social.notices_seen(ids).await;
+    Ok(())
 }

@@ -1,0 +1,56 @@
+// Limited accounts and moderators' measures (SPAM1, MOD1): what the player is told, nothing
+// technical. Dates read "28 Ekim"; they come before "tarihine kadar".
+export const trSafety = {
+  limited: {
+    chip: "Sınırlı hesap",
+    title: "Discord hesabın yeni olduğu için {{date}} tarihine kadar:",
+    items: {
+      crewFound: "Ekip kuramazsın",
+      crewInvites_one: "Günde en çok {{count}} ekip daveti gönderebilirsin",
+      crewInvites_other: "Günde en çok {{count}} ekip daveti gönderebilirsin",
+      codeLookups_one: "Günde en çok {{count}} kod deneyebilirsin",
+      codeLookups_other: "Günde en çok {{count}} kod deneyebilirsin",
+      settingsBackup: "Ayarların yedeklenmez",
+      chatMessages_one: "Günde en çok {{count}} mesaj gönderebilirsin",
+      chatMessages_other: "Günde en çok {{count}} mesaj gönderebilirsin",
+    },
+    lifts: "Bu sınırlar kendiliğinden kalkar.",
+    crewFound: "Discord hesabın yeni olduğu için ekip kuramazsın. {{when}}",
+    backup: "Discord hesabın yeni olduğu için ayar yedeği {{date}} tarihine kadar kapalı.",
+    opensDays_one: "{{count}} gün sonra açılır.",
+    opensDays_other: "{{count}} gün sonra açılır.",
+    opensHours_one: "{{count}} saat sonra açılır.",
+    opensHours_other: "{{count}} saat sonra açılır.",
+    opensSoon: "Birazdan açılır.",
+  },
+  restricted: {
+    until: "Hesabın {{date}} tarihine kadar kısıtlandı.",
+    forever: "Hesabın kalıcı olarak kısıtlandı.",
+    rules: "Topluluk kuralları",
+  },
+  signupsClosed: "Şu an yeni hesap açılamıyor. Yarın yeniden dene.",
+  notice: {
+    warningTitle: "Uyarı aldın",
+    warning: "Topluluk kurallarına aykırı davranış nedeniyle uyarı aldın.",
+    profileResetTitle: "Profil resmin sıfırlandı",
+    profileReset: "Profil resmin topluluk kurallarına aykırı bulunduğu için sıfırlandı.",
+    reason: "Neden: {{reason}}",
+    reasons: {
+      name: "Uygunsuz ad",
+      profile: "Uygunsuz profil resmi",
+      harassment: "Taciz ya da zorbalık",
+      inappropriate: "Uygunsuz mesaj",
+      spam: "Spam",
+      scam: "Dolandırıcılık",
+      other: "Diğer",
+    },
+    ok: "Anladım",
+  },
+  crewReset: {
+    body: "Ekibin adı ve sloganı topluluk kurallarına aykırı bulunduğu için sıfırlandı.",
+    until: "{{date}} tarihine kadar değiştirilemez.",
+  },
+  crewDisbanded: "{{team}} ekibi topluluk kuralları nedeniyle kapatıldı.",
+  crewDisbandedUnnamed: "Ekip topluluk kuralları nedeniyle kapatıldı.",
+  backupWaits: "Ayar yedeği şu an alınamıyor. Değişikliklerin sonra yedeklenir.",
+};

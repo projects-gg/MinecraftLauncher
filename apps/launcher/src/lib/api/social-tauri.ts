@@ -1,13 +1,18 @@
 // Tauri implementation of `api.social`: maps the generated bindings onto the UI shapes.
 import { listen } from "@tauri-apps/api/event";
 import {
+  type ChatChangeView,
+  type ChatMessageView,
+  type ChatView,
   type CmdError,
+  type ConversationView,
   type CrewCallView,
   commands,
   type FriendGroupsView,
   type FriendView,
   type InviteView,
   type MeView,
+  type ModNoticeView,
   type SocialNotice as NoticeBinding,
   type ProfileView,
   type RequestView,
@@ -17,11 +22,17 @@ import {
   type TeamView,
 } from "@/bindings";
 import type {
+  ChatChange,
+  ChatMessage,
+  ChatState,
+  Conversation,
   CrewCall,
   CrewFeatures,
   Friend,
   FriendGroups,
   FriendRequest,
+  LimitedKey,
+  ModNotice,
   SocialApi,
   SocialGame,
   SocialInvite,
@@ -116,7 +127,68 @@ function me(v: MeView): SocialMe {
     status: v.status,
     privacy: { shareServer: v.privacy.shareServer, shareLastSeen: v.privacy.shareLastSeen },
     backup: opt(v.backup),
+    limited: v.limited
+      ? {
+          until: v.limited.until,
+          items: v.limited.items
+            .filter((item) => item.key !== "other")
+            .map((item) => ({ key: item.key as LimitedKey, perDay: opt(item.perDay) })),
+        }
+      : undefined,
   };
+}
+
+function chatMessage(v: ChatMessageView): ChatMessage {
+  return {
+    key: v.key,
+    id: opt(v.id),
+    from: v.from,
+    mine: v.mine,
+    text: v.text,
+    at: v.at,
+    edited: v.edited,
+    state: v.state,
+    failure: opt(v.failure),
+    editUntil: opt(v.editUntil),
+    deleteUntil: opt(v.deleteUntil),
+  };
+}
+
+function conversation(v: ConversationView): Conversation {
+  return {
+    id: v.id,
+    peer: opt(v.peer),
+    crew: opt(v.crew),
+    title: opt(v.title),
+    last: opt(v.last),
+    unread: v.unread,
+    writable: v.writable,
+    failed: v.failed,
+  };
+}
+
+function chatState(v: ChatView): ChatState {
+  return {
+    on: v.on,
+    mailbox: v.mailbox,
+    perDay: v.perDay,
+    mutedUntil: opt(v.mutedUntil),
+    conversations: v.conversations.map(conversation),
+  };
+}
+
+function chatChange(v: ChatChangeView): ChatChange {
+  return {
+    conv: v.conv,
+    upsert: v.upsert.map(chatMessage),
+    remove: v.remove,
+    reset: v.reset,
+  };
+}
+
+function modNotice(v: ModNoticeView): ModNotice | null {
+  if (v.kind === "other") return null;
+  return { id: v.id, kind: v.kind, at: v.at, reason: opt(v.reason) };
 }
 
 function groups(v: FriendGroupsView): FriendGroups {
@@ -171,6 +243,7 @@ function team(v: TeamView): SocialTeam {
     invited: v.invited,
     limit: v.limit,
     mute: { muted: v.notifications.muted ?? false, muteUntil: v.notifications.muteUntil ?? null },
+    textLockedUntil: opt(v.textLockedUntil),
   };
 }
 
@@ -251,6 +324,11 @@ export function snapshot(v: SocialView): SocialSnapshot {
           muteUntil: v.crewNotifications.muteUntil ?? null,
         }
       : undefined,
+    chatAllowed: v.chatAllowed,
+    chat: v.chat ? chatState(v.chat) : undefined,
+    notices: v.notices.map(modNotice).filter((n): n is ModNotice => n !== null),
+    restriction: v.restriction ? { until: opt(v.restriction.until) } : undefined,
+    backupWaitsUntil: opt(v.backupWaitsUntil),
   };
 }
 
@@ -275,13 +353,23 @@ function notice(v: NoticeBinding): SocialNotice {
     case "teamInvite":
       return { kind: "teamInvite", invite: teamInvite(v.invite) };
     case "teamGone":
-      return { kind: "teamGone", reason: v.reason, name: opt(v.name) };
+      return { kind: "teamGone", reason: v.reason, name: opt(v.name), staff: v.staff };
     case "crewCall":
       return { kind: "crewCall", call: call(v.call) };
     case "crewCallJoin":
       return { kind: "crewCallJoin", call: call(v.call) };
     case "crewmateOnProjects":
       return { kind: "crewmateOnProjects", id: v.id };
+    case "chatMessage":
+      return {
+        kind: "chatMessage",
+        conv: v.conv,
+        message: chatMessage(v.message),
+        name: opt(v.name),
+        crew: opt(v.crew),
+      };
+    case "restricted":
+      return { kind: "restricted", until: opt(v.until) };
   }
 }
 
@@ -461,5 +549,46 @@ export const tauriSocial: SocialApi = {
   },
   async declineTeamInvite(teamId) {
     await ok(commands.socialTeamDecline(teamId));
+  },
+  onChat(listener) {
+    const unlisten = listen<ChatChangeView>("social-chat", (event) =>
+      listener(chatChange(event.payload)),
+    );
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  },
+  async chatPage(conv, before) {
+    const page = await commands.socialChatPage(conv, before ?? null);
+    return { conv: page.conv, messages: page.messages.map(chatMessage), more: page.more };
+  },
+  chatSend: (conv, text) => ok(commands.socialChatSend(conv, text)),
+  async chatRetry(key) {
+    await ok(commands.socialChatRetry(key));
+  },
+  async chatDiscard(key) {
+    await commands.socialChatDiscard(key);
+  },
+  async chatEdit(conv, id, text) {
+    await ok(commands.socialChatEdit(conv, id, text));
+  },
+  async chatDelete(conv, id) {
+    await ok(commands.socialChatDelete(conv, id));
+  },
+  async chatRead(conv) {
+    await commands.socialChatRead(conv);
+  },
+  async chatClear(conv) {
+    await commands.socialChatClear(conv);
+  },
+  async report(target, reason, note, block) {
+    const wire =
+      target.kind === "crew"
+        ? { kind: "crew" as const, id: target.id, code: target.code ?? null }
+        : target;
+    await ok(commands.socialReport(wire, reason, note ?? null, block));
+  },
+  async noticesSeen(ids) {
+    await ok(commands.socialNoticesSeen(ids));
   },
 };

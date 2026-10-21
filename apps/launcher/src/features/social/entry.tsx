@@ -15,8 +15,8 @@ import { enter, leave } from "./motion";
 
 /**
  * What the gold mark stands for, in words: "Seni bekleyen istek ya da davet var" for a request or
- * an invite, "Kaan ekibi çağırıyor" for a crewmate's call (a call is neither; E2E6). Empty while
- * nothing waits.
+ * an invite, "Kaan ekibi çağırıyor" for a crewmate's call (a call is neither; E2E6), "2 okunmamış
+ * mesaj" for direct messages (CHAT1). Empty while nothing waits.
  */
 export function waitingWords(
   t: TFunction,
@@ -26,6 +26,7 @@ export function waitingWords(
   const words: string[] = [];
   if (waiting.asks) words.push(t("social.pill.pending"));
   if (waiting.call) words.push(callSentenceOf(waiting.call, crews, t));
+  if (waiting.messages > 0) words.push(t("chat.waiting", { count: waiting.messages }));
   return words;
 }
 

@@ -930,6 +930,29 @@ export const commands = {
 	socialTeamJoin: (code: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_join", { code })),
 	socialTeamAccept: (team: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_accept", { team })),
 	socialTeamDecline: (team: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_decline", { team })),
+	/**  A conversation's newest messages (`before` None) or those before a message id, oldest first. */
+	socialChatPage: (conv: string, before: number | null) => __TAURI_INVOKE<ChatPage>("social_chat_page", { conv, before }),
+	/**  Sends a message: it shows at once and goes in the order typed. Returns its key. */
+	socialChatSend: (conv: string, text: string) => typedError<string, CmdError>(__TAURI_INVOKE("social_chat_send", { conv, text })),
+	/**  "Tekrar dene" on a message that did not go. */
+	socialChatRetry: (key: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_chat_retry", { key })),
+	/**  Drops a message that did not go. */
+	socialChatDiscard: (key: string) => __TAURI_INVOKE<void>("social_chat_discard", { key }),
+	/**  Edits the player's own message (within 15 minutes). */
+	socialChatEdit: (conv: string, id: number, text: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_chat_edit", { conv, id, text })),
+	/**  "Herkesten sil". */
+	socialChatDelete: (conv: string, id: number) => typedError<null, CmdError>(__TAURI_INVOKE("social_chat_delete", { conv, id })),
+	/**  Everything in a conversation is read (it is on screen at its newest message). */
+	socialChatRead: (conv: string) => __TAURI_INVOKE<void>("social_chat_read", { conv }),
+	/**  "Geçmişi temizle": the conversation's messages leave this computer. */
+	socialChatClear: (conv: string) => __TAURI_INVOKE<void>("social_chat_clear", { conv }),
+	/**
+	 *  "Rapor et": a player, a crew or a message, with a reason and an optional note (200
+	 *  characters); `block` also blocks the player.
+	 */
+	socialReport: (target: ReportTarget, reason: ReportReason, note: string | null, block: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("social_report", { target, reason, note, block })),
+	/**  The launcher showed these moderators' notes. */
+	socialNoticesSeen: (ids: string[]) => typedError<null, CmdError>(__TAURI_INVOKE("social_notices_seen", { ids })),
 };
 
 /* Types */
@@ -1333,6 +1356,17 @@ export type CategoryView = {
 	header: string,
 };
 
+/**
+ *  What changed in one conversation (`social-chat`): messages to add or replace (by key), keys to
+ *  take away, or everything shown gone first (`reset`: the history was cleared here).
+ */
+export type ChatChangeView = {
+	conv: string,
+	upsert: ChatMessageView[],
+	remove: string[],
+	reset: boolean,
+};
+
 export type ChatLogFilter = "all" | "messages" | "chat";
 
 export type ChatLogSettings = {
@@ -1340,6 +1374,61 @@ export type ChatLogSettings = {
 	addDateTime?: boolean,
 	showDate?: boolean,
 	filter?: ChatLogFilter,
+};
+
+/**  One message of a conversation. */
+export type ChatMessageView = {
+	/**
+	 *  The same from the moment it is typed to sent (`n:<nonce>` for the player's own, else
+	 *  `i:<id>`).
+	 */
+	key: string,
+	/**  The service's id (its clock, ms; the order key): None while on its way. */
+	id: number | null,
+	from: string,
+	mine: boolean,
+	text: string,
+	/**  Unix milliseconds on this computer's clock. */
+	at: number,
+	/**  "düzenlendi". */
+	edited: boolean,
+	state: MessageState,
+	failure: SendFailure | null,
+	/**  Unix ms (this computer): the player may edit it until then (their own, sent; 15 minutes). */
+	editUntil: number | null,
+	/**
+	 *  Unix ms: the player may delete it for everyone until then (their own, or any in a crew
+	 *  they lead or moderate; 7 days).
+	 */
+	deleteUntil: number | null,
+};
+
+/**  A conversation's newest messages (or those before a given one), oldest first. */
+export type ChatPage = {
+	conv: string,
+	messages: ChatMessageView[],
+	/**  Older messages remain on this device. */
+	more: boolean,
+};
+
+/**  Crew chat and direct messages (CHAT1). */
+export type ChatView = {
+	/**  The service's switch: off hides the composer; what this device holds stays readable. */
+	on: boolean,
+	/**
+	 *  Messages also wait for devices that are away; false: they reach only those online ("Mesajlar
+	 *  şu an yalnız çevrimiçi olanlara gidiyor.").
+	 */
+	mailbox: boolean,
+	/**  The player's daily limit. */
+	perDay: number,
+	/**  Unix seconds on this computer's clock: a moderator muted the player until then. */
+	mutedUntil: number | null,
+	/**
+	 *  The player's crews and every conversation this device holds, the newest first (crews
+	 *  without messages last).
+	 */
+	conversations: ConversationView[],
 };
 
 export type CleanupBlock = 
@@ -1531,6 +1620,24 @@ export type ContentSearchRequest = {
 export type ContentStatusView = {
 	/**  The last refresh reached no mirror: the cached (or bundled) content is shown. */
 	offline: boolean,
+};
+
+/**  One conversation in the list. */
+export type ConversationView = {
+	/**  `c:<team id>` or `d:<id>:<id>`. */
+	id: string,
+	/**  The friend of a direct conversation. */
+	peer: string | null,
+	/**  The crew of a crew's chat. */
+	crew: string | null,
+	/**  Who or what it is with, as last known (the lists' name wins while they are in them). */
+	title: string | null,
+	last: LastMessageView | null,
+	unread: number,
+	/**  The player may write here now (still friends, still in the crew). */
+	writable: boolean,
+	/**  A message of the player's did not go. */
+	failed: boolean,
 };
 
 export type CrashKind = 
@@ -2569,6 +2676,14 @@ export type Lang =
 /**  Turkish: the launcher's first language, and the backend's until the UI says otherwise. */
 "tr" | "en";
 
+export type LastMessageView = {
+	from: string,
+	mine: boolean,
+	text: string,
+	/**  Unix milliseconds on this computer's clock. */
+	at: number,
+};
+
 export type LastSeen = "today" | "yesterday" | 
 /**  Within the last 7 days. */
 "week" | 
@@ -2718,6 +2833,39 @@ export type LegacyScan = {
 	freeBytes: number | null,
 };
 
+/**  One limit of a limited account (`perDay` for the daily ones). */
+export type LimitedItem = {
+	key: LimitedKey,
+	perDay?: number | null,
+};
+
+/**
+ *  What a limited account ("Sınırlı hesap", a Discord account younger than the service's
+ *  threshold) may not do, or does less of. A key this version does not know reads as `Other` and
+ *  is left out of the view.
+ */
+export type LimitedKey = 
+/**  Founding crews (joining one is fine). */
+"crewFound" | 
+/**  Crew invites a day. */
+"crewInvites" | 
+/**  Friend and crew code lookups a day (requests and joins by code included). */
+"codeLookups" | 
+/**  The settings backup. */
+"settingsBackup" | 
+/**  Chat messages a day. */
+"chatMessages" | "other";
+
+/**
+ *  A limited account ("Sınırlı hesap", a new Discord account): until when, and what is limited
+ *  (only what this launcher knows how to say).
+ */
+export type LimitedView = {
+	/**  Unix seconds. */
+	until: number,
+	items: LimitedItem[],
+};
+
 export type Limits = {
 	friends: number,
 	outgoingRequests: number,
@@ -2843,6 +2991,8 @@ export type MeView = {
 	privacy: Privacy,
 	/**  The settings backup, when there is one. */
 	backup: SettingsMeta | null,
+	/**  A limited account ("Sınırlı hesap"): only the player sees it. */
+	limited: LimitedView | null,
 };
 
 /**  "Belleği artır/düşür ve yeniden dene". */
@@ -2851,6 +3001,13 @@ export type MemoryAdviceView = {
 	suggestedMb: number,
 	increase: boolean,
 };
+
+/**  Where one of the player's messages stands. */
+export type MessageState = "sent" | 
+/**  On its way (shown at once, settled by the service's answer). */
+"sending" | 
+/**  It did not go: `failure` says why. */
+"failed";
 
 /**  What a Microsoft sign-in did, so the UI can say it plainly. */
 export type MicrosoftLoginOutcome = 
@@ -3127,6 +3284,16 @@ export type ModIssueView = {
 	kind: ModIssueKind,
 	/**  Technical details, for "copy details" only. */
 	detail: string,
+};
+
+/**  A one-time note from Projects' moderators. */
+export type ModNoticeView = {
+	id: string,
+	kind: NoticeKind,
+	/**  Unix seconds. */
+	at: number,
+	/**  What it was about (a report reason), when the moderators said. */
+	reason: ReportReason | null,
 };
 
 /**  Choices from the mod center. */
@@ -3497,6 +3664,16 @@ export type NewsView = {
 	/**  The original Discord message of a feed item (`https://` only), for "Discord'da aç". */
 	sourceUrl: string | null,
 };
+
+/**
+ *  What a moderators' one-time note says. A kind this version does not know reads as `Other`
+ *  and is not shown.
+ */
+export type NoticeKind = 
+/**  "Topluluk kurallarına aykırı davranış nedeniyle uyarı aldın." */
+"warning" | 
+/**  The profile picture went back to the default. */
+"profileReset" | "other";
 
 export type OfficialPackView = {
 	id: string,
@@ -3903,6 +4080,26 @@ export type RepairStepView = {
 	note: StepNote | null,
 };
 
+/**
+ *  A report reason, as players pick it and the service names it. One this version does not know
+ *  reads as `Other`.
+ */
+export type ReportReason = 
+/**  An inappropriate name, tag or motto. */
+"name" | 
+/**  An inappropriate profile picture. */
+"profile" | 
+/**  Harassment or bullying. */
+"harassment" | 
+/**  An inappropriate message. */
+"inappropriate" | "spam" | "scam" | "other";
+
+/**
+ *  What the player reports ("Rapor et"): a player, a crew (`code` when it was looked up by code)
+ *  or a message as this device holds it.
+ */
+export type ReportTarget = { kind: "player"; id: string } | { kind: "crew"; id: string; code: string | null } | { kind: "message"; conv: string; id: number };
+
 export type RequestView = {
 	id: string,
 	name: string,
@@ -3937,6 +4134,11 @@ export type RestoredWorldView = {
 	folder: string,
 	/**  The world it replaced, now in the launcher trash. */
 	replaced: TrashItemView | null,
+};
+
+/**  A suspension (`until`, Unix seconds) or a ban (`until` None) from the social features. */
+export type RestrictionView = {
+	until: number | null,
 };
 
 export type ResumeKind = "world" | "server";
@@ -3987,6 +4189,29 @@ export type ScreenshotView = {
 	path: string,
 	takenAt: string,
 };
+
+/**  Why one of the player's messages did not go. */
+export type SendFailure = 
+/**  A link ("Bağlantı gönderilemez."). */
+"link" | 
+/**  A phone number. */
+"phone" | 
+/**  A word the service does not let through (it never says which). */
+"words" | 
+/**  Too long, or nothing left after cleaning. */
+"invalid" | 
+/**  Too many messages in a row. */
+"tooFast" | 
+/**  The day's messages are used up. */
+"dailyLimit" | 
+/**  A moderator muted the player. */
+"muted" | 
+/**  Chat is switched off. */
+"off" | 
+/**  No longer friends, or no longer in the crew. */
+"notAllowed" | 
+/**  The connection: it may go again. */
+"connection";
 
 /**  Result of sending a request by code. */
 export type SendOutcome = 
@@ -4306,7 +4531,11 @@ export type SignInFailure =
 /**  The browser step took too long, or the link was already used: start again. */
 "expired" | 
 /**  The service could not be reached. */
-"unavailable" | "failed";
+"unavailable" | "failed" | 
+/**  The account is suspended or banned (`restriction` in the view says until when). */
+"restricted" | 
+/**  No new accounts are made right now; this Discord account has none yet. */
+"signupsClosed";
 
 /**  A skin PNG the player picked or dropped, checked and ready for the preview. */
 export type SkinFilePreview = {
@@ -4356,72 +4585,98 @@ export type SocialNotice = SocialNotice_Serialize | SocialNotice_Deserialize;
 /**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
 export type SocialNotice_Deserialize = 
 /**  A live invite (never while on do-not-disturb: those wait as quiet invites). */
-({ kind: "invite"; invite: InviteView_Deserialize }) & { call?: never; friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "invite"; invite: InviteView_Deserialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Someone sent a friend request. */
-({ kind: "request"; request: RequestView }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; reason?: never; restore?: never } | 
+({ kind: "request"; request: RequestView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
 /**  A request was accepted (by them, or on another device): a new friend. */
-({ kind: "friendAdded"; friend: FriendView_Deserialize }) & { call?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendAdded"; friend: FriendView_Deserialize }) & { call?: never; conv?: never; crew?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A friend came online. */
-({ kind: "friendOnline"; id: string }) & { call?: never; friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendOnline"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A friend started playing on projects.gg. */
-({ kind: "friendOnProjects"; id: string }) & { call?: never; friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Signed in. `restore` is a settings backup saved by another computer, worth offering. */
-({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never } | 
+({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; staff?: never; until?: never } | 
 /**  A friend invited the player to their team (only while teams are on). */
-({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The founder removed the player from the team, or ended it. */
 ({ kind: "teamGone"; reason: TeamExit; 
 /**  The team's name, for the sentence. */
-name: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; request?: never; restore?: never } | 
+name: string | null; 
+/**  Projects' moderators did it (community rules). */
+staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; request?: never; restore?: never; until?: never } | 
+/**
+ *  A new chat message from someone else, live (never one of the player's own, nor one a sync
+ *  brought): the launcher decides whether to say it.
+ */
+({ kind: "chatMessage"; conv: string; message: ChatMessageView; 
+/**  The sender's name as the lists show it. */
+name: string | null; 
+/**  The crew of a crew's chat. */
+crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+/**  Moderators suspended or banned the account: every session ended. */
+({ kind: "restricted"; until: number | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never } | 
 /**
  *  A teammate called the crew, live (never for the player's own call, on do-not-disturb or
  *  for a call that is only new to this launcher).
  */
-({ kind: "crewCall"; call: CrewCallView_Deserialize }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "crewCall"; call: CrewCallView_Deserialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**
  *  The caller of a call the player said "Geliyorum" or "Birazdan" to moved: to projects.gg (a
  *  call that was "Hazır mısın?"), or to another server (the call's `server` says where).
  */
-({ kind: "crewCallJoin"; call: CrewCallView_Deserialize }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "crewCallJoin"; call: CrewCallView_Deserialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A teammate (a friend or not) started playing on projects.gg. */
-({ kind: "crewmateOnProjects"; id: string }) & { call?: never; friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; request?: never; restore?: never } | 
+({ kind: "crewmateOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
-({ kind: "signedOutRemotely" }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never };
+({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never };
 
 /**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
 export type SocialNotice_Serialize = 
 /**  A live invite (never while on do-not-disturb: those wait as quiet invites). */
-({ kind: "invite"; invite: InviteView_Serialize }) & { call?: never; friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "invite"; invite: InviteView_Serialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Someone sent a friend request. */
-({ kind: "request"; request: RequestView }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; reason?: never; restore?: never } | 
+({ kind: "request"; request: RequestView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
 /**  A request was accepted (by them, or on another device): a new friend. */
-({ kind: "friendAdded"; friend: FriendView_Serialize }) & { call?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendAdded"; friend: FriendView_Serialize }) & { call?: never; conv?: never; crew?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A friend came online. */
-({ kind: "friendOnline"; id: string }) & { call?: never; friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendOnline"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A friend started playing on projects.gg. */
-({ kind: "friendOnProjects"; id: string }) & { call?: never; friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "friendOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Signed in. `restore` is a settings backup saved by another computer, worth offering. */
-({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never } | 
+({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; staff?: never; until?: never } | 
 /**  A friend invited the player to their team (only while teams are on). */
-({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; friend?: never; id?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The founder removed the player from the team, or ended it. */
 ({ kind: "teamGone"; reason: TeamExit; 
 /**  The team's name, for the sentence. */
-name: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; request?: never; restore?: never } | 
+name: string | null; 
+/**  Projects' moderators did it (community rules). */
+staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; request?: never; restore?: never; until?: never } | 
+/**
+ *  A new chat message from someone else, live (never one of the player's own, nor one a sync
+ *  brought): the launcher decides whether to say it.
+ */
+({ kind: "chatMessage"; conv: string; message: ChatMessageView; 
+/**  The sender's name as the lists show it. */
+name: string | null; 
+/**  The crew of a crew's chat. */
+crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+/**  Moderators suspended or banned the account: every session ended. */
+({ kind: "restricted"; until: number | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never } | 
 /**
  *  A teammate called the crew, live (never for the player's own call, on do-not-disturb or
  *  for a call that is only new to this launcher).
  */
-({ kind: "crewCall"; call: CrewCallView_Serialize }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "crewCall"; call: CrewCallView_Serialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**
  *  The caller of a call the player said "Geliyorum" or "Birazdan" to moved: to projects.gg (a
  *  call that was "Hazır mısın?"), or to another server (the call's `server` says where).
  */
-({ kind: "crewCallJoin"; call: CrewCallView_Serialize }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "crewCallJoin"; call: CrewCallView_Serialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A teammate (a friend or not) started playing on projects.gg. */
-({ kind: "crewmateOnProjects"; id: string }) & { call?: never; friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; request?: never; restore?: never } | 
+({ kind: "crewmateOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
-({ kind: "signedOutRemotely" }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never };
+({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never };
 
 export type SocialView = SocialView_Serialize | SocialView_Deserialize;
 
@@ -4477,6 +4732,22 @@ export type SocialView_Deserialize = {
 	 *  `teams` and the service offers `mute`; otherwise the launcher's own switches decide).
 	 */
 	crewNotifications: CrewNotificationsView | null,
+	/**
+	 *  Chat may show (signed config `features.chat`), whatever the service offers: the sign-in
+	 *  screen says what chat keeps.
+	 */
+	chatAllowed: boolean,
+	/**
+	 *  Crew chat and direct messages (CHAT1): only while `chat_allowed` and the service offers
+	 *  chat on this connection.
+	 */
+	chat: ChatView | null,
+	/**  One-time notes from moderators still to be shown, oldest first. */
+	notices: ModNoticeView[],
+	/**  Moderators suspended or banned the account (this run): the sign-in screen says so. */
+	restriction: RestrictionView | null,
+	/**  The settings backup waits until then (Unix seconds): the service protects its storage. */
+	backupWaitsUntil: number | null,
 };
 
 export type SocialView_Serialize = {
@@ -4531,6 +4802,22 @@ export type SocialView_Serialize = {
 	 *  `teams` and the service offers `mute`; otherwise the launcher's own switches decide).
 	 */
 	crewNotifications: CrewNotificationsView | null,
+	/**
+	 *  Chat may show (signed config `features.chat`), whatever the service offers: the sign-in
+	 *  screen says what chat keeps.
+	 */
+	chatAllowed: boolean,
+	/**
+	 *  Crew chat and direct messages (CHAT1): only while `chat_allowed` and the service offers
+	 *  chat on this connection.
+	 */
+	chat: ChatView | null,
+	/**  One-time notes from moderators still to be shown, oldest first. */
+	notices: ModNoticeView[],
+	/**  Moderators suspended or banned the account (this run): the sign-in screen says so. */
+	restriction: RestrictionView | null,
+	/**  The settings backup waits until then (Unix seconds): the service protects its storage. */
+	backupWaitsUntil: number | null,
 };
 
 /**  The launcher a source belongs to. Names are brand names: the UI shows them as they are. */
@@ -4933,6 +5220,11 @@ export type TeamView_Deserialize = {
 	 *  `multi`; `crewNotifications` covers all crews).
 	 */
 	notifications: CrewMute,
+	/**
+	 *  Projects' moderators reset the crew's name, tag and motto; they stay locked until then
+	 *  (Unix seconds; None when not locked).
+	 */
+	textLockedUntil: number | null,
 };
 
 export type TeamView_Serialize = {
@@ -4971,6 +5263,11 @@ export type TeamView_Serialize = {
 	 *  `multi`; `crewNotifications` covers all crews).
 	 */
 	notifications: CrewMute,
+	/**
+	 *  Projects' moderators reset the crew's name, tag and motto; they stay locked until then
+	 *  (Unix seconds; None when not locked).
+	 */
+	textLockedUntil: number | null,
 };
 
 /**  Something in the launcher trash. */

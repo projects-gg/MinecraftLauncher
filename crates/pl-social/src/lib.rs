@@ -1,6 +1,7 @@
 //! Client for the Projects Launcher friends service (`services/social` in the Studio
 //! repository): Discord sign-in, friends, blocks, privacy, friend categories, teams, settings
-//! backup and the presence WebSocket.
+//! backup, the presence WebSocket, crew chat and direct messages with their history on this
+//! device, reports, and what moderators' measures mean for the player.
 //!
 //! Two layers:
 //! - [`SocialClient`] / [`Session`] / [`PresenceHandle`]: the HTTP API and the presence socket,
@@ -40,12 +41,14 @@
 
 mod auth;
 mod backoff;
+mod chat;
 mod client;
 mod closed;
 mod codes;
 mod error;
 mod game;
 mod gate;
+mod history;
 mod model;
 mod presence;
 mod protocol;
@@ -61,7 +64,8 @@ mod testutil;
 
 pub use auth::{AUTH_DONE_LINK, LoginAttempt, SessionToken, SignedIn, auth_code_from_deep_link};
 pub use backoff::{Backoff, BackoffPolicy};
-pub use client::{PRODUCTION_URL, Session, SocialClient, SocialConfig};
+pub use chat::{CHAT_LINES_MAX, CHAT_TEXT_MAX, DELETE_WINDOW_MS, EDIT_WINDOW_MS};
+pub use client::{PRODUCTION_URL, ReportAnswer, Session, SocialClient, SocialConfig};
 pub use codes::{
     CREW_CODE_PREFIX, FRIEND_DEEP_LINK_PREFIX, crew_code, friend_code_from_deep_link,
     friend_deep_link, friend_share_link, normalize_friend_code, normalize_team_code,
@@ -69,32 +73,38 @@ pub use codes::{
 pub use error::{ErrorCode, Result, SocialError};
 pub use game::{GameActivity, LogSignal, log_signal, may_signal, server_label};
 pub use gate::service_url;
+pub use history::{HISTORY_LIMIT, crew_conversation, direct_conversation};
 pub use model::{
-    Avatar, BlockedUser, CodeLookup, CrewEntry, CrewMute, CrewMuteEdit, DEFAULT_CREW_LIMIT,
-    DEFAULT_TEAM_COLOR, DEFAULT_TEAM_FRAME, FIRST_EMBLEMS, Friend, FriendGroup, FriendGroups,
-    FriendRequest, FriendsOverview, LastSeen, Limits, MAX_FRIEND_GROUPS, MAX_MUTE_SECS, Me,
-    PermissionLevel, PermissionsEdit, Privacy, ProfileUpdate, PublicProfile, Relation,
-    RequestOutcome, SessionInfo, SettingsBackup, SettingsMeta, SettingsPrecondition, StatusMode,
-    TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI,
-    TEAM_FEATURE_MUTE, TEAM_FEATURE_ROLES, Team, TeamAnswer, TeamEdit, TeamExit, TeamInvite,
-    TeamLook, TeamLookup, TeamMember, TeamNotifications, TeamNotificationsEdit, TeamPermissions,
-    TeamRelation, TeamRole, TeamSummary, TeamsOverview, discord_avatar_url,
+    Avatar, BlockedUser, ChatDeletion, ChatMessage, ChatRejection, ChatStatus, CodeLookup,
+    CrewEntry, CrewMute, CrewMuteEdit, DEFAULT_CREW_LIMIT, DEFAULT_TEAM_COLOR, DEFAULT_TEAM_FRAME,
+    FEATURE_CHAT, FIRST_EMBLEMS, Friend, FriendGroup, FriendGroups, FriendRequest, FriendsOverview,
+    LastSeen, Limited, LimitedItem, LimitedKey, Limits, MAX_FRIEND_GROUPS, MAX_MUTE_SECS, Me,
+    ModNotice, NoticeKind, PermissionLevel, PermissionsEdit, Privacy, ProfileUpdate, PublicProfile,
+    Relation, ReportReason, RequestOutcome, SessionInfo, SettingsBackup, SettingsMeta,
+    SettingsPrecondition, StatusMode, TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS,
+    TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, TEAM_FEATURE_ROLES, Team, TeamAnswer,
+    TeamEdit, TeamExit, TeamInvite, TeamLook, TeamLookup, TeamMember, TeamNotifications,
+    TeamNotificationsEdit, TeamPermissions, TeamRelation, TeamRole, TeamSummary, TeamsOverview,
+    discord_avatar_url,
 };
 pub use presence::{
-    InviteOutcome, PresenceControl, PresenceEvent, PresenceEvents, PresenceHandle, PresenceOptions,
-    StopReason,
+    ChatSetup, InviteOutcome, PresenceControl, PresenceEvent, PresenceEvents, PresenceHandle,
+    PresenceOptions, StopReason,
 };
 pub use protocol::{
-    CallAnswer, CallEndReason, CallKind, CrewCall, Game, GameLocation, Invite, LocalStatus,
-    OnlineStatus, PRESENCE_CAPS, Presence, PresenceState, is_projects_host,
+    CHAT_CAP, CallAnswer, CallEndReason, CallKind, CrewCall, Game, GameLocation, Invite,
+    LocalStatus, OnlineStatus, PRESENCE_CAPS, Presence, PresenceState, is_projects_host,
+    presence_caps,
 };
 pub use qr::{QrPath, qr_path};
 pub use service::{ServiceConfig, SocialService, SocialUpdate, UpdateSink};
 pub use state::{Connection, INVITE_LIFETIME_SECS, SocialState};
 pub use store::{KEYRING_SERVICE, KeyringTokenStore, MemoryTokenStore, TokenStore};
 pub use view::{
-    ActivityView, AuthPhase, CallAnswerView, CallOutcome, CallPlace, CrewCallView,
-    CrewNotificationsView, FriendGroupsView, FriendView, GroupMember, InviteResult, InviteView,
-    LookupView, MeView, ProfileView, RequestView, SendOutcome, SignInFailure, SocialNotice,
+    ActivityView, AuthPhase, CallAnswerView, CallOutcome, CallPlace, ChatChangeView,
+    ChatMessageView, ChatPage, ChatView, ConversationView, CrewCallView, CrewNotificationsView,
+    FriendGroupsView, FriendView, GroupMember, InviteResult, InviteView, LastMessageView,
+    LimitedView, LookupView, MeView, MessageState, ModNoticeView, ProfileView, ReportTarget,
+    RequestView, RestrictionView, SendFailure, SendOutcome, SignInFailure, SocialNotice,
     SocialView, TeamInviteView, TeamLookupView, TeamMemberView, TeamView,
 };

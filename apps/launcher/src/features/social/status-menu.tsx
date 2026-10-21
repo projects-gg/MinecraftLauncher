@@ -1,6 +1,7 @@
-// The player's own card in the panel header: picture with presence, name, and the status picker
-// (Çevrimiçi / Rahatsız etmeyin / Görünmez). The chosen status shows at once and settles when
-// the service confirms; a failure puts the old one back. The panel's menu changes it too.
+// The player's own card in the panel header: picture with presence, name ("Sınırlı hesap" beside it
+// while the Discord account is new), and the status picker (Çevrimiçi / Rahatsız etmeyin /
+// Görünmez). The chosen status shows at once and settles when the service confirms; a failure puts
+// the old one back. The panel's menu changes it too.
 import { CaretDown, Check } from "@phosphor-icons/react";
 import { easeOutExpo, returnFocusAfterKeys } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -13,6 +14,7 @@ import { api } from "@/lib/api";
 import type { SocialMe, StatusMode } from "@/lib/api/social-types";
 import i18n from "@/lib/i18n";
 import { attempt } from "./actions";
+import { LimitedChip } from "./limited-chip";
 import { swap, useSocialMotion } from "./motion";
 import { PresenceDot, SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
@@ -56,7 +58,10 @@ export function MeCard({ me }: { me: SocialMe }) {
         dnd={status === "dnd"}
       />
       <div className="min-w-0">
-        <p className="truncate text-[15px] leading-tight font-semibold text-bone-50">{me.name}</p>
+        <div className="flex min-w-0 items-center gap-2">
+          <p className="truncate text-[15px] leading-tight font-semibold text-bone-50">{me.name}</p>
+          <LimitedChip me={me} />
+        </div>
         <DropdownMenu.Root open={open} onOpenChange={setOpen}>
           <DropdownMenu.Trigger asChild>
             <button

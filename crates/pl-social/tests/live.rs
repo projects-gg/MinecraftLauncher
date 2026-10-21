@@ -10,19 +10,25 @@
 //! cargo test -p pl-social --test live -- --ignored --test-threads=1   # here
 //! ```
 //!
-//! `PL_SOCIAL_URL` overrides the service URL (default `http://127.0.0.1:8797/`).
+//! `PL_SOCIAL_URL` overrides the service URL (default `http://127.0.0.1:8797/`). The chat tests
+//! need chat on in the service (its seal key `CHAT_MAC_KEY` in `.dev.vars`, as in the example).
 
+use std::sync::Arc;
+use std::sync::atomic::AtomicI64;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use pl_social::{
-    CallAnswer, CallEndReason, CallKind, CrewMuteEdit, ErrorCode, GameLocation, InviteOutcome,
-    LocalStatus, LoginAttempt, PermissionLevel, PermissionsEdit, PresenceEvent, PresenceHandle,
-    PresenceOptions, PresenceState, ProfileUpdate, Relation, RequestOutcome, Session,
+    CallAnswer, CallEndReason, CallKind, ChatRejection, ChatSetup, CrewMuteEdit, ErrorCode,
+    FEATURE_CHAT, GameLocation, InviteOutcome, LimitedKey, LocalStatus, LoginAttempt,
+    PermissionLevel, PermissionsEdit, PresenceEvent, PresenceHandle, PresenceOptions,
+    PresenceState, ProfileUpdate, Relation, ReportReason, RequestOutcome, Session,
     SettingsPrecondition, SocialClient, SocialConfig, SocialError, StatusMode, StopReason,
     TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI,
     TEAM_FEATURE_MUTE, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamNotifications,
-    TeamNotificationsEdit, TeamRelation, auth_code_from_deep_link, crew_code,
+    TeamNotificationsEdit, TeamRelation, auth_code_from_deep_link, crew_code, crew_conversation,
+    direct_conversation,
 };
+use serde_json::json;
 use url::Url;
 
 fn client() -> SocialClient {
@@ -42,6 +48,29 @@ fn new_user_id(n: u32) -> String {
         .unwrap()
         .as_millis();
     format!("9{millis}{n:03}")
+}
+
+/// A Discord account made just now (a Discord id carries the time it was made): the service
+/// treats it as new, a limited account (SPAM1).
+fn new_discord_account_id(n: u64) -> String {
+    let millis = u64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
+    )
+    .unwrap();
+    (((millis - 1_420_070_400_000) << 22) + n).to_string()
+}
+
+fn unix_now() -> i64 {
+    i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs(),
+    )
+    .unwrap()
 }
 
 /// Plays the browser: start → fake Discord consent → callback (with the state cookie). Returns
@@ -126,6 +155,36 @@ fn options() -> PresenceOptions {
 /// moment before a request that depends on it.
 async fn settle() {
     tokio::time::sleep(Duration::from_millis(400)).await;
+}
+
+/// Chat takes about one message a second per player (bursts of 5): keep under it.
+async fn pace() {
+    tokio::time::sleep(Duration::from_millis(1100)).await;
+}
+
+/// Chat on the socket, syncing from `since` (0: a new device).
+fn chat_from(since: i64) -> ChatSetup {
+    ChatSetup {
+        since: Arc::new(AtomicI64::new(since)),
+    }
+}
+
+/// Connects with chat and waits for the connect and its first sync; returns the chat state.
+async fn connect_chat(session: &Session) -> (PresenceHandle, pl_social::ChatStatus) {
+    let mut handle = session.connect_presence_with_chat(options(), chat_from(0));
+    let chat = match expect(&mut handle, "connected with chat", |e| {
+        matches!(e, PresenceEvent::Connected { .. })
+    })
+    .await
+    {
+        PresenceEvent::Connected { chat, .. } => chat.expect("the service took chat"),
+        _ => unreachable!(),
+    };
+    expect(&mut handle, "the first sync", |e| {
+        matches!(e, PresenceEvent::ChatSynced { .. })
+    })
+    .await;
+    (handle, chat)
 }
 
 #[tokio::test]
@@ -861,4 +920,380 @@ async fn several_crews_their_order_mutes_and_calls() {
 
     mate.delete_account().await.unwrap();
     leader.delete_account().await.unwrap();
+}
+
+/// Chat (CHAT1) and reports (MOD1): direct messages both ways with their seal and key, a resend
+/// that gives the message already taken, texts the service turns away, an edit, a delete for
+/// everyone, a new device's sync, crew chat where the leader deletes anyone's message, a block
+/// that ends direct messages, and reports of a message, a player and a crew.
+#[tokio::test]
+#[ignore = "needs `pnpm dev` and `pnpm dev:discord` in services/social"]
+async fn chat_messages_edits_deletes_syncs_and_reports() {
+    let client = client();
+    client.health().await.expect("wrangler dev is running");
+    let ayse_id = new_user_id(21);
+    let bora_id = new_user_id(22);
+    let ayse = sign_in(&client, &ayse_id, "ayse").await;
+    let bora = sign_in(&client, &bora_id, "bora").await;
+    let features = ayse.friends().await.unwrap().features;
+    assert!(
+        features.iter().any(|f| f == FEATURE_CHAT),
+        "chat is on (CHAT_MAC_KEY in .dev.vars)"
+    );
+
+    // Direct messages go only between friends.
+    let ayse_me = ayse.me().await.unwrap();
+    bora.send_request(&ayse_me.friend_code).await.unwrap();
+    ayse.accept_request(&bora_id).await.unwrap();
+    let (mut ayse_live, chat) = connect_chat(&ayse).await;
+    assert!(chat.on && chat.mailbox);
+    assert_eq!((chat.per_day, chat.muted_until), (500, None));
+    let (mut bora_live, _) = connect_chat(&bora).await;
+    let ayse_chat = ayse_live.control();
+    let bora_chat = bora_live.control();
+    let conv = direct_conversation(&ayse_id, &bora_id);
+
+    // Ayşe writes: the service cleans the text and seals it; Bora gets it without her key.
+    let sent = ayse_chat
+        .chat_send(&conv, "  Akşam bedwars'a   girelim mi? ", "live1a")
+        .await
+        .unwrap();
+    assert_eq!(sent.text, "Akşam bedwars'a girelim mi?");
+    assert_eq!(sent.mac.len(), 22);
+    assert_eq!(sent.nonce.as_deref(), Some("live1a"));
+    let got = match expect(
+        &mut bora_live,
+        "the message",
+        |e| matches!(e, PresenceEvent::ChatMessage(m) if m.id == sent.id),
+    )
+    .await
+    {
+        PresenceEvent::ChatMessage(message) => message,
+        _ => unreachable!(),
+    };
+    assert_eq!(
+        (got.conv.as_str(), got.from.as_str(), got.text.as_str()),
+        (conv.as_str(), ayse_id.as_str(), sent.text.as_str())
+    );
+    assert_eq!(got.nonce, None, "the key goes only to the sender's devices");
+    // The same key again (as after an answer lost with the connection): the message taken.
+    let again = ayse_chat
+        .chat_send(&conv, "Akşam bedwars'a girelim mi?", "live1a")
+        .await
+        .unwrap();
+    assert_eq!(again.id, sent.id);
+
+    // Bora answers; ids are the order.
+    let answer = bora_chat
+        .chat_send(&conv, "Olur, 9'da", "live1b")
+        .await
+        .unwrap();
+    assert!(answer.id > sent.id);
+    expect(
+        &mut ayse_live,
+        "the answer",
+        |e| matches!(e, PresenceEvent::ChatMessage(m) if m.id == answer.id),
+    )
+    .await;
+
+    // What the service turns away.
+    pace().await;
+    for (text, nonce, wanted) in [
+        ("discord.gg/abc", "live1r1", ChatRejection::Link),
+        ("0532 123 45 67", "live1r2", ChatRejection::Phone),
+    ] {
+        let refused = ayse_chat.chat_send(&conv, text, nonce).await.unwrap_err();
+        assert!(
+            matches!(refused, SocialError::ChatRejected { reason } if reason == wanted),
+            "{text}: {refused:?}"
+        );
+    }
+
+    // Ayşe edits hers: the same id, a new seal, "düzenlendi"; Bora gets the new text.
+    pace().await;
+    let edited = ayse_chat
+        .chat_edit(&sent, "Akşam bedwars'a girelim mi? 9'da")
+        .await
+        .unwrap();
+    assert_eq!(edited.id, sent.id);
+    assert!(edited.edited_at.is_some());
+    assert_ne!(edited.mac, sent.mac);
+    match expect(
+        &mut bora_live,
+        "the edit",
+        |e| matches!(e, PresenceEvent::ChatEdited(m) if m.id == sent.id),
+    )
+    .await
+    {
+        PresenceEvent::ChatEdited(message) => {
+            assert_eq!(message.text, edited.text);
+            assert_eq!(message.edited_at, edited.edited_at);
+        }
+        _ => unreachable!(),
+    }
+    // Bora's message is not hers to edit.
+    let not_hers = ayse_chat.chat_edit(&answer, "Olur").await.unwrap_err();
+    assert!(
+        matches!(
+            not_hers,
+            SocialError::Refused {
+                code: ErrorCode::ChatNotPermitted,
+                ..
+            }
+        ),
+        "{not_hers:?}"
+    );
+
+    // "Rapor et" on Bora's message as Ayşe's device holds it, with what came before; the same
+    // target again while the first is open is a duplicate. Then the player.
+    let report = ayse
+        .report(
+            json!({ "kind": "message", "message": answer.sealed(), "before": [edited.sealed()] }),
+            ReportReason::Inappropriate,
+            Some("canlı test"),
+            false,
+        )
+        .await
+        .unwrap();
+    assert!(!report.duplicate && !report.id.is_empty());
+    let duplicate = ayse
+        .report(
+            json!({ "kind": "message", "message": answer.sealed(), "before": [] }),
+            ReportReason::Spam,
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    assert!(duplicate.duplicate);
+    let player = ayse
+        .report(
+            json!({ "kind": "player", "id": bora_id }),
+            ReportReason::Harassment,
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    assert!(!player.duplicate);
+
+    // Ayşe deletes hers for everyone: Bora is told who did; her socket gets only the answer.
+    ayse_chat.chat_delete(&edited).await.unwrap();
+    match expect(
+        &mut bora_live,
+        "the delete",
+        |e| matches!(e, PresenceEvent::ChatDeleted { id, .. } if *id == sent.id),
+    )
+    .await
+    {
+        PresenceEvent::ChatDeleted { conv: at, by, .. } => {
+            assert_eq!(at, conv);
+            assert_eq!(by, ayse_id);
+        }
+        _ => unreachable!(),
+    }
+
+    // Bora's new computer syncs from nothing: his message with his key, her deletion.
+    let bora_new = sign_in(&client, &bora_id, "bora").await;
+    let mut bora_new_live = bora_new.connect_presence_with_chat(options(), chat_from(0));
+    expect(&mut bora_new_live, "connected", |e| {
+        matches!(e, PresenceEvent::Connected { chat: Some(_), .. })
+    })
+    .await;
+    match expect(
+        &mut bora_new_live,
+        "the conversation's sync",
+        |e| matches!(e, PresenceEvent::ChatSync { conv: at, .. } if *at == conv),
+    )
+    .await
+    {
+        PresenceEvent::ChatSync {
+            messages, deleted, ..
+        } => {
+            assert!(
+                messages.iter().any(|m| m.id == answer.id
+                    && m.conv == conv
+                    && m.nonce.as_deref() == Some("live1b")),
+                "{messages:?}"
+            );
+            assert!(messages.iter().all(|m| m.id != sent.id));
+            assert!(deleted.iter().any(|d| d.id == sent.id), "{deleted:?}");
+        }
+        _ => unreachable!(),
+    }
+    expect(&mut bora_new_live, "the sync's end", |e| {
+        matches!(e, PresenceEvent::ChatSynced { .. })
+    })
+    .await;
+    bora_new_live.shutdown().await;
+
+    // Crew chat: everyone in the crew gets it; the leader deletes anyone's message.
+    let multi = ayse
+        .teams()
+        .await
+        .unwrap()
+        .team_features
+        .iter()
+        .any(|f| f == TEAM_FEATURE_MULTI);
+    let crew = ayse
+        .create_team("Gece Kartalları", "GKR", "sword", None, multi)
+        .await
+        .unwrap()
+        .team
+        .unwrap();
+    bora.join_team(&crew_code(&crew.code), multi).await.unwrap();
+    let crew_conv = crew_conversation(&crew.id);
+    expect(&mut ayse_live, "bora in the crew", |e| {
+        matches!(e, PresenceEvent::TeamChanged { team: Some(team), .. } if team.members.len() == 2)
+    })
+    .await;
+    pace().await;
+    let coming = bora_chat
+        .chat_send(&crew_conv, "Geliyorum", "live1c")
+        .await
+        .unwrap();
+    expect(
+        &mut ayse_live,
+        "the crew message",
+        |e| matches!(e, PresenceEvent::ChatMessage(m) if m.id == coming.id && m.conv == crew_conv),
+    )
+    .await;
+    ayse_chat.chat_delete(&coming).await.unwrap();
+    expect(
+        &mut bora_live,
+        "deleted by the leader",
+        |e| matches!(e, PresenceEvent::ChatDeleted { id, by, .. } if *id == coming.id && *by == ayse_id),
+    )
+    .await;
+    let crew_report = bora
+        .report(
+            json!({ "kind": "crew", "id": crew.id }),
+            ReportReason::Name,
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    assert!(!crew_report.duplicate);
+
+    // A block ends direct messages both ways.
+    bora.block(&ayse_id).await.unwrap();
+    pace().await;
+    let blocked = ayse_chat
+        .chat_send(&conv, "Orada mısın?", "live1d")
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(blocked, SocialError::Refused { .. }),
+        "{blocked:?}"
+    );
+
+    ayse_live.shutdown().await;
+    bora_live.shutdown().await;
+    bora.delete_account().await.unwrap();
+    ayse.delete_account().await.unwrap();
+}
+
+/// A Discord account made just now is limited (SPAM1): the profile says until when and what; a
+/// crew cannot be founded, the settings backup is off, code lookups stop at 10 a day and chat
+/// at 100 messages; reports still go.
+#[tokio::test]
+#[ignore = "needs `pnpm dev` and `pnpm dev:discord` in services/social"]
+async fn limited_accounts_and_their_limits() {
+    let client = client();
+    client.health().await.expect("wrangler dev is running");
+    let fresh_id = new_discord_account_id(31);
+    let fresh = sign_in(&client, &fresh_id, "yeni").await;
+    let limited = fresh
+        .me()
+        .await
+        .unwrap()
+        .limited
+        .expect("a new account is limited");
+    assert!(limited.until > unix_now());
+    let per_day = |key: LimitedKey| {
+        limited
+            .items
+            .iter()
+            .find(|item| item.key == key)
+            .map(|item| item.per_day)
+    };
+    assert_eq!(per_day(LimitedKey::CrewFound), Some(None));
+    assert_eq!(per_day(LimitedKey::CrewInvites), Some(Some(5)));
+    assert_eq!(per_day(LimitedKey::CodeLookups), Some(Some(10)));
+    assert_eq!(per_day(LimitedKey::SettingsBackup), Some(None));
+    let chat = fresh
+        .friends()
+        .await
+        .unwrap()
+        .features
+        .iter()
+        .any(|f| f == FEATURE_CHAT);
+    assert_eq!(per_day(LimitedKey::ChatMessages), chat.then_some(Some(100)));
+
+    // Said where it happens, with the item and the date.
+    let multi = fresh
+        .teams()
+        .await
+        .unwrap()
+        .team_features
+        .iter()
+        .any(|f| f == TEAM_FEATURE_MULTI);
+    let found = fresh
+        .create_team("Yeni Ekip", "YNE", "sword", None, multi)
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(
+            found,
+            SocialError::Limited { item: LimitedKey::CrewFound, until: Some(until), .. }
+                if until == limited.until
+        ),
+        "{found:?}"
+    );
+    let backup = fresh
+        .put_settings(
+            "Integration PC",
+            &json!({ "v": 1 }),
+            SettingsPrecondition::Create,
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(
+            backup,
+            SocialError::Limited {
+                item: LimitedKey::SettingsBackup,
+                ..
+            }
+        ),
+        "{backup:?}"
+    );
+    // Ten code lookups a day (unknown codes count too), then until tomorrow.
+    let mut stopped = None;
+    for attempt in 0..12 {
+        match fresh.lookup_code("PRJ-ZZZZ-ZZZZ").await {
+            Err(SocialError::Limited {
+                item: LimitedKey::CodeLookups,
+                retry_after,
+                ..
+            }) => {
+                stopped = Some((attempt, retry_after));
+                break;
+            }
+            Err(_) => {}
+            Ok(found) => panic!("nobody has this code: {found:?}"),
+        }
+    }
+    let (attempt, retry_after) = stopped.expect("lookups stop");
+    assert_eq!(attempt, 10);
+    assert!(retry_after.is_some());
+
+    if chat {
+        let (live, chat) = connect_chat(&fresh).await;
+        assert_eq!(chat.per_day, 100);
+        live.shutdown().await;
+    }
+
+    fresh.delete_account().await.unwrap();
 }

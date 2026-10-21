@@ -10,8 +10,10 @@
 //! reconnect, never on a timer; presence arrives as events; nothing retries in a loop (the
 //! presence task backs off by itself, a manual "try again" is throttled).
 
+use std::collections::HashSet;
 use std::future::Future;
 use std::path::PathBuf;
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -19,26 +21,32 @@ use tokio::runtime::Handle;
 use url::Url;
 
 use crate::auth::{LoginAttempt, SignedIn, auth_code_from_deep_link};
+use crate::chat::{
+    EDIT_WINDOW_MS, PAGE_SIZE, REPORT_CONTEXT, RESEND_WINDOW_MS, TOO_FAST_WAIT_MAX, Viewer,
+    change_view, entry_view, failure_of, merge, message_view, new_nonce, prepare_text,
+};
 use crate::client::{Session, SocialClient, SocialConfig};
 use crate::closed::ClosedInvitesFile;
 use crate::codes::{crew_code, normalize_friend_code, normalize_team_code};
 use crate::error::{ErrorCode, Result, SocialError};
 use crate::game::{self, GameActivity};
+use crate::history::{Change, Conversation, History};
 use crate::model::{
-    CrewMuteEdit, FIRST_EMBLEMS, FriendGroup, FriendGroups, MAX_FRIEND_GROUPS, ProfileUpdate,
-    RequestOutcome, SessionInfo, SettingsMeta, SettingsPrecondition, TEAM_FEATURE_CALLS,
-    TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, TEAM_FEATURE_ROLES, TeamEdit,
-    TeamLook, TeamNotificationsEdit,
+    ChatMessage, ChatStatus, CrewMuteEdit, FIRST_EMBLEMS, FriendGroup, FriendGroups, LimitedKey,
+    MAX_FRIEND_GROUPS, ProfileUpdate, ReportReason, RequestOutcome, SessionInfo, SettingsMeta,
+    SettingsPrecondition, TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI,
+    TEAM_FEATURE_MUTE, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamNotificationsEdit, TeamRole,
 };
-use crate::presence::{PresenceControl, PresenceEvent, PresenceOptions, StopReason};
+use crate::presence::{ChatSetup, PresenceControl, PresenceEvent, PresenceOptions, StopReason};
 use crate::protocol::{CallAnswer, LocalStatus};
 use crate::qr::{QrPath, qr_path};
 use crate::state::{Connection, SocialState};
 use crate::store::TokenStore;
 use crate::view::{
-    ActivityView, AuthPhase, CallOutcome, CallPlace, CrewNotificationsView, GroupMember,
-    InviteResult, LookupView, ProfileView, SendOutcome, SignInFailure, SocialNotice, SocialView,
-    TeamLookupView, me_view,
+    ActivityView, AuthPhase, CallOutcome, CallPlace, ChatChangeView, ChatPage, ChatView,
+    ConversationView, CrewNotificationsView, GroupMember, InviteResult, LastMessageView,
+    LookupView, ProfileView, ReportTarget, RestrictionView, SendFailure, SendOutcome,
+    SignInFailure, SocialNotice, SocialView, TeamLookupView, me_view,
 };
 
 /// After a reconnect the friend list is fetched again only when it is older than this.
@@ -52,7 +60,13 @@ const LOGOUT_TIMEOUT: Duration = Duration::from_secs(5);
 pub enum SocialUpdate {
     View(Box<SocialView>),
     Notice(SocialNotice),
+    /// What changed in one chat conversation (CHAT1).
+    Chat(ChatChangeView),
 }
+
+/// Chat events that came before the history could be opened (the profile was not known yet:
+/// the service was down at start) wait at most this many.
+const CHAT_BACKLOG_MAX: usize = 2_000;
 
 pub type UpdateSink = Arc<dyn Fn(SocialUpdate) + Send + Sync>;
 
@@ -122,6 +136,32 @@ struct Core {
     /// Where answered and closed invites outlive a restart (None: for this run only). Kept
     /// across sign-outs, like the configuration.
     closed_invites: Option<ClosedInvitesFile>,
+    /// Chat may show (signed config `features.chat`). Survives sign-outs.
+    chat_enabled: bool,
+    /// Where chat histories live (one folder per account). Survives sign-outs.
+    chat_root: Option<PathBuf>,
+    /// The signed-in account's chat history (once its id is known).
+    history: Option<History>,
+    /// Where the presence task's next sync starts (kept from the history).
+    chat_setup: ChatSetup,
+    /// The chat state of this connection (None: no chat on it).
+    chat_status: Option<ChatStatus>,
+    /// This computer's clock minus the hub's (ms).
+    chat_skew_ms: i64,
+    /// The sync after the last connect is over: waiting messages may go.
+    chat_synced: bool,
+    /// Chat events that came before the history was open.
+    chat_backlog: Vec<PresenceEvent>,
+    /// Chat changes for the UI, sent with the next view.
+    chat_outbox: Vec<ChatChangeView>,
+    /// Waiting messages are being sent (one at a time).
+    sending: bool,
+    /// Messages that met "too fast" once (they go again by themselves once).
+    too_fast: HashSet<String>,
+    /// The account was suspended or banned in this run (shown on the sign-in screen).
+    restriction: Option<RestrictionView>,
+    /// The settings backup waits until then (Unix seconds; storage protection).
+    backup_waits_until: Option<i64>,
 }
 
 impl SocialService {
@@ -163,11 +203,15 @@ impl SocialService {
     }
 
     fn emit_view(&self) {
-        let view = {
+        let (changes, view) = {
             let mut core = self.lock();
             core.seq += 1;
-            build_view(&mut core)
+            let changes = std::mem::take(&mut core.chat_outbox);
+            (changes, build_view(&mut core))
         };
+        for change in changes {
+            (self.inner.sink)(SocialUpdate::Chat(change));
+        }
         (self.inner.sink)(SocialUpdate::View(Box::new(view)));
     }
 
@@ -234,6 +278,7 @@ impl SocialService {
                     core.settings_version = me.settings.as_ref().map(|s| s.version);
                     core.state.set_me(me);
                     remember_closed_invites(&mut core);
+                    open_history(&mut core);
                     core.auth = AuthPhase::SignedIn;
                     self.start_presence(&mut core);
                 }
@@ -242,6 +287,8 @@ impl SocialService {
             }
             // Expired or revoked while the launcher was closed: back to the sign-in screen.
             Err(SocialError::Unauthorized) => self.end_session(generation, true),
+            // Suspended or banned while the launcher was closed.
+            Err(SocialError::Restricted { until }) => self.end_restricted(generation, until),
             Err(error) => {
                 tracing::info!(%error, "friends service unavailable; retrying in the background");
                 {
@@ -258,6 +305,22 @@ impl SocialService {
                 self.emit_view();
             }
         }
+    }
+
+    /// Moderators suspended or banned the account: every session ended. The token goes, and the
+    /// sign-in screen says why (for this run).
+    fn end_restricted(&self, generation: u64, until: Option<i64>) {
+        {
+            let mut core = self.lock();
+            if core.generation != generation {
+                return;
+            }
+            reset(&mut core);
+            core.restriction = Some(RestrictionView { until });
+        }
+        self.inner.tokens.clear();
+        self.emit_view();
+        self.notify(SocialNotice::Restricted { until });
     }
 
     /// The session is no longer valid: forget it (and say so unless `quietly`).
@@ -285,11 +348,19 @@ impl SocialService {
         let (control, mut events) = {
             // Callers may run outside the runtime (deep links arrive on the UI thread).
             let _runtime = self.inner.runtime.enter();
-            session.connect_presence(self.inner.config.presence).split()
+            if core.chat_enabled {
+                session
+                    .connect_presence_with_chat(self.inner.config.presence, core.chat_setup.clone())
+                    .split()
+            } else {
+                session.connect_presence(self.inner.config.presence).split()
+            }
         };
         control.set_status(core.activity.clone());
         // Replacing the control closes the previous connection cleanly.
         core.presence = Some(control);
+        core.chat_status = None;
+        core.chat_synced = false;
         core.state.set_connection(Connection::Connecting);
         let service = self.clone();
         self.spawn(async move {
@@ -303,6 +374,8 @@ impl SocialService {
         let mut refetch = false;
         let mut ended = false;
         let mut quietly = false;
+        let mut restricted = None;
+        let deliver;
         let notices = {
             let mut core = self.lock();
             if core.generation != generation || core.epoch != epoch {
@@ -334,11 +407,21 @@ impl SocialService {
                     ended = true;
                     quietly = core.deleting;
                 }
+                PresenceEvent::Stopped(StopReason::Restricted { until }) => {
+                    restricted = Some(*until);
+                }
                 PresenceEvent::Stopped(_) => core.presence = None,
                 _ => {}
             }
+            let chat = apply_chat(&mut core, &event);
+            deliver = chat.deliver;
+            notices.extend(chat.notices);
             notices
         };
+        if let Some(until) = restricted {
+            self.end_restricted(generation, until);
+            return;
+        }
         if ended {
             self.end_session(generation, quietly);
             return;
@@ -346,6 +429,9 @@ impl SocialService {
         self.emit_view();
         for notice in notices {
             self.notify(notice);
+        }
+        if deliver {
+            self.kick_sender();
         }
         if refetch {
             let service = self.clone();
@@ -379,6 +465,7 @@ impl SocialService {
                 self.emit_view();
             }
             Err(SocialError::Unauthorized) => self.end_session(generation, false),
+            Err(SocialError::Restricted { until }) => self.end_restricted(generation, until),
             Err(error) => tracing::info!(%error, "could not load the friend list"),
         }
     }
@@ -402,6 +489,7 @@ impl SocialService {
             Err(_) => None,
         };
         let mut ended = false;
+        let mut restricted = None;
         {
             let mut core = self.lock();
             if core.generation != generation {
@@ -414,8 +502,10 @@ impl SocialService {
                     core.state.set_me(me);
                     // The profile may come only now (the service was down at start).
                     remember_closed_invites(&mut core);
+                    open_history(&mut core);
                 }
                 Err(SocialError::Unauthorized) => ended = true,
+                Err(SocialError::Restricted { until }) => restricted = Some(until),
                 Err(error) => {
                     tracing::info!(%error, "friends service unavailable");
                     if core.state.connection() != Connection::Online {
@@ -429,11 +519,14 @@ impl SocialService {
                     core.fetched_at = Some(Instant::now());
                 }
                 Some(Err(SocialError::Unauthorized)) => ended = true,
+                Some(Err(SocialError::Restricted { until })) => restricted = Some(until),
                 Some(Err(error)) => tracing::info!(%error, "could not load the friend list"),
                 None => {}
             }
         }
-        if ended {
+        if let Some(until) = restricted {
+            self.end_restricted(generation, until);
+        } else if ended {
             self.end_session(generation, false);
         } else {
             self.emit_view();
@@ -570,6 +663,8 @@ impl SocialService {
                     core.state = SocialState::default();
                     core.state.set_me(me);
                     remember_closed_invites(&mut core);
+                    open_history(&mut core);
+                    core.restriction = None;
                     core.auth = AuthPhase::SignedIn;
                     self.start_presence(&mut core);
                 }
@@ -584,6 +679,8 @@ impl SocialService {
                         code: ErrorCode::AuthPendingNotFound,
                         ..
                     } => SignInFailure::Expired,
+                    SocialError::Restricted { .. } => SignInFailure::Restricted,
+                    SocialError::SignupsClosed { .. } => SignInFailure::SignupsClosed,
                     error if error.is_transient() => SignInFailure::Unavailable,
                     _ => SignInFailure::Failed,
                 };
@@ -591,6 +688,9 @@ impl SocialService {
                     let mut core = self.lock();
                     if core.generation == generation && core.auth == AuthPhase::SigningIn {
                         core.auth = AuthPhase::SignedOut;
+                    }
+                    if let SocialError::Restricted { until } = error {
+                        core.restriction = Some(RestrictionView { until });
                     }
                 }
                 self.emit_view();
@@ -636,6 +736,10 @@ impl SocialService {
             Err(SocialError::Unauthorized) => {
                 self.end_session(generation, false);
                 Err(SocialError::Unauthorized)
+            }
+            Err(SocialError::Restricted { until }) => {
+                self.end_restricted(generation, until);
+                Err(SocialError::Restricted { until })
             }
             Err(error) => Err(error),
         }
@@ -1365,6 +1469,9 @@ impl SocialService {
         {
             let mut core = self.lock();
             if core.generation == generation {
+                if let Some(history) = core.history.as_mut() {
+                    history.erase();
+                }
                 reset(&mut core);
             }
         }
@@ -1379,6 +1486,30 @@ impl SocialService {
     /// another computer saved in between, the newest preferences win.
     pub async fn upload_settings(&self, data: serde_json::Value) -> Result<SettingsMeta> {
         let (session, generation) = self.signed_in()?;
+        {
+            let core = self.lock();
+            if let Some(limited) = core.state.me().and_then(|me| me.limited.as_ref())
+                && limited.until > unix_now()
+                && limited
+                    .items
+                    .iter()
+                    .any(|item| item.key == LimitedKey::SettingsBackup)
+            {
+                return Err(SocialError::Limited {
+                    item: LimitedKey::SettingsBackup,
+                    until: Some(limited.until),
+                    retry_after: None,
+                });
+            }
+            if let Some(until) = core.backup_waits_until
+                && until > unix_now()
+            {
+                let left = u64::try_from(until - unix_now()).unwrap_or(0);
+                return Err(SocialError::Unavailable {
+                    retry_after: Some(Duration::from_secs(left)),
+                });
+            }
+        }
         let version = self.lock().settings_version;
         let device = self.inner.config.device.clone();
         let precondition =
@@ -1401,12 +1532,27 @@ impl SocialService {
                 self.update(generation, |core| {
                     core.settings_version = Some(shown.version);
                     core.state.set_settings_meta(Some(shown));
+                    core.backup_waits_until = None;
                 });
                 Ok(meta)
             }
             Err(SocialError::Unauthorized) => {
                 self.end_session(generation, false);
                 Err(SocialError::Unauthorized)
+            }
+            Err(SocialError::Restricted { until }) => {
+                self.end_restricted(generation, until);
+                Err(SocialError::Restricted { until })
+            }
+            // Storage protection: uploads wait until the next night (`Retry-After`).
+            Err(SocialError::Unavailable {
+                retry_after: Some(wait),
+            }) => {
+                let until = unix_now() + i64::try_from(wait.as_secs()).unwrap_or(0);
+                self.update(generation, |core| core.backup_waits_until = Some(until));
+                Err(SocialError::Unavailable {
+                    retry_after: Some(wait),
+                })
             }
             Err(error) => Err(error),
         }
@@ -1437,6 +1583,522 @@ impl SocialService {
             core.state.set_settings_meta(None);
         });
         Ok(())
+    }
+
+    // --- chat (CHAT1) ------------------------------------------------------------------------
+
+    /// Keeps the chat history under this folder (`<folder>/<account id>/`); without it, for this
+    /// run only.
+    pub fn keep_chat_in(&self, path: impl Into<PathBuf>) {
+        self.lock().chat_root = Some(path.into());
+    }
+
+    /// Chat may show (signed config `features.chat`; friends must be on too). The presence
+    /// connection asks for chat only while it may: a change reconnects it.
+    pub fn set_chat_enabled(&self, on: bool) {
+        {
+            let mut core = self.lock();
+            if core.chat_enabled == on {
+                return;
+            }
+            core.chat_enabled = on;
+            if core.auth == AuthPhase::SignedIn && core.presence.is_some() {
+                self.start_presence(&mut core);
+            }
+        }
+        self.emit_view();
+    }
+
+    /// What the view's conversation `conv` may do now: chat on, not muted, still friends or still
+    /// in the crew.
+    fn chat_writable(&self, conv: &str) -> Result<()> {
+        let core = self.lock();
+        if core.auth != AuthPhase::SignedIn {
+            return Err(SocialError::Unauthorized);
+        }
+        let status = match core.chat_status {
+            Some(status) if core.chat_enabled => status,
+            _ => return Err(SocialError::InvalidInput("chat off")),
+        };
+        if !status.on {
+            return Err(SocialError::InvalidInput("chat off"));
+        }
+        let skew = core.chat_skew_ms / 1000;
+        if status
+            .muted_until
+            .is_some_and(|until| until + skew > unix_now())
+        {
+            return Err(SocialError::ChatMuted {
+                until: status.muted_until,
+            });
+        }
+        if !conversation_writable(&core.state, conv) {
+            return Err(SocialError::InvalidInput("chat not allowed"));
+        }
+        Ok(())
+    }
+
+    /// A conversation's newest messages (`before` None) or those before a message id, oldest first.
+    pub fn chat_page(&self, conv: &str, before: Option<i64>) -> ChatPage {
+        let mut core = self.lock();
+        let viewer = viewer(&core, conv);
+        let (entries, more) = match core.history.as_mut() {
+            Some(history) => history.page(conv, before, PAGE_SIZE),
+            None => (Vec::new(), false),
+        };
+        ChatPage {
+            conv: conv.to_owned(),
+            messages: entries.iter().map(|e| entry_view(e, &viewer)).collect(),
+            more,
+        }
+    }
+
+    /// Sends a message: it shows at once (on its way) and goes when the connection lets it, in
+    /// the order typed. Returns its key. Refused at once when chat is off, the player is muted,
+    /// the conversation is not theirs to write in, or the text is empty or too long.
+    pub fn chat_send(&self, conv: &str, text: &str) -> Result<String> {
+        self.chat_writable(conv)?;
+        let text = prepare_text(text).ok_or(SocialError::InvalidInput("chat text"))?;
+        let nonce = new_nonce();
+        {
+            let mut core = self.lock();
+            let viewer = viewer(&core, conv);
+            let change = core
+                .history
+                .as_mut()
+                .and_then(|history| history.add_outgoing(conv, &text, &nonce, unix_now_ms()))
+                .ok_or(SocialError::InvalidInput("chat not allowed"))?;
+            let view = change_view(&change, &viewer);
+            core.chat_outbox.push(view);
+        }
+        self.emit_view();
+        self.kick_sender();
+        Ok(format!("n:{nonce}"))
+    }
+
+    /// "Tekrar dene" on a message that did not go.
+    pub fn chat_retry(&self, key: &str) -> Result<()> {
+        let nonce = key
+            .strip_prefix("n:")
+            .ok_or(SocialError::InvalidInput("chat message"))?;
+        let conv = {
+            let core = self.lock();
+            core.history
+                .as_ref()
+                .and_then(|history| history.outgoing_of(nonce))
+                .map(|outgoing| outgoing.conv.clone())
+                .ok_or(SocialError::InvalidInput("chat message"))?
+        };
+        self.chat_writable(&conv)?;
+        {
+            let mut core = self.lock();
+            let viewer = viewer(&core, &conv);
+            // A manual retry starts the clock again: it may go by itself after a reconnect too.
+            let at = unix_now_ms();
+            if let Some(history) = core.history.as_mut() {
+                history.restart_outgoing(nonce, at);
+                if let Some(change) = history.set_outgoing(nonce, None) {
+                    let view = change_view(&change, &viewer);
+                    core.chat_outbox.push(view);
+                }
+            }
+            core.too_fast.remove(nonce);
+        }
+        self.emit_view();
+        self.kick_sender();
+        Ok(())
+    }
+
+    /// Drops a message that did not go.
+    pub fn chat_discard(&self, key: &str) {
+        let Some(nonce) = key.strip_prefix("n:") else {
+            return;
+        };
+        {
+            let mut core = self.lock();
+            let Some(change) = core
+                .history
+                .as_mut()
+                .and_then(|history| history.discard_outgoing(nonce))
+            else {
+                return;
+            };
+            let viewer = viewer(&core, &change.conv);
+            let view = change_view(&change, &viewer);
+            core.chat_outbox.push(view);
+        }
+        self.emit_view();
+    }
+
+    /// Edits the player's own message (within 15 minutes). The new version reaches the view.
+    pub async fn chat_edit(&self, conv: &str, id: i64, text: &str) -> Result<()> {
+        self.chat_writable(conv)?;
+        let text = prepare_text(text).ok_or(SocialError::InvalidInput("chat text"))?;
+        let (control, message, generation) = {
+            let mut core = self.lock();
+            let me = core
+                .state
+                .me()
+                .map(|me| me.profile.id.clone())
+                .unwrap_or_default();
+            let skew = core.chat_skew_ms;
+            let message = core
+                .history
+                .as_mut()
+                .and_then(|history| history.message(conv, id))
+                .ok_or(SocialError::InvalidInput("chat message"))?;
+            if message.from != me {
+                return Err(SocialError::InvalidInput("chat message"));
+            }
+            if message.id + skew + EDIT_WINDOW_MS <= unix_now_ms() {
+                return Err(SocialError::Refused {
+                    status: 409,
+                    code: ErrorCode::ChatTooOld,
+                    message: String::new(),
+                });
+            }
+            let control = core
+                .presence
+                .clone()
+                .ok_or(SocialError::Unavailable { retry_after: None })?;
+            (control, message, core.generation)
+        };
+        if message.text == text {
+            return Ok(());
+        }
+        let stored = match control.chat_edit(&message, &text).await {
+            Ok(stored) => stored,
+            Err(error) => {
+                if error.code() == Some(&ErrorCode::MessageNotFound) {
+                    // Deleted meanwhile (on another device, or by a moderator).
+                    self.chat_forget(generation, conv, id);
+                }
+                return Err(error);
+            }
+        };
+        self.chat_store(generation, &stored);
+        Ok(())
+    }
+
+    /// "Herkesten sil": the player's own message (7 days), or any in a crew they lead or
+    /// moderate. Gone from the view at once; it comes back if the service refuses.
+    pub async fn chat_delete(&self, conv: &str, id: i64) -> Result<()> {
+        let (control, message, generation) = {
+            let mut core = self.lock();
+            if core.auth != AuthPhase::SignedIn {
+                return Err(SocialError::Unauthorized);
+            }
+            let message = core
+                .history
+                .as_mut()
+                .and_then(|history| history.message(conv, id))
+                .ok_or(SocialError::InvalidInput("chat message"))?;
+            let control = core
+                .presence
+                .clone()
+                .ok_or(SocialError::Unavailable { retry_after: None })?;
+            (control, message, core.generation)
+        };
+        match control.chat_delete(&message).await {
+            Ok(()) => {}
+            // Gone already (another device, a moderator): it goes here too.
+            Err(error) if error.code() == Some(&ErrorCode::MessageNotFound) => {}
+            Err(error) => return Err(error),
+        }
+        self.chat_forget(generation, conv, id);
+        Ok(())
+    }
+
+    /// Everything in a conversation is read now (it is on screen, scrolled to the newest).
+    pub fn chat_read(&self, conv: &str) {
+        let changed = self
+            .lock()
+            .history
+            .as_mut()
+            .is_some_and(|history| history.mark_read(conv));
+        if changed {
+            self.emit_view();
+        }
+    }
+
+    /// "Geçmişi temizle": the conversation's messages leave this device for good (the service's
+    /// mailbox and the other devices keep theirs).
+    pub fn chat_clear(&self, conv: &str) {
+        {
+            let mut core = self.lock();
+            let Some(change) = core
+                .history
+                .as_mut()
+                .and_then(|history| history.clear(conv))
+            else {
+                return;
+            };
+            let viewer = viewer(&core, conv);
+            let view = change_view(&change, &viewer);
+            core.chat_outbox.push(view);
+        }
+        self.emit_view();
+    }
+
+    /// A message as the service now has it (an answer to an edit): into the history and the view.
+    fn chat_store(&self, generation: u64, message: &ChatMessage) {
+        {
+            let mut core = self.lock();
+            if core.generation != generation {
+                return;
+            }
+            let viewer = viewer(&core, &message.conv);
+            if let Some(change) = core
+                .history
+                .as_mut()
+                .and_then(|history| history.put(message))
+            {
+                let view = change_view(&change, &viewer);
+                core.chat_outbox.push(view);
+            }
+        }
+        self.emit_view();
+    }
+
+    fn chat_forget(&self, generation: u64, conv: &str, id: i64) {
+        {
+            let mut core = self.lock();
+            if core.generation != generation {
+                return;
+            }
+            let viewer = viewer(&core, conv);
+            if let Some(change) = core
+                .history
+                .as_mut()
+                .and_then(|history| history.remove(conv, id))
+            {
+                let view = change_view(&change, &viewer);
+                core.chat_outbox.push(view);
+            }
+        }
+        self.emit_view();
+    }
+
+    /// Starts sending the messages that wait, unless that is under way already.
+    fn kick_sender(&self) {
+        {
+            let mut core = self.lock();
+            if core.sending {
+                return;
+            }
+            core.sending = true;
+        }
+        let service = self.clone();
+        self.spawn(async move { service.send_waiting().await });
+    }
+
+    /// Sends the waiting messages one at a time, in the order typed, while the connection is up.
+    /// A message that waited longer than the service remembers a resend is not sent by itself; it
+    /// waits for "Tekrar dene".
+    async fn send_waiting(&self) {
+        loop {
+            let next = {
+                let mut core = self.lock();
+                let online = core.state.connection() == Connection::Online
+                    && core.chat_status.is_some()
+                    && core.chat_synced;
+                let now = unix_now_ms();
+                let mut stale = Vec::new();
+                let pick = core.history.as_ref().and_then(|history| {
+                    history
+                        .outgoing()
+                        .iter()
+                        .filter(|o| o.failed.is_none())
+                        .find(|o| {
+                            if now - o.at > RESEND_WINDOW_MS {
+                                stale.push(o.nonce.clone());
+                                false
+                            } else {
+                                true
+                            }
+                        })
+                        .cloned()
+                });
+                for nonce in stale {
+                    let conv = core
+                        .history
+                        .as_ref()
+                        .and_then(|h| h.outgoing_of(&nonce))
+                        .map(|o| o.conv.clone())
+                        .unwrap_or_default();
+                    let viewer = viewer(&core, &conv);
+                    if let Some(change) = core
+                        .history
+                        .as_mut()
+                        .and_then(|h| h.set_outgoing(&nonce, Some(SendFailure::Connection)))
+                    {
+                        let view = change_view(&change, &viewer);
+                        core.chat_outbox.push(view);
+                    }
+                }
+                match (core.presence.clone(), pick) {
+                    (Some(control), Some(outgoing)) if online => {
+                        Some((control, outgoing, core.generation))
+                    }
+                    _ => {
+                        core.sending = false;
+                        None
+                    }
+                }
+            };
+            let Some((control, outgoing, generation)) = next else {
+                self.emit_view();
+                return;
+            };
+            let result = control
+                .chat_send(&outgoing.conv, &outgoing.text, &outgoing.nonce)
+                .await;
+            let mut wait = None;
+            {
+                let mut core = self.lock();
+                if core.generation != generation {
+                    core.sending = false;
+                    return;
+                }
+                let viewer = viewer(&core, &outgoing.conv);
+                let change = match result {
+                    Ok(message) => core.history.as_mut().and_then(|h| h.put(&message)),
+                    Err(error) => {
+                        let failure = failure_of(&error);
+                        if let SocialError::ChatMuted { until } = error
+                            && let Some(status) = core.chat_status.as_mut()
+                        {
+                            status.muted_until = until;
+                        }
+                        if failure == SendFailure::Off
+                            && let Some(status) = core.chat_status.as_mut()
+                        {
+                            status.on = false;
+                        }
+                        let retried = core.too_fast.contains(&outgoing.nonce);
+                        match failure {
+                            // About one a second: it goes again by itself once, after the wait.
+                            SendFailure::TooFast if !retried => {
+                                core.too_fast.insert(outgoing.nonce.clone());
+                                wait = Some(
+                                    error
+                                        .retry_after()
+                                        .unwrap_or(Duration::from_secs(1))
+                                        .min(TOO_FAST_WAIT_MAX),
+                                );
+                                None
+                            }
+                            // The connection dropped: it goes after the next connect's sync.
+                            SendFailure::Connection
+                                if core.state.connection() != Connection::Online =>
+                            {
+                                core.sending = false;
+                                drop(core);
+                                self.emit_view();
+                                return;
+                            }
+                            failure => core
+                                .history
+                                .as_mut()
+                                .and_then(|h| h.set_outgoing(&outgoing.nonce, Some(failure))),
+                        }
+                    }
+                };
+                if let Some(change) = change {
+                    let view = change_view(&change, &viewer);
+                    core.chat_outbox.push(view);
+                }
+            }
+            self.emit_view();
+            if let Some(wait) = wait {
+                tokio::time::sleep(wait).await;
+            }
+        }
+    }
+
+    // --- reports and moderators' notes (MOD1) -------------------------------------------------
+
+    /// "Rapor et": a player, a crew or a message (with the 20 messages before it this device
+    /// holds, as the moderators' context). `block` also blocks the player (players and messages).
+    /// A second report about the same thing while the first is open changes nothing; either way
+    /// the player hears "Raporun iletildi.".
+    pub async fn report(
+        &self,
+        target: ReportTarget,
+        reason: ReportReason,
+        note: Option<String>,
+        block: bool,
+    ) -> Result<()> {
+        let (wire, blocked) = {
+            let mut core = self.lock();
+            match &target {
+                ReportTarget::Player { id } => (
+                    serde_json::json!({ "kind": "player", "id": id }),
+                    Some(id.clone()),
+                ),
+                ReportTarget::Crew { id, code } => {
+                    let mut wire = serde_json::json!({ "kind": "crew", "id": id });
+                    if let Some(code) = code.as_ref().and_then(|c| normalize_team_code(c)) {
+                        wire["code"] = code.into();
+                    }
+                    (wire, None)
+                }
+                ReportTarget::Message { conv, id } => {
+                    let history = core
+                        .history
+                        .as_mut()
+                        .ok_or(SocialError::InvalidInput("chat message"))?;
+                    let message = history
+                        .message(conv, *id)
+                        .ok_or(SocialError::InvalidInput("chat message"))?;
+                    let before: Vec<serde_json::Value> = history
+                        .before(conv, *id, REPORT_CONTEXT)
+                        .iter()
+                        .map(ChatMessage::sealed)
+                        .collect();
+                    let sender = message.from.clone();
+                    (
+                        serde_json::json!({
+                            "kind": "message",
+                            "message": message.sealed(),
+                            "before": before,
+                        }),
+                        Some(sender),
+                    )
+                }
+            }
+        };
+        let block = block && blocked.is_some();
+        // Taken before the call: the block also reaches the socket, which may take them off the
+        // lists before the answer comes.
+        let profile = blocked
+            .as_deref()
+            .filter(|_| block)
+            .and_then(|id| self.lock().state.profile(id));
+        let (_, generation) = self
+            .call(
+                |session| async move { session.report(wire, reason, note.as_deref(), block).await },
+            )
+            .await?;
+        if let (true, Some(id)) = (block, blocked) {
+            self.update(generation, |core| match profile {
+                Some(profile) => core.state.blocked(profile),
+                None => core.state.friend_removed(&id),
+            });
+        }
+        Ok(())
+    }
+
+    /// The launcher showed these moderators' notes: they leave the view and the service hears it.
+    pub async fn notices_seen(&self, ids: Vec<String>) {
+        let generation = self.lock().generation;
+        self.update(generation, |core| core.state.notices_seen(&ids));
+        if let Err(error) = self
+            .call(|session| async move { session.notices_seen(&ids).await })
+            .await
+        {
+            tracing::info!(%error, "the notes' seen mark waits for the next start");
+        }
     }
 
     // --- the game -------------------------------------------------------------------------
@@ -1520,6 +2182,16 @@ fn reset(core: &mut Core) {
     core.groups_saving = false;
     core.groups_next = None;
     core.groups_saved = None;
+    core.history = None;
+    core.chat_setup.since.store(0, Ordering::Relaxed);
+    core.chat_status = None;
+    core.chat_skew_ms = 0;
+    core.chat_synced = false;
+    core.chat_backlog.clear();
+    core.chat_outbox.clear();
+    core.sending = false;
+    core.too_fast.clear();
+    core.backup_waits_until = None;
 }
 
 /// The categories the UI wants saved, checked as the service will check them.
@@ -1551,6 +2223,316 @@ fn groups_document(groups: Vec<FriendGroup>, members: Vec<GroupMember>) -> Resul
         }
     }
     Ok(document)
+}
+
+/// The chat history of the signed-in account, once its id is known; chat events that waited for
+/// it are applied now.
+fn open_history(core: &mut Core) {
+    let Some(me) = core.state.me().map(|me| me.profile.id.clone()) else {
+        return;
+    };
+    if core
+        .history
+        .as_ref()
+        .is_some_and(|history| history.me() == me)
+    {
+        return;
+    }
+    let history = History::open(core.chat_root.as_deref(), &me);
+    core.chat_setup
+        .since
+        .store(history.sync_since(), Ordering::Relaxed);
+    core.history = Some(history);
+    for event in std::mem::take(&mut core.chat_backlog) {
+        let outcome = apply_chat(core, &event);
+        // Messages that waited are no news: they show as unread.
+        drop(outcome.notices);
+    }
+}
+
+/// What a chat event did: changes for the UI (in the outbox), news worth telling, and whether
+/// waiting messages may go now.
+#[derive(Default)]
+struct ChatOutcome {
+    notices: Vec<SocialNotice>,
+    deliver: bool,
+}
+
+/// How the player sees a conversation's messages (their times, what they may still do).
+fn viewer(core: &Core, conv: &str) -> Viewer {
+    let me = core
+        .state
+        .me()
+        .map(|me| me.profile.id.clone())
+        .unwrap_or_default();
+    let moderates = match Conversation::parse(conv) {
+        Some(Conversation::Crew(team)) => core.state.crew(&team).is_some_and(|entry| {
+            entry
+                .team
+                .members
+                .iter()
+                .any(|m| m.profile.id == me && (m.role == TeamRole::Founder || m.moderator))
+        }),
+        _ => false,
+    };
+    Viewer {
+        me,
+        skew_ms: core.chat_skew_ms,
+        now_ms: unix_now_ms(),
+        moderates,
+    }
+}
+
+/// The player may write in `conv` now: a crew they are in, or a friend (both ways).
+fn conversation_writable(state: &SocialState, conv: &str) -> bool {
+    let Some(me) = state.me().map(|me| me.profile.id.as_str()) else {
+        return false;
+    };
+    match Conversation::parse(conv) {
+        Some(Conversation::Crew(team)) => state.crew(&team).is_some(),
+        Some(direct @ Conversation::Direct(..)) => direct
+            .peer(me)
+            .is_some_and(|peer| state.friends().iter().any(|f| f.id == peer)),
+        None => false,
+    }
+}
+
+/// The sender's name as the lists show it (a friend, or a crewmate).
+fn sender_name(state: &SocialState, id: &str) -> Option<String> {
+    if let Some(friend) = state.friends().into_iter().find(|f| f.id == id) {
+        return Some(friend.name);
+    }
+    state
+        .crews()
+        .iter()
+        .flat_map(|entry| entry.team.members.iter())
+        .find(|m| m.profile.id == id)
+        .map(|m| m.profile.name().to_owned())
+}
+
+/// Applies a chat event: the state of this connection, the history, the UI's changes.
+fn apply_chat(core: &mut Core, event: &PresenceEvent) -> ChatOutcome {
+    let mut outcome = ChatOutcome::default();
+    let now_ms = unix_now_ms();
+    match event {
+        PresenceEvent::Connected { chat, clock, .. } => {
+            core.chat_status = *chat;
+            core.chat_synced = false;
+            if let Some(clock) = clock {
+                core.chat_skew_ms = now_ms - clock * 1_000;
+            }
+            return outcome;
+        }
+        PresenceEvent::ChatState(status) => {
+            core.chat_status = Some(*status);
+            return outcome;
+        }
+        PresenceEvent::ChatSynced { clock } => {
+            if let Some(clock) = clock {
+                core.chat_skew_ms = now_ms - clock;
+            }
+            core.chat_synced = true;
+            outcome.deliver = true;
+            return outcome;
+        }
+        PresenceEvent::Disconnected { .. } | PresenceEvent::Stopped(_) => {
+            core.chat_synced = false;
+            return outcome;
+        }
+        PresenceEvent::ChatMessage(_)
+        | PresenceEvent::ChatEdited(_)
+        | PresenceEvent::ChatDeleted { .. }
+        | PresenceEvent::ChatSync { .. } => {}
+        _ => return outcome,
+    }
+    if core.history.is_none() {
+        if core.chat_backlog.len() < CHAT_BACKLOG_MAX {
+            core.chat_backlog.push(event.clone());
+        }
+        return outcome;
+    }
+    let mut changes: Vec<Change> = Vec::new();
+    let mut news: Option<ChatMessage> = None;
+    if let Some(history) = core.history.as_mut() {
+        let me = history.me().to_owned();
+        match event {
+            PresenceEvent::ChatMessage(message) => {
+                if let Some(change) = history.put(message) {
+                    if message.from != me {
+                        news = Some(message.clone());
+                    }
+                    changes.push(change);
+                }
+            }
+            PresenceEvent::ChatEdited(message) => changes.extend(history.put(message)),
+            PresenceEvent::ChatDeleted { conv, id, .. } => {
+                changes.extend(history.remove(conv, *id));
+            }
+            PresenceEvent::ChatSync {
+                conv,
+                messages,
+                deleted,
+            } => {
+                let mut list = Vec::new();
+                for message in messages {
+                    list.extend(history.put(message));
+                }
+                for deletion in deleted {
+                    list.extend(history.remove(conv, deletion.id));
+                }
+                changes.extend(merge(list));
+            }
+            _ => {}
+        }
+        core.chat_setup
+            .since
+            .store(history.sync_since(), Ordering::Relaxed);
+    }
+    for change in changes {
+        let viewer = viewer(core, &change.conv);
+        core.chat_outbox.push(change_view(&change, &viewer));
+    }
+    if let Some(message) = news {
+        let viewer = viewer(core, &message.conv);
+        let crew = match Conversation::parse(&message.conv) {
+            Some(Conversation::Crew(team)) => Some(team),
+            _ => None,
+        };
+        outcome.notices.push(SocialNotice::ChatMessage {
+            conv: message.conv.clone(),
+            message: Box::new(message_view(&message, &viewer)),
+            name: sender_name(&core.state, &message.from),
+            crew,
+        });
+    }
+    outcome
+}
+
+/// The chat part of the view: the conversations this device holds and the player's crews.
+fn chat_view(core: &mut Core, now: i64) -> Option<ChatView> {
+    if !core.chat_enabled {
+        return None;
+    }
+    let status = core.chat_status?;
+    let me = core.state.me()?.profile.id.clone();
+    let skew = core.chat_skew_ms;
+    let friends = core.state.friends();
+    let blocked: HashSet<String> = core
+        .state
+        .blocked_users()
+        .into_iter()
+        .map(|profile| profile.id)
+        .collect();
+    let crews: Vec<(String, String)> = core
+        .state
+        .crews()
+        .iter()
+        .map(|entry| (entry.team.id.clone(), entry.team.name.clone()))
+        .collect();
+    let history = core.history.as_mut()?;
+    let mut titles: Vec<(String, String)> = Vec::new();
+    let mut failed: HashSet<String> = HashSet::new();
+    for outgoing in history.outgoing() {
+        if outgoing.failed.is_some() {
+            failed.insert(outgoing.conv.clone());
+        }
+    }
+    let waiting: HashSet<String> = history
+        .outgoing()
+        .iter()
+        .map(|outgoing| outgoing.conv.clone())
+        .collect();
+    let mut list: Vec<ConversationView> = Vec::new();
+    for (conv, meta) in history.conversations() {
+        let Some(kind) = Conversation::parse(conv) else {
+            continue;
+        };
+        if meta.last.is_none() && !waiting.contains(conv) {
+            continue;
+        }
+        let (peer, crew, known, writable) = match &kind {
+            Conversation::Crew(team) => {
+                let known = crews
+                    .iter()
+                    .find(|(id, _)| id == team)
+                    .map(|(_, n)| n.clone());
+                let writable = known.is_some();
+                (None, Some(team.clone()), known, writable)
+            }
+            Conversation::Direct(..) => {
+                let Some(peer) = kind.peer(&me) else {
+                    continue;
+                };
+                if blocked.contains(peer) {
+                    continue;
+                }
+                let known = friends
+                    .iter()
+                    .find(|f| f.id == peer)
+                    .map(|f| f.name.clone());
+                let writable = known.is_some();
+                (Some(peer.to_owned()), None, known, writable)
+            }
+        };
+        if let Some(name) = &known
+            && meta.title.as_deref() != Some(name.as_str())
+        {
+            titles.push((conv.to_owned(), name.clone()));
+        }
+        list.push(ConversationView {
+            id: conv.to_owned(),
+            peer,
+            crew,
+            title: known.or_else(|| meta.title.clone()),
+            last: meta.last.as_ref().map(|last| LastMessageView {
+                from: last.f.clone(),
+                mine: last.f == me,
+                text: last.t.clone(),
+                at: last.i + skew,
+            }),
+            unread: meta.unread,
+            writable,
+            failed: failed.contains(conv),
+        });
+    }
+    // Every crew of the player's has its chat, messages or not.
+    for (team, name) in &crews {
+        let conv = format!("c:{team}");
+        if !list.iter().any(|c| c.id == conv) {
+            list.push(ConversationView {
+                id: conv,
+                peer: None,
+                crew: Some(team.clone()),
+                title: Some(name.clone()),
+                last: None,
+                unread: 0,
+                writable: true,
+                failed: false,
+            });
+        }
+    }
+    for (conv, title) in titles {
+        history.set_title(&conv, &title);
+    }
+    list.sort_by_key(|c| std::cmp::Reverse(c.last.as_ref().map_or(i64::MIN, |last| last.at)));
+    Some(ChatView {
+        on: status.on,
+        mailbox: status.mailbox,
+        per_day: status.per_day,
+        muted_until: status
+            .muted_until
+            .map(|until| until + skew / 1_000)
+            .filter(|until| *until > now),
+        conversations: list,
+    })
+}
+
+fn unix_now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| {
+            i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX)
+        })
 }
 
 fn build_view(core: &mut Core) -> SocialView {
@@ -1622,6 +2604,11 @@ fn build_view(core: &mut Core) -> SocialView {
         } else {
             None
         },
+        chat_allowed: core.chat_enabled,
+        chat: chat_view(core, now),
+        notices: core.state.notices(),
+        restriction: core.restriction,
+        backup_waits_until: core.backup_waits_until.filter(|until| *until > now),
     }
 }
 
@@ -1689,7 +2676,7 @@ mod tests {
                 .iter()
                 .filter_map(|update| match update {
                     SocialUpdate::Notice(notice) => Some(notice.clone()),
-                    SocialUpdate::View(_) => None,
+                    SocialUpdate::View(_) | SocialUpdate::Chat(_) => None,
                 })
                 .collect()
         }
@@ -1761,6 +2748,7 @@ mod tests {
             }],
             calls: vec![],
             clock: None,
+            chat: None,
         };
         let signed_in = |view: &SocialView| view.loaded && view.auth == AuthPhase::SignedIn;
 

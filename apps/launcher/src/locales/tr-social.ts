@@ -10,7 +10,7 @@ export const trSocial = {
   },
   consent: {
     title: "Arkadaşlarınla birlikte oyna",
-    body: "Discord hesabınla giriş yaparsın. Arkadaşların adını, profil fotoğrafını ve ne oynadığını görür; e-postan, şifren ve mesajların bize gelmez.",
+    body: "Discord hesabınla giriş yaparsın. Arkadaşların adını, profil fotoğrafını ve ne oynadığını görür; e-postan ve şifren bize gelmez.",
     privacy: "Gizlilik",
     signIn: "Discord ile giriş yap",
     waiting: "Tarayıcıda Discord'u onayla",

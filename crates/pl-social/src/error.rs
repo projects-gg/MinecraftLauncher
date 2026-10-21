@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::model::SettingsMeta;
+use crate::model::{ChatRejection, LimitedKey, SettingsMeta};
 
 /// Stable error codes of the service (`{"error": {"code": …}}`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -82,6 +82,30 @@ pub enum ErrorCode {
     LimitCrews,
     /// A new crew order did not name exactly the player's crews: read the list again.
     CrewsChanged,
+    /// The account is suspended or banned from the social features (MOD1).
+    AccountRestricted,
+    /// A limited account ("Sınırlı hesap") may not do this, or not more today (SPAM1).
+    AccountLimited,
+    /// No new accounts are made right now (the daily cap, or storage protection).
+    SignupsClosed,
+    /// Moderators reset the crew's name, tag and motto; they stay locked for a while.
+    TeamTextLocked,
+    /// Nothing the player may report there (or it does not exist).
+    TargetNotFound,
+    /// At most 1,000 blocks.
+    LimitBlocks,
+    /// Chat is switched off, or not offered (CHAT1).
+    ChatOff,
+    /// A moderator muted the player in chat.
+    ChatMuted,
+    /// A link, a phone number or a listed word.
+    ChatRejected,
+    /// The message does not check out, or it was deleted.
+    MessageNotFound,
+    /// Not the player's message (and not their crew's to moderate).
+    ChatNotPermitted,
+    /// Too late to edit (15 minutes) or delete (7 days).
+    ChatTooOld,
     UpgradeRequired,
     RateLimited,
     Internal,
@@ -141,6 +165,18 @@ const CODES: &[(&str, ErrorCode)] = &[
     ("call_server_hidden", ErrorCode::CallServerHidden),
     ("limit_crews", ErrorCode::LimitCrews),
     ("crews_changed", ErrorCode::CrewsChanged),
+    ("account_restricted", ErrorCode::AccountRestricted),
+    ("account_limited", ErrorCode::AccountLimited),
+    ("signups_closed", ErrorCode::SignupsClosed),
+    ("team_text_locked", ErrorCode::TeamTextLocked),
+    ("target_not_found", ErrorCode::TargetNotFound),
+    ("limit_blocks", ErrorCode::LimitBlocks),
+    ("chat_off", ErrorCode::ChatOff),
+    ("chat_muted", ErrorCode::ChatMuted),
+    ("chat_rejected", ErrorCode::ChatRejected),
+    ("message_not_found", ErrorCode::MessageNotFound),
+    ("chat_not_permitted", ErrorCode::ChatNotPermitted),
+    ("chat_too_old", ErrorCode::ChatTooOld),
     ("upgrade_required", ErrorCode::UpgradeRequired),
     ("rate_limited", ErrorCode::RateLimited),
     ("internal", ErrorCode::Internal),
@@ -201,6 +237,30 @@ pub enum SocialError {
     Protocol(String),
     #[error("invalid input: {0}")]
     InvalidInput(&'static str),
+    /// The account is suspended (until `until`, Unix seconds) or banned (`None`) from the social
+    /// features: every session ended (MOD1).
+    #[error("the account is restricted")]
+    Restricted { until: Option<i64> },
+    /// A limited account may not do this (`item`), or not more today (`retry_after` until the
+    /// next day). The limits end at `until` (Unix seconds; SPAM1).
+    #[error("a limited account cannot do this: {item:?}")]
+    Limited {
+        item: LimitedKey,
+        until: Option<i64>,
+        retry_after: Option<Duration>,
+    },
+    /// No new accounts are made right now; existing ones sign in as usual.
+    #[error("no new accounts right now")]
+    SignupsClosed { retry_after: Option<Duration> },
+    /// Moderators reset the crew's name, tag and motto; they stay locked until `until`.
+    #[error("the crew's texts are locked")]
+    TextLocked { until: Option<i64> },
+    /// The service turned a chat text away: a link, a phone number or a listed word.
+    #[error("chat text refused: {reason:?}")]
+    ChatRejected { reason: ChatRejection },
+    /// A moderator muted the player in chat until `until` (Unix seconds, the hub's clock).
+    #[error("muted in chat")]
+    ChatMuted { until: Option<i64> },
 }
 
 impl SocialError {
@@ -208,13 +268,22 @@ impl SocialError {
     pub fn code(&self) -> Option<&ErrorCode> {
         match self {
             Self::Refused { code, .. } => Some(code),
+            Self::Restricted { .. } => Some(&ErrorCode::AccountRestricted),
+            Self::Limited { .. } => Some(&ErrorCode::AccountLimited),
+            Self::SignupsClosed { .. } => Some(&ErrorCode::SignupsClosed),
+            Self::TextLocked { .. } => Some(&ErrorCode::TeamTextLocked),
+            Self::ChatRejected { .. } => Some(&ErrorCode::ChatRejected),
+            Self::ChatMuted { .. } => Some(&ErrorCode::ChatMuted),
             _ => None,
         }
     }
 
     pub fn retry_after(&self) -> Option<Duration> {
         match self {
-            Self::RateLimited { retry_after } | Self::Unavailable { retry_after } => *retry_after,
+            Self::RateLimited { retry_after }
+            | Self::Unavailable { retry_after }
+            | Self::SignupsClosed { retry_after }
+            | Self::Limited { retry_after, .. } => *retry_after,
             _ => None,
         }
     }
@@ -254,6 +323,12 @@ struct ErrorBody {
     retry_after: Option<u64>,
     #[serde(default)]
     current: Option<SettingsMeta>,
+    /// Unix seconds, or null (a ban): `account_restricted`, `account_limited`, `team_text_locked`.
+    #[serde(default)]
+    until: Option<i64>,
+    /// `account_limited`: what is limited.
+    #[serde(default)]
+    item: Option<String>,
 }
 
 /// Maps a non-success response. Bodies that are not the service's JSON envelope (for example a
@@ -276,6 +351,20 @@ pub(crate) fn from_response(status: u16, retry_after: Option<&str>, body: &[u8])
             current: body.current,
         },
         (500..=599, _) => SocialError::Unavailable { retry_after },
+        (403, Some(body)) if body.code == "account_restricted" => {
+            SocialError::Restricted { until: body.until }
+        }
+        (403, Some(body)) if body.code == "account_limited" => SocialError::Limited {
+            item: LimitedKey::parse(body.item.as_deref().unwrap_or_default()),
+            until: body.until,
+            retry_after,
+        },
+        (403, Some(body)) if body.code == "signups_closed" => {
+            SocialError::SignupsClosed { retry_after }
+        }
+        (403, Some(body)) if body.code == "team_text_locked" => {
+            SocialError::TextLocked { until: body.until }
+        }
         (_, Some(body)) => SocialError::Refused {
             status,
             code: ErrorCode::parse(&body.code),
@@ -345,5 +434,70 @@ mod tests {
             from_response(418, None, b"teapot"),
             SocialError::Protocol(_)
         ));
+    }
+
+    #[test]
+    fn restrictions_limits_and_closed_sign_ups_keep_their_details() {
+        let banned = br#"{"error":{"code":"account_restricted","message":"x","until":null}}"#;
+        assert!(matches!(
+            from_response(403, None, banned),
+            SocialError::Restricted { until: None }
+        ));
+        let suspended =
+            br#"{"error":{"code":"account_restricted","message":"x","until":1792600000}}"#;
+        let error = from_response(403, None, suspended);
+        assert!(matches!(
+            error,
+            SocialError::Restricted {
+                until: Some(1_792_600_000)
+            }
+        ));
+        assert_eq!(error.code(), Some(&ErrorCode::AccountRestricted));
+
+        let limited = br#"{"error":{"code":"account_limited","message":"x","item":"crew_invites",
+            "until":1792600000,"retryAfter":3600}}"#;
+        match from_response(403, None, limited) {
+            SocialError::Limited {
+                item,
+                until,
+                retry_after,
+            } => {
+                assert_eq!(item, LimitedKey::CrewInvites);
+                assert_eq!(until, Some(1_792_600_000));
+                assert_eq!(retry_after, Some(Duration::from_secs(3_600)));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        let unknown = br#"{"error":{"code":"account_limited","message":"x","item":"rockets"}}"#;
+        assert!(matches!(
+            from_response(403, None, unknown),
+            SocialError::Limited {
+                item: LimitedKey::Other,
+                ..
+            }
+        ));
+        let closed = br#"{"error":{"code":"signups_closed","message":"x","retryAfter":7200}}"#;
+        assert_eq!(
+            from_response(403, None, closed).retry_after(),
+            Some(Duration::from_secs(7_200))
+        );
+        let locked = br#"{"error":{"code":"team_text_locked","message":"x","until":1792600000}}"#;
+        assert!(matches!(
+            from_response(403, None, locked),
+            SocialError::TextLocked {
+                until: Some(1_792_600_000)
+            }
+        ));
+        // Any other 403 stays a refusal with its code.
+        let founder = br#"{"error":{"code":"team_founder_only","message":"x"}}"#;
+        assert_eq!(
+            from_response(403, None, founder).code(),
+            Some(&ErrorCode::TeamFounderOnly)
+        );
+        let target = br#"{"error":{"code":"target_not_found","message":"x"}}"#;
+        assert_eq!(
+            from_response(404, None, target).code(),
+            Some(&ErrorCode::TargetNotFound)
+        );
     }
 }

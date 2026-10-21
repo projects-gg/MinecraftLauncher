@@ -2,19 +2,47 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import {
   HIDDEN_SNAPSHOT,
+  type ReportTarget,
   type SignInFailure,
+  type SocialProfile,
   type SocialSnapshot,
   type StatusMode,
 } from "@/lib/api/social-types";
+import type { ChatMutes } from "./chat/conversations";
 import type { HomeHint } from "./model";
 
-export type SocialPage = "list" | "add" | "settings" | "team";
+export type SocialPage = "list" | "add" | "settings" | "team" | "chat";
+
+/** The list page's two halves: friends, and the conversations ("Mesajlar"). */
+export type ListTab = "friends" | "messages";
+
+/** A crew page shows the crew, or its chat ("Sohbet"). */
+export type CrewPane = "crew" | "chat";
+
+/** What "Rapor et" is about, with what the dialog shows of it. */
+export interface ReportRequest {
+  target: ReportTarget;
+  /** The player, the crew or the message's sender, as the lists show them. */
+  name: string;
+  /** Their picture (a player or a sender). */
+  person?: Pick<SocialProfile, "name" | "avatar" | "avatarUrl">;
+  /** A crew's look. */
+  crew?: { emblem: string; color: string; frame: string };
+  /** The reported message's text. */
+  text?: string;
+  /** A crew invite: the player may report the inviter instead of the crew. */
+  inviter?: {
+    target: ReportTarget;
+    name: string;
+    person: Pick<SocialProfile, "name" | "avatar" | "avatarUrl">;
+  };
+}
 
 /** Where a menu sends the player on the team page: editing, the invite list, or leaving. */
 export type TeamIntent = "edit" | "invite" | "leave";
 
 /** Pages deeper in the panel than the list slide in from the right. */
-const DEPTH: Record<SocialPage, number> = { list: 0, add: 1, settings: 1, team: 1 };
+const DEPTH: Record<SocialPage, number> = { list: 0, add: 1, settings: 1, team: 1, chat: 2 };
 
 interface SocialUi {
   /** The latest snapshot from the backend (hidden until the first one arrives). */
@@ -88,6 +116,22 @@ interface SocialUi {
   /** When the player last called from here (ms), for the five minutes between calls. */
   lastCallAt: number | null;
   setCallWait: (change: { refusedUntil?: number; lastCallAt?: number }) => void;
+
+  /** The list page shows friends or the conversations (this session only). */
+  listTab: ListTab;
+  setListTab: (tab: ListTab) => void;
+  /** The crew page shows the crew or its chat (this session only). */
+  crewPane: CrewPane;
+  setCrewPane: (pane: CrewPane) => void;
+  /** The conversation the chat page shows, and the page it came from (back goes there). */
+  chatConv: string | null;
+  chatFrom: SocialPage;
+  /** Opens a conversation: a friend's on the chat page, a crew's on its crew page. */
+  openChat: (conv: string, options?: { from?: SocialPage }) => void;
+  /** "Rapor et" is open about this. */
+  report: ReportRequest | null;
+  openReport: (request: ReportRequest) => void;
+  closeReport: () => void;
 }
 
 export const useSocialUi = create<SocialUi>()((set, get) => ({
@@ -178,6 +222,30 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
       callRefusedUntil: refusedUntil ?? s.callRefusedUntil,
       lastCallAt: lastCallAt ?? s.lastCallAt,
     })),
+
+  listTab: "friends",
+  setListTab: (listTab) => set({ listTab }),
+  crewPane: "crew",
+  setCrewPane: (crewPane) => set({ crewPane }),
+  chatConv: null,
+  chatFrom: "list",
+  openChat: (conv, options) => {
+    const s = get();
+    if (conv.startsWith("c:")) {
+      // A crew's chat lives on its crew page.
+      if (!s.open) s.openPanel({ page: "team" });
+      else s.goTo("team");
+      set({ crewTab: conv.slice(2), crewPane: "chat" });
+      return;
+    }
+    const from = options?.from ?? (s.open && s.page !== "chat" ? s.page : "list");
+    if (!s.open) s.openPanel({ page: "chat" });
+    else s.goTo("chat");
+    set({ chatConv: conv, chatFrom: from });
+  },
+  report: null,
+  openReport: (report) => set({ report }),
+  closeReport: () => set({ report: null }),
 }));
 
 /** Friend preferences kept on this computer (and in the settings backup). */
@@ -205,6 +273,12 @@ interface SocialPrefs {
   /** Folded friend categories and the team section (a view of this computer only: the
    * categories themselves live with the account). */
   collapsed: string[];
+  /** "Ekip sohbeti bildirimleri": crew chat messages are told like direct ones (off by default:
+   * crew chat only counts unread). */
+  notifyCrewChat: boolean;
+  /** Conversations muted on this computer ("Sessize al"): until when (ms), or null until unmuted. */
+  chatMutes: ChatMutes;
+  setChatMute: (conv: string, until: number | null | undefined) => void;
   setConsent: () => void;
   toggleFavorite: (id: string) => void;
   setOnlineAlert: (id: string, on: boolean) => void;
@@ -215,7 +289,13 @@ interface SocialPrefs {
 
 export type SocialPrefValues = Omit<
   SocialPrefs,
-  "setConsent" | "toggleFavorite" | "setOnlineAlert" | "closeHint" | "toggleCollapsed" | "set"
+  | "setConsent"
+  | "toggleFavorite"
+  | "setOnlineAlert"
+  | "closeHint"
+  | "toggleCollapsed"
+  | "set"
+  | "setChatMute"
 >;
 
 export const useSocialPrefs = create<SocialPrefs>()(
@@ -232,6 +312,20 @@ export const useSocialPrefs = create<SocialPrefs>()(
       backupFingerprint: null,
       closedHints: [],
       collapsed: [],
+      notifyCrewChat: false,
+      chatMutes: {},
+      setChatMute: (conv, until) =>
+        set((s) => {
+          const next: Record<string, number | null> = { ...s.chatMutes };
+          if (until === undefined) delete next[conv];
+          else next[conv] = until;
+          // Timed mutes that ended go (the list stays small).
+          const now = Date.now();
+          for (const [key, value] of Object.entries(next)) {
+            if (value !== null && value <= now) delete next[key];
+          }
+          return { chatMutes: next };
+        }),
       setConsent: () => set({ consentAt: Date.now() }),
       toggleFavorite: (id) =>
         set((s) => ({

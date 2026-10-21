@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type {
+  ChatState,
   CrewCall,
   Friend,
   FriendRequest,
@@ -301,20 +302,49 @@ describe("crew notices", () => {
     expect(whatWaits({ incoming: [], invites: [], calls: [open] }, true, NOW)).toEqual({
       asks: false,
       call: open,
+      messages: 0,
     });
     // Both at once: both are said.
     const both = { incoming: [{} as FriendRequest], invites: [], calls: [open] };
-    expect(whatWaits(both, true, NOW)).toEqual({ asks: true, call: open });
+    expect(whatWaits(both, true, NOW)).toEqual({ asks: true, call: open, messages: 0 });
     // An answered call, the player's own call and a call not heard wait for nothing.
     for (const view of [
       { incoming: [], invites: [], calls: [call({ myAnswer: "soon" })] },
       { incoming: [], invites: [], calls: [call({ mine: true })] },
     ]) {
-      expect(whatWaits(view, true, NOW)).toEqual({ asks: false, call: null });
+      expect(whatWaits(view, true, NOW)).toEqual({ asks: false, call: null, messages: 0 });
     }
     expect(
       whatWaits({ incoming: [], invites: [{} as SocialInvite], calls: [open] }, false, NOW),
-    ).toEqual({ asks: true, call: null });
+    ).toEqual({ asks: true, call: null, messages: 0 });
+  });
+
+  it("counts unread direct messages, not crew chat or conversations muted here (CHAT1)", () => {
+    const conversation = (id: string, unread: number, extra: object) => ({
+      id,
+      unread,
+      writable: true,
+      failed: false,
+      ...extra,
+    });
+    const chat: ChatState = {
+      on: true,
+      mailbox: true,
+      perDay: 500,
+      conversations: [
+        conversation("d:1:2", 2, { peer: "2" }),
+        conversation("d:1:3", 1, { peer: "3" }),
+        conversation("c:00000000000000aa", 7, { crew: "00000000000000aa" }),
+      ],
+    };
+    const view = { incoming: [], invites: [], calls: [], chat };
+    expect(whatWaits(view, true, NOW).messages).toBe(3);
+    expect(somethingWaits(view, true, NOW)).toBe(true);
+    // Muted here for an hour, then heard again; muted until unmuted stays quiet.
+    const mutes = { "d:1:2": NOW + 3_600_000, "d:1:3": null };
+    expect(whatWaits(view, true, NOW, mutes).messages).toBe(0);
+    expect(somethingWaits(view, true, NOW, mutes)).toBe(false);
+    expect(whatWaits(view, true, NOW + 3_600_001, mutes).messages).toBe(2);
   });
 
   it("carries the crew switches in the settings backup, older backups keeping the defaults", () => {

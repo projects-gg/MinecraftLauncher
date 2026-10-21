@@ -1,13 +1,16 @@
 // One friend in the list: picture with presence, name, where they are, and "Katıl" when they are
 // on projects.gg. The row opens their card (beside the panel; a click, Enter or a double click):
-// join, "Birlikte oyna", "Discord'dan mesaj at", favourite, the online notice, and in a quieter
-// corner remove and block, each confirmed in place with one sentence. The same actions are in the
-// row's menu: a right click, Shift+F10 or the menu key, or its "…". With several crews (TEAM4)
-// "Ekibe davet et" asks which crew (a menu of them, each with its mark).
+// join, "Birlikte oyna", "Mesaj" (chat, CHAT1), "Discord'dan mesaj at", favourite, the online
+// notice, and in a quieter corner remove, block and "Rapor et" (MOD1), the first two confirmed in
+// place with one sentence. The same actions are in the row's menu: a right click, Shift+F10 or
+// the menu key, or its "…". With several crews (TEAM4) "Ekibe davet et" asks which crew (a menu
+// of them, each with its mark).
 import {
   Bell,
+  ChatCircle,
   DiscordLogo,
   DotsThree,
+  Flag,
   FolderSimple,
   FolderSimplePlus,
   PaperPlaneTilt,
@@ -40,6 +43,7 @@ import type { Friend, FriendGroup, SocialTeam } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
 import { useLaunch } from "@/stores/launch";
 import { attempt, inviteCoolingDown, inviteFriend } from "./actions";
+import { directConversation } from "./chat/conversations";
 import type { InviteState } from "./crews";
 import { DiscordButton } from "./discord-button";
 import { openInDiscord } from "./discord-link";
@@ -89,6 +93,24 @@ function crewInviteItems(
 
 // In the interface's language, looked up at each call (the language can change live).
 const dateFormat = () => dateTimeFormat({ day: "numeric", month: "long", year: "numeric" });
+
+/** "Mesaj": a friend's conversation (chat on), or nothing to offer. */
+function useOpenChat(friend: Pick<Friend, "id">): (() => void) | null {
+  const chat = useSocialUi((s) => Boolean(s.view.chat));
+  const me = useSocialUi((s) => s.view.me?.id);
+  const openChat = useSocialUi((s) => s.openChat);
+  if (!chat || !me) return null;
+  return () => openChat(directConversation(me, friend.id), { from: "list" });
+}
+
+/** "Rapor et" about a friend. */
+function reportFriend(friend: Friend) {
+  useSocialUi.getState().openReport({
+    target: { kind: "player", id: friend.id },
+    name: friend.name,
+    person: friend,
+  });
+}
 
 /**
  * "Birlikte oyna" is offered only from a server the invite will carry: projects.gg, or another
@@ -167,6 +189,7 @@ function FriendCard({
   const [busy, setBusy] = useState(false);
   const joinable = friend.state === "playing" && isJoinable(friend.game);
   const coolingDown = inviteCoolingDown(friend.id, cooldown);
+  const openChat = useOpenChat(friend);
 
   const run = async (action: "remove" | "block") => {
     setBusy(true);
@@ -234,6 +257,19 @@ function FriendCard({
             onClick={() => void inviteFriend(friend)}
           >
             {coolingDown ? t("social.actions.invited") : t("social.actions.invite")}
+          </Button>
+        ) : null}
+        {openChat ? (
+          <Button
+            variant={joinable ? "secondary" : "primary"}
+            className="w-full"
+            icon={<ChatCircle size={16} weight={joinable ? "regular" : "fill"} />}
+            onClick={() => {
+              onDone();
+              openChat();
+            }}
+          >
+            {t("chat.actions.message")}
           </Button>
         ) : null}
         <DiscordButton className="w-full" onClick={() => void openInDiscord(friend)}>
@@ -368,7 +404,16 @@ function FriendCard({
                   </motion.span>
                 }
               />
-              <MoreMenu onPick={setConfirm} />
+              <MoreMenu
+                onPick={(action) => {
+                  if (action === "report") {
+                    onDone();
+                    reportFriend(friend);
+                  } else {
+                    setConfirm(action);
+                  }
+                }}
+              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -377,7 +422,7 @@ function FriendCard({
   );
 }
 
-function MoreMenu({ onPick }: { onPick: (action: "remove" | "block") => void }) {
+function MoreMenu({ onPick }: { onPick: (action: "remove" | "block" | "report") => void }) {
   const { t } = useTranslation();
   const calm = useCalm();
   const [open, setOpen] = useState(false);
@@ -428,6 +473,13 @@ function MoreMenu({ onPick }: { onPick: (action: "remove" | "block") => void }) 
                   <Prohibit size={16} aria-hidden />
                   {t("social.actions.block")}
                 </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  onSelect={() => onPick("report")}
+                  className={cn(menuItemClass, "text-bone-100")}
+                >
+                  <Flag size={16} className="text-ash-300" aria-hidden />
+                  {t("reports.action")}
+                </DropdownMenu.Item>
               </motion.div>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
@@ -469,6 +521,7 @@ export function FriendRow({
   const joinable = friend.state === "playing" && isJoinable(friend.game);
   const coolingDown = inviteCoolingDown(friend.id, cooldown);
   const line = presenceLine(friend, t);
+  const openChat = useOpenChat(friend);
 
   // Remove and block ask first, in the card: it opens at the question once the menu is gone.
   const openAt = (question: Confirm) =>
@@ -486,6 +539,8 @@ export function FriendRow({
       notifyOnline: notify,
       categories: Boolean(categories),
       team: team?.state ?? null,
+      chat: Boolean(openChat),
+      report: true,
     }),
     (row): MenuItem | null => {
       switch (row.action) {
@@ -503,6 +558,14 @@ export function FriendRow({
             disabled: row.disabled,
             onSelect: () => void inviteFriend(friend),
           };
+        case "chat":
+          return openChat
+            ? {
+                label: t("chat.actions.message"),
+                icon: <ChatCircle size={16} />,
+                onSelect: openChat,
+              }
+            : null;
         case "message":
           return {
             label: t("social.actions.message"),
@@ -572,6 +635,12 @@ export function FriendRow({
             icon: <Prohibit size={16} />,
             danger: true,
             onSelect: () => openAt("block"),
+          };
+        case "report":
+          return {
+            label: t("reports.action"),
+            icon: <Flag size={16} />,
+            onSelect: () => reportFriend(friend),
           };
       }
     },

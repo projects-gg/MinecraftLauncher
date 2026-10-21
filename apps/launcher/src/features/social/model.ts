@@ -14,6 +14,7 @@ import type {
   TeamMember,
 } from "@/lib/api/social-types";
 import { unansweredCall } from "./calls";
+import { type ChatMutes, unreadDirect } from "./chat/conversations";
 import { callHeardIn, crewCallsHeard, crewmateHeardIn, mutedNow } from "./mute";
 
 const collator = new Intl.Collator("tr", { sensitivity: "base" });
@@ -158,18 +159,26 @@ export interface Waiting {
   asks: boolean;
   /** A crewmate's call the player has not answered. */
   call: CrewCall | null;
+  /** Unread direct messages, outside conversations muted here (CHAT1). */
+  messages: number;
 }
 
 type WaitingView = Pick<SocialSnapshot, "incoming" | "invites" | "calls"> &
-  Partial<Pick<SocialSnapshot, "crewNotifications" | "crews">>;
+  Partial<Pick<SocialSnapshot, "crewNotifications" | "crews" | "chat">>;
 
 /**
  * What waits for the player (the friends entry's gold dot): a request or an invite, and a
  * crewmate's call they have not answered, unless crew calls are off or the crews it names are
  * muted (the call itself stays on the crew page and the Home line). The two are told apart: a
- * call is neither a request nor an invite, and the entry says which waits (E2E6).
+ * call is neither a request nor an invite, and the entry says which waits (E2E6). Unread direct
+ * messages wait too, unless their conversation is muted here; crew chat only counts in the list.
  */
-export function whatWaits(view: WaitingView, localCrewCalls: boolean, nowMs: number): Waiting {
+export function whatWaits(
+  view: WaitingView,
+  localCrewCalls: boolean,
+  nowMs: number,
+  chatMutes: ChatMutes = {},
+): Waiting {
   // The newest unanswered call of a crew that is not muted on its own.
   const call = crewCallsHeard(view.crewNotifications, localCrewCalls, nowMs)
     ? unansweredCall(
@@ -180,13 +189,19 @@ export function whatWaits(view: WaitingView, localCrewCalls: boolean, nowMs: num
   return {
     asks: view.incoming.length > 0 || view.invites.length > 0,
     call: call ?? null,
+    messages: unreadDirect(view.chat, chatMutes, nowMs),
   };
 }
 
 /** Something waits for the player (`whatWaits`): the gold dot is on. */
-export function somethingWaits(view: WaitingView, localCrewCalls: boolean, nowMs: number): boolean {
-  const { asks, call } = whatWaits(view, localCrewCalls, nowMs);
-  return asks || call !== null;
+export function somethingWaits(
+  view: WaitingView,
+  localCrewCalls: boolean,
+  nowMs: number,
+  chatMutes: ChatMutes = {},
+): boolean {
+  const { asks, call, messages } = whatWaits(view, localCrewCalls, nowMs, chatMutes);
+  return asks || call !== null || messages > 0;
 }
 
 /** Someone on Home's "playing" line: a friend in game, or a crewmate on Projects. */
@@ -335,8 +350,9 @@ export function wantsNotice(
   crews: readonly SocialTeam[] = [],
 ): boolean {
   if (status === "dnd") {
-    // Signing out still has to be said: the panel looks different afterwards.
-    return notice.kind === "signedOutRemotely";
+    // Signing out still has to be said: the panel looks different afterwards (and so does a
+    // suspension, which signs the player out).
+    return notice.kind === "signedOutRemotely" || notice.kind === "restricted";
   }
   switch (notice.kind) {
     case "friendOnline":

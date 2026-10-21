@@ -9,16 +9,20 @@
 // call that is on; where a call cannot start yet (CALL1) one line under the button says why. Then
 // the members grouped by where they are ("Projects'te 4", with "Katıl"); friends to invite; the
 // crew code; the leader's "Yetkiler"; leaving. Every irreversible step asks once, in place, with
-// one sentence; nothing else asks.
+// one sentence; nothing else asks. With chat (CHAT1) the crew has "Ekip" and "Sohbet" (its chat,
+// filling the panel); a crew whose name moderators reset says so on top while it stays locked
+// (MOD1), and a new Discord account hears in place why it cannot found a crew yet (SPAM1).
 import {
   ArrowsClockwise,
   CalendarBlank,
   CaretDown,
   Check,
   Copy,
+  LockSimple,
   MagnifyingGlass,
   MegaphoneSimple,
   PencilSimple,
+  ShieldWarning,
   SignOut,
   Sparkle,
   Trash,
@@ -26,7 +30,17 @@ import {
   UsersThree,
   WarningCircle,
 } from "@phosphor-icons/react";
-import { Button, cn, IconButton, SearchInput, Skeleton, Switch, Tooltip } from "@pl/ui";
+import {
+  Button,
+  cn,
+  IconButton,
+  SearchInput,
+  Skeleton,
+  Switch,
+  TabPanel,
+  Tabs,
+  Tooltip,
+} from "@pl/ui";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -44,6 +58,7 @@ import { dateTimeFormat } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
 import { attempt, copyText } from "./actions";
 import { callNames, callWaitUntil, liveCalls, waitMinutes } from "./calls";
+import { CrewChat } from "./chat/crew-chat";
 import { CallStrip } from "./crew-call";
 import { CallReason, useCallPress } from "./crew-call-picker";
 import {
@@ -57,10 +72,11 @@ import {
 } from "./crew-editor";
 import { CrewRail } from "./crew-rail";
 import { callableCrews, canAddCrew, NEW_CREW_TAB, shownCrew } from "./crews";
+import { dayMonth, limitOf, opensIn } from "./limits";
 import { type Leaving, leavingOf } from "./menus";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
 import { SocialAvatar, SocialFace } from "./social-face";
-import { useSocialUi } from "./store";
+import { type CrewPane, useSocialUi } from "./store";
 import { CrewMark, CrewWatermark, TeamTag } from "./team-emblem";
 import { RoleBadge, TeamMemberRow } from "./team-member";
 import { TeamInviteRow } from "./team-section";
@@ -90,13 +106,22 @@ function useCrewFeatures() {
 
 function CreateCrew() {
   const { t } = useTranslation();
+  const { reduce } = useSocialMotion();
   const crew = useCrewFeatures();
+  const me = useSocialUi((s) => s.view.me);
   const [draft, setDraft] = useState<CrewDraft>(NEW_CREW);
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
+  // A new Discord account cannot found a crew yet: said in place when "Ekip kur" is pressed.
+  const [limited, setLimited] = useState<string | null>(null);
 
   const submit = async () => {
     setTouched(true);
+    const limit = limitOf(me, "crewFound", Date.now());
+    if (limit) {
+      setLimited(t("safety.limited.crewFound", { when: opensIn(t, limit.until, Date.now()) }));
+      return;
+    }
     if (busy || !draftReady(draft, crew.look, true)) return;
     setBusy(true);
     const name = cleanCrewText(draft.name);
@@ -126,12 +151,47 @@ function CreateCrew() {
         showErrors={touched}
         onSubmit={() => void submit()}
         footer={
-          <Button type="submit" variant="primary" className="w-full" disabled={busy}>
-            {t("teams.create.submit")}
-          </Button>
+          <>
+            <Button type="submit" variant="primary" className="w-full" disabled={busy}>
+              {t("teams.create.submit")}
+            </Button>
+            <AnimatePresence initial={false}>
+              {limited ? (
+                <motion.p
+                  key="limited"
+                  role="status"
+                  className="mt-2.5 flex items-start gap-2 text-[12.5px] leading-snug text-ash-300"
+                  {...rise(reduce, 3, 0.2)}
+                >
+                  <LockSimple size={14} className="mt-px shrink-0 text-ash-400" aria-hidden />
+                  {limited}
+                </motion.p>
+              ) : null}
+            </AnimatePresence>
+          </>
         }
       />
     </section>
+  );
+}
+
+/** Moderators reset the crew's name and motto: said on top while they stay locked. */
+function CrewResetNote({ team }: { team: SocialTeam }) {
+  const { t } = useTranslation();
+  const until = team.textLockedUntil;
+  if (!until || until * 1000 <= Date.now()) return null;
+  return (
+    <p className="mb-3 flex items-start gap-2.5 rounded-[var(--radius-panel)] bg-gold-500/[0.07] px-3.5 py-3 text-[13px] leading-snug text-bone-100 ring-1 ring-gold-400/20">
+      <ShieldWarning
+        size={17}
+        weight="duotone"
+        className="mt-px shrink-0 text-gold-300"
+        aria-hidden
+      />
+      <span>
+        {t("safety.crewReset.body")} {t("safety.crewReset.until", { date: dayMonth(until) })}
+      </span>
+    </p>
   );
 }
 
@@ -961,6 +1021,7 @@ function CrewView({ team }: { team: SocialTeam }) {
   return (
     <LayoutGroup>
       <div className="pt-1">
+        <CrewResetNote team={team} />
         <section className="relative overflow-hidden rounded-[var(--radius-panel)] bg-obsidian-950/40 p-4 ring-1 ring-white/8">
           <AnimatePresence mode="popLayout" initial={false}>
             {editing ? (
@@ -1076,6 +1137,35 @@ function AddCrew({ canAdd, limit }: { canAdd: boolean; limit: number }) {
   );
 }
 
+/** A crew with chat (CHAT1): "Ekip" (the crew) and "Sohbet" (its chat, with how many are unread). */
+function CrewPanes({ team }: { team: SocialTeam }) {
+  const { t } = useTranslation();
+  const pane = useSocialUi((s) => s.crewPane);
+  const setPane = useSocialUi((s) => s.setCrewPane);
+  const unread = useSocialUi(
+    (s) => s.view.chat?.conversations.find((c) => c.id === `c:${team.id}`)?.unread ?? 0,
+  );
+  const open = useSocialUi((s) => s.open && s.page === "team");
+  return (
+    <Tabs<CrewPane>
+      value={pane}
+      onValueChange={setPane}
+      label={team.name}
+      items={[
+        { value: "crew", label: t("chat.tabs.crew") },
+        { value: "chat", label: t("chat.tabs.chat"), count: unread > 0 ? unread : undefined },
+      ]}
+    >
+      <TabPanel value="crew" className="overflow-visible pt-3">
+        <CrewView team={team} />
+      </TabPanel>
+      <TabPanel value="chat" className="flex flex-col overflow-hidden pt-0">
+        <CrewChat team={team} onScreen={open && pane === "chat"} />
+      </TabPanel>
+    </Tabs>
+  );
+}
+
 /**
  * A crew switch slides the page in from the side the picked mark sits on and the old one out the
  * other way (fades only under reduced motion). `custom` carries the side to the leaving page too.
@@ -1100,6 +1190,10 @@ export function TeamPage() {
   const canAdd = canAddCrew(crews, limit, multi);
   const shownKey = shown === NEW_CREW_TAB ? NEW_CREW_TAB : shown.id;
   const rail = multi && crews.length > 0;
+  const chat = useSocialUi((s) => s.view.chat !== undefined);
+  const pane = useSocialUi((s) => s.crewPane);
+  // The chat fills the panel (its messages scroll, the composer stays at the bottom).
+  const fill = chat && pane === "chat" && shown !== NEW_CREW_TAB;
 
   // A crew founded or joined from "Ekip kur ya da katıl" comes on screen once it arrives.
   const count = useRef(crews.length);
@@ -1141,17 +1235,20 @@ export function TeamPage() {
     : rise(reduce, 6, 0.28);
 
   return (
-    <div ref={root}>
+    <div ref={root} className={fill ? "flex h-full min-h-0 flex-col" : undefined}>
       {rail ? <CrewRail crews={crews} shown={shownKey} canAdd={canAdd} limit={limit} /> : null}
       <AnimatePresence mode="popLayout" initial={false} custom={side.side}>
         <motion.div
           key={shown === NEW_CREW_TAB ? "none" : `team:${shown.id}`}
           role={rail ? "tabpanel" : undefined}
           aria-labelledby={rail ? `crew-tab-${shownKey}` : undefined}
+          className={fill ? "flex min-h-0 flex-1 flex-col" : undefined}
           {...slide}
         >
           {shown === NEW_CREW_TAB ? (
             <AddCrew canAdd={canAdd} limit={limit} />
+          ) : chat ? (
+            <CrewPanes team={shown} />
           ) : (
             <CrewView team={shown} />
           )}

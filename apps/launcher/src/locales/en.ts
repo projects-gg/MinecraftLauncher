@@ -60,7 +60,7 @@ export const en: DeepPartial<Strings> = {
     },
     consent: {
       title: "Play with your friends",
-      body: "You sign in with your Discord account. Your friends see your name, profile picture and what you're playing; your email, password and messages never reach us.",
+      body: "You sign in with your Discord account. Your friends see your name, profile picture and what you're playing; your email and password never reach us.",
       privacy: "Privacy",
       signIn: "Sign in with Discord",
       waiting: "Approve Discord in your browser",

@@ -249,6 +249,7 @@ pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
         &state.social,
         snapshot.config.features.friends,
         snapshot.config.features.teams,
+        snapshot.config.features.chat,
     );
     state
         .afk

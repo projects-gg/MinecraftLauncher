@@ -5,14 +5,26 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::model::{
-    CrewMute, FriendGroups, LastSeen, PublicProfile, StatusMode, Team, TeamExit, TeamInvite,
-    TeamNotifications,
+    ChatDeletion, ChatMessage, ChatStatus, CrewMute, FriendGroups, LastSeen, ModNotice,
+    PublicProfile, StatusMode, Team, TeamExit, TeamInvite, TeamNotifications,
 };
 
 /// What this launcher understands on the presence socket (`GET /v1/presence?caps=…`): crew calls
 /// that carry their server and may end with `server` (`callServer`), and several crews (`crews`).
 /// Older services ignore the query.
 pub const PRESENCE_CAPS: &str = "callServer,crews";
+
+/// Crew chat and direct messages (CHAT1): asked for only while the signed content allows chat.
+pub const CHAT_CAP: &str = "chat";
+
+/// The capabilities to ask for: [`PRESENCE_CAPS`], with chat when it may show.
+pub fn presence_caps(chat: bool) -> String {
+    if chat {
+        format!("{PRESENCE_CAPS},{CHAT_CAP}")
+    } else {
+        PRESENCE_CAPS.to_owned()
+    }
+}
 
 /// projects.gg or one of its subdomains, with or without a port (`play.projects.gg:25565`).
 pub fn is_projects_host(host: &str) -> bool {
@@ -244,6 +256,31 @@ pub(crate) enum ClientMessage {
         call: String,
         rid: u32,
     },
+    /// A chat message; `nonce` makes a resend after a lost answer safe.
+    Chat {
+        conv: String,
+        text: String,
+        nonce: String,
+        rid: u32,
+    },
+    /// The player's own message, as held (its seal), and its new text.
+    ChatEdit {
+        msg: serde_json::Value,
+        text: String,
+        rid: u32,
+    },
+    /// "Herkesten sil": a message as held (its seal).
+    ChatDelete {
+        msg: serde_json::Value,
+        rid: u32,
+    },
+    /// What changed after `since` (ms); `after` only to continue with the cursor just given.
+    ChatSync {
+        since: i64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        after: Option<String>,
+        rid: u32,
+    },
 }
 
 impl ClientMessage {
@@ -291,6 +328,9 @@ pub(crate) enum ServerMessage {
         /// The capabilities of [`PRESENCE_CAPS`] the service took (none from an older one).
         #[serde(default)]
         caps: Vec<String>,
+        /// The chat state (only with `chat` in the capabilities).
+        #[serde(default)]
+        chat: Option<ChatStatus>,
     },
     /// A crew call, new or changed (its server or kind, its crews, or answers that went away):
     /// replaces the one with the same id. `quiet`: show it, never announce it.
@@ -369,11 +409,52 @@ pub(crate) enum ServerMessage {
     Status {
         status: StatusMode,
     },
+    /// A new chat message in one of the player's conversations (their own too, from another
+    /// device).
+    Chat {
+        msg: ChatMessage,
+    },
+    ChatEdited {
+        msg: ChatMessage,
+    },
+    ChatDeleted {
+        conv: String,
+        id: i64,
+        #[serde(default)]
+        by: String,
+    },
+    /// One conversation of a sync answer.
+    ChatSync {
+        conv: String,
+        #[serde(default)]
+        messages: Vec<ChatMessage>,
+        #[serde(default)]
+        deleted: Vec<ChatDeletion>,
+    },
+    /// The end of a sync answer: `now` is the hub's clock (ms), `more` the cursor to go on with.
+    ChatSynced {
+        #[serde(default)]
+        rid: Option<u32>,
+        #[serde(default)]
+        now: Option<i64>,
+        #[serde(default)]
+        more: Option<String>,
+    },
+    ChatState {
+        chat: ChatStatus,
+    },
+    /// A one-time note from moderators.
+    Notice {
+        notice: ModNotice,
+    },
     Ack {
         #[serde(default)]
         rid: Option<u32>,
         #[serde(default)]
         delivered: Option<bool>,
+        /// A chat message as stored (sending and editing).
+        #[serde(default)]
+        msg: Option<ChatMessage>,
     },
     Error {
         #[serde(default)]
@@ -381,10 +462,19 @@ pub(crate) enum ServerMessage {
         code: String,
         #[serde(default, rename = "retryAfter")]
         retry_after: Option<u64>,
+        /// `chat_rejected`: `link`, `phone` or `words`.
+        #[serde(default)]
+        reason: Option<String>,
+        /// `chat_muted`: Unix seconds.
+        #[serde(default)]
+        until: Option<i64>,
     },
     Bye {
         #[serde(default)]
         reason: String,
+        /// `restricted`: until when (Unix seconds; null: for good).
+        #[serde(default)]
+        until: Option<i64>,
     },
     #[serde(other)]
     Unknown,
@@ -714,5 +804,138 @@ mod tests {
         ] {
             assert!(!is_projects_host(host), "{host}");
         }
+    }
+
+    #[test]
+    fn chat_frames_both_ways() {
+        assert_eq!(presence_caps(false), "callServer,crews");
+        assert_eq!(presence_caps(true), "callServer,crews,chat");
+        let json = |message: &ClientMessage| serde_json::to_string(message).unwrap();
+        assert_eq!(
+            json(&ClientMessage::Chat {
+                conv: "c:0a1b2c3d4e5f6a7b".into(),
+                text: "Geliyorum".into(),
+                nonce: "q8Zr3kT0aWbc".into(),
+                rid: 11
+            }),
+            r#"{"t":"chat","conv":"c:0a1b2c3d4e5f6a7b","text":"Geliyorum","nonce":"q8Zr3kT0aWbc","rid":11}"#
+        );
+        let held = ChatMessage {
+            conv: "d:1:2".into(),
+            id: 1_792_521_000_123,
+            from: "1".into(),
+            text: "Geliyrum".into(),
+            mac: "m".repeat(22),
+            edited_at: None,
+            nonce: Some("own".into()),
+        };
+        // The nonce stays home: the service wants the sealed message back as it sent it.
+        let sealed: serde_json::Value = serde_json::from_str(&json(&ClientMessage::ChatEdit {
+            msg: held.sealed(),
+            text: "Geliyorum".into(),
+            rid: 12,
+        }))
+        .unwrap();
+        assert_eq!(sealed["t"], "chat_edit");
+        assert_eq!(
+            sealed["msg"],
+            serde_json::json!({"conv": "d:1:2", "id": 1_792_521_000_123_i64, "from": "1",
+                "text": "Geliyrum", "mac": "m".repeat(22)})
+        );
+        let edited = ChatMessage {
+            edited_at: Some(1_792_521_060_000),
+            ..held.clone()
+        };
+        assert_eq!(edited.sealed()["editedAt"], 1_792_521_060_000_i64);
+        assert_eq!(
+            json(&ClientMessage::ChatSync {
+                since: 1_792_521_000_000,
+                after: None,
+                rid: 14
+            }),
+            r#"{"t":"chat_sync","since":1792521000000,"rid":14}"#
+        );
+        assert_eq!(
+            json(&ClientMessage::ChatSync {
+                since: 5,
+                after: Some("k".into()),
+                rid: 15
+            }),
+            r#"{"t":"chat_sync","since":5,"after":"k","rid":15}"#
+        );
+
+        let hello: ServerMessage = serde_json::from_str(
+            r#"{"t":"hello","v":1,"status":"online","friends":[],"invites":[],"caps":["callServer","crews","chat"],
+                "chat":{"on":true,"mailbox":false,"mailboxBack":1792540800,"perDay":100,"mutedUntil":null},"now":9}"#,
+        )
+        .unwrap();
+        match hello {
+            ServerMessage::Hello {
+                chat: Some(chat), ..
+            } => {
+                assert!(chat.on && !chat.mailbox);
+                assert_eq!(chat.mailbox_back, Some(1_792_540_800));
+                assert_eq!(chat.per_day, 100);
+                assert_eq!(chat.muted_until, None);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        let sync: ServerMessage = serde_json::from_str(
+            r#"{"t":"chat_sync","conv":"c:0a1b2c3d4e5f6a7b","messages":[{"id":7,"from":"1","text":"a","mac":"x",
+                "editedAt":9,"nonce":"n1"}],"deleted":[{"id":3,"by":"staff","at":8}]}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            sync,
+            ServerMessage::ChatSync { conv, messages, deleted }
+                if conv.starts_with("c:") && messages[0].edited_at == Some(9)
+                    && messages[0].conv.is_empty() && deleted[0].by == "staff"
+        ));
+        let synced: ServerMessage =
+            serde_json::from_str(r#"{"t":"chat_synced","rid":14,"now":1792521300000,"more":"k"}"#)
+                .unwrap();
+        assert!(matches!(
+            synced,
+            ServerMessage::ChatSynced {
+                rid: Some(14),
+                more: Some(_),
+                ..
+            }
+        ));
+        let ack: ServerMessage = serde_json::from_str(
+            r#"{"t":"ack","rid":11,"msg":{"conv":"c:0a1b2c3d4e5f6a7b","id":7,"from":"1","text":"a","mac":"x","nonce":"n1"}}"#,
+        )
+        .unwrap();
+        assert!(
+            matches!(ack, ServerMessage::Ack { msg: Some(msg), .. } if msg.nonce.as_deref() == Some("n1"))
+        );
+        let refused: ServerMessage = serde_json::from_str(
+            r#"{"t":"error","rid":11,"code":"chat_rejected","reason":"link"}"#,
+        )
+        .unwrap();
+        assert!(matches!(refused, ServerMessage::Error { reason: Some(r), .. } if r == "link"));
+        let muted: ServerMessage = serde_json::from_str(
+            r#"{"t":"error","rid":11,"code":"chat_muted","until":1792600000}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            muted,
+            ServerMessage::Error {
+                until: Some(1_792_600_000),
+                ..
+            }
+        ));
+        let deleted: ServerMessage =
+            serde_json::from_str(r#"{"t":"chat_deleted","conv":"d:1:2","id":7,"by":"","at":9}"#)
+                .unwrap();
+        assert!(matches!(deleted, ServerMessage::ChatDeleted { id: 7, .. }));
+        let notice: ServerMessage = serde_json::from_str(
+            r#"{"t":"notice","notice":{"id":"w3","kind":"warning","at":1792520000,"reason":"harassment"}}"#,
+        )
+        .unwrap();
+        assert!(matches!(notice, ServerMessage::Notice { notice } if notice.id == "w3"));
+        let bye: ServerMessage =
+            serde_json::from_str(r#"{"t":"bye","reason":"restricted","until":null}"#).unwrap();
+        assert!(matches!(bye, ServerMessage::Bye { until: None, .. }));
     }
 }

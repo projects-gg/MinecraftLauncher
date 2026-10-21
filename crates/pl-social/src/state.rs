@@ -2,16 +2,16 @@
 //! requests, blocks and waiting invites. A pure reducer over presence events and API results,
 //! so every rule is testable without a service.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use serde::Serialize;
 
 use crate::codes::crew_code;
 use crate::model::{
     BlockedUser, CrewEntry, CrewMute, DEFAULT_CREW_LIMIT, Friend, FriendGroups, FriendRequest,
-    FriendsOverview, Limits, Me, PublicProfile, RequestOutcome, SettingsMeta, TEAM_FEATURE_MULTI,
-    TEAM_FEATURE_MUTE, Team, TeamAnswer, TeamExit, TeamInvite, TeamMember, TeamNotifications,
-    TeamRole, TeamsOverview, crews_of,
+    FriendsOverview, Limits, Me, ModNotice, NoticeKind, PublicProfile, RequestOutcome,
+    SettingsMeta, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, Team, TeamAnswer, TeamExit, TeamInvite,
+    TeamMember, TeamNotifications, TeamRole, TeamsOverview, crews_of,
 };
 use crate::presence::{PresenceEvent, StopReason};
 use crate::protocol::{
@@ -20,7 +20,8 @@ use crate::protocol::{
 };
 use crate::view::{
     CallAnswerView, CrewCallView, FriendGroupsView, FriendView, GroupMember, InviteView,
-    ProfileView, RequestView, SocialNotice, TeamInviteView, TeamMemberView, TeamView,
+    ModNoticeView, ProfileView, RequestView, SocialNotice, TeamInviteView, TeamMemberView,
+    TeamView,
 };
 
 /// How long a received invite stays worth answering (the service delivers them for an hour).
@@ -62,6 +63,9 @@ pub struct SocialState {
     connection: Connection,
     /// Open crew calls the player sees (their own too), oldest first.
     calls: Vec<OpenCall>,
+    /// Moderators' one-time notes still to be shown, and those shown in this run.
+    notices: Vec<ModNotice>,
+    seen_notices: HashSet<String>,
 }
 
 /// A crew call with its times on this computer's clock.
@@ -113,7 +117,10 @@ impl SocialState {
         self.overview.as_ref().map(|o| o.limits)
     }
 
-    pub fn set_me(&mut self, me: Me) {
+    pub fn set_me(&mut self, mut me: Me) {
+        for notice in std::mem::take(&mut me.notices) {
+            self.add_notice(notice);
+        }
         self.me = Some(me);
     }
 
@@ -152,6 +159,7 @@ impl SocialState {
                 invites,
                 calls,
                 clock,
+                ..
             } => {
                 self.connection = Connection::Online;
                 if let Some(me) = &mut self.me {
@@ -383,13 +391,54 @@ impl SocialState {
                 self.calls.clear();
                 self.connection = match reason {
                     StopReason::Replaced => Connection::Replaced,
-                    StopReason::SignedOut | StopReason::AccountDeleted | StopReason::Shutdown => {
-                        Connection::Idle
-                    }
+                    StopReason::SignedOut
+                    | StopReason::AccountDeleted
+                    | StopReason::Shutdown
+                    | StopReason::Restricted { .. } => Connection::Idle,
                 };
             }
+            PresenceEvent::Notice(notice) => self.add_notice(notice.clone()),
+            // Chat lives in the service's history (history.rs), not here.
+            PresenceEvent::ChatState(_)
+            | PresenceEvent::ChatMessage(_)
+            | PresenceEvent::ChatEdited(_)
+            | PresenceEvent::ChatDeleted { .. }
+            | PresenceEvent::ChatSync { .. }
+            | PresenceEvent::ChatSynced { .. } => {}
         }
         notices
+    }
+
+    // --- moderators' notes (MOD1) -------------------------------------------------------------
+
+    /// A note from moderators, once (the same id again changes nothing).
+    fn add_notice(&mut self, notice: ModNotice) {
+        if notice.kind == NoticeKind::Other
+            || self.seen_notices.contains(&notice.id)
+            || self.notices.iter().any(|n| n.id == notice.id)
+        {
+            return;
+        }
+        self.notices.push(notice);
+    }
+
+    /// The notes still to be shown, oldest first.
+    pub fn notices(&self) -> Vec<ModNoticeView> {
+        self.notices
+            .iter()
+            .map(|notice| ModNoticeView {
+                id: notice.id.clone(),
+                kind: notice.kind,
+                at: notice.at,
+                reason: notice.reason,
+            })
+            .collect()
+    }
+
+    /// The launcher showed these notes: they never come back in this run.
+    pub fn notices_seen(&mut self, ids: &[String]) {
+        self.seen_notices.extend(ids.iter().cloned());
+        self.notices.retain(|notice| !ids.contains(&notice.id));
     }
 
     /// A request was sent by code: pending, or friends right away when they had asked first.
@@ -748,6 +797,7 @@ impl SocialState {
                 told.then(|| SocialNotice::TeamGone {
                     reason: reason.unwrap_or(TeamExit::Other),
                     name: gone.map(|entry| entry.team.name),
+                    staff: by == Some("staff"),
                 })
             }
         }
@@ -1000,6 +1050,7 @@ impl SocialState {
             invited: entry.invited.clone(),
             limit: overview.limits.team_members.unwrap_or(30),
             notifications: entry.notifications.at(now),
+            text_locked_until: team.text_locked_until.filter(|until| *until > now),
         })
     }
 
@@ -1305,6 +1356,8 @@ mod tests {
             },
             created_on: "2026-10-16".into(),
             settings: None,
+            limited: None,
+            notices: Vec::new(),
         }
     }
 
@@ -1336,6 +1389,7 @@ mod tests {
             team_notifications: None,
             crews: None,
             crew_limit: None,
+            features: Vec::new(),
         });
         state
     }
@@ -1394,6 +1448,7 @@ mod tests {
                 invites: vec![invite("i1", "1", NOW - 10, false)],
                 calls: vec![],
                 clock: None,
+                chat: None,
             },
             NOW,
         );
@@ -1422,6 +1477,7 @@ mod tests {
                 invites: vec![],
                 calls: vec![],
                 clock: None,
+                chat: None,
             },
             NOW,
         );
@@ -1612,6 +1668,7 @@ mod tests {
             invites,
             calls: vec![],
             clock: None,
+            chat: None,
         }
     }
 
@@ -1727,6 +1784,7 @@ mod tests {
                 invites: vec![],
                 calls: vec![],
                 clock: None,
+                chat: None,
             },
             NOW,
         );
@@ -1776,6 +1834,7 @@ mod tests {
                 })
                 .collect(),
             permissions: crate::model::TeamPermissions::default(),
+            text_locked_until: None,
         }
     }
 
@@ -1830,6 +1889,7 @@ mod tests {
                 invites: vec![],
                 calls: vec![],
                 clock: None,
+                chat: None,
             },
             NOW,
         );
@@ -1967,6 +2027,7 @@ mod tests {
                     service_now + 900,
                 )],
                 clock: Some(service_now),
+                chat: None,
             },
             NOW,
         );
@@ -2242,7 +2303,7 @@ mod tests {
             NOW,
         );
         assert!(
-            matches!(&removed[..], [SocialNotice::TeamGone { reason: TeamExit::Kicked, name: Some(name) }] if name == "Gece Kartalları")
+            matches!(&removed[..], [SocialNotice::TeamGone { reason: TeamExit::Kicked, name: Some(name), .. }] if name == "Gece Kartalları")
         );
         assert!(crew_view(&state).is_none());
 

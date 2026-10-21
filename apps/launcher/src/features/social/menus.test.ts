@@ -149,6 +149,21 @@ describe("friendMenu", () => {
     // Every crew full: nothing to invite to.
     expect(words(friendMenu({ ...base, team: "full" }))).toContain("teamInvite(off)");
   });
+
+  it("opens the chat and reports only where those are on (CHAT1, MOD1)", () => {
+    expect(words(friendMenu({ ...base, chat: true, report: true }))).toEqual([
+      "invite",
+      "chat",
+      "message",
+      "-",
+      "favorite",
+      "notifyOnline",
+      "-",
+      "remove",
+      "block",
+      "report",
+    ]);
+  });
 });
 
 describe("memberMenu", () => {
@@ -210,6 +225,22 @@ describe("memberMenu", () => {
     ]);
     expect(words(memberMenu({ ...base, joinable: true, gameBusy: true }))[0]).toBe("join(off)");
   });
+
+  it("opens the chat with a friend in the crew and reports (CHAT1, MOD1)", () => {
+    expect(words(memberMenu({ ...base, chat: true, report: true }))).toEqual([
+      "chat",
+      "message",
+      "-",
+      "block",
+      "report",
+    ]);
+    // Blocked: no conversation.
+    expect(words(memberMenu({ ...base, chat: true, blocked: true }))).toEqual([
+      "message",
+      "-",
+      "unblock",
+    ]);
+  });
 });
 
 describe("categoryMenu", () => {
@@ -241,6 +272,12 @@ describe("teamMenu", () => {
     members: Array.from({ length: size }, (_, i) => member(String(i + 1))),
     invited: [],
     limit,
+  });
+
+  it("opens the crew's chat and reports the crew where those are on (CHAT1, MOD1)", () => {
+    expect(
+      words(teamMenu({ team: team("member", 4), friendsOutside: 3, chat: true, report: true })),
+    ).toEqual(["open", "toggle", "-", "chat", "copyCode", "invite", "-", "report", "leave"]);
   });
 
   it("lets a member open, fold, share and leave", () => {

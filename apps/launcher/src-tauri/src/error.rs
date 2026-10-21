@@ -191,11 +191,211 @@ impl From<pl_mc::Error> for CmdError {
     }
 }
 
+/// "28 Ekim" / "28 October" (with the year when it is not this one), on this computer's clock.
+fn day_month(unix: i64, lang: Lang) -> String {
+    const TR: [&str; 12] = [
+        "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim",
+        "Kasım", "Aralık",
+    ];
+    const EN: [&str; 12] = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+    ];
+    let zone = jiff::tz::TimeZone::system();
+    let Ok(at) = jiff::Timestamp::from_second(unix) else {
+        return String::new();
+    };
+    let date = at.to_zoned(zone.clone()).date();
+    let month = usize::try_from(date.month() - 1).unwrap_or(0).min(11);
+    let this_year = jiff::Timestamp::now().to_zoned(zone).year();
+    let name = lang.pick(TR[month], EN[month]);
+    if date.year() == this_year {
+        format!("{} {name}", date.day())
+    } else {
+        format!("{} {name} {}", date.day(), date.year())
+    }
+}
+
+/// When a new account's limit lifts: "3 gün sonra açılır." / "It opens in 3 days.".
+fn opens_in(until: Option<i64>, lang: Lang) -> String {
+    let Some(until) = until else {
+        return String::new();
+    };
+    let left = until - jiff::Timestamp::now().as_second();
+    if left <= 3_600 {
+        return lang.pick("Birazdan açılır.", "It opens soon.").to_owned();
+    }
+    if left < 86_400 {
+        let hours = (left + 3_599) / 3_600;
+        return lang.pick(
+            format!("{hours} saat sonra açılır."),
+            if hours == 1 {
+                "It opens in an hour.".to_owned()
+            } else {
+                format!("It opens in {hours} hours.")
+            },
+        );
+    }
+    let days = (left + 86_399) / 86_400;
+    lang.pick(
+        format!("{days} gün sonra açılır."),
+        if days == 1 {
+            "It opens tomorrow.".to_owned()
+        } else {
+            format!("It opens in {days} days.")
+        },
+    )
+}
+
+/// Friends service failures that carry their own details (a date, a limit): the sentence is made
+/// here; None for the plain ones.
+fn social_special(error: &pl_social::SocialError) -> Option<(&'static str, String)> {
+    use pl_social::{ChatRejection, LimitedKey, SocialError as E};
+    let lang = Lang::current();
+    Some(match error {
+        E::Restricted { until: Some(until) } => (
+            "SOSYAL-KISITLI",
+            lang.pick(
+                format!(
+                    "Hesabın {} tarihine kadar kısıtlandı.",
+                    day_month(*until, lang)
+                ),
+                format!(
+                    "Your account is restricted until {}.",
+                    day_month(*until, lang)
+                ),
+            ),
+        ),
+        E::Restricted { until: None } => (
+            "SOSYAL-KISITLI",
+            lang.pick(
+                "Hesabın kalıcı olarak kısıtlandı.",
+                "Your account is restricted for good.",
+            )
+            .to_owned(),
+        ),
+        E::SignupsClosed { .. } => (
+            "SOSYAL-YENI-HESAP",
+            lang.pick(
+                "Şu an yeni hesap açılamıyor. Yarın yeniden dene.",
+                "No new accounts can be made right now. Try again tomorrow.",
+            )
+            .to_owned(),
+        ),
+        E::TextLocked { until } => (
+            "SOSYAL-EKIP-KILIT",
+            match until {
+                Some(until) => lang.pick(
+                    format!(
+                        "Ekibin adı ve sloganı {} tarihine kadar değiştirilemez.",
+                        day_month(*until, lang)
+                    ),
+                    format!(
+                        "The crew's name and motto can't change until {}.",
+                        day_month(*until, lang)
+                    ),
+                ),
+                None => lang
+                    .pick(
+                        "Ekibin adı ve sloganı şu an değiştirilemez.",
+                        "The crew's name and motto can't change right now.",
+                    )
+                    .to_owned(),
+            },
+        ),
+        E::Limited { item, until, .. } => {
+            let (tr, en, daily) = match item {
+                LimitedKey::CrewFound => (
+                    "Discord hesabın yeni olduğu için ekip kuramazsın.",
+                    "Your Discord account is new, so you can't found a crew yet.",
+                    false,
+                ),
+                LimitedKey::CrewInvites => (
+                    "Discord hesabın yeni olduğu için bugün daha fazla ekip daveti gönderemezsin.",
+                    "Your Discord account is new, so you can't send more crew invites today.",
+                    true,
+                ),
+                LimitedKey::CodeLookups => (
+                    "Discord hesabın yeni olduğu için bugün daha fazla kod deneyemezsin.",
+                    "Your Discord account is new, so you can't try more codes today.",
+                    true,
+                ),
+                LimitedKey::SettingsBackup => (
+                    "Discord hesabın yeni olduğu için ayar yedeği şimdilik kapalı.",
+                    "Your Discord account is new, so the settings backup is off for now.",
+                    false,
+                ),
+                LimitedKey::ChatMessages => (
+                    "Discord hesabın yeni olduğu için bugünlük mesaj sınırına ulaştın.",
+                    "Your Discord account is new, so you've reached today's message limit.",
+                    true,
+                ),
+                LimitedKey::Other => (
+                    "Discord hesabın yeni olduğu için bu şimdilik yapılamıyor.",
+                    "Your Discord account is new, so this can't be done yet.",
+                    false,
+                ),
+            };
+            let sentence = lang.pick(tr, en).to_owned();
+            // A daily cap opens tomorrow; the rest when the account is old enough.
+            let when = if daily {
+                String::new()
+            } else {
+                opens_in(*until, lang)
+            };
+            (
+                "SOSYAL-SINIRLI",
+                if when.is_empty() {
+                    sentence
+                } else {
+                    format!("{sentence} {when}")
+                },
+            )
+        }
+        E::ChatRejected { reason } => (
+            "SOSYAL-SOHBET-METIN",
+            match reason {
+                ChatRejection::Link => lang.pick("Bağlantı gönderilemez.", "Links can't be sent."),
+                ChatRejection::Phone => lang.pick(
+                    "Telefon numarası gönderilemez.",
+                    "Phone numbers can't be sent.",
+                ),
+                ChatRejection::Words => {
+                    lang.pick("Bu mesaj gönderilemez.", "This message can't be sent.")
+                }
+            }
+            .to_owned(),
+        ),
+        E::ChatMuted { .. } => (
+            "SOSYAL-SOHBET-SUSTURMA",
+            lang.pick(
+                "Şu an mesaj gönderemezsin.",
+                "You can't send messages right now.",
+            )
+            .to_owned(),
+        ),
+        _ => return None,
+    })
+}
+
 impl From<pl_social::SocialError> for CmdError {
     /// Friends service failures: a short sentence; the code stays in the details.
     fn from(error: pl_social::SocialError) -> Self {
         use pl_social::{ErrorCode as C, SocialError as E};
         let details = error.to_string();
+        if let Some((code, message)) = social_special(&error) {
+            return Self::new(code, message, details);
+        }
         let unavailable = pick(
             "Arkadaş listene şu an ulaşılamıyor. Biraz sonra tekrar dene.",
             "Can't reach your friends list right now. Try again in a bit.",
@@ -245,7 +445,42 @@ impl From<pl_social::SocialError> for CmdError {
                     "Couldn't save your categories.",
                 ),
             ),
+            E::InvalidInput("chat off") => (
+                "SOSYAL-SOHBET-KAPALI",
+                pick("Sohbet şu an kapalı.", "Chat is off right now."),
+            ),
+            E::InvalidInput("chat not allowed") => (
+                "SOSYAL-SOHBET-YOK",
+                pick(
+                    "Buraya artık mesaj gönderemezsin.",
+                    "You can't send messages here anymore.",
+                ),
+            ),
+            E::InvalidInput("chat text") => (
+                "SOSYAL-SOHBET-METIN",
+                pick(
+                    "Mesaj en çok 300 karakter olabilir.",
+                    "A message has up to 300 characters.",
+                ),
+            ),
+            E::InvalidInput("chat message") => (
+                "SOSYAL-SOHBET-MESAJ",
+                pick("Bu mesaj artık yok.", "This message is gone."),
+            ),
             E::InvalidInput(_) | E::Protocol(_) => (
+                "SOSYAL",
+                pick(
+                    "Bir sorun oluştu. Biraz sonra tekrar dene.",
+                    "Something went wrong. Try again in a bit.",
+                ),
+            ),
+            // Said by `social_special` above, with their details.
+            E::Restricted { .. }
+            | E::Limited { .. }
+            | E::SignupsClosed { .. }
+            | E::TextLocked { .. }
+            | E::ChatRejected { .. }
+            | E::ChatMuted { .. } => (
                 "SOSYAL",
                 pick(
                     "Bir sorun oluştu. Biraz sonra tekrar dene.",
@@ -405,6 +640,42 @@ impl From<pl_social::SocialError> for CmdError {
                     pick(
                         "Ekiplerin bu arada değişti. Sırayı yeniden dene.",
                         "Your crews changed meanwhile. Try the order again.",
+                    ),
+                ),
+                C::TargetNotFound => (
+                    "SOSYAL-RAPOR-YOK",
+                    pick(
+                        "Bu artık raporlanamıyor.",
+                        "This can't be reported anymore.",
+                    ),
+                ),
+                C::LimitBlocks => (
+                    "SOSYAL-ENGEL-SINIR",
+                    pick(
+                        "En çok 1.000 kişiyi engelleyebilirsin.",
+                        "You can block up to 1,000 people.",
+                    ),
+                ),
+                C::ChatOff => (
+                    "SOSYAL-SOHBET-KAPALI",
+                    pick("Sohbet şu an kapalı.", "Chat is off right now."),
+                ),
+                C::MessageNotFound => (
+                    "SOSYAL-SOHBET-MESAJ",
+                    pick("Bu mesaj artık yok.", "This message is gone."),
+                ),
+                C::ChatNotPermitted => (
+                    "SOSYAL-SOHBET-IZIN",
+                    pick(
+                        "Bu mesajda bunu yapamazsın.",
+                        "You can't do that with this message.",
+                    ),
+                ),
+                C::ChatTooOld => (
+                    "SOSYAL-SOHBET-SURE",
+                    pick(
+                        "Bu mesajın süresi doldu.",
+                        "It's too late for this message.",
                     ),
                 ),
                 C::InvalidTeamTag => (

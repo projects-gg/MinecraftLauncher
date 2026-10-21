@@ -1,0 +1,48 @@
+// A crew's "Sohbet": the crew's conversation, with names over others' groups and the quick replies
+// over the composer. Its leader and moderators may delete any message (the service decides; the
+// menu offers it where the view says so).
+import { ChatsCircle } from "@phosphor-icons/react";
+import { useTranslation } from "react-i18next";
+import type { ChatMessage, SocialTeam } from "@/lib/api/social-types";
+import { useSocialUi } from "../store";
+import { useComposerNotice, useComposerState, usePeople } from "./chat-page";
+import { Conversation, useUnreadAtOpen } from "./conversation";
+import { crewConversation } from "./conversations";
+
+export function CrewChat({ team, onScreen }: { team: SocialTeam; onScreen: boolean }) {
+  const { t } = useTranslation();
+  const conv = crewConversation(team.id);
+  const openReport = useSocialUi((s) => s.openReport);
+  const people = usePeople();
+  const composer = useComposerState(conv, true, true);
+  const notice = useComposerNotice();
+  const unreadAtOpen = useUnreadAtOpen(conv);
+  const report = (message: ChatMessage) => {
+    if (message.id === undefined) return;
+    const sender = people(message.from);
+    openReport({
+      target: { kind: "message", conv, id: message.id },
+      name: sender.name,
+      person: sender,
+      text: message.text,
+    });
+  };
+  return (
+    <Conversation
+      conv={conv}
+      crew
+      people={people}
+      composer={composer}
+      notice={notice}
+      unreadAtOpen={unreadAtOpen}
+      onScreen={onScreen}
+      onReport={report}
+      empty={
+        <div className="flex flex-col items-center gap-2 text-center">
+          <ChatsCircle size={28} className="text-ash-400" aria-hidden />
+          <p className="text-[13px] text-ash-400">{t("chat.list.noMessages")}</p>
+        </div>
+      }
+    />
+  );
+}

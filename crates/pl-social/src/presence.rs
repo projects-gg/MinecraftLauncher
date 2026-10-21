@@ -8,9 +8,13 @@
 //!   which are not billed; a connection that stops answering is replaced.
 //! - Close codes 4001 (session ended), 4002 (account deleted) and 4000 (replaced by a newer
 //!   connection of the same account) stop the task: [`PresenceEvent::Stopped`].
+//! - Chat (CHAT1, [`ChatSetup`]): asked for in the capabilities; after every connect the task
+//!   syncs what changed since the device's newest message (continuing with the service's cursor
+//!   at once), then everything arrives live. Sends, edits and deletes are answered by `rid`.
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
 
 use futures::stream::{SplitSink, SplitStream};
@@ -34,14 +38,25 @@ use crate::auth::SessionToken;
 use crate::backoff::{Backoff, BackoffPolicy, jitter};
 use crate::error::{ErrorCode, Result, SocialError, parse_retry_after};
 use crate::model::{
-    CrewMute, FriendGroups, PublicProfile, StatusMode, Team, TeamExit, TeamInvite,
-    TeamNotifications,
+    ChatDeletion, ChatMessage, ChatRejection, ChatStatus, CrewMute, FriendGroups, ModNotice,
+    PublicProfile, StatusMode, Team, TeamExit, TeamInvite, TeamNotifications,
 };
 use crate::protocol::{
-    CallAnswer, CallEndReason, ClientMessage, CrewCall, Invite, LocalStatus, Presence,
+    CHAT_CAP, CallAnswer, CallEndReason, ClientMessage, CrewCall, Invite, LocalStatus, Presence,
     ServerMessage,
 };
 use crate::tls;
+
+/// Chat on the presence socket (CHAT1). `since` is where the next sync starts (ms on the hub's
+/// clock: the device's newest message minus a minute); the owner keeps it up to date.
+#[derive(Debug, Clone, Default)]
+pub struct ChatSetup {
+    pub since: Arc<AtomicI64>,
+}
+
+/// A refused sync waits at least this long before it is asked again (one a minute per socket).
+const SYNC_RETRY_MIN: Duration = Duration::from_secs(5);
+const SYNC_RETRY_MAX: Duration = Duration::from_secs(120);
 
 #[derive(Debug, Clone, Copy)]
 pub struct PresenceOptions {
@@ -83,7 +98,36 @@ pub enum PresenceEvent {
         invites: Vec<Invite>,
         calls: Vec<CrewCall>,
         clock: Option<i64>,
+        /// The chat state, when chat was asked for and the service took it (None: no chat on
+        /// this connection).
+        chat: Option<ChatStatus>,
     },
+    /// The chat state changed: the service's switch, the mailbox, the daily limit or a mute.
+    ChatState(ChatStatus),
+    /// A new message in one of the player's conversations, their own too (from another device,
+    /// or as the service stored this device's message).
+    ChatMessage(ChatMessage),
+    /// A message was edited: its new text and seal.
+    ChatEdited(ChatMessage),
+    /// A message was deleted for everyone (`by`: a user id, `staff`, or empty).
+    ChatDeleted {
+        conv: String,
+        id: i64,
+        by: String,
+    },
+    /// One conversation of a sync: messages sent or edited, and deletions, since the device's
+    /// newest (each message carries its `conv`).
+    ChatSync {
+        conv: String,
+        messages: Vec<ChatMessage>,
+        deleted: Vec<ChatDeletion>,
+    },
+    /// The sync after a connect is over (`clock`: the hub's time in ms, when it said so).
+    ChatSynced {
+        clock: Option<i64>,
+    },
+    /// A one-time note from moderators.
+    Notice(ModNotice),
     /// A crew call, new or changed: replaces the one with the same id. `quiet`: show it but do
     /// not announce it (your own call, do-not-disturb, or a call that is only new to you).
     Call {
@@ -165,6 +209,9 @@ pub enum StopReason {
     Replaced,
     /// [`PresenceHandle::shutdown`] or the handle was dropped.
     Shutdown,
+    /// Moderators suspended (until `until`, Unix seconds) or banned (None) the account: every
+    /// session ended.
+    Restricted { until: Option<i64> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -183,6 +230,23 @@ enum CrewRequest {
     End { call: String },
 }
 
+/// What a chat request asks of the service.
+#[derive(Debug, Clone, PartialEq)]
+enum ChatRequest {
+    Send {
+        conv: String,
+        text: String,
+        nonce: String,
+    },
+    Edit {
+        msg: serde_json::Value,
+        text: String,
+    },
+    Delete {
+        msg: serde_json::Value,
+    },
+}
+
 enum Command {
     Invite {
         to: String,
@@ -191,6 +255,10 @@ enum Command {
     Crew {
         request: CrewRequest,
         reply: oneshot::Sender<Result<()>>,
+    },
+    Chat {
+        request: ChatRequest,
+        reply: oneshot::Sender<Result<Option<ChatMessage>>>,
     },
     Shutdown,
 }
@@ -202,6 +270,7 @@ impl Command {
         match self {
             Self::Invite { reply, .. } => drop(reply.send(Err(error()))),
             Self::Crew { reply, .. } => drop(reply.send(Err(error()))),
+            Self::Chat { reply, .. } => drop(reply.send(Err(error()))),
             Self::Shutdown => {}
         }
     }
@@ -299,6 +368,56 @@ impl PresenceControl {
         }
     }
 
+    /// Sends a chat message (CHAT1). `nonce` (1-16 of `A-Z a-z 0-9 _ -`) is this device's key for
+    /// it: sending the same again after a lost answer gives the message already taken. Returns
+    /// the message as the service stored it; it also arrives as [`PresenceEvent::ChatMessage`].
+    /// Fails with `ChatRejected`, `ChatMuted`, `RateLimited`, `Refused` (`chat_off`,
+    /// `friend_not_found`, `team_not_found`, `bad_request`) or `Unavailable`/`Network` while the
+    /// connection is down or the answer was lost.
+    pub async fn chat_send(&self, conv: &str, text: &str, nonce: &str) -> Result<ChatMessage> {
+        self.chat(ChatRequest::Send {
+            conv: conv.to_owned(),
+            text: text.to_owned(),
+            nonce: nonce.to_owned(),
+        })
+        .await?
+        .ok_or_else(|| SocialError::Protocol("a chat answer without its message".into()))
+    }
+
+    /// Edits the player's own message (within 15 minutes), as held: its new version comes back.
+    pub async fn chat_edit(&self, message: &ChatMessage, text: &str) -> Result<ChatMessage> {
+        self.chat(ChatRequest::Edit {
+            msg: message.sealed(),
+            text: text.to_owned(),
+        })
+        .await?
+        .ok_or_else(|| SocialError::Protocol("a chat answer without its message".into()))
+    }
+
+    /// "Herkesten sil": the player's own message (7 days), or any of a crew they lead or
+    /// moderate. The other devices and people get [`PresenceEvent::ChatDeleted`]; this one only
+    /// the answer.
+    pub async fn chat_delete(&self, message: &ChatMessage) -> Result<()> {
+        self.chat(ChatRequest::Delete {
+            msg: message.sealed(),
+        })
+        .await
+        .map(drop)
+    }
+
+    async fn chat(&self, request: ChatRequest) -> Result<Option<ChatMessage>> {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(Command::Chat { request, reply })
+            .await
+            .map_err(|_| SocialError::Unavailable { retry_after: None })?;
+        match timeout(self.invite_timeout, answer).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) => Err(SocialError::Network("presence connection closed".into())),
+            Err(_) => Err(SocialError::Network("no answer from the service".into())),
+        }
+    }
+
     /// Asks the task to close the connection cleanly and stop.
     pub async fn shutdown(&self) {
         let _ = self.commands.send(Command::Shutdown).await;
@@ -350,6 +469,7 @@ impl PresenceHandle {
         token: SessionToken,
         user_agent: String,
         options: PresenceOptions,
+        chat: Option<ChatSetup>,
     ) -> Self {
         let (status, status_rx) = watch::channel(LocalStatus::Launcher);
         let (commands, commands_rx) = mpsc::channel(32);
@@ -359,6 +479,7 @@ impl PresenceHandle {
             token,
             user_agent,
             connect_timeout: options.connect_timeout,
+            chat,
         };
         let task = tokio::spawn(run(endpoint, status_rx, commands_rx, events_tx, options));
         Self {
@@ -448,6 +569,7 @@ struct Endpoint {
     token: SessionToken,
     user_agent: String,
     connect_timeout: Duration,
+    chat: Option<ChatSetup>,
 }
 
 impl Endpoint {
@@ -518,9 +640,14 @@ fn handshake_outcome(status: u16, retry_after: Option<Duration>) -> Outcome {
     }
 }
 
-fn close_outcome(frame: Option<&CloseFrame>) -> Outcome {
+/// How a close ends the task. `restricted`: the `bye` before it said the account is restricted
+/// (until when; None for good).
+fn close_outcome(frame: Option<&CloseFrame>, restricted: Option<Option<i64>>) -> Outcome {
     match frame.map(|frame| u16::from(frame.code)) {
-        Some(4001) => Outcome::Stop(StopReason::SignedOut),
+        Some(4001) => match restricted {
+            Some(until) => Outcome::Stop(StopReason::Restricted { until }),
+            None => Outcome::Stop(StopReason::SignedOut),
+        },
         Some(4002) => Outcome::Stop(StopReason::AccountDeleted),
         Some(4000) => Outcome::Stop(StopReason::Replaced),
         Some(4008) => Outcome::Retry {
@@ -544,7 +671,17 @@ async fn run(
     loop {
         let started = Instant::now();
         let outcome = match endpoint.connect().await {
-            Ok(socket) => session(socket, &mut status, &mut commands, &events, &options).await,
+            Ok(socket) => {
+                session(
+                    socket,
+                    &mut status,
+                    &mut commands,
+                    &events,
+                    &options,
+                    endpoint.chat.as_ref(),
+                )
+                .await
+            }
             Err(outcome) => outcome,
         };
         let wait = match outcome {
@@ -589,6 +726,7 @@ type Sink = SplitSink<Socket, Message>;
 enum Reply {
     Invite(oneshot::Sender<Result<InviteOutcome>>),
     Crew(oneshot::Sender<Result<()>>),
+    Chat(oneshot::Sender<Result<Option<ChatMessage>>>),
 }
 
 impl Reply {
@@ -596,6 +734,7 @@ impl Reply {
         match self {
             Self::Invite(reply) => drop(reply.send(Err(error))),
             Self::Crew(reply) => drop(reply.send(Err(error))),
+            Self::Chat(reply) => drop(reply.send(Err(error))),
         }
     }
 }
@@ -609,6 +748,7 @@ async fn session(
     commands: &mut mpsc::Receiver<Command>,
     events: &mpsc::UnboundedSender<PresenceEvent>,
     options: &PresenceOptions,
+    chat: Option<&ChatSetup>,
 ) -> Outcome {
     let (mut sink, mut stream): (Sink, SplitStream<Socket>) = socket.split();
     let mut pending: Pending = HashMap::new();
@@ -617,6 +757,11 @@ async fn session(
         sent: None,
         next_rid: 0,
         keepalive: options.keepalive,
+        chat: chat.cloned(),
+        chat_on: false,
+        sync: None,
+        sync_again: None,
+        restricted: None,
     };
     let mut last_inbound = Instant::now();
     let mut next_ping = Instant::now() + spread(state.keepalive);
@@ -624,6 +769,7 @@ async fn session(
 
     let outcome = loop {
         let pong_deadline = ping_sent.map(|at| at + options.pong_timeout);
+        let sync_again = state.sync_again;
         tokio::select! {
             frame = stream.next() => match frame {
                 Some(Ok(Message::Text(text))) => {
@@ -635,7 +781,9 @@ async fn session(
                         break outcome;
                     }
                 }
-                Some(Ok(Message::Close(frame))) => break close_outcome(frame.as_ref()),
+                Some(Ok(Message::Close(frame))) => {
+                    break close_outcome(frame.as_ref(), state.restricted);
+                }
                 Some(Ok(_)) => {
                     last_inbound = Instant::now();
                     ping_sent = None;
@@ -669,8 +817,7 @@ async fn session(
                         command.refuse(None);
                         continue;
                     }
-                    state.next_rid = state.next_rid.wrapping_add(1) % 1_000_000;
-                    let rid = state.next_rid;
+                    let rid = state.rid();
                     let (message, reply) = match command {
                         Command::Invite { to, reply } => {
                             (ClientMessage::Invite { to, rid }, Reply::Invite(reply))
@@ -678,16 +825,29 @@ async fn session(
                         Command::Crew { request, reply } => {
                             (crew_message(request, rid), Reply::Crew(reply))
                         }
+                        Command::Chat { request, reply } => {
+                            if !state.chat_on {
+                                // No chat on this connection (an older service, or not asked for).
+                                let _ = reply.send(Err(chat_off()));
+                                continue;
+                            }
+                            (chat_message(request, rid), Reply::Chat(reply))
+                        }
                         Command::Shutdown => continue,
                     };
-                    let text = serde_json::to_string(&message).unwrap_or_default();
-                    if sink.send(Message::text(text)).await.is_err() {
+                    if send(&mut sink, &message).await.is_err() {
                         reply.fail(SocialError::Network("presence connection lost".into()));
                         break RETRY_NOW;
                     }
                     pending.insert(rid, reply);
                 }
             },
+            () = sleep_until(sync_again.unwrap_or(next_ping)), if sync_again.is_some() => {
+                state.sync_again = None;
+                if start_sync(&mut state, &mut sink).await.is_err() {
+                    break RETRY_NOW;
+                }
+            }
             () = sleep_until(next_ping) => {
                 if sink.send(Message::Ping(Default::default())).await.is_err() {
                     break RETRY_NOW;
@@ -717,6 +877,28 @@ fn crew_message(request: CrewRequest, rid: u32) -> ClientMessage {
     }
 }
 
+fn chat_message(request: ChatRequest, rid: u32) -> ClientMessage {
+    match request {
+        ChatRequest::Send { conv, text, nonce } => ClientMessage::Chat {
+            conv,
+            text,
+            nonce,
+            rid,
+        },
+        ChatRequest::Edit { msg, text } => ClientMessage::ChatEdit { msg, text, rid },
+        ChatRequest::Delete { msg } => ClientMessage::ChatDelete { msg, rid },
+    }
+}
+
+/// Chat is not on this connection: what an older service would say.
+fn chat_off() -> SocialError {
+    SocialError::Refused {
+        status: 403,
+        code: ErrorCode::ChatOff,
+        message: String::new(),
+    }
+}
+
 /// Pings every `keepalive` ± 10 %, so clients do not ping in step.
 fn spread(keepalive: Duration) -> Duration {
     jitter(keepalive.mul_f64(0.9), keepalive.mul_f64(1.1))
@@ -728,6 +910,31 @@ struct SessionState {
     sent: Option<LocalStatus>,
     next_rid: u32,
     keepalive: Duration,
+    /// Chat was asked for: where its sync starts.
+    chat: Option<ChatSetup>,
+    /// The service took chat on this connection.
+    chat_on: bool,
+    /// The sync under way: its `rid` and where it started (ms).
+    sync: Option<(u32, i64)>,
+    /// A refused sync is asked again then.
+    sync_again: Option<Instant>,
+    /// The `bye` before the close said the account is restricted (until when; None for good).
+    restricted: Option<Option<i64>>,
+}
+
+impl SessionState {
+    fn rid(&mut self) -> u32 {
+        self.next_rid = self.next_rid.wrapping_add(1) % 1_000_000;
+        self.next_rid
+    }
+}
+
+async fn send(
+    sink: &mut Sink,
+    message: &ClientMessage,
+) -> std::result::Result<(), tungstenite::Error> {
+    let text = serde_json::to_string(message).unwrap_or_default();
+    sink.send(Message::text(text)).await
 }
 
 async fn send_status(
@@ -739,10 +946,31 @@ async fn send_status(
     if state.sent.as_ref() == Some(&desired) {
         return Ok(());
     }
-    let message = serde_json::to_string(&ClientMessage::status(&desired)).unwrap_or_default();
-    sink.send(Message::text(message)).await?;
+    send(sink, &ClientMessage::status(&desired)).await?;
     state.sent = Some(desired);
     Ok(())
+}
+
+/// Asks what changed since the device's newest message (after every connect, never on a timer).
+async fn start_sync(
+    state: &mut SessionState,
+    sink: &mut Sink,
+) -> std::result::Result<(), tungstenite::Error> {
+    let since = match &state.chat {
+        Some(setup) if state.chat_on => setup.since.load(Ordering::Relaxed).max(0),
+        _ => return Ok(()),
+    };
+    let rid = state.rid();
+    state.sync = Some((rid, since));
+    send(
+        sink,
+        &ClientMessage::ChatSync {
+            since,
+            after: None,
+            rid,
+        },
+    )
+    .await
 }
 
 async fn on_text(
@@ -760,6 +988,7 @@ async fn on_text(
             return Ok(());
         }
     };
+    let gone = |_| Outcome::Stop(StopReason::Shutdown);
     let event = match message {
         ServerMessage::Hello {
             status: mode,
@@ -770,6 +999,7 @@ async fn on_text(
             calls,
             now,
             caps,
+            chat,
         } => {
             tracing::debug!(?caps, "presence connected");
             state.greeted = true;
@@ -778,6 +1008,12 @@ async fn on_text(
             if let Some(seconds) = keepalive_seconds.filter(|s| (15..=300).contains(s)) {
                 state.keepalive = state.keepalive.min(Duration::from_secs(seconds));
             }
+            // Chat flows only when it was asked for and the service took it.
+            let chat_on =
+                state.chat.is_some() && caps.iter().any(|cap| cap == CHAT_CAP) && chat.is_some();
+            state.chat_on = chat_on;
+            state.sync = None;
+            state.sync_again = None;
             // Everyone online the player may see: friends, then teammates who are not friends.
             friends.extend(team);
             let _ = events.send(PresenceEvent::Connected {
@@ -786,10 +1022,12 @@ async fn on_text(
                 invites,
                 calls,
                 clock: now,
+                chat: chat.filter(|_| chat_on),
             });
-            return send_status(state, sink, status)
+            send_status(state, sink, status)
                 .await
-                .map_err(|_| RETRY_NOW);
+                .map_err(|_| RETRY_NOW)?;
+            return start_sync(state, sink).await.map_err(|_| RETRY_NOW);
         }
         ServerMessage::Call { call, quiet, now } => PresenceEvent::Call {
             call,
@@ -837,7 +1075,54 @@ async fn on_text(
             notifications,
         },
         ServerMessage::CrewOrder { order } => PresenceEvent::CrewOrder(order),
-        ServerMessage::Ack { rid, delivered } => {
+        ServerMessage::Chat { msg } if state.chat_on => PresenceEvent::ChatMessage(msg),
+        ServerMessage::ChatEdited { msg } if state.chat_on => PresenceEvent::ChatEdited(msg),
+        ServerMessage::ChatDeleted { conv, id, by } if state.chat_on => {
+            PresenceEvent::ChatDeleted { conv, id, by }
+        }
+        ServerMessage::ChatSync {
+            conv,
+            mut messages,
+            deleted,
+        } if state.chat_on => {
+            for message in &mut messages {
+                message.conv.clone_from(&conv);
+            }
+            PresenceEvent::ChatSync {
+                conv,
+                messages,
+                deleted,
+            }
+        }
+        ServerMessage::ChatSynced { rid, now, more } => match state.sync {
+            Some((sync, since)) if rid == Some(sync) => {
+                if let Some(after) = more {
+                    // The rest at once, with the cursor just given.
+                    let rid = state.rid();
+                    state.sync = Some((rid, since));
+                    return send(
+                        sink,
+                        &ClientMessage::ChatSync {
+                            since,
+                            after: Some(after),
+                            rid,
+                        },
+                    )
+                    .await
+                    .map_err(|_| RETRY_NOW);
+                }
+                state.sync = None;
+                PresenceEvent::ChatSynced { clock: now }
+            }
+            _ => return Ok(()),
+        },
+        ServerMessage::ChatState { chat } if state.chat_on => PresenceEvent::ChatState(chat),
+        ServerMessage::Notice { notice } => PresenceEvent::Notice(notice),
+        ServerMessage::Ack {
+            rid,
+            delivered,
+            msg,
+        } => {
             match rid.and_then(|rid| pending.remove(&rid)) {
                 Some(Reply::Invite(reply)) => {
                     let outcome = if delivered == Some(true) {
@@ -850,44 +1135,92 @@ async fn on_text(
                 Some(Reply::Crew(reply)) => {
                     let _ = reply.send(Ok(()));
                 }
+                Some(Reply::Chat(reply)) => {
+                    let _ = reply.send(Ok(msg.clone()));
+                }
                 None => {}
             }
-            return Ok(());
+            // The stored message reaches the owner as an event too: an answer that came after its
+            // wait ended still settles the message it is about.
+            return match msg {
+                Some(msg) if msg.edited_at.is_some() => {
+                    events.send(PresenceEvent::ChatEdited(msg)).map_err(gone)
+                }
+                Some(msg) => events.send(PresenceEvent::ChatMessage(msg)).map_err(gone),
+                None => Ok(()),
+            };
         }
         ServerMessage::Error {
             rid,
             code,
             retry_after,
+            reason,
+            until,
         } => {
-            if let Some(reply) = rid.and_then(|rid| pending.remove(&rid)) {
-                reply.fail(socket_error(&code, retry_after));
-            } else {
-                tracing::debug!(%code, "presence error");
+            if let Some(rid) = rid {
+                if state.sync.is_some_and(|(sync, _)| sync == rid) {
+                    // A sync too soon after the last one (one a minute per socket): asked again
+                    // after the wait. Whatever comes meanwhile comes live.
+                    state.sync = None;
+                    if code == "rate_limited" {
+                        let wait = retry_after
+                            .map_or(SYNC_RETRY_MIN, Duration::from_secs)
+                            .clamp(SYNC_RETRY_MIN, SYNC_RETRY_MAX);
+                        state.sync_again = Some(Instant::now() + wait);
+                    }
+                    return events
+                        .send(PresenceEvent::ChatSynced { clock: None })
+                        .map_err(gone);
+                }
+                if let Some(reply) = pending.remove(&rid) {
+                    reply.fail(socket_error(&code, retry_after, reason.as_deref(), until));
+                    return Ok(());
+                }
+            }
+            tracing::debug!(%code, "presence error");
+            return Ok(());
+        }
+        ServerMessage::Bye { reason, until } => {
+            tracing::debug!(%reason, "presence connection closing");
+            if reason == "restricted" {
+                state.restricted = Some(until);
             }
             return Ok(());
         }
-        ServerMessage::Bye { reason } => {
-            tracing::debug!(%reason, "presence connection closing");
-            return Ok(());
-        }
-        ServerMessage::Unknown => return Ok(()),
+        ServerMessage::Unknown
+        | ServerMessage::Chat { .. }
+        | ServerMessage::ChatEdited { .. }
+        | ServerMessage::ChatDeleted { .. }
+        | ServerMessage::ChatSync { .. }
+        | ServerMessage::ChatState { .. } => return Ok(()),
     };
-    events
-        .send(event)
-        .map_err(|_| Outcome::Stop(StopReason::Shutdown))
+    events.send(event).map_err(gone)
 }
 
-/// The error of a socket request (an invite or a crew call request).
-fn socket_error(code: &str, retry_after: Option<u64>) -> SocialError {
+/// The error of a socket request (an invite, a crew call request or a chat request).
+fn socket_error(
+    code: &str,
+    retry_after: Option<u64>,
+    reason: Option<&str>,
+    until: Option<i64>,
+) -> SocialError {
     let status = match code {
         "rate_limited" => {
             return SocialError::RateLimited {
                 retry_after: retry_after.map(Duration::from_secs),
             };
         }
-        "friend_not_found" | "team_not_found" | "call_not_found" => 404,
-        "team_not_permitted" => 403,
-        "call_active" | "call_needs_server" | "call_server_hidden" => 409,
+        "chat_rejected" => {
+            return SocialError::ChatRejected {
+                reason: ChatRejection::parse(reason.unwrap_or_default()),
+            };
+        }
+        "chat_muted" => return SocialError::ChatMuted { until },
+        // An unexpected failure of the service: the frame may be sent again.
+        "internal" => return SocialError::Unavailable { retry_after: None },
+        "friend_not_found" | "team_not_found" | "call_not_found" | "message_not_found" => 404,
+        "team_not_permitted" | "chat_off" | "chat_not_permitted" => 403,
+        "call_active" | "call_needs_server" | "call_server_hidden" | "chat_too_old" => 409,
         _ => 400,
     };
     SocialError::Refused {
@@ -1200,21 +1533,21 @@ mod tests {
             reason: "".into(),
         };
         assert_eq!(
-            close_outcome(Some(&frame(4002))),
+            close_outcome(Some(&frame(4002)), None),
             Outcome::Stop(StopReason::AccountDeleted)
         );
         assert_eq!(
-            close_outcome(Some(&frame(4000))),
+            close_outcome(Some(&frame(4000)), None),
             Outcome::Stop(StopReason::Replaced)
         );
         assert_eq!(
-            close_outcome(Some(&frame(4008))),
+            close_outcome(Some(&frame(4008)), None),
             Outcome::Retry {
                 at_least: Duration::from_secs(60)
             }
         );
-        assert_eq!(close_outcome(Some(&frame(1006))), RETRY_NOW);
-        assert_eq!(close_outcome(None), RETRY_NOW);
+        assert_eq!(close_outcome(Some(&frame(1006)), None), RETRY_NOW);
+        assert_eq!(close_outcome(None, None), RETRY_NOW);
         assert_eq!(
             handshake_outcome(503, Some(Duration::from_secs(7_200))),
             Outcome::Retry {
@@ -1229,19 +1562,19 @@ mod tests {
             }
         );
         assert!(matches!(
-            socket_error("rate_limited", Some(30)),
+            socket_error("rate_limited", Some(30), None, None),
             SocialError::RateLimited { retry_after: Some(d) } if d == Duration::from_secs(30)
         ));
         assert_eq!(
-            socket_error("friend_not_found", None).code(),
+            socket_error("friend_not_found", None, None, None).code(),
             Some(&ErrorCode::FriendNotFound)
         );
         assert_eq!(
-            socket_error("call_active", None).code(),
+            socket_error("call_active", None, None, None).code(),
             Some(&ErrorCode::CallActive)
         );
         assert!(matches!(
-            socket_error("call_not_found", None),
+            socket_error("call_not_found", None, None, None),
             SocialError::Refused {
                 status: 404,
                 code: ErrorCode::CallNotFound,
@@ -1456,6 +1789,208 @@ mod tests {
         ));
         let error = handle.call_crew(None).await.unwrap_err();
         assert!(matches!(error, SocialError::Unavailable { .. }));
+        handle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn chat_syncs_after_connecting_and_answers_by_rid() {
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let setup = ChatSetup::default();
+        setup.since.store(1_792_520_000_000, Ordering::Relaxed);
+        let mut handle = client
+            .session(token())
+            .connect_presence_with_chat(fast(), setup.clone());
+        let mut server = accept(&listener, None, seen.clone()).await.unwrap();
+        assert!(
+            seen.lock()
+                .unwrap()
+                .iter()
+                .any(|(k, v)| k == ":uri" && v == "/v1/presence?caps=callServer,crews,chat"),
+            "chat is asked for"
+        );
+        let mut greeting = hello();
+        greeting["caps"] = serde_json::json!(["callServer", "crews", "chat"]);
+        greeting["chat"] = serde_json::json!({"on": true, "mailbox": true, "mailboxBack": null,
+            "perDay": 500, "mutedUntil": null});
+        send_json(&mut server, greeting).await;
+        match handle.next_event().await.unwrap() {
+            PresenceEvent::Connected { chat, .. } => assert_eq!(chat.map(|c| c.per_day), Some(500)),
+            other => panic!("unexpected {other:?}"),
+        }
+        // The sync starts at once, from where the device is.
+        let sync = next_json(&mut server).await;
+        assert_eq!(sync["t"], "chat_sync");
+        assert_eq!(sync["since"], 1_792_520_000_000_i64);
+        assert!(sync.get("after").is_none());
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "chat_sync", "conv": "c:0123456789abcdef",
+                "messages": [{"id": 1_792_520_100_000_i64, "from": "7", "text": "selam", "mac": "m"}],
+                "deleted": [{"id": 5, "by": "7", "at": 6}]}),
+        )
+        .await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "chat_synced", "rid": sync["rid"], "now": 9, "more": "k1"}),
+        )
+        .await;
+        // The rest comes with the cursor, from the same place.
+        let more = next_json(&mut server).await;
+        assert_eq!(more["t"], "chat_sync");
+        assert_eq!(more["since"], 1_792_520_000_000_i64);
+        assert_eq!(more["after"], "k1");
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "chat_synced", "rid": more["rid"], "now": 1_792_521_000_000_i64}),
+        )
+        .await;
+        match handle.next_event().await.unwrap() {
+            PresenceEvent::ChatSync {
+                conv,
+                messages,
+                deleted,
+            } => {
+                assert_eq!(
+                    messages[0].conv, conv,
+                    "each message knows its conversation"
+                );
+                assert_eq!(deleted[0].id, 5);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::ChatSynced {
+                clock: Some(1_792_521_000_000)
+            }
+        );
+
+        // A send is answered by its rid with the message as stored, which also arrives as an
+        // event.
+        let send = tokio::spawn({
+            let control = handle.control();
+            async move {
+                control
+                    .chat_send("c:0123456789abcdef", "Geliyorum", "q8Zr3kT0aWbc")
+                    .await
+            }
+        });
+        let sent = next_json(&mut server).await;
+        assert_eq!(sent["t"], "chat");
+        assert_eq!(sent["nonce"], "q8Zr3kT0aWbc");
+        let stored = serde_json::json!({"conv": "c:0123456789abcdef", "id": 1_792_521_000_500_i64,
+            "from": "100", "text": "Geliyorum", "mac": "x", "nonce": "q8Zr3kT0aWbc"});
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "ack", "rid": sent["rid"], "msg": stored}),
+        )
+        .await;
+        let message = send.await.unwrap().unwrap();
+        assert_eq!(message.id, 1_792_521_000_500);
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::ChatMessage(m) if m.nonce.as_deref() == Some("q8Zr3kT0aWbc")
+        ));
+
+        // A refused edit says why.
+        let edit = tokio::spawn({
+            let control = handle.control();
+            async move { control.chat_edit(&message, "discord.gg/x").await }
+        });
+        let edited = next_json(&mut server).await;
+        assert_eq!(edited["t"], "chat_edit");
+        assert!(edited["msg"].get("nonce").is_none());
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "error", "rid": edited["rid"], "code": "chat_rejected",
+                "reason": "link"}),
+        )
+        .await;
+        assert!(matches!(
+            edit.await.unwrap().unwrap_err(),
+            SocialError::ChatRejected {
+                reason: ChatRejection::Link
+            }
+        ));
+
+        // Live messages, edits and deletes.
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "chat_deleted", "conv": "c:0123456789abcdef",
+                "id": 1_792_521_000_500_i64, "by": "staff", "at": 1}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::ChatDeleted {
+                conv: "c:0123456789abcdef".into(),
+                id: 1_792_521_000_500,
+                by: "staff".into()
+            }
+        );
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "chat_state", "chat": {"on": true, "mailbox": false,
+                "mailboxBack": 1_792_540_800, "perDay": 500, "mutedUntil": 1_792_600_000}}),
+        )
+        .await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::ChatState(state) if !state.mailbox && state.muted_until.is_some()
+        ));
+
+        // A suspension: the goodbye says so before the close.
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "bye", "reason": "restricted", "until": 1_792_600_000}),
+        )
+        .await;
+        server
+            .close(Some(CloseFrame {
+                code: CloseCode::from(4001),
+                reason: "restricted".into(),
+            }))
+            .await
+            .unwrap();
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::Stopped(StopReason::Restricted {
+                until: Some(1_792_600_000)
+            })
+        );
+    }
+
+    #[tokio::test]
+    async fn without_chat_nothing_of_it_flows() {
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        // Asked for, but an older service does not take it.
+        let mut handle = client
+            .session(token())
+            .connect_presence_with_chat(fast(), ChatSetup::default());
+        let mut server = accept(&listener, None, seen).await.unwrap();
+        send_json(&mut server, hello()).await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::Connected { chat: None, .. }
+        ));
+        // No sync, a chat frame is ignored, and a send fails at once.
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "chat", "msg": {"conv": "c:0123456789abcdef", "id": 1,
+                "from": "7", "text": "x", "mac": "m"}}),
+        )
+        .await;
+        let error = handle
+            .control()
+            .chat_send("c:0123456789abcdef", "x", "n")
+            .await
+            .unwrap_err();
+        assert_eq!(error.code(), Some(&ErrorCode::ChatOff));
+        // The next frame the server reads is the status, not a sync.
+        handle.set_status(LocalStatus::Singleplayer);
+        assert_eq!(next_json(&mut server).await["t"], "status");
         handle.shutdown().await;
     }
 }

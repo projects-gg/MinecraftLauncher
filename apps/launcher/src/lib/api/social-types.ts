@@ -17,7 +17,9 @@ export type GameWhere = "projects" | "other" | "singleplayer";
 /** Coarse "last seen": today, yesterday, this week, longer ago. */
 export type LastSeen = "today" | "yesterday" | "week" | "long";
 export type Relation = "none" | "friend" | "outgoing" | "incoming" | "blocked" | "self";
-export type SignInFailure = "expired" | "unavailable" | "failed";
+/** Why a sign-in did not finish: `restricted` (suspended or banned; `restriction` says until
+ * when) and `signupsClosed` (no new accounts right now) come from the service. */
+export type SignInFailure = "expired" | "unavailable" | "failed" | "restricted" | "signupsClosed";
 
 export interface SocialGame {
   where: GameWhere;
@@ -89,6 +91,129 @@ export interface SocialMe extends SocialProfile {
   status: StatusMode;
   privacy: { shareServer: boolean; shareLastSeen: boolean };
   backup?: BackupMeta;
+  /** A limited account ("Sınırlı hesap", a new Discord account); only the player sees it. */
+  limited?: LimitedAccount;
+}
+
+/** What a limited account may not do, or does less of. */
+export type LimitedKey =
+  | "crewFound"
+  | "crewInvites"
+  | "codeLookups"
+  | "settingsBackup"
+  | "chatMessages";
+
+export interface LimitedAccount {
+  /** Unix seconds: the limits lift by themselves then. */
+  until: number;
+  items: Array<{ key: LimitedKey; perDay?: number }>;
+}
+
+/** A one-time note from Projects' moderators. */
+export interface ModNotice {
+  id: string;
+  kind: "warning" | "profileReset";
+  /** Unix seconds. */
+  at: number;
+  reason?: ReportReason;
+}
+
+/** A report reason, as players pick it. */
+export type ReportReason =
+  | "name"
+  | "profile"
+  | "harassment"
+  | "inappropriate"
+  | "spam"
+  | "scam"
+  | "other";
+
+/** What the player reports ("Rapor et"). */
+export type ReportTarget =
+  | { kind: "player"; id: string }
+  /** `code`: the crew was looked up by code. */
+  | { kind: "crew"; id: string; code?: string }
+  /** A message as this computer holds it (with the messages before it as context). */
+  | { kind: "message"; conv: string; id: number };
+
+// --- chat (CHAT1) ---------------------------------------------------------------------------
+
+/** Why one of the player's messages did not go. */
+export type SendFailure =
+  | "link"
+  | "phone"
+  | "words"
+  | "invalid"
+  | "tooFast"
+  | "dailyLimit"
+  | "muted"
+  | "off"
+  | "notAllowed"
+  | "connection";
+
+/** One message of a conversation. */
+export interface ChatMessage {
+  /** Stays the same from typing to sent (`n:<nonce>` for the player's own, else `i:<id>`). */
+  key: string;
+  /** The service's id (its clock, ms): undefined while on its way. */
+  id?: number;
+  from: string;
+  mine: boolean;
+  text: string;
+  /** Unix ms on this computer's clock. */
+  at: number;
+  /** "düzenlendi". */
+  edited: boolean;
+  state: "sent" | "sending" | "failed";
+  failure?: SendFailure;
+  /** Unix ms: may be edited until then (the player's own, 15 minutes). */
+  editUntil?: number;
+  /** Unix ms: may be deleted for everyone until then (own, or any in a crew led or moderated). */
+  deleteUntil?: number;
+}
+
+/** One conversation in the list: a crew's chat (`c:<team id>`) or a friend's (`d:<id>:<id>`). */
+export interface Conversation {
+  id: string;
+  /** The friend of a direct conversation. */
+  peer?: string;
+  /** The crew of a crew's chat. */
+  crew?: string;
+  /** Who or what it is with, as last known (for one no longer in the lists). */
+  title?: string;
+  last?: { from: string; mine: boolean; text: string; at: number };
+  unread: number;
+  /** The player may write here now (still friends, still in the crew). */
+  writable: boolean;
+  /** A message of the player's did not go. */
+  failed: boolean;
+}
+
+export interface ChatState {
+  /** The service's switch: off hides the composer; what this computer holds stays readable. */
+  on: boolean;
+  /** False: messages reach only those online right now. */
+  mailbox: boolean;
+  /** The player's daily limit. */
+  perDay: number;
+  /** Unix seconds: a moderator muted the player until then. */
+  mutedUntil?: number;
+  conversations: Conversation[];
+}
+
+/** A conversation's messages, oldest first (`more`: older ones remain on this computer). */
+export interface ChatPage {
+  conv: string;
+  messages: ChatMessage[];
+  more: boolean;
+}
+
+/** What changed in one conversation: add or replace by key, take keys away, or start over. */
+export interface ChatChange {
+  conv: string;
+  upsert: ChatMessage[];
+  remove: string[];
+  reset: boolean;
 }
 
 /** What this launcher tells friends. */
@@ -232,6 +357,8 @@ export interface SocialTeam extends CrewLook {
   limit: number;
   /** The player's own mute of this crew (never muted on a service with one crew per player). */
   mute: CrewMute;
+  /** Moderators reset the crew's name, tag and motto; they stay locked until then (Unix seconds). */
+  textLockedUntil?: number;
 }
 
 export interface TeamInvite extends CrewLook {
@@ -342,6 +469,16 @@ export interface SocialSnapshot {
   /** The player's crew notification settings (only while the service keeps them: `crew.mute`;
    * otherwise the launcher's own switches decide). */
   crewNotifications?: CrewNotifications;
+  /** Chat may show (signed config): the sign-in screen says what chat keeps. */
+  chatAllowed: boolean;
+  /** Crew chat and direct messages, while the service offers them on this connection. */
+  chat?: ChatState;
+  /** One-time notes from moderators still to be shown, oldest first. */
+  notices: ModNotice[];
+  /** Suspended (`until`, Unix seconds) or banned (no `until`) in this run. */
+  restriction?: { until?: number };
+  /** The settings backup waits until then (Unix seconds): the service protects its storage. */
+  backupWaitsUntil?: number;
 }
 
 export type SocialNotice =
@@ -354,13 +491,18 @@ export type SocialNotice =
   | { kind: "signInFailed"; reason: SignInFailure }
   | { kind: "signedOutRemotely" }
   | { kind: "teamInvite"; invite: TeamInvite }
-  | { kind: "teamGone"; reason: TeamExit; name?: string }
+  /** `staff`: Projects' moderators did it (community rules). */
+  | { kind: "teamGone"; reason: TeamExit; name?: string; staff: boolean }
   /** A teammate called the crew, live. */
   | { kind: "crewCall"; call: CrewCall }
   /** The caller of a call the player is coming to is on projects.gg now. */
   | { kind: "crewCallJoin"; call: CrewCall }
   /** A crewmate started playing on projects.gg. */
-  | { kind: "crewmateOnProjects"; id: string };
+  | { kind: "crewmateOnProjects"; id: string }
+  /** A new chat message from someone else, live (never a sync's). */
+  | { kind: "chatMessage"; conv: string; message: ChatMessage; name?: string; crew?: string }
+  /** Moderators suspended (`until`) or banned the account: every session ended. */
+  | { kind: "restricted"; until?: number };
 
 export interface CodeLookup {
   profile: SocialProfile;
@@ -398,6 +540,8 @@ export const HIDDEN_SNAPSHOT: SocialSnapshot = {
   teamInvites: [],
   calls: [],
   callPlace: "needsServer",
+  chatAllowed: false,
+  notices: [],
 };
 
 export interface SocialApi {
@@ -481,4 +625,31 @@ export interface SocialApi {
   joinTeam(code: string): Promise<void>;
   acceptTeamInvite(teamId: string): Promise<void>;
   declineTeamInvite(teamId: string): Promise<void>;
+  /** Changes in chat conversations. Returns an unsubscribe function. */
+  onChat(listener: (change: ChatChange) => void): () => void;
+  /** A conversation's newest messages, or those before a message id. */
+  chatPage(conv: string, before?: number): Promise<ChatPage>;
+  /** Sends a message: it shows at once (on its way). Returns its key. */
+  chatSend(conv: string, text: string): Promise<string>;
+  /** "Tekrar dene" on a message that did not go. */
+  chatRetry(key: string): Promise<void>;
+  /** Drops a message that did not go. */
+  chatDiscard(key: string): Promise<void>;
+  /** Edits the player's own message (15 minutes). */
+  chatEdit(conv: string, id: number, text: string): Promise<void>;
+  /** "Herkesten sil". */
+  chatDelete(conv: string, id: number): Promise<void>;
+  /** The conversation is on screen at its newest message. */
+  chatRead(conv: string): Promise<void>;
+  /** "Geçmişi temizle" (this computer only). */
+  chatClear(conv: string): Promise<void>;
+  /** "Rapor et". */
+  report(
+    target: ReportTarget,
+    reason: ReportReason,
+    note: string | undefined,
+    block: boolean,
+  ): Promise<void>;
+  /** The launcher showed these moderators' notes. */
+  noticesSeen(ids: string[]): Promise<void>;
 }

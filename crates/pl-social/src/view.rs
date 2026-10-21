@@ -5,8 +5,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    CrewMute, FriendGroup, Limits, Me, Privacy, PublicProfile, Relation, SettingsMeta, StatusMode,
-    TeamExit, TeamPermissions, TeamRelation, TeamRole, discord_avatar_url,
+    CrewMute, FriendGroup, LimitedItem, LimitedKey, Limits, Me, NoticeKind, Privacy, PublicProfile,
+    Relation, ReportReason, SettingsMeta, StatusMode, TeamExit, TeamPermissions, TeamRelation,
+    TeamRole, discord_avatar_url,
 };
 use crate::protocol::{CallAnswer, CallKind, Game, LocalStatus, PresenceState, is_projects_host};
 use crate::qr::QrPath;
@@ -69,6 +70,202 @@ pub struct SocialView {
     /// The player's crew notification settings for all crews, kept by the service (only while
     /// `teams` and the service offers `mute`; otherwise the launcher's own switches decide).
     pub crew_notifications: Option<CrewNotificationsView>,
+    /// Chat may show (signed config `features.chat`), whatever the service offers: the sign-in
+    /// screen says what chat keeps.
+    pub chat_allowed: bool,
+    /// Crew chat and direct messages (CHAT1): only while `chat_allowed` and the service offers
+    /// chat on this connection.
+    pub chat: Option<ChatView>,
+    /// One-time notes from moderators still to be shown, oldest first.
+    pub notices: Vec<ModNoticeView>,
+    /// Moderators suspended or banned the account (this run): the sign-in screen says so.
+    pub restriction: Option<RestrictionView>,
+    /// The settings backup waits until then (Unix seconds): the service protects its storage.
+    pub backup_waits_until: Option<i64>,
+}
+
+/// A suspension (`until`, Unix seconds) or a ban (`until` None) from the social features.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct RestrictionView {
+    pub until: Option<i64>,
+}
+
+/// A one-time note from Projects' moderators.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ModNoticeView {
+    pub id: String,
+    pub kind: NoticeKind,
+    /// Unix seconds.
+    pub at: i64,
+    /// What it was about (a report reason), when the moderators said.
+    pub reason: Option<ReportReason>,
+}
+
+/// A limited account ("Sınırlı hesap", a new Discord account): until when, and what is limited
+/// (only what this launcher knows how to say).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LimitedView {
+    /// Unix seconds.
+    pub until: i64,
+    pub items: Vec<LimitedItem>,
+}
+
+impl LimitedView {
+    pub(crate) fn of(limited: &crate::model::Limited) -> Self {
+        Self {
+            until: limited.until,
+            items: limited
+                .items
+                .iter()
+                .filter(|item| item.key != LimitedKey::Other)
+                .copied()
+                .collect(),
+        }
+    }
+}
+
+/// Crew chat and direct messages (CHAT1).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatView {
+    /// The service's switch: off hides the composer; what this device holds stays readable.
+    pub on: bool,
+    /// Messages also wait for devices that are away; false: they reach only those online ("Mesajlar
+    /// şu an yalnız çevrimiçi olanlara gidiyor.").
+    pub mailbox: bool,
+    /// The player's daily limit.
+    pub per_day: u32,
+    /// Unix seconds on this computer's clock: a moderator muted the player until then.
+    pub muted_until: Option<i64>,
+    /// The player's crews and every conversation this device holds, the newest first (crews
+    /// without messages last).
+    pub conversations: Vec<ConversationView>,
+}
+
+/// One conversation in the list.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationView {
+    /// `c:<team id>` or `d:<id>:<id>`.
+    pub id: String,
+    /// The friend of a direct conversation.
+    pub peer: Option<String>,
+    /// The crew of a crew's chat.
+    pub crew: Option<String>,
+    /// Who or what it is with, as last known (the lists' name wins while they are in them).
+    pub title: Option<String>,
+    pub last: Option<LastMessageView>,
+    pub unread: u32,
+    /// The player may write here now (still friends, still in the crew).
+    pub writable: bool,
+    /// A message of the player's did not go.
+    pub failed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LastMessageView {
+    pub from: String,
+    pub mine: bool,
+    pub text: String,
+    /// Unix milliseconds on this computer's clock.
+    pub at: i64,
+}
+
+/// Where one of the player's messages stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum MessageState {
+    Sent,
+    /// On its way (shown at once, settled by the service's answer).
+    Sending,
+    /// It did not go: `failure` says why.
+    Failed,
+}
+
+/// Why one of the player's messages did not go.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum SendFailure {
+    /// A link ("Bağlantı gönderilemez.").
+    Link,
+    /// A phone number.
+    Phone,
+    /// A word the service does not let through (it never says which).
+    Words,
+    /// Too long, or nothing left after cleaning.
+    Invalid,
+    /// Too many messages in a row.
+    TooFast,
+    /// The day's messages are used up.
+    DailyLimit,
+    /// A moderator muted the player.
+    Muted,
+    /// Chat is switched off.
+    Off,
+    /// No longer friends, or no longer in the crew.
+    NotAllowed,
+    /// The connection: it may go again.
+    Connection,
+}
+
+/// One message of a conversation.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatMessageView {
+    /// The same from the moment it is typed to sent (`n:<nonce>` for the player's own, else
+    /// `i:<id>`).
+    pub key: String,
+    /// The service's id (its clock, ms; the order key): None while on its way.
+    pub id: Option<i64>,
+    pub from: String,
+    pub mine: bool,
+    pub text: String,
+    /// Unix milliseconds on this computer's clock.
+    pub at: i64,
+    /// "düzenlendi".
+    pub edited: bool,
+    pub state: MessageState,
+    pub failure: Option<SendFailure>,
+    /// Unix ms (this computer): the player may edit it until then (their own, sent; 15 minutes).
+    pub edit_until: Option<i64>,
+    /// Unix ms: the player may delete it for everyone until then (their own, or any in a crew
+    /// they lead or moderate; 7 days).
+    pub delete_until: Option<i64>,
+}
+
+/// A conversation's newest messages (or those before a given one), oldest first.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatPage {
+    pub conv: String,
+    pub messages: Vec<ChatMessageView>,
+    /// Older messages remain on this device.
+    pub more: bool,
+}
+
+/// What changed in one conversation (`social-chat`): messages to add or replace (by key), keys to
+/// take away, or everything shown gone first (`reset`: the history was cleared here).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatChangeView {
+    pub conv: String,
+    pub upsert: Vec<ChatMessageView>,
+    pub remove: Vec<String>,
+    pub reset: bool,
+}
+
+/// What the player reports ("Rapor et"): a player, a crew (`code` when it was looked up by code)
+/// or a message as this device holds it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ReportTarget {
+    Player { id: String },
+    Crew { id: String, code: Option<String> },
+    Message { conv: String, id: i64 },
 }
 
 /// Where "Ekibi çağır" stands (CALL1): a call starts only while the player plays, in a game this
@@ -218,6 +415,9 @@ pub struct TeamView {
     /// The player's own mute of this crew as it reads now (never muted from a service without
     /// `multi`; `crewNotifications` covers all crews).
     pub notifications: CrewMute,
+    /// Projects' moderators reset the crew's name, tag and motto; they stay locked until then
+    /// (Unix seconds; None when not locked).
+    pub text_locked_until: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -302,6 +502,8 @@ pub struct MeView {
     pub privacy: Privacy,
     /// The settings backup, when there is one.
     pub backup: Option<SettingsMeta>,
+    /// A limited account ("Sınırlı hesap"): only the player sees it.
+    pub limited: Option<LimitedView>,
 }
 
 /// Someone shown with name and picture (requests, blocked users, code lookups).
@@ -445,6 +647,10 @@ pub enum SignInFailure {
     /// The service could not be reached.
     Unavailable,
     Failed,
+    /// The account is suspended or banned (`restriction` in the view says until when).
+    Restricted,
+    /// No new accounts are made right now; this Discord account has none yet.
+    SignupsClosed,
 }
 
 /// A moment worth telling the player about (toasts, notifications). Views carry the state.
@@ -484,6 +690,22 @@ pub enum SocialNotice {
         reason: TeamExit,
         /// The team's name, for the sentence.
         name: Option<String>,
+        /// Projects' moderators did it (community rules).
+        staff: bool,
+    },
+    /// A new chat message from someone else, live (never one of the player's own, nor one a sync
+    /// brought): the launcher decides whether to say it.
+    ChatMessage {
+        conv: String,
+        message: Box<ChatMessageView>,
+        /// The sender's name as the lists show it.
+        name: Option<String>,
+        /// The crew of a crew's chat.
+        crew: Option<String>,
+    },
+    /// Moderators suspended or banned the account: every session ended.
+    Restricted {
+        until: Option<i64>,
     },
     /// A teammate called the crew, live (never for the player's own call, on do-not-disturb or
     /// for a call that is only new to this launcher).
@@ -528,6 +750,7 @@ pub(crate) fn me_view(me: &Me, share: Option<(String, Option<QrPath>)>) -> MeVie
         status: me.status,
         privacy: me.privacy,
         backup: me.settings.clone(),
+        limited: me.limited.as_ref().map(LimitedView::of),
     }
 }
 

@@ -24,11 +24,12 @@ use crate::codes::{friend_share_link, normalize_friend_code, normalize_team_code
 use crate::error::{ErrorCode, Result, SocialError, from_response};
 use crate::model::{
     CodeLookup, CrewMute, CrewMuteEdit, Friend, FriendGroups, FriendsOverview, Me, ProfileUpdate,
-    RequestOutcome, SessionInfo, SettingsBackup, SettingsMeta, SettingsPrecondition, TeamAnswer,
-    TeamEdit, TeamLook, TeamLookup, TeamNotifications, TeamNotificationsEdit, TeamsOverview,
+    ReportReason, RequestOutcome, SessionInfo, SettingsBackup, SettingsMeta, SettingsPrecondition,
+    TeamAnswer, TeamEdit, TeamLook, TeamLookup, TeamNotifications, TeamNotificationsEdit,
+    TeamsOverview,
 };
-use crate::presence::{PresenceHandle, PresenceOptions};
-use crate::protocol::PRESENCE_CAPS;
+use crate::presence::{ChatSetup, PresenceHandle, PresenceOptions};
+use crate::protocol::presence_caps;
 
 /// The production service.
 pub const PRODUCTION_URL: &str = "https://social.projects.gg/";
@@ -214,6 +215,11 @@ impl SocialClient {
     }
 
     pub(crate) fn presence_url(&self) -> Url {
+        self.presence_url_with(false)
+    }
+
+    /// The presence socket's address, asking for chat too when `chat` (CHAT1).
+    pub(crate) fn presence_url_with(&self, chat: bool) -> Url {
         let mut url = self
             .inner
             .base
@@ -224,7 +230,7 @@ impl SocialClient {
         let _ = url.set_scheme(scheme);
         // What this launcher understands (older services ignore the query); commas stay as they
         // are, as the service reads them.
-        url.set_query(Some(&format!("caps={PRESENCE_CAPS}")));
+        url.set_query(Some(&format!("caps={}", presence_caps(chat))));
         url
     }
 
@@ -844,8 +850,72 @@ impl Session {
             self.token.clone(),
             self.client.user_agent().to_owned(),
             options,
+            None,
         )
     }
+
+    /// The presence connection with chat (CHAT1): `chat` in the capabilities, and a sync from
+    /// `chat.since` after every connect.
+    pub fn connect_presence_with_chat(
+        &self,
+        options: PresenceOptions,
+        chat: ChatSetup,
+    ) -> PresenceHandle {
+        PresenceHandle::spawn(
+            self.client.presence_url_with(true),
+            self.token.clone(),
+            self.client.user_agent().to_owned(),
+            options,
+            Some(chat),
+        )
+    }
+
+    /// "Rapor et" (MOD1): `target` is the JSON the service takes (`{"kind": "player", "id"}`,
+    /// `{"kind": "crew", "id", "code"?}`, `{"kind": "message", "message", "before"}`). A note of at
+    /// most 200 characters; `block` also blocks the player (players and messages only). Answers
+    /// whether a report about it from the player was still open (nothing new was filed then).
+    pub async fn report(
+        &self,
+        target: serde_json::Value,
+        reason: ReportReason,
+        note: Option<&str>,
+        block: bool,
+    ) -> Result<ReportAnswer> {
+        let mut body = serde_json::json!({ "target": target, "reason": reason.as_wire() });
+        if let Some(note) = note.map(str::trim).filter(|note| !note.is_empty()) {
+            body["note"] = note.into();
+        }
+        if block {
+            body["block"] = true.into();
+        }
+        self.call(Method::POST, "v1/reports", Some(body))
+            .await?
+            .json()
+    }
+
+    /// The launcher showed these moderators' notes (unknown ids are ignored).
+    pub async fn notices_seen(&self, ids: &[String]) -> Result<()> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        self.call(
+            Method::POST,
+            "v1/me/notices/seen",
+            Some(serde_json::json!({ "ids": ids })),
+        )
+        .await
+        .map(drop)
+    }
+}
+
+/// What a report answered.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ReportAnswer {
+    #[serde(default)]
+    pub id: String,
+    /// The player's earlier report about it is still open: nothing new was filed.
+    #[serde(default)]
+    pub duplicate: bool,
 }
 
 #[cfg(test)]

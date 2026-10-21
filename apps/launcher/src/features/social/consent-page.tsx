@@ -1,7 +1,9 @@
-// The opt-in screen (S3): what is shared, in two sentences, a link to the privacy page, and
-// Discord sign-in. Pressing the button after reading is the consent. While the browser is open
-// the button gives way to a calm waiting card; an expired or failed sign-in says so in place.
-import { ArrowSquareOut, WarningCircle } from "@phosphor-icons/react";
+// The opt-in screen (S3): what is shared, in two sentences (a third about chat while chat may
+// show), a link to the privacy page, and Discord sign-in. Pressing the button after reading is the
+// consent. While the browser is open the button gives way to a calm waiting card; an expired or
+// failed sign-in says so in place, and so do a suspended or banned account (with the community
+// rules) and a day without new accounts (MOD1, SPAM1).
+import { ArrowSquareOut, Prohibit, WarningCircle } from "@phosphor-icons/react";
 import { Button, useAmbientMotion } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
@@ -9,7 +11,9 @@ import { useTranslation } from "react-i18next";
 import { presetAvatar } from "@/features/avatars/presets";
 import { api } from "@/lib/api";
 import { currentLanguage } from "@/lib/i18n";
+import { openWebLink } from "@/lib/links";
 import { DiscordButton, DiscordTile } from "./discord-button";
+import { COMMUNITY_RULES_URL, dayMonth } from "./limits";
 import { rise, useSocialMotion } from "./motion";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -61,8 +65,23 @@ export function ConsentPage() {
   const error = useSocialUi((s) => s.signInError);
   const setSignIn = useSocialUi((s) => s.setSignIn);
   const setConsent = useSocialPrefs((s) => s.setConsent);
+  const chatAllowed = useSocialUi((s) => s.view.chatAllowed);
+  const restriction = useSocialUi((s) => s.view.restriction);
   const [starting, setStarting] = useState(false);
   const waiting = auth === "signingIn";
+  // A suspension that ended (or a ban lifted) no longer stands in the way.
+  const restricted =
+    restriction && (restriction.until === undefined || restriction.until * 1000 > Date.now())
+      ? restriction
+      : null;
+  const errorText =
+    error === "restricted"
+      ? null
+      : error === "signupsClosed"
+        ? t("safety.signupsClosed")
+        : error
+          ? t(`social.consent.${error}`)
+          : null;
 
   const start = async () => {
     setStarting(true);
@@ -92,6 +111,7 @@ export function ConsentPage() {
       </h2>
       <p className="mt-3 max-w-[36ch] text-[14px] leading-relaxed text-ash-300">
         {t("social.consent.body")}
+        {chatAllowed ? ` ${t("chat.consent")}` : null}
       </p>
       <button
         type="button"
@@ -139,15 +159,37 @@ export function ConsentPage() {
           ) : (
             <motion.div key="start" {...rise(reduce)}>
               <AnimatePresence initial={false}>
-                {error ? (
+                {restricted ? (
+                  <motion.div
+                    key="restricted"
+                    role="alert"
+                    className="mb-4 flex flex-col items-center gap-2 rounded-[var(--radius-panel)] bg-obsidian-950/45 px-4 py-3.5 ring-1 ring-flare-400/25"
+                    {...rise(reduce, 4)}
+                  >
+                    <p className="flex items-start gap-2 text-left text-[13.5px] text-bone-100">
+                      <Prohibit size={17} className="mt-px shrink-0 text-flare-400" aria-hidden />
+                      {restricted.until !== undefined
+                        ? t("safety.restricted.until", { date: dayMonth(restricted.until) })
+                        : t("safety.restricted.forever")}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => openWebLink(COMMUNITY_RULES_URL)}
+                      className="inline-flex cursor-pointer items-center gap-1 rounded-md px-1.5 py-0.5 text-[13px] font-medium text-gold-300 underline-offset-4 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-gold-300"
+                    >
+                      {t("safety.restricted.rules")}
+                      <ArrowSquareOut size={13} aria-hidden />
+                    </button>
+                  </motion.div>
+                ) : errorText ? (
                   <motion.p
-                    key={error}
+                    key={error ?? "error"}
                     role="alert"
                     className="mb-3 flex items-start justify-center gap-2 text-left text-[13px] text-flare-400"
                     {...rise(reduce, 4)}
                   >
                     <WarningCircle size={16} weight="fill" className="mt-px shrink-0" aria-hidden />
-                    {t(`social.consent.${error}`)}
+                    {errorText}
                   </motion.p>
                 ) : null}
               </AnimatePresence>

@@ -179,6 +179,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         // Emitted as the plain "social-view" / "social-notice" events (friends feature).
         .typ::<pl_social::SocialView>()
         .typ::<pl_social::SocialNotice>()
+        .typ::<pl_social::ChatChangeView>()
         .commands(tauri_specta::collect_commands![
             commands::app::app_info,
             commands::app::app_set_language,
@@ -432,6 +433,16 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_team_join,
             commands::social::social_team_accept,
             commands::social::social_team_decline,
+            commands::social::social_chat_page,
+            commands::social::social_chat_send,
+            commands::social::social_chat_retry,
+            commands::social::social_chat_discard,
+            commands::social::social_chat_edit,
+            commands::social::social_chat_delete,
+            commands::social::social_chat_read,
+            commands::social::social_chat_clear,
+            commands::social::social_report,
+            commands::social::social_notices_seen,
         ])
 }
 

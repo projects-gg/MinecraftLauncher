@@ -1,9 +1,12 @@
 // The friends panel: a sheet from the right, like the account center. The header carries the
 // player's own card and status; pages (list, add, settings) slide in from the side they belong
 // to. Signed out it is the opt-in screen; while a saved session is checked, skeletons. With several
-// crews (TEAM4) the crew page is "Ekipler" and its bell is the crew's on screen.
+// crews (TEAM4) the crew page is "Ekipler" and its bell is the crew's on screen. With chat (CHAT1)
+// the list has "Arkadaşlar" and "Mesajlar", and a conversation (a friend's on its own page, a crew's
+// "Sohbet" on the crew page) fills the panel: its messages scroll, the composer stays at the bottom.
 import { CaretLeft, GearSix, UserPlus, UsersThree, X } from "@phosphor-icons/react";
 import {
+  cn,
   EntranceGate,
   focusPanel,
   GatedMotion,
@@ -18,9 +21,10 @@ import { Dialog } from "radix-ui";
 import { useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AddPage } from "./add-page";
+import { ChatHeader, ChatPage } from "./chat/chat-page";
 import { ConsentPage } from "./consent-page";
 import { CrewNotifyButton } from "./crew-notify";
-import { ListPage } from "./list-page";
+import { ListTabs } from "./list-tabs";
 import { crossfade, pageVariants, useSocialMotion } from "./motion";
 import { openPanelMenuFromKey, PanelContextMenu, PanelMenuButton } from "./panel-menu";
 import { SocialSettings } from "./settings-page";
@@ -48,6 +52,7 @@ function Header({ page }: { page: SocialPage | "consent" | "restoring" }) {
   const shownCrew = useShownCrewId();
   const goTo = useSocialUi((s) => s.goTo);
   const sub = page === "add" || page === "settings" || page === "team";
+  const chat = page === "chat";
   // The crew card says the crew's name in large: the header just says where this is.
   const subTitle =
     page === "add"
@@ -66,7 +71,9 @@ function Header({ page }: { page: SocialPage | "consent" | "restoring" }) {
             className="flex min-w-0 flex-1 items-center gap-2"
             {...crossfade()}
           >
-            {sub ? (
+            {chat ? (
+              <ChatHeader />
+            ) : sub ? (
               <>
                 <IconButton
                   label={t("social.actions.back")}
@@ -139,14 +146,22 @@ export function FriendsSheet() {
   const body = useRef<HTMLDivElement>(null);
   const variants = pageVariants(reduce);
 
+  const chatConv = useSocialUi((s) => s.chatConv);
+  const crewPane = useSocialUi((s) => s.crewPane);
   const shown: SocialPage | "consent" | "restoring" =
     view.auth === "signedIn"
-      ? view.me && (page !== "team" || view.teams)
+      ? view.me &&
+        (page !== "team" || view.teams) &&
+        (page !== "chat" || (view.chat !== undefined && chatConv !== null))
         ? page
         : "list"
       : view.auth === "restoring"
         ? "restoring"
         : "consent";
+  // A conversation fills the panel: its own list scrolls, the composer stays at the bottom.
+  const fill =
+    shown === "chat" ||
+    (shown === "team" && crewPane === "chat" && view.chat !== undefined && view.crews.length > 0);
 
   return (
     <Dialog.Root open={open && view.enabled} onOpenChange={(next) => !next && close()}>
@@ -198,7 +213,10 @@ export function FriendsSheet() {
                       <div
                         ref={scroller}
                         data-social-scroller
-                        className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+                        className={cn(
+                          "relative min-h-0 flex-1 overflow-x-hidden overscroll-contain",
+                          fill ? "overflow-y-hidden" : "overflow-y-auto",
+                        )}
                       >
                         <AnimatePresence mode="popLayout" initial={false} custom={direction}>
                           <motion.div
@@ -209,7 +227,7 @@ export function FriendsSheet() {
                             animate="center"
                             exit="exit"
                             onAnimationStart={() => scroller.current?.scrollTo({ top: 0 })}
-                            className="px-4 pt-3 pb-8"
+                            className={cn("px-4 pt-3", fill ? "flex h-full flex-col pb-0" : "pb-8")}
                           >
                             {shown === "consent" ? (
                               <ConsentPage />
@@ -223,8 +241,10 @@ export function FriendsSheet() {
                               <div className="px-1">
                                 <SocialSettings />
                               </div>
+                            ) : shown === "chat" ? (
+                              <ChatPage />
                             ) : (
-                              <ListPage />
+                              <ListTabs />
                             )}
                           </motion.div>
                         </AnimatePresence>

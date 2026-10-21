@@ -9,9 +9,11 @@ import {
   BellSlash,
   CaretDown,
   CaretRight,
+  ChatsCircle,
   Check,
   Copy,
   DotsThree,
+  Flag,
   MegaphoneSimple,
   PencilSimple,
   SignOut,
@@ -68,6 +70,7 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
         ? "waiting"
         : "ready";
   const at = crews.findIndex((c) => c.id === team.id);
+  const chat = useSocialUi.getState().view.chat !== undefined;
   const plan = teamMenu({
     team,
     friendsOutside,
@@ -79,9 +82,28 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
       crew.multi && crews.length > 1 && at >= 0
         ? { first: at === 0, last: at === crews.length - 1 }
         : undefined,
+    chat,
+    report: true,
   });
   return rowsOf(plan, (row): MenuItem | null => {
     switch (row.action) {
+      case "chat":
+        return {
+          label: t("chat.tabs.chat"),
+          icon: <ChatsCircle size={16} />,
+          onSelect: () => useSocialUi.getState().openChat(`c:${team.id}`),
+        };
+      case "report":
+        return {
+          label: t("reports.crewAction"),
+          icon: <Flag size={16} />,
+          onSelect: () =>
+            useSocialUi.getState().openReport({
+              target: { kind: "crew", id: team.id },
+              name: team.name,
+              crew: team,
+            }),
+        };
       case "mute":
         return {
           label: t("teams.mute.action"),
@@ -291,38 +313,69 @@ export function TeamInviteRow({ invite }: { invite: TeamInvite }) {
     setBusy(false);
     if (done !== undefined && accept) announce(t("teams.joined", { name: invite.name }));
   };
+  // "Rapor et": the crew, or who sent the invite (the dialog asks which).
+  const report: MenuItem[] = [
+    {
+      label: t("reports.action"),
+      icon: <Flag size={16} />,
+      onSelect: () =>
+        useSocialUi.getState().openReport({
+          target: { kind: "crew", id: invite.teamId },
+          name: invite.name,
+          crew: invite,
+          inviter: {
+            target: { kind: "player", id: invite.from.id },
+            name: invite.from.name,
+            person: invite.from,
+          },
+        }),
+    },
+  ];
   return (
-    <div className="mb-1.5 flex items-center gap-3 rounded-[var(--radius-panel)] bg-gold-500/[0.07] py-2 pr-1.5 pl-2 ring-1 ring-gold-400/15">
-      <CrewMark look={invite} size={36} />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className="truncate text-[14px] font-semibold text-bone-50">{invite.name}</span>
-          <TeamTag tag={invite.tag} color={invite.color} />
+    <ContextMenu items={report}>
+      <div className="mb-1.5 flex items-center gap-3 rounded-[var(--radius-panel)] bg-gold-500/[0.07] py-2 pr-1.5 pl-2 ring-1 ring-gold-400/15">
+        <CrewMark look={invite} size={36} />
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5">
+            <span className="truncate text-[14px] font-semibold text-bone-50">{invite.name}</span>
+            <TeamTag tag={invite.tag} color={invite.color} />
+          </span>
+          <span className="block truncate text-[12.5px] text-ash-300">
+            {t("teams.invitedBy", { name: invite.from.name })}, {ago(invite.sentAt)}
+          </span>
         </span>
-        <span className="block truncate text-[12.5px] text-ash-300">
-          {t("teams.invitedBy", { name: invite.from.name })}, {ago(invite.sentAt)}
-        </span>
-      </span>
-      <Tooltip content={t("crews.limit", { count: limit })} disabled={!full}>
-        <span className="inline-flex">
-          <Button
-            size="sm"
-            variant="secondary"
-            icon={<Check size={14} weight="bold" />}
-            disabled={busy || full}
-            onClick={() => void act(true)}
-          >
-            {t("teams.accept")}
-          </Button>
-        </span>
-      </Tooltip>
-      <IconButton
-        label={t("teams.decline")}
-        icon={<X size={16} />}
-        size="sm"
-        disabled={busy}
-        onClick={() => void act(false)}
-      />
-    </div>
+        <Tooltip content={t("crews.limit", { count: limit })} disabled={!full}>
+          <span className="inline-flex">
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<Check size={14} weight="bold" />}
+              disabled={busy || full}
+              onClick={() => void act(true)}
+            >
+              {t("teams.accept")}
+            </Button>
+          </span>
+        </Tooltip>
+        <IconButton
+          label={t("teams.decline")}
+          icon={<X size={16} />}
+          size="sm"
+          disabled={busy}
+          onClick={() => void act(false)}
+        />
+        <Menu
+          items={report}
+          trigger={
+            <IconButton
+              label={t("social.actions.more")}
+              icon={<DotsThree size={18} weight="bold" />}
+              size="sm"
+              disabled={busy}
+            />
+          }
+        />
+      </div>
+    </ContextMenu>
   );
 }

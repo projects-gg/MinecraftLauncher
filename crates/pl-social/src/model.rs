@@ -150,6 +150,13 @@ pub struct Me {
     /// `YYYY-MM-DD`
     pub created_on: String,
     pub settings: Option<SettingsMeta>,
+    /// A limited account ("Sınırlı hesap"): what is limited, until when (SPAM1). None from an
+    /// older service or for an account that is not limited.
+    #[serde(default)]
+    pub limited: Option<Limited>,
+    /// One-time notes from moderators that wait to be shown (MOD1).
+    #[serde(default)]
+    pub notices: Vec<ModNotice>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -240,7 +247,13 @@ pub struct FriendsOverview {
     /// How many crews a player may be in (a service with [`TEAM_FEATURE_MULTI`]).
     #[serde(default)]
     pub crew_limit: Option<u32>,
+    /// What the service offers besides friends and crews: `push`, `chat` (none from an older one).
+    #[serde(default)]
+    pub features: Vec<String>,
 }
+
+/// `features`: crew chat and direct messages (CHAT1).
+pub const FEATURE_CHAT: &str = "chat";
 
 /// `teamFeatures`: crew looks (colour, frame, motto, the newer emblems).
 pub const TEAM_FEATURE_LOOK: &str = "look";
@@ -623,6 +636,10 @@ pub struct Team {
     /// without roles).
     #[serde(default)]
     pub permissions: TeamPermissions,
+    /// Projects' moderators reset the crew's name, tag and motto: they stay locked until then
+    /// (Unix seconds; MOD1).
+    #[serde(default)]
+    pub text_locked_until: Option<i64>,
 }
 
 /// What an invite or a code shows of a team before joining it.
@@ -884,6 +901,244 @@ impl ProfileUpdate {
     pub fn share_last_seen(mut self, share: bool) -> Self {
         self.share_last_seen = Some(share);
         self
+    }
+}
+
+// --- limited accounts, notices (SPAM1, MOD1) ---------------------------------------------------
+
+/// What a limited account ("Sınırlı hesap", a Discord account younger than the service's
+/// threshold) may not do, or does less of. A key this version does not know reads as `Other` and
+/// is left out of the view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum LimitedKey {
+    /// Founding crews (joining one is fine).
+    CrewFound,
+    /// Crew invites a day.
+    CrewInvites,
+    /// Friend and crew code lookups a day (requests and joins by code included).
+    CodeLookups,
+    /// The settings backup.
+    SettingsBackup,
+    /// Chat messages a day.
+    ChatMessages,
+    Other,
+}
+
+impl LimitedKey {
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "crew_found" => Self::CrewFound,
+            "crew_invites" => Self::CrewInvites,
+            "code_lookups" => Self::CodeLookups,
+            "settings_backup" => Self::SettingsBackup,
+            "chat_messages" => Self::ChatMessages,
+            _ => Self::Other,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for LimitedKey {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Self::parse(&String::deserialize(deserializer)?))
+    }
+}
+
+/// One limit of a limited account (`perDay` for the daily ones).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct LimitedItem {
+    pub key: LimitedKey,
+    #[serde(default)]
+    pub per_day: Option<u32>,
+}
+
+/// `me.limited`: the account is limited until `until` (Unix seconds), in these ways.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Limited {
+    pub until: i64,
+    #[serde(default)]
+    pub items: Vec<LimitedItem>,
+}
+
+/// What a moderators' one-time note says. A kind this version does not know reads as `Other`
+/// and is not shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum NoticeKind {
+    /// "Topluluk kurallarına aykırı davranış nedeniyle uyarı aldın."
+    Warning,
+    /// The profile picture went back to the default.
+    ProfileReset,
+    Other,
+}
+
+impl<'de> Deserialize<'de> for NoticeKind {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match String::deserialize(deserializer)?.as_str() {
+            "warning" => Self::Warning,
+            "profile_reset" => Self::ProfileReset,
+            _ => Self::Other,
+        })
+    }
+}
+
+/// A report reason, as players pick it and the service names it. One this version does not know
+/// reads as `Other`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ReportReason {
+    /// An inappropriate name, tag or motto.
+    Name,
+    /// An inappropriate profile picture.
+    Profile,
+    /// Harassment or bullying.
+    Harassment,
+    /// An inappropriate message.
+    Inappropriate,
+    Spam,
+    Scam,
+    Other,
+}
+
+impl ReportReason {
+    pub fn as_wire(self) -> &'static str {
+        match self {
+            Self::Name => "name",
+            Self::Profile => "profile",
+            Self::Harassment => "harassment",
+            Self::Inappropriate => "inappropriate",
+            Self::Spam => "spam",
+            Self::Scam => "scam",
+            Self::Other => "other",
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for ReportReason {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(match String::deserialize(deserializer)?.as_str() {
+            "name" => Self::Name,
+            "profile" => Self::Profile,
+            "harassment" => Self::Harassment,
+            "inappropriate" => Self::Inappropriate,
+            "spam" => Self::Spam,
+            "scam" => Self::Scam,
+            _ => Self::Other,
+        })
+    }
+}
+
+/// A one-time note from Projects' moderators (`me.notices`, `{"t":"notice"}`): shown once, on the
+/// device that sees it first, then marked seen.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ModNotice {
+    pub id: String,
+    pub kind: NoticeKind,
+    /// Unix seconds.
+    #[serde(default)]
+    pub at: i64,
+    /// What the moderators acted on (a report reason).
+    #[serde(default)]
+    pub reason: Option<ReportReason>,
+}
+
+// --- chat (CHAT1) -------------------------------------------------------------------------------
+
+/// A chat message as the service seals it: crew chat `c:<team id>`, direct `d:<id>:<id>`. `id` is
+/// the hub's clock in milliseconds when it took the message, the order key within a conversation
+/// (an edit keeps it); `mac` proves the version is genuine and goes back unchanged in an edit, a
+/// delete or a report. `nonce` (the sender's own key) reaches only the sender's devices.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatMessage {
+    /// Missing inside a sync answer (the conversation is said once there).
+    #[serde(default)]
+    pub conv: String,
+    pub id: i64,
+    pub from: String,
+    pub text: String,
+    pub mac: String,
+    /// Milliseconds, when the message was edited ("düzenlendi").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edited_at: Option<i64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nonce: Option<String>,
+}
+
+impl ChatMessage {
+    /// The message as the service wants it back (an edit, a delete, a report): without the
+    /// sender's own nonce.
+    pub fn sealed(&self) -> serde_json::Value {
+        let mut value = serde_json::json!({
+            "conv": self.conv,
+            "id": self.id,
+            "from": self.from,
+            "text": self.text,
+            "mac": self.mac,
+        });
+        if let Some(at) = self.edited_at {
+            value["editedAt"] = at.into();
+        }
+        value
+    }
+}
+
+/// A deletion in a sync answer.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ChatDeletion {
+    pub id: i64,
+    /// Who deleted it: a user id, `staff`, or empty once that account is gone.
+    #[serde(default)]
+    pub by: String,
+    #[serde(default)]
+    pub at: i64,
+}
+
+/// `hello.chat` / `chat_state`: the service's switch, the mailbox, the player's daily limit and a
+/// moderator's mute.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatStatus {
+    #[serde(default)]
+    pub on: bool,
+    #[serde(default = "mailbox_on")]
+    pub mailbox: bool,
+    /// Unix seconds (the hub's clock) when the mailbox opens again; None while unknown.
+    #[serde(default)]
+    pub mailbox_back: Option<i64>,
+    #[serde(default = "chat_per_day")]
+    pub per_day: u32,
+    /// Unix seconds (the hub's clock): the player may not send until then.
+    #[serde(default)]
+    pub muted_until: Option<i64>,
+}
+
+fn mailbox_on() -> bool {
+    true
+}
+
+fn chat_per_day() -> u32 {
+    500
+}
+
+/// Why the service turned a chat text away (`chat_rejected`). One this version does not know
+/// reads as `Words` (the text can't be sent as it is, nothing more to say).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ChatRejection {
+    Link,
+    Phone,
+    Words,
+}
+
+impl ChatRejection {
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "link" => Self::Link,
+            "phone" => Self::Phone,
+            _ => Self::Words,
+        }
     }
 }
 

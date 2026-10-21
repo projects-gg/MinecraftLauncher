@@ -31,7 +31,19 @@
 // - `&muted=<minutes>|forever` on any crew scenario: the player muted their crew (`crewMuted`:
 //   a member who did, for about two and a half hours); `&noMute=1`: a service with calls but
 //   without crew notification settings (the launcher's own switches);
-// - `legacy`: a service that offers neither categories nor teams (their menu rows stay away).
+// - `legacy`: a service that offers neither categories nor teams (their menu rows stay away);
+// - chat (CHAT1): `chat`, `chatLive`, `chatFailed`, `chatEmpty`, `chatMuted`, `chatOff` and
+//   `chatMailbox` (mock-chat.ts; `&chat=1` turns chat on in any scenario);
+// - `limited`: a new Discord account ("Sınırlı hesap"; SPAM1) without a crew: its chip, no crew
+//   founding, no settings backup, no more code lookups today;
+// - `warning` / `profileReset`: a moderators' one-time note waits (MOD1); `crewReset`: moderators
+//   reset the crew's name, locked for three days; `crewGone`: they disband the crew live;
+// - `restricted` / `banned`: the sign-in screen of a suspended / banned account, which signing in
+//   again does not change; `restrictedLive`: it happens while signed in; `signupsClosed`: no new
+//   accounts today;
+// - `backupWaits`: storage protection: the settings backup waits;
+// - `&reports=limit` on any scenario: "Rapor et" says the day's reports are used up.
+import { CHAT_SCENARIOS, mockChat } from "./mock-chat";
 import { pick } from "./mock-lang";
 import type {
   BackupMeta,
@@ -42,6 +54,7 @@ import type {
   Friend,
   FriendGroups,
   FriendRequest,
+  LimitedAccount,
   SocialApi,
   SocialInvite,
   SocialNotice,
@@ -90,6 +103,20 @@ function previewMute(): number | null | undefined {
   if (Number.isFinite(minutes) && minutes > 0) return now() + Math.round(minutes * 60);
   const halfHour = 30 * 60;
   return Math.ceil((now() + 2 * 3600) / halfHour) * halfHour;
+}
+
+/** A new Discord account's limits (SPAM1), lifting in five days. */
+function previewLimited(): LimitedAccount {
+  return {
+    until: now() + 5 * 86400,
+    items: [
+      { key: "crewFound" },
+      { key: "crewInvites", perDay: 5 },
+      { key: "codeLookups", perDay: 10 },
+      { key: "settingsBackup" },
+      { key: "chatMessages", perDay: 100 },
+    ],
+  };
 }
 
 function scenario(): string {
@@ -522,6 +549,8 @@ function initial(): SocialSnapshot {
     teamInvites: [],
     calls: [],
     callPlace: "needsServer",
+    chatAllowed: false,
+    notices: [],
   };
   // Crews on, with what the service offers of them.
   const keepsMutes = !OLD_CREWS && searchParam("noMute") === null;
@@ -551,6 +580,8 @@ function initial(): SocialSnapshot {
     crewLimit: previewLimit(),
     ...extra,
   });
+  // Chat previews (mock-chat.ts): the player leads the crew, so its chat is there too.
+  if (CHAT_SCENARIOS.includes(name)) return crewed([previewTeam(true)]);
   switch (name) {
     case "groups":
       return { ...base, groups: previewGroups() };
@@ -611,6 +642,31 @@ function initial(): SocialSnapshot {
       };
     case "replaced":
       return { ...base, connection: "replaced" };
+    case "limited":
+      // A new Discord account (SPAM1): no crew yet, and it may not found one.
+      return crewed([], { me: base.me ? { ...base.me, limited: previewLimited() } : base.me });
+    case "crewReset":
+      return crewed([{ ...previewTeam(true), textLockedUntil: now() + 3 * 86400 }]);
+    case "crewGone":
+      return crewed([previewTeam(false)]);
+    case "warning":
+      return {
+        ...base,
+        notices: [{ id: "n-warning", kind: "warning", at: now() - 3600, reason: "harassment" }],
+      };
+    case "profileReset":
+      return {
+        ...base,
+        notices: [{ id: "n-reset", kind: "profileReset", at: now() - 600, reason: "name" }],
+      };
+    case "restricted":
+      return { ...signedOut(base), restriction: { until: now() + 7 * 86400 } };
+    case "banned":
+      return { ...signedOut(base), restriction: {} };
+    case "signupsClosed":
+      return signedOut(base);
+    case "backupWaits":
+      return { ...base, backupWaitsUntil: now() + 3600 };
     default:
       return base;
   }
@@ -661,6 +717,7 @@ function signedOut(base: SocialSnapshot): SocialSnapshot {
     invites: [],
     crews: [],
     teamInvites: [],
+    chat: undefined,
   };
 }
 
@@ -673,7 +730,15 @@ const NO_CREW_FEATURES = {
   callServer: false,
 };
 
-let view = withPlace(placed(initial()));
+// Chat (CHAT1) lives in mock-chat.ts, on this preview's data.
+const chat = mockChat({
+  scenario: scenario(),
+  param: searchParam,
+  view: () => view,
+  commit,
+  tell,
+});
+let view = withPlace(placed(chat.prepare(initial())));
 
 function withPlace(snapshot: SocialSnapshot): SocialSnapshot {
   // The hidden server's address shows once the player shares it ("Aç ve çağır").
@@ -700,6 +765,27 @@ function tell(notice: SocialNotice) {
 
 if (typeof window !== "undefined") {
   const name = scenario();
+  chat.start();
+  if (name === "restrictedLive") {
+    // Moderators suspend the account while the player is signed in.
+    setTimeout(() => {
+      const until = now() + 7 * 86400;
+      commit((v) => ({ ...signedOut(v), restriction: { until } }));
+      tell({ kind: "restricted", until });
+    }, 1600);
+  }
+  if (name === "crewGone") {
+    setTimeout(() => {
+      const crew = view.crews[0];
+      if (!crew) return;
+      commit((v) => ({ ...v, crews: v.crews.filter((c) => c.id !== crew.id) }));
+      tell({ kind: "teamGone", reason: "disbanded", name: crew.name, staff: true });
+    }, 1600);
+  }
+  if (name === "signupsClosed") {
+    // As after a sign-in the service turned down today.
+    setTimeout(() => tell({ kind: "signInFailed", reason: "signupsClosed" }), 400);
+  }
   if (name === "invite" || name === "inviteOther") {
     // `?inviteAt=<ms>`: when it arrives (a game started in the preview first, for example).
     const at = Number(new URLSearchParams(window.location.search).get("inviteAt")) || 1600;
@@ -868,12 +954,40 @@ export const mockSocial: SocialApi = {
     noticeListeners.add(listener);
     return () => noticeListeners.delete(listener);
   },
+  ...chat.api,
+  async report(target, _reason, _note, block) {
+    await delay(500);
+    if (searchParam("reports") === "limit") {
+      throw new MockSocialError(
+        "SOSYAL-SINIR",
+        pick(
+          "Bugün çok rapor gönderdin. Yarın yeniden dene.",
+          "You've sent a lot of reports today. Try again tomorrow.",
+        ),
+      );
+    }
+    if (block && target.kind === "player") await mockSocial.block(target.id);
+  },
+  async noticesSeen(ids) {
+    await delay(120);
+    commit((v) => ({ ...v, notices: v.notices.filter((notice) => !ids.includes(notice.id)) }));
+  },
   async signIn() {
     await delay(300);
     commit((v) => ({ ...v, auth: "signingIn" }));
     // The browser step, then the deep link.
     setTimeout(() => {
-      const signed = initial();
+      const name = scenario();
+      if (name === "restricted" || name === "banned" || name === "signupsClosed") {
+        // The service turns the sign-in down at the end of the browser step.
+        commit((v) => ({ ...v, auth: "signedOut" }));
+        tell({
+          kind: "signInFailed",
+          reason: name === "signupsClosed" ? "signupsClosed" : "restricted",
+        });
+        return;
+      }
+      const signed = chat.prepare(initial());
       commit(() => ({
         ...signed,
         auth: "signedIn",
@@ -914,6 +1028,15 @@ export const mockSocial: SocialApi = {
   },
   async lookup(code) {
     await delay(500);
+    if (scenario() === "limited") {
+      throw new MockSocialError(
+        "SOSYAL-SINIRLI",
+        pick(
+          "Discord hesabın yeni olduğu için bugün daha fazla kod deneyemezsin.",
+          "Your Discord account is new, so you can't try more codes today.",
+        ),
+      );
+    }
     const normalized = code.toUpperCase();
     if (normalized === view.me?.friendCode) {
       return {

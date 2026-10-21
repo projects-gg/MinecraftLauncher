@@ -14,6 +14,7 @@ import type { SocialMe, SocialSession } from "@/lib/api/social-types";
 import { formatRelative } from "@/lib/format";
 import { attempt } from "./actions";
 import { CrewNotifyGroup } from "./crew-notify";
+import { dayMonth, limitOf } from "./limits";
 import { rise, useSocialMotion } from "./motion";
 import { SocialAvatar, SocialFace } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -123,6 +124,9 @@ function NotificationSection() {
   // The crew's own group, while the player is in one (the crew page's bell shows it too); with
   // several crews it mutes all of them at once.
   const crews = useSocialUi((s) => s.view.teams && s.view.crews.length > 0);
+  // Crew chat only counts unread unless this is on (CHAT1).
+  const chat = useSocialUi((s) => s.view.chat !== undefined);
+  const crewChat = useSocialPrefs((s) => s.notifyCrewChat);
   return (
     <Section title={t("social.settings.notifications")}>
       <div className="space-y-3.5">
@@ -136,6 +140,13 @@ function NotificationSection() {
           onCheckedChange={(on) => set("notifyFavoriteProjects", on)}
           label={t("social.settings.favoriteProjects")}
         />
+        {chat && crews ? (
+          <Switch
+            checked={crewChat}
+            onCheckedChange={(on) => set("notifyCrewChat", on)}
+            label={t("chat.settings.crewChat")}
+          />
+        ) : null}
       </div>
       {crews ? (
         <div className="mt-5">
@@ -151,6 +162,11 @@ function BackupSection({ me }: { me: SocialMe }) {
   const { reduce } = useSocialMotion();
   const enabled = useSocialPrefs((s) => s.backup);
   const set = useSocialPrefs((s) => s.set);
+  // A new Discord account keeps no backup (SPAM1); storage protection makes uploads wait.
+  const limit = limitOf(me, "settingsBackup", Date.now());
+  const waits = useSocialUi(
+    (s) => s.view.backupWaitsUntil && s.view.backupWaitsUntil * 1000 > Date.now(),
+  );
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const turnOff = async () => {
@@ -165,7 +181,8 @@ function BackupSection({ me }: { me: SocialMe }) {
   return (
     <Section title={t("social.settings.backup")}>
       <Switch
-        checked={enabled && !asking}
+        checked={enabled && !asking && !limit}
+        disabled={Boolean(limit)}
         onCheckedChange={(on) => {
           if (on) {
             set("backup", true);
@@ -175,11 +192,15 @@ function BackupSection({ me }: { me: SocialMe }) {
         }}
         label={t("social.settings.backupToggle")}
         description={
-          enabled && me.backup
-            ? t("social.settings.backupWhen", {
-                when: formatRelative(new Date(me.backup.updatedAt * 1000).toISOString()),
-              })
-            : undefined
+          limit
+            ? t("safety.limited.backup", { date: dayMonth(limit.until) })
+            : enabled && waits
+              ? t("safety.backupWaits")
+              : enabled && me.backup
+                ? t("social.settings.backupWhen", {
+                    when: formatRelative(new Date(me.backup.updatedAt * 1000).toISOString()),
+                  })
+                : undefined
         }
       />
       <AnimatePresence initial={false}>

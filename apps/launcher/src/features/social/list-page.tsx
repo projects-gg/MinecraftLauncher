@@ -12,6 +12,7 @@ import {
   Check,
   Copy,
   DotsThree,
+  Flag,
   Prohibit,
   UserPlus,
   WifiSlash,
@@ -255,6 +256,19 @@ function RequestRow({ request }: { request: FriendRequest }) {
                   >
                     <Prohibit size={16} aria-hidden />
                     {t("social.actions.block")}
+                  </DropdownMenu.Item>
+                  <DropdownMenu.Item
+                    onSelect={() =>
+                      useSocialUi.getState().openReport({
+                        target: { kind: "player", id: request.id },
+                        name: request.name,
+                        person: request,
+                      })
+                    }
+                    className="flex h-10 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[13.5px] text-bone-100 outline-none select-none data-[highlighted]:bg-white/8"
+                  >
+                    <Flag size={16} className="text-ash-300" aria-hidden />
+                    {t("reports.action")}
                   </DropdownMenu.Item>
                 </motion.div>
               </DropdownMenu.Content>
