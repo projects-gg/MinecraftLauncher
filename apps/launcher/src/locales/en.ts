@@ -9,6 +9,7 @@ import { enFps } from "./en-fps";
 import { enFriendGroups } from "./en-friend-groups";
 import { enFriendMenus } from "./en-friend-menus";
 import { enGraphics } from "./en-graphics";
+import { enHelp } from "./en-help";
 import { enHomeLinks } from "./en-home-links";
 import { enImport } from "./en-import";
 import { enKeyClash } from "./en-key-clash";
@@ -273,6 +274,7 @@ export const en: DeepPartial<Strings> = {
   chat: enChat,
   reports: enReports,
   safety: enSafety,
+  help: enHelp,
   nav: {
     home: "Home",
     library: "Library",

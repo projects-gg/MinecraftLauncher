@@ -10,6 +10,7 @@ import { trFps } from "./tr-fps";
 import { trFriendGroups } from "./tr-friend-groups";
 import { trFriendMenus } from "./tr-friend-menus";
 import { trGraphics } from "./tr-graphics";
+import { trHelp } from "./tr-help";
 import { trHomeLinks } from "./tr-home-links";
 import { trImport } from "./tr-import";
 import { trKeyClash } from "./tr-key-clash";
@@ -67,6 +68,7 @@ export const tr = {
   chat: trChat,
   reports: trReports,
   safety: trSafety,
+  help: trHelp,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
