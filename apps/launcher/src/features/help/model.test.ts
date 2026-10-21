@@ -16,6 +16,7 @@ import {
   shownFix,
   summaryText,
   supportCode,
+  supportPlace,
   verdict,
   verdictLine,
 } from "./model";
@@ -382,5 +383,44 @@ describe("shownFix", () => {
     expect(reasonOf(t, insecure, "tr")).toBe(
       "Saat yanlış olduğu için güvenli bağlantı kurulamıyor.",
     );
+  });
+});
+
+describe("the clock's fix where the system has no settings page", () => {
+  it("leaves the button out on Linux", () => {
+    const clock = row("clock", "problem", "clockWrong", { fix: "clockSettings" });
+    const rows = new Map([[clock.check, clock]]);
+    expect(shownFix(clock, rows, false)).toBeUndefined();
+    expect(shownFix(clock, rows, true)).toBe("clockSettings");
+    const disk = row("disk", "problem", "diskFull", { fix: "makeSpace" });
+    expect(shownFix(disk, new Map([[disk.check, disk]]), false)).toBe("makeSpace");
+  });
+});
+
+describe("supportPlace", () => {
+  const forum = { platform: "forum", url: "https://forum.projects.gg" };
+
+  it("sends to Studio's support link, else Discord", () => {
+    expect(supportPlace({ support: "https://projects.gg/destek" }, true)).toEqual({
+      kind: "page",
+      url: "https://projects.gg/destek",
+    });
+    expect(supportPlace({ discord: "https://discord.gg/abc" }, true)).toEqual({
+      kind: "discord",
+      url: "https://discord.gg/abc",
+    });
+    expect(supportPlace({}, true)).toEqual({ kind: "discord", url: "https://projects.gg/discord" });
+  });
+
+  it("sends to the forum when Discord is out of reach", () => {
+    expect(supportPlace({ discord: "https://discord.gg/abc", community: [forum] }, false)).toEqual({
+      kind: "forum",
+      url: "https://forum.projects.gg",
+    });
+    // Without a forum link Discord stays; a support page stays anyway.
+    expect(supportPlace({ discord: "https://discord.gg/abc" }, false).kind).toBe("discord");
+    expect(
+      supportPlace({ support: "https://projects.gg/destek", community: [forum] }, false).kind,
+    ).toBe("page");
   });
 });

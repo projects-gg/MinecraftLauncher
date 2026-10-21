@@ -41,6 +41,7 @@ import { usePlayInstance } from "@/features/settings/graphics-section";
 import { api, type HelpLevel, type InstanceSummary } from "@/lib/api";
 import { copyDetails, copyText } from "@/lib/clipboard";
 import { openLink } from "@/lib/links";
+import { detectOs } from "@/lib/platform";
 import { InstanceIcon } from "@/shell/instance-icon";
 import { usePrefs } from "@/stores/prefs";
 import { runFix } from "./fixes";
@@ -54,6 +55,7 @@ import {
   reasonOf,
   shownFix,
   summaryText,
+  supportPlace,
   titleOf,
   type Verdict,
   verdict,
@@ -62,6 +64,9 @@ import {
 import { type LaunchFailure, recentFailure, useHelp } from "./store";
 
 type Shown = "checking" | HelpLevel;
+
+/** The system has a date and time page to open (Windows, macOS). */
+const CLOCK_SETTINGS = detectOs() !== "linux";
 
 /** Skeleton widths, so the rows being checked do not read as one block. */
 const SKELETON_WIDTHS = ["w-[46%]", "w-[58%]", "w-[38%]", "w-[52%]", "w-[42%]", "w-[60%]"];
@@ -277,7 +282,7 @@ function HelpRow({
   if (row) last.current = { reason, row };
   const kept = { reason: row ? reason : (last.current?.reason ?? "") };
   const shownRow = row ?? last.current?.row;
-  const fix = shownRow ? shownFix(shownRow, rows) : undefined;
+  const fix = shownRow ? shownFix(shownRow, rows, CLOCK_SETTINGS) : undefined;
   const title = titleOf(t, check);
   const tone =
     !row || row.level === "ok"
@@ -534,8 +539,8 @@ export function HelpSection() {
   // works as soon as its row settles.
   const leadRow = running
     ? undefined
-    : shownRows.find((row) => row.level === "problem" && shownFix(row, rows));
-  const leadFix = leadRow ? shownFix(leadRow, rows) : undefined;
+    : shownRows.find((row) => row.level === "problem" && shownFix(row, rows, CLOCK_SETTINGS));
+  const leadFix = leadRow ? shownFix(leadRow, rows, CLOCK_SETTINGS) : undefined;
 
   const [fixing, setFixing] = useState(false);
   const fix = async (row: Row) => {
@@ -563,11 +568,11 @@ export function HelpSection() {
       () => toast.error(t("common.copyFailed")),
     );
   };
-  const links = home?.links;
-  const supportUrl = links?.support ?? links?.discord ?? "https://projects.gg/discord";
-  const discord =
-    /(^|\.)discord(app)?\.(gg|com)$/i.test(hostOf(supportUrl)) ||
-    supportUrl === "https://projects.gg/discord";
+  // Studio's support link or Discord; the forum when this computer cannot reach Discord.
+  const support = supportPlace(
+    home?.links ?? {},
+    rows.get("discord")?.code !== "discordUnreachable",
+  );
   const prefs = useMotionPrefs();
   const { end, below: stuck } = useContentBelow();
 
@@ -642,10 +647,16 @@ export function HelpSection() {
             <Button
               size="sm"
               variant="secondary"
-              icon={discord ? <CommunityMark platform="discord" /> : <Lifebuoy size={15} />}
-              onClick={() => openLink(supportUrl)}
+              icon={
+                support.kind === "page" ? (
+                  <Lifebuoy size={15} />
+                ) : (
+                  <CommunityMark platform={support.kind} />
+                )
+              }
+              onClick={() => openLink(support.url)}
             >
-              {discord ? t("help.footer.discord") : t("help.footer.support")}
+              {t(`help.footer.${support.kind === "page" ? "support" : support.kind}`)}
             </Button>
           </div>
         </div>
@@ -672,12 +683,4 @@ function useContentBelow() {
     return () => observer.disconnect();
   }, []);
   return { end, below };
-}
-
-function hostOf(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return "";
-  }
 }

@@ -123,6 +123,7 @@ export const enHelp = {
     copy: "Copy summary for support",
     copied: "Summary copied. Paste it in the support channel.",
     discord: "Go to the Discord support channel",
+    forum: "Ask for help on the forum",
     support: "Go to the support page",
   },
   summary: {

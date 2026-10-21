@@ -135,6 +135,8 @@ export const trHelp = {
     copy: "Destek için özeti kopyala",
     copied: "Özet kopyalandı. Destek kanalına yapıştırabilirsin.",
     discord: "Discord destek kanalına git",
+    /** This computer cannot reach Discord: the forum instead. */
+    forum: "Forumda destek iste",
     /** The support link is a web page, not Discord. */
     support: "Destek sayfasına git",
   },

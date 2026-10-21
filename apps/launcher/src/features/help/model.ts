@@ -105,10 +105,16 @@ export function noticeRow(
 /**
  * The fix a row's button offers. One button per fix: a wrong clock is why secure connections
  * fail, and the clock's own row offers its settings, so the internet row (which says so) does not
- * offer them a second time. Rows that are fine offer nothing.
+ * offer them a second time. Rows that are fine offer nothing. `clockSettings`: the system has a
+ * date and time page to open (Windows, macOS; Linux desktops have no common one).
  */
-export function shownFix(row: Row, rows: ReadonlyMap<RowCheck, Row>): HelpFix | undefined {
+export function shownFix(
+  row: Row,
+  rows: ReadonlyMap<RowCheck, Row>,
+  clockSettings = true,
+): HelpFix | undefined {
   if (row.level === "ok") return undefined;
+  if (row.fix === "clockSettings" && !clockSettings) return undefined;
   if (
     row.check === "internet" &&
     row.fix === "clockSettings" &&
@@ -117,6 +123,33 @@ export function shownFix(row: Row, rows: ReadonlyMap<RowCheck, Row>): HelpFix | 
     return undefined;
   }
   return row.fix;
+}
+
+export type SupportPlace = { kind: "discord" | "forum" | "page"; url: string };
+
+/**
+ * Where "Çözülmedi mi?" sends the player: Studio's support link, else the Discord server. When
+ * this computer cannot reach Discord (the Discord row says so) and the forum is among the
+ * community links, the forum: a support channel the player cannot open helps nobody.
+ */
+export function supportPlace(
+  links: { support?: string; discord?: string; community?: { platform: string; url: string }[] },
+  discordReachable: boolean,
+): SupportPlace {
+  const forum = links.community?.find((link) => link.platform === "forum")?.url;
+  const url = links.support ?? links.discord ?? "https://projects.gg/discord";
+  const kind = isDiscordLink(url) ? "discord" : "page";
+  if (kind === "discord" && !discordReachable && forum) return { kind: "forum", url: forum };
+  return { kind, url };
+}
+
+function isDiscordLink(url: string): boolean {
+  if (url === "https://projects.gg/discord") return true;
+  try {
+    return /(^|\.)(discord|discordapp)\.(gg|com)$/i.test(new URL(url).hostname);
+  } catch {
+    return false;
+  }
 }
 
 /**
