@@ -1239,8 +1239,16 @@ async fn prepare_and_spawn(
         // Background preparation looks again once the player is done with the launcher.
         crate::prepare::game_exited(&app);
         if let Some(diagnosis) = exit.crash.clone() {
-            let view =
-                modhealth::crash_view(&app, &state, &crashed_instance, java_major, diagnosis).await;
+            let view = modhealth::crash_view(
+                &app,
+                &state,
+                &crashed_instance,
+                java_major,
+                diagnosis.clone(),
+            )
+            .await;
+            // The troubleshooter's "Son çökme" row, also after a restart (HELP1).
+            crate::commands::troubleshoot::remember_crash(&app, &id, diagnosis, java_major, &view);
             let _ = events.send(LaunchEventView::Crashed(view));
         }
         // A start that never reached the game (closed or crashed while it opened, or crashed on
@@ -1249,6 +1257,9 @@ async fn prepare_and_spawn(
             Some(played) => {
                 if let Err(error) = state.instances.record_session(&id, played).await {
                     tracing::warn!(%error, "could not record play time");
+                }
+                if exit.crash.is_none() {
+                    crate::commands::troubleshoot::played_without_crash(&app, &id);
                 }
             }
             None => tracing::info!(

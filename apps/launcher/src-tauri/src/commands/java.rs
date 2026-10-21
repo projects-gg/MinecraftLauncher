@@ -1106,6 +1106,73 @@ pub(crate) async fn prelaunch(
     }
 }
 
+// --- the troubleshooter ------------------------------------------------------------------------
+
+/// The Java the instance would run with, for the troubleshooter (HELP1): on "Otomatik" whether
+/// the launcher's runtime for its game is installed (it comes with the first start otherwise);
+/// a custom Java against what the game and its mods need, with the same probe and cache as the
+/// check before a launch. The second value: "Kur ve oyna" has a launcher runtime that fits.
+pub(crate) async fn troubleshoot_java(
+    app: &AppHandle,
+    state: &AppState,
+    instance: &Instance,
+) -> (pl_data::troubleshoot::JavaState, bool) {
+    use pl_data::troubleshoot::JavaState;
+    let need = {
+        let dirs = state.mc.dirs.clone();
+        let (minecraft, loader) = (instance.mc_version.clone(), instance.loader.kind);
+        tokio::task::spawn_blocking(move || pl_mc::java::game_need(&dirs, &minecraft, loader))
+            .await
+            .ok()
+            .flatten()
+    };
+    let need = match need {
+        Some(need) => Some(
+            need.with_mods(crate::commands::modhealth::mods_java_minimum(state, instance).await),
+        ),
+        None => None,
+    };
+    let fixable = need.as_ref().is_some_and(|need| remedy(need).is_some());
+    match &instance.java {
+        JavaSetting::Auto => {
+            // A game whose version is not installed yet gets its runtime with it.
+            let Some(need) = need else {
+                return (JavaState::Automatic { installed: None }, fixable);
+            };
+            let managed = {
+                let (dirs, os) = (state.mc.dirs.clone(), state.mc.platform.os);
+                tokio::task::spawn_blocking(move || managed::list_managed(&dirs, os))
+                    .await
+                    .unwrap_or_default()
+            };
+            let platforms = state.mc.platform.java_runtime_platforms();
+            let installed = automatic_runtime(&managed, &need.component, &platforms)
+                .map(|runtime| runtime.major);
+            (JavaState::Automatic { installed }, fixable)
+        }
+        JavaSetting::Custom { path } => {
+            let path = resolve_custom_java(path, state.mc.platform.os);
+            let java = check_custom_java(&path, &service(app).probes).await;
+            let found = match &java {
+                CustomJava::Missing => return (JavaState::Missing, fixable),
+                CustomJava::Broken => return (JavaState::Broken, fixable),
+                CustomJava::Found(info) => JavaState::Fits {
+                    major: info.major,
+                    bits32: bits32(info.arch),
+                },
+            };
+            let judged = match need.as_ref().map(|need| judge(&java, need)) {
+                Some(JavaVerdict::TooOld { have, need }) => JavaState::TooOld { have, need },
+                Some(JavaVerdict::TooNew { have, max }) => JavaState::TooNew { have, max },
+                Some(JavaVerdict::Missing) => JavaState::Missing,
+                Some(JavaVerdict::Broken) => JavaState::Broken,
+                Some(JavaVerdict::Fine) | None => found,
+            };
+            (judged, fixable)
+        }
+    }
+}
+
 // --- background updates ------------------------------------------------------------------------
 
 /// Nothing else wants the network or the data folder: no game running or being prepared, no

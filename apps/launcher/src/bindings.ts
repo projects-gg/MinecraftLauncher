@@ -231,6 +231,46 @@ export const commands = {
 	 *  and address it pings the featured server Studio published (else `play.projects.gg`).
 	 */
 	serverStatus: (name: string | null, address: string | null) => __TAURI_INVOKE<ServerStatusView>("server_status", { name, address }),
+	/**
+	 *  Checks everything once, sending each row as it settles. `instance_id`: the instance Play
+	 *  starts (its Java, memory, mods and last crash); without one the game rows are left out.
+	 */
+	troubleshootRun: (instanceId: string | null, onEvent: Channel<TroubleshootEvent>) => typedError<TroubleshootReport, CmdError>(__TAURI_INVOKE("troubleshoot_run", { instanceId, onEvent })),
+	/**
+	 *  The crash dialog for the instance's last crash (the row's "Ayrıntılar"), built again from
+	 *  the diagnosis kept when it happened, against the mods folder as it is now. `None` when the
+	 *  crash is resolved, old or gone.
+	 */
+	troubleshootCrash: (instanceId: string) => typedError<{
+	title: string,
+	hint: string,
+	actions: string[],
+	mods: string[],
+	logFile: string | null,
+	crashReport: string | null,
+	kind: CrashKind,
+	instanceId: string,
+	/**  Mods the crash points at, strongest evidence first. */
+	suspects: CrashSuspectView[],
+	/**  "Onar" has something to do. */
+	repairable: boolean,
+	/**  The first strongly suspected mod that can be turned off ("Bu modu kapat"). */
+	turnOff: TurnOffView | null,
+	/**  "Yeniden yükle" makes sense (a mod crash in a set with mods). */
+	reinstall: boolean,
+	/**  Memory crashes: the maximum memory to retry with. */
+	memory: MemoryAdviceView | null,
+	/**
+	 *  The JVM did not start because of the instance's own JVM arguments, and it has some:
+	 *  "Argümanları sıfırla ve yeniden dene" (`instance_set_jvm_args`).
+	 */
+	resetJvmArgs: boolean,
+} | null, CmdError>(__TAURI_INVOKE("troubleshoot_crash", { instanceId })),
+	/**
+	 *  The system's date and time settings (the clock row's fix): Windows' Settings page, macOS's
+	 *  System Settings pane. Linux desktops have no common one; the row offers no fix there.
+	 */
+	troubleshootOpenClock: () => typedError<null, CmdError>(__TAURI_INVOKE("troubleshoot_open_clock")),
 	afkOverview: () => __TAURI_INVOKE<AfkAccountView[]>("afk_overview"),
 	afkAdd: (nickname: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_add", { nickname })),
 	afkRemove: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_remove", { id })),
@@ -1467,6 +1507,31 @@ export type CleanupSummaryView = {
 };
 
 /**
+/**  One row of the troubleshooter, in the order the rows are shown. */
+export type Check = "internet" | 
+/**  The Projects Minecraft server (server list ping). */
+"server" | 
+/**  The signed content (packs, news, the launcher's settings from Studio). */
+"content" | 
+/**  The friends service, while the feature is on. */
+"friends" | 
+/**  Microsoft's sign-in and Minecraft services, when a Microsoft account is added. */
+"microsoft" | 
+/**  Discord (friends sign-in, the support channel), while the friends feature is on. */
+"discord" | 
+/**  This computer's clock; a row only when it is wrong. */
+"clock" | 
+/**  Free space on the data folder's disk. */
+"disk" | 
+/**  The Java the instance Play starts would run with. */
+"java" | 
+/**  That instance's memory; a row only when it is too high. */
+"memory" | 
+/**  That instance's mod check. */
+"mods" | 
+/**  That instance's last crash. */
+"crash";
+
  *  Why the AFK client could not be had, in the player's terms (the UI words each one; the cause
  *  itself goes to the log).
  */
@@ -1559,6 +1624,39 @@ export type ConsoleLine = {
 export type ConsoleLineKind = 
 /**  Always visible. */
 "normal" | 
+/**  What a check found, stable for support (the summary writes it as `SERVER-UNREACHABLE`). */
+export type Code = "internetOk" | "internetSlow" | 
+/**  The system has no network at all. */
+"internetOffline" | 
+/**  A network without internet (a router that lost its line). */
+"internetLocal" | 
+/**  A network behind a sign-in page (a café, a school, a hotel). */
+"internetSignIn" | 
+/**  No address resolves (DNS). */
+"internetNoDns" | 
+/**  Secure connections fail (the clock, security software or a proxy that reads HTTPS). */
+"internetInsecure" | "internetDown" | "serverOk" | "serverSlow" | 
+/**  The server refused the connection. */
+"serverDown" | 
+/**  The server's name does not resolve. */
+"serverNotFound" | "serverUnreachable" | "serverNeedsInternet" | "contentOk" | 
+/**  Out of reach; the launcher goes on with what it saved. */
+"contentUnreachable" | 
+/**  Out of reach with nothing saved yet. */
+"contentMissing" | "contentNeedsInternet" | "friendsOk" | 
+/**  The service answered with an error. */
+"friendsDown" | "friendsUnreachable" | "friendsNeedsInternet" | "microsoftOk" | "microsoftDown" | "microsoftUnreachable" | "microsoftNeedsInternet" | "discordOk" | "discordUnreachable" | "discordNeedsInternet" | "clockWrong" | "diskOk" | "diskLow" | "diskFull" | "diskUnknown" | 
+/**  "Otomatik": the launcher's runtime is installed. */
+"javaReady" | 
+/**  "Otomatik": the runtime comes with the first start. */
+"javaDownloads" | "javaCustomOk" | 
+/**  A 32-bit Java on a 64-bit computer: the game gets little memory. */
+"javaX86" | "javaMissing" | "javaBroken" | "javaTooOld" | "javaTooNew" | "javaUnknown" | "memoryTooHigh" | "memoryHigh" | "modsOk" | "modsWarning" | "modsBlocking" | "modsUnknown" | "crashNone" | 
+/**  The game ran fine after its last crash. */
+"crashResolved" | "crashRecent" | 
+/**  The check could not run (an error, or its time ran out). */
+"checkFailed";
+
 /**  Output of a login command: visible only when "show script commands" is on. */
 "script" | 
 /**  Output of a login/register/password command: never visible (already masked anyway). */
@@ -1972,6 +2070,26 @@ export type FixLabel =
 /**  "Aç". */
 "enable";
 
+/**  Numbers and names a row's words use. Never personal data. */
+export type Facts = {
+	latencyMs: number | null,
+	players: number | null,
+	freeBytes: number | null,
+	/**  A Java major version (the one there is). */
+	major: number | null,
+	/**  The Java the game needs (the lowest, or the highest for a Java that is too new). */
+	need: number | null,
+	/**  Mod issues, or mods. */
+	count: number | null,
+	/**  How far the clock is off (positive: ahead). */
+	minutes: number | null,
+	/**  When the last crash happened. */
+	at: string | null,
+	crash: CrashKind | null,
+	/**  The mod a crash points at (its display name). */
+	name: string | null,
+};
+
 export type FixOfferView = {
 	label: FixLabel,
 	/**  The mod the button acts on, for `disableNamed`. */
@@ -2001,6 +2119,36 @@ export type FriendView = FriendView_Serialize | FriendView_Deserialize;
 
 export type FriendView_Deserialize = {
 	id: string,
+/**  What one check found. */
+export type Finding = {
+	check: Check,
+	level: Level,
+	code: Code,
+	fix: Fix | null,
+	facts: Facts,
+};
+
+/**  The one-tap fix a row offers. */
+export type Fix = 
+/**  The cleanup (Settings → Veri). */
+"makeSpace" | 
+/**  Switch the instance to a Java that fits and play (the Java prompt's "Kur ve oyna"). */
+"installJava" | 
+/**  The instance's settings tab. */
+"instanceSettings" | 
+/**  The mod repair ("Onar"). */
+"repair" | 
+/**  The mod check's findings. */
+"showMods" | 
+/**  The crash dialog. */
+"crashDetails" | 
+/**  The instance's memory back on "Otomatik". */
+"memoryAuto" | 
+/**  The system's date and time settings. */
+"clockSettings" | 
+/**  The status page of an announcement. */
+"statusPage";
+
 	name: string,
 	username: string,
 	avatar: string,
@@ -2320,6 +2468,11 @@ export type InstanceSettingsView = {
 	/**  "auto" | "custom" */
 	javaMode: string,
 	javaPath: string | null,
+/**  The kind of instance, for the summary (never its name). */
+export type InstanceKind = 
+/**  Kept up to date from the Projects pack. */
+"official" | "custom";
+
 	minMemoryMb: number,
 	maxMemoryMb: number,
 	/**
@@ -2901,6 +3054,13 @@ export type LoaderKind = "vanilla" | "fabric" | "quilt" | "forge" | "neoForge";
 export type LoaderVersionView = {
 	version: string,
 	stable: boolean,
+/**  How a check went. The calm states first: only `Warning` and `Problem` count as findings. */
+export type Level = "ok" | 
+/**  Worth knowing, nothing to fix (a planned maintenance). */
+"note" | "warning" | "problem" | 
+/**  Could not be judged (no internet for it, no instance, the check failed). */
+"skipped";
+
 };
 
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error" | "fatal";
@@ -5506,4 +5666,38 @@ async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; dat
         return { status: "error", error: e as any };
     }
 }
+
+/**  What a run sends while it goes. */
+export type TroubleshootEvent = 
+/**  The rows checked (the memory and clock rows come only with a finding). */
+{ type: "plan"; checks: Check[] } | 
+/**  A row settled (or changed). */
+{ type: "finding"; finding: Finding };
+
+/**  The instance the checks looked at, for the summary. */
+export type TroubleshootInstance = {
+	kind: InstanceKind,
+	minecraft: string,
+	loader: LoaderKind,
+	loaderVersion: string | null,
+	/**  The Projects pack's version. */
+	packVersion: string | null,
+};
+
+/**  A run's result. */
+export type TroubleshootReport = {
+	findings: Finding[],
+	system: TroubleshootSystem,
+	instance: TroubleshootInstance | null,
+};
+
+/**  The computer, for the summary. */
+export type TroubleshootSystem = {
+	launcher: string,
+	debug: boolean,
+	/**  "Windows 11 Pro 24H2". */
+	os: string,
+	arch: string,
+	memoryMb: number,
+};
 

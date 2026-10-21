@@ -79,36 +79,60 @@ pub enum ProbeMethod {
 }
 
 impl Http {
-    /// One request to `url`, at most `timeout` long, without the client's retries.
+    /// One request to `url`, at most `timeout` long, without the client's retries. Redirects are
+    /// followed, as every request of the launcher follows them.
     pub async fn probe(&self, method: ProbeMethod, url: &str, timeout: Duration) -> Probe {
         let request = match method {
             ProbeMethod::Head => self.client().head(url),
             ProbeMethod::Get => self.client().get(url),
         };
-        let started = Instant::now();
-        let result = request.timeout(timeout).send().await;
-        let elapsed = started.elapsed();
-        let received_at = SystemTime::now();
-        match result {
-            Ok(response) => Probe {
-                reach: Reach::Answered {
-                    status: response.status().as_u16(),
-                },
-                elapsed,
-                server_date: response
-                    .headers()
-                    .get(reqwest::header::DATE)
-                    .and_then(|value| value.to_str().ok())
-                    .and_then(parse_http_date),
-                received_at,
+        send(request, timeout).await
+    }
+}
+
+/// A `HEAD` to `url` that takes its first answer, a redirect too, from a client of its own: a
+/// plain HTTP address that only sends to its secure twin still tells the server's clock while
+/// every secure connection fails (a wrong clock is a common reason they do).
+pub async fn probe_unfollowed(user_agent: &str, url: &str, timeout: Duration) -> Probe {
+    let client = reqwest::Client::builder()
+        .user_agent(user_agent)
+        .redirect(reqwest::redirect::Policy::none())
+        .build();
+    match client {
+        Ok(client) => send(client.head(url), timeout).await,
+        Err(error) => Probe {
+            reach: classify(&error),
+            elapsed: Duration::ZERO,
+            server_date: None,
+            received_at: SystemTime::now(),
+        },
+    }
+}
+
+async fn send(request: reqwest::RequestBuilder, timeout: Duration) -> Probe {
+    let started = Instant::now();
+    let result = request.timeout(timeout).send().await;
+    let elapsed = started.elapsed();
+    let received_at = SystemTime::now();
+    match result {
+        Ok(response) => Probe {
+            reach: Reach::Answered {
+                status: response.status().as_u16(),
             },
-            Err(error) => Probe {
-                reach: classify(&error),
-                elapsed,
-                server_date: None,
-                received_at,
-            },
-        }
+            elapsed,
+            server_date: response
+                .headers()
+                .get(reqwest::header::DATE)
+                .and_then(|value| value.to_str().ok())
+                .and_then(parse_http_date),
+            received_at,
+        },
+        Err(error) => Probe {
+            reach: classify(&error),
+            elapsed,
+            server_date: None,
+            received_at,
+        },
     }
 }
 
@@ -464,6 +488,24 @@ mod tests {
             .probe(ProbeMethod::Get, &url, Duration::from_secs(5))
             .await;
         assert_eq!(get.reach, Reach::Answered { status: 204 });
+    }
+
+    #[tokio::test]
+    async fn a_redirect_tells_the_clock_when_its_target_fails() {
+        // A plain address that sends to a secure one nobody answers (port 1 is never open).
+        let url = answering(
+            "HTTP/1.1 301 Moved Permanently\r\nLocation: https://127.0.0.1:1/\r\nDate: Wed, 21 Oct 2026 18:42:07 GMT\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        )
+        .await;
+        let first = probe_unfollowed("pl-net tests", &url, Duration::from_secs(5)).await;
+        assert_eq!(first.reach, Reach::Answered { status: 301 });
+        assert_eq!(first.server_date.map(secs), Some(1_792_608_127));
+        // Following it ends where the redirect leads.
+        let followed = http()
+            .probe(ProbeMethod::Head, &url, Duration::from_secs(10))
+            .await;
+        assert!(!followed.reach.answered(), "{followed:?}");
+        assert_eq!(followed.server_date, None);
     }
 
     #[tokio::test]

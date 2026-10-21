@@ -32,8 +32,8 @@ pub struct ServerStatusView {
 }
 
 /// The signed config's featured server (else its first one) as name and `host[:port]`, from the
-/// content cache (no network).
-async fn configured_server(app: &tauri::AppHandle) -> Option<(String, String)> {
+/// content cache (no network). The troubleshooter pings it too.
+pub(crate) async fn configured_server(app: &tauri::AppHandle) -> Option<(String, String)> {
     let state = app.try_state::<AppState>()?;
     let snapshot = state.content.load_cached().await.ok()?;
     let servers = &snapshot.config.servers;
