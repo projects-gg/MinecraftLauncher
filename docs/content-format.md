@@ -355,8 +355,8 @@ cache file extension.
 ```
 
 Every field is optional (`{}` is a valid config). Defaults: no maintenance, no banners, bundled
-hero art with `particles: embers`, `season: none`, all feature flags `true` except `friends`
-and `teams` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
+hero art with `particles: embers`, `season: none`, all feature flags `true` except `friends`,
+`teams` and `chat` (`false`), Discord enabled with the launcher's built-in client id when `clientId` is empty, no
 news feed, the launcher's built-in recommended Minecraft version.
 
 - `banners[].level`: `info | warning | event | critical`; a banner is shown while
@@ -404,6 +404,17 @@ news feed, the launcher's built-in recommended Minecraft version.
   `false`. Launchers that do not know the field ignore it. Studio sets it with "Ekipler" next
   to "Arkadaşlar" (it can't be switched on while `friends` is off) and warns before a publish
   that switches it on, or that has it on without `friends`.
+- `features.chat`: crew chat and direct messages between friends inside the friends feature
+  (CHAT1: text only, a short mailbox on the service, the history on each device), with reporting
+  a message. Off by default and only shown while `features.friends` is on too. Launchers also
+  need the friends service to offer chat on its presence socket (its own switch and seal key); a
+  service without it, or with its switch off, shows no chat (what a device already holds stays
+  readable while the service's switch is off). While it is `false` (or missing) launchers do not
+  ask for chat, show no "Mesajlar", "Sohbet" or "Mesaj" and leave the chat clause out of the
+  sign-in screen. Turn it on only after the service with chat, reports and spam protection
+  (MOD1, SPAM1) is live and its privacy text is published. Writers omit it while it is `false`;
+  launchers that do not know the field ignore it. Studio sets it next to "Arkadaşlar" (it can't
+  be switched on while `friends` is off).
 - `newsFeed`: the Discord bot's feed ([News feed (Discord bot)](#news-feed-discord-bot)).
   `mirrors`: 1–4 distinct `https://` bases with a host, ending in `/`, without credentials, query
   or fragment. `keys`: 1–4 distinct `{ keyId, publicKey }`, `publicKey` the base64 of a 32-byte

@@ -476,8 +476,8 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
     out.trim().to_owned()
 }
 
-/// Feature flags; everything is on unless Studio turns it off, except `friends` and `teams`,
-/// which stay off until Studio turns them on.
+/// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams` and
+/// `chat`, which stay off until Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -494,6 +494,11 @@ pub struct Features {
     /// service with teams is live; written only when on.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub teams: bool,
+    /// Crew chat and direct messages inside the friends feature (needs `friends` too; CHAT1).
+    /// Off by default until the friends service with chat (and its reports and spam protection)
+    /// is live; written only when on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub chat: bool,
 }
 
 impl Default for Features {
@@ -505,6 +510,7 @@ impl Default for Features {
             modrinth_browser: true,
             friends: false,
             teams: false,
+            chat: false,
         }
     }
 }
@@ -632,6 +638,16 @@ mod tests {
         assert!(teams.features.teams);
         assert_eq!(
             serde_json::to_value(&teams).unwrap()["features"]["teams"],
+            serde_json::Value::Bool(true)
+        );
+        // Chat the same way.
+        assert!(!teams.features.chat);
+        assert!(written["features"].get("chat").is_none());
+        let chat: LauncherConfig =
+            serde_json::from_str(r#"{"features": {"friends": true, "chat": true}}"#).unwrap();
+        assert!(chat.features.chat && !chat.features.teams);
+        assert_eq!(
+            serde_json::to_value(&chat).unwrap()["features"]["chat"],
             serde_json::Value::Bool(true)
         );
     }
