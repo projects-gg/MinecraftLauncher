@@ -19,10 +19,14 @@ import { useSocialUi } from "./store";
 /** The service allows one invite per friend per 5 minutes. */
 export const INVITE_COOLDOWN_MS = 5 * 60_000;
 
-/** Runs a friends call; a failure becomes a toast. Returns undefined on failure. */
+/**
+ * Runs a friends call; a failure becomes a toast and gives undefined. A call that answers nothing
+ * gives null when it went through, so `done !== undefined` always means it worked.
+ */
 export async function attempt<T>(work: () => Promise<T>): Promise<T | undefined> {
   try {
-    return await work();
+    const value = await work();
+    return (value === undefined ? null : value) as T;
   } catch (error) {
     toast.error(friendlyError(error, i18n.t("social.actions.failed")).message);
     return undefined;
