@@ -59,7 +59,7 @@ import { AccountsSection } from "./accounts-section";
 import { DataSection } from "./data-section";
 import { GraphicsSection } from "./graphics-section";
 import { JavaSection } from "./java-section";
-import { Row } from "./row";
+import { Row, SwapLine } from "./row";
 
 const sections = [
   { id: "general", icon: Gear },
@@ -159,7 +159,17 @@ function General() {
   return (
     <>
       <LanguageRow />
-      <Row title={t("settings.general.onGameStart")} help={t("settings.general.onGameStartHelp")}>
+      {/* "Kapansın" really quits (SMALL7): its line says what that gives up; the others keep the
+          AFK rule. Both share one cell, so nothing moves when the choice changes. */}
+      <Row
+        title={t("settings.general.onGameStart")}
+        help={
+          <SwapLine
+            lines={[t("settings.general.onGameStartHelp"), t("small7.gameStart.closeHelp")]}
+            active={p.onGameStart === "close" ? 1 : 0}
+          />
+        }
+      >
         {/* Wide enough for "Simge durumuna küçülsün" on one line. */}
         <div className="w-64">
           <Select<GameStartBehavior>

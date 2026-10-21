@@ -268,9 +268,24 @@ impl InstanceStore {
 
     /// Add a finished session to the play time and set "last played".
     pub async fn record_session(&self, id: &str, played: Duration) -> Result<Instance> {
+        self.record_session_ended(id, played, jiff::Timestamp::now())
+            .await
+    }
+
+    /// [`Self::record_session`] for a session that ended at `ended` (a game that ended while no
+    /// launcher followed it, `launch::detached`). "Last played" never goes back in time.
+    pub async fn record_session_ended(
+        &self,
+        id: &str,
+        played: Duration,
+        ended: jiff::Timestamp,
+    ) -> Result<Instance> {
         let mut instance = self.get(id).await?;
         instance.play_time_secs = instance.play_time_secs.saturating_add(played.as_secs());
-        instance.last_played_at = Some(jiff::Timestamp::now());
+        instance.last_played_at = Some(match instance.last_played_at {
+            Some(last) if last > ended => last,
+            _ => ended,
+        });
         self.write(&instance).await?;
         Ok(instance)
     }
@@ -467,6 +482,22 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(played.play_time_secs, 130);
+        // A session that ended while no launcher followed it: its time adds up, and "last played"
+        // never goes back to an older end.
+        let last = played.last_played_at.unwrap();
+        let earlier = last - jiff::SignedDuration::from_hours(1);
+        let played = store
+            .record_session_ended("survival", Duration::from_secs(70), earlier)
+            .await
+            .unwrap();
+        assert_eq!(played.play_time_secs, 200);
+        assert_eq!(played.last_played_at, Some(last));
+        let later = last + jiff::SignedDuration::from_secs(30);
+        let played = store
+            .record_session_ended("survival", Duration::from_secs(0), later)
+            .await
+            .unwrap();
+        assert_eq!(played.last_played_at, Some(later));
 
         store.delete("survival-2").await.unwrap();
         assert!(matches!(

@@ -17,6 +17,9 @@
 //!
 //! macOS keeps its own convention: the red button only hides the window and the app stays in the
 //! Dock (⌘Q quits, the Dock icon brings the window back).
+//!
+//! "Oyun açılınca launcher: Kapansın" decides the same way once the game's window is on screen
+//! ([`leave_for_game`], SMALL7), except that the game itself never keeps the launcher.
 
 use std::time::{Duration, Instant};
 
@@ -151,6 +154,23 @@ pub fn decide(platform: Platform, choice: CloseChoice, activity: Activity) -> Cl
     CloseAction::Quit
 }
 
+/// What "Oyun açılınca launcher: Kapansın" does once the game's window is on screen (SMALL7): the
+/// launcher quits and the game plays on by itself; the game never keeps it, leaving the game
+/// alone is the choice. AFK accounts do keep it (in the tray, with their one-time notice), and a
+/// job the player started finishes first ([`QuitWhenDone::beside_the_game`]). The same on every
+/// platform: unlike the red button on macOS, this is an explicit choice to quit.
+pub fn leave_for_game(activity: Activity) -> CloseAction {
+    if activity.afk {
+        return CloseAction::Hide {
+            hint: Some(TrayHint::Afk),
+        };
+    }
+    if activity.jobs {
+        return CloseAction::HideUntilDone;
+    }
+    CloseAction::Quit
+}
+
 /// One look of a launcher waiting for its jobs ([`QuitWhenDone::check`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Waiting {
@@ -167,12 +187,24 @@ pub enum Waiting {
 #[derive(Debug, Default)]
 pub struct QuitWhenDone {
     idle_since: Option<Instant>,
+    /// It left for a game ([`leave_for_game`]): that game does not keep it.
+    beside_game: bool,
 }
 
 impl QuitWhenDone {
+    /// A launcher that left for a game ([`leave_for_game`]) and quits once the player's jobs are
+    /// done, while the game plays on.
+    pub fn beside_the_game() -> Self {
+        Self {
+            idle_since: None,
+            beside_game: true,
+        }
+    }
+
     /// Looks at the launcher (every [`CHECK_EVERY`]): what runs and whether the window is shown.
     pub fn check(&mut self, now: Instant, activity: Activity, window_shown: bool) -> Waiting {
-        if window_shown || activity.game || activity.afk {
+        let game = activity.game && !self.beside_game;
+        if window_shown || game || activity.afk {
             return Waiting::Stay;
         }
         if activity.jobs {
@@ -398,6 +430,50 @@ mod tests {
                 "{activity:?}"
             );
         }
+    }
+
+    /// "Oyun açılınca launcher: Kapansın" (SMALL7): the game never keeps the launcher; AFK
+    /// accounts do, and the player's jobs finish first.
+    #[test]
+    fn leaving_for_the_game_quits_unless_afk_or_jobs_keep_it() {
+        assert_eq!(leave_for_game(IDLE), CloseAction::Quit);
+        assert_eq!(leave_for_game(GAME), CloseAction::Quit);
+        for activity in [
+            AFK,
+            Activity { game: true, ..AFK },
+            Activity { jobs: true, ..AFK },
+        ] {
+            assert_eq!(leave_for_game(activity), AFK_HINT, "{activity:?}");
+        }
+        for activity in [JOBS, Activity { game: true, ..JOBS }] {
+            assert_eq!(
+                leave_for_game(activity),
+                CloseAction::HideUntilDone,
+                "{activity:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_launcher_beside_the_game_waits_for_its_jobs_only() {
+        let start = Instant::now();
+        let at = |secs: u64| start + Duration::from_secs(secs);
+        let mut wait = QuitWhenDone::beside_the_game();
+        let game_and_jobs = Activity { jobs: true, ..GAME };
+        assert_eq!(wait.check(at(0), game_and_jobs, false), Waiting::Wait);
+        assert_eq!(wait.check(at(1), GAME, false), Waiting::Wait);
+        assert_eq!(wait.check(at(2), GAME, false), Waiting::Wait);
+        assert_eq!(wait.check(at(3), GAME, false), Waiting::Quit);
+        // The player coming back, or an AFK account starting, still keeps it.
+        let now = Instant::now();
+        assert_eq!(
+            QuitWhenDone::beside_the_game().check(now, GAME, true),
+            Waiting::Stay
+        );
+        assert_eq!(
+            QuitWhenDone::beside_the_game().check(now, Activity { game: true, ..AFK }, false),
+            Waiting::Stay
+        );
     }
 
     #[test]

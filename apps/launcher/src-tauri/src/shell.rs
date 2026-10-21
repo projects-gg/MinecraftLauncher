@@ -242,10 +242,11 @@ pub fn app_quit(app: AppHandle) {
     quit(&app);
 }
 
-/// Leaves for real (the tray's "Çıkış", the close button when nothing keeps the launcher):
-/// AFK sessions are stopped cleanly first. Exiting runs the plugins' last steps (the window's
-/// size and place are saved) and removes the tray icon; the single-instance lock goes with the
-/// process.
+/// Leaves for real (the tray's "Çıkış", the close button when nothing keeps the launcher,
+/// "Oyun açılınca launcher: Kapansın"): AFK sessions are stopped cleanly first. A game that runs
+/// plays on by itself; the next start follows it again (`commands::launch::detach_running`).
+/// Exiting runs the plugins' last steps (the window's size and place are saved) and removes the
+/// tray icon; the single-instance lock goes with the process.
 pub(crate) fn quit(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -254,8 +255,42 @@ pub(crate) fn quit(app: &AppHandle) {
             state.afk.cancel_bulk();
             state.afk.stop_all().await;
         }
+        crate::commands::launch::detach_running(&state);
         app.exit(0);
     });
+}
+
+/// "Oyun açılınca launcher: Kapansın" (SMALL7), asked by the page once the game's window is on
+/// screen and "Oyunda" has settled: the launcher quits and leaves the game alone. AFK accounts keep
+/// it in the tray (with their one-time notice, as the close button does); a job the player started
+/// finishes in the tray first (`pl_desktop::close::leave_for_game`).
+#[tauri::command]
+#[specta::specta]
+pub fn launcher_leave_for_game(app: AppHandle) {
+    let activity = close_activity(&app);
+    let action = close::leave_for_game(activity);
+    tracing::info!(
+        ?action,
+        ?activity,
+        "the game is on screen: the launcher leaves"
+    );
+    let Some(window) = app.get_webview_window("main") else {
+        if action == CloseAction::Quit {
+            quit(&app);
+        }
+        return;
+    };
+    let _ = window.hide();
+    if action == CloseAction::Quit {
+        quit(&app);
+        return;
+    }
+    if let Some(closed) = action.closed() {
+        let _ = app.emit(close::CLOSED_EVENT, closed);
+    }
+    if action == CloseAction::HideUntilDone {
+        quit_when_done(&app, close::QuitWhenDone::beside_the_game());
+    }
 }
 
 // --- the close button (TRAY1) -------------------------------------------------------------------
@@ -297,8 +332,15 @@ fn close_activity(app: &AppHandle) -> close::Activity {
     let Some(state) = app.try_state::<AppState>() else {
         return close::Activity::default();
     };
+    // A game the last start left running does not keep the launcher: the player already left it
+    // to play on alone ("Kapansın"), so closing the window leaves it alone again.
+    let game = state
+        .running
+        .lock()
+        .as_ref()
+        .is_some_and(|game| !game.adopted);
     close::Activity {
-        game: state.running.lock().is_some() || state.launch_cancel.lock().is_some(),
+        game: game || state.launch_cancel.lock().is_some(),
         afk: state.afk.any_active(),
         jobs: player_jobs_running(app),
     }
@@ -335,19 +377,19 @@ pub fn close_requested(app: &AppHandle) {
         let _ = app.emit(close::CLOSED_EVENT, closed);
     }
     if action == CloseAction::HideUntilDone {
-        quit_when_done(app);
+        quit_when_done(app, close::QuitWhenDone::default());
     }
 }
 
 /// Quits once the player's jobs are done, unless the player comes back first (the window shows
-/// again: [`focus_main_window`] calls it off at once) or a game or an AFK account starts. Looks
+/// again: [`focus_main_window`] calls it off at once) or a game or an AFK account starts (a
+/// launcher that left for a game waits for the jobs only: `QuitWhenDone::beside_the_game`). Looks
 /// every [`close::CHECK_EVERY`], and only while it waits.
-fn quit_when_done(app: &AppHandle) {
+fn quit_when_done(app: &AppHandle, mut wait: close::QuitWhenDone) {
     let number = NEXT_QUIT_WAIT.fetch_add(1, Ordering::Relaxed);
     QUIT_WAIT.store(number, Ordering::Relaxed);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        let mut wait = close::QuitWhenDone::default();
         loop {
             tokio::time::sleep(close::CHECK_EVERY).await;
             if QUIT_WAIT.load(Ordering::Relaxed) != number {

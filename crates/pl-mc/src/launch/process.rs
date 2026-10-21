@@ -151,6 +151,16 @@ impl LogSink {
         }
     }
 
+    /// No file: a game followed without its output ([`GameProcess::adopt`]).
+    fn none() -> Self {
+        Self {
+            file: None,
+            path: None,
+            written: 0,
+            truncated: false,
+        }
+    }
+
     fn write(&mut self, line: &str) {
         let Some(file) = self.file.as_mut() else {
             return;
@@ -192,6 +202,8 @@ struct Shared {
     /// counts as shown.
     ending: AtomicBool,
     started: Instant,
+    /// `started` by the wall clock.
+    started_at: SystemTime,
     on_event: GameEventFn,
 }
 
@@ -333,6 +345,7 @@ impl GameProcess {
             probing: options.window_probe.is_some() && pid.is_some(),
             ending: AtomicBool::new(false),
             started,
+            started_at,
             on_event,
         });
         (shared.on_event)(GameEvent::Started { pid });
@@ -374,8 +387,95 @@ impl GameProcess {
         })
     }
 
+    /// A game this launcher started before it quit and left running ([`super::detached`]),
+    /// followed again until it ends. Its output went with the old launcher's pipes, so there is
+    /// no log, no tail and no crash analysis. `wait` resolves once the process has ended (with its
+    /// exit code when the OS still tells it); `kill` ends it. `started` and `shown` are when the
+    /// game started and when its window showed, by the wall clock; a game left while it was still
+    /// opening counts as shown from now on (it is past its loading screen by the time anyone
+    /// looks). Must be called within a Tokio runtime.
+    pub fn adopt(
+        pid: u32,
+        started: SystemTime,
+        shown: Option<SystemTime>,
+        wait: impl std::future::Future<Output = Option<i32>> + Send + 'static,
+        kill: impl FnOnce() + Send + 'static,
+    ) -> Self {
+        let now = SystemTime::now();
+        let elapsed = now.duration_since(started).unwrap_or_default();
+        let started_instant = Instant::now()
+            .checked_sub(elapsed)
+            .unwrap_or_else(Instant::now);
+        let shown_after = shown
+            .unwrap_or(now)
+            .duration_since(started)
+            .unwrap_or_default();
+        let shared = Arc::new(Shared {
+            tail: Mutex::new(VecDeque::new()),
+            log: Mutex::new(LogSink::none()),
+            window_shown: AtomicBool::new(true),
+            shown_after: Mutex::new(Some(shown_after)),
+            probing: false,
+            ending: AtomicBool::new(false),
+            started: started_instant,
+            started_at: started,
+            on_event: Arc::new(|_| {}),
+        });
+        let token = CancellationToken::new();
+        let (tx, rx) = tokio::sync::watch::channel(None);
+        let follow = Arc::clone(&shared);
+        let cancelled = token.clone();
+        tokio::spawn(async move {
+            tokio::pin!(wait);
+            let mut kill = Some(kill);
+            let code = loop {
+                tokio::select! {
+                    code = &mut wait => break code,
+                    () = cancelled.cancelled(), if kill.is_some() => {
+                        follow.ending.store(true, Ordering::SeqCst);
+                        if let Some(kill) = kill.take() {
+                            kill();
+                        }
+                    }
+                }
+            };
+            follow.ending.store(true, Ordering::SeqCst);
+            let runtime = follow.started.elapsed();
+            let on_screen = runtime.saturating_sub(shown_after);
+            tracing::info!(
+                ?code,
+                runtime_secs = runtime.as_secs(),
+                "adopted game exited"
+            );
+            let _ = tx.send(Some(GameExit {
+                code,
+                runtime_secs: runtime.as_secs(),
+                on_screen_secs: Some(on_screen.as_secs()),
+                killed: kill.is_none(),
+                crash: None,
+                log_file: None,
+            }));
+        });
+        Self {
+            pid: Some(pid),
+            kill: token,
+            shared,
+            exit: rx,
+        }
+    }
+
     pub fn pid(&self) -> Option<u32> {
         self.pid
+    }
+
+    /// When the game started, by the wall clock.
+    pub fn started_at(&self) -> SystemTime {
+        self.shared.started_at
+    }
+
+    /// When the game's window showed, by the wall clock (`None` while it opens).
+    pub fn shown_at(&self) -> Option<SystemTime> {
+        (*self.shared.shown_after.lock()).map(|after| self.shared.started_at + after)
     }
 
     /// Ask the supervisor to kill the game. A killed run is never reported as a crash.
@@ -1076,6 +1176,68 @@ mod tests {
             assert!(file.is_none());
             assert_eq!(args, command.args);
         }
+    }
+
+    /// A game the launcher left running when it quit is followed again by the next start
+    /// (SMALL7): shown, its whole run counted once it ends, no log of its own.
+    #[tokio::test]
+    async fn an_adopted_game_is_followed_to_its_end() {
+        let (end, ended) = tokio::sync::oneshot::channel::<Option<i32>>();
+        let started = SystemTime::now() - Duration::from_secs(600);
+        let shown = started + Duration::from_secs(30);
+        let process = GameProcess::adopt(
+            77,
+            started,
+            Some(shown),
+            async move { ended.await.ok().flatten() },
+            || {},
+        );
+        assert!(process.is_running() && process.window_shown());
+        assert_eq!(process.pid(), Some(77));
+        assert_eq!(process.started_at(), started);
+        assert_eq!(process.shown_at(), Some(shown));
+        assert!(process.log_file().is_none() && process.tail().is_empty());
+        end.send(Some(0)).unwrap();
+        let exit = tokio::time::timeout(Duration::from_secs(5), process.wait())
+            .await
+            .unwrap();
+        assert_eq!(exit.code, Some(0));
+        assert!(!exit.killed && exit.crash.is_none() && exit.log_file.is_none());
+        assert!(exit.runtime_secs >= 600, "{exit:?}");
+        assert_eq!(exit.on_screen_secs, Some(exit.runtime_secs - 30));
+        assert_eq!(
+            exit.play_time(),
+            Some(Duration::from_secs(exit.runtime_secs))
+        );
+        assert!(!process.is_running());
+    }
+
+    #[tokio::test]
+    async fn an_adopted_game_is_closed_through_the_os() {
+        let (end, ended) = tokio::sync::oneshot::channel::<Option<i32>>();
+        let asked = Arc::new(AtomicBool::new(false));
+        let kill = {
+            let asked = Arc::clone(&asked);
+            move || {
+                asked.store(true, Ordering::SeqCst);
+                let _ = end.send(Some(1));
+            }
+        };
+        // Left while it was still opening: it counts as shown from the moment it was adopted.
+        let process = GameProcess::adopt(
+            78,
+            SystemTime::now(),
+            None,
+            async move { ended.await.ok().flatten() },
+            kill,
+        );
+        assert!(process.shown_at().is_some());
+        process.kill();
+        let exit = tokio::time::timeout(Duration::from_secs(5), process.wait())
+            .await
+            .unwrap();
+        assert!(asked.load(Ordering::SeqCst));
+        assert!(exit.killed && exit.crash.is_none());
     }
 
     #[tokio::test]

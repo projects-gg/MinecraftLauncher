@@ -90,6 +90,9 @@ pub fn run() {
             app.asset_protocol_scope()
                 .allow_directory(state.root.join("cache"), true)?;
             app.manage(state);
+            // A game the last start left running when it quit ("Kapansın") is followed again, or
+            // its session counted, before anything else could touch its files.
+            commands::launch::adopt_detached(app.handle());
             // A data folder move finishes once this start succeeded: the old folder goes.
             commands::data::finish_pending_move(app.handle());
             shell::setup_deep_links(app);
@@ -167,6 +170,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<shell::DeepLink>()
         // Emitted as the plain "game-log" event (live log of the running game).
         .typ::<commands::launch::GameLogEvent>()
+        // Emitted as the plain "adopted-game-exited" event (a game an earlier start left running).
+        .typ::<commands::launch::AdoptedGameExit>()
         // Emitted as the plain "java-progress" event (a Java runtime update downloading).
         .typ::<commands::java::JavaProgressEvent>()
         // Emitted as the plain "prepare-status" event (background preparation).
@@ -219,6 +224,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::launch::launch_cancel,
             commands::launch::game_kill,
             commands::launch::game_running,
+            commands::launch::game_adopted,
             commands::launch::game_copy_screenshots,
             prepare::prepare_configure,
             prepare::prepare_status,
@@ -255,6 +261,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::official::official_instance_ensure,
             shell::deep_link_pending,
             shell::app_quit,
+            shell::launcher_leave_for_game,
             shell::window_bring_forward,
             // small conveniences: dropped files, "Devam et", desktop shortcuts
             commands::drop::files_classify,

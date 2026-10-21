@@ -207,6 +207,12 @@ export const commands = {
 	gameKill: () => __TAURI_INVOKE<void>("game_kill"),
 	/**  Instance id of the running game, if any (used after a UI reload). */
 	gameRunning: () => __TAURI_INVOKE<string | null>("game_running"),
+	/**  The game an earlier start left running, while this start follows it ([`adopt_detached`]). */
+	gameAdopted: () => __TAURI_INVOKE<{
+	instanceId: string,
+	/**  When its window showed (Unix milliseconds); the session time counts from there. */
+	sinceMs: number,
+} | null>("game_adopted"),
 	/**
 	 *  Settings → Genel "Ekran görüntülerini panoya kopyala" switched: a game that runs now starts
 	 *  or stops copying its new screenshots at once (each launch also brings the setting along).
@@ -332,6 +338,13 @@ export const commands = {
 { kind: "friend"; code: string } | null>("deep_link_pending"),
 	/**  Leaves for real: AFK sessions are stopped cleanly first. */
 	appQuit: () => __TAURI_INVOKE<void>("app_quit"),
+	/**
+	 *  "Oyun açılınca launcher: Kapansın" (SMALL7), asked by the page once the game's window is on
+	 *  screen and "Oyunda" has settled: the launcher quits and leaves the game alone. AFK accounts keep
+	 *  it in the tray (with their one-time notice, as the close button does); a job the player started
+	 *  finishes in the tray first (`pl_desktop::close::leave_for_game`).
+	 */
+	launcherLeaveForGame: () => __TAURI_INVOKE<void>("launcher_leave_for_game"),
 	/**
 	 *  The launcher comes back after a game (`stores/launch.ts` → `restoreWindow`): shown,
 	 *  restored and brought forward without synthetic input ([`focus_main_window`]).
@@ -992,6 +1005,21 @@ export type AddonUpdate = {
 	versionNumber: string,
 	versionType: ModrinthVersionType,
 	datePublished: string,
+};
+
+/**  Payload of [`ADOPTED_GAME_EXITED`]. */
+export type AdoptedGameExit = {
+	instanceId: string,
+};
+
+/**
+ *  The game an earlier start of the launcher left running, followed again by this start
+ *  ([`adopt_detached`]): the page shows it as "Oyunda" from its first paint.
+ */
+export type AdoptedGameView = {
+	instanceId: string,
+	/**  When its window showed (Unix milliseconds); the session time counts from there. */
+	sinceMs: number,
 };
 
 export type AfkAccountView = {

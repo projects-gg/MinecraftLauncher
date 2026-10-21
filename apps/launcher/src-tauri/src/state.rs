@@ -73,6 +73,9 @@ fn trusted_content_keys() -> Vec<pl_content::VerifyingKey> {
 pub struct RunningGame {
     pub instance_id: String,
     pub process: Arc<GameProcess>,
+    /// A game an earlier start of the launcher left running when it quit, followed again
+    /// (`commands::launch::adopt_detached`): it does not keep the launcher open.
+    pub adopted: bool,
 }
 
 /// Everything long-lived the commands need. Cheap handles only; heavy work runs in tasks.

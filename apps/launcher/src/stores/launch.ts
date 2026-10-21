@@ -1,4 +1,5 @@
 import { toast } from "@pl/ui";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { create } from "zustand";
 import { commands } from "@/bindings";
@@ -87,23 +88,80 @@ interface LaunchState {
 /** "Oyunda" settles on OYNA (its cross-fade) before the launcher steps aside for the game. */
 const STEP_ASIDE_MS = 450;
 
+/** The backend's name for the end of a game an earlier start left running (`launch.rs`). */
+const ADOPTED_GAME_EXITED = "adopted-game-exited";
+
+/**
+ * "Kapansın" left this game alone (SMALL7): the launcher quit, or AFK accounts or the player's
+ * jobs kept it in the tray for a while. Either way it does not come back when the game ends.
+ */
+let leftForGame = false;
+
 /** What the launcher window does once the game window appears (Settings > General). */
 async function applyGameStartBehavior() {
   if (!isTauri()) return;
   const behavior = usePrefs.getState().onGameStart;
-  if (behavior !== "minimize" && behavior !== "tray" && behavior !== "close") return;
+  if (behavior === "keep") return;
   const win = getCurrentWindow();
-  // Already out of sight (put in the tray or minimized while the game opened): it stays there.
-  // Minimizing a hidden window would bring it back to the taskbar.
   const [visible, minimized] = await Promise.all([win.isVisible(), win.isMinimized()]);
-  if (!visible || minimized) return;
-  await new Promise((resolve) => setTimeout(resolve, STEP_ASIDE_MS));
+  const inSight = visible && !minimized;
+  // Already out of sight (put in the tray or minimized while the game opened): it stays there.
+  // Minimizing a hidden window would bring it back to the taskbar. "Kapansın" leaves anyway.
+  if (!inSight && behavior !== "close") return;
+  if (inSight) await new Promise((resolve) => setTimeout(resolve, STEP_ASIDE_MS));
   // The game closed meanwhile (a crash right after its window showed): the launcher stays.
   const { phase } = useLaunch.getState();
   if (phase.kind !== "running" || !phase.shown) return;
+  if (behavior === "close") {
+    // The game plays on by itself; the shell quits, unless AFK accounts or the player's jobs keep
+    // it in the tray a while (it says so through `window-closed`, shell/close-button.ts).
+    leftForGame = true;
+    try {
+      await commands.launcherLeaveForGame();
+      return;
+    } catch {
+      // The shell did not answer: the launcher steps aside as "Tepsiye gizlensin" does.
+      leftForGame = false;
+    }
+  }
   if (behavior === "minimize") await win.minimize();
   else await win.hide();
   await refreshWindowAway();
+}
+
+/**
+ * A game an earlier start left running when it quit ("Kapansın", SMALL7): the backend follows it
+ * again (src-tauri `commands::launch::adopt_detached`), and the bar shows it as "Oyunda" until it
+ * ends, without its log or crash help. `onEnded` runs when it has (its play time is recorded by
+ * then). Returns the stop function.
+ */
+export function followAdoptedGame(onEnded: (instanceId: string) => void): () => void {
+  if (!isTauri()) return () => {};
+  let adopted: string | null = null;
+  let stopped = false;
+  const stop = listen<{ instanceId: string }>(ADOPTED_GAME_EXITED, ({ payload }) => {
+    const { phase, instanceId } = useLaunch.getState();
+    // Only the adopted game's bar goes back to OYNA (it is the one game, launches wait for it).
+    if (adopted === payload.instanceId && instanceId === adopted && phase.kind === "running") {
+      useLaunch.setState({ phase: { kind: "idle" } });
+    }
+    adopted = null;
+    onEnded(payload.instanceId);
+  });
+  // Asked once the end can be heard, so an end in between is never missed.
+  void stop.then(async () => {
+    const game = await commands.gameAdopted();
+    if (stopped || !game || useLaunch.getState().phase.kind !== "idle") return;
+    adopted = game.instanceId;
+    useLaunch.setState({
+      instanceId: game.instanceId,
+      phase: { kind: "running", since: game.sinceMs, shown: true, firstStart: false },
+    });
+  });
+  return () => {
+    stopped = true;
+    void stop.then((fn) => fn());
+  };
 }
 
 async function restoreWindow() {
@@ -187,6 +245,7 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
     if (!go) return;
     playSound("play");
     launchRun += 1;
+    leftForGame = false;
     const run = launchRun;
     set({
       instanceId,
@@ -325,7 +384,9 @@ export const useLaunch = create<LaunchState>()((set, get) => ({
           setPageDuty(OPENING_DUTY, false);
           set({ phase: { kind: "idle" }, newShots: shots ? { ...shots, at: Date.now() } : null });
           shots = null;
-          void restoreWindow();
+          // "Kapansın" left the game alone: the launcher does not come back for its end.
+          if (leftForGame) leftForGame = false;
+          else void restoreWindow();
           if (unseenNotes) {
             announcePack(unseenNotes, unseenNotes.name, unseenNotes.version);
             unseenNotes = null;

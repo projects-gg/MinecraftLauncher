@@ -1182,6 +1182,7 @@ async fn prepare_and_spawn(
     *state.running.lock() = Some(RunningGame {
         instance_id: instance.id.clone(),
         process: Arc::clone(&process),
+        adopted: false,
     });
     crate::commands::cleanup::status_changed(app);
     // A cancel that came while the game was being started (after the last checkpoint, before it
@@ -1331,4 +1332,181 @@ pub fn game_running(state: State<'_, AppState>) -> Option<String> {
 #[specta::specta]
 pub async fn game_copy_screenshots(app: AppHandle, enabled: bool) {
     crate::shot_copy::set_enabled(&app, enabled);
+}
+
+// --- a game the launcher left running (SMALL7) -------------------------------------------------
+
+/// The page hears under this name that a game an earlier start left running has ended.
+pub const ADOPTED_GAME_EXITED: &str = "adopted-game-exited";
+
+/// The game an earlier start of the launcher left running, followed again by this start
+/// ([`adopt_detached`]): the page shows it as "Oyunda" from its first paint.
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AdoptedGameView {
+    pub instance_id: String,
+    /// When its window showed (Unix milliseconds); the session time counts from there.
+    pub since_ms: i64,
+}
+
+/// Payload of [`ADOPTED_GAME_EXITED`].
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct AdoptedGameExit {
+    pub instance_id: String,
+}
+
+/// The launcher quits while a game runs ("Oyun açılınca launcher: Kapansın", the tray's "Çıkış"):
+/// the game plays on by itself, since it never depended on the launcher, and the next start
+/// learns of it from the note left here (`shell::quit`, just before the exit).
+pub(crate) fn detach_running(state: &AppState) {
+    let running = state.running.lock();
+    let Some(game) = running.as_ref() else {
+        return;
+    };
+    let Some(pid) = game.process.pid() else {
+        return;
+    };
+    // Already ended (its exit is being handled): nothing to leave behind.
+    let Some(process_started) = pl_desktop::process::start_time(pid) else {
+        return;
+    };
+    let Ok(game_dir) = state.instances.game_dir(&game.instance_id) else {
+        return;
+    };
+    let note = pl_mc::launch::DetachedGame {
+        instance_id: game.instance_id.clone(),
+        pid,
+        process_started,
+        started_at_ms: pl_mc::launch::detached::unix_ms(game.process.started_at()),
+        shown_at_ms: game
+            .process
+            .shown_at()
+            .map(pl_mc::launch::detached::unix_ms),
+        game_dir,
+    };
+    match note.save(&state.root) {
+        Ok(()) => tracing::info!(
+            instance = %note.instance_id,
+            pid,
+            "the launcher quits while the game runs; the game plays on"
+        ),
+        Err(error) => tracing::warn!(%error, "the running game's note was not left"),
+    }
+}
+
+/// At start: the game an earlier start left running when it quit ([`detach_running`]). One that
+/// still runs is followed again until it ends: the bar says "Oyunda", nothing changes its files
+/// meanwhile and its session is counted (without its log or crash help: its output went with the
+/// old launcher). One that ended meanwhile adds its session, ending at its log's last write. Runs
+/// in setup, before the page, so the page finds the game at once ([`game_adopted`]).
+pub fn adopt_detached(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let Some(note) = pl_mc::launch::DetachedGame::take(&state.root) else {
+        return;
+    };
+    if !pl_desktop::process::is_same(note.pid, note.process_started) {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move { record_detached_session(&app, &note).await });
+        return;
+    }
+    let (pid, process_started) = (note.pid, note.process_started);
+    let wait = async move {
+        tauri::async_runtime::spawn_blocking(move || {
+            pl_desktop::process::wait_for_exit(pid, process_started)
+        })
+        .await
+        .ok()
+        .flatten()
+    };
+    let kill = move || {
+        if !pl_desktop::process::kill(pid, process_started) {
+            tracing::warn!(pid, "could not close the adopted game");
+        }
+    };
+    let process = {
+        // Setup runs outside the async runtime: the follower's task needs its handle.
+        let tauri::async_runtime::RuntimeHandle::Tokio(handle) = tauri::async_runtime::handle();
+        let _runtime = handle.enter();
+        Arc::new(GameProcess::adopt(
+            pid,
+            pl_mc::launch::detached::from_unix_ms(note.started_at_ms),
+            note.shown_at_ms.map(pl_mc::launch::detached::from_unix_ms),
+            wait,
+            kill,
+        ))
+    };
+    *state.running.lock() = Some(RunningGame {
+        instance_id: note.instance_id.clone(),
+        process: Arc::clone(&process),
+        adopted: true,
+    });
+    tracing::info!(instance = %note.instance_id, pid, "the game the last start left running is followed again");
+    crate::commands::cleanup::status_changed(app);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let exit = process.wait().await;
+        crate::webview_rest::wake(&app, "the adopted game exited");
+        let state = app.state::<AppState>();
+        state.running.lock().take();
+        crate::commands::cleanup::status_changed(&app);
+        crate::commands::java::game_exited(&app);
+        crate::prepare::game_exited(&app);
+        if let Some(played) = exit.play_time()
+            && let Err(error) = state
+                .instances
+                .record_session(&note.instance_id, played)
+                .await
+        {
+            tracing::warn!(%error, "could not record the adopted game's play time");
+        }
+        let _ = app.emit(
+            ADOPTED_GAME_EXITED,
+            AdoptedGameExit {
+                instance_id: note.instance_id.clone(),
+            },
+        );
+    });
+}
+
+/// A game that ended while no launcher followed it: its session counts up to its log's last
+/// write (`DetachedGame::play_time`).
+async fn record_detached_session(app: &AppHandle, note: &pl_mc::launch::DetachedGame) {
+    let ended = note.ended_at_ms();
+    let Some(played) = note.play_time(ended) else {
+        tracing::info!(instance = %note.instance_id, "the game left running ended meanwhile; its session is not known");
+        return;
+    };
+    let at = ended
+        .and_then(|ms| jiff::Timestamp::from_millisecond(ms).ok())
+        .unwrap_or_else(jiff::Timestamp::now);
+    let state = app.state::<AppState>();
+    match state
+        .instances
+        .record_session_ended(&note.instance_id, played, at)
+        .await
+    {
+        Ok(_) => tracing::info!(
+            instance = %note.instance_id,
+            played_secs = played.as_secs(),
+            "the game left running ended meanwhile; its session is counted"
+        ),
+        Err(error) => tracing::warn!(%error, "could not record the detached game's play time"),
+    }
+}
+
+/// The game an earlier start left running, while this start follows it ([`adopt_detached`]).
+#[tauri::command]
+#[specta::specta]
+pub fn game_adopted(state: State<'_, AppState>) -> Option<AdoptedGameView> {
+    let running = state.running.lock();
+    let game = running.as_ref().filter(|game| game.adopted)?;
+    let since = game
+        .process
+        .shown_at()
+        .unwrap_or_else(|| game.process.started_at());
+    Some(AdoptedGameView {
+        instance_id: game.instance_id.clone(),
+        since_ms: pl_mc::launch::detached::unix_ms(since),
+    })
 }

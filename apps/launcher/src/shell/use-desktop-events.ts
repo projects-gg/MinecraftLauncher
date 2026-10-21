@@ -9,7 +9,7 @@ import { api, type DeepLink } from "@/lib/api";
 import { readStartOnBoot } from "@/lib/autostart";
 import i18n from "@/lib/i18n";
 import { onAppLink } from "@/lib/links";
-import { useLaunch } from "@/stores/launch";
+import { followAdoptedGame, useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { useCloseButton } from "./close-button";
 
@@ -154,4 +154,16 @@ export function useDesktopEvents() {
       if (on !== null) usePrefs.getState().set("startOnBoot", on);
     });
   }, []);
+
+  // A game the last start left running ("Kapansın") is "Oyunda" until it ends; then its play time
+  // and the views that wait for a closed game are read again.
+  useEffect(
+    () =>
+      followAdoptedGame((instanceId) => {
+        void queryClient.invalidateQueries({ queryKey: ["instances"] });
+        void queryClient.invalidateQueries({ queryKey: ["instance", instanceId] });
+        void queryClient.invalidateQueries({ queryKey: ["game-running"] });
+      }),
+    [queryClient],
+  );
 }

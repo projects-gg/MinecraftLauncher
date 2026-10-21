@@ -13,6 +13,8 @@
 //!   launcher's identifier, keychain service or data folder).
 //! - [`discord`]: whether the Discord app is installed, and the one link handed to it (a
 //!   friend's profile, `discord://-/users/<id>`), for "Discord'dan mesaj at".
+//! - [`process`]: a process the launcher left running (the game it quit beside): who it is, and
+//!   waiting for its end.
 
 pub mod close;
 pub mod discord;
@@ -21,6 +23,7 @@ pub mod game_window;
 pub mod ico;
 pub mod identity;
 pub mod link;
+pub mod process;
 pub mod shortcut;
 #[cfg(test)]
 mod test_support;

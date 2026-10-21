@@ -5,4 +5,7 @@ export const enSmall7 = {
     turnedOff: "Shaders turned off.",
     turnedOn: "Shaders turned on.",
   },
+  gameStart: {
+    closeHelp: "After the game, the launcher won't reopen or help with crashes.",
+  },
 };
