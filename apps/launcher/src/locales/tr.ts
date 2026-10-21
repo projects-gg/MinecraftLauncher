@@ -2,6 +2,7 @@
 import { trAfkAlerts } from "./tr-afk-alerts";
 import { trAfkConnect } from "./tr-afk-connect";
 import { trAfkReconnect } from "./tr-afk-reconnect";
+import { trChat } from "./tr-chat";
 import { trCrews } from "./tr-crews";
 import { trDisk } from "./tr-disk";
 import { trEventJoin } from "./tr-event-join";
@@ -21,6 +22,8 @@ import { trPlayOpen } from "./tr-play-open";
 import { trPlayTogether } from "./tr-play-together";
 import { trPrepare } from "./tr-prepare";
 import { trReminders } from "./tr-reminders";
+import { trReports } from "./tr-reports";
+import { trSafety } from "./tr-safety";
 import { trShortcuts } from "./tr-shortcuts";
 import { trShotCopy } from "./tr-shot-copy";
 import { trSmall7 } from "./tr-small7";
@@ -61,6 +64,9 @@ export const tr = {
   tray: trTray,
   small7: trSmall7,
   crews: trCrews,
+  chat: trChat,
+  reports: trReports,
+  safety: trSafety,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",

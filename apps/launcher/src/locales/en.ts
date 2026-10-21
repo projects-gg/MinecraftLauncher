@@ -1,6 +1,7 @@
 import { enAfkAlerts } from "./en-afk-alerts";
 import { enAfkConnect } from "./en-afk-connect";
 import { enAfkReconnect } from "./en-afk-reconnect";
+import { enChat } from "./en-chat";
 import { enCrews } from "./en-crews";
 import { enDisk } from "./en-disk";
 import { enEventJoin } from "./en-event-join";
@@ -20,6 +21,8 @@ import { enPlayOpen } from "./en-play-open";
 import { enPlayTogether } from "./en-play-together";
 import { enPrepare } from "./en-prepare";
 import { enReminders } from "./en-reminders";
+import { enReports } from "./en-reports";
+import { enSafety } from "./en-safety";
 import { enShortcuts } from "./en-shortcuts";
 import { enShotCopy } from "./en-shot-copy";
 import { enSmall7 } from "./en-small7";
@@ -267,6 +270,9 @@ export const en: DeepPartial<Strings> = {
   tray: enTray,
   small7: enSmall7,
   crews: enCrews,
+  chat: enChat,
+  reports: enReports,
+  safety: enSafety,
   nav: {
     home: "Home",
     library: "Library",
