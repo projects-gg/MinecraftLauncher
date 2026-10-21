@@ -4,36 +4,64 @@ import com.google.gson.JsonObject;
 import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.BridgeConfig;
 import gg.projects.overlay.bridge.Protocol;
+import gg.projects.overlay.compat.Compat;
+import gg.projects.overlay.connect.Connector;
+import gg.projects.overlay.connect.MinecraftGame;
+import gg.projects.overlay.connect.ServerTarget;
+import gg.projects.overlay.settings.OverlaySettings;
+import gg.projects.overlay.settings.SettingsStore;
 import gg.projects.overlay.state.OverlayState;
-import gg.projects.overlay.ui.OverlayScreen;
-import gg.projects.overlay.ui.OverlayToast;
+import gg.projects.overlay.toast.ToastLayer;
+import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.draw.Shapes;
+import gg.projects.overlay.ui.panel.JoinScreen;
+import gg.projects.overlay.ui.panel.OverlayScreen;
+import java.util.function.UnaryOperator;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
-import org.lwjgl.glfw.GLFW;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Entry point. Without the launcher's bridge properties (another launcher, or an old Projects Launcher) the
- * mod registers nothing at all: no key, no threads, no render hooks.
+ * mod registers nothing at all: no key, no threads, no HUD layer.
  */
 public final class OverlayClient implements ClientModInitializer {
     public static final String MOD_ID = "projects_overlay";
+    /** Where "Katıl" goes for a friend on Projects. */
+    public static final String PROJECTS_HOST = ServerTarget.PROJECTS_HOST;
     private static final Logger LOG = LoggerFactory.getLogger("Projects Overlay");
+    /** A toast this recent decides which conversation the panel opens on. */
+    private static final long RECENT_TOAST_MS = 30_000;
+    /** Characters baked into the fonts' glyph pages a few at a time after a world opens. */
+    private static final String WARM =
+        "abcçdefgğhıijklmnoöprsştuüvyzqwxABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZQWX0123456789 .,:;!?'\"()-/%+…";
+    private static final int WARM_PER_TICK = 18;
 
     private static volatile OverlayClient instance;
 
     private OverlayKey key;
     private OverlayState state;
     private BridgeClient bridge;
+    private SettingsStore settings;
+    private ToastLayer toasts;
+    private MinecraftGame game;
+    private Connector connector;
+    private OverlayScreen.Page lastPage = OverlayScreen.Page.CHATS;
+    private String lastConversation;
+    private String lastToastConversation;
+    private long lastToastAt;
+    private boolean hadLevel;
+    private int warmIndex = -1;
+    private int warmScale = -1;
 
     @Override
     public void onInitializeClient() {
@@ -43,13 +71,17 @@ public final class OverlayClient implements ClientModInitializer {
             return;
         }
         state = new OverlayState();
+        settings = new SettingsStore(FabricLoader.getInstance().getGameDir());
         key = new OverlayKey(KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main")));
         KeyMappingHelper.registerKeyMapping(key);
-        ClientTickEvents.END_CLIENT_TICK.register(mc -> {
-            while (key.consumeClick()) {
-                togglePanel();
-            }
-        });
+        toasts = new ToastLayer();
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "toasts"), toasts);
+        // The travel toast stays above the saving, connecting and loading screens (and the pause menu).
+        ScreenEvents.AFTER_INIT.register((mc, screen, width, height) ->
+            ScreenEvents.afterExtract(screen).register((s, g, mouseX, mouseY, delta) -> toasts.extractOverScreen(g)));
+        game = new MinecraftGame(this);
+        connector = new Connector(game, frame -> bridge.send(frame));
+        ClientTickEvents.END_CLIENT_TICK.register(this::tick);
 
         bridge = new BridgeClient(config, version(MOD_ID), version("minecraft"),
             () -> Minecraft.getInstance().options.languageCode, new BridgeClient.Listener() {
@@ -63,8 +95,14 @@ public final class OverlayClient implements ClientModInitializer {
                     Minecraft.getInstance().execute(() -> handleFrame(frame));
                 }
             });
-        ClientLifecycleEvents.CLIENT_STARTED.register(mc -> bridge.start());
-        ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> bridge.stop());
+        ClientLifecycleEvents.CLIENT_STARTED.register(mc -> {
+            bridge.start();
+            Shapes.prepare();
+        });
+        ClientLifecycleEvents.CLIENT_STOPPING.register(mc -> {
+            bridge.stop();
+            settings.close();
+        });
         instance = this;
         LOG.info("Overlay on; launcher bridge at 127.0.0.1:{}", config.port());
     }
@@ -86,37 +124,103 @@ public final class OverlayClient implements ClientModInitializer {
         return bridge;
     }
 
-    /** Called by the keyboard mixin for every key event; returns true when the Shift+Tab chord was used. */
-    public static boolean consumeChord(long window, int action, KeyEvent event) {
-        OverlayClient self = instance;
-        if (self == null || action != GLFW.GLFW_PRESS || !self.key.usesChord() || !OverlayKey.isChord(event)) {
-            return false;
+    public ToastLayer toasts() {
+        return toasts;
+    }
+
+    public OverlaySettings settings() {
+        return settings.get();
+    }
+
+    public void updateSettings(UnaryOperator<OverlaySettings> change) {
+        settings.set(change.apply(settings.get()));
+    }
+
+    /** The player's "Animasyonları azalt" or the launcher's "Hareketi azalt". */
+    public boolean reducedMotion() {
+        return settings.get().reduceMotion() || state.reducedMotion();
+    }
+
+    public OverlayScreen.Page lastPage() {
+        return lastPage;
+    }
+
+    public void rememberPage(OverlayScreen.Page page) {
+        lastPage = page;
+    }
+
+    public void rememberConversation(String id) {
+        lastConversation = id;
+    }
+
+    /** The conversation the panel should open on: a recent toast's, else the last one looked at. */
+    public String preferredConversation() {
+        long now = System.currentTimeMillis();
+        if (lastToastConversation != null && now - lastToastAt < RECENT_TOAST_MS) {
+            return lastToastConversation;
         }
-        Minecraft mc = Minecraft.getInstance();
-        if (window != mc.getWindow().handle() || mc.screen != null) {
-            return false;
+        return lastConversation;
+    }
+
+    private void tick(Minecraft mc) {
+        while (key.consumeClick()) {
+            togglePanel();
         }
-        self.togglePanel();
-        return true;
+        boolean hasLevel = mc.level != null;
+        if (hadLevel && !hasLevel) {
+            toasts.reset();
+        }
+        if (!hadLevel && hasLevel) {
+            warmIndex = 0;
+        }
+        hadLevel = hasLevel;
+        connector.tick(monotonicMs());
+        Shapes.prepare();
+        warmFonts(mc);
+    }
+
+    /**
+     * Bakes the bundled fonts' common glyphs for the current GUI scale a few per tick after a world opens,
+     * so the first toast does not pay for them in its frame.
+     */
+    private void warmFonts(Minecraft mc) {
+        int scale = mc.getWindow().getGuiScale();
+        if (scale != warmScale) {
+            warmScale = scale;
+            warmIndex = mc.level != null ? 0 : -1;
+        }
+        if (warmIndex < 0 || mc.level == null) {
+            return;
+        }
+        int end = Math.min(WARM.length(), warmIndex + WARM_PER_TICK);
+        String chunk = WARM.substring(warmIndex, end);
+        for (Fonts.Face face : Fonts.Face.values()) {
+            Fonts.get(face).width(chunk);
+        }
+        warmIndex = end >= WARM.length() ? -1 : end;
     }
 
     /** Opens the panel from the game (never over another screen) or closes it. */
     public void togglePanel() {
         Minecraft mc = Minecraft.getInstance();
-        if (mc.screen instanceof OverlayScreen) {
-            mc.setScreen(null);
+        if (Compat.screen(mc) instanceof OverlayScreen screen) {
+            screen.close();
             return;
         }
-        if (mc.screen != null) {
+        if (Compat.screen(mc) != null) {
             return;
         }
-        // A background retry is pending: try now. After the launcher's goodbye only "Try again" retries, so the
-        // panel keeps saying why it is offline.
+        // A background retry is pending: try now. After the launcher's goodbye only "Yeniden dene" retries,
+        // so the panel keeps saying why it is offline.
         if (bridge.status() == BridgeClient.Status.OFFLINE) {
             bridge.retryNow();
         }
+        Compat.setScreen(mc, new OverlayScreen(this));
+    }
+
+    public void panelOpened() {
+        toasts.clear();
         bridge.send(Protocol.panel(true));
-        mc.setScreen(new OverlayScreen(this));
     }
 
     public void panelClosed() {
@@ -124,6 +228,7 @@ public final class OverlayClient implements ClientModInitializer {
     }
 
     public void openConversation(String conversation) {
+        lastConversation = conversation;
         bridge.send(Protocol.openConversation(conversation));
     }
 
@@ -139,21 +244,53 @@ public final class OverlayClient implements ClientModInitializer {
         bridge.send(Protocol.answer(call, answer));
     }
 
-    /** Asks the launcher where the friend plays. The game connects only after the player confirms in-game. */
-    public void join(String friend) {
-        JsonObject o = Protocol.message("join");
-        o.addProperty("friend", friend);
-        bridge.send(o);
-    }
-
     public void retry() {
         state.setStatus(BridgeClient.Status.CONNECTING, null);
         bridge.retryNow();
         refreshScreen();
     }
 
-    /** Applies a launcher frame on the render thread. Public for the spike driver, which replays frames. */
+    /** Whether the game is on Projects now. */
+    public boolean onProjects() {
+        ServerTarget here = game.currentServer();
+        return here != null && here.projects();
+    }
+
+    /** Whether the game is on {@code host} now. */
+    public boolean onServer(String host) {
+        ServerTarget here = game.currentServer();
+        return here != null && here.sameServer(ServerTarget.parse(host));
+    }
+
+    /**
+     * Goes to a friend's (or a caller's) server after the player confirmed in the overlay: the travel toast,
+     * then the current game is left the way the pause menu does (a singleplayer world is saved).
+     */
+    public void connect(JoinScreen.Target target) {
+        ServerTarget to = ServerTarget.parse(target.host());
+        if (to == null) {
+            LOG.warn("Not joining: the address is not valid");
+            return;
+        }
+        if (!connector.go(to, monotonicMs())) {
+            LOG.info("Not joining now: the game is loading, saving or connecting");
+            return;
+        }
+        if (target.friendId() != null) {
+            bridge.send(Protocol.join(target.friendId()));
+        }
+    }
+
+    public Connector connector() {
+        return connector;
+    }
+
+    /** Applies a launcher frame on the render thread. Public for the scenario driver, which replays frames. */
     public void handleFrame(JsonObject frame) {
+        if ("connect".equals(Protocol.type(frame))) {
+            connector.request(frame, monotonicMs());
+            return;
+        }
         OverlayState.ToastRequest toast = state.apply(frame, System.currentTimeMillis());
         if (toast != null) {
             showToast(toast);
@@ -163,45 +300,32 @@ public final class OverlayClient implements ClientModInitializer {
 
     private void onBridgeStatus(BridgeClient.Status status, String reason) {
         state.setStatus(status, reason);
+        if (status != BridgeClient.Status.ONLINE) {
+            toasts.clear();
+        }
         refreshScreen();
     }
 
     private void showToast(OverlayState.ToastRequest t) {
         Minecraft mc = Minecraft.getInstance();
-        if (t.conversation() != null && mc.screen instanceof OverlayScreen screen
-            && t.conversation().equals(screen.openConversation())) {
-            return;
+        OverlayScreen panel = Compat.screen(mc) instanceof OverlayScreen s ? s : null;
+        OverlayState.Conversation conv = state.conversation(t.conversation());
+        if (t.conversation() != null) {
+            lastToastConversation = t.conversation();
+            lastToastAt = System.currentTimeMillis();
         }
-        // Calls and invites carry names only; the wording comes from the game's language.
-        OverlayToast.Kind kind;
-        String body;
-        switch (t.kind()) {
-            case "call" -> {
-                kind = OverlayToast.Kind.CALL;
-                body = Component.translatable("projects_overlay.toast.call", t.body()).getString();
-            }
-            case "invite" -> {
-                kind = OverlayToast.Kind.CALL;
-                body = Component.translatable("projects_overlay.toast.invite").getString();
-            }
-            case "info" -> {
-                kind = OverlayToast.Kind.INFO;
-                body = t.body();
-            }
-            default -> {
-                kind = OverlayToast.Kind.MESSAGE;
-                body = t.body().isEmpty() ? Component.translatable("projects_overlay.toast.new_message").getString()
-                    : t.body();
-            }
-        }
-        Component hint = kind == OverlayToast.Kind.INFO ? null : key.getTranslatedKeyMessage();
-        OverlayToast.show(mc, kind, t.key(), t.title(), body, hint, state.reducedMotion());
+        toasts.show(t, conv != null && conv.crew(), panel == null ? null : panel.openConversation(), panel != null,
+            settings.get(), key.keyName(), reducedMotion());
     }
 
     private void refreshScreen() {
-        if (Minecraft.getInstance().screen instanceof OverlayScreen screen) {
+        if (Compat.screen(Minecraft.getInstance()) instanceof OverlayScreen screen) {
             screen.onStateChanged();
         }
+    }
+
+    private static long monotonicMs() {
+        return System.nanoTime() / 1_000_000L;
     }
 
     private static String version(String modId) {

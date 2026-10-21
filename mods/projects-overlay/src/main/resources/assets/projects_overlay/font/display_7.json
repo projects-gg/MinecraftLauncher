@@ -1,0 +1,23 @@
+{
+  "providers": [
+    {
+      "type": "ttf",
+      "file": "projects_overlay:tektur-semibold.ttf",
+      "size": 9.0,
+      "oversample": 7.0,
+      "shift": [
+        0.0,
+        0.0
+      ],
+      "skip": ""
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:include/default"
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:include/unifont"
+    }
+  ]
+}

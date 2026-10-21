@@ -1,0 +1,23 @@
+{
+  "providers": [
+    {
+      "type": "ttf",
+      "file": "projects_overlay:figtree-semibold.ttf",
+      "size": 8.5,
+      "oversample": 5.0,
+      "shift": [
+        0.0,
+        0.0
+      ],
+      "skip": ""
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:include/default"
+    },
+    {
+      "type": "reference",
+      "id": "minecraft:include/unifont"
+    }
+  ]
+}

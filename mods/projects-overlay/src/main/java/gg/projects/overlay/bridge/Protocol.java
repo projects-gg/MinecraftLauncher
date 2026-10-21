@@ -1,10 +1,12 @@
 package gg.projects.overlay.bridge;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
+import java.util.List;
 
 /**
  * Wire format shared with Projects Launcher: one UTF-8 JSON object per line, the {@code t} field names the
@@ -25,6 +27,8 @@ public final class Protocol {
     public static final int MAX_MESSAGE_CHARS = 300;
     /** Longest name or title rendered from launcher data. */
     public static final int MAX_NAME_CHARS = 48;
+    /** What this build does beyond the first protocol, listed in {@code hello}; the launcher sends only these. */
+    public static final List<String> FEATURES = List.of("connect");
     /** Minecraft's legacy formatting sign; launcher text must never carry formatting into the game. */
     private static final int SECTION_SIGN = 0xA7;
 
@@ -38,6 +42,28 @@ public final class Protocol {
         o.addProperty("mod", modVersion);
         o.addProperty("mc", minecraftVersion);
         o.addProperty("lang", language);
+        JsonArray features = new JsonArray();
+        for (String feature : FEATURES) {
+            features.add(feature);
+        }
+        o.add("features", features);
+        return o;
+    }
+
+    /**
+     * The answer to the launcher's {@code connect}: {@code ok} once the game's connect screen is up, else
+     * why not ({@code busy}, {@code invalid}); {@code already} when the game is on that server.
+     */
+    public static JsonObject connectResult(String id, boolean ok, String reason, boolean already) {
+        JsonObject o = message("connect-result");
+        o.addProperty("id", id);
+        o.addProperty("ok", ok);
+        if (reason != null) {
+            o.addProperty("reason", reason);
+        }
+        if (already) {
+            o.addProperty("already", true);
+        }
         return o;
     }
 
@@ -65,6 +91,13 @@ public final class Protocol {
         JsonObject o = message("answer");
         o.addProperty("call", call);
         o.addProperty("answer", answer);
+        return o;
+    }
+
+    /** The player joins a friend (after the in-game confirmation); the launcher marks their invites answered. */
+    public static JsonObject join(String friend) {
+        JsonObject o = message("join");
+        o.addProperty("friend", friend);
         return o;
     }
 

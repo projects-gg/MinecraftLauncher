@@ -14,18 +14,14 @@
   "entrypoints": {
     "client": ["gg.projects.overlay.OverlayClient"]
   },
-  "mixins": [
-    {
-      "config": "projects_overlay.mixins.json",
-      "environment": "client"
-    }
-  ],
   "depends": {
     "fabricloader": ">=0.19.5",
-    "minecraft": "~26.1.2",
+    "minecraft": "${minecraft_range}",
     "java": ">=25",
     "fabric-key-mapping-api-v1": "*",
     "fabric-lifecycle-events-v1": "*",
-    "fabric-resource-loader-v1": "*"
+    "fabric-rendering-v1": "*",
+    "fabric-resource-loader-v1": "*",
+    "fabric-screen-api-v1": "*"
   }
 }

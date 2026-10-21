@@ -1,0 +1,295 @@
+package gg.projects.overlay.toast;
+
+import gg.projects.overlay.state.OverlayState;
+import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.Texts;
+import gg.projects.overlay.ui.Theme;
+import gg.projects.overlay.ui.draw.Draw;
+import gg.projects.overlay.ui.draw.Frames;
+import gg.projects.overlay.ui.draw.Icon;
+import java.util.List;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
+
+/**
+ * One toast, laid out once when it arrives (or updates) and only drawn afterwards: a face on the left (a
+ * name's initial, or the crew, call, invite or info sign), the name in bold with its count, the crew's name
+ * under it for crew chat, up to two lines of text, and the hint with the key that opens the overlay. A
+ * travel toast ("Projects sunucusuna bağlanılıyor…") is one sentence beside the gold join sign.
+ */
+public final class ToastCard {
+    public static final int WIDTH = Frames.TOAST_WIDTH;
+    static final int PAD_X = 8;
+    static final int PAD_Y = 7;
+    static final int FACE = 18;
+    static final int TEXT_X = PAD_X + FACE + 7;
+    static final int TEXT_W = WIDTH - TEXT_X - PAD_X;
+    static final int TITLE_H = 10;
+    static final int LINE_H = 10;
+    static final int SMALL_H = 9;
+    static final int HINT_GAP = 4;
+    static final int HINT_H = 10;
+    static final int MAX_BODY_LINES = 2;
+    private static final int KEY_PAD = 3;
+
+    public enum Kind { MESSAGE, CALL, INVITE, INFO, TRAVEL }
+
+    final Kind kind;
+    final String conversation;
+    final boolean crewChat;
+    final String initial;
+    final int initialWidth;
+    final FormattedCharSequence title;
+    final int titleWidth;
+    final String countText;
+    final int countWidth;
+    final FormattedCharSequence crew;
+    final List<FormattedCharSequence> body;
+    final String hintBefore;
+    final int hintBeforeWidth;
+    final String hintKey;
+    final int hintKeyWidth;
+    final String hintAfter;
+    final float height;
+    final Component narration;
+
+    private ToastCard(Builder b) {
+        this.kind = b.kind;
+        this.conversation = b.conversation;
+        this.crewChat = b.crewChat;
+        this.initial = b.initial;
+        this.initialWidth = Fonts.strong().width(b.initial);
+        this.title = b.title;
+        this.titleWidth = b.titleWidth;
+        this.countText = b.countText;
+        this.countWidth = b.countWidth;
+        this.crew = b.crew;
+        this.body = b.body;
+        this.hintBefore = b.hintBefore;
+        this.hintBeforeWidth = b.hintBefore == null ? 0 : Fonts.small().width(b.hintBefore);
+        this.hintKey = b.hintKey;
+        this.hintKeyWidth = b.hintKey == null ? 0 : Fonts.small().width(b.hintKey) + 2 * KEY_PAD;
+        this.hintAfter = b.hintAfter;
+        this.narration = b.narration;
+        if (kind == Kind.TRAVEL) {
+            this.height = PAD_Y + Math.max(FACE, body.size() * LINE_H) + PAD_Y;
+            return;
+        }
+        float h = PAD_Y + TITLE_H + (crew != null ? SMALL_H : 0) + 1 + body.size() * LINE_H;
+        if (kind != Kind.INFO) {
+            h += HINT_GAP + HINT_H;
+        }
+        this.height = h + PAD_Y;
+    }
+
+    private static final class Builder {
+        Kind kind;
+        String conversation;
+        boolean crewChat;
+        String initial;
+        FormattedCharSequence title;
+        int titleWidth;
+        String countText;
+        int countWidth;
+        FormattedCharSequence crew;
+        List<FormattedCharSequence> body;
+        String hintBefore;
+        String hintKey;
+        String hintAfter;
+        Component narration;
+    }
+
+    public static Kind kindOf(String kind) {
+        return switch (kind) {
+            case "call" -> Kind.CALL;
+            case "invite" -> Kind.INVITE;
+            case "info" -> Kind.INFO;
+            default -> Kind.MESSAGE;
+        };
+    }
+
+    /**
+     * Lays out a toast.
+     *
+     * @param crewChat the message comes from a crew conversation
+     * @param count how many messages it stands for (shown from 2 on)
+     * @param showText the player's "Mesaj metnini göster"
+     * @param keyName the overlay key's name, or null when none is bound
+     */
+    public static ToastCard of(OverlayState.ToastRequest request, boolean crewChat, int count, boolean showText,
+        String keyName) {
+        Builder b = new Builder();
+        b.kind = kindOf(request.kind());
+        b.conversation = request.conversation();
+        b.crewChat = crewChat;
+        Font strong = Fonts.strong();
+        Font small = Fonts.small();
+        String someone = Texts.str("toast.someone");
+        String name = request.title().isEmpty() ? someone : request.title();
+        String bodyText = switch (b.kind) {
+            case CALL -> Texts.str("toast.call", request.body().isEmpty() ? someone : request.body());
+            case INVITE -> Texts.str("toast.invite");
+            case INFO, TRAVEL -> request.body();
+            case MESSAGE -> showText && !request.body().isEmpty() ? request.body() : Texts.str("toast.new_message");
+        };
+        if (count > 1) {
+            b.countText = count > 99 ? "99+" : Integer.toString(count);
+            b.countWidth = small.width(b.countText) + 8;
+        }
+        int titleRoom = TEXT_W - (b.countText == null ? 0 : b.countWidth + 4);
+        String titleText = Texts.fit(strong, name, titleRoom);
+        b.title = Texts.visual(titleText);
+        b.titleWidth = strong.width(titleText);
+        b.initial = Texts.initial(name);
+        String crewName = request.crew() == null || request.crew().isEmpty() ? null : request.crew();
+        if (b.kind == Kind.MESSAGE && crewName != null) {
+            b.crew = Texts.visual(Texts.fit(small, crewName, TEXT_W));
+        }
+        b.body = Texts.wrap(Fonts.ui(), bodyText, TEXT_W, MAX_BODY_LINES);
+        if (b.kind != Kind.INFO) {
+            if (keyName == null) {
+                b.hintBefore = Texts.str("toast.hint.unbound");
+            } else {
+                // The key sits where the sentence has it ("F7 ile arayüzü aç", "Press F7 to open").
+                String template = Texts.str(b.kind == Kind.CALL ? "toast.hint.call" : "toast.hint.open", "\u0000");
+                int at = template.indexOf('\u0000');
+                b.hintBefore = at < 0 ? template.strip() : template.substring(0, at).strip();
+                b.hintAfter = at < 0 ? "" : template.substring(at + 1).strip();
+                b.hintKey = Texts.fit(small, keyName, 48);
+            }
+        }
+        b.narration = switch (b.kind) {
+            case CALL, INVITE -> Texts.tr("toast.narration.notice", name, bodyText);
+            case INFO, TRAVEL -> Component.literal(name + ". " + bodyText);
+            case MESSAGE -> crewName != null ? Texts.tr("toast.narration.crew", name, crewName, bodyText)
+                : Texts.tr("toast.narration.message", name, bodyText);
+        };
+        return new ToastCard(b);
+    }
+
+    /** A travel toast: one sentence (up to two lines) beside the gold join sign, no title, no hint. */
+    public static ToastCard travel(String text) {
+        Builder b = new Builder();
+        b.kind = Kind.TRAVEL;
+        b.initial = "";
+        b.body = Texts.wrap(Fonts.ui(), text, TEXT_W, MAX_BODY_LINES);
+        b.narration = Component.literal(text);
+        return new ToastCard(b);
+    }
+
+    public float height() {
+        return height;
+    }
+
+    public Component narration() {
+        return narration;
+    }
+
+    public String conversation() {
+        return conversation;
+    }
+
+    public Kind kind() {
+        return kind;
+    }
+
+    /** Draws the card with its top-left corner at {@code x, y}; the caller set the opacity. */
+    void draw(GuiGraphicsExtractor g, float x, float y, float refresh) {
+        if (kind == Kind.TRAVEL) {
+            drawTravel(g, x, y);
+            return;
+        }
+        Draw.frame(g, kind == Kind.CALL ? Frames.TOAST_CALL : Frames.TOAST, x, y, WIDTH, height);
+        drawFace(g, x + PAD_X + FACE / 2f, y + PAD_Y + FACE / 2f);
+        float tx = x + TEXT_X;
+        float ty = y + PAD_Y;
+        Draw.text(g, Fonts.strong(), title, tx, Fonts.centeredY(Fonts.Face.STRONG, ty + TITLE_H / 2f), Theme.BONE_50);
+        if (countText != null) {
+            float px = tx + titleWidth + 4;
+            float py = ty + (TITLE_H - 9) / 2f;
+            Draw.frame(g, Frames.PILL, px, py, countWidth, 9);
+            Draw.text(g, Fonts.small(), countText, px + 4, Fonts.centeredY(Fonts.Face.SMALL, py + 4.5f),
+                Theme.BONE_100);
+        }
+        ty += TITLE_H;
+        if (crew != null) {
+            Draw.text(g, Fonts.small(), crew, tx, Fonts.centeredY(Fonts.Face.SMALL, ty + SMALL_H / 2f - 0.5f),
+                Theme.ASH_300);
+            ty += SMALL_H;
+        }
+        ty += 1;
+        // An update in place: the text comes up from dim, so the eye sees it changed.
+        Draw.pushAlpha(0.45f + 0.55f * refresh);
+        for (FormattedCharSequence line : body) {
+            Draw.text(g, Fonts.ui(), line, tx, Fonts.centeredY(Fonts.Face.UI, ty + LINE_H / 2f), Theme.BONE_300);
+            ty += LINE_H;
+        }
+        Draw.popAlpha();
+        if (kind != Kind.INFO) {
+            drawHint(g, tx, ty + HINT_GAP);
+        }
+    }
+
+    private void drawTravel(GuiGraphicsExtractor g, float x, float y) {
+        Draw.frame(g, Frames.TOAST, x, y, WIDTH, height);
+        float mid = y + height / 2f;
+        drawFace(g, x + PAD_X + FACE / 2f, mid);
+        float ty = mid - body.size() * LINE_H / 2f;
+        for (FormattedCharSequence line : body) {
+            Draw.text(g, Fonts.ui(), line, x + TEXT_X, Fonts.centeredY(Fonts.Face.UI, ty + LINE_H / 2f),
+                Theme.BONE_100);
+            ty += LINE_H;
+        }
+    }
+
+    private void drawFace(GuiGraphicsExtractor g, float cx, float cy) {
+        switch (kind) {
+            case TRAVEL -> {
+                Draw.disc(g, FACE, cx, cy, Theme.withAlpha(Theme.GOLD_500, 0.2f));
+                Draw.icon(g, Icon.JOIN, 10, cx - 5, cy - 5, Theme.GOLD_300);
+            }
+            case CALL -> {
+                Draw.disc(g, FACE, cx, cy, Theme.withAlpha(Theme.GOLD_500, 0.2f));
+                Draw.icon(g, Icon.CALL, 10, cx - 5, cy - 5, Theme.GOLD_300);
+            }
+            case INVITE -> {
+                Draw.disc(g, FACE, cx, cy, Theme.OBSIDIAN_700);
+                Draw.icon(g, Icon.INVITE, 10, cx - 5, cy - 5, Theme.BONE_100);
+            }
+            case INFO -> {
+                Draw.disc(g, FACE, cx, cy, Theme.OBSIDIAN_700);
+                Draw.icon(g, Icon.INFO, 10, cx - 5, cy - 5, Theme.ASH_300);
+            }
+            case MESSAGE -> {
+                Draw.disc(g, FACE, cx, cy, Theme.OBSIDIAN_600);
+                if (crewChat) {
+                    Draw.icon(g, Icon.CREW, 10, cx - 5, cy - 5, Theme.BONE_100);
+                } else {
+                    Draw.text(g, Fonts.strong(), initial, cx - initialWidth / 2f,
+                        Fonts.centeredY(Fonts.Face.STRONG, cy), Theme.BONE_100);
+                }
+            }
+        }
+    }
+
+    private void drawHint(GuiGraphicsExtractor g, float x, float y) {
+        Font small = Fonts.small();
+        float textY = Fonts.centeredY(Fonts.Face.SMALL, y + HINT_H / 2f);
+        float cx = x;
+        if (hintBefore != null && !hintBefore.isEmpty()) {
+            Draw.text(g, small, hintBefore, cx, textY, Theme.ASH_300);
+            cx += hintBeforeWidth + 3;
+        }
+        if (hintKey == null) {
+            return;
+        }
+        Draw.frame(g, Frames.KEYCAP, cx, y, hintKeyWidth, HINT_H);
+        Draw.text(g, small, hintKey, cx + KEY_PAD, textY - 0.5f, Theme.BONE_100);
+        cx += hintKeyWidth + 3;
+        if (!hintAfter.isEmpty()) {
+            Draw.text(g, small, hintAfter, cx, textY, Theme.ASH_300);
+        }
+    }
+}

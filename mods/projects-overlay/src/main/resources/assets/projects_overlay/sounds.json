@@ -1,0 +1,8 @@
+{
+  "ui.message": {
+    "sounds": [{ "name": "projects_overlay:ui/message", "stream": false }]
+  },
+  "ui.call": {
+    "sounds": [{ "name": "projects_overlay:ui/call", "stream": false }]
+  }
+}

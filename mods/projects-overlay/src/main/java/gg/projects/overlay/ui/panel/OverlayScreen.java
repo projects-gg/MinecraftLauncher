@@ -1,0 +1,891 @@
+package gg.projects.overlay.ui.panel;
+
+import gg.projects.overlay.compat.Compat;
+import gg.projects.overlay.OverlayClient;
+import gg.projects.overlay.Perf;
+import gg.projects.overlay.bridge.BridgeClient;
+import gg.projects.overlay.bridge.Protocol;
+import gg.projects.overlay.motion.Ease;
+import gg.projects.overlay.settings.OverlaySettings;
+import gg.projects.overlay.state.OverlayState;
+import gg.projects.overlay.toast.ToastLayer;
+import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.Texts;
+import gg.projects.overlay.ui.Theme;
+import gg.projects.overlay.ui.draw.Draw;
+import gg.projects.overlay.ui.draw.Frames;
+import gg.projects.overlay.ui.draw.Icon;
+import gg.projects.overlay.ui.draw.ShapeSet;
+import gg.projects.overlay.ui.draw.Shapes;
+import java.util.ArrayList;
+import java.util.List;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.options.controls.KeyBindsScreen;
+import net.minecraft.client.input.CharacterEvent;
+import net.minecraft.client.input.KeyEvent;
+import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.util.FormattedCharSequence;
+
+/**
+ * The overlay panel: a drawer on the right over the running game (it never pauses, singleplayer keeps
+ * ticking, the world stays visible under a light dim). Header with the connection and settings; notices
+ * when there is something to say (the launcher is away, the first time, "Rahatsız etmeyin"); a crew call
+ * with its answers; then chats (conversation chips, the conversation, the message field) or friends, or the
+ * settings page.
+ *
+ * <p>Widgets live as long as the panel: launcher data only updates what they show, so focus, the draft and
+ * the caret stay where they are. It slides in on the drawer curve (opacity only under reduced motion);
+ * closing hands the last picture to the HUD, which fades it out while the game already has the input.
+ */
+public final class OverlayScreen extends Screen {
+    public enum Page { CHATS, FRIENDS, SETTINGS }
+
+    private static final int P = 10;
+    private static final int HEADER_H = 30;
+    private static final int COMPOSER_H = 22;
+    private static final long ENTER_MS = 220;
+    private static final long EXIT_MS = 140;
+    private static final long PAGE_MS = 220;
+    private static final String[] ANSWERS = {"coming", "soon", "cant"};
+
+    private record Notice(Icon icon, int iconColor, List<FormattedCharSequence> lines, ActionButton button,
+        int y, int height) {
+    }
+
+    private final OverlayClient overlay;
+    private final OverlayState state;
+    private final IconButton gear;
+    private final IconButton back;
+    private final ActionButton retry;
+    private final ActionButton hintOk;
+    private final ActionButton[] answers = new ActionButton[3];
+    private final ActionButton callJoin;
+    private final Segmented tabs;
+    private final ChipRow chips;
+    private final MessageList messages;
+    private final QuickReplies quick;
+    private final ComposerField field;
+    private final SendButton send;
+    private final FriendList friends;
+    private final SettingsList settingsList;
+    private final List<Notice> notices = new ArrayList<>();
+
+    private Page page;
+    private Page lastListPage;
+    private String conversation;
+    private int seenRevision = -1;
+    private int panelX;
+    private int panelW;
+    private int dndY = -1;
+    private int callY = -1;
+    private int callH;
+    private List<FormattedCharSequence> callTitle = List.of();
+    private String callCounts = "";
+    private OverlayState.CrewCall call;
+    private String pendingAnswerCall;
+    private String pendingAnswer;
+    private int composerY;
+    private String composerNote;
+    private long openedAt;
+    private long pageChangedAt;
+    private boolean closing;
+    private String titleText = "";
+    private String settingsTitle = "";
+    private String statusText = "";
+    private BridgeClient.Status statusShown;
+    private String dndText = "";
+
+    public OverlayScreen(OverlayClient overlay) {
+        super(Texts.tr("panel.title"));
+        this.overlay = overlay;
+        this.state = overlay.state();
+        gear = new IconButton(Icon.GEAR, Texts.tr("settings.title"), () -> setPage(Page.SETTINGS));
+        back = new IconButton(Icon.BACK, Texts.tr("panel.back"), () -> setPage(lastListPage));
+        retry = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("retry"), null, overlay::retry);
+        hintOk = new ActionButton(ActionButton.Style.GHOST, Texts.tr("hint.ok"), null,
+            () -> overlay.updateSettings(s -> s.withHintSeen(true)));
+        for (int i = 0; i < ANSWERS.length; i++) {
+            String answer = ANSWERS[i];
+            answers[i] = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("call." + answer), null,
+                () -> answer(answer));
+        }
+        callJoin = new ActionButton(ActionButton.Style.GHOST, Texts.tr("call.join"), Icon.JOIN, this::joinCall);
+        tabs = new Segmented(Texts.tr("panel.tabs"), new Component[] {Texts.tr("chats"), Texts.tr("friends")}, 0,
+            i -> setPage(i == 0 ? Page.CHATS : Page.FRIENDS));
+        chips = new ChipRow(this::openConversation);
+        messages = new MessageList(new MessageList.Actions() {
+            @Override
+            public void retry(OverlayState.ChatLine line) {
+                OverlayState.ChatLine taken = state.takeFailed(line.clientId, now());
+                if (taken != null && conversation != null) {
+                    overlay.sendChat(conversation, taken.text);
+                    messages.toBottom();
+                }
+            }
+
+            @Override
+            public void rewrite(OverlayState.ChatLine line) {
+                OverlayState.ChatLine taken = state.takeFailed(line.clientId, now());
+                if (taken != null) {
+                    field.setValue(taken.text);
+                    setFocused(field);
+                }
+            }
+
+            @Override
+            public void discard(OverlayState.ChatLine line) {
+                state.takeFailed(line.clientId, now());
+            }
+        });
+        quick = new QuickReplies(this::sendText);
+        field = new ComposerField(Texts.tr("chat.field"));
+        field.setMaxLength(Protocol.MAX_MESSAGE_CHARS);
+        send = new SendButton(this::canSend, this::sendDraft);
+        friends = new FriendList(this::joinFriend);
+        settingsList = new SettingsList(overlay::settings, overlay::updateSettings, overlay.key()::keyName,
+            () -> Compat.setScreen(minecraft, new KeyBindsScreen(this, minecraft.options)));
+        lastListPage = state.has("chat") || !state.welcomed() ? Page.CHATS : Page.FRIENDS;
+        page = overlay.lastPage() == Page.SETTINGS ? lastListPage : overlay.lastPage();
+        if (page == Page.CHATS && state.welcomed() && !state.has("chat")) {
+            page = Page.FRIENDS;
+        }
+        if (page != Page.SETTINGS) {
+            lastListPage = page;
+        }
+        conversation = pickConversation();
+    }
+
+    static long now() {
+        return System.nanoTime() / 1_000_000L;
+    }
+
+    /** The conversation on screen; its new messages do not raise toasts. */
+    public String openConversation() {
+        return page == Page.CHATS ? conversation : null;
+    }
+
+    public Page page() {
+        return page;
+    }
+
+    public boolean reducedMotion() {
+        return overlay.reducedMotion();
+    }
+
+    /** The message field (the scenario driver types into it through the normal input path). */
+    public ComposerField input() {
+        return field;
+    }
+
+    /** Shows a page as its tab or button would (the scenario driver uses it too). */
+    public void showPage(Page next) {
+        setPage(next);
+    }
+
+    /** "Katıl" on a friend, as the list's button does. */
+    public void join(String friendId) {
+        joinFriend(friendId);
+    }
+
+    /** The settings list (the scenario driver scrolls it). */
+    public SettingsList settings() {
+        return settingsList;
+    }
+
+    private String pickConversation() {
+        String wanted = overlay.preferredConversation();
+        if (wanted != null && state.conversation(wanted) != null) {
+            return wanted;
+        }
+        String first = null;
+        for (OverlayState.Conversation c : state.conversations()) {
+            if (first == null) {
+                first = c.id();
+            }
+            if (c.unread() > 0) {
+                return c.id();
+            }
+        }
+        return first;
+    }
+
+    @Override
+    protected void init() {
+        if (openedAt == 0) {
+            openedAt = now();
+            pageChangedAt = 0;
+        }
+        for (AbstractWidget w : new AbstractWidget[] {gear, back, retry, hintOk, answers[0], answers[1], answers[2],
+            callJoin, tabs, chips, messages, quick, field, send, friends, settingsList}) {
+            addWidget(w);
+        }
+        Shapes.prepare();
+        if (conversation != null) {
+            messages.open(conversation, isCrew(conversation), unreadOf(conversation));
+            overlay.openConversation(conversation);
+        }
+        sync(true);
+        setInitialFocus(initialFocus());
+    }
+
+    @Override
+    protected void repositionElements() {
+        layout();
+    }
+
+    private AbstractWidget initialFocus() {
+        return switch (page) {
+            case CHATS -> composerOpen() ? field : chips;
+            case FRIENDS -> friends;
+            case SETTINGS -> settingsList;
+        };
+    }
+
+    private boolean isCrew(String conv) {
+        OverlayState.Conversation c = state.conversation(conv);
+        return c != null && c.crew();
+    }
+
+    private int unreadOf(String conv) {
+        OverlayState.Conversation c = state.conversation(conv);
+        return c == null ? 0 : c.unread();
+    }
+
+    /** Called by the overlay on the render thread after every launcher frame. */
+    public void onStateChanged() {
+        sync(false);
+    }
+
+    private void sync(boolean force) {
+        if (!force && state.revision() == seenRevision) {
+            return;
+        }
+        seenRevision = state.revision();
+        if (conversation == null || state.conversation(conversation) == null) {
+            String next = pickConversation();
+            if (next != null && !next.equals(conversation)) {
+                conversation = next;
+                messages.open(next, isCrew(next), unreadOf(next));
+                overlay.openConversation(next);
+            } else if (next == null) {
+                conversation = null;
+                messages.open(null, false, 0);
+            }
+        }
+        chips.update(state, conversation);
+        layout();
+    }
+
+    private void setPage(Page next) {
+        if (next == null || next == page) {
+            return;
+        }
+        if (next == Page.SETTINGS && !overlay.settings().hintSeen()) {
+            overlay.updateSettings(s -> s.withHintSeen(true));
+        }
+        if (page != Page.SETTINGS) {
+            lastListPage = page;
+        }
+        if (next != Page.SETTINGS) {
+            lastListPage = next;
+            tabs.select(next == Page.CHATS ? 0 : 1);
+        }
+        page = next;
+        overlay.rememberPage(next);
+        pageChangedAt = now();
+        layout();
+        setFocused(initialFocus());
+        if (page == Page.CHATS && conversation != null) {
+            overlay.openConversation(conversation);
+        }
+    }
+
+    private void openConversation(String id) {
+        if (id == null || id.equals(conversation)) {
+            return;
+        }
+        conversation = id;
+        overlay.rememberConversation(id);
+        messages.open(id, isCrew(id), unreadOf(id));
+        overlay.openConversation(id);
+        chips.update(state, id);
+        layout();
+    }
+
+    private boolean composerOpen() {
+        OverlayState.Conversation c = state.conversation(conversation);
+        return c != null && c.writable() && state.online() && state.has("chat");
+    }
+
+    private boolean canSend() {
+        return composerOpen() && !Protocol.plain(field.getValue(), Protocol.MAX_MESSAGE_CHARS).isEmpty();
+    }
+
+    private void sendDraft() {
+        String text = Protocol.plain(field.getValue(), Protocol.MAX_MESSAGE_CHARS);
+        if (text.isEmpty() || !composerOpen()) {
+            return;
+        }
+        field.setValue("");
+        sendText(text);
+    }
+
+    private void sendText(String text) {
+        if (conversation == null || !composerOpen()) {
+            return;
+        }
+        overlay.sendChat(conversation, text);
+        messages.toBottom();
+    }
+
+    private void answer(String answer) {
+        if (call == null || !state.online()) {
+            return;
+        }
+        pendingAnswerCall = call.id();
+        pendingAnswer = answer;
+        overlay.answer(call.id(), answer);
+        layout();
+    }
+
+    private void joinFriend(String id) {
+        OverlayState.Friend f = state.friend(id);
+        if (f == null || !canJoin(f)) {
+            return;
+        }
+        boolean projects = f.onProjects();
+        String host = projects ? OverlayClient.PROJECTS_HOST : f.host();
+        if (host == null) {
+            return;
+        }
+        Compat.setScreen(minecraft, new JoinScreen(this, new JoinScreen.Target(f.id(), f.name(), host, projects)));
+    }
+
+    private void joinCall() {
+        if (call == null) {
+            return;
+        }
+        boolean projects = "projects".equals(call.where());
+        String host = projects ? OverlayClient.PROJECTS_HOST : call.host();
+        if (host == null) {
+            return;
+        }
+        Compat.setScreen(minecraft, new JoinScreen(this, new JoinScreen.Target(null, call.from(), host, projects)));
+    }
+
+    private boolean canJoin(OverlayState.Friend f) {
+        if (!f.joinable() || !state.online()) {
+            return false;
+        }
+        if (f.onProjects()) {
+            return !overlay.onProjects();
+        }
+        return f.host() != null && !overlay.onServer(f.host());
+    }
+
+    private boolean callJoinable(OverlayState.CrewCall c) {
+        if (c == null || c.where() == null || !state.online()) {
+            return false;
+        }
+        if (c.where().equals("projects")) {
+            return !overlay.onProjects();
+        }
+        return c.host() != null && !overlay.onServer(c.host());
+    }
+
+    // ---- Layout -------------------------------------------------------------------------------------
+
+    private void layout() {
+        if (font == null) {
+            return;
+        }
+        long now = now();
+        boolean reduced = reducedMotion();
+        titleText = getTitle().getString();
+        settingsTitle = Texts.str("settings.title");
+        dndText = Texts.str("dnd");
+        statusShown = state.status();
+        statusText = Texts.str("status." + statusShown.name().toLowerCase(java.util.Locale.ROOT));
+        tabs.setReducedMotion(reduced);
+        chips.setReducedMotion(reduced);
+        messages.setReducedMotion(reduced);
+        friends.setReducedMotion(reduced);
+        settingsList.setReducedMotion(reduced);
+        panelW = Math.max(220, Math.min(300, Math.round(width * 0.38f)));
+        panelW = Math.min(panelW, width - 24);
+        panelX = width - panelW;
+        int x0 = panelX + P;
+        int cw = panelW - 2 * P;
+        hideAll();
+        boolean settingsPage = page == Page.SETTINGS;
+        gear.visible = !settingsPage;
+        back.visible = settingsPage;
+        PanelWidget.place(gear, panelX + panelW - P - IconButton.SIZE + 3, (HEADER_H - IconButton.SIZE) / 2,
+            IconButton.SIZE, IconButton.SIZE);
+        PanelWidget.place(back, x0 - 4, (HEADER_H - IconButton.SIZE) / 2, IconButton.SIZE, IconButton.SIZE);
+        int y = HEADER_H + 6;
+        dndY = -1;
+        if (state.online() && state.dnd()) {
+            dndY = y;
+            y += 14;
+        }
+        notices.clear();
+        y = layoutNotices(x0, cw, y);
+        call = settingsPage ? null : state.activeCall(System.currentTimeMillis());
+        callY = -1;
+        if (call != null && state.has("calls")) {
+            y = layoutCall(x0, cw, y);
+        }
+        if (settingsPage) {
+            settingsList.visible = true;
+            PanelWidget.place(settingsList, x0, y, cw, Math.max(40, height - P - y));
+            return;
+        }
+        boolean chat = state.has("chat") || !state.welcomed();
+        if (chat && state.signedIn()) {
+            tabs.visible = true;
+            PanelWidget.place(tabs, x0, y, cw, Segmented.HEIGHT);
+            tabs.setMarker(0, page != Page.CHATS && state.unreadTotal() > 0);
+            y += Segmented.HEIGHT + 8;
+        }
+        if (page == Page.FRIENDS || !chat) {
+            friends.visible = true;
+            PanelWidget.place(friends, x0, y, cw, Math.max(30, height - P - y));
+            friends.refresh(state, this::canJoin);
+            return;
+        }
+        chips.visible = !chips.isEmpty();
+        if (chips.visible) {
+            PanelWidget.place(chips, x0, y, cw, ChipRow.HEIGHT);
+            y += ChipRow.HEIGHT + 6;
+        }
+        composerY = height - P - COMPOSER_H;
+        int listBottom = composerY - 6;
+        composerNote = null;
+        if (conversation == null) {
+            listBottom = height - P;
+        } else if (composerOpen()) {
+            field.visible = true;
+            field.setEditable(true);
+            send.visible = true;
+            PanelWidget.place(field, x0 + 8, composerY + (COMPOSER_H - 12) / 2, cw - 8 - SendButton.SIZE - 6, 12);
+            PanelWidget.place(send, x0 + cw - SendButton.SIZE - 2, composerY + (COMPOSER_H - SendButton.SIZE) / 2,
+                SendButton.SIZE, SendButton.SIZE);
+            field.setPlaceholder(Texts.tr(isCrew(conversation) ? "chat.hint.crew" : "chat.hint"));
+            if (isCrew(conversation)) {
+                quick.visible = true;
+                int qy = composerY - 6 - QuickReplies.HEIGHT;
+                PanelWidget.place(quick, x0, qy, cw, QuickReplies.HEIGHT);
+                quick.setHidden(!field.getValue().isEmpty(), now);
+                listBottom = qy - 6;
+            }
+        } else {
+            composerNote = composerReason();
+        }
+        messages.visible = true;
+        PanelWidget.place(messages, x0, y, cw, Math.max(20, listBottom - y));
+        messages.refresh(state, now);
+    }
+
+    private String composerReason() {
+        if (!state.online()) {
+            return Texts.str("chat.closed.offline");
+        }
+        if (!state.has("chat")) {
+            return Texts.str("chat.closed.off");
+        }
+        return Texts.str("chat.closed.not_allowed");
+    }
+
+    private void hideAll() {
+        for (AbstractWidget w : new AbstractWidget[] {retry, hintOk, answers[0], answers[1], answers[2], callJoin,
+            tabs, chips, messages, quick, field, send, friends, settingsList}) {
+            w.visible = false;
+        }
+    }
+
+    private int layoutNotices(int x0, int cw, int y) {
+        Font ui = Fonts.ui();
+        int textW = cw - 8 - 10 - 6 - 8;
+        BridgeClient.Status status = state.status();
+        if (status != BridgeClient.Status.ONLINE) {
+            boolean retryable = status == BridgeClient.Status.OFFLINE || status == BridgeClient.Status.ENDED;
+            String line = switch (status) {
+                case CONNECTING -> Texts.str("detail.connecting");
+                case OUTDATED -> Texts.str("detail.outdated");
+                case REJECTED -> Texts.str("detail.rejected");
+                default -> Texts.str("detail.closed");
+            };
+            String detail = switch (status) {
+                case OFFLINE -> Texts.str("detail.offline");
+                case ENDED -> "disabled".equals(state.statusReason()) ? Texts.str("detail.disabled")
+                    : "game-start-close".equals(state.statusReason()) ? Texts.str("detail.closes")
+                    : Texts.str("detail.ended");
+                default -> null;
+            };
+            List<FormattedCharSequence> lines = new ArrayList<>(Texts.wrap(Fonts.ui(), line, textW, 3));
+            if (detail != null) {
+                lines.addAll(Texts.wrap(ui, detail, textW, 2));
+            }
+            y = addNotice(x0, cw, y, status == BridgeClient.Status.CONNECTING ? Icon.CLOCK : Icon.UNPLUGGED,
+                status == BridgeClient.Status.CONNECTING ? Theme.ASH_300 : Theme.FLARE_300, lines,
+                retryable ? retry : null);
+        } else if (!state.signedIn()) {
+            y = addNotice(x0, cw, y, Icon.INFO, Theme.ASH_300,
+                Texts.wrap(ui, Texts.str("detail.signed_out"), textW, 3), null);
+        } else if (!overlay.settings().hintSeen()) {
+            y = addNotice(x0, cw, y, Icon.GEAR, Theme.GOLD_300,
+                Texts.wrap(ui, Texts.str("hint.first"), textW, 3), hintOk);
+        }
+        return y;
+    }
+
+    private int addNotice(int x0, int cw, int y, Icon icon, int color, List<FormattedCharSequence> lines,
+        ActionButton button) {
+        int h = 8 + lines.size() * 10 + 8;
+        if (button != null) {
+            button.visible = true;
+            int bw = button.preferredWidth();
+            h += 2 + ActionButton.HEIGHT;
+            PanelWidget.place(button, x0 + cw - 8 - bw, y + h - 8 - ActionButton.HEIGHT, bw, ActionButton.HEIGHT);
+        }
+        notices.add(new Notice(icon, color, lines, button, y, h));
+        return y + h + 6;
+    }
+
+    private int layoutCall(int x0, int cw, int y) {
+        callY = y;
+        Font strong = Fonts.strong();
+        int textW = cw - 8 - 12 - 6 - 8;
+        String title = call.own() ? Texts.str("call.own", call.crew())
+            : Texts.str("call.title", call.from(), call.crew());
+        callTitle = Texts.wrap(strong, title, textW, 2);
+        callCounts = counts(call);
+        int h = 8 + callTitle.size() * 10 + 2 + 9 + 8;
+        boolean joinable = callJoinable(call);
+        if (!call.own()) {
+            h += 2 + ActionButton.HEIGHT;
+            int bw = (cw - 16 - 8) / 3;
+            int by = y + h - 8 - ActionButton.HEIGHT;
+            String mine = call.id().equals(pendingAnswerCall) && call.mine() == null ? pendingAnswer : call.mine();
+            for (int i = 0; i < answers.length; i++) {
+                answers[i].visible = true;
+                answers[i].active = state.online();
+                answers[i].setSelected(ANSWERS[i].equals(mine));
+                PanelWidget.place(answers[i], x0 + 8 + i * (bw + 4), by, bw, ActionButton.HEIGHT);
+            }
+        }
+        if (joinable) {
+            callJoin.visible = true;
+            int jw = callJoin.preferredWidth();
+            PanelWidget.place(callJoin, x0 + cw - 8 - jw, y + 8 + callTitle.size() * 10 - 3, jw, ActionButton.HEIGHT);
+        }
+        callH = h;
+        return y + h + 8;
+    }
+
+    private static String counts(OverlayState.CrewCall c) {
+        List<String> parts = new ArrayList<>(3);
+        if (c.coming() > 0) {
+            parts.add(Texts.str("call.count.coming", c.coming()));
+        }
+        if (c.soon() > 0) {
+            parts.add(Texts.str("call.count.soon", c.soon()));
+        }
+        if (c.cant() > 0) {
+            parts.add(Texts.str("call.count.cant", c.cant()));
+        }
+        return parts.isEmpty() ? Texts.str("call.count.none") : String.join(", ", parts);
+    }
+
+    // ---- Input --------------------------------------------------------------------------------------
+
+    @Override
+    public boolean keyPressed(KeyEvent event) {
+        boolean typing = field.isFocused() && field.visible;
+        if (overlay.key().closes(event, typing)) {
+            close();
+            return true;
+        }
+        if (typing && event.isConfirmation()) {
+            sendDraft();
+            return true;
+        }
+        if (event.isCycleFocus() || event.isUp() || event.isDown() || event.isLeft() || event.isRight()) {
+            PanelInput.usedKeyboard();
+        }
+        return super.keyPressed(event);
+    }
+
+    @Override
+    public boolean charTyped(CharacterEvent event) {
+        boolean handled = super.charTyped(event);
+        if (page == Page.CHATS && quick.visible) {
+            quick.setHidden(!field.getValue().isEmpty(), now());
+        }
+        return handled;
+    }
+
+    @Override
+    public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
+        if (overlay.key().matchesMouse(event)) {
+            close();
+            return true;
+        }
+        if (event.x() < panelX) {
+            // A click on the world goes back to the game.
+            close();
+            return true;
+        }
+        return super.mouseClicked(event, doubleClick);
+    }
+
+    @Override
+    public void onClose() {
+        close();
+    }
+
+    /** Closes to the game: input returns at once, the picture fades out on the HUD. */
+    public void close() {
+        if (closing) {
+            return;
+        }
+        closing = true;
+        long start = now();
+        boolean reduced = reducedMotion();
+        ToastLayer layer = overlay.toasts();
+        layer.setAfterimage((g, now) -> {
+            float q = Math.min(1f, (now - start) / (float) EXIT_MS);
+            if (q >= 1f) {
+                return false;
+            }
+            float eased = Ease.OUT.at(q);
+            drawScrim(g, 1f - eased);
+            drawPanel(g, -1, -1, now, 1f - eased, reduced ? 0f : eased * 12f);
+            return true;
+        });
+        Compat.setScreen(minecraft, null);
+    }
+
+    @Override
+    public void added() {
+        closing = false;
+        overlay.panelOpened();
+    }
+
+    @Override
+    public void removed() {
+        overlay.panelClosed();
+    }
+
+    @Override
+    public boolean isPauseScreen() {
+        return false;
+    }
+
+    @Override
+    public void tick() {
+        if (page == Page.CHATS && quick.visible) {
+            quick.setHidden(!field.getValue().isEmpty(), now());
+        }
+        if (call != null && !call.liveAt(System.currentTimeMillis())) {
+            layout();
+        }
+    }
+
+    // ---- Drawing ------------------------------------------------------------------------------------
+
+    @Override
+    public void extractBackground(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+        float t = Math.min(1f, (now() - openedAt) / (float) ENTER_MS);
+        drawScrim(g, Ease.OUT.at(t));
+    }
+
+    private void drawScrim(GuiGraphicsExtractor g, float alpha) {
+        Draw.fill(g, 0, 0, width, height, Theme.fade(Theme.SCRIM, alpha));
+    }
+
+    @Override
+    public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
+        long started = Perf.start();
+        sync(false);
+        Shapes.prepare();
+        long now = now();
+        float t = Math.min(1f, (now - openedAt) / (float) ENTER_MS);
+        float alpha = Ease.OUT.at(Math.min(1f, (now - openedAt) / 160f));
+        float dx = reducedMotion() ? 0f : (1f - Ease.DRAWER.at(t)) * 18f;
+        drawPanel(g, mouseX, mouseY, now, alpha, dx);
+        Perf.panel(started);
+    }
+
+    /** The panel as it stands, without its entrance (the dialog over it draws this). */
+    void drawStill(GuiGraphicsExtractor g, long now) {
+        drawScrim(g, 1f);
+        drawPanel(g, -1, -1, now, 1f, 0f);
+    }
+
+    private void drawPanel(GuiGraphicsExtractor g, int mouseX, int mouseY, long now, float alpha, float dx) {
+        if (alpha <= 0.004f) {
+            return;
+        }
+        Draw.pushAlpha(alpha);
+        g.pose().pushMatrix();
+        g.pose().translate(dx, 0f);
+        Draw.strip(g, ShapeSet.PANEL_SHADOW, panelX - ShapeSet.PANEL_SHADOW_WIDTH, 0, ShapeSet.PANEL_SHADOW_WIDTH,
+            height);
+        Draw.fill(g, panelX, 0, width, height, ShapeSet.PANEL_FILL);
+        Draw.vhairline(g, panelX, 0, height, Theme.withAlpha(0xFFFFFF, 0.08f));
+        drawHeader(g, mouseX, mouseY, now);
+        for (Notice n : notices) {
+            drawNotice(g, n, mouseX, mouseY);
+        }
+        if (dndY >= 0) {
+            float x0 = panelX + P;
+            Draw.icon(g, Icon.BELL, 8, x0, dndY + 2, Theme.GOLD_300);
+            Draw.text(g, Fonts.small(), dndText, x0 + 12, Fonts.centeredY(Fonts.Face.SMALL, dndY + 6), Theme.ASH_300);
+        }
+        if (callY >= 0 && call != null) {
+            drawCall(g, mouseX, mouseY);
+        }
+        if (messages.visible) {
+            // Cheap unless something changed (or a message waited too long for its answer).
+            messages.refresh(state, now);
+        }
+        float p = pageChangedAt == 0 ? 1f : Math.min(1f, (now - pageChangedAt) / (float) PAGE_MS);
+        float pe = Ease.OUT.at(p);
+        Draw.pushAlpha(pe);
+        g.pose().pushMatrix();
+        g.pose().translate(0f, reducedMotion() ? 0f : (1f - pe) * 4f);
+        render(g, tabs, mouseX, mouseY);
+        render(g, chips, mouseX, mouseY);
+        render(g, messages, mouseX, mouseY);
+        render(g, quick, mouseX, mouseY);
+        if (page == Page.CHATS && conversation != null) {
+            drawComposer(g, mouseX, mouseY);
+        }
+        render(g, friends, mouseX, mouseY);
+        render(g, settingsList, mouseX, mouseY);
+        g.pose().popMatrix();
+        Draw.popAlpha();
+        g.pose().popMatrix();
+        Draw.popAlpha();
+    }
+
+    private void render(GuiGraphicsExtractor g, AbstractWidget w, int mouseX, int mouseY) {
+        if (w.visible) {
+            w.extractRenderState(g, mouseX, mouseY, 0f);
+        }
+    }
+
+    private void drawHeader(GuiGraphicsExtractor g, int mouseX, int mouseY, long now) {
+        int x0 = panelX + P;
+        float mid = HEADER_H / 2f;
+        if (page == Page.SETTINGS) {
+            render(g, back, mouseX, mouseY);
+            Draw.text(g, Fonts.display(), settingsTitle, x0 + 15, Fonts.centeredY(Fonts.Face.DISPLAY, mid),
+                Theme.BONE_50);
+        } else {
+            Draw.text(g, Fonts.display(), titleText, x0, Fonts.centeredY(Fonts.Face.DISPLAY, mid), Theme.BONE_50);
+            render(g, gear, mouseX, mouseY);
+            if (!overlay.settings().hintSeen() && state.online()) {
+                Draw.disc(g, 5, gear.getX() + 13, gear.getY() + 3, Theme.GOLD_500);
+            }
+        }
+        if (statusShown != state.status()) {
+            layout();
+        }
+        BridgeClient.Status status = statusShown;
+        String label = statusText;
+        Font small = Fonts.small();
+        float right = page == Page.SETTINGS ? panelX + panelW - P : gear.getX() - 4;
+        float lx = right - small.width(label);
+        int dot = switch (status) {
+            case ONLINE -> Theme.JADE_400;
+            case CONNECTING -> Theme.ASH_400;
+            default -> Theme.FLARE_400;
+        };
+        Draw.disc(g, 5, lx - 6, mid, dot);
+        Draw.text(g, small, label, lx, Fonts.centeredY(Fonts.Face.SMALL, mid), Theme.ASH_400);
+        Draw.hairline(g, panelX + P, panelX + panelW - P, HEADER_H, Theme.withAlpha(0xFFFFFF, 0.07f));
+    }
+
+    private void drawNotice(GuiGraphicsExtractor g, Notice n, int mouseX, int mouseY) {
+        int x0 = panelX + P;
+        int cw = panelW - 2 * P;
+        Draw.frame(g, Frames.CARD, x0, n.y(), cw, n.height());
+        Draw.icon(g, n.icon(), 10, x0 + 8, n.y() + 8, n.iconColor());
+        float ty = n.y() + 8;
+        boolean first = true;
+        for (FormattedCharSequence line : n.lines()) {
+            Draw.text(g, Fonts.ui(), line, x0 + 8 + 10 + 6, Fonts.centeredY(Fonts.Face.UI, ty + 5),
+                first ? Theme.BONE_100 : Theme.ASH_300);
+            ty += 10;
+            first = false;
+        }
+        if (n.button() != null) {
+            render(g, n.button(), mouseX, mouseY);
+        }
+    }
+
+    private void drawCall(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        int x0 = panelX + P;
+        int cw = panelW - 2 * P;
+        Draw.frame(g, Frames.CARD_GOLD, x0, callY, cw, callH);
+        Draw.icon(g, Icon.CALL, 12, x0 + 8, callY + 7, Theme.GOLD_300);
+        float ty = callY + 8;
+        for (FormattedCharSequence line : callTitle) {
+            Draw.text(g, Fonts.strong(), line, x0 + 8 + 12 + 6, Fonts.centeredY(Fonts.Face.STRONG, ty + 5),
+                Theme.BONE_50);
+            ty += 10;
+        }
+        ty += 2;
+        Draw.text(g, Fonts.small(), callCounts, x0 + 8 + 12 + 6, Fonts.centeredY(Fonts.Face.SMALL, ty + 4.5f),
+            Theme.ASH_300);
+        for (ActionButton b : answers) {
+            render(g, b, mouseX, mouseY);
+        }
+        render(g, callJoin, mouseX, mouseY);
+    }
+
+    private void drawComposer(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        int x0 = panelX + P;
+        int cw = panelW - 2 * P;
+        if (composerNote != null) {
+            Draw.frame(g, Frames.CARD, x0, composerY, cw, COMPOSER_H);
+            Draw.icon(g, Icon.INFO, 8, x0 + 8, composerY + (COMPOSER_H - 8) / 2f, Theme.ASH_400);
+            Draw.text(g, Fonts.small(), composerNote, x0 + 20, Fonts.centeredY(Fonts.Face.SMALL, composerY
+                + COMPOSER_H / 2f), Theme.ASH_300);
+            return;
+        }
+        if (!field.visible) {
+            return;
+        }
+        boolean focused = field.isFocused();
+        boolean lit = mouseX >= x0 && mouseX < x0 + cw && mouseY >= composerY && mouseY < composerY + COMPOSER_H;
+        Draw.frame(g, focused ? Frames.FIELD_FOCUS : lit ? Frames.FIELD_HOVER : Frames.FIELD, x0, composerY, cw,
+            COMPOSER_H);
+        render(g, field, mouseX, mouseY);
+        render(g, send, mouseX, mouseY);
+        int length = field.getValue().codePointCount(0, field.getValue().length());
+        if (length >= 250) {
+            String count = length + "/" + Protocol.MAX_MESSAGE_CHARS;
+            Font small = Fonts.small();
+            Draw.text(g, small, count, send.getX() - 4 - small.width(count), composerY - 10f,
+                length >= Protocol.MAX_MESSAGE_CHARS ? Theme.FLARE_300 : Theme.ASH_400);
+        }
+    }
+
+    @Override
+    public Component getNarrationMessage() {
+        return getTitle();
+    }
+
+    /** Keeps the settings toggles in step after the player changed something elsewhere (key binds). */
+    public void settingsChanged(OverlaySettings settings) {
+        layout();
+    }
+}

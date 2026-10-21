@@ -34,6 +34,21 @@ class ProtocolTest {
         assertEquals("hello", Protocol.type(hello));
         assertEquals(Protocol.VERSION, Protocol.num(hello, "proto", 0));
         assertEquals("tok", Protocol.str(hello, "token", ""));
+        assertEquals("connect", hello.getAsJsonArray("features").get(0).getAsString());
+    }
+
+    @Test
+    void connectResultSaysWhyNot() {
+        JsonObject ok = Protocol.connectResult("c1", true, null, false);
+        assertEquals("connect-result", Protocol.type(ok));
+        assertEquals("c1", Protocol.str(ok, "id", ""));
+        assertEquals(true, Protocol.bool(ok, "ok", false));
+        assertNull(ok.get("reason"));
+        assertNull(ok.get("already"));
+        JsonObject busy = Protocol.connectResult("c2", false, "busy", false);
+        assertEquals(false, Protocol.bool(busy, "ok", true));
+        assertEquals("busy", Protocol.str(busy, "reason", ""));
+        assertEquals(true, Protocol.bool(Protocol.connectResult("c3", true, null, true), "already", false));
     }
 
     @Test

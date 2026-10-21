@@ -2,7 +2,21 @@ plugins {
     id 'net.fabricmc.fabric-loom' version "${loom_version}"
 }
 
-version = project.mod_version
+// One source tree, one jar per Minecraft version: -Pmc=26.1.2 (the default), 26.2 or 26.3. Each version adds
+// its small compatibility source set (src/<compat>/java) and pins its own range in fabric.mod.json.
+// Adding a version: a row here, src/<compat>/java/gg/projects/overlay/compat/Compat.java, the CI matrix.
+def targets = [
+    '26.1.2': [minecraft: '26.1.2', fabricApi: '0.152.1+26.1.2', range: '~26.1.2', compat: 'mc26_1'],
+    '26.2'  : [minecraft: '26.2', fabricApi: '0.161.0+26.2', range: '~26.2', compat: 'mc26_2'],
+    '26.3'  : [minecraft: '26.3', fabricApi: '0.164.0+26.3', range: '~26.3', compat: 'mc26_3'],
+]
+def mc = providers.gradleProperty('mc').getOrElse(project.default_mc)
+def target = targets[mc]
+if (target == null) {
+    throw new GradleException("Unknown Minecraft version '${mc}' (-Pmc=): one of ${targets.keySet()}")
+}
+
+version = "${project.mod_version}+${target.minecraft}"
 group = project.maven_group
 
 base {
@@ -16,8 +30,16 @@ if (buildDirOverride.isPresent()) {
 }
 
 sourceSets {
+    main {
+        java {
+            srcDir "src/${target.compat}/java"
+        }
+    }
     // Test driver for runClient only (scripted scenario, frame timing). Never part of the released jar.
     dev {
+        java {
+            srcDir "src/${target.compat}/dev/java"
+        }
         compileClasspath += main.compileClasspath + main.output
         runtimeClasspath += main.runtimeClasspath + main.output
     }
@@ -28,9 +50,9 @@ repositories {
 }
 
 dependencies {
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    minecraft "com.mojang:minecraft:${target.minecraft}"
     implementation "net.fabricmc:fabric-loader:${project.loader_version}"
-    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${target.fabricApi}"
 
     testImplementation platform("org.junit:junit-bom:${project.junit_version}")
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -51,7 +73,7 @@ loom {
         client {
             source sourceSets.dev
             runDir = providers.gradleProperty('ovl.runDir').getOrElse('run')
-            programArgs '--username', providers.gradleProperty('ovl.username').getOrElse('OVL1Test'),
+            programArgs '--username', providers.gradleProperty('ovl.username').getOrElse('OVL2Test'),
                 '--width', '1280', '--height', '720'
             vmArgs '-Xmx2G'
             // The launcher passes these on the real command line; local runs take them as Gradle properties.
@@ -61,6 +83,7 @@ loom {
                 'perf'      : 'ovl.perf',
                 'dev.script': 'ovl.script',
                 'dev.out'   : 'ovl.out',
+                'dev.server': 'ovl.server',
             ].each { name, property ->
                 def value = providers.gradleProperty(property)
                 if (value.isPresent()) {
@@ -72,11 +95,11 @@ loom {
 }
 
 processResources {
-    def version = project.version
-    inputs.property 'version', version
+    def props = [version: project.version, minecraft_range: target.range]
+    inputs.properties props
 
     filesMatching('fabric.mod.json') {
-        expand 'version': version
+        expand props
     }
 }
 

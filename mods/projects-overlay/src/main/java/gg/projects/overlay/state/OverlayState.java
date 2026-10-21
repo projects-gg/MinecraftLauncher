@@ -6,11 +6,16 @@ import com.google.gson.JsonObject;
 import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.Protocol;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -22,14 +27,38 @@ public final class OverlayState {
     public static final int MAX_LINES = 100;
     /** A message the launcher did not confirm within this time is shown as not sent. */
     public static final long SEND_TIMEOUT_MS = 10_000;
+    /** Failure reason of a message nobody answered for. */
+    public static final String TIMEOUT = "timeout";
 
-    public record Friend(String id, String name, String where, boolean joinable) {
+    public record Friend(String id, String name, String where, boolean joinable, String host) {
+        public boolean onProjects() {
+            return where.equals("projects");
+        }
+
+        public boolean online() {
+            return !where.equals("offline");
+        }
+
+        /** In a game (Projects, another server, singleplayer or the game's menus). */
+        public boolean inGame() {
+            return switch (where) {
+                case "projects", "server", "single", "game" -> true;
+                default -> false;
+            };
+        }
     }
 
-    public record Conversation(String id, String kind, String title, int unread, boolean muted) {
+    public record Conversation(String id, String kind, String title, int unread, boolean muted, boolean writable) {
+        public boolean crew() {
+            return kind.equals("crew");
+        }
     }
 
-    public record CrewCall(String id, String crew, String from, int coming, int soon, int cant, String mine) {
+    public record CrewCall(String id, String crew, String from, long since, long until, int coming, int soon,
+        int cant, String mine, String where, String host, boolean own) {
+        public boolean liveAt(long now) {
+            return until <= 0 || now < until;
+        }
     }
 
     public enum Delivery { PENDING, SENT, FAILED }
@@ -37,14 +66,18 @@ public final class OverlayState {
     public static final class ChatLine {
         public final String clientId;
         public final String from;
-        public final String text;
         public final boolean mine;
         public final long createdAt;
         public String id;
+        public String text;
+        public long at;
+        public boolean edited;
+        /** Deleted for everyone: shown as a quiet mark in its place. */
+        public boolean deleted;
         public Delivery delivery;
         public String failure;
 
-        ChatLine(String id, String clientId, String from, String text, boolean mine, Delivery delivery,
+        ChatLine(String id, String clientId, String from, String text, boolean mine, Delivery delivery, long at,
             long createdAt) {
             this.id = id;
             this.clientId = clientId;
@@ -52,6 +85,7 @@ public final class OverlayState {
             this.text = text;
             this.mine = mine;
             this.delivery = delivery;
+            this.at = at;
             this.createdAt = createdAt;
         }
 
@@ -61,20 +95,31 @@ public final class OverlayState {
             }
             return delivery;
         }
+
+        public String failureAt(long now) {
+            if (delivery == Delivery.PENDING && now - createdAt > SEND_TIMEOUT_MS) {
+                return TIMEOUT;
+            }
+            return failure;
+        }
     }
 
     /** A toast the launcher asked for; the mod may still skip it (hidden GUI, conversation already open). */
-    public record ToastRequest(String kind, String key, String title, String body, String conversation) {
+    public record ToastRequest(String kind, String key, String title, String body, String conversation,
+        String crew) {
     }
 
     private final Map<String, Friend> friends = new LinkedHashMap<>();
-    private final Map<String, Conversation> conversations = new LinkedHashMap<>();
+    private final LinkedHashMap<String, Conversation> conversations = new LinkedHashMap<>();
     private final Map<String, Deque<ChatLine>> lines = new HashMap<>();
+    private final Map<String, Integer> lineRevisions = new HashMap<>();
     private final Map<String, CrewCall> calls = new LinkedHashMap<>();
+    private final Set<String> features = new HashSet<>();
 
     private BridgeClient.Status status = BridgeClient.Status.CONNECTING;
     private String statusReason;
     private String me = "";
+    private boolean welcomed;
     private boolean dnd;
     private boolean reducedMotion;
     private int revision;
@@ -85,6 +130,10 @@ public final class OverlayState {
 
     public String statusReason() {
         return statusReason;
+    }
+
+    public boolean online() {
+        return status == BridgeClient.Status.ONLINE;
     }
 
     public String me() {
@@ -99,25 +148,69 @@ public final class OverlayState {
         return reducedMotion;
     }
 
+    /** The launcher greeted this session at least once (there is something to show). */
+    public boolean welcomed() {
+        return welcomed;
+    }
+
+    /** Signed in to Friends in the launcher: the welcome named at least one feature. */
+    public boolean signedIn() {
+        return !features.isEmpty();
+    }
+
+    public boolean has(String feature) {
+        return features.contains(feature);
+    }
+
     /** Bumps on every visible change so an open panel knows when to rebuild. */
     public int revision() {
         return revision;
+    }
+
+    /** Bumps when the lines of {@code conversation} change. */
+    public int lineRevision(String conversation) {
+        Integer r = lineRevisions.get(conversation);
+        return r == null ? 0 : r;
     }
 
     public Collection<Friend> friends() {
         return friends.values();
     }
 
+    public Friend friend(String id) {
+        return friends.get(id);
+    }
+
+    /** Newest activity first. */
     public Collection<Conversation> conversations() {
         return conversations.values();
     }
 
     public Conversation conversation(String id) {
-        return conversations.get(id);
+        return id == null ? null : conversations.get(id);
+    }
+
+    public int unreadTotal() {
+        int n = 0;
+        for (Conversation c : conversations.values()) {
+            n += c.unread();
+        }
+        return n;
     }
 
     public Collection<CrewCall> calls() {
         return calls.values();
+    }
+
+    /** The newest call that still runs and is someone else's, or null. */
+    public CrewCall activeCall(long now) {
+        CrewCall found = null;
+        for (CrewCall c : calls.values()) {
+            if (!c.own() && c.liveAt(now)) {
+                found = c;
+            }
+        }
+        return found;
     }
 
     public Deque<ChatLine> lines(String conversation) {
@@ -133,17 +226,33 @@ public final class OverlayState {
     /** Adds the player's own message before the launcher confirms it; returns the client id to send. */
     public String addPending(String conversation, String text, long now) {
         String clientId = UUID.randomUUID().toString();
-        append(conversation, new ChatLine(null, clientId, me, text, true, Delivery.PENDING, now));
+        append(conversation, new ChatLine(null, clientId, me, text, true, Delivery.PENDING, now, now));
         return clientId;
     }
 
     public void markFailed(String clientId, String reason) {
-        ChatLine line = findPending(clientId);
-        if (line != null) {
+        ChatLine line = findByClientId(clientId);
+        if (line != null && line.delivery != Delivery.SENT) {
             line.delivery = Delivery.FAILED;
             line.failure = reason;
-            revision++;
+            touch(conversationOf(line));
         }
+    }
+
+    /** Takes a message that did not go out of its conversation; returns it (for a retry or a rewrite). */
+    public ChatLine takeFailed(String clientId, long now) {
+        for (Map.Entry<String, Deque<ChatLine>> entry : lines.entrySet()) {
+            Iterator<ChatLine> it = entry.getValue().iterator();
+            while (it.hasNext()) {
+                ChatLine line = it.next();
+                if (clientId.equals(line.clientId) && line.deliveryAt(now) == Delivery.FAILED) {
+                    it.remove();
+                    touch(entry.getKey());
+                    return line;
+                }
+            }
+        }
+        return null;
     }
 
     /** Applies one launcher frame and returns a toast to show, or null. */
@@ -152,15 +261,37 @@ public final class OverlayState {
         switch (Protocol.type(frame)) {
             case "welcome" -> {
                 JsonObject self = obj(frame, "me");
-                me = self == null ? "" : name(self, "name");
+                String name = self == null ? "" : name(self, "name");
+                if (welcomed && !name.equals(me)) {
+                    // Another account: nothing of the previous one stays on screen.
+                    lines.clear();
+                    lineRevisions.clear();
+                    friends.clear();
+                    conversations.clear();
+                    calls.clear();
+                }
+                me = name;
+                welcomed = true;
                 dnd = Protocol.bool(frame, "dnd", false);
                 reducedMotion = Protocol.bool(frame, "reducedMotion", false);
+                features.clear();
+                JsonArray list = arr(frame, "features");
+                if (list != null) {
+                    for (JsonElement e : list) {
+                        if (e.isJsonPrimitive() && e.getAsJsonPrimitive().isString()) {
+                            features.add(e.getAsString());
+                        }
+                    }
+                }
             }
             case "snapshot" -> {
                 friends.clear();
                 forEach(frame, "friends", this::putFriend);
+                LinkedHashMap<String, Conversation> next = new LinkedHashMap<>();
+                forEachConversation(frame, next);
                 conversations.clear();
-                forEach(frame, "convs", this::putConversation);
+                conversations.putAll(next);
+                lines.keySet().removeIf(id -> !conversations.containsKey(id) && !hasPending(lines.get(id)));
                 calls.clear();
                 forEach(frame, "calls", this::putCall);
                 dnd = Protocol.bool(frame, "dnd", dnd);
@@ -169,27 +300,54 @@ public final class OverlayState {
             case "friend-gone" -> friends.remove(Protocol.str(frame, "id", ""));
             case "conv" -> putConversation(frame);
             case "dnd" -> dnd = Protocol.bool(frame, "on", false);
-            case "msg" -> putMessage(frame, now);
+            case "msg" -> putMessage(frame, now, true);
+            case "msg-gone" -> {
+                // A line dropped (past the history's limit, an unsent message thrown away) leaves the list. A
+                // message deleted for everyone comes as a "msg" with "deleted" instead (L16) and stays as a mark.
+                String conv = Protocol.str(frame, "conv", "");
+                String id = Protocol.str(frame, "id", "");
+                Deque<ChatLine> deque = lines.get(conv);
+                ChatLine line = deque == null || id.isEmpty() ? null : findById(deque, null, id);
+                if (line != null) {
+                    deque.remove(line);
+                    touch(conv);
+                }
+            }
             case "history" -> {
                 String conv = Protocol.str(frame, "conv", "");
                 Deque<ChatLine> deque = lines(conv);
-                deque.removeIf(l -> l.delivery != Delivery.PENDING);
+                List<ChatLine> waiting = new ArrayList<>();
+                for (ChatLine l : deque) {
+                    if (l.delivery != Delivery.SENT) {
+                        waiting.add(l);
+                    }
+                }
+                deque.clear();
                 JsonArray msgs = arr(frame, "msgs");
                 if (msgs != null) {
                     for (JsonElement e : msgs) {
                         if (e.isJsonObject()) {
                             JsonObject m = e.getAsJsonObject();
                             m.addProperty("conv", conv);
-                            putMessage(m, now);
+                            putMessage(m, now, false);
                         }
                     }
                 }
+                for (ChatLine l : waiting) {
+                    if (findById(deque, l.clientId, null) == null) {
+                        deque.addLast(l);
+                    }
+                }
+                trim(deque);
+                touch(conv);
             }
             case "sent" -> {
-                ChatLine line = findPending(Protocol.str(frame, "cid", ""));
+                ChatLine line = findByClientId(Protocol.str(frame, "cid", ""));
                 if (line != null) {
                     line.delivery = Delivery.SENT;
-                    line.id = Protocol.str(frame, "id", null);
+                    line.failure = null;
+                    line.id = Protocol.str(frame, "id", line.id);
+                    touch(conversationOf(line));
                 }
             }
             case "send-failed" -> markFailed(Protocol.str(frame, "cid", ""), Protocol.str(frame, "reason", "error"));
@@ -200,7 +358,8 @@ public final class OverlayState {
                 Protocol.plain(Protocol.str(frame, "key", Protocol.str(frame, "id", "")), 64),
                 name(frame, "title"),
                 Protocol.plain(Protocol.str(frame, "body", ""), Protocol.MAX_MESSAGE_CHARS),
-                Protocol.str(frame, "conv", null));
+                Protocol.str(frame, "conv", null),
+                Protocol.plain(Protocol.str(frame, "crew", ""), Protocol.MAX_NAME_CHARS));
             default -> {
                 return null;
             }
@@ -214,17 +373,47 @@ public final class OverlayState {
         if (id.isEmpty()) {
             return;
         }
+        String host = Protocol.plain(Protocol.str(o, "host", ""), 255);
         friends.put(id, new Friend(id, name(o, "name"), Protocol.str(o, "where", "offline"),
-            Protocol.bool(o, "joinable", false)));
+            Protocol.bool(o, "joinable", false), host.isEmpty() ? null : host));
+    }
+
+    private void forEachConversation(JsonObject frame, LinkedHashMap<String, Conversation> into) {
+        JsonArray a = arr(frame, "convs");
+        if (a == null) {
+            return;
+        }
+        for (JsonElement e : a) {
+            if (e.isJsonObject()) {
+                Conversation c = conversationOf(e.getAsJsonObject());
+                if (c != null) {
+                    into.put(c.id(), c);
+                }
+            }
+        }
     }
 
     private void putConversation(JsonObject o) {
-        String id = Protocol.str(o, "id", "");
-        if (id.isEmpty()) {
+        Conversation c = conversationOf(o);
+        if (c == null) {
             return;
         }
-        conversations.put(id, new Conversation(id, Protocol.str(o, "kind", "dm"), name(o, "title"),
-            (int) Math.max(0, Protocol.num(o, "unread", 0)), Protocol.bool(o, "muted", false)));
+        boolean known = conversations.containsKey(c.id());
+        conversations.put(c.id(), c);
+        if (!known) {
+            // A new conversation comes first.
+            moveToFront(c.id());
+        }
+    }
+
+    private static Conversation conversationOf(JsonObject o) {
+        String id = Protocol.str(o, "id", "");
+        if (id.isEmpty()) {
+            return null;
+        }
+        return new Conversation(id, Protocol.str(o, "kind", "dm"), name(o, "title"),
+            (int) Math.max(0, Math.min(9999, Protocol.num(o, "unread", 0))), Protocol.bool(o, "muted", false),
+            Protocol.bool(o, "writable", true));
     }
 
     private void putCall(JsonObject o) {
@@ -233,43 +422,120 @@ public final class OverlayState {
             return;
         }
         JsonObject answers = obj(o, "answers");
-        calls.put(id, new CrewCall(id, name(o, "crew"), name(o, "from"),
-            answers == null ? 0 : (int) Protocol.num(answers, "coming", 0),
-            answers == null ? 0 : (int) Protocol.num(answers, "soon", 0),
-            answers == null ? 0 : (int) Protocol.num(answers, "cant", 0),
-            Protocol.str(o, "mine", null)));
+        String host = Protocol.plain(Protocol.str(o, "host", ""), 255);
+        calls.put(id, new CrewCall(id, name(o, "crew"), name(o, "from"), Protocol.num(o, "since", 0),
+            Protocol.num(o, "until", 0),
+            answers == null ? 0 : (int) Math.max(0, Protocol.num(answers, "coming", 0)),
+            answers == null ? 0 : (int) Math.max(0, Protocol.num(answers, "soon", 0)),
+            answers == null ? 0 : (int) Math.max(0, Protocol.num(answers, "cant", 0)),
+            Protocol.str(o, "mine", null), Protocol.str(o, "where", null), host.isEmpty() ? null : host,
+            Protocol.bool(o, "own", false)));
     }
 
-    private void putMessage(JsonObject o, long now) {
+    private void putMessage(JsonObject o, long now, boolean live) {
         String conv = Protocol.str(o, "conv", "");
         if (conv.isEmpty()) {
             return;
         }
         String id = Protocol.str(o, "id", null);
         String clientId = Protocol.str(o, "cid", null);
+        String text = Protocol.plain(Protocol.str(o, "text", ""), Protocol.MAX_MESSAGE_CHARS);
+        boolean edited = Protocol.bool(o, "edited", false);
+        // Deleted for everyone (L16): the line stays as a quiet "Mesaj silindi" mark, like the launcher's.
+        boolean deleted = Protocol.bool(o, "deleted", false);
+        long at = Protocol.num(o, "at", now);
         Deque<ChatLine> deque = lines(conv);
-        for (ChatLine line : deque) {
-            if ((id != null && id.equals(line.id)) || (clientId != null && clientId.equals(line.clientId))) {
-                line.id = id;
-                line.delivery = Delivery.SENT;
-                return;
+        ChatLine known = findById(deque, clientId, id);
+        if (known != null) {
+            // The same message again: confirmed, edited or deleted.
+            known.id = id == null ? known.id : id;
+            if (deleted) {
+                known.deleted = true;
+                known.text = "";
+                known.edited = false;
+            } else {
+                known.text = text.isEmpty() ? known.text : text;
+                known.edited = edited;
+            }
+            known.at = at;
+            known.delivery = Delivery.SENT;
+            known.failure = null;
+            touch(conv);
+            return;
+        }
+        if (deleted && live) {
+            // The deletion of a message this game never showed: nothing to mark.
+            return;
+        }
+        ChatLine line = new ChatLine(id, clientId, name(o, "from"), deleted ? "" : text,
+            Protocol.bool(o, "mine", false), Delivery.SENT, at, now);
+        line.edited = edited && !deleted;
+        line.deleted = deleted;
+        append(conv, line);
+        if (live) {
+            moveToFront(conv);
+        }
+    }
+
+    /** New activity puts a conversation first (the panel keeps its own order while it is open). */
+    private void moveToFront(String conv) {
+        Conversation c = conversations.get(conv);
+        if (c == null || conversations.keySet().iterator().next().equals(conv)) {
+            return;
+        }
+        LinkedHashMap<String, Conversation> next = new LinkedHashMap<>();
+        next.put(conv, c);
+        for (Conversation other : conversations.values()) {
+            if (!other.id().equals(conv)) {
+                next.put(other.id(), other);
             }
         }
-        append(conv, new ChatLine(id, clientId, name(o, "from"),
-            Protocol.plain(Protocol.str(o, "text", ""), Protocol.MAX_MESSAGE_CHARS), Protocol.bool(o, "mine", false),
-            Delivery.SENT, now));
+        conversations.clear();
+        conversations.putAll(next);
     }
 
     private void append(String conversation, ChatLine line) {
         Deque<ChatLine> deque = lines(conversation);
         deque.addLast(line);
+        trim(deque);
+        touch(conversation);
+    }
+
+    private static void trim(Deque<ChatLine> deque) {
         while (deque.size() > MAX_LINES) {
             deque.removeFirst();
+        }
+    }
+
+    private void touch(String conversation) {
+        if (conversation != null) {
+            lineRevisions.merge(conversation, 1, Integer::sum);
         }
         revision++;
     }
 
-    private ChatLine findPending(String clientId) {
+    private static boolean hasPending(Deque<ChatLine> deque) {
+        if (deque == null) {
+            return false;
+        }
+        for (ChatLine l : deque) {
+            if (l.delivery == Delivery.PENDING) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static ChatLine findById(Deque<ChatLine> deque, String clientId, String id) {
+        for (ChatLine line : deque) {
+            if ((id != null && id.equals(line.id)) || (clientId != null && clientId.equals(line.clientId))) {
+                return line;
+            }
+        }
+        return null;
+    }
+
+    private ChatLine findByClientId(String clientId) {
         if (clientId == null || clientId.isEmpty()) {
             return null;
         }
@@ -278,6 +544,15 @@ public final class OverlayState {
                 if (clientId.equals(line.clientId)) {
                     return line;
                 }
+            }
+        }
+        return null;
+    }
+
+    private String conversationOf(ChatLine line) {
+        for (Map.Entry<String, Deque<ChatLine>> entry : lines.entrySet()) {
+            if (entry.getValue().contains(line)) {
+                return entry.getKey();
             }
         }
         return null;
