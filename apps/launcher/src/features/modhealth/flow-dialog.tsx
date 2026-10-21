@@ -25,6 +25,7 @@ import {
   type Direction,
   enter,
   fade,
+  leave,
   rise,
   stagger,
   stepVariants,
@@ -663,20 +664,38 @@ export function ModFlowDialog() {
             </motion.p>
           ) : null}
         </AnimatePresence>
-        {steps.length === 0 && running ? (
-          <div aria-busy className="space-y-3 py-1">
-            {["w-1/2", "w-2/5", "w-3/5"].map((width) => (
-              <div key={width} className="flex items-center gap-3">
-                <Skeleton className="size-4 shrink-0 rounded-full" />
-                <Skeleton className={`h-3.5 ${width}`} />
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="max-h-[38vh] overflow-y-auto pr-1">
-            <Checklist rows={rows} label={t("modHealth.repair.progress")} />
-          </div>
-        )}
+        {/* Until the plan comes the steps' place is held by rows as tall as the checklist's
+            (34 px), so the panel opens at about its final height: the old short skeleton made
+            it shrink ~30 px and grow back as the list came (POLISH6). The rows show only after
+            150 ms, so a plan that comes at once never flashes grey bars. */}
+        <div className="relative">
+          <AnimatePresence mode="popLayout">
+            {steps.length === 0 && running ? (
+              <motion.ul
+                key="planning"
+                aria-busy
+                aria-label={t("modHealth.repair.progress")}
+                className="space-y-px"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: { ...enter(0.2), delay: 0.15 } }}
+                exit={{ opacity: 0, transition: leave(0.12) }}
+              >
+                {["w-1/2", "w-2/5", "w-3/5"].map((width) => (
+                  <li key={width} className="flex items-center gap-3 py-[7px]">
+                    <span className="grid size-5 shrink-0 place-items-center">
+                      <Skeleton className="size-4 rounded-full" />
+                    </span>
+                    <Skeleton className={`h-3.5 ${width}`} />
+                  </li>
+                ))}
+              </motion.ul>
+            ) : (
+              <motion.div key="steps" className="max-h-[38vh] overflow-y-auto pr-1">
+                <Checklist rows={rows} label={t("modHealth.repair.progress")} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
         {repair.error ? (
           <motion.p {...fade(0.2)} className="mt-3 text-[13.5px] text-ash-300">
             {repair.error instanceof Error ? repair.error.message : String(repair.error)}
