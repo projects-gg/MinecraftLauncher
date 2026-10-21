@@ -197,6 +197,7 @@ export function FriendsSheet() {
                       <Header page={shown} />
                       <div
                         ref={scroller}
+                        data-social-scroller
                         className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
                       >
                         <AnimatePresence mode="popLayout" initial={false} custom={direction}>

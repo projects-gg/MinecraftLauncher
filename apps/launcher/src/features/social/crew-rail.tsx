@@ -90,6 +90,7 @@ function CrewTab({
   travel,
   controls,
   dragged,
+  lifted,
   onSelect,
   onKeyDown,
 }: {
@@ -103,6 +104,8 @@ function CrewTab({
   travel: boolean;
   controls: DragControls;
   dragged: RefObject<boolean>;
+  /** Being dragged: its tooltip waits (the pointer rides along with it). */
+  lifted: boolean;
   onSelect: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
 }) {
@@ -148,6 +151,7 @@ function CrewTab({
       items={items}
       wrapTrigger={(trigger) => (
         <Tooltip
+          disabled={lifted}
           content={
             <span className="block">
               {crew.name}
@@ -218,10 +222,11 @@ function RailItem({
 }: {
   id: string;
   onDragEnd: () => void;
-  children: (controls: DragControls, dragged: RefObject<boolean>) => ReactNode;
+  children: (controls: DragControls, dragged: RefObject<boolean>, lifted: boolean) => ReactNode;
 }) {
   const controls = useDragControls();
   const dragged = useRef(false);
+  const [lifted, setLifted] = useState(false);
   const calm = useCalm();
   return (
     <Reorder.Item
@@ -235,8 +240,12 @@ function RailItem({
       dragElastic={0.12}
       onDragStart={() => {
         dragged.current = true;
+        setLifted(true);
       }}
-      onDragEnd={onDragEnd}
+      onDragEnd={() => {
+        setLifted(false);
+        onDragEnd();
+      }}
       transition={{ layout: springSnappy }}
       // Reorder.Item writes its own z-index while dragging; the lifted mark grows a touch.
       className="relative flex"
@@ -245,7 +254,7 @@ function RailItem({
       animate={calm({ opacity: 1, scale: 1 })}
       exit={calm({ opacity: 0, scale: 0.9, transition: { duration: 0.16 } })}
     >
-      {children(controls, dragged)}
+      {children(controls, dragged, lifted)}
     </Reorder.Item>
   );
 }
@@ -369,7 +378,7 @@ export function CrewRail({
         <AnimatePresence initial={false}>
           {shownCrews.map((crew, index) => (
             <RailItem key={crew.id} id={crew.id} onDragEnd={() => endDrag(crew.id)}>
-              {(controls, dragged) => (
+              {(controls, dragged, lifted) => (
                 <CrewTab
                   crew={crew}
                   index={index}
@@ -385,6 +394,7 @@ export function CrewRail({
                   travel={layout}
                   controls={controls}
                   dragged={dragged}
+                  lifted={lifted}
                   onSelect={() => setTab(crew.id)}
                   onKeyDown={(event) => onKeyDown(event, crew.id)}
                 />

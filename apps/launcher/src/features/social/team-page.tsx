@@ -1121,6 +1121,15 @@ export function TeamPage() {
       side: Math.sign(order.indexOf(shownKey) - order.indexOf(side.key)) || 1,
     });
   }
+  // Another crew (or the add view) starts at the top, where its rail is: a crew founded or joined
+  // from the long add view would otherwise open scrolled down.
+  const root = useRef<HTMLDivElement>(null);
+  const firstKey = useRef(shownKey);
+  useEffect(() => {
+    if (shownKey === firstKey.current) return;
+    firstKey.current = shownKey;
+    root.current?.closest("[data-social-scroller]")?.scrollTo({ top: 0 });
+  }, [shownKey]);
   const slide = rail
     ? {
         variants: switchVariants(reduce),
@@ -1132,7 +1141,7 @@ export function TeamPage() {
     : rise(reduce, 6, 0.28);
 
   return (
-    <div>
+    <div ref={root}>
       {rail ? <CrewRail crews={crews} shown={shownKey} canAdd={canAdd} limit={limit} /> : null}
       <AnimatePresence mode="popLayout" initial={false} custom={side.side}>
         <motion.div
