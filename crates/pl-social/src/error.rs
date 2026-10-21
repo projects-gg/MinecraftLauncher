@@ -74,6 +74,14 @@ pub enum ErrorCode {
     TeamNotPermitted,
     /// A crew has at most 4 moderators.
     LimitTeamModerators,
+    /// A crew call starts only while the player plays on a multiplayer server (CALL1).
+    CallNeedsServer,
+    /// On another server a crew call needs its address shared with friends (CALL1).
+    CallServerHidden,
+    /// The player is in as many crews as the service allows (`crewLimit`).
+    LimitCrews,
+    /// A new crew order did not name exactly the player's crews: read the list again.
+    CrewsChanged,
     UpgradeRequired,
     RateLimited,
     Internal,
@@ -129,6 +137,10 @@ const CODES: &[(&str, ErrorCode)] = &[
     ("call_not_found", ErrorCode::CallNotFound),
     ("team_not_permitted", ErrorCode::TeamNotPermitted),
     ("limit_team_moderators", ErrorCode::LimitTeamModerators),
+    ("call_needs_server", ErrorCode::CallNeedsServer),
+    ("call_server_hidden", ErrorCode::CallServerHidden),
+    ("limit_crews", ErrorCode::LimitCrews),
+    ("crews_changed", ErrorCode::CrewsChanged),
     ("upgrade_required", ErrorCode::UpgradeRequired),
     ("rate_limited", ErrorCode::RateLimited),
     ("internal", ErrorCode::Internal),

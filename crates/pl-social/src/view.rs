@@ -5,10 +5,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    FriendGroup, Limits, Me, Privacy, PublicProfile, Relation, SettingsMeta, StatusMode, TeamExit,
-    TeamPermissions, TeamRelation, TeamRole, discord_avatar_url,
+    CrewMute, FriendGroup, Limits, Me, Privacy, PublicProfile, Relation, SettingsMeta, StatusMode,
+    TeamExit, TeamPermissions, TeamRelation, TeamRole, discord_avatar_url,
 };
-use crate::protocol::{CallAnswer, CallKind, Game, LocalStatus, PresenceState};
+use crate::protocol::{CallAnswer, CallKind, Game, LocalStatus, PresenceState, is_projects_host};
 use crate::qr::QrPath;
 use crate::state::Connection;
 
@@ -54,16 +54,49 @@ pub struct SocialView {
     /// What the service offers of crews beyond the first version (`look`, `calls`, …; only
     /// while `teams`). The launcher uses each part only while it is listed.
     pub team_features: Vec<String>,
-    /// The player's team (only while `teams`).
-    pub team: Option<TeamView>,
+    /// The player's crews in their order, the first being the primary crew (only while `teams`;
+    /// at most one from a service without `multi`).
+    pub crews: Vec<TeamView>,
+    /// How many crews the player may be in (1 from a service without `multi`).
+    pub crew_limit: u32,
     /// Invites to teams, newest first (only while `teams`).
     pub team_invites: Vec<TeamInviteView>,
     /// Open crew calls the player sees, their own included (only while `teams` and the service
     /// offers calls). They end by themselves at `endsAt`: the launcher hides them then.
     pub calls: Vec<CrewCallView>,
-    /// The player's crew notification settings, kept by the service (only while `teams` and the
-    /// service offers `mute`; otherwise the launcher's own switches decide).
+    /// Whether "Ekibi çağır" may start from where the player is right now (CALL1).
+    pub call_place: CallPlace,
+    /// The player's crew notification settings for all crews, kept by the service (only while
+    /// `teams` and the service offers `mute`; otherwise the launcher's own switches decide).
     pub crew_notifications: Option<CrewNotificationsView>,
+}
+
+/// Where "Ekibi çağır" stands (CALL1): a call starts only while the player plays, in a game this
+/// launcher started, on a multiplayer server: projects.gg always, another server only while its
+/// address is shared with friends ("Başka sunuculardaysam adresini göster").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CallPlace {
+    /// On projects.gg, or on another server whose address is shared.
+    Ok,
+    /// In the launcher, in singleplayer, or the server is not known (menus, a LAN world).
+    NeedsServer,
+    /// On another server while its address is not shared.
+    ServerHidden,
+}
+
+impl CallPlace {
+    /// Where a call may start from this launcher's status.
+    pub fn of(status: &LocalStatus, share_server: bool) -> Self {
+        match status {
+            LocalStatus::Playing { host: Some(host) } if is_projects_host(host) => Self::Ok,
+            LocalStatus::Playing { host: Some(_) } if share_server => Self::Ok,
+            LocalStatus::Playing { host: Some(_) } => Self::ServerHidden,
+            LocalStatus::Launcher
+            | LocalStatus::Singleplayer
+            | LocalStatus::Playing { host: None } => Self::NeedsServer,
+        }
+    }
 }
 
 /// What the player hears of their crew ("Sessize al", "Ekip çağrıları"), the same on all their
@@ -92,9 +125,14 @@ pub struct CrewCallView {
     pub name: Option<String>,
     pub avatar: Option<String>,
     pub avatar_url: Option<String>,
-    /// `join`: the caller plays on projects.gg ("Geliyorum" can join them); `ready`: "Hazır
-    /// mısın?".
+    /// `join`: "Geliyorum" can join the caller where `server` says; `ready`: "Hazır mısın?" (a
+    /// call from before CALL1: an answer, nothing to join).
     pub kind: CallKind,
+    /// Where the call is: projects.gg, or another server with its address (None for `ready`).
+    pub server: Option<Game>,
+    /// The player's crews the call names, in the player's order (every crew it names for their
+    /// own call).
+    pub crews: Vec<String>,
     /// Unix seconds on this computer's clock (the service's times moved by the difference
     /// between the two clocks when the call arrived).
     pub started_at: i64,
@@ -122,6 +160,10 @@ pub enum CallOutcome {
     Wait { seconds: u32 },
     /// A call is open already (the player's own or a teammate's).
     Active,
+    /// Not on a multiplayer server (CALL1): nothing was sent, or the service said so.
+    NeedsServer,
+    /// On another server whose address is not shared (CALL1).
+    ServerHidden,
 }
 
 /// The player's friend categories, in their order, and who is in which.
@@ -173,6 +215,9 @@ pub struct TeamView {
     pub invited: Vec<String>,
     /// How many may be in a team.
     pub limit: u32,
+    /// The player's own mute of this crew as it reads now (never muted from a service without
+    /// `multi`; `crewNotifications` covers all crews).
+    pub notifications: CrewMute,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -445,7 +490,8 @@ pub enum SocialNotice {
     CrewCall {
         call: Box<CrewCallView>,
     },
-    /// The caller of a call the player said "Geliyorum" or "Birazdan" to is on projects.gg now.
+    /// The caller of a call the player said "Geliyorum" or "Birazdan" to moved: to projects.gg (a
+    /// call that was "Hazır mısın?"), or to another server (the call's `server` says where).
     CrewCallJoin {
         call: Box<CrewCallView>,
     },
@@ -482,5 +528,44 @@ pub(crate) fn me_view(me: &Me, share: Option<(String, Option<QrPath>)>) -> MeVie
         status: me.status,
         privacy: me.privacy,
         backup: me.settings.clone(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_call_starts_only_on_a_multiplayer_server() {
+        let playing = |host: &str| LocalStatus::Playing {
+            host: Some(host.to_owned()),
+        };
+        for share in [false, true] {
+            assert_eq!(
+                CallPlace::of(&playing("play.projects.gg"), share),
+                CallPlace::Ok
+            );
+            assert_eq!(
+                CallPlace::of(&LocalStatus::Launcher, share),
+                CallPlace::NeedsServer
+            );
+            assert_eq!(
+                CallPlace::of(&LocalStatus::Singleplayer, share),
+                CallPlace::NeedsServer
+            );
+            // In the menus, or a LAN world: the server is not known.
+            assert_eq!(
+                CallPlace::of(&LocalStatus::Playing { host: None }, share),
+                CallPlace::NeedsServer
+            );
+        }
+        assert_eq!(
+            CallPlace::of(&playing("mc.example.com"), false),
+            CallPlace::ServerHidden
+        );
+        assert_eq!(
+            CallPlace::of(&playing("mc.example.com:25570"), true),
+            CallPlace::Ok
+        );
     }
 }

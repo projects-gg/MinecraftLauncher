@@ -41,7 +41,7 @@ function member(id: string, name: string, extra: Partial<TeamMember> = {}): Team
 
 const onProjects = { state: "playing" as const, game: { where: "projects" as const } };
 
-function crew(members: TeamMember[]): SocialTeam {
+function crew(members: TeamMember[], extra: Partial<SocialTeam> = {}): SocialTeam {
   return {
     id: "0123456789abcdef",
     name: "Gece Kartalları",
@@ -58,6 +58,8 @@ function crew(members: TeamMember[]): SocialTeam {
     members: [member("100", "Ben", { me: true }), ...members],
     invited: [],
     limit: 30,
+    mute: { muted: false, muteUntil: null },
+    ...extra,
   };
 }
 
@@ -67,6 +69,7 @@ function call(extra: Partial<CrewCall> = {}): CrewCall {
     from: "1",
     mine: false,
     kind: "join",
+    crews: [],
     startedAt: NOW / 1000 - 60,
     endsAt: NOW / 1000 + 600,
     answers: [],
@@ -90,40 +93,70 @@ describe("Home's line with a crew", () => {
 
   it("puts an unanswered call first, then two or more crewmates on Projects", () => {
     const team = crew([member("1", "Ayşe", onProjects), member("2", "Bora", onProjects)]);
-    expect(homeStrip({ ...view, team, calls: [call()] }, [], context)).toBe("call");
-    expect(homeStrip({ ...view, team }, [], context)).toBe("crew");
+    expect(homeStrip({ ...view, crews: [team], calls: [call()] }, [], context)).toBe("call");
+    expect(homeStrip({ ...view, crews: [team] }, [], context)).toBe("crew");
     // Answered, closed here, or the player's own: the next line.
-    expect(homeStrip({ ...view, team, calls: [call({ myAnswer: "soon" })] }, [], context)).toBe(
-      "crew",
-    );
     expect(
-      homeStrip({ ...view, team, calls: [call()] }, [], { ...context, closedCalls: ["c1"] }),
+      homeStrip({ ...view, crews: [team], calls: [call({ myAnswer: "soon" })] }, [], context),
     ).toBe("crew");
-    expect(homeStrip({ ...view, team, calls: [call({ mine: true })] }, [], context)).toBe("crew");
-    // Run out: gone.
-    expect(homeStrip({ ...view, team, calls: [call({ endsAt: NOW / 1000 })] }, [], context)).toBe(
+    expect(
+      homeStrip({ ...view, crews: [team], calls: [call()] }, [], {
+        ...context,
+        closedCalls: ["c1"],
+      }),
+    ).toBe("crew");
+    expect(homeStrip({ ...view, crews: [team], calls: [call({ mine: true })] }, [], context)).toBe(
       "crew",
     );
+    // Run out: gone.
+    expect(
+      homeStrip({ ...view, crews: [team], calls: [call({ endsAt: NOW / 1000 })] }, [], context),
+    ).toBe("crew");
   });
 
   it("waits while a game is open, and says one crewmate on Projects like a friend", () => {
     const team = crew([member("1", "Ayşe", onProjects), member("2", "Bora", onProjects)]);
-    expect(homeStrip({ ...view, team, calls: [call()] }, [], { ...context, gameBusy: true })).toBe(
-      "playing",
-    );
+    expect(
+      homeStrip({ ...view, crews: [team], calls: [call()] }, [], { ...context, gameBusy: true }),
+    ).toBe("playing");
     const alone = crew([member("1", "Ayşe", onProjects), member("2", "Bora")]);
-    expect(homeStrip({ ...view, team: alone }, [], context)).toBe("playing");
+    expect(homeStrip({ ...view, crews: [alone] }, [], context)).toBe("playing");
     // Someone blocked is not on Projects for the player.
     const blocked = crew([
       member("1", "Ayşe", onProjects),
       member("2", "Bora", { ...onProjects, blocked: true }),
     ]);
-    expect(homeStrip({ ...view, team: blocked }, [], context)).toBe("playing");
+    expect(homeStrip({ ...view, crews: [blocked] }, [], context)).toBe("playing");
+  });
+
+  it("counts crewmates on Projects across several crews once each", () => {
+    const first = crew([member("1", "Ayşe", onProjects)]);
+    const second = crew([member("1", "Ayşe", onProjects), member("3", "Cem")], {
+      id: "fedcba9876543210",
+    });
+    // Ayşe in both crews is one person: no crew line yet.
+    expect(homeStrip({ ...view, crews: [first, second] }, [], context)).toBe("playing");
+    const third = crew([member("2", "Bora", onProjects)], { id: "1111222233334444" });
+    expect(homeStrip({ ...view, crews: [first, second, third] }, [], context)).toBe("crew");
+  });
+
+  it("offers a call in game where one may start, after calls and the crew line", () => {
+    const quiet = crew([member("1", "Ayşe"), member("2", "Bora")]);
+    const playing = { ...context, gameBusy: true, callable: true };
+    expect(homeStrip({ ...view, crews: [quiet] }, [], playing)).toBe("callCrew");
+    // Not where a call may start (or nothing to call): the usual line.
+    expect(homeStrip({ ...view, crews: [quiet] }, [], { ...playing, callable: false })).toBe("add");
+    expect(homeStrip({ ...view, crews: [] }, [], playing)).toBe("add");
+    // Out of the game the call and the crew line come first.
+    const busy = crew([member("1", "Ayşe", onProjects), member("2", "Bora", onProjects)]);
+    expect(homeStrip({ ...view, crews: [busy] }, [], { ...context, callable: true })).toBe("crew");
   });
 
   it("ignores the crew while crews are off", () => {
     const team = crew([member("1", "Ayşe", onProjects), member("2", "Bora", onProjects)]);
-    expect(homeStrip({ ...view, teams: false, team, calls: [call()] }, [], context)).toBe("add");
+    expect(homeStrip({ ...view, teams: false, crews: [team], calls: [call()] }, [], context)).toBe(
+      "add",
+    );
   });
 
   it("names friends in game first, then crewmates on Projects who are not friends", () => {
@@ -143,8 +176,13 @@ describe("Home's line with a crew", () => {
       member("1", "Ayşe", { ...onProjects, friend: true }),
       member("2", "Bora", onProjects),
     ]);
-    expect(playingPeople({ friends, teams: true, team }, []).map((p) => p.id)).toEqual(["1", "2"]);
-    expect(playingPeople({ friends, teams: false, team }, []).map((p) => p.id)).toEqual(["1"]);
+    expect(playingPeople({ friends, teams: true, crews: [team] }, []).map((p) => p.id)).toEqual([
+      "1",
+      "2",
+    ]);
+    expect(playingPeople({ friends, teams: false, crews: [team] }, []).map((p) => p.id)).toEqual([
+      "1",
+    ]);
   });
 });
 
@@ -208,6 +246,39 @@ describe("crew notices", () => {
     expect(wantsNotice({ kind: "friendOnline", id: "1" }, "online", prefs, forever, NOW)).toBe(
       true,
     );
+  });
+
+  it("keeps a call quiet where every crew it names is muted on its own", () => {
+    const at = NOW / 1000;
+    const loud = crew([member("1", "Ayşe")], { id: "a" });
+    const quiet = crew([member("1", "Ayşe")], {
+      id: "b",
+      mute: { muted: true, muteUntil: at + 600 },
+    });
+    const both = { kind: "crewCall" as const, call: call({ crews: ["a", "b"] }) };
+    const onlyQuiet = { kind: "crewCall" as const, call: call({ crews: ["b"] }) };
+    expect(wantsNotice(both, "online", prefs, undefined, NOW, [loud, quiet])).toBe(true);
+    expect(wantsNotice(onlyQuiet, "online", prefs, undefined, NOW, [loud, quiet])).toBe(false);
+    // The mute ends by itself.
+    expect(wantsNotice(onlyQuiet, "online", prefs, undefined, NOW + 600_000, [loud, quiet])).toBe(
+      true,
+    );
+    // A crewmate is heard through any crew shared with them that is not muted.
+    const asked = { ...prefs, notifyCrewProjects: true };
+    const joined: SocialNotice = { kind: "crewmateOnProjects", id: "1" };
+    const mates = { ...asked, notifyFavoriteProjects: false };
+    expect(wantsNotice(joined, "online", mates, undefined, NOW, [loud, quiet])).toBe(true);
+    expect(wantsNotice(joined, "online", mates, undefined, NOW, [quiet])).toBe(false);
+    // The gold dot: the newest call of a crew not muted on its own.
+    const older = call({ id: "old", crews: ["a"], startedAt: at - 300 });
+    const newer = call({ id: "new", crews: ["b"], startedAt: at - 30 });
+    expect(
+      whatWaits(
+        { incoming: [], invites: [], calls: [older, newer], crews: [loud, quiet] },
+        true,
+        NOW,
+      ).call?.id,
+    ).toBe("old");
   });
 
   it("lights the gold dot for a call only while calls are heard", () => {

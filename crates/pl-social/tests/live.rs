@@ -15,12 +15,13 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use pl_social::{
-    CallAnswer, CallKind, ErrorCode, InviteOutcome, LocalStatus, LoginAttempt, PermissionLevel,
-    PermissionsEdit, PresenceEvent, PresenceHandle, PresenceOptions, PresenceState, ProfileUpdate,
-    Relation, RequestOutcome, Session, SettingsPrecondition, SocialClient, SocialConfig,
-    SocialError, StatusMode, StopReason, TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK, TEAM_FEATURE_MUTE,
-    TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamNotifications, TeamNotificationsEdit,
-    auth_code_from_deep_link, crew_code,
+    CallAnswer, CallEndReason, CallKind, CrewMuteEdit, ErrorCode, GameLocation, InviteOutcome,
+    LocalStatus, LoginAttempt, PermissionLevel, PermissionsEdit, PresenceEvent, PresenceHandle,
+    PresenceOptions, PresenceState, ProfileUpdate, Relation, RequestOutcome, Session,
+    SettingsPrecondition, SocialClient, SocialConfig, SocialError, StatusMode, StopReason,
+    TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI,
+    TEAM_FEATURE_MUTE, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamNotifications,
+    TeamNotificationsEdit, TeamRelation, auth_code_from_deep_link, crew_code,
 };
 use url::Url;
 
@@ -119,6 +120,12 @@ async fn expect(
 
 fn options() -> PresenceOptions {
     PresenceOptions::default()
+}
+
+/// A status change goes out on its own (the socket task sends it when it sees it): give it a
+/// moment before a request that depends on it.
+async fn settle() {
+    tokio::time::sleep(Duration::from_millis(400)).await;
 }
 
 #[tokio::test]
@@ -375,6 +382,8 @@ async fn crews_look_roles_and_calls() {
     let roles = features.iter().any(|f| f == TEAM_FEATURE_ROLES);
     let calls = features.iter().any(|f| f == TEAM_FEATURE_CALLS);
     let mute = features.iter().any(|f| f == TEAM_FEATURE_MUTE);
+    let call_server = features.iter().any(|f| f == TEAM_FEATURE_CALL_SERVER);
+    let multi = features.iter().any(|f| f == TEAM_FEATURE_MULTI);
 
     // Founding: the look goes only where the service has looks.
     let wanted = TeamLook {
@@ -384,7 +393,13 @@ async fn crews_look_roles_and_calls() {
     };
     let emblem = if look { "controller" } else { "sword" };
     let created = leader
-        .create_team("Gece Kartalları", "GKR", emblem, look.then_some(&wanted))
+        .create_team(
+            "Gece Kartalları",
+            "GKR",
+            emblem,
+            look.then_some(&wanted),
+            multi,
+        )
         .await
         .unwrap()
         .team
@@ -409,10 +424,10 @@ async fn crews_look_roles_and_calls() {
     // The code as players see it (EKP-) finds the crew on every service: it goes without prefix.
     let shown = crew_code(&created.code);
     assert!(shown.starts_with("EKP-"));
-    let lookup = mate.lookup_team(&shown).await.unwrap();
+    let lookup = mate.lookup_team(&shown, multi).await.unwrap();
     assert_eq!(lookup.team.id, created.id);
     assert_eq!(lookup.team.color, if look { "teal" } else { "gold" });
-    let joined = mate.join_team(&shown).await.unwrap().team.unwrap();
+    let joined = mate.join_team(&shown, multi).await.unwrap().team.unwrap();
     assert_eq!(joined.members.len(), 2);
 
     if look {
@@ -500,7 +515,22 @@ async fn crews_look_roles_and_calls() {
         .await;
     }
     if calls {
-        mate_presence.call_crew().await.unwrap();
+        if call_server {
+            // CALL1: not from the launcher; on another server only while it is shared.
+            let refused = mate_presence.call_crew(None).await.unwrap_err();
+            assert_eq!(refused.code(), Some(&ErrorCode::CallNeedsServer));
+            mate_presence.set_status(LocalStatus::Playing {
+                host: Some("mc.example.com".into()),
+            });
+            settle().await;
+            let hidden = mate_presence.call_crew(None).await.unwrap_err();
+            assert_eq!(hidden.code(), Some(&ErrorCode::CallServerHidden));
+            mate_presence.set_status(LocalStatus::Playing {
+                host: Some("play.projects.gg".into()),
+            });
+            settle().await;
+        }
+        mate_presence.call_crew(None).await.unwrap();
         let call = match expect(&mut leader_presence, "the call", |e| {
             matches!(e, PresenceEvent::Call { .. })
         })
@@ -510,7 +540,19 @@ async fn crews_look_roles_and_calls() {
                 assert!(!quiet, "a teammate's live call is announced");
                 assert!(clock.is_some(), "the hub's clock comes with it");
                 assert_eq!(call.from, mate_id);
-                assert_eq!(call.kind, CallKind::Ready);
+                if call_server {
+                    // Always "join", with where it is and (several crews) the crews it names.
+                    assert_eq!(call.kind, CallKind::Join);
+                    assert_eq!(
+                        call.server.as_ref().map(|s| s.location),
+                        Some(GameLocation::Projects)
+                    );
+                } else {
+                    assert_eq!(call.kind, CallKind::Ready);
+                }
+                if multi {
+                    assert_eq!(call.crews, vec![created.id.clone()]);
+                }
                 assert_eq!(call.until - call.at, 20 * 60);
                 call
             }
@@ -524,18 +566,26 @@ async fn crews_look_roles_and_calls() {
             matches!(e, PresenceEvent::CallAnswered { by, answer: CallAnswer::Yes, .. } if *by == leader_id)
         })
         .await;
-        // The caller goes to projects.gg: the call turns into a "join" call.
-        mate_presence.set_status(LocalStatus::Playing {
-            host: Some("play.projects.gg".into()),
-        });
-        expect(
-            &mut leader_presence,
-            "the join call",
-            |e| matches!(e, PresenceEvent::Call { call, .. } if call.kind == CallKind::Join),
-        )
-        .await;
-        // One call at a time, and not again so soon.
-        let again = leader_presence.call_crew().await.unwrap_err();
+        if !call_server {
+            // The caller goes to projects.gg: the call turns into a "join" call.
+            mate_presence.set_status(LocalStatus::Playing {
+                host: Some("play.projects.gg".into()),
+            });
+            expect(
+                &mut leader_presence,
+                "the join call",
+                |e| matches!(e, PresenceEvent::Call { call, .. } if call.kind == CallKind::Join),
+            )
+            .await;
+        }
+        // One call at a time, and not again so soon (from a server: CALL1 comes first).
+        if call_server {
+            leader_presence.set_status(LocalStatus::Playing {
+                host: Some("play.projects.gg".into()),
+            });
+            settle().await;
+        }
+        let again = leader_presence.call_crew(None).await.unwrap_err();
         assert_eq!(again.code(), Some(&ErrorCode::CallActive));
         mate_presence.end_call(&call.id).await.unwrap();
         expect(
@@ -544,7 +594,7 @@ async fn crews_look_roles_and_calls() {
             |e| matches!(e, PresenceEvent::CallEnded { call: id, .. } if *id == call.id),
         )
         .await;
-        let soon = mate_presence.call_crew().await.unwrap_err();
+        let soon = mate_presence.call_crew(None).await.unwrap_err();
         assert!(matches!(
             soon,
             SocialError::RateLimited {
@@ -558,7 +608,7 @@ async fn crews_look_roles_and_calls() {
         assert_eq!(gone.code(), Some(&ErrorCode::CallNotFound));
     } else {
         // A service without calls refuses the message (the launcher never sends it there).
-        let refused = mate_presence.call_crew().await.unwrap_err();
+        let refused = mate_presence.call_crew(None).await.unwrap_err();
         assert_eq!(refused.code(), Some(&ErrorCode::BadRequest));
     }
 
@@ -596,7 +646,7 @@ async fn crews_look_roles_and_calls() {
         let refused = mate.set_team_notifications(&stray).await.unwrap_err();
         assert_eq!(refused.code(), Some(&ErrorCode::BadRequest));
         if calls {
-            leader_presence.call_crew().await.unwrap();
+            leader_presence.call_crew(None).await.unwrap();
             match expect(
                 &mut mate_presence,
                 "the muted call",
@@ -647,6 +697,167 @@ async fn crews_look_roles_and_calls() {
         };
         assert!(mate.set_team_notifications(&edit).await.is_err());
     }
+
+    mate.delete_account().await.unwrap();
+    leader.delete_account().await.unwrap();
+}
+
+/// Several crews (`multi`): founding and joining one more, the order and the primary crew, a
+/// mute per crew, and one call to two crews that reaches each crewmate through their own.
+#[tokio::test]
+#[ignore = "needs `pnpm dev` and `pnpm dev:discord` in services/social"]
+async fn several_crews_their_order_mutes_and_calls() {
+    let client = client();
+    client.health().await.expect("wrangler dev is running");
+    let leader_id = new_user_id(6);
+    let mate_id = new_user_id(7);
+    let leader = sign_in(&client, &leader_id, "lider").await;
+    let mate = sign_in(&client, &mate_id, "uye").await;
+    let overview = leader.teams().await.unwrap();
+    if !overview
+        .team_features
+        .iter()
+        .any(|f| f == TEAM_FEATURE_MULTI)
+    {
+        eprintln!("this service has one crew per player: nothing to try");
+        mate.delete_account().await.unwrap();
+        leader.delete_account().await.unwrap();
+        return;
+    }
+    let limit = overview
+        .crew_limit
+        .expect("a service with several crews says its limit");
+    assert!((1..=10).contains(&limit));
+
+    // Two crews of the leader's; without `multi` the second is refused the old way.
+    let first = leader
+        .create_team("Gece Kartalları", "GKR", "sword", None, true)
+        .await
+        .unwrap()
+        .team
+        .unwrap();
+    let old_way = leader
+        .create_team("PvP", "PVP", "bolt", None, false)
+        .await
+        .unwrap_err();
+    assert_eq!(old_way.code(), Some(&ErrorCode::AlreadyInTeam));
+    let second = leader
+        .create_team("PvP", "PVP", "bolt", None, true)
+        .await
+        .unwrap()
+        .team
+        .unwrap();
+    let crews = leader.friends().await.unwrap();
+    let ids: Vec<String> = crews
+        .crews
+        .as_ref()
+        .unwrap()
+        .iter()
+        .map(|c| c.team.id.clone())
+        .collect();
+    assert_eq!(ids, vec![first.id.clone(), second.id.clone()]);
+    // The primary crew is the first; older launchers read it as `team`.
+    assert_eq!(crews.team.unwrap().id, first.id);
+
+    // The mate joins the first crew by its code (one crew, below the limit).
+    let shown = crew_code(&first.code);
+    assert_eq!(
+        mate.lookup_team(&shown, true).await.unwrap().relation,
+        TeamRelation::None
+    );
+    mate.join_team(&shown, true).await.unwrap();
+
+    // The leader puts PvP first: it becomes the primary crew, on every device.
+    let mut leader_presence = leader.connect_presence(options());
+    let mut mate_presence = mate.connect_presence(options());
+    for presence in [&mut leader_presence, &mut mate_presence] {
+        expect(presence, "connected", |e| {
+            matches!(e, PresenceEvent::Connected { .. })
+        })
+        .await;
+    }
+    let order = vec![second.id.clone(), first.id.clone()];
+    assert_eq!(leader.order_crews(&order).await.unwrap(), order);
+    expect(
+        &mut leader_presence,
+        "the order on the socket",
+        |e| matches!(e, PresenceEvent::CrewOrder(o) if *o == order),
+    )
+    .await;
+    assert_eq!(leader.teams().await.unwrap().team.unwrap().id, second.id);
+    let stale = leader
+        .order_crews(std::slice::from_ref(&first.id))
+        .await
+        .unwrap_err();
+    assert_eq!(stale.code(), Some(&ErrorCode::CrewsChanged));
+
+    // The mate mutes the crew for an hour: on the socket, and in the list.
+    let now = i64::try_from(
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs(),
+    )
+    .unwrap();
+    let hour = CrewMuteEdit {
+        muted: true,
+        mute_until: Some(now + 3_600),
+    };
+    let muted = mate.set_crew_mute(&first.id, &hour).await.unwrap();
+    assert!(muted.muted && muted.mute_until == Some(now + 3_600));
+    expect(
+        &mut mate_presence,
+        "the crew's mute on the socket",
+        |e| matches!(e, PresenceEvent::CrewMuted { crew, notifications } if *crew == first.id && notifications.muted),
+    )
+    .await;
+    let listed = mate.friends().await.unwrap().crews.unwrap();
+    assert!(listed[0].notifications.muted);
+
+    // One call to both crews from Projects: the mate sees it through the one they share, quiet
+    // while that crew is muted.
+    leader_presence.set_status(LocalStatus::Playing {
+        host: Some("play.projects.gg".into()),
+    });
+    settle().await;
+    leader_presence
+        .call_crew(Some(vec![first.id.clone(), second.id.clone()]))
+        .await
+        .unwrap();
+    let call = match expect(
+        &mut mate_presence,
+        "the call",
+        |e| matches!(e, PresenceEvent::Call { call, .. } if call.from == leader_id),
+    )
+    .await
+    {
+        PresenceEvent::Call { call, quiet, .. } => {
+            assert!(quiet, "the only crew it names for the mate is muted");
+            assert_eq!(call.crews, vec![first.id.clone()]);
+            call
+        }
+        _ => unreachable!(),
+    };
+    // The mate leaves that crew: the call ends for them.
+    mate.leave_team(&first.id).await.unwrap();
+    expect(
+        &mut mate_presence,
+        "the call's end",
+        |e| matches!(e, PresenceEvent::CallEnded { call: id, reason: CallEndReason::Left } if *id == call.id),
+    )
+    .await;
+    // The leader goes back to the launcher: their call ends with the server reason.
+    leader_presence.set_status(LocalStatus::Launcher);
+    expect(&mut leader_presence, "the end of the own call", |e| {
+        matches!(
+            e,
+            PresenceEvent::CallEnded {
+                reason: CallEndReason::Server,
+                ..
+            }
+        )
+    })
+    .await;
 
     mate.delete_account().await.unwrap();
     leader.delete_account().await.unwrap();

@@ -50,6 +50,7 @@ export type PanelAction =
   | "newCategory"
   | "createTeam"
   | "openTeam"
+  | "callCrews"
   | "status";
 
 export interface PanelInput {
@@ -65,6 +66,10 @@ export interface PanelInput {
   inTeam: boolean;
   /** The player's friend code is known. */
   hasCode: boolean;
+  /** Several crews (TEAM4): one more may be founded or joined ("Ekip kur" beside "Ekipleri aç"). */
+  canAddCrew?: boolean;
+  /** Several crews the player may call: "Ekiplerini çağır…" (the picker), waiting or not. */
+  callCrews?: "ready" | "waiting" | "hidden";
 }
 
 export function panelMenu(input: PanelInput): Plan<PanelAction> {
@@ -76,6 +81,10 @@ export function panelMenu(input: PanelInput): Plan<PanelAction> {
       ? { action: "newCategory", disabled: input.categoryCount >= MAX_GROUPS }
       : null,
     input.teams ? { action: input.inTeam ? "openTeam" : "createTeam" } : null,
+    input.teams && input.inTeam && input.canAddCrew ? { action: "createTeam" } : null,
+    input.teams && input.inTeam && input.callCrews && input.callCrews !== "hidden"
+      ? { action: "callCrews", disabled: input.callCrews === "waiting" }
+      : null,
     null,
     { action: "status" },
   ]);
@@ -105,8 +114,12 @@ export interface FriendInput {
   notifyOnline: boolean;
   /** The service keeps categories. */
   categories: boolean;
-  /** The player's team and them: null without a team (or teams off). */
-  team: "invitable" | "invited" | "member" | null;
+  /**
+   * The player's team and them: null without a team (or teams off). With several crews (TEAM4) it
+   * is the best of them (one to invite to beats invited beats in all of them), and the row opens a
+   * submenu of the crews.
+   */
+  team: "invitable" | "invited" | "member" | "full" | null;
 }
 
 export function friendMenu(input: FriendInput): Plan<FriendAction> {
@@ -119,7 +132,7 @@ export function friendMenu(input: FriendInput): Plan<FriendAction> {
     { action: "notifyOnline", checked: input.notifyOnline },
     input.categories ? { action: "category" } : null,
     input.team && input.team !== "member"
-      ? { action: "teamInvite", disabled: input.team === "invited" }
+      ? { action: "teamInvite", disabled: input.team === "invited" || input.team === "full" }
       : null,
     null,
     { action: "remove" },
@@ -218,6 +231,9 @@ export type TeamAction =
   | "copyCode"
   | "invite"
   | "edit"
+  | "makeMain"
+  | "moveUp"
+  | "moveDown"
   | "mute"
   | "unmute"
   | Leaving;
@@ -240,6 +256,11 @@ export interface TeamInput {
    * keeps the crew's notification settings. Older callers leave it out.
    */
   mute?: "muted" | "unmuted" | "hidden";
+  /**
+   * Several crews (TEAM4): where this one stands in the player's order. The first is the primary
+   * crew; the others offer "Ana ekip yap". Left out with one crew.
+   */
+  order?: { first: boolean; last: boolean };
 }
 
 export function teamMenu({
@@ -249,6 +270,7 @@ export function teamMenu({
   canInvite = true,
   canEdit,
   mute = "hidden",
+  order,
 }: TeamInput): Plan<TeamAction> {
   const full = team.members.length >= team.limit;
   return tidy<TeamAction>([
@@ -261,6 +283,14 @@ export function teamMenu({
       canInvite && { action: "invite", disabled: full || friendsOutside === 0 },
       (canEdit ?? team.role === "founder") && { action: "edit" },
     ),
+    null,
+    ...(order
+      ? only<TeamAction>(
+          !order.first && { action: "makeMain" },
+          { action: "moveUp", disabled: order.first },
+          { action: "moveDown", disabled: order.last },
+        )
+      : []),
     null,
     mute === "hidden" ? null : { action: mute === "muted" ? "unmute" : "mute" },
     null,

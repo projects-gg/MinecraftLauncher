@@ -9,10 +9,10 @@ use std::sync::Arc;
 use pl_lang::pick;
 use pl_mc::launch::{GameEvent, QuickPlay};
 use pl_social::{
-    CallAnswer, CallOutcome, ErrorCode, FriendGroup, GroupMember, InviteResult, LookupView,
-    PermissionsEdit, ProfileUpdate, SendOutcome, SessionInfo, SettingsMeta, SocialError,
-    SocialService, SocialUpdate, SocialView, StatusMode, TeamEdit, TeamLook, TeamLookupView,
-    TeamNotificationsEdit,
+    CallAnswer, CallOutcome, CrewMuteEdit, ErrorCode, FriendGroup, GroupMember, InviteResult,
+    LookupView, PermissionsEdit, ProfileUpdate, SendOutcome, SessionInfo, SettingsMeta,
+    SocialError, SocialService, SocialUpdate, SocialView, StatusMode, TeamEdit, TeamLook,
+    TeamLookupView, TeamNotificationsEdit,
 };
 use tauri::{AppHandle, Emitter, State};
 
@@ -411,13 +411,15 @@ pub async fn social_team_create(
     Ok(state.social.create_team(&name, &tag, &emblem, look).await?)
 }
 
-/// Renames the crew, changes its tag, emblem, look or permissions (the leader; a moderator the
-/// look where the crew lets them); unset fields stay, `motto: ""` takes the motto away.
+/// Renames one of the player's crews (`team`), changes its tag, emblem, look or permissions (the
+/// leader; a moderator the look where the crew lets them); unset fields stay, `motto: ""` takes
+/// the motto away.
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::too_many_arguments)]
 pub async fn social_team_edit(
     state: State<'_, AppState>,
+    team: String,
     name: Option<String>,
     tag: Option<String>,
     emblem: Option<String>,
@@ -436,7 +438,7 @@ pub async fn social_team_edit(
         permissions,
     };
     let text = edit.changes_text();
-    match state.social.edit_team(edit).await {
+    match state.social.edit_team(&team, edit).await {
         // A crew's name, tag and motto change at most 10 times a day: the service says so with a
         // plain "too often", which reads better as the rule itself.
         Err(error @ SocialError::RateLimited { .. }) if text => Err(crate::error::CmdError::new(
@@ -451,28 +453,26 @@ pub async fn social_team_edit(
     }
 }
 
-/// Makes a member a moderator, or a moderator a member again (leader).
+/// Makes a member of one of the player's crews a moderator, or a moderator a member again
+/// (leader).
 #[tauri::command]
 #[specta::specta]
 pub async fn social_team_moderator(
     state: State<'_, AppState>,
+    team: String,
     id: String,
     moderator: bool,
 ) -> CmdResult<()> {
-    Ok(state.social.set_team_moderator(&id, moderator).await?)
+    Ok(state
+        .social
+        .set_team_moderator(&team, &id, moderator)
+        .await?)
 }
 
-/// The player's crew notification settings, on a service that keeps them: "Sessize al" (until
-/// `muteUntil`, or until unmuted without it), "Sesi aç" (`muted: false`), crew calls on or off.
-#[tauri::command]
-#[specta::specta]
-pub async fn social_team_notifications(
-    state: State<'_, AppState>,
-    change: TeamNotificationsEdit,
-) -> CmdResult<()> {
-    match state.social.set_crew_notifications(change).await {
-        // The service turns down a mute whose end its clock reads as past or too far ahead: this
-        // computer's clock is off (a plain 400 reads as a wrong friend code elsewhere).
+/// A mute the service turned down as past or too far ahead by its clock: this computer's clock is
+/// off (a plain 400 reads as a wrong friend code elsewhere).
+fn mute_refused(result: Result<(), SocialError>) -> CmdResult<()> {
+    match result {
         Err(error) if error.code() == Some(&ErrorCode::BadRequest) => {
             Err(crate::error::CmdError::new(
                 "SOSYAL-EKIP-SESSIZ",
@@ -487,11 +487,46 @@ pub async fn social_team_notifications(
     }
 }
 
-/// "Ekibi çağır". A wait (called too recently) and an open call are answers, not errors.
+/// The player's crew notification settings for all crews, on a service that keeps them: "Sessize
+/// al" (until `muteUntil`, or until unmuted without it), "Sesi aç" (`muted: false`), crew calls on
+/// or off.
 #[tauri::command]
 #[specta::specta]
-pub async fn social_team_call(state: State<'_, AppState>) -> CmdResult<CallOutcome> {
-    Ok(state.social.call_crew().await?)
+pub async fn social_team_notifications(
+    state: State<'_, AppState>,
+    change: TeamNotificationsEdit,
+) -> CmdResult<()> {
+    mute_refused(state.social.set_crew_notifications(change).await)
+}
+
+/// "Sessize al" for one of the player's crews (until `muteUntil`, or until unmuted without it) or
+/// "Sesi aç", on a service with several crews.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_mute(
+    state: State<'_, AppState>,
+    team: String,
+    change: CrewMuteEdit,
+) -> CmdResult<()> {
+    mute_refused(state.social.set_crew_mute(&team, change).await)
+}
+
+/// The player's crews in a new order (each once; the first becomes the primary crew).
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_order(state: State<'_, AppState>, order: Vec<String>) -> CmdResult<()> {
+    Ok(state.social.order_crews(order).await?)
+}
+
+/// "Ekibi çağır" for `crews` (empty: the primary crew). Waiting (called too recently), an open
+/// call and not being on a multiplayer server (CALL1) are answers, not errors.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_call(
+    state: State<'_, AppState>,
+    crews: Vec<String>,
+) -> CmdResult<CallOutcome> {
+    Ok(state.social.call_crew(crews).await?)
 }
 
 /// "Geliyorum", "Birazdan" or "Gelemem" to a teammate's call. False: the call is gone.
@@ -512,45 +547,61 @@ pub async fn social_team_call_end(state: State<'_, AppState>, call: String) -> C
     Ok(state.social.end_call(&call).await?)
 }
 
-/// Ends the team for everyone (founder).
+/// Ends one of the player's crews for everyone (founder).
 #[tauri::command]
 #[specta::specta]
-pub async fn social_team_disband(state: State<'_, AppState>) -> CmdResult<()> {
-    Ok(state.social.disband_team().await?)
+pub async fn social_team_disband(state: State<'_, AppState>, team: String) -> CmdResult<()> {
+    Ok(state.social.disband_team(&team).await?)
 }
 
+/// Leaves one of the player's crews.
 #[tauri::command]
 #[specta::specta]
-pub async fn social_team_leave(state: State<'_, AppState>) -> CmdResult<()> {
-    Ok(state.social.leave_team().await?)
+pub async fn social_team_leave(state: State<'_, AppState>, team: String) -> CmdResult<()> {
+    Ok(state.social.leave_team(&team).await?)
 }
 
-/// A new team code (founder); the old one stops working.
+/// A new code for one of the player's crews (founder); the old one stops working.
 #[tauri::command]
 #[specta::specta]
-pub async fn social_team_rotate_code(state: State<'_, AppState>) -> CmdResult<String> {
-    Ok(state.social.rotate_team_code().await?)
+pub async fn social_team_rotate_code(
+    state: State<'_, AppState>,
+    team: String,
+) -> CmdResult<String> {
+    Ok(state.social.rotate_team_code(&team).await?)
 }
 
-/// Invites a friend to the player's team.
+/// Invites a friend to one of the player's crews.
 #[tauri::command]
 #[specta::specta]
-pub async fn social_team_invite(state: State<'_, AppState>, id: String) -> CmdResult<()> {
-    Ok(state.social.invite_to_team(&id).await?)
+pub async fn social_team_invite(
+    state: State<'_, AppState>,
+    team: String,
+    id: String,
+) -> CmdResult<()> {
+    Ok(state.social.invite_to_team(&team, &id).await?)
 }
 
-/// Removes a member (founder); the code is renewed with it.
+/// Removes a member from one of the player's crews; the code is renewed with it.
 #[tauri::command]
 #[specta::specta]
-pub async fn social_team_remove(state: State<'_, AppState>, id: String) -> CmdResult<()> {
-    Ok(state.social.remove_team_member(&id).await?)
+pub async fn social_team_remove(
+    state: State<'_, AppState>,
+    team: String,
+    id: String,
+) -> CmdResult<()> {
+    Ok(state.social.remove_team_member(&team, &id).await?)
 }
 
-/// Hands the founder role to another member.
+/// Hands the founder role of one of the player's crews to another member.
 #[tauri::command]
 #[specta::specta]
-pub async fn social_team_transfer(state: State<'_, AppState>, id: String) -> CmdResult<()> {
-    Ok(state.social.transfer_team_founder(&id).await?)
+pub async fn social_team_transfer(
+    state: State<'_, AppState>,
+    team: String,
+    id: String,
+) -> CmdResult<()> {
+    Ok(state.social.transfer_team_founder(&team, &id).await?)
 }
 
 #[tauri::command]

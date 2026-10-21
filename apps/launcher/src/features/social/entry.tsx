@@ -9,7 +9,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SocialTeam } from "@/lib/api/social-types";
 import { justMoved } from "@/stores/placement";
-import { callSentence } from "./crew-call";
+import { callSentenceOf } from "./crews";
 import type { Waiting } from "./model";
 import { enter, leave } from "./motion";
 
@@ -21,11 +21,11 @@ import { enter, leave } from "./motion";
 export function waitingWords(
   t: TFunction,
   waiting: Waiting,
-  team: SocialTeam | undefined,
+  crews: readonly SocialTeam[],
 ): string[] {
   const words: string[] = [];
   if (waiting.asks) words.push(t("social.pill.pending"));
-  if (waiting.call) words.push(callSentence(waiting.call, team, t));
+  if (waiting.call) words.push(callSentenceOf(waiting.call, crews, t));
   return words;
 }
 

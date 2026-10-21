@@ -18,6 +18,15 @@
 // - `crewCall`: a crewmate's call from projects.gg arrives live (`&callAt=<ms>`);
 //   `crewCallOpen`: one is on already, unanswered ("Hazır mısın?"); `crewCallMine`: the player's
 //   own call is on, with answers;
+// - `crewCallOther`: a crewmate's call from another server is on (CALL1);
+// - `crews`: several crews (TEAM4): the player leads one and is in two more, the last muted on its
+//   own, an invite to a fourth waiting (`&crewLimit=<n>`, 5 without it); `crewsFull`: at the limit
+//   (3); `crewCallMulti`: a call to
+//   two of them arrives live (`&callAt=<ms>`); `&multi=1` turns several crews on in any crew
+//   scenario;
+// - `&at=projects|other|hidden` on any scenario: the player plays on projects.gg, on another
+//   server with its address shared, or on one with it hidden ("Ekibi çağır" goes from the first
+//   two; CALL1); without it they are in the launcher;
 // - `crewOld`: crews on a service from before looks, calls and roles (today's editor and card);
 // - `&muted=<minutes>|forever` on any crew scenario: the player muted their crew (`crewMuted`:
 //   a member who did, for about two and a half hours); `&noMute=1`: a service with calls but
@@ -26,6 +35,7 @@
 import { pick } from "./mock-lang";
 import type {
   BackupMeta,
+  CallPlace,
   CodeLookup,
   CrewCall,
   CrewLook,
@@ -251,6 +261,18 @@ function teamMember(
 
 /** Where the preview's crews come from: a service before looks, calls and roles (`crewOld`). */
 const OLD_CREWS = scenario() === "crewOld";
+/** Several crews per player (TEAM4). */
+const MULTI =
+  !OLD_CREWS &&
+  (["crews", "crewsFull", "crewCallMulti"].includes(scenario()) || searchParam("multi") !== null);
+/** How many crews the player may be in (`&crewLimit=`; `crewsFull`: the three they are in). */
+function previewLimit(): number {
+  if (!MULTI) return 1;
+  if (scenario() === "crewsFull") return 3;
+  const asked = Number(searchParam("crewLimit"));
+  return Number.isInteger(asked) && asked > 0 ? asked : 5;
+}
+const NOT_MUTED = { muted: false, muteUntil: null };
 const PREVIEW_LOOK: CrewLook = OLD_CREWS
   ? { emblem: "shield", color: "gold", frame: "cut" }
   : { emblem: "controller", color: "teal", frame: "banner" };
@@ -311,7 +333,80 @@ function previewTeam(founder: boolean, moderator = false): SocialTeam {
     ],
     invited: ["305"],
     limit: 30,
+    mute: NOT_MUTED,
   };
+}
+
+/** The `crews` previews: "Gece Kartalları" (the player leads it), "Skyblock Ustaları" and "PvP
+ * Kulübü" (muted on its own until unmuted), with Ayşe in all three and two more on Projects. */
+function previewCrews(): SocialTeam[] {
+  const gkr = previewTeam(true);
+  const me = gkr.members.find((m) => m.me);
+  const ayse = gkr.members.find((m) => m.id === "301");
+  const crew = (
+    id: string,
+    look: CrewLook & { name: string; tag: string; motto: string },
+    members: TeamMember[],
+    extra: Partial<SocialTeam> = {},
+  ): SocialTeam => ({
+    ...gkr,
+    ...look,
+    id,
+    code: `EKP-${id.slice(0, 4).toUpperCase()}-${id.slice(4, 8).toUpperCase()}`,
+    role: "member",
+    moderator: false,
+    members: members.map((m) => (m.me ? { ...m, role: "member", moderator: false } : m)),
+    invited: [],
+    ...extra,
+  });
+  const onProjects = {
+    state: "playing" as const,
+    game: { where: "projects" as const, host: "play.projects.gg" },
+  };
+  return [
+    gkr,
+    crew(
+      "5555666677778888",
+      {
+        name: "Skyblock Ustaları",
+        tag: "SKY",
+        emblem: "castle",
+        color: "purple",
+        frame: "hex",
+        motto: pick("Adadan adaya", "Island to island"),
+      },
+      [
+        teamMember(undefined, {
+          id: "801",
+          name: "Deniz",
+          avatar: "preset:wizard",
+          ...onProjects,
+          role: "founder",
+        }),
+        ...(ayse ? [ayse] : []),
+        ...(me ? [me] : []),
+        teamMember(undefined, { id: "802", name: "Selin", avatar: "preset:fox", ...onProjects }),
+        teamMember(undefined, { id: "803", name: "Can", avatar: "preset:wolf", state: "launcher" }),
+      ],
+    ),
+    crew(
+      "9999aaaabbbbcccc",
+      {
+        name: pick("PvP Kulübü", "PvP Club"),
+        tag: "PVP",
+        emblem: "sword",
+        color: "crimson",
+        frame: "shield",
+        motto: "",
+      },
+      [
+        teamMember(undefined, { id: "804", name: "Efe", avatar: "preset:knight", role: "founder" }),
+        ...(me ? [me] : []),
+        ...(ayse ? [ayse] : []),
+      ],
+      { mute: { muted: true, muteUntil: null } },
+    ),
+  ];
 }
 
 const teamInvite = (): TeamInvite => ({
@@ -327,13 +422,15 @@ const teamInvite = (): TeamInvite => ({
   sentAt: now() - 1_800,
 });
 
-/** A crew call: Ayşe's from projects.gg (`join`), Melis's from the launcher (`ready`), or the
- * player's own with a few answers (`mine`). Twenty minutes, a few already gone. */
-function previewCall(kind: "join" | "ready" | "mine"): CrewCall {
+/** A crew call: Ayşe's from projects.gg (`join`), KorAteşi's from another server (`other`),
+ * Melis's from the launcher (`ready`, before CALL1), or the player's own with a few answers
+ * (`mine`). Twenty minutes, a few already gone. */
+function previewCall(kind: "join" | "other" | "ready" | "mine", crews: string[] = []): CrewCall {
   const started = now() - 180;
   const who = {
     mine: { from: "100", name: "EjderAvcısı", avatar: "preset:golden-dragon" },
     join: { from: "301", name: "Ayşe", avatar: "preset:fox" },
+    other: { from: "302", name: "KorAteşi", avatar: "discord", avatarUrl: discord(2) },
     ready: { from: "702", name: "Melis", avatar: "preset:axolotl" },
   }[kind];
   return {
@@ -341,6 +438,13 @@ function previewCall(kind: "join" | "ready" | "mine"): CrewCall {
     ...who,
     mine: kind === "mine",
     kind: kind === "ready" ? "ready" : "join",
+    server:
+      kind === "ready"
+        ? undefined
+        : kind === "other"
+          ? { where: "other", host: "survival.example.net" }
+          : { where: "projects", host: "play.projects.gg" },
+    crews,
     startedAt: started,
     endsAt: started + 20 * 60,
     answers:
@@ -412,20 +516,30 @@ function initial(): SocialSnapshot {
     activity: { state: "launcher" },
     groups: { version: 0, groups: [], members: {} },
     teams: false,
-    crew: { look: false, calls: false, roles: false, mute: false },
+    crew: NO_CREW_FEATURES,
+    crews: [],
+    crewLimit: 1,
     teamInvites: [],
     calls: [],
+    callPlace: "needsServer",
   };
   // Crews on, with what the service offers of them.
   const keepsMutes = !OLD_CREWS && searchParam("noMute") === null;
   const mutedUntil = previewMute();
-  const crewed = (team: SocialTeam | undefined, extra: Partial<SocialSnapshot> = {}) => ({
+  const crewed = (crews: SocialTeam[], extra: Partial<SocialSnapshot> = {}) => ({
     ...base,
     groups: previewGroups(),
     teams: true,
     crew: OLD_CREWS
-      ? { look: false, calls: false, roles: false, mute: false }
-      : { look: true, calls: true, roles: true, mute: keepsMutes },
+      ? NO_CREW_FEATURES
+      : {
+          look: true,
+          calls: true,
+          roles: true,
+          mute: keepsMutes,
+          multi: MULTI,
+          callServer: true,
+        },
     crewNotifications: keepsMutes
       ? {
           calls: true,
@@ -433,7 +547,8 @@ function initial(): SocialSnapshot {
           muteUntil: mutedUntil ?? null,
         }
       : undefined,
-    team,
+    crews,
+    crewLimit: previewLimit(),
     ...extra,
   });
   switch (name) {
@@ -441,22 +556,31 @@ function initial(): SocialSnapshot {
       return { ...base, groups: previewGroups() };
     case "team":
     case "crewOld":
-      return crewed(previewTeam(true));
+      return crewed([previewTeam(true)]);
     case "teamMember":
     case "crewMuted":
-      return crewed(previewTeam(false));
+      return crewed([previewTeam(false)]);
     case "teamModerator":
-      return crewed(previewTeam(false, true));
+      return crewed([previewTeam(false, true)]);
     case "crewCall":
-      return crewed(previewTeam(false));
+      return crewed([previewTeam(false)]);
     case "crewCallOpen":
-      return crewed(previewTeam(false), { calls: [previewCall("ready")] });
+      return crewed([previewTeam(false)], { calls: [previewCall("ready")] });
+    case "crewCallOther":
+      return crewed([previewTeam(false)], { calls: [previewCall("other")] });
     case "crewCallMine":
-      return crewed(previewTeam(true), { calls: [previewCall("mine")] });
+      return crewed([previewTeam(true)], { calls: [previewCall("mine")] });
+    case "crews":
+    case "crewsFull":
+    case "crewCallMulti":
+      // An invite waits (at the limit too: the add view still opens, to decline it).
+      return crewed(previewCrews(), {
+        teamInvites: name === "crewCallMulti" ? [] : [teamInvite()],
+      });
     case "teamNew":
-      return crewed(undefined, { teamInvites: [teamInvite()] });
+      return crewed([], { teamInvites: [teamInvite()] });
     case "teamInvite":
-      return crewed(undefined);
+      return crewed([]);
     case "legacy":
       // A service without categories and teams (the live one until SOC4 is deployed).
       return { ...base, groups: undefined };
@@ -492,6 +616,37 @@ function initial(): SocialSnapshot {
   }
 }
 
+/** `&at=`: where the player plays, and so whether "Ekibi çağır" may start there (CALL1). */
+function placed(snapshot: SocialSnapshot): SocialSnapshot {
+  const at = searchParam("at");
+  const share = (on: boolean) =>
+    snapshot.me
+      ? { ...snapshot.me, privacy: { ...snapshot.me.privacy, shareServer: on } }
+      : snapshot.me;
+  switch (at) {
+    case "projects":
+      return { ...snapshot, activity: { state: "playing", host: "play.projects.gg" } };
+    case "other":
+      return {
+        ...snapshot,
+        activity: { state: "playing", host: "survival.example.net" },
+        me: share(true),
+      };
+    case "hidden":
+      return { ...snapshot, activity: { state: "playing" }, me: share(false) };
+    default:
+      return snapshot;
+  }
+}
+
+/** Where a call may start from, as the backend decides it (CALL1): the preview's other server is
+ * hidden while the address is not shared. */
+function placeOf(snapshot: SocialSnapshot): CallPlace {
+  if (snapshot.activity.state !== "playing") return "needsServer";
+  if (snapshot.activity.host === "play.projects.gg") return "ok";
+  return snapshot.me?.privacy.shareServer ? "ok" : "serverHidden";
+}
+
 function signedOut(base: SocialSnapshot): SocialSnapshot {
   return {
     ...base,
@@ -504,17 +659,38 @@ function signedOut(base: SocialSnapshot): SocialSnapshot {
     outgoing: [],
     blocked: [],
     invites: [],
-    team: undefined,
+    crews: [],
     teamInvites: [],
   };
 }
 
-let view = initial();
+const NO_CREW_FEATURES = {
+  look: false,
+  calls: false,
+  roles: false,
+  mute: false,
+  multi: false,
+  callServer: false,
+};
+
+let view = withPlace(placed(initial()));
+
+function withPlace(snapshot: SocialSnapshot): SocialSnapshot {
+  // The hidden server's address shows once the player shares it ("Aç ve çağır").
+  const activity =
+    searchParam("at") === "hidden" &&
+    snapshot.activity.state === "playing" &&
+    snapshot.me?.privacy.shareServer
+      ? { state: "playing" as const, host: "survival.example.net" }
+      : snapshot.activity;
+  const next = { ...snapshot, activity };
+  return { ...next, callPlace: placeOf(next) };
+}
 const viewListeners = new Set<(view: SocialSnapshot) => void>();
 const noticeListeners = new Set<(notice: SocialNotice) => void>();
 
 function commit(change: (draft: SocialSnapshot) => SocialSnapshot) {
-  view = { ...change(view), seq: view.seq + 1 };
+  view = { ...withPlace(change(view)), seq: view.seq + 1 };
   for (const listener of viewListeners) listener(view);
 }
 
@@ -562,12 +738,15 @@ if (typeof window !== "undefined") {
       tell({ kind: "teamInvite", invite });
     }, 1600);
   }
-  if (name === "crewCall") {
+  if (name === "crewCall" || name === "crewCallMulti") {
     // `?callAt=<ms>`: when it arrives.
     const at = Number(new URLSearchParams(window.location.search).get("callAt")) || 1600;
     setTimeout(() => {
       const call: CrewCall = {
-        ...previewCall("join"),
+        ...previewCall(
+          "join",
+          name === "crewCallMulti" ? view.crews.slice(0, 2).map((crew) => crew.id) : [],
+        ),
         startedAt: now(),
         endsAt: now() + 20 * 60,
         answers: [],
@@ -578,19 +757,47 @@ if (typeof window !== "undefined") {
   }
 }
 
-/** The team as it is, or an error worded like the backend when there is none. */
-function currentTeam(): SocialTeam {
-  if (!view.team) {
+/** One of the player's crews as it is, or an error worded like the backend when it is gone. */
+function currentTeam(teamId: string): SocialTeam {
+  const team = view.crews.find((crew) => crew.id === teamId);
+  if (!team) {
     throw new MockSocialError(
       "SOSYAL-TAKIM-YOK",
       pick("Artık bir ekipte değilsin.", "You're not in a crew anymore."),
     );
   }
-  return view.team;
+  return team;
 }
 
-function setTeam(change: (team: SocialTeam) => SocialTeam | undefined) {
-  commit((v) => (v.team ? { ...v, team: change(v.team) } : v));
+function setTeam(teamId: string, change: (team: SocialTeam) => SocialTeam) {
+  commit((v) => ({
+    ...v,
+    crews: v.crews.map((crew) => (crew.id === teamId ? change(crew) : crew)),
+  }));
+}
+
+/** A crew more: after the others with several crews (at the limit, the backend's refusal), else
+ * in place of the one there was. */
+function addCrew(team: SocialTeam) {
+  if (view.crew.multi && view.crews.length >= view.crewLimit) {
+    throw new MockSocialError(
+      "SOSYAL-EKIP-SINIR",
+      pick("Daha fazla ekipte olamazsın.", "You can't be in any more crews."),
+    );
+  }
+  commit((v) => ({
+    ...v,
+    crews: v.crew.multi ? [...v.crews.filter((crew) => crew.id !== team.id), team] : [team],
+  }));
+}
+
+function dropCrew(teamId: string) {
+  currentTeam(teamId);
+  commit((v) => ({
+    ...v,
+    crews: v.crews.filter((crew) => crew.id !== teamId),
+    calls: v.calls.filter((call) => !call.crews.includes(teamId) || call.crews.length > 1),
+  }));
 }
 
 /** Crew codes the preview knows. */
@@ -911,46 +1118,49 @@ export const mockSocial: SocialApi = {
   async createTeam({ name, tag, emblem, color, frame, motto }) {
     await delay(500);
     const me = view.me;
-    commit((v) => ({
-      ...v,
-      team: {
-        ...previewTeam(true),
-        id: "abcdef0123456789",
-        name,
-        tag,
-        emblem,
-        color: color ?? "gold",
-        frame: frame ?? "cut",
-        motto: motto ?? "",
-        code: "EKP-3HXN-8RWE",
-        createdOn: new Date().toISOString().slice(0, 10),
-        members: previewTeam(true).members.filter((m) => m.me && me),
-        invited: [],
-      },
-    }));
+    addCrew({
+      ...previewTeam(true),
+      id: `abcdef01234567${String(view.crews.length).padStart(2, "0")}`,
+      name,
+      tag,
+      emblem,
+      color: color ?? "gold",
+      frame: frame ?? "cut",
+      motto: motto ?? "",
+      code: "EKP-3HXN-8RWE",
+      createdOn: new Date().toISOString().slice(0, 10),
+      members: previewTeam(true).members.filter((m) => m.me && me),
+      invited: [],
+    });
   },
-  async editTeam({ permissions, ...change }) {
+  async editTeam(teamId, { permissions, ...change }) {
     await delay(300);
-    currentTeam();
-    setTeam((team) => ({
+    currentTeam(teamId);
+    setTeam(teamId, (team) => ({
       ...team,
       ...change,
       permissions: { ...team.permissions, ...permissions },
     }));
   },
-  async setModerator(memberId, moderator) {
+  async setModerator(teamId, memberId, moderator) {
     await delay(250);
-    setTeam((team) => ({
+    setTeam(teamId, (team) => ({
       ...team,
       members: team.members.map((m) => (m.id === memberId ? { ...m, moderator } : m)),
     }));
   },
-  async callCrew() {
+  async callCrew(crews) {
     await delay(300);
-    currentTeam();
-    if (view.calls.some((c) => c.endsAt > now())) return { status: "active" };
+    const named = crews.length ? crews : view.crews.slice(0, 1).map((crew) => crew.id);
+    for (const id of named) currentTeam(id);
+    if (view.callPlace !== "ok") return { status: view.callPlace };
+    if (view.calls.some((c) => c.mine && c.endsAt > now())) return { status: "active" };
     const call: CrewCall = {
-      ...previewCall("mine"),
+      ...previewCall("mine", view.crew.multi ? named : []),
+      server:
+        view.activity.state === "playing" && view.activity.host !== "play.projects.gg"
+          ? { where: "other", host: view.activity.host }
+          : { where: "projects", host: "play.projects.gg" },
       startedAt: now(),
       endsAt: now() + 20 * 60,
       answers: [],
@@ -1001,38 +1211,55 @@ export const mockSocial: SocialApi = {
       },
     }));
   },
-  async disbandTeam() {
-    await delay(400);
-    currentTeam();
-    commit((v) => ({ ...v, team: undefined }));
+  async setCrewMute(teamId, change) {
+    await delay(250);
+    currentTeam(teamId);
+    setTeam(teamId, (team) => ({
+      ...team,
+      mute: change.muted
+        ? { muted: true, muteUntil: change.muteUntil ?? null }
+        : { muted: false, muteUntil: null },
+    }));
   },
-  async leaveTeam() {
-    await delay(400);
-    currentTeam();
-    commit((v) => ({ ...v, team: undefined }));
+  async orderCrews(order) {
+    await delay(250);
+    commit((v) => ({
+      ...v,
+      crews: order
+        .map((id) => v.crews.find((crew) => crew.id === id))
+        .filter((crew): crew is SocialTeam => Boolean(crew)),
+    }));
   },
-  async rotateTeamCode() {
+  async disbandTeam(teamId) {
     await delay(400);
-    currentTeam();
+    dropCrew(teamId);
+  },
+  async leaveTeam(teamId) {
+    await delay(400);
+    dropCrew(teamId);
+  },
+  async rotateTeamCode(teamId) {
+    await delay(400);
+    currentTeam(teamId);
     const code = "EKP-R2N8-HW6P";
-    setTeam((team) => ({ ...team, code }));
+    setTeam(teamId, (team) => ({ ...team, code }));
     return code;
   },
-  async inviteToTeam(friendId) {
+  async inviteToTeam(teamId, friendId) {
     await delay(350);
-    setTeam((team) => ({ ...team, invited: [...new Set([...team.invited, friendId])] }));
+    setTeam(teamId, (team) => ({ ...team, invited: [...new Set([...team.invited, friendId])] }));
   },
-  async removeTeamMember(memberId) {
+  async removeTeamMember(teamId, memberId) {
     await delay(350);
-    setTeam((team) => ({
+    setTeam(teamId, (team) => ({
       ...team,
       code: "EKP-K7MD-2QPC",
       members: team.members.filter((m) => m.id !== memberId),
     }));
   },
-  async transferTeam(memberId) {
+  async transferTeam(teamId, memberId) {
     await delay(350);
-    setTeam((team) => ({
+    setTeam(teamId, (team) => ({
       ...team,
       role: "member",
       moderator: true,
@@ -1046,8 +1273,8 @@ export const mockSocial: SocialApi = {
   async lookupTeam(code) {
     await delay(500);
     const normalized = code.toUpperCase();
-    if (view.team?.code === normalized) {
-      const team = view.team;
+    const team = view.crews.find((crew) => crew.code === normalized);
+    if (team) {
       return {
         teamId: team.id,
         name: team.name,
@@ -1071,7 +1298,13 @@ export const mockSocial: SocialApi = {
     return {
       ...found,
       members: 6,
-      relation: view.team ? "elsewhere" : "none",
+      relation: view.crew.multi
+        ? view.crews.length >= view.crewLimit
+          ? "limit"
+          : "none"
+        : view.crews.length
+          ? "elsewhere"
+          : "none",
       code: normalized,
     };
   },
@@ -1084,16 +1317,13 @@ export const mockSocial: SocialApi = {
         pick("Bu koda ait bir ekip yok.", "No crew has this code."),
       );
     }
-    commit((v) => ({ ...v, team: joinedTeam(found) }));
+    addCrew(joinedTeam(found));
   },
   async acceptTeamInvite(teamId) {
     await delay(450);
     const invite = view.teamInvites.find((i) => i.teamId === teamId);
-    commit((v) => ({
-      ...v,
-      teamInvites: v.teamInvites.filter((i) => i.teamId !== teamId),
-      team: invite ? joinedTeam(invite) : v.team,
-    }));
+    if (invite) addCrew(joinedTeam(invite));
+    commit((v) => ({ ...v, teamInvites: v.teamInvites.filter((i) => i.teamId !== teamId) }));
   },
   async declineTeamInvite(teamId) {
     await delay(250);

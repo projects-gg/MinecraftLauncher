@@ -63,6 +63,26 @@ describe("panelMenu", () => {
     expect(words(panelMenu({ ...base, teams: true, inTeam: true }))).not.toContain("createTeam");
   });
 
+  it("founds one more crew and calls several where the player has several", () => {
+    const crews = { ...base, teams: true, inTeam: true };
+    expect(words(panelMenu({ ...crews, canAddCrew: true, callCrews: "ready" }))).toEqual([
+      "addFriend",
+      "copyCode",
+      "-",
+      "openTeam",
+      "createTeam",
+      "callCrews",
+      "-",
+      "status",
+    ]);
+    expect(words(panelMenu({ ...crews, callCrews: "waiting" }))).toContain("callCrews(off)");
+    expect(words(panelMenu({ ...crews, callCrews: "hidden" }))).not.toContain("callCrews");
+    // Without a crew there is nothing to call, and "Ekip kur" is the only crew row.
+    expect(
+      words(panelMenu({ ...base, teams: true, canAddCrew: true, callCrews: "ready" })),
+    ).toEqual(["addFriend", "copyCode", "-", "createTeam", "-", "status"]);
+  });
+
   it("offers a category only with friends to put in it", () => {
     expect(words(panelMenu({ ...base, categories: true, hasFriends: false }))).not.toContain(
       "newCategory",
@@ -126,6 +146,8 @@ describe("friendMenu", () => {
     expect(words(friendMenu({ ...base, team: "invitable" }))).toContain("teamInvite");
     expect(words(friendMenu({ ...base, team: "invited" }))).toContain("teamInvite(off)");
     expect(words(friendMenu({ ...base, team: "member" })).join()).not.toContain("teamInvite");
+    // Every crew full: nothing to invite to.
+    expect(words(friendMenu({ ...base, team: "full" }))).toContain("teamInvite(off)");
   });
 });
 
@@ -271,6 +293,30 @@ describe("teamMenu", () => {
     ]);
     expect(plan("waiting")).toContain("call(off)");
     expect(plan("hidden")).not.toContain("call");
+  });
+
+  it("moves one of several crews in the player's order", () => {
+    const plan = (first: boolean, last: boolean) =>
+      words(teamMenu({ team: team("member", 4), friendsOutside: 3, order: { first, last } }));
+    expect(plan(false, false)).toEqual([
+      "open",
+      "toggle",
+      "-",
+      "copyCode",
+      "invite",
+      "-",
+      "makeMain",
+      "moveUp",
+      "moveDown",
+      "-",
+      "leave",
+    ]);
+    // The primary crew is first already; the last goes no lower.
+    expect(plan(true, false)).not.toContain("makeMain");
+    expect(plan(true, false)).toContain("moveUp(off)");
+    expect(plan(false, true)).toContain("moveDown(off)");
+    // One crew: no order at all.
+    expect(words(teamMenu({ team: team("member", 4), friendsOutside: 3 }))).not.toContain("moveUp");
   });
 
   it("invites and edits only where the crew lets the player", () => {

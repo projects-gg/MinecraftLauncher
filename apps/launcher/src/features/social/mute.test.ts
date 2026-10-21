@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { CrewNotifications } from "@/lib/api/social-types";
+import type { CrewNotifications, SocialTeam, TeamMember } from "@/lib/api/social-types";
 import {
+  callHeardIn,
   crewCallsHeard,
+  crewMutedNow,
+  crewmateHeardIn,
   MUTE_PRESETS,
   mutedNow,
   muteEndDay,
@@ -15,6 +18,39 @@ const muted = (muteUntil: number | null, calls = true): CrewNotifications => ({
   calls,
   muted: true,
   muteUntil,
+});
+
+describe("one crew muted on its own (several crews)", () => {
+  const NOW = 1_792_521_000_000;
+  const at = NOW / 1000;
+  const someone = (id: string) => ({ id }) as TeamMember;
+  const crew = (id: string, mute: SocialTeam["mute"], members: string[] = []) =>
+    ({ id, mute, members: members.map(someone) }) as SocialTeam;
+  const loud = crew("a", { muted: false, muteUntil: null }, ["1"]);
+  const quiet = crew("b", { muted: true, muteUntil: at + 60 }, ["1", "2"]);
+
+  it("is silent while it or every crew is muted", () => {
+    expect(crewMutedNow(loud, undefined, NOW)).toBe(false);
+    expect(crewMutedNow(quiet, undefined, NOW)).toBe(true);
+    expect(crewMutedNow(quiet, undefined, NOW + 60_000)).toBe(false);
+    expect(crewMutedNow(loud, muted(null), NOW)).toBe(true);
+  });
+
+  it("hears a call through any crew it names that is not muted", () => {
+    expect(callHeardIn({ crews: ["a", "b"] }, [loud, quiet], NOW)).toBe(true);
+    expect(callHeardIn({ crews: ["b"] }, [loud, quiet], NOW)).toBe(false);
+    // A call from a service with one crew per player is the primary crew's.
+    expect(callHeardIn({ crews: [] }, [quiet, loud], NOW)).toBe(false);
+    expect(callHeardIn({ crews: [] }, [], NOW)).toBe(true);
+  });
+
+  it("hears a crewmate through any crew shared with them that is not muted", () => {
+    expect(crewmateHeardIn("1", [loud, quiet], NOW)).toBe(true);
+    expect(crewmateHeardIn("2", [loud, quiet], NOW)).toBe(false);
+    expect(crewmateHeardIn("2", [loud, quiet], NOW + 60_000)).toBe(true);
+    // Not in any crew yet (the list catching up): heard.
+    expect(crewmateHeardIn("9", [loud, quiet], NOW)).toBe(true);
+  });
 });
 
 describe("crew mute presets", () => {

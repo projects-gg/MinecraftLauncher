@@ -1,13 +1,19 @@
-// The crew page of the friends panel. Without a crew: invites to crews, "Ekip kur" (crew-editor:
-// name, tag, motto and look, with a live preview) and "Kodla katıl" (a code, then what it leads to).
-// In a crew: its card (the mark, name, tag, motto, size and founding day, a month's or a year's
-// anniversary that day, the emblem's faint watermark) whose strip shows who is online with "Ekibi
-// çağır", or the call that is on; the members grouped by where they are ("Projects'te 4", with
-// "Katıl"); friends to invite; the crew code; the leader's "Yetkiler"; leaving. Every irreversible
-// step asks once, in place, with one sentence; nothing else asks.
+// The crew page of the friends panel. With several crews (TEAM4) a rail of their marks sits on top
+// (crew-rail.tsx: the player's order, the crew on screen, "Ekip kur ya da katıl" while one more
+// fits); the page below shows one crew, sliding in from the side its mark sits on. Without a crew
+// (or on "Ekip kur ya da katıl"): invites to crews, "Ekip kur" (crew-editor: name, tag, motto and
+// look, with a live preview) and "Kodla katıl" (a code, then what it leads to); at the crew limit,
+// one line instead. In a crew: its card (the mark, name, tag, motto, size and founding day, a
+// month's or a year's anniversary that day, the emblem's faint watermark) whose strip shows who is
+// online with "Ekibi çağır" (this crew; "Birden çok ekibi çağır" beside it with several), or the
+// call that is on; where a call cannot start yet (CALL1) one line under the button says why. Then
+// the members grouped by where they are ("Projects'te 4", with "Katıl"); friends to invite; the
+// crew code; the leader's "Yetkiler"; leaving. Every irreversible step asks once, in place, with
+// one sentence; nothing else asks.
 import {
   ArrowsClockwise,
   CalendarBlank,
+  CaretDown,
   Check,
   Copy,
   MagnifyingGlass,
@@ -37,9 +43,9 @@ import type {
 import { dateTimeFormat } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
 import { attempt, copyText } from "./actions";
-import { callCrew } from "./call-actions";
-import { callWaitUntil, liveCalls, waitMinutes } from "./calls";
+import { callNames, callWaitUntil, liveCalls, waitMinutes } from "./calls";
 import { CallStrip } from "./crew-call";
+import { CallReason, useCallPress } from "./crew-call-picker";
 import {
   type CrewDraft,
   CrewEditor,
@@ -49,6 +55,8 @@ import {
   fieldClass,
   NEW_CREW,
 } from "./crew-editor";
+import { CrewRail } from "./crew-rail";
+import { callableCrews, canAddCrew, NEW_CREW_TAB, shownCrew } from "./crews";
 import { type Leaving, leavingOf } from "./menus";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
 import { SocialAvatar, SocialFace } from "./social-face";
@@ -136,6 +144,7 @@ type Found =
 function JoinCrew() {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
+  const limit = useSocialUi((s) => s.view.crewLimit);
   const inputId = useId();
   const [value, setValue] = useState("");
   const [invalid, setInvalid] = useState(false);
@@ -169,7 +178,11 @@ function JoinCrew() {
   };
 
   const status = (lookup: TeamLookup) =>
-    lookup.relation === "none" ? null : t(`teams.join.${lookup.relation}`);
+    lookup.relation === "none"
+      ? null
+      : lookup.relation === "limit"
+        ? t("crews.limit", { count: limit })
+        : t(`teams.join.${lookup.relation}`);
 
   return (
     <section className="mt-4 rounded-[var(--radius-panel)] bg-obsidian-950/40 p-4 ring-1 ring-white/8">
@@ -295,7 +308,7 @@ function CodeRow({ team }: { team: SocialTeam }) {
   const [busy, setBusy] = useState(false);
   const rotate = async () => {
     setBusy(true);
-    const code = await attempt(() => api.social.rotateTeamCode());
+    const code = await attempt(() => api.social.rotateTeamCode(team.id));
     setBusy(false);
     setAsking(false);
     if (code) announce(t("teams.code.rotated"));
@@ -412,7 +425,7 @@ function EditCrew({ team, onDone }: { team: SocialTeam; onDone: () => void }) {
       return;
     }
     setBusy(true);
-    const done = await attempt(() => api.social.editTeam(change));
+    const done = await attempt(() => api.social.editTeam(team.id, change));
     setBusy(false);
     if (done === undefined) return;
     announce(t("teams.edit.saved"));
@@ -442,42 +455,69 @@ function EditCrew({ team, onDone }: { team: SocialTeam; onDone: () => void }) {
   );
 }
 
-/** "Ekibi çağır", soft while the five minutes since the last call run (it says how long). */
-function CallButton() {
+/**
+ * "Ekibi çağır" (this crew), soft while the five minutes since the last call run (it says how
+ * long); beside it, with two or more crews to call, "Birden çok ekibi çağır" (the picker, this
+ * crew ticked).
+ */
+function CallButton({ team, onCall }: { team: SocialTeam; onCall: () => void }) {
   const { t } = useTranslation();
   const now = useCallClock((s) => s.now);
   const calls = useSocialUi((s) => s.view.calls);
+  const crews = useSocialUi((s) => s.view.crews);
+  const features = useCrewFeatures();
   const refusedUntil = useSocialUi((s) => s.callRefusedUntil);
   const lastCallAt = useSocialUi((s) => s.lastCallAt);
+  const openPicker = useSocialUi((s) => s.openCallPicker);
   const until = callWaitUntil(calls, refusedUntil, lastCallAt);
   const waiting = until > now;
+  const several = features.multi && callableCrews(crews, features).length > 1;
   return (
-    <Tooltip content={t("teams.call.wait", { count: waitMinutes(until, now) })} disabled={!waiting}>
-      <span className="inline-flex shrink-0">
-        <Button
+    <span className="inline-flex shrink-0 items-center gap-0.5">
+      <Tooltip
+        content={t("teams.call.wait", { count: waitMinutes(until, now) })}
+        disabled={!waiting}
+      >
+        <span className="inline-flex">
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<MegaphoneSimple size={15} />}
+            disabled={waiting}
+            onClick={onCall}
+          >
+            {t("teams.call.start")}
+          </Button>
+        </span>
+      </Tooltip>
+      {several ? (
+        <IconButton
           size="sm"
-          variant="secondary"
-          icon={<MegaphoneSimple size={15} />}
+          label={t("crews.call.several")}
+          icon={<CaretDown size={13} weight="bold" />}
           disabled={waiting}
-          onClick={() => void callCrew()}
-        >
-          {t("teams.call.start")}
-        </Button>
-      </span>
-    </Tooltip>
+          onClick={() => openPicker([team.id])}
+        />
+      ) : null}
+    </span>
   );
 }
 
-/** The card's strip: who is online and "Ekibi çağır", or the call(s) that are on. */
+/** The card's strip: who is online and "Ekibi çağır" (with the reason it cannot go yet), or the
+ * calls on in this crew. */
 function CrewStrip({ team, canCall }: { team: SocialTeam; canCall: boolean }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
   const now = useCallClock((s) => s.now);
+  const crews = useSocialUi((s) => s.view.crews);
   const calls = liveCalls(
     useSocialUi((s) => s.view.calls),
     now,
-  ).sort((a, b) => Number(b.mine) - Number(a.mine) || b.startedAt - a.startedAt);
+  )
+    .filter((call) => callNames(call, team, crews))
+    .sort((a, b) => Number(b.mine) - Number(a.mine) || b.startedAt - a.startedAt);
   const online = team.members.filter((m) => !m.me && !m.blocked && m.state !== "offline");
+  const { reason, call } = useCallPress();
   return (
     <AnimatePresence mode="popLayout" initial={false}>
       {calls.length ? (
@@ -486,46 +526,45 @@ function CrewStrip({ team, canCall }: { team: SocialTeam; canCall: boolean }) {
           className="space-y-4"
           {...rise(reduce, 0, 0.22)}
         >
-          {calls.map((call) => (
-            <CallStrip key={call.id} call={call} team={team} />
+          {calls.map((open) => (
+            <CallStrip key={open.id} call={open} team={team} />
           ))}
         </motion.div>
       ) : (
-        <motion.div
-          key="online"
-          className="flex min-h-8 items-center gap-2.5"
-          {...rise(reduce, 0, 0.22)}
-        >
-          {online.length ? (
-            <span className="flex items-center">
-              {online.slice(0, 4).map((member, index) => (
-                <span
-                  key={member.id}
-                  className="relative flex rounded-[5px] ring-2 ring-obsidian-900"
-                  style={{ marginLeft: index ? -7 : 0, zIndex: 4 - index }}
-                >
-                  <SocialFace source={member} size={24} />
-                </span>
-              ))}
-            </span>
-          ) : null}
-          <span className="min-w-0 flex-1 truncate text-[13px] text-ash-300">
+        <motion.div key="online" {...rise(reduce, 0, 0.22)}>
+          <div className="flex min-h-8 items-center gap-2.5">
             {online.length ? (
-              <>
-                <span className="relative inline-flex font-display font-semibold text-jade-400 tabular-nums">
-                  <AnimatePresence mode="popLayout" initial={false}>
-                    <motion.span key={online.length} {...swap(reduce, 0.18)}>
-                      {online.length}
-                    </motion.span>
-                  </AnimatePresence>
-                </span>{" "}
-                {t("teams.card.online")}
-              </>
-            ) : (
-              t("social.account.noneOnline")
-            )}
-          </span>
-          {canCall ? <CallButton /> : null}
+              <span className="flex items-center">
+                {online.slice(0, 4).map((member, index) => (
+                  <span
+                    key={member.id}
+                    className="relative flex rounded-[5px] ring-2 ring-obsidian-900"
+                    style={{ marginLeft: index ? -7 : 0, zIndex: 4 - index }}
+                  >
+                    <SocialFace source={member} size={24} />
+                  </span>
+                ))}
+              </span>
+            ) : null}
+            <span className="min-w-0 flex-1 truncate text-[13px] text-ash-300">
+              {online.length ? (
+                <>
+                  <span className="relative inline-flex font-display font-semibold text-jade-400 tabular-nums">
+                    <AnimatePresence mode="popLayout" initial={false}>
+                      <motion.span key={online.length} {...swap(reduce, 0.18)}>
+                        {online.length}
+                      </motion.span>
+                    </AnimatePresence>
+                  </span>{" "}
+                  {t("teams.card.online")}
+                </>
+              ) : (
+                t("social.account.noneOnline")
+              )}
+            </span>
+            {canCall ? <CallButton team={team} onCall={() => void call([team.id])} /> : null}
+          </div>
+          {canCall ? <CallReason reason={reason} crews={[team.id]} className="mt-2.5" /> : null}
         </motion.div>
       )}
     </AnimatePresence>
@@ -692,7 +731,7 @@ function InviteFriends({ team }: { team: SocialTeam }) {
     .filter((f) => matchesQuery(f.name, query.trim()) || matchesQuery(f.username, query.trim()));
   const invite = async (friend: Friend) => {
     setBusy(friend.id);
-    const done = await attempt(() => api.social.inviteToTeam(friend.id));
+    const done = await attempt(() => api.social.inviteToTeam(team.id, friend.id));
     setBusy(null);
     if (done !== undefined) announce(t("teams.invite.sent"));
   };
@@ -770,7 +809,9 @@ function CrewPermissions({ team }: { team: SocialTeam }) {
     const next = switchLevel(levels[right], role, on);
     if (next === levels[right]) return;
     setPending((current) => ({ ...current, [right]: next }));
-    const done = await attempt(() => api.social.editTeam({ permissions: { [right]: next } }));
+    const done = await attempt(() =>
+      api.social.editTeam(team.id, { permissions: { [right]: next } }),
+    );
     if (done === undefined) {
       setPending((current) => {
         const { [right]: _, ...rest } = current;
@@ -844,6 +885,17 @@ function CrewPermissions({ team }: { team: SocialTeam }) {
 /** How long the page takes to slide in (motion.ts `pageVariants`), plus a frame. */
 const PAGE_SETTLE_MS = 340;
 
+/** The crew the page shows now, as `shownCrew` decides (several crews), else the only one; null
+ * on "Ekip kur ya da katıl" and without a crew. */
+export function useShownCrewId(): string | null {
+  return useSocialUi((s) => {
+    const shown = s.view.crew.multi
+      ? shownCrew(s.view.crews, s.crewTab)
+      : (s.view.crews[0] ?? NEW_CREW_TAB);
+    return shown === NEW_CREW_TAB ? null : shown.id;
+  });
+}
+
 function CrewView({ team }: { team: SocialTeam }) {
   const { t } = useTranslation();
   const { reduce, layout } = useSocialMotion();
@@ -855,6 +907,8 @@ function CrewView({ team }: { team: SocialTeam }) {
   const leaving = leavingOf(team);
   const inviteRef = useRef<HTMLDivElement>(null);
   const leaveRef = useRef<HTMLDivElement>(null);
+  // Leaving the page for another crew, it never takes the next crew's menu intent.
+  const current = useShownCrewId() === team.id;
   // Rights taken away while editing close the editor (the crew says so live).
   useEffect(() => {
     if (!rights.look) setEditing(false);
@@ -863,7 +917,7 @@ function CrewView({ team }: { team: SocialTeam }) {
   // A menu in the list sent the player here to edit, invite or leave: the page opens there.
   const intent = useSocialUi((s) => s.teamIntent);
   useEffect(() => {
-    if (!intent) return;
+    if (!intent || !current) return;
     useSocialUi.getState().takeTeamIntent();
     if (intent === "edit" && rights.look) setEditing(true);
     if (intent === "leave") setAsking(leaving);
@@ -876,12 +930,12 @@ function CrewView({ team }: { team: SocialTeam }) {
         place.current?.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" }),
       PAGE_SETTLE_MS,
     );
-  }, [intent, rights.look, leaving, reduce]);
+  }, [intent, current, rights.look, leaving, reduce]);
 
   const run = async (what: Leaving) => {
     setBusy(true);
     const done = await attempt(() =>
-      what === "disband" ? api.social.disbandTeam() : api.social.leaveTeam(),
+      what === "disband" ? api.social.disbandTeam(team.id) : api.social.leaveTeam(team.id),
     );
     setBusy(false);
     setAsking(null);
@@ -989,32 +1043,111 @@ function CrewView({ team }: { team: SocialTeam }) {
   );
 }
 
-export function TeamPage() {
+/**
+ * Without a crew, or on "Ekip kur ya da katıl": invites to crews, then founding and joining by code
+ * while one more fits, or one line at the crew limit.
+ */
+function AddCrew({ canAdd, limit }: { canAdd: boolean; limit: number }) {
   const { t } = useTranslation();
-  const team = useSocialUi((s) => s.view.team);
   const invites = useSocialUi((s) => s.view.teamInvites);
-  const { reduce } = useSocialMotion();
   return (
-    <AnimatePresence mode="popLayout" initial={false}>
-      {team ? (
-        <motion.div key={`team:${team.id}`} {...rise(reduce, 6, 0.28)}>
-          <CrewView team={team} />
-        </motion.div>
-      ) : (
-        <motion.div key="none" className="pt-1" {...rise(reduce, 6, 0.28)}>
-          {invites.length ? (
-            <section className="mb-4">
-              <SectionTitle>{t("teams.invites")}</SectionTitle>
-              {invites.map((invite) => (
-                <TeamInviteRow key={invite.teamId} invite={invite} />
-              ))}
-            </section>
-          ) : null}
+    <div className="pt-1">
+      {invites.length ? (
+        <section className="mb-4">
+          <SectionTitle>{t("teams.invites")}</SectionTitle>
+          {invites.map((invite) => (
+            <TeamInviteRow key={invite.teamId} invite={invite} />
+          ))}
+        </section>
+      ) : null}
+      {canAdd ? (
+        <>
           <CreateCrew />
           <JoinCrew />
-          <p className="mt-4 px-1 text-[12px] leading-snug text-ash-400">{t("teams.privacy")}</p>
-        </motion.div>
+        </>
+      ) : (
+        <p className="flex items-center gap-2.5 rounded-[var(--radius-panel)] bg-obsidian-950/40 px-4 py-3.5 text-[13px] text-ash-300 ring-1 ring-white/8">
+          <UsersThree size={17} className="shrink-0 text-ash-400" aria-hidden />
+          {t("crews.limit", { count: limit })}
+        </p>
       )}
-    </AnimatePresence>
+      <p className="mt-4 px-1 text-[12px] leading-snug text-ash-400">{t("teams.privacy")}</p>
+    </div>
+  );
+}
+
+/**
+ * A crew switch slides the page in from the side the picked mark sits on and the old one out the
+ * other way (fades only under reduced motion). `custom` carries the side to the leaving page too.
+ */
+function switchVariants(reduce: boolean) {
+  const x = (px: number) => (reduce ? "none" : `translateX(${px}px)`);
+  return {
+    from: (side: number) => ({ opacity: 0, transform: x(16 * side) }),
+    on: { opacity: 1, transform: x(0), transition: enter(0.26) },
+    gone: (side: number) => ({ opacity: 0, transform: x(-10 * side), transition: leave(0.18) }),
+  };
+}
+
+export function TeamPage() {
+  const crews = useSocialUi((s) => s.view.crews);
+  const multi = useSocialUi((s) => s.view.crew.multi);
+  const limit = useSocialUi((s) => s.view.crewLimit);
+  const tab = useSocialUi((s) => s.crewTab);
+  const setTab = useSocialUi((s) => s.setCrewTab);
+  const { reduce } = useSocialMotion();
+  const shown = multi ? shownCrew(crews, tab) : (crews[0] ?? NEW_CREW_TAB);
+  const canAdd = canAddCrew(crews, limit, multi);
+  const shownKey = shown === NEW_CREW_TAB ? NEW_CREW_TAB : shown.id;
+  const rail = multi && crews.length > 0;
+
+  // A crew founded or joined from "Ekip kur ya da katıl" comes on screen once it arrives.
+  const count = useRef(crews.length);
+  useEffect(() => {
+    if (crews.length > count.current && tab === NEW_CREW_TAB) {
+      const newest = crews.at(-1);
+      if (newest) setTab(newest.id);
+    }
+    count.current = crews.length;
+  }, [crews, tab, setTab]);
+
+  // The side the page comes from: where the new mark sits against the old one in the rail (the
+  // add view is last). Kept until the next switch, so a later update does not turn it around.
+  const [side, setSide] = useState({ key: shownKey, side: 1 });
+  if (side.key !== shownKey) {
+    const order = [...crews.map((crew) => crew.id), NEW_CREW_TAB];
+    setSide({
+      key: shownKey,
+      side: Math.sign(order.indexOf(shownKey) - order.indexOf(side.key)) || 1,
+    });
+  }
+  const slide = rail
+    ? {
+        variants: switchVariants(reduce),
+        custom: side.side,
+        initial: "from",
+        animate: "on",
+        exit: "gone",
+      }
+    : rise(reduce, 6, 0.28);
+
+  return (
+    <div>
+      {rail ? <CrewRail crews={crews} shown={shownKey} canAdd={canAdd} limit={limit} /> : null}
+      <AnimatePresence mode="popLayout" initial={false} custom={side.side}>
+        <motion.div
+          key={shown === NEW_CREW_TAB ? "none" : `team:${shown.id}`}
+          role={rail ? "tabpanel" : undefined}
+          aria-labelledby={rail ? `crew-tab-${shownKey}` : undefined}
+          {...slide}
+        >
+          {shown === NEW_CREW_TAB ? (
+            <AddCrew canAdd={canAdd} limit={limit} />
+          ) : (
+            <CrewView team={shown} />
+          )}
+        </motion.div>
+      </AnimatePresence>
+    </div>
   );
 }

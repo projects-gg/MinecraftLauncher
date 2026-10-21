@@ -95,8 +95,13 @@ function memberPlan(team: SocialTeam, member: TeamMember, busy: boolean, roles: 
 }
 
 /** Naming or un-naming a moderator: no question, the badge says it in place. */
-async function setModerator(member: TeamMember, moderator: boolean, said: string) {
-  const done = await attempt(() => api.social.setModerator(member.id, moderator));
+async function setModerator(
+  team: SocialTeam,
+  member: TeamMember,
+  moderator: boolean,
+  said: string,
+) {
+  const done = await attempt(() => api.social.setModerator(team.id, member.id, moderator));
   if (done !== undefined) announce(said);
 }
 
@@ -136,9 +141,9 @@ function MemberCard({
     const done = await attempt(() => {
       switch (action) {
         case "founder":
-          return api.social.transferTeam(member.id);
+          return api.social.transferTeam(team.id, member.id);
         case "remove":
-          return api.social.removeTeamMember(member.id);
+          return api.social.removeTeamMember(team.id, member.id);
         case "block":
           return api.social.block(member.id);
         case "unblock":
@@ -176,10 +181,20 @@ function MemberCard({
   const select = (action: MemberAction) => {
     switch (action) {
       case "makeModerator":
-        void setModerator(member, true, t("teams.member.madeModerator", { name: member.name }));
+        void setModerator(
+          team,
+          member,
+          true,
+          t("teams.member.madeModerator", { name: member.name }),
+        );
         return;
       case "unmakeModerator":
-        void setModerator(member, false, t("teams.member.unmadeModerator", { name: member.name }));
+        void setModerator(
+          team,
+          member,
+          false,
+          t("teams.member.unmadeModerator", { name: member.name }),
+        );
         return;
       case "makeFounder":
         setQuestion("founder");
@@ -435,7 +450,12 @@ export function TeamMemberRow({
           icon: <ShieldStar size={16} />,
           disabled: row.disabled,
           onSelect: () =>
-            void setModerator(member, true, t("teams.member.madeModerator", { name: member.name })),
+            void setModerator(
+              team,
+              member,
+              true,
+              t("teams.member.madeModerator", { name: member.name }),
+            ),
         };
       case "unmakeModerator":
         return {
@@ -443,6 +463,7 @@ export function TeamMemberRow({
           icon: <ShieldStar size={16} />,
           onSelect: () =>
             void setModerator(
+              team,
               member,
               false,
               t("teams.member.unmadeModerator", { name: member.name }),

@@ -3,7 +3,9 @@ import type { CrewCall } from "@/lib/api/social-types";
 import {
   answersBy,
   CALL_GAP_MS,
+  callNames,
   callWaitUntil,
+  crewsOfCall,
   liveCalls,
   minutesLeft,
   myCall,
@@ -22,12 +24,31 @@ function call(id: string, extra: Partial<CrewCall> = {}): CrewCall {
     from: "7",
     mine: false,
     kind: "ready",
+    crews: [],
     startedAt: s(NOW) - 60,
     endsAt: s(NOW) + 19 * 60,
     answers: [],
     ...extra,
   };
 }
+
+describe("the crews a call names", () => {
+  const crews = [{ id: "a" }, { id: "b" }, { id: "c" }];
+
+  it("names them in the player's order, and the primary crew on a service with one", () => {
+    expect(crewsOfCall(call("x", { crews: ["c", "a"] }), crews)).toEqual([
+      { id: "a" },
+      { id: "c" },
+    ]);
+    expect(crewsOfCall(call("x"), crews)).toEqual([{ id: "a" }]);
+    expect(crewsOfCall(call("x"), [])).toEqual([]);
+    // A crew the player has left is not named.
+    expect(crewsOfCall(call("x", { crews: ["z"] }), crews)).toEqual([]);
+    expect(callNames(call("x", { crews: ["b"] }), { id: "b" }, crews)).toBe(true);
+    expect(callNames(call("x", { crews: ["b"] }), { id: "a" }, crews)).toBe(false);
+    expect(callNames(call("x"), { id: "a" }, crews)).toBe(true);
+  });
+});
 
 describe("calls on the launcher's own clock", () => {
   it("hides a call when its time is up, with no message", () => {

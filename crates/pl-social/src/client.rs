@@ -23,11 +23,12 @@ use crate::backoff::jitter;
 use crate::codes::{friend_share_link, normalize_friend_code, normalize_team_code};
 use crate::error::{ErrorCode, Result, SocialError, from_response};
 use crate::model::{
-    CodeLookup, Friend, FriendGroups, FriendsOverview, Me, ProfileUpdate, RequestOutcome,
-    SessionInfo, SettingsBackup, SettingsMeta, SettingsPrecondition, TeamAnswer, TeamEdit,
-    TeamLook, TeamLookup, TeamNotifications, TeamNotificationsEdit, TeamsOverview,
+    CodeLookup, CrewMute, CrewMuteEdit, Friend, FriendGroups, FriendsOverview, Me, ProfileUpdate,
+    RequestOutcome, SessionInfo, SettingsBackup, SettingsMeta, SettingsPrecondition, TeamAnswer,
+    TeamEdit, TeamLook, TeamLookup, TeamNotifications, TeamNotificationsEdit, TeamsOverview,
 };
 use crate::presence::{PresenceHandle, PresenceOptions};
+use crate::protocol::PRESENCE_CAPS;
 
 /// The production service.
 pub const PRODUCTION_URL: &str = "https://social.projects.gg/";
@@ -221,6 +222,9 @@ impl SocialClient {
         let scheme = if url.scheme() == "https" { "wss" } else { "ws" };
         // http(s) → ws(s) is always a valid scheme change.
         let _ = url.set_scheme(scheme);
+        // What this launcher understands (older services ignore the query); commas stay as they
+        // are, as the service reads them.
+        url.set_query(Some(&format!("caps={PRESENCE_CAPS}")));
         url
     }
 
@@ -379,6 +383,14 @@ fn team_id(id: &str) -> Result<&str> {
     } else {
         Err(SocialError::InvalidInput("not a team id"))
     }
+}
+
+/// `"multi": true` in a body, for a service with several crews (an older one refuses the key).
+fn with_multi(mut body: serde_json::Value, multi: bool) -> serde_json::Value {
+    if multi {
+        body["multi"] = true.into();
+    }
+    body
 }
 
 /// An authenticated client for one session. Cheap to clone.
@@ -584,14 +596,16 @@ impl Session {
         self.get("v1/teams").await
     }
 
-    /// Founds a team (the player must not be in one). `look` only for a service that offers
-    /// looks (an older one refuses the keys).
+    /// Founds a team. `look` only for a service that offers looks (an older one refuses the
+    /// keys); `multi` only for one that offers several crews: with it a player below the crew
+    /// limit founds one more, without it only a player in no crew founds one.
     pub async fn create_team(
         &self,
         name: &str,
         tag: &str,
         emblem: &str,
         look: Option<&TeamLook>,
+        multi: bool,
     ) -> Result<TeamAnswer> {
         let mut body = serde_json::json!({ "name": name, "tag": tag, "emblem": emblem });
         if let Some(look) = look {
@@ -599,9 +613,42 @@ impl Session {
             body["frame"] = look.frame.clone().into();
             body["motto"] = look.motto.clone().into();
         }
+        if multi {
+            body["multi"] = true.into();
+        }
         self.call(Method::POST, "v1/teams", Some(body))
             .await?
             .json()
+    }
+
+    /// The player's crews in a new order (every crew exactly once; the first becomes the primary
+    /// crew). `crews_changed` when they are not exactly the player's crews any more.
+    pub async fn order_crews(&self, order: &[String]) -> Result<Vec<String>> {
+        #[derive(Deserialize)]
+        struct Ordered {
+            order: Vec<String>,
+        }
+        for id in order {
+            team_id(id)?;
+        }
+        let ordered: Ordered = self
+            .call(
+                Method::PUT,
+                "v1/teams/order",
+                Some(serde_json::json!({ "order": order })),
+            )
+            .await?
+            .json()?;
+        Ok(ordered.order)
+    }
+
+    /// Mutes one of the player's crews for the player, or unmutes it (a service with several
+    /// crews): answers the crew's mute as the service keeps it now.
+    pub async fn set_crew_mute(&self, team: &str, edit: &CrewMuteEdit) -> Result<CrewMute> {
+        let body =
+            serde_json::to_value(edit).map_err(|error| SocialError::Protocol(error.to_string()))?;
+        let path = format!("v1/teams/{}/notifications", team_id(team)?);
+        self.call(Method::PATCH, &path, Some(body)).await?.json()
     }
 
     /// Renames the team, changes its tag, emblem or look (founder).
@@ -689,33 +736,37 @@ impl Session {
         self.call(method, &path, None).await?.json()
     }
 
-    /// What a team code leads to (counts against the daily code lookup quota).
-    pub async fn lookup_team(&self, code: &str) -> Result<TeamLookup> {
+    /// What a team code leads to (counts against the daily code lookup quota). With `multi` (a
+    /// service with several crews) a player in other crews reads `none` below the crew limit and
+    /// `limit` at it, never `elsewhere`.
+    pub async fn lookup_team(&self, code: &str, multi: bool) -> Result<TeamLookup> {
         let code = normalize_team_code(code).ok_or(SocialError::InvalidInput("not a team code"))?;
         self.call(
             Method::POST,
             "v1/teams/lookup",
-            Some(serde_json::json!({ "code": code })),
+            Some(with_multi(serde_json::json!({ "code": code }), multi)),
         )
         .await?
         .json()
     }
 
-    /// Joins the team of a code.
-    pub async fn join_team(&self, code: &str) -> Result<TeamAnswer> {
+    /// Joins the team of a code (one more crew with `multi`); answers the crew joined.
+    pub async fn join_team(&self, code: &str, multi: bool) -> Result<TeamAnswer> {
         let code = normalize_team_code(code).ok_or(SocialError::InvalidInput("not a team code"))?;
         self.call(
             Method::POST,
             "v1/teams/join",
-            Some(serde_json::json!({ "code": code })),
+            Some(with_multi(serde_json::json!({ "code": code }), multi)),
         )
         .await?
         .json()
     }
 
-    pub async fn accept_team_invite(&self, team: &str) -> Result<TeamAnswer> {
+    /// Accepts an invite (one more crew with `multi`); answers the crew joined.
+    pub async fn accept_team_invite(&self, team: &str, multi: bool) -> Result<TeamAnswer> {
         let path = format!("v1/teams/invites/{}/accept", team_id(team)?);
-        self.call(Method::POST, &path, None).await?.json()
+        let body = multi.then(|| serde_json::json!({ "multi": true }));
+        self.call(Method::POST, &path, body).await?.json()
     }
 
     pub async fn decline_team_invite(&self, team: &str) -> Result<()> {
@@ -1001,7 +1052,7 @@ mod tests {
         .await;
         let session = client(&server).session(token());
         let created = session
-            .create_team("Gece Kartalları", "gkr", "sword", None)
+            .create_team("Gece Kartalları", "gkr", "sword", None, false)
             .await
             .unwrap();
         assert_eq!(created.team.unwrap().code, "TKM-ABCD-EFGH");
@@ -1011,14 +1062,21 @@ mod tests {
             motto: String::new(),
         };
         session
-            .create_team("Gece Kartalları", "GKR", "controller", Some(&look))
+            .create_team("Gece Kartalları", "GKR", "controller", Some(&look), false)
             .await
             .unwrap();
-        assert!(session.lookup_team("ekp abcd efgh").await.is_ok());
-        let lookup = session.lookup_team("tkm abcd efgh").await.unwrap();
+        assert!(session.lookup_team("ekp abcd efgh", false).await.is_ok());
+        let lookup = session.lookup_team("tkm abcd efgh", false).await.unwrap();
         assert_eq!(lookup.relation, crate::model::TeamRelation::Elsewhere);
         assert_eq!(lookup.team.members, 3);
-        assert!(session.join_team("abcdefgh").await.unwrap().team.is_some());
+        assert!(
+            session
+                .join_team("abcdefgh", false)
+                .await
+                .unwrap()
+                .team
+                .is_some()
+        );
         let edit = TeamEdit {
             tag: Some("PVP".into()),
             ..TeamEdit::default()
@@ -1067,7 +1125,7 @@ mod tests {
             .await
             .unwrap();
         let refused = session
-            .accept_team_invite("fedcba9876543210")
+            .accept_team_invite("fedcba9876543210", false)
             .await
             .unwrap_err();
         assert_eq!(refused.code(), Some(&ErrorCode::AlreadyInTeam));
@@ -1084,11 +1142,114 @@ mod tests {
 
         // Malformed codes and ids never reach the service.
         let before = server.requests().len();
-        assert!(session.join_team("PRJ-ABCD-EFGH").await.is_err());
+        assert!(session.join_team("PRJ-ABCD-EFGH", false).await.is_err());
         assert!(session.leave_team("../me").await.is_err());
         assert!(
             session
                 .invite_to_team("0123456789abcdef", "x")
+                .await
+                .is_err()
+        );
+        assert_eq!(server.requests().len(), before);
+    }
+
+    #[tokio::test]
+    async fn several_crews_ask_for_one_more_and_keep_their_order_and_mutes() {
+        let server = MockServer::start(|req| match (req.method.as_str(), req.path.as_str()) {
+            ("POST", "/v1/teams") => {
+                assert_eq!(req.json()["multi"], true);
+                MockReply::json(201, TEAM)
+            }
+            ("POST", "/v1/teams/lookup") => {
+                assert_eq!(req.json()["multi"], true);
+                MockReply::json(
+                    200,
+                    r#"{"team":{"id":"fedcba9876543210","name":"PvP","tag":"PVP","emblem":"bolt",
+                        "members":4},"relation":"limit"}"#,
+                )
+            }
+            ("POST", "/v1/teams/join") => {
+                assert_eq!(req.json()["multi"], true);
+                MockReply::json(
+                    422,
+                    r#"{"error":{"code":"limit_crews","message":"You are in as many crews as you may be"}}"#,
+                )
+            }
+            ("POST", "/v1/teams/invites/fedcba9876543210/accept") => {
+                assert_eq!(req.body_text(), r#"{"multi":true}"#);
+                MockReply::json(200, TEAM)
+            }
+            ("PUT", "/v1/teams/order") => {
+                let body = req.json();
+                if body["order"][0] == "0123456789abcdef" {
+                    MockReply::json(200, &req.body_text().to_owned())
+                } else {
+                    MockReply::json(
+                        409,
+                        r#"{"error":{"code":"crews_changed","message":"Your crews changed meanwhile"}}"#,
+                    )
+                }
+            }
+            ("PATCH", "/v1/teams/0123456789abcdef/notifications") => {
+                assert_eq!(req.body_text(), r#"{"muteUntil":1792600000,"muted":true}"#);
+                MockReply::json(200, r#"{"muted":true,"muteUntil":1792600000}"#)
+            }
+            _ => MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#),
+        })
+        .await;
+        let session = client(&server).session(token());
+        session
+            .create_team("Gece Kartalları", "GKR", "sword", None, true)
+            .await
+            .unwrap();
+        let lookup = session.lookup_team("EKP-ABCD-EFGH", true).await.unwrap();
+        assert_eq!(lookup.relation, crate::model::TeamRelation::Limit);
+        assert_eq!(
+            session
+                .join_team("EKP-ABCD-EFGH", true)
+                .await
+                .unwrap_err()
+                .code(),
+            Some(&ErrorCode::LimitCrews)
+        );
+        assert!(
+            session
+                .accept_team_invite("fedcba9876543210", true)
+                .await
+                .unwrap()
+                .team
+                .is_some()
+        );
+        let order = vec!["0123456789abcdef".to_owned(), "fedcba9876543210".to_owned()];
+        assert_eq!(session.order_crews(&order).await.unwrap(), order);
+        let stale = vec!["fedcba9876543210".to_owned()];
+        assert_eq!(
+            session.order_crews(&stale).await.unwrap_err().code(),
+            Some(&ErrorCode::CrewsChanged)
+        );
+        let mute = session
+            .set_crew_mute(
+                "0123456789abcdef",
+                &CrewMuteEdit {
+                    muted: true,
+                    mute_until: Some(1_792_600_000),
+                },
+            )
+            .await
+            .unwrap();
+        assert!(mute.muted_at(1_792_599_999) && !mute.muted_at(1_792_600_000));
+        // Ids that are not crews never reach the service.
+        let before = server.requests().len();
+        assert!(session.order_crews(&["../me".to_owned()]).await.is_err());
+        assert!(
+            session
+                .set_crew_mute(
+                    "x",
+                    &CrewMuteEdit {
+                        muted: false,
+                        mute_until: None
+                    }
+                )
                 .await
                 .is_err()
         );
@@ -1216,7 +1377,7 @@ mod tests {
         let client = SocialClient::new(SocialConfig::production("ProjectsLauncher/test")).unwrap();
         assert_eq!(
             client.presence_url().as_str(),
-            "wss://social.projects.gg/v1/presence"
+            "wss://social.projects.gg/v1/presence?caps=callServer,crews"
         );
         assert_eq!(
             client.friend_share_link("abcdefgh").unwrap().as_str(),
@@ -1229,7 +1390,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             local.presence_url().as_str(),
-            "ws://127.0.0.1:8797/v1/presence"
+            "ws://127.0.0.1:8797/v1/presence?caps=callServer,crews"
         );
     }
 }

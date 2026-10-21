@@ -9,11 +9,12 @@ import type {
   SocialGame,
   SocialNotice,
   SocialSnapshot,
+  SocialTeam,
   StatusMode,
   TeamMember,
 } from "@/lib/api/social-types";
 import { unansweredCall } from "./calls";
-import { crewCallsHeard, mutedNow } from "./mute";
+import { callHeardIn, crewCallsHeard, crewmateHeardIn, mutedNow } from "./mute";
 
 const collator = new Intl.Collator("tr", { sensitivity: "base" });
 
@@ -76,7 +77,7 @@ export function onlineFriends(friends: readonly Friend[], favorites: readonly st
 /** Home's invitations, closed for good with ×: sign in with Discord, then add a first friend. */
 export type HomeHint = "connect" | "add";
 /** What the friends line on Home shows. */
-export type HomeStrip = HomeHint | "playing" | "call" | "crew";
+export type HomeStrip = HomeHint | "playing" | "call" | "crew" | "callCrew";
 
 /** What else decides Home's line: calls closed there, a game being open, the call clock. */
 export interface HomeContext {
@@ -84,23 +85,38 @@ export interface HomeContext {
   /** A game is being prepared or running: the crew's lines wait (the game is what matters). */
   gameBusy: boolean;
   now: number;
+  /** "Ekibini çağır" would go right now: the player plays on a server a call may start from,
+   * may call a crew, has no call on and is not waiting out the five minutes (CALL1). */
+  callable?: boolean;
 }
 
 const NO_CONTEXT: HomeContext = { closedCalls: [], gameBusy: false, now: 0 };
 
-/** Crewmates on projects.gg now ("Katıl"), the player and anyone blocked left out. */
-export function crewmatesOnProjects(team: { members: readonly TeamMember[] } | undefined) {
-  return (team?.members ?? []).filter(
-    (m) => !m.me && !m.blocked && m.state === "playing" && isJoinable(m.game),
-  );
+/** Crewmates on projects.gg now ("Katıl") across the player's crews, each person once, the
+ * player and anyone blocked left out. */
+export function crewmatesOnProjects(crews: readonly { members: readonly TeamMember[] }[]) {
+  const seen = new Set<string>();
+  const out: TeamMember[] = [];
+  for (const crew of crews) {
+    for (const m of crew.members) {
+      if (m.me || m.blocked || seen.has(m.id) || m.state !== "playing" || !isJoinable(m.game)) {
+        continue;
+      }
+      seen.add(m.id);
+      out.push(m);
+    }
+  }
+  return out;
 }
 
 /**
  * The friends line on Home, most pressing first (one line at a time):
  * 1. a teammate's call the player has not answered (nor closed here), while no game is open;
- * 2. two or more crewmates on Projects ("Ekibinden 4 kişi Projects'te"), while no game is open;
- * 3. friends in game, or the one crewmate on Projects (said as for a friend);
- * 4. signed out (or while the browser is open), the invitation to sign in; signed in with nobody
+ * 2. two or more crewmates on Projects across the crews, each once ("Ekibinden 4 kişi
+ *    Projects'te", "Ekiplerinden 6 kişi…"), while no game is open;
+ * 3. in game on a server a call may start from: "Ekibini çağır" (CALL1);
+ * 4. friends in game, or the one crewmate on Projects (said as for a friend);
+ * 5. signed out (or while the browser is open), the invitation to sign in; signed in with nobody
  *    on the list and no request either way, the invitation to add a first friend.
  * A closed invitation never comes back on this computer; nothing shows while a saved session is
  * checked or the list has not arrived.
@@ -110,7 +126,7 @@ export function homeStrip(
     SocialSnapshot,
     "enabled" | "auth" | "loaded" | "friends" | "incoming" | "outgoing" | "invites"
   > &
-    Partial<Pick<SocialSnapshot, "teams" | "team" | "calls">>,
+    Partial<Pick<SocialSnapshot, "teams" | "crews" | "calls">>,
   closed: readonly HomeHint[],
   context: HomeContext = NO_CONTEXT,
 ): HomeStrip | null {
@@ -119,12 +135,13 @@ export function homeStrip(
     return closed.includes("connect") ? null : "connect";
   }
   if (view.auth !== "signedIn") return null;
-  const team = view.teams ? view.team : undefined;
-  const crew = crewmatesOnProjects(team);
-  if (team && !context.gameBusy) {
+  const crews = view.teams ? (view.crews ?? []) : [];
+  const crew = crewmatesOnProjects(crews);
+  if (crews.length && !context.gameBusy) {
     if (unansweredCall(view.calls ?? [], context.now, context.closedCalls)) return "call";
     if (crew.length >= 2) return "crew";
   }
+  if (crews.length && context.callable) return "callCrew";
   if (view.friends.some((f) => f.state === "playing") || crew.length > 0) return "playing";
   const alone =
     view.loaded &&
@@ -144,19 +161,25 @@ export interface Waiting {
 }
 
 type WaitingView = Pick<SocialSnapshot, "incoming" | "invites" | "calls"> &
-  Partial<Pick<SocialSnapshot, "crewNotifications">>;
+  Partial<Pick<SocialSnapshot, "crewNotifications" | "crews">>;
 
 /**
  * What waits for the player (the friends entry's gold dot): a request or an invite, and a
- * crewmate's call they have not answered, unless crew calls are off or the crew is muted (the
- * call itself stays on the crew page and the Home line). The two are told apart: a call is
- * neither a request nor an invite, and the entry says which waits (E2E6).
+ * crewmate's call they have not answered, unless crew calls are off or the crews it names are
+ * muted (the call itself stays on the crew page and the Home line). The two are told apart: a
+ * call is neither a request nor an invite, and the entry says which waits (E2E6).
  */
 export function whatWaits(view: WaitingView, localCrewCalls: boolean, nowMs: number): Waiting {
-  const call = unansweredCall(view.calls, nowMs);
+  // The newest unanswered call of a crew that is not muted on its own.
+  const call = crewCallsHeard(view.crewNotifications, localCrewCalls, nowMs)
+    ? unansweredCall(
+        view.calls.filter((one) => callHeardIn(one, view.crews ?? [], nowMs)),
+        nowMs,
+      )
+    : undefined;
   return {
     asks: view.incoming.length > 0 || view.invites.length > 0,
-    call: call && crewCallsHeard(view.crewNotifications, localCrewCalls, nowMs) ? call : null,
+    call: call ?? null,
   };
 }
 
@@ -180,12 +203,12 @@ export interface PlayingPerson {
  * Projects who are not friends (teammates see each other's game, never another server).
  */
 export function playingPeople(
-  view: Pick<SocialSnapshot, "friends"> & Partial<Pick<SocialSnapshot, "teams" | "team">>,
+  view: Pick<SocialSnapshot, "friends"> & Partial<Pick<SocialSnapshot, "teams" | "crews">>,
   favorites: readonly string[],
 ): PlayingPerson[] {
   const friends: PlayingPerson[] = groupFriends(view.friends, favorites).playing;
   const known = new Set(view.friends.map((f) => f.id));
-  const crew = crewmatesOnProjects(view.teams ? view.team : undefined).filter(
+  const crew = crewmatesOnProjects(view.teams ? (view.crews ?? []) : []).filter(
     (m) => !known.has(m.id),
   );
   return [...friends, ...crew];
@@ -298,9 +321,10 @@ export function notifiesOnline(prefs: NoticePrefs, id: string): boolean {
 /**
  * Whether a notice should reach the player at all. Do-not-disturb silences everything (friends
  * still see the status); a friend coming online counts when the player asked for it (for that
- * friend, or for favourites), joining projects.gg only for favourites. A crew muted with "Sessize
- * al" says nothing (its calls stay on the crew page and the Home line); where the service keeps
- * the crew's settings (`crew`), its "Ekip çağrıları" wins over this computer's.
+ * friend, or for favourites), joining projects.gg only for favourites. Crews muted with "Sessize
+ * al" (all of them, or every crew a call names or a crewmate shares, `crews`) say nothing (calls
+ * stay on the crew page and the Home line); where the service keeps the crew settings (`crew`),
+ * its "Ekip çağrıları" wins over this computer's.
  */
 export function wantsNotice(
   notice: SocialNotice,
@@ -308,6 +332,7 @@ export function wantsNotice(
   prefs: NoticePrefs,
   crew?: CrewNotifications,
   nowMs: number = Date.now(),
+  crews: readonly SocialTeam[] = [],
 ): boolean {
   if (status === "dnd") {
     // Signing out still has to be said: the panel looks different afterwards.
@@ -322,9 +347,16 @@ export function wantsNotice(
       return !notice.invite.quiet;
     case "crewCall":
     case "crewCallJoin":
-      return crewCallsHeard(crew, prefs.notifyCrewCalls ?? true, nowMs);
+      return (
+        crewCallsHeard(crew, prefs.notifyCrewCalls ?? true, nowMs) &&
+        callHeardIn(notice.call, crews, nowMs)
+      );
     case "crewmateOnProjects":
-      return !mutedNow(crew, nowMs) && notifiesCrewProjects(prefs, notice.id);
+      return (
+        !mutedNow(crew, nowMs) &&
+        crewmateHeardIn(notice.id, crews, nowMs) &&
+        notifiesCrewProjects(prefs, notice.id)
+      );
     default:
       return true;
   }

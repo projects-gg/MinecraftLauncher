@@ -4,7 +4,8 @@
 // rest, each in presence order. One list, so a friend who comes online (or moves to another
 // category) glides to the new place instead of vanishing and reappearing; section headers glide
 // with them and fade when their section empties. Friends and categories are dragged to move them;
-// menus and Alt+↑/↓ do the same from the keyboard.
+// menus and Alt+↑/↓ do the same from the keyboard. With several crews (TEAM4) each crew is a
+// section of its own, in the player's order; a call sits under the first crew it names.
 import {
   ArrowClockwise,
   CaretDown,
@@ -46,7 +47,7 @@ import type {
 import { formatRelative } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
 import { attempt, copyText } from "./actions";
-import { theirCalls } from "./calls";
+import { crewsOfCall, theirCalls } from "./calls";
 import {
   CategoryHeader,
   DragGhost,
@@ -55,6 +56,7 @@ import {
   NewCategoryRow,
 } from "./category-header";
 import { CallRow } from "./crew-call";
+import { type InviteState, inviteTargets } from "./crews";
 import { FriendRow, type RowTeam } from "./friend-row";
 import {
   addGroup,
@@ -79,14 +81,25 @@ import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
 import { TeamMemberRow } from "./team-member";
 import { TeamHeader, TeamInviteRow } from "./team-section";
-import { crewRights, teammates } from "./teams";
+import { teammates } from "./teams";
 import { useCallClock } from "./use-call-clock";
 import { useListDrag } from "./use-list-drag";
 
 const ago = (unixSeconds: number) => formatRelative(new Date(unixSeconds * 1000).toISOString());
 
-/** The team section's id among folded sections (category ids are 1-12 letters and digits). */
+/** The team section's id among folded sections (category ids are 1-12 letters and digits); with
+ * several crews each folds on its own, as "team:" and its id. */
 const TEAM_SECTION = "team:";
+
+const NO_CREWS: SocialTeam[] = [];
+
+/** A crew's id among folded sections: "team:" with one crew per player, else with its id. */
+function foldOf(crew: Pick<SocialTeam, "id">, multi: boolean): string {
+  return multi ? `${TEAM_SECTION}${crew.id}` : TEAM_SECTION;
+}
+
+/** The best of a friend's states across the player's crews: one to invite to first. */
+const INVITE_ORDER: readonly InviteState[] = ["invitable", "invited", "full", "member"];
 
 function Header({ label, count }: { label: string; count: number }) {
   const { reduce } = useSocialMotion();
@@ -477,10 +490,10 @@ export function ListPage() {
   const { t } = useTranslation();
   const { reduce, layout } = useSocialMotion();
   const view = useSocialUi((s) => s.view);
-  const goTo = useSocialUi((s) => s.goTo);
   const favorites = useSocialPrefs((s) => s.favorites);
   const collapsed = useSocialPrefs((s) => s.collapsed);
   const toggleCollapsed = useSocialPrefs((s) => s.toggleCollapsed);
+  const openTeam = useSocialUi((s) => s.openTeam);
   const listRef = useRef<HTMLUListElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -544,29 +557,37 @@ export function ListPage() {
     },
   });
 
-  const team = view.teams ? view.team : undefined;
-  const teamFolded = team ? collapsed.includes(TEAM_SECTION) : false;
+  const crews = view.teams ? view.crews : NO_CREWS;
+  const multi = view.crew.multi;
   // Teammates' calls sit under the crew's header (the player's own is on the crew page).
   const now = useCallClock((s) => s.now);
-  const calls = useMemo(() => (team ? theirCalls(view.calls, now) : []), [team, view.calls, now]);
+  const calls = useMemo(
+    () => (crews.length ? theirCalls(view.calls, now) : []),
+    [crews, view.calls, now],
+  );
   const teamRowFor = (friendId: string): RowTeam | null => {
-    // Only where the crew lets the player invite (everyone on a service without roles).
-    if (!team || !crewRights(team, view.crew).invite) return null;
-    const state = team.members.some((m) => m.id === friendId)
-      ? "member"
-      : team.invited.includes(friendId)
-        ? "invited"
-        : "invitable";
+    // Only crews that let the player invite (everyone on a service without roles).
+    const targets = inviteTargets(crews, friendId, view.crew);
+    if (!targets.length) return null;
+    const invite = (crew: SocialTeam) => () => {
+      void attempt(() => api.social.inviteToTeam(crew.id, friendId)).then((done) => {
+        if (done !== undefined) {
+          announce(t("teams.invite.sent"));
+          toast.success(t("teams.invite.sent"));
+        }
+      });
+    };
+    const best = [...targets].sort(
+      (a, b) => INVITE_ORDER.indexOf(a.state) - INVITE_ORDER.indexOf(b.state),
+    )[0];
+    if (!best) return null;
     return {
-      state,
-      onInvite: () => {
-        void attempt(() => api.social.inviteToTeam(friendId)).then((done) => {
-          if (done !== undefined) {
-            announce(t("teams.invite.sent"));
-            toast.success(t("teams.invite.sent"));
-          }
-        });
-      },
+      state: best.state,
+      onInvite: invite(best.crew),
+      crews:
+        multi && targets.length > 1
+          ? targets.map(({ crew, state }) => ({ crew, state, onInvite: invite(crew) }))
+          : undefined,
     };
   };
 
@@ -602,17 +623,21 @@ export function ListPage() {
         .map((request) => ({ key: `r:${request.id}`, kind: "request", request })),
     );
 
-    if (team) {
+    for (const team of crews) {
       const mates = teammates(team).filter((m) => hit(m.name, m.username));
+      const folded = collapsed.includes(foldOf(team, multi));
       if (!q || mates.length) {
-        list.push({ key: "t:head", kind: "teamHeader", team, folded: teamFolded && !q });
-        // A call waits for an answer even while the crew is folded.
+        list.push({ key: `t:${team.id}`, kind: "teamHeader", team, folded: folded && !q });
+        // A call waits for an answer even while the crew is folded; under the first crew it names.
         if (!q) {
-          for (const call of calls) list.push({ key: `c:${call.id}`, kind: "call", call, team });
+          for (const call of calls) {
+            if (crewsOfCall(call, crews)[0]?.id !== team.id) continue;
+            list.push({ key: `c:${call.id}`, kind: "call", call, team });
+          }
         }
-        if (!teamFolded || q) {
+        if (!folded || q) {
           for (const member of mates) {
-            list.push({ key: `m:${member.id}`, kind: "teammate", member, team });
+            list.push({ key: `m:${team.id}:${member.id}`, kind: "teammate", member, team });
           }
         }
       }
@@ -703,8 +728,8 @@ export function ListPage() {
     view.incoming,
     view.friends,
     view.outgoing,
-    team,
-    teamFolded,
+    crews,
+    multi,
     calls,
     favorites,
     collapsed,
@@ -829,7 +854,7 @@ export function ListPage() {
     !view.outgoing.length &&
     !view.invites.length &&
     !view.teamInvites.length &&
-    !team;
+    !crews.length;
 
   const draggedFriend =
     drag?.kind === "friend" ? view.friends.find((f) => f.id === drag.id) : undefined;
@@ -885,8 +910,8 @@ export function ListPage() {
           <TeamHeader
             team={item.team}
             folded={item.folded}
-            onToggle={() => toggleCollapsed(TEAM_SECTION)}
-            onOpen={() => goTo("team")}
+            onToggle={() => toggleCollapsed(foldOf(item.team, multi))}
+            onOpen={() => openTeam(undefined, item.team.id)}
             onKeyDown={onRowKey}
           />
         );

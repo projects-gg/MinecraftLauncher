@@ -2,10 +2,29 @@
 // when the next minute (or end) comes, how the answers add up and when the player may call again.
 // Calls end by themselves at `endsAt` and no message says so: the launcher hides them on its own
 // clock, with one timer to the next change while a call is on and none otherwise.
-import type { CallAnswer, CrewCall } from "@/lib/api/social-types";
+import type { CallAnswer, CrewCall, SocialTeam } from "@/lib/api/social-types";
 
 /** A player calls at most every 5 minutes (the service says so too). */
 export const CALL_GAP_MS = 5 * 60_000;
+
+/** Crews of the player's a call names, in the player's order. A call from a service with one
+ * crew per player names none: it is the (only) primary crew's. */
+export function crewsOfCall<T extends Pick<SocialTeam, "id">>(
+  call: Pick<CrewCall, "crews">,
+  crews: readonly T[],
+): T[] {
+  if (!call.crews.length) return crews.slice(0, 1);
+  return crews.filter((crew) => call.crews.includes(crew.id));
+}
+
+/** A call that names this crew (see `crewsOfCall`). */
+export function callNames(
+  call: Pick<CrewCall, "crews">,
+  crew: Pick<SocialTeam, "id">,
+  crews: readonly Pick<SocialTeam, "id">[],
+): boolean {
+  return crewsOfCall(call, crews).some((named) => named.id === crew.id);
+}
 
 /** Calls still on at `nowMs`. */
 export function liveCalls(calls: readonly CrewCall[], nowMs: number): CrewCall[] {

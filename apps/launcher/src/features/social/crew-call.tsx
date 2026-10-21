@@ -1,48 +1,48 @@
-// "Ekibi çağır" on screen (TEAM2 §4.3). The crew card's strip turns into the call: the caller sees
-// "Çağrın sürüyor", the minutes left and "Bitir"; a teammate sees who calls, where (Projects, or
-// "Hazır mısın?") and three answers, "Geliyorum" in gold when it can join the caller. Under both,
-// three boxes show who is coming, who comes soon and who cannot. The same call sits under the
-// crew's header in the friend list, on Home and in a toast when it arrives. Nothing moves by itself:
-// the minutes change once a minute, an answer fades in where it lands.
+// "Ekibi çağır" on screen (TEAM2 §4.3, CALL1, TEAM4). The crew card's strip turns into the call: the
+// caller sees "Çağrın sürüyor", where (Projects or the server's address), the minutes left and
+// "Bitir"; a teammate sees who calls, where, and three answers, "Geliyorum" in gold when it can
+// join the caller there. Under both, three boxes show who is coming, who comes soon and who
+// cannot. The same call sits under its crew's header in the friend list, on Home and in a toast
+// when it arrives; with several crews those name the crews it calls. Nothing moves by itself: the
+// minutes change once a minute, an answer fades in where it lands. A call from before CALL1 (an
+// older service) still shows as "Hazır mısın?".
 import { Check, Clock, MegaphoneSimple, Play, UsersThree, X } from "@phosphor-icons/react";
 import { Button, ContextMenu, cn, IconButton, type MenuItem, toast } from "@pl/ui";
-import type { TFunction } from "i18next";
 import { AnimatePresence, motion } from "motion/react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { CallAnswer, CrewCall, SocialTeam, TeamMember } from "@/lib/api/social-types";
 import { useLaunch } from "@/stores/launch";
 import { answerCall, endCall } from "./call-actions";
-import { answersBy, minutesLeft } from "./calls";
+import { answersBy, crewsOfCall, minutesLeft } from "./calls";
+import { callerIn, callSentenceOf, callWhere, callWhereLine } from "./crews";
 import { gameBusy } from "./join";
 import { joinCall } from "./join-dialog";
 import { callMenu, rowsOf } from "./menus";
 import { pop, swap, useSocialMotion } from "./motion";
-import { type FaceSource, SocialAvatar, SocialFace } from "./social-face";
+import { SocialAvatar, SocialFace } from "./social-face";
 import { useSocialUi } from "./store";
 import { CrewMark } from "./team-emblem";
 import { useCallClock } from "./use-call-clock";
 
 const ANSWERS: CallAnswer[] = ["yes", "soon", "no"];
 
-/** The caller as the crew shows them (a name even when they are not in the list yet). */
-export function callerOf(
-  call: CrewCall,
-  team: SocialTeam | undefined,
-): FaceSource & { id: string } {
-  const member = team?.members.find((m) => m.id === call.from);
-  return {
-    id: call.from,
-    name: member?.name ?? call.name ?? "",
-    avatar: member?.avatar ?? call.avatar,
-    avatarUrl: member?.avatarUrl ?? call.avatarUrl,
-  };
-}
-
-/** "Ayşe ekibi çağırıyor" (or "Bir ekip arkadaşın" while the name is not known). */
-export function callSentence(call: CrewCall, team: SocialTeam | undefined, t: TFunction) {
-  const name = callerOf(call, team).name || t("teams.call.someone");
-  return t("teams.call.theirs", { name });
+/** "Projects'te" / "mc.example.com sunucusunda" (jade: "Geliyorum" goes there), or "Hazır
+ * mısın?" for a call from before CALL1. */
+function WhereLine({ call, className }: { call: CrewCall; className?: string }) {
+  const { t } = useTranslation();
+  const where = callWhere(call);
+  return (
+    <span
+      className={cn(
+        "block truncate text-[12.5px]",
+        where.kind === "ready" ? "text-ash-300" : "text-jade-400",
+        className,
+      )}
+    >
+      {callWhereLine(where, t)}
+    </span>
+  );
 }
 
 /** "17 dk", read as "17 dakika kaldı". Changes once a minute (the call clock), never by seconds. */
@@ -75,11 +75,12 @@ export function AnswerButtons({
 }) {
   const { t } = useTranslation();
   const answered = call.myAnswer;
+  const joinable = callWhere(call).kind !== "ready";
   /** Unanswered: "Geliyorum" leads (gold when it joins the caller), "Gelemem" stays quiet.
    * Answered: the chosen one is checked and gold-edged, the others step back. */
   const variant = (answer: CallAnswer): "primary" | "secondary" | "ghost" => {
     if (answered) return answered === answer ? "secondary" : "ghost";
-    if (answer === "yes") return call.kind === "join" ? "primary" : "secondary";
+    if (answer === "yes") return joinable ? "primary" : "secondary";
     return answer === "soon" ? "secondary" : "ghost";
   };
   return (
@@ -87,7 +88,7 @@ export function AnswerButtons({
       <legend className="sr-only">{t("teams.call.answer")}</legend>
       {ANSWERS.map((answer) => {
         const chosen = answered === answer;
-        const joins = answer === "yes" && call.kind === "join" && !answered;
+        const joins = answer === "yes" && joinable && !answered;
         return (
           <Button
             key={answer}
@@ -135,7 +136,7 @@ function Faces({ members }: { members: TeamMember[] }) {
   );
 }
 
-/** Who answered what: three quiet boxes with faces and counts. */
+/** Who answered what: three quiet boxes with faces and counts (this crew's people). */
 export function AnswerBoxes({ call, team }: { call: CrewCall; team: SocialTeam }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
@@ -187,7 +188,8 @@ export function AnswerBoxes({ call, team }: { call: CrewCall; team: SocialTeam }
 /** The crew card's strip while a call is on: the player's own, or a teammate's. */
 export function CallStrip({ call, team }: { call: CrewCall; team: SocialTeam }) {
   const { t } = useTranslation();
-  const caller = callerOf(call, team);
+  const crews = useSocialUi((s) => s.view.crews);
+  const caller = callerIn(call, [team, ...crews]);
   return (
     <div className="space-y-2.5">
       {call.mine ? (
@@ -200,11 +202,7 @@ export function CallStrip({ call, team }: { call: CrewCall; team: SocialTeam }) 
               {t("teams.call.mine")}
             </span>
             {/* Where the crew is called to; "Hazır mısın?" is the teammates' question. */}
-            {call.kind === "join" ? (
-              <span className="block text-[12.5px] text-jade-400">
-                {t("social.presence.projects")}
-              </span>
-            ) : null}
+            {callWhere(call).kind !== "ready" ? <WhereLine call={call} /> : null}
           </span>
           <MinutesLeft call={call} className="text-ash-300" />
           <Button size="sm" variant="ghost" onClick={() => void endCall(call)}>
@@ -217,16 +215,9 @@ export function CallStrip({ call, team }: { call: CrewCall; team: SocialTeam }) 
             <SocialAvatar source={caller} size={36} />
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[14px] font-semibold text-bone-50">
-                {callSentence(call, team, t)}
+                {callSentenceOf(call, crews, t, true)}
               </span>
-              <span
-                className={cn(
-                  "block text-[12.5px]",
-                  call.kind === "join" ? "text-jade-400" : "text-ash-300",
-                )}
-              >
-                {call.kind === "join" ? t("social.presence.projects") : t("teams.call.ready")}
-              </span>
+              <WhereLine call={call} />
             </span>
             <MinutesLeft call={call} className="text-ash-300" />
           </div>
@@ -238,15 +229,17 @@ export function CallStrip({ call, team }: { call: CrewCall; team: SocialTeam }) 
   );
 }
 
-/** A teammate's call in the friend list, right under the crew's header (the invite rows' family).
- * Its right-click menu answers too, joins the caller on Projects and opens the crew. */
+/** A teammate's call in the friend list, under the header of the first crew it names (the invite
+ * rows' family). Its right-click menu answers too, joins the caller and opens the crew. */
 export function CallRow({ call, team }: { call: CrewCall; team: SocialTeam }) {
   const { t } = useTranslation();
-  const caller = callerOf(call, team);
+  const crews = useSocialUi((s) => s.view.crews);
+  const caller = callerIn(call, [team, ...crews]);
+  const where = callWhere(call);
   const busy = useLaunch((s) => gameBusy(s.phase.kind));
   const openTeam = useSocialUi((s) => s.openTeam);
   const items = rowsOf(
-    callMenu({ joinable: call.kind === "join", gameBusy: busy, answer: call.myAnswer }),
+    callMenu({ joinable: where.kind !== "ready", gameBusy: busy, answer: call.myAnswer }),
     (row): MenuItem | null => {
       switch (row.action) {
         case "yes":
@@ -265,13 +258,13 @@ export function CallRow({ call, team }: { call: CrewCall; team: SocialTeam }) {
             label: t("social.actions.join"),
             icon: <Play size={16} />,
             disabled: row.disabled,
-            onSelect: () => joinCall(),
+            onSelect: () => joinCall(where),
           };
         case "open":
           return {
             label: t("teams.open"),
             icon: <UsersThree size={16} />,
-            onSelect: () => openTeam(),
+            onSelect: () => openTeam(undefined, team.id),
           };
       }
     },
@@ -288,16 +281,9 @@ export function CallRow({ call, team }: { call: CrewCall; team: SocialTeam }) {
           </span>
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[13.5px] font-semibold text-bone-50">
-              {callSentence(call, team, t)}
+              {callSentenceOf(call, crews, t)}
             </span>
-            <span
-              className={cn(
-                "block truncate text-[12.5px]",
-                call.kind === "join" ? "text-jade-400" : "text-ash-300",
-              )}
-            >
-              {call.kind === "join" ? t("social.presence.projects") : t("teams.call.ready")}
-            </span>
+            <WhereLine call={call} />
           </span>
           <MinutesLeft call={call} className="pr-1 text-ash-300" />
         </div>
@@ -317,35 +303,33 @@ function CallToast({
   joined: boolean;
 }) {
   const { t } = useTranslation();
-  const team = useSocialUi((s) => s.view.team);
+  const crews = useSocialUi((s) => s.view.crews);
   const live = useSocialUi((s) => s.view.calls.find((c) => c.id === call.id)) ?? call;
-  const caller = callerOf(live, team);
+  const caller = callerIn(live, crews);
+  const where = callWhere(live);
+  const mark = crewsOfCall(live, crews)[0];
   const busy = useLaunch((s) => gameBusy(s.phase.kind));
+  const name = caller.name || t("teams.call.someone");
   return (
     <div className="w-full font-normal">
       <div className="flex items-center gap-3">
         <span className="relative flex">
           <SocialAvatar source={caller} size={40} />
-          {team ? (
+          {mark ? (
             <span className="absolute -right-1.5 -bottom-1.5">
-              <CrewMark look={team} size={22} />
+              <CrewMark look={mark} size={22} />
             </span>
           ) : null}
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-[13.5px] leading-snug font-semibold text-bone-50">
             {joined
-              ? t("teams.call.arrived", { name: caller.name || t("teams.call.someone") })
-              : callSentence(live, team, t)}
+              ? where.kind === "server"
+                ? t("crews.call.arrivedAt", { name, host: where.host })
+                : t("teams.call.arrived", { name })
+              : callSentenceOf(live, crews, t)}
           </p>
-          <p
-            className={cn(
-              "truncate text-[12.5px]",
-              live.kind === "join" ? "text-jade-400" : "text-ash-300",
-            )}
-          >
-            {live.kind === "join" ? t("social.presence.projects") : t("teams.call.ready")}
-          </p>
+          <WhereLine call={live} />
         </div>
         <IconButton
           label={t("social.actions.dismiss")}
@@ -363,7 +347,8 @@ function CallToast({
           disabled={busy}
           onClick={() => {
             toast.dismiss(toastId);
-            joinCall();
+            // A "Hazır mısın?" call's caller who moved went to projects.gg.
+            joinCall(where.kind === "ready" ? { kind: "projects" } : where);
           }}
         >
           {t("social.actions.join")}
@@ -381,7 +366,7 @@ function CallToast({
 }
 
 /**
- * A teammate's call arriving (or their arrival on Projects for a call the player is coming to):
+ * A teammate's call arriving (or the caller moving on for a call the player is coming to):
  * 20 seconds, then it waits in the crew card, the list and on Home for the rest of its time.
  */
 export function showCallToast(call: CrewCall, joined = false) {

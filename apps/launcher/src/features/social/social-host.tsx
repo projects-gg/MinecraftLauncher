@@ -1,6 +1,7 @@
 // Everything the friends feature runs in the background, mounted once with the main window's
 // title bar: the snapshot subscription, notices (toasts and, while the launcher is not in front,
-// system notifications), the crew calls' clock, the settings backup and the new-computer question.
+// system notifications), the crew calls' clock, the settings backup, the new-computer question and
+// the crew picker of "Ekiplerini çağır".
 import { Button, Dialog, toast } from "@pl/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -11,7 +12,9 @@ import { formatRelative } from "@/lib/format";
 import i18n from "@/lib/i18n";
 import { usePrefs } from "@/stores/prefs";
 import { attempt, notifyOutside } from "./actions";
-import { callSentence, showCallToast } from "./crew-call";
+import { showCallToast } from "./crew-call";
+import { CrewCallDialog } from "./crew-call-picker";
+import { callerIn, callSentenceOf, callWhere } from "./crews";
 import { FriendsSheet } from "./friends-sheet";
 import { showInviteToast } from "./invite-toast";
 import { joinProjects } from "./join";
@@ -25,7 +28,7 @@ import {
   readBackup,
   wantsNotice,
 } from "./model";
-import { mutedNow } from "./mute";
+import { crewmateHeardIn, mutedNow } from "./mute";
 import { useSocialPrefs, useSocialUi } from "./store";
 import { useCallTicker } from "./use-call-clock";
 
@@ -39,7 +42,11 @@ const crewThrottle = new NoticeThrottle(FRIEND_NOTICE_GAP_MS);
 const crewArrivals: { ids: string[]; timer: number | null } = { ids: [], timer: null };
 
 function crewmateName(id: string): string | null {
-  return useSocialUi.getState().view.team?.members.find((m) => m.id === id)?.name ?? null;
+  for (const crew of useSocialUi.getState().view.crews) {
+    const member = crew.members.find((m) => m.id === id);
+    if (member) return member.name;
+  }
+  return null;
 }
 
 /** "Ayşe Projects'e girdi" (or "Ayşe ve 2 ekip arkadaşın…"), gathered over 5 s, with "Katıl". */
@@ -48,12 +55,16 @@ function showCrewArrival(id: string) {
   if (!crewArrivals.ids.includes(id)) crewArrivals.ids.push(id);
   if (crewArrivals.timer !== null) return;
   crewArrivals.timer = window.setTimeout(() => {
-    const ids = crewArrivals.ids.filter((one) => crewmateName(one));
+    const { view } = useSocialUi.getState();
+    const now = Date.now();
+    // Muted meanwhile ("Sessize al" while the arrivals were gathered): nothing to say of them.
+    const ids = crewArrivals.ids.filter(
+      (one) => crewmateName(one) && crewmateHeardIn(one, view.crews, now),
+    );
     crewArrivals.ids = [];
     crewArrivals.timer = null;
     const first = ids[0];
-    // Muted meanwhile ("Sessize al" while the arrivals were gathered): nothing to say.
-    if (!first || mutedNow(useSocialUi.getState().view.crewNotifications, Date.now())) return;
+    if (!first || mutedNow(view.crewNotifications, now)) return;
     const name = crewmateName(first) ?? "";
     const text =
       ids.length > 1
@@ -115,7 +126,18 @@ function handleNotice(notice: SocialNotice) {
     return;
   }
   const prefs = useSocialPrefs.getState();
-  if (!wantsNotice(notice, ui.view.me?.status, prefs, ui.view.crewNotifications)) return;
+  if (
+    !wantsNotice(
+      notice,
+      ui.view.me?.status,
+      prefs,
+      ui.view.crewNotifications,
+      Date.now(),
+      ui.view.crews,
+    )
+  ) {
+    return;
+  }
   switch (notice.kind) {
     case "invite": {
       showInviteToast(notice.invite);
@@ -179,8 +201,7 @@ function handleNotice(notice: SocialNotice) {
       break;
     }
     case "crewCall": {
-      const team = useSocialUi.getState().view.team;
-      const text = callSentence(notice.call, team, i18n.t);
+      const text = callSentenceOf(notice.call, useSocialUi.getState().view.crews, i18n.t);
       void notifyOutside(text);
       announce(text);
       // The open panel shows it already, with its answers (the crew page and the list).
@@ -188,10 +209,12 @@ function handleNotice(notice: SocialNotice) {
       break;
     }
     case "crewCallJoin": {
-      const team = useSocialUi.getState().view.team;
-      const name =
-        team?.members.find((m) => m.id === notice.call.from)?.name ?? notice.call.name ?? "";
-      const text = i18n.t("teams.call.arrived", { name });
+      const { name } = callerIn(notice.call, useSocialUi.getState().view.crews);
+      const where = callWhere(notice.call);
+      const text =
+        where.kind === "server"
+          ? i18n.t("crews.call.arrivedAt", { name, host: where.host })
+          : i18n.t("teams.call.arrived", { name });
       showCallToast(notice.call, true);
       void notifyOutside(text);
       announce(text);
@@ -415,6 +438,7 @@ export function SocialHost() {
       <FriendsSheet />
       <RestoreDialog />
       <JoinDialog />
+      <CrewCallDialog />
     </>
   );
 }

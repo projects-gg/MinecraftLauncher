@@ -1,7 +1,9 @@
 // The crew in the friend list: its header (the crew's mark, name, tinted tag, crewmates online, a
 // struck-through bell while muted; folds like a category; the arrow opens the crew page; its menu
 // opens, folds, calls the crew, shares the code, invites, edits, mutes and leaves, each where the
-// crew and the service let the player) and invites to other crews, answered in place.
+// crew and the service let the player) and invites to other crews, answered in place. With several
+// crews (TEAM4) each has its own header, in the player's order: its menu also makes it the primary
+// crew or moves it up or down (Alt+↑/↓ on the header), and its bell is its own.
 import {
   Bell,
   BellSlash,
@@ -13,12 +15,13 @@ import {
   MegaphoneSimple,
   PencilSimple,
   SignOut,
+  Star,
   Trash,
   UserPlus,
   UsersThree,
   X,
 } from "@phosphor-icons/react";
-import { Button, ContextMenu, cn, IconButton, Menu, type MenuItem, toast } from "@pl/ui";
+import { Button, ContextMenu, cn, IconButton, Menu, type MenuItem, Tooltip, toast } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { type KeyboardEvent, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -27,9 +30,11 @@ import { api } from "@/lib/api";
 import type { SocialTeam, TeamInvite } from "@/lib/api/social-types";
 import { formatRelative } from "@/lib/format";
 import { attempt, copyText } from "./actions";
-import { callCrew } from "./call-actions";
-import { callWaitUntil, liveCalls } from "./calls";
+import { callOrAsk } from "./call-actions";
+import { callNames, callWaitUntil, liveCalls } from "./calls";
 import { muteItems, unmuteCrew, useCrewMute } from "./crew-notify";
+import { makeMainCrew, stepCrew } from "./crew-order";
+import { canAddCrew } from "./crews";
 import { openMenuFromKey } from "./menu-key";
 import { rowsOf, teamMenu } from "./menus";
 import { pop, swap, useSocialMotion } from "./motion";
@@ -45,6 +50,7 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
   const { t } = useTranslation();
   const friends = useSocialUi((s) => s.view.friends);
   const crew = useSocialUi((s) => s.view.crew);
+  const crews = useSocialUi((s) => s.view.crews);
   const calls = useSocialUi((s) => s.view.calls);
   const refusedUntil = useSocialUi((s) => s.callRefusedUntil);
   const lastCallAt = useSocialUi((s) => s.lastCallAt);
@@ -53,21 +59,26 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
   const members = new Set(team.members.map((m) => m.id));
   const friendsOutside = friends.filter((f) => !members.has(f.id)).length;
   const rights = crewRights(team, crew);
-  const mute = useCrewMute();
-  // A call that is on (anyone's) takes the button's place on the crew page: none here either.
+  const mute = useCrewMute(team.id);
+  // A call on in this crew (anyone's) takes the button's place on the crew page: none here either.
   const call =
-    !rights.call || liveCalls(calls, now).length
+    !rights.call || liveCalls(calls, now).some((open) => callNames(open, team, crews))
       ? "hidden"
       : callWaitUntil(calls, refusedUntil, lastCallAt) > now
         ? "waiting"
         : "ready";
+  const at = crews.findIndex((c) => c.id === team.id);
   const plan = teamMenu({
     team,
     friendsOutside,
     call,
     canInvite: rights.invite,
     canEdit: rights.look,
-    mute: mute.settings ? (mute.muted ? "muted" : "unmuted") : "hidden",
+    mute: mute.target || mute.settings ? (mute.muted ? "muted" : "unmuted") : "hidden",
+    order:
+      crew.multi && crews.length > 1 && at >= 0
+        ? { first: at === 0, last: at === crews.length - 1 }
+        : undefined,
   });
   return rowsOf(plan, (row): MenuItem | null => {
     switch (row.action) {
@@ -75,27 +86,41 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
         return {
           label: t("teams.mute.action"),
           icon: <BellSlash size={16} />,
-          items: muteItems(t),
+          items: muteItems(t, mute.target),
           onSelect: () => {},
         };
       case "unmute":
         return {
           label: t("teams.mute.undo"),
           icon: <Bell size={16} />,
-          onSelect: () => void unmuteCrew(),
+          onSelect: () => void unmuteCrew(mute.target),
         };
       case "call":
         return {
           label: t("teams.call.start"),
           icon: <MegaphoneSimple size={16} />,
           disabled: row.disabled,
-          onSelect: () => void callCrew(),
+          onSelect: () => void callOrAsk([team.id]),
         };
       case "open":
         return {
           label: t("teams.open"),
           icon: <UsersThree size={16} />,
-          onSelect: () => openTeam(),
+          onSelect: () => openTeam(undefined, team.id),
+        };
+      case "makeMain":
+        return {
+          label: t("crews.makeMain"),
+          icon: <Star size={16} />,
+          onSelect: () => makeMainCrew(team.id),
+        };
+      case "moveUp":
+      case "moveDown":
+        return {
+          label: row.action === "moveUp" ? t("crews.moveUp") : t("crews.moveDown"),
+          shortcut: row.action === "moveUp" ? "Alt ↑" : "Alt ↓",
+          disabled: row.disabled,
+          onSelect: () => stepCrew(team.id, row.action === "moveUp" ? -1 : 1),
         };
       case "toggle":
         return {
@@ -119,13 +144,13 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
           label: t("teams.invite.title"),
           icon: <UserPlus size={16} />,
           disabled: row.disabled,
-          onSelect: () => openTeam("invite"),
+          onSelect: () => openTeam("invite", team.id),
         };
       case "edit":
         return {
           label: t("friendMenus.editTeam"),
           icon: <PencilSimple size={16} />,
-          onSelect: () => openTeam("edit"),
+          onSelect: () => openTeam("edit", team.id),
         };
       case "leave":
       case "close":
@@ -140,7 +165,7 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
           icon: row.action === "leave" ? <SignOut size={16} /> : <Trash size={16} />,
           danger: true,
           // Asked on the team page, in place, with one sentence.
-          onSelect: () => openTeam("leave"),
+          onSelect: () => openTeam("leave", team.id),
         };
     }
   });
@@ -163,7 +188,9 @@ export function TeamHeader({
   const { reduce } = useSocialMotion();
   const online = teammatesOnline(team);
   const items = useTeamItems(team, folded, onToggle);
-  const { muted } = useCrewMute();
+  const { muted: own, target, allMuted } = useCrewMute(team.id);
+  const muted = own || (Boolean(target) && allMuted);
+  const multi = useSocialUi((s) => s.view.crew.multi && s.view.crews.length > 1);
   return (
     <ContextMenu items={items}>
       <div className="group/team flex items-center gap-1 pt-3 pr-1 pb-1">
@@ -177,7 +204,19 @@ export function TeamHeader({
           })}
           onClick={onToggle}
           onKeyDown={(event) => {
-            if (!openMenuFromKey(event)) onKeyDown?.(event);
+            if (openMenuFromKey(event)) return;
+            // Not with Ctrl: Windows reports AltGr as Ctrl+Alt (Turkish Q types with it).
+            if (
+              multi &&
+              event.altKey &&
+              !event.ctrlKey &&
+              (event.key === "ArrowUp" || event.key === "ArrowDown")
+            ) {
+              event.preventDefault();
+              stepCrew(team.id, event.key === "ArrowUp" ? -1 : 1);
+              return;
+            }
+            onKeyDown?.(event);
           }}
           className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-1.5 text-left outline-none transition-colors duration-150 hover:bg-white/[0.04] focus-visible:ring-2 focus-visible:ring-gold-300"
         >
@@ -233,10 +272,15 @@ export function TeamHeader({
   );
 }
 
-/** An invite to a crew: its mark and name, who sent it, "Kabul et" and ×. */
+/** An invite to a crew: its mark and name, who sent it, "Kabul et" and ×. At the crew limit (several
+ * crews) "Kabul et" waits and says why; × still declines. */
 export function TeamInviteRow({ invite }: { invite: TeamInvite }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
+  const full = useSocialUi(
+    (s) => s.view.crew.multi && !canAddCrew(s.view.crews, s.view.crewLimit, true),
+  );
+  const limit = useSocialUi((s) => s.view.crewLimit);
   const act = async (accept: boolean) => {
     setBusy(true);
     const done = await attempt(() =>
@@ -259,15 +303,19 @@ export function TeamInviteRow({ invite }: { invite: TeamInvite }) {
           {t("teams.invitedBy", { name: invite.from.name })}, {ago(invite.sentAt)}
         </span>
       </span>
-      <Button
-        size="sm"
-        variant="secondary"
-        icon={<Check size={14} weight="bold" />}
-        disabled={busy}
-        onClick={() => void act(true)}
-      >
-        {t("teams.accept")}
-      </Button>
+      <Tooltip content={t("crews.limit", { count: limit })} disabled={!full}>
+        <span className="inline-flex">
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<Check size={14} weight="bold" />}
+            disabled={busy || full}
+            onClick={() => void act(true)}
+          >
+            {t("teams.accept")}
+          </Button>
+        </span>
+      </Tooltip>
       <IconButton
         label={t("teams.decline")}
         icon={<X size={16} />}

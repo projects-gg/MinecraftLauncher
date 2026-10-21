@@ -34,7 +34,8 @@ use crate::auth::SessionToken;
 use crate::backoff::{Backoff, BackoffPolicy, jitter};
 use crate::error::{ErrorCode, Result, SocialError, parse_retry_after};
 use crate::model::{
-    FriendGroups, PublicProfile, StatusMode, Team, TeamExit, TeamInvite, TeamNotifications,
+    CrewMute, FriendGroups, PublicProfile, StatusMode, Team, TeamExit, TeamInvite,
+    TeamNotifications,
 };
 use crate::protocol::{
     CallAnswer, CallEndReason, ClientMessage, CrewCall, Invite, LocalStatus, Presence,
@@ -103,10 +104,12 @@ pub enum PresenceEvent {
     },
     /// A friend's or a teammate's presence changed.
     Presence(Presence),
-    /// Your team changed (members, roles, name, code), or you are no longer in one (None, with
-    /// the reason; `by` is who made the change).
+    /// One of your crews changed (members, roles, name, code), or you are no longer in it (None,
+    /// with the reason; `by` is who made the change). `crew` is its id (None from a service with
+    /// one crew per player: the message is about that crew).
     TeamChanged {
         team: Option<Team>,
+        crew: Option<String>,
         reason: Option<TeamExit>,
         by: Option<String>,
     },
@@ -114,8 +117,15 @@ pub enum PresenceEvent {
     TeamInvited(TeamInvite),
     /// Your friend categories changed on another device.
     GroupsChanged(FriendGroups),
-    /// Your crew notification settings changed (on any of your devices).
+    /// Your crew notification settings for all crews changed (on any of your devices).
     CrewNotifications(TeamNotifications),
+    /// Your mute of one crew changed (on any of your devices).
+    CrewMuted {
+        crew: String,
+        notifications: CrewMute,
+    },
+    /// You put your crews in another order on another device (the first is the primary crew).
+    CrewOrder(Vec<String>),
     /// A request was accepted (by either side): a new friend, with their current presence.
     FriendAdded {
         friend: PublicProfile,
@@ -168,7 +178,7 @@ pub enum InviteOutcome {
 /// What a crew call request asks of the service ("Ekibi çağır", an answer, "Bitir").
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum CrewRequest {
-    Call,
+    Call { crews: Option<Vec<String>> },
     Answer { call: String, answer: CallAnswer },
     End { call: String },
 }
@@ -247,12 +257,15 @@ impl PresenceControl {
         }
     }
 
-    /// "Ekibi çağır" (limits: one open call among teammates who see each other, one every 5
-    /// minutes and 10 a day per player). The call itself arrives as [`PresenceEvent::Call`]
-    /// before this returns. Fails with `RateLimited` (with the wait), `Refused` `call_active` or
-    /// `team_not_found`, or `Unavailable` while disconnected.
-    pub async fn call_crew(&self) -> Result<()> {
-        self.crew(CrewRequest::Call).await
+    /// "Ekibi çağır": `crews` names the crews it calls (a service with several crews), None the
+    /// primary one. Limits: only from a multiplayer server, one open call per player and per crew
+    /// among teammates who see each other, one every 5 minutes and 10 a day per player, however
+    /// many crews it names. The call itself arrives as [`PresenceEvent::Call`] before this
+    /// returns. Fails with `RateLimited` (with the wait), `Refused` (`call_needs_server`,
+    /// `call_server_hidden`, `call_active`, `team_not_found`, `team_not_permitted`), or
+    /// `Unavailable` while disconnected.
+    pub async fn call_crew(&self, crews: Option<Vec<String>>) -> Result<()> {
+        self.crew(CrewRequest::Call { crews }).await
     }
 
     /// Answers (or changes the answer to) a teammate's call. `Refused` `call_not_found` when the
@@ -377,8 +390,8 @@ impl PresenceHandle {
     }
 
     /// "Ekibi çağır"; see [`PresenceControl::call_crew`].
-    pub async fn call_crew(&self) -> Result<()> {
-        self.control.call_crew().await
+    pub async fn call_crew(&self, crews: Option<Vec<String>>) -> Result<()> {
+        self.control.call_crew(crews).await
     }
 
     /// See [`PresenceControl::answer_call`].
@@ -698,7 +711,7 @@ async fn session(
 
 fn crew_message(request: CrewRequest, rid: u32) -> ClientMessage {
     match request {
-        CrewRequest::Call => ClientMessage::Call { rid },
+        CrewRequest::Call { crews } => ClientMessage::Call { crews, rid },
         CrewRequest::Answer { call, answer } => ClientMessage::CallAnswer { call, answer, rid },
         CrewRequest::End { call } => ClientMessage::CallEnd { call, rid },
     }
@@ -756,7 +769,9 @@ async fn on_text(
             invites,
             calls,
             now,
+            caps,
         } => {
+            tracing::debug!(?caps, "presence connected");
             state.greeted = true;
             // Every connection starts as "launcher" on the service.
             state.sent = Some(LocalStatus::Launcher);
@@ -798,12 +813,30 @@ async fn on_text(
         ServerMessage::Invite { invite } => PresenceEvent::Invite(invite),
         ServerMessage::Invites { invites } => PresenceEvent::QueuedInvites(invites),
         ServerMessage::Status { status } => PresenceEvent::StatusChanged(status),
-        ServerMessage::Team { team, reason, by } => PresenceEvent::TeamChanged { team, reason, by },
+        ServerMessage::Team {
+            team,
+            crew,
+            reason,
+            by,
+        } => PresenceEvent::TeamChanged {
+            team,
+            crew,
+            reason,
+            by,
+        },
         ServerMessage::TeamInvite { invite } => PresenceEvent::TeamInvited(invite),
         ServerMessage::Groups { groups } => PresenceEvent::GroupsChanged(groups),
         ServerMessage::TeamNotifications { notifications } => {
             PresenceEvent::CrewNotifications(notifications)
         }
+        ServerMessage::CrewNotifications {
+            crew,
+            notifications,
+        } => PresenceEvent::CrewMuted {
+            crew,
+            notifications,
+        },
+        ServerMessage::CrewOrder { order } => PresenceEvent::CrewOrder(order),
         ServerMessage::Ack { rid, delivered } => {
             match rid.and_then(|rid| pending.remove(&rid)) {
                 Some(Reply::Invite(reply)) => {
@@ -854,7 +887,7 @@ fn socket_error(code: &str, retry_after: Option<u64>) -> SocialError {
         }
         "friend_not_found" | "team_not_found" | "call_not_found" => 404,
         "team_not_permitted" => 403,
-        "call_active" => 409,
+        "call_active" | "call_needs_server" | "call_server_hidden" => 409,
         _ => 400,
     };
     SocialError::Refused {
@@ -908,6 +941,7 @@ mod tests {
         #[allow(clippy::result_large_err)]
         let callback = move |request: &Request, response: Response| {
             let mut log = seen.lock().unwrap();
+            log.push((":uri".to_owned(), request.uri().to_string()));
             for (name, value) in request.headers() {
                 log.push((name.to_string(), value.to_str().unwrap_or("").to_owned()));
             }
@@ -979,6 +1013,12 @@ mod tests {
                 headers
                     .iter()
                     .any(|(k, v)| k == "user-agent" && v == "ProjectsLauncher/test")
+            );
+            // What this launcher understands rides on the address (older services ignore it).
+            assert!(
+                headers
+                    .iter()
+                    .any(|(k, v)| k == ":uri" && v == "/v1/presence?caps=callServer,crews")
             );
         }
         send_json(&mut server, hello()).await;
@@ -1229,13 +1269,24 @@ mod tests {
             other => panic!("unexpected {other:?}"),
         }
 
-        // "Ekibi çağır": the own call arrives first, then the ack.
+        // "Ekibi çağır" to two crews: the own call arrives first, then the ack.
         let call = tokio::spawn({
             let control = handle.control();
-            async move { control.call_crew().await }
+            async move {
+                control
+                    .call_crew(Some(vec![
+                        "0a1b2c3d4e5f6a7b".into(),
+                        "9f8e7d6c5b4a3f2e".into(),
+                    ]))
+                    .await
+            }
         });
         let sent = next_json(&mut server).await;
         assert_eq!(sent["t"], "call");
+        assert_eq!(
+            sent["crews"],
+            serde_json::json!(["0a1b2c3d4e5f6a7b", "9f8e7d6c5b4a3f2e"])
+        );
         send_json(
             &mut server,
             serde_json::json!({"t": "call", "call": {"id": "c1", "from": "100",
@@ -1273,9 +1324,11 @@ mod tests {
         );
         let again = tokio::spawn({
             let control = handle.control();
-            async move { control.call_crew().await }
+            async move { control.call_crew(None).await }
         });
         let sent = next_json(&mut server).await;
+        // Without crews: the primary one (and the only form an older service knows).
+        assert!(sent.get("crews").is_none());
         send_json(
             &mut server,
             serde_json::json!({"t": "error", "rid": sent["rid"], "code": "rate_limited",
@@ -1285,6 +1338,21 @@ mod tests {
         assert_eq!(
             again.await.unwrap().unwrap_err().retry_after(),
             Some(Duration::from_secs(240))
+        );
+        // Not on a multiplayer server (CALL1): a refusal with its own code.
+        let away = tokio::spawn({
+            let control = handle.control();
+            async move { control.call_crew(None).await }
+        });
+        let sent = next_json(&mut server).await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "error", "rid": sent["rid"], "code": "call_needs_server"}),
+        )
+        .await;
+        assert_eq!(
+            away.await.unwrap().unwrap_err().code(),
+            Some(&ErrorCode::CallNeedsServer)
         );
 
         // Answers and ends arrive as events; an unknown answer is skipped.
@@ -1347,6 +1415,32 @@ mod tests {
                 mute_until: None
             })
         );
+        // One crew muted, and the crews in a new order, on another device.
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "crew_notifications", "crew": "9f8e7d6c5b4a3f2e",
+                "notifications": {"muted": true, "muteUntil": 1_792_600_000}}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::CrewMuted {
+                crew: "9f8e7d6c5b4a3f2e".into(),
+                notifications: CrewMute {
+                    muted: true,
+                    mute_until: Some(1_792_600_000)
+                }
+            }
+        );
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "crew_order", "order": ["9f8e7d6c5b4a3f2e", "0a1b2c3d4e5f6a7b"]}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::CrewOrder(vec!["9f8e7d6c5b4a3f2e".into(), "0a1b2c3d4e5f6a7b".into()])
+        );
 
         // While the connection is down (a flood closes it for a minute), a call fails at once.
         server
@@ -1360,7 +1454,7 @@ mod tests {
             handle.next_event().await.unwrap(),
             PresenceEvent::Disconnected { retry_in } if retry_in >= Duration::from_secs(60)
         ));
-        let error = handle.call_crew().await.unwrap_err();
+        let error = handle.call_crew(None).await.unwrap_err();
         assert!(matches!(error, SocialError::Unavailable { .. }));
         handle.shutdown().await;
     }

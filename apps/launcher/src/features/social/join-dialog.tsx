@@ -1,5 +1,5 @@
 // "Katıl" on a "Birlikte oyna" invite (its toast or its row in the list), and "Geliyorum" to a crew
-// call from projects.gg (joinCall). With the game closed:
+// call on a server (joinCall). With the game closed:
 // one question, "Minecraft açılsın mı?", and "Evet" starts the game straight into the inviter's
 // server (projects.gg as every "Katıl" does; another server with the instance OYNA would start).
 // With a game open or opening it is never closed for this (unsaved singleplayer progress would be
@@ -15,6 +15,7 @@ import type { SocialInvite } from "@/lib/api/social-types";
 import i18n from "@/lib/i18n";
 import { useLaunch } from "@/stores/launch";
 import { copyText } from "./actions";
+import type { CallWhere } from "./crews";
 import { gameBusy, joinProjects, joinServer } from "./join";
 import { type JoinTarget, joinStep, joinTarget, targetAddress, targetName } from "./play-together";
 import { useSocialUi } from "./store";
@@ -43,12 +44,18 @@ export function joinInvite(invite: SocialInvite) {
 }
 
 /**
- * "Geliyorum" to a crew call from projects.gg, or its "Katıl": the same question as an invite's
- * (the game opens straight into Projects, or the open game is never closed for it). Already on
- * Projects, the answer says it all.
+ * "Geliyorum" to a crew call, or its "Katıl": the same question as an invite's (the game opens
+ * straight into the caller's server, projects.gg or another one, or the open game is never closed
+ * for it). Already there, the answer says it all.
  */
-export function joinCall() {
-  const target: JoinTarget = { kind: "projects" };
+export function joinCall(where: CallWhere = { kind: "projects" }) {
+  const target: JoinTarget | null =
+    where.kind === "projects"
+      ? { kind: "projects" }
+      : where.kind === "server"
+        ? joinTarget({ where: "other", host: where.host })
+        : null;
+  if (!target) return;
   const busy = gameBusy(useLaunch.getState().phase.kind);
   const step = joinStep(target, busy, useSocialUi.getState().view.activity);
   if (step === "already") return;

@@ -1,6 +1,7 @@
 // The friends panel: a sheet from the right, like the account center. The header carries the
 // player's own card and status; pages (list, add, settings) slide in from the side they belong
-// to. Signed out it is the opt-in screen; while a saved session is checked, skeletons.
+// to. Signed out it is the opt-in screen; while a saved session is checked, skeletons. With several
+// crews (TEAM4) the crew page is "Ekipler" and its bell is the crew's on screen.
 import { CaretLeft, GearSix, UserPlus, UsersThree, X } from "@phosphor-icons/react";
 import {
   EntranceGate,
@@ -25,7 +26,7 @@ import { openPanelMenuFromKey, PanelContextMenu, PanelMenuButton } from "./panel
 import { SocialSettings } from "./settings-page";
 import { MeCard } from "./status-menu";
 import { type SocialPage, useSocialUi } from "./store";
-import { TeamPage } from "./team-page";
+import { TeamPage, useShownCrewId } from "./team-page";
 
 function HeaderSkeleton() {
   return (
@@ -43,7 +44,8 @@ function Header({ page }: { page: SocialPage | "consent" | "restoring" }) {
   const { t } = useTranslation();
   const me = useSocialUi((s) => s.view.me);
   const teams = useSocialUi((s) => s.view.teams);
-  const inCrew = useSocialUi((s) => Boolean(s.view.team));
+  const several = useSocialUi((s) => s.view.crew.multi && s.view.crews.length > 1);
+  const shownCrew = useShownCrewId();
   const goTo = useSocialUi((s) => s.goTo);
   const sub = page === "add" || page === "settings" || page === "team";
   // The crew card says the crew's name in large: the header just says where this is.
@@ -51,7 +53,9 @@ function Header({ page }: { page: SocialPage | "consent" | "restoring" }) {
     page === "add"
       ? t("social.add.title")
       : page === "team"
-        ? t("teams.title")
+        ? several
+          ? t("crews.title")
+          : t("teams.title")
         : t("social.settings.title");
   return (
     <header className="flex h-[68px] shrink-0 items-center gap-2 border-b border-white/8 pr-3 pl-5">
@@ -92,12 +96,12 @@ function Header({ page }: { page: SocialPage | "consent" | "restoring" }) {
           </motion.div>
         </AnimatePresence>
       </div>
-      {page === "team" && inCrew ? <CrewNotifyButton /> : null}
+      {page === "team" && shownCrew ? <CrewNotifyButton crew={shownCrew} /> : null}
       {page === "list" && me ? (
         <>
           {teams ? (
             <IconButton
-              label={t("teams.title")}
+              label={several ? t("crews.title") : t("teams.title")}
               icon={<UsersThree size={19} />}
               onClick={() => goTo("team")}
             />

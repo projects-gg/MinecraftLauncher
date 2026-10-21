@@ -877,39 +877,55 @@ export const commands = {
 	 */
 	socialTeamCreate: (name: string, tag: string, emblem: string, color: string | null, frame: string | null, motto: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_create", { name, tag, emblem, color, frame, motto })),
 	/**
-	 *  Renames the crew, changes its tag, emblem, look or permissions (the leader; a moderator the
-	 *  look where the crew lets them); unset fields stay, `motto: ""` takes the motto away.
+	 *  Renames one of the player's crews (`team`), changes its tag, emblem, look or permissions (the
+	 *  leader; a moderator the look where the crew lets them); unset fields stay, `motto: ""` takes
+	 *  the motto away.
 	 */
-	socialTeamEdit: (name: string | null, tag: string | null, emblem: string | null, color: string | null, frame: string | null, motto: string | null, permissions: {
+	socialTeamEdit: (team: string, name: string | null, tag: string | null, emblem: string | null, color: string | null, frame: string | null, motto: string | null, permissions: {
 	invite?: PermissionLevel | null,
 	call?: PermissionLevel | null,
 	kick?: PermissionLevel | null,
 	edit?: PermissionLevel | null,
-} | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_edit", { name, tag, emblem, color, frame, motto, permissions })),
-	/**  Makes a member a moderator, or a moderator a member again (leader). */
-	socialTeamModerator: (id: string, moderator: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_moderator", { id, moderator })),
+} | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_edit", { team, name, tag, emblem, color, frame, motto, permissions })),
 	/**
-	 *  The player's crew notification settings, on a service that keeps them: "Sessize al" (until
-	 *  `muteUntil`, or until unmuted without it), "Sesi aç" (`muted: false`), crew calls on or off.
+	 *  Makes a member of one of the player's crews a moderator, or a moderator a member again
+	 *  (leader).
+	 */
+	socialTeamModerator: (team: string, id: string, moderator: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_moderator", { team, id, moderator })),
+	/**
+	 *  The player's crew notification settings for all crews, on a service that keeps them: "Sessize
+	 *  al" (until `muteUntil`, or until unmuted without it), "Sesi aç" (`muted: false`), crew calls on
+	 *  or off.
 	 */
 	socialTeamNotifications: (change: TeamNotificationsEdit_Deserialize) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_notifications", { change })),
-	/**  "Ekibi çağır". A wait (called too recently) and an open call are answers, not errors. */
-	socialTeamCall: () => typedError<CallOutcome, CmdError>(__TAURI_INVOKE("social_team_call")),
+	/**
+	 *  "Sessize al" for one of the player's crews (until `muteUntil`, or until unmuted without it) or
+	 *  "Sesi aç", on a service with several crews.
+	 */
+	socialTeamMute: (team: string, change: CrewMuteEdit_Deserialize) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_mute", { team, change })),
+	/**  The player's crews in a new order (each once; the first becomes the primary crew). */
+	socialTeamOrder: (order: string[]) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_order", { order })),
+	/**
+	 *  "Ekibi çağır" for `crews` (empty: the primary crew). Waiting (called too recently), an open
+	 *  call and not being on a multiplayer server (CALL1) are answers, not errors.
+	 */
+	socialTeamCall: (crews: string[]) => typedError<CallOutcome, CmdError>(__TAURI_INVOKE("social_team_call", { crews })),
 	/**  "Geliyorum", "Birazdan" or "Gelemem" to a teammate's call. False: the call is gone. */
 	socialTeamCallAnswer: (call: string, answer: CallAnswer) => typedError<boolean, CmdError>(__TAURI_INVOKE("social_team_call_answer", { call, answer })),
 	/**  "Bitir": ends the player's own call. */
 	socialTeamCallEnd: (call: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_call_end", { call })),
-	/**  Ends the team for everyone (founder). */
-	socialTeamDisband: () => typedError<null, CmdError>(__TAURI_INVOKE("social_team_disband")),
-	socialTeamLeave: () => typedError<null, CmdError>(__TAURI_INVOKE("social_team_leave")),
-	/**  A new team code (founder); the old one stops working. */
-	socialTeamRotateCode: () => typedError<string, CmdError>(__TAURI_INVOKE("social_team_rotate_code")),
-	/**  Invites a friend to the player's team. */
-	socialTeamInvite: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_invite", { id })),
-	/**  Removes a member (founder); the code is renewed with it. */
-	socialTeamRemove: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_remove", { id })),
-	/**  Hands the founder role to another member. */
-	socialTeamTransfer: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_transfer", { id })),
+	/**  Ends one of the player's crews for everyone (founder). */
+	socialTeamDisband: (team: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_disband", { team })),
+	/**  Leaves one of the player's crews. */
+	socialTeamLeave: (team: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_leave", { team })),
+	/**  A new code for one of the player's crews (founder); the old one stops working. */
+	socialTeamRotateCode: (team: string) => typedError<string, CmdError>(__TAURI_INVOKE("social_team_rotate_code", { team })),
+	/**  Invites a friend to one of the player's crews. */
+	socialTeamInvite: (team: string, id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_invite", { team, id })),
+	/**  Removes a member from one of the player's crews; the code is renewed with it. */
+	socialTeamRemove: (team: string, id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_remove", { team, id })),
+	/**  Hands the founder role of one of the player's crews to another member. */
+	socialTeamTransfer: (team: string, id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_transfer", { team, id })),
 	socialTeamLookup: (code: string) => typedError<TeamLookupView, CmdError>(__TAURI_INVOKE("social_team_lookup", { code })),
 	socialTeamJoin: (code: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_join", { code })),
 	socialTeamAccept: (team: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_accept", { team })),
@@ -1259,9 +1275,10 @@ export type CallAnswerView = {
 };
 
 /**
- *  What a crew call asks: come to projects.gg, where the caller plays, or "are you ready?" (the
- *  caller is in the launcher or elsewhere). It follows the caller's status. A kind this version
- *  does not know reads as `Ready` (an answer, nothing to join).
+ *  What a crew call asks: come where the caller plays, or "are you ready?" (a call from before
+ *  CALL1, or one of another server for a launcher that does not know `callServer`). With
+ *  `callServer` it is always `Join` and the call carries its server. A kind this version does not
+ *  know reads as `Ready` (an answer, nothing to join).
  */
 export type CallKind = "join" | "ready";
 
@@ -1272,7 +1289,24 @@ export type CallOutcome =
 /**  Called too recently (every 5 minutes, 10 a day): again in this many seconds. */
 { status: "wait"; seconds: number } | 
 /**  A call is open already (the player's own or a teammate's). */
-{ status: "active" };
+{ status: "active" } | 
+/**  Not on a multiplayer server (CALL1): nothing was sent, or the service said so. */
+{ status: "needsServer" } | 
+/**  On another server whose address is not shared (CALL1). */
+{ status: "serverHidden" };
+
+/**
+ *  Where "Ekibi çağır" stands (CALL1): a call starts only while the player plays, in a game this
+ *  launcher started, on a multiplayer server: projects.gg always, another server only while its
+ *  address is shared with friends ("Başka sunuculardaysam adresini göster").
+ */
+export type CallPlace = 
+/**  On projects.gg, or on another server whose address is shared. */
+"ok" | 
+/**  In the launcher, in singleplayer, or the server is not known (menus, a LAN world). */
+"needsServer" | 
+/**  On another server while its address is not shared. */
+"serverHidden";
 
 /**  A cape the profile owns. */
 export type Cape = {
@@ -1551,7 +1585,10 @@ export type CreatedInstance = {
 };
 
 /**  "Ekibi çağır": an open crew call. */
-export type CrewCallView = {
+export type CrewCallView = CrewCallView_Serialize | CrewCallView_Deserialize;
+
+/**  "Ekibi çağır": an open crew call. */
+export type CrewCallView_Deserialize = {
 	id: string,
 	/**  The caller: a teammate, or the player (`mine`). */
 	from: string,
@@ -1561,10 +1598,17 @@ export type CrewCallView = {
 	avatar: string | null,
 	avatarUrl: string | null,
 	/**
-	 *  `join`: the caller plays on projects.gg ("Geliyorum" can join them); `ready`: "Hazır
-	 *  mısın?".
+	 *  `join`: "Geliyorum" can join the caller where `server` says; `ready`: "Hazır mısın?" (a
+	 *  call from before CALL1: an answer, nothing to join).
 	 */
 	kind: CallKind,
+	/**  Where the call is: projects.gg, or another server with its address (None for `ready`). */
+	server: Game_Deserialize | null,
+	/**
+	 *  The player's crews the call names, in the player's order (every crew it names for their
+	 *  own call).
+	 */
+	crews: string[],
 	/**
 	 *  Unix seconds on this computer's clock (the service's times moved by the difference
 	 *  between the two clocks when the call arrived).
@@ -1575,6 +1619,77 @@ export type CrewCallView = {
 	answers: CallAnswerView[],
 	/**  The player's own answer (any of their devices). */
 	myAnswer: CallAnswer | null,
+};
+
+/**  "Ekibi çağır": an open crew call. */
+export type CrewCallView_Serialize = {
+	id: string,
+	/**  The caller: a teammate, or the player (`mine`). */
+	from: string,
+	mine: boolean,
+	/**  The caller's name and picture as the crew shows them (None when not in the crew list). */
+	name: string | null,
+	avatar: string | null,
+	avatarUrl: string | null,
+	/**
+	 *  `join`: "Geliyorum" can join the caller where `server` says; `ready`: "Hazır mısın?" (a
+	 *  call from before CALL1: an answer, nothing to join).
+	 */
+	kind: CallKind,
+	/**  Where the call is: projects.gg, or another server with its address (None for `ready`). */
+	server: Game_Serialize | null,
+	/**
+	 *  The player's crews the call names, in the player's order (every crew it names for their
+	 *  own call).
+	 */
+	crews: string[],
+	/**
+	 *  Unix seconds on this computer's clock (the service's times moved by the difference
+	 *  between the two clocks when the call arrived).
+	 */
+	startedAt: number,
+	endsAt: number,
+	/**  Who answered what, in the crew's order. */
+	answers: CallAnswerView[],
+	/**  The player's own answer (any of their devices). */
+	myAnswer: CallAnswer | null,
+};
+
+/**
+ *  The player's own mute of one crew (`crews[].notifications`, a service with
+ *  [`TEAM_FEATURE_MULTI`]): silent until `mute_until`, or until unmuted when that is None. Nobody
+ *  else sees it; a timed mute ends by itself.
+ */
+export type CrewMute = {
+	muted?: boolean,
+	/**  Unix seconds (the service's clock). */
+	muteUntil?: number | null,
+};
+
+/**
+ *  `PATCH /v1/teams/:id/notifications`: "Sessize al" for one crew until `mute_until` (or until
+ *  unmuted without it), or "Sesi aç" (`muted: false`).
+ */
+export type CrewMuteEdit = CrewMuteEdit_Serialize | CrewMuteEdit_Deserialize;
+
+/**
+ *  `PATCH /v1/teams/:id/notifications`: "Sessize al" for one crew until `mute_until` (or until
+ *  unmuted without it), or "Sesi aç" (`muted: false`).
+ */
+export type CrewMuteEdit_Deserialize = {
+	muted: boolean,
+	/**  Unix seconds, in the next 30 days; only with `muted: true`. */
+	muteUntil?: number | null,
+};
+
+/**
+ *  `PATCH /v1/teams/:id/notifications`: "Sessize al" for one crew until `mute_until` (or until
+ *  unmuted without it), or "Sesi aç" (`muted: false`).
+ */
+export type CrewMuteEdit_Serialize = {
+	muted: boolean,
+	/**  Unix seconds, in the next 30 days; only with `muted: true`. */
+	muteUntil?: number | null,
 };
 
 /**
@@ -4262,9 +4377,12 @@ name: string | null }) & { call?: never; friend?: never; id?: never; invite?: ne
  *  A teammate called the crew, live (never for the player's own call, on do-not-disturb or
  *  for a call that is only new to this launcher).
  */
-({ kind: "crewCall"; call: CrewCallView }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
-/**  The caller of a call the player said "Geliyorum" or "Birazdan" to is on projects.gg now. */
-({ kind: "crewCallJoin"; call: CrewCallView }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "crewCall"; call: CrewCallView_Deserialize }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+/**
+ *  The caller of a call the player said "Geliyorum" or "Birazdan" to moved: to projects.gg (a
+ *  call that was "Hazır mısın?"), or to another server (the call's `server` says where).
+ */
+({ kind: "crewCallJoin"; call: CrewCallView_Deserialize }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  A teammate (a friend or not) started playing on projects.gg. */
 ({ kind: "crewmateOnProjects"; id: string }) & { call?: never; friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; request?: never; restore?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
@@ -4294,9 +4412,12 @@ name: string | null }) & { call?: never; friend?: never; id?: never; invite?: ne
  *  A teammate called the crew, live (never for the player's own call, on do-not-disturb or
  *  for a call that is only new to this launcher).
  */
-({ kind: "crewCall"; call: CrewCallView }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
-/**  The caller of a call the player said "Geliyorum" or "Birazdan" to is on projects.gg now. */
-({ kind: "crewCallJoin"; call: CrewCallView }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+({ kind: "crewCall"; call: CrewCallView_Serialize }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
+/**
+ *  The caller of a call the player said "Geliyorum" or "Birazdan" to moved: to projects.gg (a
+ *  call that was "Hazır mısın?"), or to another server (the call's `server` says where).
+ */
+({ kind: "crewCallJoin"; call: CrewCallView_Serialize }) & { friend?: never; id?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | 
 /**  A teammate (a friend or not) started playing on projects.gg. */
 ({ kind: "crewmateOnProjects"; id: string }) & { call?: never; friend?: never; invite?: never; name?: never; reason?: never; request?: never; restore?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; friend?: never; id?: never; invite?: never; name?: never; request?: never; restore?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
@@ -4335,18 +4456,25 @@ export type SocialView_Deserialize = {
 	 *  while `teams`). The launcher uses each part only while it is listed.
 	 */
 	teamFeatures: string[],
-	/**  The player's team (only while `teams`). */
-	team: TeamView_Deserialize | null,
+	/**
+	 *  The player's crews in their order, the first being the primary crew (only while `teams`;
+	 *  at most one from a service without `multi`).
+	 */
+	crews: TeamView_Deserialize[],
+	/**  How many crews the player may be in (1 from a service without `multi`). */
+	crewLimit: number,
 	/**  Invites to teams, newest first (only while `teams`). */
 	teamInvites: TeamInviteView[],
 	/**
 	 *  Open crew calls the player sees, their own included (only while `teams` and the service
 	 *  offers calls). They end by themselves at `endsAt`: the launcher hides them then.
 	 */
-	calls: CrewCallView[],
+	calls: CrewCallView_Deserialize[],
+	/**  Whether "Ekibi çağır" may start from where the player is right now (CALL1). */
+	callPlace: CallPlace,
 	/**
-	 *  The player's crew notification settings, kept by the service (only while `teams` and the
-	 *  service offers `mute`; otherwise the launcher's own switches decide).
+	 *  The player's crew notification settings for all crews, kept by the service (only while
+	 *  `teams` and the service offers `mute`; otherwise the launcher's own switches decide).
 	 */
 	crewNotifications: CrewNotificationsView | null,
 };
@@ -4382,18 +4510,25 @@ export type SocialView_Serialize = {
 	 *  while `teams`). The launcher uses each part only while it is listed.
 	 */
 	teamFeatures: string[],
-	/**  The player's team (only while `teams`). */
-	team: TeamView_Serialize | null,
+	/**
+	 *  The player's crews in their order, the first being the primary crew (only while `teams`;
+	 *  at most one from a service without `multi`).
+	 */
+	crews: TeamView_Serialize[],
+	/**  How many crews the player may be in (1 from a service without `multi`). */
+	crewLimit: number,
 	/**  Invites to teams, newest first (only while `teams`). */
 	teamInvites: TeamInviteView[],
 	/**
 	 *  Open crew calls the player sees, their own included (only while `teams` and the service
 	 *  offers calls). They end by themselves at `endsAt`: the launcher hides them then.
 	 */
-	calls: CrewCallView[],
+	calls: CrewCallView_Serialize[],
+	/**  Whether "Ekibi çağır" may start from where the player is right now (CALL1). */
+	callPlace: CallPlace,
 	/**
-	 *  The player's crew notification settings, kept by the service (only while `teams` and the
-	 *  service offers `mute`; otherwise the launcher's own switches decide).
+	 *  The player's crew notification settings for all crews, kept by the service (only while
+	 *  `teams` and the service offers `mute`; otherwise the launcher's own switches decide).
 	 */
 	crewNotifications: CrewNotificationsView | null,
 };
@@ -4740,7 +4875,12 @@ export type TeamRelation = "none" |
 /**  The player blocked someone in it. */
 "blocked" | 
 /**  No room left. */
-"full";
+"full" | 
+/**
+ *  The player is in as many crews as they may be (only when the lookup asked with
+ *  `multi: true`).
+ */
+"limit";
 
 /**
  *  The wire keeps the first names: players see "Lider" (leader) for `founder`. A role this
@@ -4788,6 +4928,11 @@ export type TeamView_Deserialize = {
 	invited: string[],
 	/**  How many may be in a team. */
 	limit: number,
+	/**
+	 *  The player's own mute of this crew as it reads now (never muted from a service without
+	 *  `multi`; `crewNotifications` covers all crews).
+	 */
+	notifications: CrewMute,
 };
 
 export type TeamView_Serialize = {
@@ -4821,6 +4966,11 @@ export type TeamView_Serialize = {
 	invited: string[],
 	/**  How many may be in a team. */
 	limit: number,
+	/**
+	 *  The player's own mute of this crew as it reads now (never muted from a service without
+	 *  `multi`; `crewNotifications` covers all crews).
+	 */
+	notifications: CrewMute,
 };
 
 /**  Something in the launcher trash. */

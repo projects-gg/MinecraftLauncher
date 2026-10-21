@@ -25,9 +25,10 @@ use crate::codes::{crew_code, normalize_friend_code, normalize_team_code};
 use crate::error::{ErrorCode, Result, SocialError};
 use crate::game::{self, GameActivity};
 use crate::model::{
-    FIRST_EMBLEMS, FriendGroup, FriendGroups, MAX_FRIEND_GROUPS, ProfileUpdate, RequestOutcome,
-    SessionInfo, SettingsMeta, SettingsPrecondition, TEAM_FEATURE_CALLS, TEAM_FEATURE_LOOK,
-    TEAM_FEATURE_MUTE, TEAM_FEATURE_ROLES, TeamAnswer, TeamEdit, TeamLook, TeamNotificationsEdit,
+    CrewMuteEdit, FIRST_EMBLEMS, FriendGroup, FriendGroups, MAX_FRIEND_GROUPS, ProfileUpdate,
+    RequestOutcome, SessionInfo, SettingsMeta, SettingsPrecondition, TEAM_FEATURE_CALLS,
+    TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, TEAM_FEATURE_ROLES, TeamEdit,
+    TeamLook, TeamNotificationsEdit,
 };
 use crate::presence::{PresenceControl, PresenceEvent, PresenceOptions, StopReason};
 use crate::protocol::{CallAnswer, LocalStatus};
@@ -35,9 +36,9 @@ use crate::qr::{QrPath, qr_path};
 use crate::state::{Connection, SocialState};
 use crate::store::TokenStore;
 use crate::view::{
-    ActivityView, AuthPhase, CallOutcome, CrewNotificationsView, GroupMember, InviteResult,
-    LookupView, ProfileView, SendOutcome, SignInFailure, SocialNotice, SocialView, TeamLookupView,
-    me_view,
+    ActivityView, AuthPhase, CallOutcome, CallPlace, CrewNotificationsView, GroupMember,
+    InviteResult, LookupView, ProfileView, SendOutcome, SignInFailure, SocialNotice, SocialView,
+    TeamLookupView, me_view,
 };
 
 /// After a reconnect the friend list is fetched again only when it is older than this.
@@ -846,11 +847,12 @@ impl SocialService {
 
     // --- teams ----------------------------------------------------------------------------
 
-    fn current_team(&self) -> Result<String> {
+    /// One of the player's crews, by its id (else "not in a team": it went away meanwhile).
+    fn crew_id(&self, team: &str) -> Result<String> {
         self.lock()
             .state
-            .team()
-            .map(|team| team.id.clone())
+            .crew(team)
+            .map(|entry| entry.team.id.clone())
             .ok_or(SocialError::InvalidInput("not in a team"))
     }
 
@@ -859,9 +861,10 @@ impl SocialService {
         self.lock().state.offers(feature)
     }
 
-    /// Founds a team: a name, a tag (2-4 letters or digits), an emblem and, where the service
+    /// Founds a crew: a name, a tag (2-4 letters or digits), an emblem and, where the service
     /// offers looks, a colour, a frame and a motto. Without looks the look stays home and only
-    /// the first 20 emblems may be sent (an older service refuses the rest).
+    /// the first 20 emblems may be sent (an older service refuses the rest). Where the service
+    /// has several crews, one more below the crew limit (`limit_crews` at it).
     pub async fn create_team(
         &self,
         name: &str,
@@ -873,11 +876,12 @@ impl SocialService {
         if look.is_none() && !FIRST_EMBLEMS.contains(&emblem) {
             return Err(SocialError::InvalidInput("emblem"));
         }
+        let multi = self.offers(TEAM_FEATURE_MULTI);
         let (name, tag, emblem) = (name.to_owned(), tag.to_owned(), emblem.to_owned());
         let (answer, generation) = self
             .call(|session| async move {
                 session
-                    .create_team(&name, &tag, &emblem, look.as_ref())
+                    .create_team(&name, &tag, &emblem, look.as_ref(), multi)
                     .await
             })
             .await?;
@@ -885,11 +889,11 @@ impl SocialService {
         Ok(())
     }
 
-    /// Renames the team, changes its tag, emblem, look or permissions (the leader; a moderator
-    /// the look where the crew lets them). What the service cannot take (a look without looks,
-    /// permissions without roles) is left out; nothing left, nothing is sent.
-    pub async fn edit_team(&self, edit: TeamEdit) -> Result<()> {
-        let team = self.current_team()?;
+    /// Renames one of the player's crews, changes its tag, emblem, look or permissions (the
+    /// leader; a moderator the look where the crew lets them). What the service cannot take (a
+    /// look without looks, permissions without roles) is left out; nothing left, nothing is sent.
+    pub async fn edit_team(&self, team: &str, edit: TeamEdit) -> Result<()> {
+        let team = self.crew_id(team)?;
         let look = self.offers(TEAM_FEATURE_LOOK);
         if !look
             && edit
@@ -910,54 +914,63 @@ impl SocialService {
         Ok(())
     }
 
-    /// Ends the team for everyone (founder).
-    pub async fn disband_team(&self) -> Result<()> {
-        let team = self.current_team()?;
+    /// Ends one of the player's crews for everyone (founder).
+    pub async fn disband_team(&self, team: &str) -> Result<()> {
+        let team = self.crew_id(team)?;
+        let id = team.clone();
         let (_, generation) = self
             .call(|session| async move { session.disband_team(&team).await })
             .await?;
-        self.update(generation, |core| core.state.team_left());
+        self.update(generation, |core| core.state.team_left(&id));
         Ok(())
     }
 
-    /// Leaves the team (a founder with members hands the role on first).
-    pub async fn leave_team(&self) -> Result<()> {
-        let team = self.current_team()?;
+    /// Leaves one of the player's crews (a founder with members hands the role on first).
+    pub async fn leave_team(&self, team: &str) -> Result<()> {
+        let team = self.crew_id(team)?;
+        let id = team.clone();
         let (_, generation) = self
             .call(|session| async move { session.leave_team(&team).await })
             .await?;
-        self.update(generation, |core| core.state.team_left());
+        self.update(generation, |core| core.state.team_left(&id));
         Ok(())
     }
 
-    /// A new team code (founder); the old one stops working.
-    pub async fn rotate_team_code(&self) -> Result<String> {
-        let team = self.current_team()?;
+    /// A new code for one of the player's crews (founder); the old one stops working.
+    pub async fn rotate_team_code(&self, team: &str) -> Result<String> {
+        let team = self.crew_id(team)?;
+        let id = team.clone();
         let (code, generation) = self
             .call(|session| async move { session.rotate_team_code(&team).await })
             .await?;
         let shown = code.clone();
-        self.update(generation, |core| core.state.team_code(shown));
+        self.update(generation, |core| core.state.team_code(&id, shown));
         Ok(code)
     }
 
-    /// Invites a friend to the player's team.
-    pub async fn invite_to_team(&self, friend: &str) -> Result<()> {
-        let team = self.current_team()?;
+    /// Invites a friend to one of the player's crews.
+    pub async fn invite_to_team(&self, team: &str, friend: &str) -> Result<()> {
+        let team = self.crew_id(team)?;
+        let id = team.clone();
         let to = friend.to_owned();
         let (_, generation) = self
             .call(|session| async move { session.invite_to_team(&team, &to).await })
             .await?;
-        self.update(generation, |core| core.state.team_invite_sent(friend));
+        self.update(generation, |core| core.state.team_invite_sent(&id, friend));
         Ok(())
     }
 
     /// Makes a member a moderator, or a moderator a member again (leader; a service with roles).
-    pub async fn set_team_moderator(&self, member: &str, moderator: bool) -> Result<()> {
+    pub async fn set_team_moderator(
+        &self,
+        team: &str,
+        member: &str,
+        moderator: bool,
+    ) -> Result<()> {
         if !self.offers(TEAM_FEATURE_ROLES) {
             return Err(SocialError::InvalidInput("crew roles"));
         }
-        let team = self.current_team()?;
+        let team = self.crew_id(team)?;
         let member = member.to_owned();
         let (answer, generation) =
             self.call(|session| async move {
@@ -969,9 +982,9 @@ impl SocialService {
     }
 
     /// Removes a member (the leader anyone; a moderator plain members, where the crew lets
-    /// them). The code is renewed with it, so the team is read again.
-    pub async fn remove_team_member(&self, member: &str) -> Result<()> {
-        let team = self.current_team()?;
+    /// them). The code is renewed with it, so the crews are read again.
+    pub async fn remove_team_member(&self, team: &str, member: &str) -> Result<()> {
+        let team = self.crew_id(team)?;
         let member = member.to_owned();
         let (overview, generation) = self
             .call(|session| async move {
@@ -979,21 +992,13 @@ impl SocialService {
                 session.teams().await
             })
             .await?;
-        self.update(generation, |core| {
-            if let Some(settings) = overview.team_notifications {
-                core.state.set_team_notifications(settings);
-            }
-            core.state.team_answer(TeamAnswer {
-                team: overview.team,
-                invited: overview.invited,
-            });
-        });
+        self.update(generation, |core| core.state.set_teams(overview));
         Ok(())
     }
 
-    /// Hands the founder role to another member.
-    pub async fn transfer_team_founder(&self, member: &str) -> Result<()> {
-        let team = self.current_team()?;
+    /// Hands the founder role of one of the player's crews to another member.
+    pub async fn transfer_team_founder(&self, team: &str, member: &str) -> Result<()> {
+        let team = self.crew_id(team)?;
         let member = member.to_owned();
         let (answer, generation) = self
             .call(|session| async move { session.transfer_team_founder(&team, &member).await })
@@ -1002,14 +1007,60 @@ impl SocialService {
         Ok(())
     }
 
+    /// The player's crews in a new order (every crew once; the first becomes the primary crew),
+    /// on a service with several crews. Shown at once; when the service answers that the crews
+    /// changed meanwhile, the list is read again; any other failure puts the old order back.
+    pub async fn order_crews(&self, order: Vec<String>) -> Result<()> {
+        let (before, generation) = {
+            let mut core = self.lock();
+            if !core.state.offers(TEAM_FEATURE_MULTI) {
+                return Err(SocialError::InvalidInput("crew order"));
+            }
+            let before = core.state.crew_order();
+            let mut wanted = order.clone();
+            wanted.sort();
+            let mut known = before.clone();
+            known.sort();
+            if wanted != known {
+                return Err(SocialError::InvalidInput("crew order"));
+            }
+            if before == order {
+                return Ok(());
+            }
+            core.state.set_crew_order(&order);
+            (before, core.generation)
+        };
+        self.emit_view();
+        let sent = order.clone();
+        match self
+            .call(|session| async move { session.order_crews(&sent).await })
+            .await
+        {
+            Ok((saved, generation)) => {
+                self.update(generation, |core| core.state.set_crew_order(&saved));
+                Ok(())
+            }
+            Err(error) => {
+                self.update(generation, |core| core.state.set_crew_order(&before));
+                if error.code() == Some(&ErrorCode::CrewsChanged) {
+                    let service = self.clone();
+                    self.spawn(async move { service.refetch(generation).await });
+                }
+                Err(error)
+            }
+        }
+    }
+
     /// What a crew code leads to (counts against the daily code lookup quota). Takes `EKP-…`,
-    /// `TKM-…` or the symbols alone.
+    /// `TKM-…` or the symbols alone. Where the service has several crews, a player at the crew
+    /// limit reads `limit`.
     pub async fn lookup_team(&self, code: &str) -> Result<TeamLookupView> {
         let normalized =
             normalize_team_code(code).ok_or(SocialError::InvalidInput("not a team code"))?;
         let request = normalized.clone();
+        let multi = self.offers(TEAM_FEATURE_MULTI);
         let (lookup, _) = self
-            .call(|session| async move { session.lookup_team(&request).await })
+            .call(|session| async move { session.lookup_team(&request, multi).await })
             .await?;
         Ok(TeamLookupView {
             team_id: lookup.team.id,
@@ -1025,21 +1076,24 @@ impl SocialService {
         })
     }
 
-    /// Joins the team of a code.
+    /// Joins the crew of a code (one more, where the service has several crews).
     pub async fn join_team(&self, code: &str) -> Result<()> {
         let code = code.to_owned();
+        let multi = self.offers(TEAM_FEATURE_MULTI);
         let (answer, generation) = self
-            .call(|session| async move { session.join_team(&code).await })
+            .call(|session| async move { session.join_team(&code, multi).await })
             .await?;
         self.update(generation, |core| core.state.team_answer(answer));
         Ok(())
     }
 
-    /// Accepts an invite to a team. An invite that is gone leaves the list either way.
+    /// Accepts an invite to a crew (one more, where the service has several crews). An invite
+    /// that is gone leaves the list either way.
     pub async fn accept_team_invite(&self, team: &str) -> Result<()> {
         let id = team.to_owned();
+        let multi = self.offers(TEAM_FEATURE_MULTI);
         match self
-            .call(|session| async move { session.accept_team_invite(&id).await })
+            .call(|session| async move { session.accept_team_invite(&id, multi).await })
             .await
         {
             Ok((answer, generation)) => {
@@ -1103,6 +1157,31 @@ impl SocialService {
         Ok(())
     }
 
+    /// "Sessize al" for one of the player's crews (until a time, or until unmuted) or "Sesi aç",
+    /// on a service with several crews. The answer reaches the view; the player's other devices
+    /// hear it through the socket.
+    pub async fn set_crew_mute(&self, team: &str, edit: CrewMuteEdit) -> Result<()> {
+        {
+            let core = self.lock();
+            if !(core.teams
+                && core.state.teams_supported()
+                && core.state.offers(TEAM_FEATURE_MULTI))
+            {
+                return Err(SocialError::InvalidInput("crew mute"));
+            }
+        }
+        if !edit.valid_at(unix_now()) {
+            return Err(SocialError::InvalidInput("mute until"));
+        }
+        let team = self.crew_id(team)?;
+        let id = team.clone();
+        let (mute, generation) = self
+            .call(|session| async move { session.set_crew_mute(&team, &edit).await })
+            .await?;
+        self.update(generation, |core| core.state.set_crew_mute(&id, mute));
+        Ok(())
+    }
+
     // --- crew calls ("Ekibi çağır") ---------------------------------------------------------
 
     /// The presence control, while signed in to a crew of a service that offers calls.
@@ -1114,7 +1193,7 @@ impl SocialService {
         if !(core.teams && core.state.teams_supported() && core.state.offers(TEAM_FEATURE_CALLS)) {
             return Err(SocialError::InvalidInput("crew calls"));
         }
-        if core.state.team().is_none() {
+        if core.state.crews().is_empty() {
             return Err(SocialError::InvalidInput("not in a team"));
         }
         core.presence
@@ -1122,11 +1201,39 @@ impl SocialService {
             .ok_or(SocialError::Unavailable { retry_after: None })
     }
 
-    /// "Ekibi çağır" (one open call among teammates who see each other, one every 5 minutes, 10
-    /// a day). The call reaches the view through the socket before this returns.
-    pub async fn call_crew(&self) -> Result<CallOutcome> {
+    /// "Ekibi çağır" for `crews` (a service with several crews; one call however many it names)
+    /// or the primary crew (empty, or a service with one crew per player). Only from a multiplayer
+    /// server (CALL1): the launcher says why without asking the service when the player is not on
+    /// one, and the service checks again. One open call among teammates who see each other, one
+    /// every 5 minutes, 10 a day. The call reaches the view through the socket before this
+    /// returns.
+    pub async fn call_crew(&self, crews: Vec<String>) -> Result<CallOutcome> {
         let control = self.crew_presence()?;
-        match control.call_crew().await {
+        let (place, named) = {
+            let core = self.lock();
+            let share = core.state.me().is_some_and(|me| me.privacy.share_server);
+            let place = CallPlace::of(&core.activity, share);
+            // Only crews of the player's, each once; none named calls the primary one. Crews
+            // that all went away meanwhile call nobody else instead.
+            let asked = !crews.is_empty();
+            let mut named: Vec<String> = Vec::new();
+            for id in crews {
+                if core.state.crew(&id).is_some() && !named.contains(&id) {
+                    named.push(id);
+                }
+            }
+            if asked && named.is_empty() {
+                return Err(SocialError::InvalidInput("not in a team"));
+            }
+            let multi = core.state.offers(TEAM_FEATURE_MULTI);
+            (place, (multi && asked).then_some(named))
+        };
+        match place {
+            CallPlace::Ok => {}
+            CallPlace::NeedsServer => return Ok(CallOutcome::NeedsServer),
+            CallPlace::ServerHidden => return Ok(CallOutcome::ServerHidden),
+        }
+        match control.call_crew(named).await {
             Ok(()) => Ok(CallOutcome::Called),
             Err(SocialError::RateLimited { retry_after }) => Ok(CallOutcome::Wait {
                 seconds: retry_after
@@ -1136,6 +1243,12 @@ impl SocialService {
                     .max(1),
             }),
             Err(error) if error.code() == Some(&ErrorCode::CallActive) => Ok(CallOutcome::Active),
+            Err(error) if error.code() == Some(&ErrorCode::CallNeedsServer) => {
+                Ok(CallOutcome::NeedsServer)
+            }
+            Err(error) if error.code() == Some(&ErrorCode::CallServerHidden) => {
+                Ok(CallOutcome::ServerHidden)
+            }
             Err(error) if error.code() == Some(&ErrorCode::TeamNotFound) => {
                 // The crew went away in the meantime: the list is read again.
                 let generation = self.lock().generation;
@@ -1458,6 +1571,7 @@ fn build_view(core: &mut Core) -> SocialView {
     });
     let teams = core.teams && core.state.teams_supported();
     let calls = teams && core.state.offers(TEAM_FEATURE_CALLS);
+    let share_server = core.state.me().is_some_and(|me| me.privacy.share_server);
     SocialView {
         seq: core.seq,
         enabled: core.url.is_some(),
@@ -1479,7 +1593,12 @@ fn build_view(core: &mut Core) -> SocialView {
         } else {
             Vec::new()
         },
-        team: if teams { core.state.team_view() } else { None },
+        crews: if teams {
+            core.state.crew_views(now)
+        } else {
+            Vec::new()
+        },
+        crew_limit: core.state.crew_limit(),
         team_invites: if teams {
             core.state.team_invites()
         } else {
@@ -1490,6 +1609,7 @@ fn build_view(core: &mut Core) -> SocialView {
         } else {
             Vec::new()
         },
+        call_place: CallPlace::of(&core.activity, share_server),
         crew_notifications: if teams {
             core.state.team_notifications().map(|settings| {
                 let settings = settings.at(now);
@@ -1601,7 +1721,7 @@ mod tests {
 
     /// The presence socket is refused (an outage), so tests only see the HTTP side.
     fn presence_refused(path: &str) -> Option<MockReply> {
-        (path == "/v1/presence").then(|| {
+        path.starts_with("/v1/presence").then(|| {
             MockReply::json(503, r#"{"error":{"code":"unavailable","message":"x"}}"#)
                 .with_header("Retry-After", "600")
         })
@@ -1789,22 +1909,33 @@ mod tests {
         harness.service.configure(url(&server));
         let view = harness.until("friends", |view| view.loaded).await;
         // The service has teams, but the signed config has not turned them on.
-        assert!(!view.teams && view.team.is_none());
+        assert!(!view.teams && view.crews.is_empty());
         assert_eq!(view.groups.as_ref().unwrap().version, 0);
         harness.service.set_teams_enabled(true);
-        let team = harness.service.view().team.unwrap();
+        let view = harness.service.view();
+        // A service with one crew per player: its crew is the list, and the limit is one.
+        assert_eq!((view.crews.len(), view.crew_limit), (1, 1));
+        let team = &view.crews[0];
         assert_eq!(team.role, crate::model::TeamRole::Founder);
         assert!(team.members[0].me);
 
         harness
             .service
-            .invite_to_team("223456789012345678")
+            .invite_to_team("0123456789abcdef", "223456789012345678")
             .await
             .unwrap();
         assert_eq!(
-            harness.service.view().team.unwrap().invited,
+            harness.service.view().crews[0].invited,
             vec!["223456789012345678".to_owned()]
         );
+        // A crew the player is not in never reaches the service.
+        assert!(matches!(
+            harness
+                .service
+                .invite_to_team("fedcba9876543210", "223456789012345678")
+                .await,
+            Err(SocialError::InvalidInput("not in a team"))
+        ));
 
         let okul = FriendGroup {
             id: "okul".into(),
@@ -1895,7 +2026,7 @@ mod tests {
         let view = harness.until("friends", |view| view.loaded).await;
         // The Worker before crews' looks and calls: today's look, no calls, nothing new sent.
         assert!(view.team_features.is_empty() && view.calls.is_empty());
-        let team = view.team.unwrap();
+        let team = view.crews[0].clone();
         assert_eq!((team.color.as_str(), team.frame.as_str()), ("gold", "cut"));
         assert_eq!(team.code, "EKP-ABCD-EFGH");
         let look = TeamLook {
@@ -1919,23 +2050,29 @@ mod tests {
         // Only a look to change: nothing to send.
         harness
             .service
-            .edit_team(TeamEdit {
-                color: Some("teal".into()),
-                ..TeamEdit::default()
-            })
+            .edit_team(
+                "0123456789abcdef",
+                TeamEdit {
+                    color: Some("teal".into()),
+                    ..TeamEdit::default()
+                },
+            )
             .await
             .unwrap();
         harness
             .service
-            .edit_team(TeamEdit {
-                name: Some("Gece Kuşları".into()),
-                motto: Some("Merhaba".into()),
-                ..TeamEdit::default()
-            })
+            .edit_team(
+                "0123456789abcdef",
+                TeamEdit {
+                    name: Some("Gece Kuşları".into()),
+                    motto: Some("Merhaba".into()),
+                    ..TeamEdit::default()
+                },
+            )
             .await
             .unwrap();
         assert!(matches!(
-            harness.service.call_crew().await,
+            harness.service.call_crew(vec![]).await,
             Err(SocialError::InvalidInput("crew calls"))
         ));
         assert_eq!(
@@ -1962,11 +2099,14 @@ mod tests {
             .unwrap();
         harness
             .service
-            .edit_team(TeamEdit {
-                color: Some("teal".into()),
-                motto: Some(String::new()),
-                ..TeamEdit::default()
-            })
+            .edit_team(
+                "0123456789abcdef",
+                TeamEdit {
+                    color: Some("teal".into()),
+                    motto: Some(String::new()),
+                    ..TeamEdit::default()
+                },
+            )
             .await
             .unwrap();
         assert_eq!(
@@ -1976,9 +2116,20 @@ mod tests {
                 r#"{"color":"teal","motto":""}"#.to_owned(),
             ]
         );
-        // Calls are offered now, but the socket is down: the request fails quietly.
+        // Calls are offered now. In the launcher the player is told why without asking the
+        // service (CALL1), whatever service it is.
+        assert_eq!(
+            harness.service.call_crew(vec![]).await.unwrap(),
+            CallOutcome::NeedsServer
+        );
+        // On Projects the call goes out, but the socket is down: the request fails quietly.
+        harness.service.game_started(Some("play.projects.gg"));
+        harness
+            .service
+            .game_line("Connecting to play.projects.gg, 25565");
+        assert_eq!(harness.service.view().call_place, CallPlace::Ok);
         assert!(matches!(
-            harness.service.call_crew().await,
+            harness.service.call_crew(vec![]).await,
             Err(SocialError::Unavailable { .. })
         ));
     }
@@ -2113,6 +2264,200 @@ mod tests {
         // Without crews (the signed config), none of it shows.
         harness.service.set_teams_enabled(false);
         assert_eq!(harness.service.view().crew_notifications, None);
+    }
+
+    const CREW_A: &str = r#"{"id":"0123456789abcdef","name":"Gece Kartalları","tag":"GKR",
+        "emblem":"sword","code":"TKM-ABCD-EFGH","createdOn":"2026-10-19","members":[
+        {"id":"123456789012345678","username":"ayse","displayName":"Ayşe","avatar":"discord",
+        "avatarHash":null,"role":"founder","joinedAt":5}]}"#;
+    const CREW_B: &str = r#"{"id":"fedcba9876543210","name":"PvP","tag":"PVP","emblem":"bolt",
+        "code":"TKM-WXYZ-1234","createdOn":"2026-10-20","members":[
+        {"id":"223456789012345678","username":"bora","displayName":"Bora","avatar":"preset:fox",
+        "avatarHash":null,"role":"founder","joinedAt":4},
+        {"id":"123456789012345678","username":"ayse","displayName":"Ayşe","avatar":"discord",
+        "avatarHash":null,"role":"member","joinedAt":6}]}"#;
+
+    /// A service with several crews: the player leads one and is in Bora's.
+    fn friends_with_crews() -> String {
+        format!(
+            r#"{{"friends":[{{"id":"223456789012345678","username":"bora","displayName":"Bora",
+            "avatar":"preset:fox","avatarHash":null,"since":"2026-10-01","lastSeen":"today"}}],
+            "incoming":[],"outgoing":[],"blocked":[],
+            "limits":{{"friends":200,"outgoingRequests":50,"teamMembers":30,"groups":20}},
+            "groups":{{"version":0,"groups":[],"members":{{}}}},
+            "team":{CREW_A},"teamInvited":[],
+            "crews":[{{"team":{CREW_A},"invited":[],"notifications":{{"muted":false,"muteUntil":null}}}},
+              {{"team":{CREW_B},"invited":[],"notifications":{{"muted":false,"muteUntil":null}}}}],
+            "crewLimit":5,"teamInvites":[],
+            "teamFeatures":["look","calls","roles","mute","multi","callServer"],
+            "teamNotifications":{{"calls":true,"muted":false,"muteUntil":null}}}}"#
+        )
+    }
+
+    #[tokio::test]
+    async fn several_crews_found_order_and_mute_one_by_one() {
+        let bodies = Arc::new(Mutex::new(Vec::<String>::new()));
+        let server = MockServer::start({
+            let bodies = bodies.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| {
+                    match (req.method.as_str(), req.path.as_str()) {
+                        ("GET", "/v1/me") => MockReply::json(200, ME),
+                        ("GET", "/v1/friends") => MockReply::json(200, &friends_with_crews()),
+                        ("POST", "/v1/teams") => {
+                            bodies.lock().unwrap().push(req.body_text().to_owned());
+                            MockReply::json(
+                                201,
+                                &format!(
+                                    r#"{{"team":{},"invited":[]}}"#,
+                                    CREW_A
+                                        .replace("0123456789abcdef", "1111222233334444")
+                                        .replace("Gece Kartalları", "Yeni")
+                                ),
+                            )
+                        }
+                        ("PUT", "/v1/teams/order") => {
+                            bodies.lock().unwrap().push(req.body_text().to_owned());
+                            if req.json()["order"][0] == "fedcba9876543210" {
+                                MockReply::json(200, &req.body_text())
+                            } else {
+                                MockReply::json(
+                                    409,
+                                    r#"{"error":{"code":"crews_changed","message":"x"}}"#,
+                                )
+                            }
+                        }
+                        ("PATCH", "/v1/teams/fedcba9876543210/notifications") => {
+                            bodies.lock().unwrap().push(req.body_text().to_owned());
+                            MockReply::json(200, r#"{"muted":true,"muteUntil":null}"#)
+                        }
+                        _ => {
+                            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+                        }
+                    }
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.set_teams_enabled(true);
+        harness.service.configure(url(&server));
+        let view = harness.until("friends", |view| view.loaded).await;
+        let ids = |view: &SocialView| {
+            view.crews
+                .iter()
+                .map(|crew| crew.id.clone())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(ids(&view), vec!["0123456789abcdef", "fedcba9876543210"]);
+        assert_eq!(view.crew_limit, 5);
+        assert_eq!(view.crews[1].role, crate::model::TeamRole::Member);
+        assert_eq!(view.call_place, CallPlace::NeedsServer);
+
+        // One more crew: asked for as one more, and it goes last.
+        harness
+            .service
+            .create_team("Yeni", "YN", "sword", None)
+            .await
+            .unwrap();
+        let three = vec!["0123456789abcdef", "fedcba9876543210", "1111222233334444"];
+        assert_eq!(ids(&harness.service.view()), three);
+
+        // Bora's crew first: shown at once and saved.
+        let order: Vec<String> = ["fedcba9876543210", "0123456789abcdef", "1111222233334444"]
+            .map(str::to_owned)
+            .to_vec();
+        harness.service.order_crews(order.clone()).await.unwrap();
+        assert_eq!(ids(&harness.service.view()), order);
+        // The same order again sends nothing; one that is not the player's crews never leaves.
+        harness.service.order_crews(order.clone()).await.unwrap();
+        assert!(matches!(
+            harness
+                .service
+                .order_crews(vec!["0123456789abcdef".into()])
+                .await,
+            Err(SocialError::InvalidInput("crew order"))
+        ));
+        // The service's crews changed meanwhile: the order shown goes back, the list is read again.
+        let back: Vec<String> = three.iter().map(|id| (*id).to_owned()).collect();
+        assert_eq!(
+            harness.service.order_crews(back).await.unwrap_err().code(),
+            Some(&ErrorCode::CrewsChanged)
+        );
+        assert_eq!(ids(&harness.service.view()), order);
+        harness
+            .until("the crews read again", |view| view.crews.len() == 2)
+            .await;
+
+        // "Sessize al" for Bora's crew alone.
+        harness
+            .service
+            .set_crew_mute(
+                "fedcba9876543210",
+                CrewMuteEdit {
+                    muted: true,
+                    mute_until: None,
+                },
+            )
+            .await
+            .unwrap();
+        let view = harness.service.view();
+        assert!(view.crews[1].notifications.muted && !view.crews[0].notifications.muted);
+        assert!(matches!(
+            harness
+                .service
+                .set_crew_mute(
+                    "fedcba9876543210",
+                    CrewMuteEdit {
+                        muted: false,
+                        mute_until: Some(unix_now() + 60),
+                    },
+                )
+                .await,
+            Err(SocialError::InvalidInput("mute until"))
+        ));
+
+        // CALL1: nothing goes out from the launcher, nor from another server whose address is
+        // not shared; the view says which.
+        assert_eq!(
+            harness
+                .service
+                .call_crew(vec!["fedcba9876543210".into()])
+                .await
+                .unwrap(),
+            CallOutcome::NeedsServer
+        );
+        harness.service.game_started(None);
+        assert_eq!(harness.service.view().call_place, CallPlace::NeedsServer);
+        harness
+            .service
+            .game_line("Connecting to mc.example.com, 25565");
+        assert_eq!(harness.service.view().call_place, CallPlace::ServerHidden);
+        assert_eq!(
+            harness.service.call_crew(vec![]).await.unwrap(),
+            CallOutcome::ServerHidden
+        );
+        // A crew that went away meanwhile calls nobody else.
+        assert!(matches!(
+            harness
+                .service
+                .call_crew(vec!["1111222233334444".into()])
+                .await,
+            Err(SocialError::InvalidInput("not in a team"))
+        ));
+        assert_eq!(
+            *bodies.lock().unwrap(),
+            vec![
+                r#"{"emblem":"sword","multi":true,"name":"Yeni","tag":"YN"}"#.to_owned(),
+                r#"{"order":["fedcba9876543210","0123456789abcdef","1111222233334444"]}"#
+                    .to_owned(),
+                r#"{"order":["0123456789abcdef","fedcba9876543210","1111222233334444"]}"#
+                    .to_owned(),
+                r#"{"muted":true}"#.to_owned(),
+            ]
+        );
     }
 
     #[tokio::test]

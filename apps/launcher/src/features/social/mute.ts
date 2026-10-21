@@ -2,7 +2,8 @@
 // (a timed one ends by itself and nothing says so: everyone compares the time), which crew
 // notifications are heard, and the pieces of "Sessizde · 14:30'a kadar". The service keeps the
 // settings (`teamFeatures: mute`); without it the launcher's own switches decide, as before.
-import type { CrewNotifications } from "@/lib/api/social-types";
+import type { CrewCall, CrewNotifications, SocialTeam } from "@/lib/api/social-types";
+import { crewsOfCall } from "./calls";
 
 export type MutePreset = "hour" | "eightHours" | "morning" | "forever";
 
@@ -42,10 +43,41 @@ export function muteUntilFor(preset: MutePreset, nowMs: number): number | null {
   }
 }
 
-/** Muted at `nowMs`. */
-export function mutedNow(settings: CrewNotifications | undefined, nowMs: number): boolean {
+/** Every crew's settings, or one crew's own mute (several crews). */
+type MuteLike = Pick<CrewNotifications, "muted" | "muteUntil"> &
+  Partial<Pick<CrewNotifications, "calls">>;
+
+/** Muted at `nowMs` (every crew's settings, or one crew's mute). */
+export function mutedNow(settings: MuteLike | undefined, nowMs: number): boolean {
   if (!settings?.muted) return false;
   return settings.muteUntil === null || settings.muteUntil * 1000 > nowMs;
+}
+
+/** One crew is silent at `nowMs`: muted on its own, or every crew at once. */
+export function crewMutedNow(
+  crew: Pick<SocialTeam, "mute">,
+  all: CrewNotifications | undefined,
+  nowMs: number,
+): boolean {
+  return mutedNow(all, nowMs) || mutedNow(crew.mute, nowMs);
+}
+
+/** A call is heard (toast, notification, the gold dot) when at least one crew of the player's it
+ * names is not muted on its own; every crew at once is `crewCallsHeard`'s. */
+export function callHeardIn(
+  call: Pick<CrewCall, "crews">,
+  crews: readonly SocialTeam[],
+  nowMs: number,
+): boolean {
+  const named = crewsOfCall(call, crews);
+  return !named.length || named.some((crew) => !mutedNow(crew.mute, nowMs));
+}
+
+/** A crewmate's news is heard when they share a crew with the player that is not muted on its
+ * own (someone in no crew of the player's yet, while the list catches up, is heard). */
+export function crewmateHeardIn(id: string, crews: readonly SocialTeam[], nowMs: number): boolean {
+  const shared = crews.filter((crew) => crew.members.some((m) => m.id === id));
+  return !shared.length || shared.some((crew) => !mutedNow(crew.mute, nowMs));
 }
 
 /**
@@ -62,10 +94,7 @@ export function crewCallsHeard(
 }
 
 /** How long until a timed mute ends (ms), or null: the only timer a mute needs. */
-export function nextMuteTick(
-  settings: CrewNotifications | undefined,
-  nowMs: number,
-): number | null {
+export function nextMuteTick(settings: MuteLike | undefined, nowMs: number): number | null {
   if (!settings?.muted || settings.muteUntil === null) return null;
   const left = settings.muteUntil * 1000 - nowMs;
   return left > 0 ? left : null;

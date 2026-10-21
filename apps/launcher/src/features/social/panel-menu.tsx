@@ -2,17 +2,28 @@
 // menu key there, and the header's "…" button. Adding a friend, the player's code, a new category,
 // the team and the status; each one is also on the panel itself (header buttons, the "Yeni
 // kategori" row, the status under the player's name). Rows of the list have menus of their own.
-import { Copy, DotsThree, FolderSimplePlus, UserPlus, UsersThree } from "@phosphor-icons/react";
+// With several crews (TEAM4) it also founds or joins one more and calls several at once.
+import {
+  Copy,
+  DotsThree,
+  FolderSimplePlus,
+  MegaphoneSimple,
+  UserPlus,
+  UsersThree,
+} from "@phosphor-icons/react";
 import { ContextMenu, IconButton, keepsNativeMenu, Menu, type MenuItem, toast } from "@pl/ui";
 import type { KeyboardEvent, MouseEvent, ReactNode, Ref } from "react";
 import { useTranslation } from "react-i18next";
 import { announce } from "@/features/accounts/use-accounts";
 import { copyText } from "./actions";
+import { callWaitUntil } from "./calls";
+import { callableCrews, canAddCrew, NEW_CREW_TAB } from "./crews";
 import { isMenuKey, openMenuAt } from "./menu-key";
 import { panelMenu, rowsOf } from "./menus";
 import { PresenceDot } from "./social-face";
 import { changeStatus, dotOf, STATUSES } from "./status-menu";
 import { useSocialUi } from "./store";
+import { useCallClock } from "./use-call-clock";
 
 function usePanelItems(): Array<MenuItem | null> {
   const { t } = useTranslation();
@@ -21,7 +32,13 @@ function usePanelItems(): Array<MenuItem | null> {
   const goTo = useSocialUi((s) => s.goTo);
   const openTeam = useSocialUi((s) => s.openTeam);
   const setCategoryDraft = useSocialUi((s) => s.setCategoryDraft);
+  const openCallPicker = useSocialUi((s) => s.openCallPicker);
+  const refusedUntil = useSocialUi((s) => s.callRefusedUntil);
+  const lastCallAt = useSocialUi((s) => s.lastCallAt);
+  const now = useCallClock((s) => s.now);
   const me = view.me;
+  const multi = view.crew.multi;
+  const inTeam = view.crews.length > 0;
   const status = pending ?? me?.status ?? "online";
 
   const copyCode = (code: string) =>
@@ -37,8 +54,15 @@ function usePanelItems(): Array<MenuItem | null> {
       categoryCount: view.groups?.groups.length ?? 0,
       hasFriends: view.friends.length > 0,
       teams: view.teams,
-      inTeam: Boolean(view.team),
+      inTeam,
       hasCode: Boolean(me?.friendCode),
+      canAddCrew: multi && canAddCrew(view.crews, view.crewLimit, multi),
+      callCrews:
+        multi && callableCrews(view.crews, view.crew).length > 1
+          ? callWaitUntil(view.calls, refusedUntil, lastCallAt) > now
+            ? "waiting"
+            : "ready"
+          : "hidden",
     }),
     (row): MenuItem | null => {
       switch (row.action) {
@@ -66,15 +90,22 @@ function usePanelItems(): Array<MenuItem | null> {
           };
         case "createTeam":
           return {
-            label: t("teams.create.title"),
+            label: inTeam ? t("crews.add") : t("teams.create.title"),
             icon: <UsersThree size={16} />,
-            onSelect: () => openTeam(),
+            onSelect: () => openTeam(undefined, inTeam ? NEW_CREW_TAB : undefined),
           };
         case "openTeam":
           return {
-            label: t("teams.open"),
+            label: multi && view.crews.length > 1 ? t("crews.open") : t("teams.open"),
             icon: <UsersThree size={16} />,
             onSelect: () => openTeam(),
+          };
+        case "callCrews":
+          return {
+            label: t("crews.call.pickTitle"),
+            icon: <MegaphoneSimple size={16} />,
+            disabled: row.disabled,
+            onSelect: () => openCallPicker([]),
           };
         case "status":
           return {

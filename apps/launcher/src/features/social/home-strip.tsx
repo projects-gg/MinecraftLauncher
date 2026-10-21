@@ -1,9 +1,12 @@
 // Home screen's friends line: one quiet glass pill over the art, under the banners (model.ts →
 // homeStrip decides which, most pressing first):
 // - a crewmate's call the player has not answered: their face with a small megaphone, "Ayşe ekibi
-//   çağırıyor" and "Geliyorum"; × closes it here, for this call only (it is not an answer);
+//   çağırıyor" (naming the crews with several) and "Geliyorum"; × closes it here, for this call
+//   only (it is not an answer);
 // - two or more crewmates on Projects: the crew's mark and their faces, "Ekibinden 4 kişi
-//   Projects'te" and "Katıl";
+//   Projects'te" ("Ekiplerinden 6 kişi…" across several crews, each person once) and "Katıl";
+// - in game on a server a call may start from (CALL1): the crews' marks, "Ekibini yanına çağır"
+//   and "Çağır" (one crew: called at once; several: the picker); × hides it on that server;
 // - friends in game (or the one crewmate on Projects), with "Katıl" when some are on projects.gg;
 // - before sign-in, the invitation: three faces, "Arkadaşlarınla birlikte oyna" and "Discord ile
 //   bağlan", which opens the friends panel on its opt-in screen (what is shared, the privacy page,
@@ -20,9 +23,18 @@ import { useTranslation } from "react-i18next";
 import { presetAvatar } from "@/features/avatars/presets";
 import { useLaunch } from "@/stores/launch";
 import { entrySelector, usePlace } from "@/stores/placement";
-import { answerCall } from "./call-actions";
-import { unansweredCall } from "./calls";
-import { callerOf, callSentence } from "./crew-call";
+import { answerCall, callOrAsk } from "./call-actions";
+import { crewsOfCall, unansweredCall } from "./calls";
+import {
+  busiestCrew,
+  callableCrews,
+  callerIn,
+  callLineKey,
+  callLineShown,
+  callSentenceOf,
+  callWhere,
+  crewsWithCall,
+} from "./crews";
 import { DiscordMark } from "./discord-button";
 import { JoinButton } from "./friend-row";
 import { gameBusy } from "./join";
@@ -169,20 +181,24 @@ function CallLine() {
   const closeCall = useSocialUi((s) => s.closeCall);
   const openPanel = useSocialUi((s) => s.openPanel);
   const now = useCallClock((s) => s.now);
+  const setCrewTab = useSocialUi((s) => s.setCrewTab);
   const call = unansweredCall(view.calls, now, closed);
   if (!call) return null;
-  const text = callSentence(call, view.team, t);
-  const joins = call.kind === "join";
+  const text = callSentenceOf(call, view.crews, t);
+  const joins = callWhere(call).kind !== "ready";
   return (
     <>
       <button
         type="button"
         aria-label={`${text}. ${t("teams.call.open")}`}
-        onClick={(event) => openPanel({ page: "team", from: event.currentTarget })}
+        onClick={(event) => {
+          openPanel({ page: "team", from: event.currentTarget });
+          setCrewTab(crewsOfCall(call, view.crews)[0]?.id ?? null);
+        }}
         className="flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-0.5 pr-2 pl-0.5 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
       >
         <span className="relative flex">
-          <SocialFace source={callerOf(call, view.team)} size={26} />
+          <SocialFace source={callerIn(call, view.crews)} size={26} />
           <span className="absolute -right-1.5 -bottom-1 flex size-[14px] items-center justify-center rounded-full bg-obsidian-950 text-gold-300 ring-1 ring-gold-400/40">
             <MegaphoneSimple size={9} weight="fill" aria-hidden />
           </span>
@@ -209,21 +225,29 @@ function CallLine() {
   );
 }
 
-/** Two or more crewmates on Projects: the crew's mark and faces, then "Katıl". */
+/** Two or more crewmates on Projects (across the crews, each once): the mark of the crew with
+ * the most of them, their faces, then "Katıl". */
 function CrewLine() {
   const { t } = useTranslation();
   const view = useSocialUi((s) => s.view);
   const openPanel = useSocialUi((s) => s.openPanel);
-  const team = view.team;
-  const crew = crewmatesOnProjects(team);
+  const setCrewTab = useSocialUi((s) => s.setCrewTab);
+  const team = busiestCrew(view.crews);
+  const crew = crewmatesOnProjects(view.crews);
   if (!team) return null;
-  const text = t("teams.home.crewProjects", { count: crew.length });
+  const text =
+    view.crews.length > 1
+      ? t("crews.home.crewProjects", { count: crew.length })
+      : t("teams.home.crewProjects", { count: crew.length });
   return (
     <>
       <button
         type="button"
         aria-label={`${text}. ${t("teams.open")}`}
-        onClick={(event) => openPanel({ page: "team", from: event.currentTarget })}
+        onClick={(event) => {
+          openPanel({ page: "team", from: event.currentTarget });
+          setCrewTab(team.id);
+        }}
         className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-full py-0.5 pr-2.5 pl-1 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
       >
         <CrewMark look={team} size={28} />
@@ -235,14 +259,81 @@ function CrewLine() {
   );
 }
 
+/**
+ * In game where a call may start: "Ekibini yanına çağır" with the marks of the crews to call.
+ * "Çağır" calls the one crew at once, or opens the picker for several; × hides it on this server.
+ */
+function CallCrewLine() {
+  const { t } = useTranslation();
+  const view = useSocialUi((s) => s.view);
+  const closeCallLine = useSocialUi((s) => s.closeCallLine);
+  const openCallPicker = useSocialUi((s) => s.openCallPicker);
+  const now = useCallClock((s) => s.now);
+  const busy = crewsWithCall(view.calls, view.crews, now);
+  const crews = callableCrews(view.crews, view.crew).filter((crew) => !busy.has(crew.id));
+  const [first] = crews;
+  if (!first) return null;
+  const several = crews.length > 1;
+  const text = several ? t("crews.call.homeMany") : t("crews.call.homeOne");
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={text}
+        onClick={() => (several ? openCallPicker([]) : void callOrAsk([first.id]))}
+        className="group flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-0.5 pr-0.5 pl-1 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
+      >
+        <span className="flex shrink-0 items-center">
+          {crews.slice(0, 3).map((crew, index) => (
+            <span
+              key={crew.id}
+              className="relative flex"
+              style={{ marginLeft: index ? -10 : 0, zIndex: 3 - index }}
+            >
+              <CrewMark look={crew} size={28} />
+            </span>
+          ))}
+        </span>
+        <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
+        <ActionLook icon={<MegaphoneSimple size={13} weight="fill" aria-hidden />}>
+          {t("crews.call.homeAction")}
+        </ActionLook>
+      </button>
+      <IconButton
+        size="sm"
+        label={t("social.actions.dismiss")}
+        icon={<X size={13} weight="bold" />}
+        onClick={() => closeCallLine(callLineKey(view.activity))}
+        className="shrink-0 rounded-full"
+      />
+    </>
+  );
+}
+
 export function FriendsHomeStrip() {
   const { reduce, layout } = useSocialMotion();
   const view = useSocialUi((s) => s.view);
   const closed = useSocialPrefs((s) => s.closedHints);
   const closedCalls = useSocialUi((s) => s.closedCalls);
+  const closedOn = useSocialUi((s) => s.callLineClosed);
+  const refusedUntil = useSocialUi((s) => s.callRefusedUntil);
+  const lastCallAt = useSocialUi((s) => s.lastCallAt);
   const busy = useLaunch((s) => gameBusy(s.phase.kind));
   const now = useCallClock((s) => s.now);
-  const kind = homeStrip(view, closed, { closedCalls, gameBusy: busy, now });
+  const callable =
+    view.teams &&
+    callLineShown({
+      place: view.callPlace,
+      activity: view.activity,
+      closedOn,
+      crews: view.crews,
+      features: view.crew,
+      calls: view.calls,
+      refusedUntil,
+      lastCallAt,
+      now,
+    });
+  const kind = homeStrip(view, closed, { closedCalls, gameBusy: busy, now, callable });
 
   return (
     <AnimatePresence initial={false} mode="popLayout">
@@ -271,6 +362,8 @@ export function FriendsHomeStrip() {
             <CallLine />
           ) : kind === "crew" ? (
             <CrewLine />
+          ) : kind === "callCrew" ? (
+            <CallCrewLine />
           ) : (
             <InviteLine hint={kind} />
           )}

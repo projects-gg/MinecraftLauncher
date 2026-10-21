@@ -5,7 +5,9 @@
 // arkadaşların Projects'e girince" stays this computer's (and the settings backup's). A muted
 // crew's calls still show on the crew page and the Home line, ready to answer; do-not-disturb
 // silences all of it too. The crew page's bell (struck through while muted), the crew's menu and
-// Settings → Arkadaşlar → Bildirimler show them.
+// Settings → Arkadaşlar → Bildirimler show them. With several crews (TEAM4) each crew is muted on
+// its own (its bell, its menu), and Settings mutes all of them at once ("Hepsini sessize al"); a
+// crew's bell then says so too, with "Sesi aç" for all.
 import { Bell, BellSlash, CaretDown } from "@phosphor-icons/react";
 import { Button, cn, easeOutExpo, IconButton, Menu, type MenuItem, Switch } from "@pl/ui";
 import type { TFunction } from "i18next";
@@ -16,7 +18,7 @@ import { useTranslation } from "react-i18next";
 import { useCalm } from "@/features/accounts/calm";
 import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
-import type { CrewNotifications } from "@/lib/api/social-types";
+import type { CrewMute, CrewNotifications } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
 import i18n from "@/lib/i18n";
 import { attempt } from "./actions";
@@ -32,12 +34,30 @@ import {
 import { useSocialPrefs, useSocialUi } from "./store";
 import { useCallClock } from "./use-call-clock";
 
-/** The crew's settings where the service keeps them, and whether the crew is muted now. */
-export function useCrewMute() {
+/**
+ * The crew's settings where the service keeps them and whether the crew is muted now. With several
+ * crews, `crew` names the one whose own mute counts (`target`: what "Sessize al" changes); without
+ * it the settings are every crew's at once.
+ */
+export function useCrewMute(crew?: string) {
   const settings = useSocialUi((s) => (s.view.crew.mute ? s.view.crewNotifications : undefined));
+  const multi = useSocialUi((s) => s.view.crew.multi);
+  const own = useSocialUi((s) =>
+    crew && s.view.crew.multi ? s.view.crews.find((c) => c.id === crew)?.mute : undefined,
+  );
   // Moves at a timed mute's end (use-call-clock.ts), so "Sessizde" goes by itself.
   const now = useCallClock((s) => s.now);
-  return { settings, muted: mutedNow(settings, now), now };
+  const target = multi && crew ? crew : undefined;
+  return {
+    settings,
+    own,
+    target,
+    /** Several crews and no crew named: the controls are every crew's at once. */
+    all: multi && !crew,
+    muted: target ? mutedNow(own, now) : mutedNow(settings, now),
+    allMuted: mutedNow(settings, now),
+    now,
+  };
 }
 
 /** "14:30'a kadar", "yarın 08:00'e kadar", "23 Ekim 14:30'a kadar". */
@@ -62,40 +82,50 @@ function untilText(t: TFunction, untilMs: number, nowMs: number): string {
 /** "Sessizde · 14:30'a kadar" ("Sessizde" until unmuted); null while not muted. */
 export function muteState(
   t: TFunction,
-  settings: CrewNotifications | undefined,
+  settings: Pick<CrewNotifications, "muted" | "muteUntil"> | undefined,
   nowMs: number,
+  muted = t("teams.mute.muted"),
 ): string | null {
   if (!settings || !mutedNow(settings, nowMs)) return null;
-  const muted = t("teams.mute.muted");
   return settings.muteUntil === null
     ? muted
     : `${muted} · ${untilText(t, settings.muteUntil * 1000, nowMs)}`;
 }
 
-/** "Sessize al" for a while (said to screen readers once it is so). */
-export async function muteCrew(preset: MutePreset): Promise<void> {
+/** The mute `crew` has on its own (several crews), else every crew's settings. */
+function muteNow(crew?: string): CrewMute | CrewNotifications | undefined {
+  const { view } = useSocialUi.getState();
+  return crew ? view.crews.find((c) => c.id === crew)?.mute : view.crewNotifications;
+}
+
+/** "Sessize al" for a while: one crew (several crews), else every crew (said to screen readers
+ * once it is so). */
+export async function muteCrew(preset: MutePreset, crew?: string): Promise<void> {
   const until = muteUntilFor(preset, Date.now());
+  const change = until === null ? { muted: true } : { muted: true, muteUntil: until };
   const done = await attempt(() =>
-    api.social.setCrewNotifications(
-      until === null ? { muted: true } : { muted: true, muteUntil: until },
-    ),
+    crew ? api.social.setCrewMute(crew, change) : api.social.setCrewNotifications(change),
   );
   if (done === undefined) return;
-  const state = muteState(i18n.t, useSocialUi.getState().view.crewNotifications, Date.now());
+  const state = muteState(i18n.t, muteNow(crew), Date.now());
   announce(state ?? i18n.t("teams.mute.muted"));
 }
 
-/** "Sesi aç". */
-export async function unmuteCrew(): Promise<void> {
-  const done = await attempt(() => api.social.setCrewNotifications({ muted: false }));
+/** "Sesi aç": one crew (several crews), else every crew. */
+export async function unmuteCrew(crew?: string): Promise<void> {
+  const done = await attempt(() =>
+    crew
+      ? api.social.setCrewMute(crew, { muted: false })
+      : api.social.setCrewNotifications({ muted: false }),
+  );
   if (done !== undefined) announce(i18n.t("teams.mute.unmuted"));
 }
 
 /** "1 saat", "8 saat", "Yarın sabaha kadar", "Ben açana kadar" (a menu, or a submenu). */
-export function muteItems(t: TFunction): MenuItem[] {
+export function muteItems(t: TFunction, crew?: string): MenuItem[] {
   return MUTE_PRESETS.map((preset) => ({
     label: t(`teams.mute.presets.${preset}`),
-    onSelect: () => void muteCrew(preset),
+    onSelect: () => void muteCrew(preset, crew),
   }));
 }
 
@@ -113,14 +143,15 @@ export function MuteBell({ muted, size }: { muted: boolean; size: number }) {
   );
 }
 
-/** "Sessize al" (how long, in a menu) or, while muted, "Sesi aç". */
-function MuteControl({ muted }: { muted: boolean }) {
+/** "Sessize al" (how long, in a menu; "Hepsini sessize al" for every crew of several) or, while
+ * muted, "Sesi aç". */
+function MuteControl({ muted, crew, all }: { muted: boolean; crew?: string; all?: boolean }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
   const [busy, setBusy] = useState(false);
   const unmute = async () => {
     setBusy(true);
-    await unmuteCrew();
+    await unmuteCrew(crew);
     setBusy(false);
   };
   return (
@@ -141,7 +172,7 @@ function MuteControl({ muted }: { muted: boolean }) {
         ) : (
           <motion.span key="mute" className="flex" {...swap(reduce, 0.18)}>
             <Menu
-              items={muteItems(t)}
+              items={muteItems(t, crew)}
               trigger={
                 <Button
                   size="sm"
@@ -149,7 +180,7 @@ function MuteControl({ muted }: { muted: boolean }) {
                   icon={<BellSlash size={15} />}
                   iconRight={<CaretDown size={12} weight="bold" className="text-ash-300" />}
                 >
-                  {t("teams.mute.action")}
+                  {all ? t("crews.mute.all") : t("teams.mute.action")}
                 </Button>
               }
             />
@@ -203,20 +234,58 @@ export function CrewNotifySwitches() {
   );
 }
 
-/**
- * "Ekip bildirimleri" with "Sessize al" beside it (where the service keeps the crew's settings),
- * what is muted until when, and the switches. The bell's panel and Settings show the same.
- */
-export function CrewNotifyGroup({ titleClassName }: { titleClassName: string }) {
+/** Every crew muted at once, said on one crew's bell panel, with "Sesi aç" for all of them. */
+function AllMutedLine({ state }: { state: string | null }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
-  const { settings, muted, now } = useCrewMute();
-  const state = muteState(t, settings, now);
+  const [busy, setBusy] = useState(false);
+  const unmute = async () => {
+    setBusy(true);
+    await unmuteCrew();
+    setBusy(false);
+  };
+  return (
+    <AnimatePresence initial={false}>
+      {state ? (
+        <motion.div
+          key="all"
+          className="mt-2 flex items-center gap-2 rounded-md bg-white/[0.04] py-1 pr-1 pl-2.5 text-[12.5px] text-ash-300"
+          {...rise(reduce, 4, 0.22)}
+        >
+          <BellSlash size={13} aria-hidden className="shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{state}</span>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={() => void unmute()}>
+            {t("teams.mute.undo")}
+          </Button>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+/**
+ * "Ekip bildirimleri" with "Sessize al" beside it (where the service keeps the crew's settings),
+ * what is muted until when, and the switches. The bell's panel and Settings show the same; with
+ * several crews the bell's panel is its crew's (`crew`) and Settings' is every crew's.
+ */
+export function CrewNotifyGroup({
+  titleClassName,
+  crew,
+}: {
+  titleClassName: string;
+  crew?: string;
+}) {
+  const { t } = useTranslation();
+  const { reduce } = useSocialMotion();
+  const { settings, own, target, all, muted, now } = useCrewMute(crew);
+  const state = target
+    ? muteState(t, own, now)
+    : muteState(t, settings, now, all ? t("crews.mute.allMuted") : undefined);
   return (
     <div>
       <div className="flex min-h-8 items-center gap-3">
         <p className={cn("min-w-0 flex-1", titleClassName)}>{t("teams.notify.title")}</p>
-        {settings ? <MuteControl muted={muted} /> : null}
+        {target || settings ? <MuteControl muted={muted} crew={target} all={all} /> : null}
       </div>
       <AnimatePresence initial={false}>
         {state ? (
@@ -230,6 +299,9 @@ export function CrewNotifyGroup({ titleClassName }: { titleClassName: string }) 
           </motion.p>
         ) : null}
       </AnimatePresence>
+      {target ? (
+        <AllMutedLine state={muteState(t, settings, now, t("crews.mute.allMuted"))} />
+      ) : null}
       <div className="mt-3.5">
         <CrewNotifySwitches />
       </div>
@@ -237,20 +309,23 @@ export function CrewNotifyGroup({ titleClassName }: { titleClassName: string }) 
   );
 }
 
-/** The bell in the crew page's header: struck through while muted, its name says until when. */
-export function CrewNotifyButton() {
+/** The bell in the crew page's header: struck through while muted, its name says until when.
+ * With several crews it is the crew's on screen (`crew`). */
+export function CrewNotifyButton({ crew }: { crew?: string }) {
   const { t } = useTranslation();
   const calm = useCalm();
   const [open, setOpen] = useState(false);
-  const { settings, muted, now } = useCrewMute();
-  const state = muteState(t, settings, now);
+  const { settings, own, target, muted, allMuted, now } = useCrewMute(crew);
+  const state = target
+    ? (muteState(t, own, now) ?? muteState(t, settings, now, t("crews.mute.allMuted")))
+    : muteState(t, settings, now);
   const title = t("teams.notify.title");
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <IconButton
           label={state ? `${title}: ${state}` : title}
-          icon={<MuteBell muted={muted} size={19} />}
+          icon={<MuteBell muted={muted || (Boolean(target) && allMuted)} size={19} />}
         />
       </Popover.Trigger>
       <AnimatePresence>
@@ -277,7 +352,10 @@ export function CrewNotifyButton() {
                 })}
                 exit={calm({ opacity: 0, scale: 0.98, transition: { duration: 0.12 } })}
               >
-                <CrewNotifyGroup titleClassName="font-display text-[15px] font-semibold text-bone-50" />
+                <CrewNotifyGroup
+                  crew={crew}
+                  titleClassName="font-display text-[15px] font-semibold text-bone-50"
+                />
               </motion.div>
             </Popover.Content>
           </Popover.Portal>

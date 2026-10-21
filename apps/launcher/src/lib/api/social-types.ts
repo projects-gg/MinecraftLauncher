@@ -115,8 +115,8 @@ export interface FriendGroups {
 
 /** "founder" is the crew's leader ("Lider"); the wire keeps the first name. */
 export type TeamRole = "founder" | "member";
-/** How a team code relates to the player. */
-export type TeamRelation = "none" | "member" | "elsewhere" | "blocked" | "full";
+/** How a team code relates to the player; `limit`: in as many crews as they may be. */
+export type TeamRelation = "none" | "member" | "elsewhere" | "blocked" | "full" | "limit";
 /** Why the player is no longer in their team. */
 export type TeamExit = "left" | "kicked" | "disbanded" | "other";
 /** Who may do something in a crew: the lowest role that may (every role above may too). */
@@ -143,7 +143,22 @@ export interface CrewFeatures {
   roles: boolean;
   /** "Sessize al" and crew calls on or off, kept by the service (the same on every device). */
   mute: boolean;
+  /** Several crews per player: their order, a mute per crew, one call to several. */
+  multi: boolean;
+  /** Calls start only on a multiplayer server and carry it (CALL1). */
+  callServer: boolean;
 }
+
+/** The player's own mute of one crew (several crews); nobody else sees it. */
+export interface CrewMute {
+  muted: boolean;
+  /** Unix seconds; null: until the player unmutes. A timed mute ends by itself. */
+  muteUntil: number | null;
+}
+
+/** Whether "Ekibi çağır" may start where the player is (CALL1): on projects.gg, or on another
+ * server whose address is shared; not in the launcher, singleplayer or an unknown server. */
+export type CallPlace = "ok" | "needsServer" | "serverHidden";
 
 /** What the player hears of their crew, kept by the service (all their devices). */
 export interface CrewNotifications {
@@ -215,6 +230,8 @@ export interface SocialTeam extends CrewLook {
   invited: string[];
   /** How many may be in a team. */
   limit: number;
+  /** The player's own mute of this crew (never muted on a service with one crew per player). */
+  mute: CrewMute;
 }
 
 export interface TeamInvite extends CrewLook {
@@ -252,8 +269,13 @@ export interface CrewCall {
   name?: string;
   avatar?: string;
   avatarUrl?: string;
-  /** `join`: the caller plays on projects.gg; `ready`: "Hazır mısın?". */
+  /** `join`: "Geliyorum" can join the caller on `server`; `ready`: "Hazır mısın?" (a call from
+   * before CALL1: an answer, nothing to join). */
   kind: "join" | "ready";
+  /** Where the call is: projects.gg, or another server with its address. */
+  server?: SocialGame;
+  /** The player's crews it names, in the player's order. */
+  crews: string[];
   /** Unix seconds on this computer's clock. */
   startedAt: number;
   /** It ends by itself then: hide it. */
@@ -267,7 +289,11 @@ export interface CrewCall {
 export type CallOutcome =
   | { status: "called" }
   | { status: "wait"; seconds: number }
-  | { status: "active" };
+  | { status: "active" }
+  /** Not on a multiplayer server (CALL1). */
+  | { status: "needsServer" }
+  /** On another server whose address is not shared (CALL1). */
+  | { status: "serverHidden" };
 
 /** A change to the crew: its texts, look or permissions. */
 export interface TeamChange {
@@ -302,12 +328,17 @@ export interface SocialSnapshot {
   teams: boolean;
   /** What the service offers of crews (all off while `teams` is off or on an older service). */
   crew: CrewFeatures;
-  /** The player's team (only while `teams`). */
-  team?: SocialTeam;
+  /** The player's crews in their order, the first being the primary crew (only while `teams`;
+   * at most one on a service without several crews). */
+  crews: SocialTeam[];
+  /** How many crews the player may be in (1 on a service without several crews). */
+  crewLimit: number;
   /** Invites to teams, newest first (only while `teams`). */
   teamInvites: TeamInvite[];
   /** Open crew calls, oldest first (only while the service offers calls). */
   calls: CrewCall[];
+  /** Whether "Ekibi çağır" may start where the player is (CALL1). */
+  callPlace: CallPlace;
   /** The player's crew notification settings (only while the service keeps them: `crew.mute`;
    * otherwise the launcher's own switches decide). */
   crewNotifications?: CrewNotifications;
@@ -361,9 +392,12 @@ export const HIDDEN_SNAPSHOT: SocialSnapshot = {
   invites: [],
   activity: { state: "launcher" },
   teams: false,
-  crew: { look: false, calls: false, roles: false, mute: false },
+  crew: { look: false, calls: false, roles: false, mute: false, multi: false, callServer: false },
+  crews: [],
+  crewLimit: 1,
   teamInvites: [],
   calls: [],
+  callPlace: "needsServer",
 };
 
 export interface SocialApi {
@@ -407,7 +441,8 @@ export interface SocialApi {
   deleteBackup(): Promise<void>;
   /** Saves the friend categories (the whole document; shown at once, saved in the background). */
   saveGroups(groups: FriendGroup[], members: Record<string, string>): Promise<void>;
-  /** A crew; the look (colour, frame, motto) only reaches a service that offers looks. */
+  /** A crew (one more below the crew limit, on a service with several crews); the look (colour,
+   * frame, motto) only reaches a service that offers looks. */
   createTeam(team: {
     name: string;
     tag: string;
@@ -416,28 +451,32 @@ export interface SocialApi {
     frame?: string;
     motto?: string;
   }): Promise<void>;
-  /** Unset fields stay; `motto: ""` takes the motto away. */
-  editTeam(change: TeamChange): Promise<void>;
+  /** One of the player's crews: unset fields stay; `motto: ""` takes the motto away. */
+  editTeam(teamId: string, change: TeamChange): Promise<void>;
   /** Makes a member a moderator, or a moderator a member again (leader). */
-  setModerator(memberId: string, moderator: boolean): Promise<void>;
-  /** "Ekibi çağır". */
-  callCrew(): Promise<CallOutcome>;
+  setModerator(teamId: string, memberId: string, moderator: boolean): Promise<void>;
+  /** "Ekibi çağır" for these crews (empty: the primary one); one call however many. */
+  callCrew(crews: string[]): Promise<CallOutcome>;
   /** An answer to a teammate's call; false when the call is gone. */
   answerCall(callId: string, answer: CallAnswer): Promise<boolean>;
   /** "Bitir": ends the player's own call. */
   endCall(callId: string): Promise<void>;
-  /** "Sessize al", "Sesi aç", crew calls on or off (a service that keeps them). */
+  /** "Sessize al", "Sesi aç", crew calls on or off, for all crews (a service that keeps them). */
   setCrewNotifications(change: CrewNotificationsChange): Promise<void>;
-  /** Ends the team for everyone (founder). */
-  disbandTeam(): Promise<void>;
-  leaveTeam(): Promise<void>;
-  /** A new team code (founder); the old one stops working. */
-  rotateTeamCode(): Promise<string>;
-  inviteToTeam(friendId: string): Promise<void>;
+  /** "Sessize al" / "Sesi aç" for one crew (several crews). `muteUntil` only with `muted`. */
+  setCrewMute(teamId: string, change: { muted: boolean; muteUntil?: number }): Promise<void>;
+  /** The player's crews in a new order (each once; the first becomes the primary crew). */
+  orderCrews(order: string[]): Promise<void>;
+  /** Ends one of the player's crews for everyone (founder). */
+  disbandTeam(teamId: string): Promise<void>;
+  leaveTeam(teamId: string): Promise<void>;
+  /** A new code for one of the player's crews (founder); the old one stops working. */
+  rotateTeamCode(teamId: string): Promise<string>;
+  inviteToTeam(teamId: string, friendId: string): Promise<void>;
   /** Removes a member (founder); the code is renewed with it. */
-  removeTeamMember(memberId: string): Promise<void>;
+  removeTeamMember(teamId: string, memberId: string): Promise<void>;
   /** Hands the founder role to another member. */
-  transferTeam(memberId: string): Promise<void>;
+  transferTeam(teamId: string, memberId: string): Promise<void>;
   lookupTeam(code: string): Promise<TeamLookup>;
   joinTeam(code: string): Promise<void>;
   acceptTeamInvite(teamId: string): Promise<void>;

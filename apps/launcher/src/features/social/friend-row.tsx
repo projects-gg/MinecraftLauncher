@@ -2,7 +2,8 @@
 // on projects.gg. The row opens their card (beside the panel; a click, Enter or a double click):
 // join, "Birlikte oyna", "Discord'dan mesaj at", favourite, the online notice, and in a quieter
 // corner remove and block, each confirmed in place with one sentence. The same actions are in the
-// row's menu: a right click, Shift+F10 or the menu key, or its "…".
+// row's menu: a right click, Shift+F10 or the menu key, or its "…". With several crews (TEAM4)
+// "Ekibe davet et" asks which crew (a menu of them, each with its mark).
 import {
   Bell,
   DiscordLogo,
@@ -35,10 +36,11 @@ import { useTranslation } from "react-i18next";
 import { useCalm } from "@/features/accounts/calm";
 import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
-import type { Friend, FriendGroup } from "@/lib/api/social-types";
+import type { Friend, FriendGroup, SocialTeam } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
 import { useLaunch } from "@/stores/launch";
 import { attempt, inviteCoolingDown, inviteFriend } from "./actions";
+import type { InviteState } from "./crews";
 import { DiscordButton } from "./discord-button";
 import { openInDiscord } from "./discord-link";
 import { REST } from "./groups";
@@ -50,6 +52,7 @@ import { rise, swap, useSocialMotion } from "./motion";
 import { canInvite } from "./play-together";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
+import { CrewMark } from "./team-emblem";
 
 /** The friend's category and where else they may go (categories mode of the list). */
 export interface RowCategories {
@@ -63,8 +66,25 @@ export interface RowCategories {
 
 /** The player's team, for "Takıma davet et". */
 export interface RowTeam {
-  state: "invitable" | "invited" | "member";
+  /** With several crews, the best of them (one to invite to first). */
+  state: InviteState;
   onInvite: () => void;
+  /** Several crews the friend may be invited to (TEAM4): the row asks which. */
+  crews?: Array<{ crew: SocialTeam; state: InviteState; onInvite: () => void }>;
+}
+
+/** "Ekibe davet et"'s crews, as menu rows: invited or in it (checked), full, or to invite. */
+function crewInviteItems(
+  crews: NonNullable<RowTeam["crews"]>,
+  t: (key: string) => string,
+): MenuItem[] {
+  return crews.map(({ crew, state, onInvite }) => ({
+    label: state === "full" ? `${crew.name} (${t("crews.invite.full")})` : crew.name,
+    icon: <CrewMark look={crew} size={16} />,
+    disabled: state !== "invitable",
+    checked: state === "invited" || state === "member" ? true : undefined,
+    onSelect: onInvite,
+  }));
 }
 
 // In the interface's language, looked up at each call (the language can change live).
@@ -219,12 +239,26 @@ function FriendCard({
         <DiscordButton className="w-full" onClick={() => void openInDiscord(friend)}>
           {t("social.actions.message")}
         </DiscordButton>
-        {team && team.state !== "member" ? (
+        {team?.crews && team.state !== "member" ? (
+          <Menu
+            items={crewInviteItems(team.crews, t)}
+            trigger={
+              <Button
+                variant="secondary"
+                className="w-full"
+                icon={<UsersThree size={16} />}
+                disabled={team.state !== "invitable"}
+              >
+                {team.state === "invited" ? t("teams.invite.sent") : t("teams.invite.toTeam")}
+              </Button>
+            }
+          />
+        ) : team && team.state !== "member" ? (
           <Button
             variant="secondary"
             className="w-full"
             icon={<UsersThree size={16} />}
-            disabled={team.state === "invited"}
+            disabled={team.state !== "invitable"}
             onClick={team.onInvite}
           >
             {team.state === "invited" ? t("teams.invite.sent") : t("teams.invite.toTeam")}
@@ -523,6 +557,7 @@ export function FriendRow({
                 icon: <UsersThree size={16} />,
                 disabled: row.disabled,
                 onSelect: team.onInvite,
+                items: team.crews ? crewInviteItems(team.crews, t) : undefined,
               }
             : null;
         case "remove":

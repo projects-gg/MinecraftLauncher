@@ -5,9 +5,30 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::model::{
-    FriendGroups, LastSeen, PublicProfile, StatusMode, Team, TeamExit, TeamInvite,
+    CrewMute, FriendGroups, LastSeen, PublicProfile, StatusMode, Team, TeamExit, TeamInvite,
     TeamNotifications,
 };
+
+/// What this launcher understands on the presence socket (`GET /v1/presence?caps=…`): crew calls
+/// that carry their server and may end with `server` (`callServer`), and several crews (`crews`).
+/// Older services ignore the query.
+pub const PRESENCE_CAPS: &str = "callServer,crews";
+
+/// projects.gg or one of its subdomains, with or without a port (`play.projects.gg:25565`).
+pub fn is_projects_host(host: &str) -> bool {
+    let name = host
+        .rsplit_once(':')
+        .map_or(host, |(name, port)| {
+            if port.bytes().all(|b| b.is_ascii_digit()) {
+                name
+            } else {
+                host
+            }
+        })
+        .trim_end_matches('.')
+        .to_ascii_lowercase();
+    name == "projects.gg" || name.ends_with(".projects.gg")
+}
 
 /// What this launcher is doing. Sent only when it changes.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -96,9 +117,10 @@ pub struct Invite {
     pub quiet: bool,
 }
 
-/// What a crew call asks: come to projects.gg, where the caller plays, or "are you ready?" (the
-/// caller is in the launcher or elsewhere). It follows the caller's status. A kind this version
-/// does not know reads as `Ready` (an answer, nothing to join).
+/// What a crew call asks: come where the caller plays, or "are you ready?" (a call from before
+/// CALL1, or one of another server for a launcher that does not know `callServer`). With
+/// `callServer` it is always `Join` and the call carries its server. A kind this version does not
+/// know reads as `Ready` (an answer, nothing to join).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum CallKind {
@@ -150,6 +172,14 @@ pub struct CrewCall {
     /// Who answered what (answers this version does not know are left out).
     #[serde(default, deserialize_with = "known_answers")]
     pub answers: BTreeMap<String, CallAnswer>,
+    /// The player's crews the call names (the caller's own call: all it names). Empty from a
+    /// service without several crews: the call is the one crew's.
+    #[serde(default)]
+    pub crews: Vec<String>,
+    /// Where the call is (a service with `callServer`): projects.gg, or another server with its
+    /// address; it follows the caller.
+    #[serde(default)]
+    pub server: Option<Game>,
 }
 
 fn known_answers<'de, D: Deserializer<'de>>(
@@ -162,20 +192,23 @@ fn known_answers<'de, D: Deserializer<'de>>(
         .collect())
 }
 
-/// Why a call ended: the caller ended it, or it went away (the caller went offline, left the crew,
-/// the crew ended, the player left it, or a block hid it). Unknown reasons read as `Ended`.
+/// Why a call ended: the caller ended it, it went away (the caller went offline, left the crew,
+/// the crew ended, the player left it, or a block hid it), or the caller is no longer on a server
+/// it allows (`server`, with `callServer`). Unknown reasons read as `Ended`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, specta::Type)]
 #[serde(rename_all = "lowercase")]
 pub enum CallEndReason {
     #[default]
     Ended,
     Left,
+    Server,
 }
 
 impl<'de> Deserialize<'de> for CallEndReason {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Ok(match String::deserialize(deserializer)?.as_str() {
             "left" => Self::Left,
+            "server" => Self::Server,
             _ => Self::Ended,
         })
     }
@@ -195,8 +228,10 @@ pub(crate) enum ClientMessage {
         to: String,
         rid: u32,
     },
-    /// "Ekibi çağır".
+    /// "Ekibi çağır": the crews it calls (a service with several crews), else the primary one.
     Call {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        crews: Option<Vec<String>>,
         rid: u32,
     },
     CallAnswer {
@@ -253,9 +288,12 @@ pub(crate) enum ServerMessage {
         /// The service's clock (Unix seconds), for the calls' deadlines.
         #[serde(default)]
         now: Option<i64>,
+        /// The capabilities of [`PRESENCE_CAPS`] the service took (none from an older one).
+        #[serde(default)]
+        caps: Vec<String>,
     },
-    /// A crew call, new or changed (its kind, or answers that went away): replaces the one with
-    /// the same id. `quiet`: show it, never announce it.
+    /// A crew call, new or changed (its server or kind, its crews, or answers that went away):
+    /// replaces the one with the same id. `quiet`: show it, never announce it.
     Call {
         call: CrewCall,
         #[serde(default)]
@@ -274,9 +312,12 @@ pub(crate) enum ServerMessage {
         #[serde(default)]
         reason: CallEndReason,
     },
-    /// The player's team changed, or they are no longer in one (`team` null).
+    /// One of the player's crews changed, or they are no longer in it (`team` null).
     Team {
         team: Option<Team>,
+        /// The crew's id (none from a service with one crew per player).
+        #[serde(default)]
+        crew: Option<String>,
         #[serde(default)]
         reason: Option<TeamExit>,
         /// Who made the change.
@@ -286,9 +327,18 @@ pub(crate) enum ServerMessage {
     TeamInvite {
         invite: TeamInvite,
     },
-    /// The player's crew notification settings changed (on any of their devices).
+    /// The player's crew notification settings for all crews changed (on any of their devices).
     TeamNotifications {
         notifications: TeamNotifications,
+    },
+    /// The player's mute of one crew changed (on any of their devices).
+    CrewNotifications {
+        crew: String,
+        notifications: CrewMute,
+    },
+    /// The player put their crews in another order on another device (the first is primary).
+    CrewOrder {
+        order: Vec<String>,
     },
     /// The player's friend categories changed on another device.
     Groups {
@@ -422,6 +472,7 @@ mod tests {
             gone,
             ServerMessage::Team {
                 team: None,
+                crew: None,
                 reason: Some(TeamExit::Kicked),
                 by: Some(_)
             }
@@ -454,8 +505,18 @@ mod tests {
     fn crew_call_messages() {
         let json = |message: &ClientMessage| serde_json::to_string(message).unwrap();
         assert_eq!(
-            json(&ClientMessage::Call { rid: 8 }),
+            json(&ClientMessage::Call {
+                crews: None,
+                rid: 8
+            }),
             r#"{"t":"call","rid":8}"#
+        );
+        assert_eq!(
+            json(&ClientMessage::Call {
+                crews: Some(vec!["0a1b2c3d4e5f6a7b".into(), "9f8e7d6c5b4a3f2e".into()]),
+                rid: 8
+            }),
+            r#"{"t":"call","crews":["0a1b2c3d4e5f6a7b","9f8e7d6c5b4a3f2e"],"rid":8}"#
         );
         assert_eq!(
             json(&ClientMessage::CallAnswer {
@@ -558,5 +619,100 @@ mod tests {
             ServerMessage::TeamNotifications { notifications }
                 if !notifications.calls && !notifications.muted && notifications.mute_until.is_none()
         ));
+    }
+
+    #[test]
+    fn calls_from_a_server_and_several_crews() {
+        // A call with `callServer` and `crews`: always `join`, with where it is and its crews.
+        let call: ServerMessage = serde_json::from_str(
+            r#"{"t":"call","call":{"id":"3f9c0a1b2c3d4e5f","from":"7","kind":"join","at":1,
+                "until":1201,"answers":{},"crews":["0a1b2c3d4e5f6a7b","9f8e7d6c5b4a3f2e"],
+                "server":{"where":"other","host":"mc.example.com"}},"quiet":false,"now":5}"#,
+        )
+        .unwrap();
+        match call {
+            ServerMessage::Call { call, .. } => {
+                assert_eq!(call.crews.len(), 2);
+                assert_eq!(
+                    call.server,
+                    Some(Game {
+                        location: GameLocation::Other,
+                        host: Some("mc.example.com".into())
+                    })
+                );
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        // From a service before them: no crews, no server.
+        let older: ServerMessage = serde_json::from_str(
+            r#"{"t":"call","call":{"id":"a","from":"7","kind":"ready","at":1,"until":2}}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            older,
+            ServerMessage::Call { call, .. } if call.crews.is_empty() && call.server.is_none()
+        ));
+        let moved: ServerMessage =
+            serde_json::from_str(r#"{"t":"call_end","call":"a","reason":"server"}"#).unwrap();
+        assert!(matches!(
+            moved,
+            ServerMessage::CallEnd {
+                reason: CallEndReason::Server,
+                ..
+            }
+        ));
+        let hello: ServerMessage = serde_json::from_str(
+            r#"{"t":"hello","v":1,"status":"online","friends":[],"invites":[],
+                "caps":["callServer","crews"],"now":9}"#,
+        )
+        .unwrap();
+        assert!(matches!(hello, ServerMessage::Hello { caps, .. } if caps.len() == 2));
+        // A crew of several changed, or the player left it.
+        let gone: ServerMessage = serde_json::from_str(
+            r#"{"t":"team","team":null,"crew":"9f8e7d6c5b4a3f2e","reason":"left","by":"100"}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            gone,
+            ServerMessage::Team { team: None, crew: Some(crew), .. } if crew == "9f8e7d6c5b4a3f2e"
+        ));
+        let muted: ServerMessage = serde_json::from_str(
+            r#"{"t":"crew_notifications","crew":"0a1b2c3d4e5f6a7b",
+                "notifications":{"muted":true,"muteUntil":1792600000}}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            muted,
+            ServerMessage::CrewNotifications { crew, notifications }
+                if crew == "0a1b2c3d4e5f6a7b" && notifications.mute_until == Some(1_792_600_000)
+        ));
+        let order: ServerMessage = serde_json::from_str(
+            r#"{"t":"crew_order","order":["9f8e7d6c5b4a3f2e","0a1b2c3d4e5f6a7b"]}"#,
+        )
+        .unwrap();
+        assert!(
+            matches!(order, ServerMessage::CrewOrder { order } if order[0] == "9f8e7d6c5b4a3f2e")
+        );
+    }
+
+    #[test]
+    fn projects_hosts() {
+        for host in [
+            "projects.gg",
+            "play.projects.gg",
+            "PLAY.Projects.GG.",
+            "play.projects.gg:25565",
+        ] {
+            assert!(is_projects_host(host), "{host}");
+        }
+        for host in [
+            "notprojects.gg",
+            "projects.gg.example.com",
+            "mc.example.com",
+            "projects.gg:abc",
+            "",
+        ] {
+            assert!(!is_projects_host(host), "{host}");
+        }
     }
 }

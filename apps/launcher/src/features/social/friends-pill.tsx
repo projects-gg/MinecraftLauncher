@@ -54,7 +54,7 @@ function Pill() {
   const crewCalls = useSocialPrefs((s) => s.notifyCrewCalls);
   // A request, an invite or a crewmate's call waits for the player: the gold mark, named in the
   // label and the tooltip.
-  const waiting = signedIn ? waitingWords(t, whatWaits(view, crewCalls, now), view.team) : [];
+  const waiting = signedIn ? waitingWords(t, whatWaits(view, crewCalls, now), view.crews) : [];
   const pending = waiting.length > 0;
   const open = () => openPanel({ from: trigger.current });
 

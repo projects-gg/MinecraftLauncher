@@ -120,8 +120,9 @@ function NotificationSection() {
   const online = useSocialPrefs((s) => s.notifyFavoriteOnline);
   const projects = useSocialPrefs((s) => s.notifyFavoriteProjects);
   const set = useSocialPrefs((s) => s.set);
-  // The crew's own group, while the player is in one (the crew page's bell shows it too).
-  const crews = useSocialUi((s) => s.view.teams && Boolean(s.view.team));
+  // The crew's own group, while the player is in one (the crew page's bell shows it too); with
+  // several crews it mutes all of them at once.
+  const crews = useSocialUi((s) => s.view.teams && s.view.crews.length > 0);
   return (
     <Section title={t("social.settings.notifications")}>
       <div className="space-y-3.5">

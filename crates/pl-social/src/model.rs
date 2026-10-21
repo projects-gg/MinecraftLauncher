@@ -233,6 +233,13 @@ pub struct FriendsOverview {
     /// outside a crew).
     #[serde(default)]
     pub team_notifications: Option<TeamNotifications>,
+    /// Every crew of the player in their order, the first being the primary crew (a service with
+    /// [`TEAM_FEATURE_MULTI`]). None from an older service: its one crew is `team`.
+    #[serde(default)]
+    pub crews: Option<Vec<CrewEntry>>,
+    /// How many crews a player may be in (a service with [`TEAM_FEATURE_MULTI`]).
+    #[serde(default)]
+    pub crew_limit: Option<u32>,
 }
 
 /// `teamFeatures`: crew looks (colour, frame, motto, the newer emblems).
@@ -243,9 +250,98 @@ pub const TEAM_FEATURE_CALLS: &str = "calls";
 pub const TEAM_FEATURE_ROLES: &str = "roles";
 /// `teamFeatures`: the player's crew notification settings ("Sessize al", crew calls on or off).
 pub const TEAM_FEATURE_MUTE: &str = "mute";
+/// `teamFeatures`: several crews per player (`crews`, `crewLimit`, `multi: true`, the crew order,
+/// a mute per crew, `crews` in calls).
+pub const TEAM_FEATURE_MULTI: &str = "multi";
+/// `teamFeatures`: crew calls start only on a multiplayer server and carry it (CALL1).
+pub const TEAM_FEATURE_CALL_SERVER: &str = "callServer";
+
+/// How many crews a player may be in when a service with several crews does not say.
+pub const DEFAULT_CREW_LIMIT: u32 = 5;
 
 /// The longest timed mute the service takes; longer is "until I unmute".
 pub const MAX_MUTE_SECS: i64 = 30 * 86_400;
+
+/// The player's own mute of one crew (`crews[].notifications`, a service with
+/// [`TEAM_FEATURE_MULTI`]): silent until `mute_until`, or until unmuted when that is None. Nobody
+/// else sees it; a timed mute ends by itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CrewMute {
+    #[serde(default)]
+    pub muted: bool,
+    /// Unix seconds (the service's clock).
+    #[serde(default)]
+    pub mute_until: Option<i64>,
+}
+
+impl CrewMute {
+    /// Muted at `now` (Unix seconds).
+    pub fn muted_at(&self, now: i64) -> bool {
+        self.muted && self.mute_until.is_none_or(|until| until > now)
+    }
+
+    /// As it reads at `now`: a timed mute that ran out is no mute.
+    pub fn at(self, now: i64) -> Self {
+        if self.muted_at(now) {
+            self
+        } else {
+            Self::default()
+        }
+    }
+}
+
+/// One of the player's crews as `crews` lists it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CrewEntry {
+    /// The crew as its members see it.
+    pub team: Team,
+    /// Friends the player invited to this crew who have not answered yet.
+    #[serde(default)]
+    pub invited: Vec<String>,
+    /// The player's own mute of this crew.
+    #[serde(default)]
+    pub notifications: CrewMute,
+}
+
+/// The player's crews in their order: `crews` from a service with several crews, else the one
+/// crew an older service sends as `team` (with its `invited`).
+pub(crate) fn crews_of(
+    crews: Option<Vec<CrewEntry>>,
+    team: Option<Team>,
+    invited: Vec<String>,
+) -> Vec<CrewEntry> {
+    crews.unwrap_or_else(|| {
+        team.map(|team| CrewEntry {
+            team,
+            invited,
+            notifications: CrewMute::default(),
+        })
+        .into_iter()
+        .collect()
+    })
+}
+
+/// `PATCH /v1/teams/:id/notifications`: "Sessize al" for one crew until `mute_until` (or until
+/// unmuted without it), or "Sesi aç" (`muted: false`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CrewMuteEdit {
+    pub muted: bool,
+    /// Unix seconds, in the next 30 days; only with `muted: true`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mute_until: Option<i64>,
+}
+
+impl CrewMuteEdit {
+    /// A timed mute needs `muted: true` and an end in the next 30 days (the service's rule).
+    pub fn valid_at(&self, now: i64) -> bool {
+        match self.mute_until {
+            None => true,
+            Some(until) => self.muted && until > now && until <= now + MAX_MUTE_SECS,
+        }
+    }
+}
 
 /// `teamNotifications`: what the player hears of their crew, on every device of theirs and in
 /// any crew. Nobody else sees it.
@@ -578,6 +674,9 @@ pub enum TeamRelation {
     Blocked,
     /// No room left.
     Full,
+    /// The player is in as many crews as they may be (only when the lookup asked with
+    /// `multi: true`).
+    Limit,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -607,6 +706,11 @@ pub struct TeamsOverview {
     pub team_features: Vec<String>,
     #[serde(default)]
     pub team_notifications: Option<TeamNotifications>,
+    /// Every crew in the player's order (a service with [`TEAM_FEATURE_MULTI`]).
+    #[serde(default)]
+    pub crews: Option<Vec<CrewEntry>>,
+    #[serde(default)]
+    pub crew_limit: Option<u32>,
 }
 
 /// Why the player is no longer in their team (presence `{"t":"team","team":null}`). A reason this
@@ -1097,6 +1201,94 @@ mod tests {
         };
         assert_eq!(serde_json::to_string(&calls).unwrap(), r#"{"calls":false}"#);
         assert!(TeamNotificationsEdit::default().is_empty() && !calls.is_empty());
+    }
+
+    #[test]
+    fn several_crews_come_in_the_players_order_with_their_mutes() {
+        let crew = |id: &str, name: &str| {
+            format!(
+                r#"{{"id":"{id}","name":"{name}","tag":"GKR","emblem":"sword","code":"TKM-ABCD-EFGH",
+                "createdOn":"2026-10-20","members":[]}}"#
+            )
+        };
+        let overview: FriendsOverview = serde_json::from_str(&format!(
+            r#"{{"friends":[],"incoming":[],"outgoing":[],"blocked":[],
+                "limits":{{"friends":200,"outgoingRequests":50,"teamMembers":30}},
+                "team":{a},"teamInvited":["2"],
+                "crews":[{{"team":{a},"invited":["2"],"notifications":{{"muted":false,"muteUntil":null}}}},
+                  {{"team":{b},"notifications":{{"muted":true,"muteUntil":1000}}}}],
+                "crewLimit":5,"teamFeatures":["look","calls","roles","mute","multi","callServer"]}}"#,
+            a = crew("0a1b2c3d4e5f6a7b", "Gece Kartalları"),
+            b = crew("9f8e7d6c5b4a3f2e", "PvP"),
+        ))
+        .unwrap();
+        assert_eq!(overview.crew_limit, Some(5));
+        let crews = crews_of(overview.crews, overview.team, overview.team_invited);
+        assert_eq!(
+            crews
+                .iter()
+                .map(|c| c.team.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["Gece Kartalları", "PvP"]
+        );
+        assert_eq!(crews[0].invited, vec!["2".to_owned()]);
+        assert!(crews[1].invited.is_empty());
+        let mute = crews[1].notifications;
+        assert!(mute.muted_at(999) && !mute.muted_at(1000));
+        assert_eq!(mute.at(1000), CrewMute::default());
+        assert_eq!(mute.at(999), mute);
+
+        // A service with one crew per player: its `team` is the list.
+        let older: TeamsOverview = serde_json::from_str(&format!(
+            r#"{{"team":{a},"invited":["3"],"teamInvites":[]}}"#,
+            a = crew("0a1b2c3d4e5f6a7b", "Gece Kartalları")
+        ))
+        .unwrap();
+        assert_eq!(older.crew_limit, None);
+        let crews = crews_of(older.crews, older.team, older.invited);
+        assert_eq!(crews.len(), 1);
+        assert_eq!(crews[0].invited, vec!["3".to_owned()]);
+        assert!(crews_of(None, None, vec![]).is_empty());
+
+        let limit: TeamLookup = serde_json::from_str(
+            r#"{"team":{"id":"x","name":"PvP","tag":"PVP","emblem":"bolt","members":3},
+                "relation":"limit"}"#,
+        )
+        .unwrap();
+        assert_eq!(limit.relation, TeamRelation::Limit);
+    }
+
+    #[test]
+    fn one_crews_mute_goes_out_as_the_service_takes_it() {
+        let timed = CrewMuteEdit {
+            muted: true,
+            mute_until: Some(4_600),
+        };
+        assert_eq!(
+            serde_json::to_string(&timed).unwrap(),
+            r#"{"muted":true,"muteUntil":4600}"#
+        );
+        assert!(timed.valid_at(1_000) && !timed.valid_at(4_600));
+        assert!(!timed.valid_at(4_600 - MAX_MUTE_SECS - 1));
+        let forever = CrewMuteEdit {
+            muted: true,
+            mute_until: None,
+        };
+        assert_eq!(
+            serde_json::to_string(&forever).unwrap(),
+            r#"{"muted":true}"#
+        );
+        let off = CrewMuteEdit {
+            muted: false,
+            mute_until: None,
+        };
+        assert_eq!(serde_json::to_string(&off).unwrap(), r#"{"muted":false}"#);
+        assert!(off.valid_at(0));
+        let stray = CrewMuteEdit {
+            muted: false,
+            mute_until: Some(4_600),
+        };
+        assert!(!stray.valid_at(1_000));
     }
 
     #[test]

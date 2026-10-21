@@ -379,6 +379,34 @@ impl From<pl_social::SocialError> for CmdError {
                     "SOSYAL-CAGRI-YOK",
                     pick("Bu çağrı bitti.", "This call has ended."),
                 ),
+                C::CallNeedsServer => (
+                    "SOSYAL-CAGRI-SUNUCU",
+                    pick(
+                        "Ekibini çağırmak için çok oyunculu bir sunucuda olmalısın.",
+                        "Join a multiplayer server to call your crew.",
+                    ),
+                ),
+                C::CallServerHidden => (
+                    "SOSYAL-CAGRI-ADRES",
+                    pick(
+                        "Ekibini buraya çağırmak için sunucunun adresini göstermelisin.",
+                        "To call your crew here, show this server's address.",
+                    ),
+                ),
+                C::LimitCrews => (
+                    "SOSYAL-EKIP-SINIR",
+                    pick(
+                        "Daha fazla ekipte olamazsın.",
+                        "You can't be in any more crews.",
+                    ),
+                ),
+                C::CrewsChanged => (
+                    "SOSYAL-EKIP-SIRA",
+                    pick(
+                        "Ekiplerin bu arada değişti. Sırayı yeniden dene.",
+                        "Your crews changed meanwhile. Try the order again.",
+                    ),
+                ),
                 C::InvalidTeamTag => (
                     "SOSYAL-TAKIM-ETIKET",
                     pick(

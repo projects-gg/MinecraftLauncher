@@ -59,8 +59,18 @@ interface SocialUi {
 
   /** The team page opens at this (a menu's "Takımı düzenle", "Davet et", "Takımdan ayrıl"). */
   teamIntent: TeamIntent | null;
-  openTeam: (intent?: TeamIntent) => void;
+  /** Opens the crew page (on `crew`, one of several, when given) and at `intent`. */
+  openTeam: (intent?: TeamIntent, crew?: string) => void;
   takeTeamIntent: () => TeamIntent | null;
+  /** The crew the crew page shows (several crews): a crew's id, "new" for "Ekip kur ya da
+   * katıl", or null for the first (the primary crew). This session only. */
+  crewTab: string | null;
+  setCrewTab: (tab: string | null) => void;
+
+  /** "Ekiplerini çağır": the picker of crews to call is open, with these ticked. */
+  callPicker: string[] | null;
+  openCallPicker: (ticked: string[]) => void;
+  closeCallPicker: () => void;
 
   /** A status just chosen, shown until the service confirms it (the old one comes back on failure). */
   statusPending: StatusMode | null;
@@ -69,6 +79,10 @@ interface SocialUi {
   /** Crew calls whose Home line the player closed with × (this session only; not an answer). */
   closedCalls: string[];
   closeCall: (id: string) => void;
+  /** Home's "Ekibini yanına çağır" was closed with × on this server (`callLineKey`): it comes
+   * back on another one. This session only. */
+  callLineClosed: string | null;
+  closeCallLine: (on: string | null) => void;
   /** "Ekibi çağır" waits until then (ms): the service refused a call that came too soon. */
   callRefusedUntil: number;
   /** When the player last called from here (ms), for the five minutes between calls. */
@@ -131,19 +145,27 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
   setCategoryDraft: (categoryDraft) => set({ categoryDraft }),
 
   teamIntent: null,
-  openTeam: (intent) => {
+  openTeam: (intent, crew) => {
     get().goTo("team");
-    set({ teamIntent: intent ?? null });
+    set((s) => ({ teamIntent: intent ?? null, crewTab: crew ?? s.crewTab }));
   },
   takeTeamIntent: () => {
     const intent = get().teamIntent;
     if (intent) set({ teamIntent: null });
     return intent;
   },
+  crewTab: null,
+  setCrewTab: (crewTab) => set({ crewTab }),
+
+  callPicker: null,
+  openCallPicker: (ticked) => set({ callPicker: ticked }),
+  closeCallPicker: () => set({ callPicker: null }),
 
   statusPending: null,
   setStatusPending: (statusPending) => set({ statusPending }),
 
+  callLineClosed: null,
+  closeCallLine: (callLineClosed) => set({ callLineClosed }),
   closedCalls: [],
   closeCall: (id) =>
     set((s) =>
