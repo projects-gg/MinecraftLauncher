@@ -7,6 +7,7 @@ export const enHelp = {
     checkingLine: "Takes a few seconds.",
     fine: "Everything looks fine",
     fineLine: "If the game still won't start, send the summary to support.",
+    nothingElse: "Nothing else looks wrong",
     problems_one: "Found {{count}} problem",
     problems: "Found {{count}} problems",
     warnings_one: "{{count}} warning",

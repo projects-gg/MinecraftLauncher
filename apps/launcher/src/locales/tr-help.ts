@@ -12,6 +12,8 @@ export const trHelp = {
     checkingLine: "Birkaç saniye sürer.",
     fine: "Her şey yolunda",
     fineLine: "Oyun yine de açılmıyorsa özeti destek kanalına gönder.",
+    /** After a failed launch, when the checks found nothing else. */
+    nothingElse: "Başka bir sorun bulunamadı",
     problems: "{{count}} sorun bulundu",
     warnings: "{{count}} uyarı var",
     /** Screen readers, when a run ends ("Denetim bitti. 2 sorun bulundu."). */

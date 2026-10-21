@@ -5,6 +5,7 @@
 // once the last row is in.
 import { create } from "zustand";
 import { api, type HelpCheck, type HelpFinding, type HelpReport } from "@/lib/api";
+import { useLaunch } from "@/stores/launch";
 import { GROUP_ORDER, GROUPS } from "./model";
 
 /** The launch that failed before the troubleshooter opened. */
@@ -126,6 +127,13 @@ export const useHelp = create<HelpState>()((set, get) => ({
     if (get().status !== "running") get().start(instanceId);
   },
 }));
+
+// A game that got going leaves the failed launch behind: the panel no longer shows it.
+useLaunch.subscribe((state, before) => {
+  if (state.phase.kind === "running" && before.phase.kind !== "running") {
+    if (useHelp.getState().failure) useHelp.setState({ failure: null });
+  }
+});
 
 /** The failed launch while it is recent enough to matter. */
 export function recentFailure(

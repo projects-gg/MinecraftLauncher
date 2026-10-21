@@ -157,12 +157,18 @@ function VerdictCard({
   run,
   progress,
   running,
+  failed,
+  lead,
   onRecheck,
 }: {
   shown: Verdict;
   run: number;
   progress: number;
   running: boolean;
+  /** A launch failed just before: with nothing else found, the headline does not say all is well. */
+  failed: boolean;
+  /** The first problem's fix, once the run is done: the one gold action, in view on any window. */
+  lead?: { key: string; label: string; busy: boolean; onClick: () => void };
   onRecheck: () => void;
 }) {
   const { t, i18n } = useTranslation();
@@ -170,7 +176,7 @@ function VerdictCard({
     shown.kind === "checking"
       ? t("help.verdict.checking")
       : shown.kind === "fine"
-        ? t("help.verdict.fine")
+        ? t(failed ? "help.verdict.nothingElse" : "help.verdict.fine")
         : t(`help.verdict.${shown.kind}`, { count: shown.count });
   const line =
     shown.kind === "checking"
@@ -188,15 +194,32 @@ function VerdictCard({
           <Swap text={headline} className="font-display text-section font-semibold text-bone-50" />
           <Swap text={line} className="mt-0.5 text-[13px] leading-[18px] text-ash-300" />
         </div>
-        <Button
-          size="sm"
-          variant="secondary"
-          icon={<ArrowClockwise size={15} />}
-          disabled={running}
-          onClick={onRecheck}
-        >
-          {t("help.recheck")}
-        </Button>
+        <div className="flex shrink-0 items-center gap-2">
+          {/* Left of "Tekrar denetle", which keeps its place when the fix comes or goes. */}
+          <AnimatePresence initial={false}>
+            {lead ? (
+              <motion.span
+                key={lead.key}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: enter(0.2) }}
+                exit={{ opacity: 0, transition: leave(0.14) }}
+              >
+                <Button size="sm" variant="primary" disabled={lead.busy} onClick={lead.onClick}>
+                  {lead.label}
+                </Button>
+              </motion.span>
+            ) : null}
+          </AnimatePresence>
+          <Button
+            size="sm"
+            variant="secondary"
+            icon={<ArrowClockwise size={15} />}
+            disabled={running}
+            onClick={onRecheck}
+          >
+            {t("help.recheck")}
+          </Button>
+        </div>
       </div>
       {/* How many rows are in: a hairline along the bottom edge (a new run starts a new one, so
           it never runs backwards), gone once the run is done. */}
@@ -232,7 +255,6 @@ function HelpRow({
   row,
   rows,
   index,
-  lead,
   busy,
   onFix,
 }: {
@@ -241,7 +263,6 @@ function HelpRow({
   /** Every row (one button per fix, `shownFix`). */
   rows: ReadonlyMap<RowCheck, Row>;
   index: number;
-  lead: boolean;
   busy: boolean;
   onFix: (row: Row) => void;
 }) {
@@ -311,7 +332,7 @@ function HelpRow({
             >
               <Button
                 size="sm"
-                variant={lead ? "primary" : "secondary"}
+                variant="secondary"
                 disabled={checking || busy}
                 aria-label={`${fixLabel(t, fix)}: ${title}`}
                 onClick={() => shownRow && onFix(shownRow)}
@@ -368,7 +389,6 @@ function GroupBlock({
   checks,
   rows,
   running,
-  lead,
   busy,
   aside,
   onFix,
@@ -377,7 +397,6 @@ function GroupBlock({
   checks: RowCheck[];
   rows: ReadonlyMap<RowCheck, Row>;
   running: boolean;
-  lead: RowCheck | undefined;
   busy: boolean;
   aside?: ReactNode;
   onFix: (row: Row) => void;
@@ -410,7 +429,6 @@ function GroupBlock({
               row={rows.get(check)}
               rows={rows}
               index={index + (group === "game" ? 3 : 0)}
-              lead={lead === check}
               busy={busy}
               onFix={onFix}
             />
@@ -511,11 +529,13 @@ export function HelpSection() {
   const shown = verdict(shownRows, running);
   const settled = plan.filter((check) => rows.has(check)).length;
   const progress = plan.length > 0 ? settled / plan.length : 0;
-  // The first problem's fix turns gold once the run is done (so the gold never hops from row to
-  // row while rows settle); every other fix stays quiet. Fixes work as soon as their row settles.
-  const lead = running
+  // The first problem's fix, gold in the verdict card once the run is done (in view on any window,
+  // and it never hops from row to row while they settle); the rows' own buttons stay quiet. A fix
+  // works as soon as its row settles.
+  const leadRow = running
     ? undefined
-    : shownRows.find((row) => row.level === "problem" && shownFix(row, rows))?.check;
+    : shownRows.find((row) => row.level === "problem" && shownFix(row, rows));
+  const leadFix = leadRow ? shownFix(leadRow, rows) : undefined;
 
   const [fixing, setFixing] = useState(false);
   const fix = async (row: Row) => {
@@ -553,16 +573,28 @@ export function HelpSection() {
 
   return (
     <div className="mt-3 space-y-4 pb-1">
+      {/* The failed launch first: it is why the player is here. */}
+      <AnimatePresence initial={false}>
+        {failure ? <LaunchNote key="failure" failure={failure} /> : null}
+      </AnimatePresence>
       <VerdictCard
         shown={shown}
         run={run}
         progress={running ? progress : 1}
         running={running}
+        failed={failure !== null}
+        lead={
+          leadRow && leadFix
+            ? {
+                key: `${leadRow.check}:${leadFix}`,
+                label: fixLabel(t, leadFix),
+                busy: fixing,
+                onClick: () => void fix(leadRow),
+              }
+            : undefined
+        }
         onRecheck={() => useHelp.getState().start(instanceId)}
       />
-      <AnimatePresence initial={false}>
-        {failure ? <LaunchNote key="failure" failure={failure} /> : null}
-      </AnimatePresence>
       {groups.map(({ group, checks }) => (
         <GroupBlock
           key={group}
@@ -570,7 +602,6 @@ export function HelpSection() {
           checks={checks}
           rows={rows}
           running={running}
-          lead={lead}
           busy={fixing}
           onFix={(row) => void fix(row)}
           aside={
@@ -581,16 +612,18 @@ export function HelpSection() {
         />
       ))}
       {/* The way to support stays in view: on a short window the footer holds to the panel's
-          bottom edge and the rows pass under a soft fade (no blur, so nothing shows through). */}
+          bottom edge (`-bottom-4`: the panel's padding, which a sticky box otherwise keeps clear)
+          and the rows pass under a soft fade into a solid surface (no blur: it would not reach
+          them inside the scroller, and their text showed through a translucent one). */}
       <motion.div
         layout={!stuck && prefs.layout ? "position" : false}
         transition={{ layout: glide }}
-        className="sticky bottom-0 z-10 -mx-6 -mb-4 px-6 pt-1.5 pb-4"
+        className="sticky -bottom-4 z-10 -mx-6 -mb-4 px-6 pt-1.5 pb-4"
       >
         <div
           aria-hidden
           className={cn(
-            "pointer-events-none absolute inset-x-0 -top-6 bottom-0 bg-[linear-gradient(to_bottom,transparent,rgb(18_16_22/0.97)_21px)] transition-opacity duration-200",
+            "pointer-events-none absolute inset-x-0 -top-6 bottom-0 bg-[linear-gradient(to_bottom,transparent,var(--color-obsidian-900)_21px)] transition-opacity duration-200",
             stuck ? "opacity-100" : "opacity-0",
           )}
         />
