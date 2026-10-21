@@ -2,6 +2,7 @@ import { enAfkAlerts } from "./en-afk-alerts";
 import { enAfkConnect } from "./en-afk-connect";
 import { enAfkReconnect } from "./en-afk-reconnect";
 import { enChat } from "./en-chat";
+import { enCrewWave2 } from "./en-crew-wave2";
 import { enCrews } from "./en-crews";
 import { enDisk } from "./en-disk";
 import { enEventJoin } from "./en-event-join";
@@ -275,6 +276,7 @@ export const en: DeepPartial<Strings> = {
   reports: enReports,
   safety: enSafety,
   help: enHelp,
+  crewWave2: enCrewWave2,
   nav: {
     home: "Home",
     library: "Library",
