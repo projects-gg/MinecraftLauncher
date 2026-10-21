@@ -21,6 +21,7 @@ import { enPrepare } from "./en-prepare";
 import { enReminders } from "./en-reminders";
 import { enShortcuts } from "./en-shortcuts";
 import { enShotCopy } from "./en-shot-copy";
+import { enSmall7 } from "./en-small7";
 import { enTeams } from "./en-teams";
 import { enTray } from "./en-tray";
 import { enTuning } from "./en-tuning";
@@ -263,6 +264,7 @@ export const en: DeepPartial<Strings> = {
   fps: enFps,
   homeLinks: enHomeLinks,
   tray: enTray,
+  small7: enSmall7,
   nav: {
     home: "Home",
     library: "Library",

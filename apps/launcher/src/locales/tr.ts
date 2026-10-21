@@ -22,6 +22,7 @@ import { trPrepare } from "./tr-prepare";
 import { trReminders } from "./tr-reminders";
 import { trShortcuts } from "./tr-shortcuts";
 import { trShotCopy } from "./tr-shot-copy";
+import { trSmall7 } from "./tr-small7";
 import { trSocial } from "./tr-social";
 import { trTeams } from "./tr-teams";
 import { trTray } from "./tr-tray";
@@ -57,6 +58,7 @@ export const tr = {
   fps: trFps,
   homeLinks: trHomeLinks,
   tray: trTray,
+  small7: trSmall7,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
