@@ -57,6 +57,8 @@ import {
   NewCategoryRow,
 } from "./category-header";
 import { CallRow } from "./crew-call";
+import { waitingRequests } from "./crew-joining";
+import { JoinsRow } from "./crew-requests";
 import { type InviteState, inviteTargets } from "./crews";
 import { FriendRow, type RowTeam } from "./friend-row";
 import {
@@ -481,6 +483,7 @@ type Item =
   | { key: string; kind: "teamInvite"; invite: TeamInvite }
   | { key: string; kind: "teamHeader"; team: SocialTeam; folded: boolean }
   | { key: string; kind: "call"; call: CrewCall; team: SocialTeam }
+  | { key: string; kind: "joins"; team: SocialTeam; count: number }
   | { key: string; kind: "teammate"; member: TeamMember; team: SocialTeam }
   | {
       key: string;
@@ -648,6 +651,9 @@ export function ListPage() {
             if (crewsOfCall(call, crews)[0]?.id !== team.id) continue;
             list.push({ key: `c:${call.id}`, kind: "call", call, team });
           }
+          // Join requests wait for the player's answer (TEAM5), folded or not.
+          const joins = waitingRequests(team, now).length;
+          if (joins) list.push({ key: `j:${team.id}`, kind: "joins", team, count: joins });
         }
         if (!folded || q) {
           for (const member of mates) {
@@ -745,6 +751,7 @@ export function ListPage() {
     crews,
     multi,
     calls,
+    now,
     favorites,
     collapsed,
     doc,
@@ -931,6 +938,8 @@ export function ListPage() {
         );
       case "call":
         return <CallRow call={item.call} team={item.team} />;
+      case "joins":
+        return <JoinsRow team={item.team} count={item.count} />;
       case "teammate":
         return <TeamMemberRow member={item.member} team={item.team} onKeyDown={onRowKey} />;
       case "group": {

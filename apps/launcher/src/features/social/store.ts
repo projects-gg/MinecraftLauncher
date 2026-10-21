@@ -56,12 +56,20 @@ interface SocialUi {
   direction: 1 | -1;
   /** A friend code to look up when the add page opens (`projects://friend/…`). */
   prefillCode: string | null;
+  /** A crew invite link to look up on "Ekip kur ya da katıl" (`projects://crew/…`, TEAM5). */
+  prefillLink: string | null;
   /** Focus goes back here when the panel closes. */
   returnFocus: HTMLElement | null;
-  openPanel: (options?: { page?: SocialPage; code?: string; from?: HTMLElement | null }) => void;
+  openPanel: (options?: {
+    page?: SocialPage;
+    code?: string;
+    link?: string;
+    from?: HTMLElement | null;
+  }) => void;
   closePanel: () => void;
   goTo: (page: SocialPage) => void;
   takePrefill: () => string | null;
+  takeLink: () => string | null;
 
   /** The browser page of the sign-in in progress ("Tarayıcıyı yeniden aç"). */
   signInUrl: string | null;
@@ -107,6 +115,9 @@ interface SocialUi {
   /** Crew calls whose Home line the player closed with × (this session only; not an answer). */
   closedCalls: string[];
   closeCall: (id: string) => void;
+  /** Crew plans whose Home line the player closed with × (this session only; TEAM5). */
+  closedPlans: string[];
+  closePlan: (id: string) => void;
   /** Home's "Ekibini yanına çağır" was closed with × on this server (`callLineKey`): it comes
    * back on another one. This session only. */
   callLineClosed: string | null;
@@ -146,6 +157,7 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
   page: "list",
   direction: 1,
   prefillCode: null,
+  prefillLink: null,
   returnFocus: null,
   openPanel: (options) => {
     const page = options?.page ?? "list";
@@ -154,6 +166,10 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
       page,
       direction: DEPTH[page] >= DEPTH[s.page] ? 1 : -1,
       prefillCode: options?.code ?? s.prefillCode,
+      // An invite link opens "Ekip kur ya da katıl", where it is looked up.
+      ...(options?.link
+        ? { prefillLink: options.link, crewTab: "new", crewPane: "crew" as const }
+        : {}),
       returnFocus:
         options?.from ??
         (document.activeElement instanceof HTMLElement ? document.activeElement : null),
@@ -170,6 +186,11 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
     const code = get().prefillCode;
     if (code) set({ prefillCode: null });
     return code;
+  },
+  takeLink: () => {
+    const link = get().prefillLink;
+    if (link) set({ prefillLink: null });
+    return link;
   },
 
   signInUrl: null,
@@ -214,6 +235,11 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
   closeCall: (id) =>
     set((s) =>
       s.closedCalls.includes(id) ? s : { closedCalls: [...s.closedCalls, id].slice(-32) },
+    ),
+  closedPlans: [],
+  closePlan: (id) =>
+    set((s) =>
+      s.closedPlans.includes(id) ? s : { closedPlans: [...s.closedPlans, id].slice(-32) },
     ),
   callRefusedUntil: 0,
   lastCallAt: null,
@@ -276,6 +302,10 @@ interface SocialPrefs {
   /** "Ekip sohbeti bildirimleri": crew chat messages are told like direct ones (off by default:
    * crew chat only counts unread). */
   notifyCrewChat: boolean;
+  /** "Katılma istekleri": a request to join a crew the player answers is told (on by default). */
+  notifyJoinRequests: boolean;
+  /** "Plan hatırlatmaları": "Geliyorum" and "Belki" ring 10 minutes before (on by default). */
+  notifyPlans: boolean;
   /** Conversations muted on this computer ("Sessize al"): until when (ms), or null until unmuted. */
   chatMutes: ChatMutes;
   setChatMute: (conv: string, until: number | null | undefined) => void;
@@ -313,6 +343,8 @@ export const useSocialPrefs = create<SocialPrefs>()(
       closedHints: [],
       collapsed: [],
       notifyCrewChat: false,
+      notifyJoinRequests: true,
+      notifyPlans: true,
       chatMutes: {},
       setChatMute: (conv, until) =>
         set((s) => {

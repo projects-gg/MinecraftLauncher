@@ -11,12 +11,19 @@
 // crew code; the leader's "Yetkiler"; leaving. Every irreversible step asks once, in place, with
 // one sentence; nothing else asks. With chat (CHAT1) the crew has "Ekip" and "Sohbet" (its chat,
 // filling the panel); a crew whose name moderators reset says so on top while it stays locked
-// (MOD1), and a new Discord account hears in place why it cannot found a crew yet (SPAM1).
+// (MOD1), and a new Discord account hears in place why it cannot found a crew yet (SPAM1). The
+// second wave (TEAM5): join requests above the members for those who answer them
+// (crew-requests.tsx), "Planlar" (crew-plans-view.tsx), the invite link and "Katılım" under the
+// code (crew-link.tsx), the time played together on the card; "Kodla katıl" takes invite links
+// too (pasted, or `projects://crew/…`), and a crew whose leaders approve newcomers gets a join
+// request instead ("İsteğin bekliyor", "Geri çek"); the player's own waiting requests sit on top
+// of "Ekip kur ya da katıl".
 import {
   ArrowsClockwise,
   CalendarBlank,
   CaretDown,
   Check,
+  Clock,
   Copy,
   LockSimple,
   MagnifyingGlass,
@@ -70,7 +77,11 @@ import {
   fieldClass,
   NEW_CREW,
 } from "./crew-editor";
+import { type CrewKey, crewKeyOf, formatJoinInput, joinOffer, showsLink } from "./crew-joining";
+import { CrewLinkRows } from "./crew-link";
+import { CrewPlans } from "./crew-plans-view";
 import { CrewRail } from "./crew-rail";
+import { CrewRequests, MyRequests } from "./crew-requests";
 import { callableCrews, canAddCrew, NEW_CREW_TAB, shownCrew } from "./crews";
 import { dayMonth, limitOf, opensIn } from "./limits";
 import { type Leaving, leavingOf } from "./menus";
@@ -87,13 +98,13 @@ import {
   formatTeamCodeInput,
   localDay,
   membersMayHave,
-  normalizeTeamCode,
   RIGHTS,
   type Right,
   rosterGroups,
   switchesOf,
   switchLevel,
 } from "./teams";
+import { togetherTime } from "./together";
 import { useCallClock } from "./use-call-clock";
 
 function SectionTitle({ children }: { children: string }) {
@@ -193,27 +204,38 @@ type Found =
   | { kind: "found"; lookup: TeamLookup }
   | { kind: "error"; message: string };
 
-function JoinCrew() {
+/** "Kodla katıl" (with links: "Kodla ya da bağlantıyla katıl"); `first` on top of the page (an
+ * invite link opened it), without the space above. */
+function JoinCrew({ first = false }: { first?: boolean }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
   const limit = useSocialUi((s) => s.view.crewLimit);
+  const features = useCrewFeatures();
+  const invites = useSocialUi((s) => s.view.teamInvites);
+  const ownRequests = useSocialUi((s) => s.view.teamRequests.length);
+  const prefill = useSocialUi((s) => s.prefillLink);
   const inputId = useId();
   const [value, setValue] = useState("");
   const [invalid, setInvalid] = useState(false);
   const [found, setFound] = useState<Found>({ kind: "idle" });
   const [busy, setBusy] = useState(false);
   const pasted = useRef(false);
+  // Links are taken where the service has them; the words follow.
+  const words = features.link ? "crewWave2.join" : "teams.join";
+
+  const lookUp = (key: CrewKey) =>
+    key.kind === "link" ? api.social.lookupCrewLink(key.link) : api.social.lookupTeam(key.code);
 
   const look = async (input: string) => {
-    const code = normalizeTeamCode(input);
-    if (!code) {
+    const key = crewKeyOf(input);
+    if (!key) {
       setInvalid(true);
       return;
     }
     setInvalid(false);
     setFound({ kind: "looking" });
     try {
-      setFound({ kind: "found", lookup: await api.social.lookupTeam(code) });
+      setFound({ kind: "found", lookup: await lookUp(key) });
     } catch (error) {
       setFound({
         kind: "error",
@@ -222,23 +244,66 @@ function JoinCrew() {
     }
   };
 
+  // An invite link the player opened (`projects://crew/…`): shown and looked up once; nothing is
+  // sent until they press the button.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `look` is this render's
+  useEffect(() => {
+    if (!prefill) return;
+    const link = useSocialUi.getState().takeLink();
+    if (!link) return;
+    setValue(link);
+    void look(link);
+  }, [prefill]);
+
   const join = async (lookup: TeamLookup) => {
     setBusy(true);
-    const done = await attempt(() => api.social.joinTeam(lookup.code));
+    const result = await attempt(() =>
+      lookup.link ? api.social.joinCrewLink(lookup.link) : api.social.joinTeam(lookup.code),
+    );
     setBusy(false);
-    if (done !== undefined) announce(t("teams.joined", { name: lookup.name }));
+    if (result === undefined) return;
+    if (result === "requested") {
+      announce(t("crewWave2.join.sent"));
+      setFound({
+        kind: "found",
+        lookup: { ...lookup, requestedAt: Math.floor(Date.now() / 1000) },
+      });
+      return;
+    }
+    announce(t("teams.joined", { name: lookup.name }));
   };
 
-  const status = (lookup: TeamLookup) =>
-    lookup.relation === "none"
-      ? null
-      : lookup.relation === "limit"
-        ? t("crews.limit", { count: limit })
-        : t(`teams.join.${lookup.relation}`);
+  const withdraw = async (lookup: TeamLookup) => {
+    setBusy(true);
+    const done = await attempt(() => api.social.withdrawTeamRequest(lookup.teamId));
+    setBusy(false);
+    if (done === undefined) return;
+    announce(t("crewWave2.join.withdrawn"));
+    setFound({ kind: "found", lookup: { ...lookup, requestedAt: undefined } });
+  };
+
+  const offerOf = (lookup: TeamLookup) =>
+    joinOffer(lookup, {
+      requests: features.requests,
+      invited: invites.some((invite) => invite.teamId === lookup.teamId),
+      ownRequests,
+    });
+
+  const status = (lookup: TeamLookup) => {
+    const offer = offerOf(lookup);
+    if (offer === "join" || offer === "ask" || offer === "waiting") return null;
+    if (offer === "askLimit") return t("crewWave2.join.askLimit");
+    return offer === "limit" ? t("crews.limit", { count: limit }) : t(`teams.join.${offer}`);
+  };
 
   return (
-    <section className="mt-4 rounded-[var(--radius-panel)] bg-obsidian-950/40 p-4 ring-1 ring-white/8">
-      <SectionTitle>{t("teams.join.title")}</SectionTitle>
+    <section
+      className={cn(
+        "rounded-[var(--radius-panel)] bg-obsidian-950/40 p-4 ring-1 ring-white/8",
+        !first && "mt-4",
+      )}
+    >
+      <SectionTitle>{t(`${words}.title`)}</SectionTitle>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -246,7 +311,7 @@ function JoinCrew() {
         }}
       >
         <label htmlFor={inputId} className="sr-only">
-          {t("teams.join.code")}
+          {features.link ? t("crewWave2.join.field") : t("teams.join.code")}
         </label>
         <div className="flex gap-2">
           <input
@@ -256,12 +321,15 @@ function JoinCrew() {
               pasted.current = true;
             }}
             onChange={(event) => {
-              const formatted = formatTeamCodeInput(event.target.value);
+              // Codes only on a service without links, as before.
+              const formatted = features.link
+                ? formatJoinInput(event.target.value, showsLink(value))
+                : formatTeamCodeInput(event.target.value);
               setValue(formatted);
               setInvalid(false);
               const fromPaste = pasted.current;
               pasted.current = false;
-              if (fromPaste && normalizeTeamCode(formatted)) {
+              if (fromPaste && crewKeyOf(formatted)) {
                 void look(formatted);
                 return;
               }
@@ -295,7 +363,7 @@ function JoinCrew() {
               className="text-[12.5px] text-flare-300"
               {...rise(reduce, 4, 0.2)}
             >
-              {t("teams.join.invalid")}
+              {t(`${words}.invalid`)}
             </motion.p>
           ) : found.kind === "looking" ? (
             <motion.div key="looking" aria-hidden {...rise(reduce, 4, 0.2)}>
@@ -309,7 +377,7 @@ function JoinCrew() {
             </motion.div>
           ) : found.kind === "found" ? (
             <motion.div
-              key={`found:${found.lookup.code}`}
+              key={`found:${found.lookup.teamId}`}
               className="rounded-[var(--radius-panel)] bg-white/[0.04] p-3 ring-1 ring-white/8"
               {...rise(reduce, 6, 0.26)}
             >
@@ -321,18 +389,13 @@ function JoinCrew() {
                 meta={t("teams.members", { count: found.lookup.members })}
                 size={52}
               />
-              {status(found.lookup) ? (
-                <p className="mt-3 text-[12.5px] text-ash-300">{status(found.lookup)}</p>
-              ) : (
-                <Button
-                  variant="primary"
-                  className="mt-3 w-full"
-                  disabled={busy}
-                  onClick={() => void join(found.lookup)}
-                >
-                  {t("teams.join.submit")}
-                </Button>
-              )}
+              <FoundOffer
+                offer={offerOf(found.lookup)}
+                status={status(found.lookup)}
+                busy={busy}
+                onJoin={() => void join(found.lookup)}
+                onWithdraw={() => void withdraw(found.lookup)}
+              />
             </motion.div>
           ) : found.kind === "error" ? (
             <motion.p
@@ -351,7 +414,60 @@ function JoinCrew() {
   );
 }
 
-/** "Ekip kodu" with copy; the leader can renew it (asked once, in place). */
+/**
+ * The found crew's button: "Ekibe katıl", "Katılma isteği gönder" (its leaders approve newcomers;
+ * one line says so), "İsteğin bekliyor" with "Geri çek", or the line saying why neither goes. The
+ * button turns into the waiting line in place once the request is sent.
+ */
+function FoundOffer({
+  offer,
+  status,
+  busy,
+  onJoin,
+  onWithdraw,
+}: {
+  offer: ReturnType<typeof joinOffer>;
+  status: string | null;
+  busy: boolean;
+  onJoin: () => void;
+  onWithdraw: () => void;
+}) {
+  const { t } = useTranslation();
+  const { reduce } = useSocialMotion();
+  return (
+    <AnimatePresence mode="popLayout" initial={false}>
+      {status ? (
+        <motion.p key="status" className="mt-3 text-[12.5px] text-ash-300" {...swap(reduce, 0.2)}>
+          {status}
+        </motion.p>
+      ) : offer === "waiting" ? (
+        <motion.div key="waiting" className="mt-3 flex items-center gap-2" {...swap(reduce, 0.2)}>
+          <span className="flex min-w-0 flex-1 items-center gap-2 text-[13px] font-medium text-gold-200">
+            <Clock size={15} weight="bold" className="shrink-0" aria-hidden />
+            {t("crewWave2.join.waiting")}
+          </span>
+          <Button size="sm" variant="ghost" disabled={busy} onClick={onWithdraw}>
+            {t("crewWave2.join.withdraw")}
+          </Button>
+        </motion.div>
+      ) : (
+        <motion.div key={offer} {...swap(reduce, 0.2)}>
+          <Button variant="primary" className="mt-3 w-full" disabled={busy} onClick={onJoin}>
+            {offer === "ask" ? t("crewWave2.join.ask") : t("teams.join.submit")}
+          </Button>
+          {offer === "ask" ? (
+            <p className="mt-2 text-center text-[12.5px] text-ash-400">
+              {t("crewWave2.join.askNote")}
+            </p>
+          ) : null}
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+/** "Ekip kodu" with copy; the leader can renew it (asked once, in place). Under it, the invite
+ * link and "Katılım" (TEAM5, crew-link.tsx). */
 function CodeRow({ team }: { team: SocialTeam }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
@@ -443,6 +559,7 @@ function CodeRow({ team }: { team: SocialTeam }) {
           </AnimatePresence>
         </div>
       ) : null}
+      <CrewLinkRows team={team} />
     </section>
   );
 }
@@ -637,6 +754,7 @@ function CrewCard({
   const { t } = useTranslation();
   const founded = localDay(team.createdOn);
   const anniversary = crewAnniversary(team.createdOn, new Date());
+  const together = togetherTime(team.togetherWeek ?? 0);
   return (
     <div className="relative">
       <CrewWatermark look={team} />
@@ -667,6 +785,12 @@ function CrewCard({
                     founded,
                   ),
                 })}
+              </span>
+            ) : null}
+            {together ? (
+              <span className="inline-flex items-center gap-1">
+                <Clock size={14} aria-hidden />
+                {t("crewWave2.together.week", { time: together })}
               </span>
             ) : null}
           </p>
@@ -843,6 +967,9 @@ function InviteFriends({ team }: { team: SocialTeam }) {
  */
 function CrewPermissions({ team }: { team: SocialTeam }) {
   const { t } = useTranslation();
+  const crew = useCrewFeatures();
+  // "İstekler ve bağlantı" (`admit`, TEAM5): moderators or the leader only.
+  const rows: Array<keyof TeamPermissions> = crew.requests ? [...RIGHTS, "admit"] : [...RIGHTS];
   const [pending, setPending] = useState<Partial<TeamPermissions>>({});
   const levels: TeamPermissions = { ...team.permissions, ...pending };
   // A pending level stays until the crew says so (the answer and the update cross).
@@ -850,15 +977,19 @@ function CrewPermissions({ team }: { team: SocialTeam }) {
     setPending((current) => {
       const left = Object.fromEntries(
         Object.entries(current).filter(
-          ([right, level]) => team.permissions[right as Right] !== level,
+          ([right, level]) => team.permissions[right as keyof TeamPermissions] !== level,
         ),
       );
       return Object.keys(left).length === Object.keys(current).length ? current : left;
     });
   }, [team.permissions]);
 
-  const change = async (right: Right, role: "moderators" | "members", on: boolean) => {
-    const next = switchLevel(levels[right], role, on);
+  const change = async (
+    right: keyof TeamPermissions,
+    role: "moderators" | "members",
+    on: boolean,
+  ) => {
+    const next = switchLevel(levels[right] ?? "moderators", role, on);
     if (next === levels[right]) return;
     setPending((current) => ({ ...current, [right]: next }));
     const done = await attempt(() =>
@@ -893,9 +1024,9 @@ function CrewPermissions({ team }: { team: SocialTeam }) {
             </tr>
           </thead>
           <tbody>
-            {RIGHTS.map((right) => {
-              const on = switchesOf(levels[right]);
-              const label = t(`teams.roles.${right}`);
+            {rows.map((right) => {
+              const on = switchesOf(levels[right] ?? "moderators");
+              const label = right === "admit" ? t("crewWave2.admit") : t(`teams.roles.${right}`);
               return (
                 <tr key={right} className="border-t border-white/6">
                   <th
@@ -914,7 +1045,7 @@ function CrewPermissions({ team }: { team: SocialTeam }) {
                     />
                   </td>
                   <td className="py-2.5">
-                    {membersMayHave(right) ? (
+                    {right !== "admit" && membersMayHave(right as Right) ? (
                       <Switch
                         className="justify-center"
                         hideLabel
@@ -1033,6 +1164,14 @@ function CrewView({ team }: { team: SocialTeam }) {
           </AnimatePresence>
         </section>
 
+        <motion.div {...glideBox}>
+          <CrewRequests team={team} />
+        </motion.div>
+
+        <motion.div {...glideBox}>
+          <CrewPlans team={team} />
+        </motion.div>
+
         <motion.section className="mt-3" {...glideBox}>
           <CrewRoster team={team} />
         </motion.section>
@@ -1103,6 +1242,10 @@ function CrewView({ team }: { team: SocialTeam }) {
 function AddCrew({ canAdd, limit }: { canAdd: boolean; limit: number }) {
   const { t } = useTranslation();
   const invites = useSocialUi((s) => s.view.teamInvites);
+  // An invite link opened at the limit still shows its crew (and says why it cannot be joined).
+  const linked = useSocialUi((s) => s.prefillLink !== null);
+  const [keepJoin, setKeepJoin] = useState(linked);
+  if (linked && !keepJoin) setKeepJoin(true);
   return (
     <div className="pt-1">
       {invites.length ? (
@@ -1113,16 +1256,32 @@ function AddCrew({ canAdd, limit }: { canAdd: boolean; limit: number }) {
           ))}
         </section>
       ) : null}
+      <MyRequests />
       {canAdd ? (
         <>
-          <CreateCrew />
-          <JoinCrew />
+          {/* An invite link the player opened leads: the crew it shows comes first. */}
+          {keepJoin ? (
+            <>
+              <JoinCrew first />
+              <div className="mt-4">
+                <CreateCrew />
+              </div>
+            </>
+          ) : (
+            <>
+              <CreateCrew />
+              <JoinCrew />
+            </>
+          )}
         </>
       ) : (
-        <p className="flex items-center gap-2.5 rounded-[var(--radius-panel)] bg-obsidian-950/40 px-4 py-3.5 text-[13px] text-ash-300 ring-1 ring-white/8">
-          <UsersThree size={17} className="shrink-0 text-ash-400" aria-hidden />
-          {t("crews.limit", { count: limit })}
-        </p>
+        <>
+          <p className="flex items-center gap-2.5 rounded-[var(--radius-panel)] bg-obsidian-950/40 px-4 py-3.5 text-[13px] text-ash-300 ring-1 ring-white/8">
+            <UsersThree size={17} className="shrink-0 text-ash-400" aria-hidden />
+            {t("crews.limit", { count: limit })}
+          </p>
+          {linked || keepJoin ? <JoinCrew /> : null}
+        </>
       )}
       <p className="mt-4 px-1 text-[12px] leading-snug text-ash-400">{t("teams.privacy")}</p>
     </div>

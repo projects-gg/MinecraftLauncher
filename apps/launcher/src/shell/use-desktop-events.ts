@@ -134,6 +134,11 @@ export function useDesktopEvents() {
           // projects://friend/<code> (QR page): the friends panel shows who it is.
           useSocialUi.getState().openPanel({ page: "add", code: link.code });
           break;
+        case "crew":
+          // projects://crew/<link> (a crew's invite link page): "Ekip kur ya da katıl" shows the
+          // crew; nothing is sent until the player confirms.
+          useSocialUi.getState().openPanel({ page: "team", link: link.link });
+          break;
       }
     };
     const stop = api.onDeepLink(open);

@@ -1,6 +1,8 @@
 // "Arkadaş ayarları": profile picture (bundled pictures, the Discord photo, the Minecraft head),
-// privacy, favourite notifications, the settings backup, sessions, blocked players, sign-out and
-// "Verilerimi sil". The same component shows in the panel and in Settings → Arkadaşlar.
+// privacy (with crews, "Birlikte oynanan süre": kept on this computer only, deleted when turned
+// off or with "Süreleri sil", TEAM5), favourite notifications, the settings backup, sessions,
+// blocked players, sign-out and "Verilerimi sil". The same component shows in the panel and in
+// Settings → Arkadaşlar.
 import { Desktop, SignOut, Trash } from "@phosphor-icons/react";
 import { Button, Dialog, Skeleton, Switch } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -94,8 +96,76 @@ function PictureSection({ me }: { me: SocialMe }) {
   );
 }
 
+/**
+ * "Birlikte oynanan süre": on or off (off deletes what was kept), and "Süreleri sil", asked once in
+ * place. The switch moves at once and settles with the launcher's answer.
+ */
+function TogetherSetting() {
+  const { t } = useTranslation();
+  const { reduce } = useSocialMotion();
+  const kept = useSocialUi((s) => s.view.together);
+  const [pending, setPending] = useState<boolean | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const on = pending ?? kept;
+  const toggle = async (next: boolean) => {
+    setPending(next);
+    setAsking(false);
+    await attempt(() => api.social.setTogether(next));
+    setPending(null);
+  };
+  const clear = async () => {
+    setBusy(true);
+    const done = await attempt(() => api.social.clearTogether());
+    setBusy(false);
+    setAsking(false);
+    if (done !== undefined) announce(t("crewWave2.together.cleared"));
+  };
+  return (
+    <div>
+      <Switch
+        checked={on}
+        onCheckedChange={(next) => void toggle(next)}
+        label={t("crewWave2.together.setting")}
+        description={t("crewWave2.together.settingNote")}
+      />
+      <AnimatePresence mode="popLayout" initial={false}>
+        {on && asking ? (
+          <motion.div
+            key="ask"
+            className="mt-2.5 flex items-center gap-2"
+            {...rise(reduce, 4, 0.2)}
+          >
+            <p className="min-w-0 flex-1 text-[13px] text-bone-100">
+              {t("crewWave2.together.clearAsk")}
+            </p>
+            <Button size="sm" variant="ghost" onClick={() => setAsking(false)}>
+              {t("teams.cancel")}
+            </Button>
+            <Button size="sm" variant="danger" disabled={busy} onClick={() => void clear()}>
+              {t("crewWave2.together.clear")}
+            </Button>
+          </motion.div>
+        ) : on ? (
+          <motion.div key="clear" className="mt-1.5" {...rise(reduce, 4, 0.2)}>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<Trash size={14} />}
+              onClick={() => setAsking(true)}
+            >
+              {t("crewWave2.together.clear")}
+            </Button>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 function PrivacySection({ me }: { me: SocialMe }) {
   const { t } = useTranslation();
+  const crews = useSocialUi((s) => s.view.teams);
   const set = (change: { shareServer?: boolean; shareLastSeen?: boolean }) =>
     void attempt(() => api.social.setPrivacy(change));
   return (
@@ -111,6 +181,7 @@ function PrivacySection({ me }: { me: SocialMe }) {
           onCheckedChange={(shareLastSeen) => set({ shareLastSeen })}
           label={t("social.settings.shareLastSeen")}
         />
+        {crews ? <TogetherSetting /> : null}
       </div>
     </Section>
   );

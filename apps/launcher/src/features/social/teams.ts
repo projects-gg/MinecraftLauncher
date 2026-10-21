@@ -277,6 +277,7 @@ export const DEFAULT_PERMISSIONS: TeamPermissions = {
   call: "members",
   kick: "moderators",
   edit: "leader",
+  admit: "moderators",
 };
 
 /** A crew can have this many moderators. */

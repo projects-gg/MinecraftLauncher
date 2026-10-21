@@ -2,7 +2,8 @@
 // title bar: the snapshot subscription, notices (toasts and, while the launcher is not in front,
 // system notifications), the crew calls' clock, the settings backup, the new-computer question and
 // the crew picker of "Ekiplerini çağır"; chat changes (CHAT1) and how a new message is told,
-// "Rapor et" and moderators' one-time notes (MOD1).
+// "Rapor et" and moderators' one-time notes (MOD1); join requests, a request taken, crewmates'
+// new plans and the plan reminders (TEAM5).
 import { Button, Dialog, toast } from "@pl/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -19,6 +20,7 @@ import { chatMutedNow, crewOf } from "./chat/conversations";
 import { chatNoticeWay, preview } from "./chat/notify";
 import { showCallToast } from "./crew-call";
 import { CrewCallDialog } from "./crew-call-picker";
+import { planWhen } from "./crew-plans";
 import { callerIn, callSentenceOf, callWhere } from "./crews";
 import { FriendsSheet } from "./friends-sheet";
 import { showInviteToast } from "./invite-toast";
@@ -36,6 +38,7 @@ import {
 } from "./model";
 import { crewMutedNow, crewmateHeardIn, mutedNow } from "./mute";
 import { NoticeDialog } from "./notice-dialog";
+import { PlanReminders } from "./plan-reminders";
 import { ReportDialog } from "./report-dialog";
 import { useSocialPrefs, useSocialUi } from "./store";
 import { useCallTicker } from "./use-call-clock";
@@ -117,6 +120,25 @@ function showFriendNotice(id: string, kind: "online" | "projects") {
     });
   }, 400);
   pendingFriendNotices.set(id, { kind, timer });
+}
+
+/** "Göster" on a crew's notice: the panel opens on that crew's page. */
+function showCrew(id: string) {
+  const ui = useSocialUi.getState();
+  ui.openPanel({ page: "team" });
+  ui.setCrewTab(id);
+  ui.setCrewPane("crew");
+}
+
+/** That crew's page is on screen (the panel open on it). */
+function crewInView(id: string): boolean {
+  const ui = useSocialUi.getState();
+  if (!ui.open || ui.page !== "team" || ui.crewPane !== "crew") return false;
+  const crews = ui.view.crews;
+  const shown = ui.view.crew.multi
+    ? (crews.find((crew) => crew.id === ui.crewTab) ?? crews[0])
+    : crews[0];
+  return shown?.id === id;
 }
 
 function handleNotice(notice: SocialNotice) {
@@ -251,6 +273,48 @@ function handleNotice(notice: SocialNotice) {
     case "chatMessage":
       showChatMessage(notice);
       break;
+    case "joinRequest": {
+      const crew = ui.view.crews.find((one) => one.id === notice.crew);
+      if (!crew) break;
+      const text = i18n.t("crewWave2.requests.notice", {
+        name: notice.request.name,
+        crew: crew.name,
+      });
+      // The crew's page shows it already, in place.
+      if (crewInView(crew.id)) {
+        announce(text);
+        break;
+      }
+      void notifyOutside(text);
+      toast(text, {
+        action: { label: i18n.t("social.notices.show"), onClick: () => showCrew(crew.id) },
+      });
+      break;
+    }
+    case "requestAccepted": {
+      const text = i18n.t("teams.joined", { name: notice.name });
+      void notifyOutside(text);
+      toast.success(text, {
+        action: { label: i18n.t("social.notices.show"), onClick: () => showCrew(notice.crew) },
+      });
+      break;
+    }
+    case "crewPlan": {
+      const { plan } = notice;
+      const text = i18n.t("crewWave2.plans.notice", {
+        name: plan.byName ?? i18n.t("social.notices.someone"),
+        when: planWhen(plan.at, Date.now(), i18n.t, true),
+      });
+      if (crewInView(plan.crew)) {
+        announce(text);
+        break;
+      }
+      void notifyOutside(text);
+      toast(text, {
+        action: { label: i18n.t("social.notices.show"), onClick: () => showCrew(plan.crew) },
+      });
+      break;
+    }
     case "restricted": {
       const text =
         notice.until !== undefined
@@ -376,6 +440,8 @@ function currentBackup() {
     notifyCrewCalls: social.notifyCrewCalls,
     notifyCrewProjects: social.notifyCrewProjects,
     notifyCrewChat: social.notifyCrewChat,
+    notifyJoinRequests: social.notifyJoinRequests,
+    notifyPlans: social.notifyPlans,
   });
 }
 
@@ -490,6 +556,12 @@ function RestoreDialog() {
       if (read.friends.notifyCrewChat !== undefined) {
         social.set("notifyCrewChat", read.friends.notifyCrewChat);
       }
+      if (read.friends.notifyJoinRequests !== undefined) {
+        social.set("notifyJoinRequests", read.friends.notifyJoinRequests);
+      }
+      if (read.friends.notifyPlans !== undefined) {
+        social.set("notifyPlans", read.friends.notifyPlans);
+      }
       // What came down is what is stored: no upload needed until something changes.
       useSocialPrefs.getState().set("backupFingerprint", backupFingerprint(currentBackup()));
       toast.success(t("social.restore.applied"));
@@ -543,6 +615,7 @@ export function SocialHost() {
       <CrewCallDialog />
       <ReportDialog />
       <NoticeDialog />
+      <PlanReminders />
     </>
   );
 }

@@ -43,8 +43,11 @@
 //   again does not change; `restrictedLive`: it happens while signed in; `signupsClosed`: no new
 //   accounts today;
 // - `backupWaits`: storage protection: the settings backup waits;
-// - `&reports=limit` on any scenario: "Rapor et" says the day's reports are used up.
+// - `&reports=limit` on any scenario: "Rapor et" says the day's reports are used up;
+// - the crews' second wave (TEAM5: join requests, invite links, plans, time together): its
+//   scenarios and switches are in mock-crew-wave2.ts (`crewApproval`, `crewPlans`, `crewAsk`…).
 import { CHAT_SCENARIOS, mockChat } from "./mock-chat";
+import { startWave2, WAVE2_SCENARIOS, wave2Api, wave2Snapshot } from "./mock-crew-wave2";
 import { pick } from "./mock-lang";
 import type {
   BackupMeta,
@@ -116,6 +119,8 @@ function previewLimited(): LimitedAccount {
       { key: "codeLookups", perDay: 10 },
       { key: "settingsBackup" },
       { key: "chatMessages", perDay: 100 },
+      { key: "crewLink" },
+      { key: "crewPlans" },
     ],
   };
 }
@@ -273,6 +278,7 @@ function teamMember(
     dnd: false,
     discordUrl: `https://discord.com/users/${extra.id}`,
     joinedAt: now() - 86_400 * 20,
+    togetherMonth: 0,
     ...(friend
       ? {
           username: friend.username,
@@ -292,7 +298,8 @@ const OLD_CREWS = scenario() === "crewOld";
 /** Several crews per player (TEAM4). */
 const MULTI =
   !OLD_CREWS &&
-  (["crews", "crewsFull", "crewCallMulti"].includes(scenario()) || searchParam("multi") !== null);
+  (["crews", "crewsFull", "crewCallMulti", "crewAsk", "crewAccepted"].includes(scenario()) ||
+    searchParam("multi") !== null);
 /** How many crews the player may be in (`&crewLimit=`; `crewsFull`: the three they are in). */
 function previewLimit(): number {
   if (!MULTI) return 1;
@@ -329,6 +336,7 @@ function previewTeam(founder: boolean, moderator = false): SocialTeam {
       call: "members",
       kick: OLD_CREWS ? "leader" : "moderators",
       edit: moderator ? "moderators" : "leader",
+      admit: "moderators",
     },
     members: [
       teamMember(undefined, {
@@ -362,6 +370,9 @@ function previewTeam(founder: boolean, moderator = false): SocialTeam {
     invited: ["305"],
     limit: 30,
     mute: NOT_MUTED,
+    join: "open",
+    requests: [],
+    togetherWeek: 0,
   };
 }
 
@@ -552,6 +563,9 @@ function initial(): SocialSnapshot {
     callPlace: "needsServer",
     chatAllowed: false,
     notices: [],
+    teamRequests: [],
+    plans: [],
+    together: false,
   };
   // Crews on, with what the service offers of them.
   const keepsMutes = !OLD_CREWS && searchParam("noMute") === null;
@@ -569,6 +583,10 @@ function initial(): SocialSnapshot {
           mute: keepsMutes,
           multi: MULTI,
           callServer: true,
+          // On with the second wave's data (mock-crew-wave2.ts).
+          requests: false,
+          link: false,
+          plans: false,
         },
     crewNotifications: keepsMutes
       ? {
@@ -583,6 +601,10 @@ function initial(): SocialSnapshot {
   });
   // Chat previews (mock-chat.ts): the player leads the crew, so its chat is there too.
   if (CHAT_SCENARIOS.includes(name)) return crewed([previewTeam(true)]);
+  // The second wave's (mock-crew-wave2.ts): led by the player, or by Ayşe in `crewPlans`.
+  if (WAVE2_SCENARIOS.includes(name)) {
+    return crewed([previewTeam(!name.startsWith("crewPlan"))]);
+  }
   switch (name) {
     case "groups":
       return { ...base, groups: previewGroups() };
@@ -727,6 +749,8 @@ function signedOut(base: SocialSnapshot): SocialSnapshot {
     invites: [],
     crews: [],
     teamInvites: [],
+    teamRequests: [],
+    plans: [],
     chat: undefined,
   };
 }
@@ -738,6 +762,9 @@ const NO_CREW_FEATURES = {
   mute: false,
   multi: false,
   callServer: false,
+  requests: false,
+  link: false,
+  plans: false,
 };
 
 // Chat (CHAT1) lives in mock-chat.ts, on this preview's data.
@@ -748,7 +775,9 @@ const chat = mockChat({
   commit,
   tell,
 });
-let view = withPlace(placed(chat.prepare(initial())));
+let view = withPlace(
+  placed(chat.prepare(wave2Snapshot(initial(), { scenario: scenario(), param: searchParam }))),
+);
 
 function withPlace(snapshot: SocialSnapshot): SocialSnapshot {
   // The hidden server's address shows once the player shares it ("Aç ve çağır").
@@ -776,6 +805,7 @@ function tell(notice: SocialNotice) {
 if (typeof window !== "undefined") {
   const name = scenario();
   chat.start();
+  startWave2(wave2Context());
   // `&liveAt=<ms>`: when the live moderators' step comes.
   const liveAt = Number(searchParam("liveAt")) || 1600;
   if (name === "restrictedLive") {
@@ -948,12 +978,42 @@ function joinedTeam(source: {
   };
 }
 
+/** What mock-crew-wave2.ts works on: this preview's data and its ways to change it. */
+function wave2Context() {
+  return {
+    scenario: scenario(),
+    param: searchParam,
+    view: () => view,
+    commit,
+    tell,
+    team: currentTeam,
+    setTeam,
+    addCrew,
+    joined: joinedTeam,
+    fail: (code: string, tr: string, en: string) => new MockSocialError(code, pick(tr, en)),
+  };
+}
+const wave2 = wave2Api(wave2Context());
+/** Crews whose leaders approve newcomers (with the second wave). */
+const APPROVING = new Set(["fedcba9876543210"]);
+
 const people: Record<string, CodeLookup["profile"]> = {
   "PRJ-4F8A-2KQX": { id: "601", name: "Kerem", username: "keremtr", avatar: "preset:lantern" },
   "PRJ-9WQ2-XM4C": { id: "305", name: "Elif Su", username: "elifsu", avatar: "preset:axolotl" },
 };
 
 export const mockSocial: SocialApi = {
+  lookupCrewLink: wave2.lookupCrewLink,
+  joinCrewLink: wave2.joinCrewLink,
+  withdrawTeamRequest: wave2.withdrawTeamRequest,
+  answerTeamRequest: wave2.answerTeamRequest,
+  setTeamLink: wave2.setTeamLink,
+  setJoinMode: wave2.setJoinMode,
+  makePlan: wave2.makePlan,
+  answerPlan: wave2.answerPlan,
+  cancelPlan: wave2.cancelPlan,
+  setTogether: wave2.setTogether,
+  clearTogether: wave2.clearTogether,
   async state() {
     await delay(120);
     return view;
@@ -1421,6 +1481,7 @@ export const mockSocial: SocialApi = {
         members: team.members.length,
         relation: "member",
         code: normalized,
+        join: team.join,
       };
     }
     const found = previewTeams[normalized];
@@ -1441,6 +1502,8 @@ export const mockSocial: SocialApi = {
           ? "elsewhere"
           : "none",
       code: normalized,
+      join: view.crew.requests && APPROVING.has(found.teamId) ? "approval" : "open",
+      requestedAt: view.teamRequests.find((r) => r.teamId === found.teamId)?.sentAt,
     };
   },
   async joinTeam(code) {
@@ -1452,13 +1515,17 @@ export const mockSocial: SocialApi = {
         pick("Bu koda ait bir ekip yok.", "No crew has this code."),
       );
     }
-    addCrew(joinedTeam(found));
+    return wave2.join(found, APPROVING.has(found.teamId));
   },
   async acceptTeamInvite(teamId) {
     await delay(450);
     const invite = view.teamInvites.find((i) => i.teamId === teamId);
     if (invite) addCrew(joinedTeam(invite));
-    commit((v) => ({ ...v, teamInvites: v.teamInvites.filter((i) => i.teamId !== teamId) }));
+    commit((v) => ({
+      ...v,
+      teamInvites: v.teamInvites.filter((i) => i.teamId !== teamId),
+      teamRequests: v.teamRequests.filter((r) => r.teamId !== teamId),
+    }));
   },
   async declineTeamInvite(teamId) {
     await delay(250);

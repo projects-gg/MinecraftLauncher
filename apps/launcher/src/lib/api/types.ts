@@ -451,7 +451,9 @@ export type DeepLink =
   | { kind: "instance"; id: string }
   | { kind: "afk" }
   /** projects://friend/<code>: add a friend by code (the panel shows who it is first). */
-  | { kind: "friend"; code: string };
+  | { kind: "friend"; code: string }
+  /** projects://crew/<link>: a crew's invite link (the crew page shows the crew first). */
+  | { kind: "crew"; link: string };
 
 export interface McVersion {
   id: string;

@@ -15,7 +15,8 @@ import type {
 } from "@/lib/api/social-types";
 import { unansweredCall } from "./calls";
 import { type ChatMutes, unreadDirect } from "./chat/conversations";
-import { callHeardIn, crewCallsHeard, crewmateHeardIn, mutedNow } from "./mute";
+import { waitingRequests } from "./crew-joining";
+import { callHeardIn, crewCallsHeard, crewMutedNow, crewmateHeardIn, mutedNow } from "./mute";
 
 const collator = new Intl.Collator("tr", { sensitivity: "base" });
 
@@ -78,7 +79,7 @@ export function onlineFriends(friends: readonly Friend[], favorites: readonly st
 /** Home's invitations, closed for good with ×: sign in with Discord, then add a first friend. */
 export type HomeHint = "connect" | "add";
 /** What the friends line on Home shows. */
-export type HomeStrip = HomeHint | "playing" | "call" | "crew" | "callCrew";
+export type HomeStrip = HomeHint | "playing" | "call" | "crew" | "callCrew" | "plan";
 
 /** What else decides Home's line: calls closed there, a game being open, the call clock. */
 export interface HomeContext {
@@ -89,6 +90,8 @@ export interface HomeContext {
   /** "Ekibini çağır" would go right now: the player plays on a server a call may start from,
    * may call a crew, has no call on and is not waiting out the five minutes (CALL1). */
   callable?: boolean;
+  /** A plan of the player's crews under way or starting within the hour (`homePlan`, TEAM5). */
+  plan?: "live" | "soon" | null;
 }
 
 const NO_CONTEXT: HomeContext = { closedCalls: [], gameBusy: false, now: 0 };
@@ -113,11 +116,13 @@ export function crewmatesOnProjects(crews: readonly { members: readonly TeamMemb
 /**
  * The friends line on Home, most pressing first (one line at a time):
  * 1. a teammate's call the player has not answered (nor closed here), while no game is open;
- * 2. two or more crewmates on Projects across the crews, each once ("Ekibinden 4 kişi
+ * 2. a crew plan under way (TEAM5), while no game is open;
+ * 3. two or more crewmates on Projects across the crews, each once ("Ekibinden 4 kişi
  *    Projects'te", "Ekiplerinden 6 kişi…"), while no game is open;
- * 3. in game on a server a call may start from: "Ekibini çağır" (CALL1);
- * 4. friends in game, or the one crewmate on Projects (said as for a friend);
- * 5. signed out (or while the browser is open), the invitation to sign in; signed in with nobody
+ * 4. a crew plan starting within the hour, while no game is open;
+ * 5. in game on a server a call may start from: "Ekibini çağır" (CALL1);
+ * 6. friends in game, or the one crewmate on Projects (said as for a friend);
+ * 7. signed out (or while the browser is open), the invitation to sign in; signed in with nobody
  *    on the list and no request either way, the invitation to add a first friend.
  * A closed invitation never comes back on this computer; nothing shows while a saved session is
  * checked or the list has not arrived.
@@ -140,7 +145,9 @@ export function homeStrip(
   const crew = crewmatesOnProjects(crews);
   if (crews.length && !context.gameBusy) {
     if (unansweredCall(view.calls ?? [], context.now, context.closedCalls)) return "call";
+    if (context.plan === "live") return "plan";
     if (crew.length >= 2) return "crew";
+    if (context.plan === "soon") return "plan";
   }
   if (crews.length && context.callable) return "callCrew";
   if (view.friends.some((f) => f.state === "playing") || crew.length > 0) return "playing";
@@ -161,6 +168,9 @@ export interface Waiting {
   call: CrewCall | null;
   /** Unread direct messages, outside conversations muted here (CHAT1). */
   messages: number;
+  /** Join requests waiting in crews whose requests the player answers, muted crews left out
+   * (TEAM5). */
+  joins: number;
 }
 
 type WaitingView = Pick<SocialSnapshot, "incoming" | "invites" | "calls"> &
@@ -172,6 +182,7 @@ type WaitingView = Pick<SocialSnapshot, "incoming" | "invites" | "calls"> &
  * muted (the call itself stays on the crew page and the Home line). The two are told apart: a
  * call is neither a request nor an invite, and the entry says which waits (E2E6). Unread direct
  * messages wait too, unless their conversation is muted here; crew chat only counts in the list.
+ * Requests to join a crew the player answers wait as well, unless that crew is muted.
  */
 export function whatWaits(
   view: WaitingView,
@@ -186,10 +197,14 @@ export function whatWaits(
         nowMs,
       )
     : undefined;
+  const joins = (view.crews ?? [])
+    .filter((crew) => !crewMutedNow(crew, view.crewNotifications, nowMs))
+    .reduce((count, crew) => count + waitingRequests(crew, nowMs).length, 0);
   return {
     asks: view.incoming.length > 0 || view.invites.length > 0,
     call: call ?? null,
     messages: unreadDirect(view.chat, chatMutes, nowMs),
+    joins,
   };
 }
 
@@ -200,8 +215,8 @@ export function somethingWaits(
   nowMs: number,
   chatMutes: ChatMutes = {},
 ): boolean {
-  const { asks, call, messages } = whatWaits(view, localCrewCalls, nowMs, chatMutes);
-  return asks || call !== null || messages > 0;
+  const { asks, call, messages, joins } = whatWaits(view, localCrewCalls, nowMs, chatMutes);
+  return asks || call !== null || messages > 0 || joins > 0;
 }
 
 /** Someone on Home's "playing" line: a friend in game, or a crewmate on Projects. */
@@ -314,6 +329,8 @@ export interface NoticePrefs {
   notifyCrewCalls?: boolean;
   /** "Ekip arkadaşların Projects'e girince" (off unless turned on). */
   notifyCrewProjects?: boolean;
+  /** "Katılma istekleri" (on unless turned off; TEAM5). */
+  notifyJoinRequests?: boolean;
 }
 
 /**
@@ -339,7 +356,8 @@ export function notifiesOnline(prefs: NoticePrefs, id: string): boolean {
  * friend, or for favourites), joining projects.gg only for favourites. Crews muted with "Sessize
  * al" (all of them, or every crew a call names or a crewmate shares, `crews`) say nothing (calls
  * stay on the crew page and the Home line); where the service keeps the crew settings (`crew`),
- * its "Ekip çağrıları" wins over this computer's.
+ * its "Ekip çağrıları" wins over this computer's. A request to join, and a crewmate's new plan,
+ * are said unless their crew is muted (requests only while "Katılma istekleri" is on).
  */
 export function wantsNotice(
   notice: SocialNotice,
@@ -373,9 +391,24 @@ export function wantsNotice(
         crewmateHeardIn(notice.id, crews, nowMs) &&
         notifiesCrewProjects(prefs, notice.id)
       );
+    case "joinRequest":
+      return (prefs.notifyJoinRequests ?? true) && !crewSilent(notice.crew, crews, crew, nowMs);
+    case "crewPlan":
+      return !crewSilent(notice.plan.crew, crews, crew, nowMs);
     default:
       return true;
   }
+}
+
+/** One of the player's crews is muted now (on its own, or every crew at once). */
+function crewSilent(
+  id: string,
+  crews: readonly SocialTeam[],
+  all: CrewNotifications | undefined,
+  nowMs: number,
+): boolean {
+  const team = crews.find((one) => one.id === id);
+  return team ? crewMutedNow(team, all, nowMs) : mutedNow(all, nowMs);
 }
 
 /** Remembers when each friend last caused a notification, so flapping friends stay quiet. */
@@ -431,6 +464,9 @@ export interface BackupFriends {
   notifyCrewProjects?: boolean;
   /** "Ekip sohbeti bildirimleri" (CHAT1; older backups have none). */
   notifyCrewChat?: boolean;
+  /** "Katılma istekleri" and "Plan hatırlatmaları" (TEAM5; older backups have none). */
+  notifyJoinRequests?: boolean;
+  notifyPlans?: boolean;
 }
 
 /** Friend ids with a yes or no, at most 200 (what a backup may carry). */
@@ -475,6 +511,10 @@ export function buildBackup(
       ...(typeof friends.notifyCrewChat === "boolean"
         ? { notifyCrewChat: friends.notifyCrewChat }
         : {}),
+      ...(typeof friends.notifyJoinRequests === "boolean"
+        ? { notifyJoinRequests: friends.notifyJoinRequests }
+        : {}),
+      ...(typeof friends.notifyPlans === "boolean" ? { notifyPlans: friends.notifyPlans } : {}),
     },
   };
 }
@@ -532,6 +572,12 @@ export function readBackup(data: unknown): {
     }
     if (typeof friends.notifyCrewChat === "boolean") {
       out.friends.notifyCrewChat = friends.notifyCrewChat;
+    }
+    if (typeof friends.notifyJoinRequests === "boolean") {
+      out.friends.notifyJoinRequests = friends.notifyJoinRequests;
+    }
+    if (typeof friends.notifyPlans === "boolean") {
+      out.friends.notifyPlans = friends.notifyPlans;
     }
   }
   return out;

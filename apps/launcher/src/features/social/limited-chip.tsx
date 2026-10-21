@@ -86,9 +86,11 @@ export function LimitedChip({ me }: { me: SocialMe }) {
                         aria-hidden
                         className="mt-[7px] size-1 shrink-0 rounded-full bg-ash-400"
                       />
-                      {item.perDay !== undefined
-                        ? t(`safety.limited.items.${item.key}`, { count: item.perDay })
-                        : t(`safety.limited.items.${item.key}`)}
+                      {item.key === "crewLink" || item.key === "crewPlans"
+                        ? t(`crewWave2.limited.${item.key}`)
+                        : item.perDay !== undefined
+                          ? t(`safety.limited.items.${item.key}`, { count: item.perDay })
+                          : t(`safety.limited.items.${item.key}`)}
                     </li>
                   ))}
                 </ul>

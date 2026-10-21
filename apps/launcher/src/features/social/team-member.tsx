@@ -49,6 +49,7 @@ import { rise, swap, useSocialMotion } from "./motion";
 import { SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
 import { afterHandingOn, canRemove, daysSince, MAX_MODERATORS } from "./teams";
+import { togetherTime } from "./together";
 
 type Question = "founder" | "remove" | "block" | "unblock";
 
@@ -160,6 +161,8 @@ function MemberCard({
   );
   const joinable = member.state === "playing" && isJoinable(member.game);
   const days = daysSince(member.joinedAt, Date.now());
+  // "Bu ay birlikte 3 sa" (TEAM5): kept on this computer only, off unless the player keeps it.
+  const together = togetherTime(member.togetherMonth ?? 0);
   const chat = useMemberChat(member);
   const plan = memberPlan(team, member, busyGame, roles).filter(
     (row): row is NonNullable<typeof row> =>
@@ -307,6 +310,11 @@ function MemberCard({
       <p className="mt-3 text-[12.5px] text-ash-400">
         {days >= 1 ? t("teams.member.since", { count: days }) : t("teams.member.sinceToday")}
       </p>
+      {together ? (
+        <p className="mt-0.5 text-[12.5px] text-ash-400">
+          {t("crewWave2.together.month", { time: together })}
+        </p>
+      ) : null}
 
       <div className="mt-3 flex flex-col gap-2">
         {joinable && !member.blocked ? (

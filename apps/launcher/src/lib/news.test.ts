@@ -65,6 +65,14 @@ describe("projects:// links from content", () => {
       kind: "friend",
       code: "PRJ-7K3M-Q9TD",
     });
+    expect(parseProjectsLink("projects://crew/abcd-efgh-jkmn")).toEqual({
+      kind: "crew",
+      link: "ABCD-EFGH-JKMN",
+    });
+    expect(parseProjectsLink("projects://ekip/o0il12345678")).toEqual({
+      kind: "crew",
+      link: "0011-1234-5678",
+    });
   });
 
   it("ignores anything it does not know", () => {
@@ -77,6 +85,8 @@ describe("projects:// links from content", () => {
       "projects://news/%2E%2E",
       "projects://afk/x",
       "projects://friend/nope",
+      "projects://crew/EKP-7Q2X-9KDA",
+      "projects://crew/ABCD-EFGH",
       `projects://news/${"a".repeat(65)}`,
       "projects://a b",
       "not a link",

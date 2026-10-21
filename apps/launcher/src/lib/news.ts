@@ -1,5 +1,6 @@
 // Small text helpers for news content (the home column, the reader and the mock API) and the
 // links content carries.
+import { normalizeCrewLink } from "@/features/social/crew-joining";
 import { normalizeCode } from "@/features/social/model";
 import type { DeepLink } from "@/lib/api/types";
 
@@ -75,6 +76,10 @@ export function parseProjectsLink(raw: string): DeepLink | null {
   if (route === "friend" || route === "arkadas") {
     const code = normalizeCode(id);
     return code ? { kind: "friend", code } : null;
+  }
+  if (route === "crew" || route === "ekip") {
+    const link = normalizeCrewLink(id);
+    return link ? { kind: "crew", link } : null;
   }
   if (!validId(id)) return null;
   if (route === "play" || route === "oyna") return { kind: "playInstance", id };

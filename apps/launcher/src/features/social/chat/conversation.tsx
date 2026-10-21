@@ -2,8 +2,10 @@
 // come when the player scrolls up, keeping their place), day lines, "Yeni mesajlar" over what was
 // unread when it opened, "En yeni mesajlar" when new ones come while the player reads back, and the
 // composer. Only messages that land while the conversation is open rise in; a deleted one fades and
-// the rest glide. The conversation is read once it is on screen at its newest message.
-import { ArrowDown } from "@phosphor-icons/react";
+// the rest glide. The conversation is read once it is on screen at its newest message. A crew's
+// conversation also shows quiet local lines at their time (its plans, TEAM5: "Ayşe Cumartesi
+// 21:00 için plan yaptı"); the service's chat holds nothing about them.
+import { ArrowDown, CalendarBlank } from "@phosphor-icons/react";
 import { toast } from "@pl/ui";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import {
@@ -24,7 +26,7 @@ import { enter, glide, leave, useSocialMotion } from "../motion";
 import { useSocialUi } from "../store";
 import { useChat } from "./chat-store";
 import { Composer, type ComposerState } from "./composer";
-import { newDay, sameGroup } from "./conversations";
+import { sameGroup } from "./conversations";
 import { MessageRow, type RowActions } from "./message-row";
 
 /** Scrolled this close to the newest message counts as "at the bottom". */
@@ -47,6 +49,19 @@ function dayLabel(t: (key: string) => string, at: number, nowMs: number): string
   ).format(new Date(at));
 }
 
+/** A quiet line of this computer's at its time among the messages (a crew plan, TEAM5). */
+export interface ChatLine {
+  key: string;
+  /** Unix ms. */
+  at: number;
+  text: string;
+}
+
+type Item = { kind: "message"; message: ChatMessage } | { kind: "line"; line: ChatLine };
+
+const itemAt = (item: Item) => (item.kind === "message" ? item.message.at : item.line.at);
+const sameDay = (a: number, b: number) => new Date(a).toDateString() === new Date(b).toDateString();
+
 export interface ConversationProps {
   conv: string;
   crew: boolean;
@@ -62,6 +77,8 @@ export interface ConversationProps {
   onReport: (message: ChatMessage) => void;
   /** What shows while there are no messages yet. */
   empty: ReactNode;
+  /** Local lines among the messages, at their time (a crew's plans). */
+  lines?: readonly ChatLine[];
 }
 
 export function Conversation({
@@ -74,6 +91,7 @@ export function Conversation({
   onScreen,
   onReport,
   empty,
+  lines,
 }: ConversationProps) {
   const { t } = useTranslation();
   const { reduce, layout } = useSocialMotion();
@@ -107,6 +125,19 @@ export function Conversation({
     () => (thread?.messages ?? []).filter((m) => !hidden[m.key]),
     [thread?.messages, hidden],
   );
+  // The lines join the messages at their time; one older than the first message shown waits for
+  // the older page it belongs to.
+  const openedAt = useRef(Date.now());
+  const items = useMemo<Item[]>(() => {
+    const out: Item[] = messages.map((message) => ({ kind: "message", message }));
+    if (!lines?.length || !thread?.loaded) return out;
+    const first = messages[0]?.at ?? Number.NEGATIVE_INFINITY;
+    for (const line of lines) {
+      if (thread.more && line.at < first) continue;
+      out.push({ kind: "line", line });
+    }
+    return out.sort((a, b) => itemAt(a) - itemAt(b));
+  }, [messages, lines, thread?.loaded, thread?.more]);
 
   // Only messages that come while the conversation is open rise in: the page it opens with, and
   // older pages (older than anything shown), are simply there.
@@ -266,16 +297,51 @@ export function Conversation({
         className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pt-2 [scrollbar-gutter:stable]"
       >
         <div ref={content} className="flex min-h-full flex-col justify-end">
-          {thread?.loaded && !messages.length ? (
+          {thread?.loaded && !items.length ? (
             <div className="flex flex-1 items-center justify-center px-6 py-10">{empty}</div>
           ) : null}
           <LayoutGroup>
             <ol role="log" aria-label={t("chat.composer.label")} className="flex flex-col">
               <AnimatePresence initial={false}>
-                {messages.map((message, index) => {
-                  const previous = messages[index - 1];
-                  const next = messages[index + 1];
-                  const day = newDay(previous, message);
+                {items.map((item, index) => {
+                  const before = items[index - 1];
+                  const after = items[index + 1];
+                  const day = !before || !sameDay(itemAt(before), itemAt(item));
+                  const dayLine = day ? (
+                    <p className="flex justify-center px-2 pt-3 pb-2">
+                      <span className="text-[12px] font-medium text-ash-400">
+                        {dayLabel(t, itemAt(item), now)}
+                      </span>
+                    </p>
+                  ) : null;
+                  if (item.kind === "line") {
+                    const { line } = item;
+                    return (
+                      <motion.li
+                        key={line.key}
+                        layout={layout ? "position" : false}
+                        transition={{ layout: glide }}
+                        initial={line.at >= openedAt.current ? { opacity: 0 } : false}
+                        animate={{ opacity: 1, transition: enter(0.24) }}
+                        exit={{ opacity: 0, transition: leave(0.16) }}
+                      >
+                        {dayLine}
+                        <p className="flex items-center justify-center gap-1.5 px-6 py-1.5 text-center text-[12px] text-ash-400">
+                          <CalendarBlank
+                            size={13}
+                            weight="duotone"
+                            className="shrink-0 text-gold-300"
+                            aria-hidden
+                          />
+                          {line.text}
+                        </p>
+                      </motion.li>
+                    );
+                  }
+                  const { message } = item;
+                  // A line between two messages starts a new group.
+                  const previous = before?.kind === "message" ? before.message : undefined;
+                  const next = after?.kind === "message" ? after.message : undefined;
                   const rising = fresh(message);
                   return (
                     <motion.li
@@ -304,13 +370,7 @@ export function Conversation({
                       exit={{ opacity: 0, transition: leave(0.16) }}
                       style={{ transformOrigin: message.mine ? "bottom right" : "bottom left" }}
                     >
-                      {day ? (
-                        <p className="flex justify-center px-2 pt-3 pb-2">
-                          <span className="text-[12px] font-medium text-ash-400">
-                            {dayLabel(t, message.at, now)}
-                          </span>
-                        </p>
-                      ) : null}
+                      {dayLine}
                       {message.key === dividerKey ? (
                         <p className="mx-2 my-2 flex items-center gap-2.5 text-[11.5px] font-semibold text-gold-300">
                           <span aria-hidden className="h-px flex-1 bg-gold-400/35" />

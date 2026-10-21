@@ -101,7 +101,11 @@ export type LimitedKey =
   | "crewInvites"
   | "codeLookups"
   | "settingsBackup"
-  | "chatMessages";
+  | "chatMessages"
+  /** Making or renewing a crew's invite link (TEAM5). */
+  | "crewLink"
+  /** Making crew plans; answering them is fine (TEAM5). */
+  | "crewPlans";
 
 export interface LimitedAccount {
   /** Unix seconds: the limits lift by themselves then. */
@@ -251,11 +255,15 @@ export type PermissionLevel = "members" | "moderators" | "leader";
  * leader removes and edits). */
 export interface TeamPermissions {
   invite: PermissionLevel;
+  /** Calling the crew and making plans. */
   call: PermissionLevel;
   /** `moderators` or `leader`: removing plain members. */
   kick: PermissionLevel;
   /** `moderators` or `leader`: the emblem, colour, frame and motto. */
   edit: PermissionLevel;
+  /** `moderators` or `leader`: answering join requests and the invite link (TEAM5; absent before
+   * it, read as `moderators`). */
+  admit?: PermissionLevel;
 }
 
 /** What the service offers of crews beyond the first version. */
@@ -272,6 +280,61 @@ export interface CrewFeatures {
   multi: boolean;
   /** Calls start only on a multiplayer server and carry it (CALL1). */
   callServer: boolean;
+  /** The join setting ("Onaylı"), join requests and who answers them (TEAM5). */
+  requests: boolean;
+  /** Crew invite links and their page (TEAM5). */
+  link: boolean;
+  /** Crew plans ("Planlar", TEAM5). */
+  plans: boolean;
+}
+
+/** How newcomers with the crew's code or invite link get in: at once, or once approved. */
+export type JoinMode = "open" | "approval";
+
+/** What asking to join led to: in the crew now, or a request that waits for its leaders. */
+export type JoinResult = "joined" | "requested";
+
+/** Someone who asked to join one of the player's crews. */
+export interface JoinRequest extends SocialProfile {
+  /** Unix seconds. */
+  sentAt: number;
+}
+
+/** One of the player's own join requests that waits (it goes by itself after 7 days). */
+export interface TeamRequest extends CrewLook {
+  teamId: string;
+  name: string;
+  tag: string;
+  motto: string;
+  members: number;
+  /** Unix seconds. */
+  sentAt: number;
+}
+
+/** "Geliyorum", "Belki", "Gelemem" to a plan. */
+export type PlanAnswer = "yes" | "maybe" | "no";
+
+/** "Planlar": a time to meet on Projects in one of the player's crews (no text). */
+export interface CrewPlan {
+  id: string;
+  /** The crew's id. */
+  crew: string;
+  /** Who made it, and their name as the crew shows it. */
+  by: string;
+  byName?: string;
+  mine: boolean;
+  /** "Planı sil": the player made it, or leads or moderates the crew. */
+  canCancel: boolean;
+  /** The plan's time (Unix seconds, a whole quarter of an hour): the time to show. */
+  at: number;
+  /** The same moment and the plan's end on this computer's clock (reminders, hiding it). */
+  startsAt: number;
+  endsAt: number;
+  /** When it was made, on this computer's clock (Unix seconds). */
+  createdAt: number;
+  /** Who answered what, in the crew's order. */
+  answers: Array<{ id: string; answer: PlanAnswer }>;
+  myAnswer?: PlanAnswer;
 }
 
 /** The player's own mute of one crew (several crews); nobody else sees it. */
@@ -321,6 +384,8 @@ export interface TeamMember extends SocialProfile {
   discordUrl: string;
   /** Unix seconds. */
   joinedAt: number;
+  /** Seconds on Projects together this month, as this computer kept it (0 while it is off). */
+  togetherMonth?: number;
 }
 
 /** How a crew looks: its emblem on a coloured frame. */
@@ -359,6 +424,15 @@ export interface SocialTeam extends CrewLook {
   mute: CrewMute;
   /** Moderators reset the crew's name, tag and motto; they stay locked until then (Unix seconds). */
   textLockedUntil?: number;
+  /** How newcomers with the code or the invite link get in (`open` before TEAM5). */
+  join?: JoinMode;
+  /** The crew's invite link (`XXXX-XXXX-XXXX`) and its page, when it has one. */
+  link?: string;
+  linkUrl?: string;
+  /** Players who asked to join, oldest first: only for a player whose role may answer them. */
+  requests?: JoinRequest[];
+  /** Seconds on Projects this week with someone of this crew there too (this computer only). */
+  togetherWeek?: number;
 }
 
 export interface TeamInvite extends CrewLook {
@@ -379,8 +453,14 @@ export interface TeamLookup extends CrewLook {
   motto: string;
   members: number;
   relation: TeamRelation;
-  /** `EKP-XXXX-XXXX` */
+  /** `EKP-XXXX-XXXX` (empty when it was looked up by its invite link). */
   code: string;
+  /** The invite link it was looked up by (`XXXX-XXXX-XXXX`). */
+  link?: string;
+  /** `approval`: "Katıl" sends a join request (absent: `open`). */
+  join?: JoinMode;
+  /** The player's request to it waits since then (Unix seconds). */
+  requestedAt?: number;
 }
 
 /** "Geliyorum", "Birazdan", "Gelemem". */
@@ -462,6 +542,12 @@ export interface SocialSnapshot {
   crewLimit: number;
   /** Invites to teams, newest first (only while `teams`). */
   teamInvites: TeamInvite[];
+  /** The player's own join requests that wait, newest first (TEAM5). */
+  teamRequests: TeamRequest[];
+  /** The plans of the player's crews, soonest first, those under way included (TEAM5). */
+  plans: CrewPlan[];
+  /** "Birlikte oynanan süre" is kept on this computer. */
+  together: boolean;
   /** Open crew calls, oldest first (only while the service offers calls). */
   calls: CrewCall[];
   /** Whether "Ekibi çağır" may start where the player is (CALL1). */
@@ -499,6 +585,12 @@ export type SocialNotice =
   | { kind: "crewCallJoin"; call: CrewCall }
   /** A crewmate started playing on projects.gg. */
   | { kind: "crewmateOnProjects"; id: string }
+  /** Someone asked to join one of the player's crews, live (TEAM5). */
+  | { kind: "joinRequest"; crew: string; request: JoinRequest }
+  /** A join request of the player's was taken: they are in that crew now. */
+  | { kind: "requestAccepted"; crew: string; name: string }
+  /** A crewmate made a plan, live. */
+  | { kind: "crewPlan"; plan: CrewPlan }
   /** A new chat message from someone else, live (never a sync's). */
   | { kind: "chatMessage"; conv: string; message: ChatMessage; name?: string; crew?: string }
   /** Moderators suspended (`until`) or banned the account: every session ended. */
@@ -534,10 +626,23 @@ export const HIDDEN_SNAPSHOT: SocialSnapshot = {
   invites: [],
   activity: { state: "launcher" },
   teams: false,
-  crew: { look: false, calls: false, roles: false, mute: false, multi: false, callServer: false },
+  crew: {
+    look: false,
+    calls: false,
+    roles: false,
+    mute: false,
+    multi: false,
+    callServer: false,
+    requests: false,
+    link: false,
+    plans: false,
+  },
   crews: [],
   crewLimit: 1,
   teamInvites: [],
+  teamRequests: [],
+  plans: [],
+  together: false,
   calls: [],
   callPlace: "needsServer",
   chatAllowed: false,
@@ -622,9 +727,32 @@ export interface SocialApi {
   /** Hands the founder role to another member. */
   transferTeam(teamId: string, memberId: string): Promise<void>;
   lookupTeam(code: string): Promise<TeamLookup>;
-  joinTeam(code: string): Promise<void>;
+  /** Joins the crew of a code; a crew that approves newcomers takes a join request instead. */
+  joinTeam(code: string): Promise<JoinResult>;
   acceptTeamInvite(teamId: string): Promise<void>;
   declineTeamInvite(teamId: string): Promise<void>;
+  /** What a crew's invite link (`XXXX-XXXX-XXXX`) leads to (TEAM5). */
+  lookupCrewLink(link: string): Promise<TeamLookup>;
+  /** Joins the crew of an invite link, or asks to. */
+  joinCrewLink(link: string): Promise<JoinResult>;
+  /** Withdraws the player's waiting join request to a crew. */
+  withdrawTeamRequest(teamId: string): Promise<void>;
+  /** Takes a player who asked into one of the player's crews, or declines (silently). */
+  answerTeamRequest(teamId: string, userId: string, accept: boolean): Promise<void>;
+  /** A new invite link (`on`, in place of the old one) or none; answers the link it has now. */
+  setTeamLink(teamId: string, on: boolean): Promise<string | null>;
+  /** How newcomers with the code or the link get in (the leader). */
+  setJoinMode(teamId: string, join: JoinMode): Promise<void>;
+  /** A new plan at `at` (Unix seconds, a whole quarter of an hour); answers its id. */
+  makePlan(crew: string, at: number): Promise<string>;
+  /** An answer to a plan; false when the plan is gone. */
+  answerPlan(planId: string, answer: PlanAnswer): Promise<boolean>;
+  /** "Planı sil". */
+  cancelPlan(planId: string): Promise<void>;
+  /** "Birlikte oynanan süre" on or off on this computer (off deletes what was kept). */
+  setTogether(on: boolean): Promise<void>;
+  /** Deletes the time played together kept on this computer. */
+  clearTogether(): Promise<void>;
   /** Changes in chat conversations. Returns an unsubscribe function. */
   onChat(listener: (change: ChatChange) => void): () => void;
   /** A conversation's newest messages, or those before a message id. */

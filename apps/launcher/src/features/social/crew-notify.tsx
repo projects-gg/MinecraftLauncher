@@ -201,6 +201,11 @@ export function CrewNotifySwitches() {
   // Crew chat only counts unread unless this is on (CHAT1).
   const chat = useSocialUi((s) => s.view.chat !== undefined);
   const crewChat = useSocialPrefs((s) => s.notifyCrewChat);
+  // Join requests and plan reminders (TEAM5), where the service has them.
+  const offersRequests = useSocialUi((s) => s.view.crew.requests);
+  const offersPlans = useSocialUi((s) => s.view.crew.plans);
+  const joinRequests = useSocialPrefs((s) => s.notifyJoinRequests);
+  const planReminders = useSocialPrefs((s) => s.notifyPlans);
   const set = useSocialPrefs((s) => s.set);
   const { settings } = useCrewMute();
   // The switch moves at once; the service's answer (or its failure) settles it.
@@ -238,6 +243,20 @@ export function CrewNotifySwitches() {
           checked={crewChat}
           onCheckedChange={(on) => set("notifyCrewChat", on)}
           label={t("chat.settings.crewChat")}
+        />
+      ) : null}
+      {offersRequests ? (
+        <Switch
+          checked={joinRequests}
+          onCheckedChange={(on) => set("notifyJoinRequests", on)}
+          label={t("crewWave2.notify.requests")}
+        />
+      ) : null}
+      {offersPlans ? (
+        <Switch
+          checked={planReminders}
+          onCheckedChange={(on) => set("notifyPlans", on)}
+          label={t("crewWave2.notify.plans")}
         />
       ) : null}
     </div>

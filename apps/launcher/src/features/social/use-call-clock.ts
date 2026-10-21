@@ -1,13 +1,15 @@
 // The time crew calls (and a crew's mute) are drawn at. It moves only when something about them
 // changes on screen: a call's minutes ("17 dk"), a call running out, "Ekibi çağır" waking up after
 // its five minutes, or a timed mute ending, every crew's or one crew's ("Sessizde" goes, the bell
-// rings again). One timer to
-// the next such moment while there is one, none otherwise (no idle work, no seconds).
+// rings again), and a crew plan coming within the hour, ringing, starting or ending (TEAM5). One
+// timer to the next such moment while there is one, none otherwise (no idle work, no seconds);
+// while a plan reminder is ahead it looks again at least every 15 minutes (a computer that slept).
 import { useEffect } from "react";
 import { create } from "zustand";
 import { callWaitUntil, nextCallTick } from "./calls";
+import { nextPlanTick } from "./crew-plans";
 import { nextMuteTick } from "./mute";
-import { useSocialUi } from "./store";
+import { useSocialPrefs, useSocialUi } from "./store";
 
 export const useCallClock = create<{ now: number }>(() => ({ now: Date.now() }));
 
@@ -23,6 +25,8 @@ export function useCallTicker() {
   const lastCallAt = useSocialUi((s) => s.lastCallAt);
   const mute = useSocialUi((s) => s.view.crewNotifications);
   const crews = useSocialUi((s) => s.view.crews);
+  const plans = useSocialUi((s) => s.view.plans);
+  const remind = useSocialPrefs((s) => s.notifyPlans);
   useEffect(() => {
     let timer: number | undefined;
     const wait = callWaitUntil(calls, refusedUntil, lastCallAt);
@@ -34,6 +38,7 @@ export function useCallTicker() {
         wait > now ? wait - now : null,
         nextMuteTick(mute, now),
         ...crews.map((crew) => nextMuteTick(crew.mute, now)),
+        nextPlanTick(plans, now, remind),
       ].filter((delay): delay is number => delay !== null);
       // A mute set elsewhere may last 30 days, longer than a browser timer can wait.
       const next = Math.min(...delays, MAX_TIMER_MS);
@@ -41,5 +46,5 @@ export function useCallTicker() {
     };
     tick();
     return () => window.clearTimeout(timer);
-  }, [calls, refusedUntil, lastCallAt, mute, crews]);
+  }, [calls, refusedUntil, lastCallAt, mute, crews, plans, remind]);
 }

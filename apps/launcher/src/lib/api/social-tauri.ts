@@ -11,14 +11,18 @@ import {
   type FriendGroupsView,
   type FriendView,
   type InviteView,
+  type JoinRequestView,
   type MeView,
   type ModNoticeView,
   type SocialNotice as NoticeBinding,
+  type PlanView,
   type ProfileView,
   type RequestView,
   type SocialView,
   type TeamInviteView,
+  type TeamLookupView,
   type TeamMemberView,
+  type TeamRequestView,
   type TeamView,
 } from "@/bindings";
 import type {
@@ -28,9 +32,11 @@ import type {
   Conversation,
   CrewCall,
   CrewFeatures,
+  CrewPlan,
   Friend,
   FriendGroups,
   FriendRequest,
+  JoinRequest,
   LimitedKey,
   ModNotice,
   SocialApi,
@@ -42,7 +48,9 @@ import type {
   SocialSnapshot,
   SocialTeam,
   TeamInvite,
+  TeamLookup,
   TeamMember,
+  TeamRequest,
 } from "./social-types";
 
 /** A failed friends command: friendly `message`, plus `code`/`details` for "copy details". */
@@ -216,6 +224,60 @@ function teamMember(v: TeamMemberView): TeamMember {
     game: game(v.game),
     discordUrl: v.discordUrl,
     joinedAt: v.joinedAt,
+    togetherMonth: v.togetherMonth,
+  };
+}
+
+function joinRequest(v: JoinRequestView): JoinRequest {
+  return { ...profile(v), sentAt: v.sentAt };
+}
+
+function teamRequest(v: TeamRequestView): TeamRequest {
+  return {
+    teamId: v.teamId,
+    name: v.name,
+    tag: v.tag,
+    emblem: v.emblem,
+    color: v.color,
+    frame: v.frame,
+    motto: v.motto,
+    members: v.members,
+    sentAt: v.sentAt,
+  };
+}
+
+function plan(v: PlanView): CrewPlan {
+  return {
+    id: v.id,
+    crew: v.crew,
+    by: v.by,
+    byName: opt(v.byName),
+    mine: v.mine,
+    canCancel: v.canCancel,
+    at: v.at,
+    startsAt: v.startsAt,
+    endsAt: v.endsAt,
+    createdAt: v.createdAt,
+    answers: v.answers.map((a) => ({ id: a.id, answer: a.answer })),
+    myAnswer: opt(v.myAnswer),
+  };
+}
+
+function teamLookup(v: TeamLookupView): TeamLookup {
+  return {
+    teamId: v.teamId,
+    name: v.name,
+    tag: v.tag,
+    emblem: v.emblem,
+    color: v.color,
+    frame: v.frame,
+    motto: v.motto,
+    members: v.members,
+    relation: v.relation,
+    code: v.code,
+    link: opt(v.link),
+    join: v.join,
+    requestedAt: opt(v.requestedAt),
   };
 }
 
@@ -238,12 +300,18 @@ function team(v: TeamView): SocialTeam {
       call: v.permissions.call ?? "members",
       kick: v.permissions.kick ?? "leader",
       edit: v.permissions.edit ?? "leader",
+      admit: v.permissions.admit ?? "moderators",
     },
     members: v.members.map(teamMember),
     invited: v.invited,
     limit: v.limit,
     mute: { muted: v.notifications.muted ?? false, muteUntil: v.notifications.muteUntil ?? null },
     textLockedUntil: opt(v.textLockedUntil),
+    join: v.join,
+    link: opt(v.link),
+    linkUrl: opt(v.linkUrl),
+    requests: v.requests.map(joinRequest),
+    togetherWeek: v.togetherWeek,
   };
 }
 
@@ -289,6 +357,9 @@ export function crewFeatures(list: readonly string[]): CrewFeatures {
     mute: list.includes("mute"),
     multi: list.includes("multi"),
     callServer: list.includes("callServer"),
+    requests: list.includes("requests"),
+    link: list.includes("link"),
+    plans: list.includes("plans"),
   };
 }
 
@@ -315,6 +386,9 @@ export function snapshot(v: SocialView): SocialSnapshot {
     crews: v.crews.map(team),
     crewLimit: v.crewLimit,
     teamInvites: v.teamInvites.map(teamInvite),
+    teamRequests: v.teamRequests.map(teamRequest),
+    plans: v.plans.map(plan),
+    together: v.together,
     calls: v.calls.map(call),
     callPlace: v.callPlace,
     crewNotifications: v.crewNotifications
@@ -360,6 +434,12 @@ function notice(v: NoticeBinding): SocialNotice {
       return { kind: "crewCallJoin", call: call(v.call) };
     case "crewmateOnProjects":
       return { kind: "crewmateOnProjects", id: v.id };
+    case "joinRequest":
+      return { kind: "joinRequest", crew: v.crew, request: joinRequest(v.request) };
+    case "requestAccepted":
+      return { kind: "requestAccepted", crew: v.crew, name: v.name };
+    case "crewPlan":
+      return { kind: "crewPlan", plan: plan(v.plan) };
     case "chatMessage":
       return {
         kind: "chatMessage",
@@ -491,6 +571,7 @@ export const tauriSocial: SocialApi = {
               call: permissions.call ?? null,
               kick: permissions.kick ?? null,
               edit: permissions.edit ?? null,
+              admit: permissions.admit ?? null,
             }
           : null,
       ),
@@ -540,15 +621,36 @@ export const tauriSocial: SocialApi = {
   async transferTeam(teamId, memberId) {
     await ok(commands.socialTeamTransfer(teamId, memberId));
   },
-  lookupTeam: (code) => ok(commands.socialTeamLookup(code)),
-  async joinTeam(code) {
-    await ok(commands.socialTeamJoin(code));
-  },
+  lookupTeam: async (code) => teamLookup(await ok(commands.socialTeamLookup(code))),
+  joinTeam: (code) => ok(commands.socialTeamJoin(code)),
   async acceptTeamInvite(teamId) {
     await ok(commands.socialTeamAccept(teamId));
   },
   async declineTeamInvite(teamId) {
     await ok(commands.socialTeamDecline(teamId));
+  },
+  lookupCrewLink: async (link) => teamLookup(await ok(commands.socialTeamLookupLink(link))),
+  joinCrewLink: (link) => ok(commands.socialTeamJoinLink(link)),
+  async withdrawTeamRequest(teamId) {
+    await ok(commands.socialTeamRequestWithdraw(teamId));
+  },
+  async answerTeamRequest(teamId, userId, accept) {
+    await ok(commands.socialTeamRequestAnswer(teamId, userId, accept));
+  },
+  setTeamLink: (teamId, on) => ok(commands.socialTeamLink(teamId, on)),
+  async setJoinMode(teamId, join) {
+    await ok(commands.socialTeamJoinMode(teamId, join));
+  },
+  makePlan: (crew, at) => ok(commands.socialPlanMake(crew, at)),
+  answerPlan: (planId, answer) => ok(commands.socialPlanAnswer(planId, answer)),
+  async cancelPlan(planId) {
+    await ok(commands.socialPlanCancel(planId));
+  },
+  async setTogether(on) {
+    await commands.socialTogether(on);
+  },
+  async clearTogether() {
+    await commands.socialTogetherClear();
   },
   onChat(listener) {
     const unlisten = listen<ChatChangeView>("social-chat", (event) =>

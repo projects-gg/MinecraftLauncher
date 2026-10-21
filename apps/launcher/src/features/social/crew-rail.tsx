@@ -3,7 +3,9 @@
 // the end (dimmed at the crew limit, which its tooltip says; a gold dot while invites to crews wait,
 // which it opens even at the limit, to decline them). The crew on screen wears the brand's
 // pixel brackets; they travel to the crew the player picks. A crew with a call waiting carries a
-// small gold megaphone, a muted one a struck bell. Marks are dragged sideways to reorder (the
+// small gold megaphone, a muted one a struck bell, one whose join requests wait for the player a
+// gold dot (TEAM5; the add tile also opens while the player's own requests wait). Marks are
+// dragged sideways to reorder (the
 // others glide aside: the glide answers the player's own hand, so it stays in Performance mode too);
 // Alt+←/→ and each mark's menu ("Ana ekip yap", "Sola taşı", "Sağa taşı") do the same without
 // dragging. A tab list: ←/→ move between crews, Home/End to the ends.
@@ -22,6 +24,7 @@ import { useTranslation } from "react-i18next";
 import { useCalm } from "@/features/accounts/calm";
 import type { SocialTeam } from "@/lib/api/social-types";
 import { callNames, unansweredCall } from "./calls";
+import { waitingRequests } from "./crew-joining";
 import { saveCrewOrder } from "./crew-order";
 import { crewFirst, moveCrew, NEW_CREW_TAB } from "./crews";
 import { useSocialMotion } from "./motion";
@@ -87,6 +90,7 @@ function CrewTab({
   selected,
   calling,
   muted,
+  asking,
   travel,
   controls,
   dragged,
@@ -101,6 +105,8 @@ function CrewTab({
   selected: boolean;
   calling: boolean;
   muted: boolean;
+  /** Join requests waiting for the player's answer. */
+  asking: number;
   travel: boolean;
   controls: DragControls;
   dragged: RefObject<boolean>;
@@ -117,6 +123,7 @@ function CrewTab({
     main ? t("crews.main") : null,
     muted ? t("crews.muted") : null,
     calling ? t("crews.callWaiting") : null,
+    asking ? t("crewWave2.requests.waiting", { count: asking }) : null,
   ]
     .filter(Boolean)
     .join(", ");
@@ -200,6 +207,12 @@ function CrewTab({
           <Badge show={muted} className="-right-1.5 -bottom-1.5 text-ash-300 ring-white/15">
             <BellSlash size={9} weight="bold" />
           </Badge>
+          <Badge
+            show={asking > 0}
+            className="-top-1 -left-1 size-[9px] bg-gold-300 ring-obsidian-900 ring-2"
+          >
+            {null}
+          </Badge>
         </span>
         <span
           className={cn(
@@ -277,6 +290,7 @@ export function CrewRail({
   const calls = useSocialUi((s) => s.view.calls);
   const all = useSocialUi((s) => s.view.crewNotifications);
   const invites = useSocialUi((s) => s.view.teamInvites.length);
+  const asked = useSocialUi((s) => s.view.teamRequests.length);
   const now = useCallClock((s) => s.now);
   const listRef = useRef<HTMLUListElement>(null);
   const addRef = useRef<HTMLButtonElement>(null);
@@ -311,8 +325,9 @@ export function CrewRail({
     focusTab(id);
   };
   const addSelected = shown === NEW_CREW_TAB;
-  // At the limit the add view still opens while invites wait (to see and decline them).
-  const addOpen = canAdd || invites > 0 || addSelected;
+  // At the limit the add view still opens while invites wait (to see and decline them), and while
+  // the player's own join requests wait (to withdraw them).
+  const addOpen = canAdd || invites > 0 || asked > 0 || addSelected;
   const targets = [...order, ...(addOpen ? [NEW_CREW_TAB] : [])];
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, id: string) => {
@@ -391,6 +406,7 @@ export function CrewRail({
                     ),
                   )}
                   muted={crewMutedNow(crew, all, now)}
+                  asking={waitingRequests(crew, now).length}
                   travel={layout}
                   controls={controls}
                   dragged={dragged}

@@ -3,6 +3,9 @@
 // - a crewmate's call the player has not answered: their face with a small megaphone, "Ayşe ekibi
 //   çağırıyor" (naming the crews with several) and "Geliyorum"; × closes it here, for this call
 //   only (it is not an answer);
+// - a crew plan under way (TEAM5): the crew's mark, the faces of those coming, "Gece Kartalları
+//   planı başladı" and "Katıl"; one within the hour says who is coming ("21:00 planına 3 kişi
+//   geliyor", "Geliyorum" while unanswered); × closes it here, for this plan only;
 // - two or more crewmates on Projects: the crew's mark and their faces, "Ekibinden 4 kişi
 //   Projects'te" ("Ekiplerinden 6 kişi…" across several crews, each person once) and "Katıl";
 // - in game on a server a call may start from (CALL1): the crews' marks, "Ekibini yanına çağır"
@@ -15,16 +18,21 @@
 // The invitations close for good with ×; the friends button then lights up once wherever it is,
 // to show where friends live (from the keyboard the focus goes there too). A line that replaces
 // another cross-fades in place; the strips below glide.
-import { MegaphoneSimple, Play, UserPlus, X } from "@phosphor-icons/react";
+import { Check, MegaphoneSimple, Play, UserPlus, X } from "@phosphor-icons/react";
 import { cn, easeOutExpo, IconButton } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { presetAvatar } from "@/features/avatars/presets";
+import { api } from "@/lib/api";
+import type { TeamMember } from "@/lib/api/social-types";
+import { dateTimeFormat } from "@/lib/format";
 import { useLaunch } from "@/stores/launch";
 import { entrySelector, usePlace } from "@/stores/placement";
+import { attempt } from "./actions";
 import { answerCall, callOrAsk } from "./call-actions";
 import { crewsOfCall, unansweredCall } from "./calls";
+import { answersBy, homePlan } from "./crew-plans";
 import {
   busiestCrew,
   callableCrews,
@@ -260,6 +268,74 @@ function CrewLine() {
 }
 
 /**
+ * A crew plan under way ("… planı başladı", "Katıl") or within the hour ("21:00 planına 3 kişi
+ * geliyor", "Geliyorum" while unanswered), with the faces of those coming; × closes it here.
+ */
+function PlanLine() {
+  const { t } = useTranslation();
+  const view = useSocialUi((s) => s.view);
+  const closed = useSocialUi((s) => s.closedPlans);
+  const closePlan = useSocialUi((s) => s.closePlan);
+  const openPanel = useSocialUi((s) => s.openPanel);
+  const setCrewTab = useSocialUi((s) => s.setCrewTab);
+  const now = useCallClock((s) => s.now);
+  const found = homePlan(view.plans, now, closed);
+  const crew = found ? view.crews.find((one) => one.id === found.plan.crew) : undefined;
+  if (!found || !crew) return null;
+  const { plan, phase } = found;
+  const coming = answersBy(plan).yes;
+  const faces = coming
+    .map((id) => crew.members.find((m) => m.id === id))
+    .filter((m): m is TeamMember => Boolean(m) && !m?.blocked);
+  const time = dateTimeFormat({ hour: "2-digit", minute: "2-digit" }).format(
+    new Date(plan.at * 1000),
+  );
+  const text =
+    phase === "live"
+      ? t("crewWave2.plans.started", { crew: crew.name })
+      : coming.length
+        ? t("crewWave2.plans.home.soonComing", { time, count: coming.length })
+        : t("crewWave2.plans.home.soon", { time });
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={`${text}. ${t("teams.open")}`}
+        onClick={(event) => {
+          openPanel({ page: "team", from: event.currentTarget });
+          setCrewTab(crew.id);
+        }}
+        className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-full py-0.5 pr-2.5 pl-1 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
+      >
+        <CrewMark look={crew} size={28} />
+        {faces.length ? <Faces sources={faces} /> : null}
+        <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
+      </button>
+      {phase === "live" && plan.myAnswer !== "no" ? (
+        <JoinButton />
+      ) : !plan.myAnswer ? (
+        <button
+          type="button"
+          onClick={() => void attempt(() => api.social.answerPlan(plan.id, "yes"))}
+          className="group flex shrink-0 cursor-pointer rounded-full outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
+        >
+          <ActionLook icon={<Check size={13} weight="bold" aria-hidden />}>
+            {t("crewWave2.plans.yes")}
+          </ActionLook>
+        </button>
+      ) : null}
+      <IconButton
+        size="sm"
+        label={t("social.actions.dismiss")}
+        icon={<X size={13} weight="bold" />}
+        onClick={() => closePlan(plan.id)}
+        className="shrink-0 rounded-full"
+      />
+    </>
+  );
+}
+
+/**
  * In game where a call may start: "Ekibini yanına çağır" with the marks of the crews to call.
  * "Çağır" calls the one crew at once, or opens the picker for several; × hides it on this server.
  */
@@ -315,6 +391,7 @@ export function FriendsHomeStrip() {
   const view = useSocialUi((s) => s.view);
   const closed = useSocialPrefs((s) => s.closedHints);
   const closedCalls = useSocialUi((s) => s.closedCalls);
+  const closedPlans = useSocialUi((s) => s.closedPlans);
   const closedOn = useSocialUi((s) => s.callLineClosed);
   const refusedUntil = useSocialUi((s) => s.callRefusedUntil);
   const lastCallAt = useSocialUi((s) => s.lastCallAt);
@@ -333,7 +410,8 @@ export function FriendsHomeStrip() {
       lastCallAt,
       now,
     });
-  const kind = homeStrip(view, closed, { closedCalls, gameBusy: busy, now, callable });
+  const plan = homePlan(view.plans, now, closedPlans)?.phase ?? null;
+  const kind = homeStrip(view, closed, { closedCalls, gameBusy: busy, now, callable, plan });
 
   return (
     <AnimatePresence initial={false} mode="popLayout">
@@ -364,6 +442,8 @@ export function FriendsHomeStrip() {
             <CrewLine />
           ) : kind === "callCrew" ? (
             <CallCrewLine />
+          ) : kind === "plan" ? (
+            <PlanLine />
           ) : (
             <InviteLine hint={kind} />
           )}

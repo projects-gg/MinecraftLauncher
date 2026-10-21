@@ -303,20 +303,26 @@ describe("crew notices", () => {
       asks: false,
       call: open,
       messages: 0,
+      joins: 0,
     });
     // Both at once: both are said.
     const both = { incoming: [{} as FriendRequest], invites: [], calls: [open] };
-    expect(whatWaits(both, true, NOW)).toEqual({ asks: true, call: open, messages: 0 });
+    expect(whatWaits(both, true, NOW)).toEqual({ asks: true, call: open, messages: 0, joins: 0 });
     // An answered call, the player's own call and a call not heard wait for nothing.
     for (const view of [
       { incoming: [], invites: [], calls: [call({ myAnswer: "soon" })] },
       { incoming: [], invites: [], calls: [call({ mine: true })] },
     ]) {
-      expect(whatWaits(view, true, NOW)).toEqual({ asks: false, call: null, messages: 0 });
+      expect(whatWaits(view, true, NOW)).toEqual({
+        asks: false,
+        call: null,
+        messages: 0,
+        joins: 0,
+      });
     }
     expect(
       whatWaits({ incoming: [], invites: [{} as SocialInvite], calls: [open] }, false, NOW),
-    ).toEqual({ asks: true, call: null, messages: 0 });
+    ).toEqual({ asks: true, call: null, messages: 0, joins: 0 });
   });
 
   it("counts unread direct messages, not crew chat or conversations muted here (CHAT1)", () => {
