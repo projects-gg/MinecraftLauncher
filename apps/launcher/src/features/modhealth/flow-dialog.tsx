@@ -7,6 +7,7 @@ import {
   DownloadSimple,
   FileText,
   FolderSimple,
+  Lifebuoy,
   Package,
   SlidersHorizontal,
   Trash,
@@ -21,6 +22,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { showError } from "@/features/content/jobs";
+import { openHelp } from "@/features/help/store";
 import {
   type Direction,
   enter,
@@ -495,6 +497,17 @@ export function ModFlowDialog() {
             }}
           />
         ) : null}
+        {/* The troubleshooter (HELP1): the connection, the disk, Java and the mods beside the crash. */}
+        <IconButton
+          label={t("help.title")}
+          icon={<Lifebuoy size={17} />}
+          size="sm"
+          tooltipSide="top"
+          onClick={() => {
+            close();
+            openHelp();
+          }}
+        />
         <div className="relative ml-auto flex items-center justify-end">
           <AnimatePresence mode="popLayout" initial={false}>
             {turnedOff ? (

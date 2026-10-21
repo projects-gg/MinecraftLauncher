@@ -8,6 +8,7 @@ import {
   Gear,
   HardDrives,
   Info,
+  Lifebuoy,
   Mountains,
   PaintBrush,
   SidebarSimple,
@@ -36,6 +37,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import logo from "@/assets/brand/logo-96.webp";
+import { HelpSection } from "@/features/help/help-panel";
 import { platformName } from "@/features/home/community-links";
 import { FriendsSettingsSection } from "@/features/social/settings-section";
 import { useSocialUi } from "@/features/social/store";
@@ -75,14 +77,21 @@ const sections = [
   { id: "updates", icon: ArrowsClockwise },
   { id: "discord", icon: ChatsCircle },
   { id: "data", icon: HardDrives },
+  // "Sorun yardımcısı" (HELP1): at the end, where help sits in most apps, before Hakkında.
+  { id: "help", icon: Lifebuoy },
   { id: "about", icon: Info },
 ] as const;
 
 type SectionId = (typeof sections)[number]["id"];
 
-/** A section's name: "Grafik ve FPS" keeps its words in its own module (locales/tr-fps.ts). */
+/**
+ * A section's name: "Grafik ve FPS" and "Sorun yardımcısı" keep their words in their own modules
+ * (locales/tr-fps.ts, tr-help.ts).
+ */
 function sectionTitle(t: TFunction, id: SectionId): string {
-  return id === "graphics" ? t("fps.title") : t(`settings.sections.${id}`);
+  if (id === "graphics") return t("fps.title");
+  if (id === "help") return t("help.title");
+  return t(`settings.sections.${id}`);
 }
 
 /**
@@ -630,6 +639,7 @@ export function SettingsPage() {
     updates: <Updates />,
     discord: <Discord />,
     data: <Data />,
+    help: <HelpSection />,
     about: <About />,
   };
 

@@ -19,6 +19,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountFace } from "@/features/accounts/account-face";
 import { launchErrorAction } from "@/features/disk/launch-error";
+import { helpsWithLaunchError } from "@/features/help/launch";
+import { openHelp, useHelp } from "@/features/help/store";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
 import { usePrepareSync } from "@/features/prepare/use-prepare-sync";
 import { ResumeButton, useResumeTarget } from "@/features/resume/resume-button";
@@ -509,6 +511,7 @@ export function CommandBar() {
     }
   }, [phase.kind, queryClient]);
 
+  const selectedLaunchId = selected?.id;
   useEffect(() => {
     if (phase.kind !== "error") return;
     if (launchErrorAction(phase.code) === "makeSpace") {
@@ -522,6 +525,19 @@ export function CommandBar() {
           onClick: () => void navigate({ to: "/settings", search: { section: "data" } }),
         },
       });
+    } else if (helpsWithLaunchError(phase.code)) {
+      // "Sorunu bul" (HELP1): the troubleshooter checks at once, so its answers are there when the
+      // player taps; its panel keeps this error's details for "Ayrıntıları kopyala".
+      useHelp.getState().launchFailed(launchId ?? selectedLaunchId ?? null, {
+        code: phase.code,
+        message: phase.message,
+        details: phase.details,
+      });
+      toast.error(phase.message, {
+        id: "launch-help",
+        duration: 10_000,
+        action: { label: t("help.find"), onClick: openHelp },
+      });
     } else {
       toast.error(phase.message, {
         action: {
@@ -531,7 +547,7 @@ export function CommandBar() {
       });
     }
     reset();
-  }, [phase, reset, t, navigate]);
+  }, [phase, reset, t, navigate, launchId, selectedLaunchId]);
 
   const state: PlayState = (() => {
     switch (phase.kind) {

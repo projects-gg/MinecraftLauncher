@@ -29,6 +29,7 @@ import { tauriCleanup } from "./cleanup-tauri";
 import { tauriContentApi } from "./content-tauri";
 import { tauriData } from "./data-tauri";
 import { cssPoint } from "./drag-point";
+import { tauriHelp } from "./help-tauri";
 import { tauriImport } from "./import-tauri";
 import type { LauncherApi } from "./index";
 import { javaPrompt, tauriJava } from "./java-tauri";
@@ -411,6 +412,7 @@ export const tauriApi: LauncherApi = {
   modHealth: tauriModHealth,
   java: tauriJava,
   importer: tauriImport,
+  help: tauriHelp,
 
   async afkAccounts() {
     return (await commands.afkOverview()).map(afkAccount);

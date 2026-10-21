@@ -114,8 +114,9 @@ export const PALETTE_WORDS = {
     keywords: ["ekran görüntüsü", "ss", "foto", "fotoğraf", "resim", "screenshot", "görüntü"],
   },
   logs: {
-    keywords: ["log", "loglar", "kayıt", "çökme", "çöküyor", "crash", "hata", "error", "rapor"],
-    related: ["açılmıyor", "başlamıyor", "kapanıyor", "atıyor"],
+    keywords: ["log", "loglar", "kayıt", "crash", "error", "rapor"],
+    // A crash or an error is the troubleshooter's first (HELP1); the logs come right after.
+    related: ["çökme", "çöküyor", "hata", "açılmıyor", "başlamıyor", "kapanıyor", "atıyor"],
   },
   folder: {
     keywords: ["klasör", "dosya", "dosyalar", "folder", ".minecraft", "dizin", "konum"],
@@ -208,9 +209,39 @@ export const PALETTE_WORDS = {
       "trash",
     ],
   },
+  // "Sorun yardımcısı" (HELP1): the game that won't start or connect, a crash, an error. The
+  // problem words lead here; the support bundle and the logs follow.
+  help: {
+    keywords: [
+      "sorun",
+      "sorun yardımcısı",
+      "yardımcı",
+      "yardım",
+      "problem",
+      "açılmıyor",
+      "açılmadı",
+      "başlamıyor",
+      "girmiyor",
+      "giremiyorum",
+      "bağlanamıyorum",
+      "bağlanamıyor",
+      "bağlanmıyor",
+      "bağlantı",
+      "internet",
+      "hata",
+      "çöküyor",
+      "çöktü",
+      "çökme",
+      "çalışmıyor",
+      "troubleshoot",
+      "troubleshooter",
+      "help",
+    ],
+    related: ["crash", "error", "ping", "sunucu", "server", "destek", "support"],
+  },
   support: {
-    keywords: ["destek", "yardım", "sorun", "problem", "rapor", "support", "help"],
-    related: ["hata", "log", "çökme"],
+    keywords: ["destek", "rapor", "support"],
+    related: ["yardım", "sorun", "problem", "help", "hata", "log", "çökme"],
   },
 
   // Actions

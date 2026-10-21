@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { AfkAccount, AfkState } from "@/lib/api";
 import { tr } from "@/locales/tr";
+import { trHelp } from "@/locales/tr-help";
 import {
   afkPaletteActions,
   PALETTE_WORDS,
@@ -70,6 +71,7 @@ const palette: { id: string; entries: Candidate[] }[] = [
     id: "settings",
     entries: [
       item("setting:graphics", tr.fps.title, PALETTE_WORDS.graphics),
+      item("setting:help", trHelp.title, PALETTE_WORDS.help),
       item("setting:performance", tr.palette.performanceOn, PALETTE_WORDS.performance, [
         tr.palette.performanceOn,
         tr.palette.performanceOff,
@@ -159,6 +161,18 @@ describe("palette search", () => {
     ["crash", "instance:logs"],
     ["log", "instance:logs"],
     ["destek", "setting:support"],
+    // The game that won't start or connect: the troubleshooter (HELP1).
+    ["açılmıyor", "setting:help"],
+    ["oyun açılmıyor", "setting:help"],
+    ["bağlanamıyorum", "setting:help"],
+    ["sunucuya bağlanamıyorum", "setting:help"],
+    ["hata", "setting:help"],
+    ["çöküyor", "setting:help"],
+    ["oyun çöktü", "setting:help"],
+    ["sorun", "setting:help"],
+    ["yardım", "setting:help"],
+    ["sorun yardımcısı", "setting:help"],
+    ["troubleshoot", "setting:help"],
     ["klasör", "instance:folder"],
     ["shader", "instance:shaders"],
     ["optifine", "instance:mods"],
@@ -178,7 +192,15 @@ describe("palette search", () => {
     const results = rank("kasıyor");
     expect(results.indexOf("instance:memory")).toBeGreaterThan(0);
     expect(results.indexOf("setting:performance")).toBeGreaterThan(0);
-    expect(rank("çöküyor").slice(0, 2)).toEqual(["instance:logs", "instance:memory"]);
+    // A crash: the troubleshooter first, then the memory and the logs.
+    const crash = rank("çöküyor");
+    expect(crash[0]).toBe("setting:help");
+    expect(crash).toContain("instance:memory");
+    expect(crash).toContain("instance:logs");
+    // An error: the troubleshooter, then the logs and the support bundle.
+    expect(rank("hata")).toEqual(
+      expect.arrayContaining(["setting:help", "instance:logs", "setting:support"]),
+    );
     // Screenshots stay screenshots, though the graphics item knows "görüntü".
     expect(rank("ekran görüntüleri")[0]).toBe("instance:screenshots");
   });

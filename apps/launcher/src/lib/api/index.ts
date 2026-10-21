@@ -16,6 +16,7 @@ import type {
 import type { CleanupApi } from "./cleanup-types";
 import type { ContentApi } from "./content-types";
 import type { DataApi } from "./data-types";
+import type { HelpApi } from "./help-types";
 import type { ImportApi } from "./import-types";
 import type { JavaApi } from "./java-types";
 import type { LibraryApi } from "./library-types";
@@ -192,6 +193,8 @@ export interface LauncherApi {
   java: JavaApi;
   /** Bringing a player over from another launcher (the welcome flow, Settings → Veri). */
   importer: ImportApi;
+  /** The troubleshooter (Settings → Sorun yardımcısı): every check once, row by row. */
+  help: HelpApi;
 }
 
 export type {
@@ -207,6 +210,7 @@ export * from "./afk-settings";
 export * from "./cleanup-types";
 export * from "./content-types";
 export * from "./data-types";
+export * from "./help-types";
 export * from "./import-types";
 export * from "./java-types";
 export * from "./library-types";

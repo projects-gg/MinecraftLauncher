@@ -28,12 +28,14 @@ export const trHelp = {
   checks: {
     internet: "İnternet",
     server: "Projects sunucusu",
-    content: "Paketler ve haberler",
+    /** The signed content: the pack's updates, news, the launcher's settings from Studio. */
+    content: "Paket güncellemeleri",
     friends: "Arkadaşlar",
     microsoft: "Microsoft girişi",
     discord: "Discord",
     clock: "Saat",
-    notice: "Duyuru",
+    /** The team's word on the servers: Studio's maintenance notice or the status page. */
+    notice: "Sunucu durumu",
     disk: "Disk alanı",
     java: "Java",
     memory: "Bellek",

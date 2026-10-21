@@ -6,6 +6,7 @@ import {
   CaretRight,
   Coffee,
   CopySimple,
+  FileZip,
   FolderOpen,
   Gauge,
   Gear,
@@ -504,6 +505,14 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
             () => run(() => openSettings("graphics")),
             { words: PALETTE_WORDS.graphics },
           ),
+          // The game that won't start or connect, a crash, an error (HELP1).
+          entry(
+            "setting:help",
+            t("help.title"),
+            <Lifebuoy size={18} />,
+            () => run(() => openSettings("help")),
+            { words: PALETTE_WORDS.help },
+          ),
           entry(
             "setting:performance",
             performanceMode ? t("palette.performanceOff") : t("palette.performanceOn"),
@@ -535,7 +544,7 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
                 entry(
                   "setting:support",
                   t("tuning.palette.support"),
-                  <Lifebuoy size={18} />,
+                  <FileZip size={18} />,
                   () => run(() => openSettings("data")),
                   { words: PALETTE_WORDS.support },
                 ),

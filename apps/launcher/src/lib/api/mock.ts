@@ -14,6 +14,7 @@ import { createMockContent, mockExtraMods } from "./mock-content";
 import { createMockConveniences, mockNewScreenshots, mockSessionMs } from "./mock-conveniences";
 import { createMockData } from "./mock-data";
 import { mockFreshOfficial, mockFreshOwnMod } from "./mock-fresh";
+import { createMockHelp } from "./mock-help";
 import { createMockImport } from "./mock-import";
 import { mockCustomJava, mockJava, mockJavaPrompt } from "./mock-java";
 import { pick } from "./mock-lang";
@@ -926,6 +927,7 @@ export const mockApi: LauncherApi = {
   modHealth: mockModHealth,
   java: mockJava,
   importer: createMockImport(),
+  help: createMockHelp(),
   library: createMockLibrary({
     setGroup: (id, group) => {
       const instance = instances.find((i) => i.id === id);

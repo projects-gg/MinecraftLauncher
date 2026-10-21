@@ -26,8 +26,11 @@ import { Row, SwapLine } from "./row";
 /** One toast at a time: a new pick (or shader tap) replaces the last one's "Geri al". */
 const TOAST_ID = "graphics-switch";
 
-/** The instance whose graphics the section shows: Play's (the command bar's rule). */
-function usePlayInstance(instances: InstanceSummary[]) {
+/**
+ * The instance whose graphics the section shows: Play's (the command bar's rule). The
+ * troubleshooter checks the same one.
+ */
+export function usePlayInstance(instances: InstanceSummary[]) {
   const selectedId = usePrefs((s) => s.selectedInstanceId);
   const phaseKind = useLaunch((s) => s.phase.kind);
   const launchId = useLaunch((s) => s.instanceId);
