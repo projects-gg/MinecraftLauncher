@@ -59,3 +59,33 @@ export function Row({
     </div>
   );
 }
+
+/**
+ * Help lines that take turns in one grid cell (a row's help that follows its choice): the cell
+ * keeps the height of the tallest, so nothing below moves; the old line fades out (100 ms), the
+ * new one in (150 ms after 60 ms), as `SwapLabel` does for buttons. Screen readers get the shown
+ * line from a live text beside it.
+ */
+export function SwapLine({ lines, active }: { lines: string[]; active: number }) {
+  return (
+    <>
+      <span aria-hidden className="grid">
+        {lines.map((line, i) => (
+          <span
+            key={line}
+            className={cn(
+              "[grid-area:1/1] transition-opacity",
+              i === active ? "opacity-100 delay-[60ms] duration-150" : "opacity-0 duration-100",
+            )}
+          >
+            {line}
+          </span>
+        ))}
+      </span>
+      {/* Heard when the choice, or the game opening, changes the line. */}
+      <span className="sr-only" aria-live="polite">
+        {lines[active]}
+      </span>
+    </>
+  );
+}

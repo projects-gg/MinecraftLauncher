@@ -209,6 +209,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::instances::instance_set_graphics,
             commands::instances::instance_switch_graphics,
             commands::instances::instance_undo_graphics,
+            commands::instances::instance_shader,
+            commands::instances::instance_set_shader,
             commands::instances::mod_set_enabled,
             commands::instances::instance_servers_edit,
             commands::instances::minecraft_versions,

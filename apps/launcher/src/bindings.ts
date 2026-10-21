@@ -151,6 +151,33 @@ export const commands = {
 /**  A Minecraft version before 1.7.2, whose options presets do not cover. */
 { kind: "unsupported" } | null, CmdError>(__TAURI_INVOKE("instance_undo_graphics", { id, backup })),
 	/**
+	 *  Settings → Grafik ve FPS: the shader pack Iris draws in the instance's game, on or off. `None`
+	 *  when there is none to draw (no Iris among its mods, no pack chosen, the pack gone).
+	 */
+	instanceShader: (id: string) => typedError<{
+	/**
+	 *  The pack's name as the instance's shader tab shows it: its Modrinth title, else its file
+	 *  name without `.zip`.
+	 */
+	name: string,
+	/**  Iris draws it; off, it waits for the player to turn it back on. */
+	on: boolean,
+} | null, CmdError>(__TAURI_INVOKE("instance_shader", { id })),
+	/**
+	 *  Turns the instance's shader pack on or off for its next start: only Iris's `enableShaders`
+	 *  changes, so "Geri al" is the opposite call. Refused while the instance's game runs (Iris keeps
+	 *  its settings in memory and writes them back).
+	 */
+	instanceSetShader: (id: string, on: boolean) => typedError<{
+	/**
+	 *  The pack's name as the instance's shader tab shows it: its Modrinth title, else its file
+	 *  name without `.zip`.
+	 */
+	name: string,
+	/**  Iris draws it; off, it waits for the player to turn it back on. */
+	on: boolean,
+} | null, CmdError>(__TAURI_INVOKE("instance_set_shader", { id, on })),
+	/**
 	 *  Switches a mod on or off. A recommended mod of the official pack changes the mod center
 	 *  selection (its file is installed or removed by the pack sync); other mods are renamed
 	 *  (`x.jar` ↔ `x.jar.disabled`).
@@ -4052,6 +4079,17 @@ export type Severity =
 "warning" | 
 /**  Worth knowing; nothing has to be done. */
 "info";
+
+/**  The shader pack Iris draws in an instance's game (Settings → Grafik ve FPS, SMALL7). */
+export type ShaderView = {
+	/**
+	 *  The pack's name as the instance's shader tab shows it: its Modrinth title, else its file
+	 *  name without `.zip`.
+	 */
+	name: string,
+	/**  Iris draws it; off, it waits for the player to turn it back on. */
+	on: boolean,
+};
 
 /**
  *  What a `.minecraft`-style folder shares between all its versions, counted without opening

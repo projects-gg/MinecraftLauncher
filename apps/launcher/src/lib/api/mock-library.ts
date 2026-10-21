@@ -15,6 +15,7 @@ import type {
   SavedServerEntry,
   Screenshot,
   ServerEdit,
+  ShaderState,
   TrashItem,
   WorldBackup,
   WorldDetail,
@@ -616,6 +617,34 @@ function graphicsOf(instanceId: string): GraphicsState {
   return state;
 }
 
+// --- Shaders (Iris) ---------------------------------------------------------------------------
+
+const shaderStates = new Map<string, ShaderState | null>();
+
+/**
+ * The Projects instance draws a shader pack; the others have none. `mockShader=on|off|none` in the
+ * hash route's query puts every instance in one state (previews).
+ */
+function shaderOf(instanceId: string): ShaderState | null {
+  const known = shaderStates.get(instanceId);
+  if (known !== undefined) return known;
+  const forced =
+    typeof window === "undefined"
+      ? null
+      : new URLSearchParams(window.location.hash.split("?")[1] ?? "").get("mockShader");
+  const pack = { name: "Complementary Shaders - Reimagined", on: true };
+  const state: ShaderState | null =
+    forced === "on" || forced === "off"
+      ? { ...pack, on: forced === "on" }
+      : forced === "none"
+        ? null
+        : instanceId === "projects"
+          ? pack
+          : null;
+  shaderStates.set(instanceId, state);
+  return state;
+}
+
 async function runJob(jobId: string, total: number, onProgress: (p: BackupProgress) => void) {
   const job = { cancelled: false };
   jobs.set(jobId, job);
@@ -956,6 +985,27 @@ export function createMockLibrary(options: {
       graphicsBackups.delete(backup);
       graphicsStates.set(instanceId, before);
       return before;
+    },
+    async shader(instanceId) {
+      await delay(140);
+      return shaderOf(instanceId);
+    },
+    async setShader(instanceId, on) {
+      await delay(120);
+      if (liveInstance === instanceId) {
+        throw failure(
+          pick(
+            "Oyun açıkken grafik ayarı değiştirilemez. Önce oyunu kapat.",
+            "You can't change the graphics setting while the game is open. Close the game first.",
+          ),
+          "OYUN-ACIK",
+        );
+      }
+      const before = shaderOf(instanceId);
+      if (!before) return null;
+      const state = { ...before, on };
+      shaderStates.set(instanceId, state);
+      return state;
     },
   };
 }

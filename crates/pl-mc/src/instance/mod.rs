@@ -7,6 +7,7 @@ pub mod memory;
 pub mod model;
 pub mod options;
 pub mod packs;
+pub mod shaders;
 pub mod store;
 pub mod usage;
 
@@ -37,5 +38,6 @@ pub use options::{
 pub use packs::{
     PackListChange, choose_shader_once, disable_resource_packs, enable_resource_packs,
 };
+pub use shaders::{ShaderState, set_shaders, shader_state};
 pub use store::{GAME_DIR_NAME, INSTANCE_FILE, InstanceStore, slugify};
 pub use usage::DiskUsage;

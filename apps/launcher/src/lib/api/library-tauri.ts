@@ -206,4 +206,6 @@ export const tauriLibrary: LibraryApi = {
     return { state: result.state, backup: result.backup ?? undefined };
   },
   undoGraphics: (instanceId, backup) => ok(commands.instanceUndoGraphics(instanceId, backup)),
+  shader: (instanceId) => ok(commands.instanceShader(instanceId)),
+  setShader: (instanceId, on) => ok(commands.instanceSetShader(instanceId, on)),
 };

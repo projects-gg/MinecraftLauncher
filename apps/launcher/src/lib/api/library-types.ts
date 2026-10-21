@@ -230,6 +230,25 @@ export interface LibraryApi {
   switchGraphics(instanceId: string, preset: GraphicsPreset): Promise<GraphicsSwitch>;
   /** "Geri al" after `switchGraphics`; `null` when its copy is gone (nothing changed). */
   undoGraphics(instanceId: string, backup: string): Promise<GraphicsState | null>;
+  /**
+   * The shader pack Iris draws in the instance's game, on or off; `null` when there is none to
+   * draw (no Iris among its mods, no pack chosen, the pack gone).
+   */
+  shader(instanceId: string): Promise<ShaderState | null>;
+  /**
+   * Turns that shader on or off for the game's next start (only Iris's `enableShaders` changes,
+   * so "Geri al" is the opposite call). Refused while the instance's game runs; `null` when there
+   * is no shader to turn.
+   */
+  setShader(instanceId: string, on: boolean): Promise<ShaderState | null>;
+}
+
+/** The shader pack Iris draws in an instance (Settings → Grafik ve FPS). */
+export interface ShaderState {
+  /** The pack's name: its Modrinth title, else its file name without `.zip`. */
+  name: string;
+  /** Iris draws it; off, it waits to be turned back on. */
+  on: boolean;
 }
 
 /** What `switchGraphics` did. */

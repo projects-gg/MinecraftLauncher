@@ -864,6 +864,84 @@ pub async fn instance_undo_graphics(
         .map_err(CmdError::from)
 }
 
+/// The shader pack Iris draws in an instance's game (Settings → Grafik ve FPS, SMALL7).
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ShaderView {
+    /// The pack's name as the instance's shader tab shows it: its Modrinth title, else its file
+    /// name without `.zip`.
+    pub name: String,
+    /// Iris draws it; off, it waits for the player to turn it back on.
+    pub on: bool,
+}
+
+async fn shader_view(
+    state: &AppState,
+    id: &str,
+    game_dir: &Path,
+    shader: pl_mc::instance::ShaderState,
+) -> ShaderView {
+    let addon_index = match state.instances.instance_dir(id) {
+        Ok(dir) => pl_mc::addons::AddonIndex::load(&super::modrinth::addon_index_path(&dir)).await,
+        Err(_) => pl_mc::addons::AddonIndex::default(),
+    };
+    // The index knows a file by its size and time, as the shader tab reads them.
+    let title = pl_mc::gamefiles::list_shader_packs(game_dir)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .find(|p| p.file_name == shader.pack)
+        .and_then(|p| {
+            addon_index
+                .source_for("shaderpacks", &p.file_name, p.size, p.modified_ms)
+                .and_then(|s| s.title.clone())
+        });
+    ShaderView {
+        name: title.unwrap_or_else(|| display_name(&shader.pack)),
+        on: shader.on,
+    }
+}
+
+/// Settings → Grafik ve FPS: the shader pack Iris draws in the instance's game, on or off. `None`
+/// when there is none to draw (no Iris among its mods, no pack chosen, the pack gone).
+#[tauri::command]
+#[specta::specta]
+pub async fn instance_shader(
+    state: State<'_, AppState>,
+    id: String,
+) -> CmdResult<Option<ShaderView>> {
+    let game_dir = state.instances.game_dir(&id).map_err(CmdError::from)?;
+    let Some(shader) = pl_mc::instance::shader_state(&game_dir)
+        .await
+        .map_err(CmdError::from)?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(shader_view(&state, &id, &game_dir, shader).await))
+}
+
+/// Turns the instance's shader pack on or off for its next start: only Iris's `enableShaders`
+/// changes, so "Geri al" is the opposite call. Refused while the instance's game runs (Iris keeps
+/// its settings in memory and writes them back).
+#[tauri::command]
+#[specta::specta]
+pub async fn instance_set_shader(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: String,
+    on: bool,
+) -> CmdResult<Option<ShaderView>> {
+    let _guard = graphics_free(&app, &state, &id).await?;
+    let game_dir = state.instances.game_dir(&id).map_err(CmdError::from)?;
+    let Some(shader) = pl_mc::instance::set_shaders(&game_dir, on)
+        .await
+        .map_err(CmdError::from)?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(shader_view(&state, &id, &game_dir, shader).await))
+}
+
 /// Switches a mod on or off. A recommended mod of the official pack changes the mod center
 /// selection (its file is installed or removed by the pack sync); other mods are renamed
 /// (`x.jar` ↔ `x.jar.disabled`).

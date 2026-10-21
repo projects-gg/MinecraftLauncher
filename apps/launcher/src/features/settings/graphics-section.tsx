@@ -1,51 +1,30 @@
-// Settings → Grafik ve FPS: the graphics preset of the instance Play launches, one tap away (HOME1).
-// The same control and commands as the instance settings tab; here a pick applies at once and the
-// toast offers "Geri al", which brings back what the file had, the player's own values included.
-import { cn, Select, Skeleton, toast } from "@pl/ui";
+// Settings → Grafik ve FPS: the graphics preset of the instance Play launches, one tap away (HOME1),
+// and its Iris shader, on or off (SMALL7). The same control and commands as the instance settings
+// tab; here a pick applies at once and the toast offers "Geri al", which brings back what the file
+// had, the player's own values included.
+import { enter, leave, Select, Skeleton, Switch, toast } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { showError } from "@/features/content/jobs";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
 import { GraphicsPicker } from "@/features/library/tabs/graphics-picker";
 import { type GraphicsChoice, pickFor, savedChoice } from "@/features/library/tabs/settings-form";
-import { api, type GraphicsPreset, type GraphicsState, type InstanceSummary } from "@/lib/api";
+import {
+  api,
+  type GraphicsPreset,
+  type GraphicsState,
+  type InstanceSummary,
+  type ShaderState,
+} from "@/lib/api";
 import { InstanceIcon } from "@/shell/instance-icon";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
-import { Row } from "./row";
+import { Row, SwapLine } from "./row";
 
-/** One toast at a time: a new pick replaces the last one's "Geri al". */
+/** One toast at a time: a new pick (or shader tap) replaces the last one's "Geri al". */
 const TOAST_ID = "graphics-switch";
-
-/**
- * Lines that take turns in one grid cell: the cell keeps the height of the tallest, so nothing
- * below moves; the old line fades out (100 ms), the new one in (150 ms after 60 ms), as
- * `SwapLabel` does for buttons. Screen readers get the shown line from a live text beside it.
- */
-function SwapLine({ lines, active }: { lines: string[]; active: number }) {
-  return (
-    <>
-      <span aria-hidden className="grid">
-        {lines.map((line, i) => (
-          <span
-            key={line}
-            className={cn(
-              "[grid-area:1/1] transition-opacity",
-              i === active ? "opacity-100 delay-[60ms] duration-150" : "opacity-0 duration-100",
-            )}
-          >
-            {line}
-          </span>
-        ))}
-      </span>
-      {/* Heard when the choice, or the game opening, changes the line. */}
-      <span className="sr-only" aria-live="polite">
-        {lines[active]}
-      </span>
-    </>
-  );
-}
 
 /** The instance whose graphics the section shows: Play's (the command bar's rule). */
 function usePlayInstance(instances: InstanceSummary[]) {
@@ -211,9 +190,88 @@ function PresetRow({ instance, gameOpen }: { instance: InstanceSummary; gameOpen
 }
 
 /**
- * "Grafik ve FPS": which instance Play launches, and its graphics preset in one tap. While that
- * instance's game is prepared or open the preset waits (the game writes its options back), as
- * in the instance tab.
+ * The shader row of one instance (keyed by it): a switch for Iris's shader pack, the thing that
+ * costs the most FPS (SMALL7). It is there only while Iris has a pack to draw, on or off: an
+ * instance without Iris or without a chosen pack has nothing to turn. A tap applies at once (only
+ * `enableShaders` changes) and the toast's "Geri al" turns it back; while the game is prepared or
+ * open it waits, as the preset does (Iris keeps its settings in memory).
+ */
+function ShaderRow({ instance, gameOpen }: { instance: InstanceSummary; gameOpen: boolean }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const queryKey = ["instance", instance.id, "shader"];
+  const shader = useQuery({
+    queryKey,
+    queryFn: () => api.library.shader(instance.id),
+    staleTime: 0,
+  });
+  // The game may change it (Iris's own menu): read again once it has closed.
+  const wasOpen = useRef(gameOpen);
+  useEffect(() => {
+    if (wasOpen.current && !gameOpen) {
+      void queryClient.invalidateQueries({ queryKey: ["instance", instance.id, "shader"] });
+    }
+    wasOpen.current = gameOpen;
+  }, [gameOpen, instance.id, queryClient]);
+
+  // The tap on its way: the switch is there at once, and springs back if the write fails.
+  const [pending, setPending] = useState<boolean | null>(null);
+  const writing = useRef(false);
+  const turn = async (on: boolean, offerUndo: boolean) => {
+    if (writing.current || gameOpen) return;
+    writing.current = true;
+    setPending(on);
+    try {
+      const state = await api.library.setShader(instance.id, on);
+      queryClient.setQueryData<ShaderState | null>(queryKey, state);
+      if (state && offerUndo) {
+        toast.success(t(on ? "small7.shader.turnedOn" : "small7.shader.turnedOff"), {
+          id: TOAST_ID,
+          duration: 8000,
+          action: { label: t("fps.undo"), onClick: () => void turn(!on, false) },
+        });
+      }
+    } catch (error) {
+      showError(error);
+    } finally {
+      writing.current = false;
+      setPending(null);
+    }
+  };
+
+  const data = shader.data;
+  return (
+    <AnimatePresence initial={false}>
+      {data ? (
+        // Comes and goes in place: a fade, never a height animation.
+        <motion.div
+          key="shader"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: enter(0.2) }}
+          exit={{ opacity: 0, transition: leave(0.14) }}
+        >
+          <Row
+            title={t("small7.shader.title")}
+            help={<SwapLine lines={[data.name, t("fps.waitsForGame")]} active={gameOpen ? 1 : 0} />}
+          >
+            <Switch
+              checked={pending ?? data.on}
+              onCheckedChange={(on) => void turn(on, true)}
+              disabled={gameOpen}
+              label={t("small7.shader.title")}
+              hideLabel
+            />
+          </Row>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
+/**
+ * "Grafik ve FPS": which instance Play launches, its graphics preset in one tap, and its shader
+ * when Iris has one. While that instance's game is prepared or open the preset and the shader wait
+ * (the game writes its options back), as in the instance tab.
  */
 export function GraphicsSection() {
   const { t } = useTranslation();
@@ -231,6 +289,7 @@ export function GraphicsSection() {
     <>
       <InstanceRow instances={instances} instance={instance} locked={busy} />
       <PresetRow key={instance.id} instance={instance} gameOpen={gameOpen} />
+      <ShaderRow key={`shader:${instance.id}`} instance={instance} gameOpen={gameOpen} />
     </>
   );
 }
