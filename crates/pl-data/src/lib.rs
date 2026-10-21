@@ -15,8 +15,11 @@
 //!   in the copy, never copied through.
 //! - [`restart`]: the one-shot note an update leaves for the next start (AFK accounts to bring
 //!   back, the window, the page, the release notes).
+//! - [`troubleshoot`]: the troubleshooter's rules (Settings → Sorun yardımcısı): what each check
+//!   found, its code for support and its one-tap fix, put together as the checks come in.
 //!
-//! Everything here is blocking file work; the app runs it on a blocking thread.
+//! Everything here is blocking file work, besides [`troubleshoot`]'s pure rules; the app runs it on
+//! a blocking thread.
 
 pub mod bundle;
 mod error;
@@ -26,6 +29,7 @@ pub mod logfile;
 pub mod mask;
 pub mod relocate;
 pub mod restart;
+pub mod troubleshoot;
 pub mod usage;
 
 pub use error::{Error, Result, TargetProblem};

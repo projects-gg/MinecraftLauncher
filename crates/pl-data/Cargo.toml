@@ -1,6 +1,6 @@
 [package]
 name = "pl-data"
-description = "Data folder housekeeping for Projects Launcher: usage, cleanup policy, support bundles, launcher log files and moving the folder"
+description = "Data folder housekeeping for Projects Launcher: usage, cleanup policy, support bundles, the troubleshooter's rules, launcher log files and moving the folder"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,8 +9,12 @@ publish = false
 
 [dependencies]
 pl-mc = { workspace = true }
+# The troubleshooter's probes (`Probe`, `Reach`) and the system's view of the network.
+pl-net = { workspace = true }
 tokio-util = { workspace = true }
 serde = { workspace = true }
+# The troubleshooter's findings reach the UI as they are.
+specta = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
