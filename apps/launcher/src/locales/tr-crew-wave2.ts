@@ -48,7 +48,7 @@ export const trCrewWave2 = {
     approvalLine: "Kodla ya da bağlantıyla gelenler istek gönderir.",
     saved: "Katılım ayarı kaydedildi",
   },
-  admit: "İstekler ve bağlantı",
+  admit: "İstekleri ve bağlantıyı yönetebilir",
   plans: {
     title: "Planlar",
     make: "Plan yap",

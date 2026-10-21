@@ -49,7 +49,7 @@ export const enCrewWave2: typeof trCrewWave2 = {
     approvalLine: "People with the code or link ask to join.",
     saved: "Joining setting saved",
   },
-  admit: "Requests and link",
+  admit: "Can manage requests and the link",
   plans: {
     title: "Plans",
     make: "Make a plan",
