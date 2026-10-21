@@ -34,7 +34,13 @@ import {
 } from "@/features/modcenter/motion";
 import { Percent } from "@/features/modcenter/parts";
 import { setName, setToUpdate } from "@/features/modsets/model";
-import { api, type HealthIssue, type ReinstallPhase, type RepairStep } from "@/lib/api";
+import {
+  api,
+  type HealthIssue,
+  type ReinstallPhase,
+  type RepairScope,
+  type RepairStep,
+} from "@/lib/api";
 import { copyDetails as copySupportText } from "@/lib/clipboard";
 import { type CrashInfo, useLaunch } from "@/stores/launch";
 import { Checklist, type ChecklistRow } from "./checklist";
@@ -126,6 +132,12 @@ const shorten = (name: string, max = 26) =>
 const settingsKinds = new Set(["invalidJvmArgument", "javaTooNew", "javaTooOld"]);
 
 /**
+ * How long "Onar" may wait, pressed in, for the repair's plan before its step opens anyway (with
+ * rows that hold the checklist's place). The plan usually comes within a tenth of a second.
+ */
+const REPAIR_HOLD_MS = 250;
+
+/**
  * Mod health in one dialog: the crash summary, mods that stop a launch, "Onar" with its steps
  * ticking through, and "Yeniden yükle" (confirm, progress, summary). Moving between them keeps
  * the dialog open: the panel glides to its new size and steps slide in from the side they come
@@ -146,6 +158,8 @@ export function ModFlowDialog() {
   const [warningsOpen, setWarningsOpen] = useState(false);
   const [turnedOff, setTurnedOff] = useState<string | null>(null);
   const [busy, setBusy] = useState<"turnOff" | "memory" | "args" | null>(null);
+  // "Onar" pressed, waiting for the repair's plan (`startRepair`).
+  const [holding, setHolding] = useState<{ scope: RepairScope; until: number } | null>(null);
 
   // What the dialog shows stays in place while it closes.
   const lastStep = useRef<FlowStep | null>(null);
@@ -166,6 +180,7 @@ export function ModFlowDialog() {
     setTurnedOff(null);
     setWarningsOpen(false);
     setBusy(null);
+    setHolding(null);
     setDirection(1);
   }, [flow.session]);
 
@@ -242,6 +257,36 @@ export function ModFlowDialog() {
     close();
     if (id) void play(id, ignoreModIssues ? { ignoreModIssues: true } : undefined);
   };
+  // "Onar" from the mod check or the crash summary: the repair starts at once, and the button
+  // stays pressed in until its plan is known (at most REPAIR_HOLD_MS), so "Modlar onarılıyor"
+  // opens with its checklist at its height rather than a placeholder that then grows. Meanwhile
+  // the dialog's other actions wait.
+  const startRepair = (scope: RepairScope) => {
+    if (holding) return;
+    ran.current = `${flow.session}:${JSON.stringify(scope)}`;
+    setHolding({ scope, until: performance.now() + REPAIR_HOLD_MS });
+    void repair.start(scope);
+  };
+  const planned =
+    (repair.progress?.steps.length ?? 0) > 0 || repair.result !== null || repair.error !== null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `go` is the same action every render
+  useEffect(() => {
+    if (!holding) return;
+    const enter = () => {
+      setHolding(null);
+      go({ kind: "repair", scope: holding.scope });
+    };
+    if (planned) {
+      enter();
+      return;
+    }
+    const timer = window.setTimeout(enter, Math.max(0, holding.until - performance.now()));
+    return () => window.clearTimeout(timer);
+  }, [holding, planned]);
+  /** An action of the step "Onar" was pressed on: it waits while the plan comes. */
+  const unlessHolding = (action: () => void) => () => {
+    if (!holding) action();
+  };
   // The pack's mod keys clash (KEYS2): asked before the launch, in this dialog.
   const keys = useKeysStep({ step, instanceId, session: flow.session, playNow: () => playNow() });
 
@@ -252,6 +297,7 @@ export function ModFlowDialog() {
   let dismissible = true;
 
   if (step?.kind === "crash" && crash) {
+    dismissible = !holding;
     const strong = crash.suspects.slice(0, 5);
     const kind = crash.kind;
     const turnOffLabel = crash.turnOff
@@ -501,7 +547,8 @@ export function ModFlowDialog() {
                   <Button
                     variant="primary"
                     disabled={busy !== null}
-                    onClick={() => go({ kind: "repair", scope: { kind: "crash" } })}
+                    className={holding ? "scale-[0.97]" : undefined}
+                    onClick={() => startRepair({ kind: "crash" })}
                   >
                     {t("modHealth.crash.repair")}
                   </Button>
@@ -593,16 +640,21 @@ export function ModFlowDialog() {
         ) : null}
       </div>
     );
+    dismissible = !holding;
     footer = (
       <>
-        <Button variant="ghost" onClick={close}>
+        <Button variant="ghost" onClick={unlessHolding(close)}>
           {t("modHealth.prelaunch.cancel")}
         </Button>
-        <Button variant="secondary" onClick={() => playNow(true)}>
+        <Button variant="secondary" onClick={unlessHolding(() => playNow(true))}>
           {t("modHealth.prelaunch.anyway")}
         </Button>
         {check.repairable ? (
-          <Button variant="primary" onClick={() => go({ kind: "repair", scope: { kind: "all" } })}>
+          <Button
+            variant="primary"
+            className={holding ? "scale-[0.97]" : undefined}
+            onClick={() => startRepair({ kind: "all" })}
+          >
             {t("modHealth.prelaunch.repair")}
           </Button>
         ) : check.hasMods ? (
