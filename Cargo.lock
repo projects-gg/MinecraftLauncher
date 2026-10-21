@@ -3985,6 +3985,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "pl-overlay"
+version = "2.0.0"
+dependencies = [
+ "base64 0.23.1",
+ "rand 0.10.3",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "pl-social"
 version = "2.0.0"
 dependencies = [

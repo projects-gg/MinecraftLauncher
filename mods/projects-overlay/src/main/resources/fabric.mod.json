@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "projects_overlay",
+  "version": "${version}",
+  "name": "Projects Overlay",
+  "description": "Messages, crew calls and friends from Projects Launcher, inside the game.",
+  "authors": ["Projects"],
+  "contact": {
+    "homepage": "https://projects.gg",
+    "sources": "https://github.com/projects-gg/MinecraftLauncher"
+  },
+  "license": "GPL-3.0-only",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["gg.projects.overlay.OverlayClient"]
+  },
+  "mixins": [
+    {
+      "config": "projects_overlay.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.19.5",
+    "minecraft": "~26.1.2",
+    "java": ">=25",
+    "fabric-key-mapping-api-v1": "*",
+    "fabric-lifecycle-events-v1": "*",
+    "fabric-resource-loader-v1": "*"
+  }
+}

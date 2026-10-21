@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "id": "projects_overlay_dev",
+  "version": "0.0.0",
+  "name": "Projects Overlay spike driver",
+  "description": "Development only: drives an automated overlay scenario and measures frame times.",
+  "license": "GPL-3.0-only",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["gg.projects.overlay.dev.SpikeDriver"]
+  },
+  "mixins": [
+    {
+      "config": "projects_overlay_dev.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "projects_overlay": "*"
+  }
+}
