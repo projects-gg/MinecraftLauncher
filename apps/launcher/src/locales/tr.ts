@@ -2,6 +2,7 @@
 import { trAfkAlerts } from "./tr-afk-alerts";
 import { trAfkConnect } from "./tr-afk-connect";
 import { trAfkReconnect } from "./tr-afk-reconnect";
+import { trCrews } from "./tr-crews";
 import { trDisk } from "./tr-disk";
 import { trEventJoin } from "./tr-event-join";
 import { trFps } from "./tr-fps";
@@ -59,6 +60,7 @@ export const tr = {
   homeLinks: trHomeLinks,
   tray: trTray,
   small7: trSmall7,
+  crews: trCrews,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",

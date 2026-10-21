@@ -1,6 +1,7 @@
 import { enAfkAlerts } from "./en-afk-alerts";
 import { enAfkConnect } from "./en-afk-connect";
 import { enAfkReconnect } from "./en-afk-reconnect";
+import { enCrews } from "./en-crews";
 import { enDisk } from "./en-disk";
 import { enEventJoin } from "./en-event-join";
 import { enFps } from "./en-fps";
@@ -265,6 +266,7 @@ export const en: DeepPartial<Strings> = {
   homeLinks: enHomeLinks,
   tray: enTray,
   small7: enSmall7,
+  crews: enCrews,
   nav: {
     home: "Home",
     library: "Library",
