@@ -18,6 +18,7 @@ import { trKeyClash } from "./tr-key-clash";
 import { trLibraryDrop } from "./tr-library-drop";
 import { trMinecraft } from "./tr-minecraft";
 import { trModSets } from "./tr-modsets";
+import { trOverlay } from "./tr-overlay";
 import { trOverview } from "./tr-overview";
 import { trPlacement } from "./tr-placement";
 import { trPlayOpen } from "./tr-play-open";
@@ -71,6 +72,7 @@ export const tr = {
   safety: trSafety,
   help: trHelp,
   crewWave2: trCrewWave2,
+  overlay: trOverlay,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
