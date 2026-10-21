@@ -153,7 +153,8 @@ function MessageRowView({
         )}
       >
         {mine ? null : (
-          <span className="flex w-6 shrink-0 self-end">
+          // The face sits by the group's last bubble, over the line with its time.
+          <span className={cn("flex w-6 shrink-0 self-end", place.last && "mb-[15px]")}>
             {place.last ? <SocialFace source={sender} size={24} /> : null}
           </span>
         )}

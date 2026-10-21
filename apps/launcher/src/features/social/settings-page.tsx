@@ -124,9 +124,6 @@ function NotificationSection() {
   // The crew's own group, while the player is in one (the crew page's bell shows it too); with
   // several crews it mutes all of them at once.
   const crews = useSocialUi((s) => s.view.teams && s.view.crews.length > 0);
-  // Crew chat only counts unread unless this is on (CHAT1).
-  const chat = useSocialUi((s) => s.view.chat !== undefined);
-  const crewChat = useSocialPrefs((s) => s.notifyCrewChat);
   return (
     <Section title={t("social.settings.notifications")}>
       <div className="space-y-3.5">
@@ -140,13 +137,6 @@ function NotificationSection() {
           onCheckedChange={(on) => set("notifyFavoriteProjects", on)}
           label={t("social.settings.favoriteProjects")}
         />
-        {chat && crews ? (
-          <Switch
-            checked={crewChat}
-            onCheckedChange={(on) => set("notifyCrewChat", on)}
-            label={t("chat.settings.crewChat")}
-          />
-        ) : null}
       </div>
       {crews ? (
         <div className="mt-5">

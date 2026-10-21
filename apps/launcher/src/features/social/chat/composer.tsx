@@ -96,7 +96,8 @@ export function Composer({
 
   const problem = textProblem(text);
   const length = chatLength(text);
-  const ready = hasText(text) && !problem && !busy;
+  // An edit with its text unchanged has nothing to save.
+  const ready = hasText(text) && !problem && !busy && (!editing || text.trim() !== editing.text);
 
   const change = (value: string) => {
     setError(null);

@@ -41,7 +41,6 @@ export const enChat = {
     newest: "Newest messages",
     menu: "Message options",
     conversation: "Conversation options",
-    profile: "Show profile",
   },
   composer: {
     placeholder: "Write a message",

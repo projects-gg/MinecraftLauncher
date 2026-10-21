@@ -37,7 +37,8 @@
 // - `limited`: a new Discord account ("Sınırlı hesap"; SPAM1) without a crew: its chip, no crew
 //   founding, no settings backup, no more code lookups today;
 // - `warning` / `profileReset`: a moderators' one-time note waits (MOD1); `crewReset`: moderators
-//   reset the crew's name, locked for three days; `crewGone`: they disband the crew live;
+//   reset the crew's name, locked for three days; `crewGone`: they disband the crew live
+//   (`&liveAt=<ms>`, as `restrictedLive`);
 // - `restricted` / `banned`: the sign-in screen of a suspended / banned account, which signing in
 //   again does not change; `restrictedLive`: it happens while signed in; `signupsClosed`: no new
 //   accounts today;
@@ -646,7 +647,16 @@ function initial(): SocialSnapshot {
       // A new Discord account (SPAM1): no crew yet, and it may not found one.
       return crewed([], { me: base.me ? { ...base.me, limited: previewLimited() } : base.me });
     case "crewReset":
-      return crewed([{ ...previewTeam(true), textLockedUntil: now() + 3 * 86400 }]);
+      // Moderators reset it: "Ekip XXXX", the tag XXXX, no motto, locked for a while.
+      return crewed([
+        {
+          ...previewTeam(true),
+          name: "Ekip 4F8A",
+          tag: "4F8A",
+          motto: "",
+          textLockedUntil: now() + 3 * 86400,
+        },
+      ]);
     case "crewGone":
       return crewed([previewTeam(false)]);
     case "warning":
@@ -766,13 +776,15 @@ function tell(notice: SocialNotice) {
 if (typeof window !== "undefined") {
   const name = scenario();
   chat.start();
+  // `&liveAt=<ms>`: when the live moderators' step comes.
+  const liveAt = Number(searchParam("liveAt")) || 1600;
   if (name === "restrictedLive") {
     // Moderators suspend the account while the player is signed in.
     setTimeout(() => {
       const until = now() + 7 * 86400;
       commit((v) => ({ ...signedOut(v), restriction: { until } }));
       tell({ kind: "restricted", until });
-    }, 1600);
+    }, liveAt);
   }
   if (name === "crewGone") {
     setTimeout(() => {
@@ -780,7 +792,7 @@ if (typeof window !== "undefined") {
       if (!crew) return;
       commit((v) => ({ ...v, crews: v.crews.filter((c) => c.id !== crew.id) }));
       tell({ kind: "teamGone", reason: "disbanded", name: crew.name, staff: true });
-    }, 1600);
+    }, liveAt);
   }
   if (name === "signupsClosed") {
     // As after a sign-in the service turned down today.

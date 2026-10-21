@@ -106,22 +106,17 @@ function useCrewFeatures() {
 
 function CreateCrew() {
   const { t } = useTranslation();
-  const { reduce } = useSocialMotion();
   const crew = useCrewFeatures();
   const me = useSocialUi((s) => s.view.me);
   const [draft, setDraft] = useState<CrewDraft>(NEW_CREW);
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
-  // A new Discord account cannot found a crew yet: said in place when "Ekip kur" is pressed.
-  const [limited, setLimited] = useState<string | null>(null);
+  // A new Discord account cannot found a crew yet (SPAM1): said in place of the form, so nobody
+  // fills it in for nothing (joining by code or invite stays open).
+  const limit = limitOf(me, "crewFound", Date.now());
 
   const submit = async () => {
     setTouched(true);
-    const limit = limitOf(me, "crewFound", Date.now());
-    if (limit) {
-      setLimited(t("safety.limited.crewFound", { when: opensIn(t, limit.until, Date.now()) }));
-      return;
-    }
     if (busy || !draftReady(draft, crew.look, true)) return;
     setBusy(true);
     const name = cleanCrewText(draft.name);
@@ -139,6 +134,18 @@ function CreateCrew() {
     if (done !== undefined) announce(t("teams.create.done", { name }));
   };
 
+  if (limit) {
+    return (
+      <section className="rounded-[var(--radius-panel)] bg-obsidian-950/40 p-4 ring-1 ring-white/8">
+        <SectionTitle>{t("teams.create.title")}</SectionTitle>
+        <p className="flex items-start gap-2.5 text-[13px] leading-snug text-ash-300">
+          <LockSimple size={16} className="mt-px shrink-0 text-ash-400" aria-hidden />
+          {t("safety.limited.crewFound", { when: opensIn(t, limit.until, Date.now()) })}
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section className="rounded-[var(--radius-panel)] bg-obsidian-950/40 p-4 ring-1 ring-white/8">
       <SectionTitle>{t("teams.create.title")}</SectionTitle>
@@ -151,24 +158,9 @@ function CreateCrew() {
         showErrors={touched}
         onSubmit={() => void submit()}
         footer={
-          <>
-            <Button type="submit" variant="primary" className="w-full" disabled={busy}>
-              {t("teams.create.submit")}
-            </Button>
-            <AnimatePresence initial={false}>
-              {limited ? (
-                <motion.p
-                  key="limited"
-                  role="status"
-                  className="mt-2.5 flex items-start gap-2 text-[12.5px] leading-snug text-ash-300"
-                  {...rise(reduce, 3, 0.2)}
-                >
-                  <LockSimple size={14} className="mt-px shrink-0 text-ash-400" aria-hidden />
-                  {limited}
-                </motion.p>
-              ) : null}
-            </AnimatePresence>
-          </>
+          <Button type="submit" variant="primary" className="w-full" disabled={busy}>
+            {t("teams.create.submit")}
+          </Button>
         }
       />
     </section>

@@ -85,6 +85,7 @@ export function Conversation({
   const setHidden = useChat((s) => s.setHidden);
   const setDraft = useChat((s) => s.setDraft);
   const scroller = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   const [away, setAway] = useState(false);
   const [newer, setNewer] = useState(false);
@@ -153,7 +154,8 @@ export function Conversation({
     before.current = { first: firstKey, height: element.scrollHeight, top: element.scrollTop };
   }, [firstKey, lastKey, messages.length]);
 
-  // The composer growing (or the panel resizing) keeps the newest message in view.
+  // The composer growing, the panel resizing or the messages growing (a day line, "Yeni mesajlar",
+  // a longer edit) keep the newest message in view.
   useEffect(() => {
     const element = scroller.current;
     if (!element) return;
@@ -161,6 +163,7 @@ export function Conversation({
       if (atBottom.current) element.scrollTop = element.scrollHeight;
     });
     observer.observe(element);
+    if (content.current) observer.observe(content.current);
     return () => observer.disconnect();
   }, []);
 
@@ -262,7 +265,7 @@ export function Conversation({
         onScroll={onScroll}
         className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pt-2 [scrollbar-gutter:stable]"
       >
-        <div className="flex min-h-full flex-col justify-end">
+        <div ref={content} className="flex min-h-full flex-col justify-end">
           {thread?.loaded && !messages.length ? (
             <div className="flex flex-1 items-center justify-center px-6 py-10">{empty}</div>
           ) : null}

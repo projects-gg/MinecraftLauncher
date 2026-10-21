@@ -198,6 +198,9 @@ export function CrewNotifySwitches() {
   const localCalls = useSocialPrefs((s) => s.notifyCrewCalls);
   const projects = useSocialPrefs((s) => s.notifyCrewProjects);
   const offersCalls = useSocialUi((s) => s.view.crew.calls);
+  // Crew chat only counts unread unless this is on (CHAT1).
+  const chat = useSocialUi((s) => s.view.chat !== undefined);
+  const crewChat = useSocialPrefs((s) => s.notifyCrewChat);
   const set = useSocialPrefs((s) => s.set);
   const { settings } = useCrewMute();
   // The switch moves at once; the service's answer (or its failure) settles it.
@@ -230,6 +233,13 @@ export function CrewNotifySwitches() {
         onCheckedChange={(on) => set("notifyCrewProjects", on)}
         label={t("teams.notify.projects")}
       />
+      {chat ? (
+        <Switch
+          checked={crewChat}
+          onCheckedChange={(on) => set("notifyCrewChat", on)}
+          label={t("chat.settings.crewChat")}
+        />
+      ) : null}
     </div>
   );
 }

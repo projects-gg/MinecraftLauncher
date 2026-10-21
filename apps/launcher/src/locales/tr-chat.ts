@@ -42,7 +42,6 @@ export const trChat = {
     newest: "En yeni mesajlar",
     menu: "Mesaj seçenekleri",
     conversation: "Konuşma seçenekleri",
-    profile: "Profili göster",
   },
   composer: {
     placeholder: "Mesaj yaz",

@@ -12,7 +12,7 @@
 // - `chatMuted`: moderators muted the player's chat for a day; `chatOff`: the service turned chat
 //   off (what this computer holds stays readable); `chatMailbox`: messages reach only those online.
 // A message with "hata" or "fail" in it does not go (`&sendFails=<reason>` fails every one with
-// that reason); a friend online answers a direct message.
+// that reason); a friend online answers a direct message (`&noReply=1` keeps them quiet).
 import { pick } from "./mock-lang";
 import type {
   ChatChange,
@@ -121,7 +121,11 @@ export function mockChat(host: ChatHost) {
   const unread = new Map<string, number>();
   const titles = new Map<string, string>();
   const listeners = new Set<(change: ChatChange) => void>();
-  const on = CHAT_SCENARIOS.includes(host.scenario) || host.param("chat") !== null;
+  // A limited account (SPAM1) has chat too: its daily message limit is listed only with chat.
+  const on =
+    CHAT_SCENARIOS.includes(host.scenario) ||
+    host.scenario === "limited" ||
+    host.param("chat") !== null;
   let nonce = 0;
 
   function message(
@@ -257,8 +261,11 @@ export function mockChat(host: ChatHost) {
         t0 - 2 * MINUTE,
       ),
     );
-    threads.set(CREW_CONV, crew);
-    unread.set(CREW_CONV, 3);
+    // The limited preview has no crew.
+    if (host.scenario !== "limited") {
+      threads.set(CREW_CONV, crew);
+      unread.set(CREW_CONV, 3);
+    }
 
     if (host.scenario === "chatFailed") {
       const failed: ChatMessage = {
@@ -382,12 +389,12 @@ export function mockChat(host: ChatHost) {
           editUntil: id + EDIT_WINDOW,
           deleteUntil: id + DELETE_WINDOW,
         });
-        // A friend online answers a direct message.
+        // A friend online answers a direct message (not with `&noReply=1`).
         const peer = conv.startsWith("d:")
           ? conv.split(":").find((p, i) => i > 0 && p !== ME)
           : null;
         const friend = host.view().friends.find((f) => f.id === peer);
-        if (friend && friend.state !== "offline" && !fails) {
+        if (friend && friend.state !== "offline" && !fails && host.param("noReply") === null) {
           setTimeout(
             () => arrive(conv, friend.id, pick("Tamamdır, görüşürüz!", "Sounds good, see you!")),
             2200,

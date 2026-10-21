@@ -4,11 +4,12 @@
 import { BellSlash, Broom, CaretLeft, DotsThree, Flag, SpeakerHigh } from "@phosphor-icons/react";
 import { Button, cn, Dialog, IconButton, Menu, type MenuItem, toast } from "@pl/ui";
 import { Dialog as RadixDialog } from "radix-ui";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import discordSymbol from "@/assets/brand/discord-symbol-white.png";
 import { api } from "@/lib/api";
 import type { ChatMessage, Friend, SocialProfile } from "@/lib/api/social-types";
+import { currentLanguage } from "@/lib/i18n";
 import { untilText } from "../crew-notify";
 import { openInDiscord } from "../discord-link";
 import { presenceLine } from "../model";
@@ -53,16 +54,37 @@ export function usePeople(): (id: string) => Pick<SocialProfile, "name" | "avata
   };
 }
 
+/** A sentence that starts with a time ("yarın 14:30'a kadar …") starts with a capital. */
+function sentence(text: string): string {
+  const locale = currentLanguage() === "tr" ? "tr-TR" : "en-US";
+  return text.charAt(0).toLocaleUpperCase(locale) + text.slice(1);
+}
+
 /** Why the player cannot write in a conversation now, or open. */
 export function useComposerState(conv: string, writable: boolean, crew: boolean): ComposerState {
   const { t } = useTranslation();
   const chat = useSocialUi((s) => s.view.chat);
+  const mutedUntil = chat?.mutedUntil;
+  // A moderator's mute ends by itself: the composer opens then (one timer, no polling).
+  const [, setEnded] = useState(0);
+  useEffect(() => {
+    if (!mutedUntil) return;
+    const wait = mutedUntil * 1000 - Date.now();
+    if (wait <= 0) return;
+    const timer = window.setTimeout(
+      () => setEnded((n) => n + 1),
+      Math.min(wait + 500, 2_000_000_000),
+    );
+    return () => window.clearTimeout(timer);
+  }, [mutedUntil]);
   const now = Date.now();
   if (!chat?.on) return { kind: "closed", reason: t("chat.composer.off"), icon: "info" };
   if (chat.mutedUntil && chat.mutedUntil * 1000 > now) {
     return {
       kind: "closed",
-      reason: t("chat.composer.muted", { until: untilText(t, chat.mutedUntil * 1000, now) }),
+      reason: sentence(
+        t("chat.composer.muted", { until: untilText(t, chat.mutedUntil * 1000, now) }),
+      ),
     };
   }
   if (!writable) {

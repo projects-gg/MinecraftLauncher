@@ -356,12 +356,18 @@ describe("crew notices", () => {
         notifyFavoriteProjects: true,
         notifyCrewCalls: false,
         notifyCrewProjects: true,
+        notifyCrewChat: true,
       },
     );
-    expect(backup.friends).toMatchObject({ notifyCrewCalls: false, notifyCrewProjects: true });
+    expect(backup.friends).toMatchObject({
+      notifyCrewCalls: false,
+      notifyCrewProjects: true,
+      notifyCrewChat: true,
+    });
     expect(readBackup(backup).friends).toMatchObject({
       notifyCrewCalls: false,
       notifyCrewProjects: true,
+      notifyCrewChat: true,
     });
     const older = readBackup({ v: 1, prefs: {}, friends: { favorites: [] } });
     expect(older.friends.notifyCrewCalls).toBeUndefined();

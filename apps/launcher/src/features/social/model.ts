@@ -429,6 +429,8 @@ export interface BackupFriends {
   /** "Ekip bildirimleri" (older backups have none: the defaults stay). */
   notifyCrewCalls?: boolean;
   notifyCrewProjects?: boolean;
+  /** "Ekip sohbeti bildirimleri" (CHAT1; older backups have none). */
+  notifyCrewChat?: boolean;
 }
 
 /** Friend ids with a yes or no, at most 200 (what a backup may carry). */
@@ -469,6 +471,9 @@ export function buildBackup(
         : {}),
       ...(typeof friends.notifyCrewProjects === "boolean"
         ? { notifyCrewProjects: friends.notifyCrewProjects }
+        : {}),
+      ...(typeof friends.notifyCrewChat === "boolean"
+        ? { notifyCrewChat: friends.notifyCrewChat }
         : {}),
     },
   };
@@ -524,6 +529,9 @@ export function readBackup(data: unknown): {
     }
     if (typeof friends.notifyCrewProjects === "boolean") {
       out.friends.notifyCrewProjects = friends.notifyCrewProjects;
+    }
+    if (typeof friends.notifyCrewChat === "boolean") {
+      out.friends.notifyCrewChat = friends.notifyCrewChat;
     }
   }
   return out;
