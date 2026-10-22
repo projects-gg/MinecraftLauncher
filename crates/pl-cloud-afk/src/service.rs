@@ -29,7 +29,7 @@ use crate::model::{
     CloudLogPage, CloudServer, CloudVersions, Me, Offer, ServiceMode, VaultKey,
 };
 use crate::seal::{CONSOLE_ROW, RevealKey, RevealTarget, SealTarget, seal};
-use crate::server::same_server;
+use crate::server::{CloudAddressProblem, normalize, same_server};
 use crate::text::{check_text, looks_sensitive};
 
 const OFFER_FRESH: Duration = Duration::from_secs(60);
@@ -505,6 +505,24 @@ impl CloudService {
         id: &str,
         edit: CloudEdit,
     ) -> Result<CloudSaveOutcome> {
+        let mut edit = edit;
+        // The service never rewrites a host (it is part of every seal's AAD): sent normalized.
+        if let Some(server) = &edit.server {
+            match normalize(&server.host, server.port) {
+                Ok(normal) => edit.server = Some(normal),
+                Err(problem) => {
+                    let problem = match problem {
+                        CloudAddressProblem::Empty | CloudAddressProblem::Format => "format",
+                        CloudAddressProblem::Dot => "dot",
+                        CloudAddressProblem::Private => "private",
+                        CloudAddressProblem::Port => "port",
+                    };
+                    return Ok(CloudSaveOutcome::Invalid {
+                        issues: vec![CloudIssue::from_path("server", problem)],
+                    });
+                }
+            }
+        }
         let current = self.fresh_account(token, id).await?;
         if current.rev != edit.rev {
             return Ok(CloudSaveOutcome::Conflict { account: current });
@@ -713,6 +731,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+    use crate::client::api_url;
     use crate::error::from_response;
 
     #[test]
@@ -764,5 +783,57 @@ mod tests {
             None,
             "a stale failure asks again"
         );
+    }
+
+    /// A service whose address answers nothing: these tests must not reach it.
+    fn offline_service(dir: &std::path::Path) -> CloudService {
+        let store = Arc::new(pl_afk::MemorySecretStore::new());
+        let copies = Copies::new(store, dir.join("copies.json"));
+        let config = CloudConfig::new(api_url(Some("http://127.0.0.1:9")), "test");
+        let sink: LiveSink = Arc::new(|_| {});
+        CloudService::new(
+            reqwest::Client::new(),
+            config,
+            copies,
+            Handle::current(),
+            sink,
+        )
+    }
+
+    #[tokio::test]
+    async fn a_new_address_is_checked_before_anything_is_sent() {
+        let dir = tempfile::tempdir().unwrap();
+        let service = offline_service(dir.path());
+        let edit = |host: &str, port: u16| CloudEdit {
+            rev: 3,
+            name: None,
+            server: Some(CloudServer {
+                host: host.into(),
+                port,
+            }),
+            version: None,
+            lang: None,
+            config: None,
+        };
+        for (host, port, problem) in [
+            ("192.168.1.5", 25565, "private"),
+            ("localhost", 25565, "private"),
+            ("sunucu", 25565, "dot"),
+            ("mc.ornek.net", 22, "port"),
+            ("", 25565, "format"),
+        ] {
+            let outcome = service
+                .save(&Bearer::new("t"), "a_1", edit(host, port))
+                .await
+                .unwrap();
+            let CloudSaveOutcome::Invalid { issues } = outcome else {
+                panic!("{host}:{port} was sent");
+            };
+            assert_eq!(
+                issues,
+                vec![CloudIssue::from_path("server", problem)],
+                "{host}:{port}"
+            );
+        }
     }
 }

@@ -39,3 +39,5 @@ rustls-platform-verifier = "0.7.1"
 tokio = { workspace = true, features = ["test-util"] }
 hex = { workspace = true }
 tempfile = { workspace = true }
+# tests/live.rs signs in to a local friends service as the launcher does.
+pl-social = { workspace = true }
