@@ -1,0 +1,1229 @@
+{
+  "set": "pl1",
+  "version": 1,
+  "created": "2026-10-22",
+  "themes": [
+    {
+      "id": "reactions",
+      "tr": "Tepkiler",
+      "en": "Reactions"
+    },
+    {
+      "id": "game",
+      "tr": "Oyun",
+      "en": "Game"
+    },
+    {
+      "id": "server",
+      "tr": "Sunucu",
+      "en": "Server"
+    },
+    {
+      "id": "greetings",
+      "tr": "Selamlaşma",
+      "en": "Greetings"
+    }
+  ],
+  "formats": {
+    "launcher": {
+      "dir": "launcher",
+      "format": "webp",
+      "quality": 85,
+      "alpha": true,
+      "size": 256
+    },
+    "android": {
+      "dir": "android",
+      "format": "webp",
+      "quality": 85,
+      "alpha": true,
+      "size": 384,
+      "prefix": "pl1_"
+    },
+    "overlay": {
+      "format": "png8",
+      "tile": 160,
+      "columns": 8,
+      "rows": 4,
+      "path": "overlay/pl1-atlas.png",
+      "width": 1280,
+      "height": 640,
+      "bytes": 254333,
+      "sha256": "9cc138bf83cd8eab388ed1f284a81955bcbc2eff636d8a1c4b879e92f0822dfb"
+    }
+  },
+  "motions": {
+    "bounce": "jumps twice, squashing a little as it lands",
+    "wobble": "rocks side to side on its base, laughing",
+    "beat": "swells and settles twice, like a heartbeat",
+    "shake": "shakes side to side, hard at first, then less",
+    "shiver": "trembles in small quick steps",
+    "wave": "swings on its base like a waving hand",
+    "nod": "dips twice, a nod or a small bow",
+    "sway": "leans slowly to one side and back",
+    "float": "rises a little, as if lifting something up, and settles",
+    "pop": "grows quickly and settles back",
+    "tilt": "tilts its head and comes back",
+    "swing": "winds back and swings forward, like a pickaxe",
+    "sink": "sinks a little and bobs back up",
+    "glitch": "jumps between offset positions, like a lagging frame"
+  },
+  "stickers": [
+    {
+      "id": "lol",
+      "ref": "pl1/lol",
+      "order": 1,
+      "theme": "reactions",
+      "name": {
+        "tr": "Kahkaha",
+        "en": "LOL"
+      },
+      "keywords": {
+        "tr": ["kahkaha", "gülmek", "komik", "haha"],
+        "en": ["lol", "laugh", "funny", "haha"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 0,
+        "row": 0
+      },
+      "motion": "wobble",
+      "files": {
+        "launcher": {
+          "path": "launcher/lol.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 14266,
+          "sha256": "e8ca04c44a2aea60161322568f56b21a7b7aa96239406e8c14e132ad18647fc3"
+        },
+        "android": {
+          "path": "android/pl1_lol.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 23668,
+          "sha256": "f39aef256a0fbe914fccfb53b97ac65b77f3c0ab9c11107edfb1f1d087cb4bec"
+        }
+      }
+    },
+    {
+      "id": "cry",
+      "ref": "pl1/cry",
+      "order": 2,
+      "theme": "reactions",
+      "name": {
+        "tr": "Ağlıyorum",
+        "en": "Crying"
+      },
+      "keywords": {
+        "tr": ["ağlamak", "üzgün", "gözyaşı", "hüzün"],
+        "en": ["crying", "sad", "tears", "sob"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 1,
+        "row": 0
+      },
+      "motion": "shiver",
+      "files": {
+        "launcher": {
+          "path": "launcher/cry.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 15794,
+          "sha256": "fae4b987ba9864fa2c81c19b5f5891c906b1589dceddbdf5d977ef80dddf48ef"
+        },
+        "android": {
+          "path": "android/pl1_cry.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 25826,
+          "sha256": "d8d6504dc74c1bb41f905ffb4ff28a6796baeb06d225783987024be004fae55b"
+        }
+      }
+    },
+    {
+      "id": "love",
+      "ref": "pl1/love",
+      "order": 3,
+      "theme": "reactions",
+      "name": {
+        "tr": "Kalp",
+        "en": "Love"
+      },
+      "keywords": {
+        "tr": ["kalp", "sevgi", "aşk", "beğendim"],
+        "en": ["love", "heart", "like", "aww"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 2,
+        "row": 0
+      },
+      "motion": "beat",
+      "files": {
+        "launcher": {
+          "path": "launcher/love.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 16144,
+          "sha256": "26bd7b3c41bd4398b5cdd99b8357f19ee4cedf0ecee95edcefcabe640da77a64"
+        },
+        "android": {
+          "path": "android/pl1_love.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 27172,
+          "sha256": "caa0178394fae2456851720020f7616e9fd515b154e4e2e73559fc8c69ef85f8"
+        }
+      }
+    },
+    {
+      "id": "shock",
+      "ref": "pl1/shock",
+      "order": 4,
+      "theme": "reactions",
+      "name": {
+        "tr": "Şok",
+        "en": "Shocked"
+      },
+      "keywords": {
+        "tr": ["şok", "şaşkın", "inanılmaz", "vay"],
+        "en": ["shocked", "surprised", "wow", "omg"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 3,
+        "row": 0
+      },
+      "motion": "pop",
+      "files": {
+        "launcher": {
+          "path": "launcher/shock.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 14782,
+          "sha256": "e7d8dda81719bf843c8595b2b26c54438fab7552731d8ce068b9cc8252477159"
+        },
+        "android": {
+          "path": "android/pl1_shock.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 25100,
+          "sha256": "475021c8c65585b40d448becdb1cbb01405981001c9265de1abe14bc8daae702"
+        }
+      }
+    },
+    {
+      "id": "think",
+      "ref": "pl1/think",
+      "order": 5,
+      "theme": "reactions",
+      "name": {
+        "tr": "Düşünüyorum",
+        "en": "Thinking"
+      },
+      "keywords": {
+        "tr": ["düşünmek", "hmm", "acaba", "emin değilim"],
+        "en": ["thinking", "hmm", "wonder", "not sure"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 4,
+        "row": 0
+      },
+      "motion": "tilt",
+      "files": {
+        "launcher": {
+          "path": "launcher/think.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 16690,
+          "sha256": "ab16a2371c6beb93624eb84af7b72260b8897bab14c27d58be467a71cf6ff3f5"
+        },
+        "android": {
+          "path": "android/pl1_think.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 27340,
+          "sha256": "10bbc378241e094626b94015259d4e7797e82ae88c9bca411c2cd6b7f03f8d46"
+        }
+      }
+    },
+    {
+      "id": "angry",
+      "ref": "pl1/angry",
+      "order": 6,
+      "theme": "reactions",
+      "name": {
+        "tr": "Sinirli",
+        "en": "Angry"
+      },
+      "keywords": {
+        "tr": ["sinirli", "kızgın", "öfke", "hırs"],
+        "en": ["angry", "mad", "rage", "furious"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 5,
+        "row": 0
+      },
+      "motion": "shake",
+      "files": {
+        "launcher": {
+          "path": "launcher/angry.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 17226,
+          "sha256": "064609def0d974bc8c8c5b35b75cecf6cf26a9ccbc099c77e1a7ec41edcacbb1"
+        },
+        "android": {
+          "path": "android/pl1_angry.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 28100,
+          "sha256": "f53d3cc90ec5052974c2a206d0b37002bec05095e5096db7e690e7594bb12673"
+        }
+      }
+    },
+    {
+      "id": "sleepy",
+      "ref": "pl1/sleepy",
+      "order": 7,
+      "theme": "reactions",
+      "name": {
+        "tr": "Uykulu",
+        "en": "Sleepy"
+      },
+      "keywords": {
+        "tr": ["uykulu", "yorgun", "esneme", "uyku"],
+        "en": ["sleepy", "tired", "yawn", "sleep"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 6,
+        "row": 0
+      },
+      "motion": "sway",
+      "files": {
+        "launcher": {
+          "path": "launcher/sleepy.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 15422,
+          "sha256": "2d24b87125d3985d2052cdc328c5079405d85c71bf80969ab4ef7a04b2eaef18"
+        },
+        "android": {
+          "path": "android/pl1_sleepy.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 25488,
+          "sha256": "73b03b5fb0638a23e986f5dfcea369c991406e9cca8ac49e2e2db08bb74c505b"
+        }
+      }
+    },
+    {
+      "id": "thanks",
+      "ref": "pl1/thanks",
+      "order": 8,
+      "theme": "reactions",
+      "name": {
+        "tr": "Sağ ol",
+        "en": "Thanks"
+      },
+      "keywords": {
+        "tr": ["sağ ol", "teşekkürler", "eyvallah", "teşekkür"],
+        "en": ["thanks", "thank you", "thx", "cheers"]
+      },
+      "caption": "SAĞ OL",
+      "atlas": {
+        "column": 7,
+        "row": 0
+      },
+      "motion": "nod",
+      "files": {
+        "launcher": {
+          "path": "launcher/thanks.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 15788,
+          "sha256": "e7923117b5059b0e0d1c61bfe2bfc9f54cd784c237244dae38a0ef7c27534d01"
+        },
+        "android": {
+          "path": "android/pl1_thanks.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 25602,
+          "sha256": "a7138c2dd7b9e800cc0b3b307d5797acedde08c50eb7ee98cc72877a3ff8b216"
+        }
+      }
+    },
+    {
+      "id": "mine",
+      "ref": "pl1/mine",
+      "order": 9,
+      "theme": "game",
+      "name": {
+        "tr": "Kazıyorum",
+        "en": "Mining"
+      },
+      "keywords": {
+        "tr": ["kazmak", "maden", "kazma", "kazı"],
+        "en": ["mining", "pickaxe", "dig", "grind"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 0,
+        "row": 1
+      },
+      "motion": "swing",
+      "files": {
+        "launcher": {
+          "path": "launcher/mine.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 15864,
+          "sha256": "53fece04037791fab0477de586f5cbfc5bd979b6347f2a71d404187fdf2ff7cf"
+        },
+        "android": {
+          "path": "android/pl1_mine.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 25244,
+          "sha256": "f86ff5970bda876318431c09d28e966a37a0e478c74df9b8d651dcdd8632c5a8"
+        }
+      }
+    },
+    {
+      "id": "gem",
+      "ref": "pl1/gem",
+      "order": 10,
+      "theme": "game",
+      "name": {
+        "tr": "Buldum!",
+        "en": "Found it"
+      },
+      "keywords": {
+        "tr": ["buldum", "elmas", "mücevher", "cevher"],
+        "en": ["found it", "gem", "diamond", "ore"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 1,
+        "row": 1
+      },
+      "motion": "float",
+      "files": {
+        "launcher": {
+          "path": "launcher/gem.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 15054,
+          "sha256": "f4b35f140dc58ca8da8693a02514079a3e8587a1c70cfd4d001b2e787a796e42"
+        },
+        "android": {
+          "path": "android/pl1_gem.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 25204,
+          "sha256": "d35ed35c136c78e0ae3d6dceb89122601ec5fbd3935a054a9c89783c9cb91ff4"
+        }
+      }
+    },
+    {
+      "id": "boom",
+      "ref": "pl1/boom",
+      "order": 11,
+      "theme": "game",
+      "name": {
+        "tr": "Patladı",
+        "en": "Boom"
+      },
+      "keywords": {
+        "tr": ["patladı", "patlama", "bum", "eyvah"],
+        "en": ["boom", "explosion", "blew up", "oops"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 2,
+        "row": 1
+      },
+      "motion": "shake",
+      "files": {
+        "launcher": {
+          "path": "launcher/boom.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 15698,
+          "sha256": "5d906a0cff02ffe09547988980fce3d52ca46d1da4af31c8fb94bec36dab35d0"
+        },
+        "android": {
+          "path": "android/pl1_boom.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 25898,
+          "sha256": "f2fbdec9a15e94a0d18442eaf5d35a98f8582c6dfc2ac39db823b863de1d3822"
+        }
+      }
+    },
+    {
+      "id": "night",
+      "ref": "pl1/night",
+      "order": 12,
+      "theme": "game",
+      "name": {
+        "tr": "Gece oldu",
+        "en": "Night"
+      },
+      "keywords": {
+        "tr": ["gece", "yatak", "uyku", "gece oldu"],
+        "en": ["night", "bed", "sleep", "nighttime"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 3,
+        "row": 1
+      },
+      "motion": "sway",
+      "files": {
+        "launcher": {
+          "path": "launcher/night.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 15456,
+          "sha256": "2b32f86bf39290f1f97c301519ef0118729b0eb41ec70f655dad5d07407f8cdb"
+        },
+        "android": {
+          "path": "android/pl1_night.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 25442,
+          "sha256": "6dda1c6a0fee8418e874ee846dade9e0b89e709f601ceee817eca74ff467b908"
+        }
+      }
+    },
+    {
+      "id": "pvp",
+      "ref": "pl1/pvp",
+      "order": 13,
+      "theme": "game",
+      "name": {
+        "tr": "Kapışalım",
+        "en": "Fight"
+      },
+      "keywords": {
+        "tr": ["kapışalım", "savaş", "kılıç", "pvp"],
+        "en": ["fight", "pvp", "sword", "duel"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 4,
+        "row": 1
+      },
+      "motion": "swing",
+      "files": {
+        "launcher": {
+          "path": "launcher/pvp.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 14158,
+          "sha256": "3b07e4f4183eec1c8cb6a87b3dd8bf069867ed0229eee76ad3baf8a5abc40b54"
+        },
+        "android": {
+          "path": "android/pl1_pvp.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 23292,
+          "sha256": "763d6e2a1474ab418f3871b581121ad22949607357916459bc4b61ff64d7e945"
+        }
+      }
+    },
+    {
+      "id": "build",
+      "ref": "pl1/build",
+      "order": 14,
+      "theme": "game",
+      "name": {
+        "tr": "İnşaattayım",
+        "en": "Building"
+      },
+      "keywords": {
+        "tr": ["inşaat", "yapı", "inşa", "yapıyorum"],
+        "en": ["building", "build", "construction", "builder"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 5,
+        "row": 1
+      },
+      "motion": "nod",
+      "files": {
+        "launcher": {
+          "path": "launcher/build.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 14490,
+          "sha256": "ccb661f9cd7372f678e0b7d52df5aa6ae82f57bed4d3141d1d3b6834115e46c7"
+        },
+        "android": {
+          "path": "android/pl1_build.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 23898,
+          "sha256": "5ebb95eb308dd2cadc851edf9bc185d20ee0aa1e2a07c37d8ac94345e196021b"
+        }
+      }
+    },
+    {
+      "id": "lava",
+      "ref": "pl1/lava",
+      "order": 15,
+      "theme": "game",
+      "name": {
+        "tr": "Düştüm",
+        "en": "Fell in"
+      },
+      "keywords": {
+        "tr": ["düştüm", "lav", "öldüm", "eyvah"],
+        "en": ["fell in", "lava", "died", "oops"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 6,
+        "row": 1
+      },
+      "motion": "sink",
+      "files": {
+        "launcher": {
+          "path": "launcher/lava.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 14542,
+          "sha256": "d1d19d7afb8f3bb95b4b05e57c0bccedf90626b5374e282f230514400ea0a3da"
+        },
+        "android": {
+          "path": "android/pl1_lava.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 24576,
+          "sha256": "9a59da20cd2a36580a07d54924d93f46148a14fd30b7b2d6d0881b49cf672dbe"
+        }
+      }
+    },
+    {
+      "id": "loot",
+      "ref": "pl1/loot",
+      "order": 16,
+      "theme": "game",
+      "name": {
+        "tr": "Ganimet",
+        "en": "Loot"
+      },
+      "keywords": {
+        "tr": ["ganimet", "sandık", "hazine", "ödül"],
+        "en": ["loot", "chest", "treasure", "reward"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 7,
+        "row": 1
+      },
+      "motion": "float",
+      "files": {
+        "launcher": {
+          "path": "launcher/loot.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 15948,
+          "sha256": "0882d3ab1c64bd2d42fd4aa6dee7eea834c63c703729fbe0001b109ead15a6a3"
+        },
+        "android": {
+          "path": "android/pl1_loot.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 26748,
+          "sha256": "1586384819ac273a25a3a175717d63323057fd9bba6b9eef767155f619120f0e"
+        }
+      }
+    },
+    {
+      "id": "gg",
+      "ref": "pl1/gg",
+      "order": 17,
+      "theme": "server",
+      "name": {
+        "tr": "GG",
+        "en": "GG"
+      },
+      "keywords": {
+        "tr": ["gg", "iyi oyun", "tebrikler", "helal"],
+        "en": ["gg", "good game", "well played", "nice"]
+      },
+      "caption": "GG",
+      "atlas": {
+        "column": 0,
+        "row": 2
+      },
+      "motion": "pop",
+      "files": {
+        "launcher": {
+          "path": "launcher/gg.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 11634,
+          "sha256": "7e7333e129eba34801b70836df7fe78dc1a2c1efd1481e00bd20fdb138abc0ac"
+        },
+        "android": {
+          "path": "android/pl1_gg.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 18832,
+          "sha256": "62e81556c5026c87f590cdd3be99ccd88e3d1dd4784b7a04b272404a4409f2e0"
+        }
+      }
+    },
+    {
+      "id": "afk",
+      "ref": "pl1/afk",
+      "order": 18,
+      "theme": "server",
+      "name": {
+        "tr": "AFK",
+        "en": "AFK"
+      },
+      "keywords": {
+        "tr": ["afk", "klavyeden uzakta", "uyuyor", "yokum"],
+        "en": ["afk", "away", "away from keyboard", "asleep"]
+      },
+      "caption": "AFK",
+      "atlas": {
+        "column": 1,
+        "row": 2
+      },
+      "motion": "sway",
+      "files": {
+        "launcher": {
+          "path": "launcher/afk.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 16264,
+          "sha256": "a062f9249f8db23427418c596e3dd6332617698340717fbeb59e4d20d7cb9699"
+        },
+        "android": {
+          "path": "android/pl1_afk.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 26980,
+          "sha256": "2d9c00fc0a814e6cb82899ae446083b7ac31d83bf1852123e0be553d3a7f36cf"
+        }
+      }
+    },
+    {
+      "id": "lag",
+      "ref": "pl1/lag",
+      "order": 19,
+      "theme": "server",
+      "name": {
+        "tr": "Lag",
+        "en": "Lag"
+      },
+      "keywords": {
+        "tr": ["lag", "gecikme", "donma", "ping"],
+        "en": ["lag", "ping", "freeze", "laggy"]
+      },
+      "caption": "LAG",
+      "atlas": {
+        "column": 2,
+        "row": 2
+      },
+      "motion": "glitch",
+      "files": {
+        "launcher": {
+          "path": "launcher/lag.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 15930,
+          "sha256": "c1a19bb48a9345da4370705b4272ac31c32f4dd7089f833cf5465493aab4dfc2"
+        },
+        "android": {
+          "path": "android/pl1_lag.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 25932,
+          "sha256": "20dcd179509511316733818eed8674fbe0d751d8415617203556e4eb5243c048"
+        }
+      }
+    },
+    {
+      "id": "come",
+      "ref": "pl1/come",
+      "order": 20,
+      "theme": "server",
+      "name": {
+        "tr": "Gel!",
+        "en": "Come on"
+      },
+      "keywords": {
+        "tr": ["gel", "buraya gel", "çabuk", "acele"],
+        "en": ["come on", "come here", "hurry", "let's go"]
+      },
+      "caption": "GEL!",
+      "atlas": {
+        "column": 3,
+        "row": 2
+      },
+      "motion": "wave",
+      "files": {
+        "launcher": {
+          "path": "launcher/come.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 14822,
+          "sha256": "13d2999522c695050b7913dd72632ce107bb92b490dfe1b7655f2b414d9c9b8b"
+        },
+        "android": {
+          "path": "android/pl1_come.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 24170,
+          "sha256": "6f7b3f02a914030ebd1eaf09114d9af369e382a6f01f1d4b3d934076690652a6"
+        }
+      }
+    },
+    {
+      "id": "wait",
+      "ref": "pl1/wait",
+      "order": 21,
+      "theme": "server",
+      "name": {
+        "tr": "Bekle",
+        "en": "Wait"
+      },
+      "keywords": {
+        "tr": ["bekle", "5 dakika", "geliyorum", "az kaldı"],
+        "en": ["wait", "five minutes", "brb", "one sec"]
+      },
+      "caption": "5 DK",
+      "atlas": {
+        "column": 4,
+        "row": 2
+      },
+      "motion": "tilt",
+      "files": {
+        "launcher": {
+          "path": "launcher/wait.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 13052,
+          "sha256": "c6f5d4d908dd4d7f8c8be61576869d2dd2213fd64d390e842bf0967fcb9d942f"
+        },
+        "android": {
+          "path": "android/pl1_wait.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 21826,
+          "sha256": "895c5646d84b4809a2075acdb10059b2aec00803a586ae611f47c6d7a0d2bae7"
+        }
+      }
+    },
+    {
+      "id": "crew",
+      "ref": "pl1/crew",
+      "order": 22,
+      "theme": "server",
+      "name": {
+        "tr": "Ekip toplanıyor",
+        "en": "Crew up"
+      },
+      "keywords": {
+        "tr": ["ekip", "ekip toplanıyor", "birlikte", "toplanın"],
+        "en": ["crew", "crew up", "squad", "together"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 5,
+        "row": 2
+      },
+      "motion": "bounce",
+      "files": {
+        "launcher": {
+          "path": "launcher/crew.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 12570,
+          "sha256": "7ec36ffd2579ac6e0edff2214b0610c2aba95891543be60a4dea2ba3f248b785"
+        },
+        "android": {
+          "path": "android/pl1_crew.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 20970,
+          "sha256": "dc4bedaf8e15df0ba71b3a55aa98b7422e434c97950cd1e83c5024be329dd534"
+        }
+      }
+    },
+    {
+      "id": "win",
+      "ref": "pl1/win",
+      "order": 23,
+      "theme": "server",
+      "name": {
+        "tr": "Kazandık",
+        "en": "We won"
+      },
+      "keywords": {
+        "tr": ["kazandık", "zafer", "kupa", "birinci"],
+        "en": ["we won", "win", "victory", "trophy"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 6,
+        "row": 2
+      },
+      "motion": "bounce",
+      "files": {
+        "launcher": {
+          "path": "launcher/win.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 18164,
+          "sha256": "698575bb5ef628e1a43913881544a98a7d33cc454090f5f940e9d8d9c2833964"
+        },
+        "android": {
+          "path": "android/pl1_win.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 30688,
+          "sha256": "8be84988fa8e044861bed8984b6caff4e11f48b27f874a28597b74e0953bb94f"
+        }
+      }
+    },
+    {
+      "id": "where",
+      "ref": "pl1/where",
+      "order": 24,
+      "theme": "server",
+      "name": {
+        "tr": "Neredesin?",
+        "en": "Where are you?"
+      },
+      "keywords": {
+        "tr": ["neredesin", "nerede", "arıyorum", "konum"],
+        "en": ["where are you", "where", "looking", "location"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 7,
+        "row": 2
+      },
+      "motion": "tilt",
+      "files": {
+        "launcher": {
+          "path": "launcher/where.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 16400,
+          "sha256": "0dc1751f3f2dcbd1a1f15d467b0641ef83f1d515ca818cde90bb716d37a8efd4"
+        },
+        "android": {
+          "path": "android/pl1_where.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 27618,
+          "sha256": "8a0552742a47e755f71192de5466eef47dfacb0a5dcc2163b5bff9550e663a12"
+        }
+      }
+    },
+    {
+      "id": "hi",
+      "ref": "pl1/hi",
+      "order": 25,
+      "theme": "greetings",
+      "name": {
+        "tr": "Selam",
+        "en": "Hi"
+      },
+      "keywords": {
+        "tr": ["selam", "merhaba", "sa", "selamlar"],
+        "en": ["hi", "hello", "hey", "greetings"]
+      },
+      "caption": "SELAM",
+      "atlas": {
+        "column": 0,
+        "row": 3
+      },
+      "motion": "wave",
+      "files": {
+        "launcher": {
+          "path": "launcher/hi.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 13876,
+          "sha256": "318d201073ff908497ad0d3436098a351368616b5f9370790acc8f96facbd5c6"
+        },
+        "android": {
+          "path": "android/pl1_hi.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 22934,
+          "sha256": "54882a1bdca65776eb6d103bae18f5662be1a8ad92b854efec7c692aff3fcefe"
+        }
+      }
+    },
+    {
+      "id": "bye",
+      "ref": "pl1/bye",
+      "order": 26,
+      "theme": "greetings",
+      "name": {
+        "tr": "Görüşürüz",
+        "en": "Bye"
+      },
+      "keywords": {
+        "tr": ["görüşürüz", "bay bay", "hoşça kal", "çıkıyorum"],
+        "en": ["bye", "see you", "goodbye", "logging off"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 1,
+        "row": 3
+      },
+      "motion": "wave",
+      "files": {
+        "launcher": {
+          "path": "launcher/bye.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 13840,
+          "sha256": "01b8d4cb96613fe9b4a34f5950b598a63f640b8d8a17dcd2557208527ab86ad1"
+        },
+        "android": {
+          "path": "android/pl1_bye.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 23082,
+          "sha256": "d836b05e8724b1cd2986c7964ad2a49974829cacc86cb336cbaa4a7655371486"
+        }
+      }
+    },
+    {
+      "id": "ok",
+      "ref": "pl1/ok",
+      "order": 27,
+      "theme": "greetings",
+      "name": {
+        "tr": "Tamam",
+        "en": "OK"
+      },
+      "keywords": {
+        "tr": ["tamam", "olur", "okey", "anlaştık"],
+        "en": ["ok", "okay", "sure", "deal"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 2,
+        "row": 3
+      },
+      "motion": "nod",
+      "files": {
+        "launcher": {
+          "path": "launcher/ok.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 12472,
+          "sha256": "efa9f6762337120b60cd1245b51ef277f35a95e0719290b3e3e154e6a1e31eb9"
+        },
+        "android": {
+          "path": "android/pl1_ok.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 20986,
+          "sha256": "8dae74aab3c6b413654f9ff647d5d5fcf5ae32ae3f6aa40d065778e24b450cec"
+        }
+      }
+    },
+    {
+      "id": "no",
+      "ref": "pl1/no",
+      "order": 28,
+      "theme": "greetings",
+      "name": {
+        "tr": "Hayır",
+        "en": "No"
+      },
+      "keywords": {
+        "tr": ["hayır", "olmaz", "yok", "asla"],
+        "en": ["no", "nope", "never", "no way"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 3,
+        "row": 3
+      },
+      "motion": "shake",
+      "files": {
+        "launcher": {
+          "path": "launcher/no.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 16550,
+          "sha256": "53c705de793824846c44227f06d66fc44330c909a68e6eef7d248d5e698d2365"
+        },
+        "android": {
+          "path": "android/pl1_no.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 27762,
+          "sha256": "5a94f4c38d559fb1ac3f75a48d99e87588279b25822d221ad70d191131721ac4"
+        }
+      }
+    },
+    {
+      "id": "legend",
+      "ref": "pl1/legend",
+      "order": 29,
+      "theme": "greetings",
+      "name": {
+        "tr": "Efsane",
+        "en": "Legend"
+      },
+      "keywords": {
+        "tr": ["efsane", "havalı", "karizma", "süper"],
+        "en": ["legend", "cool", "epic", "awesome"]
+      },
+      "caption": "EFSANE",
+      "atlas": {
+        "column": 4,
+        "row": 3
+      },
+      "motion": "pop",
+      "files": {
+        "launcher": {
+          "path": "launcher/legend.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 15078,
+          "sha256": "bf8c9cbd0ccede3ae28474cf92fa607c2e934150136361d4e95d21117b358692"
+        },
+        "android": {
+          "path": "android/pl1_legend.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 25020,
+          "sha256": "389c689f12093083ad963588f524bb0e2bd2cfefabbcf8edd7ea80b123734885"
+        }
+      }
+    },
+    {
+      "id": "bro",
+      "ref": "pl1/bro",
+      "order": 30,
+      "theme": "greetings",
+      "name": {
+        "tr": "Kanka",
+        "en": "Bro"
+      },
+      "keywords": {
+        "tr": ["kanka", "dost", "kardeş", "kanki"],
+        "en": ["bro", "buddy", "friend", "mate"]
+      },
+      "caption": "KANKA",
+      "atlas": {
+        "column": 5,
+        "row": 3
+      },
+      "motion": "pop",
+      "files": {
+        "launcher": {
+          "path": "launcher/bro.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 11268,
+          "sha256": "1b6addf2db4fe50b2772ddc17df49866ba2464d0a943d2874d734f5a9cebd6dc"
+        },
+        "android": {
+          "path": "android/pl1_bro.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 18628,
+          "sha256": "7a4b51d1d4f1098a093fbaa93c2680b6fc97683e8fedf9ae09ab823e4af8fa74"
+        }
+      }
+    },
+    {
+      "id": "gn",
+      "ref": "pl1/gn",
+      "order": 31,
+      "theme": "greetings",
+      "name": {
+        "tr": "İyi geceler",
+        "en": "Good night"
+      },
+      "keywords": {
+        "tr": ["iyi geceler", "uyku", "tatlı rüyalar", "yatıyorum"],
+        "en": ["good night", "sleep", "sweet dreams", "night"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 6,
+        "row": 3
+      },
+      "motion": "sway",
+      "files": {
+        "launcher": {
+          "path": "launcher/gn.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 15866,
+          "sha256": "369b3ebab1a72a01ea6bb48b1e6da10cb207628db706e78dc50e24f286ec3058"
+        },
+        "android": {
+          "path": "android/pl1_gn.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 26544,
+          "sha256": "3a6241fecb14efe5893545466a7490a670855aa7486c3c816d49f68d063460a2"
+        }
+      }
+    },
+    {
+      "id": "party",
+      "ref": "pl1/party",
+      "order": 32,
+      "theme": "greetings",
+      "name": {
+        "tr": "Kutlama",
+        "en": "Party"
+      },
+      "keywords": {
+        "tr": ["kutlama", "parti", "tebrikler", "yaşasın"],
+        "en": ["party", "celebrate", "congrats", "yay"]
+      },
+      "caption": null,
+      "atlas": {
+        "column": 7,
+        "row": 3
+      },
+      "motion": "bounce",
+      "files": {
+        "launcher": {
+          "path": "launcher/party.webp",
+          "width": 256,
+          "height": 256,
+          "bytes": 16264,
+          "sha256": "2435d0f1251ca3a2fa3ac5532fd00b9efa8fcd92d65a8301829dc789b5b43414"
+        },
+        "android": {
+          "path": "android/pl1_party.webp",
+          "width": 384,
+          "height": 384,
+          "bytes": 27066,
+          "sha256": "40b5e9f388112d5c5894a66d014a7be19e3bd40c5bfcfb84d825e161d2a62c29"
+        }
+      }
+    }
+  ],
+  "credits": {
+    "art": "Projects (projects.gg); AI-assisted generation (Codex image_gen), post-processed by script",
+    "captionFont": "Tektur 600, Copyright 2023 The Tektur Project Authors, SIL Open Font License 1.1"
+  }
+}
