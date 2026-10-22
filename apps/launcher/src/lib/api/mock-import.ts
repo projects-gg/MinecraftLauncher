@@ -179,6 +179,10 @@ export function createMockImport(): ImportApi {
         freeBytes: kind === "big" ? 21.4 * GB : 118.2 * GB,
         reserveBytes: 2 * GB,
         projectsHasOptions: kind === "kept",
+        // LIB1: `?library=empty` / `noOfficial` (mock.ts) deleted the Projects instance.
+        projectsRemoved: ["empty", "noOfficial"].includes(
+          new URLSearchParams(window.location.search).get("library") ?? "",
+        ),
       };
     },
     async measure(sourceId) {

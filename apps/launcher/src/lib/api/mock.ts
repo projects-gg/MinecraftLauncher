@@ -644,6 +644,47 @@ const instances: InstanceSummary[] = [
 const joinOffline = mockFlag("join") === "offline";
 const projectsIndex = instances.findIndex((i) => i.managed);
 if (joinOffline && projectsIndex >= 0) instances.splice(projectsIndex, 1);
+// LIB1: `?library=empty` has no instance left, `?library=noOfficial` only lost the official one
+// (the player deleted it: nothing makes it again by itself, the library offers it).
+const libraryFlag = mockFlag("library");
+if (libraryFlag === "empty") instances.splice(0, instances.length);
+if (libraryFlag === "noOfficial") {
+  for (let i = instances.length - 1; i >= 0; i--) if (instances[i]?.managed) instances.splice(i, 1);
+}
+/** The player deleted the last official instance (the backend's `official.json`). */
+let officialRemoved = libraryFlag === "empty" || libraryFlag === "noOfficial";
+
+/** The official instance: the one there, else made now (offline under `?join=offline`). */
+async function mockInstallOfficial(): Promise<InstanceSummary> {
+  await delay(500);
+  const existing = instances.find((i) => i.managed);
+  if (existing) return existing;
+  if (joinOffline) {
+    throw Object.assign(
+      new Error(
+        pick(
+          "Projects paketi indirilemedi. İnternet bağlantını kontrol edip tekrar dene.",
+          "Couldn't download the Projects pack. Check your internet connection and try again.",
+        ),
+      ),
+      { code: "PAKET-AG", details: "Önizleme verisi" },
+    );
+  }
+  const created: InstanceSummary = {
+    id: "projects",
+    name: "Projects",
+    icon: "dragon-egg",
+    mcVersion: "26.1.2",
+    loader: "fabric",
+    loaderVersion: "0.19.5",
+    managed: true,
+    playTimeSecs: 0,
+    state: "needsInstall",
+    autoJoin: "play.projects.gg",
+  };
+  instances.unshift(created);
+  return created;
+}
 // `?fresh=1`: the official instance was just added and never downloaded (mock-fresh.ts).
 const freshOfficial = mockFreshOfficial() ? instances.find((i) => i.managed) : undefined;
 if (freshOfficial) {
@@ -1020,6 +1061,8 @@ export const mockApi: LauncherApi = {
     const index = instances.findIndex((i) => i.id === id);
     const [gone] = index >= 0 ? instances.splice(index, 1) : [];
     const trashId = `trash-${id}-${Date.now()}`;
+    // The last official instance went: remembered, as the backend does.
+    if (gone?.managed && !instances.some((i) => i.managed)) officialRemoved = true;
     if (gone) {
       mockTrashedInstances.set(trashId, {
         instance: gone,
@@ -1039,6 +1082,7 @@ export const mockApi: LauncherApi = {
     for (let n = 2; taken(name); n++) name = `${back.name} (${n})`;
     const restored = { ...back, name };
     instances.push(restored);
+    if (restored.managed) officialRemoved = false;
     return restored;
   },
   async minecraftVersions() {
@@ -1198,37 +1242,21 @@ export const mockApi: LauncherApi = {
         summary: "Sunucu için hazırlanmış performans ve görünüm paketi.",
       },
       instanceId: instances.find((i) => i.managed)?.id,
+      removed: officialRemoved && !instances.some((i) => i.managed),
     };
   },
   async ensureOfficialInstance() {
-    await delay(500);
     const existing = instances.find((i) => i.managed);
-    if (existing) return existing;
-    if (joinOffline) {
-      throw Object.assign(
-        new Error(
-          pick(
-            "Projects paketi indirilemedi. İnternet bağlantını kontrol edip tekrar dene.",
-            "Couldn't download the Projects pack. Check your internet connection and try again.",
-          ),
-        ),
-        { code: "PAKET-AG", details: "Önizleme verisi" },
-      );
+    // Deleted by the player: nothing is made by itself (LIB1).
+    if (!existing && officialRemoved) {
+      await delay(150);
+      return null;
     }
-    const created: InstanceSummary = {
-      id: "projects",
-      name: "Projects",
-      icon: "dragon-egg",
-      mcVersion: "26.1.2",
-      loader: "fabric",
-      loaderVersion: "0.19.5",
-      managed: true,
-      playTimeSecs: 0,
-      state: "needsInstall",
-      autoJoin: "play.projects.gg",
-    };
-    instances.unshift(created);
-    return created;
+    return mockInstallOfficial();
+  },
+  async installOfficialInstance() {
+    officialRemoved = false;
+    return mockInstallOfficial();
   },
   onContentChanged(listener) {
     // Preview: `dispatchEvent(new Event("pl-mock-content-changed"))` acts like newly published

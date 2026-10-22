@@ -23,7 +23,10 @@ use pl_content::{
 use pl_lang::pick;
 use pl_mc::install::{LaunchBar, McContext};
 use pl_mc::instance::model::{ManagedPack, ServerAddress};
-use pl_mc::instance::{Instance, InstanceIcon, InstanceLoader, NewInstance};
+use pl_mc::instance::{
+    Instance, InstanceIcon, InstanceLoader, NewInstance, OfficialChoice, OfficialEnsure,
+    find_official,
+};
 use pl_mc::loaders::LoaderKind;
 use pl_net::{CancellationToken, DownloadOptions, VerifyMode};
 use serde::Serialize;
@@ -60,6 +63,9 @@ pub struct OfficialStatus {
     /// The instance following that pack family, or the "Projects" instance when none is
     /// published.
     pub instance_id: Option<String>,
+    /// There is no official instance because the player deleted it: nothing makes it again by
+    /// itself; the library and OYNA offer "Resmî paketi kur" (LIB1).
+    pub removed: bool,
 }
 
 pub(crate) fn pack_error(error: pl_content::Error) -> CmdError {
@@ -218,27 +224,122 @@ fn instance_follows(
     instance_family(index, instance, game_dir.as_deref()).as_deref() == Some(family)
 }
 
+/// The official instance among `instances`, the one rule the status, the creation and the
+/// deletion memory share: the one following the published pack's family, else (nothing published,
+/// no content at hand) the "Projects" instance (`pl_mc::instance::find_official`).
+pub(crate) fn official_of<'a>(
+    state: &AppState,
+    instances: &'a [Instance],
+    snapshot: Option<&ContentSnapshot>,
+) -> Option<&'a Instance> {
+    match snapshot.and_then(|s| official_pack_ref(s).map(|pack| (s, pack.family_id()))) {
+        Some((snapshot, family)) => {
+            let follows = |i: &Instance| instance_follows(state, &snapshot.index, i, family);
+            find_official(instances, Some(&follows))
+        }
+        None => find_official(instances, None),
+    }
+}
+
+/// Held while the player's choice about the official instance (`official.json`) is read or
+/// changed, across a whole deletion (the move and its memory) and a whole creation, so the two
+/// never interleave: a creation that looks in the middle of a deletion would make it again.
+static CHOICE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Whether an official instance is on disk now. The cached content only: a deletion or "Geri al"
+/// never waits for the network.
+async fn official_there(state: &AppState) -> bool {
+    let Ok(instances) = state.instances.list().await else {
+        return false;
+    };
+    let snapshot = state.content.load_cached().await.ok();
+    official_of(state, &instances, snapshot.as_ref()).is_some()
+}
+
+/// A deletion under way ([`begin_deletion`]): it holds the memory's lock until it is recorded or
+/// dropped (the move failed).
+pub(crate) struct Deletion {
+    _guard: tokio::sync::MutexGuard<'static, ()>,
+    official_before: bool,
+}
+
+/// Right before an instance goes to the trash (its game folder still there): whether an official
+/// instance is there now. No creation starts until the deletion is recorded ([`Deletion::record`]).
+pub(crate) async fn begin_deletion(state: &AppState) -> Deletion {
+    let guard = CHOICE.lock().await;
+    Deletion {
+        official_before: official_there(state).await,
+        _guard: guard,
+    }
+}
+
+impl Deletion {
+    /// The instance has gone: when an official instance was there before and none is left now (a
+    /// copy of the pack still counts), the deletion is remembered, so nothing makes it again by
+    /// itself; "Resmî paketi kur" and "Geri al" still bring it back.
+    pub(crate) async fn record(self, state: &AppState) {
+        if !self.official_before {
+            return;
+        }
+        let after = official_there(state).await;
+        let mut choice = OfficialChoice::load(&state.root).await;
+        if !choice.record_deletion(self.official_before, after, jiff::Timestamp::now()) {
+            return;
+        }
+        match choice.save(&state.root).await {
+            Ok(()) => {
+                tracing::info!("the official instance was deleted; it is not made again by itself")
+            }
+            Err(error) => {
+                tracing::warn!(%error, "could not remember the deletion of the official instance")
+            }
+        }
+    }
+}
+
+/// An official instance is there again (the player installed it, or put it back from the trash):
+/// an earlier deletion is forgotten. The caller holds [`CHOICE`].
+async fn forget_removal_locked(state: &AppState) {
+    let mut choice = OfficialChoice::load(&state.root).await;
+    if !choice.forget() {
+        return;
+    }
+    match choice.save(&state.root).await {
+        Ok(()) => tracing::info!("the official instance is back"),
+        Err(error) => {
+            tracing::warn!(%error, "could not forget the deletion of the official instance")
+        }
+    }
+}
+
+/// "Geri al" of a deletion put an instance back: when that brought an official instance back, the
+/// deletion is forgotten.
+pub(crate) async fn instance_restored(state: &AppState) {
+    let _guard = CHOICE.lock().await;
+    if official_there(state).await {
+        forget_removal_locked(state).await;
+    }
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn official_status(state: State<'_, AppState>) -> CmdResult<OfficialStatus> {
     let instances = state.instances.list().await.map_err(CmdError::from)?;
     let snapshot = cached_or_fresh(&state).await;
+    let instance = official_of(&state, &instances, snapshot.as_ref());
+    // Only while there is none: an official instance put back meanwhile leaves nothing to offer.
+    let removed = instance.is_none() && OfficialChoice::load(&state.root).await.removed();
     let Some((snapshot, recommended)) = snapshot
         .as_ref()
         .and_then(|s| official_pack_ref(s).map(|pack| (s, pack)))
     else {
         return Ok(OfficialStatus {
             pack: None,
-            instance_id: instances
-                .iter()
-                .find(|i| i.name.eq_ignore_ascii_case(PROJECTS_NAME))
-                .map(|i| i.id.clone()),
+            instance_id: instance.map(|i| i.id.clone()),
+            removed,
         });
     };
     let family = recommended.family_id();
-    let instance = instances
-        .iter()
-        .find(|i| instance_follows(&state, &snapshot.index, i, family));
     // The member the official instance follows (its version), else the one new installs get.
     let pack = instance
         .and_then(|i| match followed_pack(&snapshot.index, i, family) {
@@ -262,31 +363,74 @@ pub async fn official_status(state: State<'_, AppState>) -> CmdResult<OfficialSt
             summary: manifest.and_then(|m| m.summary),
         }),
         instance_id: instance.map(|i| i.id.clone()),
+        removed,
     })
 }
 
-/// The Projects instance, created on first use. It follows the official pack family when one
+/// The Projects instance, made when there is none. It follows the official pack family when one
 /// is published (new installs get the family's default member); until then it is vanilla on the
 /// newest release. Files are installed by the first launch.
+///
+/// `install` is the player's own "Resmî paketi kur": it always makes one and forgets an earlier
+/// deletion. Without it (the first start, the pack watcher, the welcome flow, "Katıl", the tray,
+/// an import) nothing is made once the player deleted the official instance: `None` comes back
+/// and the page offers "Resmî paketi kur" instead (LIB1).
 #[tauri::command]
 #[specta::specta]
-pub async fn official_instance_ensure(state: State<'_, AppState>) -> CmdResult<InstanceView> {
+pub async fn official_instance_ensure(
+    state: State<'_, AppState>,
+    install: bool,
+) -> CmdResult<Option<InstanceView>> {
+    let instance = ensure_official(&state, install).await?;
+    Ok(instance.map(|instance| view(&state, &instance)))
+}
+
+/// [`official_instance_ensure`] for the backend (the import's shared items).
+pub(crate) async fn ensure_official(
+    state: &AppState,
+    install: bool,
+) -> CmdResult<Option<Instance>> {
     // The first-run screen and the pack watcher may ask at the same time: one creation only.
     static ENSURE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
     let _guard = ENSURE.lock().await;
+    // The content first (it may wait for the network); then a deletion under way finishes, and is
+    // remembered, before the instances are looked at (LIB1).
+    let snapshot = cached_or_fresh(state).await;
+    let _choice = CHOICE.lock().await;
     let instances = state.instances.list().await.map_err(CmdError::from)?;
-    let snapshot = cached_or_fresh(&state).await;
+    let found = official_of(state, &instances, snapshot.as_ref()).cloned();
+    match OfficialChoice::load(&state.root)
+        .await
+        .decide(found.is_some(), install)
+    {
+        OfficialEnsure::Existing => {
+            if install {
+                forget_removal_locked(state).await;
+            }
+            return Ok(found);
+        }
+        OfficialEnsure::Offer => {
+            tracing::info!("the player deleted the official instance; it is not made again");
+            return Ok(None);
+        }
+        OfficialEnsure::Create => {}
+    }
+    let created = create_official(state, &instances, snapshot.as_ref()).await?;
+    if install {
+        forget_removal_locked(state).await;
+    }
+    Ok(Some(created))
+}
 
-    if let Some(snapshot) = snapshot.as_ref()
+/// Makes the official instance (there is none): following the published pack, else vanilla.
+async fn create_official(
+    state: &AppState,
+    instances: &[Instance],
+    snapshot: Option<&ContentSnapshot>,
+) -> CmdResult<Instance> {
+    if let Some(snapshot) = snapshot
         && let Some(pack) = official_pack_ref(snapshot)
     {
-        let family = pack.family_id();
-        if let Some(found) = instances
-            .iter()
-            .find(|i| instance_follows(&state, &snapshot.index, i, family))
-        {
-            return Ok(view(&state, found));
-        }
         let manifest = state
             .content
             .pack_manifest(pack)
@@ -319,7 +463,7 @@ pub async fn official_instance_ensure(state: State<'_, AppState>) -> CmdResult<I
                 .update(&adopted)
                 .await
                 .map_err(CmdError::from)?;
-            return Ok(view(&state, &adopted));
+            return Ok(adopted);
         }
         // A modded one (e.g. imported from v1) keeps its files under a name that tells the
         // two apart.
@@ -335,8 +479,8 @@ pub async fn official_instance_ensure(state: State<'_, AppState>) -> CmdResult<I
                 .await
                 .map_err(CmdError::from)?;
         }
-        let created = create_projects_instance(
-            &state,
+        return create_projects_instance(
+            state,
             manifest.dependencies.minecraft.clone(),
             pack_loader(&manifest),
             Some(ManagedPack {
@@ -346,16 +490,9 @@ pub async fn official_instance_ensure(state: State<'_, AppState>) -> CmdResult<I
             }),
             manifest.projects.recommended_memory_mb,
         )
-        .await?;
-        return Ok(view(&state, &created));
+        .await;
     }
 
-    if let Some(found) = instances
-        .iter()
-        .find(|i| i.name.eq_ignore_ascii_case(PROJECTS_NAME))
-    {
-        return Ok(view(&state, found));
-    }
     let manifest = match pl_mc::version::manifest::load_manifest(&state.mc, false).await {
         Ok(manifest) => manifest,
         Err(error) if error.is_offline() => {
@@ -365,15 +502,14 @@ pub async fn official_instance_ensure(state: State<'_, AppState>) -> CmdResult<I
         }
         Err(error) => return Err(error.into()),
     };
-    let created = create_projects_instance(
-        &state,
+    create_projects_instance(
+        state,
         manifest.latest.release.clone(),
         InstanceLoader::default(),
         None,
         None,
     )
-    .await?;
-    Ok(view(&state, &created))
+    .await
 }
 
 async fn create_projects_instance(

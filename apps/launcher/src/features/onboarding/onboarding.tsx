@@ -15,6 +15,7 @@ import {
   Field,
   Input,
   Skeleton,
+  SwapLabel,
   Switch,
   toast,
   useMotionPrefs,
@@ -176,11 +177,12 @@ export function Onboarding() {
   };
 
   const skip = () => {
-    // The Projects instance is only metadata until the first launch, so create it anyway.
+    // The Projects instance is only metadata until the first launch, so create it anyway (not
+    // when this data folder's player deleted it: the library offers it, LIB1).
     void api
       .ensureOfficialInstance()
       .then((instance) => {
-        if (!usePrefs.getState().selectedInstanceId) selectInstance(instance.id);
+        if (instance && !usePrefs.getState().selectedInstanceId) selectInstance(instance.id);
       })
       .catch(() => {});
     finish();
@@ -642,6 +644,15 @@ function ProjectsStep({
       void queryClient.invalidateQueries({ queryKey: ["official-status"] });
     },
   });
+  // This data folder's player had deleted the Projects instance (a reinstall that cleared the
+  // launcher's own settings shows this flow again): it is offered, not made (LIB1).
+  const install = useMutation({
+    mutationFn: () => api.installOfficialInstance(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["instances"] });
+      void queryClient.invalidateQueries({ queryKey: ["official-status"] });
+    },
+  });
   const { data: official } = useQuery({
     queryKey: ["official-status"],
     queryFn: () => api.officialStatus(),
@@ -658,21 +669,67 @@ function ProjectsStep({
     mutate();
   }, [mutate]);
 
-  const instance = ensure.data;
+  const instance = install.data ?? ensure.data ?? undefined;
+  // `null` from the backend: deleted here before, so "Kur" waits for the player.
+  const offered = ensure.data === null && !install.data;
+  const failed = ensure.isError || install.isError;
+  const installing = install.isPending;
+  const pack = official?.pack;
   return (
     <StepFrame
       headingRef={headingRef}
-      title={instance ? t("onboarding.projects.title") : t("onboarding.projects.preparing")}
+      title={
+        instance
+          ? t("onboarding.projects.title")
+          : offered
+            ? t("lib1.empty.question")
+            : t("onboarding.projects.preparing")
+      }
       body={t("onboarding.projects.body")}
     >
       <div className="mt-7">
-        {ensure.isError ? (
+        {failed ? (
           <div className="flex items-center gap-3">
             <p className="text-[14px] text-flare-400" role="alert">
               {t("onboarding.projects.failed")}
             </p>
-            <Button size="sm" variant="secondary" onClick={() => mutate()}>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => (install.isError ? install.mutate() : mutate())}
+            >
               {t("common.retry")}
+            </Button>
+          </div>
+        ) : offered ? (
+          // The pack as the installed card would show it, dimmed, with its one action.
+          <div className="flex items-center gap-4 rounded-[var(--radius-panel)] bg-obsidian-900/50 px-4 py-3.5 ring-1 ring-white/10">
+            <InstanceIcon icon="dragon-egg" size={56} className="opacity-60 saturate-[0.6]" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <p className="truncate font-display text-[19px] font-semibold text-bone-50/85">
+                  {pack?.name ?? "Projects"}
+                </p>
+                <Chip tone="gold">{t("instances.managed")}</Chip>
+              </div>
+              <p className="mt-0.5 text-[13px] text-ash-400">
+                {pack
+                  ? `Minecraft ${pack.mcVersion}, ${t(`loaders.${pack.loader}`)}`
+                  : t("lib1.notInstalled")}
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              aria-label={t("lib1.install")}
+              aria-busy={installing || undefined}
+              onClick={() => {
+                if (!installing) install.mutate();
+              }}
+            >
+              <SwapLabel
+                labels={[t("lib1.installShort"), t("lib1.installing")]}
+                active={installing ? 1 : 0}
+              />
             </Button>
           </div>
         ) : instance ? (
@@ -693,13 +750,13 @@ function ProjectsStep({
         ) : (
           <Skeleton className="h-[84px] w-full" />
         )}
-        {instance ? (
+        {instance || offered ? (
           <p className="mt-3 text-[13px] text-ash-400">
             {official?.pack
               ? t("onboarding.projects.pack", { name: official.pack.name })
               : t("onboarding.projects.noPack")}
           </p>
-        ) : ensure.isError ? null : (
+        ) : failed ? null : (
           // Holds the line's place while the instance is prepared, so the switches below stay.
           <Skeleton className="mt-3 h-[19px] w-3/4" />
         )}
@@ -729,7 +786,12 @@ function ProjectsStep({
       </div>
 
       <div className="mt-9 flex flex-wrap items-center gap-3">
-        <Button variant="primary" size="lg" disabled={!instance} onClick={() => onFinish(instance)}>
+        <Button
+          variant="primary"
+          size="lg"
+          disabled={!instance && !offered}
+          onClick={() => onFinish(instance)}
+        >
           {t("onboarding.projects.finish")}
         </Button>
         <BackButton onClick={onBack} />

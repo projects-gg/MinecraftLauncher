@@ -103,6 +103,7 @@ function scan(extra: Partial<ImportScanView> = {}): ImportScanView {
     freeBytes: 100 * GB,
     reserveBytes: 2 * GB,
     projectsHasOptions: false,
+    projectsRemoved: false,
     ...extra,
   };
 }
@@ -160,6 +161,20 @@ describe("import rows", () => {
     // Worlds over the limit start unticked.
     const huge = rowsOf(scan(), measures(LARGE_BYTES + 1));
     expect(defaultTicks(huge, 100 * GB, 2 * GB).has(sharedKey("minecraft", "worlds"))).toBe(false);
+  });
+
+  it("leave unticked what would bring back a Projects instance the player deleted (LIB1)", () => {
+    const rows = rowsOf(scan({ projectsRemoved: true }), measures(1 * GB));
+    const ticks = defaultTicks(rows, 100 * GB, 2 * GB);
+    for (const kind of ["options", "servers", "resourcePacks", "screenshots"] as const) {
+      expect(ticks.has(sharedKey("minecraft", kind))).toBe(false);
+    }
+    // Worlds go to the instances of their versions, and profiles become new instances.
+    expect(ticks.has(sharedKey("minecraft", "worlds"))).toBe(true);
+    expect(ticks.has(profileKey("minecraft", "version:Fabric 1.21.4"))).toBe(true);
+    // Ticked by the player, they come over (the import installs the instance again).
+    const choices = new Map([[sharedKey("minecraft", "options"), true]]);
+    expect(ticksOf(rows, ticks, choices).has(sharedKey("minecraft", "options"))).toBe(true);
   });
 
   it("drop the biggest ticks until they fit the disk, never the settings", () => {

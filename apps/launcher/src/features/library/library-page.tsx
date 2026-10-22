@@ -14,7 +14,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
-import { type Ref, useId, useMemo, useRef, useState } from "react";
+import { type ReactNode, type Ref, useId, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import emptyArt from "@/assets/art/empty-library.webp";
 import { ExportDialog } from "@/features/content/export-dialog";
@@ -28,6 +28,8 @@ import { CreateInstanceDialog } from "./create-instance-dialog";
 import { GroupDialog } from "./group-dialog";
 import { type InstanceActions, InstanceCard } from "./instance-card";
 import { type LibrarySort, sortInstances, useLibraryView } from "./library-view";
+import { deletesLastOfficial, libraryOffer, officialStatusQuery, playTarget } from "./official";
+import { LibraryEmpty, NotInstalledCard } from "./official-ui";
 import { createDesktopShortcut } from "./shortcut";
 
 /**
@@ -38,6 +40,7 @@ import { createDesktopShortcut } from "./shortcut";
 function Section({
   title,
   items,
+  extra,
   selectedId,
   actions,
   offset,
@@ -48,6 +51,8 @@ function Section({
 }: {
   title: string;
   items: InstanceSummary[];
+  /** A keyed card after the instances (the official pack's "Kurulu değil" card, LIB1). */
+  extra?: ReactNode;
   selectedId: string | undefined;
   actions: InstanceActions;
   offset: number;
@@ -87,9 +92,11 @@ function Section({
             className={cn("transition-transform duration-200", collapsed && "-rotate-90")}
           />
           {title}
-          <span className="font-sans text-[12px] font-medium text-ash-400 tabular-nums">
-            {items.length}
-          </span>
+          {items.length > 0 ? (
+            <span className="font-sans text-[12px] font-medium text-ash-400 tabular-nums">
+              {items.length}
+            </span>
+          ) : null}
         </button>
       </h2>
       <AnimatePresence initial={false} mode="popLayout">
@@ -115,6 +122,7 @@ function Section({
                   meta={meta}
                 />
               ))}
+              {extra}
             </AnimatePresence>
           </motion.div>
         )}
@@ -160,7 +168,11 @@ export function LibraryPage() {
     queryKey: ["instances"],
     queryFn: () => api.instances(),
   });
-  const selectedId = usePrefs((s) => s.selectedInstanceId) ?? instances?.[0]?.id;
+  // Whether the official pack is there, or was deleted (LIB1: the library offers it again).
+  const { data: officialStatus } = useQuery(officialStatusQuery);
+  // The card OYNA starts, as the command bar picks it (a deleted selection falls to the first).
+  const chosenId = usePrefs((s) => s.selectedInstanceId);
+  const selectedId = playTarget(instances ?? [], chosenId)?.id;
   const selectInstance = usePrefs((s) => s.selectInstance);
   const play = useLaunch((s) => s.play);
   const sort = useLibraryView((s) => s.sort);
@@ -190,6 +202,9 @@ export function LibraryPage() {
   }, [instances]);
 
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["instances"] });
+  // A deletion or its "Geri al" may take the official pack away or bring it back.
+  const invalidateOfficial = () =>
+    void queryClient.invalidateQueries({ queryKey: ["official-status"] });
   const duplicate = useMutation({
     mutationFn: (i: InstanceSummary) => api.duplicateInstance(i.id),
     onSuccess: (copy) => {
@@ -203,6 +218,7 @@ export function LibraryPage() {
     try {
       const back = await api.restoreInstance(trashId);
       invalidate();
+      invalidateOfficial();
       toast.success(t("instance.trash.restored", { name: back.name }));
     } catch (error) {
       showError(error);
@@ -212,6 +228,7 @@ export function LibraryPage() {
     mutationFn: (i: InstanceSummary) => api.deleteInstance(i.id),
     onSuccess: (trashId, i) => {
       invalidate();
+      invalidateOfficial();
       void queryClient.invalidateQueries({ queryKey: ["cleanup-trash"] });
       toast(t("library.deleted", { name: i.name }), {
         duration: 9000,
@@ -264,8 +281,18 @@ export function LibraryPage() {
     }))
     .filter((g) => g.items.length > 0);
   const ungrouped = mine.filter((i) => !i.group);
-  const sections = [
-    { key: "official", title: t("library.official"), items: official },
+  // No instance left: the empty state. Only the official pack gone: its quiet card where it was.
+  const offer = libraryOffer(instances, officialStatus, searching);
+  const sections: { key: string; title: string; items: InstanceSummary[]; extra?: ReactNode }[] = [
+    {
+      key: "official",
+      title: t("library.official"),
+      items: official,
+      extra:
+        offer === "official" ? (
+          <NotInstalledCard key="official-offer" pack={officialStatus?.pack} index={0} />
+        ) : null,
+    },
     ...groups,
     {
       key: "ungrouped",
@@ -344,22 +371,7 @@ export function LibraryPage() {
               </Button>
             }
           />
-        ) : instances && instances.length === 0 ? (
-          <EmptyState
-            illustration={emptyArt}
-            title={t("library.empty.title")}
-            body={t("library.empty.body")}
-            action={
-              <Button
-                variant="primary"
-                icon={<Plus size={16} weight="bold" />}
-                onClick={() => setCreateOpen(true)}
-              >
-                {t("library.empty.action")}
-              </Button>
-            }
-          />
-        ) : filtered.length === 0 ? (
+        ) : (instances?.length ?? 0) > 0 && filtered.length === 0 ? (
           <div className="flex flex-col items-center gap-3 pt-10 text-center">
             <p className="text-ash-400">{t("library.noResults")}</p>
             <Button variant="ghost" size="sm" onClick={() => setQuery("")}>
@@ -367,30 +379,39 @@ export function LibraryPage() {
             </Button>
           </div>
         ) : (
-          // Searching swaps the groups in place (keyed by the query: no fades and glides while
-          // typing, as in the mods tab and the mod center). Without a new query, a group that
-          // empties (its last card removed) fades out and the ones below glide up (popLayout).
-          <AnimatePresence key={query.trim()} initial={false} mode="popLayout">
-            {sections
-              .filter((section) => section.items.length > 0)
-              .map((section) => {
-                const start = offset;
-                offset += section.items.length;
-                return (
-                  <Section
-                    key={section.key}
-                    title={section.title}
-                    items={section.items}
-                    selectedId={selectedId}
-                    actions={actions}
-                    offset={start}
-                    collapsed={!searching && collapsed.includes(section.key)}
-                    onToggle={() => toggleSection(section.key)}
-                    meta={sort === "playTime" ? "playTime" : "lastPlayed"}
-                  />
-                );
-              })}
-          </AnimatePresence>
+          <>
+            {/* Searching swaps the groups in place (keyed by the query: no fades and glides while
+                typing, as in the mods tab and the mod center). Without a new query, a group that
+                empties (its last card removed) fades out and the ones below glide up (popLayout). */}
+            <AnimatePresence key={query.trim()} initial={false} mode="popLayout">
+              {sections
+                .filter((section) => section.items.length > 0 || section.extra)
+                .map((section) => {
+                  const start = offset;
+                  offset += section.items.length;
+                  return (
+                    <Section
+                      key={section.key}
+                      title={section.title}
+                      items={section.items}
+                      extra={section.extra}
+                      selectedId={selectedId}
+                      actions={actions}
+                      offset={start}
+                      collapsed={!searching && collapsed.includes(section.key)}
+                      onToggle={() => toggleSection(section.key)}
+                      meta={sort === "playTime" ? "playTime" : "lastPlayed"}
+                    />
+                  );
+                })}
+            </AnimatePresence>
+            {/* The last card leaves first; then the empty state fades in where the list was. */}
+            <AnimatePresence initial={false}>
+              {offer === "empty" ? (
+                <LibraryEmpty key="empty" onCreate={() => setCreateOpen(true)} />
+              ) : null}
+            </AnimatePresence>
+          </>
         )}
       </div>
 
@@ -406,7 +427,12 @@ export function LibraryPage() {
         open={Boolean(pendingDelete)}
         onOpenChange={(open) => !open && setPendingDelete(null)}
         title={t("library.deleteConfirm.title", { name: pendingDelete?.name ?? "" })}
-        description={t("library.deleteConfirm.body")}
+        // The last official instance: what happens and that the pack can come back (LIB1).
+        description={
+          pendingDelete && deletesLastOfficial(instances ?? [], officialStatus, pendingDelete.id)
+            ? t("lib1.deleteOfficial")
+            : t("library.deleteConfirm.body")
+        }
         closeLabel={t("common.close")}
         width={440}
         footer={

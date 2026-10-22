@@ -4,6 +4,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useAfkWatch } from "@/features/afk/use-afk-watch";
+import { officialStatusQuery, playTarget, useOfficialOffer } from "@/features/library/official";
 import { useSocialUi } from "@/features/social/store";
 import { api, type DeepLink } from "@/lib/api";
 import { readStartOnBoot } from "@/lib/autostart";
@@ -24,17 +25,19 @@ async function playInstance(id: string) {
   await useLaunch.getState().play(id);
 }
 
-/** Plays the selected instance, falling back to the Projects instance. */
+/**
+ * Plays what OYNA would (the selected instance, else the first). With nothing to play it opens
+ * OYNA's offer ("Hiç kurulum yok", "Kur ve oyna"): nothing is made behind the player's back (LIB1).
+ */
 async function playPreferred() {
   const prefs = usePrefs.getState();
   const instances = await api.instances();
-  let id = instances.some((i) => i.id === prefs.selectedInstanceId)
-    ? prefs.selectedInstanceId
-    : null;
+  const id = playTarget(instances, prefs.selectedInstanceId)?.id;
   if (!id) {
-    id = (await api.ensureOfficialInstance()).id;
-    prefs.selectInstance(id);
+    useOfficialOffer.getState().show({ kind: "play" });
+    return;
   }
+  prefs.selectInstance(id);
   await useLaunch.getState().play(id);
 }
 
@@ -84,19 +87,16 @@ export function useDesktopEvents() {
 
   // When the server publishes its pack, the Projects instance starts following it. The welcome
   // flow creates that instance itself and says so, so nothing is announced before it ends (its
-  // status query fills this cache too).
-  const { data: official } = useQuery({
-    queryKey: ["official-status"],
-    queryFn: () => api.officialStatus(),
-    enabled: onboarded,
-    staleTime: 5 * 60_000,
-  });
+  // status query fills this cache too). Once the player deleted it, it stays deleted (LIB1): the
+  // library offers it again instead.
+  const { data: official } = useQuery({ ...officialStatusQuery, enabled: onboarded });
   useEffect(() => {
     const pack = official?.pack;
-    if (!onboarded || !pack || official.instanceId) return;
+    if (!onboarded || !pack || official.instanceId || official.removed) return;
     void api
       .ensureOfficialInstance()
       .then((instance) => {
+        if (!instance) return;
         usePrefs.getState().selectInstance(instance.id);
         void queryClient.invalidateQueries({ queryKey: ["instances"] });
         void queryClient.invalidateQueries({ queryKey: ["official-status"] });

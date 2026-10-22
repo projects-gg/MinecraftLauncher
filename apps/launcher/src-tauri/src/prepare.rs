@@ -221,6 +221,30 @@ pub async fn yield_to_launch(app: &AppHandle) {
     }
 }
 
+/// The player deletes the instance a preparation runs for (LIB1): that run stops at once and the
+/// deletion waits (briefly) until its files are closed and the instance lock is free. A run for
+/// another instance goes on.
+pub async fn yield_instance(app: &AppHandle, instance_id: &str) {
+    let Some(prepare) = app.try_state::<Prepare>() else {
+        return;
+    };
+    let running = prepare
+        .inner
+        .lock()
+        .running
+        .as_ref()
+        .filter(|run| run.instance_id == instance_id)
+        .map(|run| (run.cancel.clone(), run.ended.clone()));
+    let Some((cancel, ended)) = running else {
+        return;
+    };
+    cancel.cancel();
+    match tokio::time::timeout(YIELD_WAIT, ended.cancelled()).await {
+        Ok(()) => tracing::info!("background preparation stopped for a deletion"),
+        Err(_) => tracing::warn!("background preparation still stopping when the deletion began"),
+    }
+}
+
 /// A launch ended without starting the game (an error, a cancel, a question).
 pub fn launch_ended(app: &AppHandle) {
     trigger(app, Trigger::LaunchEnded);

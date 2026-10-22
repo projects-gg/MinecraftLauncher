@@ -439,6 +439,11 @@ export interface OfficialStatus {
   pack?: OfficialPack;
   /** The instance that follows it (or the "Projects" instance while none is published). */
   instanceId?: string;
+  /**
+   * There is none because the player deleted it (LIB1): nothing makes it again by itself; the
+   * library and OYNA offer "Resmî paketi kur".
+   */
+  removed: boolean;
 }
 
 /** Where a projects:// link or a tray action sends the user. */

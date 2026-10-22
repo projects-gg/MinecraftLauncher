@@ -22,6 +22,7 @@ import { launchErrorAction } from "@/features/disk/launch-error";
 import { helpsWithLaunchError } from "@/features/help/launch";
 import { openHelp, useHelp } from "@/features/help/store";
 import { sortInstances, useLibraryView } from "@/features/library/library-view";
+import { useOfficialOffer } from "@/features/library/official";
 import { usePrepareSync } from "@/features/prepare/use-prepare-sync";
 import { ResumeButton, useResumeTarget } from "@/features/resume/resume-button";
 import { api, type InstanceSummary } from "@/lib/api";
@@ -585,8 +586,9 @@ export function CommandBar() {
         state={state}
         onPlay={() => {
           if (selected) void play(selected.id);
-          // Nothing to play yet: OYNA leads to the one thing that helps.
-          else if (!instancesLoading) void navigate({ to: "/library", search: { create: true } });
+          // Nothing to play: the offer "Hiç kurulum yok" with "Kur ve oyna" and "Yeni kurulum"
+          // (LIB1). Never an error.
+          else if (!instancesLoading) useOfficialOffer.getState().show({ kind: "play" });
         }}
         onCancel={() => void cancel()}
         // Ctrl+Enter presses it (app-shell.tsx), only when a press starts a game.

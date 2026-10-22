@@ -360,11 +360,32 @@ export const commands = {
 } | null>("update_restart_info"),
 	officialStatus: () => typedError<OfficialStatus, CmdError>(__TAURI_INVOKE("official_status")),
 	/**
-	 *  The Projects instance, created on first use. It follows the official pack family when one
+	 *  The Projects instance, made when there is none. It follows the official pack family when one
 	 *  is published (new installs get the family's default member); until then it is vanilla on the
 	 *  newest release. Files are installed by the first launch.
+	 * 
+	 *  `install` is the player's own "Resmî paketi kur": it always makes one and forgets an earlier
+	 *  deletion. Without it (the first start, the pack watcher, the welcome flow, "Katıl", the tray,
+	 *  an import) nothing is made once the player deleted the official instance: `None` comes back
+	 *  and the page offers "Resmî paketi kur" instead (LIB1).
 	 */
-	officialInstanceEnsure: () => typedError<InstanceView, CmdError>(__TAURI_INVOKE("official_instance_ensure")),
+	officialInstanceEnsure: (install: boolean) => typedError<{
+	id: string,
+	name: string,
+	icon: string,
+	mcVersion: string,
+	loader: LoaderKind,
+	loaderVersion: string | null,
+	managed: boolean,
+	lastPlayedAt: string | null,
+	playTimeSecs: number,
+	/**  "ready" | "needsInstall" | "needsUpdate" */
+	state: string,
+	autoJoin: string | null,
+	/**  Library group (`None`: no group). */
+	group: string | null,
+	createdAt: string,
+} | null, CmdError>(__TAURI_INVOKE("official_instance_ensure", { install })),
 	/**  The link that started the app, if any (taken once). */
 	deepLinkPending: () => __TAURI_INVOKE<{ kind: "home" } | 
 /**  Start the selected instance (`projects://play`, `projects://join`). */
@@ -2416,6 +2437,11 @@ export type ImportScanView = {
 	reserveBytes: number,
 	/**  The Projects instance already has game settings of its own: they are kept. */
 	projectsHasOptions: boolean,
+	/**
+	 *  The player deleted the Projects instance (LIB1): what goes into it is not ticked by
+	 *  default, and ticking it installs the instance again.
+	 */
+	projectsRemoved: boolean,
 };
 
 /**  A kind of shared data. */
@@ -3927,6 +3953,11 @@ export type OfficialStatus = {
 	 *  published.
 	 */
 	instanceId: string | null,
+	/**
+	 *  There is no official instance because the player deleted it: nothing makes it again by
+	 *  itself; the library and OYNA offer "Resmî paketi kur" (LIB1).
+	 */
+	removed: boolean,
 };
 
 export type OldSetView = {

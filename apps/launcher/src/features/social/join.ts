@@ -1,8 +1,10 @@
 // "Katıl": start the game on projects.gg. The instance that joins projects.gg by itself is the
 // official one (or any instance whose auto-join server is on projects.gg); it is selected and
 // launched with auto-join on, whatever the general auto-join setting says. An invite from another
-// server starts the instance OYNA would start, straight into that server.
+// server starts the instance OYNA would start, straight into that server. Once the player deleted
+// the official instance nothing makes it again here: "Resmî paketi kur" is offered (LIB1).
 import { showError } from "@/features/content/jobs";
+import { officialOrOffer } from "@/features/library/official";
 import { api } from "@/lib/api";
 import i18n from "@/lib/i18n";
 import { useLaunch } from "@/stores/launch";
@@ -51,7 +53,8 @@ export async function joinServer(address: { host: string; port: number | null })
     const prefs = usePrefs.getState();
     const id =
       playInstance(await api.instances(), prefs.selectedInstanceId) ??
-      (await api.ensureOfficialInstance()).id;
+      (await officialOrOffer({ kind: "joinServer", host: address.host, port: address.port }))?.id;
+    if (!id) return;
     prefs.selectInstance(id);
     await launch.play(id, {
       autoJoin: false,
@@ -69,7 +72,8 @@ async function join(): Promise<void> {
   const target =
     instances.find((i) => i.managed && isProjectsHost(i.autoJoin)) ??
     instances.find((i) => isProjectsHost(i.autoJoin)) ??
-    (await api.ensureOfficialInstance());
+    (await officialOrOffer({ kind: "join" }));
+  if (!target) return;
   usePrefs.getState().selectInstance(target.id);
   await launch.play(target.id, { autoJoin: true });
 }

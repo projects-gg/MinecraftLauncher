@@ -7,8 +7,8 @@
 use std::sync::Arc;
 
 use pl_import::{
-    ImportProgress, ImportReport, ImportRequest, ImportSource, Locations, OfficialTarget,
-    RunContext, SourceMeasure,
+    ImportProgress, ImportReport, ImportRequest, ImportShared, ImportSource, Locations,
+    OfficialTarget, RunContext, SourceMeasure,
 };
 use pl_lang::pick;
 use serde::Serialize;
@@ -45,6 +45,9 @@ pub struct ImportScanView {
     pub reserve_bytes: u64,
     /// The Projects instance already has game settings of its own: they are kept.
     pub projects_has_options: bool,
+    /// The player deleted the Projects instance (LIB1): what goes into it is not ticked by
+    /// default, and ticking it installs the instance again.
+    pub projects_removed: bool,
 }
 
 /// The Projects instance without asking the network (the scan must stay quick).
@@ -68,6 +71,10 @@ pub async fn import_scan(state: State<'_, AppState>) -> CmdResult<ImportScanView
     let projects_game = projects_instance(&state)
         .await
         .and_then(|id| state.instances.game_dir(&id).ok());
+    let projects_removed = projects_game.is_none()
+        && pl_mc::instance::OfficialChoice::load(&state.root)
+            .await
+            .removed();
     tauri::async_runtime::spawn_blocking(move || {
         let imported = pl_import::imported_profiles(&instances_root);
         let sources = pl_import::scan(&locations(), &imported);
@@ -80,6 +87,7 @@ pub async fn import_scan(state: State<'_, AppState>) -> CmdResult<ImportScanView
             free_bytes: fs4::available_space(&data_root).ok(),
             reserve_bytes: RESERVE_BYTES,
             projects_has_options: projects_game.is_some_and(|dir| dir.join("options.txt").is_file()),
+            projects_removed,
         }
     })
     .await
@@ -157,15 +165,27 @@ pub async fn import_start(
     }
     let job = start_job(&app, &job_id);
 
-    // Shared data goes into the Projects instance (made now when it is not there yet).
+    // Shared data goes into the Projects instance (made now when it is not there yet). Once the
+    // player deleted it, only an item that goes into it makes it again (LIB1: such items are not
+    // ticked by default then, so the player asked); worlds alone go to their versions' instances.
+    let into_projects = request
+        .sources
+        .iter()
+        .any(|s| s.shared.iter().any(|kind| *kind != ImportShared::Worlds));
     let official = if request.sources.iter().any(|s| !s.shared.is_empty()) {
-        match crate::commands::official::official_instance_ensure(state.clone()).await {
-            Ok(view) => Some(OfficialTarget {
-                id: view.id,
-                name: view.name,
-                minecraft: view.mc_version,
-                official_pack: view.managed,
+        match crate::commands::official::ensure_official(&state, into_projects).await {
+            Ok(Some(instance)) => Some(OfficialTarget {
+                official_pack: instance.managed_pack.is_some(),
+                id: instance.id,
+                name: instance.name,
+                minecraft: instance.mc_version,
             }),
+            Ok(None) => {
+                tracing::info!(
+                    "the player deleted the Projects instance; worlds go to their versions' instances"
+                );
+                None
+            }
             Err(error) => {
                 tracing::warn!(
                     ?error,

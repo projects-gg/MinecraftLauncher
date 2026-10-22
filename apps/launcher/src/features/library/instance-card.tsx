@@ -202,11 +202,12 @@ export function InstanceCard({
                         },
                       ]),
                   null,
+                  // Every instance can go, the official pack and its copies too (LIB1): the trash
+                  // keeps it 30 days and the library offers the pack again.
                   {
                     label: t("library.actions.delete"),
                     icon: <Trash size={16} />,
                     danger: true,
-                    disabled: instance.managed,
                     onSelect: () => actions.remove(instance),
                   },
                 ]}

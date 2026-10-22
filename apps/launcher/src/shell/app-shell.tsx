@@ -6,6 +6,7 @@ import { DropHost } from "@/features/drop/drop-host";
 import { EventReminders } from "@/features/home/event-reminders";
 import { ImportHost } from "@/features/import/import-host";
 import { JavaPromptDialog } from "@/features/java/java-prompt";
+import { OfficialOfferDialog } from "@/features/library/official-ui";
 import { ScreenshotNotice } from "@/features/library/screenshot-notice";
 import { MigrationDialog } from "@/features/migrate/migration-dialog";
 import { ModFlowDialog } from "@/features/modhealth/flow-dialog";
@@ -145,6 +146,8 @@ export function AppShell() {
       <MandatoryUpdate />
       <MigrationDialog open={migrationOpen} onOpenChange={setMigrationOpen} />
       <ImportHost onboarding={onboarding} />
+      {/* "Resmî paketi kur" when an action needed the deleted official pack (LIB1). */}
+      <OfficialOfferDialog />
       <NewsReader
         newsId={newsId}
         onClose={() =>

@@ -50,6 +50,11 @@ export interface SharedRow {
   /** Unknown until the source is measured. */
   bytes?: number;
   state: RowState;
+  /**
+   * The player deleted the Projects instance and this goes into it: ticking it installs the
+   * instance again, so it starts unticked (LIB1). Worlds go to their versions' instances.
+   */
+  bringsProjects?: boolean;
 }
 
 export interface ProfileRow {
@@ -144,6 +149,7 @@ export function rowsOf(
         count: sharedCount(source, kind),
         bytes: sharedBytes(kind, measure),
         state: kind === "options" && scan.projectsHasOptions ? "kept" : "ready",
+        ...(scan.projectsRemoved && kind !== "worlds" ? { bringsProjects: true } : {}),
       }),
     );
     const profiles: ProfileRow[] = source.profiles.map((profile) => {
@@ -177,8 +183,9 @@ const weighty = (row: ImportRow) =>
 
 /**
  * The ticks a screen starts with: everything that can come over, except rows over
- * [`LARGE_BYTES`] and profiles past the first [`FIRST_PROFILES`] of each launcher. When the
- * free space (less the reserve) is known and the ticks do not fit, the biggest rows go first.
+ * [`LARGE_BYTES`], profiles past the first [`FIRST_PROFILES`] of each launcher and what would
+ * bring back a Projects instance the player deleted. When the free space (less the reserve) is
+ * known and the ticks do not fit, the biggest rows go first.
  */
 export function defaultTicks(
   rows: SourceRows[],
@@ -188,7 +195,9 @@ export function defaultTicks(
   const ticks = new Set<RowKey>();
   for (const source of rows) {
     for (const row of source.shared) {
-      if (row.state === "ready" && (row.bytes ?? 0) <= LARGE_BYTES) ticks.add(row.key);
+      if (row.state === "ready" && !row.bringsProjects && (row.bytes ?? 0) <= LARGE_BYTES) {
+        ticks.add(row.key);
+      }
     }
     source.profiles
       .filter((row) => row.state === "ready")

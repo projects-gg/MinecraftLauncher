@@ -145,8 +145,13 @@ export interface LauncherApi {
   legacyScan(): Promise<LegacyScan>;
   legacyImport(request: LegacyImportRequest): Promise<LegacyImportReport>;
   officialStatus(): Promise<OfficialStatus>;
-  /** The Projects instance, created on first use (files install on the first launch). */
-  ensureOfficialInstance(): Promise<InstanceSummary>;
+  /**
+   * The Projects instance, made when there is none (files install on the first launch), unless
+   * the player deleted it: then `null`, and the caller offers "Resmî paketi kur" (LIB1).
+   */
+  ensureOfficialInstance(): Promise<InstanceSummary | null>;
+  /** "Resmî paketi kur": the Projects instance, made now even after the player deleted it. */
+  installOfficialInstance(): Promise<InstanceSummary>;
   /** New content arrived in the background. Returns an unsubscribe function. */
   onContentChanged(listener: () => void): () => void;
   /** Whether the last content refresh reached the servers (the home screen's offline strip). */

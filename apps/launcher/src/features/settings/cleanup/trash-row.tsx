@@ -87,6 +87,8 @@ export function TrashRow() {
     onSuccess: (name, entry) => {
       if (entry.kind === "instance") {
         void queryClient.invalidateQueries({ queryKey: ["instances"] });
+        // The official pack put back: the library stops offering it (LIB1).
+        void queryClient.invalidateQueries({ queryKey: ["official-status"] });
         toast.success(t(`${c}.instanceRestored`, { name: name ?? entry.item.name }));
       } else if (entry.kind === "file") {
         toast.success(t("instance.trash.restored", { name: entryName(entry) }));

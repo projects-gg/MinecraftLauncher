@@ -232,12 +232,19 @@ pub async fn instance_delete(
     {
         return Err(busy("the game of this instance is running"));
     }
+    // The launcher's own background download of it stops first (LIB1): the player never started
+    // it, so it is no reason to refuse.
+    crate::prepare::yield_instance(&app, &id).await;
     // A launch being prepared, a mod change or an install holds the instance: never move the
     // folder under it.
     let lock = crate::commands::modrinth::instance_lock(&app, &id);
     let Ok(_guard) = lock.try_lock() else {
         return Err(busy("the instance is busy"));
     };
+    // Every instance can go, the official one too; deleting the last official instance is
+    // remembered, so nothing makes it again by itself (LIB1). Until it is recorded, nothing
+    // creates the official instance.
+    let official = crate::commands::official::begin_deletion(&state).await;
     let trash = crate::commands::library::launcher_trash(&state);
     let entry = state
         .instances
@@ -252,6 +259,7 @@ pub async fn instance_delete(
             ),
         })?;
     tracing::info!(instance = %id, trash = %entry.id, "instance moved to the launcher trash");
+    official.record(&state).await;
     crate::commands::library::purge_trash_later(trash);
     Ok(entry.id)
 }
@@ -281,6 +289,8 @@ pub async fn instance_restore(
             )
         })?;
     tracing::info!(instance = %restored.id, "instance restored from the launcher trash");
+    // The official instance put back is as before: its deletion is forgotten.
+    crate::commands::official::instance_restored(&state).await;
     Ok(view(&state, &restored))
 }
 

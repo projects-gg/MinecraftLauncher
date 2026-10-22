@@ -712,10 +712,17 @@ export const tauriApi: LauncherApi = {
     return {
       pack: s.pack ? { ...s.pack, summary: s.pack.summary ?? undefined } : undefined,
       instanceId: s.instanceId ?? undefined,
+      removed: s.removed,
     };
   },
   async ensureOfficialInstance() {
-    return instance(await ok(commands.officialInstanceEnsure()));
+    const made = await ok(commands.officialInstanceEnsure(false));
+    return made ? instance(made) : null;
+  },
+  async installOfficialInstance() {
+    const made = await ok(commands.officialInstanceEnsure(true));
+    if (!made) throw new Error("the official instance was not made");
+    return instance(made);
   },
   onContentChanged(listener) {
     const unlisten = listen("content-changed", () => listener());
