@@ -7,6 +7,7 @@ import { trCrewWave2 } from "./tr-crew-wave2";
 import { trCrews } from "./tr-crews";
 import { trDisk } from "./tr-disk";
 import { trEventJoin } from "./tr-event-join";
+import { trFix2 } from "./tr-fix2";
 import { trFps } from "./tr-fps";
 import { trFriendGroups } from "./tr-friend-groups";
 import { trFriendMenus } from "./tr-friend-menus";
@@ -75,6 +76,7 @@ export const tr = {
   crewWave2: trCrewWave2,
   overlay: trOverlay,
   lib1: trLib1,
+  fix2: trFix2,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
