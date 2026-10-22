@@ -759,8 +759,8 @@ function CrewCard({
   const anniversary = crewAnniversary(team.createdOn, new Date());
   const together = togetherTime(team.togetherWeek ?? 0);
   // The crew's own menu on a right click, as on its header in the friend list (FIX2); it is on
-  // screen already, so no "Ekibi aç".
-  const items = useCrewItems(team, { onOpen: false });
+  // screen already, so no "Ekibi aç", and its order rows move it along the rail above.
+  const items = useCrewItems(team, { onOpen: false, sideways: true });
   return (
     <div className="relative">
       <CrewWatermark look={team} />
