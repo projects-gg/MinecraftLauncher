@@ -5,10 +5,7 @@
       "file": "projects_overlay:figtree-medium.ttf",
       "size": 8.5,
       "oversample": 8.0,
-      "shift": [
-        0.0,
-        0.0
-      ],
+      "shift": [0.0, 0.0],
       "skip": ""
     },
     {

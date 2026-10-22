@@ -15,6 +15,7 @@ The font definitions are written here too, one per GUI scale: the game rasterize
 equals the GUI scale. The overlay picks the definition for the current scale (ui/Fonts.java).
 """
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -90,7 +91,16 @@ def main():
                 ]
             }
             path = FONT_DIR / f"{name}_{scale}.json"
-            path.write_text(json.dumps(definition, indent=2) + "\n", encoding="utf-8", newline="\n")
+            path.write_text(biome_style(json.dumps(definition, indent=2)) + "\n", encoding="utf-8", newline="\n")
+
+
+def biome_style(text):
+    """JSON as the repo's Biome formatter prints it: an array of numbers on one line ("shift": [0.0, 0.0])."""
+    return re.sub(
+        r"\[\s+([^\[\]{}\"]*?)\s+\]",
+        lambda m: "[" + ", ".join(v.strip() for v in m.group(1).split(",")) + "]",
+        text,
+    )
 
 
 if __name__ == "__main__":
