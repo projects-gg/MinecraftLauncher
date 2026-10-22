@@ -77,7 +77,7 @@ const live = (state: string, extra: Partial<CloudAccount["live"]> = {}): CloudAc
 describe("cloudStatus", () => {
   it("lets a hold win over the live state", () => {
     const status = cloudStatus(
-      account({ hold: { kind: "cause", cause: "wrongPassword", at: NOW - 60 } }),
+      account({ hold: { kind: "cause", cause: "wrongPassword", at: NOW - 60, row: null } }),
       NOW * 1000,
       t,
     );
@@ -91,11 +91,66 @@ describe("cloudStatus", () => {
   it("reads an unknown stop cause as a plain stop and gives no hint for a ban", () => {
     expect(causeText("somethingNew", t)).toBe(trCloudAfk.cause.other);
     const banned = cloudStatus(
-      account({ hold: { kind: "cause", cause: "banned", at: NOW } }),
+      account({ hold: { kind: "cause", cause: "banned", at: NOW, row: null } }),
       NOW * 1000,
       t,
     );
     expect(banned.hint).toBeNull();
+  });
+
+  it("says which row a stop names, counted as the settings list them", () => {
+    const view = account().config;
+    const config = {
+      ...view,
+      commands: ["c1", "c2"].map((id) => ({
+        id,
+        enabled: true,
+        on: "join",
+        delay: 2,
+        every: null,
+        at: null,
+        secret: false,
+        text: "/afk",
+        preview: null,
+        fp: null,
+      })),
+      rules: [
+        {
+          id: "r1",
+          enabled: true,
+          match: "selam",
+          regex: false,
+          from: "player",
+          ownerOnly: false,
+          cooldown: 60,
+          reply: { secret: true, text: null, preview: "******", fp: "AAAAAAAAAAAAAAAA" },
+        },
+      ],
+    };
+    const held = (cause: string, row: string | null) =>
+      cloudStatus(account({ config, hold: { kind: "cause", cause, at: NOW, row } }), NOW * 1000, t);
+    expect(held("invalidCommand", "c2")).toMatchObject({
+      signal: "offline",
+      tone: "error",
+      text: "Bir satır çalıştırılamıyor: ters bölüyle başlıyor",
+      hint: "Ayarlar'da 2. komutu düzelt, sonra başlat.",
+    });
+    expect(held("invalidCommand", "r1").hint).toBe(
+      "Ayarlar'da 1. otomatik yanıtı düzelt, sonra başlat.",
+    );
+    // An older machine names no row, or a row since deleted.
+    expect(held("invalidCommand", null).hint).toBe(trCloudAfk.hint.invalidCommand);
+    expect(held("invalidCommand", "c9").hint).toBe(trCloudAfk.hint.invalidCommand);
+    expect(held("secretUnreadable", "r1")).toMatchObject({
+      text: "Durdu: Gizli komutlar okunamadı",
+      hint: "Ayarlar'da 1. otomatik yanıtı yeniden yaz, sonra başlat.",
+    });
+    expect(held("secretUnreadable", null).hint).toBe(trCloudAfk.hint.secretUnreadable);
+    // A cause this launcher does not know yet reads as a plain stop.
+    expect(held("somethingNew", "c1")).toMatchObject({
+      text: `Durdu: ${trCloudAfk.cause.other}`,
+      hint: null,
+    });
   });
 
   it("names Studio's reason of a blocked server in the player's language, the other one if empty", () => {
@@ -165,7 +220,9 @@ describe("cloudPrimary", () => {
     expect(cloudPrimary(account())).toBe("stop");
     expect(cloudPrimary(account({ desired: "stop", live: live("stopped") }))).toBe("start");
     expect(
-      cloudPrimary(account({ hold: { kind: "cause", cause: "wrongPassword", at: NOW } })),
+      cloudPrimary(
+        account({ hold: { kind: "cause", cause: "wrongPassword", at: NOW, row: null } }),
+      ),
     ).toBe("start");
     expect(cloudPrimary(account({ hold: { kind: "paused", mode: "paused" } }))).toBe("stop");
   });

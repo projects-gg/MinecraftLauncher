@@ -2228,12 +2228,14 @@ export type CloudHold_Deserialize =
 } }) & { cause?: never; expired?: never; no_host?: never; other?: never; paused?: never; restricted?: never; suspended?: never } | 
 /**
  *  The client stopped for good: `cause` is a stop cause of the contract (pl-afk's names plus
- *  the cloud's own), kept as text.
+ *  the cloud's own, [`CLOUD_CAUSES`]), kept as text so a newer one still reads. `row`: with
+ *  `secretUnreadable` and `invalidCommand`, the row to write again, when the machine named it.
  */
 ({ cause: {
 	kind: "cause",
 	cause: string,
 	at: number,
+	row?: string | null,
 } }) & { expired?: never; no_host?: never; other?: never; paused?: never; restricted?: never; server_blocked?: never; suspended?: never } | ({ other: {
 	kind: string,
 } }) & { cause?: never; expired?: never; no_host?: never; paused?: never; restricted?: never; server_blocked?: never; suspended?: never };
@@ -2244,18 +2246,19 @@ export type CloudHold_Deserialize =
  */
 export type CloudHold_Serialize = 
 /**  Staff stopped it; `reason` is a reason key. */
-({ kind: "suspended"; until: number | null; reason: string }) & { at?: never; cause?: never; mode?: never; since?: never } | 
+({ kind: "suspended"; until: number | null; reason: string }) & { at?: never; cause?: never; mode?: never; row?: never; since?: never } | 
 /**  The player is banned from Cloud AFK. */
-({ kind: "restricted"; until: number | null }) & { at?: never; cause?: never; mode?: never; reason?: never; since?: never } | ({ kind: "expired"; at: number }) & { cause?: never; mode?: never; reason?: never; since?: never; until?: never } | 
+({ kind: "restricted"; until: number | null }) & { at?: never; cause?: never; mode?: never; reason?: never; row?: never; since?: never } | ({ kind: "expired"; at: number }) & { cause?: never; mode?: never; reason?: never; row?: never; since?: never; until?: never } | 
 /**  The service is not on (`paused` or `off`). */
-({ kind: "paused"; mode: string }) & { at?: never; cause?: never; reason?: never; since?: never; until?: never } | 
+({ kind: "paused"; mode: string }) & { at?: never; cause?: never; reason?: never; row?: never; since?: never; until?: never } | 
 /**  No machine yet, or its machine is disabled. */
-({ kind: "no_host"; since: number }) & { at?: never; cause?: never; mode?: never; reason?: never; until?: never } | ({ kind: "server_blocked"; reason: CloudLocalized | null }) & { at?: never; cause?: never; mode?: never; since?: never; until?: never } | 
+({ kind: "no_host"; since: number }) & { at?: never; cause?: never; mode?: never; reason?: never; row?: never; until?: never } | ({ kind: "server_blocked"; reason: CloudLocalized | null }) & { at?: never; cause?: never; mode?: never; row?: never; since?: never; until?: never } | 
 /**
  *  The client stopped for good: `cause` is a stop cause of the contract (pl-afk's names plus
- *  the cloud's own), kept as text.
+ *  the cloud's own, [`CLOUD_CAUSES`]), kept as text so a newer one still reads. `row`: with
+ *  `secretUnreadable` and `invalidCommand`, the row to write again, when the machine named it.
  */
-({ kind: "cause"; cause: string; at: number }) & { mode?: never; reason?: never; since?: never; until?: never } | ({ kind: "other" }) & { at?: never; cause?: never; mode?: never; reason?: never; since?: never; until?: never };
+({ kind: "cause"; cause: string; at: number; row: string | null }) & { mode?: never; reason?: never; since?: never; until?: never } | ({ kind: "other" }) & { at?: never; cause?: never; mode?: never; reason?: never; row?: never; since?: never; until?: never };
 
 /**
  *  Where a problem is and what it is. `place` is `general`, `commands` or `rules`; `index` the

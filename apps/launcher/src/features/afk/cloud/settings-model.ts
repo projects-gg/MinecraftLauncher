@@ -218,6 +218,45 @@ export function localIssues(
   return issues;
 }
 
+/** What the settings say at the row a stop names: the cause's own refusal. */
+const HELD: Record<string, string> = {
+  invalidCommand: "backslash",
+  secretUnreadable: "unreadable",
+};
+
+/**
+ * The row the machine stopped the account on (the hold's `row`), marked while its words are the
+ * stored ones; `invalidCommand` only while the row is on (the machine runs only those). It never
+ * blocks saving: the stored words may be fixed already, the stop lasts until the next start.
+ */
+export function heldIssue(view: CloudEditData, draft: Draft): Issue | null {
+  const hold = view.account.hold;
+  if (hold?.kind !== "cause" || !hold.row) return null;
+  const problem = HELD[hold.cause];
+  if (!problem) return null;
+  const row = hold.row;
+  const same = (a: Words, b: Words | undefined) => JSON.stringify(a) === JSON.stringify(b);
+  const commandAt = draft.config.commands.findIndex((c) => c.id === row);
+  const command = draft.config.commands[commandAt];
+  if (command) {
+    const stored = view.config.commands.find((c) => c.id === row)?.words;
+    const runs = command.enabled || hold.cause !== "invalidCommand";
+    return runs && same(command.words, stored)
+      ? { place: "commands", index: commandAt, field: "text", problem }
+      : null;
+  }
+  const ruleAt = draft.config.rules.findIndex((r) => r.id === row);
+  const rule = draft.config.rules[ruleAt];
+  if (rule) {
+    const stored = view.config.rules.find((r) => r.id === row)?.reply;
+    const runs = rule.enabled || hold.cause !== "invalidCommand";
+    return runs && same(rule.reply, stored)
+      ? { place: "rules", index: ruleAt, field: "reply", problem }
+      : null;
+  }
+  return null;
+}
+
 /** The text key of an issue (`cloudAfk.settings.issues.<key>`). */
 export function issueKey(issue: Issue): string {
   const { field, problem } = issue;
@@ -265,6 +304,7 @@ export function issueKey(issue: Issue): string {
         "empty",
         "length",
         "unicode",
+        "unreadable",
         "space",
         "control",
         "backslash",

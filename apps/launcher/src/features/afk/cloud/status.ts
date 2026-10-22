@@ -28,6 +28,7 @@ const CAUSES = [
   "loginTimeout",
   "unsupportedVersion",
   "secretUnreadable",
+  "invalidCommand",
   "crashLoop",
   "forbiddenTarget",
 ];
@@ -41,6 +42,24 @@ export function causeText(cause: string, t: TFunction): string {
 
 function hintText(key: string, t: TFunction): string | null {
   return HINTS.includes(key) ? t(`cloudAfk.hint.${key}`) : null;
+}
+
+/**
+ * The hint of a stop that names its row (`invalidCommand`, `secretUnreadable`; older machines name
+ * none): which command or auto-reply to fix, counted as the settings list them.
+ */
+function rowHint(
+  account: CloudAccount,
+  cause: "invalidCommand" | "secretUnreadable",
+  row: string | null,
+  t: TFunction,
+): string {
+  const kind = cause === "invalidCommand" ? "invalid" : "unreadable";
+  const command = row === null ? -1 : account.config.commands.findIndex((c) => c.id === row);
+  if (command >= 0) return t(`cloudAfk.hint.${kind}CommandRow`, { n: command + 1 });
+  const rule = row === null ? -1 : account.config.rules.findIndex((r) => r.id === row);
+  if (rule >= 0) return t(`cloudAfk.hint.${kind}ReplyRow`, { n: rule + 1 });
+  return t(`cloudAfk.hint.${cause}`);
 }
 
 /** Studio's Turkish or English words, the other language when one is empty. */
@@ -103,11 +122,21 @@ export function cloudStatus(
         );
       }
       case "cause":
+        if (hold.cause === "invalidCommand") {
+          return still(
+            "offline",
+            t("cloudAfk.state.invalidCommand"),
+            "error",
+            rowHint(account, hold.cause, hold.row ?? null, t),
+          );
+        }
         return still(
           "offline",
           t("cloudAfk.state.stoppedBecause", { reason: causeText(hold.cause, t) }),
           "error",
-          hintText(hold.cause, t),
+          hold.cause === "secretUnreadable"
+            ? rowHint(account, hold.cause, hold.row ?? null, t)
+            : hintText(hold.cause, t),
         );
       default:
         // A hold this launcher does not know yet: the most generic words of its kind.

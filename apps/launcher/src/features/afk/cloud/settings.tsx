@@ -30,6 +30,7 @@ import { isFriendly } from "../errors";
 import { type CloudAccount, type CloudEditData, cloudApi } from "./api";
 import {
   type Draft,
+  heldIssue,
   type Issue,
   isDirty,
   localIssues,
@@ -75,7 +76,11 @@ function Editor({
   const queryClient = useQueryClient();
   const baseline = useMemo(() => toDraft(view), [view]);
   const [draft, setDraftState] = useState<Draft>(baseline);
-  const [part, setPart] = useState<Part>("general");
+  // A stop that names a row opens the sheet on it.
+  const [part, setPart] = useState<Part>(() => {
+    const held = heldIssue(view, baseline);
+    return held ? partOf(held) : "general";
+  });
   const [submitted, setSubmitted] = useState(false);
   const [serverIssues, setServerIssues] = useState<Issue[]>([]);
   const [failure, setFailure] = useState<{ message: string; error: unknown } | null>(null);
@@ -111,6 +116,9 @@ function Editor({
       : [];
     return [...own, ...reseal, ...serverIssues];
   }, [draft, submitted, serverIssues, view]);
+  // Shown with the rest, never blocking: see heldIssue.
+  const held = heldIssue(view, draft);
+  const shown = held ? [...issues, held] : issues;
 
   const save = async () => {
     setSubmitted(true);
@@ -186,7 +194,7 @@ function Editor({
         ? JSON.stringify(draft.config.commands) !== JSON.stringify(baseline.config.commands)
         : JSON.stringify(draft.config.rules) !== JSON.stringify(baseline.config.rules);
 
-  const props = { draft, setDraft, view, issues };
+  const props = { draft, setDraft, view, issues: shown };
   const blocking = submitted && issues.length > 0;
   return (
     <>

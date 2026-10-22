@@ -189,7 +189,11 @@ function initialAccounts(which: Scenario): CloudAccount[] {
     }),
     account("a_3MCV7Y1KD5HS8FQ2", "Tuccar_Ali", "play.projects.gg", 0, {
       expiresAt: now + 27 * DAY,
-      hold: { kind: "cause", cause: "wrongPassword", at: now - 2 * 3_600 },
+      // `?hold=invalid`: the machine stopped it on a row that starts with a backslash.
+      hold:
+        param("hold") === "invalid"
+          ? { kind: "cause", cause: "invalidCommand", at: now - 2 * 3_600, row: "c2" }
+          : { kind: "cause", cause: "wrongPassword", at: now - 2 * 3_600, row: null },
       live: {
         state: "stopped",
         since: now - 2 * 3_600,

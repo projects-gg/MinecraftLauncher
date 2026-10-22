@@ -195,6 +195,25 @@ pub struct CloudRenewal {
     pub opens_at: i64,
 }
 
+/// The contract's stop causes: pl-afk's names (`KickCause`, `FailureReason`) and the cloud's own.
+/// `invalidCommand`: a command or rule-reply row that would run breaks the text rule's rule 4 (a
+/// `\` after only leading spaces or format characters), so the client would take it for its own
+/// command. Any other cause reads like a plain stop.
+pub const CLOUD_CAUSES: &[&str] = &[
+    "banned",
+    "notWhitelisted",
+    "wrongPassword",
+    "premiumOnly",
+    "loggedInElsewhere",
+    "alreadyConnected",
+    "loginTimeout",
+    "unsupportedVersion",
+    "secretUnreadable",
+    "invalidCommand",
+    "crashLoop",
+    "forbiddenTarget",
+];
+
 /// Why an account does not run although it is wanted (in this order of precedence). A hold this
 /// launcher does not know yet is `Other` (shown like a plain stop).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
@@ -224,10 +243,13 @@ pub enum CloudHold {
         reason: Option<CloudLocalized>,
     },
     /// The client stopped for good: `cause` is a stop cause of the contract (pl-afk's names plus
-    /// the cloud's own), kept as text.
+    /// the cloud's own, [`CLOUD_CAUSES`]), kept as text so a newer one still reads. `row`: with
+    /// `secretUnreadable` and `invalidCommand`, the row to write again, when the machine named it.
     Cause {
         cause: String,
         at: i64,
+        #[serde(default)]
+        row: Option<String>,
     },
     #[serde(other)]
     Other,
@@ -580,6 +602,34 @@ mod tests {
     }
 
     #[test]
+    fn a_stop_cause_names_its_row_and_an_unknown_one_still_reads() {
+        let hold: CloudHold = serde_json::from_str(
+            r#"{"kind": "cause", "cause": "invalidCommand", "at": 1792400000, "row": "c2"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            hold,
+            CloudHold::Cause {
+                cause: "invalidCommand".into(),
+                at: 1792400000,
+                row: Some("c2".into()),
+            }
+        );
+        assert!(CLOUD_CAUSES.contains(&"invalidCommand"));
+        // An older machine names no row; a newer cause is kept as it came.
+        let hold: CloudHold =
+            serde_json::from_str(r#"{"kind": "cause", "cause": "somethingNew", "at": 5}"#).unwrap();
+        assert_eq!(
+            hold,
+            CloudHold::Cause {
+                cause: "somethingNew".into(),
+                at: 5,
+                row: None,
+            }
+        );
+    }
+
+    #[test]
     fn reads_an_account_of_the_contract() {
         let json = r#"{
           "id": "a_7KQ2MZ3P9TW4XB1C", "name": "Ahmet_AFK",
@@ -611,7 +661,8 @@ mod tests {
             account.hold,
             Some(CloudHold::Cause {
                 cause: "wrongPassword".into(),
-                at: 1792400000
+                at: 1792400000,
+                row: None,
             })
         );
         assert_eq!(account.live.retry_at, Some(1792400020));

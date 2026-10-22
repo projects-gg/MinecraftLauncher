@@ -6,6 +6,7 @@ import type { CloudAccount, CloudEditData } from "./api";
 import { looksSensitive } from "./sensitive";
 import {
   type Draft,
+  heldIssue,
   isDirty,
   issueKey,
   localIssues,
@@ -225,6 +226,53 @@ describe("localIssues", () => {
   });
 });
 
+describe("heldIssue", () => {
+  const stopped = (cause: string, row: string | null): CloudEditData => {
+    const base = view();
+    return { ...base, account: { ...base.account, hold: { kind: "cause", cause, at: NOW, row } } };
+  };
+
+  it("marks the row a stop names while its words are the stored ones", () => {
+    const held = stopped("invalidCommand", "c2");
+    expect(heldIssue(held, toDraft(held))).toEqual({
+      place: "commands",
+      index: 1,
+      field: "text",
+      problem: "backslash",
+    });
+    const unreadable = stopped("secretUnreadable", "r1");
+    expect(heldIssue(unreadable, toDraft(unreadable))).toEqual({
+      place: "rules",
+      index: 0,
+      field: "reply",
+      problem: "unreadable",
+    });
+  });
+
+  it("lets go once the row is rewritten, turned off or gone", () => {
+    const held = stopped("invalidCommand", "c2");
+    const rewritten = toDraft(held);
+    const row = rewritten.config.commands[1];
+    if (row) row.words = { kind: "plain", text: "/afk2" };
+    expect(heldIssue(held, rewritten)).toBeNull();
+    const off = toDraft(held);
+    const second = off.config.commands[1];
+    if (second) second.enabled = false;
+    expect(heldIssue(held, off)).toBeNull();
+    const gone = toDraft(held);
+    gone.config.commands.splice(1, 1);
+    expect(heldIssue(held, gone)).toBeNull();
+  });
+
+  it("marks nothing without a row or for another cause", () => {
+    const none = stopped("invalidCommand", null);
+    expect(heldIssue(none, toDraft(none))).toBeNull();
+    const other = stopped("wrongPassword", "c1");
+    expect(heldIssue(other, toDraft(other))).toBeNull();
+    expect(heldIssue(view(), toDraft(view()))).toBeNull();
+  });
+});
+
 describe("toEdit", () => {
   it("sends only what changed", () => {
     const baseline = toDraft(view());
@@ -329,6 +377,7 @@ describe("issueKey", () => {
         "empty",
         "length",
         "unicode",
+        "unreadable",
         "space",
         "control",
         "backslash",
