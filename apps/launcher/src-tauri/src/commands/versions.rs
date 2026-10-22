@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 
-use crate::commands::modcenter::{QUICK, sync_options, sync_progress};
+use crate::commands::modcenter::{quick, sync_options, sync_progress};
 use crate::commands::modrinth::{
     JobProgressView, addon_index_path, content_error, icon_dir, instance_lock, modrinth_client,
     percent, start_job,
@@ -1049,7 +1049,7 @@ async fn sync_set(
     cancel: &CancellationToken,
 ) -> CmdResult<()> {
     let previous = PackState::load(game_dir).await.map_err(pack_error)?;
-    let plan = plan_sync(manifest, game_dir, previous.as_ref(), None, &QUICK)
+    let plan = plan_sync(manifest, game_dir, previous.as_ref(), None, &quick())
         .await
         .map_err(pack_error)?;
     if !plan.is_noop() {

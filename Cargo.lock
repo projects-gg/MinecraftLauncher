@@ -4215,6 +4215,7 @@ dependencies = [
  "pl-lang",
  "pl-mc",
  "pl-net",
+ "pl-overlay",
  "pl-social",
  "regex",
  "semver",

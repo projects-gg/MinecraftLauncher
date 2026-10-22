@@ -39,8 +39,8 @@ use serde::{Deserialize, Serialize};
 use crate::error::{Error, Result};
 use crate::fsutil::{normalize_hex, read_optional, write_durable};
 use crate::items::{
-    AdoptedChange, ItemStatus, ManualChange, PackSelection, installed_record, resolve_items,
-    resolve_with,
+    AdoptedChange, ItemStatus, LauncherItems, ManualChange, PackSelection, installed_record,
+    resolve_items, resolve_with,
 };
 use crate::model::{EnvSupport, FilePolicy, PackFile, PackItem, PackManifest, ProjectsExtension};
 use crate::path::{LAUNCHER_DIR, check_relative_path, join_relative};
@@ -134,6 +134,15 @@ impl PackState {
     /// `<game_dir>/.projects/pack-state.json`: the active set.
     pub fn path(game_dir: &Path) -> PathBuf {
         game_dir.join(LAUNCHER_DIR).join(PACK_STATE_FILE)
+    }
+
+    /// Where the last sync installed the item `id` and left it switched on (relative path), if
+    /// it did.
+    pub fn installed_item(&self, id: &str) -> Option<&str> {
+        self.files
+            .iter()
+            .find(|(_, record)| record.item.as_deref() == Some(id) && !record.disabled)
+            .map(|(path, _)| path.as_str())
     }
 
     /// Loads the active state; `None` when there is none. A corrupt file is reported and
@@ -280,6 +289,9 @@ pub struct SyncPolicy {
     /// Skip hashing files whose size matches and whose recorded hash already equals the
     /// manifest (fast repeat launches). Removals are always hashed.
     pub quick_check: bool,
+    /// The launcher settings that own their pack items ("Oyun içi katman"); every sync applies
+    /// them, so a sync that does not pass the player's must not run.
+    pub items: LauncherItems,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
@@ -683,7 +695,13 @@ pub async fn plan_sync(
     let reset = looks_wiped(game_dir, prev, &disk).await;
     let mut adoption = adopt(ext, prev, selection, &disk, reset);
 
-    let resolution = resolve_with(manifest, previous, selection, &adoption.choices);
+    let resolution = resolve_with(
+        manifest,
+        previous,
+        selection,
+        &adoption.choices,
+        &policy.items,
+    );
     let enabled_items: HashSet<&str> = resolution
         .items
         .iter()
@@ -847,6 +865,7 @@ pub async fn plan_sync(
                 });
                 if reason == KeepReason::UserModified
                     && let Some(id) = &item
+                    && !LauncherItems::owns(id)
                 {
                     // Tell the player once, when the replaced file first shows up.
                     let known = previous_of(&file.path).map(|record| record.modified);
@@ -1114,7 +1133,8 @@ async fn looks_wiped(game_dir: &Path, prev: &PackState, disk: &HashMap<String, S
 
 /// Item choices the disk shows: files the last sync installed that the player deleted or
 /// disabled switch their item off, a kept disabled copy renamed back switches it on. Items
-/// the selection names are the player's explicit choice and are skipped.
+/// the selection names are the player's explicit choice and are skipped, and so are the items a
+/// launcher setting owns (its switch is their one place).
 fn adopt(
     ext: &ProjectsExtension,
     prev: &PackState,
@@ -1123,7 +1143,11 @@ fn adopt(
     reset: bool,
 ) -> Adoption {
     let mut adoption = Adoption::default();
-    for item in ext.items.iter().filter(|item| !item.library) {
+    for item in ext
+        .items
+        .iter()
+        .filter(|item| !item.library && !LauncherItems::owns(&item.id))
+    {
         if selection.is_some_and(|s| s.items.contains_key(&item.id)) {
             continue;
         }
@@ -1882,6 +1906,7 @@ mod tests {
             &SyncPolicy {
                 repair: true,
                 quick_check: false,
+                ..SyncPolicy::default()
             },
         )
         .await
@@ -2009,6 +2034,7 @@ mod tests {
         let quick = SyncPolicy {
             repair: false,
             quick_check: true,
+            ..SyncPolicy::default()
         };
         let plan = plan_sync(&m, game, Some(&previous), None, &quick)
             .await
@@ -2757,6 +2783,171 @@ mod tests {
             paths(&back.downloads),
             [("mods/zoom.jar", DownloadAction::Add)]
         );
+    }
+
+    #[tokio::test]
+    async fn the_overlay_item_follows_its_switch_on_every_sync() {
+        use crate::items::OVERLAY_ITEM;
+
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        let m = item_manifest("mods/sodium.jar", &[(OVERLAY_ITEM, true)]);
+        let on = SyncPolicy::default();
+        let off = SyncPolicy {
+            items: LauncherItems { overlay: false },
+            ..SyncPolicy::default()
+        };
+        let jar = format!("mods/{OVERLAY_ITEM}.jar");
+        // Off from the first sync: never downloaded, nothing recorded.
+        let first = plan_sync(&m, game, None, None, &off).await.unwrap();
+        assert!(!first.downloads.iter().any(|d| d.path == jar));
+        assert!(!first.next_state.items.contains_key(OVERLAY_ITEM));
+        let state = installed(
+            game,
+            &first,
+            &[
+                ("mods/fabric-api.jar", b"fabric"),
+                ("mods/sodium.jar", b"sodium"),
+                ("config/sodium.json", b"{}"),
+            ],
+        );
+
+        // On: installed by the next sync, never new, never a choice.
+        let plan = plan_sync(&m, game, Some(&state), None, &on).await.unwrap();
+        assert_eq!(
+            paths(&plan.downloads),
+            [(jar.as_str(), DownloadAction::Add)]
+        );
+        let overlay = status(&plan, OVERLAY_ITEM);
+        assert!(overlay.effectively_enabled && !overlay.is_new && !overlay.selected);
+        assert!(!plan.next_state.items.contains_key(OVERLAY_ITEM));
+        let state = installed(game, &plan, &[(jar.as_str(), OVERLAY_ITEM.as_bytes())]);
+        assert_eq!(state.installed_item(OVERLAY_ITEM), Some(jar.as_str()));
+
+        // Deleted by hand while on: it comes back and nothing is adopted.
+        std::fs::remove_file(game.join(&jar)).unwrap();
+        let again = plan_sync(&m, game, Some(&state), None, &on).await.unwrap();
+        assert!(again.downloads.iter().any(|d| d.path == jar));
+        assert!(again.adopted.is_empty() && again.next_state.manual.is_empty());
+        write(game, &jar, OVERLAY_ITEM.as_bytes());
+
+        // Off again: removed, and nothing to tell about it.
+        let removed = plan_sync(&m, game, Some(&state), None, &off).await.unwrap();
+        assert_eq!(deleted(&removed), [jar.as_str()]);
+        assert!(removed.adopted.is_empty());
+        assert!(removed.next_state.installed_item(OVERLAY_ITEM).is_none());
+
+        // The mod center's selection never brings it back.
+        let picked = plan_sync(
+            &m,
+            game,
+            Some(&state),
+            Some(&select(&[(OVERLAY_ITEM, true)])),
+            &off,
+        )
+        .await
+        .unwrap();
+        assert!(!status(&picked, OVERLAY_ITEM).effectively_enabled);
+    }
+
+    /// The pack for one Minecraft version: sodium and its library, plus the overlay's jar built for
+    /// that version when there is one (Studio lists each version's own file under the same id).
+    fn version_manifest(minecraft: &str, overlay_jar: Option<&str>) -> PackManifest {
+        use crate::items::OVERLAY_ITEM;
+
+        let mut m = item_manifest("mods/sodium.jar", &[]);
+        m.dependencies.minecraft = minecraft.into();
+        if let Some(jar) = overlay_jar {
+            m.files.push(pack_file(jar, jar.as_bytes()));
+            m.projects
+                .items
+                .push(pack_item(OVERLAY_ITEM, jar, true, &["fabric-api"]));
+        }
+        m.validate().unwrap();
+        m
+    }
+
+    /// What a version switch does to the folder: `mods/` and `config/` leave with the old set.
+    fn park_folders(game: &Path) {
+        for dir in PARKED_DIRS {
+            let _ = std::fs::remove_dir_all(game.join(dir));
+        }
+    }
+
+    #[tokio::test]
+    async fn each_minecraft_version_gets_its_own_overlay_jar() {
+        use crate::items::OVERLAY_ITEM;
+
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        let on = SyncPolicy::default();
+        let base: [(&str, &[u8]); 3] = [
+            ("mods/fabric-api.jar", b"fabric"),
+            ("mods/sodium.jar", b"sodium"),
+            ("config/sodium.json", b"{}"),
+        ];
+        let with = |jar: &'static str| {
+            let mut contents = base.to_vec();
+            contents.push((jar, jar.as_bytes()));
+            contents
+        };
+
+        // 26.1.2: its own jar.
+        let jar1 = "mods/projects-overlay-0.2.0+mc26.1.2.jar";
+        let m1 = version_manifest("26.1.2", Some(jar1));
+        let plan = plan_sync(&m1, game, None, None, &on).await.unwrap();
+        assert!(plan.downloads.iter().any(|d| d.path == jar1));
+        let first = installed(game, &plan, &with(jar1));
+        assert_eq!(first.installed_item(OVERLAY_ITEM), Some(jar1));
+
+        // To 26.2 for the first time: the old jar stays with the parked set, the new one comes.
+        let jar2 = "mods/projects-overlay-0.2.0+mc26.2.jar";
+        let switch = first.switch_version("26.1.2", "26.2", None);
+        assert_eq!(switch.parked.installed_item(OVERLAY_ITEM), Some(jar1));
+        assert_eq!(switch.active.installed_item(OVERLAY_ITEM), None);
+        park_folders(game);
+        let m2 = version_manifest("26.2", Some(jar2));
+        let plan = plan_sync(&m2, game, Some(&switch.active), None, &on)
+            .await
+            .unwrap();
+        assert!(plan.downloads.iter().any(|d| d.path == jar2));
+        assert!(!plan.downloads.iter().any(|d| d.path == jar1));
+        assert!(plan.deletes.is_empty() && plan.adopted.is_empty());
+        let second = installed(game, &plan, &with(jar2));
+        assert_eq!(second.installed_item(OVERLAY_ITEM), Some(jar2));
+
+        // 26.3 has no jar yet: no item, nothing installed (and so no bridge for its games).
+        let switch3 = second.clone().switch_version("26.2", "26.3", None);
+        park_folders(game);
+        let m3 = version_manifest("26.3", None);
+        let plan = plan_sync(&m3, game, Some(&switch3.active), None, &on)
+            .await
+            .unwrap();
+        assert!(plan.items.iter().all(|s| s.id != OVERLAY_ITEM));
+        let third = installed(game, &plan, &base);
+        assert_eq!(third.installed_item(OVERLAY_ITEM), None);
+
+        // Back to 26.1.2: its parked set brings its own jar back, still current.
+        let back = third.switch_version("26.3", "26.1.2", Some(switch.parked.clone()));
+        assert_eq!(back.active.installed_item(OVERLAY_ITEM), Some(jar1));
+        park_folders(game);
+        for (path, content) in with(jar1) {
+            write(game, path, content);
+        }
+        let plan = plan_sync(&m1, game, Some(&back.active), None, &on)
+            .await
+            .unwrap();
+        assert!(plan.downloads.is_empty() && plan.deletes.is_empty());
+
+        // With the switch off, a version's own jar goes and the next version brings none.
+        let off = SyncPolicy {
+            items: LauncherItems { overlay: false },
+            ..SyncPolicy::default()
+        };
+        let plan = plan_sync(&m1, game, Some(&back.active), None, &off)
+            .await
+            .unwrap();
+        assert_eq!(deleted(&plan), [jar1]);
     }
 
     #[tokio::test]

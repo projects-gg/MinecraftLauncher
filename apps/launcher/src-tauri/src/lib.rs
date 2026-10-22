@@ -3,6 +3,7 @@
 mod commands;
 mod error;
 mod identity;
+mod overlay;
 mod prepare;
 mod shell;
 mod shot_copy;
@@ -180,6 +181,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<pl_social::SocialView>()
         .typ::<pl_social::SocialNotice>()
         .typ::<pl_social::ChatChangeView>()
+        // Emitted as the plain "overlay-status" event (the in-game overlay's mod connected).
+        .typ::<pl_overlay::OverlayStatus>()
         .commands(tauri_specta::collect_commands![
             commands::app::app_info,
             commands::app::app_set_language,
@@ -230,6 +233,10 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::launch::game_copy_screenshots,
             prepare::prepare_configure,
             prepare::prepare_status,
+            // the in-game overlay (Settings → Genel "Oyun içi katman")
+            overlay::overlay_configure,
+            overlay::overlay_state,
+            overlay::overlay_connect_in_game,
             commands::server::server_status,
             commands::troubleshoot::troubleshoot_run,
             commands::troubleshoot::troubleshoot_crash,

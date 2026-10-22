@@ -315,6 +315,8 @@ pub(crate) fn item_views(
 ) -> Vec<ModCenterItemView> {
     statuses
         .iter()
+        // A launcher setting's items ("Oyun içi katman") have their one place there.
+        .filter(|status| !pl_content::LauncherItems::owns(&status.id))
         .filter_map(|status| {
             let item = manifest.projects.item(&status.id)?;
             let (folder, file_name) = split_path(&item.path);
@@ -405,11 +407,15 @@ pub(crate) fn notice(
     })
 }
 
-/// Background-sync policy: files whose size and recorded hash match are not hashed again.
-pub(crate) const QUICK: SyncPolicy = SyncPolicy {
-    repair: false,
-    quick_check: true,
-};
+/// Background-sync policy: files whose size and recorded hash match are not hashed again; the
+/// launcher's own items follow their settings ("Oyun içi katman", crate::overlay).
+pub(crate) fn quick() -> SyncPolicy {
+    SyncPolicy {
+        repair: false,
+        quick_check: true,
+        items: crate::overlay::pack_items(),
+    }
+}
 
 /// Download options for pack syncs started from the mod center or a version switch.
 pub(crate) fn sync_options(cancel: &CancellationToken) -> DownloadOptions {
@@ -500,7 +506,7 @@ pub async fn mod_center(
         PackSource::Dropped(dropped) => view.dropped = Some(dropped),
         PackSource::Ready { pack, manifest } => {
             let previous = PackState::load(&game_dir).await.map_err(pack_error)?;
-            let plan = plan_sync(&manifest, &game_dir, previous.as_ref(), None, &QUICK)
+            let plan = plan_sync(&manifest, &game_dir, previous.as_ref(), None, &quick())
                 .await
                 .map_err(pack_error)?;
             view.items = item_views(&manifest, &plan.items);
@@ -548,7 +554,7 @@ pub async fn mod_center_preview(
         &game_dir,
         previous.as_ref(),
         Some(&selection),
-        &QUICK,
+        &quick(),
     )
     .await
     .map_err(pack_error)?;
@@ -618,7 +624,7 @@ pub(crate) async fn apply_selection(
         &game_dir,
         previous.as_ref(),
         Some(&selection),
-        &QUICK,
+        &quick(),
     )
     .await
     .map_err(pack_error)?;

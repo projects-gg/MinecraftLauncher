@@ -99,6 +99,8 @@ pub struct AppState {
     pub content_refreshing: AtomicBool,
     /// The optional friends feature (off until the signed config turns it on).
     pub social: pl_social::SocialService,
+    /// The in-game overlay: its choices and the running game's bridge (`crate::overlay`).
+    pub overlay: pl_overlay::Overlay,
     /// The Discord bot's news feed (`<data>/cache/feed/`); used only while the signed config
     /// enables it (`commands::feed`).
     pub feed: pl_content::FeedClient,
@@ -171,6 +173,8 @@ impl AppState {
         // Setup runs outside the async runtime, so hand the actor Tauri's tokio handle.
         let tauri::async_runtime::RuntimeHandle::Tokio(handle) = tauri::async_runtime::handle();
         let presence = PresenceManager::start_on(&handle, PresenceConfig::new(DISCORD_CLIENT_ID));
+        // Before the friends feature: what it tells the page also feeds a running game's overlay.
+        let overlay = crate::overlay::create(app, &root);
         let social = crate::commands::social::create(
             app,
             &http,
@@ -178,6 +182,7 @@ impl AppState {
             handle.clone(),
             ephemeral_secrets,
             &root,
+            overlay.clone(),
         );
 
         // AFK accounts (Projects Console Client sessions). Events go straight to the UI (and
@@ -231,6 +236,7 @@ impl AppState {
             login_cancel: Mutex::new(None),
             content_refreshing: AtomicBool::new(false),
             social,
+            overlay,
             feed,
         })
     }

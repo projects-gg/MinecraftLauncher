@@ -252,8 +252,15 @@ pub fn app_quit(app: AppHandle) {
 /// Exiting runs the plugins' last steps (the window's size and place are saved) and removes the
 /// tray icon; the single-instance lock goes with the process.
 pub(crate) fn quit(app: &AppHandle) {
+    quit_for(app, pl_overlay::protocol::ByeReason::LauncherExit);
+}
+
+/// [`quit`], telling the running game's overlay why the launcher goes (`reason`).
+fn quit_for(app: &AppHandle, reason: pl_overlay::protocol::ByeReason) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
+        // The overlay first: its goodbye leaves before anything else can hold the exit up.
+        crate::overlay::leaving(&app, reason).await;
         let state = app.state::<AppState>();
         if state.afk.any_active() {
             state.afk.cancel_bulk();
@@ -278,15 +285,17 @@ pub fn launcher_leave_for_game(app: AppHandle) {
         ?activity,
         "the game is on screen: the launcher leaves"
     );
+    // The game's overlay hears that the launcher leaves for good (`bye{game-start-close}`).
+    let leave = pl_overlay::protocol::ByeReason::GameStartClose;
     let Some(window) = app.get_webview_window("main") else {
         if action == CloseAction::Quit {
-            quit(&app);
+            quit_for(&app, leave);
         }
         return;
     };
     let _ = window.hide();
     if action == CloseAction::Quit {
-        quit(&app);
+        quit_for(&app, leave);
         return;
     }
     if let Some(closed) = action.closed() {

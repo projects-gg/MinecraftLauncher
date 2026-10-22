@@ -692,6 +692,8 @@ pub(crate) async fn sync_pack_files(
         &SyncPolicy {
             repair: false,
             quick_check: true,
+            // "Oyun içi katman" installs or removes the overlay's mod (crate::overlay).
+            items: crate::overlay::pack_items(),
         },
     )
     .await

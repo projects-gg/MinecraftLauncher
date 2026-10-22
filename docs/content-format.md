@@ -1114,6 +1114,25 @@ a top-level `projects` object that other launchers ignore; Studio can export a r
   - Rules (a manifest that breaks them is refused): unique ids; `path` exists in `files` and
     is not `unsupported` on the client; no two items share a path; `title` is not blank;
     `iconUrl` and `pageUrl` are HTTPS; `requires` names existing items and has no cycles.
+  - The id `projects-overlay` is reserved for the in-game overlay mod (`mods/projects-overlay`
+    in the launcher repository; a file Projects hosts, `category: interface`, `title` "Oyun içi
+    katman", usually `requires: ["fabric-api"]`). Its choice belongs to the desktop launcher's
+    setting "Oyun içi katman" (on by default), not to the mod center: the launcher installs the
+    file exactly while the setting is on (an item that requires it does not switch it on), never
+    lists it in the mod center or the instance's mods, never records, adopts or flags a choice for
+    it, and installs it again when the player deletes the file by hand. No other field marks it:
+    the id does, so older Studios keep it like any item. Clients without the setting (older
+    launchers, Android) treat it as an ordinary item; the mod does nothing without the launcher's
+    bridge.
+  - The overlay is built per Minecraft version (one jar each for 26.1.2, 26.2 and 26.3, every jar
+    requiring exactly its version). Studio lists, in each family member's manifest (one per
+    Minecraft version, see [Pack families](#pack-families)), the jar built for that version under
+    the same id `projects-overlay`, at a path that names the version
+    (`mods/projects-overlay-<mod version>+mc<minecraft>.jar`), uploaded like any file we host. A
+    version without a jar simply has no such item: nothing is installed there and the launcher
+    opens no bridge for its games. Switching an instance's version swaps the jar with the rest of
+    `mods/` ([Per-version sets](#per-version-sets)): the old version's jar stays with its parked
+    set and comes back with it, the new version's sync installs its own.
 - `optionalGroups` (legacy): switchable sets of `files[]` paths. A file in several groups is
   installed when any of them is enabled. The player's choice is remembered in the pack state;
   new groups start at `defaultEnabled`. Files covered by an item ignore groups; groups still

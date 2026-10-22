@@ -56,7 +56,8 @@ pub use feed::{
 pub use glob::glob_match;
 pub use images::{LAUNCHER_IMAGE_HOSTS, is_launcher_image_url};
 pub use items::{
-    AdoptedChange, ItemResolution, ItemStatus, ManualChange, PackSelection, resolve_items,
+    AdoptedChange, ItemResolution, ItemStatus, LauncherItems, ManualChange, OVERLAY_ITEM,
+    PackSelection, resolve_items, resolve_items_with,
 };
 pub use model::*;
 pub use modsets::{

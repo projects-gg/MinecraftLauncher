@@ -51,7 +51,7 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 
 use crate::commands::launch::{CrashView, MemoryAdviceView, TurnOffView};
-use crate::commands::modcenter::{PackSource, QUICK, pack_source, sync_options};
+use crate::commands::modcenter::{PackSource, pack_source, quick, sync_options};
 use crate::commands::modrinth::{
     addon_index_path, content_error, icon_dir, instance_lock, modrinth_client, start_job,
 };
@@ -782,7 +782,7 @@ impl RepairHost for LauncherHost<'_> {
             &self.game_dir,
             previous.as_ref(),
             Some(&selection),
-            &QUICK,
+            &quick(),
         )
         .await
         .map_err(pack_failure)?;

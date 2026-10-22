@@ -178,6 +178,10 @@ pub struct LaunchSettings {
     /// to the clipboard (`crate::shot_copy`).
     #[serde(default)]
     pub copy_screenshots: bool,
+    /// Settings → Genel "Oyun içi katman" as the page shows it (`crate::overlay`): this launch's
+    /// pack sync installs or removes the mod by it, and the game gets a bridge while it is on.
+    #[serde(default)]
+    pub overlay: Option<bool>,
 }
 
 /// One line of the running game's log, emitted as the `game-log` event.
@@ -342,6 +346,10 @@ pub async fn launch_instance(
             ),
             "the data folder is being moved",
         ));
+    }
+    // The page's switch wins over a push it may have missed: the pack sync below follows it.
+    if let Some(on) = settings.overlay {
+        crate::overlay::set_enabled(&app, on);
     }
     let cancel = CancellationToken::new();
     let id = NEXT_LAUNCH.fetch_add(1, Ordering::Relaxed);
@@ -549,6 +557,7 @@ async fn pack_missing(manifest: &PackManifest, game_dir: &Path) -> u64 {
     let policy = SyncPolicy {
         repair: false,
         quick_check: true,
+        items: crate::overlay::pack_items(),
     };
     match plan_sync(manifest, game_dir, previous.as_ref(), None, &policy).await {
         Ok(plan) => plan.downloads.iter().map(|download| download.size).sum(),
@@ -1062,6 +1071,14 @@ async fn prepare_and_spawn(
     options.min_memory_mb = Some(memory.min_mb);
     options.max_memory_mb = Some(memory.max_mb);
     options.launcher_name = "Projects Launcher".to_owned();
+    // The in-game overlay (OVL2): a fresh bridge for this game while its switch is on and the
+    // pack put the mod in place. The game reads the port and the token from two system
+    // properties; the printable command masks the token. It closes again unless the game starts.
+    let overlay = crate::overlay::for_launch(state, &game_dir, &launcher_version).await;
+    if let Some(endpoint) = overlay.endpoint() {
+        options.launcher_jvm_args.extend(endpoint.jvm_args());
+        options.secrets.push(endpoint.secret().to_owned());
+    }
     options.launcher_version = launcher_version;
     // "Devam et" and an invite's "Katıl" first (a server on every version, a world only with
     // quick play), else the instance's server when auto-join is on.
@@ -1178,6 +1195,8 @@ async fn prepare_and_spawn(
     )
     .await
     .map_err(CmdError::from)?;
+    // The game runs: its bridge stays until it ends.
+    let overlay_port = overlay.keep();
     let process = Arc::new(process);
     *state.running.lock() = Some(RunningGame {
         instance_id: instance.id.clone(),
@@ -1232,6 +1251,8 @@ async fn prepare_and_spawn(
         crate::webview_rest::wake(&app, "the game exited");
         let state = app.state::<AppState>();
         state.running.lock().take();
+        // Its overlay bridge goes with it (the mod is gone already).
+        crate::overlay::game_ended(&state, overlay_port).await;
         crate::commands::cleanup::status_changed(&app);
         crate::shot_copy::session_ended(&app);
         // Java runtime updates waiting for the game can take their place now.

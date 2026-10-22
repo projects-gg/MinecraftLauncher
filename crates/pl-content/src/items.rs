@@ -13,7 +13,10 @@
 //! - changes the player made in the mods folder are adopted ([`ManualChange`]): a sync that
 //!   finds a pack jar deleted or renamed to `.disabled` records the item as switched off (and a
 //!   disabled copy renamed back as switched on) instead of undoing the change. Those adopted
-//!   choices rank below an explicit [`PackSelection`] and above the recorded choices.
+//!   choices rank below an explicit [`PackSelection`] and above the recorded choices;
+//! - an item a launcher setting owns ([`LauncherItems`]: the in-game overlay, [`OVERLAY_ITEM`])
+//!   follows that setting alone: never recorded, adopted or new, and the mod center does not list
+//!   it.
 //!
 //! [`resolve_items`] is pure; [`crate::plan_sync`] turns its result into downloads and
 //! deletions.
@@ -25,6 +28,40 @@ use serde::{Deserialize, Serialize};
 use crate::fsutil::normalize_hex;
 use crate::model::{PackItem, PackManifest};
 use crate::sync::{InstalledFile, PackState};
+
+/// The in-game overlay's item in the official pack (OVL2): Settings → Genel "Oyun içi katman"
+/// owns its choice ([`LauncherItems::overlay`]).
+pub const OVERLAY_ITEM: &str = "projects-overlay";
+
+/// Pack items a launcher setting owns instead of the mod center: one switch, one place. Such an
+/// item is installed exactly while its setting is on (an enabled item that requires it does not
+/// switch it on), its choice is never recorded in the pack state, a change to its file in the mods
+/// folder is never adopted, it is never new, and the mod center does not list it
+/// ([`LauncherItems::owns`]). No signed content field marks it: the item id does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase", default)]
+pub struct LauncherItems {
+    /// "Oyun içi katman" (on by default).
+    pub overlay: bool,
+}
+
+impl Default for LauncherItems {
+    fn default() -> Self {
+        Self { overlay: true }
+    }
+}
+
+impl LauncherItems {
+    /// Whether a launcher setting owns the item `id`.
+    pub fn owns(id: &str) -> bool {
+        id == OVERLAY_ITEM
+    }
+
+    /// The setting's choice for an item it owns.
+    pub fn choice(&self, id: &str) -> Option<bool> {
+        (id == OVERLAY_ITEM).then_some(self.overlay)
+    }
+}
 
 /// Choices from the mod center, for [`resolve_items`] and [`crate::plan_sync`]. Passing one
 /// means the player confirmed the mod center: afterwards every item of the manifest counts as
@@ -138,33 +175,54 @@ impl ItemResolution {
 }
 
 /// Computes the player's item set from the manifest, the previous pack state and, when the
-/// player confirmed the mod center, their selection. See the module documentation for the
+/// player confirmed the mod center, their selection, with the launcher's own items at their
+/// defaults ([`resolve_items_with`] takes their settings). See the module documentation for the
 /// rules.
 pub fn resolve_items(
     manifest: &PackManifest,
     previous: Option<&PackState>,
     selection: Option<&PackSelection>,
 ) -> ItemResolution {
-    resolve_with(manifest, previous, selection, &BTreeMap::new())
+    resolve_items_with(manifest, previous, selection, &LauncherItems::default())
 }
 
-/// [`resolve_items`] plus choices adopted from the game directory (`adopted`: item id →
+/// [`resolve_items`] with the launcher settings that own their items.
+pub fn resolve_items_with(
+    manifest: &PackManifest,
+    previous: Option<&PackState>,
+    selection: Option<&PackSelection>,
+    launcher: &LauncherItems,
+) -> ItemResolution {
+    resolve_with(manifest, previous, selection, &BTreeMap::new(), launcher)
+}
+
+/// [`resolve_items_with`] plus choices adopted from the game directory (`adopted`: item id →
 /// selected, see [`ManualChange`]). They win over recorded choices and fresh-set defaults, but
-/// an explicit selection wins over them.
+/// an explicit selection wins over them; a launcher setting wins over everything for its items.
 pub(crate) fn resolve_with(
     manifest: &PackManifest,
     previous: Option<&PackState>,
     selection: Option<&PackSelection>,
     adopted: &BTreeMap<String, bool>,
+    launcher: &LauncherItems,
 ) -> ItemResolution {
     let items = &manifest.projects.items;
     let empty = PackState::default();
     let prev = previous.unwrap_or(&empty);
     let fresh = prev.items.is_empty() && prev.seen_items.is_empty();
 
+    // A launcher setting's items are never recorded as choices.
     let mut choices = prev.items.clone();
+    choices.retain(|id, _| !LauncherItems::owns(id));
     let mut selected: HashSet<&str> = HashSet::new();
+    let mut set_on: HashSet<&str> = HashSet::new();
     for item in items.iter().filter(|item| !item.library) {
+        if let Some(on) = launcher.choice(&item.id) {
+            if on {
+                set_on.insert(item.id.as_str());
+            }
+            continue;
+        }
         let choice = selection
             .and_then(|s| s.items.get(&item.id))
             .or_else(|| adopted.get(&item.id))
@@ -183,11 +241,15 @@ pub(crate) fn resolve_with(
 
     let by_id: HashMap<&str, &PackItem> =
         items.iter().map(|item| (item.id.as_str(), item)).collect();
-    let mut enabled = selected.clone();
-    let mut pending: Vec<&str> = selected.iter().copied().collect();
+    let mut enabled: HashSet<&str> = selected.union(&set_on).copied().collect();
+    let mut pending: Vec<&str> = enabled.iter().copied().collect();
     while let Some(id) = pending.pop() {
         let Some(item) = by_id.get(id) else { continue };
         for required in &item.requires {
+            // A launcher setting that is off keeps its item off, whatever needs it.
+            if launcher.choice(required) == Some(false) {
+                continue;
+            }
             if by_id.contains_key(required.as_str()) && enabled.insert(required.as_str()) {
                 pending.push(required.as_str());
             }
@@ -198,6 +260,13 @@ pub(crate) fn resolve_with(
     if fresh || selection.is_some() {
         seen.extend(items.iter().map(|item| item.id.clone()));
     }
+    // Never new: the setting decides, the mod center does not show them.
+    seen.extend(
+        items
+            .iter()
+            .filter(|item| LauncherItems::owns(&item.id))
+            .map(|item| item.id.clone()),
+    );
 
     let statuses = items
         .iter()
@@ -213,6 +282,7 @@ pub(crate) fn resolve_with(
                 effectively_enabled: enabled.contains(item.id.as_str()),
                 is_new: !item.library
                     && !fresh
+                    && !LauncherItems::owns(&item.id)
                     && !prev.seen_items.contains(&item.id)
                     && !prev.items.contains_key(&item.id),
                 required_by: items
@@ -547,7 +617,7 @@ mod tests {
         let m = catalog();
         let state = state_with(&resolve_items(&m, None, None));
         let adopted = BTreeMap::from([("minimap".to_owned(), false), ("iris".to_owned(), true)]);
-        let background = resolve_with(&m, Some(&state), None, &adopted);
+        let background = resolve_with(&m, Some(&state), None, &adopted, &LauncherItems::default());
         assert!(!background.is_enabled("minimap"));
         assert!(background.is_enabled("iris") && background.is_enabled("sodium"));
         assert_eq!(background.choices.get("minimap"), Some(&false));
@@ -562,12 +632,114 @@ mod tests {
             items: BTreeMap::from([("minimap".to_owned(), true)]),
             ..PackSelection::default()
         };
-        let explicit = resolve_with(&m, Some(&state), Some(&selection), &adopted);
+        let explicit = resolve_with(
+            &m,
+            Some(&state),
+            Some(&selection),
+            &adopted,
+            &LauncherItems::default(),
+        );
         assert!(explicit.is_enabled("minimap"));
         assert!(
             explicit.is_enabled("iris"),
             "unlisted items still follow the disk"
         );
+    }
+
+    /// The catalog with the in-game overlay, which needs the library.
+    fn with_overlay() -> PackManifest {
+        let mut m = catalog();
+        m.projects
+            .items
+            .push(item(OVERLAY_ITEM, true, &["fabric-api"]));
+        m.files.push(file(&format!("mods/{OVERLAY_ITEM}.jar")));
+        m.validate().unwrap();
+        m
+    }
+
+    #[test]
+    fn the_overlay_follows_its_setting_alone() {
+        let on = LauncherItems::default();
+        let off = LauncherItems { overlay: false };
+        // A set made before the overlay came: it is installed at once, never new, never recorded.
+        let before = resolve_items(&catalog(), None, None);
+        let state = state_with(&before);
+        let m = with_overlay();
+        let now = resolve_items_with(&m, Some(&state), None, &on);
+        let overlay = now.status(OVERLAY_ITEM).unwrap();
+        assert!(overlay.effectively_enabled && !overlay.selected && !overlay.is_new);
+        assert!(!now.choices.contains_key(OVERLAY_ITEM));
+        assert!(now.seen.contains(OVERLAY_ITEM));
+        assert_eq!(now.new_items().count(), 0);
+
+        // Off: not installed, and the library goes too when nothing else needs it.
+        let quiet = resolve_items_with(&m, Some(&state), None, &off);
+        assert!(!quiet.is_enabled(OVERLAY_ITEM));
+        assert!(quiet.is_enabled("fabric-api"), "sodium still needs it");
+        let lean = resolve_items_with(
+            &m,
+            Some(&state),
+            Some(&PackSelection {
+                items: BTreeMap::from([("sodium".to_owned(), false)]),
+                ..PackSelection::default()
+            }),
+            &on,
+        );
+        assert!(
+            lean.is_enabled("fabric-api"),
+            "the overlay alone keeps its library"
+        );
+        assert_eq!(
+            lean.status("fabric-api").unwrap().required_by,
+            [OVERLAY_ITEM]
+        );
+
+        // The mod center's selection and what the mods folder shows do not move it.
+        let named = PackSelection {
+            items: BTreeMap::from([(OVERLAY_ITEM.to_owned(), false)]),
+            ..PackSelection::default()
+        };
+        assert!(resolve_items_with(&m, Some(&state), Some(&named), &on).is_enabled(OVERLAY_ITEM));
+        let adopted = BTreeMap::from([(OVERLAY_ITEM.to_owned(), true)]);
+        assert!(!resolve_with(&m, Some(&state), None, &adopted, &off).is_enabled(OVERLAY_ITEM));
+
+        // A choice an older launcher recorded is forgotten.
+        let mut old = state.clone();
+        old.items.insert(OVERLAY_ITEM.to_owned(), false);
+        let cleaned = resolve_items_with(&m, Some(&old), None, &on);
+        assert!(cleaned.is_enabled(OVERLAY_ITEM));
+        assert!(!cleaned.choices.contains_key(OVERLAY_ITEM));
+
+        // A fresh set: the same.
+        let fresh = resolve_items_with(&m, None, None, &off);
+        assert!(!fresh.is_enabled(OVERLAY_ITEM));
+        assert!(!fresh.choices.contains_key(OVERLAY_ITEM));
+    }
+
+    #[test]
+    fn an_item_that_needs_the_overlay_does_not_switch_it_on() {
+        let mut m = with_overlay();
+        m.projects
+            .items
+            .push(item("overlay-skin", true, &[OVERLAY_ITEM]));
+        m.files.push(file("mods/overlay-skin.jar"));
+        m.validate().unwrap();
+        let off = resolve_items_with(&m, None, None, &LauncherItems { overlay: false });
+        assert!(off.is_enabled("overlay-skin"));
+        assert!(!off.is_enabled(OVERLAY_ITEM));
+    }
+
+    #[test]
+    fn launcher_items_read_and_default_on() {
+        assert!(LauncherItems::default().overlay);
+        assert!(LauncherItems::owns(OVERLAY_ITEM) && !LauncherItems::owns("sodium"));
+        assert_eq!(
+            LauncherItems { overlay: false }.choice(OVERLAY_ITEM),
+            Some(false)
+        );
+        assert_eq!(LauncherItems::default().choice("sodium"), None);
+        let read: LauncherItems = serde_json::from_str("{}").unwrap();
+        assert!(read.overlay);
     }
 
     #[test]

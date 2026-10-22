@@ -234,6 +234,14 @@ export const commands = {
 	/**  What the command bar shows now (after the page loaded or came back on screen). */
 	prepareStatus: () => __TAURI_INVOKE<PrepareStatusView>("prepare_status"),
 	/**
+	 *  The page's choices: Settings → Genel "Oyun içi katman", the friends notification choices and
+	 *  reduced motion, at its start and on every change.
+	 */
+	overlayConfigure: (config: OverlayConfig) => __TAURI_INVOKE<void>("overlay_configure", { config }),
+	overlayState: () => __TAURI_INVOKE<OverlayStateView>("overlay_state"),
+	/**  [`connect_in_game`] for the page. */
+	overlayConnectInGame: (target: string) => __TAURI_INVOKE<ConnectOutcome>("overlay_connect_in_game", { target }),
+	/**
 	 *  Server List Ping. Never fails: an unreachable server is reported as offline. Without a name
 	 *  and address it pings the featured server Studio published (else `play.projects.gg`).
 	 */
@@ -1717,6 +1725,18 @@ export type CommunityLink = {
 /**  A community or social platform the launcher shows with its own mark. */
 export type CommunityPlatform = "wiki" | "discord" | "forum" | "instagram" | "tiktok" | "youtube" | "x" | "twitch" | "kick";
 
+/**  What asking the running game to join a server led to ([`crate::Overlay::connect_in_game`]). */
+export type ConnectOutcome = 
+/**  The game is on its way to the server. */
+{ status: "done" } | 
+/**
+ *  The overlay cannot do it now: start the game again as before. `reason`: `no-overlay` (no
+ *  game, or no mod connected), `unsupported` (an older mod), `busy` (another one is on its
+ *  way), `not-allowed` (not Projects nor an address shared now), `timeout` (no answer in 5 s),
+ *  or the mod's own (`busy`, `refused`, …).
+ */
+{ status: "unavailable"; reason: string };
+
 /**  The presence connection as the player should understand it. */
 export type Connection = 
 /**  No connection (signed out, or the feature is off). */
@@ -3072,6 +3092,11 @@ export type LaunchSettings = {
 };
 
 export type LeftoverKindView = "cache" | "downloads" | "logs" | "crashReports";
+	/**
+	 *  Settings → Genel "Oyun içi katman" as the page shows it (`crate::overlay`): this launch's
+	 *  pack sync installs or removes the mod by it, and the game gets a bridge while it is on.
+	 */
+	overlay?: boolean | null,
 
 export type LeftoverView = {
 	kind: LeftoverKindView,
@@ -3972,6 +3997,25 @@ export type NoticeKind =
 export type OfficialPackView = {
 	id: string,
 	name: string,
+/**
+ *  The notification choices this computer keeps (Settings → Arkadaşlar and the chat's "Sessize
+ *  al"), mirrored from the launcher's page.
+ */
+export type NotifyPrefs = {
+	/**
+	 *  "Ekip çağrıları" (on unless turned off). Used only while the service does not keep the
+	 *  crew settings itself.
+	 */
+	crewCalls?: boolean,
+	/**  "Ekip sohbeti bildirimleri" (off by default: the panel counts unread messages instead). */
+	crewChat?: boolean,
+	/**
+	 *  Conversations muted on this computer: until when (Unix milliseconds), or null until the
+	 *  player unmutes.
+	 */
+	chatMutes?: { [key in string]: number | null },
+};
+
 	version: string,
 	mcVersion: string,
 	loader: LoaderKind,
@@ -4053,6 +4097,37 @@ export type OutcomeStatus =
 /**  One file an update adds, changes, removes or leaves alone. */
 export type PackChangeView = {
 	/**  Game-relative path. */
+/**
+ *  The player's choices that reach the overlay (Settings → Genel "Oyun içi katman", the friends
+ *  notification choices, Hareketi azalt). The page pushes them at its start and on every change;
+ *  the launcher keeps them in its data folder for the starts before the page asks.
+ */
+export type OverlayConfig = {
+	/**
+	 *  "Oyun içi katman" (on by default): the official pack's overlay item is installed and each
+	 *  game start gets a bridge.
+	 */
+	enabled?: boolean,
+	notify?: NotifyPrefs,
+	/**  Performance mode or the system's reduced motion: toasts appear in place. */
+	reducedMotion?: boolean,
+};
+
+/**  What the page shows at its start. */
+export type OverlayStateView = {
+	config: OverlayConfig,
+	/**  The mod in the running game is connected now. */
+	connected: boolean,
+};
+
+/**
+ *  Whether the mod in the running game is connected (`overlay-status`): while it is, its toasts
+ *  stand in for the launcher's system notifications of the same events.
+ */
+export type OverlayStatus = {
+	connected: boolean,
+};
+
 	path: string,
 	/**  The Modrinth project's title when known, else the file name. */
 	name: string,

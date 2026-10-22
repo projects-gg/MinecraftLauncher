@@ -22,7 +22,8 @@ use crate::error::CmdResult;
 use crate::state::AppState;
 
 /// Builds the service; it stays off until [`apply_flag`] (or the debug override) turns it on.
-/// `data_root` keeps the invites the player closed over a restart.
+/// `data_root` keeps the invites the player closed over a restart. Every update also reaches the
+/// in-game overlay (`overlay`), which drops it at once while no game runs.
 pub fn create(
     app: &AppHandle,
     http: &pl_net::Http,
@@ -30,14 +31,16 @@ pub fn create(
     runtime: tokio::runtime::Handle,
     ephemeral_secrets: bool,
     data_root: &std::path::Path,
+    overlay: pl_overlay::Overlay,
 ) -> SocialService {
     let emitter = app.clone();
     let sink: pl_social::UpdateSink = Arc::new(move |update| {
-        let _ = match update {
-            SocialUpdate::View(view) => emitter.emit("social-view", &*view),
-            SocialUpdate::Notice(notice) => emitter.emit("social-notice", &notice),
-            SocialUpdate::Chat(change) => emitter.emit("social-chat", &change),
+        let _ = match &update {
+            SocialUpdate::View(view) => emitter.emit("social-view", &**view),
+            SocialUpdate::Notice(notice) => emitter.emit("social-notice", notice),
+            SocialUpdate::Chat(change) => emitter.emit("social-chat", change),
         };
+        overlay.on_social(update);
     });
     let tokens: Arc<dyn pl_social::TokenStore> =
         if ephemeral_secrets || !pl_social::KeyringTokenStore::is_available() {

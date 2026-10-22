@@ -574,6 +574,14 @@ pub async fn instance_detail(
         .await
         .unwrap_or_default()
         .into_iter()
+        // The in-game overlay's mod belongs to its switch in Settings, not to this list.
+        .filter(|m| {
+            let base = m.file_name.trim_end_matches(".disabled");
+            pack_files
+                .get(&format!("mods/{base}").to_ascii_lowercase())
+                .and_then(|item| item.as_deref())
+                .is_none_or(|item| !pl_content::LauncherItems::owns(item))
+        })
         .map(|m| {
             let meta = m.metadata.as_ref();
             let base = m.file_name.trim_end_matches(".disabled").to_owned();
@@ -972,6 +980,12 @@ pub async fn mod_set_enabled(
         .game_dir(&instance_id)
         .map_err(CmdError::from)?;
     if let Some(item) = crate::commands::modcenter::item_for_mod_file(&game_dir, &file_name).await {
+        // The in-game overlay's mod (the crash help's "Bu modu kapat"): its switch in Settings
+        // follows; the next launch's sync removes or brings back the file.
+        if pl_content::LauncherItems::owns(&item) {
+            crate::overlay::switched_elsewhere(&app, enabled);
+            return Ok(());
+        }
         let lock = crate::commands::modrinth::instance_lock(&app, &instance_id);
         let _guard = lock.lock().await;
         let selection = pl_content::PackSelection {
