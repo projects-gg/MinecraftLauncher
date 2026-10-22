@@ -4,6 +4,7 @@ import { trAfkConnect } from "./tr-afk-connect";
 import { trAfkReconnect } from "./tr-afk-reconnect";
 import { trChat } from "./tr-chat";
 import { trChat2 } from "./tr-chat2";
+import { trCloudAfk } from "./tr-cloud-afk";
 import { trCrewWave2 } from "./tr-crew-wave2";
 import { trCrews } from "./tr-crews";
 import { trDisk } from "./tr-disk";
@@ -81,6 +82,7 @@ export const tr = {
   fix2: trFix2,
   chat2: trChat2,
   team6: trTeam6,
+  cloudAfk: trCloudAfk,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",

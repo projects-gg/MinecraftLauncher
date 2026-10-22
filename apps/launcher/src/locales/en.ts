@@ -3,6 +3,7 @@ import { enAfkConnect } from "./en-afk-connect";
 import { enAfkReconnect } from "./en-afk-reconnect";
 import { enChat } from "./en-chat";
 import { enChat2 } from "./en-chat2";
+import { enCloudAfk } from "./en-cloud-afk";
 import { enCrewWave2 } from "./en-crew-wave2";
 import { enCrews } from "./en-crews";
 import { enDisk } from "./en-disk";
@@ -287,6 +288,7 @@ export const en: DeepPartial<Strings> = {
   fix2: enFix2,
   chat2: enChat2,
   team6: enTeam6,
+  cloudAfk: enCloudAfk,
   nav: {
     home: "Home",
     library: "Library",
