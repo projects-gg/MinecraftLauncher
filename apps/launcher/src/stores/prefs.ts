@@ -39,6 +39,11 @@ interface PrefsState {
   desktopNotifications: boolean;
   /** Settings → Genel: every screenshot taken in game goes to the clipboard (src-tauri shot_copy). */
   copyScreenshots: boolean;
+  /**
+   * Settings → Genel "Oyun içi katman" (OVL2): the official pack installs the overlay's mod and
+   * each game start gets a bridge to it (features/overlay, src-tauri overlay.rs).
+   */
+  inGameOverlay: boolean;
   updateChannel: UpdateChannel;
   autoDownloadUpdates: boolean;
   discordEnabled: boolean;
@@ -93,6 +98,7 @@ export const usePrefs = create<PrefsState>()(
       closeBehavior: "quit",
       desktopNotifications: true,
       copyScreenshots: false,
+      inGameOverlay: true,
       updateChannel: "stable",
       autoDownloadUpdates: true,
       discordEnabled: true,

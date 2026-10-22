@@ -87,6 +87,7 @@ function storedPrefs(): {
   concurrentDownloads?: number;
   verifyOnLaunch?: boolean;
   copyScreenshots?: boolean;
+  inGameOverlay?: boolean;
   defaultMaxMemoryMb?: number | null;
   defaultJvmArgs?: string;
 } {
@@ -695,6 +696,7 @@ export const tauriApi: LauncherApi = {
           quickPlay: options?.quickPlay ?? null,
           java: options?.java ?? null,
           copyScreenshots: prefs.copyScreenshots ?? false,
+          overlay: prefs.inGameOverlay ?? true,
         },
         channel,
       ),

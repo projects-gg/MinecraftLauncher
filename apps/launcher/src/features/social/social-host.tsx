@@ -8,6 +8,8 @@ import { Button, Dialog, toast } from "@pl/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { announce } from "@/features/accounts/use-accounts";
+import { shownInGame } from "@/features/overlay/store";
+import { useOverlaySync } from "@/features/overlay/use-overlay-sync";
 import { api } from "@/lib/api";
 import type { BackupMeta, Friend, SocialNotice } from "@/lib/api/social-types";
 import { formatRelative } from "@/lib/format";
@@ -173,7 +175,8 @@ function handleNotice(notice: SocialNotice) {
     case "invite": {
       showInviteToast(notice.invite);
       const name = notice.invite.name ?? i18n.t("social.notices.someone");
-      void notifyOutside(i18n.t("social.notices.invite", { name }));
+      // In game the overlay's card says it (one notification, never two).
+      if (!shownInGame(notice.kind)) void notifyOutside(i18n.t("social.notices.invite", { name }));
       announce(i18n.t("social.notices.invite", { name }));
       break;
     }
@@ -233,7 +236,7 @@ function handleNotice(notice: SocialNotice) {
     }
     case "crewCall": {
       const text = callSentenceOf(notice.call, useSocialUi.getState().view.crews, i18n.t);
-      void notifyOutside(text);
+      if (!shownInGame(notice.kind)) void notifyOutside(text);
       announce(text);
       // The open panel shows it already, with its answers (the crew page and the list).
       if (!callInView()) showCallToast(notice.call);
@@ -612,6 +615,8 @@ export function SocialHost() {
   useSocialSync();
   useBackupSync();
   useCallTicker();
+  // The in-game overlay follows the friends notification choices (features/overlay).
+  useOverlaySync();
   return (
     <>
       <FriendsSheet />

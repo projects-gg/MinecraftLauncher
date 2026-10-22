@@ -7,4 +7,6 @@ export const trOverlay = {
   settingHelp: "Oyunda F7'ye bas: mesajlar, arkadaşlar ve ekip çağrıları.",
   /** In its place while "Oyun açılınca launcher: Kapansın" is chosen. */
   closeHelp: "Oyun açılınca launcher kapandığı için çalışmaz.",
+  /** In its place while no instance follows the official pack (LIB1), before "Kur". */
+  packMissing: "Resmî paket kurulu değil.",
 };
