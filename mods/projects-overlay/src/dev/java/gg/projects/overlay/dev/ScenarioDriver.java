@@ -10,6 +10,8 @@ import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.Protocol;
 import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.toast.ToastLayer;
+import gg.projects.overlay.ui.PreparedLine;
+import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.panel.JoinScreen;
 import gg.projects.overlay.ui.panel.OverlayScreen;
 import java.io.IOException;
@@ -18,6 +20,7 @@ import java.lang.management.ThreadMXBean;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.concurrent.CompletableFuture;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -37,9 +40,12 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Development-only scenario for OVL2, enabled with {@code -Dprojects.overlay.dev.script=ovl2}: a flat test
- * world, frame times idle / with toasts moving / with the panel open, and screenshots of every state the
- * overlay has (one toast, a stack of three with a fourth arriving, an update in place, the panel's chat,
- * sending and a refused message, friends, the join question, settings, closing, offline, ended, English).
+ * world, frame times idle / with toasts moving / with three settled toasts / with the panel open (each runs
+ * twice: the old drawing, every line laid out on every frame in the game's shared layer, and the new one, kept
+ * layouts in the overlay's own layers; plus a frame of each with the world frozen, for a pixel comparison),
+ * and screenshots of every state the overlay has (one toast, a stack of three with a fourth arriving, an update
+ * in place, the panel's chat, sending and a refused message, friends, the join question, settings, closing,
+ * offline, ended, English).
  * Everything goes through the overlay's normal paths (frames from the mock launcher, the panel's own key
  * and character handlers); no OS input. Results and screenshots go to {@code -Dprojects.overlay.dev.out}.
  */
@@ -51,9 +57,20 @@ public final class ScenarioDriver implements ClientModInitializer {
 
     private enum Step {
         TITLE, LOADING, SETTLE, BASELINE, ONE, ONE_CLEAR, STACK, STACK_CLEAR, NIGHT, NIGHT_CLEAR, TOAST_BENCH, BENCH_CLEAR,
-        PANEL_OPEN, PANEL_BENCH, TYPE, LINK, FRIENDS, JOIN, SETTINGS, CLOSE, BASELINE_AFTER, DROP, OFFLINE_PANEL,
-        WAIT_ONLINE, ENGLISH, ENGLISH_TOAST, ENGLISH_PANEL, BYE, ENDED_PANEL, QUIT, DONE
+        STEADY, STEADY_CLEAR, PANEL_OPEN, PANEL_BENCH, TYPE, LINK, FRIENDS, JOIN, SETTINGS, CLOSE, BASELINE_AFTER, DROP,
+        OFFLINE_PANEL, WAIT_ONLINE, ENGLISH, ENGLISH_TOAST, ENGLISH_PANEL, BYE, ENDED_PANEL, QUIT, DONE
     }
+
+    /** Slot and mode index of the old drawing and the new one in the interleaved measurements. */
+    private static final int LEGACY = 0;
+    private static final int NEW = 1;
+    /** The toast bench brings a toast every this many seconds; each measured slice holds exactly one such cycle. */
+    private static final double TOAST_EVERY_S = 1.2;
+    private static final int TOAST_SLICES = 12;
+    private static final int STEADY_SLICES = 6;
+    private static final double STEADY_SLICE_S = 0.4;
+    private static final int PANEL_SLICES = 10;
+    private static final double PANEL_SLICE_S = 1.5;
 
     private final JsonObject results = new JsonObject();
     private final JsonArray events = new JsonArray();
@@ -68,6 +85,10 @@ public final class ScenarioDriver implements ClientModInitializer {
     private long[] bridgeCpuAtStart;
     private CompletableFuture<Void> reload;
     private int stage;
+    /** Interleaved measurement: slices done, when the next one starts, the layer counters per mode. */
+    private int slice;
+    private double nextSlice;
+    private final long[][] perfByMode = new long[2][6];
     private Object lastScreen = "start";
     private BridgeClient.Status lastStatus;
 
@@ -139,6 +160,9 @@ public final class ScenarioDriver implements ClientModInitializer {
             }
             case SETTLE -> {
                 if (secs() > 6) {
+                    results.addProperty("minecraft", Compat.VERSION);
+                    results.addProperty("guiScale", mc.getWindow().getGuiScale());
+                    results.addProperty("window", mc.getWindow().getWidth() + "x" + mc.getWindow().getHeight());
                     Perf.drain();
                     bridgeCpuAtStart = bridgeCpu();
                     FrameClock.start();
@@ -214,31 +238,77 @@ public final class ScenarioDriver implements ClientModInitializer {
             }
             case NIGHT_CLEAR -> {
                 if (overlay.toasts().stack().isEmpty() && secs() > 1) {
-                    Perf.drain();
-                    FrameClock.start();
+                    // Noon, looking at the grass: the steady pixel pair comes much later, so by then the vignette
+                    // has settled on the new brightness (it eases over seconds, ticks frozen or not).
+                    mc.player.connection.sendCommand("time set noon");
+                    mc.player.setXRot(70f);
                     lastInject = -10;
+                    beginSlices(3 * TOAST_EVERY_S - 0.05);
                     go(Step.TOAST_BENCH);
                 } else if (secs() > 40) {
                     fail(mc, "night stack did not clear");
                 }
             }
             case TOAST_BENCH -> {
-                if (secs() - lastInject > 1.2) {
+                // A toast every 1.2 s; once three are up, the old and the new drawing take turns, one cycle each.
+                boolean done = slices(TOAST_SLICES, TOAST_EVERY_S);
+                if (!done && secs() - lastInject >= TOAST_EVERY_S) {
                     lastInject = secs();
                     overlay.handleFrame(benchToast(++serial));
                 }
-                if (secs() > MEASURE_S) {
-                    results.add("toasts", FrameClock.stop());
-                    results.add("toastRender", perf(Perf.drain(), 0));
+                if (done) {
+                    results.add("toastsLegacy", FrameClock.summary(LEGACY));
+                    results.add("toastRenderLegacy", perf(perfByMode[LEGACY], 0, "legacy"));
+                    results.add("toasts", FrameClock.summary(NEW));
+                    results.add("toastRender", perf(perfByMode[NEW], 0, "new"));
                     go(Step.BENCH_CLEAR);
                 }
             }
             case BENCH_CLEAR -> {
                 if (overlay.toasts().stack().isEmpty() && secs() > 1) {
+                    go(Step.STEADY);
+                } else if (secs() > 40) {
+                    fail(mc, "bench toasts did not clear");
+                }
+            }
+            case STEADY -> {
+                // Three toasts that stay put: what a settled stack costs per frame, both ways in turns, then one
+                // frame of each way while the world stands still (ticks frozen) to compare pixels.
+                for (int i = 0; i < STEADY_TOASTS.length; i++) {
+                    if (at(i, 1.0 + 0.05 * i)) {
+                        overlay.handleFrame(steadyToast(i));
+                        if (i == STEADY_TOASTS.length - 1) {
+                            beginSlices(2.0);
+                        }
+                    }
+                }
+                if (stage == 3 && slices(STEADY_SLICES, STEADY_SLICE_S)) {
+                    stage++;
+                    results.add("steady3Legacy", FrameClock.summary(LEGACY));
+                    results.add("steady3RenderLegacy", perf(perfByMode[LEGACY], 0, "legacy"));
+                    results.add("steady3", FrameClock.summary(NEW));
+                    results.add("steady3Render", perf(perfByMode[NEW], 0, "new"));
+                    results.addProperty("steadyVisible", overlay.toasts().stack().visibleCount());
+                    mc.player.connection.sendCommand("tick freeze");
+                    legacy(true);
+                }
+                if (at(4, 4.8)) {
+                    shot(mc, "steady-legacy");
+                    legacy(false);
+                }
+                if (at(5, 4.9)) {
+                    shot(mc, "steady-new");
+                    mc.player.connection.sendCommand("tick unfreeze");
+                    go(Step.STEADY_CLEAR);
+                }
+            }
+            case STEADY_CLEAR -> {
+                if (overlay.toasts().stack().isEmpty() && secs() > 1) {
+                    mc.player.setXRot(25f);
                     overlay.togglePanel();
                     go(Step.PANEL_OPEN);
                 } else if (secs() > 40) {
-                    fail(mc, "bench toasts did not clear");
+                    fail(mc, "steady toasts did not clear");
                 }
             }
             case PANEL_OPEN -> {
@@ -247,15 +317,27 @@ public final class ScenarioDriver implements ClientModInitializer {
                 }
                 if (at(1, 1.2)) {
                     shot(mc, "panel-chat");
-                    Perf.drain();
-                    FrameClock.start();
+                    beginSlices(0);
                     go(Step.PANEL_BENCH);
                 }
             }
             case PANEL_BENCH -> {
-                if (secs() > MEASURE_S) {
-                    results.add("panel", FrameClock.stop());
-                    results.add("panelRender", perf(Perf.drain(), 2));
+                if (stage == 0 && slices(PANEL_SLICES, PANEL_SLICE_S)) {
+                    stage++;
+                    results.add("panelLegacy", FrameClock.summary(LEGACY));
+                    results.add("panelRenderLegacy", perf(perfByMode[LEGACY], 2, "legacy"));
+                    results.add("panel", FrameClock.summary(NEW));
+                    results.add("panelRender", perf(perfByMode[NEW], 2, "new"));
+                    mc.player.connection.sendCommand("tick freeze");
+                    legacy(true);
+                }
+                if (at(1, PANEL_SLICES * PANEL_SLICE_S + 0.4)) {
+                    shot(mc, "panel-legacy");
+                    legacy(false);
+                }
+                if (at(2, PANEL_SLICES * PANEL_SLICE_S + 0.5)) {
+                    shot(mc, "panel-new");
+                    mc.player.connection.sendCommand("tick unfreeze");
                     go(Step.TYPE);
                 }
             }
@@ -450,6 +532,58 @@ public final class ScenarioDriver implements ClientModInitializer {
         }
     }
 
+    /**
+     * The old drawing (every line laid out on every frame, everything in the game's shared layer) or the new one
+     * (kept layouts, the overlay's own layers): the measurements compare the two in the same run.
+     */
+    private static void legacy(boolean on) {
+        PreparedLine.keepLayouts = !on;
+        Draw.separateStrata = !on;
+    }
+
+    /** Prepares an interleaved measurement whose first slice starts {@code firstAt} seconds into the step. */
+    private void beginSlices(double firstAt) {
+        slice = 0;
+        nextSlice = firstAt;
+        for (long[] p : perfByMode) {
+            Arrays.fill(p, 0L);
+        }
+        FrameClock.clear();
+    }
+
+    /**
+     * Runs the old and the new drawing in turns (old first), {@code count} slices of {@code length} seconds, so
+     * that both see the same moments of the scene and drift in the machine's load falls on both alike. Frame times
+     * go to the mode's FrameClock slot, the layer's counters to {@link #perfByMode}. Returns true once, when the
+     * last slice ends (the new drawing stays on).
+     */
+    private boolean slices(int count, double length) {
+        if (secs() < nextSlice) {
+            return false;
+        }
+        long[] drained = Perf.drain();
+        if (slice > 0) {
+            long[] into = perfByMode[(slice - 1) % 2];
+            for (int i = 0; i < into.length; i++) {
+                into[i] += drained[i];
+            }
+        }
+        if (slice >= count) {
+            FrameClock.record(-1);
+            legacy(false);
+            nextSlice = Double.MAX_VALUE;
+            event("slice", "end");
+            return true;
+        }
+        int mode = slice % 2;
+        legacy(mode == LEGACY);
+        FrameClock.record(mode);
+        event("slice", mode == LEGACY ? "legacy" : "new");
+        slice++;
+        nextSlice += length;
+        return false;
+    }
+
     private void openWorld(Minecraft mc) {
         if (mc.getLevelSource().levelExists(WORLD)) {
             event("world", "open");
@@ -470,6 +604,26 @@ public final class ScenarioDriver implements ClientModInitializer {
         {"dm:zeynep", "Zeynep", "Hadi gel, seni bekliyoruz."},
         {"crew:gece", "Deniz", "Ben de geliyorum, bekleyin!"},
     };
+
+    private static final String[][] STEADY_TOASTS = {
+        {"dm:selin", "Selin", "Bu akşam turnuvaya var mısın?"},
+        {"crew:gece", "Deniz", "Ben de geliyorum, bekleyin!"},
+        {"dm:kaan", "Kaan", "Haritayı açtım, köprünün orada buluşalım."},
+    };
+
+    private static JsonObject steadyToast(int i) {
+        String[] pick = STEADY_TOASTS[i];
+        JsonObject o = Protocol.message("toast");
+        o.addProperty("kind", "message");
+        o.addProperty("key", pick[0]);
+        o.addProperty("title", pick[1]);
+        o.addProperty("body", pick[2]);
+        o.addProperty("conv", pick[0]);
+        if (pick[0].startsWith("crew:")) {
+            o.addProperty("crew", "Gece Kuşları");
+        }
+        return o;
+    }
 
     private static JsonObject benchToast(int n) {
         String[] pick = BENCH[n % BENCH.length];
@@ -526,17 +680,27 @@ public final class ScenarioDriver implements ClientModInitializer {
     }
 
     private static JsonObject perf(long[] drained, int offset) {
+        return perf(drained, offset, PreparedLine.keepLayouts ? "new" : "legacy");
+    }
+
+    /** The layer's own time per call, and how many lines of text the game laid out (or reused) per call. */
+    private static JsonObject perf(long[] drained, int offset, String drawing) {
         JsonObject o = new JsonObject();
         long nanos = drained[offset];
         long calls = drained[offset + 1];
         o.addProperty("calls", calls);
         o.addProperty("avgMicros", calls == 0 ? 0 : round(nanos / 1e3 / calls));
+        o.addProperty("layoutsMadePerCall", calls == 0 ? 0 : round(drained[4] / (double) calls));
+        o.addProperty("layoutsReusedPerCall", calls == 0 ? 0 : round(drained[5] / (double) calls));
+        o.addProperty("drawing", drawing);
         return o;
     }
 
     private void event(String kind, String value) {
         JsonObject e = new JsonObject();
         e.addProperty("t", round((System.nanoTime() - runStarted) / 1e9));
+        // Wall-clock time, to line steps up with a flight recording.
+        e.addProperty("wall", System.currentTimeMillis());
         e.addProperty(kind, value);
         events.add(e);
         LOG.info("{}: {}", kind, value);

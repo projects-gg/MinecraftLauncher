@@ -77,6 +77,12 @@ loom {
                 '--width', providers.gradleProperty('ovl.width').getOrElse('1280'),
                 '--height', providers.gradleProperty('ovl.height').getOrElse('720')
             vmArgs '-Xmx2G'
+            // Extra JVM arguments for measurement runs, separated by ';' (gradlew.bat passes '|' to cmd), e.g. a
+            // flight recording: -Povl.jvmArgs=-XX:StartFlightRecording=settings=profile,filename=run.jfr
+            def extraJvmArgs = providers.gradleProperty('ovl.jvmArgs')
+            if (extraJvmArgs.isPresent()) {
+                extraJvmArgs.get().split(';').findAll { !it.isBlank() }.each { vmArg it.strip() }
+            }
             // The launcher passes these on the real command line; local runs take them as Gradle properties.
             [
                 'port'      : 'ovl.port',
