@@ -5,6 +5,7 @@ pub mod defaults;
 pub mod keys;
 pub mod memory;
 pub mod model;
+pub mod official;
 pub mod options;
 pub mod packs;
 pub mod shaders;
@@ -29,6 +30,9 @@ pub use memory::{
 pub use model::{
     Hooks, INSTANCE_SCHEMA_VERSION, Instance, InstanceIcon, InstanceLoader, ManagedPack,
     MemorySettings, NewInstance, ServerAddress, WindowSettings,
+};
+pub use official::{
+    OFFICIAL_CHOICE_FILE, OFFICIAL_INSTANCE_NAME, OfficialChoice, OfficialEnsure, find_official,
 };
 pub use options::{
     GraphicsPreset, GraphicsState, GraphicsSwitch, apply_preset, detect_preset, graphics_state,
