@@ -11,6 +11,8 @@ public final class Perf {
     private static long toastCalls;
     private static long panelNanos;
     private static long panelCalls;
+    private static long layoutsMade;
+    private static long layoutsReused;
 
     private Perf() {
     }
@@ -33,13 +35,32 @@ public final class Perf {
         }
     }
 
-    /** Returns {toastNanos, toastCalls, panelNanos, panelCalls} and resets the counters. */
+    /** The game laid out a line of the overlay's text (looked up and placed its glyphs). */
+    public static void layoutMade() {
+        if (ENABLED) {
+            layoutsMade++;
+        }
+    }
+
+    /** A line drew with the layout it kept from an earlier frame. */
+    public static void layoutReused() {
+        if (ENABLED) {
+            layoutsReused++;
+        }
+    }
+
+    /**
+     * Returns {toastNanos, toastCalls, panelNanos, panelCalls, layoutsMade, layoutsReused} and resets the
+     * counters.
+     */
     public static long[] drain() {
-        long[] out = {toastNanos, toastCalls, panelNanos, panelCalls};
+        long[] out = {toastNanos, toastCalls, panelNanos, panelCalls, layoutsMade, layoutsReused};
         toastNanos = 0;
         toastCalls = 0;
         panelNanos = 0;
         panelCalls = 0;
+        layoutsMade = 0;
+        layoutsReused = 0;
         return out;
     }
 }

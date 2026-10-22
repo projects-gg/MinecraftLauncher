@@ -739,6 +739,9 @@ public final class OverlayScreen extends Screen {
             height);
         Draw.fill(g, panelX, 0, width, height, ShapeSet.PANEL_FILL);
         Draw.vhairline(g, panelX, 0, height, Theme.withAlpha(0xFFFFFF, 0.08f));
+        // A layer per section: every element of the panel overlaps its fill, so in one layer placing each
+        // element would scan all the others (Draw.stratum).
+        Draw.stratum(g);
         drawHeader(g, mouseX, mouseY, now);
         for (Notice n : notices) {
             drawNotice(g, n, mouseX, mouseY);
@@ -760,13 +763,17 @@ public final class OverlayScreen extends Screen {
         Draw.pushAlpha(pe);
         g.pose().pushMatrix();
         g.pose().translate(0f, reducedMotion() ? 0f : (1f - pe) * 4f);
+        Draw.stratum(g);
         render(g, tabs, mouseX, mouseY);
         render(g, chips, mouseX, mouseY);
+        Draw.stratum(g);
         render(g, messages, mouseX, mouseY);
+        Draw.stratum(g);
         render(g, quick, mouseX, mouseY);
         if (page == Page.CHATS && conversation != null) {
             drawComposer(g, mouseX, mouseY);
         }
+        Draw.stratum(g);
         render(g, friends, mouseX, mouseY);
         render(g, settingsList, mouseX, mouseY);
         g.pose().popMatrix();

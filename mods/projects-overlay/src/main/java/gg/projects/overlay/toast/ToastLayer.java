@@ -179,6 +179,8 @@ public final class ToastLayer implements HudElement {
             return;
         }
         long started = Perf.start();
+        // A layer of our own: placing each element then scans only the overlay's elements, not the whole HUD.
+        Draw.stratum(g);
         Minecraft mc = Minecraft.getInstance();
         long now = now();
         if (afterimage != null && !afterimage.draw(g, now)) {
@@ -234,6 +236,7 @@ public final class ToastLayer implements HudElement {
             return;
         }
         long started = Perf.start();
+        Draw.stratum(g);
         drawTravel(g, Minecraft.getInstance(), now(), true);
         Perf.toast(started);
     }

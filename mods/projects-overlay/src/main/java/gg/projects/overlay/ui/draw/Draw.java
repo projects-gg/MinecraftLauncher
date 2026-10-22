@@ -17,6 +17,9 @@ import org.joml.Matrix3x2fStack;
  * besides what the game's own drawing calls make.
  */
 public final class Draw {
+    /** Lets the measurement driver compare with everything in one shared layer, as before. */
+    public static volatile boolean separateStrata = true;
+
     private static final float[] ALPHA = new float[16];
     private static int depth;
 
@@ -25,6 +28,20 @@ public final class Draw {
     }
 
     private Draw() {
+    }
+
+    /**
+     * Starts a new layer of the game's GUI drawing for what follows. The game places each element above the
+     * highest earlier element it overlaps by scanning every element of the current layer, so in the HUD's layer
+     * each toast element paid for the whole HUD, and in one panel-wide layer each element for the whole panel.
+     * Layers draw strictly in order and overlapping elements inside a layer keep their order, so what reaches
+     * the screen does not change; only the scans get short. (A screen's blur sits before the screen's own layer,
+     * so this never moves anything in or out of the blur.)
+     */
+    public static void stratum(GuiGraphicsExtractor g) {
+        if (separateStrata) {
+            g.nextStratum();
+        }
     }
 
     /** The opacity everything is drawn with now. */

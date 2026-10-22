@@ -11,7 +11,10 @@ import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
 
-/** Words and lines: translations, ellipsis, wrapping to a number of lines, initials. */
+/**
+ * Words and lines: translations, ellipsis, wrapping to a number of lines, initials. Lines for drawing come out
+ * as {@link PreparedLine}s, laid out once and drawn with that layout until something it depends on changes.
+ */
 public final class Texts {
     public static final String ELLIPSIS = "…";
     private static final String PREFIX = "projects_overlay.";
@@ -53,9 +56,12 @@ public final class Texts {
         return out;
     }
 
-    /** One line in display order (right-to-left names read right). */
+    /**
+     * One line in display order (right-to-left names read right), keeping its layout between frames while it
+     * stays on screen unchanged ({@link PreparedLine}).
+     */
     public static FormattedCharSequence visual(String line) {
-        return Language.getInstance().getVisualOrder(FormattedText.of(line));
+        return PreparedLine.of(Language.getInstance().getVisualOrder(FormattedText.of(line)));
     }
 
     private static String rest(List<FormattedText> parts, int from) {

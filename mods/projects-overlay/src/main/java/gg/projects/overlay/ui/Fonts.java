@@ -1,6 +1,7 @@
 package gg.projects.overlay.ui;
 
 import gg.projects.overlay.OverlayClient;
+import gg.projects.overlay.Perf;
 import java.lang.reflect.Field;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -8,6 +9,7 @@ import net.minecraft.client.gui.GlyphSource;
 import net.minecraft.client.gui.font.glyphs.EffectGlyph;
 import net.minecraft.network.chat.FontDescription;
 import net.minecraft.resources.Identifier;
+import net.minecraft.util.FormattedCharSequence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,7 +21,8 @@ import org.slf4j.LoggerFactory;
  * from a bitmap of "size x oversample" pixels, so text is sharp only when the oversample equals the scale.
  * Because the swap happens inside the font, widths, wrapping, the text field's caret and mouse placement
  * all agree with what is drawn. At GUI scale 1 (the pixel font is the most legible there) and with
- * "Force Unicode Font" on, the game's own font is used.
+ * "Force Unicode Font" on, the game's own font is used. Lines made by {@link Texts} keep their layout between
+ * frames ({@link PreparedLine}).
  */
 public final class Fonts {
     /** A typeface, with the vertical metrics layouts need (GUI pixels from a line's top). */
@@ -104,7 +107,7 @@ public final class Fonts {
         if (base == null) {
             return mc.font;
         }
-        return new Font(new Font.Provider() {
+        return new KeepingFont(new Font.Provider() {
             @Override
             public GlyphSource glyphs(FontDescription description) {
                 if (description.equals(FontDescription.DEFAULT)) {
@@ -122,6 +125,39 @@ public final class Fonts {
                 return base.effect();
             }
         });
+    }
+
+    /**
+     * An overlay face: the game's own layout and drawing, except that a {@link PreparedLine} is laid out once
+     * and then drawn with that layout for as long as nothing it depends on changes.
+     */
+    private static final class KeepingFont extends Font {
+        private final Font.Provider glyphs;
+
+        KeepingFont(Font.Provider glyphs) {
+            super(glyphs);
+            this.glyphs = glyphs;
+        }
+
+        @Override
+        public Font.PreparedText prepareText(FormattedCharSequence text, float x, float y, int color, boolean shadow,
+            boolean includeEmpty, int background) {
+            if (text instanceof PreparedLine line && PreparedLine.keeps(color, background)) {
+                // The glyph source changes with the GUI scale, "Force Unicode Font" and every resource reload.
+                Object source = glyphs.glyphs(FontDescription.DEFAULT);
+                Font.PreparedText kept = line.reuse(this, source, x, y, color, shadow, includeEmpty, background);
+                if (kept != null) {
+                    Perf.layoutReused();
+                    return kept;
+                }
+                Font.PreparedText made = super.prepareText(text, x, y, color, shadow, includeEmpty, background);
+                line.keep(this, source, x, y, color, shadow, includeEmpty, background, made);
+                Perf.layoutMade();
+                return made;
+            }
+            Perf.layoutMade();
+            return super.prepareText(text, x, y, color, shadow, includeEmpty, background);
+        }
     }
 
     /** The game font's glyph provider (a private field: if a later version renames it, the game font stays). */
