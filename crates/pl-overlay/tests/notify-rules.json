@@ -1,0 +1,253 @@
+{
+  "about": "Which social events reach the player (OVL2). One table for both sides: the launcher's page (features/overlay/notify-rules.test.ts: wantsNotice, chatNoticeWay) and the in-game overlay (pl-overlay policy.rs). Change a rule on both sides and here. `now` is Unix ms; crew mutes (`muteUntil`) are Unix seconds, conversation mutes (`chatMutes`) Unix ms, null = until unmuted. Omitted situation fields: status online, crewCalls true, crewChat false, no chat mutes, no service settings, no crews.",
+  "now": 1800000000000,
+  "cases": [
+    {
+      "name": "a direct message is heard",
+      "event": { "kind": "direct", "conv": "d:1:2" },
+      "heard": true
+    },
+    {
+      "name": "do not disturb silences a direct message",
+      "event": { "kind": "direct", "conv": "d:1:2" },
+      "situation": { "status": "dnd" },
+      "heard": false
+    },
+    {
+      "name": "invisible is not do not disturb",
+      "event": { "kind": "direct", "conv": "d:1:2" },
+      "situation": { "status": "invisible" },
+      "heard": true
+    },
+    {
+      "name": "a conversation muted until unmuted stays quiet",
+      "event": { "kind": "direct", "conv": "d:1:2" },
+      "situation": { "chatMutes": { "d:1:2": null } },
+      "heard": false
+    },
+    {
+      "name": "a conversation muted for an hour stays quiet",
+      "event": { "kind": "direct", "conv": "d:1:2" },
+      "situation": { "chatMutes": { "d:1:2": 1800003600000 } },
+      "heard": false
+    },
+    {
+      "name": "a conversation mute that ran out is no mute",
+      "event": { "kind": "direct", "conv": "d:1:2" },
+      "situation": { "chatMutes": { "d:1:2": 1799999000000 } },
+      "heard": true
+    },
+    {
+      "name": "another conversation's mute does not count",
+      "event": { "kind": "direct", "conv": "d:1:2" },
+      "situation": { "chatMutes": { "d:1:3": null } },
+      "heard": true
+    },
+    {
+      "name": "the player's own message is never told",
+      "event": { "kind": "direct", "conv": "d:1:2", "mine": true },
+      "heard": false
+    },
+    {
+      "name": "a blocked person's message is never told",
+      "event": { "kind": "direct", "conv": "d:1:2", "blocked": true },
+      "heard": false
+    },
+    {
+      "name": "crew chat stays quiet by default",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1" },
+      "situation": { "crews": [{ "id": "t1" }] },
+      "heard": false
+    },
+    {
+      "name": "crew chat is heard once its notifications are on",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1" },
+      "situation": { "crewChat": true, "crews": [{ "id": "t1" }] },
+      "heard": true
+    },
+    {
+      "name": "a crew muted until unmuted keeps its chat quiet",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1" },
+      "situation": {
+        "crewChat": true,
+        "crews": [{ "id": "t1", "muted": true, "muteUntil": null }]
+      },
+      "heard": false
+    },
+    {
+      "name": "a crew muted for a while keeps its chat quiet",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1" },
+      "situation": {
+        "crewChat": true,
+        "crews": [{ "id": "t1", "muted": true, "muteUntil": 1800000600 }]
+      },
+      "heard": false
+    },
+    {
+      "name": "a crew mute that ran out is no mute",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1" },
+      "situation": {
+        "crewChat": true,
+        "crews": [{ "id": "t1", "muted": true, "muteUntil": 1799999000 }]
+      },
+      "heard": true
+    },
+    {
+      "name": "all crews muted keeps crew chat quiet",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1" },
+      "situation": {
+        "crewChat": true,
+        "service": { "calls": true, "muted": true, "muteUntil": null },
+        "crews": [{ "id": "t1" }]
+      },
+      "heard": false
+    },
+    {
+      "name": "all crews muted until a time that passed is no mute",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1" },
+      "situation": {
+        "crewChat": true,
+        "service": { "calls": true, "muted": true, "muteUntil": 1799999000 },
+        "crews": [{ "id": "t1" }]
+      },
+      "heard": true
+    },
+    {
+      "name": "a crew the list does not have yet is never silent",
+      "event": { "kind": "crew", "conv": "c:t9", "crew": "t9" },
+      "situation": {
+        "crewChat": true,
+        "service": { "calls": true, "muted": true, "muteUntil": null },
+        "crews": [{ "id": "t1" }]
+      },
+      "heard": true
+    },
+    {
+      "name": "a crew conversation muted here stays quiet",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1" },
+      "situation": { "crewChat": true, "chatMutes": { "c:t1": null }, "crews": [{ "id": "t1" }] },
+      "heard": false
+    },
+    {
+      "name": "do not disturb silences crew chat",
+      "event": { "kind": "crew", "conv": "c:t1", "crew": "t1" },
+      "situation": { "status": "dnd", "crewChat": true, "crews": [{ "id": "t1" }] },
+      "heard": false
+    },
+    {
+      "name": "a crew call is heard",
+      "event": { "kind": "call", "crews": ["t1"] },
+      "situation": { "crews": [{ "id": "t1" }] },
+      "heard": true
+    },
+    {
+      "name": "this computer's crew call switch decides without the service's settings",
+      "event": { "kind": "call", "crews": ["t1"] },
+      "situation": { "crewCalls": false, "crews": [{ "id": "t1" }] },
+      "heard": false
+    },
+    {
+      "name": "the service's crew call switch wins over this computer's (on)",
+      "event": { "kind": "call", "crews": ["t1"] },
+      "situation": {
+        "crewCalls": false,
+        "service": { "calls": true, "muted": false, "muteUntil": null },
+        "crews": [{ "id": "t1" }]
+      },
+      "heard": true
+    },
+    {
+      "name": "the service's crew call switch wins over this computer's (off)",
+      "event": { "kind": "call", "crews": ["t1"] },
+      "situation": {
+        "crewCalls": true,
+        "service": { "calls": false, "muted": false, "muteUntil": null },
+        "crews": [{ "id": "t1" }]
+      },
+      "heard": false
+    },
+    {
+      "name": "all crews muted for a while silences calls",
+      "event": { "kind": "call", "crews": ["t1"] },
+      "situation": {
+        "service": { "calls": true, "muted": true, "muteUntil": 1800000600 },
+        "crews": [{ "id": "t1" }]
+      },
+      "heard": false
+    },
+    {
+      "name": "all crews muted until a time that passed lets calls through",
+      "event": { "kind": "call", "crews": ["t1"] },
+      "situation": {
+        "service": { "calls": true, "muted": true, "muteUntil": 1799999000 },
+        "crews": [{ "id": "t1" }]
+      },
+      "heard": true
+    },
+    {
+      "name": "a call to one muted crew stays quiet",
+      "event": { "kind": "call", "crews": ["t1"] },
+      "situation": {
+        "crews": [{ "id": "t1", "muted": true, "muteUntil": null }, { "id": "t2" }]
+      },
+      "heard": false
+    },
+    {
+      "name": "a call to a muted and an unmuted crew is heard",
+      "event": { "kind": "call", "crews": ["t1", "t2"] },
+      "situation": {
+        "crews": [{ "id": "t1", "muted": true, "muteUntil": null }, { "id": "t2" }]
+      },
+      "heard": true
+    },
+    {
+      "name": "a call naming no crew is the first crew's (muted)",
+      "event": { "kind": "call", "crews": [] },
+      "situation": {
+        "crews": [{ "id": "t1", "muted": true, "muteUntil": null }, { "id": "t2" }]
+      },
+      "heard": false
+    },
+    {
+      "name": "a call naming no crew is the first crew's (not muted)",
+      "event": { "kind": "call", "crews": [] },
+      "situation": {
+        "crews": [{ "id": "t1" }, { "id": "t2", "muted": true, "muteUntil": null }]
+      },
+      "heard": true
+    },
+    {
+      "name": "a call naming no crew while the list is empty is heard",
+      "event": { "kind": "call", "crews": [] },
+      "heard": true
+    },
+    {
+      "name": "a call naming only crews the list does not have is heard",
+      "event": { "kind": "call", "crews": ["t9"] },
+      "situation": { "crews": [{ "id": "t1", "muted": true, "muteUntil": null }] },
+      "heard": true
+    },
+    {
+      "name": "do not disturb silences calls",
+      "event": { "kind": "call", "crews": ["t1"] },
+      "situation": { "status": "dnd", "crews": [{ "id": "t1" }] },
+      "heard": false
+    },
+    {
+      "name": "a live invite is heard",
+      "event": { "kind": "invite", "quiet": false },
+      "heard": true
+    },
+    {
+      "name": "an invite that waited is never a toast",
+      "event": { "kind": "invite", "quiet": true },
+      "heard": false
+    },
+    {
+      "name": "do not disturb silences invites",
+      "event": { "kind": "invite", "quiet": false },
+      "situation": { "status": "dnd" },
+      "heard": false
+    }
+  ]
+}

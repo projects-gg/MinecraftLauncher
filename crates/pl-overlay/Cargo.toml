@@ -8,9 +8,15 @@ license.workspace = true
 publish = false
 
 [dependencies]
+# What the overlay shows comes from the friends feature's views and goes back to its actions.
+pl-social = { workspace = true }
+# A message from someone the lists do not know reads "Biri" / "Someone".
+pl-lang = { workspace = true }
 base64 = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+# The page's overlay settings and the connection status are exported to TypeScript (tauri-specta).
+specta = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

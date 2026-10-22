@@ -3989,9 +3989,12 @@ name = "pl-overlay"
 version = "2.0.0"
 dependencies = [
  "base64 0.23.1",
+ "pl-lang",
+ "pl-social",
  "rand 0.10.3",
  "serde",
  "serde_json",
+ "specta",
  "tokio",
  "tracing",
 ]

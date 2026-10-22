@@ -1,21 +1,34 @@
 //! Local bridge between Projects Launcher and the in-game overlay mod (`mods/projects-overlay`).
 //!
 //! For every game launch the launcher binds `127.0.0.1` on a port the OS picks and makes a fresh random
-//! token ([`Bridge::bind`]). Both reach the game as JVM system properties ([`Endpoint::jvm_args`]); the
-//! token argument must be redacted wherever launch commands are logged ([`is_secret_jvm_arg`]). The mod
-//! connects, proves it knows the token, and then both sides exchange newline-delimited JSON frames
-//! ([`protocol`]).
+//! token ([`Overlay::start`], [`Bridge::bind`]). Both reach the game as JVM system properties
+//! ([`Endpoint::jvm_args`]); the token's value must be masked wherever launch commands are logged
+//! ([`Endpoint::secret`], [`is_secret_jvm_arg`]). The mod connects, proves it knows the token, and
+//! then both sides exchange newline-delimited JSON frames ([`protocol`]).
 //!
-//! Nothing here can make the game do anything: the launcher only sends things to show, and the mod only
-//! sends what the player did in its panel. Which social events become in-game toasts is decided by
-//! [`policy`], in Rust, because the launcher's web view sleeps while the window is hidden.
+//! Nothing here can make the game do anything: the launcher only sends things to show, and the mod
+//! only sends what the player did in its panel. What the mod hears is made from the friends
+//! feature's views (`feed`); which social events become in-game toasts is decided by [`policy`], in
+//! Rust, because the launcher's web view may rest while the window is hidden.
 //!
-//! This is the OVL1 spike sketch; it is not wired into the app yet.
+//! Costs nothing while idle: between games every update is dropped at once, during a game the
+//! tasks wait on their channels and sockets (no timers, no polling).
 
+mod feed;
+mod hub;
 pub mod policy;
 pub mod protocol;
 mod server;
+mod session;
+#[cfg(test)]
+mod tests;
 mod token;
 
-pub use server::{Bridge, BridgeEvent, Endpoint, PORT_ARG, TOKEN_ARG, is_secret_jvm_arg};
+pub use feed::{MAX_CONVS, MAX_FRIENDS};
+pub use hub::{Overlay, OverlayConfig, OverlayStatus};
+pub use server::{
+    BYE_TIMEOUT, Bridge, BridgeEvent, ConnId, Control, Endpoint, PORT_ARG, TOKEN_ARG,
+    is_secret_jvm_arg,
+};
+pub use session::{CONNECT_WAIT, ConnectOutcome, SocialActions};
 pub use token::SessionToken;
