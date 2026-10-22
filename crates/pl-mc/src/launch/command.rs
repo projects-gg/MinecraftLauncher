@@ -76,6 +76,12 @@ pub struct LaunchOptions {
     pub max_memory_mb: Option<u32>,
     /// Extra JVM arguments as typed by the user (split with quote handling).
     pub jvm_args: String,
+    /// JVM arguments the launcher adds for itself (the in-game overlay's port and token), after
+    /// the player's own so they win over a property of the same name.
+    pub launcher_jvm_args: Vec<String>,
+    /// Values that must never show up in logs, besides the access token: masked wherever they
+    /// appear in the printable forms of the command (the overlay's session token).
+    pub secrets: Vec<String>,
     /// Extra game arguments as typed by the user (split with quote handling).
     pub game_args: String,
     pub window: WindowOptions,
@@ -96,6 +102,8 @@ impl LaunchOptions {
             min_memory_mb: None,
             max_memory_mb: None,
             jvm_args: String::new(),
+            launcher_jvm_args: Vec::new(),
+            secrets: Vec::new(),
             game_args: String::new(),
             window: WindowOptions::default(),
             quick_play: None,
@@ -146,8 +154,9 @@ impl LaunchCommand {
         self.program.as_os_str().len() + self.args.iter().map(|a| a.len() + 3).sum::<usize>()
     }
 
-    /// Arguments with secrets replaced (the value after `--accessToken`/`--session` and any
-    /// occurrence of the token).
+    /// Arguments with secrets replaced: the value after `--accessToken`/`--session`, any
+    /// occurrence of the access token or of [`LaunchOptions::secrets`], and the value of any
+    /// `-D<name>.token=` system property (the overlay's session token, even if nobody named it).
     pub fn redacted_args(&self) -> Vec<String> {
         let mut out = Vec::with_capacity(self.args.len());
         let mut mask_next = false;
@@ -160,6 +169,9 @@ impl LaunchCommand {
             let mut shown = arg.clone();
             for secret in &self.secrets {
                 shown = shown.replace(secret.as_str(), REDACTED);
+            }
+            if let Some(masked) = masked_token_property(&shown) {
+                shown = masked;
             }
             mask_next = matches!(arg.as_str(), "--accessToken" | "--session");
             out.push(shown);
@@ -216,6 +228,13 @@ impl fmt::Debug for LaunchCommand {
             .field("env", &self.env.keys().collect::<Vec<_>>())
             .finish()
     }
+}
+
+/// `-D<name>=********` for a system property whose name ends in `.token`.
+fn masked_token_property(arg: &str) -> Option<String> {
+    let (name, value) = arg.strip_prefix("-D")?.split_once('=')?;
+    (name.to_ascii_lowercase().ends_with(".token") && !value.is_empty() && value != REDACTED)
+        .then(|| format!("-D{name}={REDACTED}"))
 }
 
 fn quote_for_display(arg: &str) -> String {
@@ -477,6 +496,7 @@ pub fn build_launch_command(
     let player_start = args.len();
     args.extend(split_args(&options.jvm_args));
     let player_options = player_start..args.len();
+    args.extend(options.launcher_jvm_args.iter().cloned());
     if let (Some(config), Some(path)) = (&resolved.logging, &installed.logging_config)
         && let Some(argument) = config.argument.as_deref()
     {
@@ -551,8 +571,8 @@ pub fn build_launch_command(
     let jvm_options = offset..offset + jvm_option_count;
     let player_jvm_options = offset + player_options.start..offset + player_options.end;
 
-    let secrets = [identity.access_token.as_str()]
-        .into_iter()
+    let secrets = std::iter::once(identity.access_token.as_str())
+        .chain(options.secrets.iter().map(String::as_str))
         .filter(|s| s.len() >= 6)
         .map(str::to_owned)
         .collect();
@@ -794,6 +814,53 @@ mod tests {
                 .next(),
             Some("/java/bin/java.exe")
         );
+    }
+
+    #[test]
+    fn the_overlay_token_never_shows() {
+        let r = resolve(MODERN);
+        let win = Platform::new(Os::Windows, Arch::X86_64, "10.0.26100");
+        let inst = installed(win, AssetLayout::Standard, "17");
+        let identity = LaunchIdentity::offline("Notch");
+        let token = "Zm9vYmFyLWJhei1xdXV4LWNvcmdlLWdyYXVsdC1nYXJwbHk";
+        let mut options = LaunchOptions::new("/java/bin/javaw.exe", "/games/one");
+        options.jvm_args = "-Dprojects.overlay.port=1 -Xss2M".into();
+        options.launcher_jvm_args = vec![
+            "-Dprojects.overlay.port=40123".into(),
+            format!("-Dprojects.overlay.token={token}"),
+        ];
+        options.secrets = vec![token.to_owned()];
+        let cmd =
+            build_launch_command(&DataDirs::new("/data"), &r, &inst, &identity, &options).unwrap();
+        // The game gets the real value, after the player's own arguments (so the launcher's win),
+        // among the JVM options.
+        let jvm = cmd.jvm_options();
+        let at = |arg: &str| jvm.iter().position(|a| a == arg).unwrap();
+        let token_arg = format!("-Dprojects.overlay.token={token}");
+        assert!(at("-Dprojects.overlay.port=40123") > at("-Xss2M"));
+        assert!(at(&token_arg) > at("-Dprojects.overlay.port=1"));
+        assert_eq!(
+            cmd.player_jvm_options(),
+            ["-Dprojects.overlay.port=1", "-Xss2M"]
+        );
+        // Every printable form masks it.
+        let shown = cmd.display_redacted();
+        assert!(!shown.contains(token), "{shown}");
+        assert!(shown.contains("-Dprojects.overlay.token=********"));
+        assert!(shown.contains("-Dprojects.overlay.port=40123"));
+        assert!(!cmd.redacted_args().iter().any(|a| a.contains(token)));
+        assert!(!format!("{cmd:?}").contains(token));
+
+        // A token property nobody listed as a secret is masked too.
+        let mut unlisted = LaunchOptions::new("/java/bin/javaw.exe", "/games/one");
+        unlisted.launcher_jvm_args = vec!["-Dprojects.overlay.token=abcdefgh12345".into()];
+        unlisted.jvm_args = "-Dmy.Token=typed-by-the-player -Dnot.a.tokenizer=kept".into();
+        let cmd =
+            build_launch_command(&DataDirs::new("/data"), &r, &inst, &identity, &unlisted).unwrap();
+        let shown = cmd.display_redacted();
+        assert!(!shown.contains("abcdefgh12345") && !shown.contains("typed-by-the-player"));
+        assert!(shown.contains("-Dmy.Token=********"));
+        assert!(shown.contains("-Dnot.a.tokenizer=kept"));
     }
 
     #[test]
