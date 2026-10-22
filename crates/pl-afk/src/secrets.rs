@@ -2,10 +2,14 @@
 //!
 //! One entry per account (`afk-login-commands/<account id>`) holding the command list as a JSON
 //! array. A Windows keychain entry holds at most 2560 bytes and `keyring` stores the value as
-//! UTF-16, so a longer value goes into numbered parts (see [`KeyringSecretStore`]).
+//! UTF-16, so a longer value goes into numbered parts (see `KeyringSecretStore`).
 //! Implementations must never log values.
+//!
+//! The OS keychain store needs the `keychain` feature (on by default). Builds without it (the cloud
+//! AFK host, which keeps its secrets elsewhere) have only [`SecretStore`] and [`MemorySecretStore`].
 
 use std::collections::HashMap;
+#[cfg(feature = "keychain")]
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -31,6 +35,7 @@ pub fn login_commands_key(account_id: &str) -> String {
 }
 
 /// Raw entries of one keychain service: the OS keychain, or a fake in tests.
+#[cfg(feature = "keychain")]
 trait Entries: Send + Sync {
     fn read(&self, key: &str) -> Result<Option<String>>;
     fn write(&self, key: &str, value: &str) -> Result<()>;
@@ -38,16 +43,19 @@ trait Entries: Send + Sync {
     fn remove(&self, key: &str) -> Result<()>;
 }
 
+#[cfg(feature = "keychain")]
 struct OsEntries {
     service: String,
 }
 
+#[cfg(feature = "keychain")]
 impl OsEntries {
     fn entry(&self, key: &str) -> Result<keyring::Entry> {
         keyring::Entry::new(&self.service, key).map_err(secret_error)
     }
 }
 
+#[cfg(feature = "keychain")]
 impl Entries for OsEntries {
     fn read(&self, key: &str) -> Result<Option<String>> {
         match self.entry(key)?.get_password() {
@@ -71,11 +79,14 @@ impl Entries for OsEntries {
 
 /// UTF-16 units in one entry's value: Windows keeps at most 2560 bytes per entry and `keyring`
 /// stores a password there as UTF-16 (1280 units); this leaves room for the parts header.
+#[cfg(feature = "keychain")]
 const PART_UNITS: usize = 1000;
 /// Most entries one value may take (32 000 characters of login commands).
+#[cfg(feature = "keychain")]
 const MAX_PARTS: usize = 32;
 /// First line of an entry whose value goes on in parts: `#pl-parts/1 <generation> <count>`. A
 /// command list (a JSON array) never starts with `#`.
+#[cfg(feature = "keychain")]
 const PARTS_TAG: &str = "#pl-parts/1";
 
 /// OS keychain via `keyring`: Windows Credential Manager, macOS Keychain, Linux Secret Service.
@@ -84,12 +95,14 @@ const PARTS_TAG: &str = "#pl-parts/1";
 /// entry itself holds the parts header and the first part, entries `<key>#<generation>.<n>` the
 /// others. A new value's parts get a new generation and are written before the entry that
 /// points at them, so a write that fails halfway leaves the old value whole.
+#[cfg(feature = "keychain")]
 #[derive(Clone)]
 pub struct KeyringSecretStore {
     service: String,
     entries: Arc<dyn Entries>,
 }
 
+#[cfg(feature = "keychain")]
 impl std::fmt::Debug for KeyringSecretStore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("KeyringSecretStore")
@@ -98,12 +111,14 @@ impl std::fmt::Debug for KeyringSecretStore {
     }
 }
 
+#[cfg(feature = "keychain")]
 impl Default for KeyringSecretStore {
     fn default() -> Self {
         Self::new()
     }
 }
 
+#[cfg(feature = "keychain")]
 impl KeyringSecretStore {
     pub fn new() -> Self {
         Self::with_service(KEYRING_SERVICE)
@@ -144,16 +159,19 @@ impl KeyringSecretStore {
     }
 }
 
+#[cfg(feature = "keychain")]
 fn secret_error(error: keyring::Error) -> AfkError {
     // keyring errors describe the store failure, never the secret itself.
     AfkError::Secret(error.to_string())
 }
 
+#[cfg(feature = "keychain")]
 fn part_key(key: &str, generation: u32, index: usize) -> String {
     format!("{key}#{generation}.{index}")
 }
 
 /// `(generation, count, first part)` of an entry that holds a parts header.
+#[cfg(feature = "keychain")]
 fn parse_parts_head(value: &str) -> Option<(u32, usize, &str)> {
     let rest = value.strip_prefix(PARTS_TAG)?.strip_prefix(' ')?;
     let (header, first) = rest.split_once('\n')?;
@@ -167,6 +185,7 @@ fn parse_parts_head(value: &str) -> Option<(u32, usize, &str)> {
 
 /// `value` cut on character boundaries into pieces of at most `units` UTF-16 units (at least one
 /// piece, maybe empty).
+#[cfg(feature = "keychain")]
 fn split_units(value: &str, units: usize) -> Vec<&str> {
     let mut pieces = Vec::new();
     let (mut start, mut used) = (0, 0);
@@ -181,6 +200,7 @@ fn split_units(value: &str, units: usize) -> Vec<&str> {
     pieces
 }
 
+#[cfg(feature = "keychain")]
 impl SecretStore for KeyringSecretStore {
     fn get(&self, key: &str) -> Result<Option<String>> {
         let Some(head) = self.entries.read(key)? else {
@@ -323,12 +343,14 @@ mod tests {
 
     /// Entries in memory with Windows' limit (2560 bytes of UTF-16 per entry); writes can be made
     /// to fail after a number of them.
+    #[cfg(feature = "keychain")]
     #[derive(Default)]
     struct FakeEntries {
         map: Mutex<HashMap<String, String>>,
         writes_left: Mutex<Option<usize>>,
     }
 
+    #[cfg(feature = "keychain")]
     impl Entries for FakeEntries {
         fn read(&self, key: &str) -> Result<Option<String>> {
             Ok(self.map.lock().get(key).cloned())
@@ -355,6 +377,7 @@ mod tests {
     }
 
     /// A JSON command list of `lines` long lines with Turkish letters.
+    #[cfg(feature = "keychain")]
     fn long_list(lines: usize) -> String {
         let commands: Vec<String> = (0..lines)
             .map(|i| format!("/msg yardımcı {i} {}", "ğ".repeat(40)))
@@ -362,6 +385,7 @@ mod tests {
         serde_json::to_string(&commands).unwrap()
     }
 
+    #[cfg(feature = "keychain")]
     #[test]
     fn long_values_are_split_under_the_windows_limit() {
         let fake = Arc::new(FakeEntries::default());
@@ -411,6 +435,7 @@ mod tests {
         assert_eq!(store.get(&key).unwrap(), None);
     }
 
+    #[cfg(feature = "keychain")]
     #[test]
     fn a_write_that_fails_halfway_keeps_the_old_value() {
         let fake = Arc::new(FakeEntries::default());
@@ -448,6 +473,7 @@ mod tests {
         assert_eq!(store.get(&key).unwrap().as_deref(), Some(new.as_str()));
     }
 
+    #[cfg(feature = "keychain")]
     #[test]
     fn values_are_cut_on_character_boundaries() {
         assert_eq!(split_units("", 3), vec![""]);
@@ -458,6 +484,7 @@ mod tests {
     }
 
     /// Touches the real OS keychain: `cargo test -p pl-afk -- --ignored keyring_round_trip`.
+    #[cfg(feature = "keychain")]
     #[test]
     #[ignore = "uses the real OS keychain"]
     fn keyring_round_trip() {
@@ -472,6 +499,7 @@ mod tests {
     /// A long command list on the real OS keychain (Windows keeps at most 2560 bytes, as UTF-16,
     /// per entry), with dummy values:
     /// `cargo test -p pl-afk -- --ignored long_values_round_trip_on_the_real_keychain`.
+    #[cfg(feature = "keychain")]
     #[test]
     #[ignore = "uses the real OS keychain"]
     fn long_values_round_trip_on_the_real_keychain() {

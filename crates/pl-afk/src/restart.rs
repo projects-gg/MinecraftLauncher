@@ -316,10 +316,7 @@ fn plain_upper(text: &str) -> String {
 
 /// The cause behind a server's kick or login refusal, if its message names one. Connection losses
 /// and other failures never have one (their messages come from the client, not the server).
-pub(crate) fn kick_cause(
-    reason: Option<&DisconnectReason>,
-    message: Option<&str>,
-) -> Option<KickCause> {
+pub fn kick_cause(reason: Option<&DisconnectReason>, message: Option<&str>) -> Option<KickCause> {
     if !matches!(
         reason,
         Some(DisconnectReason::InGameKick | DisconnectReason::LoginRejected)
@@ -365,7 +362,7 @@ impl FailureReason {
 
 /// The last problem the running client reported through the bridge.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct Failure {
+pub struct Failure {
     pub reason: Option<DisconnectReason>,
     /// Verbatim (formatting codes removed), one line, length-limited.
     pub message: Option<String>,
@@ -373,7 +370,9 @@ pub(crate) struct Failure {
 }
 
 impl Failure {
-    pub(crate) fn new(
+    /// A report of the bridge's `disconnected` or `error` event (the message is cleaned up and
+    /// length-limited; mask secrets before passing it in).
+    pub fn new(
         reason: Option<DisconnectReason>,
         message: Option<&str>,
         version_error: bool,
@@ -390,7 +389,7 @@ impl Failure {
 
     /// Combines a new report with the previous one: MCC sends `disconnected` (with the kick
     /// message) and then `error` (same reason, no message); the message must survive.
-    pub(crate) fn merge(previous: Option<Failure>, next: Failure) -> Failure {
+    pub fn merge(previous: Option<Failure>, next: Failure) -> Failure {
         match previous {
             Some(previous) if next.message.is_none() && previous.reason == next.reason => Failure {
                 message: previous.message,
@@ -401,7 +400,8 @@ impl Failure {
         }
     }
 
-    pub(crate) fn to_reason(&self) -> FailureReason {
+    /// The reason shown for this report.
+    pub fn to_reason(&self) -> FailureReason {
         let message = self.message.clone();
         if self.version_error {
             return FailureReason::UnsupportedVersion { message };
@@ -419,7 +419,7 @@ impl Failure {
 
 /// Outcome once the client process is gone.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ExitDecision {
+pub enum ExitDecision {
     Stopped,
     Fail(FailureReason),
     /// Retry limit reached.
@@ -463,7 +463,7 @@ pub(crate) fn kick_filter_allows(
 /// [`KickCause`]. A kick with a cause stops the session (at once, or after [`REPEATED_KICKS`] in a
 /// row for the causes that can be passing) unless it contains one of the account's own kick
 /// messages; a version the client does not support stops it too.
-pub(crate) fn decide_failure(
+pub fn decide_failure(
     relog: &AutoRelogOptions,
     reason: Option<&DisconnectReason>,
     display: FailureReason,
@@ -494,8 +494,9 @@ pub(crate) fn decide_failure(
     }
 }
 
-/// `OnProcessExited`, with the fixes described in the module docs.
-pub(crate) fn decide_exit(
+/// `OnProcessExited`, with the fixes described in the module docs. `failure` is what the bridge
+/// reported before the exit ([`Failure::merge`] of its `disconnected` and `error` events).
+pub fn decide_exit(
     relog: &AutoRelogOptions,
     stop_requested: bool,
     exit_code: Option<i32>,

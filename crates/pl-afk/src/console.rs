@@ -173,13 +173,40 @@ impl Secret {
         Some(Self {
             command: command.to_owned(),
             replacement: format!("{head} {MASK}"),
-            words: args
-                .split_whitespace()
-                .filter(|w| w.chars().count() >= MIN_MASKED_WORD_CHARS)
-                .map(str::to_owned)
-                .collect(),
+            words: maskable_words(args),
         })
     }
+
+    /// A line the user marked secret, whatever its command. The whole line is masked: a command
+    /// keeps its name (`/msg ******`, as the line's preview shows it), anything else becomes
+    /// [`MASK`]. Its words (a command's arguments) are masked wherever they appear too.
+    fn marked(line: &str) -> Option<Self> {
+        let line = line.trim();
+        if line.is_empty() {
+            return None;
+        }
+        let head = first_token(line);
+        let args = line[head.len()..].trim();
+        let (replacement, words) = if head.starts_with('/') && !args.is_empty() {
+            (format!("{head} {MASK}"), args)
+        } else {
+            (MASK.to_owned(), line)
+        };
+        Some(Self {
+            command: line.to_owned(),
+            replacement,
+            words: maskable_words(words),
+        })
+    }
+}
+
+/// The words of `text` masked on their own (very short words are skipped to keep the console
+/// usable).
+fn maskable_words(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .filter(|w| w.chars().count() >= MIN_MASKED_WORD_CHARS)
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Per-launch line rules: script classification and secret masking.
@@ -208,6 +235,26 @@ impl LineFilter {
         filter
     }
 
+    /// [`Self::new`] for an account whose lines the user marks secret one by one (cloud AFK
+    /// accounts, where any line can carry a password): every line of `secrets` is also masked
+    /// whatever its command (the whole line, and its words of at least four characters wherever
+    /// they appear) and classified [`ConsoleLineKind::Sensitive`].
+    pub fn with_secrets<S: AsRef<str>, T: AsRef<str>>(login_commands: &[S], secrets: &[T]) -> Self {
+        let mut filter = Self::new(login_commands);
+        for line in secrets {
+            let line = line.as_ref().trim();
+            if line.is_empty() {
+                continue;
+            }
+            match filter.script_commands.iter_mut().find(|(c, _)| c == line) {
+                Some((_, sensitive)) => *sensitive = true,
+                None => filter.script_commands.push((line.to_owned(), true)),
+            }
+            filter.add_secret_line(line);
+        }
+        filter
+    }
+
     /// Remembers a sensitive line the user typed so the client's echo of it is masked too.
     pub fn add_user_command(&mut self, line: &str) {
         if is_sensitive_command(line) {
@@ -215,10 +262,22 @@ impl LineFilter {
         }
     }
 
+    /// Remembers a line the user marked secret (a sealed console line) so the client's echo of it
+    /// is masked too, whatever its command.
+    pub fn add_secret_line(&mut self, line: &str) {
+        if let Some(secret) = Secret::marked(line) {
+            self.push_secret(secret);
+        }
+    }
+
     fn add_secret(&mut self, command: &str) {
-        if let Some(secret) = Secret::new(command)
-            && !self.secrets.iter().any(|s| s.command == secret.command)
-        {
+        if let Some(secret) = Secret::new(command) {
+            self.push_secret(secret);
+        }
+    }
+
+    fn push_secret(&mut self, secret: Secret) {
+        if !self.secrets.iter().any(|s| s.command == secret.command) {
             self.secrets.push(secret);
             // Longest first, so a command that contains another is replaced whole.
             self.secrets
@@ -340,6 +399,61 @@ mod tests {
         filter.add_user_command("/l secret123");
         assert_eq!(filter.mask("> /l secret123"), "> /l ******");
         assert_eq!(filter.classify("> /l secret123"), ConsoleLineKind::Normal);
+    }
+
+    #[test]
+    fn lines_marked_secret_are_masked_whatever_their_command() {
+        let filter = LineFilter::with_secrets(
+            &["/is home", "/login hunter22"],
+            &[
+                " /msg Ahmet gizli-kod-42 ",
+                "parolam123",
+                "/login hunter22",
+                "",
+            ],
+        );
+        let (text, kind) = filter.process("[Script] send /msg Ahmet gizli-kod-42");
+        assert_eq!(text, "[Script] send /msg ******");
+        assert_eq!(kind, ConsoleLineKind::Sensitive);
+        // Arguments and plain secret lines lose their words anywhere, the command name stays.
+        assert_eq!(
+            filter.mask("<Ahmet> gizli-kod-42 tamam mı? /msg"),
+            "<******> ****** tamam mı? /msg"
+        );
+        assert_eq!(
+            filter.mask("[Script] send parolam123"),
+            "[Script] send ******"
+        );
+        assert_eq!(filter.mask("PAROLAM123"), "******", "whole line, any case");
+        assert_eq!(filter.mask("/LOGIN hunter22"), "/login ******");
+        // Plain login commands stay script lines, other text is untouched.
+        assert_eq!(
+            filter.process("[Script] send /is home"),
+            ("[Script] send /is home".to_owned(), ConsoleLineKind::Script)
+        );
+        assert_eq!(filter.classify("parolam123"), ConsoleLineKind::Sensitive);
+        assert_eq!(filter.mask("Hoş geldin!"), "Hoş geldin!");
+
+        // Without secrets it is the desktop filter.
+        let plain = LineFilter::with_secrets::<&str, &str>(&["/login hunter22"], &[]);
+        assert_eq!(plain.mask("send /login hunter22"), "send /login ******");
+        assert_eq!(plain.mask("Ahmet"), "Ahmet");
+    }
+
+    #[test]
+    fn typed_lines_marked_secret_are_masked_too() {
+        let mut filter = LineFilter::default();
+        filter.add_secret_line("  ");
+        filter.add_secret_line("/pay Ahmet 1000");
+        filter.add_secret_line("/sifremiunuttum");
+        assert_eq!(filter.mask("> /pay Ahmet 1000"), "> /pay ******");
+        assert_eq!(filter.mask("1000 TL gönderildi"), "****** TL gönderildi");
+        assert_eq!(filter.mask("ok /sifremiunuttum"), "ok ******");
+        assert_eq!(
+            filter.classify("> /pay Ahmet 1000"),
+            ConsoleLineKind::Normal,
+            "typed lines are not script lines"
+        );
     }
 
     #[test]

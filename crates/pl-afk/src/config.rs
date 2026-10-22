@@ -459,7 +459,7 @@ fn toml_range(min: f64, max: f64) -> String {
 
 /// TOML basic string with the legacy escaping: `\\ \" \n \r \t`, other control characters below
 /// U+0020 as `\uXXXX` (uppercase hex); everything else verbatim.
-fn toml_str(value: &str) -> String {
+pub fn toml_str(value: &str) -> String {
     let mut out = String::with_capacity(value.len() + 2);
     out.push('"');
     for c in value.chars() {
@@ -478,7 +478,7 @@ fn toml_str(value: &str) -> String {
 }
 
 /// TOML array of the non-blank items, trimmed: `[ ]` when empty, `[ "a", "b" ]` otherwise.
-fn toml_arr<S: AsRef<str>>(items: &[S]) -> String {
+pub fn toml_arr<S: AsRef<str>>(items: &[S]) -> String {
     let values: Vec<String> = items
         .iter()
         .map(|item| item.as_ref().trim())
@@ -498,7 +498,7 @@ fn toml_arr<S: AsRef<str>>(items: &[S]) -> String {
 /// string half away from zero to three decimals, keeping at least one. MCC requires a decimal
 /// point for these TOML floats. Values that round to zero print without a sign (`-0.0001` → `0.0`;
 /// .NET Core 3.0+ would print `-0.0`, but the legacy launcher ran on .NET Framework).
-pub(crate) fn dotnet_number(value: f64) -> String {
+pub fn dotnet_number(value: f64) -> String {
     if value.is_nan() {
         return "NaN".to_owned();
     }

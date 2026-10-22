@@ -21,12 +21,19 @@ uuid = { workspace = true }
 jiff = { workspace = true }
 zip = { workspace = true }
 parking_lot = { workspace = true }
-keyring = { workspace = true }
+# Login commands in the OS keychain (`KeyringSecretStore`), behind the default `keychain` feature:
+# the cloud AFK host builds without it, so no D-Bus or keychain backend reaches its Linux build.
+keyring = { workspace = true, optional = true }
 specta = { workspace = true }
 # Auto-respond regex checks (the parser behind `regex`, already in the lock file).
 regex-syntax = "0.8"
 # Start time and command line of AFK clients a crashed launcher left running.
 sysinfo = { workspace = true }
+
+[features]
+default = ["keychain"]
+# `KeyringSecretStore`: Windows Credential Manager, macOS Keychain, Linux Secret Service.
+keychain = ["dep:keyring"]
 
 [dev-dependencies]
 tempfile = { workspace = true }

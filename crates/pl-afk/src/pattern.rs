@@ -136,8 +136,11 @@ fn anchored(ast: &Ast) -> bool {
     at_line_start(ast) || leading_loop(ast)
 }
 
-/// The pattern line of a `[Match]` block for a checked pattern.
-pub(crate) fn matches_line(pattern: &str, is_regex: bool) -> String {
+/// The pattern line of a `[Match]` block for a pattern [`check_pattern`] accepted (trimmed):
+/// `match=` (MCC compares it case-insensitively) for plain text, `regex=` for a regular
+/// expression. MCC's `matches.ini` reader cuts every line at `#`, so a regex spells `#` as `\x23`
+/// and plain text containing `#` becomes the equivalent case-insensitive `regex=(?i)…`.
+pub fn matches_line(pattern: &str, is_regex: bool) -> String {
     let pattern = pattern.trim();
     if is_regex {
         format!("regex={}", escape_hash(pattern))
