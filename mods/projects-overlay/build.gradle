@@ -74,7 +74,8 @@ loom {
             source sourceSets.dev
             runDir = providers.gradleProperty('ovl.runDir').getOrElse('run')
             programArgs '--username', providers.gradleProperty('ovl.username').getOrElse('OVL2Test'),
-                '--width', '1280', '--height', '720'
+                '--width', providers.gradleProperty('ovl.width').getOrElse('1280'),
+                '--height', providers.gradleProperty('ovl.height').getOrElse('720')
             vmArgs '-Xmx2G'
             // The launcher passes these on the real command line; local runs take them as Gradle properties.
             [
