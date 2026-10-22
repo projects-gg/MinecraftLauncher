@@ -6,11 +6,18 @@ import { ChatsCircle } from "@phosphor-icons/react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatMessage, SocialTeam } from "@/lib/api/social-types";
+import { currentLanguage } from "@/lib/i18n";
 import { planWhen, withPlanNote } from "../crew-plans";
 import { useSocialUi } from "../store";
 import { useComposerNotice, useComposerState, usePeople } from "./chat-page";
 import { type ChatLine, Conversation, useUnreadAtOpen } from "./conversation";
 import { crewConversation } from "./conversations";
+
+/** "Bugün 21:00 için plan yaptın": the line starts with its time, so it starts with a capital. */
+function capitalized(text: string): string {
+  const locale = currentLanguage() === "tr" ? "tr-TR" : "en-US";
+  return text.charAt(0).toLocaleUpperCase(locale) + text.slice(1);
+}
 
 export function CrewChat({ team, onScreen }: { team: SocialTeam; onScreen: boolean }) {
   const { t } = useTranslation();
@@ -32,7 +39,7 @@ export function CrewChat({ team, onScreen }: { team: SocialTeam; onScreen: boole
             at: plan.createdAt * 1000,
             text: withPlanNote(
               plan.mine
-                ? t("crewWave2.plans.chatMine", { when })
+                ? capitalized(t("crewWave2.plans.chatMine", { when }))
                 : t("crewWave2.plans.notice", { name: plan.byName ?? "?", when }),
               plan.note,
               t,
