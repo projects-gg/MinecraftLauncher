@@ -1,0 +1,280 @@
+// The words of a command or a reply. Three looks:
+// - plain words: a field, with a lock that makes them secret (a password command is secret at once);
+// - a secret this computer has (sealed here, kept in the keychain, or typed now): a hidden field
+//   with an eye that shows it on this computer only, and a quiet "Bu bilgisayarda saklı";
+// - a secret only the cloud can show (sealed on the site or another computer): its preview, with
+//   "Göster" (the machine sends it sealed to a one-time key; shown for a few seconds, never kept)
+//   and "Değiştir" (type it again).
+import { Eye, EyeSlash, LockSimple, LockSimpleOpen } from "@phosphor-icons/react";
+import { Button, cn, enter, IconButton, Input, leave, useMotionPrefs } from "@pl/ui";
+import { AnimatePresence, motion } from "motion/react";
+import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { cloudApi } from "./api";
+import { looksSensitive } from "./sensitive";
+import { typed, type Words } from "./settings-model";
+
+/** How long revealed words stay on screen. */
+const SHOWN_MS = 10_000;
+
+type Reveal =
+  | { state: "idle" }
+  | { state: "loading" }
+  | { state: "shown"; text: string; until: number }
+  | { state: "failed"; reason: "offline" | "limited" | "unreadable" };
+
+function Stored({
+  preview,
+  accountId,
+  rowId,
+  onChange,
+  error,
+  label,
+}: {
+  preview: string;
+  accountId: string;
+  rowId: string;
+  onChange: () => void;
+  error: string | null;
+  label: string;
+}) {
+  const { t } = useTranslation();
+  const { reduce } = useMotionPrefs();
+  const [reveal, setReveal] = useState<Reveal>({ state: "idle" });
+  // Shown words go when the time is up, when the row leaves and when the sheet closes.
+  useEffect(() => {
+    if (reveal.state !== "shown") return;
+    const id = window.setTimeout(() => setReveal({ state: "idle" }), reveal.until - Date.now());
+    return () => window.clearTimeout(id);
+  }, [reveal]);
+
+  const show = async () => {
+    setReveal({ state: "loading" });
+    try {
+      const outcome = await cloudApi.reveal(accountId, rowId);
+      if (outcome.kind === "shown") {
+        setReveal({ state: "shown", text: outcome.text, until: Date.now() + SHOWN_MS });
+      } else {
+        setReveal({
+          state: "failed",
+          reason:
+            outcome.kind === "offline"
+              ? "offline"
+              : outcome.kind === "limited"
+                ? "limited"
+                : "unreadable",
+        });
+      }
+    } catch {
+      setReveal({ state: "failed", reason: "offline" });
+    }
+  };
+
+  const shown = reveal.state === "shown";
+  const name = preview.replace(/\s*\*+$/, "");
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-2">
+        <div
+          className={cn(
+            "relative flex h-9 min-w-0 flex-1 items-center gap-2 overflow-hidden rounded-md border bg-obsidian-850/80 px-3",
+            error ? "border-flare-400/60" : "border-white/7",
+          )}
+        >
+          <span className="sr-only">{label}</span>
+          <LockSimple size={15} weight="fill" className="shrink-0 text-gold-300" aria-hidden />
+          <span className="grid min-w-0 flex-1">
+            <AnimatePresence initial={false}>
+              {shown ? (
+                <motion.span
+                  key="shown"
+                  className="truncate font-mono text-[13px] text-bone-50 [grid-area:1/1]"
+                  data-selectable
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1, transition: enter(0.18) }}
+                  exit={{ opacity: 0, transition: leave(0.14) }}
+                >
+                  {reveal.text}
+                </motion.span>
+              ) : (
+                <motion.span
+                  key="hidden"
+                  className="flex min-w-0 items-center gap-2 [grid-area:1/1]"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1, transition: enter(0.18) }}
+                  exit={{ opacity: 0, transition: leave(0.14) }}
+                >
+                  {name ? (
+                    <span className="truncate font-mono text-[13px] text-bone-100">{name}</span>
+                  ) : null}
+                  <span aria-hidden className="font-mono text-[13px] tracking-widest text-ash-400">
+                    ••••••
+                  </span>
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </span>
+          {/* How long the words stay: a hairline that empties (transform only; still under
+              reduced motion, where it simply goes with the words). */}
+          {shown ? (
+            <motion.span
+              aria-hidden
+              className="absolute right-0 bottom-0 left-0 h-[2px] origin-left bg-gold-400/70"
+              initial={{ transform: "scaleX(1)" }}
+              animate={{
+                transform: reduce ? "scaleX(1)" : "scaleX(0)",
+                transition: { duration: SHOWN_MS / 1000, ease: "linear" },
+              }}
+            />
+          ) : null}
+        </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={shown ? <EyeSlash size={15} /> : <Eye size={15} />}
+          disabled={reveal.state === "loading"}
+          onClick={() => (shown ? setReveal({ state: "idle" }) : void show())}
+        >
+          {shown ? t("cloudAfk.settings.secret.hide") : t("cloudAfk.settings.secret.show")}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onChange}>
+          {t("cloudAfk.settings.secret.change")}
+        </Button>
+      </div>
+      {error || reveal.state === "failed" ? (
+        <p role="alert" className="mt-1.5 text-[12.5px] text-flare-400">
+          {error ??
+            (reveal.state === "failed" ? t(`cloudAfk.settings.secret.${reveal.reason}`) : null)}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export function WordsField({
+  words,
+  onChange,
+  accountId,
+  rowId,
+  label,
+  placeholder,
+  error,
+  autoFocus,
+}: {
+  words: Words;
+  onChange: (words: Words) => void;
+  accountId: string;
+  rowId: string;
+  label: string;
+  placeholder: string;
+  error: string | null;
+  autoFocus?: boolean;
+}) {
+  const { t } = useTranslation();
+  const [visible, setVisible] = useState(false);
+  // "Değiştir" on a stored secret: what to go back to with "Vazgeç".
+  const replaced = useRef<Words | null>(null);
+  const [focusNext, setFocusNext] = useState(false);
+
+  if (words.kind === "sealed") {
+    return (
+      <Stored
+        preview={words.preview}
+        accountId={accountId}
+        rowId={rowId}
+        label={label}
+        error={error}
+        onChange={() => {
+          replaced.current = words;
+          setFocusNext(true);
+          onChange({ kind: "secret", text: "", kept: false });
+        }}
+      />
+    );
+  }
+
+  const secret = words.kind === "secret";
+  const forced = looksSensitive(words.text);
+  const kept = words.kind === "secret" && words.kept;
+  return (
+    <div className="min-w-0 flex-1">
+      <div className="flex items-center gap-2">
+        <div className="relative min-w-0 flex-1">
+          {secret ? (
+            <LockSimple
+              size={15}
+              weight="fill"
+              aria-hidden
+              className="pointer-events-none absolute top-1/2 left-3 z-10 -translate-y-1/2 text-gold-300"
+            />
+          ) : null}
+          <Input
+            aria-label={label}
+            value={words.text}
+            placeholder={replaced.current ? t("cloudAfk.settings.secret.newValue") : placeholder}
+            type={secret && !visible ? "password" : "text"}
+            maxLength={256}
+            spellCheck={false}
+            autoComplete={secret ? "new-password" : "off"}
+            data-1p-ignore=""
+            data-lpignore="true"
+            invalid={Boolean(error)}
+            autoFocus={autoFocus || focusNext}
+            onChange={(event) => onChange(typed(words, event.target.value))}
+            className={cn("h-9 font-mono text-[13px]", secret && "pl-9", secret && "pr-10")}
+          />
+          {secret ? (
+            <IconButton
+              label={
+                visible ? t("cloudAfk.settings.secret.hide") : t("cloudAfk.settings.secret.show")
+              }
+              icon={visible ? <EyeSlash size={16} /> : <Eye size={16} />}
+              size="sm"
+              className="absolute top-1/2 right-0.5 size-8 -translate-y-1/2"
+              onClick={() => setVisible((v) => !v)}
+            />
+          ) : null}
+        </div>
+        {replaced.current ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              const back = replaced.current;
+              replaced.current = null;
+              if (back) onChange(back);
+            }}
+          >
+            {t("cloudAfk.settings.secret.undoChange")}
+          </Button>
+        ) : (
+          <IconButton
+            label={t("cloudAfk.settings.secret.mark")}
+            icon={secret ? <LockSimple size={16} weight="fill" /> : <LockSimpleOpen size={16} />}
+            size="sm"
+            aria-pressed={secret}
+            // A password command stays secret.
+            disabled={forced && secret}
+            className={cn(secret && "text-gold-300")}
+            onClick={() =>
+              onChange(
+                secret
+                  ? { kind: "plain", text: words.text }
+                  : { kind: "secret", text: words.text, kept: false },
+              )
+            }
+          />
+        )}
+      </div>
+      {error ? (
+        <p role="alert" className="mt-1.5 text-[12.5px] text-flare-400">
+          {error}
+        </p>
+      ) : kept ? (
+        <p className="mt-1 text-[12px] text-ash-400">{t("cloudAfk.settings.secret.kept")}</p>
+      ) : forced && secret ? (
+        <p className="mt-1 text-[12px] text-ash-400">{t("cloudAfk.settings.secret.auto")}</p>
+      ) : null}
+    </div>
+  );
+}

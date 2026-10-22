@@ -1,0 +1,63 @@
+// Lines that carry a password, for the UI's own care (the field hides what is typed, the lock
+// shows it is sealed). The backend decides what is sealed (pl_cloud_afk::looks_sensitive); this is
+// the same list: pl-afk's `SENSITIVE_COMMANDS` (crates/pl-afk/src/console.rs).
+const SENSITIVE_COMMANDS: readonly string[] = [
+  "/login",
+  "/l",
+  "/log",
+  "/signin",
+  "/g",
+  "/gir",
+  "/giris",
+  "/giriş",
+  "/girisyap",
+  "/girişyap",
+  "/register",
+  "/reg",
+  "/signup",
+  "/k",
+  "/kayit",
+  "/kayıt",
+  "/kaydol",
+  "/password",
+  "/pass",
+  "/passwd",
+  "/sifre",
+  "/şifre",
+  "/changepassword",
+  "/changepass",
+  "/cp",
+  "/auth",
+  "/authme",
+  "/2fa",
+  "/2fauth",
+];
+
+/** Each character's simple uppercase (`ı` and `i` both `I`); longer expansions stay as they are. */
+function fold(text: string): string {
+  let out = "";
+  for (const char of text) {
+    const upper = char.toUpperCase();
+    out += [...upper].length === 1 ? upper : char;
+  }
+  return out;
+}
+
+const FOLDED = new Set(SENSITIVE_COMMANDS.map(fold));
+const TURKISH_LOWER = new Set(SENSITIVE_COMMANDS.map((name) => name.toLocaleLowerCase("tr")));
+
+export function firstWord(line: string): string {
+  return line.trim().split(/[ \t]/, 1)[0] ?? "";
+}
+
+/** The first word is a password command (also a Turkish keyboard's capitals: `/GİRİŞ`). */
+export function looksSensitive(line: string): boolean {
+  const name = firstWord(line);
+  return name !== "" && (FOLDED.has(fold(name)) || TURKISH_LOWER.has(name.toLocaleLowerCase("tr")));
+}
+
+/** What a secret row shows instead of its words: `/login ******`, or only the stars. */
+export function secretPreview(line: string): string {
+  const name = firstWord(line);
+  return name.startsWith("/") && name.length <= 32 ? `${name} ******` : "******";
+}

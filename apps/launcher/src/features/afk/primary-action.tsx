@@ -7,6 +7,7 @@ import type { MouseEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { isAfkIdle } from "@/features/accounts/afk-match";
 import { type AfkAccount, type AfkState, api } from "@/lib/api";
+import { useGuardedConnect } from "./cloud/use-cloud";
 import { runAfk } from "./errors";
 
 export type AfkAction = "connect" | "stop" | "cancel" | "retry";
@@ -43,6 +44,8 @@ export function AfkPrimaryAction({
   // the pointer has left the button or 0.8 s later, also under a resting pointer (@pl/ui
   // press-guard; E2E2).
   const guard = usePressGuard(action);
+  // Asks first when the same account runs in 7/24 Bulut.
+  const connect = useGuardedConnect();
   const labels: Record<AfkAction, string> = {
     connect: t("afk.connect"),
     stop: t("afk.stop"),
@@ -52,7 +55,7 @@ export function AfkPrimaryAction({
   const press = (event: MouseEvent) => {
     if (!guard.take(event)) return;
     if (action === "connect" || action === "retry") {
-      runAfk(api.afkConnect(account.id), t("afk.connectFailed"));
+      connect(account);
     } else {
       runAfk(api.afkStop(account.id), t("afk.stopFailed"));
     }

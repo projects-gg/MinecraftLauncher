@@ -41,6 +41,9 @@ import { type AfkAccount, api } from "@/lib/api";
 import { ContentIcon } from "@/shell/content-icon";
 import { AfkConsole } from "./afk-console";
 import { AfkHead } from "./afk-head";
+import { CloudLocation, useCloudPlaces, useMoveMenuItem } from "./cloud/location";
+import { CloudSection } from "./cloud/section";
+import { useConnectAll, useGuardedConnect } from "./cloud/use-cloud";
 import { afkFailed, isFriendly, runAfk } from "./errors";
 import { AfkPrimaryAction, primaryAction } from "./primary-action";
 import { AfkSettingsSheet, useAfkReconnect } from "./settings/settings-sheet";
@@ -166,7 +169,11 @@ function AfkCard({
   const stale =
     account.settingsChanged && ["starting", "connecting", "connected"].includes(account.state.kind);
 
-  const connect = () => runAfk(api.afkConnect(account.id), t("afk.connectFailed"));
+  // Asks first when the same account runs in 7/24 Bulut (cloud/use-cloud.ts).
+  const guardedConnect = useGuardedConnect();
+  const connect = () => guardedConnect(account);
+  const places = useCloudPlaces();
+  const moveItem = useMoveMenuItem(account);
   const stop = () => runAfk(api.afkStop(account.id), t("afk.stopFailed"));
   const openFolder = () => runAfk(api.afkOpenFolder(account.id), t("afk.openFolderFailed"));
 
@@ -193,6 +200,7 @@ function AfkCard({
     { label: t("afk.console"), icon: <Terminal size={16} />, onSelect: onConsole },
     { label: t("afk.settings"), icon: <GearSix size={16} />, onSelect: onSettings },
     { label: t("afk.openFolder"), icon: <FolderOpen size={16} />, onSelect: openFolder },
+    ...(moveItem ? [moveItem] : []),
     null,
     { label: t("afk.remove"), icon: <Trash size={16} />, danger: true, onSelect: onRemove },
   ];
@@ -298,6 +306,9 @@ function AfkCard({
               </Button>
             </div>
           ) : null}
+
+          {/* Where it runs, once the player has 7/24 Bulut accounts. */}
+          {places ? <CloudLocation account={account} /> : null}
 
           {/* Pinned to the bottom: the buttons of a row of cards line up. */}
           <div className="mt-auto flex gap-2 pt-3">
@@ -405,6 +416,7 @@ export function AfkPage() {
   const [consoleId, setConsoleId] = useState<string | null>(null);
   const [settingsId, setSettingsId] = useState<string | null>(null);
   const [removing, setRemoving] = useState<AfkAccount | null>(null);
+  const connectAll = useConnectAll();
 
   useEffect(
     () => api.onAfkChange(() => void queryClient.invalidateQueries({ queryKey: ["afk"] })),
@@ -458,7 +470,7 @@ export function AfkPage() {
             <Button
               variant="secondary"
               icon={<Play size={15} weight="fill" className="text-gold-300" />}
-              onClick={() => runAfk(api.afkConnectAll(), t("afk.connectFailed"))}
+              onClick={connectAll}
               disabled={!anyIdle}
             >
               {t("afk.connectAll")}
@@ -497,6 +509,8 @@ export function AfkPage() {
         {isPending ? null : (
           <AddForm accounts={accounts} centered={accounts.length === 0} onAdded={refresh} />
         )}
+        {/* Nothing of it shows unless 7/24 Bulut answers. */}
+        {isPending ? null : <CloudSection desktop={accounts} centered={accounts.length === 0} />}
       </div>
 
       <AfkConsole account={consoleAccount} onClose={() => setConsoleId(null)} />

@@ -379,6 +379,28 @@ export const CONTENT_SPRITES = {
       "................",
     ],
   },
+  /** A cloud, a dome between two shoulders, lit from above: 7/24 Bulut, AFK accounts on our machines. */
+  cloud: {
+    shadow: "o",
+    rows: [
+      "................",
+      "................",
+      "................",
+      "......hhh.......",
+      ".....hllllh.....",
+      "....hllllllh....",
+      "..hhlllllllhhh..",
+      ".hllllllllllllm.",
+      ".hlllllllllllmm.",
+      ".lllllllllmmmmd.",
+      "..mmmmmmmmmmmd..",
+      "................",
+      "................",
+      "................",
+      "................",
+      "................",
+    ],
+  },
 } satisfies Record<string, Sprite>;
 
 export type ContentIconKind = keyof typeof CONTENT_SPRITES;

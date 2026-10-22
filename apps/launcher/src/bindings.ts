@@ -2427,7 +2427,7 @@ export type CloudPage =
 /**  Renewing or reactivating `account`. */
 "renew" | 
 /**  The account's own page. */
-"cloudAccount" | 
+"account" | 
 /**  The player's accounts. */
 "accounts";
 

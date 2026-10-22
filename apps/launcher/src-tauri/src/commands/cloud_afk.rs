@@ -272,7 +272,8 @@ pub async fn cloud_afk_reveal(
         }),
         Err(error) => match error.code() {
             "secret_unreadable" | "seal" => Ok(CloudRevealOutcome::Retype),
-            "host_offline" => Ok(CloudRevealOutcome::Offline),
+            // The service answers 503 while the account's machine is away.
+            "host_offline" | "unavailable" => Ok(CloudRevealOutcome::Offline),
             "rate_limited" => Ok(CloudRevealOutcome::Limited {
                 retry_after: error.retry_after(),
             }),
@@ -440,7 +441,7 @@ pub enum CloudPage {
     /// Renewing or reactivating `account`.
     Renew,
     /// The account's own page.
-    CloudAccount,
+    Account,
     /// The player's accounts.
     Accounts,
 }
@@ -466,8 +467,8 @@ pub fn cloud_afk_open(
         (CloudPage::Start, _) => String::new(),
         (CloudPage::Buy, _) => "satin-al".to_owned(),
         (CloudPage::Renew, Some(id)) => format!("satin-al?hesap={id}"),
-        (CloudPage::CloudAccount, Some(id)) => format!("hesap/{id}"),
-        (CloudPage::Accounts, _) | (CloudPage::Renew | CloudPage::CloudAccount, None) => {
+        (CloudPage::Account, Some(id)) => format!("hesap/{id}"),
+        (CloudPage::Accounts, _) | (CloudPage::Renew | CloudPage::Account, None) => {
             "hesaplar".to_owned()
         }
     };
