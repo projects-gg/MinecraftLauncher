@@ -258,6 +258,12 @@ function CallLine() {
             onSelect: () => void answerCall(call, "yes"),
           },
           { label: t("teams.open"), icon: <UsersThree size={16} />, onSelect: () => open() },
+          // The line's × as well, as the invite row has it (FIX2 menu table).
+          {
+            label: t("social.actions.dismiss"),
+            icon: <X size={16} />,
+            onSelect: () => closeCall(call.id),
+          },
         ]}
         people={call.mine ? [] : [caller]}
         place={{ crew, from: "team" }}
@@ -406,6 +412,11 @@ function PlanLine() {
           ]
         : []),
     { label: t("teams.open"), icon: <UsersThree size={16} />, onSelect: () => open() },
+    {
+      label: t("social.actions.dismiss"),
+      icon: <X size={16} />,
+      onSelect: () => closePlan(plan.id),
+    },
   ];
   return (
     <>
