@@ -1,7 +1,17 @@
 @import "@pl/ui/styles.css";
+/* PL Emoji (CHAT2): our own colour emoji, sliced; an engine loads only the slices of the emoji on
+   screen (docs/tasks/chat2-l.md). */
+@import "./assets/fonts/emoji/emoji.css";
 
 /* Scan the app's own sources (the ui package scans itself). */
 @source "./";
+
+/* Emoji come from PL Emoji in every text, so they look the same on every computer; the letters
+   stay Tektur and Figtree (the faces before it in the list). */
+@theme {
+  --font-display: "Tektur Variable", "PL Emoji", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Figtree Variable", "PL Emoji", ui-sans-serif, system-ui, sans-serif;
+}
 
 /* Page changes (router.tsx, view transition type "page"). Only the page area takes part: the
    rail, title bar, command bar and the art stay live and change in place. The leaving page

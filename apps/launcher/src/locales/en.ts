@@ -2,6 +2,7 @@ import { enAfkAlerts } from "./en-afk-alerts";
 import { enAfkConnect } from "./en-afk-connect";
 import { enAfkReconnect } from "./en-afk-reconnect";
 import { enChat } from "./en-chat";
+import { enChat2 } from "./en-chat2";
 import { enCrewWave2 } from "./en-crew-wave2";
 import { enCrews } from "./en-crews";
 import { enDisk } from "./en-disk";
@@ -283,6 +284,7 @@ export const en: DeepPartial<Strings> = {
   overlay: enOverlay,
   lib1: enLib1,
   fix2: enFix2,
+  chat2: enChat2,
   nav: {
     home: "Home",
     library: "Library",

@@ -3,6 +3,7 @@ import { trAfkAlerts } from "./tr-afk-alerts";
 import { trAfkConnect } from "./tr-afk-connect";
 import { trAfkReconnect } from "./tr-afk-reconnect";
 import { trChat } from "./tr-chat";
+import { trChat2 } from "./tr-chat2";
 import { trCrewWave2 } from "./tr-crew-wave2";
 import { trCrews } from "./tr-crews";
 import { trDisk } from "./tr-disk";
@@ -77,6 +78,7 @@ export const tr = {
   overlay: trOverlay,
   lib1: trLib1,
   fix2: trFix2,
+  chat2: trChat2,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
