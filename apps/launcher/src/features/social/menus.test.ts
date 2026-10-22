@@ -10,6 +10,7 @@ import {
   personMenu,
   planMenu,
   teamMenu,
+  without,
 } from "./menus";
 
 /** A plan as words: actions, `-` for separators, `(off)` for unavailable rows, `✓` for checks. */
@@ -354,6 +355,30 @@ describe("teamMenu", () => {
     expect(
       words(teamMenu({ team: team("member", 4), friendsOutside: 3, chat: true, report: true })),
     ).toEqual(["open", "toggle", "-", "chat", "copyCode", "invite", "-", "report", "leave"]);
+  });
+
+  it("is the same menu on the crew page, without what means nothing there (FIX2)", () => {
+    const full = teamMenu({ team: team("member", 4), friendsOutside: 3, chat: true, report: true });
+    // The rail: no folding (only the friend list folds a crew).
+    expect(words(without(full, ["toggle"]))).toEqual([
+      "open",
+      "-",
+      "chat",
+      "copyCode",
+      "invite",
+      "-",
+      "report",
+      "leave",
+    ]);
+    // The crew's own card: it is on screen already, and a whole group may go with its separator.
+    expect(words(without(full, ["toggle", "open"]))).toEqual([
+      "chat",
+      "copyCode",
+      "invite",
+      "-",
+      "report",
+      "leave",
+    ]);
   });
 
   it("lets a member open, fold, share and leave", () => {

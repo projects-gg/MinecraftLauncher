@@ -31,6 +31,11 @@ export function rowsOf<A extends string, T>(
   return plan.map((entry) => (entry ? row(entry) : null));
 }
 
+/** The plan without the rows of `drop` (a place they mean nothing in), its separators tidied again. */
+export function without<A extends string>(plan: Plan<A>, drop: readonly A[]): Plan<A> {
+  return tidy(plan.filter((row) => !row || !drop.includes(row.action)));
+}
+
 /** Separators only between groups that have rows (none first, last or twice). */
 function tidy<A extends string>(plan: Plan<A>): Plan<A> {
   const out: Plan<A> = [];

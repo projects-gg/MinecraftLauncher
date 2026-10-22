@@ -39,6 +39,7 @@ import {
 } from "@phosphor-icons/react";
 import {
   Button,
+  ContextMenu,
   cn,
   IconButton,
   SearchInput,
@@ -92,7 +93,7 @@ import { SocialAvatar, SocialFace } from "./social-face";
 import { type CrewPane, useSocialUi } from "./store";
 import { CrewMark, CrewWatermark, TeamTag } from "./team-emblem";
 import { RoleBadge, TeamMemberRow } from "./team-member";
-import { TeamInviteRow } from "./team-section";
+import { TeamInviteRow, useCrewItems } from "./team-section";
 import {
   cleanCrewText,
   crewAnniversary,
@@ -757,64 +758,69 @@ function CrewCard({
   const founded = localDay(team.createdOn);
   const anniversary = crewAnniversary(team.createdOn, new Date());
   const together = togetherTime(team.togetherWeek ?? 0);
+  // The crew's own menu on a right click, as on its header in the friend list (FIX2); it is on
+  // screen already, so no "Ekibi aç".
+  const items = useCrewItems(team, { onOpen: false });
   return (
     <div className="relative">
       <CrewWatermark look={team} />
-      <div className="relative flex items-start gap-3.5">
-        <CrewMark look={team} size={64} />
-        <div className="min-w-0 flex-1">
-          <p className="flex items-center gap-2 pr-1">
-            <span className="truncate font-display text-[20px] leading-tight font-semibold text-bone-50">
-              {team.name}
-            </span>
-            <TeamTag tag={team.tag} color={team.color} />
-          </p>
-          {team.motto ? (
-            <p className="mt-0.5 text-[13px] leading-snug text-ash-300" data-selectable>
-              {team.motto}
-            </p>
-          ) : null}
-          <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12.5px] text-ash-400">
-            <span className="inline-flex items-center gap-1">
-              <UsersThree size={14} aria-hidden />
-              {t("teams.membersOf", { count: team.members.length, limit: team.limit })}
-            </span>
-            {founded ? (
-              <span className="inline-flex items-center gap-1">
-                <CalendarBlank size={14} aria-hidden />
-                {t("teams.card.founded", {
-                  date: dateTimeFormat({ day: "numeric", month: "long", year: "numeric" }).format(
-                    founded,
-                  ),
-                })}
+      <ContextMenu items={items}>
+        <div className="relative flex items-start gap-3.5">
+          <CrewMark look={team} size={64} />
+          <div className="min-w-0 flex-1">
+            <p className="flex items-center gap-2 pr-1">
+              <span className="truncate font-display text-[20px] leading-tight font-semibold text-bone-50">
+                {team.name}
               </span>
-            ) : null}
-            {together ? (
-              <span className="inline-flex items-center gap-1">
-                <Clock size={14} aria-hidden />
-                {t("crewWave2.together.week", { time: together })}
-              </span>
-            ) : null}
-          </p>
-          {anniversary ? (
-            <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] font-medium text-gold-300">
-              <Sparkle size={14} weight="fill" aria-hidden />
-              {"years" in anniversary
-                ? t("teams.card.yearsToday", { count: anniversary.years })
-                : t("teams.card.monthsToday", { count: anniversary.months })}
+              <TeamTag tag={team.tag} color={team.color} />
             </p>
+            {team.motto ? (
+              <p className="mt-0.5 text-[13px] leading-snug text-ash-300" data-selectable>
+                {team.motto}
+              </p>
+            ) : null}
+            <p className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[12.5px] text-ash-400">
+              <span className="inline-flex items-center gap-1">
+                <UsersThree size={14} aria-hidden />
+                {t("teams.membersOf", { count: team.members.length, limit: team.limit })}
+              </span>
+              {founded ? (
+                <span className="inline-flex items-center gap-1">
+                  <CalendarBlank size={14} aria-hidden />
+                  {t("teams.card.founded", {
+                    date: dateTimeFormat({ day: "numeric", month: "long", year: "numeric" }).format(
+                      founded,
+                    ),
+                  })}
+                </span>
+              ) : null}
+              {together ? (
+                <span className="inline-flex items-center gap-1">
+                  <Clock size={14} aria-hidden />
+                  {t("crewWave2.together.week", { time: together })}
+                </span>
+              ) : null}
+            </p>
+            {anniversary ? (
+              <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] font-medium text-gold-300">
+                <Sparkle size={14} weight="fill" aria-hidden />
+                {"years" in anniversary
+                  ? t("teams.card.yearsToday", { count: anniversary.years })
+                  : t("teams.card.monthsToday", { count: anniversary.months })}
+              </p>
+            ) : null}
+          </div>
+          {canEdit ? (
+            <IconButton
+              label={t("teams.edit.action")}
+              icon={<PencilSimple size={16} />}
+              size="sm"
+              className="-mt-1 -mr-1"
+              onClick={onEdit}
+            />
           ) : null}
         </div>
-        {canEdit ? (
-          <IconButton
-            label={t("teams.edit.action")}
-            icon={<PencilSimple size={16} />}
-            size="sm"
-            className="-mt-1 -mr-1"
-            onClick={onEdit}
-          />
-        ) : null}
-      </div>
+      </ContextMenu>
       <div className="relative mt-4 border-t border-white/7 pt-3">
         <CrewStrip team={team} canCall={canCall} />
       </div>

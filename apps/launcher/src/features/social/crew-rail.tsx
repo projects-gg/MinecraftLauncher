@@ -8,9 +8,10 @@
 // dragged sideways to reorder (the
 // others glide aside: the glide answers the player's own hand, so it stays in Performance mode too);
 // Alt+←/→ and each mark's menu ("Ana ekip yap", "Sola taşı", "Sağa taşı") do the same without
-// dragging. A tab list: ←/→ move between crews, Home/End to the ends.
-import { BellSlash, ChatsCircle, MegaphoneSimple, Plus, UsersThree } from "@phosphor-icons/react";
-import { ContextMenu, cn, type MenuItem, PixelBrackets, springSnappy, Tooltip } from "@pl/ui";
+// dragging; that menu is the crew's whole menu, as on its header in the friend list (FIX2). A tab
+// list: ←/→ move between crews, Home/End to the ends.
+import { BellSlash, MegaphoneSimple, Plus } from "@phosphor-icons/react";
+import { ContextMenu, cn, PixelBrackets, springSnappy, Tooltip } from "@pl/ui";
 import { AnimatePresence, type DragControls, motion, Reorder, useDragControls } from "motion/react";
 import {
   type KeyboardEvent,
@@ -26,11 +27,12 @@ import type { SocialTeam } from "@/lib/api/social-types";
 import { callNames, unansweredCall } from "./calls";
 import { waitingRequests } from "./crew-joining";
 import { saveCrewOrder } from "./crew-order";
-import { crewFirst, moveCrew, NEW_CREW_TAB } from "./crews";
+import { moveCrew, NEW_CREW_TAB } from "./crews";
 import { useSocialMotion } from "./motion";
 import { crewMutedNow } from "./mute";
 import { useSocialUi } from "./store";
 import { CrewMark } from "./team-emblem";
+import { useCrewItems } from "./team-section";
 import { useCallClock } from "./use-call-clock";
 
 const MARK = 36;
@@ -127,43 +129,9 @@ function CrewTab({
   ]
     .filter(Boolean)
     .join(", ");
-  const move = (next: string[] | null) => {
-    if (next) void saveCrewOrder(next, crew.id);
-  };
-  // "Sohbeti aç" as everywhere a crew shows (FIX2).
-  const chat = useSocialUi((s) => s.view.chat !== undefined);
-  const items: Array<MenuItem | null> = [
-    { label: t("teams.open"), icon: <UsersThree size={16} />, onSelect },
-    ...(chat
-      ? [
-          {
-            label: t("fix2.menu.crewChat"),
-            icon: <ChatsCircle size={16} />,
-            onSelect: () => useSocialUi.getState().openChat(`c:${crew.id}`),
-          },
-        ]
-      : []),
-  ];
-  if (count > 1) {
-    items.push(
-      null,
-      ...(index > 0
-        ? [{ label: t("crews.makeMain"), onSelect: () => move(crewFirst(order, crew.id)) }]
-        : []),
-      {
-        label: t("crews.moveLeft"),
-        shortcut: "Alt ←",
-        disabled: index === 0,
-        onSelect: () => move(moveCrew(order, crew.id, -1)),
-      },
-      {
-        label: t("crews.moveRight"),
-        shortcut: "Alt →",
-        disabled: index === count - 1,
-        onSelect: () => move(moveCrew(order, crew.id, 1)),
-      },
-    );
-  }
+  // The crew's own menu, as on its header in the friend list (FIX2): "Ekibi aç" picks it here, and
+  // the order rows move it sideways.
+  const items = useCrewItems(crew, { onOpen: onSelect, sideways: true });
   return (
     <ContextMenu
       items={items}

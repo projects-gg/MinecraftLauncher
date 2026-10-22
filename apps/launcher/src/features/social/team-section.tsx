@@ -38,7 +38,7 @@ import { muteItems, unmuteCrew, useCrewMute } from "./crew-notify";
 import { makeMainCrew, stepCrew } from "./crew-order";
 import { canAddCrew } from "./crews";
 import { openMenuFromKey } from "./menu-key";
-import { rowsOf, teamMenu } from "./menus";
+import { rowsOf, type TeamAction, teamMenu, without } from "./menus";
 import { pop, swap, useSocialMotion } from "./motion";
 import { useSocialUi } from "./store";
 import { CrewMark, TeamTag } from "./team-emblem";
@@ -47,8 +47,24 @@ import { useCallClock } from "./use-call-clock";
 
 const ago = (unixSeconds: number) => formatRelative(new Date(unixSeconds * 1000).toISOString());
 
-/** The team header's menu: a right click, Shift+F10 or the menu key, or its "…". */
-function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
+/** Where a crew's menu opens: the friend list's header, the crew page's rail or its card. */
+export interface CrewMenuPlace {
+  /** The friend list's header folds the crew ("Daralt" / "Genişlet"). */
+  folded?: boolean;
+  onToggle?: () => void;
+  /** What "Ekibi aç" does here; false where the crew is on screen already (its own card). */
+  onOpen?: (() => void) | false;
+  /** The crew page's rail lays the crews out sideways: "Sola taşı" / "Sağa taşı". */
+  sideways?: boolean;
+}
+
+/**
+ * A crew's menu, the same wherever the crew shows (FIX2): a right click, Shift+F10 or the menu
+ * key, or the header's "…". Rows a place has no use for (folding off the list, opening the crew
+ * already on screen) are left out there.
+ */
+export function useCrewItems(team: SocialTeam, place: CrewMenuPlace = {}) {
+  const { folded = false, onToggle, onOpen, sideways = false } = place;
   const { t } = useTranslation();
   const friends = useSocialUi((s) => s.view.friends);
   const crew = useSocialUi((s) => s.view.crew);
@@ -71,7 +87,7 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
         : "ready";
   const at = crews.findIndex((c) => c.id === team.id);
   const chat = useSocialUi((s) => s.view.chat !== undefined);
-  const plan = teamMenu({
+  const full = teamMenu({
     team,
     friendsOutside,
     call,
@@ -85,6 +101,10 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
     chat,
     report: true,
   });
+  const drop: TeamAction[] = [];
+  if (!onToggle) drop.push("toggle");
+  if (onOpen === false) drop.push("open");
+  const plan = without(full, drop);
   return rowsOf(plan, (row): MenuItem | null => {
     switch (row.action) {
       case "chat":
@@ -128,7 +148,7 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
         return {
           label: t("teams.open"),
           icon: <UsersThree size={16} />,
-          onSelect: () => openTeam(undefined, team.id),
+          onSelect: onOpen || (() => openTeam(undefined, team.id)),
         };
       case "makeMain":
         return {
@@ -137,18 +157,22 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
           onSelect: () => makeMainCrew(team.id),
         };
       case "moveUp":
-      case "moveDown":
+      case "moveDown": {
+        const up = row.action === "moveUp";
         return {
-          label: row.action === "moveUp" ? t("crews.moveUp") : t("crews.moveDown"),
-          shortcut: row.action === "moveUp" ? "Alt ↑" : "Alt ↓",
+          label: sideways
+            ? t(up ? "crews.moveLeft" : "crews.moveRight")
+            : t(up ? "crews.moveUp" : "crews.moveDown"),
+          shortcut: sideways ? (up ? "Alt ←" : "Alt →") : up ? "Alt ↑" : "Alt ↓",
           disabled: row.disabled,
-          onSelect: () => stepCrew(team.id, row.action === "moveUp" ? -1 : 1),
+          onSelect: () => stepCrew(team.id, up ? -1 : 1),
         };
+      }
       case "toggle":
         return {
           label: folded ? t("friendMenus.expand") : t("friendMenus.collapse"),
           icon: folded ? <CaretDown size={16} /> : <CaretRight size={16} />,
-          onSelect: onToggle,
+          onSelect: () => onToggle?.(),
         };
       case "copyCode":
         return {
@@ -209,7 +233,7 @@ export function TeamHeader({
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
   const online = teammatesOnline(team);
-  const items = useTeamItems(team, folded, onToggle);
+  const items = useCrewItems(team, { folded, onToggle });
   const { muted: own, target, allMuted } = useCrewMute(team.id);
   const muted = own || (Boolean(target) && allMuted);
   const multi = useSocialUi((s) => s.view.crew.multi && s.view.crews.length > 1);
