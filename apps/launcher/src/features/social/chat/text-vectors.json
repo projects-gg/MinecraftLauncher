@@ -1,0 +1,1106 @@
+{
+  "about": "The friends service's shared chat filter cases, copied as they are (projects-studio services/social at main 9340389): `text` is test/chat-text-vectors.json (last changed in 4ba4686), `links` test/chat-link-vectors.json with the rule table src/chat-links.json beside this file as chat-links.json (both last changed in 673332d, rule table version 2). Never edit a case here: change the service's copy, then copy both files again and raise nothing else. text.test.ts runs every case; the word list stays the service's own (only 🖕 is checked here).",
+  "source": {
+    "repository": "projects-studio",
+    "commit": "9340389",
+    "text": "services/social/test/chat-text-vectors.json@4ba4686",
+    "links": "services/social/test/chat-link-vectors.json@673332d",
+    "rules": "services/social/src/chat-links.json@673332d"
+  },
+  "text": {
+    "about": "Chat text filter vectors (CHAT2 §3.4, FIX2-S): `reason` is what the service answers (`chat_rejected` with it), null when the text passes. Service: test/chattext.test.ts; launcher and Android pre-checks should pass the same table.",
+    "vectors": [
+      {
+        "name": "discord.gg in regional indicators",
+        "text": "🇩🇮🇸🇨🇴🇷🇩.🇬🇬",
+        "reason": "link"
+      },
+      {
+        "name": "discord gg in regional indicators, no dot",
+        "text": "🇩🇮🇸🇨🇴🇷🇩 🇬🇬",
+        "reason": "link"
+      },
+      {
+        "name": "regional indicators with a path",
+        "text": "🇩🇮🇸🇨🇴🇷🇩.🇬🇬/abc",
+        "reason": "link"
+      },
+      {
+        "name": "negative squared letters",
+        "text": "🅳🅸🆂🅲🅾🆁🅳.gg",
+        "reason": "link"
+      },
+      {
+        "name": "negative circled letters",
+        "text": "🅨🅞🅤🅣🅤🅑🅔.com",
+        "reason": "link"
+      },
+      {
+        "name": "small capitals",
+        "text": "ᴅɪꜱᴄᴏʀᴅ.ɢɢ",
+        "reason": "link"
+      },
+      {
+        "name": "ideographic full stop",
+        "text": "discord。gg/abc",
+        "reason": "link"
+      },
+      {
+        "name": "halfwidth ideographic full stop",
+        "text": "youtube｡com",
+        "reason": "link"
+      },
+      {
+        "name": "vertical ideographic full stop",
+        "text": "site︒com",
+        "reason": "link"
+      },
+      {
+        "name": "round emoji for a dot",
+        "text": "youtube🔴com",
+        "reason": "link"
+      },
+      {
+        "name": "round emoji for a dot, space after",
+        "text": "youtube🔴 com",
+        "reason": "link"
+      },
+      {
+        "name": "black circle for a dot",
+        "text": "instagram⚫com",
+        "reason": "link"
+      },
+      {
+        "name": "emoji between digit groups",
+        "text": "0532🔥123🔥45🔥67",
+        "reason": "phone"
+      },
+      {
+        "name": "emoji and spaces between groups",
+        "text": "0532 🔥 123 🔥 45 🔥 67",
+        "reason": "phone"
+      },
+      {
+        "name": "emoji with a skin tone between groups",
+        "text": "0532👍🏽123👍🏽4567",
+        "reason": "phone"
+      },
+      {
+        "name": "dingbat digits",
+        "text": "⓿❺❸❷ ❶❷❸ ❹❺ ❻❼",
+        "reason": "phone"
+      },
+      {
+        "name": "keycap digits",
+        "text": "0️⃣5️⃣3️⃣2️⃣1️⃣2️⃣3️⃣4️⃣5️⃣6️⃣7️⃣",
+        "reason": "phone"
+      },
+      {
+        "name": "sik in regional indicators",
+        "text": "🇸🇮🇰",
+        "reason": "words"
+      },
+      {
+        "name": "amk in regional indicators",
+        "text": "🇦🇲🇰",
+        "reason": "words"
+      },
+      {
+        "name": "orospu in negative squared letters",
+        "text": "🅾🆁🅾🆂🅿🆄",
+        "reason": "words"
+      },
+      {
+        "name": "siktir in small capitals",
+        "text": "ꜱɪᴋᴛɪʀ",
+        "reason": "words"
+      },
+      {
+        "name": "middle finger",
+        "text": "🖕",
+        "reason": "words"
+      },
+      {
+        "name": "middle finger with a skin tone",
+        "text": "🖕🏽",
+        "reason": "words"
+      },
+      {
+        "name": "letters between emoji",
+        "text": "s🔥i🔥k",
+        "reason": "words"
+      },
+      {
+        "name": "flags in a sentence",
+        "text": "🇹🇷🇹🇷 maç bugün",
+        "reason": null
+      },
+      {
+        "name": "three flags",
+        "text": "🇹🇷🇹🇷🇹🇷",
+        "reason": null
+      },
+      {
+        "name": "keycap one",
+        "text": "1️⃣ numara",
+        "reason": null
+      },
+      {
+        "name": "coordinates and fire",
+        "text": "x: 120 y: 64 🔥",
+        "reason": null
+      },
+      {
+        "name": "round emoji inside Turkish",
+        "text": "naber🔴ne zaman",
+        "reason": null
+      },
+      {
+        "name": "decorative circle before a word",
+        "text": "sunucu 🟢 online",
+        "reason": null
+      },
+      {
+        "name": "live circle",
+        "text": "🔴 canlı yayın başladı",
+        "reason": null
+      },
+      {
+        "name": "our domain",
+        "text": "projects.gg",
+        "reason": null
+      },
+      {
+        "name": "our server",
+        "text": "play.projects.gg'de buluşalım",
+        "reason": null
+      },
+      {
+        "name": "fire",
+        "text": "harika 🔥🔥🔥",
+        "reason": null
+      },
+      {
+        "name": "laughing",
+        "text": "gg 😂😂",
+        "reason": null
+      },
+      {
+        "name": "a family",
+        "text": "Aile 👨‍👩‍👧‍👦",
+        "reason": null
+      },
+      {
+        "name": "a skin tone",
+        "text": "👍🏽 tamam",
+        "reason": null
+      },
+      {
+        "name": "a heart",
+        "text": "❤️ seni seviyorum",
+        "reason": null
+      },
+      {
+        "name": "keycap ten",
+        "text": "🔟 dakika sonra",
+        "reason": null
+      },
+      {
+        "name": "score with an emoji",
+        "text": "Skor 3🔥2",
+        "reason": null
+      },
+      {
+        "name": "Antarctica",
+        "text": "🇦🇶",
+        "reason": null
+      },
+      {
+        "name": "Saint Helena and Italy",
+        "text": "🇸🇭🇮🇹",
+        "reason": null
+      },
+      {
+        "name": "Colombia and the Cook Islands",
+        "text": "🇨🇴🇨🇰",
+        "reason": null
+      },
+      {
+        "name": "dingbat numbers in a list",
+        "text": "❶ Bedwars ❷ SkyWars",
+        "reason": null
+      },
+      {
+        "name": "small capitals greeting",
+        "text": "ᴍᴇʀʜᴀʙᴀ",
+        "reason": null
+      }
+    ]
+  },
+  "links": {
+    "about": "Chat link vectors (CHAT2, rule table version 2): what a whole message's text gets while links are on (or off, with `off`), with Studio's lists as in `lists` (a vector's own `invites` replaces the list's: whether Discord invites may be linked). `reason`: what the service answers (`chat_rejected` with it, and `rule` for links), null when the text passes; then `links` are its plain links in order, as written, and whether each is trusted. Every implementation of the rules in src/chat-links.json must pass the same table (the service: test/chatlinks.test.ts). The word list is the service's own and is not tried here.",
+    "lists": {
+      "trusted": [
+        "discords.com",
+        "kick.com",
+        "linktr.ee",
+        "minecraft.net",
+        "minecraft.wiki",
+        "modrinth.com",
+        "projects.gg",
+        "twitch.tv",
+        "youtu.be",
+        "youtube.com"
+      ],
+      "blocked": ["example.org", "youtube.com/@dolandirici"],
+      "invites": true
+    },
+    "vectors": [
+      {
+        "name": "a Discord invite while Studio keeps invites off",
+        "invites": false,
+        "text": "gel https://discord.gg/projects",
+        "reason": "link",
+        "rule": "invite"
+      },
+      {
+        "name": "a Discord invite on discord.com while invites are off",
+        "invites": false,
+        "text": "https://discord.com/invite/projects",
+        "reason": "link",
+        "rule": "invite"
+      },
+      {
+        "name": "an old Discord invite while invites are off",
+        "invites": false,
+        "text": "https://discordapp.com/invite/projects",
+        "reason": "link",
+        "rule": "invite"
+      },
+      {
+        "name": "a vanity invite while invites are off",
+        "invites": false,
+        "text": "https://dsc.gg/projects",
+        "reason": "link",
+        "rule": "invite"
+      },
+      {
+        "name": "a Discord message link while invites are off",
+        "invites": false,
+        "text": "https://discord.com/channels/123456789012345678/123456789012345679",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://discord.com/channels/123456789012345678/123456789012345679",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a path that only starts like an invite while invites are off",
+        "invites": false,
+        "text": "https://discord.com/invites-and-more",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://discord.com/invites-and-more",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a vanity invite while invites go",
+        "text": "https://dsc.gg/projects",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://dsc.gg/projects",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a YouTube video",
+        "text": "şuna bak https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "a YouTube share link",
+        "text": "https://youtu.be/dQw4w9WgXcQ?si=Kc3vF1bQx0Zp8yTm",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://youtu.be/dQw4w9WgXcQ?si=Kc3vF1bQx0Zp8yTm",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "a video at a time",
+        "text": "2:10'dan izle https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=130s",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=130s",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "a Twitch channel",
+        "text": "yayındayım: https://www.twitch.tv/projectsgg",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://www.twitch.tv/projectsgg",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "a Twitch clip",
+        "text": "https://clips.twitch.tv/BraveSillyOtterKappa-x8Yq2",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://clips.twitch.tv/BraveSillyOtterKappa-x8Yq2",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "a Kick channel",
+        "text": "https://kick.com/projects",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://kick.com/projects",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "a Modrinth mod, the sentence's full stop left out",
+        "text": "Sodium kur: https://modrinth.com/mod/sodium.",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://modrinth.com/mod/sodium",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "a wiki page in brackets",
+        "text": "creeper (https://minecraft.wiki/w/Creeper) patlar",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://minecraft.wiki/w/Creeper",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "a Turkish wiki page with a case ending",
+        "text": "https://tr.minecraft.wiki/w/Elmas'ı oku",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://tr.minecraft.wiki/w/Elmas",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "our forum",
+        "text": "https://forum.projects.gg/t/sezon-5-notlari/1234",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://forum.projects.gg/t/sezon-5-notlari/1234",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "minecraft.net news",
+        "text": "https://www.minecraft.net/tr-tr/article/minecraft-26-3",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://www.minecraft.net/tr-tr/article/minecraft-26-3",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "the case of letters in the scheme and host",
+        "text": "HTTPS://WWW.YOUTUBE.COM/watch?v=dQw4w9WgXcQ",
+        "reason": null,
+        "links": [
+          {
+            "url": "HTTPS://WWW.YOUTUBE.COM/watch?v=dQw4w9WgXcQ",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "emoji right after a link",
+        "text": "https://youtu.be/dQw4w9WgXcQ🔥🔥",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://youtu.be/dQw4w9WgXcQ",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "a link and our server's address",
+        "text": "videoyu izle https://youtu.be/dQw4w9WgXcQ sonra play.projects.gg'ye gel",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://youtu.be/dQw4w9WgXcQ",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "three links",
+        "text": "https://modrinth.com/mod/sodium https://modrinth.com/mod/lithium https://modrinth.com/mod/iris",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://modrinth.com/mod/sodium",
+            "trusted": true
+          },
+          {
+            "url": "https://modrinth.com/mod/lithium",
+            "trusted": true
+          },
+          {
+            "url": "https://modrinth.com/mod/iris",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "a site nobody listed",
+        "text": "skin burada https://www.planetminecraft.com/skins/tag/dragon/",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://www.planetminecraft.com/skins/tag/dragon/",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a fan site with a brand in its name",
+        "text": "https://minecraft-heads.com/custom-heads/decoration",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://minecraft-heads.com/custom-heads/decoration",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a Wikipedia page with Turkish letters in its path",
+        "text": "https://tr.wikipedia.org/wiki/Türkiye",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://tr.wikipedia.org/wiki/Türkiye",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a Steam profile with a long number",
+        "text": "https://steamcommunity.com/profiles/76561198012345678",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://steamcommunity.com/profiles/76561198012345678",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a Discord message link",
+        "text": "https://discord.com/channels/123456789012345678/123456789012345679/123456789012345680",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://discord.com/channels/123456789012345678/123456789012345679/123456789012345680",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a Discord invite",
+        "text": "sunucumuz https://discord.gg/projects",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://discord.gg/projects",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "an Instagram profile",
+        "text": "https://www.instagram.com/projects.oyun/",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://www.instagram.com/projects.oyun/",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a GitHub repository",
+        "text": "https://github.com/CaffeineMC/sodium",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://github.com/CaffeineMC/sodium",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a telegram channel",
+        "text": "https://t.me/projectsgg",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://t.me/projectsgg",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a TikTok video with a long number",
+        "text": "https://www.tiktok.com/@projects.oyun/video/7351234567890123456",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://www.tiktok.com/@projects.oyun/video/7351234567890123456",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a TikTok share link",
+        "text": "https://vm.tiktok.com/ZMabc123/",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://vm.tiktok.com/ZMabc123/",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a post on X",
+        "text": "https://x.com/projectsoyun/status/1792521000123456789",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://x.com/projectsoyun/status/1792521000123456789",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "the phone app on Google Play",
+        "text": "https://play.google.com/store/apps/details?id=gg.projects.mobile",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://play.google.com/store/apps/details?id=gg.projects.mobile",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a Roblox game",
+        "text": "https://www.roblox.com/games/920587237/Adopt-Me",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://www.roblox.com/games/920587237/Adopt-Me",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a real Nitro gift",
+        "text": "https://discord.gift/AbCdEfGhIjKlMnOp",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://discord.gift/AbCdEfGhIjKlMnOp",
+            "trusted": false
+          }
+        ]
+      },
+      {
+        "name": "a link in Turkish quotes",
+        "text": "“https://youtu.be/dQw4w9WgXcQ” bunu izle",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://youtu.be/dQw4w9WgXcQ",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "a trailing dot of the host",
+        "text": "https://youtube.com.",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://youtube.com",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "a site Studio trusts although it looks like a brand",
+        "text": "https://discords.com/servers/projects",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://discords.com/servers/projects",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "a page of the same name as a blocked channel, longer",
+        "text": "https://www.youtube.com/@dolandiricilikuyari",
+        "reason": null,
+        "links": [
+          {
+            "url": "https://www.youtube.com/@dolandiricilikuyari",
+            "trusted": true
+          }
+        ]
+      },
+      {
+        "name": "links switched off",
+        "off": true,
+        "text": "https://youtu.be/dQw4w9WgXcQ",
+        "reason": "link",
+        "rule": "off"
+      },
+      {
+        "name": "a hidden link while links are off",
+        "off": true,
+        "text": "youtube . com",
+        "reason": "link",
+        "rule": "off"
+      },
+      {
+        "name": "our server's address while links are off",
+        "off": true,
+        "text": "play.projects.gg'de buluşalım",
+        "reason": null,
+        "links": []
+      },
+      {
+        "name": "http",
+        "text": "http://example.com/sayfa",
+        "reason": "link",
+        "rule": "http"
+      },
+      {
+        "name": "http in capitals",
+        "text": "HTTP://EXAMPLE.COM",
+        "reason": "link",
+        "rule": "http"
+      },
+      {
+        "name": "a name before an at sign",
+        "text": "https://youtube.com@kotu-site.com/watch",
+        "reason": "link",
+        "rule": "credentials"
+      },
+      {
+        "name": "a port",
+        "text": "https://example.com:8443/",
+        "reason": "link",
+        "rule": "port"
+      },
+      {
+        "name": "an IP address",
+        "text": "https://185.12.34.56/giris",
+        "reason": "link",
+        "rule": "ip"
+      },
+      {
+        "name": "an IP address as one number",
+        "text": "https://3104653880/",
+        "reason": "link",
+        "rule": "ip"
+      },
+      {
+        "name": "a server's IP address and port",
+        "text": "https://185.12.34.56:25565",
+        "reason": "link",
+        "rule": "ip"
+      },
+      {
+        "name": "an IPv6 address",
+        "text": "https://[2001:db8::1]/",
+        "reason": "link",
+        "rule": "ip"
+      },
+      {
+        "name": "a Cyrillic letter in the host",
+        "text": "https://уoutube.com/watch?v=dQw4w9WgXcQ",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "punycode",
+        "text": "https://xn--yotu-1ra.be/x",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "no domain",
+        "text": "https://localhost/admin",
+        "reason": "link",
+        "rule": "form"
+      },
+      {
+        "name": "a host without a dot",
+        "text": "https://youtube . com",
+        "reason": "link",
+        "rule": "form"
+      },
+      {
+        "name": "a bare domain beside a link",
+        "text": "https://youtu.be/dQw4w9WgXcQ ve discord.gg/abc",
+        "reason": "link",
+        "rule": "form"
+      },
+      {
+        "name": "a bare domain",
+        "text": "youtube.com/watch?v=dQw4w9WgXcQ",
+        "reason": "link",
+        "rule": "form"
+      },
+      {
+        "name": "a hidden dot",
+        "text": "discord。gg/abc",
+        "reason": "link",
+        "rule": "form"
+      },
+      {
+        "name": "another scheme",
+        "text": "steam://openurl/https",
+        "reason": "link",
+        "rule": "form"
+      },
+      {
+        "name": "four links",
+        "text": "https://modrinth.com/mod/a https://modrinth.com/mod/b https://modrinth.com/mod/c https://modrinth.com/mod/d",
+        "reason": "link",
+        "rule": "count"
+      },
+      {
+        "name": "a link over 200 characters",
+        "text": "https://www.youtube.com/watch?v=dQw4w9WgXcQ&list=PLabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHI&index=1",
+        "reason": "link",
+        "rule": "long"
+      },
+      {
+        "name": "bit.ly",
+        "text": "bedava değil, bak: https://bit.ly/3xYzAbC",
+        "reason": "link",
+        "rule": "shortener"
+      },
+      {
+        "name": "t.co",
+        "text": "https://t.co/AbCdEf123",
+        "reason": "link",
+        "rule": "shortener"
+      },
+      {
+        "name": "a link hub, trusted by Studio: trust lifts only the look-alike rule",
+        "text": "https://linktr.ee/biri",
+        "reason": "link",
+        "rule": "shortener"
+      },
+      {
+        "name": "a shortener's subdomain",
+        "text": "https://abc.bit.ly/x",
+        "reason": "link",
+        "rule": "shortener"
+      },
+      {
+        "name": "an IP logger with www",
+        "text": "https://www.grabify.link/AbC",
+        "reason": "link",
+        "rule": "grabber"
+      },
+      {
+        "name": "circled letters in the host",
+        "text": "https://ⓨⓞⓤⓣⓤⓑⓔ.com/x",
+        "reason": "link",
+        "rule": "form"
+      },
+      {
+        "name": "a fake Nitro gift",
+        "text": "https://dlscord.gift/AbCdEf",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "an IP logger",
+        "text": "https://grabify.link/ABC123",
+        "reason": "link",
+        "rule": "grabber"
+      },
+      {
+        "name": "another IP logger",
+        "text": "https://iplogger.org/2Ab3Cd",
+        "reason": "link",
+        "rule": "grabber"
+      },
+      {
+        "name": "a tunnel",
+        "text": "https://amazing-cats-ride.trycloudflare.com/",
+        "reason": "link",
+        "rule": "grabber"
+      },
+      {
+        "name": "a wildcard IP name",
+        "text": "https://185-12-34-56.nip.io/",
+        "reason": "link",
+        "rule": "grabber"
+      },
+      {
+        "name": "an adult domain",
+        "text": "https://example.xxx/",
+        "reason": "link",
+        "rule": "adult"
+      },
+      {
+        "name": "a betting domain",
+        "text": "https://kazan.bet/bonus",
+        "reason": "link",
+        "rule": "adult"
+      },
+      {
+        "name": "a letter changed",
+        "text": "https://dlscord.com/nitro",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "a brand with a lure",
+        "text": "https://discord-nitro.gift/claim",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "an official domain inside another",
+        "text": "https://discord.com.verify-login.ru/",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "a brand on a country's second level",
+        "text": "https://steamcommunity.com.ru/tradeoffer/new",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "rn for m",
+        "text": "https://steamcomrnunity.com/id/kanka",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "a zero for an o",
+        "text": "https://pr0jects.gg/magaza",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "our name with a hyphen",
+        "text": "https://projects-gg.com/",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "free robux",
+        "text": "https://free-robux.club/",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "a fake sign-in",
+        "text": "https://minecraft-login.com/",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "one letter too many",
+        "text": "https://youtubee.com/watch",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "two letters swapped",
+        "text": "https://dsicord.com/",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "a WhatsApp number",
+        "text": "https://wa.me/905321234567",
+        "reason": "phone"
+      },
+      {
+        "name": "a WhatsApp number in the query",
+        "text": "https://api.whatsapp.com/send?phone=905321234567&text=selam",
+        "reason": "phone"
+      },
+      {
+        "name": "a Telegram number",
+        "text": "https://t.me/+905321234567",
+        "reason": "phone"
+      },
+      {
+        "name": "a phone number beside a link",
+        "text": "https://youtu.be/dQw4w9WgXcQ ara beni 0532 123 45 67",
+        "reason": "phone"
+      },
+      {
+        "name": "a scam path",
+        "text": "https://example.com/free-nitro",
+        "reason": "link",
+        "rule": "scam"
+      },
+      {
+        "name": "a scam host",
+        "text": "https://deneme-bonusu-veren-siteler.com/",
+        "reason": "link",
+        "rule": "scam"
+      },
+      {
+        "name": "a brand's product with a lure",
+        "text": "https://nitro-gift.com/",
+        "reason": "link",
+        "rule": "lookalike"
+      },
+      {
+        "name": "a scam beside a link",
+        "text": "Bedava Robux burada: https://example.com/r",
+        "reason": "link",
+        "rule": "scam"
+      },
+      {
+        "name": "a scam in leet beside a link",
+        "text": "fr33 n1tr0 https://example.com/x",
+        "reason": "link",
+        "rule": "scam"
+      },
+      {
+        "name": "a betting bonus",
+        "text": "deneme bonusu veren siteler https://example.com/",
+        "reason": "link",
+        "rule": "scam"
+      },
+      {
+        "name": "a program",
+        "text": "https://example.com/indir/setup.exe",
+        "reason": "link",
+        "rule": "file"
+      },
+      {
+        "name": "a mod file",
+        "text": "https://cdn.modrinth.com/data/AANobbMI/versions/u1OEbNKx/sodium-fabric-0.6.0.jar",
+        "reason": "link",
+        "rule": "file"
+      },
+      {
+        "name": "a file in the middle of the path",
+        "text": "https://www.mediafire.com/file/abc123/Modpack.zip/file",
+        "reason": "link",
+        "rule": "file"
+      },
+      {
+        "name": "an escaped file name",
+        "text": "https://example.com/setup%2Eexe",
+        "reason": "link",
+        "rule": "file"
+      },
+      {
+        "name": "an APK",
+        "text": "https://example.com/hile.apk?v=2",
+        "reason": "link",
+        "rule": "file"
+      },
+      {
+        "name": "a blocked site",
+        "text": "https://example.org/her-sey",
+        "reason": "link",
+        "rule": "blocked"
+      },
+      {
+        "name": "a blocked site's subdomain",
+        "text": "https://www.example.org/",
+        "reason": "link",
+        "rule": "blocked"
+      },
+      {
+        "name": "a blocked channel",
+        "text": "https://www.youtube.com/@dolandirici/videos",
+        "reason": "link",
+        "rule": "blocked"
+      },
+      {
+        "name": "a blocked channel in other letters",
+        "text": "https://m.youtube.com/@Dolandirici",
+        "reason": "link",
+        "rule": "blocked"
+      },
+      {
+        "name": "the CHAT1 vectors still hold: discord.gg in regional indicators",
+        "text": "🇩🇮🇸🇨🇴🇷🇩.🇬🇬",
+        "reason": "link",
+        "rule": "form"
+      },
+      {
+        "name": "the CHAT1 vectors still hold: emoji between digit groups",
+        "text": "0532🔥123🔥45🔥67",
+        "reason": "phone"
+      },
+      {
+        "name": "ordinary text",
+        "text": "naber🔴ne zaman geliyorsun",
+        "reason": null,
+        "links": []
+      }
+    ]
+  }
+}
