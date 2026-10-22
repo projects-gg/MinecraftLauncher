@@ -131,6 +131,13 @@ export interface LauncherApi {
     options?: LaunchOptions,
   ): Promise<void>;
   cancelLaunch(instanceId: string): Promise<void>;
+  /**
+   * "Bağlan" (FIX2): asks the running game to close the way its own close button does (it saves
+   * and leaves its server). False when nothing of it could be asked.
+   */
+  closeGame(): Promise<boolean>;
+  /** Ends the running game at once (only at the player's word, after the warning). */
+  killGame(): Promise<void>;
   /** "Ekran görüntülerini panoya kopyala" switched: a game that runs now follows it at once. */
   setScreenshotCopy(enabled: boolean): Promise<void>;
   openUrl(url: string): Promise<void>;

@@ -8,6 +8,11 @@
 //! Every change is written at once (an append for a new message, a rewrite for an edit or a
 //! delete, both through a temporary file and a rename for rewrites), so a crash loses nothing that
 //! was shown. Nothing here talks to the service.
+//!
+//! A message deleted for everyone stays in its place as a tombstone (FIX2): who sent it and when,
+//! who deleted it. Its text and seal are erased, in memory and in the file, and never come back
+//! (a sync or a late event may still list the message). Only a message this device held becomes
+//! one; tombstones count towards the history's limit like any message, never as unread.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::fs;
@@ -101,6 +106,25 @@ struct Line {
     e: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     n: Option<String>,
+    /// Deleted for everyone: a tombstone, its text and seal erased.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    d: Option<Gone>,
+}
+
+/// Who deleted a message for everyone (`b`: a user id, `staff`, or empty when not known) and when
+/// (`a`: the hub's clock in ms, 0 when not known).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct Gone {
+    #[serde(default)]
+    b: String,
+    #[serde(default)]
+    a: i64,
+}
+
+/// Overwrites a text before it is dropped: what a deletion erases should not linger in memory.
+fn erase(text: &mut String) {
+    let mut bytes = std::mem::take(text).into_bytes();
+    bytes.fill(0);
 }
 
 impl Line {
@@ -112,6 +136,7 @@ impl Line {
             m: message.mac.clone(),
             e: message.edited_at,
             n: message.nonce.clone().filter(|nonce| !nonce.is_empty()),
+            d: None,
         }
     }
 
@@ -126,14 +151,68 @@ impl Line {
             nonce: self.n.clone(),
         }
     }
+
+    fn key(&self) -> String {
+        key_of(self.n.as_deref(), self.i)
+    }
+
+    /// The line as shown: a message, or the tombstone of one.
+    fn entry(&self, conv: &str) -> Entry {
+        match &self.d {
+            Some(gone) => Entry::Deleted(Tombstone {
+                conv: conv.to_owned(),
+                id: self.i,
+                from: self.f.clone(),
+                nonce: self.n.clone(),
+                by: gone.b.clone(),
+                at: gone.a,
+            }),
+            None => Entry::Sent(self.message(conv)),
+        }
+    }
+
+    fn last(&self) -> Last {
+        Last {
+            i: self.i,
+            f: self.f.clone(),
+            t: self.t.clone(),
+            d: self.d.as_ref().map(|gone| gone.b.clone()),
+        }
+    }
+}
+
+fn key_of(nonce: Option<&str>, id: i64) -> String {
+    match nonce.filter(|nonce| !nonce.is_empty()) {
+        Some(nonce) => format!("n:{nonce}"),
+        None => format!("i:{id}"),
+    }
 }
 
 /// The key a message keeps on screen from the moment it is typed: its nonce when it has one (the
-/// player's own messages), else its id.
+/// player's own messages), else its id. Its tombstone keeps the same key.
 pub fn message_key(message: &ChatMessage) -> String {
-    match message.nonce.as_deref().filter(|nonce| !nonce.is_empty()) {
-        Some(nonce) => format!("n:{nonce}"),
-        None => format!("i:{}", message.id),
+    key_of(message.nonce.as_deref(), message.id)
+}
+
+/// A message deleted for everyone, as this device keeps it in its place: who sent it and when
+/// (`id`, the hub's clock), who deleted it and when. Its text and seal are gone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Tombstone {
+    pub conv: String,
+    pub id: i64,
+    pub from: String,
+    /// The sender's own key (the player's messages): the tombstone keeps the message's key.
+    pub nonce: Option<String>,
+    /// A user id (the sender, or a crew's leader or moderator), `staff` for Projects' moderators,
+    /// or empty when not known (that account is gone, or the service did not say).
+    pub by: String,
+    /// The hub's clock in ms when it was deleted (0 when not known).
+    pub at: i64,
+}
+
+impl Tombstone {
+    pub fn key(&self) -> String {
+        key_of(self.nonce.as_deref(), self.id)
     }
 }
 
@@ -156,10 +235,12 @@ impl Outgoing {
     }
 }
 
-/// One entry of a conversation as shown: a message the service took, or one on its way.
+/// One entry of a conversation as shown: a message the service took, the tombstone of one
+/// deleted for everyone, or one on its way.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Entry {
     Sent(ChatMessage),
+    Deleted(Tombstone),
     Outgoing(Outgoing),
 }
 
@@ -167,6 +248,7 @@ impl Entry {
     pub fn key(&self) -> String {
         match self {
             Self::Sent(message) => message_key(message),
+            Self::Deleted(tombstone) => tombstone.key(),
             Self::Outgoing(outgoing) => outgoing.key(),
         }
     }
@@ -191,12 +273,15 @@ impl Change {
     }
 }
 
-/// The newest message of a conversation, for the list.
+/// The newest message of a conversation, for the list (`d`: it was deleted for everyone, by whom;
+/// its text is empty then).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Last {
     pub i: i64,
     pub f: String,
     pub t: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub d: Option<String>,
 }
 
 /// What the index keeps about one conversation.
@@ -335,6 +420,18 @@ impl History {
         let read = self.index.convs.get(&conv).map_or(0, |meta| meta.read);
         let lines = self.lines(&conv);
         let (inserted, appended) = match lines.binary_search_by_key(&line.i, |l| l.i) {
+            // Deleted for everyone here: it never comes back, whatever lists it again.
+            Ok(at) if lines[at].d.is_some() => {
+                let entry = lines[at].entry(&conv);
+                if !settled {
+                    return None;
+                }
+                // The answer to the player's own message came after its tombstone: nothing of
+                // it waits any more.
+                change.upsert.push(entry);
+                self.save_index();
+                return Some(change);
+            }
             Ok(at) => {
                 if lines[at] == line {
                     if !settled {
@@ -362,24 +459,21 @@ impl History {
             .binary_search_by_key(&message.id, |l| l.i)
             .ok()
             .map(|at| lines[at].message(&conv));
-        let last = lines.last().map(|l| Last {
-            i: l.i,
-            f: l.f.clone(),
-            t: l.t.clone(),
-        });
+        let last = lines.last().map(Line::last);
         let count = u32::try_from(lines.len()).unwrap_or(u32::MAX);
         if let Some(stored) = stored {
             change.upsert.push(Entry::Sent(stored));
         }
         for line in &dropped {
-            change.remove.push(message_key(&line.message(&conv)));
+            change.remove.push(line.key());
         }
         let meta = self.index.convs.entry(conv.clone()).or_default();
         if inserted && !mine && message.id > read {
             meta.unread = meta.unread.saturating_add(1);
         }
         for line in &dropped {
-            if line.f != self.me && line.i > meta.read {
+            // A tombstone stopped counting when its message was deleted.
+            if line.d.is_none() && line.f != self.me && line.i > meta.read {
                 meta.unread = meta.unread.saturating_sub(1);
             }
         }
@@ -394,26 +488,49 @@ impl History {
         Some(change)
     }
 
-    /// A message was deleted for everyone: it goes from the history. None when it was not held.
-    pub fn remove(&mut self, conv: &str, id: i64) -> Option<Change> {
+    /// A message was deleted for everyone (`by`: a user id, `staff`, or empty when not known;
+    /// `at`: the hub's clock in ms, 0 when not known). The device keeps a tombstone in its place:
+    /// the same key, who sent it and when, who deleted it. Its text and seal are erased here and
+    /// in the file. None when it was not held (no tombstone for a message this device never had),
+    /// or when its tombstone learns nothing new (a deleter not known before is learnt).
+    pub fn delete(&mut self, conv: &str, id: i64, by: &str, at: i64) -> Option<Change> {
         Conversation::parse(conv)?;
+        let me = self.me.clone();
         let lines = self.lines(conv);
-        let at = lines.binary_search_by_key(&id, |l| l.i).ok()?;
-        let line = lines.remove(at);
-        let last = lines.last().map(|l| Last {
-            i: l.i,
-            f: l.f.clone(),
-            t: l.t.clone(),
-        });
-        let count = u32::try_from(lines.len()).unwrap_or(u32::MAX);
+        let index = lines.binary_search_by_key(&id, |l| l.i).ok()?;
+        let line = &mut lines[index];
+        let was_message = line.d.is_none();
+        match &mut line.d {
+            Some(gone) => {
+                if !gone.b.is_empty() || by.is_empty() {
+                    return None;
+                }
+                gone.b = by.to_owned();
+                if at > 0 {
+                    gone.a = at;
+                }
+            }
+            None => {
+                erase(&mut line.t);
+                erase(&mut line.m);
+                line.e = None;
+                line.d = Some(Gone {
+                    b: by.to_owned(),
+                    a: at.max(0),
+                });
+            }
+        }
+        let entry = line.entry(conv);
+        let from_someone_else = line.f != me;
+        let last = lines.last().map(Line::last);
         let mut change = Change::new(conv);
-        change.remove.push(message_key(&line.message(conv)));
+        change.upsert.push(entry);
         let meta = self.index.convs.entry(conv.to_owned()).or_default();
-        if line.f != self.me && line.i > meta.read {
+        // There is nothing left to read in it.
+        if was_message && from_someone_else && id > meta.read {
             meta.unread = meta.unread.saturating_sub(1);
         }
         meta.last = last;
-        meta.count = count;
         self.write_lines(conv);
         self.save_index();
         Some(change)
@@ -493,7 +610,7 @@ impl History {
         let start = end.saturating_sub(limit);
         let mut entries: Vec<Entry> = lines[start..end]
             .iter()
-            .map(|line| Entry::Sent(line.message(conv)))
+            .map(|line| line.entry(conv))
             .collect();
         if before.is_none() {
             entries.extend(
@@ -508,25 +625,32 @@ impl History {
         (entries, start > 0)
     }
 
-    /// One message as held (for an edit, a delete or a report).
+    /// One message as held (for an edit, a delete or a report); a tombstone has none.
     pub fn message(&mut self, conv: &str, id: i64) -> Option<ChatMessage> {
         Conversation::parse(conv)?;
         let lines = self.lines(conv);
         let at = lines.binary_search_by_key(&id, |l| l.i).ok()?;
-        Some(lines[at].message(conv))
+        let line = &lines[at];
+        line.d.is_none().then(|| line.message(conv))
     }
 
-    /// Up to `count` messages before `id`, oldest first (a report's context).
+    /// Up to `count` messages before `id`, oldest first (a report's context; tombstones carry
+    /// nothing to show).
     pub fn before(&mut self, conv: &str, id: i64, count: usize) -> Vec<ChatMessage> {
         if Conversation::parse(conv).is_none() {
             return Vec::new();
         }
         let lines = self.lines(conv);
         let end = lines.partition_point(|l| l.i < id);
-        lines[end.saturating_sub(count)..end]
+        let mut before: Vec<ChatMessage> = lines[..end]
             .iter()
+            .rev()
+            .filter(|line| line.d.is_none())
+            .take(count)
             .map(|line| line.message(conv))
-            .collect()
+            .collect();
+        before.reverse();
+        before
     }
 
     /// Everything in a conversation is read now. False when it already was.
@@ -621,11 +745,15 @@ impl History {
             .filter_map(|line| serde_json::from_str(line).ok())
             .collect();
         lines.sort_by_key(|l| l.i);
-        // A later line of the same id is its newer version.
+        // A later line of the same id is its newer version; a tombstone is never undone.
         let mut kept: Vec<Line> = Vec::with_capacity(lines.len());
         for line in lines {
             match kept.last_mut() {
-                Some(last) if last.i == line.i => *last = line,
+                Some(last) if last.i == line.i => {
+                    if last.d.is_none() || line.d.is_some() {
+                        *last = line;
+                    }
+                }
                 _ => kept.push(line),
             }
         }
@@ -789,6 +917,7 @@ mod tests {
             .iter()
             .map(|e| match e {
                 Entry::Sent(m) => m.id,
+                Entry::Deleted(t) => t.id,
                 Entry::Outgoing(_) => -1,
             })
             .collect();
@@ -803,7 +932,7 @@ mod tests {
     }
 
     #[test]
-    fn an_edit_replaces_the_text_and_a_delete_takes_it_away() {
+    fn an_edit_replaces_the_text_and_a_delete_leaves_a_tombstone() {
         let mut history = History::open(None, ME);
         let conv = CREW.to_owned();
         history.put(&message(&conv, 10, AYSE, "Geliyrum"));
@@ -820,15 +949,110 @@ mod tests {
             1,
             "an edit is no new message"
         );
-        assert_eq!(history.message(&conv, 10), Some(edited));
-        let change = history.remove(&conv, 10).unwrap();
-        assert_eq!(change.remove, ["i:10"]);
-        assert_eq!(history.meta(&conv).unwrap().unread, 0);
-        assert!(history.meta(&conv).unwrap().last.is_none());
+        assert_eq!(history.message(&conv, 10), Some(edited.clone()));
+        let change = history.delete(&conv, 10, AYSE, 20).unwrap();
+        let tombstone = Tombstone {
+            conv: conv.clone(),
+            id: 10,
+            from: AYSE.into(),
+            nonce: None,
+            by: AYSE.into(),
+            at: 20,
+        };
+        // The same key: the bubble turns into its tombstone in place.
+        assert_eq!(change.upsert, [Entry::Deleted(tombstone.clone())]);
+        assert!(change.remove.is_empty());
+        let meta = history.meta(&conv).unwrap();
+        assert_eq!(meta.unread, 0, "nothing left to read in it");
+        assert_eq!(meta.count, 1, "a tombstone keeps its place");
+        let last = meta.last.as_ref().unwrap();
+        assert_eq!((last.t.as_str(), last.d.as_deref()), ("", Some(AYSE)));
+        assert_eq!(history.page(&conv, None, 10).0, [Entry::Deleted(tombstone)]);
+        // Nothing to edit, delete or report any more.
+        assert_eq!(history.message(&conv, 10), None);
         assert!(
-            history.remove(&conv, 10).is_none(),
+            history.delete(&conv, 10, AYSE, 21).is_none(),
             "deleting again changes nothing"
         );
+        // A late event or a sync that lists it again never brings the text back.
+        assert!(history.put(&edited).is_none());
+        assert!(history.put(&message(&conv, 10, AYSE, "Geliyrum")).is_none());
+        assert_eq!(history.message(&conv, 10), None);
+    }
+
+    #[test]
+    fn only_messages_held_here_leave_a_tombstone() {
+        let mut history = History::open(None, ME);
+        let conv = dm();
+        assert!(history.delete(&conv, 10, AYSE, 20).is_none());
+        assert!(history.meta(&conv).is_none(), "nothing was made for it");
+        history.put(&message(&conv, 10, AYSE, "selam"));
+        history.put(&message(&conv, 20, AYSE, "naber"));
+        // Who deleted it is learnt later (an edit found it gone before the event came).
+        let first = history.delete(&conv, 20, "", 0).unwrap();
+        assert!(matches!(&first.upsert[0], Entry::Deleted(t) if t.by.is_empty()));
+        let learnt = history.delete(&conv, 20, "staff", 30).unwrap();
+        assert!(matches!(&learnt.upsert[0], Entry::Deleted(t) if t.by == "staff" && t.at == 30));
+        assert!(
+            history.delete(&conv, 20, AYSE, 31).is_none(),
+            "known already"
+        );
+        assert_eq!(
+            history.meta(&conv).unwrap().unread,
+            1,
+            "the first is unread"
+        );
+        // The player's own message keeps its nonce key; the report context skips tombstones.
+        let mine = ChatMessage {
+            nonce: Some("k3y".into()),
+            ..message(&conv, 30, ME, "benim")
+        };
+        history.put(&mine);
+        let change = history.delete(&conv, 30, ME, 40).unwrap();
+        assert_eq!(change.upsert[0].key(), "n:k3y");
+        history.put(&message(&conv, 50, AYSE, "son"));
+        let context: Vec<i64> = history.before(&conv, 50, 20).iter().map(|m| m.id).collect();
+        assert_eq!(context, [10]);
+    }
+
+    #[test]
+    fn a_tombstone_keeps_nothing_of_the_text_on_disk() {
+        let dir = tempfile::tempdir().unwrap();
+        let conv = dm();
+        {
+            let mut history = History::open(Some(dir.path()), ME);
+            history.put(&message(&conv, 10, AYSE, "gizli sözcük"));
+            history.put(&message(&conv, 20, AYSE, "kalan"));
+            history.delete(&conv, 10, AYSE, 15);
+        }
+        let file = dir
+            .path()
+            .join(ME)
+            .join(format!("{}.jsonl", conv.replace(':', "_")));
+        let written = fs::read_to_string(&file).unwrap();
+        assert!(!written.contains("gizli"), "{written}");
+        assert!(!written.contains("mac10"), "the seal goes too: {written}");
+        assert!(written.contains("kalan"));
+        let index = fs::read_to_string(dir.path().join(ME).join(INDEX_FILE)).unwrap();
+        assert!(!index.contains("gizli"), "{index}");
+        // After a restart it is still the tombstone, and it stays one.
+        let mut history = History::open(Some(dir.path()), ME);
+        let (entries, _) = history.page(&conv, None, 10);
+        assert!(matches!(&entries[0], Entry::Deleted(t) if t.id == 10 && t.by == AYSE));
+        assert!(
+            history
+                .put(&message(&conv, 10, AYSE, "gizli sözcük"))
+                .is_none()
+        );
+        // The newest one deleted: the list shows that, never its text.
+        history.delete(&conv, 20, AYSE, 25);
+        let last = history.meta(&conv).unwrap().last.clone().unwrap();
+        assert_eq!(
+            (last.i, last.t.as_str(), last.d.as_deref()),
+            (20, "", Some(AYSE))
+        );
+        let index = fs::read_to_string(dir.path().join(ME).join(INDEX_FILE)).unwrap();
+        assert!(!index.contains("kalan"), "{index}");
     }
 
     #[test]
@@ -894,7 +1118,7 @@ mod tests {
         assert_eq!(newest.len(), 60);
         let first = match &newest[0] {
             Entry::Sent(m) => m.id,
-            Entry::Outgoing(_) => unreachable!(),
+            Entry::Deleted(_) | Entry::Outgoing(_) => unreachable!(),
         };
         let (older, _) = history.page(&conv, Some(first), 60);
         assert_eq!(older.len(), 60);

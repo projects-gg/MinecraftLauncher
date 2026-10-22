@@ -70,7 +70,7 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
         ? "waiting"
         : "ready";
   const at = crews.findIndex((c) => c.id === team.id);
-  const chat = useSocialUi.getState().view.chat !== undefined;
+  const chat = useSocialUi((s) => s.view.chat !== undefined);
   const plan = teamMenu({
     team,
     friendsOutside,
@@ -89,7 +89,7 @@ function useTeamItems(team: SocialTeam, folded: boolean, onToggle: () => void) {
     switch (row.action) {
       case "chat":
         return {
-          label: t("chat.tabs.chat"),
+          label: t("fix2.menu.crewChat"),
           icon: <ChatsCircle size={16} />,
           onSelect: () => useSocialUi.getState().openChat(`c:${team.id}`),
         };

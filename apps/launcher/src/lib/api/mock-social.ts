@@ -587,6 +587,9 @@ function initial(): SocialSnapshot {
           requests: false,
           link: false,
           plans: false,
+          planNotes: false,
+          // FIX2: "Arkadaş ekle" on a crewmate (`&fix2=0`: a service from before it).
+          crewFriendRequests: searchParam("fix2") !== "0",
         },
     crewNotifications: keepsMutes
       ? {
@@ -599,8 +602,9 @@ function initial(): SocialSnapshot {
     crewLimit: previewLimit(),
     ...extra,
   });
-  // Chat previews (mock-chat.ts): the player leads the crew, so its chat is there too.
-  if (CHAT_SCENARIOS.includes(name)) return crewed([previewTeam(true)]);
+  // Chat previews (mock-chat.ts): the player leads the crew, so its chat is there too (Ayşe leads
+  // it in `chatTombstones`, whose crew chat shows her deletion).
+  if (CHAT_SCENARIOS.includes(name)) return crewed([previewTeam(name !== "chatTombstones")]);
   // The second wave's (mock-crew-wave2.ts): led by the player, or by Ayşe in `crewPlans`.
   if (WAVE2_SCENARIOS.includes(name)) {
     return crewed([previewTeam(!name.startsWith("crewPlan"))]);
@@ -765,6 +769,8 @@ const NO_CREW_FEATURES = {
   requests: false,
   link: false,
   plans: false,
+  planNotes: false,
+  crewFriendRequests: false,
 };
 
 // Chat (CHAT1) lives in mock-chat.ts, on this preview's data.
@@ -1010,6 +1016,7 @@ export const mockSocial: SocialApi = {
   setTeamLink: wave2.setTeamLink,
   setJoinMode: wave2.setJoinMode,
   makePlan: wave2.makePlan,
+  setPlanNote: wave2.setPlanNote,
   answerPlan: wave2.answerPlan,
   cancelPlan: wave2.cancelPlan,
   setTogether: wave2.setTogether,
@@ -1133,6 +1140,41 @@ export const mockSocial: SocialApi = {
     if (!person) throw codeNotFound();
     const request: FriendRequest = { ...person, sentAt: now() };
     commit((v) => ({ ...v, outgoing: [request, ...v.outgoing] }));
+    return "requested";
+  },
+  async requestCrewmate(userId) {
+    await delay(450);
+    const member = view.crews.flatMap((c) => c.members).find((m) => m.id === userId && !m.me);
+    if (!member || member.blocked) {
+      throw new MockSocialError(
+        "SOSYAL-EKIP-ARKADAS",
+        pick(
+          "Bu oyuncuya şu an istek gönderilemiyor.",
+          "You can't send this player a request right now.",
+        ),
+      );
+    }
+    // They had asked first: friends at once, as by code.
+    if (view.incoming.some((r) => r.id === userId)) {
+      await mockSocial.accept(userId);
+      commit((v) => ({
+        ...v,
+        crews: v.crews.map((c) => ({
+          ...c,
+          members: c.members.map((m) => (m.id === userId ? { ...m, friend: true } : m)),
+        })),
+      }));
+      return "friends";
+    }
+    const request: FriendRequest = {
+      id: member.id,
+      name: member.name,
+      username: member.username,
+      avatar: member.avatar,
+      avatarUrl: member.avatarUrl,
+      sentAt: now(),
+    };
+    commit((v) => ({ ...v, outgoing: [request, ...v.outgoing.filter((r) => r.id !== userId)] }));
     return "requested";
   },
   async accept(id) {

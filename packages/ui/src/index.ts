@@ -67,6 +67,7 @@ export {
   underlineFrames,
 } from "./glide";
 export {
+  focusMovedOn,
   focusPanel,
   focusTabQuietly,
   lastInputWasPointer,

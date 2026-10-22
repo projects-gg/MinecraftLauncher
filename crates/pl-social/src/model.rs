@@ -279,6 +279,12 @@ pub const TEAM_FEATURE_REQUESTS: &str = "requests";
 pub const TEAM_FEATURE_LINK: &str = "link";
 /// `teamFeatures`: crew plans on the presence socket (TEAM5).
 pub const TEAM_FEATURE_PLANS: &str = "plans";
+/// `teamFeatures`: a plan's short note and `plan_note` (FIX2).
+pub const TEAM_FEATURE_PLAN_NOTES: &str = "planNotes";
+/// `teamFeatures`: a friend request to a crewmate without their code (FIX2).
+pub const TEAM_FEATURE_CREW_FRIEND_REQUESTS: &str = "crewFriendRequests";
+/// A plan's note: one line of at most this many characters (code points).
+pub const PLAN_NOTE_MAX: usize = 80;
 
 /// A join request waits this long; then it goes without a message (the service's rule).
 pub const JOIN_REQUEST_LIFETIME_SECS: i64 = 7 * 86_400;

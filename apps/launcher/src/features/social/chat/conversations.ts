@@ -1,5 +1,6 @@
 // Conversations (CHAT1), pure rules (conversations.test.ts): their ids, who each is with, what is
-// unread, a conversation muted on this computer, and the order the list shows.
+// unread, a conversation muted on this computer, the order the list shows, and what a deleted
+// message's tombstone says (FIX2).
 import type {
   ChatMessage,
   ChatState,
@@ -107,4 +108,41 @@ export function newDay(previous: ChatMessage | undefined, next: ChatMessage): bo
     previous === undefined ||
     new Date(previous.at).toDateString() !== new Date(next.at).toDateString()
   );
+}
+
+// --- tombstones (FIX2) ---------------------------------------------------------------------------
+
+/**
+ * Who a tombstone says deleted the message: the player ("Bu mesajı sildin"), its sender or nobody
+ * known ("Bu mesaj silindi", also when that account is gone), a crew's leader or one of its
+ * moderators (crew chat), or Projects' moderators.
+ */
+export type TombstoneKind = "mine" | "sender" | "leader" | "moderator" | "staff";
+
+export function tombstoneKind(
+  by: string,
+  from: string,
+  me: string | undefined,
+  crew?: Pick<SocialTeam, "members">,
+): TombstoneKind {
+  if (by === "staff") return "staff";
+  if (me && by === me) return "mine";
+  if (!by || by === from || !crew) return "sender";
+  // Someone else took it away in crew chat: its leader, else one of its moderators (also one who
+  // has left the crew since).
+  return crew.members.find((m) => m.id === by)?.role === "founder" ? "leader" : "moderator";
+}
+
+/** The message a tombstone stands for, or the player's own deletion that waits for its answer. */
+export function deletionOf(
+  message: Pick<ChatMessage, "deleted" | "key">,
+  deleting: Readonly<Record<string, true>>,
+  me: string | undefined,
+): { by: string } | undefined {
+  return message.deleted ?? (deleting[message.key] ? { by: me ?? "" } : undefined);
+}
+
+/** Messages that still say something: tombstones are neither unread nor edited again. */
+export function readable(message: Pick<ChatMessage, "deleted">): boolean {
+  return !message.deleted;
 }

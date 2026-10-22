@@ -123,6 +123,9 @@ pub enum ErrorCode {
     PlanExists,
     /// The plan is gone (cancelled, over, or no longer seen).
     PlanNotFound,
+    /// A plan's note is not one line of at most 80 characters, or chat's checks turned it away
+    /// (FIX2).
+    InvalidPlanNote,
     UpgradeRequired,
     RateLimited,
     Internal,
@@ -205,6 +208,7 @@ const CODES: &[(&str, ErrorCode)] = &[
     ("limit_team_plans", ErrorCode::LimitTeamPlans),
     ("plan_exists", ErrorCode::PlanExists),
     ("plan_not_found", ErrorCode::PlanNotFound),
+    ("invalid_plan_note", ErrorCode::InvalidPlanNote),
     ("upgrade_required", ErrorCode::UpgradeRequired),
     ("rate_limited", ErrorCode::RateLimited),
     ("internal", ErrorCode::Internal),
@@ -289,6 +293,10 @@ pub enum SocialError {
     /// A moderator muted the player in chat until `until` (Unix seconds, the hub's clock).
     #[error("muted in chat")]
     ChatMuted { until: Option<i64> },
+    /// The service turned a plan's note away (FIX2): chat's `reason` (a link, a phone number, a
+    /// listed word), or None for its form (a line break, more than 80 characters).
+    #[error("plan note refused: {reason:?}")]
+    PlanNoteRejected { reason: Option<ChatRejection> },
 }
 
 impl SocialError {
@@ -302,6 +310,7 @@ impl SocialError {
             Self::TextLocked { .. } => Some(&ErrorCode::TeamTextLocked),
             Self::ChatRejected { .. } => Some(&ErrorCode::ChatRejected),
             Self::ChatMuted { .. } => Some(&ErrorCode::ChatMuted),
+            Self::PlanNoteRejected { .. } => Some(&ErrorCode::InvalidPlanNote),
             _ => None,
         }
     }

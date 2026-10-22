@@ -17,11 +17,12 @@
 // - signed in with nobody yet, the player's face, "Henüz arkadaşın yok" and "Arkadaş ekle".
 // The invitations close for good with ×; the friends button then lights up once wherever it is,
 // to show where friends live (from the keyboard the focus goes there too). A line that replaces
-// another cross-fades in place; the strips below glide.
-import { Check, MegaphoneSimple, Play, UserPlus, X } from "@phosphor-icons/react";
-import { cn, easeOutExpo, IconButton } from "@pl/ui";
+// another cross-fades in place; the strips below glide. A line about people opens a menu on a right
+// click (Shift+F10, the menu key): its own actions, then each person with their whole menu (FIX2).
+import { Check, MegaphoneSimple, Play, UserPlus, UsersThree, X } from "@phosphor-icons/react";
+import { ContextMenu, cn, easeOutExpo, IconButton, type MenuItem } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { presetAvatar } from "@/features/avatars/presets";
 import { api } from "@/lib/api";
@@ -46,8 +47,11 @@ import {
 import { DiscordMark } from "./discord-button";
 import { JoinButton } from "./friend-row";
 import { gameBusy } from "./join";
+import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
+import { openMenuFromKey } from "./menu-key";
 import { crewmatesOnProjects, type HomeHint, homeStrip, isJoinable, playingPeople } from "./model";
 import { enter, leave, useSocialMotion } from "./motion";
+import { type PersonPlace, type PersonRef, usePeopleItems } from "./person-menu";
 import { type FaceSource, SocialFace } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
 import { CrewMark } from "./team-emblem";
@@ -148,11 +152,36 @@ function InviteLine({ hint }: { hint: HomeHint }) {
   );
 }
 
+/**
+ * A line's right click (FIX2): its own actions, then each person on it with their whole menu (as
+ * wherever they show). Shift+F10 and the menu key on the focused line open it too.
+ */
+function LineMenu({
+  actions,
+  people,
+  place,
+  children,
+}: {
+  actions: Array<MenuItem | null>;
+  people: readonly PersonRef[];
+  place?: PersonPlace;
+  children: ReactElement;
+}) {
+  const submenus = usePeopleItems(people, place);
+  const items = [...actions, ...(actions.length && submenus.length ? [null] : []), ...submenus];
+  return (
+    <ContextMenu items={items} disabled={!items.length}>
+      {children}
+    </ContextMenu>
+  );
+}
+
 function PlayingLine() {
   const { t } = useTranslation();
   const view = useSocialUi((s) => s.view);
   const favorites = useSocialPrefs((s) => s.favorites);
   const openPanel = useSocialUi((s) => s.openPanel);
+  const here = useThere(PROJECTS);
   const playing = playingPeople(view, favorites);
   const onProjects = playing.filter((f) => isJoinable(f.game));
   // projects.gg first: that is where "Katıl" leads.
@@ -167,15 +196,34 @@ function PlayingLine() {
 
   return (
     <>
-      <button
-        type="button"
-        aria-label={`${text}. ${t("social.home.open")}`}
-        onClick={() => openPanel({ page: "list" })}
-        className="flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-0.5 pr-2.5 pl-0.5 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
+      <LineMenu
+        actions={
+          onProjects.length
+            ? [
+                {
+                  label: t("social.actions.join"),
+                  icon: <Play size={16} />,
+                  disabled: here,
+                  onSelect: () => joinOrAsk(PROJECTS),
+                },
+              ]
+            : []
+        }
+        people={shown}
       >
-        <Faces sources={shown} />
-        <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
-      </button>
+        <button
+          type="button"
+          aria-label={`${text}. ${t("social.home.open")}`}
+          onClick={() => openPanel({ page: "list" })}
+          onKeyDown={(event) => {
+            openMenuFromKey(event);
+          }}
+          className="flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-0.5 pr-2.5 pl-0.5 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
+        >
+          <Faces sources={shown} />
+          <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
+        </button>
+      </LineMenu>
       {onProjects.length ? <JoinButton /> : null}
     </>
   );
@@ -194,25 +242,44 @@ function CallLine() {
   if (!call) return null;
   const text = callSentenceOf(call, view.crews, t);
   const joins = callWhere(call).kind !== "ready";
+  const crew = crewsOfCall(call, view.crews)[0];
+  const caller = callerIn(call, view.crews);
+  const open = (from?: HTMLElement | null) => {
+    openPanel({ page: "team", from });
+    setCrewTab(crew?.id ?? null);
+  };
   return (
     <>
-      <button
-        type="button"
-        aria-label={`${text}. ${t("teams.call.open")}`}
-        onClick={(event) => {
-          openPanel({ page: "team", from: event.currentTarget });
-          setCrewTab(crewsOfCall(call, view.crews)[0]?.id ?? null);
-        }}
-        className="flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-0.5 pr-2 pl-0.5 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
+      <LineMenu
+        actions={[
+          {
+            label: t("teams.call.yes"),
+            icon: joins ? <Play size={16} /> : <Check size={16} />,
+            onSelect: () => void answerCall(call, "yes"),
+          },
+          { label: t("teams.open"), icon: <UsersThree size={16} />, onSelect: () => open() },
+        ]}
+        people={call.mine ? [] : [caller]}
+        place={{ crew, from: "team" }}
       >
-        <span className="relative flex">
-          <SocialFace source={callerIn(call, view.crews)} size={26} />
-          <span className="absolute -right-1.5 -bottom-1 flex size-[14px] items-center justify-center rounded-full bg-obsidian-950 text-gold-300 ring-1 ring-gold-400/40">
-            <MegaphoneSimple size={9} weight="fill" aria-hidden />
+        <button
+          type="button"
+          aria-label={`${text}. ${t("teams.call.open")}`}
+          onClick={(event) => open(event.currentTarget)}
+          onKeyDown={(event) => {
+            openMenuFromKey(event);
+          }}
+          className="flex min-w-0 cursor-pointer items-center gap-3 rounded-full py-0.5 pr-2 pl-0.5 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
+        >
+          <span className="relative flex">
+            <SocialFace source={caller} size={26} />
+            <span className="absolute -right-1.5 -bottom-1 flex size-[14px] items-center justify-center rounded-full bg-obsidian-950 text-gold-300 ring-1 ring-gold-400/40">
+              <MegaphoneSimple size={9} weight="fill" aria-hidden />
+            </span>
           </span>
-        </span>
-        <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
-      </button>
+          <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
+        </button>
+      </LineMenu>
       <button
         type="button"
         onClick={() => void answerCall(call, "yes")}
@@ -240,6 +307,7 @@ function CrewLine() {
   const view = useSocialUi((s) => s.view);
   const openPanel = useSocialUi((s) => s.openPanel);
   const setCrewTab = useSocialUi((s) => s.setCrewTab);
+  const here = useThere(PROJECTS);
   const team = busiestCrew(view.crews);
   const crew = crewmatesOnProjects(view.crews);
   if (!team) return null;
@@ -247,21 +315,39 @@ function CrewLine() {
     view.crews.length > 1
       ? t("crews.home.crewProjects", { count: crew.length })
       : t("teams.home.crewProjects", { count: crew.length });
+  const open = (from?: HTMLElement | null) => {
+    openPanel({ page: "team", from });
+    setCrewTab(team.id);
+  };
   return (
     <>
-      <button
-        type="button"
-        aria-label={`${text}. ${t("teams.open")}`}
-        onClick={(event) => {
-          openPanel({ page: "team", from: event.currentTarget });
-          setCrewTab(team.id);
-        }}
-        className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-full py-0.5 pr-2.5 pl-1 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
+      <LineMenu
+        actions={[
+          {
+            label: t("social.actions.join"),
+            icon: <Play size={16} />,
+            disabled: here,
+            onSelect: () => joinOrAsk(PROJECTS),
+          },
+          { label: t("teams.open"), icon: <UsersThree size={16} />, onSelect: () => open() },
+        ]}
+        people={crew}
+        place={view.crews.length === 1 ? { crew: team, from: "team" } : { from: "team" }}
       >
-        <CrewMark look={team} size={28} />
-        <Faces sources={crew} />
-        <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
-      </button>
+        <button
+          type="button"
+          aria-label={`${text}. ${t("teams.open")}`}
+          onClick={(event) => open(event.currentTarget)}
+          onKeyDown={(event) => {
+            openMenuFromKey(event);
+          }}
+          className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-full py-0.5 pr-2.5 pl-1 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
+        >
+          <CrewMark look={team} size={28} />
+          <Faces sources={crew} />
+          <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
+        </button>
+      </LineMenu>
       <JoinButton />
     </>
   );
@@ -296,21 +382,52 @@ function PlanLine() {
       : coming.length
         ? t("crewWave2.plans.home.soonComing", { time, count: coming.length })
         : t("crewWave2.plans.home.soon", { time });
+  const open = (from?: HTMLElement | null) => {
+    openPanel({ page: "team", from });
+    setCrewTab(crew.id);
+  };
+  // The line's own actions on a right click, as its buttons have them (FIX2).
+  const actions: MenuItem[] = [
+    ...(phase === "live" && plan.myAnswer !== "no"
+      ? [
+          {
+            label: t("social.actions.join"),
+            icon: <Play size={16} />,
+            onSelect: () => joinOrAsk(PROJECTS),
+          },
+        ]
+      : !plan.myAnswer
+        ? [
+            {
+              label: t("crewWave2.plans.yes"),
+              icon: <Check size={16} />,
+              onSelect: () => void attempt(() => api.social.answerPlan(plan.id, "yes")),
+            },
+          ]
+        : []),
+    { label: t("teams.open"), icon: <UsersThree size={16} />, onSelect: () => open() },
+  ];
   return (
     <>
-      <button
-        type="button"
-        aria-label={`${text}. ${t("teams.open")}`}
-        onClick={(event) => {
-          openPanel({ page: "team", from: event.currentTarget });
-          setCrewTab(crew.id);
-        }}
-        className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-full py-0.5 pr-2.5 pl-1 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
-      >
-        <CrewMark look={crew} size={28} />
-        {faces.length ? <Faces sources={faces} /> : null}
-        <span className="truncate text-[13.5px] font-medium text-bone-50">{text}</span>
-      </button>
+      <LineMenu actions={actions} people={faces} place={{ crew, from: "team" }}>
+        <button
+          type="button"
+          aria-label={`${text}${plan.note ? `: ${plan.note}` : ""}. ${t("teams.open")}`}
+          onClick={(event) => open(event.currentTarget)}
+          onKeyDown={(event) => {
+            openMenuFromKey(event);
+          }}
+          className="flex min-w-0 cursor-pointer items-center gap-2.5 rounded-full py-0.5 pr-2.5 pl-1 outline-none transition-colors duration-150 hover:bg-white/6 focus-visible:ring-2 focus-visible:ring-gold-300"
+        >
+          <CrewMark look={crew} size={28} />
+          {faces.length ? <Faces sources={faces} /> : null}
+          <span className="shrink-0 text-[13.5px] font-medium text-bone-50">{text}</span>
+          {/* The plan's note (FIX2), quieter, cut where the pill ends. */}
+          {plan.note ? (
+            <span className="min-w-0 truncate text-[13px] text-ash-300">“{plan.note}”</span>
+          ) : null}
+        </button>
+      </LineMenu>
       {phase === "live" && plan.myAnswer !== "no" ? (
         <JoinButton />
       ) : !plan.myAnswer ? (

@@ -4,7 +4,8 @@
 // with one press. Enter sends, Shift+Enter starts a new line, ↑ in an empty field edits the last
 // message the player may still edit, Esc leaves an edit. When the player cannot write here (a
 // moderator's mute, chat switched off, no longer friends or in the crew) one quiet line takes its
-// place, the same height.
+// place, the same height. An edit (from a message's menu, a right click or ↑) and "Düzenle" on a
+// message that did not go put the caret at the end of the field (FIX2).
 import { Check, Info, LockSimple, PaperPlaneRight, PencilSimple, X } from "@phosphor-icons/react";
 import { cn, IconButton } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -22,6 +23,7 @@ import { api } from "@/lib/api";
 import type { ChatMessage } from "@/lib/api/social-types";
 import { enter, leave, rise, useSocialMotion } from "../motion";
 import { useChat } from "./chat-store";
+import { holdFocus } from "./focus";
 import { CHAT_COUNT_FROM, CHAT_TEXT_MAX, chatLength, hasText, textProblem } from "./text";
 
 /** What the composer may do here. */
@@ -42,6 +44,7 @@ export function Composer({
   state,
   editing,
   notice,
+  focusRequest = 0,
   onCancelEdit,
   onEditLast,
   onSent,
@@ -54,6 +57,9 @@ export function Composer({
   editing: ChatMessage | null;
   /** A quiet line over the field (the mailbox is off, the connection is waiting). */
   notice: string | null;
+  /** Grows when the field should take the focus, the caret at the end (a failed message's text
+   * came back to it). */
+  focusRequest?: number;
   onCancelEdit: () => void;
   /** ↑ in an empty field: the last message the player may still edit, if any. */
   onEditLast: () => void;
@@ -71,18 +77,24 @@ export function Composer({
   const field = useRef<HTMLTextAreaElement>(null);
   const text = editing ? editText : draft;
 
-  // An edit starts with the message's text, the caret at its end.
+  // An edit starts with the message's text, the caret at its end, however it started: the menu
+  // that started it may close after this and must not take the focus away (focus.ts). An edit
+  // that ends leaves nothing of its text behind.
   useEffect(() => {
-    if (!editing) return;
+    if (!editing) {
+      setEditText("");
+      return;
+    }
     setEditText(editing.text);
     setError(null);
-    window.requestAnimationFrame(() => {
-      const element = field.current;
-      if (!element) return;
-      element.focus();
-      element.setSelectionRange(element.value.length, element.value.length);
-    });
+    return field.current ? holdFocus(field.current) : undefined;
   }, [editing]);
+
+  // A failed message's text came back to the field: the caret waits at its end.
+  useEffect(() => {
+    if (!focusRequest || !field.current) return;
+    return holdFocus(field.current);
+  }, [focusRequest]);
 
   // The field grows with its lines (up to five), measured before paint.
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-measured when the text changes

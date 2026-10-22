@@ -1,7 +1,8 @@
 // What the open conversations show: their messages (pages read from this computer's history and
-// the changes that come live), drafts that wait in the composer, and edits shown before the
-// service answers. Only conversations the player opened are kept here; the list's summaries come
-// with the snapshot.
+// the changes that come live), drafts that wait in the composer, and edits and deletions shown
+// before the service answers. A message deleted for everyone comes back as its tombstone, under
+// the same key (FIX2): its text leaves this store with it. Only conversations the player opened
+// are kept here; the list's summaries come with the snapshot.
 import { create } from "zustand";
 import { api } from "@/lib/api";
 import type { ChatChange, ChatMessage, ChatPage } from "@/lib/api/social-types";
@@ -26,14 +27,14 @@ interface ChatStore {
   drafts: Record<string, string>;
   /** Edits on their way: the new text shows until the service answers (key → text). */
   edits: Record<string, string>;
-  /** Messages deleted here, hidden until the service answers. */
-  hidden: Record<string, true>;
+  /** Messages the player deleted here: shown as their tombstone until the service answers. */
+  deleting: Record<string, true>;
   load: (conv: string) => Promise<void>;
   loadOlder: (conv: string) => Promise<void>;
   apply: (change: ChatChange) => void;
   setDraft: (conv: string, text: string) => void;
   setEdit: (key: string, text: string | null) => void;
-  setHidden: (key: string, hidden: boolean) => void;
+  setDeleting: (key: string, deleting: boolean) => void;
   /** Signed out or another account: nothing of the old one stays. */
   forget: () => void;
 }
@@ -57,7 +58,7 @@ export const useChat = create<ChatStore>()((set, get) => ({
   threads: {},
   drafts: {},
   edits: {},
-  hidden: {},
+  deleting: {},
   load: async (conv) => {
     const current = get().threads[conv];
     if (current?.loading) return;
@@ -146,13 +147,21 @@ export const useChat = create<ChatStore>()((set, get) => ({
         else messages.push(message);
       }
       // An edit or a delete the service answered needs no stand-in any more (the service may have
-      // cleaned the edited text: its version wins).
+      // cleaned the edited text: its version wins). A tombstone takes any edit on its way along.
       const edits = { ...s.edits };
-      const hidden = { ...s.hidden };
+      const deleting = { ...s.deleting };
       for (const message of change.upsert) {
-        if (message.edited || edits[message.key] === message.text) delete edits[message.key];
+        if (message.deleted) {
+          delete edits[message.key];
+          delete deleting[message.key];
+        } else if (message.edited || edits[message.key] === message.text) {
+          delete edits[message.key];
+        }
       }
-      for (const key of change.remove) delete hidden[key];
+      for (const key of change.remove) {
+        delete edits[key];
+        delete deleting[key];
+      }
       return {
         threads: {
           ...s.threads,
@@ -163,7 +172,7 @@ export const useChat = create<ChatStore>()((set, get) => ({
           },
         },
         edits,
-        hidden,
+        deleting,
       };
     }),
   setDraft: (conv, text) =>
@@ -181,12 +190,12 @@ export const useChat = create<ChatStore>()((set, get) => ({
       else edits[key] = text;
       return { edits };
     }),
-  setHidden: (key, hidden) =>
+  setDeleting: (key, deleting) =>
     set((s) => {
-      const next = { ...s.hidden };
-      if (hidden) next[key] = true;
+      const next = { ...s.deleting };
+      if (deleting) next[key] = true;
       else delete next[key];
-      return { hidden: next };
+      return { deleting: next };
     }),
-  forget: () => set({ threads: {}, drafts: {}, edits: {}, hidden: {} }),
+  forget: () => set({ threads: {}, drafts: {}, edits: {}, deleting: {} }),
 }));

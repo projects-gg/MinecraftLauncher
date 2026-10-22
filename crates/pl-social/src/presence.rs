@@ -137,11 +137,13 @@ pub enum PresenceEvent {
     ChatMessage(ChatMessage),
     /// A message was edited: its new text and seal.
     ChatEdited(ChatMessage),
-    /// A message was deleted for everyone (`by`: a user id, `staff`, or empty).
+    /// A message was deleted for everyone (`by`: a user id, `staff`, or empty; `at`: the hub's
+    /// clock in ms, 0 when not said).
     ChatDeleted {
         conv: String,
         id: i64,
         by: String,
+        at: i64,
     },
     /// One conversation of a sync: messages sent or edited, and deletions, since the device's
     /// newest (each message carries its `conv`).
@@ -258,12 +260,26 @@ enum CrewRequest {
     End { call: String },
 }
 
-/// What a crew plan request asks of the service (TEAM5).
+/// What a crew plan request asks of the service (TEAM5; the note FIX2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum PlanRequest {
-    Make { crew: String, at: i64 },
-    Answer { plan: String, answer: PlanAnswer },
-    Cancel { plan: String },
+    Make {
+        crew: String,
+        at: i64,
+        note: Option<String>,
+    },
+    Answer {
+        plan: String,
+        answer: PlanAnswer,
+    },
+    Cancel {
+        plan: String,
+    },
+    Note {
+        crew: String,
+        plan: String,
+        note: String,
+    },
 }
 
 /// What a chat request asks of the service.
@@ -464,11 +480,27 @@ impl PresenceControl {
     /// (the maker is coming); the crewmates who see the player get it too. Limits: 3 upcoming
     /// plans per crew, one per crew and time, 5 a day per player, the right to call the crew.
     /// Fails with `Refused` (`plan_time`, `limit_team_plans`, `plan_exists`, `team_not_found`,
-    /// `team_not_permitted`), `RateLimited`, `Limited` (`crew_plans`) or `Unavailable`.
-    pub async fn make_plan(&self, crew: &str, at: i64) -> Result<CrewPlan> {
+    /// `team_not_permitted`), `RateLimited`, `Limited` (`crew_plans`) or `Unavailable`. A note
+    /// (only to a service with `planNotes`) may be turned away: `PlanNoteRejected`, `ChatMuted`.
+    pub async fn make_plan(&self, crew: &str, at: i64, note: Option<&str>) -> Result<CrewPlan> {
         self.plan(PlanRequest::Make {
             crew: crew.to_owned(),
             at,
+            note: note.map(str::to_owned),
+        })
+        .await?
+        .ok_or_else(|| SocialError::Protocol("a plan answer without its plan".into()))
+    }
+
+    /// A plan's new note, or `""` to clear it (FIX2): its maker sets, changes or clears it; the
+    /// crew's leader and moderators may only clear it. Returns the plan as the service has it now.
+    /// Fails with `PlanNoteRejected`, `ChatMuted`, `Limited` (`crew_plans`), `RateLimited` or
+    /// `Refused` (`plan_not_found`, `team_not_permitted`, `team_not_found`).
+    pub async fn set_plan_note(&self, crew: &str, plan: &str, note: &str) -> Result<CrewPlan> {
+        self.plan(PlanRequest::Note {
+            crew: crew.to_owned(),
+            plan: plan.to_owned(),
+            note: note.to_owned(),
         })
         .await?
         .ok_or_else(|| SocialError::Protocol("a plan answer without its plan".into()))
@@ -1002,9 +1034,20 @@ fn chat_off() -> SocialError {
 
 fn plan_message(request: PlanRequest, rid: u32) -> ClientMessage {
     match request {
-        PlanRequest::Make { crew, at } => ClientMessage::Plan { crew, at, rid },
+        PlanRequest::Make { crew, at, note } => ClientMessage::Plan {
+            crew,
+            at,
+            note,
+            rid,
+        },
         PlanRequest::Answer { plan, answer } => ClientMessage::PlanAnswer { plan, answer, rid },
         PlanRequest::Cancel { plan } => ClientMessage::PlanCancel { plan, rid },
+        PlanRequest::Note { crew, plan, note } => ClientMessage::PlanNote {
+            crew,
+            id: plan,
+            note,
+            rid,
+        },
     }
 }
 
@@ -1223,8 +1266,8 @@ async fn on_text(
         ServerMessage::CrewOrder { order } => PresenceEvent::CrewOrder(order),
         ServerMessage::Chat { msg } if state.chat_on => PresenceEvent::ChatMessage(msg),
         ServerMessage::ChatEdited { msg } if state.chat_on => PresenceEvent::ChatEdited(msg),
-        ServerMessage::ChatDeleted { conv, id, by } if state.chat_on => {
-            PresenceEvent::ChatDeleted { conv, id, by }
+        ServerMessage::ChatDeleted { conv, id, by, at } if state.chat_on => {
+            PresenceEvent::ChatDeleted { conv, id, by, at }
         }
         ServerMessage::ChatSync {
             conv,
@@ -1374,6 +1417,12 @@ fn socket_error(
         "chat_rejected" => {
             return SocialError::ChatRejected {
                 reason: ChatRejection::parse(reason.unwrap_or_default()),
+            };
+        }
+        // A plan's note (FIX2): chat's reasons, or none for its form (a line break, too long).
+        "invalid_plan_note" => {
+            return SocialError::PlanNoteRejected {
+                reason: reason.map(ChatRejection::parse),
             };
         }
         "chat_muted" => return SocialError::ChatMuted { until },
@@ -2021,7 +2070,11 @@ mod tests {
         // A new plan: the frame goes with its rid and the stored plan comes back in the ack.
         let make = tokio::spawn({
             let control = handle.control();
-            async move { control.make_plan("0a1b2c3d4e5f6a7b", 1_792_612_800).await }
+            async move {
+                control
+                    .make_plan("0a1b2c3d4e5f6a7b", 1_792_612_800, None)
+                    .await
+            }
         });
         let sent = next_json(&mut server).await;
         assert_eq!(sent["t"], "plan");
@@ -2041,7 +2094,11 @@ mod tests {
         // The same time again; a changed answer over the day's limit; a cancel.
         let twice = tokio::spawn({
             let control = handle.control();
-            async move { control.make_plan("0a1b2c3d4e5f6a7b", 1_792_612_800).await }
+            async move {
+                control
+                    .make_plan("0a1b2c3d4e5f6a7b", 1_792_612_800, None)
+                    .await
+            }
         });
         let sent = next_json(&mut server).await;
         send_json(
@@ -2137,7 +2194,7 @@ mod tests {
         ));
         let refused = handle
             .control()
-            .make_plan("0a1b2c3d4e5f6a7b", 1_792_612_800)
+            .make_plan("0a1b2c3d4e5f6a7b", 1_792_612_800, None)
             .await
             .unwrap_err();
         assert_eq!(refused.code(), Some(&ErrorCode::BadRequest));
@@ -2294,7 +2351,8 @@ mod tests {
             PresenceEvent::ChatDeleted {
                 conv: "c:0123456789abcdef".into(),
                 id: 1_792_521_000_500,
-                by: "staff".into()
+                by: "staff".into(),
+                at: 1
             }
         );
         send_json(

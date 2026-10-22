@@ -47,10 +47,32 @@ export function focusPanel(element: HTMLElement): void {
 
 /**
  * A menu's `onCloseAutoFocus`: the focus goes back to the trigger only after keyboard use (a
- * mouse player would get the trigger's ring and tooltip after a plain click).
+ * mouse player would get the trigger's ring and tooltip after a plain click), and never when the
+ * chosen item moved it on by itself: a field it focused (a chat message's "Düzenle", FIX2) or a
+ * layer it opened keeps it.
  */
 export function returnFocusAfterKeys(event: Event): void {
-  if (pointerLast) event.preventDefault();
+  const active = typeof document === "undefined" ? null : document.activeElement;
+  if (pointerLast || focusMovedOn(active, event.currentTarget ?? event.target)) {
+    event.preventDefault();
+  }
+}
+
+/**
+ * Whether the focus moved on while a menu closed: something outside the menu has it, not the
+ * page itself (the focus falls to the page when the menu's focused row goes away).
+ */
+export function focusMovedOn(active: Element | null, menu: unknown): boolean {
+  if (!active) return false;
+  const page = active.ownerDocument;
+  if (page && (active === page.body || active === page.documentElement)) return false;
+  const inMenu =
+    menu !== null &&
+    typeof menu === "object" &&
+    "contains" in menu &&
+    typeof menu.contains === "function" &&
+    Boolean(menu.contains(active));
+  return !inMenu;
 }
 
 /**

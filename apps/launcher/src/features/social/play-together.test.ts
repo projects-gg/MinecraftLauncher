@@ -76,20 +76,23 @@ describe("joinStep", () => {
   if (!server) throw new Error("test address");
 
   it("asks once when the game is closed", () => {
-    expect(joinStep({ kind: "projects" }, false, { state: "launcher" })).toBe("confirm");
-    expect(joinStep(server, false, { state: "launcher" })).toBe("confirm");
+    expect(joinStep({ kind: "projects" }, "closed", { state: "launcher" })).toBe("confirm");
+    expect(joinStep(server, "closed", { state: "launcher" })).toBe("confirm");
   });
 
-  it("never closes an open game: it says how to join from the game", () => {
-    expect(joinStep({ kind: "projects" }, true, { state: "singleplayer" })).toBe("gameOpen");
-    expect(joinStep(server, true, projects)).toBe("gameOpen");
-    // Still opening (no server yet).
-    expect(joinStep(server, true, { state: "launcher" })).toBe("gameOpen");
+  it("takes an open game there after one question (FIX2: it closes as its X does, or moves)", () => {
+    expect(joinStep({ kind: "projects" }, "open", { state: "singleplayer" })).toBe("restart");
+    expect(joinStep(server, "open", projects)).toBe("restart");
+  });
+
+  it("starts a game that is still opening again, into the server", () => {
+    expect(joinStep(server, "opening", { state: "launcher" })).toBe("reopen");
+    expect(joinStep({ kind: "projects" }, "opening", { state: "launcher" })).toBe("reopen");
   });
 
   it("has nothing to do when the player is already there", () => {
-    expect(joinStep({ kind: "projects" }, true, projects)).toBe("already");
-    expect(joinStep(server, true, other)).toBe("already");
+    expect(joinStep({ kind: "projects" }, "open", projects)).toBe("already");
+    expect(joinStep(server, "open", other)).toBe("already");
   });
 });
 

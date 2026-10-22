@@ -84,8 +84,10 @@ import { CrewRail } from "./crew-rail";
 import { CrewRequests, MyRequests } from "./crew-requests";
 import { callableCrews, canAddCrew, NEW_CREW_TAB, shownCrew } from "./crews";
 import { dayMonth, limitOf, opensIn } from "./limits";
+import { openMenuFromKey } from "./menu-key";
 import { type Leaving, leavingOf } from "./menus";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
+import { PersonContextMenu } from "./person-menu";
 import { SocialAvatar, SocialFace } from "./social-face";
 import { type CrewPane, useSocialUi } from "./store";
 import { CrewMark, CrewWatermark, TeamTag } from "./team-emblem";
@@ -933,24 +935,27 @@ function InviteFriends({ team }: { team: SocialTeam }) {
           {candidates.map((friend) => {
             const invited = team.invited.includes(friend.id);
             return (
-              <li
-                key={friend.id}
-                className="flex items-center gap-3 rounded-[var(--radius-panel)] py-1.5 pr-1 pl-2"
-              >
-                <SocialAvatar source={friend} size={32} state={friend.state} dnd={friend.dnd} />
-                <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-bone-100">
-                  {friend.name}
-                </span>
-                <Button
-                  size="sm"
-                  variant={invited ? "ghost" : "secondary"}
-                  icon={invited ? <Check size={14} weight="bold" /> : <UserPlus size={14} />}
-                  disabled={invited || full || busy === friend.id}
-                  onClick={() => void invite(friend)}
-                >
-                  {invited ? t("teams.invite.sent") : t("teams.invite.action")}
-                </Button>
-              </li>
+              // A friend here has the menu they have everywhere (FIX2: right click, Shift+F10).
+              <PersonContextMenu key={friend.id} person={friend} place={{ from: "team" }}>
+                <li className="group/invite flex items-center gap-3 rounded-[var(--radius-panel)] py-1.5 pr-1 pl-2 transition-colors duration-150 hover:bg-white/[0.035] has-[[data-state=open]]:bg-white/[0.05]">
+                  <SocialAvatar source={friend} size={32} state={friend.state} dnd={friend.dnd} />
+                  <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold text-bone-100">
+                    {friend.name}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant={invited ? "ghost" : "secondary"}
+                    icon={invited ? <Check size={14} weight="bold" /> : <UserPlus size={14} />}
+                    disabled={invited || full || busy === friend.id}
+                    onClick={() => void invite(friend)}
+                    onKeyDown={(event) => {
+                      openMenuFromKey(event);
+                    }}
+                  >
+                    {invited ? t("teams.invite.sent") : t("teams.invite.action")}
+                  </Button>
+                </li>
+              </PersonContextMenu>
             );
           })}
         </ul>

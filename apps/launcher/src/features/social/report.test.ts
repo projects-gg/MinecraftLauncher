@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { canBlock, NOTE_MAX, noteLength, noteOf, REPORT_REASONS, reasonKey } from "./report";
+import {
+  canBlock,
+  NOTE_MAX,
+  noteLength,
+  noteOf,
+  REPORT_REASONS,
+  reasonKey,
+  reasonsFor,
+} from "./report";
 
 describe("reports", () => {
   it("offer only the reasons the service takes for each target", () => {
@@ -10,6 +18,14 @@ describe("reports", () => {
     expect(reasonKey("player", "name")).toBe("reports.reasons.playerName");
     expect(reasonKey("crew", "name")).toBe("reports.reasons.crewName");
     expect(reasonKey("message", "spam")).toBe("reports.reasons.spam");
+  });
+
+  it("report a plan's maker for its note too (FIX2)", () => {
+    const plan = { kind: "player" as const, id: "1", plan: { crew: "c", id: "p" } };
+    expect(reasonsFor(plan)).toContain("inappropriate");
+    expect(reasonsFor({ kind: "player", id: "1" })).not.toContain("inappropriate");
+    expect(reasonKey("player", "inappropriate", true)).toBe("fix2.report.noteReason");
+    expect(reasonKey("message", "inappropriate")).toBe("reports.reasons.inappropriate");
   });
 
   it("count the note as the service does", () => {

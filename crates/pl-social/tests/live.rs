@@ -23,11 +23,12 @@ use pl_social::{
     LocalStatus, LoginAttempt, PermissionLevel, PermissionsEdit, PlanAnswer, PresenceEvent,
     PresenceHandle, PresenceOptions, PresenceState, ProfileUpdate, Relation, ReportReason,
     RequestOutcome, Session, SettingsPrecondition, SocialClient, SocialConfig, SocialError,
-    StatusMode, StopReason, TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS, TEAM_FEATURE_LINK,
-    TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, TEAM_FEATURE_PLANS,
-    TEAM_FEATURE_REQUESTS, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamNotifications,
-    TeamNotificationsEdit, TeamRelation, auth_code_from_deep_link, crew_code, crew_conversation,
-    direct_conversation, normalize_crew_link,
+    StatusMode, StopReason, TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS,
+    TEAM_FEATURE_CREW_FRIEND_REQUESTS, TEAM_FEATURE_LINK, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI,
+    TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES, TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS,
+    TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamNotifications, TeamNotificationsEdit, TeamRelation,
+    auth_code_from_deep_link, crew_code, crew_conversation, direct_conversation,
+    normalize_crew_link,
 };
 use serde_json::json;
 use url::Url;
@@ -1462,7 +1463,7 @@ async fn crew_join_requests_links_and_plans() {
     let at = (unix_now() / 900 + 5) * 900;
     let plan = leader_presence
         .control()
-        .make_plan(&crew.id, at)
+        .make_plan(&crew.id, at, None)
         .await
         .unwrap();
     assert_eq!(plan.at, at);
@@ -1477,13 +1478,13 @@ async fn crew_join_requests_links_and_plans() {
     assert!(matches!(seen, PresenceEvent::Plan { quiet: false, .. }));
     let twice = leader_presence
         .control()
-        .make_plan(&crew.id, at)
+        .make_plan(&crew.id, at, None)
         .await
         .unwrap_err();
     assert_eq!(twice.code(), Some(&ErrorCode::PlanExists));
     let odd = leader_presence
         .control()
-        .make_plan(&crew.id, at + 60)
+        .make_plan(&crew.id, at + 60, None)
         .await
         .unwrap_err();
     assert_eq!(odd.code(), Some(&ErrorCode::PlanTime));
@@ -1526,6 +1527,163 @@ async fn crew_join_requests_links_and_plans() {
     asker_presence.shutdown().await;
     leader_presence.shutdown().await;
     for session in [other, asker, leader] {
+        session.delete_account().await.unwrap();
+    }
+}
+
+/// FIX2: a plan's short note (written with the plan, changed by its maker, cleared by the crew's
+/// leader, the chat's checks), the plan as a report's evidence, and a friend request to a
+/// crewmate without their code (never to a stranger).
+#[tokio::test]
+#[ignore = "needs `pnpm dev` and `pnpm dev:discord` in services/social"]
+async fn plan_notes_and_crewmate_requests() {
+    let client = client();
+    client.health().await.expect("wrangler dev is running");
+    let leader_id = new_user_id(14);
+    let member_id = new_user_id(15);
+    let stranger_id = new_user_id(16);
+    let leader = sign_in(&client, &leader_id, "lider").await;
+    let member = sign_in(&client, &member_id, "uye").await;
+    let stranger = sign_in(&client, &stranger_id, "yabanci").await;
+    let features = leader.teams().await.unwrap().team_features;
+    let has = |name: &str| features.iter().any(|f| f == name);
+    if !(has(TEAM_FEATURE_PLAN_NOTES) && has(TEAM_FEATURE_CREW_FRIEND_REQUESTS)) {
+        eprintln!("this service has no plan notes or crewmate requests: nothing to try");
+        for session in [stranger, member, leader] {
+            session.delete_account().await.unwrap();
+        }
+        return;
+    }
+    let crew = leader
+        .create_team("Gece Kartalları", "GKR", "sword", None, true)
+        .await
+        .unwrap()
+        .team
+        .unwrap();
+    assert!(matches!(
+        member
+            .join_crew(&CrewKey::Code(crew_code(&crew.code)), true, true)
+            .await
+            .unwrap(),
+        JoinOutcome::Joined(_)
+    ));
+
+    // "Arkadaş ekle" on a crewmate: a request without their code; a stranger is nobody to ask.
+    match member.send_request_to(&leader_id).await.unwrap() {
+        RequestOutcome::Requested { user, .. } => assert_eq!(user.id, leader_id),
+        RequestOutcome::Friends { .. } => panic!("no request waited the other way"),
+    }
+    let incoming = leader.friends().await.unwrap().incoming;
+    assert!(
+        incoming
+            .iter()
+            .any(|request| request.profile.id == member_id)
+    );
+    let stranger_asked = stranger.send_request_to(&leader_id).await.unwrap_err();
+    assert_eq!(stranger_asked.code(), Some(&ErrorCode::UserNotFound));
+    let self_asked = member.send_request_to(&member_id).await.unwrap_err();
+    assert_eq!(self_asked.code(), Some(&ErrorCode::SelfTarget));
+
+    let mut leader_presence = leader.connect_presence(options());
+    expect(&mut leader_presence, "the leader connected", |e| {
+        matches!(e, PresenceEvent::Connected { plans: Some(_), .. })
+    })
+    .await;
+    let mut member_presence = member.connect_presence(options());
+    expect(&mut member_presence, "the member connected", |e| {
+        matches!(e, PresenceEvent::Connected { plans: Some(_), .. })
+    })
+    .await;
+
+    // A plan with its note: the crew sees it with the plan.
+    let at = (unix_now() / 900 + 5) * 900;
+    let note = "Bedwars turnuvası, sesli gelin";
+    let made = member_presence
+        .control()
+        .make_plan(&crew.id, at, Some(note))
+        .await
+        .unwrap();
+    assert_eq!(made.note.as_deref(), Some(note));
+    expect(&mut leader_presence, "the plan with its note", |e| {
+        matches!(e, PresenceEvent::Plan { plan, .. } if plan.id == made.id && plan.note.as_deref() == Some(note))
+    })
+    .await;
+
+    // Its maker changes it; the chat's checks hold; the form's limits answer without a reason.
+    let changed = member_presence
+        .control()
+        .set_plan_note(&crew.id, &made.id, "Lobide buluşuyoruz")
+        .await
+        .unwrap();
+    assert_eq!(changed.note.as_deref(), Some("Lobide buluşuyoruz"));
+    expect(&mut leader_presence, "the changed note", |e| {
+        matches!(e, PresenceEvent::Plan { plan, .. } if plan.note.as_deref() == Some("Lobide buluşuyoruz"))
+    })
+    .await;
+    pace().await;
+    let link = member_presence
+        .control()
+        .set_plan_note(&crew.id, &made.id, "discord.gg/abcdef gelin")
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(
+            link,
+            SocialError::PlanNoteRejected {
+                reason: Some(ChatRejection::Link)
+            }
+        ),
+        "{link:?}"
+    );
+    pace().await;
+    let lines = member_presence
+        .control()
+        .set_plan_note(&crew.id, &made.id, "iki\nsatır")
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(
+            lines,
+            SocialError::PlanNoteRejected { reason: None } | SocialError::InvalidInput(_)
+        ),
+        "{lines:?}"
+    );
+
+    // The leader may only clear it.
+    pace().await;
+    let written = leader_presence
+        .control()
+        .set_plan_note(&crew.id, &made.id, "Benim notum")
+        .await
+        .unwrap_err();
+    assert_eq!(written.code(), Some(&ErrorCode::TeamNotPermitted));
+    pace().await;
+    let cleared = leader_presence
+        .control()
+        .set_plan_note(&crew.id, &made.id, "")
+        .await
+        .unwrap();
+    assert_eq!(cleared.note, None);
+    expect(&mut member_presence, "the cleared note", |e| {
+        matches!(e, PresenceEvent::Plan { plan, .. } if plan.id == made.id && plan.note.is_none())
+    })
+    .await;
+
+    // "Rapor et" on the plan: its maker, the plan as evidence.
+    let report = leader
+        .report(
+            json!({ "kind": "player", "id": member_id, "plan": { "crew": crew.id, "id": made.id } }),
+            ReportReason::Inappropriate,
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    assert!(!report.duplicate && !report.id.is_empty());
+
+    member_presence.shutdown().await;
+    leader_presence.shutdown().await;
+    for session in [stranger, member, leader] {
         session.delete_account().await.unwrap();
     }
 }

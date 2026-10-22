@@ -20,7 +20,7 @@ import { chatMutedNow, crewOf } from "./chat/conversations";
 import { chatNoticeWay, preview } from "./chat/notify";
 import { showCallToast } from "./crew-call";
 import { CrewCallDialog } from "./crew-call-picker";
-import { planWhen } from "./crew-plans";
+import { planWhen, withPlanNote } from "./crew-plans";
 import { callerIn, callSentenceOf, callWhere } from "./crews";
 import { FriendsSheet } from "./friends-sheet";
 import { showInviteToast } from "./invite-toast";
@@ -38,6 +38,7 @@ import {
 } from "./model";
 import { crewMutedNow, crewmateHeardIn, mutedNow } from "./mute";
 import { NoticeDialog } from "./notice-dialog";
+import { PersonAskDialog } from "./person-menu";
 import { PlanReminders } from "./plan-reminders";
 import { ReportDialog } from "./report-dialog";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -301,10 +302,14 @@ function handleNotice(notice: SocialNotice) {
     }
     case "crewPlan": {
       const { plan } = notice;
-      const text = i18n.t("crewWave2.plans.notice", {
-        name: plan.byName ?? i18n.t("social.notices.someone"),
-        when: planWhen(plan.at, Date.now(), i18n.t, true),
-      });
+      const text = withPlanNote(
+        i18n.t("crewWave2.plans.notice", {
+          name: plan.byName ?? i18n.t("social.notices.someone"),
+          when: planWhen(plan.at, Date.now(), i18n.t, true),
+        }),
+        plan.note,
+        i18n.t,
+      );
       if (crewInView(plan.crew)) {
         announce(text);
         break;
@@ -614,6 +619,7 @@ export function SocialHost() {
       <JoinDialog />
       <CrewCallDialog />
       <ReportDialog />
+      <PersonAskDialog />
       <NoticeDialog />
       <PlanReminders />
     </>

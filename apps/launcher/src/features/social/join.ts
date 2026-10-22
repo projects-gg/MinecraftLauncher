@@ -31,10 +31,13 @@ function failed(error: unknown) {
   );
 }
 
-/** Every "Katıl" to projects.gg (event card, friends list, invites). */
-export async function joinProjects(): Promise<void> {
+/**
+ * Every "Katıl" to projects.gg (event card, friends list, invites). `prefer`: the instance a game
+ * closed for "Bağlan" ran (FIX2), when it joins projects.gg by itself.
+ */
+export async function joinProjects(prefer?: string): Promise<void> {
   try {
-    await join();
+    await join(prefer);
   } catch (error) {
     failed(error);
   }
@@ -44,15 +47,20 @@ export async function joinProjects(): Promise<void> {
  * "Katıl" on an invite from another server: the instance OYNA would start (the selected one, else
  * the Projects instance), straight into that server whatever the auto-join setting says. A server
  * joins on every version (`--server` before 1.20); the AFK question of a same-name account comes
- * with the launch, as for OYNA.
+ * with the launch, as for OYNA. `prefer`: the instance a game closed for "Bağlan" ran (FIX2).
  */
-export async function joinServer(address: { host: string; port: number | null }): Promise<void> {
+export async function joinServer(
+  address: { host: string; port: number | null },
+  prefer?: string,
+): Promise<void> {
   try {
     const launch = useLaunch.getState();
     if (gameBusy(launch.phase.kind)) return;
     const prefs = usePrefs.getState();
+    const instances = await api.instances();
     const id =
-      playInstance(await api.instances(), prefs.selectedInstanceId) ??
+      playInstance(instances, prefer ?? null) ??
+      playInstance(instances, prefs.selectedInstanceId) ??
       (await officialOrOffer({ kind: "joinServer", host: address.host, port: address.port }))?.id;
     if (!id) return;
     prefs.selectInstance(id);
@@ -65,11 +73,12 @@ export async function joinServer(address: { host: string; port: number | null })
   }
 }
 
-async function join(): Promise<void> {
+async function join(prefer?: string): Promise<void> {
   const launch = useLaunch.getState();
   if (gameBusy(launch.phase.kind)) return;
   const instances = await api.instances();
   const target =
+    instances.find((i) => i.id === prefer && isProjectsHost(i.autoJoin)) ??
     instances.find((i) => i.managed && isProjectsHost(i.autoJoin)) ??
     instances.find((i) => isProjectsHost(i.autoJoin)) ??
     (await officialOrOffer({ kind: "join" }));

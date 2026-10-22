@@ -11,8 +11,13 @@
 // - `chatEmpty`: chat on, no conversations yet;
 // - `chatMuted`: moderators muted the player's chat for a day; `chatOff`: the service turned chat
 //   off (what this computer holds stays readable); `chatMailbox`: messages reach only those online.
+// - `chatTombstones` (FIX2): deleted messages of every kind in Ayşe's conversation and the crew's,
+//   which Ayşe leads here (the player's, the sender's, the leader's, a moderator's, Projects'
+//   moderators', an account that is gone); `chatDeleteLive`: Ayşe deletes her newest message
+//   shortly after start, then Projects' moderators one in the crew (`&deleteAt=<ms>`).
 // A message with "hata" or "fail" in it does not go (`&sendFails=<reason>` fails every one with
-// that reason); a friend online answers a direct message (`&noReply=1` keeps them quiet).
+// that reason); a friend online answers a direct message (`&noReply=1` keeps them quiet). A
+// message deleted for everyone stays as its tombstone.
 import { pick } from "./mock-lang";
 import type {
   ChatChange,
@@ -34,7 +39,21 @@ export const CHAT_SCENARIOS: readonly string[] = [
   "chatMuted",
   "chatOff",
   "chatMailbox",
+  "chatTombstones",
+  "chatDeleteLive",
 ];
+
+/** A message deleted for everyone: its tombstone (its text gone, nothing to do with it). */
+function tombstoneOf(message: ChatMessage, by: string, at = Date.now()): ChatMessage {
+  return {
+    ...message,
+    text: "",
+    edited: false,
+    editUntil: undefined,
+    deleteUntil: undefined,
+    deleted: { by, at },
+  };
+}
 
 /** What the chat preview needs of the friends preview. */
 export interface ChatHost {
@@ -136,8 +155,9 @@ export function mockChat(host: ChatHost) {
     extra: Partial<ChatMessage> = {},
   ): ChatMessage {
     const mine = from === ME;
-    // The preview crew is led by the player: they may delete any of its messages for a week.
-    const deletes = mine || conv === CREW_CONV;
+    // The preview crew is led by the player: they may delete any of its messages for a week (not
+    // in `chatTombstones`, where Ayşe leads it).
+    const deletes = mine || (conv === CREW_CONV && host.scenario !== "chatTombstones");
     return {
       key: `i:${at}`,
       id: at,
@@ -267,6 +287,42 @@ export function mockChat(host: ChatHost) {
       unread.set(CREW_CONV, 3);
     }
 
+    if (host.scenario === "chatTombstones") {
+      // Ayşe's conversation: hers, the player's, and one Projects' moderators took away.
+      const dm = threads.get(ayse) ?? [];
+      threads.set(
+        ayse,
+        dm.map((m, i) =>
+          i === 2
+            ? tombstoneOf(m, "301", m.at + MINUTE)
+            : i === 3
+              ? tombstoneOf(m, ME, m.at + MINUTE)
+              : i === 5
+                ? tombstoneOf(m, "staff", m.at + MINUTE)
+                : m,
+        ),
+      );
+      // The crew's newest: the leader's (Ayşe) deletion and a moderator's (KorAteşi) of others'
+      // messages, the player's and a sender's of their own, and one of an account that is gone.
+      const tail = crew.length;
+      const by: Record<number, string> = {
+        [tail - 1]: "301",
+        [tail - 2]: "302",
+        [tail - 4]: ME,
+        [tail - 5]: "",
+        [tail - 6]: "701",
+      };
+      threads.set(
+        CREW_CONV,
+        crew.map((m, i) => {
+          const who = by[i];
+          return who === undefined ? m : tombstoneOf(m, who, m.at + MINUTE);
+        }),
+      );
+      unread.set(ayse, 1);
+      unread.set(CREW_CONV, 1);
+    }
+
     if (host.scenario === "chatFailed") {
       const failed: ChatMessage = {
         key: "n:preview-failed",
@@ -286,7 +342,13 @@ export function mockChat(host: ChatHost) {
     const messages = threads.get(conv) ?? [];
     const newest = messages[messages.length - 1];
     return newest
-      ? { from: newest.from, mine: newest.mine, text: newest.text, at: newest.at }
+      ? {
+          from: newest.from,
+          mine: newest.mine,
+          text: newest.text,
+          at: newest.at,
+          deletedBy: newest.deleted?.by,
+        }
       : undefined;
   }
 
@@ -423,9 +485,24 @@ export function mockChat(host: ChatHost) {
     };
   }
 
-  /** Live messages of `chatLive`. */
+  /** Someone else deletes a message: its tombstone comes as a change (`chatDeleteLive`). */
+  function deleteLive(conv: string, from: string, by: string) {
+    const found = [...(threads.get(conv) ?? [])].reverse().find((m) => m.from === from);
+    if (!found || found.deleted) return;
+    if (!found.mine && (unread.get(conv) ?? 0) > 0) unread.set(conv, (unread.get(conv) ?? 1) - 1);
+    put(conv, tombstoneOf(found, by));
+  }
+
+  /** Live messages of `chatLive`, live deletions of `chatDeleteLive`. */
   function start() {
-    if (typeof window === "undefined" || host.scenario !== "chatLive") return;
+    if (typeof window === "undefined") return;
+    if (host.scenario === "chatDeleteLive") {
+      const at = Number(host.param("deleteAt")) || 2400;
+      setTimeout(() => deleteLive(direct("301"), "301", "301"), at);
+      setTimeout(() => deleteLive(CREW_CONV, "702", "staff"), at + 2600);
+      return;
+    }
+    if (host.scenario !== "chatLive") return;
     const at = Number(host.param("chatAt")) || 1600;
     setTimeout(
       () => arrive(direct("301"), "301", pick("Hazır mısın? Başlıyoruz", "Ready? We're starting")),
@@ -516,12 +593,8 @@ export function mockChat(host: ChatHost) {
           ),
         );
       }
-      threads.set(
-        conv,
-        (threads.get(conv) ?? []).filter((m) => m.key !== found.key),
-      );
-      emit({ conv, remove: [found.key] });
-      refresh();
+      // Its tombstone stays in its place, under the same key.
+      put(conv, tombstoneOf(found, ME));
     },
     async chatRead(conv) {
       if (!unread.get(conv)) return;

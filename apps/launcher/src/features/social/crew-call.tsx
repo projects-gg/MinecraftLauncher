@@ -12,20 +12,27 @@ import { AnimatePresence, motion } from "motion/react";
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import type { CallAnswer, CrewCall, SocialTeam, TeamMember } from "@/lib/api/social-types";
-import { useLaunch } from "@/stores/launch";
 import { answerCall, endCall } from "./call-actions";
 import { answersBy, crewsOfCall, minutesLeft } from "./calls";
-import { callerIn, callSentenceOf, callWhere, callWhereLine } from "./crews";
-import { gameBusy } from "./join";
-import { joinCall } from "./join-dialog";
+import { type CallWhere, callerIn, callSentenceOf, callWhere, callWhereLine } from "./crews";
+import { joinCall, PROJECTS, useThere } from "./join-dialog";
 import { callMenu, rowsOf } from "./menus";
 import { pop, swap, useSocialMotion } from "./motion";
+import { usePeopleItems } from "./person-menu";
+import { type JoinTarget, joinTarget } from "./play-together";
 import { SocialAvatar, SocialFace } from "./social-face";
 import { useSocialUi } from "./store";
 import { CrewMark } from "./team-emblem";
 import { useCallClock } from "./use-call-clock";
 
 const ANSWERS: CallAnswer[] = ["yes", "soon", "no"];
+
+/** Where "Katıl" on a call leads (its "Katıl" is off once the player's game is there). */
+function callTarget(where: CallWhere): JoinTarget {
+  return where.kind === "server"
+    ? (joinTarget({ where: "other", host: where.host }) ?? PROJECTS)
+    : PROJECTS;
+}
 
 /** "Projects'te" / "mc.example.com sunucusunda" (jade: "Geliyorum" goes there), or "Hazır
  * mısın?" for a call from before CALL1. */
@@ -136,51 +143,61 @@ function Faces({ members }: { members: TeamMember[] }) {
   );
 }
 
+interface Box {
+  answer: CallAnswer;
+  icon: ReactNode;
+  label: string;
+}
+
+/** One answer's box. Its right click lists the people in it, each with their own menu (FIX2). */
+function AnswerBox({ box, who, team }: { box: Box; who: TeamMember[]; team: SocialTeam }) {
+  const { reduce } = useSocialMotion();
+  const items = usePeopleItems(who, { crew: team, from: "team" });
+  return (
+    <ContextMenu items={items} disabled={!items.length}>
+      <li
+        className="flex min-w-0 flex-col gap-1.5 rounded-md bg-obsidian-950/45 px-2.5 py-2 ring-1 ring-white/6"
+        aria-label={`${box.label}: ${who.length}`}
+      >
+        <span className="flex items-center justify-between gap-1 text-[12px] text-ash-300">
+          <span className="flex min-w-0 items-center gap-1">
+            <span className={box.answer === "yes" && who.length ? "text-jade-400" : "text-ash-400"}>
+              {box.icon}
+            </span>
+            <span className="truncate">{box.label}</span>
+          </span>
+          <span className="relative inline-flex font-display text-[13px] font-semibold text-bone-50 tabular-nums">
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.span key={who.length} {...swap(reduce, 0.16)}>
+                {who.length}
+              </motion.span>
+            </AnimatePresence>
+          </span>
+        </span>
+        <Faces members={who} />
+      </li>
+    </ContextMenu>
+  );
+}
+
 /** Who answered what: three quiet boxes with faces and counts (this crew's people). */
 export function AnswerBoxes({ call, team }: { call: CrewCall; team: SocialTeam }) {
   const { t } = useTranslation();
-  const { reduce } = useSocialMotion();
   const by = answersBy(call);
   const people = (ids: string[]) =>
     ids
       .map((id) => team.members.find((m) => m.id === id))
       .filter((m): m is TeamMember => Boolean(m));
-  const boxes: Array<{ answer: CallAnswer; icon: ReactNode; label: string }> = [
+  const boxes: Box[] = [
     { answer: "yes", icon: <Check size={13} weight="bold" />, label: t("teams.call.saidYes") },
     { answer: "soon", icon: <Clock size={13} weight="bold" />, label: t("teams.call.saidSoon") },
     { answer: "no", icon: <X size={13} weight="bold" />, label: t("teams.call.saidNo") },
   ];
   return (
     <ul className="grid grid-cols-3 gap-1.5">
-      {boxes.map((box) => {
-        const who = people(by[box.answer]);
-        return (
-          <li
-            key={box.answer}
-            className="flex min-w-0 flex-col gap-1.5 rounded-md bg-obsidian-950/45 px-2.5 py-2 ring-1 ring-white/6"
-            aria-label={`${box.label}: ${who.length}`}
-          >
-            <span className="flex items-center justify-between gap-1 text-[12px] text-ash-300">
-              <span className="flex min-w-0 items-center gap-1">
-                <span
-                  className={box.answer === "yes" && who.length ? "text-jade-400" : "text-ash-400"}
-                >
-                  {box.icon}
-                </span>
-                <span className="truncate">{box.label}</span>
-              </span>
-              <span className="relative inline-flex font-display text-[13px] font-semibold text-bone-50 tabular-nums">
-                <AnimatePresence mode="popLayout" initial={false}>
-                  <motion.span key={who.length} {...swap(reduce, 0.16)}>
-                    {who.length}
-                  </motion.span>
-                </AnimatePresence>
-              </span>
-            </span>
-            <Faces members={who} />
-          </li>
-        );
-      })}
+      {boxes.map((box) => (
+        <AnswerBox key={box.answer} box={box} who={people(by[box.answer])} team={team} />
+      ))}
     </ul>
   );
 }
@@ -230,16 +247,18 @@ export function CallStrip({ call, team }: { call: CrewCall; team: SocialTeam }) 
 }
 
 /** A teammate's call in the friend list, under the header of the first crew it names (the invite
- * rows' family). Its right-click menu answers too, joins the caller and opens the crew. */
+ * rows' family). Its right-click menu answers too, joins the caller and opens the crew; the caller's
+ * own menu follows (FIX2). */
 export function CallRow({ call, team }: { call: CrewCall; team: SocialTeam }) {
   const { t } = useTranslation();
   const crews = useSocialUi((s) => s.view.crews);
   const caller = callerIn(call, [team, ...crews]);
   const where = callWhere(call);
-  const busy = useLaunch((s) => gameBusy(s.phase.kind));
+  const here = useThere(callTarget(where));
   const openTeam = useSocialUi((s) => s.openTeam);
-  const items = rowsOf(
-    callMenu({ joinable: where.kind !== "ready", gameBusy: busy, answer: call.myAnswer }),
+  const callerItems = usePeopleItems([caller], { crew: team, from: "team" });
+  const rows = rowsOf(
+    callMenu({ joinable: where.kind !== "ready", here, answer: call.myAnswer }),
     (row): MenuItem | null => {
       switch (row.action) {
         case "yes":
@@ -269,6 +288,7 @@ export function CallRow({ call, team }: { call: CrewCall; team: SocialTeam }) {
       }
     },
   );
+  const items = callerItems.length ? [...rows, null, ...callerItems] : rows;
   return (
     <ContextMenu items={items}>
       <div className="mb-1.5 rounded-[var(--radius-panel)] bg-gold-500/[0.07] py-2 pr-1.5 pl-2 ring-1 ring-gold-400/15">
@@ -308,7 +328,8 @@ function CallToast({
   const caller = callerIn(live, crews);
   const where = callWhere(live);
   const mark = crewsOfCall(live, crews)[0];
-  const busy = useLaunch((s) => gameBusy(s.phase.kind));
+  // A "Hazır mısın?" call's caller who moved went to projects.gg.
+  const here = useThere(callTarget(where.kind === "ready" ? { kind: "projects" } : where));
   const name = caller.name || t("teams.call.someone");
   return (
     <div className="w-full font-normal">
@@ -344,7 +365,7 @@ function CallToast({
           size="sm"
           variant="primary"
           className="mt-2.5 w-full"
-          disabled={busy}
+          disabled={here}
           onClick={() => {
             toast.dismiss(toastId);
             // A "Hazır mısın?" call's caller who moved went to projects.gg.

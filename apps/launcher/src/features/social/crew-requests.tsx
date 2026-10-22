@@ -1,11 +1,12 @@
 // Join requests on screen (TEAM5). Whoever answers them in a crew (`admit`: its leader, and its
 // moderators unless the leader keeps it) sees the waiting ones above the members: who asked and
-// when, "Kabul et", × (declines, silently, as friend requests are) and "…" with "Engelle" (asked
-// once, in place) and "Rapor et"; the same menu opens on right click. The player's own waiting
+// when, "Kabul et", × (declines, silently, as friend requests are) and "…" with the shared person
+// menu (FIX2: the answers first, "Engelle" asked once, in place, "Rapor et" last); the same menu
+// opens on right click. The player's own waiting
 // requests sit on "Ekip kur ya da katıl" with "Geri çek". A row that goes fades while the rows
 // under it glide up; nothing moves by itself.
-import { Check, DotsThree, Flag, Prohibit, X } from "@phosphor-icons/react";
-import { Button, ContextMenu, IconButton, Menu, type MenuItem } from "@pl/ui";
+import { Check, DotsThree, X } from "@phosphor-icons/react";
+import { Button, ContextMenu, IconButton, Menu } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,6 +17,7 @@ import { formatRelative } from "@/lib/format";
 import { attempt } from "./actions";
 import { answersRequests, stillWaits, waitingRequests } from "./crew-joining";
 import { enter, glide, leave, rise, useSocialMotion } from "./motion";
+import { usePersonItems } from "./person-menu";
 import { SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
 import { CrewMark, TeamTag } from "./team-emblem";
@@ -46,31 +48,15 @@ function RequestRow({ team, request }: { team: SocialTeam; request: JoinRequest 
     setAsking(false);
     if (done !== undefined) announce(t("social.actions.blocked", { name: request.name }));
   };
-  const report = () =>
-    useSocialUi.getState().openReport({
-      target: { kind: "player", id: request.id },
-      name: request.name,
-      person: request,
-    });
-  const items: MenuItem[] = [
-    {
-      label: t("social.actions.accept"),
-      icon: <Check size={16} />,
-      onSelect: () => void answer(true),
+  // The person menu with the request's answers first (FIX2): the right click and "…" say the same;
+  // blocking asks here, in place.
+  const items = usePersonItems(request, {
+    request: { join: team },
+    from: "team",
+    ask: (question) => {
+      if (question === "block") setAsking(true);
     },
-    {
-      label: t("social.actions.decline"),
-      icon: <X size={16} />,
-      onSelect: () => void answer(false),
-    },
-    {
-      label: t("social.actions.block"),
-      icon: <Prohibit size={16} />,
-      danger: true,
-      onSelect: () => setAsking(true),
-    },
-    { label: t("reports.action"), icon: <Flag size={16} />, onSelect: report },
-  ];
+  });
 
   return (
     <ContextMenu items={items}>
@@ -102,7 +88,7 @@ function RequestRow({ team, request }: { team: SocialTeam; request: JoinRequest 
             onClick={() => void answer(false)}
           />
           <Menu
-            items={items.slice(2)}
+            items={items}
             trigger={
               <IconButton
                 size="sm"

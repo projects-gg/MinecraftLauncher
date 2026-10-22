@@ -10,6 +10,7 @@ import type { LauncherApi } from "./index";
 import { mockAccountName, mockAccounts } from "./mock-accounts";
 import { mockAfk } from "./mock-afk";
 import { createMockCleanup } from "./mock-cleanup";
+import { mockCloseGame, mockKillGame, mockSession } from "./mock-connect";
 import { createMockContent, mockExtraMods } from "./mock-content";
 import { createMockConveniences, mockNewScreenshots, mockSessionMs } from "./mock-conveniences";
 import { createMockData } from "./mock-data";
@@ -1182,7 +1183,8 @@ export const mockApi: LauncherApi = {
       onEvent({ type: "screenshotNotCopied" });
     }
     const session = mockSessionMs();
-    await delay(session);
+    // "Bağlan" (FIX2) may close the game before its session is over (mock-connect.ts).
+    await mockSession(session);
     const shots = mockNewScreenshots();
     if (shots) onEvent({ type: "newScreenshots", ...shots });
     onEvent({ type: "exited", code: 0, runtimeSecs: Math.round(session / 1000) });
@@ -1191,6 +1193,8 @@ export const mockApi: LauncherApi = {
     const job = running.get(instanceId);
     if (job) job.cancelled = true;
   },
+  closeGame: mockCloseGame,
+  killGame: mockKillGame,
   async setScreenshotCopy() {},
   async updatePresence() {},
   async setPresenceEnabled() {},

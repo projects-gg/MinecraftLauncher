@@ -23,7 +23,8 @@ use url::Url;
 use crate::auth::{LoginAttempt, SignedIn, auth_code_from_deep_link};
 use crate::chat::{
     EDIT_WINDOW_MS, PAGE_SIZE, REPORT_CONTEXT, RESEND_WINDOW_MS, TOO_FAST_WAIT_MAX, Viewer,
-    change_view, entry_view, failure_of, merge, message_view, new_nonce, prepare_text,
+    change_view, entry_view, failure_of, merge, message_view, new_nonce, prepare_plan_note,
+    prepare_text,
 };
 use crate::client::{CrewKey, Session, SocialClient, SocialConfig};
 use crate::closed::ClosedInvitesFile;
@@ -35,9 +36,9 @@ use crate::model::{
     ChatMessage, ChatStatus, CrewMuteEdit, EditFeatures, FIRST_EMBLEMS, FriendGroup, FriendGroups,
     JoinMode, JoinOutcome, LimitedKey, MAX_FRIEND_GROUPS, ProfileUpdate, ReportReason,
     RequestOutcome, SessionInfo, SettingsMeta, SettingsPrecondition, TEAM_FEATURE_CALLS,
-    TEAM_FEATURE_LINK, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE,
-    TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamLookup,
-    TeamNotificationsEdit, TeamRole,
+    TEAM_FEATURE_CREW_FRIEND_REQUESTS, TEAM_FEATURE_LINK, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI,
+    TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES, TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS,
+    TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamLookup, TeamNotificationsEdit, TeamRole,
 };
 use crate::presence::{ChatSetup, PresenceControl, PresenceEvent, PresenceOptions, StopReason};
 use crate::protocol::{CallAnswer, LocalStatus, PlanAnswer};
@@ -825,6 +826,43 @@ impl SocialService {
         Ok(result)
     }
 
+    /// "Arkadaş ekle" on a crewmate who is not a friend (FIX2; a service with
+    /// `crewFriendRequests`): a request without their code, answered as one by code would be. A
+    /// crewmate the service no longer lets the player ask (they left, blocked the player, or were
+    /// suspended) is `InvalidInput("not a crewmate")`.
+    pub async fn send_request_to_crewmate(&self, user: &str) -> Result<SendOutcome> {
+        if !self.offers(TEAM_FEATURE_CREW_FRIEND_REQUESTS) {
+            return Err(SocialError::InvalidInput("crewmate requests"));
+        }
+        let crewmate = self.lock().state.crews().iter().any(|entry| {
+            entry
+                .team
+                .members
+                .iter()
+                .any(|member| member.profile.id == user)
+        });
+        if !crewmate {
+            return Err(SocialError::InvalidInput("not a crewmate"));
+        }
+        let to = user.to_owned();
+        let (outcome, generation) = match self
+            .call(|session| async move { session.send_request_to(&to).await })
+            .await
+        {
+            Ok(answer) => answer,
+            Err(error) if error.code() == Some(&ErrorCode::UserNotFound) => {
+                return Err(SocialError::InvalidInput("not a crewmate"));
+            }
+            Err(error) => return Err(error),
+        };
+        let result = match &outcome {
+            RequestOutcome::Requested { .. } => SendOutcome::Requested,
+            RequestOutcome::Friends { .. } => SendOutcome::Friends,
+        };
+        self.update(generation, |core| core.state.request_sent(outcome));
+        Ok(result)
+    }
+
     pub async fn accept(&self, id: &str) -> Result<()> {
         let from = id.to_owned();
         let (friend, generation) = self
@@ -1387,16 +1425,22 @@ impl SocialService {
     }
 
     /// A new plan in one of the player's crews at `at` (Unix seconds, a whole quarter of an
-    /// hour; the service checks it is later than its clock and at most 7 days ahead). Answers
-    /// the plan's id; the plan is in the view.
-    pub async fn make_plan(&self, crew: &str, at: i64) -> Result<String> {
+    /// hour; the service checks it is later than its clock and at most 7 days ahead), with its
+    /// short note (FIX2; only a service with `planNotes` takes one). Answers the plan's id; the
+    /// plan is in the view.
+    pub async fn make_plan(&self, crew: &str, at: i64, note: Option<&str>) -> Result<String> {
         let control = self.plan_presence()?;
         let crew = self.crew_id(crew)?;
         if at % 900 != 0 {
             return Err(SocialError::InvalidInput("plan time"));
         }
+        let note = match note {
+            Some(text) => prepare_plan_note(text)?,
+            None => None,
+        }
+        .filter(|_| self.offers(TEAM_FEATURE_PLAN_NOTES));
         let generation = self.lock().generation;
-        match control.make_plan(&crew, at).await {
+        match control.make_plan(&crew, at, note.as_deref()).await {
             Ok(plan) => {
                 let id = plan.id.clone();
                 self.update(generation, |core| core.state.upsert_plan(plan));
@@ -1425,6 +1469,37 @@ impl SocialService {
             Err(error) if error.code() == Some(&ErrorCode::PlanNotFound) => {
                 self.update(generation, |core| core.state.plan_gone(plan));
                 Ok(false)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// A plan's note (FIX2): its maker writes, changes or clears it (`""`); the crew's leader and
+    /// moderators may only clear it. The plan as the service has it now replaces the one shown;
+    /// one that is gone leaves the view.
+    pub async fn set_plan_note(&self, plan: &str, note: &str) -> Result<()> {
+        let control = self.plan_presence()?;
+        if !self.offers(TEAM_FEATURE_PLAN_NOTES) {
+            return Err(SocialError::InvalidInput("plan notes"));
+        }
+        let note = prepare_plan_note(note)?.unwrap_or_default();
+        let (crew, generation) = {
+            let core = self.lock();
+            let crew = core
+                .state
+                .plan(plan)
+                .map(|known| known.crew.clone())
+                .ok_or(SocialError::InvalidInput("plan gone"))?;
+            (crew, core.generation)
+        };
+        match control.set_plan_note(&crew, plan, &note).await {
+            Ok(stored) => {
+                self.update(generation, |core| core.state.upsert_plan(stored));
+                Ok(())
+            }
+            Err(error) if error.code() == Some(&ErrorCode::PlanNotFound) => {
+                self.update(generation, |core| core.state.plan_gone(plan));
+                Err(error)
             }
             Err(error) => Err(error),
         }
@@ -2023,8 +2098,9 @@ impl SocialService {
             Ok(stored) => stored,
             Err(error) => {
                 if error.code() == Some(&ErrorCode::MessageNotFound) {
-                    // Deleted meanwhile (on another device, or by a moderator).
-                    self.chat_forget(generation, conv, id);
+                    // Deleted meanwhile (on another device, or by a moderator): its event says
+                    // who, when it comes.
+                    self.chat_tombstone(generation, conv, id, "");
                 }
                 return Err(error);
             }
@@ -2034,13 +2110,19 @@ impl SocialService {
     }
 
     /// "Herkesten sil": the player's own message (7 days), or any in a crew they lead or
-    /// moderate. Gone from the view at once; it comes back if the service refuses.
+    /// moderate. It turns into its tombstone once the service took it (the launcher shows that
+    /// at once; it comes back if the service refuses).
     pub async fn chat_delete(&self, conv: &str, id: i64) -> Result<()> {
-        let (control, message, generation) = {
+        let (control, message, generation, me) = {
             let mut core = self.lock();
             if core.auth != AuthPhase::SignedIn {
                 return Err(SocialError::Unauthorized);
             }
+            let me = core
+                .state
+                .me()
+                .map(|me| me.profile.id.clone())
+                .unwrap_or_default();
             let message = core
                 .history
                 .as_mut()
@@ -2050,15 +2132,15 @@ impl SocialService {
                 .presence
                 .clone()
                 .ok_or(SocialError::Unavailable { retry_after: None })?;
-            (control, message, core.generation)
+            (control, message, core.generation, me)
         };
-        match control.chat_delete(&message).await {
-            Ok(()) => {}
-            // Gone already (another device, a moderator): it goes here too.
-            Err(error) if error.code() == Some(&ErrorCode::MessageNotFound) => {}
+        let by = match control.chat_delete(&message).await {
+            Ok(()) => me,
+            // Gone already (another device, a moderator): its event says who, when it comes.
+            Err(error) if error.code() == Some(&ErrorCode::MessageNotFound) => String::new(),
             Err(error) => return Err(error),
-        }
-        self.chat_forget(generation, conv, id);
+        };
+        self.chat_tombstone(generation, conv, id, &by);
         Ok(())
     }
 
@@ -2113,17 +2195,20 @@ impl SocialService {
         self.emit_view();
     }
 
-    fn chat_forget(&self, generation: u64, conv: &str, id: i64) {
+    /// A message of this device's history was deleted for everyone (`by`: who, empty when not
+    /// known yet): it turns into its tombstone, now (the hub's clock).
+    fn chat_tombstone(&self, generation: u64, conv: &str, id: i64, by: &str) {
         {
             let mut core = self.lock();
             if core.generation != generation {
                 return;
             }
             let viewer = viewer(&core, conv);
+            let at = unix_now_ms() - core.chat_skew_ms;
             if let Some(change) = core
                 .history
                 .as_mut()
-                .and_then(|history| history.remove(conv, id))
+                .and_then(|history| history.delete(conv, id, by, at))
             {
                 let view = change_view(&change, &viewer);
                 core.chat_outbox.push(view);
@@ -2285,10 +2370,16 @@ impl SocialService {
         let (wire, blocked) = {
             let mut core = self.lock();
             match &target {
-                ReportTarget::Player { id } => (
-                    serde_json::json!({ "kind": "player", "id": id }),
-                    Some(id.clone()),
-                ),
+                ReportTarget::Player { id, plan } => {
+                    let mut wire = serde_json::json!({ "kind": "player", "id": id });
+                    // From a plan card (FIX2): the plan goes along as the moderators' evidence.
+                    if let Some(plan) = plan.as_ref()
+                        && core.state.offers(TEAM_FEATURE_PLAN_NOTES)
+                    {
+                        wire["plan"] = serde_json::json!({ "crew": plan.crew, "id": plan.id });
+                    }
+                    (wire, Some(id.clone()))
+                }
                 ReportTarget::Crew { id, code } => {
                     let mut wire = serde_json::json!({ "kind": "crew", "id": id });
                     if let Some(code) = code.as_ref().and_then(|c| normalize_team_code(c)) {
@@ -2662,8 +2753,9 @@ fn apply_chat(core: &mut Core, event: &PresenceEvent) -> ChatOutcome {
                 }
             }
             PresenceEvent::ChatEdited(message) => changes.extend(history.put(message)),
-            PresenceEvent::ChatDeleted { conv, id, .. } => {
-                changes.extend(history.remove(conv, *id));
+            // A message this device holds turns into its tombstone (FIX2).
+            PresenceEvent::ChatDeleted { conv, id, by, at } => {
+                changes.extend(history.delete(conv, *id, by, *at));
             }
             PresenceEvent::ChatSync {
                 conv,
@@ -2675,7 +2767,7 @@ fn apply_chat(core: &mut Core, event: &PresenceEvent) -> ChatOutcome {
                     list.extend(history.put(message));
                 }
                 for deletion in deleted {
-                    list.extend(history.remove(conv, deletion.id));
+                    list.extend(history.delete(conv, deletion.id, &deletion.by, deletion.at));
                 }
                 changes.extend(merge(list));
             }
@@ -2786,6 +2878,7 @@ fn chat_view(core: &mut Core, now: i64) -> Option<ChatView> {
                 mine: last.f == me,
                 text: last.t.clone(),
                 at: last.i + skew,
+                deleted_by: last.d.clone(),
             }),
             unread: meta.unread,
             writable,
@@ -4002,7 +4095,7 @@ mod tests {
         assert!(matches!(
             harness
                 .service
-                .make_plan("0123456789abcdef", 1_792_612_800)
+                .make_plan("0123456789abcdef", 1_792_612_800, None)
                 .await,
             Err(SocialError::InvalidInput("crew plans"))
         ));

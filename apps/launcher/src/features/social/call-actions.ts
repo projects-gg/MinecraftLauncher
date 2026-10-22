@@ -83,8 +83,8 @@ export async function shareAndCall(crews: string[] = []): Promise<CallOutcome | 
 
 /**
  * "Geliyorum", "Birazdan" or "Gelemem". "Geliyorum" to a call on a server goes on to join the
- * caller there (the game opens straight into it after one question, or the open game is left
- * alone and says how to get there).
+ * caller there: after one question the game opens straight into it, or an open game goes there
+ * (FIX2 "Bağlan": in game through the overlay, else it closes as its X does and starts again).
  */
 export async function answerCall(call: CrewCall, answer: CallAnswer): Promise<void> {
   const key = `answer:${call.id}`;

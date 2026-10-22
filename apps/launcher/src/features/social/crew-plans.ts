@@ -163,6 +163,15 @@ export function answersBy(plan: Pick<CrewPlan, "answers">): Record<PlanAnswer, s
 
 /** "Bugün 21:00", "Yarın 20:30", "Cumartesi 21:00": the plan's time on its day ("bugün 21:00"
  * inside a sentence). */
+/** A line about a plan, with its note when it has one (FIX2). */
+export function withPlanNote(
+  text: string,
+  note: string | undefined,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): string {
+  return note ? t("fix2.note.with", { text, note }) : text;
+}
+
 export function planWhen(at: number, nowMs: number, t: TFunction, inSentence = false): string {
   const date = new Date(at * 1000);
   const time = dateTimeFormat({ hour: "2-digit", minute: "2-digit" }).format(date);

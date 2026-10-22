@@ -1330,6 +1330,30 @@ pub fn game_kill(state: State<'_, AppState>) {
     }
 }
 
+/// "Bağlan" while a game runs (FIX2): asks the game to close the way its own close button does,
+/// so it leaves a server and saves a singleplayer world as always; the page starts it again into
+/// the server once it has ended (its exit comes as usual). False when nothing of it could be asked
+/// (no window yet, or it ended): the page then offers to end it, with its warning (`game_kill`).
+#[tauri::command]
+#[specta::specta]
+pub fn game_close(state: State<'_, AppState>) -> bool {
+    // The process id only: asking reads the window list and must not hold the lock meanwhile.
+    let pid = state
+        .running
+        .lock()
+        .as_ref()
+        .and_then(|running| running.process.pid());
+    let Some(pid) = pid else {
+        return false;
+    };
+    let asked = pl_desktop::game_close::ask_to_close(pid);
+    tracing::info!(
+        ?asked,
+        "asked the game to close before it joins another server"
+    );
+    asked.asked()
+}
+
 /// Instance id of the running game, if any (used after a UI reload).
 #[tauri::command]
 #[specta::specta]

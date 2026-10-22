@@ -159,6 +159,7 @@ function chatMessage(v: ChatMessageView): ChatMessage {
     failure: opt(v.failure),
     editUntil: opt(v.editUntil),
     deleteUntil: opt(v.deleteUntil),
+    deleted: v.deleted ? { by: v.deleted.by, at: opt(v.deleted.at) } : undefined,
   };
 }
 
@@ -168,7 +169,15 @@ function conversation(v: ConversationView): Conversation {
     peer: opt(v.peer),
     crew: opt(v.crew),
     title: opt(v.title),
-    last: opt(v.last),
+    last: v.last
+      ? {
+          from: v.last.from,
+          mine: v.last.mine,
+          text: v.last.text,
+          at: v.last.at,
+          deletedBy: opt(v.last.deletedBy),
+        }
+      : undefined,
     unread: v.unread,
     writable: v.writable,
     failed: v.failed,
@@ -260,6 +269,9 @@ function plan(v: PlanView): CrewPlan {
     createdAt: v.createdAt,
     answers: v.answers.map((a) => ({ id: a.id, answer: a.answer })),
     myAnswer: opt(v.myAnswer),
+    note: opt(v.note),
+    canWriteNote: v.canWriteNote,
+    canClearNote: v.canClearNote,
   };
 }
 
@@ -360,6 +372,8 @@ export function crewFeatures(list: readonly string[]): CrewFeatures {
     requests: list.includes("requests"),
     link: list.includes("link"),
     plans: list.includes("plans"),
+    planNotes: list.includes("planNotes"),
+    crewFriendRequests: list.includes("crewFriendRequests"),
   };
 }
 
@@ -488,6 +502,7 @@ export const tauriSocial: SocialApi = {
     return { profile: profile(found.profile), relation: found.relation, code: found.code };
   },
   sendRequest: (code) => ok(commands.socialSendRequest(code)),
+  requestCrewmate: (userId) => ok(commands.socialRequestCrewmate(userId)),
   async accept(id) {
     await ok(commands.socialAccept(id));
   },
@@ -641,7 +656,10 @@ export const tauriSocial: SocialApi = {
   async setJoinMode(teamId, join) {
     await ok(commands.socialTeamJoinMode(teamId, join));
   },
-  makePlan: (crew, at) => ok(commands.socialPlanMake(crew, at)),
+  makePlan: (crew, at, note) => ok(commands.socialPlanMake(crew, at, note ?? null)),
+  async setPlanNote(planId, note) {
+    await ok(commands.socialPlanNote(planId, note));
+  },
   answerPlan: (planId, answer) => ok(commands.socialPlanAnswer(planId, answer)),
   async cancelPlan(planId) {
     await ok(commands.socialPlanCancel(planId));
@@ -687,7 +705,9 @@ export const tauriSocial: SocialApi = {
     const wire =
       target.kind === "crew"
         ? { kind: "crew" as const, id: target.id, code: target.code ?? null }
-        : target;
+        : target.kind === "player"
+          ? { kind: "player" as const, id: target.id, plan: target.plan ?? null }
+          : target;
     await ok(commands.socialReport(wire, reason, note ?? null, block));
   },
   async noticesSeen(ids) {

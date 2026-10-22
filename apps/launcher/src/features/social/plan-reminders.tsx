@@ -17,7 +17,7 @@ import { setPageDuty } from "@/lib/page-duties";
 import { onWindowAwayChange } from "@/lib/window-away";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
-import { type DuePlan, duePlans, pruneTold, reminderAhead } from "./crew-plans";
+import { type DuePlan, duePlans, pruneTold, reminderAhead, withPlanNote } from "./crew-plans";
 import { crewMutedNow } from "./mute";
 import { useSocialPrefs, useSocialUi } from "./store";
 import { useCallClock } from "./use-call-clock";
@@ -55,10 +55,13 @@ function ReminderMark() {
 function tell(due: DuePlan, crew: SocialTeam): boolean {
   const phase = useLaunch.getState().phase.kind;
   if (phase === "launching" || phase === "running") return true;
-  const text =
+  const text = withPlanNote(
     due.kind === "soon"
       ? i18n.t("crewWave2.plans.startsIn", { crew: crew.name, count: due.minutes })
-      : i18n.t("crewWave2.plans.started", { crew: crew.name });
+      : i18n.t("crewWave2.plans.started", { crew: crew.name }),
+    due.plan.note,
+    i18n.t,
+  );
   if (windowAway()) {
     if (!usePrefs.getState().desktopNotifications) return false;
     void notify(crew.name, text);

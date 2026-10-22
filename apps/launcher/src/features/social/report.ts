@@ -11,10 +11,29 @@ export const REPORT_REASONS: Record<ReportKind, readonly ReportReason[]> = {
   message: ["harassment", "inappropriate", "spam", "scam", "other"],
 };
 
-/** The words of a reason for a target ("Uygunsuz ad" for a player, "… ya da slogan" for a crew). */
-export function reasonKey(kind: ReportKind, reason: ReportReason): string {
+/** A plan's maker (FIX2) also takes "Uygunsuz not": the plan's note. */
+const PLAN_REASONS: readonly ReportReason[] = [
+  "name",
+  "profile",
+  "harassment",
+  "inappropriate",
+  "spam",
+  "scam",
+  "other",
+];
+
+/** The reasons a target takes, in the dialog's order. */
+export function reasonsFor(target: ReportTarget): readonly ReportReason[] {
+  if (target.kind === "player" && target.plan) return PLAN_REASONS;
+  return REPORT_REASONS[target.kind];
+}
+
+/** The words of a reason for a target ("Uygunsuz ad" for a player, "… ya da slogan" for a crew,
+ * "Uygunsuz not" from a plan). */
+export function reasonKey(kind: ReportKind, reason: ReportReason, plan = false): string {
   if (reason === "name")
     return kind === "crew" ? "reports.reasons.crewName" : "reports.reasons.playerName";
+  if (plan && reason === "inappropriate") return "fix2.report.noteReason";
   return `reports.reasons.${reason}`;
 }
 

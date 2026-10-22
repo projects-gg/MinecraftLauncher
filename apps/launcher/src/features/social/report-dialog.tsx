@@ -12,7 +12,15 @@ import { Check } from "@/features/settings/cleanup/check";
 import { api } from "@/lib/api";
 import type { ReportReason } from "@/lib/api/social-types";
 import { enter, leave } from "./motion";
-import { canBlock, NOTE_MAX, noteLength, noteOf, REPORT_REASONS, reasonKey } from "./report";
+import {
+  canBlock,
+  NOTE_MAX,
+  noteLength,
+  noteOf,
+  REPORT_REASONS,
+  reasonKey,
+  reasonsFor,
+} from "./report";
 import { SocialAvatar } from "./social-face";
 import { type ReportRequest, useSocialUi } from "./store";
 import { CrewMark } from "./team-emblem";
@@ -31,6 +39,19 @@ function Subject({ request, inviter }: { request: ReportRequest; inviter: boolea
       )}
       <div className="min-w-0 flex-1">
         <p className="truncate text-[14px] font-semibold text-bone-50">{name}</p>
+        {/* From a plan card (FIX2): the plan's time and its note. */}
+        {kind === "player" && !inviter && request.plan ? (
+          <>
+            <p className="mt-0.5 truncate text-[12.5px] text-ash-300">
+              {t("fix2.report.plan", { when: request.plan.when })}
+            </p>
+            {request.plan.note ? (
+              <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-bone-100 break-words">
+                <span className="sr-only">{t("fix2.note.label")}: </span>“{request.plan.note}”
+              </p>
+            ) : null}
+          </>
+        ) : null}
         {kind === "message" && request.text ? (
           <p className="mt-1 line-clamp-3 text-[13px] leading-snug text-bone-100 break-words whitespace-pre-wrap">
             <span className="sr-only">{t("reports.message")}: </span>
@@ -67,7 +88,8 @@ export function ReportDialog() {
 
   const target = request && inviter && request.inviter ? request.inviter.target : request?.target;
   const kind = target?.kind ?? "player";
-  const reasons = REPORT_REASONS[kind];
+  const reasons = target ? reasonsFor(target) : REPORT_REASONS[kind];
+  const fromPlan = target?.kind === "player" && Boolean(target.plan);
   const length = noteLength(note);
   const tooLong = length > NOTE_MAX;
   const ready = Boolean(target && reason && reasons.includes(reason)) && !tooLong && !busy;
@@ -146,7 +168,7 @@ export function ReportDialog() {
                 >
                   <RadioGroup.Indicator className="size-2 rounded-full bg-gold-400" />
                 </span>
-                {t(reasonKey(kind, option))}
+                {t(reasonKey(kind, option, fromPlan))}
               </RadioGroup.Item>
             ))}
           </RadioGroup.Root>

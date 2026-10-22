@@ -1,21 +1,22 @@
 // One crewmate: picture with presence, name (a crown for the leader, a starred shield for a
 // moderator), where they are when the group above does not say it, and "Katıl" when they are on
 // projects.gg. The row opens their card beside the panel: how long they have been in the crew, join,
-// "Discord'dan mesaj at", and in a quieter corner what the player may do about them (the leader names
-// moderators, hands on the leadership and removes anyone; a moderator removes plain members where
-// the crew lets them; anyone may block). Irreversible steps are confirmed in place with one
-// sentence; naming a moderator is not (it is undone the same way). The same actions are in the row's
-// menu: a right click, Shift+F10 or the menu key, or its "…".
+// "Mesaj" (a friend, chat on), "Arkadaş ekle" (a crewmate who is not a friend, FIX2),
+// "Discord'dan mesaj at", and in a quieter corner what the player may do about them (the leader
+// names moderators, hands on the leadership and removes anyone; a moderator removes plain members
+// where the crew lets them; anyone may block). Irreversible steps are confirmed in place with one
+// sentence; naming a moderator is not (it is undone the same way). The row's menu (a right click,
+// Shift+F10 or the menu key, or its "…") is the person menu every place shows (person-menu.tsx).
 import {
   ChatCircle,
   Crown,
-  DiscordLogo,
   DotsThree,
   Flag,
-  Play,
   Prohibit,
   ShieldStar,
+  UserCheck,
   UserMinus,
+  UserPlus,
 } from "@phosphor-icons/react";
 import {
   Button,
@@ -24,8 +25,8 @@ import {
   easeOutExpo,
   IconButton,
   Menu,
-  type MenuItem,
   returnFocusAfterKeys,
+  toast,
 } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { DropdownMenu, Popover } from "radix-ui";
@@ -35,23 +36,30 @@ import { useCalm } from "@/features/accounts/calm";
 import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import type { SocialTeam, TeamMember } from "@/lib/api/social-types";
-import { useLaunch } from "@/stores/launch";
 import { attempt } from "./actions";
 import { directConversation } from "./chat/conversations";
 import { DiscordButton } from "./discord-button";
 import { openInDiscord } from "./discord-link";
 import { JoinButton } from "./friend-row";
-import { gameBusy, joinProjects } from "./join";
 import { openMenuFromKey } from "./menu-key";
-import { type MemberAction, memberMenu, rowsOf } from "./menus";
+import { type PersonAction, personMenu } from "./menus";
 import { isJoinable, presenceLine } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
+import { type PersonQuestion, usePersonItems } from "./person-menu";
 import { SocialAvatar } from "./social-face";
 import { useSocialUi } from "./store";
 import { afterHandingOn, canRemove, daysSince, MAX_MODERATORS } from "./teams";
 import { togetherTime } from "./together";
 
-type Question = "founder" | "remove" | "block" | "unblock";
+type Question = "founder" | "remove" | "removeFriend" | "block" | "unblock";
+
+/** The card's question for the person menu's. */
+const CARD_QUESTION: Record<PersonQuestion, Question> = {
+  makeFounder: "founder",
+  removeMember: "remove",
+  removeFriend: "removeFriend",
+  block: "block",
+};
 
 /** A crown for the leader, a starred shield for a moderator (gold, quieter). */
 export function RoleBadge({
@@ -83,27 +91,41 @@ export function RoleBadge({
   );
 }
 
-/** What the player may do about a crewmate, from the crew's roles and permissions. */
-function memberPlan(
-  team: SocialTeam,
-  member: TeamMember,
-  busy: boolean,
-  roles: boolean,
-  chat = false,
-) {
-  const moderators = team.members.filter((m) => m.moderator).length;
-  return memberMenu({
-    joinable: member.state === "playing" && isJoinable(member.game),
-    gameBusy: busy,
-    founder: team.role === "founder",
+/** The crew's rows of the person menu. */
+const CREW_ROWS = new Set<PersonAction>([
+  "makeModerator",
+  "unmakeModerator",
+  "makeFounder",
+  "removeMember",
+]);
+
+/** The card's quieter corner: the crew's and the relationship's rows of the person menu. */
+const CARD_ACTIONS = new Set<PersonAction>([
+  "makeModerator",
+  "unmakeModerator",
+  "makeFounder",
+  "removeMember",
+  "removeFriend",
+  "block",
+  "unblock",
+  "report",
+]);
+
+function cardPlan(team: SocialTeam, member: TeamMember, roles: boolean) {
+  return personMenu({
+    friend: member.friend,
     blocked: member.blocked,
-    roles,
-    moderator: member.moderator,
-    moderatorsFull: moderators >= MAX_MODERATORS,
-    removable: canRemove(team, member, roles),
-    chat: chat && member.friend,
     report: !member.me,
-  });
+    crew: member.me
+      ? undefined
+      : {
+          roles,
+          leader: team.role === "founder",
+          moderator: member.moderator,
+          moderatorsFull: team.members.filter((m) => m.moderator).length >= MAX_MODERATORS,
+          removable: canRemove(team, member, roles),
+        },
+  }).filter((row): row is NonNullable<typeof row> => row !== null && CARD_ACTIONS.has(row.action));
 }
 
 /** "Mesaj" to a crewmate who is a friend (chat on), else nothing to offer. */
@@ -113,6 +135,21 @@ function useMemberChat(member: TeamMember): (() => void) | null {
   const openChat = useSocialUi((s) => s.openChat);
   if (!chat || !me || !member.friend || member.blocked) return null;
   return () => openChat(directConversation(me, member.id), { from: "team" });
+}
+
+/**
+ * "Arkadaş ekle" to a crewmate who is not a friend (FIX2; the service lets crewmates add each other
+ * without a code): may be sent, was sent and waits, or they asked first.
+ */
+function useAddFriend(member: TeamMember): "ready" | "sent" | "received" | null {
+  return useSocialUi((s) => {
+    if (member.friend || member.blocked || member.me || !s.view.crew.crewFriendRequests) {
+      return null;
+    }
+    if (s.view.outgoing.some((r) => r.id === member.id)) return "sent";
+    if (s.view.incoming.some((r) => r.id === member.id)) return "received";
+    return "ready";
+  });
 }
 
 /** "Rapor et" about a crewmate. */
@@ -151,10 +188,10 @@ function MemberCard({
   const { reduce } = useSocialMotion();
   const calm = useCalm();
   const roles = useSocialUi((s) => s.view.crew.roles);
-  const busyGame = useLaunch((s) => gameBusy(s.phase.kind));
   const [question, setQuestion] = useState<Question | null>(initialQuestion);
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [asking, setAsking] = useState(false);
   // A friend's coarse "last seen" lives on the friend list.
   const friend = useSocialUi((s) =>
     member.friend ? s.view.friends.find((f) => f.id === member.id) : undefined,
@@ -164,10 +201,8 @@ function MemberCard({
   // "Bu ay birlikte 3 sa" (TEAM5): kept on this computer only, off unless the player keeps it.
   const together = togetherTime(member.togetherMonth ?? 0);
   const chat = useMemberChat(member);
-  const plan = memberPlan(team, member, busyGame, roles).filter(
-    (row): row is NonNullable<typeof row> =>
-      row !== null && row.action !== "join" && row.action !== "message" && row.action !== "chat",
-  );
+  const addFriend = useAddFriend(member);
+  const plan = cardPlan(team, member, roles);
 
   const run = async (action: Question) => {
     setBusy(true);
@@ -177,6 +212,8 @@ function MemberCard({
           return api.social.transferTeam(team.id, member.id);
         case "remove":
           return api.social.removeTeamMember(team.id, member.id);
+        case "removeFriend":
+          return api.social.removeFriend(member.id);
         case "block":
           return api.social.block(member.id);
         case "unblock":
@@ -188,11 +225,31 @@ function MemberCard({
     const said = {
       founder: t("teams.member.madeFounder", { name: member.name }),
       remove: t("teams.member.removed", { name: member.name }),
+      removeFriend: t("social.actions.removed", { name: member.name }),
       block: t("social.actions.blocked", { name: member.name }),
       unblock: t("social.actions.unblocked", { name: member.name }),
     }[action];
     announce(said);
     onDone();
+  };
+
+  /** "Arkadaş ekle" or "İsteği kabul et" (FIX2): sent at once, said in place and aloud. */
+  const befriend = async () => {
+    setAsking(true);
+    const outcome =
+      addFriend === "received"
+        ? await attempt(() => api.social.accept(member.id)).then((done) =>
+            done === undefined ? undefined : ("friends" as const),
+          )
+        : await attempt(() => api.social.requestCrewmate(member.id));
+    setAsking(false);
+    if (outcome === undefined) return;
+    const said =
+      outcome === "friends"
+        ? t("social.actions.accepted", { name: member.name })
+        : t("fix2.menu.requestSentTo");
+    toast.success(said);
+    announce(said);
   };
 
   const asks: Record<Question, string> = {
@@ -201,17 +258,19 @@ function MemberCard({
         ? t("teams.member.makeFounderAskModerator", { name: member.name })
         : t("teams.member.makeFounderAsk", { name: member.name }),
     remove: t("teams.member.removeAsk", { name: member.name }),
+    removeFriend: t("social.actions.removeAsk", { name: member.name }),
     block: t("social.actions.blockAsk"),
     unblock: t("social.actions.unblock"),
   };
   const labels: Record<Question, string> = {
     founder: t("teams.member.makeFounder"),
     remove: t("teams.member.remove"),
+    removeFriend: t("social.actions.remove"),
     block: t("social.actions.block"),
     unblock: t("social.actions.unblock"),
   };
 
-  const select = (action: MemberAction) => {
+  const select = (action: PersonAction) => {
     switch (action) {
       case "makeModerator":
         void setModerator(
@@ -232,8 +291,11 @@ function MemberCard({
       case "makeFounder":
         setQuestion("founder");
         return;
-      case "remove":
+      case "removeMember":
         setQuestion("remove");
+        return;
+      case "removeFriend":
+        setQuestion("removeFriend");
         return;
       case "block":
         setQuestion("block");
@@ -252,20 +314,22 @@ function MemberCard({
 
   const itemClass =
     "flex h-10 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[13.5px] outline-none select-none data-[highlighted]:bg-white/8 data-[disabled]:cursor-default data-[disabled]:opacity-45";
-  const words: Record<string, string> = {
+  const words: Partial<Record<PersonAction, string>> = {
     makeModerator: t("teams.member.makeModerator"),
     unmakeModerator: t("teams.member.unmakeModerator"),
     makeFounder: t("teams.member.makeFounder"),
-    remove: t("teams.member.remove"),
+    removeMember: t("teams.member.remove"),
+    removeFriend: t("social.actions.remove"),
     block: t("social.actions.block"),
     unblock: t("social.actions.unblock"),
     report: t("reports.action"),
   };
-  const icons: Record<string, ReactElement> = {
+  const icons: Partial<Record<PersonAction, ReactElement>> = {
     makeModerator: <ShieldStar size={16} className="text-ash-300" aria-hidden />,
     unmakeModerator: <ShieldStar size={16} className="text-ash-300" aria-hidden />,
     makeFounder: <Crown size={16} className="text-ash-300" aria-hidden />,
-    remove: <UserMinus size={16} className="text-ash-300" aria-hidden />,
+    removeMember: <UserMinus size={16} className="text-ash-300" aria-hidden />,
+    removeFriend: <UserMinus size={16} className="text-ash-300" aria-hidden />,
     block: <Prohibit size={16} aria-hidden />,
     unblock: <Prohibit size={16} aria-hidden />,
     report: <Flag size={16} className="text-ash-300" aria-hidden />,
@@ -331,6 +395,21 @@ function MemberCard({
             }}
           >
             {t("chat.actions.message")}
+          </Button>
+        ) : null}
+        {addFriend ? (
+          <Button
+            variant="secondary"
+            className="w-full"
+            icon={addFriend === "received" ? <UserCheck size={16} /> : <UserPlus size={16} />}
+            disabled={addFriend === "sent" || asking}
+            onClick={() => void befriend()}
+          >
+            {addFriend === "sent"
+              ? t("fix2.menu.requestSent")
+              : addFriend === "received"
+                ? t("fix2.menu.acceptFriend")
+                : t("fix2.menu.addFriend")}
           </Button>
         ) : null}
         <DiscordButton className="w-full" onClick={() => void openInDiscord(member)}>
@@ -406,27 +485,27 @@ function MemberCard({
                           })}
                           exit={calm({ opacity: 0, scale: 0.98, transition: { duration: 0.12 } })}
                         >
-                          {plan.map((row, index) =>
-                            row === null ? null : (
-                              <div key={row.action}>
-                                {index > 0 &&
-                                (row.action === "block" || row.action === "unblock") ? (
-                                  <DropdownMenu.Separator className="my-1.5 h-px bg-white/8" />
-                                ) : null}
-                                <DropdownMenu.Item
-                                  disabled={row.disabled}
-                                  onSelect={() => select(row.action)}
-                                  className={cn(
-                                    itemClass,
-                                    row.action === "block" ? "text-flare-400" : "text-bone-100",
-                                  )}
-                                >
-                                  {icons[row.action]}
-                                  {words[row.action]}
-                                </DropdownMenu.Item>
-                              </div>
-                            ),
-                          )}
+                          {plan.map((row, index) => (
+                            <div key={row.action}>
+                              {/* The crew's rows, then the relationship's, apart. */}
+                              {index > 0 &&
+                              !CREW_ROWS.has(row.action) &&
+                              CREW_ROWS.has(plan[index - 1]?.action ?? "report") ? (
+                                <DropdownMenu.Separator className="my-1.5 h-px bg-white/8" />
+                              ) : null}
+                              <DropdownMenu.Item
+                                disabled={row.disabled}
+                                onSelect={() => select(row.action)}
+                                className={cn(
+                                  itemClass,
+                                  row.action === "block" ? "text-flare-400" : "text-bone-100",
+                                )}
+                              >
+                                {icons[row.action]}
+                                {words[row.action]}
+                              </DropdownMenu.Item>
+                            </div>
+                          ))}
                         </motion.div>
                       </DropdownMenu.Content>
                     </DropdownMenu.Portal>
@@ -459,10 +538,8 @@ export function TeamMemberRow({
   const { t } = useTranslation();
   const calm = useCalm();
   const { reduce } = useSocialMotion();
-  const roles = useSocialUi((s) => s.view.crew.roles);
   const [open, setOpen] = useState(false);
   const [intent, setIntent] = useState<Question | null>(null);
-  const busy = useLaunch((s) => gameBusy(s.phase.kind));
   // A friend's coarse "last seen" lives on the friend list (crewmates who are not friends never
   // share it).
   const friend = useSocialUi((s) =>
@@ -486,95 +563,15 @@ export function TeamMemberRow({
       setOpen(true);
     }, 0);
 
-  const chat = useMemberChat(member);
-  const items = rowsOf(
-    memberPlan(team, member, busy, roles, Boolean(chat)),
-    (row): MenuItem | null => {
-      switch (row.action) {
-        case "join":
-          return {
-            label: t("social.actions.join"),
-            icon: <Play size={16} />,
-            disabled: row.disabled,
-            onSelect: () => void joinProjects(),
-          };
-        case "chat":
-          return chat
-            ? { label: t("chat.actions.message"), icon: <ChatCircle size={16} />, onSelect: chat }
-            : null;
-        case "report":
-          return {
-            label: t("reports.action"),
-            icon: <Flag size={16} />,
-            onSelect: () => reportMember(member),
-          };
-        case "message":
-          return {
-            label: t("social.actions.message"),
-            icon: <DiscordLogo size={16} />,
-            onSelect: () => void openInDiscord(member),
-          };
-        case "makeModerator":
-          return {
-            label: t("teams.member.makeModerator"),
-            icon: <ShieldStar size={16} />,
-            disabled: row.disabled,
-            onSelect: () =>
-              void setModerator(
-                team,
-                member,
-                true,
-                t("teams.member.madeModerator", { name: member.name }),
-              ),
-          };
-        case "unmakeModerator":
-          return {
-            label: t("teams.member.unmakeModerator"),
-            icon: <ShieldStar size={16} />,
-            onSelect: () =>
-              void setModerator(
-                team,
-                member,
-                false,
-                t("teams.member.unmadeModerator", { name: member.name }),
-              ),
-          };
-        case "makeFounder":
-          return {
-            label: t("teams.member.makeFounder"),
-            icon: <Crown size={16} />,
-            onSelect: () => openAt("founder"),
-          };
-        case "remove":
-          return {
-            label: t("teams.member.remove"),
-            icon: <UserMinus size={16} />,
-            onSelect: () => openAt("remove"),
-          };
-        case "block":
-          return {
-            label: t("social.actions.block"),
-            icon: <Prohibit size={16} />,
-            danger: true,
-            onSelect: () => openAt("block"),
-          };
-        case "unblock":
-          return {
-            label: t("social.actions.unblock"),
-            icon: <Prohibit size={16} />,
-            onSelect: () =>
-              void attempt(() => api.social.unblock(member.id)).then((done) => {
-                if (done !== undefined) {
-                  announce(t("social.actions.unblocked", { name: member.name }));
-                }
-              }),
-          };
-      }
-    },
-  );
+  // The crewmate's menu, the same wherever they show (FIX2), with the crew's rows for this crew.
+  const items = usePersonItems(member, {
+    crew: team,
+    from: "team",
+    ask: (question) => openAt(CARD_QUESTION[question]),
+  });
 
   return (
-    <ContextMenu items={items}>
+    <ContextMenu items={items} disabled={!items.length}>
       <div className="group/friend flex items-center gap-2 rounded-[var(--radius-panel)] pr-2 transition-colors duration-150 hover:bg-white/[0.045] has-[[data-state=open]]:bg-white/[0.06]">
         <Popover.Root
           open={open}

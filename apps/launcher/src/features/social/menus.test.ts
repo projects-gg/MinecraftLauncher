@@ -3,12 +3,12 @@ import type { TeamMember } from "@/lib/api/social-types";
 import {
   callMenu,
   categoryMenu,
-  type FriendInput,
-  friendMenu,
   leavingOf,
-  memberMenu,
+  type PersonInput,
   type Plan,
   panelMenu,
+  personMenu,
+  planMenu,
   teamMenu,
 } from "./menus";
 
@@ -103,143 +103,219 @@ describe("panelMenu", () => {
   });
 });
 
-describe("friendMenu", () => {
-  const base: FriendInput = {
+describe("personMenu", () => {
+  // A friend in the friend list, as the list sees them.
+  const friend: PersonInput = {
+    friend: true,
+    blocked: false,
     joinable: false,
-    gameBusy: false,
+    here: false,
     invite: "ready",
+    chat: true,
+    discord: true,
     notifyOnline: false,
-    categories: false,
+    categories: true,
     team: null,
+    report: true,
+  };
+  // A crewmate who is not a friend, seen by a plain member.
+  const crewmate: PersonInput = {
+    friend: false,
+    blocked: false,
+    discord: true,
+    addFriend: "ready",
+    crew: { roles: true, leader: false, moderator: false, moderatorsFull: false, removable: false },
+    report: true,
   };
 
-  it("lists the actions in the card's order, the destructive ones apart", () => {
-    expect(words(friendMenu(base))).toEqual([
-      "invite",
-      "message",
-      "-",
-      "favorite",
-      "notifyOnline",
-      "-",
-      "remove",
-      "block",
-    ]);
-  });
-
-  it("offers Katıl on projects.gg, waiting while a game is busy", () => {
-    expect(words(friendMenu({ ...base, joinable: true }))[0]).toBe("join");
-    expect(words(friendMenu({ ...base, joinable: true, gameBusy: true }))[0]).toBe("join(off)");
-  });
-
-  it("shows the invite's wait and hides it when it cannot be sent", () => {
-    expect(words(friendMenu({ ...base, invite: "waiting" }))).toContain("invite(off)");
-    expect(words(friendMenu({ ...base, invite: "hidden" }))).not.toContain("invite");
-    expect(words(friendMenu({ ...base, invite: "hidden" }))[0]).toBe("message");
-  });
-
-  it("marks the online notice when it is on", () => {
-    expect(words(friendMenu({ ...base, notifyOnline: true }))).toContain("notifyOnline✓");
-  });
-
-  it("moves to a category and invites to the team only when those exist", () => {
-    expect(words(friendMenu({ ...base, categories: true }))).toContain("category");
-    expect(words(friendMenu({ ...base, team: "invitable" }))).toContain("teamInvite");
-    expect(words(friendMenu({ ...base, team: "invited" }))).toContain("teamInvite(off)");
-    expect(words(friendMenu({ ...base, team: "member" })).join()).not.toContain("teamInvite");
-    // Every crew full: nothing to invite to.
-    expect(words(friendMenu({ ...base, team: "full" }))).toContain("teamInvite(off)");
-  });
-
-  it("opens the chat and reports only where those are on (CHAT1, MOD1)", () => {
-    expect(words(friendMenu({ ...base, chat: true, report: true }))).toEqual([
+  it("keeps one order: together, the friend list, the crew, the relationship", () => {
+    expect(words(personMenu({ ...friend, joinable: true, team: "invitable" }))).toEqual([
+      "join",
       "invite",
       "chat",
       "message",
       "-",
       "favorite",
       "notifyOnline",
+      "category",
+      "teamInvite",
       "-",
-      "remove",
+      "removeFriend",
       "block",
       "report",
     ]);
   });
-});
 
-describe("memberMenu", () => {
-  const base = { joinable: false, gameBusy: false, founder: false, blocked: false };
-
-  it("lets a member message and block a teammate", () => {
-    expect(words(memberMenu(base))).toEqual(["message", "-", "block"]);
-  });
-
-  it("lets the founder hand the role on and remove", () => {
-    expect(words(memberMenu({ ...base, founder: true, joinable: true }))).toEqual([
-      "join",
+  it("gives a friend in a crew the leader's crew rows too, in their own group", () => {
+    const leader = {
+      roles: true,
+      leader: true,
+      moderator: false,
+      moderatorsFull: false,
+      removable: true,
+    };
+    expect(words(personMenu({ ...friend, categories: false, crew: leader }))).toEqual([
+      "invite",
+      "chat",
       "message",
       "-",
-      "makeFounder",
-      "remove",
-      "-",
-      "block",
-    ]);
-  });
-
-  it("lets the leader name and un-name moderators where the service has roles", () => {
-    const leader = { ...base, founder: true, roles: true };
-    expect(words(memberMenu(leader))).toEqual([
-      "message",
+      "favorite",
+      "notifyOnline",
       "-",
       "makeModerator",
       "makeFounder",
-      "remove",
+      "removeMember",
       "-",
+      "removeFriend",
       "block",
+      "report",
     ]);
-    expect(words(memberMenu({ ...leader, moderator: true }))).toContain("unmakeModerator");
-    expect(words(memberMenu({ ...leader, moderatorsFull: true }))).toContain("makeModerator(off)");
-    // A service without roles: no moderators at all.
-    expect(words(memberMenu({ ...leader, roles: false }))).not.toContain("makeModerator");
+    expect(words(personMenu({ ...friend, crew: { ...leader, moderator: true } }))).toContain(
+      "unmakeModerator",
+    );
+    expect(words(personMenu({ ...friend, crew: { ...leader, moderatorsFull: true } }))).toContain(
+      "makeModerator(off)",
+    );
+    // A service without roles: no moderators at all, the leadership still goes on.
+    const plain = words(personMenu({ ...friend, crew: { ...leader, roles: false } }));
+    expect(plain).not.toContain("makeModerator");
+    expect(plain).toContain("makeFounder");
+    // A moderator removes where the crew lets them, and nothing more.
+    expect(
+      words(personMenu({ ...crewmate, crew: { ...leader, leader: false, removable: true } })),
+    ).toEqual(["message", "addFriend", "-", "removeMember", "-", "block", "report"]);
   });
 
-  it("lets a moderator remove where the crew lets them, and nothing more", () => {
-    expect(words(memberMenu({ ...base, roles: true, removable: true }))).toEqual([
-      "message",
-      "-",
-      "remove",
-      "-",
-      "block",
-    ]);
-    expect(words(memberMenu({ ...base, roles: true, removable: false }))).toEqual([
-      "message",
-      "-",
-      "block",
-    ]);
-  });
-
-  it("offers no Katıl to someone blocked, and lifts the block", () => {
-    expect(words(memberMenu({ ...base, joinable: true, blocked: true }))).toEqual([
-      "message",
-      "-",
-      "unblock",
-    ]);
-    expect(words(memberMenu({ ...base, joinable: true, gameBusy: true }))[0]).toBe("join(off)");
-  });
-
-  it("opens the chat with a friend in the crew and reports (CHAT1, MOD1)", () => {
-    expect(words(memberMenu({ ...base, chat: true, report: true }))).toEqual([
-      "chat",
+  it("offers a crewmate who is not a friend a friend request instead of a message", () => {
+    // Direct messages stay between friends: no "Mesaj gönder", no invite to play.
+    expect(words(personMenu(crewmate))).toEqual(["message", "addFriend", "-", "block", "report"]);
+    expect(words(personMenu({ ...crewmate, addFriend: "sent" }))).toContain("addFriend(off)✓");
+    expect(words(personMenu({ ...crewmate, addFriend: "received" }))).toContain("acceptFriend");
+    // An older service: nothing to offer but Discord.
+    expect(words(personMenu({ ...crewmate, addFriend: "hidden" }))).toEqual([
       "message",
       "-",
       "block",
       "report",
     ]);
-    // Blocked: no conversation.
-    expect(words(memberMenu({ ...base, chat: true, blocked: true }))).toEqual([
+  });
+
+  it("offers Katıl on projects.gg, off when the player is there already, never to someone blocked", () => {
+    expect(words(personMenu({ ...crewmate, joinable: true }))[0]).toBe("join");
+    expect(words(personMenu({ ...crewmate, joinable: true, here: true }))[0]).toBe("join(off)");
+    expect(words(personMenu({ ...crewmate, joinable: true, blocked: true }))).toEqual([
       "message",
       "-",
       "unblock",
+      "report",
     ]);
+  });
+
+  it("shows the invite's wait, and hides the chat in its own conversation", () => {
+    expect(words(personMenu({ ...friend, invite: "waiting" }))).toContain("invite(off)");
+    expect(words(personMenu({ ...friend, invite: "hidden" }))[0]).toBe("chat");
+    expect(words(personMenu({ ...friend, chat: false }))).not.toContain("chat");
+    expect(words(personMenu({ ...friend, notifyOnline: true }))).toContain("notifyOnline✓");
+    expect(words(personMenu({ ...friend, team: "invited" }))).toContain("teamInvite(off)");
+    expect(words(personMenu({ ...friend, team: "full" }))).toContain("teamInvite(off)");
+    expect(words(personMenu({ ...friend, team: "member" })).join()).not.toContain("teamInvite");
+  });
+
+  it("leads a request's own row with its answers", () => {
+    const asker: PersonInput = { friend: false, blocked: false, report: true };
+    expect(words(personMenu({ ...asker, request: "incoming" }))).toEqual([
+      "acceptRequest",
+      "declineRequest",
+      "-",
+      "block",
+      "report",
+    ]);
+    expect(words(personMenu({ ...asker, request: "join" }))).toEqual([
+      "acceptRequest",
+      "declineRequest",
+      "-",
+      "block",
+      "report",
+    ]);
+    // The player's own request: take it back; nothing to report about someone asked.
+    expect(words(personMenu({ ...asker, request: "outgoing", report: false }))).toEqual([
+      "cancelRequest",
+      "-",
+      "block",
+    ]);
+    // A crewmate's request is answered on its row, not offered again.
+    expect(
+      words(personMenu({ ...crewmate, request: "incoming", addFriend: "received" })),
+    ).not.toContain("acceptFriend");
+  });
+
+  it("has nothing for the player's own row", () => {
+    expect(personMenu({ ...friend, me: true })).toEqual([]);
+  });
+});
+
+describe("planMenu", () => {
+  const base = {
+    joinable: false,
+    here: false,
+    notes: true,
+    hasNote: false,
+    canWrite: false,
+    canClear: false,
+    report: true,
+    cancel: false,
+  };
+
+  it("answers, reports a crewmate's plan and leaves its note to its maker", () => {
+    expect(words(planMenu({ ...base, answer: "maybe" }))).toEqual([
+      "yes",
+      "maybe✓",
+      "no",
+      "-",
+      "report",
+    ]);
+  });
+
+  it("lets its maker write, change and clear the note before it starts", () => {
+    const mine = { ...base, report: false, cancel: true, canWrite: true, canClear: true };
+    expect(words(planMenu(mine))).toEqual(["yes", "maybe", "no", "-", "writeNote", "-", "cancel"]);
+    expect(words(planMenu({ ...mine, hasNote: true }))).toEqual([
+      "yes",
+      "maybe",
+      "no",
+      "-",
+      "editNote",
+      "clearNote",
+      "-",
+      "cancel",
+    ]);
+    // Under way: the note stays, "Katıl" leads after the answers.
+    expect(words(planMenu({ ...mine, hasNote: true, canWrite: false, joinable: true }))).toEqual([
+      "yes",
+      "maybe",
+      "no",
+      "-",
+      "join",
+      "-",
+      "clearNote",
+      "-",
+      "cancel",
+    ]);
+  });
+
+  it("lets the crew's leaders only clear a note, and an older service none at all", () => {
+    const leader = { ...base, cancel: true, hasNote: true, canClear: true };
+    expect(words(planMenu(leader))).toEqual([
+      "yes",
+      "maybe",
+      "no",
+      "-",
+      "clearNote",
+      "-",
+      "report",
+      "cancel",
+    ]);
+    expect(words(planMenu({ ...leader, notes: false }))).not.toContain("clearNote");
   });
 });
 
@@ -392,7 +468,7 @@ describe("teamMenu", () => {
 
 describe("callMenu", () => {
   it("answers, joins the caller on Projects and opens the crew", () => {
-    expect(words(callMenu({ joinable: true, gameBusy: false }))).toEqual([
+    expect(words(callMenu({ joinable: true, here: false }))).toEqual([
       "yes",
       "soon",
       "no",
@@ -400,13 +476,13 @@ describe("callMenu", () => {
       "join",
       "open",
     ]);
-    expect(words(callMenu({ joinable: false, gameBusy: false, answer: "soon" }))).toEqual([
+    expect(words(callMenu({ joinable: false, here: false, answer: "soon" }))).toEqual([
       "yes",
       "soon✓",
       "no",
       "-",
       "open",
     ]);
-    expect(words(callMenu({ joinable: true, gameBusy: true }))).toContain("join(off)");
+    expect(words(callMenu({ joinable: true, here: true }))).toContain("join(off)");
   });
 });

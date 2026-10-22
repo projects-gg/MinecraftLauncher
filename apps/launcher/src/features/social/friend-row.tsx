@@ -2,19 +2,15 @@
 // on projects.gg. The row opens their card (beside the panel; a click, Enter or a double click):
 // join, "Birlikte oyna", "Mesaj" (chat, CHAT1), "Discord'dan mesaj at", favourite, the online
 // notice, and in a quieter corner remove, block and "Rapor et" (MOD1), the first two confirmed in
-// place with one sentence. The same actions are in the row's menu: a right click, Shift+F10 or
-// the menu key, or its "…". With several crews (TEAM4) "Ekibe davet et" asks which crew (a menu
-// of them, each with its mark).
+// place with one sentence. The row's menu (a right click, Shift+F10 or the menu key, or its "…")
+// is the person menu every place shows (person-menu.tsx, FIX2). With several crews (TEAM4) "Ekibe
+// davet et" asks which crew (a menu of them, each with its mark).
 import {
   Bell,
   ChatCircle,
-  DiscordLogo,
   DotsThree,
   Flag,
-  FolderSimple,
-  FolderSimplePlus,
   PaperPlaneTilt,
-  Play,
   Prohibit,
   Star,
   UserMinus,
@@ -41,18 +37,17 @@ import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import type { Friend, FriendGroup, SocialTeam } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
-import { useLaunch } from "@/stores/launch";
 import { attempt, inviteCoolingDown, inviteFriend } from "./actions";
 import { directConversation } from "./chat/conversations";
 import type { InviteState } from "./crews";
 import { DiscordButton } from "./discord-button";
 import { openInDiscord } from "./discord-link";
 import { REST } from "./groups";
-import { gameBusy, joinProjects } from "./join";
+import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
 import { openMenuFromKey } from "./menu-key";
-import { friendMenu, rowsOf } from "./menus";
 import { isJoinable, notifiesOnline, presenceLine } from "./model";
 import { rise, swap, useSocialMotion } from "./motion";
+import { usePersonItems } from "./person-menu";
 import { canInvite } from "./play-together";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
@@ -122,10 +117,11 @@ function useCanInvite(): boolean {
 }
 
 /**
- * "Katıl": disabled (with the reason) while a game is being prepared or running. A disabled
- * button takes no pointer, so the tooltip hangs on its wrapper, there all the time (and quiet
- * while the button works): the button stays the same and fades into its waiting look. The wrapper
- * takes the layout (`w-full` in the friend's card) and the button fills it.
+ * "Katıl": disabled (with the reason) while the player's game is on projects.gg already; with a
+ * game open elsewhere or opening it asks first and goes there (FIX2 "Bağlan"). A disabled button
+ * takes no pointer, so the tooltip hangs on its wrapper, there all the time (and quiet while the
+ * button works): the button stays the same and fades into its waiting look. The wrapper takes the
+ * layout (`w-full` in the friend's card) and the button fills it.
  */
 export function JoinButton({
   size = "sm",
@@ -137,18 +133,18 @@ export function JoinButton({
   className?: string;
 }) {
   const { t } = useTranslation();
-  const busy = useLaunch((s) => gameBusy(s.phase.kind));
+  const here = useThere(PROJECTS);
   return (
-    <Tooltip content={t("social.actions.joinBusy")} disabled={!busy}>
+    <Tooltip content={t("playTogether.already")} disabled={!here}>
       <span className={cn("inline-flex", className)}>
         <Button
           size={size}
           variant={variant}
-          disabled={busy}
+          disabled={here}
           className="w-full"
           onClick={(event) => {
             event.stopPropagation();
-            void joinProjects();
+            joinOrAsk(PROJECTS);
           }}
         >
           {t("social.actions.join")}
@@ -512,16 +508,8 @@ export function FriendRow({
   const { reduce } = useSocialMotion();
   const [open, setOpen] = useState(false);
   const [intent, setIntent] = useState<Confirm | null>(null);
-  const toggleFavorite = useSocialPrefs((s) => s.toggleFavorite);
-  const notify = useSocialPrefs((s) => notifiesOnline(s, friend.id));
-  const setOnlineAlert = useSocialPrefs((s) => s.setOnlineAlert);
-  const cooldown = useSocialUi((s) => s.inviteCooldown);
-  const invitable = useCanInvite();
-  const busy = useLaunch((s) => gameBusy(s.phase.kind));
   const joinable = friend.state === "playing" && isJoinable(friend.game);
-  const coolingDown = inviteCoolingDown(friend.id, cooldown);
   const line = presenceLine(friend, t);
-  const openChat = useOpenChat(friend);
 
   // Remove and block ask first, in the card: it opens at the question once the menu is gone.
   const openAt = (question: Confirm) =>
@@ -530,121 +518,13 @@ export function FriendRow({
       setOpen(true);
     }, 0);
 
-  // The card's actions: a right click, Shift+F10 or the menu key, or "…" away on the row.
-  const items = rowsOf(
-    friendMenu({
-      joinable,
-      gameBusy: busy,
-      invite: !invitable ? "hidden" : coolingDown ? "waiting" : "ready",
-      notifyOnline: notify,
-      categories: Boolean(categories),
-      team: team?.state ?? null,
-      chat: Boolean(openChat),
-      report: true,
-    }),
-    (row): MenuItem | null => {
-      switch (row.action) {
-        case "join":
-          return {
-            label: t("social.actions.join"),
-            icon: <Play size={16} />,
-            disabled: row.disabled,
-            onSelect: () => void joinProjects(),
-          };
-        case "invite":
-          return {
-            label: coolingDown ? t("social.actions.invited") : t("social.actions.invite"),
-            icon: <PaperPlaneTilt size={16} />,
-            disabled: row.disabled,
-            onSelect: () => void inviteFriend(friend),
-          };
-        case "chat":
-          return openChat
-            ? {
-                label: t("chat.actions.message"),
-                icon: <ChatCircle size={16} />,
-                onSelect: openChat,
-              }
-            : null;
-        case "message":
-          return {
-            label: t("social.actions.message"),
-            icon: <DiscordLogo size={16} />,
-            onSelect: () => void openInDiscord(friend),
-          };
-        case "favorite":
-          return {
-            label: favorite ? t("social.actions.unfavorite") : t("social.actions.favorite"),
-            icon: <Star size={16} weight={favorite ? "fill" : "regular"} />,
-            onSelect: () => toggleFavorite(friend.id),
-          };
-        case "notifyOnline":
-          return {
-            label: t("friendMenus.notifyOnline"),
-            icon: <Bell size={16} weight={notify ? "fill" : "regular"} />,
-            checked: notify,
-            onSelect: () => setOnlineAlert(friend.id, !notify),
-          };
-        case "category":
-          return categories
-            ? {
-                label: t("friendGroups.moveTo"),
-                icon: <FolderSimple size={16} />,
-                onSelect: () => {},
-                items: [
-                  ...categories.groups.map((g) => ({
-                    label: g.name,
-                    checked: categories.current === g.id,
-                    radio: true,
-                    onSelect: () => categories.onMove(g.id),
-                  })),
-                  {
-                    label: t("friendGroups.rest"),
-                    checked: categories.current === REST,
-                    radio: true,
-                    onSelect: () => categories.onMove(REST),
-                  },
-                  null,
-                  {
-                    label: t("friendGroups.addMenu"),
-                    icon: <FolderSimplePlus size={16} />,
-                    onSelect: categories.onNew,
-                  },
-                ],
-              }
-            : null;
-        case "teamInvite":
-          return team
-            ? {
-                label: team.state === "invited" ? t("teams.invite.sent") : t("teams.invite.toTeam"),
-                icon: <UsersThree size={16} />,
-                disabled: row.disabled,
-                onSelect: team.onInvite,
-                items: team.crews ? crewInviteItems(team.crews, t) : undefined,
-              }
-            : null;
-        case "remove":
-          return {
-            label: t("social.actions.remove"),
-            icon: <UserMinus size={16} />,
-            onSelect: () => openAt("remove"),
-          };
-        case "block":
-          return {
-            label: t("social.actions.block"),
-            icon: <Prohibit size={16} />,
-            danger: true,
-            onSelect: () => openAt("block"),
-          };
-        case "report":
-          return {
-            label: t("reports.action"),
-            icon: <Flag size={16} />,
-            onSelect: () => reportFriend(friend),
-          };
-      }
-    },
-  );
+  // The friend's menu, the same wherever they show (FIX2): a right click, Shift+F10 or the menu
+  // key, or "…" away on the row.
+  const items = usePersonItems(friend, {
+    categories,
+    from: "list",
+    ask: (question) => openAt(question === "block" ? "block" : "remove"),
+  });
 
   return (
     <ContextMenu items={items}>

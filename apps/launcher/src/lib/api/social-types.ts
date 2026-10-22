@@ -134,7 +134,8 @@ export type ReportReason =
 
 /** What the player reports ("Rapor et"). */
 export type ReportTarget =
-  | { kind: "player"; id: string }
+  /** `plan`: reported from a plan card (its maker; FIX2), the plan as the moderators' evidence. */
+  | { kind: "player"; id: string; plan?: { crew: string; id: string } }
   /** `code`: the crew was looked up by code. */
   | { kind: "crew"; id: string; code?: string }
   /** A message as this computer holds it (with the messages before it as context). */
@@ -174,6 +175,15 @@ export interface ChatMessage {
   editUntil?: number;
   /** Unix ms: may be deleted for everyone until then (own, or any in a crew led or moderated). */
   deleteUntil?: number;
+  /** Deleted for everyone: a tombstone in its place (the text is gone, nothing may be done with
+   * it). `by`: who deleted it, a user id, `staff` (Projects' moderators) or empty (not known). */
+  deleted?: ChatDeletion;
+}
+
+/** Who deleted a message for everyone, and when (Unix ms on this computer's clock). */
+export interface ChatDeletion {
+  by: string;
+  at?: number;
 }
 
 /** One conversation in the list: a crew's chat (`c:<team id>`) or a friend's (`d:<id>:<id>`). */
@@ -185,7 +195,9 @@ export interface Conversation {
   crew?: string;
   /** Who or what it is with, as last known (for one no longer in the lists). */
   title?: string;
-  last?: { from: string; mine: boolean; text: string; at: number };
+  /** The newest message; `deletedBy` (who deleted it, as `ChatDeletion.by`) when it is a
+   * tombstone, its text empty then. */
+  last?: { from: string; mine: boolean; text: string; at: number; deletedBy?: string };
   unread: number;
   /** The player may write here now (still friends, still in the crew). */
   writable: boolean;
@@ -286,6 +298,10 @@ export interface CrewFeatures {
   link: boolean;
   /** Crew plans ("Planlar", TEAM5). */
   plans: boolean;
+  /** A plan's short note, changed on its own (FIX2). */
+  planNotes: boolean;
+  /** "Arkadaş ekle" on a crewmate, without their code (FIX2). */
+  crewFriendRequests: boolean;
 }
 
 /** How newcomers with the crew's code or invite link get in: at once, or once approved. */
@@ -314,7 +330,7 @@ export interface TeamRequest extends CrewLook {
 /** "Geliyorum", "Belki", "Gelemem" to a plan. */
 export type PlanAnswer = "yes" | "maybe" | "no";
 
-/** "Planlar": a time to meet on Projects in one of the player's crews (no text). */
+/** "Planlar": a time to meet on Projects in one of the player's crews, with an optional note. */
 export interface CrewPlan {
   id: string;
   /** The crew's id. */
@@ -335,6 +351,12 @@ export interface CrewPlan {
   /** Who answered what, in the crew's order. */
   answers: Array<{ id: string; answer: PlanAnswer }>;
   myAnswer?: PlanAnswer;
+  /** One line of at most 80 characters ("Bedwars, sesli gelin"; FIX2). */
+  note?: string;
+  /** The player may write or change the note (they made the plan; none from older services). */
+  canWriteNote?: boolean;
+  /** The player may clear the note (they made the plan, or lead or moderate the crew). */
+  canClearNote?: boolean;
 }
 
 /** The player's own mute of one crew (several crews); nobody else sees it. */
@@ -636,6 +658,8 @@ export const HIDDEN_SNAPSHOT: SocialSnapshot = {
     requests: false,
     link: false,
     plans: false,
+    planNotes: false,
+    crewFriendRequests: false,
   },
   crews: [],
   crewLimit: 1,
@@ -663,6 +687,8 @@ export interface SocialApi {
   refresh(): Promise<void>;
   lookup(code: string): Promise<CodeLookup>;
   sendRequest(code: string): Promise<"requested" | "friends">;
+  /** "Arkadaş ekle" on a crewmate who is not a friend, without their code (FIX2). */
+  requestCrewmate(userId: string): Promise<"requested" | "friends">;
   accept(id: string): Promise<void>;
   decline(id: string): Promise<void>;
   cancelRequest(id: string): Promise<void>;
@@ -743,8 +769,11 @@ export interface SocialApi {
   setTeamLink(teamId: string, on: boolean): Promise<string | null>;
   /** How newcomers with the code or the link get in (the leader). */
   setJoinMode(teamId: string, join: JoinMode): Promise<void>;
-  /** A new plan at `at` (Unix seconds, a whole quarter of an hour); answers its id. */
-  makePlan(crew: string, at: number): Promise<string>;
+  /** A new plan at `at` (Unix seconds, a whole quarter of an hour), with its note when the
+   * service keeps notes; answers its id. */
+  makePlan(crew: string, at: number, note?: string): Promise<string>;
+  /** A plan's note: written or changed by its maker; `""` clears it (maker, leader, moderators). */
+  setPlanNote(planId: string, note: string): Promise<void>;
   /** An answer to a plan; false when the plan is gone. */
   answerPlan(planId: string, answer: PlanAnswer): Promise<boolean>;
   /** "Planı sil". */

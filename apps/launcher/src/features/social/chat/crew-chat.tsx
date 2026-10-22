@@ -6,7 +6,7 @@ import { ChatsCircle } from "@phosphor-icons/react";
 import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatMessage, SocialTeam } from "@/lib/api/social-types";
-import { planWhen } from "../crew-plans";
+import { planWhen, withPlanNote } from "../crew-plans";
 import { useSocialUi } from "../store";
 import { useComposerNotice, useComposerState, usePeople } from "./chat-page";
 import { type ChatLine, Conversation, useUnreadAtOpen } from "./conversation";
@@ -30,9 +30,13 @@ export function CrewChat({ team, onScreen }: { team: SocialTeam; onScreen: boole
           return {
             key: `plan:${plan.id}`,
             at: plan.createdAt * 1000,
-            text: plan.mine
-              ? t("crewWave2.plans.chatMine", { when })
-              : t("crewWave2.plans.notice", { name: plan.byName ?? "?", when }),
+            text: withPlanNote(
+              plan.mine
+                ? t("crewWave2.plans.chatMine", { when })
+                : t("crewWave2.plans.notice", { name: plan.byName ?? "?", when }),
+              plan.note,
+              t,
+            ),
           };
         }),
     [plans, team.id, t],

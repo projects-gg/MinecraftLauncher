@@ -10,9 +10,9 @@ use crate::codes::crew_code;
 use crate::model::{
     BlockedUser, CrewEntry, CrewMute, DEFAULT_CREW_LIMIT, Friend, FriendGroups, FriendRequest,
     FriendsOverview, JOIN_REQUEST_LIFETIME_SECS, JoinRequest, Limits, Me, ModNotice, NoticeKind,
-    PublicProfile, RequestOutcome, SettingsMeta, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, Team,
-    TeamAnswer, TeamExit, TeamInvite, TeamMember, TeamNotifications, TeamRequest, TeamRole,
-    TeamsOverview, crews_of,
+    PublicProfile, RequestOutcome, SettingsMeta, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE,
+    TEAM_FEATURE_PLAN_NOTES, Team, TeamAnswer, TeamExit, TeamInvite, TeamMember, TeamNotifications,
+    TeamRequest, TeamRole, TeamsOverview, crews_of,
 };
 use crate::presence::{PresenceEvent, StopReason};
 use crate::protocol::{
@@ -1195,6 +1195,11 @@ impl SocialState {
         self.plans.retain(|p| p.id != plan);
     }
 
+    /// A plan the player sees, by its id.
+    pub fn plan(&self, id: &str) -> Option<&CrewPlan> {
+        self.plans.iter().find(|p| p.id == id)
+    }
+
     /// Plans that are over at `now` (on this computer's clock) go: nothing says so.
     fn prune_plans(&mut self, now: i64) {
         let skew = self.plan_skew;
@@ -1234,6 +1239,7 @@ impl SocialState {
             .is_some_and(|m| m.role == TeamRole::Founder || m.moderator);
         let mine = me == Some(plan.by.as_str());
         let skew = self.plan_skew;
+        let notes = self.offers(TEAM_FEATURE_PLAN_NOTES);
         Some(PlanView {
             id: plan.id.clone(),
             crew: plan.crew.clone(),
@@ -1258,6 +1264,9 @@ impl SocialState {
                 })
                 .collect(),
             my_answer: me.and_then(|me| plan.answers.get(me).copied()),
+            note: plan.note.clone().filter(|_| notes),
+            can_write_note: notes && mine,
+            can_clear_note: notes && (mine || leads),
         })
     }
 
@@ -3209,6 +3218,7 @@ mod tests {
             until: at + 7_200,
             created_at: at - 3_600,
             answers: [(by.to_owned(), PlanAnswer::Yes)].into_iter().collect(),
+            note: None,
         }
     }
 

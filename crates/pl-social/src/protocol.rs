@@ -228,9 +228,9 @@ impl PlanAnswer {
 }
 
 /// "Planlar": a time to meet on Projects in one of the player's crews (`hello.plans`,
-/// `{"t":"plan"}`, `{"t":"plans"}`). It carries no text. Times are Unix seconds on the service's
-/// clock; `at` is a whole quarter of an hour, and the plan is over at `until` (`at` + 2 hours),
-/// without a message.
+/// `{"t":"plan"}`, `{"t":"plans"}`), with an optional short note (`planNotes`, FIX2: its only
+/// text). Times are Unix seconds on the service's clock; `at` is a whole quarter of an hour, and
+/// the plan is over at `until` (`at` + 2 hours), without a message.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CrewPlan {
@@ -247,6 +247,17 @@ pub struct CrewPlan {
     /// this version does not know are left out.
     #[serde(default, deserialize_with = "known_plan_answers")]
     pub answers: BTreeMap<String, PlanAnswer>,
+    /// One line of at most 80 characters ("Bedwars, sesli gelin"); None (or empty) is none.
+    #[serde(default, deserialize_with = "plan_note")]
+    pub note: Option<String>,
+}
+
+/// A plan's note: kept only when it is a string with something in it.
+fn plan_note<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Option<String>, D::Error> {
+    let raw = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(raw
+        .and_then(|value| value.as_str().map(str::trim).map(str::to_owned))
+        .filter(|note| !note.is_empty()))
 }
 
 fn known_plan_answers<'de, D: Deserializer<'de>>(
@@ -369,10 +380,20 @@ pub(crate) enum ClientMessage {
         rid: u32,
     },
     /// A new crew plan: a time (Unix seconds, a whole quarter of an hour) in one of the player's
-    /// crews.
+    /// crews, and its note (only to a service with `planNotes`).
     Plan {
         crew: String,
         at: i64,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        note: Option<String>,
+        rid: u32,
+    },
+    /// A plan's new note, or `""` to clear it (its maker; the crew's leader and moderators may
+    /// only clear it).
+    PlanNote {
+        crew: String,
+        id: String,
+        note: String,
         rid: u32,
     },
     /// "Geliyorum", "Belki" or "Gelemem" to a plan.
@@ -560,6 +581,9 @@ pub(crate) enum ServerMessage {
         id: i64,
         #[serde(default)]
         by: String,
+        /// When (the hub's clock, ms).
+        #[serde(default)]
+        at: i64,
     },
     /// One conversation of a sync answer.
     ChatSync {
@@ -1072,7 +1096,10 @@ mod tests {
         let deleted: ServerMessage =
             serde_json::from_str(r#"{"t":"chat_deleted","conv":"d:1:2","id":7,"by":"","at":9}"#)
                 .unwrap();
-        assert!(matches!(deleted, ServerMessage::ChatDeleted { id: 7, .. }));
+        assert!(matches!(
+            deleted,
+            ServerMessage::ChatDeleted { id: 7, at: 9, .. }
+        ));
         let notice: ServerMessage = serde_json::from_str(
             r#"{"t":"notice","notice":{"id":"w3","kind":"warning","at":1792520000,"reason":"harassment"}}"#,
         )
@@ -1090,9 +1117,29 @@ mod tests {
             json(&ClientMessage::Plan {
                 crew: "0a1b2c3d4e5f6a7b".into(),
                 at: 1_792_609_200,
+                note: None,
                 rid: 15
             }),
             r#"{"t":"plan","crew":"0a1b2c3d4e5f6a7b","at":1792609200,"rid":15}"#
+        );
+        // FIX2: the note goes with the plan, and on its own to change or clear it.
+        assert_eq!(
+            json(&ClientMessage::Plan {
+                crew: "0a1b2c3d4e5f6a7b".into(),
+                at: 1_792_609_200,
+                note: Some("Bedwars, sesli gelin".into()),
+                rid: 18
+            }),
+            r#"{"t":"plan","crew":"0a1b2c3d4e5f6a7b","at":1792609200,"note":"Bedwars, sesli gelin","rid":18}"#
+        );
+        assert_eq!(
+            json(&ClientMessage::PlanNote {
+                crew: "0a1b2c3d4e5f6a7b".into(),
+                id: "3f9c0a1b2c3d4e5f".into(),
+                note: String::new(),
+                rid: 19
+            }),
+            r#"{"t":"plan_note","crew":"0a1b2c3d4e5f6a7b","id":"3f9c0a1b2c3d4e5f","note":"","rid":19}"#
         );
         assert_eq!(
             json(&ClientMessage::PlanAnswer {
@@ -1143,7 +1190,22 @@ mod tests {
                 "createdAt":1,"answers":{}},"quiet":false}"#,
         )
         .unwrap();
-        assert!(matches!(plan, ServerMessage::Plan { quiet: false, plan } if plan.id == "p1"));
+        assert!(
+            matches!(plan, ServerMessage::Plan { quiet: false, plan } if plan.id == "p1" && plan.note.is_none())
+        );
+        // A note shows when it says something; an empty one or one that is not text is none.
+        for (note, expected) in [
+            (r#""Bedwars, sesli gelin""#, Some("Bedwars, sesli gelin")),
+            (r#""""#, None),
+            ("null", None),
+            ("7", None),
+        ] {
+            let plan: CrewPlan = serde_json::from_str(&format!(
+                r#"{{"id":"p1","crew":"c","by":"1","at":900,"until":8100,"note":{note}}}"#
+            ))
+            .unwrap();
+            assert_eq!(plan.note.as_deref(), expected, "{note}");
+        }
         let empty: ServerMessage =
             serde_json::from_str(r#"{"t":"plans","crew":"c","plans":[]}"#).unwrap();
         assert!(matches!(empty, ServerMessage::Plans { plans, .. } if plans.is_empty()));

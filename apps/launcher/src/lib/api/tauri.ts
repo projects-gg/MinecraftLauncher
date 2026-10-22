@@ -703,6 +703,10 @@ export const tauriApi: LauncherApi = {
   async cancelLaunch() {
     await commands.launchCancel();
   },
+  closeGame: () => commands.gameClose(),
+  async killGame() {
+    await commands.gameKill();
+  },
   async setScreenshotCopy(enabled) {
     await commands.gameCopyScreenshots(enabled);
   },

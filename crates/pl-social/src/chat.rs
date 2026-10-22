@@ -6,9 +6,9 @@
 use std::time::Duration;
 
 use crate::error::{ErrorCode, SocialError};
-use crate::history::{Change, Entry};
-use crate::model::{ChatMessage, ChatRejection};
-use crate::view::{ChatChangeView, ChatMessageView, MessageState, SendFailure};
+use crate::history::{Change, Entry, Tombstone};
+use crate::model::{ChatMessage, ChatRejection, PLAN_NOTE_MAX};
+use crate::view::{ChatChangeView, ChatDeletedView, ChatMessageView, MessageState, SendFailure};
 
 /// A message may be edited this long after it was sent.
 pub const EDIT_WINDOW_MS: i64 = 15 * 60_000;
@@ -57,6 +57,27 @@ pub fn prepare_text(text: &str) -> Option<String> {
     let text = lines.join("\n");
     let size = text.chars().count();
     (1..=CHAT_TEXT_MAX).contains(&size).then_some(text)
+}
+
+/// A crew plan's note as it will go (FIX2): spaces collapsed and trimmed, as the service cleans
+/// it. None when nothing is left (no note, or clearing it); refused when it is not one line or is
+/// longer than the service takes. The service checks links, phone numbers and words itself (the
+/// launcher's composer check runs as the player types).
+pub fn prepare_plan_note(text: &str) -> Result<Option<String>, SocialError> {
+    let refused = SocialError::PlanNoteRejected { reason: None };
+    if text.len() > 1_000 {
+        return Err(refused);
+    }
+    let trimmed = text.trim();
+    if trimmed.contains(['\n', '\r']) {
+        return Err(refused);
+    }
+    let note = trimmed.split_whitespace().collect::<Vec<_>>().join(" ");
+    match note.chars().count() {
+        0 => Ok(None),
+        size if size <= PLAN_NOTE_MAX => Ok(Some(note)),
+        _ => Err(refused),
+    }
 }
 
 /// Why a send did not go, from the service's answer.
@@ -118,12 +139,36 @@ pub fn message_view(message: &ChatMessage, viewer: &Viewer) -> ChatMessageView {
         } else {
             None
         },
+        deleted: None,
+    }
+}
+
+/// A message deleted for everyone: its place, its sender and time, who deleted it. Nothing may be
+/// done with it (no edit, delete, copy or report).
+pub fn tombstone_view(tombstone: &Tombstone, viewer: &Viewer) -> ChatMessageView {
+    ChatMessageView {
+        key: tombstone.key(),
+        id: Some(tombstone.id),
+        from: tombstone.from.clone(),
+        mine: tombstone.from == viewer.me,
+        text: String::new(),
+        at: tombstone.id + viewer.skew_ms,
+        edited: false,
+        state: MessageState::Sent,
+        failure: None,
+        edit_until: None,
+        delete_until: None,
+        deleted: Some(ChatDeletedView {
+            by: tombstone.by.clone(),
+            at: (tombstone.at > 0).then(|| tombstone.at + viewer.skew_ms),
+        }),
     }
 }
 
 pub fn entry_view(entry: &Entry, viewer: &Viewer) -> ChatMessageView {
     match entry {
         Entry::Sent(message) => message_view(message, viewer),
+        Entry::Deleted(tombstone) => tombstone_view(tombstone, viewer),
         Entry::Outgoing(outgoing) => ChatMessageView {
             key: outgoing.key(),
             id: None,
@@ -140,6 +185,7 @@ pub fn entry_view(entry: &Entry, viewer: &Viewer) -> ChatMessageView {
             failure: outgoing.failed,
             edit_until: None,
             delete_until: None,
+            deleted: None,
         },
     }
 }
@@ -210,6 +256,25 @@ mod tests {
         assert_eq!(nonce.len(), 12);
         assert!(nonce.bytes().all(|b| b.is_ascii_alphanumeric()));
         assert_ne!(nonce, new_nonce());
+    }
+
+    #[test]
+    fn a_plan_note_goes_on_one_line_of_80() {
+        let note = |text: &str| prepare_plan_note(text).map_err(|e| e.code().cloned());
+        assert_eq!(
+            note("  Bedwars,   sesli  gelin "),
+            Ok(Some("Bedwars, sesli gelin".into()))
+        );
+        assert_eq!(note("   "), Ok(None), "empty is none (or clears it)");
+        assert_eq!(note(""), Ok(None));
+        assert_eq!(
+            note(&"ş".repeat(80)).map(|n| n.map(|n| n.chars().count())),
+            Ok(Some(80))
+        );
+        let refused = Err(Some(ErrorCode::InvalidPlanNote));
+        assert_eq!(note(&"ş".repeat(81)), refused);
+        assert_eq!(note("iki\nsatır"), refused);
+        assert_eq!(note("sonda satır\n"), Ok(Some("sonda satır".into())));
     }
 
     #[test]
@@ -299,6 +364,37 @@ mod tests {
         assert_eq!(view.state, MessageState::Failed);
         assert_eq!(view.at, 7);
         assert_eq!(view.id, None);
+    }
+
+    #[test]
+    fn a_tombstone_shows_who_deleted_it_and_offers_nothing() {
+        let viewer = Viewer {
+            me: "1".into(),
+            skew_ms: 500,
+            now_ms: 1_000_500,
+            moderates: true,
+        };
+        let tombstone = Tombstone {
+            conv: "c:0123456789abcdef".into(),
+            id: 1_000_000,
+            from: "1".into(),
+            nonce: Some("n".into()),
+            by: "2".into(),
+            at: 1_000_100,
+        };
+        let view = tombstone_view(&tombstone, &viewer);
+        assert_eq!(view.key, "n:n", "the bubble keeps its key");
+        assert!(view.mine && view.text.is_empty() && !view.edited);
+        assert_eq!(view.at, 1_000_500);
+        assert_eq!((view.edit_until, view.delete_until), (None, None));
+        let deleted = view.deleted.unwrap();
+        assert_eq!((deleted.by.as_str(), deleted.at), ("2", Some(1_000_600)));
+        let unknown = Tombstone {
+            at: 0,
+            by: String::new(),
+            ..tombstone
+        };
+        assert_eq!(tombstone_view(&unknown, &viewer).deleted.unwrap().at, None);
     }
 
     #[test]

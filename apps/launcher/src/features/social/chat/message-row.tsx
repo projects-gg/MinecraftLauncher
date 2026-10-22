@@ -3,6 +3,13 @@
 // the time and where it stands (on its way, sent, not sent with "Tekrar dene"). Its menu ("…" on
 // hover or focus, a right click, Shift+F10): copy, edit (15 minutes), "Herkesten sil" (asked in
 // place, one sentence), "Rapor et" (others' messages).
+//
+// A message deleted for everyone stays in its place as a tombstone (FIX2): the same bubble, quiet
+// and empty-handed, saying who deleted it ("Bu mesajı sildin", "Bu mesaj silindi", "Ekip lideri
+// sildi"…). No menu, no copy, edit, report or reply. The bubble morphs into it: the text fades out,
+// the bubble glides to its new size (a transform-based layout animation, corners and ring kept by
+// the scale correction) while its fill cross-fades to the tombstone's, and the words fade in.
+// Reduced motion and Performance mode: the text fades out, then the words fade in.
 import {
   ArrowClockwise,
   Check,
@@ -11,17 +18,28 @@ import {
   DotsThree,
   Flag,
   PencilSimple,
+  Prohibit,
   Trash,
   WarningCircle,
 } from "@phosphor-icons/react";
-import { Button, ContextMenu, cn, IconButton, Menu, type MenuItem, toast } from "@pl/ui";
+import {
+  Button,
+  ContextMenu,
+  cn,
+  easeOutExpo,
+  IconButton,
+  Menu,
+  type MenuItem,
+  toast,
+} from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
-import { memo, useState } from "react";
+import { memo, type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatMessage, SocialProfile } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
 import { copyText } from "../actions";
 import { enter, leave, rise, swap, useSocialMotion } from "../motion";
+import { PersonContextMenu, type PersonPlace } from "../person-menu";
 import { SocialFace } from "../social-face";
 
 /** What a row needs from its conversation. */
@@ -47,6 +65,11 @@ const timeFormat = () => dateTimeFormat({ hour: "2-digit", minute: "2-digit" });
 
 /** Failures the same text would meet again: the player writes it another way. */
 const REWRITE = new Set(["link", "phone", "words", "invalid"]);
+
+/** The bubble's corners (the panels' radius, `--radius-panel`), kept through its morph. */
+const RADIUS = 10;
+/** The bubble gliding to its new size: the list's entrance curve, a little longer. */
+const MORPH = { duration: 0.36, ease: easeOutExpo };
 
 function StateMark({ message }: { message: ChatMessage }) {
   const { t } = useTranslation();
@@ -76,43 +99,121 @@ function StateMark({ message }: { message: ChatMessage }) {
   );
 }
 
+/**
+ * The bubble: its fill and ring sit on two layers behind the words, the message's and the
+ * tombstone's, which cross-fade; the bubble's size change is a layout animation (transform), its
+ * corners kept by the scale correction (the radius is a style for that).
+ */
+function Bubble({
+  mine,
+  failed,
+  sending,
+  gone,
+  sizeKey,
+  children,
+}: {
+  mine: boolean;
+  failed: boolean;
+  sending: boolean;
+  gone: boolean;
+  /** Changes whenever the words inside change (the bubble measures itself only then). */
+  sizeKey: string;
+  children: ReactNode;
+}) {
+  const { layout } = useSocialMotion();
+  // One transition for both: the layout morph, and the fill's own fade.
+  const layer = (shown: boolean, delay = 0) => ({
+    initial: false as const,
+    animate: { opacity: shown ? 1 : 0 },
+    transition: {
+      layout: MORPH,
+      opacity: shown ? { duration: 0.26, ease: easeOutExpo, delay } : { duration: 0.16 },
+    },
+  });
+  return (
+    <motion.div
+      layout={layout}
+      layoutDependency={sizeKey}
+      transition={{ layout: MORPH }}
+      style={{ borderRadius: RADIUS }}
+      className={cn(
+        "relative isolate max-w-full overflow-hidden text-[13.5px] leading-[1.45] transition-opacity duration-200",
+        sending && "opacity-70",
+      )}
+    >
+      <motion.span
+        aria-hidden
+        layout={layout}
+        layoutDependency={sizeKey}
+        style={{ borderRadius: RADIUS }}
+        className={cn(
+          "absolute inset-0 -z-10 ring-1 ring-inset transition-[box-shadow] duration-200",
+          mine
+            ? "bg-[color-mix(in_oklab,var(--color-gold-500)_17%,var(--color-obsidian-800))] ring-gold-400/20"
+            : "bg-obsidian-800/85 ring-white/7",
+          failed && "ring-flare-400/45",
+        )}
+        {...layer(!gone)}
+      />
+      <motion.span
+        aria-hidden
+        layout={layout}
+        layoutDependency={sizeKey}
+        style={{ borderRadius: RADIUS }}
+        className="absolute inset-0 -z-10 bg-obsidian-900/45 ring-1 ring-inset ring-white/10"
+        {...layer(gone, 0.06)}
+      />
+      {children}
+    </motion.div>
+  );
+}
+
 function MessageRowView({
   message,
   text,
+  tombstone,
   sender,
   place,
+  personPlace,
   actions,
   nowMs,
 }: {
   message: ChatMessage;
   /** The text shown (an edit on its way shows its new text). */
   text: string;
+  /** Deleted for everyone (or by the player, waiting for the answer): what its tombstone says. */
+  tombstone: string | null;
   sender: Pick<SocialProfile, "name" | "avatar" | "avatarUrl">;
   place: RowPlace;
+  /** Where the sender's own menu opens from (their face and name, a right click; FIX2). */
+  personPlace?: PersonPlace;
   actions: RowActions;
   nowMs: number;
 }) {
   const { t } = useTranslation();
-  const { reduce } = useSocialMotion();
+  const { reduce, layout } = useSocialMotion();
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const mine = message.mine;
-  const editable = message.state === "sent" && (message.editUntil ?? 0) > nowMs;
-  const deletable = message.state === "sent" && (message.deleteUntil ?? 0) > nowMs;
+  const gone = tombstone !== null;
+  const editable = !gone && message.state === "sent" && (message.editUntil ?? 0) > nowMs;
+  const deletable = !gone && message.state === "sent" && (message.deleteUntil ?? 0) > nowMs;
   const failed = message.state === "failed";
   const time = timeFormat().format(new Date(message.at));
 
-  const items: MenuItem[] = [
-    {
-      label: t("chat.actions.copy"),
-      icon: <Copy size={16} />,
-      onSelect: () => {
-        void copyText(message.text).then((copied) => {
-          if (copied) toast.success(t("chat.actions.copied"));
-        });
-      },
-    },
-  ];
+  const items: MenuItem[] = gone
+    ? []
+    : [
+        {
+          label: t("chat.actions.copy"),
+          icon: <Copy size={16} />,
+          onSelect: () => {
+            void copyText(message.text).then((copied) => {
+              if (copied) toast.success(t("chat.actions.copied"));
+            });
+          },
+        },
+      ];
   if (mine && editable) {
     items.push({
       label: t("chat.actions.edit"),
@@ -128,7 +229,7 @@ function MessageRowView({
       onSelect: () => setAsking(true),
     });
   }
-  if (!mine && message.id !== undefined) {
+  if (!gone && !mine && message.id !== undefined) {
     items.push({
       label: t("chat.actions.report"),
       icon: <Flag size={16} />,
@@ -138,13 +239,50 @@ function MessageRowView({
 
   const remove = async () => {
     setBusy(true);
+    // The question goes as the tombstone comes; it comes back if the service refused.
+    setAsking(false);
     const done = await actions.onDelete(message);
     setBusy(false);
     if (!done) setAsking(false);
   };
 
+  // The words: the text fades out, the tombstone's line fades in (one after the other while the
+  // bubble does not glide).
+  const words = (
+    <AnimatePresence mode={layout ? "popLayout" : "wait"} initial={false}>
+      {gone ? (
+        <motion.span
+          key="gone"
+          layout={layout ? "position" : false}
+          className="relative flex items-center gap-1.5 px-3 py-[7px] whitespace-nowrap text-ash-300"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: { ...enter(0.22), delay: layout ? 0.12 : 0 } }}
+          exit={{ opacity: 0, transition: leave(0.12) }}
+        >
+          <Prohibit size={14} weight="bold" className="shrink-0 text-ash-400" aria-hidden />
+          <span className="sr-only">{mine ? "" : `${sender.name}: `}</span>
+          {tombstone}
+        </motion.span>
+      ) : (
+        <motion.span
+          key="text"
+          layout={layout ? "position" : false}
+          className="relative block px-3 py-[7px] break-words whitespace-pre-wrap text-bone-50 data-[theirs]:text-bone-100"
+          data-theirs={mine ? undefined : true}
+          data-selectable
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1, transition: enter(0.2) }}
+          exit={{ opacity: 0, transition: { duration: 0.1, ease: easeOutExpo } }}
+        >
+          <span className="sr-only">{mine ? "" : `${sender.name}: `}</span>
+          {text}
+        </motion.span>
+      )}
+    </AnimatePresence>
+  );
+
   return (
-    <ContextMenu items={items}>
+    <ContextMenu items={items} disabled={gone}>
       <div
         className={cn(
           "group/msg relative flex items-end gap-2 px-1",
@@ -153,46 +291,49 @@ function MessageRowView({
         )}
       >
         {mine ? null : (
-          // The face sits by the group's last bubble, over the line with its time.
+          // The face sits by the group's last bubble, over the line with its time; a right click
+          // on it (or on the name) opens the sender's own menu.
           <span className={cn("flex w-6 shrink-0 self-end", place.last && "mb-[15px]")}>
-            {place.last ? <SocialFace source={sender} size={24} /> : null}
+            {place.last ? (
+              <PersonContextMenu person={{ id: message.from, ...sender }} place={personPlace}>
+                <span className="flex">
+                  <SocialFace source={sender} size={24} />
+                </span>
+              </PersonContextMenu>
+            ) : null}
           </span>
         )}
         <div
           className={cn("flex min-w-0 max-w-[78%] flex-col", mine ? "items-end" : "items-start")}
         >
           {place.crew && !mine && place.first ? (
-            <span className="mb-1 ml-1 max-w-full truncate text-[12px] font-semibold text-ash-300">
-              {sender.name}
-            </span>
+            <PersonContextMenu person={{ id: message.from, ...sender }} place={personPlace}>
+              <span className="mb-1 ml-1 max-w-full truncate text-[12px] font-semibold text-ash-300">
+                {sender.name}
+              </span>
+            </PersonContextMenu>
           ) : null}
-          <div
-            className={cn(
-              "max-w-full rounded-[var(--radius-panel)] px-3 py-[7px] text-[13.5px] leading-[1.45] break-words whitespace-pre-wrap",
-              "transition-[opacity,box-shadow,background-color] duration-200",
-              mine
-                ? "bg-[color-mix(in_oklab,var(--color-gold-500)_17%,var(--color-obsidian-800))] text-bone-50 ring-1 ring-gold-400/20"
-                : "bg-obsidian-800/85 text-bone-100 ring-1 ring-white/7",
-              message.state === "sending" && "opacity-70",
-              failed && "ring-flare-400/45",
-            )}
-            data-selectable
+          <Bubble
+            mine={mine}
+            failed={failed}
+            sending={message.state === "sending"}
+            gone={gone}
+            sizeKey={gone ? `gone:${tombstone}` : `text:${text}`}
           >
-            <span className="sr-only">{mine ? "" : `${sender.name}: `}</span>
-            {text}
-          </div>
-          {place.last || message.state !== "sent" || message.edited ? (
+            {words}
+          </Bubble>
+          {place.last || (!gone && (message.state !== "sent" || message.edited)) ? (
             <span
               className={cn(
                 "mt-1 flex items-center gap-1.5 px-1 text-[11.5px] leading-none text-ash-400 tabular-nums",
                 mine ? "flex-row-reverse" : "flex-row",
               )}
             >
-              {mine ? <StateMark message={message} /> : null}
+              {mine && !gone ? <StateMark message={message} /> : null}
               {place.last || failed ? (
                 <time dateTime={new Date(message.at).toISOString()}>{time}</time>
               ) : null}
-              {message.edited ? <span>{t("chat.state.edited")}</span> : null}
+              {message.edited && !gone ? <span>{t("chat.state.edited")}</span> : null}
             </span>
           ) : null}
           <AnimatePresence initial={false}>
@@ -237,7 +378,7 @@ function MessageRowView({
             ) : null}
           </AnimatePresence>
           <AnimatePresence initial={false}>
-            {asking ? (
+            {asking && !gone ? (
               <motion.div
                 key="ask"
                 className={cn(
@@ -276,20 +417,25 @@ function MessageRowView({
           className={cn(
             "flex shrink-0 self-center opacity-0 transition-opacity duration-150",
             "group-hover/msg:opacity-100 focus-within:opacity-100 has-[[data-state=open]]:opacity-100",
-            message.state !== "sent" && "pointer-events-none invisible",
+            // A tombstone keeps the place of the "…" (nothing moves), offers nothing.
+            (message.state !== "sent" || gone) && "pointer-events-none invisible",
           )}
         >
-          <Menu
-            items={items}
-            trigger={
-              <IconButton
-                label={t("chat.actions.menu")}
-                icon={<DotsThree size={18} weight="bold" />}
-                size="sm"
-                tooltipSide="top"
-              />
-            }
-          />
+          {gone ? (
+            <span aria-hidden className="size-7" />
+          ) : (
+            <Menu
+              items={items}
+              trigger={
+                <IconButton
+                  label={t("chat.actions.menu")}
+                  icon={<DotsThree size={18} weight="bold" />}
+                  size="sm"
+                  tooltipSide="top"
+                />
+              }
+            />
+          )}
         </span>
       </div>
     </ContextMenu>

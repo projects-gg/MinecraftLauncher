@@ -570,6 +570,20 @@ impl Session {
         .json()
     }
 
+    /// Sends a request to a crewmate, without their code (FIX2; a service with
+    /// `crewFriendRequests`): the code's answers, caps and daily lookup quota. Someone who is not
+    /// a crewmate (or blocked the player, or is suspended) answers `user_not_found`.
+    pub async fn send_request_to(&self, user: &str) -> Result<RequestOutcome> {
+        let user = user_id(user)?;
+        self.call(
+            Method::POST,
+            "v1/friends/requests",
+            Some(serde_json::json!({ "user": user })),
+        )
+        .await?
+        .json()
+    }
+
     pub async fn accept_request(&self, from: &str) -> Result<Friend> {
         #[derive(Deserialize)]
         struct Accepted {

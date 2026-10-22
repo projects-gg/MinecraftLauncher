@@ -181,9 +181,13 @@ pub struct ConversationView {
 pub struct LastMessageView {
     pub from: String,
     pub mine: bool,
+    /// Empty when it was deleted for everyone.
     pub text: String,
     /// Unix milliseconds on this computer's clock.
     pub at: i64,
+    /// It was deleted for everyone, by this user id (`staff`: Projects' moderators; empty: not
+    /// known).
+    pub deleted_by: Option<String>,
 }
 
 /// Where one of the player's messages stands.
@@ -246,6 +250,20 @@ pub struct ChatMessageView {
     /// Unix ms: the player may delete it for everyone until then (their own, or any in a crew
     /// they lead or moderate; 7 days).
     pub delete_until: Option<i64>,
+    /// Deleted for everyone: a tombstone in the message's place (the same key; `text` is empty,
+    /// nothing may be done with it).
+    pub deleted: Option<ChatDeletedView>,
+}
+
+/// Who deleted a message for everyone, and when.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatDeletedView {
+    /// A user id (the sender, or a crew's leader or moderator), `staff` for Projects' moderators,
+    /// or empty when not known (that account is gone, or the service did not say).
+    pub by: String,
+    /// Unix milliseconds on this computer's clock, when known.
+    pub at: Option<i64>,
 }
 
 /// A conversation's newest messages (or those before a given one), oldest first.
@@ -274,9 +292,27 @@ pub struct ChatChangeView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ReportTarget {
-    Player { id: String },
-    Crew { id: String, code: Option<String> },
-    Message { conv: String, id: i64 },
+    /// A player; from a plan card (FIX2) its maker, with the plan as the moderators' evidence.
+    Player {
+        id: String,
+        #[serde(default)]
+        plan: Option<ReportPlan>,
+    },
+    Crew {
+        id: String,
+        code: Option<String>,
+    },
+    Message {
+        conv: String,
+        id: i64,
+    },
+}
+
+/// The crew plan a player is reported from: its crew's id and its own.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct ReportPlan {
+    pub crew: String,
+    pub id: String,
 }
 
 /// Where "Ekibi çağır" stands (CALL1): a call starts only while the player plays, in a game this
@@ -497,6 +533,12 @@ pub struct PlanView {
     /// Who answered what, in the crew's order.
     pub answers: Vec<PlanAnswerView>,
     pub my_answer: Option<PlanAnswer>,
+    /// Its short note ("Bedwars, sesli gelin"; FIX2), when it has one.
+    pub note: Option<String>,
+    /// The player may write or change its note (they made it; a service with `planNotes`).
+    pub can_write_note: bool,
+    /// The player may clear its note (they made it, or lead or moderate the crew).
+    pub can_clear_note: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]

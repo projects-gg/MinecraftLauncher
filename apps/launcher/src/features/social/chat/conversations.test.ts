@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
-import type { ChatMessage, ChatState, Conversation } from "@/lib/api/social-types";
+import type { ChatMessage, ChatState, Conversation, SocialTeam } from "@/lib/api/social-types";
 import {
   chatMutedNow,
   conversationFace,
   crewConversation,
   crewOf,
+  deletionOf,
   directConversation,
   newDay,
   peerOf,
+  readable,
   sameGroup,
   sortMessages,
+  tombstoneKind,
   unreadAll,
   unreadDirect,
 } from "./conversations";
@@ -78,6 +81,43 @@ describe("conversations", () => {
     expect(conversationFace({ id: "d", peer: AYSE, title: "Eski ad" }, view).name).toBe("Ayşe");
     expect(conversationFace({ id: "d", peer: "9", title: "Bora" }, view).name).toBe("Bora");
     expect(conversationFace({ id: "c", crew: "x", title: "Ekip" }, view).name).toBe("Ekip");
+  });
+
+  it("say who deleted a message in its tombstone", () => {
+    const crew = {
+      members: [
+        { id: ME, role: "founder" as const },
+        { id: AYSE, role: "member" as const },
+        { id: "3", role: "member" as const },
+      ],
+    } as unknown as Pick<SocialTeam, "members">;
+    // The player's own deletion, of their message or (leading the crew) of anyone's.
+    expect(tombstoneKind(ME, ME, ME)).toBe("mine");
+    expect(tombstoneKind(ME, AYSE, ME, crew)).toBe("mine");
+    // The sender's own, or nobody known (a deleted account): "Bu mesaj silindi".
+    expect(tombstoneKind(AYSE, AYSE, ME)).toBe("sender");
+    expect(tombstoneKind("", AYSE, ME, crew)).toBe("sender");
+    expect(tombstoneKind("staff", AYSE, ME, crew)).toBe("staff");
+    // Someone else in crew chat: its leader, else a moderator (one who left included).
+    const led = { members: [{ id: "3", role: "founder" as const }] } as unknown as Pick<
+      SocialTeam,
+      "members"
+    >;
+    expect(tombstoneKind("3", AYSE, ME, led)).toBe("leader");
+    expect(tombstoneKind("3", AYSE, ME, crew)).toBe("moderator");
+    expect(tombstoneKind("9", AYSE, ME, crew)).toBe("moderator");
+    // A direct message is deleted only by its sender or moderators.
+    expect(tombstoneKind("9", AYSE, ME)).toBe("sender");
+  });
+
+  it("show the player's own deletion at once and never count a tombstone", () => {
+    const gone = message("i:3", 30, { id: 3, text: "", deleted: { by: AYSE, at: 31 } });
+    expect(deletionOf(gone, {}, ME)).toEqual({ by: AYSE, at: 31 });
+    const asked = message("i:4", 40, { id: 4 });
+    expect(deletionOf(asked, { "i:4": true }, ME)).toEqual({ by: ME });
+    expect(deletionOf(asked, {}, ME)).toBeUndefined();
+    expect(readable(gone)).toBe(false);
+    expect(readable(asked)).toBe(true);
   });
 
   it("keep their order and group a sender's messages", () => {

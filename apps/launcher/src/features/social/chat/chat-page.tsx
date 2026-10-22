@@ -14,6 +14,7 @@ import { untilText } from "../crew-notify";
 import { openInDiscord } from "../discord-link";
 import { presenceLine } from "../model";
 import { MUTE_PRESETS, muteUntilFor } from "../mute";
+import { PersonContextMenu } from "../person-menu";
 import { SocialAvatar } from "../social-face";
 import { useSocialPrefs, useSocialUi } from "../store";
 import type { ComposerState } from "./composer";
@@ -138,6 +139,7 @@ function muteItems(t: (key: string) => string, conv: string): MenuItem[] {
 
 export function ChatHeader() {
   const { t } = useTranslation();
+  const me = useSocialUi((s) => s.view.me?.id ?? "");
   const back = useSocialUi((s) => s.goTo);
   const from = useSocialUi((s) => s.chatFrom);
   const openReport = useSocialUi((s) => s.openReport);
@@ -191,25 +193,35 @@ export function ChatHeader() {
         className="-ml-2"
         onClick={() => back(from === "chat" ? "list" : from)}
       />
-      <SocialAvatar
-        source={peer ?? { name, avatar: "discord" }}
-        size={32}
-        state={peer?.state}
-        dnd={peer?.dnd}
-      />
-      <div className="min-w-0 flex-1">
-        <RadixDialog.Title className="flex items-center gap-1.5 truncate text-[15px] leading-tight font-semibold text-bone-50">
-          <span className="truncate">{name}</span>
-          {muted ? (
-            <BellSlash
-              size={13}
-              className="shrink-0 text-ash-400"
-              aria-label={t("chat.list.muted")}
-            />
-          ) : null}
-        </RadixDialog.Title>
-        {peer ? <p className="truncate text-[12px] text-ash-300">{presenceLine(peer, t)}</p> : null}
-      </div>
+      {/* The friend's own menu on a right click (FIX2), as wherever they show. */}
+      <PersonContextMenu
+        person={peer ?? { id: peerOf(conv, me) ?? "", name }}
+        place={{ inConversation: true, from: "chat" }}
+      >
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <SocialAvatar
+            source={peer ?? { name, avatar: "discord" }}
+            size={32}
+            state={peer?.state}
+            dnd={peer?.dnd}
+          />
+          <div className="min-w-0 flex-1">
+            <RadixDialog.Title className="flex items-center gap-1.5 truncate text-[15px] leading-tight font-semibold text-bone-50">
+              <span className="truncate">{name}</span>
+              {muted ? (
+                <BellSlash
+                  size={13}
+                  className="shrink-0 text-ash-400"
+                  aria-label={t("chat.list.muted")}
+                />
+              ) : null}
+            </RadixDialog.Title>
+            {peer ? (
+              <p className="truncate text-[12px] text-ash-300">{presenceLine(peer, t)}</p>
+            ) : null}
+          </div>
+        </div>
+      </PersonContextMenu>
       {peer ? (
         <Button
           size="sm"

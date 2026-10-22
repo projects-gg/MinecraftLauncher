@@ -205,6 +205,13 @@ export const commands = {
 	 */
 	launchCancel: () => __TAURI_INVOKE<void>("launch_cancel"),
 	gameKill: () => __TAURI_INVOKE<void>("game_kill"),
+	/**
+	 *  "Bağlan" while a game runs (FIX2): asks the game to close the way its own close button does,
+	 *  so it leaves a server and saves a singleplayer world as always; the page starts it again into
+	 *  the server once it has ended (its exit comes as usual). False when nothing of it could be asked
+	 *  (no window yet, or it ended): the page then offers to end it, with its warning (`game_kill`).
+	 */
+	gameClose: () => __TAURI_INVOKE<boolean>("game_close"),
 	/**  Instance id of the running game, if any (used after a UI reload). */
 	gameRunning: () => __TAURI_INVOKE<string | null>("game_running"),
 	/**  The game an earlier start left running, while this start follows it ([`adopt_detached`]). */
@@ -897,6 +904,8 @@ export const commands = {
 	socialRefresh: () => typedError<null, CmdError>(__TAURI_INVOKE("social_refresh")),
 	socialLookup: (code: string) => typedError<LookupView, CmdError>(__TAURI_INVOKE("social_lookup", { code })),
 	socialSendRequest: (code: string) => typedError<SendOutcome, CmdError>(__TAURI_INVOKE("social_send_request", { code })),
+	/**  "Arkadaş ekle" on a crewmate who is not a friend (FIX2): a request without their code. */
+	socialRequestCrewmate: (user: string) => typedError<SendOutcome, CmdError>(__TAURI_INVOKE("social_request_crewmate", { user })),
 	socialAccept: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_accept", { id })),
 	socialDecline: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_decline", { id })),
 	socialCancelRequest: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_cancel_request", { id })),
@@ -1015,14 +1024,19 @@ export const commands = {
 	/**  How newcomers with the code or the invite link get in (the leader). */
 	socialTeamJoinMode: (team: string, join: JoinMode) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_join_mode", { team, join })),
 	/**
-	 *  A new plan in one of the player's crews at `at` (Unix seconds, a whole quarter of an hour).
-	 *  Answers its id.
+	 *  A new plan in one of the player's crews at `at` (Unix seconds, a whole quarter of an hour),
+	 *  with its short note (FIX2; empty or none: no note). Answers its id.
 	 */
-	socialPlanMake: (crew: string, at: number) => typedError<string, CmdError>(__TAURI_INVOKE("social_plan_make", { crew, at })),
+	socialPlanMake: (crew: string, at: number, note: string | null) => typedError<string, CmdError>(__TAURI_INVOKE("social_plan_make", { crew, at, note })),
 	/**  "Geliyorum", "Belki" or "Gelemem" to a plan. False: the plan is gone. */
 	socialPlanAnswer: (plan: string, answer: PlanAnswer) => typedError<boolean, CmdError>(__TAURI_INVOKE("social_plan_answer", { plan, answer })),
 	/**  "Planı sil". */
 	socialPlanCancel: (plan: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_plan_cancel", { plan })),
+	/**
+	 *  A plan's note (FIX2): its maker writes or changes it, `""` clears it (its maker, the crew's
+	 *  leader and moderators).
+	 */
+	socialPlanNote: (plan: string, note: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_plan_note", { plan, note })),
 	/**  "Birlikte oynanan süre" on or off on this computer (off deletes what was kept). */
 	socialTogether: (on: boolean) => __TAURI_INVOKE<void>("social_together", { on }),
 	/**  Deletes the time played together kept on this computer. */
@@ -1464,6 +1478,17 @@ export type ChatChangeView = {
 	reset: boolean,
 };
 
+/**  Who deleted a message for everyone, and when. */
+export type ChatDeletedView = {
+	/**
+	 *  A user id (the sender, or a crew's leader or moderator), `staff` for Projects' moderators,
+	 *  or empty when not known (that account is gone, or the service did not say).
+	 */
+	by: string,
+	/**  Unix milliseconds on this computer's clock, when known. */
+	at: number | null,
+};
+
 export type ChatLogFilter = "all" | "messages" | "chat";
 
 export type ChatLogSettings = {
@@ -1498,6 +1523,11 @@ export type ChatMessageView = {
 	 *  they lead or moderate; 7 days).
 	 */
 	deleteUntil: number | null,
+	/**
+	 *  Deleted for everyone: a tombstone in the message's place (the same key; `text` is empty,
+	 *  nothing may be done with it).
+	 */
+	deleted: ChatDeletedView | null,
 };
 
 /**  A conversation's newest messages (or those before a given one), oldest first. */
@@ -2926,9 +2956,15 @@ export type Lang =
 export type LastMessageView = {
 	from: string,
 	mine: boolean,
+	/**  Empty when it was deleted for everyone. */
 	text: string,
 	/**  Unix milliseconds on this computer's clock. */
 	at: number,
+	/**
+	 *  It was deleted for everyone, by this user id (`staff`: Projects' moderators; empty: not
+	 *  known).
+	 */
+	deletedBy: string | null,
 };
 
 export type LastSeen = "today" | "yesterday" | 
@@ -4177,6 +4213,12 @@ export type PlanView = {
 	/**  Who answered what, in the crew's order. */
 	answers: PlanAnswerView[],
 	myAnswer: PlanAnswer | null,
+	/**  Its short note ("Bedwars, sesli gelin"; FIX2), when it has one. */
+	note: string | null,
+	/**  The player may write or change its note (they made it; a service with `planNotes`). */
+	canWriteNote: boolean,
+	/**  The player may clear its note (they made it, or lead or moderate the crew). */
+	canClearNote: boolean,
 };
 
 /**  What the command bar shows (`prepare-status`, `prepare_status`). */
@@ -4383,6 +4425,12 @@ export type RepairStepView = {
 	note: StepNote | null,
 };
 
+/**  The crew plan a player is reported from: its crew's id and its own. */
+export type ReportPlan = {
+	crew: string,
+	id: string,
+};
+
 /**
  *  A report reason, as players pick it and the service names it. One this version does not know
  *  reads as `Other`.
@@ -4401,7 +4449,9 @@ export type ReportReason =
  *  What the player reports ("Rapor et"): a player, a crew (`code` when it was looked up by code)
  *  or a message as this device holds it.
  */
-export type ReportTarget = { kind: "player"; id: string } | { kind: "crew"; id: string; code: string | null } | { kind: "message"; conv: string; id: number };
+export type ReportTarget = 
+/**  A player; from a plan card (FIX2) its maker, with the plan as the moderators' evidence. */
+{ kind: "player"; id: string; plan?: ReportPlan | null } | { kind: "crew"; id: string; code: string | null } | { kind: "message"; conv: string; id: number };
 
 export type RequestView = {
 	id: string,

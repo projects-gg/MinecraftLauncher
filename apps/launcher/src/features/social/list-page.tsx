@@ -11,28 +11,24 @@ import {
   CaretDown,
   Check,
   Copy,
-  DotsThree,
-  Flag,
-  Prohibit,
+  Play,
   UserPlus,
   WifiSlash,
   X,
 } from "@phosphor-icons/react";
 import {
   Button,
-  easeOutExpo,
+  ContextMenu,
   IconButton,
+  type MenuItem,
   Progress,
-  returnFocusAfterKeys,
   SearchInput,
   Skeleton,
   toast,
 } from "@pl/ui";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
-import { DropdownMenu } from "radix-ui";
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useCalm } from "@/features/accounts/calm";
 import { announce } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import type {
@@ -78,8 +74,10 @@ import {
   stepGroup,
 } from "./groups";
 import { canJoinInvite, joinInvite } from "./join-dialog";
+import { openMenuFromKey } from "./menu-key";
 import { groupFriends, presenceLine } from "./model";
 import { enter, glide, leave, rise, swap, useSocialMotion } from "./motion";
+import { PersonContextMenu, PersonMoreButton, usePeopleItems } from "./person-menu";
 import { SocialAvatar } from "./social-face";
 import { useSocialPrefs, useSocialUi } from "./store";
 import { TeamMemberRow } from "./team-member";
@@ -175,110 +173,50 @@ function ConnectionBanner() {
 
 function RequestRow({ request }: { request: FriendRequest }) {
   const { t } = useTranslation();
-  const calm = useCalm();
   const [busy, setBusy] = useState(false);
-  const [open, setOpen] = useState(false);
-  const act = async (action: "accept" | "decline" | "block") => {
+  const act = async (action: "accept" | "decline") => {
     setBusy(true);
     const done = await attempt(() =>
-      action === "accept"
-        ? api.social.accept(request.id)
-        : action === "decline"
-          ? api.social.decline(request.id)
-          : api.social.block(request.id),
+      action === "accept" ? api.social.accept(request.id) : api.social.decline(request.id),
     );
     setBusy(false);
     if (done !== undefined && action === "accept") {
       announce(t("social.actions.accepted", { name: request.name }));
     }
   };
+  // The request's answers lead the person menu (FIX2): the right click and "…" say the same.
+  const place = { request: "incoming" as const, from: "list" as const };
   return (
-    <div className="flex items-center gap-3 rounded-[var(--radius-panel)] py-2 pr-1.5 pl-2">
-      <SocialAvatar source={request} size={36} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14px] font-semibold text-bone-50">
-          {request.name}
+    <PersonContextMenu person={request} place={place}>
+      <div className="flex items-center gap-3 rounded-[var(--radius-panel)] py-2 pr-1.5 pl-2">
+        <SocialAvatar source={request} size={36} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[14px] font-semibold text-bone-50">
+            {request.name}
+          </span>
+          <span className="block truncate text-[12.5px] text-ash-400">
+            {t("social.list.wantsToAdd")}
+          </span>
         </span>
-        <span className="block truncate text-[12.5px] text-ash-400">
-          {t("social.list.wantsToAdd")}
-        </span>
-      </span>
-      <Button
-        size="sm"
-        variant="secondary"
-        icon={<Check size={14} weight="bold" />}
-        disabled={busy}
-        onClick={() => void act("accept")}
-      >
-        {t("social.actions.accept")}
-      </Button>
-      <IconButton
-        label={t("social.actions.decline")}
-        icon={<X size={16} />}
-        size="sm"
-        disabled={busy}
-        onClick={() => void act("decline")}
-      />
-      <DropdownMenu.Root open={open} onOpenChange={setOpen} modal={false}>
-        <DropdownMenu.Trigger asChild>
-          <IconButton
-            label={t("social.actions.more")}
-            icon={<DotsThree size={18} weight="bold" />}
-            size="sm"
-            disabled={busy}
-          />
-        </DropdownMenu.Trigger>
-        <AnimatePresence>
-          {open ? (
-            <DropdownMenu.Portal forceMount>
-              <DropdownMenu.Content
-                onCloseAutoFocus={returnFocusAfterKeys}
-                forceMount
-                asChild
-                align="end"
-                sideOffset={4}
-                collisionPadding={12}
-                loop
-              >
-                <motion.div
-                  className="z-50 w-[200px] rounded-[var(--radius-panel)] border border-white/8 bg-obsidian-900/96 p-1.5 shadow-[0_24px_60px_rgb(34_6_6/0.55)] backdrop-blur-xl outline-none [html[data-perf=on]_&]:backdrop-blur-none"
-                  style={{ transformOrigin: "var(--radix-dropdown-menu-content-transform-origin)" }}
-                  initial={calm({ opacity: 0, scale: 0.96, y: -4 })}
-                  animate={calm({
-                    opacity: 1,
-                    scale: 1,
-                    y: 0,
-                    transition: { duration: 0.18, ease: easeOutExpo },
-                  })}
-                  exit={calm({ opacity: 0, scale: 0.98, transition: { duration: 0.12 } })}
-                >
-                  <DropdownMenu.Item
-                    onSelect={() => void act("block")}
-                    className="flex h-10 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[13.5px] text-flare-400 outline-none select-none data-[highlighted]:bg-white/8"
-                  >
-                    <Prohibit size={16} aria-hidden />
-                    {t("social.actions.block")}
-                  </DropdownMenu.Item>
-                  <DropdownMenu.Item
-                    onSelect={() =>
-                      useSocialUi.getState().openReport({
-                        target: { kind: "player", id: request.id },
-                        name: request.name,
-                        person: request,
-                      })
-                    }
-                    className="flex h-10 cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-[13.5px] text-bone-100 outline-none select-none data-[highlighted]:bg-white/8"
-                  >
-                    <Flag size={16} className="text-ash-300" aria-hidden />
-                    {t("reports.action")}
-                  </DropdownMenu.Item>
-                </motion.div>
-              </DropdownMenu.Content>
-            </DropdownMenu.Portal>
-          ) : null}
-        </AnimatePresence>
-      </DropdownMenu.Root>
-    </div>
+        <Button
+          size="sm"
+          variant="secondary"
+          icon={<Check size={14} weight="bold" />}
+          disabled={busy}
+          onClick={() => void act("accept")}
+        >
+          {t("social.actions.accept")}
+        </Button>
+        <IconButton
+          label={t("social.actions.decline")}
+          icon={<X size={16} />}
+          size="sm"
+          disabled={busy}
+          onClick={() => void act("decline")}
+        />
+        <PersonMoreButton person={request} place={place} />
+      </div>
+    </PersonContextMenu>
   );
 }
 
@@ -286,58 +224,93 @@ function SentRow({ request }: { request: FriendRequest }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   return (
-    <div className="flex items-center gap-3 rounded-[var(--radius-panel)] py-2 pr-1.5 pl-2">
-      <SocialAvatar source={request} size={36} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14px] font-semibold text-bone-100">
-          {request.name}
+    <PersonContextMenu person={request} place={{ request: "outgoing", from: "list" }}>
+      <div className="flex items-center gap-3 rounded-[var(--radius-panel)] py-2 pr-1.5 pl-2">
+        <SocialAvatar source={request} size={36} />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[14px] font-semibold text-bone-100">
+            {request.name}
+          </span>
+          <span className="block truncate text-[12.5px] text-ash-400">
+            {t("social.list.waiting")}
+          </span>
         </span>
-        <span className="block truncate text-[12.5px] text-ash-400">
-          {t("social.list.waiting")}
-        </span>
-      </span>
-      <Button
-        size="sm"
-        variant="ghost"
-        disabled={busy}
-        onClick={() => {
-          setBusy(true);
-          void attempt(() => api.social.cancelRequest(request.id)).then(() => setBusy(false));
-        }}
-      >
-        {t("social.actions.cancelRequest")}
-      </Button>
-    </div>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void attempt(() => api.social.cancelRequest(request.id)).then(() => setBusy(false));
+          }}
+          onKeyDown={(event) => {
+            openMenuFromKey(event);
+          }}
+        >
+          {t("social.actions.cancelRequest")}
+        </Button>
+      </div>
+    </PersonContextMenu>
   );
 }
 
 function InviteRow({ invite }: { invite: SocialInvite }) {
   const { t } = useTranslation();
   const name = invite.name ?? t("social.notices.someone");
+  const joinable = canJoinInvite(invite);
+  // "Katıl" and "Kapat" first, then who sent it with their whole menu (FIX2).
+  const people = usePeopleItems(
+    invite.name
+      ? [{ id: invite.from, name, avatar: invite.avatar, avatarUrl: invite.avatarUrl }]
+      : [],
+    { from: "list" },
+  );
+  const items: Array<MenuItem | null> = [
+    ...(joinable
+      ? [
+          {
+            label: t("social.actions.join"),
+            icon: <Play size={16} />,
+            onSelect: () => joinInvite(invite),
+          },
+        ]
+      : []),
+    {
+      label: t("social.actions.dismiss"),
+      icon: <X size={16} />,
+      onSelect: () => void api.social.dismissInvite(invite.id),
+    },
+    ...(people.length ? [null, ...people] : []),
+  ];
   return (
-    <div className="mb-1.5 flex items-center gap-3 rounded-[var(--radius-panel)] bg-gold-500/[0.07] py-2 pr-1.5 pl-2 ring-1 ring-gold-400/15">
-      <SocialAvatar
-        source={{ name, avatar: invite.avatar, avatarUrl: invite.avatarUrl }}
-        size={36}
-      />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14px] font-semibold text-bone-50">{name}</span>
-        <span className="block truncate text-[12.5px] text-ash-300">
-          {t("social.list.invitedYou")}, {ago(invite.at)}
+    <ContextMenu items={items}>
+      <div className="mb-1.5 flex items-center gap-3 rounded-[var(--radius-panel)] bg-gold-500/[0.07] py-2 pr-1.5 pl-2 ring-1 ring-gold-400/15">
+        <SocialAvatar
+          source={{ name, avatar: invite.avatar, avatarUrl: invite.avatarUrl }}
+          size={36}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[14px] font-semibold text-bone-50">{name}</span>
+          <span className="block truncate text-[12.5px] text-ash-300">
+            {t("social.list.invitedYou")}, {ago(invite.at)}
+          </span>
         </span>
-      </span>
-      {canJoinInvite(invite) ? (
-        <Button size="sm" variant="secondary" onClick={() => joinInvite(invite)}>
-          {t("social.actions.join")}
-        </Button>
-      ) : null}
-      <IconButton
-        label={t("social.actions.dismiss")}
-        icon={<X size={16} />}
-        size="sm"
-        onClick={() => void api.social.dismissInvite(invite.id)}
-      />
-    </div>
+        {joinable ? (
+          <Button size="sm" variant="secondary" onClick={() => joinInvite(invite)}>
+            {t("social.actions.join")}
+          </Button>
+        ) : null}
+        <IconButton
+          label={t("social.actions.dismiss")}
+          icon={<X size={16} />}
+          size="sm"
+          onClick={() => void api.social.dismissInvite(invite.id)}
+          onKeyDown={(event) => {
+            openMenuFromKey(event);
+          }}
+        />
+      </div>
+    </ContextMenu>
   );
 }
 

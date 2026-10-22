@@ -1,10 +1,11 @@
 // A conversation: its messages from this computer's history, newest at the bottom (older pages
 // come when the player scrolls up, keeping their place), day lines, "Yeni mesajlar" over what was
 // unread when it opened, "En yeni mesajlar" when new ones come while the player reads back, and the
-// composer. Only messages that land while the conversation is open rise in; a deleted one fades and
-// the rest glide. The conversation is read once it is on screen at its newest message. A crew's
-// conversation also shows quiet local lines at their time (its plans, TEAM5: "Ayşe Cumartesi
-// 21:00 için plan yaptı"); the service's chat holds nothing about them.
+// composer. Only messages that land while the conversation is open rise in; a message deleted for
+// everyone turns into its quiet tombstone in place, saying who deleted it (FIX2; the player's own
+// deletion shows at once). The conversation is read once it is on screen at its newest message. A
+// crew's conversation also shows quiet local lines at their time (its plans, TEAM5: "Ayşe
+// Cumartesi 21:00 için plan yaptı"); the service's chat holds nothing about them.
 import { ArrowDown, CalendarBlank } from "@phosphor-icons/react";
 import { toast } from "@pl/ui";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
@@ -18,15 +19,16 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { friendlyError } from "@/features/accounts/use-accounts";
+import { announce, friendlyError } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import type { ChatMessage, SocialProfile } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
 import { enter, glide, leave, useSocialMotion } from "../motion";
+import type { PersonPlace } from "../person-menu";
 import { useSocialUi } from "../store";
 import { useChat } from "./chat-store";
 import { Composer, type ComposerState } from "./composer";
-import { sameGroup } from "./conversations";
+import { crewOf, deletionOf, readable, sameGroup, tombstoneKind } from "./conversations";
 import { MessageRow, type RowActions } from "./message-row";
 
 /** Scrolled this close to the newest message counts as "at the bottom". */
@@ -97,10 +99,10 @@ export function Conversation({
   const { reduce, layout } = useSocialMotion();
   const thread = useChat((s) => s.threads[conv]);
   const edits = useChat((s) => s.edits);
-  const hidden = useChat((s) => s.hidden);
+  const deleting = useChat((s) => s.deleting);
   const load = useChat((s) => s.load);
   const loadOlder = useChat((s) => s.loadOlder);
-  const setHidden = useChat((s) => s.setHidden);
+  const setDeleting = useChat((s) => s.setDeleting);
   const setDraft = useChat((s) => s.setDraft);
   const scroller = useRef<HTMLDivElement>(null);
   const content = useRef<HTMLDivElement>(null);
@@ -108,8 +110,21 @@ export function Conversation({
   const [away, setAway] = useState(false);
   const [newer, setNewer] = useState(false);
   const [editing, setEditing] = useState<ChatMessage | null>(null);
+  const [focusRequest, setFocusRequest] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const open = useSocialUi((s) => s.open);
+  const me = useSocialUi((s) => s.view.me?.id);
+  // Whose deletion a crew chat's tombstone tells: its leader's or a moderator's.
+  const team = useSocialUi((s) => {
+    const id = crewOf(conv);
+    return id ? s.view.crews.find((c) => c.id === id) : undefined;
+  });
+  // Where a sender's own menu opens (their face and name): the crew's chat, or the conversation
+  // with them on screen (FIX2).
+  const personPlace = useMemo<PersonPlace>(
+    () => (crew ? { crew: team, from: "team" } : { inConversation: true, from: "chat" }),
+    [crew, team],
+  );
 
   useEffect(() => {
     void load(conv);
@@ -121,10 +136,15 @@ export function Conversation({
     return () => window.clearInterval(timer);
   }, []);
 
-  const messages = useMemo(
-    () => (thread?.messages ?? []).filter((m) => !hidden[m.key]),
-    [thread?.messages, hidden],
-  );
+  const messages = useMemo(() => thread?.messages ?? [], [thread?.messages]);
+
+  // A message being edited that turned into a tombstone (deleted on another device, or by a
+  // moderator) ends the edit.
+  useEffect(() => {
+    if (!editing) return;
+    const current = messages.find((m) => m.key === editing.key);
+    if (!current || current.deleted || deleting[editing.key]) setEditing(null);
+  }, [editing, messages, deleting]);
   // The lines join the messages at their time; one older than the first message shown waits for
   // the older page it belongs to.
   const openedAt = useRef(Date.now());
@@ -162,7 +182,8 @@ export function Conversation({
     if (dividerSet.current || !thread?.loaded) return;
     dividerSet.current = true;
     if (unreadAtOpen <= 0) return;
-    const theirs = messages.filter((m) => !m.mine);
+    // Tombstones are never unread.
+    const theirs = messages.filter((m) => !m.mine && readable(m));
     const first = theirs[Math.max(0, theirs.length - unreadAtOpen)];
     setDividerKey(first?.key ?? null);
   }, [thread?.loaded, messages, unreadAtOpen]);
@@ -256,14 +277,15 @@ export function Conversation({
       onEdit: (message) => setEditing(message),
       onDelete: async (message) => {
         if (message.id === undefined) return false;
-        // It fades at once; it comes back if the service refuses.
-        setHidden(message.key, true);
+        // Its tombstone shows at once (the bubble says the player deleted it, no toast); the
+        // message comes back if the service refuses.
+        setDeleting(message.key, true);
         try {
           await api.social.chatDelete(conv, message.id);
-          toast.success(t("chat.actions.deleted"));
+          announce(t("chat.actions.deleted"));
           return true;
         } catch (error) {
-          setHidden(message.key, false);
+          setDeleting(message.key, false);
           toast.error(friendlyError(error, t("chat.failure.connection")).message);
           return false;
         }
@@ -275,16 +297,21 @@ export function Conversation({
         });
       },
       onDiscard: (message) => void api.social.chatDiscard(message.key),
+      // The text goes back to the field to be written another way: the caret waits at its end.
       onRewrite: (message) => {
+        setEditing(null);
         setDraft(conv, message.text);
+        setFocusRequest((n) => n + 1);
         void api.social.chatDiscard(message.key);
       },
     }),
-    [conv, onReport, setDraft, setHidden, t],
+    [conv, onReport, setDraft, setDeleting, t],
   );
 
   const editLast = () => {
-    const mine = [...messages].reverse().find((m) => m.mine && (m.editUntil ?? 0) > Date.now());
+    const mine = [...messages]
+      .reverse()
+      .find((m) => m.mine && readable(m) && !deleting[m.key] && (m.editUntil ?? 0) > Date.now());
     if (mine) setEditing(mine);
   };
 
@@ -343,6 +370,7 @@ export function Conversation({
                   const previous = before?.kind === "message" ? before.message : undefined;
                   const next = after?.kind === "message" ? after.message : undefined;
                   const rising = fresh(message);
+                  const deletion = deletionOf(message, deleting, me);
                   return (
                     <motion.li
                       key={message.key}
@@ -381,7 +409,15 @@ export function Conversation({
                       <MessageRow
                         message={message}
                         text={edits[message.key] ?? message.text}
+                        tombstone={
+                          deletion
+                            ? t(
+                                `fix2.tombstone.${tombstoneKind(deletion.by, message.from, me, team)}`,
+                              )
+                            : null
+                        }
                         sender={people(message.from)}
+                        personPlace={personPlace}
                         place={{
                           crew,
                           first: day || !sameGroup(previous, message),
@@ -421,6 +457,7 @@ export function Conversation({
           state={composer}
           editing={editing}
           notice={notice}
+          focusRequest={focusRequest}
           onCancelEdit={() => setEditing(null)}
           onEditLast={editLast}
           onSent={() => toBottom(false)}

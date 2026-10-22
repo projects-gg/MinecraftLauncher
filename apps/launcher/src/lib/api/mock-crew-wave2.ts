@@ -10,7 +10,13 @@
 //   `projects://crew/…` would; `&asked=1`: the player's request to it waits already;
 // - `crewAccepted`: the player's request waits and is taken shortly after start;
 // - `&wave2=0` on any crew scenario: a service from before TEAM5 (none of it shows);
-// - `&limited=1` on any crew scenario: a new Discord account (no invite links, no plans).
+// - `&limited=1` on any crew scenario: a new Discord account (no invite links, no plans);
+// - FIX2: plans carry notes ("Bedwars, sesli gelin"), written with the plan or later by its maker,
+//   cleared by the crew's leaders (`&fix2=0`: a service from before notes); a note with "küfür"
+//   in it is turned away as the service's word list would; `&crowd=1` puts 22 more crewmates in
+//   the crew, most of them answering the first plan (its answers list pages).
+
+import { cleanPlanNote, planNoteProblem } from "@/features/social/plan-note";
 import type {
   CrewLook,
   CrewPlan,
@@ -92,9 +98,12 @@ function plan(
   start: number,
   by: { id: string; name: string },
   answers: Array<{ id: string; answer: PlanAnswer }>,
+  note?: string,
+  notes = true,
 ): CrewPlan {
   const me = team.members.find((m) => m.me)?.id ?? "100";
   const mine = by.id === me;
+  const leads = team.role === "founder" || team.moderator;
   const myAnswer = answers.find((a) => a.id === me)?.answer;
   return {
     id,
@@ -102,48 +111,151 @@ function plan(
     by: by.id,
     byName: by.name,
     mine,
-    canCancel: mine || team.role === "founder" || team.moderator,
+    canCancel: mine || leads,
     at: start,
     startsAt: start,
     endsAt: start + 7200,
     createdAt: Math.min(now() - 600, start - 3600),
     answers,
     myAnswer,
+    note: notes ? note : undefined,
+    canWriteNote: notes && mine,
+    canClearNote: notes && (mine || leads),
   };
 }
 
+/** `&crowd=1`: 22 more crewmates, for a plan whose answers list pages (FIX2). */
+const CROWD = [
+  "Deniz",
+  "Ece",
+  "Mert",
+  "Zeynep",
+  "Kerem",
+  "Elif",
+  "Emir",
+  "Defne",
+  "Berk",
+  "Ada",
+  "Yiğit",
+  "Duru",
+  "Kaan",
+  "Lina",
+  "Arda",
+  "Nehir",
+  "Çınar",
+  "Asya",
+  "Ozan",
+  "İpek",
+  "Selin",
+  "Toprak",
+];
+const CROWD_FACES = ["fox", "wolf", "knight", "axolotl", "lantern", "wizard", "golden-dragon"];
+
+function crowded(team: SocialTeam): SocialTeam {
+  const extra = CROWD.map((name, index) => ({
+    id: String(900 + index),
+    name,
+    username: name.toLocaleLowerCase("tr"),
+    avatar: `preset:${CROWD_FACES[index % CROWD_FACES.length] ?? "fox"}`,
+    role: "member" as const,
+    moderator: false,
+    me: false,
+    // A few are friends; the others are crewmates only ("Arkadaş ekle").
+    friend: index % 5 === 0,
+    blocked: false,
+    state:
+      index % 3 === 0
+        ? ("playing" as const)
+        : index % 3 === 1
+          ? ("launcher" as const)
+          : ("offline" as const),
+    dnd: false,
+    game: index % 3 === 0 ? { where: "projects" as const } : undefined,
+    discordUrl: `https://discord.com/users/${900 + index}`,
+    joinedAt: now() - (index + 2) * 86_400,
+    togetherMonth: 0,
+  }));
+  return { ...team, members: [...team.members, ...extra], limit: 30 };
+}
+
+/** The crowd's answers to a plan: most come, some may, a few cannot. */
+function crowdAnswers(): Array<{ id: string; answer: PlanAnswer }> {
+  return CROWD.map((_, index) => ({
+    id: String(900 + index),
+    answer: index % 7 === 3 ? "no" : index % 4 === 1 ? "maybe" : "yes",
+  }));
+}
+
 /** The plans of a scenario: tonight's and Saturday's (`crewApproval`), one under way and one
- * tomorrow (`crewPlans`). */
-function previewPlans(scenario: string, crews: readonly SocialTeam[]): CrewPlan[] {
+ * tomorrow (`crewPlans`); notes on some (FIX2), and the crowd's answers with `&crowd=1`. */
+function previewPlans(
+  scenario: string,
+  crews: readonly SocialTeam[],
+  notes: boolean,
+  crowd: boolean,
+): CrewPlan[] {
   const team = crews[0];
   if (!team) return [];
   const ayse = { id: "301", name: "Ayşe" };
   const me = { id: "100", name: "EjderAvcısı" };
+  const more = crowd ? crowdAnswers() : [];
   if (scenario === "crewApproval" || scenario === "crewRequestLive") {
     const tonight = at(now() + 3 * 3600);
     return [
-      plan(team, "a1b2c3d4e5f60718", tonight, me, [
-        { id: "100", answer: "yes" },
-        { id: "301", answer: "yes" },
-        { id: "701", answer: "yes" },
-        { id: "302", answer: "maybe" },
-        { id: "703", answer: "no" },
-      ]),
-      plan(team, "b1b2c3d4e5f60718", at(now() + 3 * 86_400), ayse, [{ id: "301", answer: "yes" }]),
+      plan(
+        team,
+        "a1b2c3d4e5f60718",
+        tonight,
+        me,
+        [
+          { id: "100", answer: "yes" },
+          { id: "301", answer: "yes" },
+          { id: "701", answer: "yes" },
+          { id: "302", answer: "maybe" },
+          { id: "703", answer: "no" },
+          ...more,
+        ],
+        "Bedwars turnuvası, sesli gelin",
+        notes,
+      ),
+      plan(
+        team,
+        "b1b2c3d4e5f60718",
+        at(now() + 3 * 86_400),
+        ayse,
+        [{ id: "301", answer: "yes" }],
+        undefined,
+        notes,
+      ),
     ];
   }
   if (scenario === "crewPlans" || scenario === "crewPlanLive") {
     const started = Math.floor((now() - 20 * 60) / QUARTER) * QUARTER;
     return [
-      plan(team, "c1b2c3d4e5f60718", started, ayse, [
-        { id: "301", answer: "yes" },
-        { id: "100", answer: "yes" },
-        { id: "701", answer: "yes" },
-        { id: "702", answer: "maybe" },
-      ]),
-      plan(team, "d1b2c3d4e5f60718", at(now() + 26 * 3600), { id: "302", name: "KorAteşi" }, [
-        { id: "302", answer: "yes" },
-      ]),
+      plan(
+        team,
+        "c1b2c3d4e5f60718",
+        started,
+        ayse,
+        [
+          { id: "301", answer: "yes" },
+          { id: "100", answer: "yes" },
+          { id: "701", answer: "yes" },
+          { id: "702", answer: "maybe" },
+          ...more,
+        ],
+        "Lobide buluşuyoruz, Skyblock adasına geçeceğiz",
+        notes,
+      ),
+      plan(
+        team,
+        "d1b2c3d4e5f60718",
+        at(now() + 26 * 3600),
+        { id: "302", name: "KorAteşi" },
+        [{ id: "302", answer: "yes" }],
+        undefined,
+        notes,
+      ),
     ];
   }
   return [];
@@ -220,7 +332,12 @@ export function wave2Snapshot(
   ctx: Pick<Wave2Context, "scenario" | "param">,
 ) {
   const on = wave2On(ctx.param) && snapshot.crew.look;
-  const crews = snapshot.crews.map((team) => wave2Team(team, ctx.scenario, on));
+  const notes = on && ctx.param("fix2") !== "0";
+  const crowd = ctx.param("crowd") !== null;
+  const crews = snapshot.crews.map((team, index) => {
+    const second = wave2Team(team, ctx.scenario, on);
+    return crowd && index === 0 ? crowded(second) : second;
+  });
   const waits =
     (ctx.scenario === "crewAsk" && ctx.param("asked") !== null) || ctx.scenario === "crewAccepted";
   const teamRequests: TeamRequest[] =
@@ -238,10 +355,10 @@ export function wave2Snapshot(
   return {
     ...snapshot,
     me: limited,
-    crew: { ...snapshot.crew, requests: on, link: on, plans: on },
+    crew: { ...snapshot.crew, requests: on, link: on, plans: on, planNotes: notes },
     crews,
     teamRequests,
-    plans: on ? previewPlans(ctx.scenario, crews) : [],
+    plans: on ? previewPlans(ctx.scenario, crews, notes, crowd) : [],
     together: on,
   } satisfies SocialSnapshot;
 }
@@ -276,6 +393,8 @@ export function startWave2(ctx: Wave2Context) {
         at(now() + 2 * 86_400),
         { id: "701", name: "Yusuf" },
         [{ id: "701", answer: "yes" }],
+        "Skyblock, adada buluşalım",
+        ctx.view().crew.planNotes,
       );
       ctx.commit((v) => ({ ...v, plans: [...v.plans, { ...made, createdAt: now() }] }));
       ctx.tell({ kind: "crewPlan", plan: made });
@@ -309,6 +428,7 @@ type Wave2Api = Pick<
   | "setTeamLink"
   | "setJoinMode"
   | "makePlan"
+  | "setPlanNote"
   | "answerPlan"
   | "cancelPlan"
   | "setTogether"
@@ -354,6 +474,34 @@ export function wave2Api(ctx: Wave2Context): Wave2Api {
   const limited = (key: "crewLink" | "crewPlans") =>
     ctx.view().me?.limited?.items.some((item) => item.key === key) ?? false;
   const me = () => ctx.view().me?.id ?? "100";
+  /** A note as the service takes it (FIX2): its refusals worded as the launcher's backend says
+   * them; "küfür" stands for its word list. */
+  const checkedNote = (note: string): string | undefined => {
+    const clean = cleanPlanNote(note);
+    if (!clean) return undefined;
+    const problem = planNoteProblem(clean);
+    if (problem === "long") {
+      throw ctx.fail(
+        "SOSYAL-PLAN-NOT",
+        "Not tek satır ve en çok 80 karakter olabilir.",
+        "A note is one line of up to 80 characters.",
+      );
+    }
+    if (problem === "link") {
+      throw ctx.fail("SOSYAL-PLAN-NOT", "Notta bağlantı olamaz.", "A note can't have a link.");
+    }
+    if (problem === "phone") {
+      throw ctx.fail(
+        "SOSYAL-PLAN-NOT",
+        "Notta telefon numarası olamaz.",
+        "A note can't have a phone number.",
+      );
+    }
+    if (/küfür/i.test(clean)) {
+      throw ctx.fail("SOSYAL-PLAN-NOT", "Bu not yazılamaz.", "This note can't be used.");
+    }
+    return clean;
+  };
 
   return {
     join,
@@ -468,9 +616,11 @@ export function wave2Api(ctx: Wave2Context): Wave2Api {
         };
       });
     },
-    async makePlan(crew, start) {
+    async makePlan(crew, start, note) {
       await delay(350);
       const team = ctx.team(crew);
+      const notes = ctx.view().crew.planNotes;
+      const written = notes && note !== undefined ? checkedNote(note) : undefined;
       if (limited("crewPlans")) {
         throw ctx.fail(
           "SOSYAL-SINIRLI",
@@ -490,11 +640,37 @@ export function wave2Api(ctx: Wave2Context): Wave2Api {
         );
       }
       const id = `f${Date.now().toString(16).slice(-15)}`;
-      const made = plan(team, id, start, { id: me(), name: v.me?.name ?? "" }, [
-        { id: me(), answer: "yes" },
-      ]);
+      const made = plan(
+        team,
+        id,
+        start,
+        { id: me(), name: v.me?.name ?? "" },
+        [{ id: me(), answer: "yes" }],
+        written,
+        notes,
+      );
       ctx.commit((view) => ({ ...view, plans: [...view.plans, { ...made, createdAt: now() }] }));
       return id;
+    },
+    async setPlanNote(planId, note) {
+      await delay(300);
+      const found = ctx.view().plans.find((p) => p.id === planId);
+      if (!found) {
+        throw ctx.fail("SOSYAL-PLAN-YOK", "Bu plan artık yok.", "This plan is gone.");
+      }
+      const written = checkedNote(note);
+      // Its maker writes; the crew's leaders may only clear it.
+      if (written !== undefined ? !found.canWriteNote : !found.canClearNote) {
+        throw ctx.fail(
+          "SOSYAL-TAKIM-IZIN",
+          "Bunu yapma iznin yok.",
+          "You don't have permission to do that.",
+        );
+      }
+      ctx.commit((v) => ({
+        ...v,
+        plans: v.plans.map((p) => (p.id === planId ? { ...p, note: written } : p)),
+      }));
     },
     async answerPlan(planId, answer) {
       await delay(250);

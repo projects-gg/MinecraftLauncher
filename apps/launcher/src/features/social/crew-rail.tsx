@@ -9,7 +9,7 @@
 // others glide aside: the glide answers the player's own hand, so it stays in Performance mode too);
 // Alt+←/→ and each mark's menu ("Ana ekip yap", "Sola taşı", "Sağa taşı") do the same without
 // dragging. A tab list: ←/→ move between crews, Home/End to the ends.
-import { BellSlash, MegaphoneSimple, Plus, UsersThree } from "@phosphor-icons/react";
+import { BellSlash, ChatsCircle, MegaphoneSimple, Plus, UsersThree } from "@phosphor-icons/react";
 import { ContextMenu, cn, type MenuItem, PixelBrackets, springSnappy, Tooltip } from "@pl/ui";
 import { AnimatePresence, type DragControls, motion, Reorder, useDragControls } from "motion/react";
 import {
@@ -130,8 +130,19 @@ function CrewTab({
   const move = (next: string[] | null) => {
     if (next) void saveCrewOrder(next, crew.id);
   };
+  // "Sohbeti aç" as everywhere a crew shows (FIX2).
+  const chat = useSocialUi((s) => s.view.chat !== undefined);
   const items: Array<MenuItem | null> = [
     { label: t("teams.open"), icon: <UsersThree size={16} />, onSelect },
+    ...(chat
+      ? [
+          {
+            label: t("fix2.menu.crewChat"),
+            icon: <ChatsCircle size={16} />,
+            onSelect: () => useSocialUi.getState().openChat(`c:${crew.id}`),
+          },
+        ]
+      : []),
   ];
   if (count > 1) {
     items.push(

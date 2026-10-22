@@ -1,18 +1,23 @@
 // "Mesajlar": the player's conversations, the newest first: a friend's picture with presence or a
 // crew's mark, the name, the last message ("Sen: …" for the player's own), when, and how many are
 // unread (gold). A conversation muted here carries a struck bell; one whose message did not go says
-// so. A press opens it (a friend's on the chat page, a crew's on its crew page, "Sohbet").
-import { BellSlash, ChatsCircle, WarningCircle } from "@phosphor-icons/react";
-import { cn, EmptyState } from "@pl/ui";
+// so. A press opens it (a friend's on the chat page, a crew's on its crew page, "Sohbet"). Its
+// right click (Shift+F10, the menu key) is the friend's own menu, or the crew's "Sohbeti aç" and
+// "Ekibi aç" (FIX2).
+import { BellSlash, ChatsCircle, Prohibit, UsersThree, WarningCircle } from "@phosphor-icons/react";
+import { ContextMenu, cn, EmptyState, type MenuItem } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
+import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
-import type { Conversation } from "@/lib/api/social-types";
+import type { Conversation, SocialTeam } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
+import { openMenuFromKey } from "../menu-key";
 import { enter, glide, leave, useSocialMotion } from "../motion";
+import { PersonContextMenu, type PersonRef } from "../person-menu";
 import { SocialAvatar } from "../social-face";
 import { useSocialPrefs, useSocialUi } from "../store";
 import { CrewMark } from "../team-emblem";
-import { chatMutedNow, conversationFace } from "./conversations";
+import { chatMutedNow, conversationFace, peerOf, tombstoneKind } from "./conversations";
 
 /** "14:05" today, "Dün", a weekday this week, else the date. */
 function whenLabel(t: (key: string) => string, at: number, nowMs: number): string {
@@ -22,6 +27,59 @@ function whenLabel(t: (key: string) => string, at: number, nowMs: number): strin
   if (diff === 1) return t("chat.day.yesterday");
   if (diff < 7) return dateTimeFormat({ weekday: "short" }).format(new Date(at));
   return dateTimeFormat({ day: "numeric", month: "short" }).format(new Date(at));
+}
+
+/** A crew conversation's right click: its chat (the row's press) and its crew page. */
+function CrewRowMenu({
+  conv,
+  crew,
+  children,
+}: {
+  conv: string;
+  crew: SocialTeam;
+  children: ReactElement;
+}) {
+  const { t } = useTranslation();
+  const items: MenuItem[] = [
+    {
+      label: t("fix2.menu.crewChat"),
+      icon: <ChatsCircle size={16} />,
+      onSelect: () => useSocialUi.getState().openChat(conv, { from: "list" }),
+    },
+    {
+      label: t("teams.open"),
+      icon: <UsersThree size={16} />,
+      onSelect: () => useSocialUi.getState().openTeam(undefined, crew.id),
+    },
+  ];
+  return <ContextMenu items={items}>{children}</ContextMenu>;
+}
+
+/** The row's right click: the friend's menu (the same as in the list), or the crew's. */
+function RowMenu({
+  conversation,
+  crew,
+  person,
+  children,
+}: {
+  conversation: Conversation;
+  crew?: SocialTeam;
+  person?: PersonRef;
+  children: ReactElement;
+}) {
+  if (crew) {
+    return (
+      <CrewRowMenu conv={conversation.id} crew={crew}>
+        {children}
+      </CrewRowMenu>
+    );
+  }
+  if (!person?.id) return children;
+  return (
+    <PersonContextMenu person={person} place={{ from: "list" }}>
+      {children}
+    </PersonContextMenu>
+  );
 }
 
 function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: number }) {
@@ -36,10 +94,16 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
     Boolean(face.crew?.mute.muted && (face.crew.mute.muteUntil ?? Infinity) * 1000 > nowMs);
   const unread = conversation.unread > 0;
   const last = conversation.last;
+  // The newest one was deleted for everyone: its tombstone's words, never its text (FIX2).
+  const gone = last?.deletedBy !== undefined;
   const preview = last
-    ? last.mine
-      ? t("chat.list.you", { text: last.text })
-      : last.text
+    ? gone
+      ? t(
+          `fix2.tombstone.${tombstoneKind(last.deletedBy ?? "", last.from, view.me?.id, face.crew)}`,
+        )
+      : last.mine
+        ? t("chat.list.you", { text: last.text })
+        : last.text
     : t("chat.list.noMessages");
   const label = [
     name,
@@ -48,76 +112,95 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
   ]
     .filter(Boolean)
     .join(", ");
+  const peer = conversation.crew
+    ? undefined
+    : (conversation.peer ?? peerOf(conversation.id, view.me?.id ?? ""));
   return (
-    <button
-      type="button"
-      aria-label={label}
-      onClick={() => openChat(conversation.id, { from: "list" })}
-      className="group/conv flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pr-2.5 pl-2 text-left outline-none transition-colors duration-150 hover:bg-white/[0.045] focus-visible:ring-2 focus-visible:ring-gold-300 active:bg-white/[0.06]"
+    <RowMenu
+      conversation={conversation}
+      crew={face.crew}
+      person={face.person ?? (peer ? { id: peer, name } : undefined)}
     >
-      {face.crew ? (
-        <CrewMark look={face.crew} size={36} />
-      ) : (
-        <SocialAvatar
-          source={face.person ?? { name, avatar: "discord" }}
-          size={36}
-          state={face.person?.state}
-          dnd={face.person?.dnd}
-        />
-      )}
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
+      <button
+        type="button"
+        aria-label={label}
+        onClick={() => openChat(conversation.id, { from: "list" })}
+        onKeyDown={(event) => {
+          openMenuFromKey(event);
+        }}
+        className="group/conv flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pr-2.5 pl-2 text-left outline-none transition-colors duration-150 hover:bg-white/[0.045] focus-visible:ring-2 focus-visible:ring-gold-300 active:bg-white/[0.06]"
+      >
+        {face.crew ? (
+          <CrewMark look={face.crew} size={36} />
+        ) : (
+          <SocialAvatar
+            source={face.person ?? { name, avatar: "discord" }}
+            size={36}
+            state={face.person?.state}
+            dnd={face.person?.dnd}
+          />
+        )}
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                "truncate text-[14px]",
+                unread ? "font-semibold text-bone-50" : "font-medium text-bone-100",
+              )}
+            >
+              {name}
+            </span>
+            {muted ? <BellSlash size={12} className="shrink-0 text-ash-400" aria-hidden /> : null}
+          </span>
           <span
             className={cn(
-              "truncate text-[14px]",
-              unread ? "font-semibold text-bone-50" : "font-medium text-bone-100",
+              "flex items-center gap-1 truncate text-[12.5px]",
+              unread ? "text-bone-100" : "text-ash-400",
             )}
           >
-            {name}
+            {conversation.failed ? (
+              <WarningCircle
+                size={13}
+                weight="fill"
+                className="shrink-0 text-flare-400"
+                aria-hidden
+              />
+            ) : gone ? (
+              <Prohibit size={12} weight="bold" className="shrink-0 text-ash-400" aria-hidden />
+            ) : null}
+            <span className="truncate">
+              {conversation.failed ? t("chat.list.failed") : preview}
+            </span>
           </span>
-          {muted ? <BellSlash size={12} className="shrink-0 text-ash-400" aria-hidden /> : null}
         </span>
-        <span
-          className={cn(
-            "flex items-center gap-1 truncate text-[12.5px]",
-            unread ? "text-bone-100" : "text-ash-400",
-          )}
-        >
-          {conversation.failed ? (
-            <WarningCircle
-              size={13}
-              weight="fill"
-              className="shrink-0 text-flare-400"
-              aria-hidden
-            />
-          ) : null}
-          <span className="truncate">{conversation.failed ? t("chat.list.failed") : preview}</span>
-        </span>
-      </span>
-      <span className="flex shrink-0 flex-col items-end gap-1">
-        {last ? (
-          <span
-            className={cn("text-[11.5px] tabular-nums", unread ? "text-gold-300" : "text-ash-400")}
-          >
-            {whenLabel(t, last.at, nowMs)}
-          </span>
-        ) : null}
-        <AnimatePresence initial={false}>
-          {unread ? (
-            <motion.span
-              key="unread"
-              aria-hidden
-              className="chamfer flex h-[18px] min-w-[18px] items-center justify-center bg-gold-500 px-1 font-display text-[11px] font-semibold text-gold-ink tabular-nums [--cut:4px]"
-              initial={{ opacity: 0, transform: "scale(0.8)" }}
-              animate={{ opacity: 1, transform: "scale(1)", transition: enter(0.2) }}
-              exit={{ opacity: 0, transform: "scale(0.8)", transition: leave(0.14) }}
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          {last ? (
+            <span
+              className={cn(
+                "text-[11.5px] tabular-nums",
+                unread ? "text-gold-300" : "text-ash-400",
+              )}
             >
-              {conversation.unread > 99 ? "99+" : conversation.unread}
-            </motion.span>
+              {whenLabel(t, last.at, nowMs)}
+            </span>
           ) : null}
-        </AnimatePresence>
-      </span>
-    </button>
+          <AnimatePresence initial={false}>
+            {unread ? (
+              <motion.span
+                key="unread"
+                aria-hidden
+                className="chamfer flex h-[18px] min-w-[18px] items-center justify-center bg-gold-500 px-1 font-display text-[11px] font-semibold text-gold-ink tabular-nums [--cut:4px]"
+                initial={{ opacity: 0, transform: "scale(0.8)" }}
+                animate={{ opacity: 1, transform: "scale(1)", transition: enter(0.2) }}
+                exit={{ opacity: 0, transform: "scale(0.8)", transition: leave(0.14) }}
+              >
+                {conversation.unread > 99 ? "99+" : conversation.unread}
+              </motion.span>
+            ) : null}
+          </AnimatePresence>
+        </span>
+      </button>
+    </RowMenu>
   );
 }
 

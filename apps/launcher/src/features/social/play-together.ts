@@ -8,6 +8,7 @@
 // with nowhere to join.
 import { parseServerAddress } from "@/features/library/quick-play";
 import type { SocialActivity, SocialGame } from "@/lib/api/social-types";
+import type { GameNow } from "./connect";
 import { isProjectsHost } from "./model";
 
 /** "Birlikte oyna" is offered: on projects.gg always, on another server while its address is shared. */
@@ -52,19 +53,18 @@ export function onTarget(target: JoinTarget, activity: SocialActivity): boolean 
 }
 
 /**
- * What "Katıl" on an invite does: nothing to do when the player is already there; with the game
- * closed, ask once and start it straight into the server; with a game open (or opening), never
- * close it (unsaved singleplayer progress would be lost): tell how to join from the game.
+ * What "Katıl" on an invite or a call does (FIX2 "Bağlan"): nothing when the player is already
+ * there; with the game closed, ask once and start it straight into the server; with a game open,
+ * ask once and take it there (the overlay in game, else the game closes the way its close button
+ * does, so nothing is lost, and starts again into the server); while a game is prepared or opens,
+ * ask once and start again into the server (nothing to save yet).
  */
-export type JoinStep = "already" | "confirm" | "gameOpen";
+export type JoinStep = "already" | "confirm" | "restart" | "reopen";
 
-export function joinStep(
-  target: JoinTarget,
-  gameBusy: boolean,
-  activity: SocialActivity,
-): JoinStep {
-  if (gameBusy && onTarget(target, activity)) return "already";
-  return gameBusy ? "gameOpen" : "confirm";
+export function joinStep(target: JoinTarget, game: GameNow, activity: SocialActivity): JoinStep {
+  if (game === "closed") return "confirm";
+  if (game === "opening") return "reopen";
+  return onTarget(target, activity) ? "already" : "restart";
 }
 
 /**
@@ -77,4 +77,21 @@ export function playInstance(
   selected: string | null,
 ): string | null {
   return selected && instances.some((i) => i.id === selected) ? selected : null;
+}
+
+/**
+ * The instance "Bağlan" starts again after the game closed (FIX2): the one that ran, where it can
+ * go: another server takes the instance the player was playing; projects.gg only one that joins
+ * it by itself (the Projects instance, or the player's own set to join it). Null: the instance
+ * "Katıl" picks with the game closed.
+ */
+export function restartInstance(
+  target: JoinTarget,
+  running: string | null,
+  instances: ReadonlyArray<{ id: string; autoJoin?: string }>,
+): string | null {
+  const instance = running ? instances.find((i) => i.id === running) : undefined;
+  if (!instance) return null;
+  if (target.kind === "server") return instance.id;
+  return isProjectsHost(instance.autoJoin) ? instance.id : null;
 }

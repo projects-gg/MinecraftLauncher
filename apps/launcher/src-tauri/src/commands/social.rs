@@ -219,6 +219,16 @@ pub async fn social_send_request(
     Ok(state.social.send_request(&code).await?)
 }
 
+/// "Arkadaş ekle" on a crewmate who is not a friend (FIX2): a request without their code.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_request_crewmate(
+    state: State<'_, AppState>,
+    user: String,
+) -> CmdResult<SendOutcome> {
+    Ok(state.social.send_request_to_crewmate(&user).await?)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn social_accept(state: State<'_, AppState>, id: String) -> CmdResult<()> {
@@ -784,16 +794,17 @@ pub async fn social_team_join_mode(
     }
 }
 
-/// A new plan in one of the player's crews at `at` (Unix seconds, a whole quarter of an hour).
-/// Answers its id.
+/// A new plan in one of the player's crews at `at` (Unix seconds, a whole quarter of an hour),
+/// with its short note (FIX2; empty or none: no note). Answers its id.
 #[tauri::command]
 #[specta::specta]
 pub async fn social_plan_make(
     state: State<'_, AppState>,
     crew: String,
     at: i64,
+    note: Option<String>,
 ) -> CmdResult<String> {
-    match state.social.make_plan(&crew, at).await {
+    match state.social.make_plan(&crew, at, note.as_deref()).await {
         // Five new plans a day.
         Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
             "SOSYAL-PLAN-SINIR",
@@ -834,6 +845,35 @@ pub async fn social_plan_answer(
 #[specta::specta]
 pub async fn social_plan_cancel(state: State<'_, AppState>, plan: String) -> CmdResult<()> {
     Ok(state.social.cancel_plan(&plan).await?)
+}
+
+/// A plan's note (FIX2): its maker writes or changes it, `""` clears it (its maker, the crew's
+/// leader and moderators).
+#[tauri::command]
+#[specta::specta]
+pub async fn social_plan_note(
+    state: State<'_, AppState>,
+    plan: String,
+    note: String,
+) -> CmdResult<()> {
+    match state.social.set_plan_note(&plan, &note).await {
+        // Twenty changed answers and notes a day; the note stays as it was.
+        Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
+            "SOSYAL-PLAN-NOT-SINIR",
+            pick(
+                "Planları bugün çok değiştirdin. Yarın yeniden dene.",
+                "You've changed plans a lot today. Try again tomorrow.",
+            ),
+            error.to_string(),
+        )),
+        // A moderator's chat mute covers notes too.
+        Err(error @ SocialError::ChatMuted { .. }) => Err(crate::error::CmdError::new(
+            "SOSYAL-PLAN-NOT-SUSTURMA",
+            pick("Şu an not yazamazsın.", "You can't write notes right now."),
+            error.to_string(),
+        )),
+        other => Ok(other?),
+    }
 }
 
 /// "Birlikte oynanan süre" on or off on this computer (off deletes what was kept).

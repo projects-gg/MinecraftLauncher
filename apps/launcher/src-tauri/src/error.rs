@@ -394,6 +394,27 @@ fn social_special(error: &pl_social::SocialError) -> Option<(&'static str, Strin
             )
             .to_owned(),
         ),
+        // A crew plan's note (FIX2): chat's reasons, or its form.
+        E::PlanNoteRejected { reason } => (
+            "SOSYAL-PLAN-NOT",
+            match reason {
+                Some(ChatRejection::Link) => {
+                    lang.pick("Notta bağlantı olamaz.", "A note can't have a link.")
+                }
+                Some(ChatRejection::Phone) => lang.pick(
+                    "Notta telefon numarası olamaz.",
+                    "A note can't have a phone number.",
+                ),
+                Some(ChatRejection::Words) => {
+                    lang.pick("Bu not yazılamaz.", "This note can't be used.")
+                }
+                None => lang.pick(
+                    "Not tek satır ve en çok 80 karakter olabilir.",
+                    "A note is one line of up to 80 characters.",
+                ),
+            }
+            .to_owned(),
+        ),
         _ => return None,
     })
 }
@@ -495,6 +516,24 @@ impl From<pl_social::SocialError> for CmdError {
                 "SOSYAL-SOHBET-MESAJ",
                 pick("Bu mesaj artık yok.", "This message is gone."),
             ),
+            E::InvalidInput("plan gone") => (
+                "SOSYAL-PLAN-YOK",
+                pick("Bu plan artık yok.", "This plan is gone."),
+            ),
+            E::InvalidInput("plan notes" | "crewmate requests") => (
+                "SOSYAL-EKIP-YENI",
+                pick(
+                    "Bu şu an kullanılamıyor. Biraz sonra tekrar dene.",
+                    "This isn't available right now. Try again in a bit.",
+                ),
+            ),
+            E::InvalidInput("not a crewmate") => (
+                "SOSYAL-EKIP-ARKADAS",
+                pick(
+                    "Bu oyuncuya şu an istek gönderilemiyor.",
+                    "You can't send this player a request right now.",
+                ),
+            ),
             E::InvalidInput(_) | E::Protocol(_) => (
                 "SOSYAL",
                 pick(
@@ -508,7 +547,8 @@ impl From<pl_social::SocialError> for CmdError {
             | E::SignupsClosed { .. }
             | E::TextLocked { .. }
             | E::ChatRejected { .. }
-            | E::ChatMuted { .. } => (
+            | E::ChatMuted { .. }
+            | E::PlanNoteRejected { .. } => (
                 "SOSYAL",
                 pick(
                     "Bir sorun oluştu. Biraz sonra tekrar dene.",

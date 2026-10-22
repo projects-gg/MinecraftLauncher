@@ -30,6 +30,8 @@ export interface ReportRequest {
   crew?: { emblem: string; color: string; frame: string };
   /** The reported message's text. */
   text?: string;
+  /** Reported from a plan card (FIX2): the plan's time as shown, and its note. */
+  plan?: { when: string; note?: string };
   /** A crew invite: the player may report the inviter instead of the crew. */
   inviter?: {
     target: ReportTarget;
