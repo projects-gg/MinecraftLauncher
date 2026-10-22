@@ -28,6 +28,12 @@ describe("reports", () => {
     expect(reasonKey("message", "inappropriate")).toBe("reports.reasons.inappropriate");
   });
 
+  it("report a reaction's giver for its emoji too (CHAT2)", () => {
+    const from = { kind: "player" as const, id: "1", reaction: { conv: "d:1:2", id: 7, e: "🤮" } };
+    expect(reasonsFor(from)).toContain("inappropriate");
+    expect(reasonKey("player", "inappropriate", false, true)).toBe("chat2.report.reactionReason");
+  });
+
   it("count the note as the service does", () => {
     expect(noteLength("  çok   kötü \n söz  ")).toBe(12);
     expect(noteOf("   ")).toBeUndefined();

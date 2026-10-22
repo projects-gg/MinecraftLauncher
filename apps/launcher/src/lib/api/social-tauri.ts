@@ -682,7 +682,22 @@ export const tauriSocial: SocialApi = {
     const page = await commands.socialChatPage(conv, before ?? null);
     return { conv: page.conv, messages: page.messages.map(chatMessage), more: page.more };
   },
+  // CHAT2's commands land with CHAT2-R (pl-social); until then the backend offers no extras
+  // (`chat.extras` absent), so the interface never asks for these.
   chatSend: (conv, text) => ok(commands.socialChatSend(conv, text)),
+  chatSendSticker: () => Promise.reject(new Error("stickers are not available")),
+  chatReact: () => Promise.reject(new Error("reactions are not available")),
+  chatTyping: () => {},
+  chatUnfurl: () => Promise.resolve(),
+  chatCard: () => Promise.resolve(null),
+  onChatTyping(listener) {
+    const unlisten = listen<{ conv: string; by: string }>("social-chat-typing", (event) =>
+      listener(event.payload),
+    );
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  },
   async chatRetry(key) {
     await ok(commands.socialChatRetry(key));
   },
@@ -706,7 +721,12 @@ export const tauriSocial: SocialApi = {
       target.kind === "crew"
         ? { kind: "crew" as const, id: target.id, code: target.code ?? null }
         : target.kind === "player"
-          ? { kind: "player" as const, id: target.id, plan: target.plan ?? null }
+          ? {
+              kind: "player" as const,
+              id: target.id,
+              plan: target.plan ?? null,
+              reaction: target.reaction ?? null,
+            }
           : target;
     await ok(commands.socialReport(wire, reason, note ?? null, block));
   },

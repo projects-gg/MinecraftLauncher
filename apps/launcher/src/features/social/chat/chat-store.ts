@@ -3,10 +3,15 @@
 // before the service answers. A message deleted for everyone comes back as its tombstone, under
 // the same key (FIX2): its text leaves this store with it. Only conversations the player opened
 // are kept here; the list's summaries come with the snapshot.
+//
+// CHAT2: the message a conversation's next one answers ("Yanıtlanıyor"), and the player's own
+// reactions shown at once until the service's answer brings the message back. A message from
+// someone ends their "yazıyor…".
 import { create } from "zustand";
 import { api } from "@/lib/api";
-import type { ChatChange, ChatMessage, ChatPage } from "@/lib/api/social-types";
+import type { ChatChange, ChatMessage, ChatPage, ChatReaction } from "@/lib/api/social-types";
 import { sortMessages } from "./conversations";
+import { useTyping } from "./typing";
 
 export interface ChatThread {
   messages: ChatMessage[];
@@ -29,12 +34,24 @@ interface ChatStore {
   edits: Record<string, string>;
   /** Messages the player deleted here: shown as their tombstone until the service answers. */
   deleting: Record<string, true>;
+  /** CHAT2: the message (key) each conversation's next message answers. */
+  replying: Record<string, string>;
+  /**
+   * CHAT2: a message's reactions with the player's changes on their way (key → reactions); it
+   * stays until every change on that message is answered, then the message's own show.
+   */
+  reacting: Record<string, ChatReaction[]>;
   load: (conv: string) => Promise<void>;
   loadOlder: (conv: string) => Promise<void>;
   apply: (change: ChatChange) => void;
   setDraft: (conv: string, text: string) => void;
   setEdit: (key: string, text: string | null) => void;
   setDeleting: (key: string, deleting: boolean) => void;
+  setReplying: (conv: string, key: string | null) => void;
+  /** The player's reaction change goes: `reactions` show at once. */
+  startReacting: (key: string, reactions: ChatReaction[]) => void;
+  /** The service answered one change (or refused it): once none waits, the message's own show. */
+  endReacting: (key: string) => void;
   /** Signed out or another account: nothing of the old one stays. */
   forget: () => void;
 }
@@ -48,6 +65,12 @@ const EMPTY: ChatThread = {
   older: false,
 };
 
+/** The player's reaction changes on their way, per message key (no need to draw them). */
+const reactionsOnTheirWay = new Map<string, number>();
+
+/** A message this recent that the thread does not hold is a new one (it ends "yazıyor…"). */
+const NEW_MESSAGE_MS = 30_000;
+
 /** The page's messages with those already shown (kept ones win: they came later). */
 function mergeInto(page: readonly ChatMessage[], kept: readonly ChatMessage[]): ChatMessage[] {
   const keys = new Set(kept.map((m) => m.key));
@@ -59,6 +82,8 @@ export const useChat = create<ChatStore>()((set, get) => ({
   drafts: {},
   edits: {},
   deleting: {},
+  replying: {},
+  reacting: {},
   load: async (conv) => {
     const current = get().threads[conv];
     if (current?.loading) return;
@@ -131,7 +156,19 @@ export const useChat = create<ChatStore>()((set, get) => ({
       }));
     }
   },
-  apply: (change) =>
+  apply: (change) => {
+    // Someone's new message ends their "yazıyor…", wherever it shows; a change to one they sent
+    // before (a reaction, an edit, a tombstone) does not. A thread not loaded here cannot tell:
+    // a message of the last half minute counts as new.
+    const held = get().threads[change.conv];
+    const nowMs = Date.now();
+    for (const message of change.upsert) {
+      if (message.mine || message.deleted || message.edited) continue;
+      const known = held?.loaded
+        ? held.messages.some((m) => m.key === message.key)
+        : nowMs - message.at > NEW_MESSAGE_MS;
+      if (!known) useTyping.getState().stop(change.conv, message.from);
+    }
     set((s) => {
       const thread = s.threads[change.conv];
       // Never opened here: the list's summary says what it needs to.
@@ -148,9 +185,12 @@ export const useChat = create<ChatStore>()((set, get) => ({
       }
       // An edit or a delete the service answered needs no stand-in any more (the service may have
       // cleaned the edited text: its version wins). A tombstone takes any edit on its way along.
+      // A message that comes back brings its reactions as the service has them.
       const edits = { ...s.edits };
       const deleting = { ...s.deleting };
+      const reacting = { ...s.reacting };
       for (const message of change.upsert) {
+        if (!reactionsOnTheirWay.get(message.key) || message.deleted) delete reacting[message.key];
         if (message.deleted) {
           delete edits[message.key];
           delete deleting[message.key];
@@ -161,6 +201,18 @@ export const useChat = create<ChatStore>()((set, get) => ({
       for (const key of change.remove) {
         delete edits[key];
         delete deleting[key];
+        delete reacting[key];
+      }
+      // A reply to a message that went away (deleted, the history cleared) stops waiting.
+      const replying = { ...s.replying };
+      const answered = replying[change.conv];
+      if (
+        answered &&
+        (change.reset ||
+          change.remove.includes(answered) ||
+          change.upsert.some((m) => m.key === answered && m.deleted))
+      ) {
+        delete replying[change.conv];
       }
       return {
         threads: {
@@ -173,8 +225,11 @@ export const useChat = create<ChatStore>()((set, get) => ({
         },
         edits,
         deleting,
+        reacting,
+        replying,
       };
-    }),
+    });
+  },
   setDraft: (conv, text) =>
     set((s) => {
       if ((s.drafts[conv] ?? "") === text) return s;
@@ -197,5 +252,35 @@ export const useChat = create<ChatStore>()((set, get) => ({
       else delete next[key];
       return { deleting: next };
     }),
-  forget: () => set({ threads: {}, drafts: {}, edits: {}, deleting: {} }),
+  setReplying: (conv, key) =>
+    set((s) => {
+      if ((s.replying[conv] ?? null) === key) return s;
+      const replying = { ...s.replying };
+      if (key) replying[conv] = key;
+      else delete replying[conv];
+      return { replying };
+    }),
+  startReacting: (key, reactions) => {
+    reactionsOnTheirWay.set(key, (reactionsOnTheirWay.get(key) ?? 0) + 1);
+    set((s) => ({ reacting: { ...s.reacting, [key]: reactions } }));
+  },
+  endReacting: (key) => {
+    const left = (reactionsOnTheirWay.get(key) ?? 1) - 1;
+    if (left > 0) {
+      reactionsOnTheirWay.set(key, left);
+      return;
+    }
+    reactionsOnTheirWay.delete(key);
+    set((s) => {
+      if (!(key in s.reacting)) return s;
+      const reacting = { ...s.reacting };
+      delete reacting[key];
+      return { reacting };
+    });
+  },
+  forget: () => {
+    reactionsOnTheirWay.clear();
+    useTyping.getState().forget();
+    set({ threads: {}, drafts: {}, edits: {}, deleting: {}, replying: {}, reacting: {} });
+  },
 }));

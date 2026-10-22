@@ -19,7 +19,7 @@ import {
 } from "@pl/ui";
 import { AnimatePresence } from "motion/react";
 import { Popover } from "radix-ui";
-import { lazy, Suspense, useCallback, useRef, useState } from "react";
+import { lazy, type ReactNode, Suspense, useCallback, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { PANEL_HEIGHT, PANEL_WIDTH, type PickerTab, SKELETON_KEYS } from "./picker-layout";
 
@@ -54,6 +54,11 @@ export function EmojiPickerButton({
   initialTab,
   onOpenChange,
   returnFocus,
+  closeOnEmoji = false,
+  label: ownLabel,
+  icon,
+  side = "top",
+  align = "end",
 }: {
   /** An emoji was picked (in the chosen skin tone); the picker stays open. */
   onEmoji: (emoji: string) => void;
@@ -64,6 +69,13 @@ export function EmojiPickerButton({
   onOpenChange?: (open: boolean) => void;
   /** Where the focus goes when the picker closes (the composer's field). */
   returnFocus?: () => HTMLElement | null;
+  /** A reaction's picker: one pick and it closes. */
+  closeOnEmoji?: boolean;
+  /** The button's name and mark in place of the composer's ("Başka bir emoji", +). */
+  label?: string;
+  icon?: ReactNode;
+  side?: "top" | "bottom";
+  align?: "start" | "center" | "end";
 }) {
   const { t, i18n } = useTranslation();
   const { reduce } = useMotionPrefs();
@@ -79,14 +91,14 @@ export function EmojiPickerButton({
     [onOpenChange],
   );
   const intent = () => preloadEmojiPicker(i18n.language);
-  const label = onSticker ? t("chat2.picker.open") : t("chat2.picker.openEmoji");
+  const label = ownLabel ?? (onSticker ? t("chat2.picker.open") : t("chat2.picker.openEmoji"));
 
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
         <IconButton
           label={label}
-          icon={<Smiley size={19} weight={open ? "fill" : "regular"} aria-hidden />}
+          icon={icon ?? <Smiley size={19} weight={open ? "fill" : "regular"} aria-hidden />}
           tooltipSide="top"
           active={open}
           disabled={disabled}
@@ -101,8 +113,8 @@ export function EmojiPickerButton({
               <Popover.Content
                 forceMount
                 asChild
-                side="top"
-                align="end"
+                side={side}
+                align={align}
                 sideOffset={10}
                 collisionPadding={12}
                 aria-label={label}
@@ -150,7 +162,10 @@ export function EmojiPickerButton({
                     <PickerPanel
                       stickers={Boolean(onSticker)}
                       initialTab={initialTab}
-                      onEmoji={onEmoji}
+                      onEmoji={(emoji) => {
+                        onEmoji(emoji);
+                        if (closeOnEmoji) setOpen(false);
+                      }}
                       onSticker={(sticker) => {
                         onSticker?.(sticker);
                         setOpen(false);

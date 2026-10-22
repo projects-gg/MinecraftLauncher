@@ -20,6 +20,8 @@ import { attempt, notifyOutside } from "./actions";
 import { useChat } from "./chat/chat-store";
 import { chatMutedNow, crewOf } from "./chat/conversations";
 import { chatNoticeWay, preview } from "./chat/notify";
+import { messageLine } from "./chat/preview";
+import { useTypingFeed } from "./chat/typing";
 import { showCallToast } from "./crew-call";
 import { CrewCallDialog } from "./crew-call-picker";
 import { planWhen, withPlanNote } from "./crew-plans";
@@ -371,7 +373,8 @@ function showChatMessage(notice: Extract<SocialNotice, { kind: "chatMessage" }>)
   });
   if (way === "none") return;
   const name = notice.name ?? i18n.t("chat.list.someone");
-  const text = preview(notice.message.text);
+  // A sticker reads "Çıkartma: GG" (CHAT2).
+  const text = preview(messageLine(notice.message, i18n.t, i18n.language));
   const line = crew
     ? i18n.t("chat.notices.crew", { name, crew: crew.name, text })
     : i18n.t("chat.notices.direct", { name, text });
@@ -617,6 +620,9 @@ export function SocialHost() {
   useCallTicker();
   // The in-game overlay follows the friends notification choices (features/overlay).
   useOverlaySync();
+  // "Yazıyor…" frames are kept from the start, so a list or a conversation that opens shows who
+  // is writing at once (CHAT2; a pushed event, nothing is asked for).
+  useTypingFeed();
   return (
     <>
       <FriendsSheet />

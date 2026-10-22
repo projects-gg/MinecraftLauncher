@@ -166,8 +166,18 @@ function TogetherSetting() {
 function PrivacySection({ me }: { me: SocialMe }) {
   const { t } = useTranslation();
   const crews = useSocialUi((s) => s.view.teams);
-  const set = (change: { shareServer?: boolean; shareLastSeen?: boolean }) =>
-    void attempt(() => api.social.setPrivacy(change));
+  const set = (change: {
+    shareServer?: boolean;
+    shareLastSeen?: boolean;
+    shareRead?: boolean;
+    shareTyping?: boolean;
+  }) => void attempt(() => api.social.setPrivacy(change));
+  // CHAT2: "Görüldü bilgisi" and "Yazıyor bilgisi", both ways (off: neither shown nor seen),
+  // while the service has them.
+  const extras = useSocialUi((s) => s.view.chat?.extras);
+  // "Görüldü" and "Yazıyor" bilgisi side by side share one note under the second.
+  const bothShares =
+    Boolean(extras) && me.privacy.shareRead !== undefined && me.privacy.shareTyping !== undefined;
   return (
     <Section title={t("social.settings.privacy")}>
       <div className="space-y-3.5">
@@ -181,6 +191,22 @@ function PrivacySection({ me }: { me: SocialMe }) {
           onCheckedChange={(shareLastSeen) => set({ shareLastSeen })}
           label={t("social.settings.shareLastSeen")}
         />
+        {extras && me.privacy.shareRead !== undefined ? (
+          <Switch
+            checked={me.privacy.shareRead}
+            onCheckedChange={(shareRead) => set({ shareRead })}
+            label={t("chat2.privacy.seen")}
+            description={bothShares ? undefined : t("chat2.privacy.note")}
+          />
+        ) : null}
+        {extras && me.privacy.shareTyping !== undefined ? (
+          <Switch
+            checked={me.privacy.shareTyping}
+            onCheckedChange={(shareTyping) => set({ shareTyping })}
+            label={t("chat2.privacy.typing")}
+            description={t(bothShares ? "chat2.privacy.both" : "chat2.privacy.note")}
+          />
+        ) : null}
         {crews ? <TogetherSetting /> : null}
       </div>
     </Section>

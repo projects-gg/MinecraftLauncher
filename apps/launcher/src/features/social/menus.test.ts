@@ -4,6 +4,8 @@ import {
   callMenu,
   categoryMenu,
   leavingOf,
+  type MessageInput,
+  messageMenu,
   type PersonInput,
   type Plan,
   panelMenu,
@@ -509,5 +511,39 @@ describe("callMenu", () => {
       "open",
     ]);
     expect(words(callMenu({ joinable: true, here: true }))).toContain("join(off)");
+  });
+});
+
+describe("messageMenu", () => {
+  const input = (change: Partial<MessageInput> = {}): MessageInput => ({
+    reactable: true,
+    repliable: true,
+    copyable: true,
+    link: false,
+    editable: false,
+    deletable: false,
+    report: true,
+    ...change,
+  });
+
+  it("puts reactions and the reply first, the report last", () => {
+    expect(words(messageMenu(input()))).toEqual(["react", "reply", "-", "copy", "-", "report"]);
+  });
+
+  it("gives the player's own message its edit and delete, and no report", () => {
+    expect(
+      words(messageMenu(input({ editable: true, deletable: true, report: false, link: true }))),
+    ).toEqual(["react", "reply", "-", "copy", "copyLink", "-", "edit", "delete"]);
+  });
+
+  it("has nothing to copy on a sticker and nothing new on an old message", () => {
+    expect(
+      words(messageMenu(input({ copyable: false, reactable: false, repliable: true }))),
+    ).toEqual(["reply", "-", "report"]);
+    expect(
+      words(
+        messageMenu(input({ reactable: false, repliable: false, copyable: false, report: false })),
+      ),
+    ).toEqual([]);
   });
 });

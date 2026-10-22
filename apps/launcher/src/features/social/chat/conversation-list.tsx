@@ -3,7 +3,8 @@
 // unread (gold). A conversation muted here carries a struck bell; one whose message did not go says
 // so. A press opens it (a friend's on the chat page, a crew's on its crew page, "Sohbet"). Its
 // right click (Shift+F10, the menu key) is the friend's own menu, or the crew's "Sohbeti aç" and
-// "Ekibi aç" (FIX2).
+// "Ekibi aç" (FIX2). CHAT2: a sticker reads "Çıkartma: GG"; while someone writes there, the
+// last line is a quiet "yazıyor…" (screen readers are not told).
 import { BellSlash, ChatsCircle, Prohibit, UsersThree, WarningCircle } from "@phosphor-icons/react";
 import { ContextMenu, cn, EmptyState, type MenuItem } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -18,6 +19,9 @@ import { SocialAvatar } from "../social-face";
 import { useSocialPrefs, useSocialUi } from "../store";
 import { CrewMark } from "../team-emblem";
 import { chatMutedNow, conversationFace, peerOf, tombstoneKind } from "./conversations";
+import { useChatExtras } from "./extras";
+import { stickerName } from "./preview";
+import { onlineIn, useTyping, useTypingFeed, writersOf } from "./typing";
 
 /** "14:05" today, "Dün", a weekday this week, else the date. */
 function whenLabel(t: (key: string) => string, at: number, nowMs: number): string {
@@ -83,7 +87,16 @@ function RowMenu({
 }
 
 function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: number }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const extras = useChatExtras();
+  // Someone writes there now (a writer who went offline stops at once).
+  const writersHere = useTyping((s) => s.writers[conversation.id]);
+  const friends = useSocialUi((s) => s.view.friends);
+  const crews = useSocialUi((s) => s.view.crews);
+  const writing =
+    writersHere !== undefined &&
+    writersOf({ [conversation.id]: writersHere }, conversation.id, onlineIn(friends, crews))
+      .length > 0;
   const view = useSocialUi((s) => s.view);
   const openChat = useSocialUi((s) => s.openChat);
   const mutes = useSocialPrefs((s) => s.chatMutes);
@@ -101,10 +114,15 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
       ? t(
           `fix2.tombstone.${tombstoneKind(last.deletedBy ?? "", last.from, view.me?.id, face.crew)}`,
         )
-      : last.mine
-        ? t("chat.list.you", { text: last.text })
-        : last.text
+      : last.sticker
+        ? last.mine
+          ? t("chat2.stickers.previewMine", { name: stickerName(last.sticker, t, i18n.language) })
+          : t("chat2.stickers.preview", { name: stickerName(last.sticker, t, i18n.language) })
+        : last.mine
+          ? t("chat.list.you", { text: last.text })
+          : last.text
     : t("chat.list.noMessages");
+  const typingNow = extras.typing && writing && !conversation.failed;
   const label = [
     name,
     unread ? t("chat.list.unread", { count: conversation.unread }) : null,
@@ -168,8 +186,24 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
             ) : gone ? (
               <Prohibit size={12} weight="bold" className="shrink-0 text-ash-400" aria-hidden />
             ) : null}
-            <span className="truncate">
-              {conversation.failed ? t("chat.list.failed") : preview}
+            <span className="relative grid min-w-0 flex-1">
+              <span
+                className={cn(
+                  "col-start-1 row-start-1 truncate transition-opacity duration-150",
+                  typingNow && "opacity-0",
+                )}
+              >
+                {conversation.failed ? t("chat.list.failed") : preview}
+              </span>
+              <span
+                aria-hidden
+                className={cn(
+                  "col-start-1 row-start-1 truncate text-ash-400 transition-opacity duration-150",
+                  typingNow ? "opacity-100" : "opacity-0",
+                )}
+              >
+                {t("chat2.typing.list")}
+              </span>
             </span>
           </span>
         </span>
@@ -206,6 +240,7 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
 
 export function ConversationList() {
   const { t } = useTranslation();
+  useTypingFeed();
   const { layout } = useSocialMotion();
   const conversations = useSocialUi((s) => s.view.chat?.conversations ?? []);
   const now = Date.now();

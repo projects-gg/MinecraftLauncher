@@ -15,15 +15,24 @@
 //   which Ayşe leads here (the player's, the sender's, the leader's, a moderator's, Projects'
 //   moderators', an account that is gone); `chatDeleteLive`: Ayşe deletes her newest message
 //   shortly after start, then Projects' moderators one in the crew (`&deleteAt=<ms>`).
+// - `chat2` (CHAT2): the extras on (`&chat2=1` in any other scenario; `&extras=replies,stickers`
+//   keeps only those, `&extras=none` a service with none of them on): replies, reactions, a
+//   sticker, links with their cards, "Görüldü" under the player's message to KorAteşi;
+//   `chat2Live`: Ayşe writes ("yazıyor…") and sends a sticker, then reacts, a crewmate writes too.
 // A message with "hata" or "fail" in it does not go (`&sendFails=<reason>` fails every one with
-// that reason); a friend online answers a direct message (`&noReply=1` keeps them quiet). A
-// message deleted for everyone stays as its tombstone.
+// that reason); a friend online answers a direct message (`&noReply=1` keeps them quiet): with
+// CHAT2 they see it first ("Görüldü") and write ("yazıyor…"). A message deleted for everyone stays
+// as its tombstone.
 import { pick } from "./mock-lang";
 import type {
+  ChatCard,
   ChatChange,
+  ChatExtras,
   ChatMessage,
   ChatPage,
+  ChatReaction,
   ChatState,
+  ChatTyping,
   Conversation,
   SendFailure,
   SocialApi,
@@ -41,7 +50,98 @@ export const CHAT_SCENARIOS: readonly string[] = [
   "chatMailbox",
   "chatTombstones",
   "chatDeleteLive",
+  "chat2",
+  "chat2Live",
 ];
+
+const EXTRA_KEYS = ["replies", "stickers", "reactions", "typing", "reads", "links"] as const;
+
+/** The link rules the preview service applies (the contract's defaults). */
+const PREVIEW_LINKS = {
+  rules: 2,
+  trusted: [
+    "projects.gg",
+    "youtube.com",
+    "youtu.be",
+    "twitch.tv",
+    "kick.com",
+    "modrinth.com",
+    "minecraft.net",
+    "minecraft.wiki",
+  ],
+  blocked: ["youtube.com/@dolandirici"],
+  invites: true,
+};
+
+/** A picture for a preview card (an SVG; the real hub sends a small JPEG). */
+function picture(top: string, bottom: string, label: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180" viewBox="0 0 320 180"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient></defs><rect width="320" height="180" fill="url(#g)"/><text x="22" y="150" font-family="Tektur, sans-serif" font-size="44" font-weight="700" fill="#fbf6ec" opacity="0.92">${label}</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/** The card the preview hub makes for a link. */
+function previewCard(url: string): ChatCard {
+  const host = new URL(url).hostname.replace(/^www\./, "");
+  if (host === "youtu.be" || host.endsWith("youtube.com")) {
+    return {
+      state: "ready",
+      url,
+      site: "YouTube",
+      icon: "youtube",
+      kind: "video",
+      title: pick(
+        "Bedwars'ta 1'e 4 kazandık: son raunt",
+        "We won a 1v4 in Bedwars: the last round",
+      ),
+      author: "KorAteşi",
+      image: picture("#3f0a0a", "#c9741a", "1v4"),
+      w: 320,
+      h: 180,
+    };
+  }
+  if (host.endsWith("twitch.tv")) {
+    return {
+      state: "ready",
+      url,
+      site: "Twitch",
+      icon: "twitch",
+      kind: "stream",
+      title: pick("Projects turnuvası canlı", "The Projects tournament, live"),
+      image: picture("#1b1820", "#7a2416", "CANLI"),
+      w: 320,
+      h: 180,
+    };
+  }
+  if (host.endsWith("modrinth.com")) {
+    return {
+      state: "ready",
+      url,
+      site: "Modrinth",
+      icon: "modrinth",
+      kind: "project",
+      title: "Sodium",
+      desc: pick(
+        "Oyunu çok daha akıcı çalıştıran bir çizim motoru.",
+        "A rendering engine that makes the game run much smoother.",
+      ),
+      image: picture("#27222c", "#5fcb8e", "S"),
+      w: 96,
+      h: 96,
+    };
+  }
+  if (host.includes("kotu"))
+    return { state: "refused", url, site: host, icon: "globe", kind: "page", rule: "blocked" };
+  if (host.includes("bos")) return { state: "plain", url, site: host, icon: "globe", kind: "page" };
+  return {
+    state: "ready",
+    url,
+    site: host,
+    icon: "globe",
+    kind: "page",
+    title: pick("Skyblock için en iyi ada düzenleri", "The best island layouts for Skyblock"),
+    desc: pick("Başlangıçtan sona adım adım rehber.", "A step-by-step guide from start to end."),
+  };
+}
 
 /** A message deleted for everyone: its tombstone (its text gone, nothing to do with it). */
 function tombstoneOf(message: ChatMessage, by: string, at = Date.now()): ChatMessage {
@@ -75,6 +175,12 @@ type ChatMethods = Pick<
   | "chatDelete"
   | "chatRead"
   | "chatClear"
+  | "chatSendSticker"
+  | "chatReact"
+  | "chatTyping"
+  | "chatUnfurl"
+  | "chatCard"
+  | "onChatTyping"
 >;
 
 const MINUTE = 60_000;
@@ -140,9 +246,20 @@ export function mockChat(host: ChatHost) {
   const unread = new Map<string, number>();
   const titles = new Map<string, string>();
   const listeners = new Set<(change: ChatChange) => void>();
+  const typingListeners = new Set<(typing: ChatTyping) => void>();
+  const peerReads = new Map<string, number>();
+  // CHAT2's extras: on in its scenarios (or with `&chat2=1`), `&extras=` picks them.
+  const chat2 = host.scenario.startsWith("chat2") || host.param("chat2") !== null;
+  const extras = (): ChatExtras | undefined => {
+    if (!chat2) return undefined;
+    const only = host.param("extras");
+    const on = (key: string) => !only || only.split(",").includes(key);
+    return Object.fromEntries(EXTRA_KEYS.map((key) => [key, on(key)])) as unknown as ChatExtras;
+  };
   // A limited account (SPAM1) has chat too: its daily message limit is listed only with chat.
   const on =
     CHAT_SCENARIOS.includes(host.scenario) ||
+    chat2 ||
     host.scenario === "limited" ||
     host.param("chat") !== null;
   let nonce = 0;
@@ -323,6 +440,8 @@ export function mockChat(host: ChatHost) {
       unread.set(CREW_CONV, 1);
     }
 
+    if (chat2) seedChat2(t0);
+
     if (host.scenario === "chatFailed") {
       const failed: ChatMessage = {
         key: "n:preview-failed",
@@ -338,6 +457,142 @@ export function mockChat(host: ChatHost) {
     }
   }
 
+  /** CHAT2's preview: a reply, a sticker, reactions, links with cards, a read mark. */
+  function seedChat2(t0: number) {
+    const ayse = direct("301");
+    const dm = threads.get(ayse) ?? [];
+    const asked = dm.find((m) => m.text.startsWith(pick("Bugün de", "Up for")));
+    const reply = (target: ChatMessage | undefined) =>
+      target?.id !== undefined
+        ? {
+            id: target.id,
+            from: target.from,
+            key: target.key,
+            text: target.text,
+            deleted: false,
+            missing: false,
+          }
+        : undefined;
+    const r = (e: string, by: string[]): ChatReaction => ({ e, by, mine: by.includes(ME) });
+    const mineReply = message(
+      ayse,
+      ME,
+      pick("Varım, 10 dakikaya geliyorum", "I'm in, coming in 10 minutes"),
+      t0 - 12 * MINUTE,
+      {
+        reply: reply(asked),
+        reactions: [r("👍", ["301"])],
+      },
+    );
+    const sticker = message(ayse, "301", "", t0 - 10 * MINUTE, { sticker: "pl1/come" });
+    const link = message(
+      ayse,
+      ME,
+      pick(
+        "Dünkü maçı izle: https://youtu.be/kor1v4 son raunt efsane",
+        "Watch yesterday's match: https://youtu.be/kor1v4 the last round is legendary",
+      ),
+      t0 - 9 * MINUTE,
+      { card: previewCard("https://youtu.be/kor1v4") },
+    );
+    const answer = message(
+      ayse,
+      "301",
+      pick("Efsane olmuş 😂", "That's legendary 😂"),
+      t0 - 7 * MINUTE,
+      {
+        reply: reply(link),
+        reactions: [r("😂", [ME, "301"]), r("🔥", [ME])],
+      },
+    );
+    const lobby = dm.at(-1);
+    threads.set(
+      ayse,
+      [
+        ...dm.filter((m) => m !== lobby),
+        mineReply,
+        sticker,
+        link,
+        answer,
+        ...(lobby ? [lobby] : []),
+      ].sort((a, b) => (a.id ?? 0) - (b.id ?? 0)),
+    );
+    // KorAteşi saw the player's last message (no answer yet): "Görüldü" under it.
+    const kor = direct("302");
+    const korMine = (threads.get(kor) ?? []).filter((m) => m.mine).at(-1);
+    if (korMine?.id !== undefined) peerReads.set(kor, korMine.id);
+
+    // The crew: reactions, a reply, a sticker, two links.
+    const crew = threads.get(CREW_CONV);
+    if (crew) {
+      const asking = crew.find((m) => m.text.startsWith(pick("Akşam turnuvaya", "Who's coming")));
+      const tail = crew
+        .slice(-6)
+        .map((m, i) =>
+          i === 1
+            ? { ...m, reactions: [r("👍", ["701", "302", "703", ME]), r("🔥", ["702", ME])] }
+            : m,
+        );
+      const more = [
+        message(CREW_CONV, "702", "", t0 - 30 * MINUTE, { sticker: "pl1/gg" }),
+        message(
+          CREW_CONV,
+          "302",
+          pick("Ben de geliyorum, kılıcı getiriyorum", "I'm coming too, bringing the sword"),
+          t0 - 28 * MINUTE,
+          {
+            reply: reply(asking),
+            reactions: [r("⚔️", ["701"])],
+          },
+        ),
+        message(
+          CREW_CONV,
+          "703",
+          pick(
+            "Gelmeden şunu kurun: https://modrinth.com/mod/sodium oyun çok akıcı oluyor",
+            "Install this first: https://modrinth.com/mod/sodium the game gets so smooth",
+          ),
+          t0 - 26 * MINUTE,
+          { card: previewCard("https://modrinth.com/mod/sodium") },
+        ),
+        message(
+          CREW_CONV,
+          "701",
+          pick(
+            "Ada planı burada: https://www.skyblockrehber.com/adalar",
+            "The island plan is here: https://www.skyblockguide.net/islands",
+          ),
+          t0 - 24 * MINUTE,
+        ),
+      ];
+      threads.set(
+        CREW_CONV,
+        [...crew.slice(0, -6), ...tail, ...more].sort((a, b) => (a.id ?? 0) - (b.id ?? 0)),
+      );
+    }
+  }
+
+  function typing(conv: string, by: string) {
+    for (const listener of typingListeners) listener({ conv, by });
+  }
+
+  /** The message a reply answers, as this computer holds it. */
+  function replyOf(conv: string, id: number | undefined): ChatMessage["reply"] {
+    if (id === undefined) return undefined;
+    const target = threads.get(conv)?.find((m) => m.id === id);
+    return target
+      ? {
+          id,
+          from: target.from,
+          key: target.key,
+          text: target.text,
+          sticker: target.sticker,
+          deleted: Boolean(target.deleted),
+          missing: false,
+        }
+      : { id, from: "", deleted: false, missing: true };
+  }
+
   function last(conv: string): Conversation["last"] {
     const messages = threads.get(conv) ?? [];
     const newest = messages[messages.length - 1];
@@ -348,6 +603,7 @@ export function mockChat(host: ChatHost) {
           text: newest.text,
           at: newest.at,
           deletedBy: newest.deleted?.by,
+          sticker: newest.sticker,
         }
       : undefined;
   }
@@ -366,6 +622,7 @@ export function mockChat(host: ChatHost) {
         unread: unread.get(conv) ?? 0,
         writable: true,
         failed: (threads.get(conv) ?? []).some((m) => m.state === "failed"),
+        peerRead: peerReads.get(conv),
       });
     }
     return list.sort((a, b) => (b.last?.at ?? 0) - (a.last?.at ?? 0));
@@ -457,9 +714,17 @@ export function mockChat(host: ChatHost) {
           : null;
         const friend = host.view().friends.find((f) => f.id === peer);
         if (friend && friend.state !== "offline" && !fails && host.param("noReply") === null) {
+          if (chat2) {
+            setTimeout(() => {
+              peerReads.set(conv, id);
+              refresh();
+            }, 900);
+            setTimeout(() => typing(conv, friend.id), 1300);
+            setTimeout(() => typing(conv, friend.id), 3300);
+          }
           setTimeout(
             () => arrive(conv, friend.id, pick("Tamamdır, görüşürüz!", "Sounds good, see you!")),
-            2200,
+            chat2 ? 4600 : 2200,
           );
         }
       },
@@ -477,9 +742,24 @@ export function mockChat(host: ChatHost) {
       perDay: snapshot.me?.limited ? 100 : 500,
       mutedUntil: host.scenario === "chatMuted" ? Math.floor((Date.now() + DAY) / 1000) : undefined,
       conversations: conversations(),
+      extras: extras(),
+      stickerSets: chat2 ? ["pl1"] : undefined,
+      links: chat2 ? PREVIEW_LINKS : undefined,
     };
+    const me =
+      chat2 && snapshot.me
+        ? {
+            ...snapshot.me,
+            privacy: {
+              shareRead: true,
+              shareTyping: true,
+              ...snapshot.me.privacy,
+            },
+          }
+        : snapshot.me;
     return {
       ...snapshot,
+      me,
       chatAllowed: true,
       chat: snapshot.auth === "signedIn" ? state : undefined,
     };
@@ -502,6 +782,37 @@ export function mockChat(host: ChatHost) {
       setTimeout(() => deleteLive(CREW_CONV, "702", "staff"), at + 2600);
       return;
     }
+    if (host.scenario === "chat2Live") {
+      // Ayşe and two crewmates write: a frame every 3 s, as a writer's launcher sends them,
+      // until Ayşe's sticker comes (`chatAt` ms after the start; the crew stops then too).
+      const at = Number(host.param("chatAt")) || 9000;
+      const ayse = direct("301");
+      const write = () => {
+        typing(ayse, "301");
+        typing(CREW_CONV, "702");
+        typing(CREW_CONV, "302");
+      };
+      write();
+      const writing = setInterval(write, 3000);
+      setTimeout(() => {
+        clearInterval(writing);
+        const next = message(ayse, "301", "", Date.now(), { sticker: "pl1/hi" });
+        unread.set(ayse, (unread.get(ayse) ?? 0) + 1);
+        put(ayse, next);
+        const view = host.view();
+        host.tell({
+          kind: "chatMessage",
+          conv: ayse,
+          message: next,
+          name: view.friends.find((f) => f.id === "301")?.name,
+        });
+      }, at);
+      setTimeout(() => {
+        const mine = (threads.get(ayse) ?? []).filter((m) => m.mine && m.id !== undefined).at(-1);
+        if (mine) react(ayse, mine, "301", "❤️", true);
+      }, at + 1400);
+      return;
+    }
     if (host.scenario !== "chatLive") return;
     const at = Number(host.param("chatAt")) || 1600;
     setTimeout(
@@ -512,6 +823,46 @@ export function mockChat(host: ChatHost) {
       () => arrive(CREW_CONV, "702", pick("Lobideyim, kapıdayım", "In the lobby, at the gate")),
       at + 2600,
     );
+  }
+
+  /** Someone's reaction on a message, as the service keeps them (5 each, 10 kinds). */
+  function react(conv: string, target: ChatMessage, by: string, emoji: string, add: boolean) {
+    const list = (target.reactions ?? []).map((x) => ({ ...x, by: [...x.by] }));
+    const same = (a: string, b: string) =>
+      a.replace(/\u{FE0F}/gu, "") === b.replace(/\u{FE0F}/gu, "");
+    const at = list.findIndex((x) => same(x.e, emoji));
+    if (add) {
+      if (
+        list.filter((x) => x.by.includes(by)).length >= 5 &&
+        !(at >= 0 && list[at]?.by.includes(by))
+      ) {
+        throw new MockChatError(
+          "SOSYAL-TEPKI-DOLU",
+          pick(
+            "Bir mesaja en çok 5 tepki verebilirsin.",
+            "You can give a message at most 5 reactions.",
+          ),
+        );
+      }
+      if (at < 0 && list.length >= 10) {
+        throw new MockChatError(
+          "SOSYAL-TEPKI-TUR",
+          pick(
+            "Bu mesajda yeni bir tepkiye yer yok.",
+            "This message has no room for a new reaction.",
+          ),
+        );
+      }
+      if (at < 0) list.push({ e: emoji, by: [by], mine: by === ME });
+      else if (!list[at]?.by.includes(by)) list[at]?.by.push(by);
+    } else if (at >= 0) {
+      const kind = list[at];
+      if (kind) kind.by = kind.by.filter((id) => id !== by);
+    }
+    const reactions = list
+      .filter((x) => x.by.length > 0)
+      .map((x) => ({ ...x, mine: x.by.includes(ME) }));
+    put(conv, { ...target, reactions: reactions.length ? reactions : undefined });
   }
 
   const api: ChatMethods = {
@@ -527,7 +878,7 @@ export function mockChat(host: ChatHost) {
       const page = older.slice(-PAGE);
       return { conv, messages: page, more: older.length > page.length };
     },
-    async chatSend(conv, text) {
+    async chatSend(conv, text, reply) {
       await delay(30);
       const chat = host.view().chat;
       if (!chat?.on) {
@@ -547,8 +898,47 @@ export function mockChat(host: ChatHost) {
         at,
         edited: false,
         state: "sending",
+        reply: replyOf(conv, reply),
       });
       return key;
+    },
+    async chatSendSticker(conv, sticker, reply) {
+      await delay(30);
+      nonce += 1;
+      const key = `n:preview${nonce}`;
+      deliver(conv, {
+        key,
+        from: ME,
+        mine: true,
+        text: "",
+        sticker,
+        at: Date.now(),
+        edited: false,
+        state: "sending",
+        reply: replyOf(conv, reply),
+      });
+      return key;
+    },
+    async chatReact(conv, id, emoji, add) {
+      await delay(260);
+      react(conv, byId(conv, id), ME, emoji, add);
+    },
+    chatTyping() {},
+    async chatUnfurl(conv, key) {
+      await delay(700);
+      const found = threads.get(conv)?.find((m) => m.key === key);
+      const url = found?.text.match(/https:\/\/\S+/u)?.[0];
+      if (!found || !url) return;
+      put(conv, { ...found, card: previewCard(url) });
+    },
+    async chatCard(url) {
+      await delay(500);
+      const card = previewCard(url);
+      return card.state === "ready" ? card : null;
+    },
+    onChatTyping(listener) {
+      typingListeners.add(listener);
+      return () => typingListeners.delete(listener);
     },
     async chatRetry(key) {
       await delay(60);

@@ -52,6 +52,12 @@ function Subject({ request, inviter }: { request: ReportRequest; inviter: boolea
             ) : null}
           </>
         ) : null}
+        {/* From a reaction's list (CHAT2): the reaction. */}
+        {kind === "player" && !inviter && request.reaction ? (
+          <p className="mt-0.5 truncate text-[12.5px] text-ash-300">
+            {t("chat2.report.reaction", { emoji: request.reaction.e })}
+          </p>
+        ) : null}
         {kind === "message" && request.text ? (
           <p className="mt-1 line-clamp-3 text-[13px] leading-snug text-bone-100 break-words whitespace-pre-wrap">
             <span className="sr-only">{t("reports.message")}: </span>
@@ -90,6 +96,7 @@ export function ReportDialog() {
   const kind = target?.kind ?? "player";
   const reasons = target ? reasonsFor(target) : REPORT_REASONS[kind];
   const fromPlan = target?.kind === "player" && Boolean(target.plan);
+  const fromReaction = target?.kind === "player" && Boolean(target.reaction);
   const length = noteLength(note);
   const tooLong = length > NOTE_MAX;
   const ready = Boolean(target && reason && reasons.includes(reason)) && !tooLong && !busy;
@@ -168,7 +175,7 @@ export function ReportDialog() {
                 >
                   <RadioGroup.Indicator className="size-2 rounded-full bg-gold-400" />
                 </span>
-                {t(reasonKey(kind, option, fromPlan))}
+                {t(reasonKey(kind, option, fromPlan, fromReaction))}
               </RadioGroup.Item>
             ))}
           </RadioGroup.Root>

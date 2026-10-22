@@ -6,7 +6,15 @@
 // moderator's mute, chat switched off, no longer friends or in the crew) one quiet line takes its
 // place, the same height. An edit (from a message's menu, a right click or ↑) and "Düzenle" on a
 // message that did not go put the caret at the end of the field (FIX2).
+//
+// CHAT2: the emoji button left of send opens the picker; an emoji goes in at the caret (the
+// picker stays open) and a sticker goes at once (it closes). A reply shows a strip over the field
+// ("Yanıtlanıyor: Ayşe", one line of the message, ✕; Esc does the same). Links the rules let
+// through can go; for one that cannot, the reason says which rule ("Kısaltılmış bağlantılar
+// gönderilemez."); a link the player writes shows its card over the field after a moment. While
+// the player writes, "yazıyor" goes out (typing.ts).
 import { Check, Info, LockSimple, PaperPlaneRight, PencilSimple, X } from "@phosphor-icons/react";
+import type { Sticker as StickerData } from "@pl/stickers";
 import { cn, IconButton } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import {
@@ -14,18 +22,27 @@ import {
   type KeyboardEvent,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
 import { friendlyError } from "@/features/accounts/use-accounts";
+import { EmojiPickerButton, insertText, useEmojiPrefs } from "@/features/emoji";
 import { api } from "@/lib/api";
-import type { ChatMessage } from "@/lib/api/social-types";
+import type { ChatCard, ChatLinkRules, ChatMessage } from "@/lib/api/social-types";
 import { inside, leaveOnEscape } from "../edit-escape";
+import { limitOf, opensIn } from "../limits";
 import { enter, leave, rise, useSocialMotion } from "../motion";
+import { useSocialUi } from "../store";
 import { useChat } from "./chat-store";
+import { useChatExtras, useChatHasExtras, useLinkRules, useStickerSets } from "./extras";
 import { holdFocus } from "./focus";
+import { domainOf, SiteIcon, shapeOf } from "./link-ui";
+import { findLinks, hasBareDomain, ruleWords } from "./links";
+import { type Quoted, ReplyStrip } from "./reply";
 import { CHAT_COUNT_FROM, CHAT_TEXT_MAX, chatLength, hasText, textProblem } from "./text";
+import { typingSender } from "./typing";
 
 /** What the composer may do here. */
 export type ComposerState =
@@ -38,6 +55,81 @@ const CHIPS = ["coming", "fiveMinutes", "where", "come"] as const;
 /** The field's line height and padding: one line is 38 px, five lines 118 px. */
 const LINE = 20;
 const PAD = 9;
+/** A link the player writes shows its card after this pause. */
+const CARD_AFTER_MS = 600;
+
+/**
+ * Why a text cannot go: CHAT1's reasons, a link with the rule it fails (CHAT2), links from a
+ * limited account (until when, Unix seconds), or none.
+ */
+type Problem = "phone" | "long" | { link: string } | { limited: number } | null;
+
+/**
+ * The composer's check. Without links on, any address is a link that cannot go (CHAT1). With
+ * them, the links that pass may go and the rest of the text is checked without them; a link that
+ * fails says why when its rule has words of its own.
+ */
+function problemOf(
+  value: string,
+  links: ChatLinkRules | undefined,
+  extras: boolean,
+  limitedUntil: number | null,
+): Problem {
+  const base = textProblem(value);
+  if (base !== "link") return base;
+  if (!links) return { link: extras ? "off" : "form" };
+  const found = findLinks(value, links);
+  if (!found.length) return { link: hasBareDomain(value) ? "formHint" : "form" };
+  if (found.length > 3) return { link: "count" };
+  const bad = found.find((link) => link.rule);
+  if (bad?.rule) return { link: bad.rule };
+  // A limited account sends no links (the service: `account_limited` with `chat_links`).
+  if (limitedUntil !== null) return { limited: limitedUntil };
+  // The text without its links: anything else that reads as an address still cannot go.
+  let rest = value;
+  for (const link of [...found].reverse()) {
+    rest = `${rest.slice(0, link.start)} ${rest.slice(link.end)}`;
+  }
+  const other = textProblem(rest);
+  return other === "link" ? { link: hasBareDomain(rest) ? "formHint" : "form" } : other;
+}
+
+/** A link's card over the field while the player writes it (what the others will see). */
+function ComposerCard({ card }: { card: ChatCard }) {
+  const { reduce } = useSocialMotion();
+  return (
+    <motion.div
+      className="mb-1.5 flex items-center gap-2 overflow-hidden rounded-[8px] bg-obsidian-800/70 py-1.5 pr-2 pl-2.5 ring-1 ring-white/6 ring-inset"
+      initial={{ opacity: 0, transform: reduce ? "none" : "translateY(3px)" }}
+      animate={{ opacity: 1, transform: "translateY(0px)", transition: enter(0.2) }}
+      exit={{ opacity: 0, transition: leave(0.14) }}
+    >
+      {card.image ? (
+        <img
+          src={card.image}
+          alt=""
+          draggable={false}
+          className={cn(
+            "h-8 shrink-0 rounded-[4px] object-cover",
+            shapeOf(card) === "banner" ? "w-14" : "w-8",
+          )}
+        />
+      ) : null}
+      <span className="min-w-0 flex-1 text-[12px] leading-[1.35]">
+        <span className="flex min-w-0 items-center gap-1.5 text-ash-400">
+          <SiteIcon icon={card.icon} />
+          <span className="truncate">{card.site}</span>
+        </span>
+        <span className="block truncate font-semibold text-bone-100">
+          {card.title ?? domainOf(new URL(card.url).hostname)}
+        </span>
+      </span>
+    </motion.div>
+  );
+}
+
+/** Cards of links the player wrote, kept for the session (asked once each). */
+const writtenCards = new Map<string, ChatCard | null>();
 
 export function Composer({
   conv,
@@ -49,6 +141,10 @@ export function Composer({
   onCancelEdit,
   onEditLast,
   onSent,
+  replyTo = null,
+  replyQuote = null,
+  onCancelReply = () => {},
+  othersOnline = true,
 }: {
   conv: string;
   /** Crew chat: the quick replies show. */
@@ -59,24 +155,43 @@ export function Composer({
   /** A quiet line over the field (the mailbox is off, the connection is waiting). */
   notice: string | null;
   /** Grows when the field should take the focus, the caret at the end (a failed message's text
-   * came back to it). */
+   * came back to it, a reply started). */
   focusRequest?: number;
   onCancelEdit: () => void;
   /** ↑ in an empty field: the last message the player may still edit, if any. */
   onEditLast: () => void;
   /** Something was sent: the list goes to its newest message. */
   onSent: () => void;
+  /** CHAT2: someone else in the conversation is online ("yazıyor…" goes only then). */
+  othersOnline?: boolean;
+  /** CHAT2: the message the next one answers (sent: it has its id). */
+  replyTo?: ChatMessage | null;
+  replyQuote?: Quoted | null;
+  onCancelReply?: () => void;
 }) {
   const { t } = useTranslation();
   const { reduce } = useSocialMotion();
   const draft = useChat((s) => s.drafts[conv] ?? "");
   const setDraft = useChat((s) => s.setDraft);
   const setEdit = useChat((s) => s.setEdit);
+  const extras = useChatExtras();
+  const links = useLinkRules();
+  const stickerSets = useStickerSets();
   const [editText, setEditText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
+  const selection = useRef({ start: 0, end: 0 });
   const text = editing ? editText : draft;
+  const typing = useMemo(() => typingSender(conv), [conv]);
+  const hasExtras = useChatHasExtras();
+  // "Yazıyor bilgisi" works both ways: off, the player's own writing is not told either.
+  const shareTyping = useSocialUi((s) => s.view.me?.privacy.shareTyping !== false);
+  const limitedLinks = useSocialUi(
+    (s) => limitOf(s.view.me, "chatLinks", Date.now())?.until ?? null,
+  );
+  // A reply waits only while the player writes a new message (an edit keeps its own link).
+  const reply = editing ? null : replyTo;
 
   // An edit starts with the message's text, the caret at its end, however it started: the menu
   // that started it may close after this and must not take the focus away (focus.ts). An edit
@@ -91,7 +206,8 @@ export function Composer({
     return field.current ? holdFocus(field.current) : undefined;
   }, [editing]);
 
-  // A failed message's text came back to the field: the caret waits at its end.
+  // A failed message's text came back to the field, or a reply started: the caret waits at its
+  // end.
   useEffect(() => {
     if (!focusRequest || !field.current) return;
     return holdFocus(field.current);
@@ -99,19 +215,22 @@ export function Composer({
 
   // Esc during an edit (in the field, on "Vazgeç" or on the save button) leaves the edit, never
   // the panel around it (FIX2: the friends panel closed instead; edit-escape.ts). The field keeps
-  // the focus: "Vazgeç" goes away with the edit.
+  // the focus: "Vazgeç" goes away with the edit. Esc while replying takes the reply away.
   const cancelEdit = useRef(onCancelEdit);
   cancelEdit.current = onCancelEdit;
+  const cancelReply = useRef(onCancelReply);
+  cancelReply.current = onCancelReply;
   useEffect(() => {
-    if (!editing) return;
+    if (!editing && !reply) return;
     return leaveOnEscape(
       (target) => inside(field.current?.form, target),
       () => {
-        cancelEdit.current();
+        if (editing) cancelEdit.current();
+        else cancelReply.current();
         field.current?.focus({ preventScroll: true });
       },
     );
-  }, [editing]);
+  }, [editing, reply]);
 
   // The field grows with its lines (up to five), measured before paint.
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-measured when the text changes
@@ -123,19 +242,83 @@ export function Composer({
     element.style.height = `${Math.min(max, Math.max(LINE + PAD * 2, element.scrollHeight))}px`;
   }, [text]);
 
-  const problem = textProblem(text);
+  const problem = problemOf(text, links, hasExtras, limitedLinks);
   const length = chatLength(text);
   // An edit with its text unchanged has nothing to save.
   const ready = hasText(text) && !problem && !busy && (!editing || text.trim() !== editing.text);
+
+  // The card of the link being written, after a pause (only links that may go).
+  const [card, setCard] = useState<ChatCard | null>(null);
+  const firstLink = !problem && links ? findLinks(text, links).find((l) => l.ok) : undefined;
+  const cardUrl = firstLink?.url;
+  useEffect(() => {
+    if (!cardUrl || editing) {
+      setCard(null);
+      return;
+    }
+    if (writtenCards.has(cardUrl)) {
+      setCard(writtenCards.get(cardUrl) ?? null);
+      return;
+    }
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      void api.social
+        .chatCard(cardUrl)
+        .catch(() => null)
+        .then((found) => {
+          writtenCards.set(cardUrl, found);
+          if (alive) setCard(found);
+        });
+    }, CARD_AFTER_MS);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [cardUrl, editing]);
+
+  const remember = () => {
+    const element = field.current;
+    if (element) selection.current = { start: element.selectionStart, end: element.selectionEnd };
+  };
 
   const change = (value: string) => {
     setError(null);
     if (editing) setEditText(value);
     else setDraft(conv, value);
+    typing.wrote({
+      text: value,
+      focused: document.activeElement === field.current,
+      editing: Boolean(editing),
+      on: extras.typing && shareTyping && othersOnline,
+    });
+  };
+
+  // An emoji goes in at the caret (over a selection), the caret after it; the picker stays open.
+  const putEmoji = (emoji: string) => {
+    const current = editing ? editText : draft;
+    const { start, end } = selection.current;
+    const next = insertText(current, start, end, emoji, CHAT_TEXT_MAX);
+    if (!next) return;
+    change(next.value);
+    selection.current = { start: next.caret, end: next.caret };
+    window.requestAnimationFrame(() => field.current?.setSelectionRange(next.caret, next.caret));
+  };
+
+  const sendSticker = async (sticker: StickerData) => {
+    setError(null);
+    const answering = reply?.id;
+    onCancelReply();
+    onSent();
+    typing.sent();
+    try {
+      await api.social.chatSendSticker(conv, sticker.ref, answering);
+    } catch (failure) {
+      setError(friendlyError(failure, t("chat.failure.connection")).message);
+    }
   };
 
   const send = async (value: string, fromChip = false) => {
-    if (!hasText(value) || textProblem(value)) return;
+    if (!hasText(value) || problemOf(value, links, hasExtras, limitedLinks)) return;
     setError(null);
     if (editing) {
       if (editing.id === undefined) return;
@@ -154,10 +337,15 @@ export function Composer({
       }
       return;
     }
-    if (!fromChip) setDraft(conv, "");
+    const answering = fromChip ? undefined : reply?.id;
+    if (!fromChip) {
+      setDraft(conv, "");
+      onCancelReply();
+    }
     onSent();
+    typing.sent();
     try {
-      await api.social.chatSend(conv, value);
+      await api.social.chatSend(conv, value, answering);
     } catch (failure) {
       // Nothing went: the text comes back to the field with the reason.
       if (!fromChip) setDraft(conv, value);
@@ -184,14 +372,19 @@ export function Composer({
 
   const reason =
     error ??
-    (problem === "link"
-      ? t("chat.composer.link")
+    (problem === null
+      ? null
       : problem === "phone"
         ? t("chat.composer.phone")
         : problem === "long"
           ? t("chat.composer.long")
-          : null);
+          : "limited" in problem
+            ? t("chat2.links.limited", { when: opensIn(t, problem.limited, Date.now()) })
+            : hasExtras || problem.link !== "form"
+              ? t(`chat2.links.rules.${ruleWords(problem.link)}`)
+              : t("chat.composer.link"));
   const showCount = length >= CHAT_COUNT_FROM;
+  const stickers = extras.stickers && stickerSets.includes("pl1") && !editing;
 
   if (state.kind === "closed") {
     return (
@@ -230,7 +423,7 @@ export function Composer({
           </motion.p>
         ) : null}
       </AnimatePresence>
-      {crew && !editing ? (
+      {crew && !editing && !reply ? (
         <fieldset
           aria-label={t("chat.chips.label")}
           className={cn(
@@ -271,11 +464,31 @@ export function Composer({
               onClick={onCancelEdit}
             />
           </motion.div>
+        ) : reply && replyQuote ? (
+          <ReplyStrip key={`reply:${reply.key}`} quoted={replyQuote} onCancel={onCancelReply} />
+        ) : null}
+      </AnimatePresence>
+      <AnimatePresence initial={false}>
+        {card && !editing ? (
+          card.state === "refused" ? (
+            // The link leads somewhere the rules refuse: the others would see plain text.
+            <motion.p
+              key={card.url}
+              className="mb-1.5 px-1 text-[12px] text-ash-400"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: enter(0.2) }}
+              exit={{ opacity: 0, transition: leave(0.14) }}
+            >
+              {t("chat2.links.refused")}
+            </motion.p>
+          ) : (
+            <ComposerCard key={card.url} card={card} />
+          )
         ) : null}
       </AnimatePresence>
       <div
         className={cn(
-          "flex items-end gap-1 rounded-[var(--radius-panel)] border bg-obsidian-800/80 pr-[3px] transition-[border-color,box-shadow] duration-150",
+          "flex items-end gap-0.5 rounded-[var(--radius-panel)] border bg-obsidian-800/80 pr-[3px] transition-[border-color,box-shadow] duration-150",
           "border-white/10 hover:border-white/18 focus-within:border-gold-400/60 focus-within:ring-2 focus-within:ring-gold-400/20",
           reason &&
             "border-flare-400/55 focus-within:border-flare-400/70 focus-within:ring-flare-400/20",
@@ -285,8 +498,15 @@ export function Composer({
           ref={field}
           rows={1}
           value={text}
-          onChange={(event) => change(event.target.value)}
+          onChange={(event) => {
+            change(event.target.value);
+            remember();
+          }}
           onKeyDown={onKeyDown}
+          onSelect={remember}
+          onKeyUp={remember}
+          onClick={remember}
+          onBlur={remember}
           aria-label={t("chat.composer.label")}
           aria-invalid={reason ? true : undefined}
           aria-describedby={reason || showCount ? `composer-${conv}` : undefined}
@@ -295,6 +515,16 @@ export function Composer({
           className="min-w-0 flex-1 resize-none bg-transparent py-[9px] pl-3.5 text-[13.5px] leading-5 text-bone-50 outline-none placeholder:text-ash-500 [scrollbar-width:thin]"
           style={{ height: LINE + PAD * 2 }}
         />
+        <span className="mb-[3px] flex">
+          <EmojiPickerButton
+            onEmoji={(emoji) => {
+              putEmoji(emoji);
+              useEmojiPrefs.getState().usedEmoji(emoji);
+            }}
+            onSticker={stickers ? (sticker) => void sendSticker(sticker) : undefined}
+            returnFocus={() => field.current}
+          />
+        </span>
         <button
           type="submit"
           disabled={!ready}

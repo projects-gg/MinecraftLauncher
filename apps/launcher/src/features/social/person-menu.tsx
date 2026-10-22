@@ -81,6 +81,8 @@ export interface PersonPlace {
   from?: SocialPage;
   /** Asks in the row's own card (friend and crewmate rows); elsewhere the dialog below asks. */
   ask?: (question: PersonQuestion) => void;
+  /** A reaction's list (CHAT2): "Rapor et" carries the reaction as the evidence. */
+  reaction?: { conv: string; id: number; e: string };
 }
 
 // --- the questions ---------------------------------------------------------------------------------
@@ -555,7 +557,12 @@ export function personItems(
           icon: <Flag size={16} />,
           onSelect: () =>
             ui.openReport({
-              target: { kind: "player", id: person.id },
+              target: {
+                kind: "player",
+                id: person.id,
+                ...(place.reaction ? { reaction: place.reaction } : {}),
+              },
+              ...(place.reaction ? { reaction: { e: place.reaction.e } } : {}),
               name: person.name,
               person: {
                 name: person.name,

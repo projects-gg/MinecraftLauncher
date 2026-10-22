@@ -419,6 +419,52 @@ export function planMenu(input: PlanInput): Plan<PlanAction> {
   ]);
 }
 
+// --- a chat message (CHAT1, FIX2, CHAT2) ---------------------------------------------------------
+
+export type MessageAction = "react" | "reply" | "copy" | "copyLink" | "edit" | "delete" | "report";
+
+export interface MessageInput {
+  /** It takes reactions now (CHAT2: sent, younger than a week, while the extra is on). The right
+   * click shows the quick reactions for it, as a row above the others. */
+  reactable: boolean;
+  /** "Yanıtla" (CHAT2: sent, while the extra is on and the player may write here). */
+  repliable: boolean;
+  /** It has words to copy (a sticker has none). */
+  copyable: boolean;
+  /** It has a link that may be pressed: "Bağlantıyı kopyala". */
+  link: boolean;
+  /** The player's own, within 15 minutes, not a sticker. */
+  editable: boolean;
+  /** "Herkesten sil": the player's own within 7 days, or any in a crew they lead or moderate. */
+  deletable: boolean;
+  /** Someone else's message: "Rapor et". */
+  report: boolean;
+}
+
+/**
+ * A message's right click (Shift+F10) and its "…": the reactions and "Yanıtla" first (what a
+ * player does most), then copying, then the player's own edit and delete, then the report. A
+ * tombstone has no menu at all.
+ */
+export function messageMenu(input: MessageInput): Plan<MessageAction> {
+  return tidy<MessageAction>([
+    ...only<MessageAction>(input.reactable && { action: "react" }),
+    ...only<MessageAction>(input.repliable && { action: "reply" }),
+    null,
+    ...only<MessageAction>(
+      input.copyable && { action: "copy" },
+      input.link && { action: "copyLink" },
+    ),
+    null,
+    ...only<MessageAction>(
+      input.editable && { action: "edit" },
+      input.deletable && { action: "delete" },
+    ),
+    null,
+    ...only<MessageAction>(input.report && { action: "report" }),
+  ]);
+}
+
 // --- a crew call's row --------------------------------------------------------------------------
 
 export type CallAction = "yes" | "soon" | "no" | "join" | "open";

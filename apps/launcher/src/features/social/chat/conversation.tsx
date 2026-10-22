@@ -6,8 +6,14 @@
 // deletion shows at once). The conversation is read once it is on screen at its newest message. A
 // crew's conversation also shows quiet local lines at their time (its plans, TEAM5: "Ayşe
 // Cumartesi 21:00 için plan yaptı"); the service's chat holds nothing about them.
+//
+// CHAT2: "Ayşe yazıyor" floats over the composer; a friend's message counts as read after a
+// second on screen with the window in front (their side may show "Görüldü"), and "Görüldü" shows
+// under the player's last message the friend has seen. A quote's press scrolls to the message (an
+// older page loads first when it is not shown yet) and lights it once. Reactions show at once and
+// settle with the service's answer; a card is asked for when its message comes on screen.
 import { ArrowDown, CalendarBlank } from "@phosphor-icons/react";
-import { toast } from "@pl/ui";
+import { cn, toast } from "@pl/ui";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import {
   type ReactNode,
@@ -20,6 +26,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 import { announce, friendlyError } from "@/features/accounts/use-accounts";
+import { useEmojiPrefs } from "@/features/emoji";
 import { api } from "@/lib/api";
 import type { ChatMessage, SocialProfile } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
@@ -28,8 +35,14 @@ import type { PersonPlace } from "../person-menu";
 import { useSocialUi } from "../store";
 import { useChat } from "./chat-store";
 import { Composer, type ComposerState } from "./composer";
-import { crewOf, deletionOf, readable, sameGroup, tombstoneKind } from "./conversations";
-import { MessageRow, type RowActions } from "./message-row";
+import { crewOf, deletionOf, peerOf, readable, sameGroup, tombstoneKind } from "./conversations";
+import { useChatExtras, useLinkRules } from "./extras";
+import { MessageRow, type RowActions, type RowShared } from "./message-row";
+import { quickReactions, reactVerdict, withMyReaction } from "./reactions";
+import { type Quoted, quotedOf } from "./reply";
+import { READ_AFTER_MS, seenKey } from "./seen";
+import { onlineIn, useTyping, useTypingFeed, writersOf } from "./typing";
+import { TypingPill } from "./typing-pill";
 
 /** Scrolled this close to the newest message counts as "at the bottom". */
 const BOTTOM_SLACK = 56;
@@ -100,6 +113,15 @@ export function Conversation({
   const thread = useChat((s) => s.threads[conv]);
   const edits = useChat((s) => s.edits);
   const deleting = useChat((s) => s.deleting);
+  const reacting = useChat((s) => s.reacting);
+  const replyingKey = useChat((s) => s.replying[conv]);
+  const setReplying = useChat((s) => s.setReplying);
+  const startReacting = useChat((s) => s.startReacting);
+  const endReacting = useChat((s) => s.endReacting);
+  const extras = useChatExtras();
+  const linkRules = useLinkRules();
+  const recentEmoji = useEmojiPrefs((s) => s.recentEmoji);
+  useTypingFeed();
   const load = useChat((s) => s.load);
   const loadOlder = useChat((s) => s.loadOlder);
   const setDeleting = useChat((s) => s.setDeleting);
@@ -114,6 +136,14 @@ export function Conversation({
   const [now, setNow] = useState(() => Date.now());
   const open = useSocialUi((s) => s.open);
   const me = useSocialUi((s) => s.view.me?.id);
+  const shareRead = useSocialUi((s) => s.view.me?.privacy.shareRead !== false);
+  const peerRead = useSocialUi(
+    (s) => s.view.chat?.conversations.find((c) => c.id === conv)?.peerRead,
+  );
+  const writable = composer.kind === "open";
+  // Who is online now (a writer who went offline stops "yazıyor").
+  const friends = useSocialUi((s) => s.view.friends);
+  const crews = useSocialUi((s) => s.view.crews);
   // Whose deletion a crew chat's tombstone tells: its leader's or a moderator's.
   const team = useSocialUi((s) => {
     const id = crewOf(conv);
@@ -232,16 +262,22 @@ export function Conversation({
   );
   useEffect(() => {
     if (!onScreen || !open || unread === 0 || away || !thread?.loaded) return;
+    const after = extras.reads ? READ_AFTER_MS : 250;
     const mark = () => {
       if (document.hasFocus()) void api.social.chatRead(conv);
     };
-    const timer = window.setTimeout(mark, 250);
-    window.addEventListener("focus", mark);
+    let timer = window.setTimeout(mark, after);
+    // The window came to front: counted from now (a quick look in passing is not a read).
+    const again = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(mark, after);
+    };
+    window.addEventListener("focus", again);
     return () => {
       window.clearTimeout(timer);
-      window.removeEventListener("focus", mark);
+      window.removeEventListener("focus", again);
     };
-  }, [onScreen, open, unread, away, thread?.loaded, conv]);
+  }, [onScreen, open, unread, away, thread?.loaded, conv, extras.reads]);
 
   const onScroll = () => {
     const element = scroller.current;
@@ -256,6 +292,34 @@ export function Conversation({
     }
     before.current.top = element.scrollTop;
   };
+
+  const [flash, setFlash] = useState<{ key: string; n: number } | null>(null);
+  const jumping = useRef<{ key: string; pages: number } | null>(null);
+  const jumpTo = useCallback(
+    (key: string) => {
+      const element = scroller.current?.querySelector<HTMLElement>(
+        `[data-key="${CSS.escape(key)}"]`,
+      );
+      if (element) {
+        jumping.current = null;
+        element.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+        setFlash((f) => ({ key, n: (f?.n ?? 0) + 1 }));
+        return;
+      }
+      // Not shown yet: an older page (at most ten of them) and try again.
+      const state = useChat.getState().threads[conv];
+      const pages = jumping.current?.key === key ? jumping.current.pages : 0;
+      if (!state?.more || pages >= 10) return;
+      jumping.current = { key, pages: pages + 1 };
+      void loadOlder(conv);
+    },
+    [conv, loadOlder, reduce],
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tries again when a page came
+  useEffect(() => {
+    const waiting = jumping.current;
+    if (waiting && !thread?.older) jumpTo(waiting.key);
+  }, [messages, thread?.older, jumpTo]);
 
   const toBottom = useCallback(
     (smooth: boolean) => {
@@ -297,6 +361,36 @@ export function Conversation({
         });
       },
       onDiscard: (message) => void api.social.chatDiscard(message.key),
+      onReply: (message) => {
+        setEditing(null);
+        setReplying(conv, message.key);
+        setFocusRequest((n) => n + 1);
+      },
+      onReact: (message, emoji, on) => {
+        if (message.id === undefined || !me || !extras.reactions || !writable) return;
+        const shown = useChat.getState().reacting[message.key] ?? message.reactions;
+        if (on) {
+          const verdict = reactVerdict(shown, emoji);
+          if (verdict === "mine" || verdict === "kinds" || verdict === "refused") {
+            toast(t(`chat2.reactions.${verdict === "mine" ? "full" : verdict}`));
+            return;
+          }
+          useEmojiPrefs.getState().usedEmoji(emoji);
+        }
+        // Shown at once; once every change on it is answered the message's own reactions show
+        // (the service's, or the old ones when it refused).
+        startReacting(message.key, withMyReaction(shown, emoji, me, on));
+        void api.social
+          .chatReact(conv, message.id, emoji, on)
+          .catch((error) => toast.error(friendlyError(error, t("chat.failure.connection")).message))
+          .finally(() => endReacting(message.key));
+      },
+      onJump: (key) => jumpTo(key),
+      onUnfurl: (message) =>
+        api.social.chatUnfurl(conv, message.key).then(
+          () => true,
+          () => false,
+        ),
       // The text goes back to the field to be written another way: the caret waits at its end.
       onRewrite: (message) => {
         setEditing(null);
@@ -305,8 +399,75 @@ export function Conversation({
         void api.social.chatDiscard(message.key);
       },
     }),
-    [conv, onReport, setDraft, setDeleting, t],
+    [
+      conv,
+      onReport,
+      setDraft,
+      setDeleting,
+      setReplying,
+      startReacting,
+      endReacting,
+      jumpTo,
+      me,
+      t,
+      extras.reactions,
+      writable,
+    ],
   );
+
+  const shared = useMemo<RowShared>(
+    () => ({
+      conv,
+      extras,
+      links: linkRules,
+      me,
+      writable,
+      quick: quickReactions(recentEmoji),
+      people,
+    }),
+    [conv, extras, linkRules, me, writable, recentEmoji, people],
+  );
+  const byId = useMemo(() => {
+    const map = new Map<number, ChatMessage>();
+    for (const message of messages) if (message.id !== undefined) map.set(message.id, message);
+    return map;
+  }, [messages]);
+  const quotes = useMemo(() => {
+    const map = new Map<string, Quoted>();
+    const nameOf = (id: string) => (id === me ? t("chat2.reply.you") : people(id).name);
+    for (const message of messages) {
+      if (message.reply) map.set(message.key, quotedOf(message.reply, byId, nameOf));
+    }
+    return map;
+  }, [messages, byId, me, people, t]);
+  const seen = !crew && extras.reads && shareRead ? seenKey(messages, peerRead) : null;
+  const writersHere = useTyping((s) => s.writers[conv]);
+  const online = onlineIn(friends, crews);
+  const writers = extras.typing
+    ? writersOf({ [conv]: writersHere ?? {} }, conv, online).filter((id) => id !== me)
+    : [];
+  // "Yazıyor…" goes only while someone else there is online.
+  const crewId = crewOf(conv);
+  const othersOnline = crewId
+    ? crews.some((c) => c.id === crewId && c.members.some((m) => !m.me && m.state !== "offline"))
+    : friends.some((f) => f.id === peerOf(conv, me ?? "") && f.state !== "offline");
+  // A reply waits only while replies are on (Studio may switch them off meanwhile).
+  const replyTo =
+    extras.replies && replyingKey ? messages.find((m) => m.key === replyingKey) : undefined;
+  useEffect(() => {
+    if (!extras.replies && replyingKey) setReplying(conv, null);
+  }, [extras.replies, replyingKey, conv, setReplying]);
+  const replyQuote = useMemo<Quoted | null>(() => {
+    if (!replyTo) return null;
+    return {
+      name: replyTo.mine ? t("chat2.reply.you") : people(replyTo.from).name,
+      text: replyTo.text,
+      sticker: replyTo.sticker,
+      deleted: Boolean(replyTo.deleted),
+      missing: false,
+      key: replyTo.key,
+    };
+  }, [replyTo, people, t]);
 
   const editLast = () => {
     const mine = [...messages]
@@ -323,7 +484,11 @@ export function Conversation({
         onScroll={onScroll}
         className="relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain pt-2 [scrollbar-gutter:stable]"
       >
-        <div ref={content} className="flex min-h-full flex-col justify-end">
+        {/* With "yazıyor…" on, the list keeps a line free under its newest message for it. */}
+        <div
+          ref={content}
+          className={cn("flex min-h-full flex-col justify-end", extras.typing && "pb-7")}
+        >
           {thread?.loaded && !items.length ? (
             <div className="flex flex-1 items-center justify-center px-6 py-10">{empty}</div>
           ) : null}
@@ -425,6 +590,12 @@ export function Conversation({
                         }}
                         actions={actions}
                         nowMs={now}
+                        shared={shared}
+                        quoted={quotes.get(message.key) ?? null}
+                        reactions={reacting[message.key] ?? message.reactions}
+                        seen={message.key === seen}
+                        fresh={rising}
+                        flash={flash?.key === message.key ? flash.n : 0}
                       />
                     </motion.li>
                   );
@@ -451,6 +622,7 @@ export function Conversation({
             </motion.button>
           ) : null}
         </AnimatePresence>
+        <TypingPill writers={writers} people={people} />
         <Composer
           conv={conv}
           crew={crew}
@@ -461,6 +633,10 @@ export function Conversation({
           onCancelEdit={() => setEditing(null)}
           onEditLast={editLast}
           onSent={() => toBottom(false)}
+          replyTo={replyTo?.id !== undefined ? replyTo : null}
+          replyQuote={replyQuote}
+          onCancelReply={() => setReplying(conv, null)}
+          othersOnline={othersOnline}
         />
       </div>
     </div>

@@ -4,7 +4,7 @@
 import { BellSlash, Broom, CaretLeft, DotsThree, Flag, SpeakerHigh } from "@phosphor-icons/react";
 import { Button, cn, Dialog, IconButton, Menu, type MenuItem, toast } from "@pl/ui";
 import { Dialog as RadixDialog } from "radix-ui";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import discordSymbol from "@/assets/brand/discord-symbol-white.png";
 import { api } from "@/lib/api";
@@ -20,6 +20,7 @@ import { useSocialPrefs, useSocialUi } from "../store";
 import type { ComposerState } from "./composer";
 import { Conversation, useUnreadAtOpen } from "./conversation";
 import { chatMutedNow, peerOf } from "./conversations";
+import { messageLine } from "./preview";
 
 /** Discord's mark in its own colour, drawn from the official symbol as a mask. */
 export function DiscordGlyph({ height = 11, className }: { height?: number; className?: string }) {
@@ -42,17 +43,23 @@ export function DiscordGlyph({ height = 11, className }: { height?: number; clas
 /** Who wrote a message, as the lists know them (the player, friends, crewmates). */
 export function usePeople(): (id: string) => Pick<SocialProfile, "name" | "avatar" | "avatarUrl"> {
   const { t } = useTranslation();
-  const view = useSocialUi((s) => s.view);
-  return (id: string) => {
-    if (view.me && id === view.me.id) return view.me;
-    const friend = view.friends.find((f) => f.id === id);
-    if (friend) return friend;
-    for (const crew of view.crews) {
-      const member = crew.members.find((m) => m.id === id);
-      if (member) return member;
-    }
-    return { name: t("chat.list.someone"), avatar: "discord" };
-  };
+  const me = useSocialUi((s) => s.view.me);
+  const friends = useSocialUi((s) => s.view.friends);
+  const crews = useSocialUi((s) => s.view.crews);
+  // One function while the lists stay the same (the rows it reaches are memoized).
+  return useCallback(
+    (id: string) => {
+      if (me && id === me.id) return me;
+      const friend = friends.find((f) => f.id === id);
+      if (friend) return friend;
+      for (const crew of crews) {
+        const member = crew.members.find((m) => m.id === id);
+        if (member) return member;
+      }
+      return { name: t("chat.list.someone"), avatar: "discord" };
+    },
+    [me, friends, crews, t],
+  );
 }
 
 /** A sentence that starts with a time ("yarın 14:30'a kadar …") starts with a capital. */
@@ -304,7 +311,7 @@ function ClearAsk({
 }
 
 export function ChatPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { conv, peer } = useChatPeer();
   const openReport = useSocialUi((s) => s.openReport);
   const writable = useSocialUi(
@@ -322,7 +329,7 @@ export function ChatPage() {
       target: { kind: "message", conv, id: message.id },
       name: sender.name,
       person: sender,
-      text: message.text,
+      text: messageLine(message, t, i18n.language),
     });
   };
   return (

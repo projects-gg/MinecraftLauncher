@@ -1,6 +1,7 @@
-// Chat extras (CHAT2): the emoji and sticker picker, stickers. Short, sentence case. Names are
-// never followed by a suffix (tr-chat.ts rule). Emoji names come from CLDR, sticker names from
-// the sticker manifest; neither is here.
+// Chat extras (CHAT2): the emoji and sticker picker, stickers, replies, reactions, "yazıyor…",
+// "Görüldü", links and their cards. Short, sentence case. Names are never followed by a suffix
+// (tr-chat.ts rule): sentences put them where none is needed. Emoji names come from CLDR, sticker
+// names from the sticker manifest; neither is here.
 export const trChat2 = {
   picker: {
     open: "Emoji ve çıkartmalar",
@@ -19,6 +20,7 @@ export const trChat2 = {
     results_one: "{{count}} emoji bulundu",
     results_other: "{{count}} emoji bulundu",
     groups: "Gruplar",
+    react: "Tepki ver",
   },
   groups: {
     smileys: "İfadeler ve duygular",
@@ -48,5 +50,99 @@ export const trChat2 = {
     recent: "Son kullanılanlar",
     label: "{{name}} çıkartması",
     unknown: "Çıkartma",
+    preview: "Çıkartma: {{name}}",
+    previewMine: "Sen: Çıkartma, {{name}}",
+    sent: "{{name}} bir çıkartma gönderdi: {{sticker}}",
+    sentMine: "Bir çıkartma gönderdin: {{sticker}}",
+  },
+  toolbar: {
+    label: "Mesaj",
+    react: "Tepki ver",
+    reply: "Yanıtla",
+    more: "Seçenekler",
+  },
+  reply: {
+    replying: "Yanıtlanıyor: {{name}}",
+    cancel: "Yanıtı kaldır",
+    earlier: "Önceki bir mesaj",
+    deleted: "Mesaj silindi",
+    sticker: "Çıkartma",
+    quoted: "Yanıtlanan mesaj",
+    jump: "Yanıtlanan mesaja git",
+    you: "Sen",
+  },
+  reactions: {
+    give: "{{emoji}} ile tepki ver",
+    more: "Başka bir emoji",
+    chip_one: "{{emoji}}, {{count}} kişi",
+    chip_other: "{{emoji}}, {{count}} kişi",
+    chipMineAlone: "{{emoji}}, sen",
+    chipMine_one: "{{emoji}}, sen ve {{count}} kişi",
+    chipMine_other: "{{emoji}}, sen ve {{count}} kişi",
+    people_one: "{{count}} kişi",
+    people_other: "{{count}} kişi",
+    you: "Sen",
+    meToo: "Ben de {{emoji}}",
+    remove: "Tepkimi kaldır",
+    full: "Bir mesaja en çok 5 tepki verebilirsin.",
+    kinds: "Bu mesajda yeni bir tepkiye yer yok.",
+    refused: "Bu emoji tepki olarak verilemez.",
+    list: "Tepki verenler",
+  },
+  typing: {
+    one: "{{name}} yazıyor",
+    two: "{{first}} ve {{second}} yazıyor",
+    more_one: "{{first}}, {{second}} ve {{count}} kişi daha yazıyor",
+    more_other: "{{first}}, {{second}} ve {{count}} kişi daha yazıyor",
+    list: "yazıyor…",
+  },
+  seen: "Görüldü",
+  links: {
+    warning: "Bu bağlantı {{domain}} sitesine gidiyor.",
+    open: "Aç",
+    cancel: "Vazgeç",
+    refused: "Bu bağlantı açılamaz.",
+    copy: "Bağlantıyı kopyala",
+    copied: "Bağlantı kopyalandı",
+    card: "{{site}}: {{title}}, bağlantı",
+    cardPlain: "{{site}}, bağlantı",
+    rules: {
+      off: "Bağlantılar şu an kapalı.",
+      form: "Bağlantı gönderilemez.",
+      formHint: "Bağlantı gönderilemez. https:// ile yaz.",
+      count: "Bir mesajda en çok 3 bağlantı olabilir.",
+      http: "Yalnız https bağlantıları gönderilebilir.",
+      long: "Bu bağlantı çok uzun.",
+      shortener: "Kısaltılmış bağlantılar gönderilemez.",
+      lookalike: "Bu bağlantı sahte bir siteye benziyor.",
+      file: "Dosya bağlantıları gönderilemez.",
+      invite: "Discord davetleri şu an gönderilemez.",
+      other: "Bu bağlantı gönderilemez.",
+    },
+    limited: "Discord hesabın yeni olduğu için bağlantı gönderemezsin. {{when}}",
+  },
+  failure: {
+    stickers: "Bugünlük çıkartma hakkın doldu.",
+    links: "Bugünlük bağlantılı mesaj hakkın doldu.",
+    limitedLinks: "Discord hesabın yeni olduğu için bağlantı gönderemezsin.",
+    featureOff: "Bu özellik şu an kapalı.",
+  },
+  report: {
+    reaction: "Tepkisi: {{emoji}}",
+    reactionReason: "Uygunsuz tepki",
+  },
+  /** The limited account's list ("Sınırlı hesap"): CHAT2's items. */
+  limited: {
+    chatLinks: "Sohbette bağlantı gönderemezsin",
+    chatStickers_one: "Günde en çok {{count}} çıkartma gönderebilirsin",
+    chatStickers_other: "Günde en çok {{count}} çıkartma gönderebilirsin",
+    chatReactions_one: "Günde en çok {{count}} tepki verebilirsin",
+    chatReactions_other: "Günde en çok {{count}} tepki verebilirsin",
+  },
+  privacy: {
+    seen: "Görüldü bilgisi",
+    typing: "Yazıyor bilgisi",
+    note: "Kapatırsan sen de göremezsin.",
+    both: "İkisi de karşılıklı: kapatırsan sen de göremezsin.",
   },
 };

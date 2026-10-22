@@ -32,6 +32,8 @@ export interface ReportRequest {
   text?: string;
   /** Reported from a plan card (FIX2): the plan's time as shown, and its note. */
   plan?: { when: string; note?: string };
+  /** Reported from a reaction's list (CHAT2): the reaction. */
+  reaction?: { e: string };
   /** A crew invite: the player may report the inviter instead of the crew. */
   inviter?: {
     target: ReportTarget;

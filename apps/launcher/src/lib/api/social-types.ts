@@ -89,7 +89,14 @@ export interface SocialMe extends SocialProfile {
   shareLink?: string;
   qr?: QrCode;
   status: StatusMode;
-  privacy: { shareServer: boolean; shareLastSeen: boolean };
+  /** `shareRead` ("Görüldü bilgisi") and `shareTyping` ("Yazıyor bilgisi"): CHAT2, both ways
+   * (off: neither shown nor seen); absent on a service without them. */
+  privacy: {
+    shareServer: boolean;
+    shareLastSeen: boolean;
+    shareRead?: boolean;
+    shareTyping?: boolean;
+  };
   backup?: BackupMeta;
   /** A limited account ("Sınırlı hesap", a new Discord account); only the player sees it. */
   limited?: LimitedAccount;
@@ -105,7 +112,13 @@ export type LimitedKey =
   /** Making or renewing a crew's invite link (TEAM5). */
   | "crewLink"
   /** Making crew plans; answering them is fine (TEAM5). */
-  | "crewPlans";
+  | "crewPlans"
+  /** CHAT2: links in chat messages. */
+  | "chatLinks"
+  /** CHAT2: 20 stickers a day (`perDay`). */
+  | "chatStickers"
+  /** CHAT2: 100 reaction changes a day (`perDay`). */
+  | "chatReactions";
 
 export interface LimitedAccount {
   /** Unix seconds: the limits lift by themselves then. */
@@ -134,8 +147,16 @@ export type ReportReason =
 
 /** What the player reports ("Rapor et"). */
 export type ReportTarget =
-  /** `plan`: reported from a plan card (its maker; FIX2), the plan as the moderators' evidence. */
-  | { kind: "player"; id: string; plan?: { crew: string; id: string } }
+  /**
+   * `plan`: reported from a plan card (its maker; FIX2), the plan as the moderators' evidence;
+   * `reaction`: from a reaction's list (who gave it; CHAT2), the reaction as the evidence.
+   */
+  | {
+      kind: "player";
+      id: string;
+      plan?: { crew: string; id: string };
+      reaction?: { conv: string; id: number; e: string };
+    }
   /** `code`: the crew was looked up by code. */
   | { kind: "crew"; id: string; code?: string }
   /** A message as this computer holds it (with the messages before it as context). */
@@ -154,7 +175,15 @@ export type SendFailure =
   | "muted"
   | "off"
   | "notAllowed"
-  | "connection";
+  | "connection"
+  /** CHAT2: the day's stickers are used up (100; 20 for a limited account). */
+  | "stickers"
+  /** CHAT2: the day's messages with links are used up (30). */
+  | "links"
+  /** CHAT2: a limited account sends no links. */
+  | "limitedLinks"
+  /** CHAT2: Studio switched this extra off (replies, stickers, links). */
+  | "featureOff";
 
 /** One message of a conversation. */
 export interface ChatMessage {
@@ -171,6 +200,8 @@ export interface ChatMessage {
   edited: boolean;
   state: "sent" | "sending" | "failed";
   failure?: SendFailure;
+  /** With `failure: "link"`: the link rule that refused it (chat-links.json), for the right words. */
+  failureRule?: string;
   /** Unix ms: may be edited until then (the player's own, 15 minutes). */
   editUntil?: number;
   /** Unix ms: may be deleted for everyone until then (own, or any in a crew led or moderated). */
@@ -178,6 +209,106 @@ export interface ChatMessage {
   /** Deleted for everyone: a tombstone in its place (the text is gone, nothing may be done with
    * it). `by`: who deleted it, a user id, `staff` (Projects' moderators) or empty (not known). */
   deleted?: ChatDeletion;
+  /** CHAT2: a sticker ("pl1/gg") in place of text (`text` is empty); never edited. */
+  sticker?: string;
+  /** CHAT2: the message it answers, as this computer holds it. */
+  reply?: ChatReply;
+  /** CHAT2: its reactions as the player sees them (people they block or who block them left
+   * out): kinds in the order they were first given, people in the order they reacted. */
+  reactions?: ChatReaction[];
+  /** CHAT2: its first link's preview card, kept with it on this computer once asked for. */
+  card?: ChatCard;
+}
+
+/** The message a reply answers (CHAT2): the service keeps only the link, the text is this
+ * computer's own copy. */
+export interface ChatReply {
+  id: number;
+  from: string;
+  /** Its key on this computer, when it holds it (to scroll to it). */
+  key?: string;
+  /** What it said, as held here. */
+  text?: string;
+  sticker?: string;
+  /** Deleted for everyone: "Mesaj silindi". */
+  deleted: boolean;
+  /** Not on this computer (older than its history, or from someone no longer seen): "Önceki bir
+   * mesaj", nothing to scroll to. */
+  missing: boolean;
+}
+
+/** One kind of reaction on a message (CHAT2). */
+export interface ChatReaction {
+  /** One fully qualified emoji. */
+  e: string;
+  /** User ids, in the order they reacted. */
+  by: string[];
+  /** The player is among them. */
+  mine: boolean;
+}
+
+/** The site icons a card may name (the launcher's own, never a site's favicon). */
+export type ChatCardIcon =
+  | "projects"
+  | "youtube"
+  | "twitch"
+  | "kick"
+  | "modrinth"
+  | "discord"
+  | "instagram"
+  | "tiktok"
+  | "x"
+  | "globe";
+
+/** A link's preview card, as the hub made it (CHAT2 §9): never fetched by this computer. */
+export interface ChatCard {
+  /** `ready`: the card; `plain`: nothing to show (the icon and the domain); `refused`: the link
+   * leads somewhere the rules refuse (plain text, not clickable, "Bu bağlantı açılamaz."). */
+  state: "ready" | "plain" | "refused";
+  url: string;
+  /** A name to show ("YouTube"), else the domain. */
+  site: string;
+  icon: ChatCardIcon;
+  /** `video` and `stream`: a 16:9 picture; `project`: a square icon beside the text; `page`:
+   * text only. */
+  kind: "video" | "stream" | "project" | "page";
+  title?: string;
+  author?: string;
+  desc?: string;
+  /** A `data:image/…;base64,` picture (trusted sites only), `w` × `h` pixels. */
+  image?: string;
+  w?: number;
+  h?: number;
+  /** With `refused`: the rule. */
+  rule?: string;
+}
+
+/** What chat offers beyond CHAT1 right now: the service took the capability and Studio has it on
+ * (CHAT2 §2). Absent: an older service, none of them. */
+export interface ChatExtras {
+  replies: boolean;
+  stickers: boolean;
+  reactions: boolean;
+  typing: boolean;
+  reads: boolean;
+  links: boolean;
+}
+
+/** The link rules the service applies now (chat-links.json's version and Studio's lists). */
+export interface ChatLinkRules {
+  rules: number;
+  /** Hosts (with their subdomains) whose links open without the warning. */
+  trusted: string[];
+  /** Hosts, or a host and the start of a path, that no link may lead to. */
+  blocked: string[];
+  /** Discord invites may be linked. */
+  invites: boolean;
+}
+
+/** Someone writes in a conversation ("yazıyor…", CHAT2 §4): shown for 6 seconds after the last. */
+export interface ChatTyping {
+  conv: string;
+  by: string;
 }
 
 /** Who deleted a message for everyone, and when (Unix ms on this computer's clock). */
@@ -196,13 +327,23 @@ export interface Conversation {
   /** Who or what it is with, as last known (for one no longer in the lists). */
   title?: string;
   /** The newest message; `deletedBy` (who deleted it, as `ChatDeletion.by`) when it is a
-   * tombstone, its text empty then. */
-  last?: { from: string; mine: boolean; text: string; at: number; deletedBy?: string };
+   * tombstone, its text empty then; `sticker` (CHAT2) for a sticker ("Çıkartma · GG"). */
+  last?: {
+    from: string;
+    mine: boolean;
+    text: string;
+    at: number;
+    deletedBy?: string;
+    sticker?: string;
+  };
   unread: number;
   /** The player may write here now (still friends, still in the crew). */
   writable: boolean;
   /** A message of the player's did not go. */
   failed: boolean;
+  /** CHAT2, a direct conversation: the friend has seen up to this message id (shared while both
+   * keep "Görüldü bilgisi" on). */
+  peerRead?: number;
 }
 
 export interface ChatState {
@@ -215,6 +356,12 @@ export interface ChatState {
   /** Unix seconds: a moderator muted the player until then. */
   mutedUntil?: number;
   conversations: Conversation[];
+  /** CHAT2: what is on beyond CHAT1 (absent: none). */
+  extras?: ChatExtras;
+  /** CHAT2: the sticker sets the service takes ("pl1"). */
+  stickerSets?: string[];
+  /** CHAT2: the link rules while links are on. */
+  links?: ChatLinkRules;
 }
 
 /** A conversation's messages, oldest first (`more`: older ones remain on this computer). */
@@ -697,7 +844,12 @@ export interface SocialApi {
   unblock(id: string): Promise<void>;
   rotateCode(): Promise<string>;
   setStatus(status: StatusMode): Promise<void>;
-  setPrivacy(change: { shareServer?: boolean; shareLastSeen?: boolean }): Promise<void>;
+  setPrivacy(change: {
+    shareServer?: boolean;
+    shareLastSeen?: boolean;
+    shareRead?: boolean;
+    shareTyping?: boolean;
+  }): Promise<void>;
   setAvatar(avatar: string): Promise<void>;
   invite(id: string): Promise<"delivered" | "queued">;
   dismissInvite(id: string): Promise<void>;
@@ -786,8 +938,24 @@ export interface SocialApi {
   onChat(listener: (change: ChatChange) => void): () => void;
   /** A conversation's newest messages, or those before a message id. */
   chatPage(conv: string, before?: number): Promise<ChatPage>;
-  /** Sends a message: it shows at once (on its way). Returns its key. */
-  chatSend(conv: string, text: string): Promise<string>;
+  /** Sends a message (CHAT2: as a reply to message `reply`): it shows at once (on its way).
+   * Returns its key. */
+  chatSend(conv: string, text: string, reply?: number): Promise<string>;
+  /** CHAT2: sends a sticker ("pl1/gg"), maybe as a reply; it shows at once. Returns its key. */
+  chatSendSticker(conv: string, sticker: string, reply?: number): Promise<string>;
+  /** CHAT2: adds the player's reaction to a message (`on`), or takes it back. */
+  chatReact(conv: string, id: number, emoji: string, on: boolean): Promise<void>;
+  /** CHAT2: the player writes here (a key in a box with text and focus); the backend sends it at
+   * most every 4 seconds, and only when someone in the conversation can see it. */
+  chatTyping(conv: string): void;
+  /** CHAT2: the card of a message's first link (once, when it comes on screen; the message comes
+   * back with `card`). */
+  chatUnfurl(conv: string, key: string): Promise<void>;
+  /** CHAT2: someone writes in a conversation. Returns an unsubscribe function. */
+  onChatTyping(listener: (typing: ChatTyping) => void): () => void;
+  /** CHAT2: the card of a link the player is writing (the composer's preview); null when the
+   * hub has nothing to show. */
+  chatCard(url: string): Promise<ChatCard | null>;
   /** "Tekrar dene" on a message that did not go. */
   chatRetry(key: string): Promise<void>;
   /** Drops a message that did not go. */

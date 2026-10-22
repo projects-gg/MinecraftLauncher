@@ -12,6 +12,7 @@ import { useSocialUi } from "../store";
 import { useComposerNotice, useComposerState, usePeople } from "./chat-page";
 import { type ChatLine, Conversation, useUnreadAtOpen } from "./conversation";
 import { crewConversation } from "./conversations";
+import { messageLine } from "./preview";
 
 /** "Bugün 21:00 için plan yaptın": the line starts with its time, so it starts with a capital. */
 function capitalized(text: string): string {
@@ -20,7 +21,7 @@ function capitalized(text: string): string {
 }
 
 export function CrewChat({ team, onScreen }: { team: SocialTeam; onScreen: boolean }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const conv = crewConversation(team.id);
   const openReport = useSocialUi((s) => s.openReport);
   const people = usePeople();
@@ -55,7 +56,7 @@ export function CrewChat({ team, onScreen }: { team: SocialTeam; onScreen: boole
       target: { kind: "message", conv, id: message.id },
       name: sender.name,
       person: sender,
-      text: message.text,
+      text: messageLine(message, t, i18n.language),
     });
   };
   return (
