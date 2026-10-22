@@ -67,6 +67,7 @@ import {
   planWhen,
   timeOn,
 } from "./crew-plans";
+import { leaveOnEscape } from "./edit-escape";
 import { JoinButton } from "./friend-row";
 import { joinOrAsk, PROJECTS, useThere } from "./join-dialog";
 import { limitOf, opensIn } from "./limits";
@@ -403,15 +404,11 @@ function NoteInput({
   latest.current = onEscape;
   useEffect(() => {
     if (!focused || !latest.current) return;
-    // Radix listens for Esc on the document in the capture phase: the window comes first.
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      latest.current?.();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    // Before the panel hears it; an IME's Esc stays the IME's (edit-escape.ts).
+    return leaveOnEscape(
+      () => true,
+      () => latest.current?.(),
+    );
   }, [focused]);
   const length = planNoteLength(value);
   const showCount = length >= PLAN_NOTE_COUNT_FROM;

@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import { friendlyError } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import type { ChatMessage } from "@/lib/api/social-types";
+import { inside, leaveOnEscape } from "../edit-escape";
 import { enter, leave, rise, useSocialMotion } from "../motion";
 import { useChat } from "./chat-store";
 import { holdFocus } from "./focus";
@@ -96,6 +97,22 @@ export function Composer({
     return holdFocus(field.current);
   }, [focusRequest]);
 
+  // Esc during an edit (in the field, on "Vazgeç" or on the save button) leaves the edit, never
+  // the panel around it (FIX2: the friends panel closed instead; edit-escape.ts). The field keeps
+  // the focus: "Vazgeç" goes away with the edit.
+  const cancelEdit = useRef(onCancelEdit);
+  cancelEdit.current = onCancelEdit;
+  useEffect(() => {
+    if (!editing) return;
+    return leaveOnEscape(
+      (target) => inside(field.current?.form, target),
+      () => {
+        cancelEdit.current();
+        field.current?.focus({ preventScroll: true });
+      },
+    );
+  }, [editing]);
+
   // The field grows with its lines (up to five), measured before paint.
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-measured when the text changes
   useLayoutEffect(() => {
@@ -152,12 +169,6 @@ export function Composer({
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
       if (ready) void send(text);
-      return;
-    }
-    if (event.key === "Escape" && editing) {
-      event.preventDefault();
-      event.stopPropagation();
-      onCancelEdit();
       return;
     }
     if (event.key === "ArrowUp" && !editing && !text) {

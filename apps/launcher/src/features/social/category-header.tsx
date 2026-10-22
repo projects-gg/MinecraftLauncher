@@ -37,6 +37,7 @@ import {
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useCalm } from "@/features/accounts/calm";
+import { inside, leaveOnEscape } from "./edit-escape";
 import { GROUP_NAME_MAX } from "./groups";
 import { openMenuFromKey } from "./menu-key";
 import { categoryMenu, rowsOf } from "./menus";
@@ -81,6 +82,18 @@ function NameField({
     input.current?.focus();
     input.current?.select();
   }, []);
+  // Esc in the field or on its buttons gives up the name, never the panel around it: Radix hears
+  // Esc before React does (edit-escape.ts; FIX2: the friends panel closed instead).
+  const cancel = useRef(onCancel);
+  cancel.current = onCancel;
+  useEffect(
+    () =>
+      leaveOnEscape(
+        (target) => inside(input.current?.form, target),
+        () => cancel.current(),
+      ),
+    [],
+  );
   const send = () => {
     const name = value.replace(/\s+/g, " ").trim();
     if (name) onSubmit(name);
@@ -101,13 +114,6 @@ function NameField({
         aria-label={label}
         placeholder={label}
         onChange={(event) => setValue(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.preventDefault();
-            event.stopPropagation();
-            onCancel();
-          }
-        }}
         className="h-8 min-w-0 flex-1 rounded-md border border-white/10 bg-obsidian-800/80 px-2.5 text-[13px] text-bone-50 transition-[border-color,box-shadow] duration-150 outline-none placeholder:text-ash-500 hover:border-white/16 focus:border-gold-400/70 focus:ring-2 focus:ring-gold-300/25"
       />
       <IconButton label={submit} icon={<Check size={15} weight="bold" />} size="sm" type="submit" />
