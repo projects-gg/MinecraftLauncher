@@ -1782,7 +1782,10 @@ export type ConsoleOrigin =
 "client" | 
 /**  Client stderr (text starts with `[hata] `). */
 "clientError" | 
-/**  Typed by the user (text starts with `> `). */
+/**
+ *  Typed by the user. No longer produced: typed lines are not echoed, the server's answer is
+ *  the feedback. Kept so the bindings stay as they are.
+ */
 "user";
 
 export type ContentAddView = {
@@ -3089,14 +3092,14 @@ export type LaunchSettings = {
 	 *  to the clipboard (`crate::shot_copy`).
 	 */
 	copyScreenshots?: boolean,
-};
-
-export type LeftoverKindView = "cache" | "downloads" | "logs" | "crashReports";
 	/**
 	 *  Settings → Genel "Oyun içi katman" as the page shows it (`crate::overlay`): this launch's
 	 *  pack sync installs or removes the mod by it, and the game gets a bridge while it is on.
 	 */
 	overlay?: boolean | null,
+};
+
+export type LeftoverKindView = "cache" | "downloads" | "logs" | "crashReports";
 
 export type LeftoverView = {
 	kind: LeftoverKindView,
@@ -3994,9 +3997,6 @@ export type NoticeKind =
 /**  The profile picture went back to the default. */
 "profileReset" | "other";
 
-export type OfficialPackView = {
-	id: string,
-	name: string,
 /**
  *  The notification choices this computer keeps (Settings → Arkadaşlar and the chat's "Sessize
  *  al"), mirrored from the launcher's page.
@@ -4016,6 +4016,9 @@ export type NotifyPrefs = {
 	chatMutes?: { [key in string]: number | null },
 };
 
+export type OfficialPackView = {
+	id: string,
+	name: string,
 	version: string,
 	mcVersion: string,
 	loader: LoaderKind,
@@ -4094,9 +4097,6 @@ export type OutcomeStatus =
 /**  Nothing was copied, on purpose (already there, the player's own kept, cancelled). */
 "skipped" | "failed";
 
-/**  One file an update adds, changes, removes or leaves alone. */
-export type PackChangeView = {
-	/**  Game-relative path. */
 /**
  *  The player's choices that reach the overlay (Settings → Genel "Oyun içi katman", the friends
  *  notification choices, Hareketi azalt). The page pushes them at its start and on every change;
@@ -4128,6 +4128,9 @@ export type OverlayStatus = {
 	connected: boolean,
 };
 
+/**  One file an update adds, changes, removes or leaves alone. */
+export type PackChangeView = {
+	/**  Game-relative path. */
 	path: string,
 	/**  The Modrinth project's title when known, else the file name. */
 	name: string,
