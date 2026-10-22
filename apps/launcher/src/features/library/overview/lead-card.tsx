@@ -1,10 +1,11 @@
 // The card on top of the overview's play column: "Devam et" back into the last world or server,
 // or, while there is none, the one empty state with "Oyna". The whole card is the button.
-import { GameController, Globe, HardDrives, Play } from "@phosphor-icons/react";
+import { Play } from "@phosphor-icons/react";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import type { ResumeTarget } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
+import { ContentIcon } from "@/shell/content-icon";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import type { LeadCard as LeadKind } from "./model";
@@ -59,7 +60,6 @@ export function LeadCard({
   if (resume) {
     const quick = resume.quickPlay;
     const server = quick.kind === "multiplayer" ? serverAddress(quick.host, quick.port) : null;
-    const Mark = resume.kind === "world" ? Globe : HardDrives;
     return (
       <button
         type="button"
@@ -73,7 +73,7 @@ export function LeadCard({
           src={resume.iconUrl}
           pixelated={resume.kind === "server"}
           size={tileSize}
-          fallback={<Mark size={24} weight="duotone" className="text-gold-400/85" />}
+          fallback={<ContentIcon kind={resume.kind} />}
         >
           <span
             aria-hidden
@@ -111,10 +111,7 @@ export function LeadCard({
       aria-describedby={titleId}
     >
       <HoverWash />
-      <IconTile
-        size={tileSize}
-        fallback={<GameController size={26} weight="duotone" className="text-gold-400/85" />}
-      />
+      <IconTile size={tileSize} fallback={<ContentIcon kind="play" />} />
       <span
         id={titleId}
         className="relative min-w-0 flex-1 truncate font-display text-[17px] font-semibold text-bone-50"

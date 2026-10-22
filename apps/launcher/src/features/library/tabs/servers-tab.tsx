@@ -1,7 +1,6 @@
 import {
   Copy,
   DotsThreeVertical,
-  HardDrives,
   LockSimple,
   PencilSimple,
   Play,
@@ -36,6 +35,7 @@ import {
 } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 import { formatCount } from "@/lib/format";
+import { ContentIcon } from "@/shell/content-icon";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { InlineNotice, TabEmpty } from "../parts";
@@ -64,7 +64,7 @@ function ServerIcon({ server }: { server: SavedServer }) {
       {src ? (
         <img src={src} alt="" draggable={false} className="size-full [image-rendering:pixelated]" />
       ) : (
-        <HardDrives size={20} weight="duotone" className="text-gold-400/80" />
+        <ContentIcon kind="server" quiet />
       )}
     </span>
   );
@@ -248,7 +248,7 @@ export function ServersTab({ instance }: { instance: InstanceDetail }) {
 
       {servers.length === 0 ? (
         <TabEmpty
-          icon={<HardDrives size={26} weight="duotone" />}
+          icon={<ContentIcon kind="server" />}
           title={t("instance.servers.emptyTitle")}
           action={addButton}
           className="pt-4"

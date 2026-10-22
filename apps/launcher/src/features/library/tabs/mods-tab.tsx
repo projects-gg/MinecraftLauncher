@@ -3,7 +3,6 @@ import {
   ArrowsLeftRight,
   FilePlus,
   MagnifyingGlassPlus,
-  Package,
   Plus,
   Trash,
 } from "@phosphor-icons/react";
@@ -41,6 +40,7 @@ import { SetBadgeChip } from "@/features/modsets/parts";
 import { api, type InstalledContent, type InstanceDetail, type ModEntry } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
+import { ContentIcon } from "@/shell/content-icon";
 import { useIncomingMods } from "../incoming-mods";
 import { TabEmpty } from "../parts";
 import { IncomingModsList, IncomingModsSkeleton, PackItemChip } from "./incoming-mods-list";
@@ -55,7 +55,7 @@ export function VanillaModsEmpty() {
   const navigate = useNavigate();
   return (
     <TabEmpty
-      icon={<Package size={26} weight="duotone" />}
+      icon={<ContentIcon kind="pack" />}
       title={t("instance.mods.vanillaTitle")}
       body={t("instance.mods.vanillaBody")}
       action={
@@ -122,7 +122,7 @@ function ModRow({
             className="size-full object-cover [image-rendering:pixelated]"
           />
         ) : (
-          <Package size={20} weight="duotone" className="text-gold-400/80" />
+          <ContentIcon kind="pack" size={16} />
         )}
       </span>
       <div className="min-w-0 flex-1">

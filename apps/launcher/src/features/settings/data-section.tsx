@@ -14,6 +14,7 @@ import { useImportJob } from "@/features/import/import-job";
 import { glide, useMotionPrefs } from "@/features/modcenter/motion";
 import { api, type MovePlan, type MoveProgress } from "@/lib/api";
 import { formatBytes, formatCount, formatPercent } from "@/lib/format";
+import { ContentIcon } from "@/shell/content-icon";
 import { useUi } from "@/stores/ui";
 import { CleanupCard } from "./cleanup/cleanup-card";
 import { TrashRow } from "./cleanup/trash-row";
@@ -443,7 +444,7 @@ function MoveDialog({
     case "done":
       body = (
         <div className="flex flex-col items-center gap-3 py-4 text-center" aria-live="polite">
-          <CheckCircle size={40} weight="duotone" className="text-jade-400" />
+          <ContentIcon kind="done" size={48} />
           <div>
             <p className="font-display text-[18px] font-semibold text-bone-50">
               {t(`${m}.doneTitle`)}

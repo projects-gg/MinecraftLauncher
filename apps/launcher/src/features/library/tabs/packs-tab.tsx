@@ -1,12 +1,4 @@
-import {
-  FilePlus,
-  FolderOpen,
-  Images,
-  Info,
-  MagnifyingGlassPlus,
-  Sun,
-  Trash,
-} from "@phosphor-icons/react";
+import { FilePlus, FolderOpen, Info, MagnifyingGlassPlus, Trash } from "@phosphor-icons/react";
 import {
   Button,
   Chip,
@@ -27,6 +19,7 @@ import { SetBadgeChip } from "@/features/modsets/parts";
 import { api, type ContentKind, type PackEntry } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
+import { ContentIcon } from "@/shell/content-icon";
 import { TabEmpty } from "../parts";
 
 /** From this many packs on, the tab offers a search field. */
@@ -61,7 +54,6 @@ export function PacksTab({
   const matching = searching
     ? shown.filter((p) => matchesQuery(p.name, query) || matchesQuery(p.description, query))
     : shown;
-  const Icon = kind === "shaderPack" ? Sun : Images;
   // The list that takes the empty zone's place (packs were just dropped or added) rises in.
   const wasEmpty = useRef(shown.length === 0);
   const arriving = wasEmpty.current && shown.length > 0;
@@ -87,7 +79,7 @@ export function PacksTab({
   if (shown.length === 0) {
     return needsLoader ? (
       <TabEmpty
-        icon={<Icon size={26} weight="duotone" />}
+        icon={<ContentIcon kind={kind} />}
         title={t("instance.packs.needsLoaderTitle")}
         body={t("instance.packs.needsLoaderBody")}
       />
@@ -205,7 +197,7 @@ export function PacksTab({
                           className="size-full object-cover [image-rendering:pixelated]"
                         />
                       ) : (
-                        <Icon size={22} weight="duotone" className="text-gold-400/80" />
+                        <ContentIcon kind={kind} quiet />
                       )}
                     </span>
                     <div className="min-w-0 flex-1">

@@ -2,6 +2,7 @@
 // desktop shortcuts and the screenshots a game session took.
 // Preview switches (`localStorage["pl.mock.<name>"]` or `?<name>=` in the page URL):
 // - `resume`: "world" (default), "server" or "none".
+// - `resumeIcon`: "none" drops the world's or server's own icon (the tile shows its mark).
 // - `shots`: screenshots the next mock game session takes (e.g. "3").
 // - `runSecs`: how long a mock game session lasts (default 25).
 // - `window.__plMockDrag({ type: "enter", paths: [...], position: { x, y } })` (then "over",
@@ -192,12 +193,13 @@ export function createMockConveniences(
       await delay(120);
       const mode = flag("pl.mock.resume") || "world";
       if (mode === "none" || loaderOf(instanceId) === undefined) return null;
+      const noIcon = flag("pl.mock.resumeIcon") === "none";
       if (mode === "server") {
         return {
           kind: "server",
           name: "Hypixel",
           lastPlayedAt: new Date(Date.now() - 5 * 3_600_000).toISOString(),
-          iconUrl: logo,
+          iconUrl: noIcon ? undefined : logo,
           quickPlay: { kind: "multiplayer", host: "mc.hypixel.net", port: null },
         };
       }
@@ -205,7 +207,7 @@ export function createMockConveniences(
         kind: "world",
         name: "Ejderha Adası",
         lastPlayedAt: new Date(Date.now() - 20 * 3_600_000).toISOString(),
-        iconUrl: coverSpawn,
+        iconUrl: noIcon ? undefined : coverSpawn,
         quickPlay: { kind: "singleplayer", world: "Ejderha Adasi" },
       };
     },

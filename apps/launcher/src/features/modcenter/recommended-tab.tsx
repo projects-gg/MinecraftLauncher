@@ -1,9 +1,4 @@
-import {
-  ArrowCounterClockwise,
-  ArrowSquareOut,
-  ArrowsClockwise,
-  Package,
-} from "@phosphor-icons/react";
+import { ArrowCounterClockwise, ArrowSquareOut, ArrowsClockwise } from "@phosphor-icons/react";
 import {
   Button,
   Chip,
@@ -33,6 +28,7 @@ import {
   type ModSelection,
 } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
+import { ContentIcon } from "@/shell/content-icon";
 import { type ModDraft, useDrafts } from "@/stores/drafts";
 import { fade, glide, type MotionPrefs, pop, swap, useMotionPrefs } from "./motion";
 import { JobLine } from "./parts";
@@ -583,10 +579,7 @@ export function RecommendedTab({
       {/* Filtering swaps the list in place (no glide while typing or picking a category). */}
       <div key={`${filter}|${query.trim()}`}>
         {choosable.length === 0 ? (
-          <EmptyState
-            icon={<Package size={26} weight="duotone" />}
-            title={t("modCenter.empty.title")}
-          />
+          <EmptyState icon={<ContentIcon kind="pack" />} title={t("modCenter.empty.title")} />
         ) : visible.length === 0 ? (
           <p className="px-3 py-8 text-center text-[13px] text-ash-400">{t("modCenter.noMatch")}</p>
         ) : grouped ? (

@@ -1,10 +1,11 @@
-import { ArrowsClockwise, DownloadSimple, Package, Trash, X } from "@phosphor-icons/react";
+import { ArrowsClockwise, DownloadSimple, Trash, X } from "@phosphor-icons/react";
 import { Button, Chip, cn, IconButton, Progress, usePressGuard } from "@pl/ui";
 import type { TFunction } from "i18next";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ContentKind, InstalledContent } from "@/lib/api";
 import { formatPercent, formatSpeed, numberFormat } from "@/lib/format";
+import { ContentIcon, spriteSize } from "@/shell/content-icon";
 import { revealWait } from "./job-rules";
 import { jobAge, type RunningJob, stageLabel } from "./jobs";
 
@@ -74,7 +75,7 @@ export function ProjectIcon({
           className="size-full object-cover"
         />
       ) : (
-        <Package size={Math.round(size * 0.46)} weight="duotone" className="text-gold-400/80" />
+        <ContentIcon kind="pack" size={spriteSize(size)} />
       )}
     </span>
   );

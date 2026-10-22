@@ -1,4 +1,4 @@
-import { ArrowLeft, Package, Plus } from "@phosphor-icons/react";
+import { ArrowLeft, Plus } from "@phosphor-icons/react";
 import { Button, Dialog, EmptyState, IconButton, Skeleton, SwapLabel, toast } from "@pl/ui";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
@@ -12,6 +12,7 @@ import { useDebounced } from "@/features/content/use-content";
 import { type Direction, stepVariants, useMotionPrefs } from "@/features/modcenter/motion";
 import { api, type InstanceDetail, type SetCard } from "@/lib/api";
 import { formatBytes, listFormat } from "@/lib/format";
+import { ContentIcon } from "@/shell/content-icon";
 import { refreshSets } from "./instance-sets";
 import { changedChoices, describeSummary, fitFor, setName } from "./model";
 import { PurposeMark, SetCardSkeletons, SetContents, SetPicker, useWords } from "./parts";
@@ -127,12 +128,7 @@ export function AddSetDialog({
       />
     );
   } else if (sets.length === 0) {
-    list = (
-      <EmptyState
-        icon={<Package size={26} weight="duotone" />}
-        title={t("modSets.create.emptyTitle")}
-      />
-    );
+    list = <EmptyState icon={<ContentIcon kind="pack" />} title={t("modSets.create.emptyTitle")} />;
   } else {
     // The sets made for this instance first; the others keep their order after them.
     const ordered = [...sets].sort(

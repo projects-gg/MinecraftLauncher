@@ -1,11 +1,4 @@
-import {
-  ArrowSquareOut,
-  Copy,
-  FolderOpen,
-  ImageSquare,
-  Trash,
-  WarningCircle,
-} from "@phosphor-icons/react";
+import { ArrowSquareOut, Copy, FolderOpen, Trash } from "@phosphor-icons/react";
 import { Button, ContextMenu, cn, IconButton, Skeleton, toast } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -14,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { copyErrorDetails, showError } from "@/features/content/jobs";
 import { api, type InstanceDetail, type Screenshot, type TrashItem } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
+import { ContentIcon } from "@/shell/content-icon";
 import { ConfirmDialog, TabEmpty, TabSection, TrashRow } from "../parts";
 import { shotTime, trashLabel } from "../trash-label";
 import { formatWhen } from "../when";
@@ -180,7 +174,7 @@ export function ScreenshotsTab({ instance }: { instance: InstanceDetail }) {
   if (shots.isError) {
     return (
       <TabEmpty
-        icon={<WarningCircle size={26} weight="duotone" className="text-flare-400" />}
+        icon={<ContentIcon kind="failed" />}
         title={t("instance.screenshots.listFailed")}
         body={shots.error instanceof Error ? shots.error.message : undefined}
         action={
@@ -221,7 +215,7 @@ export function ScreenshotsTab({ instance }: { instance: InstanceDetail }) {
 
       {list.length === 0 ? (
         <TabEmpty
-          icon={<ImageSquare size={26} weight="duotone" />}
+          icon={<ContentIcon kind="screenshots" />}
           title={t("instance.screenshots.emptyTitle")}
           body={t("instance.screenshots.empty")}
           className="pt-4"

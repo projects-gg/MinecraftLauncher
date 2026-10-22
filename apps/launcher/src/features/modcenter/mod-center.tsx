@@ -14,6 +14,7 @@ import { ModHealthSection } from "@/features/modhealth/health-banner";
 import { AddSetDialog } from "@/features/modsets/add-set-dialog";
 import { InstanceSets, useInstanceSets } from "@/features/modsets/instance-sets";
 import { api, type InstanceDetail, type ModCenterItem } from "@/lib/api";
+import { ContentIcon } from "@/shell/content-icon";
 import { useLaunch } from "@/stores/launch";
 import { ModIssuesBanner } from "./issues-banner";
 import { MigrateDialog } from "./migrate-dialog";
@@ -143,7 +144,7 @@ export function ModCenter({
     } else if (view.isError || !view.data) {
       content = (
         <EmptyState
-          icon={<WarningCircle size={26} weight="duotone" />}
+          icon={<ContentIcon kind="failed" />}
           title={t("modCenter.loadFailed")}
           body={view.error instanceof Error ? view.error.message : undefined}
           action={

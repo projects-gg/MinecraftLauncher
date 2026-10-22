@@ -2,15 +2,7 @@
 // and inside Settings → Hesaplar; both are the same component over the same data.
 // Order (owner's rule): pinned accounts first, dragged into the player's order (handle in the
 // left gutter, its menu, or Alt+↑/↓); the rest sorted by activity, never by hand.
-import {
-  ArrowDown,
-  ArrowUp,
-  CaretRight,
-  DotsSixVertical,
-  Robot,
-  UserCirclePlus,
-  X,
-} from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp, CaretRight, DotsSixVertical, Robot, X } from "@phosphor-icons/react";
 import {
   cn,
   EntranceGate,
@@ -54,6 +46,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { SocialAccountRow } from "@/features/social/account-row";
 import { type AccountSummary, api } from "@/lib/api";
+import { ContentIcon } from "@/shell/content-icon";
 import { AccountCard } from "./account-card";
 import { movePinned, pinnedIds, withPinnedOrder } from "./account-order";
 import { AddAccount } from "./add-account";
@@ -347,7 +340,7 @@ function EmptyAccounts() {
       exit={{ opacity: 0, transition: { duration: exitOf(0.3) } }}
     >
       <span className="flex size-16 items-center justify-center rounded-[var(--radius-head)] bg-gold-700/25 text-gold-300 ring-1 ring-gold-400/25">
-        <UserCirclePlus size={34} weight="duotone" aria-hidden />
+        <ContentIcon kind="account" />
       </span>
       <h3 className="mt-4 font-display text-[19px] font-semibold text-bone-50">
         {t("accounts.center.emptyTitle")}

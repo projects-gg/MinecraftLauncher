@@ -4,12 +4,10 @@ import {
   ClockCounterClockwise,
   DotsThreeVertical,
   FolderOpen,
-  Globe,
   LockSimple,
   Play,
   Stack,
   Trash,
-  WarningCircle,
   X,
 } from "@phosphor-icons/react";
 import {
@@ -40,6 +38,7 @@ import {
   type WorldDetail,
 } from "@/lib/api";
 import { formatBytes, formatPercent, formatRelative } from "@/lib/format";
+import { ContentIcon } from "@/shell/content-icon";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { ConfirmDialog, InlineNotice, TabEmpty, TabSection, TrashRow } from "../parts";
@@ -107,7 +106,7 @@ function WorldIcon({ world }: { world: WorldDetail }) {
           draggable={false}
         />
       ) : (
-        <Globe size={22} weight="duotone" className="text-gold-400/80" />
+        <ContentIcon kind="world" quiet />
       )}
     </span>
   );
@@ -478,7 +477,7 @@ export function WorldsTab({ instance }: { instance: InstanceDetail }) {
   if (worlds.isError) {
     return (
       <TabEmpty
-        icon={<WarningCircle size={26} weight="duotone" className="text-flare-400" />}
+        icon={<ContentIcon kind="failed" />}
         title={t("instance.worlds.listFailed")}
         body={worlds.error instanceof Error ? worlds.error.message : undefined}
         action={
@@ -532,7 +531,7 @@ export function WorldsTab({ instance }: { instance: InstanceDetail }) {
 
       {worldList.length === 0 ? (
         <TabEmpty
-          icon={<Globe size={26} weight="duotone" />}
+          icon={<ContentIcon kind="world" />}
           title={t("instance.worlds.emptyTitle")}
           body={t("instance.worlds.emptyBody")}
           className="pt-4"

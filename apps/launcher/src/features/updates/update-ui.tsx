@@ -1,4 +1,4 @@
-import { ArrowsClockwise, CircleNotch, Sparkle } from "@phosphor-icons/react";
+import { ArrowsClockwise, CircleNotch } from "@phosphor-icons/react";
 import {
   Button,
   Chip,
@@ -20,6 +20,7 @@ import { AfkHead } from "@/features/afk/afk-head";
 import { type AfkAccount, api } from "@/lib/api";
 import i18n from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
+import { ContentIcon } from "@/shell/content-icon";
 import { useLaunch } from "@/stores/launch";
 import { takePendingNotes, useUpdate } from "@/stores/update";
 import { chooseNotes, landingRoute, loadAfterUpdate, type ReleaseNotes } from "./after-update";
@@ -280,7 +281,7 @@ function MandatoryScreen() {
               }
         }
       >
-        <Sparkle size={40} weight="duotone" className="mx-auto text-gold-400" />
+        <ContentIcon kind="sparkle" size={48} className="mx-auto" />
         <h2
           id="mandatory-update-title"
           className="mt-3 font-display text-[22px] font-semibold text-bone-50"

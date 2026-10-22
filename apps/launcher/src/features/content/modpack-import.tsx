@@ -10,6 +10,7 @@ import { hasModpack } from "@/features/drop/zones";
 import { api, type ModpackImportResult, type PackOptionalFile, type PackPreview } from "@/lib/api";
 import { notifyWhenAway } from "@/lib/attention";
 import { formatBytes, formatCount } from "@/lib/format";
+import { ContentIcon } from "@/shell/content-icon";
 import { trackTask } from "@/stores/progress";
 import { newJobId, type RunningJob, showError } from "./jobs";
 import { optionalFolder, optionalTotals, prettyFileName } from "./optional-files";
@@ -128,7 +129,7 @@ function PreviewCard({
     <div className="grid grid-cols-1 gap-4">
       <div className="glass flex items-start gap-4 rounded-[var(--radius-panel)] p-4">
         <span className="chamfer flex size-14 shrink-0 items-center justify-center bg-obsidian-800 [--cut:7px]">
-          <FileZip size={28} weight="duotone" className="text-gold-400" />
+          <ContentIcon kind="pack" />
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">

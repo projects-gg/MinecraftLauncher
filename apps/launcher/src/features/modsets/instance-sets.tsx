@@ -1,4 +1,4 @@
-import { ArrowsClockwise, DotsThree, Package, Plus, Trash } from "@phosphor-icons/react";
+import { ArrowsClockwise, DotsThree, Plus, Trash } from "@phosphor-icons/react";
 import { Button, Chip, cn, EmptyState, IconButton, Menu, Skeleton, toast } from "@pl/ui";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -22,6 +22,7 @@ import {
   type SyncSummary,
 } from "@/lib/api";
 import { formatBytes, listFormat } from "@/lib/format";
+import { ContentIcon } from "@/shell/content-icon";
 import { describeSummary, setName, setSummary } from "./model";
 import { PurposeMark, useWords } from "./parts";
 
@@ -446,7 +447,7 @@ export function InstanceSets({ instance, onAdd }: { instance: InstanceDetail; on
   if (sets.length === 0) {
     return (
       <EmptyState
-        icon={<Package size={26} weight="duotone" />}
+        icon={<ContentIcon kind="pack" />}
         title={t("modSets.center.emptyTitle")}
         action={
           <Button variant="secondary" icon={<Plus size={16} weight="bold" />} onClick={onAdd}>

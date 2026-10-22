@@ -6,7 +6,6 @@ import {
   GearSix,
   Heart,
   Play,
-  Robot,
   Stop,
   StopCircle,
   Terminal,
@@ -39,6 +38,7 @@ import { type Ref, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { isAfkIdle } from "@/features/accounts/afk-match";
 import { type AfkAccount, api } from "@/lib/api";
+import { ContentIcon } from "@/shell/content-icon";
 import { AfkConsole } from "./afk-console";
 import { AfkHead } from "./afk-head";
 import { afkFailed, isFriendly, runAfk } from "./errors";
@@ -473,7 +473,7 @@ export function AfkPage() {
         {/* The list answers within a frame: nothing (rather than a jumping form) until then. */}
         {isPending ? null : accounts.length === 0 ? (
           <EmptyState
-            icon={<Robot size={28} weight="duotone" />}
+            icon={<ContentIcon kind="afk" />}
             title={t("afk.empty.title")}
             body={t("afk.empty.body")}
             className="pt-[8vh] pb-5"

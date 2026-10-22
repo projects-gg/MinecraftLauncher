@@ -16,6 +16,7 @@ import {
 } from "@/features/modcenter/motion";
 import { api, type RemovedSet } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
+import { ContentIcon } from "@/shell/content-icon";
 import { ErrorLine, type Failure, failure } from "../failure";
 import { AnimatedBytes } from "./animated-bytes";
 import type { CleanupPlan } from "./model";
@@ -425,7 +426,7 @@ function Result({ outcome }: { outcome: Outcome }) {
   return (
     <div className="flex flex-col items-center pt-2 pb-1 text-center" aria-live="polite">
       <motion.span {...pop(prefs.reduce, 0.3)} className="text-jade-400">
-        <CheckCircle size={44} weight="duotone" />
+        <ContentIcon kind="done" size={48} />
       </motion.span>
       <AnimatedBytes
         value={shown}

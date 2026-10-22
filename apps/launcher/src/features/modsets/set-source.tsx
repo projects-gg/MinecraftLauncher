@@ -1,4 +1,4 @@
-import { ArrowLeft, DownloadSimple, Package } from "@phosphor-icons/react";
+import { ArrowLeft, DownloadSimple } from "@phosphor-icons/react";
 import { Button, EmptyState, Field, IconButton, Input, Segmented } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
@@ -12,6 +12,7 @@ import { type Direction, stepVariants, useMotionPrefs } from "@/features/modcent
 import { api, type InstanceSummary, type SetCard } from "@/lib/api";
 import { notifyWhenAway } from "@/lib/attention";
 import { formatBytes } from "@/lib/format";
+import { ContentIcon } from "@/shell/content-icon";
 import { trackTask } from "@/stores/progress";
 import { bytesOf, changedChoices, defaultVariant, enabledItems, iconFor, setName } from "./model";
 import { PurposeMark, SetCardSkeletons, SetContents, SetPicker, useWords } from "./parts";
@@ -150,12 +151,7 @@ export function useSetSource({
       />
     );
   } else if (sets.length === 0) {
-    list = (
-      <EmptyState
-        icon={<Package size={26} weight="duotone" />}
-        title={t("modSets.create.emptyTitle")}
-      />
-    );
+    list = <EmptyState icon={<ContentIcon kind="pack" />} title={t("modSets.create.emptyTitle")} />;
   } else {
     list = (
       <SetPicker

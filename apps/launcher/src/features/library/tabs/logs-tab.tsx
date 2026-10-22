@@ -1,4 +1,4 @@
-import { FolderOpen, Scroll, WarningCircle } from "@phosphor-icons/react";
+import { FolderOpen } from "@phosphor-icons/react";
 import { Button, Chip, cn, Skeleton } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { copyErrorDetails, showError } from "@/features/content/jobs";
 import { api, type GameLogSession, type InstanceDetail } from "@/lib/api";
 import { formatBytes, formatDuration } from "@/lib/format";
+import { ContentIcon } from "@/shell/content-icon";
 import { TabEmpty } from "../parts";
 import { useGameRunning } from "../use-game-running";
 import { formatWhen, logFileWhen } from "../when";
@@ -186,7 +187,7 @@ export function LogsTab({ instance }: { instance: InstanceDetail }) {
   if (sessions.isError) {
     return (
       <TabEmpty
-        icon={<WarningCircle size={26} weight="duotone" className="text-flare-400" />}
+        icon={<ContentIcon kind="failed" />}
         title={t("instance.logs.listFailed")}
         body={
           sessions.error instanceof Error && sessions.error.message
@@ -210,7 +211,7 @@ export function LogsTab({ instance }: { instance: InstanceDetail }) {
   if (!selected) {
     return (
       <TabEmpty
-        icon={<Scroll size={26} weight="duotone" />}
+        icon={<ContentIcon kind="logs" />}
         title={t("instance.logs.emptyTitle")}
         body={t("instance.logs.emptyBody")}
         action={

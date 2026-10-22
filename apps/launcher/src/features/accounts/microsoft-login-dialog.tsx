@@ -1,6 +1,6 @@
 // Microsoft sign-in: starts as soon as it opens (the player already pressed "Microsoft ile giriş
 // yap"), follows the browser steps, then says plainly what happened.
-import { Check, CircleNotch, Copy, WarningCircle } from "@phosphor-icons/react";
+import { Check, CircleNotch, Copy } from "@phosphor-icons/react";
 import { Button, cn, easeOutExpo, PlayerHead, springSnappy } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
@@ -10,6 +10,7 @@ import { MicrosoftMark } from "@/features/settings/microsoft-mark";
 import { type AccountSummary, api, type LoginStep, type MicrosoftLoginResult } from "@/lib/api";
 import { copyDetails } from "@/lib/clipboard";
 import { playSound } from "@/lib/sound";
+import { ContentIcon } from "@/shell/content-icon";
 import { AccountDialog } from "./account-dialog";
 import { useCalm } from "./calm";
 import { useAccountsUi } from "./store";
@@ -165,7 +166,7 @@ function Failure({ failure, error }: { failure: LoginFailure; error: FriendlyErr
         animate={calm({ scale: 1, opacity: 1 })}
         transition={springSnappy}
       >
-        <WarningCircle size={30} weight="duotone" />
+        <ContentIcon kind="failed" />
       </motion.span>
       <p className="mt-5 font-display text-[19px] font-semibold text-bone-50">{title}</p>
       <p className="mt-1.5 max-w-[40ch] text-[13.5px] leading-relaxed text-ash-300">{body}</p>

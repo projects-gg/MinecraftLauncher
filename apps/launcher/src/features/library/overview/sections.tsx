@@ -1,6 +1,6 @@
 // The overview's shortcuts: the last worlds and the featured server with their own "Oyna" and
 // "Katıl", and the newest screenshots opening the full-window viewer.
-import { Globe, HardDrives, Play } from "@phosphor-icons/react";
+import { Play } from "@phosphor-icons/react";
 import { Button, Chip, cn, Skeleton, toast } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next";
 import { showError } from "@/features/content/jobs";
 import { api, type SavedServer, type Screenshot, type TrashItem } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
+import { ContentIcon } from "@/shell/content-icon";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { ConfirmDialog } from "../parts";
@@ -107,7 +108,7 @@ function WorldRow({
         src={world.iconUrl}
         pixelated
         size="size-9 [--cut:5px]"
-        fallback={<Globe size={18} weight="duotone" className="text-gold-400/80" />}
+        fallback={<ContentIcon kind="world" size={16} />}
       />
       <div className="min-w-0 flex-1">
         <div className="flex min-w-0 items-center gap-2">
@@ -167,7 +168,7 @@ export function ServerSection({
           src={server.iconUrl ?? ping.data?.iconUrl}
           pixelated
           size="size-9 [--cut:5px]"
-          fallback={<HardDrives size={18} weight="duotone" className="text-gold-400/80" />}
+          fallback={<ContentIcon kind="server" size={16} />}
         />
         <div className="min-w-0 flex-1">
           <p id={nameId} className="truncate text-[13.5px] font-semibold text-bone-50">

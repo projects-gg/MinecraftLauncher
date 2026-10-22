@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { ProjectIcon } from "@/features/content/parts";
 import type { LoaderKind, SetBadge, SetCard, SetItem, SetPurpose, SetVariant } from "@/lib/api";
 import { formatBytes, listFormat } from "@/lib/format";
+import { ContentIcon, type ContentIconKind, spriteSize } from "@/shell/content-icon";
 import {
   countWords,
   enabledItems,
@@ -18,6 +19,7 @@ import {
   type Words,
 } from "./model";
 
+/** A set's purpose on a chip (Phosphor, 12 px: a label, too small for a sprite). */
 const marks: Record<SetPurpose, typeof Sword> = {
   pvp: Sword,
   performance: Gauge,
@@ -25,7 +27,15 @@ const marks: Record<SetPurpose, typeof Sword> = {
   other: Package,
 };
 
-/** What a set is for, as a chamfered tile (gold mark; duotone when the set is chosen). */
+/** A set's purpose in its tile: our pixel sprites. */
+const sprites: Record<SetPurpose, ContentIconKind> = {
+  pvp: "pvp",
+  performance: "performance",
+  visual: "sparkle",
+  other: "pack",
+};
+
+/** A set's purpose as a chamfered tile: its pixel mark, a gold step quieter until chosen. */
 export function PurposeMark({
   purpose,
   active = false,
@@ -37,25 +47,27 @@ export function PurposeMark({
   size?: number;
   className?: string;
 }) {
-  const Mark = marks[purpose];
+  const kind = sprites[purpose];
+  const px = spriteSize(size);
   return (
     <span
       aria-hidden
       className={cn(
-        "chamfer relative flex shrink-0 items-center justify-center bg-white/7 text-gold-300 [--cut:7px]",
+        "chamfer relative flex shrink-0 items-center justify-center bg-white/7 [--cut:7px]",
         className,
       )}
       style={{ width: size, height: size }}
     >
-      {/* Both weights stay mounted: the chosen one fades in, nothing reflows. */}
-      <Mark
-        size={Math.round(size * 0.56)}
-        weight="regular"
+      {/* Both tones stay mounted: the chosen one fades in, nothing reflows. */}
+      <ContentIcon
+        kind={kind}
+        size={px}
+        quiet
         className={cn("absolute transition-opacity duration-150", active && "opacity-0")}
       />
-      <Mark
-        size={Math.round(size * 0.56)}
-        weight="duotone"
+      <ContentIcon
+        kind={kind}
+        size={px}
         className={cn("absolute transition-opacity duration-150", !active && "opacity-0")}
       />
     </span>
