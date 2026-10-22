@@ -847,8 +847,6 @@ export const en: DeepPartial<Strings> = {
     mine: "My instances",
     noResults: "No instances match your search.",
     empty: {
-      title: "You don't have any instances yet",
-      body: "Pick a version and add a mod loader if you like. The launcher handles the rest.",
       action: "Create instance",
     },
     card: {

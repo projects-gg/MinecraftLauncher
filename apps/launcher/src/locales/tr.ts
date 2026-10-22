@@ -610,8 +610,6 @@ export const tr = {
     mine: "Kurulumlarım",
     noResults: "Aramana uyan kurulum yok.",
     empty: {
-      title: "Henüz bir kurulumun yok",
-      body: "Bir sürüm seç, istersen mod yükleyici ekle. Gerisini launcher halleder.",
       action: "Kurulum oluştur",
     },
     card: { more: "Diğer işlemler" },
