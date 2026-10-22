@@ -4,6 +4,7 @@ pub mod accounts;
 pub mod afk;
 pub mod app;
 pub mod cleanup;
+pub mod cloud_afk;
 pub mod content;
 pub mod data;
 pub mod datapacks;

@@ -198,8 +198,10 @@ pub fn social_sign_in_cancel(state: State<'_, AppState>) {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn social_sign_out(state: State<'_, AppState>) -> CmdResult<()> {
+pub async fn social_sign_out(app: AppHandle, state: State<'_, AppState>) -> CmdResult<()> {
     state.social.sign_out().await;
+    // 7/24 Bulut signs in with this session: what it kept for the player goes too.
+    crate::commands::cloud_afk::signed_out(&app, &state).await;
     Ok(())
 }
 

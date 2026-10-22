@@ -1,0 +1,41 @@
+[package]
+name = "pl-cloud-afk"
+description = "Client for 7/24 Bulut (cloud AFK accounts on afk.projects.gg): the player API, the live console socket, sealing secret rows to the machines' key, reading them back, and moving desktop AFK settings to the cloud"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+# The desktop AFK model ("Buluta taşı"), its password commands, pattern check and keychain store.
+pl-afk = { workspace = true }
+tokio = { workspace = true }
+futures = { workspace = true }
+reqwest = { workspace = true }
+url = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+sha2 = { workspace = true }
+base64 = { workspace = true }
+rand = { workspace = true }
+parking_lot = { workspace = true }
+# UI-facing views are exported to TypeScript by the launcher (tauri-specta).
+specta = { workspace = true }
+# Seals (pl1) and reveals (rv1): HPKE (RFC 9180) base mode, DHKEM(P-256, HKDF-SHA256) +
+# HKDF-SHA256 + AES-128-GCM, the suite the contract names (MIT/Apache-2.0; the same crate and
+# features as afk-host, the only opener of seals).
+hpke = { version = "0.14.1", default-features = false, features = ["alloc", "getrandom", "nistp", "aes"] }
+# A revealed secret is wiped from memory once it was handed on.
+zeroize = "1"
+# The live console socket: the same stack and versions as pl-social's presence socket.
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake", "rustls-tls-native-roots"] }
+rustls = { version = "0.23.46", default-features = false, features = ["std", "tls12", "aws_lc_rs"] }
+rustls-platform-verifier = "0.7.1"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
+hex = { workspace = true }
+tempfile = { workspace = true }

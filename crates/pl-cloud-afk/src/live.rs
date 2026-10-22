@@ -1,0 +1,720 @@
+//! The live console socket (the contract's "Live console socket"): one socket per machine the
+//! watched accounts are on, open only while a console is on screen. `watch` opens it (or adds the
+//! account to the open one), `unwatch` of the last account closes it: nothing runs while no console
+//! is watched. While open: `{"t":"ping"}` every 30-45 s (the Durable Object answers it without
+//! waking), `keep` every 5 minutes (renews the console lease and checks the session), and a
+//! reconnect when nothing came back within 20 s of a ping.
+//!
+//! Close codes: 4000 a newer socket of this player took over (not reopened by itself), 4001 the
+//! session ended, 4004 the player's accounts there changed (reopened at once), 4008 too many
+//! messages (a minute's pause); anything else reopens with backoff (2 s doubling to 5 minutes,
+//! ±20 %).
+
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use std::time::Duration;
+
+use futures::{SinkExt, StreamExt};
+use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
+use tokio::runtime::Handle;
+use tokio::sync::mpsc;
+use tokio::time::{Instant, sleep_until, timeout};
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::HeaderValue;
+use tokio_tungstenite::tungstenite::http::header::{AUTHORIZATION, RETRY_AFTER, USER_AGENT};
+use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
+use tokio_tungstenite::tungstenite::protocol::{CloseFrame, WebSocketConfig};
+use tokio_tungstenite::tungstenite::{self, Message};
+use tokio_tungstenite::{Connector, connect_async_tls_with_config};
+use url::Url;
+
+use crate::client::Bearer;
+use crate::model::{CloudConsoleLine, CloudLiveState};
+use crate::tls;
+
+const PING: &str = r#"{"t":"ping"}"#;
+const KEEP: &str = r#"{"t":"keep"}"#;
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+const PONG_TIMEOUT: Duration = Duration::from_secs(20);
+const KEEP_EVERY: Duration = Duration::from_secs(5 * 60);
+const BACKOFF_MIN: Duration = Duration::from_secs(2);
+const BACKOFF_MAX: Duration = Duration::from_secs(5 * 60);
+const TOO_MANY_PAUSE: Duration = Duration::from_secs(60);
+
+/// How one machine's socket is doing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CloudLiveStatus {
+    Connecting,
+    Live,
+    /// Dropped; opening again after a pause.
+    Reconnecting,
+    /// A newer console of this player took over (another launcher or the site): not reopened by
+    /// itself.
+    Replaced,
+    /// The friends session ended.
+    Ended,
+    /// The service refused this socket (no account of the player on that machine, an old
+    /// launcher): not reopened by itself.
+    Refused,
+}
+
+/// What the socket tells the launcher.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum CloudLiveEvent {
+    /// The socket of `host` is open; whether its machine is connected now.
+    Hello { host: String, online: bool },
+    /// A watched account's live state changed (also once right after `watch`).
+    State { acct: String, live: CloudLiveState },
+    /// Masked console lines of a watched account. `snapshot`: the recent lines right after
+    /// `watch` (they replace what was shown); `skipped`: lines dropped in between.
+    Lines {
+        acct: String,
+        lines: Vec<CloudConsoleLine>,
+        skipped: u32,
+        snapshot: bool,
+    },
+    /// The machine connected or went away.
+    Machine { host: String, online: bool },
+    /// The service said no to something: `not_found` (not the player's account there),
+    /// `rate_limited`, `host_offline`, `bad_request`.
+    Problem { acct: Option<String>, code: String },
+    Status {
+        host: String,
+        status: CloudLiveStatus,
+    },
+}
+
+pub type LiveSink = Arc<dyn Fn(CloudLiveEvent) + Send + Sync>;
+
+enum Command {
+    Watch(String),
+    Unwatch(String),
+}
+
+struct HostTask {
+    generation: u64,
+    commands: mpsc::UnboundedSender<Command>,
+    watched: HashSet<String>,
+}
+
+struct Hub {
+    runtime: Handle,
+    user_agent: String,
+    sink: LiveSink,
+    hosts: Mutex<HashMap<String, HostTask>>,
+    next_generation: Mutex<u64>,
+}
+
+/// The live sockets. Cheap to clone.
+#[derive(Clone)]
+pub struct LiveHub {
+    hub: Arc<Hub>,
+}
+
+impl std::fmt::Debug for LiveHub {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LiveHub").finish_non_exhaustive()
+    }
+}
+
+impl LiveHub {
+    pub fn new(runtime: Handle, user_agent: impl Into<String>, sink: LiveSink) -> Self {
+        Self {
+            hub: Arc::new(Hub {
+                runtime,
+                user_agent: user_agent.into(),
+                sink,
+                hosts: Mutex::new(HashMap::new()),
+                next_generation: Mutex::new(0),
+            }),
+        }
+    }
+
+    /// Streams `acct`'s console and state from `host`'s socket at `url` (opened when it is not).
+    pub fn watch(&self, url: Url, token: Bearer, host: &str, acct: &str) {
+        let mut hosts = self.hub.hosts.lock();
+        if let Some(task) = hosts.get_mut(host)
+            && task.commands.send(Command::Watch(acct.to_owned())).is_ok()
+        {
+            task.watched.insert(acct.to_owned());
+            return;
+        }
+        let generation = {
+            let mut next = self.hub.next_generation.lock();
+            *next += 1;
+            *next
+        };
+        let (commands, receiver) = mpsc::unbounded_channel();
+        let watched: HashSet<String> = [acct.to_owned()].into();
+        hosts.insert(
+            host.to_owned(),
+            HostTask {
+                generation,
+                commands,
+                watched: watched.clone(),
+            },
+        );
+        let hub = self.hub.clone();
+        let host = host.to_owned();
+        self.hub.runtime.spawn(async move {
+            let endpoint = Endpoint {
+                url,
+                token,
+                user_agent: hub.user_agent.clone(),
+            };
+            run(&endpoint, &host, watched, receiver, &hub.sink).await;
+            let mut hosts = hub.hosts.lock();
+            if hosts
+                .get(&host)
+                .is_some_and(|task| task.generation == generation)
+            {
+                hosts.remove(&host);
+            }
+        });
+    }
+
+    /// Stops streaming `acct`; the socket closes with its last watched account.
+    pub fn unwatch(&self, acct: &str) {
+        let mut hosts = self.hub.hosts.lock();
+        let mut emptied = None;
+        for (host, task) in hosts.iter_mut() {
+            if task.watched.remove(acct) {
+                let _ = task.commands.send(Command::Unwatch(acct.to_owned()));
+                if task.watched.is_empty() {
+                    emptied = Some(host.clone());
+                }
+            }
+        }
+        if let Some(host) = emptied {
+            // The task closes the socket and ends by itself; a new watch starts a new one.
+            hosts.remove(&host);
+        }
+    }
+
+    /// Closes every socket (signed out, the service gone).
+    pub fn stop_all(&self) {
+        // Dropping the senders ends the tasks: they close their sockets.
+        self.hub.hosts.lock().clear();
+    }
+
+    /// Whether any console is watched.
+    pub fn is_watching(&self) -> bool {
+        !self.hub.hosts.lock().is_empty()
+    }
+}
+
+struct Endpoint {
+    url: Url,
+    token: Bearer,
+    user_agent: String,
+}
+
+type Socket =
+    tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+/// How a connection (or an attempt) ended.
+enum Outcome {
+    /// Open again after at least this long (zero: with the usual backoff).
+    Retry(Duration),
+    /// Open again at once.
+    Now,
+    Stop(CloudLiveStatus),
+    /// Nobody watches any more.
+    Done,
+}
+
+impl Endpoint {
+    async fn connect(&self) -> Result<Socket, Outcome> {
+        let mut request = self
+            .url
+            .as_str()
+            .into_client_request()
+            .map_err(|_| Outcome::Stop(CloudLiveStatus::Refused))?;
+        let headers = request.headers_mut();
+        let bearer = HeaderValue::from_str(&format!("Bearer {}", self.token.expose()))
+            .map_err(|_| Outcome::Stop(CloudLiveStatus::Ended))?;
+        headers.insert(AUTHORIZATION, bearer);
+        if let Ok(agent) = HeaderValue::from_str(&self.user_agent) {
+            headers.insert(USER_AGENT, agent);
+        }
+        let connector = if self.url.scheme() == "wss" {
+            match tls::client_config() {
+                Ok(config) => Connector::Rustls(config),
+                Err(error) => {
+                    tracing::warn!(%error, "live console TLS setup failed");
+                    return Err(Outcome::Retry(BACKOFF_MAX));
+                }
+            }
+        } else {
+            Connector::Plain
+        };
+        let config = WebSocketConfig::default()
+            .max_message_size(Some(1 << 20))
+            .max_frame_size(Some(1 << 20));
+        let attempt = connect_async_tls_with_config(request, Some(config), true, Some(connector));
+        match timeout(CONNECT_TIMEOUT, attempt).await {
+            Ok(Ok((socket, _))) => Ok(socket),
+            Ok(Err(tungstenite::Error::Http(response))) => {
+                let wait = response
+                    .headers()
+                    .get(RETRY_AFTER)
+                    .and_then(|value| value.to_str().ok())
+                    .and_then(|value| value.trim().parse::<u64>().ok())
+                    .map(Duration::from_secs);
+                Err(handshake_outcome(response.status().as_u16(), wait))
+            }
+            Ok(Err(error)) => {
+                tracing::debug!(%error, "live console connect failed");
+                Err(Outcome::Retry(Duration::ZERO))
+            }
+            Err(_) => Err(Outcome::Retry(Duration::ZERO)),
+        }
+    }
+}
+
+fn handshake_outcome(status: u16, retry_after: Option<Duration>) -> Outcome {
+    match status {
+        401 => Outcome::Stop(CloudLiveStatus::Ended),
+        // Not the player's machine, a refused origin, an old protocol: asking again will not help.
+        403 | 404 | 426 => Outcome::Stop(CloudLiveStatus::Refused),
+        429 | 503 => Outcome::Retry(
+            retry_after
+                .unwrap_or(TOO_MANY_PAUSE)
+                .clamp(BACKOFF_MIN, Duration::from_secs(3_600)),
+        ),
+        500..=599 => Outcome::Retry(Duration::ZERO),
+        _ => Outcome::Retry(BACKOFF_MAX),
+    }
+}
+
+fn close_outcome(frame: Option<&CloseFrame>) -> Outcome {
+    match frame.map(|frame| u16::from(frame.code)) {
+        Some(4000) => Outcome::Stop(CloudLiveStatus::Replaced),
+        Some(4001) => Outcome::Stop(CloudLiveStatus::Ended),
+        Some(4004) => Outcome::Now,
+        Some(4008) => Outcome::Retry(TOO_MANY_PAUSE),
+        _ => Outcome::Retry(Duration::ZERO),
+    }
+}
+
+/// ±20 % of `base`.
+fn jitter(base: Duration) -> Duration {
+    let factor = 0.8 + f64::from(rand::random::<u16>()) / f64::from(u16::MAX) * 0.4;
+    base.mul_f64(factor)
+}
+
+/// 30-45 s.
+fn ping_wait() -> Duration {
+    Duration::from_secs(30) + Duration::from_millis(u64::from(rand::random::<u16>()) % 15_000)
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "t", rename_all = "lowercase")]
+enum Incoming {
+    Hello {
+        #[serde(default)]
+        host: HelloHost,
+    },
+    St {
+        acct: String,
+        #[serde(default)]
+        live: CloudLiveState,
+    },
+    Con {
+        acct: String,
+        #[serde(default)]
+        lines: Vec<CloudConsoleLine>,
+        #[serde(default)]
+        skipped: u32,
+        #[serde(default)]
+        snapshot: bool,
+    },
+    Host {
+        #[serde(default)]
+        online: bool,
+    },
+    Error {
+        #[serde(default)]
+        code: String,
+        #[serde(default)]
+        acct: Option<String>,
+    },
+    Bye,
+    Pong,
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct HelloHost {
+    online: bool,
+}
+
+async fn send_text(socket: &mut Socket, text: String) -> bool {
+    socket.send(Message::text(text)).await.is_ok()
+}
+
+fn watch_frame(t: &str, acct: &str) -> String {
+    serde_json::json!({ "t": t, "acct": acct }).to_string()
+}
+
+/// One machine's socket until nobody watches or it must not reopen.
+async fn run(
+    endpoint: &Endpoint,
+    host: &str,
+    mut watched: HashSet<String>,
+    mut commands: mpsc::UnboundedReceiver<Command>,
+    sink: &LiveSink,
+) {
+    let status = |status: CloudLiveStatus| {
+        sink(CloudLiveEvent::Status {
+            host: host.to_owned(),
+            status,
+        });
+    };
+    let mut backoff = BACKOFF_MIN;
+    let mut first = true;
+    loop {
+        status(if first {
+            CloudLiveStatus::Connecting
+        } else {
+            CloudLiveStatus::Reconnecting
+        });
+        first = false;
+        let outcome = match endpoint.connect().await {
+            Ok(mut socket) => {
+                let outcome = connected(
+                    &mut socket,
+                    host,
+                    &mut watched,
+                    &mut commands,
+                    sink,
+                    &mut backoff,
+                )
+                .await;
+                let _ = socket.close(None).await;
+                outcome
+            }
+            Err(outcome) => outcome,
+        };
+        let wait = match outcome {
+            Outcome::Done => return,
+            Outcome::Stop(why) => {
+                status(why);
+                return;
+            }
+            Outcome::Now => Duration::ZERO,
+            Outcome::Retry(at_least) => {
+                let wait = jitter(backoff).max(at_least);
+                backoff = (backoff * 2).min(BACKOFF_MAX);
+                wait
+            }
+        };
+        if wait.is_zero() {
+            continue;
+        }
+        status(CloudLiveStatus::Reconnecting);
+        // Wait, but follow the watchers meanwhile: the last one leaving ends it.
+        let until = Instant::now() + wait;
+        loop {
+            tokio::select! {
+                () = sleep_until(until) => break,
+                command = commands.recv() => match command {
+                    None => return,
+                    Some(Command::Watch(acct)) => { watched.insert(acct); }
+                    Some(Command::Unwatch(acct)) => {
+                        watched.remove(&acct);
+                        if watched.is_empty() {
+                            return;
+                        }
+                    }
+                },
+            }
+        }
+    }
+}
+
+async fn connected(
+    socket: &mut Socket,
+    host: &str,
+    watched: &mut HashSet<String>,
+    commands: &mut mpsc::UnboundedReceiver<Command>,
+    sink: &LiveSink,
+    backoff: &mut Duration,
+) -> Outcome {
+    for acct in watched.iter() {
+        if !send_text(socket, watch_frame("watch", acct)).await {
+            return Outcome::Retry(Duration::ZERO);
+        }
+    }
+    let mut next_ping = Instant::now() + ping_wait();
+    let mut next_keep = Instant::now() + KEEP_EVERY;
+    let mut pong_deadline: Option<Instant> = None;
+    loop {
+        let deadline = pong_deadline.unwrap_or(next_ping + Duration::from_secs(3_600));
+        tokio::select! {
+            frame = socket.next() => match frame {
+                Some(Ok(Message::Text(text))) => {
+                    pong_deadline = None;
+                    match serde_json::from_str::<Incoming>(text.as_str()) {
+                        Ok(Incoming::Hello { host: hello }) => {
+                            *backoff = BACKOFF_MIN;
+                            sink(CloudLiveEvent::Status { host: host.to_owned(), status: CloudLiveStatus::Live });
+                            sink(CloudLiveEvent::Hello { host: host.to_owned(), online: hello.online });
+                        }
+                        Ok(Incoming::St { acct, live }) => sink(CloudLiveEvent::State { acct, live }),
+                        Ok(Incoming::Con { acct, lines, skipped, snapshot }) => {
+                            sink(CloudLiveEvent::Lines { acct, lines, skipped, snapshot });
+                        }
+                        Ok(Incoming::Host { online }) => {
+                            sink(CloudLiveEvent::Machine { host: host.to_owned(), online });
+                        }
+                        Ok(Incoming::Error { code, acct }) => sink(CloudLiveEvent::Problem { acct, code }),
+                        Ok(Incoming::Bye | Incoming::Pong | Incoming::Other) => {}
+                        Err(error) => tracing::debug!(%error, "unreadable live console message"),
+                    }
+                }
+                Some(Ok(Message::Close(frame))) => return close_outcome(frame.as_ref()),
+                Some(Ok(_)) => pong_deadline = None,
+                Some(Err(error)) => {
+                    tracing::debug!(%error, "live console connection error");
+                    return Outcome::Retry(Duration::ZERO);
+                }
+                None => return Outcome::Retry(Duration::ZERO),
+            },
+            command = commands.recv() => match command {
+                None => {
+                    let _ = socket
+                        .send(Message::Close(Some(CloseFrame {
+                            code: CloseCode::Normal,
+                            reason: "hidden".into(),
+                        })))
+                        .await;
+                    return Outcome::Done;
+                }
+                Some(Command::Watch(acct)) => {
+                    if watched.insert(acct.clone()) && !send_text(socket, watch_frame("watch", &acct)).await {
+                        return Outcome::Retry(Duration::ZERO);
+                    }
+                }
+                Some(Command::Unwatch(acct)) => {
+                    if watched.remove(&acct) {
+                        let _ = send_text(socket, watch_frame("unwatch", &acct)).await;
+                    }
+                    if watched.is_empty() {
+                        let _ = socket
+                            .send(Message::Close(Some(CloseFrame {
+                                code: CloseCode::Normal,
+                                reason: "hidden".into(),
+                            })))
+                            .await;
+                        return Outcome::Done;
+                    }
+                }
+            },
+            () = sleep_until(next_ping) => {
+                // Exactly these bytes: the Durable Object answers them without waking.
+                if !send_text(socket, PING.to_owned()).await {
+                    return Outcome::Retry(Duration::ZERO);
+                }
+                if pong_deadline.is_none() {
+                    pong_deadline = Some(Instant::now() + PONG_TIMEOUT);
+                }
+                next_ping = Instant::now() + ping_wait();
+            }
+            () = sleep_until(next_keep) => {
+                if !watched.is_empty() && !send_text(socket, KEEP.to_owned()).await {
+                    return Outcome::Retry(Duration::ZERO);
+                }
+                next_keep = Instant::now() + KEEP_EVERY;
+            }
+            () = sleep_until(deadline), if pong_deadline.is_some() => {
+                // Nothing came back: the line is dead even if the socket says otherwise.
+                return Outcome::Retry(Duration::ZERO);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex as StdMutex;
+
+    use tokio::net::TcpListener;
+    use tokio_tungstenite::accept_hdr_async;
+    use tokio_tungstenite::tungstenite::handshake::server::{ErrorResponse, Request, Response};
+
+    use super::*;
+
+    #[test]
+    fn handshakes_and_closes_decide_what_comes_next() {
+        assert!(matches!(
+            handshake_outcome(401, None),
+            Outcome::Stop(CloudLiveStatus::Ended)
+        ));
+        assert!(matches!(
+            handshake_outcome(404, None),
+            Outcome::Stop(CloudLiveStatus::Refused)
+        ));
+        assert!(matches!(
+            handshake_outcome(429, Some(Duration::from_secs(30))),
+            Outcome::Retry(wait) if wait == Duration::from_secs(30)
+        ));
+        assert!(matches!(handshake_outcome(502, None), Outcome::Retry(wait) if wait.is_zero()));
+        let frame = |code: u16| CloseFrame {
+            code: CloseCode::from(code),
+            reason: "".into(),
+        };
+        assert!(matches!(
+            close_outcome(Some(&frame(4000))),
+            Outcome::Stop(CloudLiveStatus::Replaced)
+        ));
+        assert!(matches!(
+            close_outcome(Some(&frame(4001))),
+            Outcome::Stop(CloudLiveStatus::Ended)
+        ));
+        assert!(matches!(close_outcome(Some(&frame(4004))), Outcome::Now));
+        assert!(
+            matches!(close_outcome(Some(&frame(4008))), Outcome::Retry(wait) if wait == TOO_MANY_PAUSE)
+        );
+        assert!(matches!(close_outcome(None), Outcome::Retry(wait) if wait.is_zero()));
+    }
+
+    #[test]
+    fn reads_the_service_messages() {
+        let parse = |text: &str| serde_json::from_str::<Incoming>(text).unwrap();
+        assert!(matches!(
+            parse(r#"{"t":"hello","v":1,"host":{"id":"kz1","online":true},"accts":["a_1"],"leaseSeconds":900,"now":1}"#),
+            Incoming::Hello { host } if host.online
+        ));
+        assert!(matches!(
+            parse(
+                r#"{"t":"con","acct":"a_1","lines":[{"at":1,"text":"/login ******","k":"s"}],"snapshot":true}"#
+            ),
+            Incoming::Con {
+                snapshot: true,
+                skipped: 0,
+                ..
+            }
+        ));
+        assert!(matches!(parse(r#"{"t":"pong"}"#), Incoming::Pong));
+        assert!(matches!(parse(r#"{"t":"later","x":1}"#), Incoming::Other));
+    }
+
+    /// A one-socket stand-in for the service: checks the Bearer, answers `hello`, a snapshot for
+    /// each `watch`, and reports what the client sent.
+    #[allow(clippy::result_large_err)] // tungstenite's handshake callback returns its response
+    async fn fake_service(sent: Arc<StdMutex<Vec<String>>>) -> Url {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            while let Ok((stream, _)) = listener.accept().await {
+                let sent = sent.clone();
+                tokio::spawn(async move {
+                    let check = |request: &Request,
+                                 response: Response|
+                     -> Result<Response, ErrorResponse> {
+                        let bearer = request
+                            .headers()
+                            .get(AUTHORIZATION)
+                            .and_then(|v| v.to_str().ok());
+                        assert_eq!(bearer, Some("Bearer pls_test"));
+                        assert_eq!(request.uri().query(), Some("host=kz1"));
+                        Ok(response)
+                    };
+                    let mut socket = accept_hdr_async(stream, check).await.unwrap();
+                    socket
+                        .send(Message::text(
+                            r#"{"t":"hello","v":1,"host":{"id":"kz1","online":true},"accts":["a_1"],"leaseSeconds":900,"now":1}"#,
+                        ))
+                        .await
+                        .unwrap();
+                    while let Some(Ok(message)) = socket.next().await {
+                        let Message::Text(text) = message else {
+                            continue;
+                        };
+                        sent.lock().unwrap().push(text.to_string());
+                        if text.contains(r#""t":"watch""#) {
+                            socket
+                                .send(Message::text(
+                                    r#"{"t":"con","acct":"a_1","lines":[{"at":5,"text":"Hoş geldin","k":"n"}],"snapshot":true}"#,
+                                ))
+                                .await
+                                .unwrap();
+                        }
+                    }
+                });
+            }
+        });
+        Url::parse(&format!("ws://{address}/api/v1/live?host=kz1")).unwrap()
+    }
+
+    #[tokio::test]
+    async fn watches_while_a_console_is_open_and_closes_after() {
+        let sent = Arc::new(StdMutex::new(Vec::new()));
+        let url = fake_service(sent.clone()).await;
+        let (events_tx, mut events) = mpsc::unbounded_channel();
+        let sink: LiveSink = Arc::new(move |event| {
+            let _ = events_tx.send(event);
+        });
+        let hub = LiveHub::new(Handle::current(), "test", sink);
+        hub.watch(url, Bearer::new("pls_test"), "kz1", "a_1");
+        assert!(hub.is_watching());
+        let mut seen = Vec::new();
+        while let Some(event) = tokio::time::timeout(Duration::from_secs(5), events.recv())
+            .await
+            .unwrap()
+        {
+            let done = matches!(event, CloudLiveEvent::Lines { .. });
+            seen.push(event);
+            if done {
+                break;
+            }
+        }
+        assert!(seen.contains(&CloudLiveEvent::Status {
+            host: "kz1".into(),
+            status: CloudLiveStatus::Live
+        }));
+        assert!(seen.contains(&CloudLiveEvent::Hello {
+            host: "kz1".into(),
+            online: true
+        }));
+        assert!(seen.iter().any(|event| matches!(
+            event,
+            CloudLiveEvent::Lines { acct, snapshot: true, lines, .. } if acct == "a_1" && lines[0].text == "Hoş geldin"
+        )));
+        hub.unwatch("a_1");
+        assert!(!hub.is_watching());
+        // The service heard the watch and the unwatch, and nothing else is scheduled.
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if sent
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .any(|text| text.contains(r#""t":"unwatch""#))
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let sent = sent.lock().unwrap().clone();
+        assert_eq!(sent[0], watch_frame("watch", "a_1"));
+    }
+
+    #[test]
+    fn pings_are_exactly_the_bytes_the_service_answers() {
+        assert_eq!(PING, r#"{"t":"ping"}"#);
+        let wait = ping_wait();
+        assert!(wait >= Duration::from_secs(30) && wait < Duration::from_secs(45));
+        let spread = jitter(Duration::from_secs(10));
+        assert!(spread >= Duration::from_secs(8) && spread <= Duration::from_secs(12));
+    }
+}

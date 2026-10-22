@@ -20,7 +20,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tokio::runtime::Handle;
 use url::Url;
 
-use crate::auth::{LoginAttempt, SignedIn, auth_code_from_deep_link};
+use crate::auth::{LoginAttempt, SessionToken, SignedIn, auth_code_from_deep_link};
 use crate::cards::StoredCard;
 use crate::chat::{
     CARD_WINDOW_MS, Context, EDIT_WINDOW_MS, PAGE_SIZE, REACT_WINDOW_MS, REPORT_CONTEXT,
@@ -815,6 +815,25 @@ impl SocialService {
     }
 
     // --- signed-in calls ------------------------------------------------------------------
+
+    /// The session's token for the launcher's other services that take the friends session as
+    /// their sign-in (7/24 Bulut): while signed in, or while a saved session is being restored.
+    pub fn session_token(&self) -> Option<SessionToken> {
+        let core = self.lock();
+        match (&core.session, core.auth) {
+            (Some(session), AuthPhase::SignedIn | AuthPhase::Restoring) => {
+                Some(session.token().clone())
+            }
+            _ => None,
+        }
+    }
+
+    /// The feature is on and nobody is signed in (never, or signed out): what those other services
+    /// kept for the player goes.
+    pub fn is_signed_out(&self) -> bool {
+        let core = self.lock();
+        core.url.is_some() && core.auth == AuthPhase::SignedOut
+    }
 
     fn signed_in(&self) -> Result<(Session, u64)> {
         let core = self.lock();

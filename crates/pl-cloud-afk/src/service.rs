@@ -1,0 +1,768 @@
+//! What the launcher runs: the client, what it read last (the gate, the player's accounts, the
+//! vault key), the keychain copies and the live sockets, behind the few calls the AFK page makes.
+//!
+//! Nothing here polls. The offer is read when the AFK page opens (at most once a minute; after a
+//! failure, once in two minutes), the accounts with it and after each action, the vault key when a
+//! secret is sealed (at most five minutes old), and the live socket runs only while a console is
+//! watched.
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use parking_lot::Mutex;
+use serde::{Deserialize, Serialize};
+use tokio::runtime::Handle;
+use zeroize::Zeroizing;
+
+use crate::client::{Bearer, CloudClient, CloudConfig, LogQuery};
+use crate::config::{
+    BuildError, CloudEditConfig, CloudIssue, SealContext, build, copies_after, edit_config,
+    fingerprints,
+};
+use crate::copies::{Copies, RowCopies};
+use crate::error::{CloudError, Result};
+use crate::live::{LiveHub, LiveSink};
+use crate::migrate::{CloudMovePlan, MoveContext, plan};
+use crate::model::{
+    AccountPatch, CloudAccount, CloudAccountCount, CloudCanBuy, CloudLimits, CloudLocalized,
+    CloudLogPage, CloudServer, CloudVersions, Me, Offer, ServiceMode, VaultKey,
+};
+use crate::seal::{CONSOLE_ROW, RevealKey, RevealTarget, SealTarget, seal};
+use crate::server::same_server;
+use crate::text::{check_text, looks_sensitive};
+
+const OFFER_FRESH: Duration = Duration::from_secs(60);
+const OFFER_FAILED: Duration = Duration::from_secs(120);
+const VERSIONS_FRESH: Duration = Duration::from_secs(300);
+const VAULT_FRESH: Duration = Duration::from_secs(300);
+
+/// Whether the account parts can show.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CloudSession {
+    /// No friends session in the launcher (or it is no longer valid).
+    SignedOut,
+    SignedIn,
+    /// Signed in, but the accounts could not be read now.
+    Failed,
+}
+
+/// The AFK page's look at 7/24 Bulut.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudOverview {
+    /// False: the service did not answer, or it is off. Then nothing of 7/24 Bulut shows.
+    pub available: bool,
+    /// `on` or `paused` (maintenance: purchases closed, accounts held).
+    pub mode: String,
+    pub maintenance: Option<CloudLocalized>,
+    /// The monthly price, a decimal string in TL (`"60.00"`).
+    pub month_price: Option<String>,
+    pub sold_out: bool,
+    /// Shown only below Studio's "Son N yer" threshold.
+    pub remaining: Option<u32>,
+    pub sales_open: bool,
+    pub renewal_window_days: u32,
+    pub limits: CloudLimits,
+    pub session: CloudSession,
+    pub accounts: Vec<CloudAccount>,
+    pub count: Option<CloudAccountCount>,
+    pub can_buy: Option<CloudCanBuy>,
+    /// The service's clock when the accounts were read (Unix seconds): the UI's skew.
+    pub now: i64,
+}
+
+impl CloudOverview {
+    fn hidden() -> Self {
+        Self {
+            available: false,
+            mode: ServiceMode::Off.as_str().to_owned(),
+            maintenance: None,
+            month_price: None,
+            sold_out: false,
+            remaining: None,
+            sales_open: false,
+            renewal_window_days: 0,
+            limits: CloudLimits::default(),
+            session: CloudSession::SignedOut,
+            accounts: Vec::new(),
+            count: None,
+            can_buy: None,
+            now: 0,
+        }
+    }
+}
+
+/// The editor's look at one account.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudEditView {
+    pub account: CloudAccount,
+    pub config: CloudEditConfig,
+    pub versions: CloudVersions,
+    pub limits: CloudLimits,
+}
+
+/// A change the editor saves: what changed besides the commands and replies is optional.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CloudEdit {
+    /// The revision the editor started from (`If-Match`).
+    pub rev: u64,
+    pub name: Option<String>,
+    pub server: Option<CloudServer>,
+    pub version: Option<String>,
+    pub lang: Option<String>,
+    pub config: Option<CloudEditConfig>,
+}
+
+/// How a save ended. Problems are worded by the UI where they are.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum CloudSaveOutcome {
+    Saved {
+        account: CloudAccount,
+    },
+    /// Something the service would refuse, found here or said by it.
+    Invalid {
+        issues: Vec<CloudIssue>,
+    },
+    /// The account changed elsewhere since the editor read it: its newer state.
+    Conflict {
+        account: CloudAccount,
+    },
+}
+
+struct Cached<T> {
+    value: Option<T>,
+    at: Option<Instant>,
+    failed: bool,
+}
+
+impl<T> Default for Cached<T> {
+    fn default() -> Self {
+        Self {
+            value: None,
+            at: None,
+            failed: false,
+        }
+    }
+}
+
+impl<T: Clone> Cached<T> {
+    /// The cached answer while it is fresh: `Some(None)` for a fresh failure.
+    fn fresh(&self, ok: Duration, failed: Duration) -> Option<Option<T>> {
+        let at = self.at?;
+        let age = at.elapsed();
+        if self.failed {
+            (age < failed).then_some(None)
+        } else {
+            (age < ok).then(|| self.value.clone())
+        }
+    }
+
+    fn set(&mut self, value: Option<T>) {
+        self.failed = value.is_none();
+        self.value = value;
+        self.at = Some(Instant::now());
+    }
+}
+
+#[derive(Default)]
+struct Known {
+    /// The signed-in player's Discord id (from `/me`).
+    owner: Option<String>,
+    accounts: HashMap<String, CloudAccount>,
+}
+
+struct Inner {
+    client: CloudClient,
+    offer: Mutex<Cached<Offer>>,
+    versions: Mutex<Cached<CloudVersions>>,
+    vault: Mutex<Cached<VaultKey>>,
+    known: Mutex<Known>,
+    copies: Arc<Copies>,
+    live: LiveHub,
+}
+
+/// Cheap to clone.
+#[derive(Clone)]
+pub struct CloudService {
+    inner: Arc<Inner>,
+}
+
+impl std::fmt::Debug for CloudService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CloudService")
+            .field("client", &self.inner.client)
+            .finish_non_exhaustive()
+    }
+}
+
+/// Runs a keychain call off the async runtime (it may block).
+async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'static) -> Result<T> {
+    tokio::task::spawn_blocking(work)
+        .await
+        .map_err(|error| CloudError::Keychain(error.to_string()))
+}
+
+impl CloudService {
+    /// `copies` keeps the words of the rows this launcher seals; `sink` gets the live sockets'
+    /// events.
+    pub fn new(
+        http: reqwest::Client,
+        config: CloudConfig,
+        copies: Copies,
+        runtime: Handle,
+        sink: LiveSink,
+    ) -> Self {
+        let client = CloudClient::with_http_client(http, config);
+        let live = LiveHub::new(runtime, client.user_agent().to_owned(), sink);
+        Self {
+            inner: Arc::new(Inner {
+                client,
+                offer: Mutex::new(Cached::default()),
+                versions: Mutex::new(Cached::default()),
+                vault: Mutex::new(Cached::default()),
+                known: Mutex::new(Known::default()),
+                copies: Arc::new(copies),
+                live,
+            }),
+        }
+    }
+
+    pub fn client(&self) -> &CloudClient {
+        &self.inner.client
+    }
+
+    /// The offer, cached (`force`: read it again now, "Tekrar dene").
+    async fn offer(&self, force: bool) -> Option<Offer> {
+        if !force && let Some(cached) = self.inner.offer.lock().fresh(OFFER_FRESH, OFFER_FAILED) {
+            return cached;
+        }
+        let offer = match self.inner.client.offer().await {
+            Ok(offer) => Some(offer),
+            Err(error) => {
+                tracing::debug!(%error, "7/24 Bulut is not reachable");
+                None
+            }
+        };
+        self.inner.offer.lock().set(offer.clone());
+        offer
+    }
+
+    async fn versions(&self) -> CloudVersions {
+        if let Some(Some(versions)) = self
+            .inner
+            .versions
+            .lock()
+            .fresh(VERSIONS_FRESH, Duration::ZERO)
+        {
+            return versions;
+        }
+        match self.inner.client.versions().await {
+            Ok(versions) => {
+                self.inner.versions.lock().set(Some(versions.clone()));
+                versions
+            }
+            Err(error) => {
+                tracing::debug!(%error, "the cloud's game versions are not readable now");
+                CloudVersions::default()
+            }
+        }
+    }
+
+    async fn vault_key(&self) -> Result<VaultKey> {
+        if let Some(Some(key)) = self.inner.vault.lock().fresh(VAULT_FRESH, Duration::ZERO) {
+            return Ok(key);
+        }
+        let key = self.inner.client.vault_key().await?;
+        self.inner.vault.lock().set(Some(key.clone()));
+        Ok(key)
+    }
+
+    async fn owner(&self, token: &Bearer) -> Result<String> {
+        if let Some(owner) = self.inner.known.lock().owner.clone() {
+            return Ok(owner);
+        }
+        let me = self.inner.client.me(token).await?;
+        self.inner.known.lock().owner = Some(me.user.id.clone());
+        Ok(me.user.id)
+    }
+
+    fn remember(&self, account: &CloudAccount) {
+        self.inner
+            .known
+            .lock()
+            .accounts
+            .insert(account.id.clone(), account.clone());
+    }
+
+    /// The account as last read, or read now.
+    async fn account(&self, token: &Bearer, id: &str) -> Result<CloudAccount> {
+        if let Some(account) = self.inner.known.lock().accounts.get(id).cloned() {
+            return Ok(account);
+        }
+        self.fresh_account(token, id).await
+    }
+
+    async fn fresh_account(&self, token: &Bearer, id: &str) -> Result<CloudAccount> {
+        let account = self.inner.client.account(token, id).await?;
+        self.remember(&account);
+        Ok(account)
+    }
+
+    /// The AFK page's look: the gate, and with a session the player's accounts. Never fails: a
+    /// service that does not answer is `available: false`, accounts that could not be read are
+    /// `session: Failed`.
+    pub async fn overview(&self, token: Option<&Bearer>, force: bool) -> CloudOverview {
+        let Some(offer) = self.offer(force).await else {
+            self.inner.live.stop_all();
+            return CloudOverview::hidden();
+        };
+        if offer.mode == ServiceMode::Off {
+            self.inner.live.stop_all();
+            return CloudOverview::hidden();
+        }
+        let mut overview = CloudOverview {
+            available: true,
+            mode: offer.mode.as_str().to_owned(),
+            maintenance: offer.maintenance_message.clone(),
+            month_price: offer.month_price().map(|price| price.price_tl.clone()),
+            sold_out: offer.stock.sold_out,
+            remaining: offer.stock.remaining,
+            sales_open: offer.sales.new_accounts,
+            renewal_window_days: offer.renewal_window_days,
+            limits: offer.limits.clone(),
+            ..CloudOverview::hidden()
+        };
+        let Some(token) = token else {
+            return overview;
+        };
+        let client = &self.inner.client;
+        let (me, list) = tokio::join!(client.me(token), client.accounts(token));
+        match (me, list) {
+            (Ok(me), Ok(list)) => {
+                self.adopt(&me, &list.accounts).await;
+                overview.session = CloudSession::SignedIn;
+                overview.count = Some(me.accounts);
+                overview.can_buy = Some(me.can_buy);
+                overview.now = list.now;
+                overview.accounts = list.accounts;
+            }
+            (Err(CloudError::Unauthorized), _) | (_, Err(CloudError::Unauthorized)) => {
+                overview.session = CloudSession::SignedOut;
+            }
+            (Err(error), _) | (_, Err(error)) => {
+                tracing::info!(%error, "cloud AFK accounts are not readable now");
+                overview.session = CloudSession::Failed;
+            }
+        }
+        overview
+    }
+
+    /// The signed-in player and their accounts: copies of gone accounts or of another player go.
+    async fn adopt(&self, me: &Me, accounts: &[CloudAccount]) {
+        {
+            let mut known = self.inner.known.lock();
+            if known.owner.as_deref() != Some(me.user.id.as_str()) {
+                known.accounts.clear();
+                self.inner.live.stop_all();
+            }
+            known.owner = Some(me.user.id.clone());
+            known.accounts = accounts
+                .iter()
+                .map(|account| (account.id.clone(), account.clone()))
+                .collect();
+        }
+        let copies = self.inner.copies.clone();
+        let owner = me.user.id.clone();
+        let ids: Vec<String> = accounts.iter().map(|account| account.id.clone()).collect();
+        let _ = blocking(move || copies.prune(&owner, &ids)).await;
+    }
+
+    /// Signed out of the friends service: the keychain copies, the sockets and what was read about
+    /// the player go (the contract: copies are deleted with a sign-out).
+    pub async fn forget(&self) {
+        self.inner.live.stop_all();
+        *self.inner.known.lock() = Known::default();
+        let copies = self.inner.copies.clone();
+        let _ = blocking(move || copies.forget_all()).await;
+    }
+
+    pub async fn start(&self, token: &Bearer, id: &str) -> Result<CloudAccount> {
+        let account = self.inner.client.start(token, id).await?;
+        self.remember(&account);
+        Ok(account)
+    }
+
+    pub async fn stop(&self, token: &Bearer, id: &str) -> Result<CloudAccount> {
+        let account = self.inner.client.stop(token, id).await?;
+        self.remember(&account);
+        Ok(account)
+    }
+
+    pub async fn restart(&self, token: &Bearer, id: &str) -> Result<CloudAccount> {
+        let account = self.inner.client.restart(token, id).await?;
+        self.remember(&account);
+        Ok(account)
+    }
+
+    /// Sends a console line; a password command is sealed here first. The console never echoes
+    /// it: the server's answer shows.
+    pub async fn send(&self, token: &Bearer, id: &str, line: &str) -> Result<()> {
+        let line = line.trim();
+        check_text(line).map_err(|_| CloudError::Invalid("console line"))?;
+        if !looks_sensitive(line) {
+            return self.inner.client.send_line(token, id, line).await;
+        }
+        let account = self.account(token, id).await?;
+        let owner = self.owner(token).await?;
+        let key = self.vault_key().await?;
+        let target = SealTarget {
+            discord_id: &owner,
+            account_id: id,
+            row_id: CONSOLE_ROW,
+            server: &account.server,
+        };
+        let sealed = seal(&key, line, &target).map_err(|e| CloudError::Seal(e.to_string()))?;
+        self.inner.client.send_sealed(token, id, &sealed).await
+    }
+
+    /// The machine's masked log before `before` (Unix seconds; none: the last hour), 200 lines.
+    pub async fn logs(
+        &self,
+        token: &Bearer,
+        id: &str,
+        before: Option<i64>,
+    ) -> Result<CloudLogPage> {
+        let query = LogQuery {
+            to: before.map(|at| at - 1),
+            limit: Some(200),
+            ..LogQuery::default()
+        };
+        self.inner.client.logs(token, id, &query).await
+    }
+
+    /// Streams the account's console while it is on screen.
+    pub async fn watch(&self, token: &Bearer, id: &str) -> Result<()> {
+        let account = self.account(token, id).await?;
+        let Some(host) = account.host.clone() else {
+            return Err(CloudError::Invalid("no machine yet"));
+        };
+        let url = self.inner.client.live_url(&host);
+        self.inner.live.watch(url, token.clone(), &host, id);
+        Ok(())
+    }
+
+    pub fn unwatch(&self, id: &str) {
+        self.inner.live.unwatch(id);
+    }
+
+    /// The account for the editor: read now, secret rows with this computer's copies.
+    pub async fn edit_view(&self, token: &Bearer, id: &str) -> Result<CloudEditView> {
+        let account = self.fresh_account(token, id).await?;
+        let owner = self.owner(token).await?;
+        let copies = self.load_copies(&owner, id).await?;
+        let versions = self.versions().await;
+        let limits = self
+            .offer(false)
+            .await
+            .map(|offer| offer.limits)
+            .unwrap_or_default();
+        Ok(CloudEditView {
+            config: edit_config(&account.config, &copies),
+            account,
+            versions,
+            limits,
+        })
+    }
+
+    async fn load_copies(&self, owner: &str, id: &str) -> Result<RowCopies> {
+        let copies = self.inner.copies.clone();
+        let (owner, id) = (owner.to_owned(), id.to_owned());
+        blocking(move || copies.load(&owner, &id)).await?
+    }
+
+    async fn save_copies(&self, owner: &str, id: &str, rows: RowCopies) {
+        let copies = self.inner.copies.clone();
+        let (owner, id) = (owner.to_owned(), id.to_owned());
+        match blocking(move || copies.save(&owner, &id, &rows)).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) | Err(error) => {
+                tracing::warn!(%error, "the words of the sealed rows are not kept on this computer");
+            }
+        }
+    }
+
+    /// Saves an edit: secrets sealed here (their words kept in the keychain after), stored seals
+    /// kept, a new server sealed again for. A change made elsewhere meanwhile comes back as
+    /// `Conflict`.
+    pub async fn save(
+        &self,
+        token: &Bearer,
+        id: &str,
+        edit: CloudEdit,
+    ) -> Result<CloudSaveOutcome> {
+        let current = self.fresh_account(token, id).await?;
+        if current.rev != edit.rev {
+            return Ok(CloudSaveOutcome::Conflict { account: current });
+        }
+        let owner = self.owner(token).await?;
+        let limits = self
+            .offer(false)
+            .await
+            .map(|offer| offer.limits)
+            .unwrap_or_default();
+        let server = edit
+            .server
+            .clone()
+            .unwrap_or_else(|| current.server.clone());
+        let server_changed = edit.server.as_ref().is_some_and(|s| *s != current.server);
+        let before = self.load_copies(&owner, id).await?;
+        let mut patch = AccountPatch {
+            name: edit.name.filter(|name| *name != current.name),
+            server: edit.server.filter(|_| server_changed),
+            version: edit.version.filter(|version| *version != current.version),
+            lang: edit.lang.filter(|lang| *lang != current.lang),
+            config: None,
+        };
+        let mut built = None;
+        // A new server needs every secret sealed again, so the config goes with it.
+        let config = match edit.config {
+            Some(config) => Some(config),
+            None if server_changed => Some(edit_config(&current.config, &before)),
+            None => None,
+        };
+        if let Some(config) = config {
+            let key = self.vault_key().await?;
+            let ctx = SealContext {
+                key: &key,
+                discord_id: &owner,
+                account_id: id,
+                server: &server,
+                server_changed,
+            };
+            match build(
+                &config,
+                &limits,
+                &ctx,
+                &before,
+                &fingerprints(&current.config),
+            ) {
+                Ok(done) => {
+                    patch.config = Some(done.config.clone());
+                    built = Some(done);
+                }
+                Err(BuildError::Invalid(issues)) => {
+                    return Ok(CloudSaveOutcome::Invalid { issues });
+                }
+                Err(BuildError::Seal(error)) => return Err(CloudError::Seal(error.to_string())),
+            }
+        }
+        if patch.is_empty() {
+            return Ok(CloudSaveOutcome::Saved { account: current });
+        }
+        match self
+            .inner
+            .client
+            .patch_account(token, id, edit.rev, &patch)
+            .await
+        {
+            Ok(account) => {
+                self.remember(&account);
+                if let Some(built) = built {
+                    let after = copies_after(built, &before, &account.config);
+                    self.save_copies(&owner, id, after).await;
+                }
+                Ok(CloudSaveOutcome::Saved { account })
+            }
+            Err(error) => match refusal_issues(&error) {
+                Some(issues) => Ok(CloudSaveOutcome::Invalid { issues }),
+                None if error.code() == "rev_conflict" => Ok(CloudSaveOutcome::Conflict {
+                    account: self.fresh_account(token, id).await?,
+                }),
+                None => Err(error),
+            },
+        }
+    }
+
+    /// "Göster": one stored secret row's words, from the account's machine, sealed to a key made
+    /// for this request. They are handed on and never kept.
+    pub async fn reveal(
+        &self,
+        token: &Bearer,
+        id: &str,
+        row_id: &str,
+    ) -> Result<Zeroizing<String>> {
+        let owner = self.owner(token).await?;
+        let key = RevealKey::generate();
+        let answer = self
+            .inner
+            .client
+            .reveal(token, id, row_id, key.public())
+            .await?;
+        let target = RevealTarget {
+            discord_id: &owner,
+            account_id: id,
+            row_id,
+            nonce: &answer.nonce,
+        };
+        key.open(&answer.revealed, &target)
+            .map_err(|error| CloudError::Seal(error.to_string()))
+    }
+
+    /// "Buluta taşı": the desktop account in the cloud's form (`owner`: the launcher's active game
+    /// account).
+    pub async fn move_plan(
+        &self,
+        account: &pl_afk::AfkAccount,
+        login_commands: &[String],
+        owner: &str,
+    ) -> CloudMovePlan {
+        let versions = self.versions().await;
+        let limits = self
+            .offer(false)
+            .await
+            .map(|offer| offer.limits)
+            .unwrap_or_default();
+        plan(
+            account,
+            login_commands,
+            MoveContext {
+                owner,
+                limits: &limits,
+                versions: &versions,
+            },
+        )
+    }
+
+    /// Writes the desktop account's plan over the cloud account `id` (its `rev` as the player saw
+    /// it). The name, server, version and every command and reply are replaced.
+    pub async fn move_to(
+        &self,
+        token: &Bearer,
+        id: &str,
+        rev: u64,
+        plan: &CloudMovePlan,
+    ) -> Result<CloudSaveOutcome> {
+        let Some(server) = plan.server.clone() else {
+            return Err(CloudError::Invalid("server"));
+        };
+        let edit = CloudEdit {
+            rev,
+            name: Some(plan.name.clone()),
+            server: Some(server),
+            version: Some(plan.version.clone()),
+            lang: None,
+            config: Some(plan.config.clone()),
+        };
+        self.save(token, id, edit).await
+    }
+
+    /// The player's cloud account with this name on this server, if any (the same account in two
+    /// places keeps kicking itself).
+    pub fn twin(&self, name: &str, server: &CloudServer) -> Option<CloudAccount> {
+        self.inner
+            .known
+            .lock()
+            .accounts
+            .values()
+            .find(|account| {
+                account.name.eq_ignore_ascii_case(name) && same_server(&account.server, server)
+            })
+            .cloned()
+    }
+}
+
+/// A refusal about the change's contents, as issues the editor shows where they are.
+fn refusal_issues(error: &CloudError) -> Option<Vec<CloudIssue>> {
+    let field = error.extra_str("field").unwrap_or("");
+    let reason = error.extra_str("reason").unwrap_or("");
+    let issue = match error.code() {
+        "invalid_name" => CloudIssue::from_path("name", "format"),
+        "invalid_server" => {
+            CloudIssue::from_path("server", if reason.is_empty() { "format" } else { reason })
+        }
+        "invalid_version" => CloudIssue::from_path("version", "format"),
+        "invalid_config" => CloudIssue::from_path(
+            if field.is_empty() { "config" } else { field },
+            if reason.is_empty() { "format" } else { reason },
+        ),
+        "invalid_command" => {
+            CloudIssue::from_path(field, if reason.is_empty() { "format" } else { reason })
+        }
+        "invalid_pattern" => {
+            CloudIssue::from_path(field, error.extra_str("problem").unwrap_or("invalid"))
+        }
+        "limit_rows" => {
+            CloudIssue::from_path(if field.is_empty() { "commands" } else { field }, "limit")
+        }
+        "duplicate_account" => CloudIssue::from_path("name", "duplicate"),
+        "server_blocked" => CloudIssue::from_path("server", "blocked"),
+        "server_full" => CloudIssue::from_path("server", "full"),
+        "server_change_limit" => CloudIssue::from_path("server", "changeLimit"),
+        _ => return None,
+    };
+    Some(vec![issue])
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+    use crate::error::from_response;
+
+    #[test]
+    fn refusals_point_at_the_field() {
+        let error = from_response(
+            400,
+            None,
+            json!({"error": {"code": "invalid_command", "field": "commands[1].text", "reason": "variable"}})
+                .to_string()
+                .as_bytes(),
+        );
+        assert_eq!(
+            refusal_issues(&error),
+            Some(vec![CloudIssue {
+                place: "commands".into(),
+                index: Some(1),
+                field: "text".into(),
+                problem: "variable".into()
+            }])
+        );
+        let error = from_response(
+            409,
+            None,
+            json!({"error": {"code": "server_change_limit", "retryAfter": 120}})
+                .to_string()
+                .as_bytes(),
+        );
+        assert_eq!(refusal_issues(&error).unwrap()[0].field, "server");
+        let error = from_response(
+            409,
+            None,
+            json!({"error": {"code": "service_paused", "mode": "off"}})
+                .to_string()
+                .as_bytes(),
+        );
+        assert_eq!(refusal_issues(&error), None);
+    }
+
+    #[test]
+    fn the_cache_keeps_answers_and_failures_apart() {
+        let mut cached: Cached<u32> = Cached::default();
+        assert_eq!(cached.fresh(OFFER_FRESH, OFFER_FAILED), None);
+        cached.set(Some(3));
+        assert_eq!(cached.fresh(OFFER_FRESH, OFFER_FAILED), Some(Some(3)));
+        cached.set(None);
+        assert_eq!(cached.fresh(OFFER_FRESH, OFFER_FAILED), Some(None));
+        assert_eq!(
+            cached.fresh(OFFER_FRESH, Duration::ZERO),
+            None,
+            "a stale failure asks again"
+        );
+    }
+}

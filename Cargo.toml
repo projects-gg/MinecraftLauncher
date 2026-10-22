@@ -25,6 +25,7 @@ pl-desktop = { path = "crates/pl-desktop" }
 pl-lang = { path = "crates/pl-lang" }
 pl-import = { path = "crates/pl-import" }
 pl-overlay = { path = "crates/pl-overlay" }
+pl-cloud-afk = { path = "crates/pl-cloud-afk" }
 
 # Async runtime
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "fs", "process", "io-util", "sync", "time", "net"] }

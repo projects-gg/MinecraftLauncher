@@ -336,6 +336,44 @@ export const commands = {
 	afkSetShowScriptCommands: (show: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("afk_set_show_script_commands", { show })),
 	/**  Opens the account's folder in the file manager: its chat log, alerts and console log are there. */
 	afkOpenFolder: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("afk_open_folder", { id })),
+	/**
+	 *  The AFK page's look at 7/24 Bulut: read when the page opens and after an action, never on a
+	 *  timer. `force`: "Tekrar dene" (the gate is read again now).
+	 */
+	cloudAfkOverview: (force: boolean) => typedError<CloudPageView_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_overview", { force })),
+	cloudAfkStart: (id: string) => typedError<CloudAccount_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_start", { id })),
+	cloudAfkStop: (id: string) => typedError<CloudAccount_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_stop", { id })),
+	/**  "Yeniden bağlan": the machine starts the client again (never repeated by itself). */
+	cloudAfkRestart: (id: string) => typedError<CloudAccount_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_restart", { id })),
+	/**
+	 *  A console line; a password command is sealed before it leaves the launcher. Nothing is echoed:
+	 *  the server's answer shows in the console.
+	 */
+	cloudAfkSend: (id: string, line: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_send", { id, line })),
+	/**  The machine's masked log before `before` (Unix seconds; none: the last hour). */
+	cloudAfkLogs: (id: string, before: number | null) => typedError<CloudLogPage, CmdError>(__TAURI_INVOKE("cloud_afk_logs", { id, before })),
+	/**  The console is on screen: its lines and state stream as `cloud-afk-live`. */
+	cloudAfkWatch: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_watch", { id })),
+	/**  The console left the screen (closed, the window hidden): the socket closes with the last one. */
+	cloudAfkUnwatch: (id: string) => __TAURI_INVOKE<void>("cloud_afk_unwatch", { id }),
+	/**  The account for the settings sheet, read now; secret rows with this computer's copies. */
+	cloudAfkEdit: (id: string) => typedError<CloudEditView_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_edit", { id })),
+	cloudAfkSave: (id: string, edit: CloudEdit) => typedError<CloudSaveOutcome_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_save", { id, edit })),
+	cloudAfkReveal: (id: string, rowId: string) => typedError<CloudRevealOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_reveal", { id, rowId })),
+	/**  "Buluta taşı": the desktop account in the cloud's form, and what stays on the desktop. */
+	cloudAfkMovePlan: (desktopId: string) => typedError<CloudMovePlan, CmdError>(__TAURI_INVOKE("cloud_afk_move_plan", { desktopId })),
+	/**
+	 *  Writes the desktop account over the cloud account `cloud_id` (`rev` as the player saw it), then
+	 *  stops it here, turns its start with the launcher off, and starts it in the cloud (`run`).
+	 */
+	cloudAfkMove: (desktopId: string, cloudId: string, rev: number, run: boolean) => typedError<CloudMoveResult_Serialize, CmdError>(__TAURI_INVOKE("cloud_afk_move", { desktopId, cloudId, rev, run })),
+	/**
+	 *  "Tümünü bağla" while some accounts run in the cloud: every other desktop account connects
+	 *  (staggered, as usual). Returns how many were left to the cloud.
+	 */
+	cloudAfkConnectHere: () => __TAURI_INVOKE<number>("cloud_afk_connect_here"),
+	/**  Opens afk.projects.gg in the browser: purchase, renewal and linking always happen there. */
+	cloudAfkOpen: (page: CloudPage, account: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_open", { page, account })),
 	legacyScan: () => typedError<LegacyScan, CmdError>(__TAURI_INVOKE("legacy_scan")),
 	legacyImport: (request: LegacyImportRequest) => typedError<LegacyImportReport, CmdError>(__TAURI_INVOKE("legacy_import", { request })),
 	/**  Other launchers' data on this computer (cheap: small files and folder listings). */
@@ -1908,6 +1946,615 @@ export type ClipboardCopy =
 "image" | 
 /**  Only the file path (the clipboard did not take the picture). */
 "path";
+
+/**  A cloud account (`GET /accounts`, `GET /accounts/:id`, and the answer of every change). */
+export type CloudAccount = CloudAccount_Serialize | CloudAccount_Deserialize;
+
+export type CloudAccountCount = {
+	count: number,
+	cap: number,
+};
+
+/**  A cloud account (`GET /accounts`, `GET /accounts/:id`, and the answer of every change). */
+export type CloudAccount_Deserialize = {
+	id: string,
+	/**  The in-game name. */
+	name: string,
+	server: CloudServer,
+	/**  A value of `GET /versions`, or `auto`. */
+	version: string,
+	/**  The client's console language: `tr` or `en`. */
+	lang: string,
+	/**  The machine's id (for the live socket); None while it waits for a slot. Never shown. */
+	host: string | null,
+	createdAt: number,
+	/**  Paid until. */
+	expiresAt: number,
+	expired: boolean,
+	/**  Reactivation possible until then; then the account is deleted. */
+	graceUntil: number,
+	renewal: CloudRenewal,
+	/**  What the player (or staff) asked for: `run` or `stop` (anything else reads as `stop`). */
+	desired: string,
+	hold: CloudHold_Deserialize | null,
+	live: CloudLiveState,
+	everJoined: boolean,
+	config: CloudConfigView,
+	/**  Version of name, server, version, lang and config (`If-Match`). */
+	rev: number,
+	serverChanges: CloudServerChanges,
+};
+
+/**  A cloud account (`GET /accounts`, `GET /accounts/:id`, and the answer of every change). */
+export type CloudAccount_Serialize = {
+	id: string,
+	/**  The in-game name. */
+	name: string,
+	server: CloudServer,
+	/**  A value of `GET /versions`, or `auto`. */
+	version: string,
+	/**  The client's console language: `tr` or `en`. */
+	lang: string,
+	/**  The machine's id (for the live socket); None while it waits for a slot. Never shown. */
+	host: string | null,
+	createdAt: number,
+	/**  Paid until. */
+	expiresAt: number,
+	expired: boolean,
+	/**  Reactivation possible until then; then the account is deleted. */
+	graceUntil: number,
+	renewal: CloudRenewal,
+	/**  What the player (or staff) asked for: `run` or `stop` (anything else reads as `stop`). */
+	desired: string,
+	hold: CloudHold_Serialize | null,
+	live: CloudLiveState,
+	everJoined: boolean,
+	config: CloudConfigView,
+	/**  Version of name, server, version, lang and config (`If-Match`). */
+	rev: number,
+	serverChanges: CloudServerChanges,
+};
+
+/**  Why an address cannot be used. */
+export type CloudAddressProblem = "empty" | 
+/**  Not a host name or an IPv4 address (IPv6 included: the machines have none). */
+"format" | 
+/**  A host name without a dot (`localhost` aside, which is `Private`). */
+"dot" | 
+/**  A private, local or reserved address. */
+"private" | 
+/**  A port the machines never connect to. */
+"port";
+
+/**  A value the cloud needs in another range, moved into it. */
+export type CloudAdjusted = 
+/**  Intervals below Studio's minimum now wait that long. */
+"interval" | 
+/**  Auto-reply waits below Studio's minimum now wait that long. */
+"cooldown" | 
+/**  The game version is not one the machines have: the recommended one. */
+"version";
+
+export type CloudAntiAfk = {
+	enabled: boolean,
+	delayMin: number,
+	delayMax: number,
+};
+
+/**
+ *  Whether the player may buy a new account now, and if not, why (a refusal key of the contract,
+ *  kept as text).
+ */
+export type CloudCanBuy = {
+	ok: boolean,
+	reason: string | null,
+	until: number | null,
+};
+
+/**
+ *  A command row of the view. `on` is `join`, `start`, `reconnect` (with `delay`), `interval`
+ *  (with `every`) or `daily` (with `at`), kept as text.
+ */
+export type CloudCommandView = {
+	id: string,
+	enabled: boolean,
+	on: string,
+	delay: number | null,
+	every: CloudEvery | null,
+	at: string[] | null,
+	secret: boolean,
+	text: string | null,
+	preview: string | null,
+	fp: string | null,
+};
+
+/**  `Account.config`: the account's commands and auto-replies, secrets as their preview only. */
+export type CloudConfigView = {
+	v: number,
+	owner: string,
+	antiAfk: CloudAntiAfk,
+	commands: CloudCommandView[],
+	rules: CloudRuleView[],
+};
+
+/**  One masked console line: `k` is `n` (normal), `e` (a client error) or `s` (a command row). */
+export type CloudConsoleLine = {
+	at: number,
+	text: string,
+	k: string,
+};
+
+export type CloudDropped = {
+	what: CloudDroppedKind,
+	/**  Rows or actions, where it counts them (1 for a setting). */
+	count: number,
+};
+
+/**  What the cloud does not do, and how many of it the account had. */
+export type CloudDroppedKind = 
+/**  Anti-AFK by walking (terrain handling). */
+"walking" | "autoEat" | 
+/**  Client actions other than sending a line (`script`, `connect`, `move`, `dig`, …). */
+"rawActions" | 
+/**  The sound when the account answers someone. */
+"sounds" | 
+/**  Alerts (their sound and file). */
+"alerts" | 
+/**  The chat log file. */
+"chatLog" | 
+/**  Downloading the server's resource pack. */
+"resourcePacks" | 
+/**  Own reconnect settings: the cloud always reconnects by the contract's rules. */
+"relog" | 
+/**  Rows beyond Studio's limits. */
+"tooMany" | 
+/**  Rows whose words the cloud cannot send (an unknown `%variable%`, too long). */
+"unusable" | 
+/**  "Yalnız ana hesabımdan" rules while the launcher has no account name to listen to. */
+"ownerOnly";
+
+/**  A change the editor saves: what changed besides the commands and replies is optional. */
+export type CloudEdit = {
+	/**  The revision the editor started from (`If-Match`). */
+	rev: number,
+	name: string | null,
+	server: CloudServer | null,
+	version: string | null,
+	lang: string | null,
+	config: CloudEditConfig | null,
+};
+
+/**
+ *  A command row: `on` is `join`, `start` or `reconnect` (with `delay`), `interval` (with
+ *  `every`) or `daily` (with `at`).
+ */
+export type CloudEditCommand = {
+	id: string,
+	enabled: boolean,
+	on: string,
+	delay?: number | null,
+	every?: CloudEvery | null,
+	at?: string[] | null,
+	words: CloudRowText,
+};
+
+export type CloudEditConfig = {
+	/**  "" or the player's own in-game name ("Yalnız ana hesabımdan" rules listen to it). */
+	owner: string,
+	antiAfk: CloudAntiAfk,
+	commands: CloudEditCommand[],
+	rules: CloudEditRule[],
+};
+
+/**  An auto-reply rule: `from` is `any`, `player`, `private` or `server`. */
+export type CloudEditRule = {
+	id: string,
+	enabled: boolean,
+	pattern: string,
+	regex: boolean,
+	from: string,
+	ownerOnly: boolean,
+	cooldown: number,
+	reply: CloudRowText,
+};
+
+/**  The editor's look at one account. */
+export type CloudEditView = CloudEditView_Serialize | CloudEditView_Deserialize;
+
+/**  The editor's look at one account. */
+export type CloudEditView_Deserialize = {
+	account: CloudAccount_Deserialize,
+	config: CloudEditConfig,
+	versions: CloudVersions,
+	limits: CloudLimits,
+};
+
+/**  The editor's look at one account. */
+export type CloudEditView_Serialize = {
+	account: CloudAccount_Serialize,
+	config: CloudEditConfig,
+	versions: CloudVersions,
+	limits: CloudLimits,
+};
+
+export type CloudEvery = {
+	min: number,
+	max: number,
+};
+
+/**
+ *  Why an account does not run although it is wanted (in this order of precedence). A hold this
+ *  launcher does not know yet is `Other` (shown like a plain stop).
+ */
+export type CloudHold = CloudHold_Serialize | CloudHold_Deserialize;
+
+/**
+ *  Why an account does not run although it is wanted (in this order of precedence). A hold this
+ *  launcher does not know yet is `Other` (shown like a plain stop).
+ */
+export type CloudHold_Deserialize = 
+/**  Staff stopped it; `reason` is a reason key. */
+({ suspended: {
+	kind: "suspended",
+	until: number | null,
+	reason: string,
+} }) & { cause?: never; expired?: never; no_host?: never; other?: never; paused?: never; restricted?: never; server_blocked?: never } | 
+/**  The player is banned from Cloud AFK. */
+({ restricted: {
+	kind: "restricted",
+	until: number | null,
+} }) & { cause?: never; expired?: never; no_host?: never; other?: never; paused?: never; server_blocked?: never; suspended?: never } | ({ expired: {
+	kind: "expired",
+	at: number,
+} }) & { cause?: never; no_host?: never; other?: never; paused?: never; restricted?: never; server_blocked?: never; suspended?: never } | 
+/**  The service is not on (`paused` or `off`). */
+({ paused: {
+	kind: "paused",
+	mode: string,
+} }) & { cause?: never; expired?: never; no_host?: never; other?: never; restricted?: never; server_blocked?: never; suspended?: never } | 
+/**  No machine yet, or its machine is disabled. */
+({ no_host: {
+	kind: "no_host",
+	since: number,
+} }) & { cause?: never; expired?: never; other?: never; paused?: never; restricted?: never; server_blocked?: never; suspended?: never } | ({ server_blocked: {
+	kind: "server_blocked",
+	reason: CloudLocalized | null,
+} }) & { cause?: never; expired?: never; no_host?: never; other?: never; paused?: never; restricted?: never; suspended?: never } | 
+/**
+ *  The client stopped for good: `cause` is a stop cause of the contract (pl-afk's names plus
+ *  the cloud's own), kept as text.
+ */
+({ cause: {
+	kind: "cause",
+	cause: string,
+	at: number,
+} }) & { expired?: never; no_host?: never; other?: never; paused?: never; restricted?: never; server_blocked?: never; suspended?: never } | ({ other: {
+	kind: string,
+} }) & { cause?: never; expired?: never; no_host?: never; paused?: never; restricted?: never; server_blocked?: never; suspended?: never };
+
+/**
+ *  Why an account does not run although it is wanted (in this order of precedence). A hold this
+ *  launcher does not know yet is `Other` (shown like a plain stop).
+ */
+export type CloudHold_Serialize = 
+/**  Staff stopped it; `reason` is a reason key. */
+({ kind: "suspended"; until: number | null; reason: string }) & { at?: never; cause?: never; mode?: never; since?: never } | 
+/**  The player is banned from Cloud AFK. */
+({ kind: "restricted"; until: number | null }) & { at?: never; cause?: never; mode?: never; reason?: never; since?: never } | ({ kind: "expired"; at: number }) & { cause?: never; mode?: never; reason?: never; since?: never; until?: never } | 
+/**  The service is not on (`paused` or `off`). */
+({ kind: "paused"; mode: string }) & { at?: never; cause?: never; reason?: never; since?: never; until?: never } | 
+/**  No machine yet, or its machine is disabled. */
+({ kind: "no_host"; since: number }) & { at?: never; cause?: never; mode?: never; reason?: never; until?: never } | ({ kind: "server_blocked"; reason: CloudLocalized | null }) & { at?: never; cause?: never; mode?: never; since?: never; until?: never } | 
+/**
+ *  The client stopped for good: `cause` is a stop cause of the contract (pl-afk's names plus
+ *  the cloud's own), kept as text.
+ */
+({ kind: "cause"; cause: string; at: number }) & { mode?: never; reason?: never; since?: never; until?: never } | ({ kind: "other" }) & { at?: never; cause?: never; mode?: never; reason?: never; since?: never; until?: never };
+
+/**
+ *  Where a problem is and what it is. `place` is `general`, `commands` or `rules`; `index` the
+ *  row; `field` what of it (`owner`, `antiAfk`, `count`, `id`, `on`, `delay`, `every`, `at`,
+ *  `text`, `match`, `from`, `ownerOnly`, `cooldown`, `reply`); `problem` a key the UI words
+ *  (a text problem, a pattern problem, `range`, `order`, `format`, `duplicate`, `limit`, `reseal`,
+ *  `owner`, `server`).
+ */
+export type CloudIssue = {
+	place: string,
+	index: number | null,
+	field: string,
+	problem: string,
+};
+
+/**  The Studio numbers the launcher's editor checks against before the service does. */
+export type CloudLimits = {
+	perPlayerCap?: number,
+	serverChangesPerHour?: number,
+	maxCommandRows?: number,
+	maxRules?: number,
+	minIntervalSec?: number,
+	minRuleCooldownSec?: number,
+	consoleLinesPerMinute?: number,
+};
+
+/**  What the socket tells the launcher. */
+export type CloudLiveEvent = 
+/**  The socket of `host` is open; whether its machine is connected now. */
+{ kind: "hello"; host: string; online: boolean } | 
+/**  A watched account's live state changed (also once right after `watch`). */
+{ kind: "state"; acct: string; live: CloudLiveState } | 
+/**
+ *  Masked console lines of a watched account. `snapshot`: the recent lines right after
+ *  `watch` (they replace what was shown); `skipped`: lines dropped in between.
+ */
+{ kind: "lines"; acct: string; lines: CloudConsoleLine[]; skipped: number; snapshot: boolean } | 
+/**  The machine connected or went away. */
+{ kind: "machine"; host: string; online: boolean } | 
+/**
+ *  The service said no to something: `not_found` (not the player's account there),
+ *  `rate_limited`, `host_offline`, `bad_request`.
+ */
+{ kind: "problem"; acct: string | null; code: string } | { kind: "status"; host: string; status: CloudLiveStatus };
+
+/**
+ *  What the machine says about the account now. `state` is one of `unknown`, `stopped`, `queued`,
+ *  `connecting`, `running`, `waiting`, kept as text (anything else reads as `unknown`).
+ */
+export type CloudLiveState = {
+	state: string,
+	since: number | null,
+	/**  `queued`: why it waits (`start_interval`, `memory`, `target_cap`, `connect_interval`). */
+	reason: string | null,
+	/**  `connecting`, `waiting`: the reconnect attempt (1 = first). */
+	attempt: number | null,
+	/**  `waiting`: the next attempt. */
+	retryAt: number | null,
+};
+
+/**  How one machine's socket is doing. */
+export type CloudLiveStatus = "connecting" | "live" | 
+/**  Dropped; opening again after a pause. */
+"reconnecting" | 
+/**
+ *  A newer console of this player took over (another launcher or the site): not reopened by
+ *  itself.
+ */
+"replaced" | 
+/**  The friends session ended. */
+"ended" | 
+/**
+ *  The service refused this socket (no account of the player on that machine, an old
+ *  launcher): not reopened by itself.
+ */
+"refused";
+
+/**  Turkish and English words written in Studio (a maintenance note, a block list reason). */
+export type CloudLocalized = {
+	tr: string,
+	en: string,
+};
+
+/**  `GET /accounts/:id/logs`: oldest first; `next` continues. */
+export type CloudLogPage = {
+	lines: CloudConsoleLine[],
+	next: string | null,
+};
+
+/**  The desktop account in the cloud's form. */
+export type CloudMovePlan = {
+	name: string,
+	/**  The address as the service stores it; None when the cloud cannot connect there. */
+	server: CloudServer | null,
+	serverProblem: CloudAddressProblem | null,
+	version: string,
+	config: CloudEditConfig,
+	dropped: CloudDropped[],
+	adjusted: CloudAdjusted[],
+};
+
+export type CloudMoveResult = CloudMoveResult_Serialize | CloudMoveResult_Deserialize;
+
+export type CloudMoveResult_Deserialize = {
+	outcome: CloudSaveOutcome_Deserialize,
+	/**  The desktop session was stopped (it would kick the cloud one). */
+	stoppedHere: boolean,
+	/**  The cloud account was started. */
+	started: boolean,
+};
+
+export type CloudMoveResult_Serialize = {
+	outcome: CloudSaveOutcome_Serialize,
+	/**  The desktop session was stopped (it would kick the cloud one). */
+	stoppedHere: boolean,
+	/**  The cloud account was started. */
+	started: boolean,
+};
+
+/**  The AFK page's look at 7/24 Bulut. */
+export type CloudOverview = CloudOverview_Serialize | CloudOverview_Deserialize;
+
+/**  The AFK page's look at 7/24 Bulut. */
+export type CloudOverview_Deserialize = {
+	/**  False: the service did not answer, or it is off. Then nothing of 7/24 Bulut shows. */
+	available: boolean,
+	/**  `on` or `paused` (maintenance: purchases closed, accounts held). */
+	mode: string,
+	maintenance: CloudLocalized | null,
+	/**  The monthly price, a decimal string in TL (`"60.00"`). */
+	monthPrice: string | null,
+	soldOut: boolean,
+	/**  Shown only below Studio's "Son N yer" threshold. */
+	remaining: number | null,
+	salesOpen: boolean,
+	renewalWindowDays: number,
+	limits: CloudLimits,
+	session: CloudSession,
+	accounts: CloudAccount_Deserialize[],
+	count: CloudAccountCount | null,
+	canBuy: CloudCanBuy | null,
+	/**  The service's clock when the accounts were read (Unix seconds): the UI's skew. */
+	now: number,
+};
+
+/**  The AFK page's look at 7/24 Bulut. */
+export type CloudOverview_Serialize = {
+	/**  False: the service did not answer, or it is off. Then nothing of 7/24 Bulut shows. */
+	available: boolean,
+	/**  `on` or `paused` (maintenance: purchases closed, accounts held). */
+	mode: string,
+	maintenance: CloudLocalized | null,
+	/**  The monthly price, a decimal string in TL (`"60.00"`). */
+	monthPrice: string | null,
+	soldOut: boolean,
+	/**  Shown only below Studio's "Son N yer" threshold. */
+	remaining: number | null,
+	salesOpen: boolean,
+	renewalWindowDays: number,
+	limits: CloudLimits,
+	session: CloudSession,
+	accounts: CloudAccount_Serialize[],
+	count: CloudAccountCount | null,
+	canBuy: CloudCanBuy | null,
+	/**  The service's clock when the accounts were read (Unix seconds): the UI's skew. */
+	now: number,
+};
+
+/**  Which page of afk.projects.gg to open. */
+export type CloudPage = 
+/**  The site's front page ("afk.projects.gg'de başla"). */
+"start" | 
+/**  Buying a new account. */
+"buy" | 
+/**  Renewing or reactivating `account`. */
+"renew" | 
+/**  The account's own page. */
+"cloudAccount" | 
+/**  The player's accounts. */
+"accounts";
+
+export type CloudPageView = CloudPageView_Serialize | CloudPageView_Deserialize;
+
+export type CloudPageView_Deserialize = {
+	overview: CloudOverview_Deserialize,
+	twins: CloudTwin[],
+};
+
+export type CloudPageView_Serialize = {
+	overview: CloudOverview_Serialize,
+	twins: CloudTwin[],
+};
+
+/**
+ *  A row's words as the account view shows them: plain (`text`) or secret (`preview`, and `fp`,
+ *  the stored seal's fingerprint; never the sealed value).
+ */
+export type CloudPayloadView = {
+	secret: boolean,
+	text: string | null,
+	preview: string | null,
+	fp: string | null,
+};
+
+export type CloudRenewal = {
+	open: boolean,
+	opensAt: number,
+};
+
+/**  How "Göster" ended. */
+export type CloudRevealOutcome = 
+/**  The words, for a few seconds on screen: never stored. */
+{ kind: "shown"; text: string } | 
+/**
+ *  The machine cannot show this row (it does not open, it is not there, an older machine):
+ *  write it again.
+ */
+{ kind: "retype" } | 
+/**  The account's machine is not connected now. */
+{ kind: "offline" } | 
+/**  Too many reveals; `retry_after` seconds when the service said. */
+{ kind: "limited"; retry_after: number | null };
+
+/**  A row's words in the editor. */
+export type CloudRowText = 
+/**  Plain words, stored as they are. */
+{ kind: "plain"; text: string } | 
+/**
+ *  A secret whose words the launcher has: this computer's copy (`kept`), or typed now. Sealed
+ *  before it is sent; the copy is kept after.
+ */
+{ kind: "secret"; text: string; kept?: boolean } | 
+/**  A secret only the account's machine can show ("Göster"): its preview. Kept as it is stored. */
+{ kind: "sealed"; preview: string };
+
+/**  An auto-reply rule of the view. `from` is `any`, `player`, `private` or `server`. */
+export type CloudRuleView = {
+	id: string,
+	enabled: boolean,
+	match: string,
+	regex: boolean,
+	from: string,
+	ownerOnly: boolean,
+	cooldown: number,
+	reply: CloudPayloadView,
+};
+
+/**  How a save ended. Problems are worded by the UI where they are. */
+export type CloudSaveOutcome = CloudSaveOutcome_Serialize | CloudSaveOutcome_Deserialize;
+
+/**  How a save ended. Problems are worded by the UI where they are. */
+export type CloudSaveOutcome_Deserialize = ({ kind: "saved"; account: CloudAccount_Deserialize }) & { issues?: never } | 
+/**  Something the service would refuse, found here or said by it. */
+({ kind: "invalid"; issues: CloudIssue[] }) & { account?: never } | 
+/**  The account changed elsewhere since the editor read it: its newer state. */
+({ kind: "conflict"; account: CloudAccount_Deserialize }) & { issues?: never };
+
+/**  How a save ended. Problems are worded by the UI where they are. */
+export type CloudSaveOutcome_Serialize = ({ kind: "saved"; account: CloudAccount_Serialize }) & { issues?: never } | 
+/**  Something the service would refuse, found here or said by it. */
+({ kind: "invalid"; issues: CloudIssue[] }) & { account?: never } | 
+/**  The account changed elsewhere since the editor read it: its newer state. */
+({ kind: "conflict"; account: CloudAccount_Serialize }) & { issues?: never };
+
+/**
+ *  A server address as the service stores it: `host` normalized (lowercase ASCII, punycode),
+ *  `port` 0 for "the client finds it" (SRV record, then 25565).
+ */
+export type CloudServer = {
+	host: string,
+	port: number,
+};
+
+export type CloudServerChanges = {
+	used: number,
+	limit: number,
+	resetAt: number | null,
+};
+
+/**  Whether the account parts can show. */
+export type CloudSession = 
+/**  No friends session in the launcher (or it is no longer valid). */
+"signedOut" | "signedIn" | 
+/**  Signed in, but the accounts could not be read now. */
+"failed";
+
+/**
+ *  A desktop AFK account and the cloud account with its name on its server (the same account in
+ *  two places keeps kicking itself).
+ */
+export type CloudTwin = {
+	desktopId: string,
+	cloudId: string,
+};
+
+export type CloudVersionOption = {
+	value: string,
+	label: string,
+};
+
+/**  `GET /versions`: what the machines' clients can connect with. */
+export type CloudVersions = {
+	versions: CloudVersionOption[],
+	recommended: string,
+};
 
 /**
  *  Error returned by every command. `message` is friendly text for the UI in the interface's

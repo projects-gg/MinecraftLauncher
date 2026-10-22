@@ -11,7 +11,8 @@
       "!**/bindings.ts",
       "!**/src-tauri",
       "!**/dist",
-      "!crates/pl-afk/tests/golden"
+      "!crates/pl-afk/tests/golden",
+      "!crates/pl-cloud-afk/tests/vectors"
     ]
   },
   "formatter": {

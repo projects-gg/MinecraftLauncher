@@ -187,6 +187,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<pl_social::TagOffView>()
         // Emitted as the plain "overlay-status" event (the in-game overlay's mod connected).
         .typ::<pl_overlay::OverlayStatus>()
+        // Emitted as the plain "cloud-afk-live" event (a watched 7/24 Bulut console).
+        .typ::<pl_cloud_afk::CloudLiveEvent>()
         .commands(tauri_specta::collect_commands![
             commands::app::app_info,
             commands::app::app_set_language,
@@ -262,6 +264,22 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::afk::afk_global_settings,
             commands::afk::afk_set_show_script_commands,
             commands::afk::afk_open_folder,
+            // 7/24 Bulut (cloud AFK accounts; shown only while the service answers)
+            commands::cloud_afk::cloud_afk_overview,
+            commands::cloud_afk::cloud_afk_start,
+            commands::cloud_afk::cloud_afk_stop,
+            commands::cloud_afk::cloud_afk_restart,
+            commands::cloud_afk::cloud_afk_send,
+            commands::cloud_afk::cloud_afk_logs,
+            commands::cloud_afk::cloud_afk_watch,
+            commands::cloud_afk::cloud_afk_unwatch,
+            commands::cloud_afk::cloud_afk_edit,
+            commands::cloud_afk::cloud_afk_save,
+            commands::cloud_afk::cloud_afk_reveal,
+            commands::cloud_afk::cloud_afk_move_plan,
+            commands::cloud_afk::cloud_afk_move,
+            commands::cloud_afk::cloud_afk_connect_here,
+            commands::cloud_afk::cloud_afk_open,
             commands::migrate::legacy_scan,
             commands::migrate::legacy_import,
             commands::import::import_scan,
