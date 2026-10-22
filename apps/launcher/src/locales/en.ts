@@ -32,6 +32,7 @@ import { enSafety } from "./en-safety";
 import { enShortcuts } from "./en-shortcuts";
 import { enShotCopy } from "./en-shot-copy";
 import { enSmall7 } from "./en-small7";
+import { enTeam6 } from "./en-team6";
 import { enTeams } from "./en-teams";
 import { enTray } from "./en-tray";
 import { enTuning } from "./en-tuning";
@@ -285,6 +286,7 @@ export const en: DeepPartial<Strings> = {
   lib1: enLib1,
   fix2: enFix2,
   chat2: enChat2,
+  team6: enTeam6,
   nav: {
     home: "Home",
     library: "Library",

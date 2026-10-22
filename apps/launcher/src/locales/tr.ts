@@ -34,6 +34,7 @@ import { trShortcuts } from "./tr-shortcuts";
 import { trShotCopy } from "./tr-shot-copy";
 import { trSmall7 } from "./tr-small7";
 import { trSocial } from "./tr-social";
+import { trTeam6 } from "./tr-team6";
 import { trTeams } from "./tr-teams";
 import { trTray } from "./tr-tray";
 import { trTuning } from "./tr-tuning";
@@ -79,6 +80,7 @@ export const tr = {
   lib1: trLib1,
   fix2: trFix2,
   chat2: trChat2,
+  team6: trTeam6,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
