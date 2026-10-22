@@ -94,7 +94,8 @@ public final class ToastLayer implements HudElement {
         if (cue != null) {
             Sounds.play(cue, settings, now);
         }
-        if (panelOpen) {
+        // The panel shows it; on the way to a server the travel toast has the corner (the panel will have it).
+        if (panelOpen || (travel != null && travelAlpha.target() > 0f)) {
             return;
         }
         Shapes.prepare();
