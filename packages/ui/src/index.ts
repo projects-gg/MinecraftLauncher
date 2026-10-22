@@ -34,7 +34,7 @@ export {
   Slider,
   useField,
 } from "./components/forms";
-export { ContextMenu, Menu, type MenuItem } from "./components/menu";
+export { ContextMenu, Menu, type MenuItem, type MenuStripItem } from "./components/menu";
 export {
   PlayButton,
   type PlayButtonLabels,

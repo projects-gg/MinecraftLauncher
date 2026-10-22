@@ -24,8 +24,47 @@ export interface MenuItem {
   shortcut?: string;
 }
 
+/**
+ * A row of small actions above a menu's rows (a chat message's quick reactions): each one a menu
+ * item of its own, reached with the arrows like the rows below, its `content` drawn in a square.
+ */
+export interface MenuStripItem {
+  key: string;
+  /** Its accessible name ("👍 ile tepki ver"). */
+  label: string;
+  content: ReactNode;
+  onSelect: () => void;
+  /** It is the player's choice already (a reaction they gave): a gold ring. */
+  on?: boolean;
+}
+
 const contentClass =
   "glass-strong pop-motion z-50 min-w-[190px] rounded-[var(--radius-panel)] p-1 shadow-[0_24px_60px_rgb(34_6_6/0.55)]";
+
+/** The strip of small actions and the line under it. */
+function stripRow(strip: readonly MenuStripItem[] | undefined, parts: MenuParts): ReactNode {
+  if (!strip?.length) return null;
+  const { Item, Separator } = parts;
+  return [
+    <div key="strip" className="flex items-center gap-0.5 px-0.5 pt-0.5">
+      {strip.map((item) => (
+        <Item
+          key={item.key}
+          aria-label={item.label}
+          onSelect={item.onSelect}
+          className={cn(
+            "chamfer flex size-[34px] cursor-pointer items-center justify-center outline-none select-none [--cut:6px]",
+            "transition-[background-color,transform,scale] duration-150 data-[highlighted]:bg-white/10 active:scale-[0.92]",
+            item.on && "bg-gold-500/16 data-[highlighted]:bg-gold-500/24",
+          )}
+        >
+          {item.content}
+        </Item>
+      ))}
+    </div>,
+    <Separator key="strip-line" className="my-1.5 h-px bg-white/8" />,
+  ];
+}
 
 /**
  * `onCloseAutoFocus` of both menus: the trigger gets the focus back only after keyboard use
@@ -155,11 +194,14 @@ function menuRows(items: Array<MenuItem | null>, parts: MenuParts): ReactNode[] 
 export function Menu({
   trigger,
   items,
+  strip,
   align = "end",
   side = "bottom",
 }: {
   trigger: ReactElement;
   items: Array<MenuItem | null>;
+  /** Small actions in a row above the rows. */
+  strip?: readonly MenuStripItem[];
   align?: "start" | "center" | "end";
   side?: "top" | "right" | "bottom" | "left";
 }) {
@@ -174,6 +216,7 @@ export function Menu({
           className={contentClass}
           onCloseAutoFocus={(event) => focusBackAfterKeys(event)}
         >
+          {stripRow(strip, DROPDOWN)}
           {menuRows(items, DROPDOWN)}
         </DropdownMenu.Content>
       </DropdownMenu.Portal>
@@ -198,6 +241,7 @@ function skipPortalClicks(event: ReactMouseEvent<HTMLElement>) {
 export function ContextMenu({
   children,
   items,
+  strip,
   disabled,
   wrapTrigger,
   onCloseAutoFocus,
@@ -205,6 +249,8 @@ export function ContextMenu({
   /** The element that opens the menu on right click (one element; it receives the handlers). */
   children: ReactElement;
   items: Array<MenuItem | null>;
+  /** Small actions in a row above the rows (a chat message's quick reactions). */
+  strip?: readonly MenuStripItem[];
   disabled?: boolean;
   /**
    * Puts something around the trigger that also needs the element, such as a `Tooltip`: the
@@ -228,6 +274,7 @@ export function ContextMenu({
           className={contentClass}
           onCloseAutoFocus={(event) => focusBackAfterKeys(event, onCloseAutoFocus)}
         >
+          {stripRow(strip, CONTEXT)}
           {menuRows(items, CONTEXT)}
         </RadixContextMenu.Content>
       </RadixContextMenu.Portal>
