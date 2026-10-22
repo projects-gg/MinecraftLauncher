@@ -1,8 +1,10 @@
 // Tauri implementation of `api.social`: maps the generated bindings onto the UI shapes.
 import { listen } from "@tauri-apps/api/event";
 import {
+  type ChatCardView,
   type ChatChangeView,
   type ChatMessageView,
+  type ChatTypingView,
   type ChatView,
   type CmdError,
   type ConversationView,
@@ -26,6 +28,7 @@ import {
   type TeamView,
 } from "@/bindings";
 import type {
+  ChatCard,
   ChatChange,
   ChatMessage,
   ChatState,
@@ -133,7 +136,13 @@ function me(v: MeView): SocialMe {
     shareLink: opt(v.shareLink),
     qr: opt(v.qr),
     status: v.status,
-    privacy: { shareServer: v.privacy.shareServer, shareLastSeen: v.privacy.shareLastSeen },
+    privacy: {
+      shareServer: v.privacy.shareServer,
+      shareLastSeen: v.privacy.shareLastSeen,
+      // CHAT2: none from a service without the chat extras (the switches do not show).
+      shareRead: opt(v.privacy.shareRead),
+      shareTyping: opt(v.privacy.shareTyping),
+    },
     backup: opt(v.backup),
     limited: v.limited
       ? {
@@ -143,6 +152,23 @@ function me(v: MeView): SocialMe {
             .map((item) => ({ key: item.key as LimitedKey, perDay: opt(item.perDay) })),
         }
       : undefined,
+  };
+}
+
+function chatCard(v: ChatCardView): ChatCard {
+  return {
+    state: v.state,
+    url: v.url,
+    site: v.site,
+    icon: v.icon,
+    kind: v.kind,
+    title: opt(v.title),
+    author: opt(v.author),
+    desc: opt(v.desc),
+    image: opt(v.image),
+    w: opt(v.w),
+    h: opt(v.h),
+    rule: opt(v.rule),
   };
 }
 
@@ -160,6 +186,22 @@ function chatMessage(v: ChatMessageView): ChatMessage {
     editUntil: opt(v.editUntil),
     deleteUntil: opt(v.deleteUntil),
     deleted: v.deleted ? { by: v.deleted.by, at: opt(v.deleted.at) } : undefined,
+    // CHAT2.
+    failureRule: opt(v.failureRule),
+    sticker: opt(v.sticker),
+    reply: v.reply
+      ? {
+          id: v.reply.id,
+          from: v.reply.from,
+          key: opt(v.reply.key),
+          text: opt(v.reply.text),
+          sticker: opt(v.reply.sticker),
+          deleted: v.reply.deleted,
+          missing: v.reply.missing,
+        }
+      : undefined,
+    reactions: v.reactions.length ? v.reactions : undefined,
+    card: v.card ? chatCard(v.card) : undefined,
   };
 }
 
@@ -176,11 +218,13 @@ function conversation(v: ConversationView): Conversation {
           text: v.last.text,
           at: v.last.at,
           deletedBy: opt(v.last.deletedBy),
+          sticker: opt(v.last.sticker),
         }
       : undefined,
     unread: v.unread,
     writable: v.writable,
     failed: v.failed,
+    peerRead: opt(v.peerRead),
   };
 }
 
@@ -191,6 +235,10 @@ function chatState(v: ChatView): ChatState {
     perDay: v.perDay,
     mutedUntil: opt(v.mutedUntil),
     conversations: v.conversations.map(conversation),
+    // CHAT2: what the socket took and Studio has on; none from an older service.
+    extras: opt(v.extras),
+    stickerSets: v.stickerSets,
+    links: opt(v.links),
   };
 }
 
@@ -526,7 +574,13 @@ export const tauriSocial: SocialApi = {
     await ok(commands.socialSetStatus(status));
   },
   async setPrivacy(change) {
-    await ok(commands.socialSetPrivacy(change.shareServer ?? null, change.shareLastSeen ?? null));
+    if (change.shareServer !== undefined || change.shareLastSeen !== undefined) {
+      await ok(commands.socialSetPrivacy(change.shareServer ?? null, change.shareLastSeen ?? null));
+    }
+    // CHAT2's two switches ("Görüldü bilgisi", "Yazıyor bilgisi").
+    if (change.shareRead !== undefined || change.shareTyping !== undefined) {
+      await ok(commands.socialSetChatPrivacy(change.shareRead ?? null, change.shareTyping ?? null));
+    }
   },
   async setAvatar(avatar) {
     await ok(commands.socialSetAvatar(avatar));
@@ -682,16 +736,28 @@ export const tauriSocial: SocialApi = {
     const page = await commands.socialChatPage(conv, before ?? null);
     return { conv: page.conv, messages: page.messages.map(chatMessage), more: page.more };
   },
-  // CHAT2's commands land with CHAT2-R (pl-social); until then the backend offers no extras
-  // (`chat.extras` absent), so the interface never asks for these.
-  chatSend: (conv, text) => ok(commands.socialChatSend(conv, text)),
-  chatSendSticker: () => Promise.reject(new Error("stickers are not available")),
-  chatReact: () => Promise.reject(new Error("reactions are not available")),
-  chatTyping: () => {},
-  chatUnfurl: () => Promise.resolve(),
-  chatCard: () => Promise.resolve(null),
+  // CHAT2 (pl-social): a reply goes with its own command; the interface asks for the extras
+  // only while `chat.extras` has them on (an older service has none).
+  chatSend: (conv, text, reply) =>
+    reply === undefined
+      ? ok(commands.socialChatSend(conv, text))
+      : ok(commands.socialChatReply(conv, text, reply)),
+  chatSendSticker: (conv, sticker, reply) =>
+    ok(commands.socialChatSticker(conv, sticker, reply ?? null)),
+  async chatReact(conv, id, emoji, on) {
+    await ok(commands.socialChatReact(conv, id, emoji, on));
+  },
+  chatTyping(conv) {
+    void commands.socialChatTyping(conv).catch(() => {});
+  },
+  async chatUnfurl(conv, key) {
+    await ok(commands.socialChatUnfurl(conv, key));
+  },
+  async chatCard(url) {
+    return chatCard(await ok(commands.socialChatLinkCard(url)));
+  },
   onChatTyping(listener) {
-    const unlisten = listen<{ conv: string; by: string }>("social-chat-typing", (event) =>
+    const unlisten = listen<ChatTypingView>("social-chat-typing", (event) =>
       listener(event.payload),
     );
     return () => {

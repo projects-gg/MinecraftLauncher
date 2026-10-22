@@ -57,13 +57,13 @@ import { type MessageAction, messageMenu } from "../menus";
 import { enter, leave, rise, swap, useSocialMotion } from "../motion";
 import { PersonContextMenu, type PersonPlace } from "../person-menu";
 import { SocialFace } from "../social-face";
-import { LinkCard, MessageText, plainCardOf } from "./link-ui";
-import { findLinks, ruleWords } from "./links";
+import { LinkCard, MessageText, plainCardOf, ruleWords } from "./link-ui";
 import { MessageToolbar } from "./message-toolbar";
 import { ReactionChips } from "./reaction-ui";
 import { REACTION_WINDOW_MS, sameEmoji, reactable as takesReactions } from "./reactions";
 import { QuoteBlock, type Quoted } from "./reply";
 import { SenderName } from "./sender-name";
+import { messageLinks } from "./text";
 
 /** What a row needs from its conversation. */
 export interface RowPlace {
@@ -301,7 +301,8 @@ function MessageRowView({
   const time = timeFormat().format(new Date(message.at));
   const { extras } = shared;
   const found = useMemo(
-    () => (sticker || gone ? [] : findLinks(text, extras.links ? shared.links : undefined)),
+    () =>
+      sticker || gone ? [] : messageLinks(text, extras.links && shared.links ? shared.links : null),
     [sticker, gone, text, extras.links, shared.links],
   );
   // The card is for the first link the rules let through. One the hub refused (the link leads

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChatCard } from "@/lib/api/social-types";
-import { cardShapeFor, domainOf, shapeOf } from "./link-ui";
+import { cardShapeFor, domainOf, piecesOf, ruleWords, shapeOf } from "./link-ui";
+import { messageLinks } from "./text";
 
 const card = (extra: Partial<ChatCard>): ChatCard => ({
   state: "ready",
@@ -44,5 +45,25 @@ describe("card shapes", () => {
     expect(shapeOf(card({ kind: "stream", image: "data:x" }))).toBe("banner");
     expect(shapeOf(card({ kind: "video" }))).toBe("row");
     expect(shapeOf(card({ state: "plain", kind: "video" }))).toBe("row");
+  });
+});
+
+describe("drawing a message's links", () => {
+  const lists = { trusted: ["youtu.be"], blocked: [], invites: true };
+
+  it("splits a text into its plain runs and links", () => {
+    const text = "bak https://youtu.be/a ve gel";
+    expect(piecesOf(text, messageLinks(text, lists)).map((p) => [p.kind, p.text])).toEqual([
+      ["text", "bak "],
+      ["link", "https://youtu.be/a"],
+      ["text", " ve gel"],
+    ]);
+  });
+
+  it("words each refusal by its own rule, or the common sentence", () => {
+    expect(ruleWords("http")).toBe("http");
+    expect(ruleWords("formHint")).toBe("formHint");
+    expect(ruleWords("grabber")).toBe("other");
+    expect(ruleWords("blocked")).toBe("other");
   });
 });

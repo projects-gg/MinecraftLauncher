@@ -38,10 +38,16 @@ import { useSocialUi } from "../store";
 import { useChat } from "./chat-store";
 import { useChatExtras, useChatHasExtras, useLinkRules, useStickerSets } from "./extras";
 import { holdFocus } from "./focus";
-import { domainOf, SiteIcon, shapeOf } from "./link-ui";
-import { findLinks, hasBareDomain, ruleWords } from "./links";
+import { domainOf, ruleWords, SiteIcon, shapeOf } from "./link-ui";
 import { type Quoted, ReplyStrip } from "./reply";
-import { CHAT_COUNT_FROM, CHAT_TEXT_MAX, chatLength, hasText, textProblem } from "./text";
+import {
+  CHAT_COUNT_FROM,
+  CHAT_TEXT_MAX,
+  chatLength,
+  hasText,
+  messageLinks,
+  messageProblem,
+} from "./text";
 import { typingSender } from "./typing";
 
 /** What the composer may do here. */
@@ -59,10 +65,14 @@ const PAD = 9;
 const CARD_AFTER_MS = 600;
 
 /**
- * Why a text cannot go: CHAT1's reasons, a link with the rule it fails (CHAT2), links from a
- * limited account (until when, Unix seconds), or none.
+ * Why a text cannot go: CHAT1's reasons (`words`: only 🖕, the word list stays the service's), a
+ * link with the rule it fails (CHAT2), links from a limited account (until when, Unix seconds),
+ * or none.
  */
-type Problem = "phone" | "long" | { link: string } | { limited: number } | null;
+type Problem = "phone" | "long" | "words" | { link: string } | { limited: number } | null;
+
+/** A bare domain in the text ("youtube.com/x"): the refusal adds "https:// ile yaz.". */
+const BARE = /(?<![\p{L}\p{N}@.\-/])[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,24}(?![\p{L}\p{N}])/iu;
 
 /**
  * The composer's check. Without links on, any address is a link that cannot go (CHAT1). With
@@ -75,23 +85,19 @@ function problemOf(
   extras: boolean,
   limitedUntil: number | null,
 ): Problem {
-  const base = textProblem(value);
-  if (base !== "link") return base;
-  if (!links) return { link: extras ? "off" : "form" };
-  const found = findLinks(value, links);
-  if (!found.length) return { link: hasBareDomain(value) ? "formHint" : "form" };
-  if (found.length > 3) return { link: "count" };
-  const bad = found.find((link) => link.rule);
-  if (bad?.rule) return { link: bad.rule };
-  // A limited account sends no links (the service: `account_limited` with `chat_links`).
-  if (limitedUntil !== null) return { limited: limitedUntil };
-  // The text without its links: anything else that reads as an address still cannot go.
-  let rest = value;
-  for (const link of [...found].reverse()) {
-    rest = `${rest.slice(0, link.start)} ${rest.slice(link.end)}`;
+  const problem = messageProblem(value, links ?? null);
+  if (problem?.reason === "link") {
+    // An older service says CHAT1's sentence; with the extras, links switched off say so.
+    if (problem.rule === "off") return { link: extras ? "off" : "form" };
+    if (problem.rule === "form") return { link: BARE.test(value) ? "formHint" : "form" };
+    return { link: problem.rule };
   }
-  const other = textProblem(rest);
-  return other === "link" ? { link: hasBareDomain(rest) ? "formHint" : "form" } : other;
+  if (problem) return problem.reason;
+  // A limited account sends no links (the service: `account_limited` with `chat_links`).
+  if (limitedUntil !== null && links && messageLinks(value, links).length > 0) {
+    return { limited: limitedUntil };
+  }
+  return null;
 }
 
 /** A link's card over the field while the player writes it (what the others will see). */
@@ -249,7 +255,7 @@ export function Composer({
 
   // The card of the link being written, after a pause (only links that may go).
   const [card, setCard] = useState<ChatCard | null>(null);
-  const firstLink = !problem && links ? findLinks(text, links).find((l) => l.ok) : undefined;
+  const firstLink = !problem && links ? messageLinks(text, links).find((l) => l.ok) : undefined;
   const cardUrl = firstLink?.url;
   useEffect(() => {
     if (!cardUrl || editing) {
@@ -378,11 +384,13 @@ export function Composer({
         ? t("chat.composer.phone")
         : problem === "long"
           ? t("chat.composer.long")
-          : "limited" in problem
-            ? t("chat2.links.limited", { when: opensIn(t, problem.limited, Date.now()) })
-            : hasExtras || problem.link !== "form"
-              ? t(`chat2.links.rules.${ruleWords(problem.link)}`)
-              : t("chat.composer.link"));
+          : problem === "words"
+            ? t("chat.failure.words")
+            : "limited" in problem
+              ? t("chat2.links.limited", { when: opensIn(t, problem.limited, Date.now()) })
+              : hasExtras || problem.link !== "form"
+                ? t(`chat2.links.rules.${ruleWords(problem.link)}`)
+                : t("chat.composer.link"));
   const showCount = length >= CHAT_COUNT_FROM;
   const stickers = extras.stickers && stickerSets.includes("pl1") && !editing;
 

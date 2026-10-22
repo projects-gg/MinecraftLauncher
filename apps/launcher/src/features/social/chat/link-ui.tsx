@@ -16,7 +16,53 @@ import { type ReactElement, type ReactNode, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { ChatCard, ChatCardIcon } from "@/lib/api/social-types";
 import { openWebLink } from "@/lib/links";
-import { type FoundLink, hostIn, piecesOf } from "./links";
+import type { MessageLink } from "./text";
+
+/** A link as the drawing needs it (text.ts's `messageLinks` makes them). */
+type FoundLink = Pick<MessageLink, "start" | "end" | "url" | "host" | "ok" | "trusted">;
+
+/** The rules whose refusal has words of its own (the contract's table; `formHint` is the
+ * composer's "https:// ile yaz." for a bare domain). */
+const WORDED = new Set([
+  "off",
+  "form",
+  "formHint",
+  "count",
+  "http",
+  "long",
+  "shortener",
+  "lookalike",
+  "file",
+  "invite",
+]);
+
+/** A refusal's words: its own, or "Bu bağlantı gönderilemez." (`chat2.links.rules.<key>`). */
+export const ruleWords = (rule: string): string => (WORDED.has(rule) ? rule : "other");
+
+/** The host or one of its parent domains is on the list. */
+function hostIn(host: string, list: readonly string[]): boolean {
+  return list.some((entry) => {
+    const site = entry.toLowerCase();
+    return host === site || host.endsWith(`.${site}`);
+  });
+}
+
+/** The text in pieces: plain runs and links (for drawing). */
+export type TextPiece =
+  | { kind: "text"; text: string }
+  | { kind: "link"; link: FoundLink; text: string };
+
+export function piecesOf(text: string, links: readonly FoundLink[]): TextPiece[] {
+  const pieces: TextPiece[] = [];
+  let at = 0;
+  for (const link of links) {
+    if (link.start > at) pieces.push({ kind: "text", text: text.slice(at, link.start) });
+    pieces.push({ kind: "link", link, text: text.slice(link.start, link.end) });
+    at = link.end;
+  }
+  if (at < text.length) pieces.push({ kind: "text", text: text.slice(at) });
+  return pieces;
+}
 
 /** Second-level labels under a country's domain that are nobody's name ("example.com.tr"). */
 const GENERIC_SECOND = new Set(
