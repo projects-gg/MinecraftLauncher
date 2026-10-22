@@ -535,11 +535,13 @@ function MessageRowView({
             ) : null}
           </span>
         )}
+        {/* The column leaves the toolbar's width free beside the bubble (92 px; with the
+            face's 32 px for the others' messages): the toolbar never lies over anything. */}
         <div
           ref={content}
           className={cn(
-            "relative flex min-w-0 max-w-[78%] flex-col",
-            mine ? "items-end" : "items-start",
+            "relative flex min-w-0 flex-col",
+            mine ? "max-w-[calc(100%-92px)] items-end" : "max-w-[calc(100%-124px)] items-start",
           )}
         >
           {place.crew && !mine && place.first ? (
@@ -555,7 +557,22 @@ function MessageRowView({
           {quoted && !gone ? (
             <QuoteBlock quoted={quoted} mine={mine} onJump={actions.onJump} />
           ) : null}
-          {body}
+          {/* The bubble and, beside it in the row's free side, its toolbar. */}
+          <div className="relative max-w-full">
+            {body}
+            {sent && !gone ? (
+              <MessageToolbar
+                mine={mine}
+                reactable={reactable}
+                repliable={repliable}
+                quick={shared.quick}
+                given={given}
+                menu={items}
+                onReact={(emoji) => actions.onReact(message, emoji, !given(emoji))}
+                onReply={() => actions.onReply(message)}
+              />
+            ) : null}
+          </div>
           {reactions?.length && !gone ? (
             <ReactionChips
               reactions={reactions}
@@ -657,18 +674,6 @@ function MessageRowView({
               </motion.div>
             ) : null}
           </AnimatePresence>
-          {sent && !gone ? (
-            <MessageToolbar
-              mine={mine}
-              reactable={reactable}
-              repliable={repliable}
-              quick={shared.quick}
-              given={given}
-              menu={items}
-              onReact={(emoji) => actions.onReact(message, emoji, !given(emoji))}
-              onReply={() => actions.onReply(message)}
-            />
-          ) : null}
         </div>
       </div>
     </ContextMenu>

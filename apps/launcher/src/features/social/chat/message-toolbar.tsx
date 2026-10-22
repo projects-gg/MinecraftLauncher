@@ -1,7 +1,10 @@
-// A message's small toolbar (CHAT2 §6, §7): it comes at the bubble's top corner while the pointer
-// is on the message or the keyboard is in it, and fades away after (opacity and 2 px, nothing
-// else moves): 😊+ (the quick reactions and "+", the whole picker), ↩ "Yanıtla" and "…" (the
-// message's menu, the same rows as its right click). One Tab stop; the arrows move inside it.
+// A message's small toolbar (CHAT2 §6, §7): it comes beside the bubble's top, in the row's own
+// free side (right of the others' messages, left of the player's; the column leaves its width
+// free), so it never lies over another message, a date line or the bubble's own words. It shows
+// while the pointer is on the message or the keyboard is in it, and fades away after (opacity and
+// 3 px out of the bubble, nothing else moves; a fade only under reduced motion): 😊+ (the quick
+// reactions and "+", the whole picker), ↩ "Yanıtla" and "…" (the message's menu, the same rows
+// as its right click). One Tab stop; the arrows move inside it.
 import { ArrowBendUpLeft, DotsThree, Plus, Smiley } from "@phosphor-icons/react";
 import { cn, IconButton, Menu, type MenuItem } from "@pl/ui";
 import { Popover } from "radix-ui";
@@ -65,13 +68,14 @@ export function MessageToolbar({
       aria-label={t("chat2.toolbar.label")}
       onKeyDown={onKeyDown}
       className={cn(
-        "absolute -top-7 z-10 flex items-center gap-0.5 rounded-[var(--radius-panel)] bg-obsidian-850 p-0.5 shadow-[0_10px_30px_rgb(34_6_6/0.5)] ring-1 ring-white/10",
-        mine ? "left-0" : "right-0",
+        // 88 px wide at most (three 28 px buttons): the 92 px the column leaves, with 4 px between.
+        "absolute top-px z-10 flex items-center rounded-[var(--radius-panel)] bg-obsidian-850 p-0.5 shadow-[0_10px_30px_rgb(34_6_6/0.5)] ring-1 ring-white/10",
+        mine ? "right-full mr-1 translate-x-[3px]" : "left-full ml-1 -translate-x-[3px]",
         // Shown while the pointer is on the message, the keyboard in it, or one of its layers open.
-        "pointer-events-none translate-y-[2px] opacity-0 transition-[opacity,translate] duration-150 ease-out",
-        "group-hover/msg:pointer-events-auto group-hover/msg:translate-y-0 group-hover/msg:opacity-100",
-        "focus-within:pointer-events-auto focus-within:translate-y-0 focus-within:opacity-100",
-        "has-[[data-state=open]]:pointer-events-auto has-[[data-state=open]]:translate-y-0 has-[[data-state=open]]:opacity-100",
+        "pointer-events-none opacity-0 transition-[opacity,translate] duration-150 ease-out motion-reduce:translate-x-0 motion-reduce:transition-opacity",
+        "group-hover/msg:pointer-events-auto group-hover/msg:translate-x-0 group-hover/msg:opacity-100",
+        "focus-within:pointer-events-auto focus-within:translate-x-0 focus-within:opacity-100",
+        "has-[[data-state=open]]:pointer-events-auto has-[[data-state=open]]:translate-x-0 has-[[data-state=open]]:opacity-100",
       )}
     >
       {reactable ? (
@@ -98,7 +102,7 @@ export function MessageToolbar({
           <Popover.Portal>
             <Popover.Content
               side="top"
-              align={mine ? "end" : "start"}
+              align={mine ? "start" : "end"}
               sideOffset={6}
               collisionPadding={12}
               className="pop-motion z-50 rounded-[var(--radius-panel)] border border-white/8 bg-obsidian-900 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_24px_60px_rgb(34_6_6/0.55)] outline-none"
