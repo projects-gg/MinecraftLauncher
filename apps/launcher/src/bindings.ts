@@ -470,6 +470,12 @@ export const commands = {
 	 *  restored and brought forward without synthetic input ([`focus_main_window`]).
 	 */
 	windowBringForward: () => __TAURI_INVOKE<void>("window_bring_forward"),
+	/**
+	 *  Shows a system notification; true when the system took it. On Windows a click comes back to
+	 *  the page as the `desktop-notification-click` event with `id`. False when the player turned the
+	 *  launcher's notifications off in Windows, so the page keeps its own toast.
+	 */
+	desktopNotify: (title: string, body: string | null, id: number) => __TAURI_INVOKE<boolean>("desktop_notify", { title, body, id }),
 	/**  What the dragged files are (called as soon as a drag enters the window). */
 	filesClassify: (paths: string[]) => __TAURI_INVOKE<DroppedFileView[]>("files_classify", { paths }),
 	/**

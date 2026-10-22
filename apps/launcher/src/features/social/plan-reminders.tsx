@@ -62,24 +62,22 @@ function tell(due: DuePlan, crew: SocialTeam): boolean {
     due.plan.note,
     i18n.t,
   );
+  const showCrew = () => {
+    const ui = useSocialUi.getState();
+    ui.openPanel({ page: "team" });
+    ui.setCrewTab(crew.id);
+    ui.setCrewPane("crew");
+  };
   if (windowAway()) {
     if (!usePrefs.getState().desktopNotifications) return false;
-    void notify(crew.name, text);
+    void notify(crew.name, text, showCrew);
     requestAttention();
     return true;
   }
   toast(text, {
     duration: TOAST_MS,
     icon: <ReminderMark />,
-    action: {
-      label: i18n.t("social.notices.show"),
-      onClick: () => {
-        const ui = useSocialUi.getState();
-        ui.openPanel({ page: "team" });
-        ui.setCrewTab(crew.id);
-        ui.setCrewPane("crew");
-      },
-    },
+    action: { label: i18n.t("social.notices.show"), onClick: showCrew },
   });
   return true;
 }

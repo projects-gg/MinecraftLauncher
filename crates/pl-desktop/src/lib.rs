@@ -17,6 +17,8 @@
 //!   friend's profile, `discord://-/users/<id>`), for "Discord'dan mesaj at".
 //! - [`process`]: a process the launcher left running (the game it quit beside): who it is, and
 //!   waiting for its end.
+//! - [`toast`]: the system notifications on Windows: the toast's text, and where Windows finds the
+//!   launcher's name and picture for it.
 
 pub mod close;
 pub mod discord;
@@ -30,6 +32,7 @@ pub mod process;
 pub mod shortcut;
 #[cfg(test)]
 mod test_support;
+pub mod toast;
 pub mod window;
 
 pub use error::{Error, Result};

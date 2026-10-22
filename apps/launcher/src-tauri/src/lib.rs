@@ -3,6 +3,7 @@
 mod commands;
 mod error;
 mod identity;
+mod notify;
 mod overlay;
 mod prepare;
 mod shell;
@@ -19,6 +20,9 @@ pub fn run() {
     // folder): they never forward to, read from or write over an installed launcher.
     identity::check();
     init_logging();
+    // Windows: windows and notifications under the identity's AppUserModelID, the one the
+    // installer's shortcuts carry, before any window exists (notify).
+    notify::adopt_app_id();
 
     let specta = specta_builder();
     #[cfg(debug_assertions)]
@@ -108,6 +112,8 @@ pub fn run() {
             // While the window is out of sight the page rests: hidden for WebView2, little
             // memory, suspended when it has nothing to do (webview_rest).
             webview_rest::install(app);
+            // Windows shows the launcher's notifications with its name and picture (notify).
+            notify::register(app.handle());
             // After an update restart, the AFK accounts it stopped come back (commands::updates).
             let resumed_afk = commands::updates::take_restart_note(app.handle());
             start_auto_afk(app.handle().clone(), resumed_afk);
@@ -297,6 +303,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             shell::app_quit,
             shell::launcher_leave_for_game,
             shell::window_bring_forward,
+            notify::desktop_notify,
             // small conveniences: dropped files, "Devam et", desktop shortcuts
             commands::drop::files_classify,
             commands::drop::files_drop,

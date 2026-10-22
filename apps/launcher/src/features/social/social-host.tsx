@@ -88,7 +88,7 @@ function showCrewArrival(id: string) {
       ids.length > 1
         ? i18n.t("teams.notify.crewJoinedMany", { name, count: ids.length - 1 })
         : i18n.t("teams.notify.crewJoined", { name });
-    void notifyOutside(text).then((sent) => {
+    void notifyOutside(text, { onClick: openFriends }).then((sent) => {
       if (sent) return;
       toast(text, {
         action: { label: i18n.t("social.actions.join"), onClick: () => void joinProjects() },
@@ -122,7 +122,7 @@ function showFriendNotice(id: string, kind: "online" | "projects") {
       kind === "projects"
         ? i18n.t("social.notices.onProjects", { name })
         : i18n.t("social.notices.online", { name });
-    void notifyOutside(text).then((sent) => {
+    void notifyOutside(text, { onClick: openFriends }).then((sent) => {
       if (!sent) toast(text);
     });
   }, 400);
@@ -135,6 +135,18 @@ function showCrew(id: string) {
   ui.openPanel({ page: "team" });
   ui.setCrewTab(id);
   ui.setCrewPane("crew");
+}
+
+/** A click on a friend's or an invite's system notification: the friends list. */
+function openFriends() {
+  useSocialUi.getState().openPanel({ page: "list" });
+}
+
+/** A click on a crew call's system notification: the first crew it names (else the list). */
+function showCalledCrew(crews: string[]) {
+  const crew = crews[0];
+  if (crew) showCrew(crew);
+  else openFriends();
 }
 
 /** That crew's page is on screen (the panel open on it). */
@@ -180,7 +192,9 @@ function handleNotice(notice: SocialNotice) {
       showInviteToast(notice.invite);
       const name = notice.invite.name ?? i18n.t("social.notices.someone");
       // In game the overlay's card says it (one notification, never two).
-      if (!shownInGame(notice.kind)) void notifyOutside(i18n.t("social.notices.invite", { name }));
+      if (!shownInGame(notice.kind)) {
+        void notifyOutside(i18n.t("social.notices.invite", { name }), { onClick: openFriends });
+      }
       announce(i18n.t("social.notices.invite", { name }));
       break;
     }
@@ -224,7 +238,7 @@ function handleNotice(notice: SocialNotice) {
         name: notice.invite.from.name,
         team: notice.invite.name,
       });
-      void notifyOutside(text);
+      void notifyOutside(text, { onClick: openFriends });
       // The open list already shows it, in place.
       if (listInView()) {
         announce(text);
@@ -240,7 +254,9 @@ function handleNotice(notice: SocialNotice) {
     }
     case "crewCall": {
       const text = callSentenceOf(notice.call, useSocialUi.getState().view.crews, i18n.t);
-      if (!shownInGame(notice.kind)) void notifyOutside(text);
+      if (!shownInGame(notice.kind)) {
+        void notifyOutside(text, { onClick: () => showCalledCrew(notice.call.crews) });
+      }
       announce(text);
       // The open panel shows it already, with its answers (the crew page and the list).
       if (!callInView()) showCallToast(notice.call);
@@ -254,7 +270,7 @@ function handleNotice(notice: SocialNotice) {
           ? i18n.t("crews.call.arrivedAt", { name, host: where.host })
           : i18n.t("teams.call.arrived", { name });
       showCallToast(notice.call, true);
-      void notifyOutside(text);
+      void notifyOutside(text, { onClick: () => showCalledCrew(notice.call.crews) });
       announce(text);
       break;
     }
@@ -293,7 +309,7 @@ function handleNotice(notice: SocialNotice) {
         announce(text);
         break;
       }
-      void notifyOutside(text);
+      void notifyOutside(text, { onClick: () => showCrew(crew.id) });
       toast(text, {
         action: { label: i18n.t("social.notices.show"), onClick: () => showCrew(crew.id) },
       });
@@ -301,7 +317,7 @@ function handleNotice(notice: SocialNotice) {
     }
     case "requestAccepted": {
       const text = i18n.t("teams.joined", { name: notice.name });
-      void notifyOutside(text);
+      void notifyOutside(text, { onClick: () => showCrew(notice.crew) });
       // "Göster", and "Etiketi tak" while the player wears no tag (TEAM6).
       sayJoined(text, () => notice.crew, {
         label: i18n.t("social.notices.show"),
@@ -323,7 +339,7 @@ function handleNotice(notice: SocialNotice) {
         announce(text);
         break;
       }
-      void notifyOutside(text);
+      void notifyOutside(text, { onClick: () => showCrew(plan.crew) });
       toast(text, {
         action: { label: i18n.t("social.notices.show"), onClick: () => showCrew(plan.crew) },
       });
@@ -393,7 +409,10 @@ function showChatMessage(notice: Extract<SocialNotice, { kind: "chatMessage" }>)
     toastIt();
     return;
   }
-  void notifyOutside(crew ? crew.name : name, crew ? `${name}: ${text}` : text).then((sent) => {
+  void notifyOutside(crew ? crew.name : name, {
+    body: crew ? `${name}: ${text}` : text,
+    onClick: () => useSocialUi.getState().openChat(notice.conv),
+  }).then((sent) => {
     if (!sent) toastIt();
   });
 }

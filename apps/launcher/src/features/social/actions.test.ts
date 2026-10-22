@@ -8,11 +8,7 @@ vi.mock("@pl/ui", () => ({
     success: vi.fn(),
   }),
 }));
-vi.mock("@tauri-apps/plugin-notification", () => ({
-  isPermissionGranted: vi.fn(),
-  requestPermission: vi.fn(),
-  sendNotification: vi.fn(),
-}));
+vi.mock("@/lib/attention", () => ({ showNotification: vi.fn() }));
 vi.mock("@/features/accounts/use-accounts", () => ({
   announce: vi.fn(),
   friendlyError: (_error: unknown, fallback: string) => ({ message: fallback }),

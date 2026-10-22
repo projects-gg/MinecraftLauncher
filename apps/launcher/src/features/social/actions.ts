@@ -2,14 +2,10 @@
 // toast it may need and the screen-reader announcement. Errors become one short sentence (the
 // details stay copyable through the accounts' friendly-error helper).
 import { toast } from "@pl/ui";
-import {
-  isPermissionGranted,
-  requestPermission,
-  sendNotification,
-} from "@tauri-apps/plugin-notification";
 import { announce, friendlyError } from "@/features/accounts/use-accounts";
 import { api } from "@/lib/api";
 import type { Friend } from "@/lib/api/social-types";
+import { showNotification } from "@/lib/attention";
 import { copyText as writeClipboard } from "@/lib/clipboard";
 import i18n from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
@@ -72,21 +68,18 @@ export function inviteCoolingDown(id: string, cooldown: Record<string, number>):
 
 /**
  * A system notification when the launcher is not in front (in game, in the tray), unless the
- * player turned them off (Settings → Genel → Masaüstü bildirimleri).
+ * player turned them off (Settings → Genel → Masaüstü bildirimleri). A click on it brings the
+ * launcher forward and runs `onClick`, which opens what it is about. False when none was shown,
+ * so the caller can show its in-app toast.
  */
-export async function notifyOutside(title: string, body?: string): Promise<boolean> {
+export async function notifyOutside(
+  title: string,
+  { body, onClick }: { body?: string; onClick?: () => void } = {},
+): Promise<boolean> {
   if (!isTauri() || document.hasFocus() || !usePrefs.getState().desktopNotifications) {
     return false;
   }
-  try {
-    let granted = await isPermissionGranted();
-    if (!granted) granted = (await requestPermission()) === "granted";
-    if (!granted) return false;
-    sendNotification(body ? { title, body } : { title });
-    return true;
-  } catch {
-    return false;
-  }
+  return showNotification(title, body, onClick);
 }
 
 /** Copies text (through the app's clipboard helper); true when it worked. */
