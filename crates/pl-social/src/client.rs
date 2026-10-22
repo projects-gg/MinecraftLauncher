@@ -864,6 +864,21 @@ impl Session {
         }
     }
 
+    /// Asks to join a crew from the card of the tag `via` wears (TEAM6, a service with
+    /// `badgeRequests`): the request always waits for the crew's leaders, even in an open crew.
+    /// Answers the request as it waits (the first `sentAt` when one waited already). A block from
+    /// someone in the crew answers the same and stores nothing.
+    pub async fn request_from_badge(&self, team: &str, via: &str) -> Result<TeamRequest> {
+        #[derive(Deserialize)]
+        struct Requested {
+            request: TeamRequest,
+        }
+        let path = format!("v1/teams/{}/requests", team_id(team)?);
+        let body = serde_json::json!({ "via": user_id(via)? });
+        let requested: Requested = self.call(Method::POST, &path, Some(body)).await?.json()?;
+        Ok(requested.request)
+    }
+
     /// Withdraws the player's waiting join request to a crew (`team_request_not_found` when
     /// none waits).
     pub async fn withdraw_team_request(&self, team: &str) -> Result<()> {
@@ -1695,7 +1710,7 @@ mod tests {
         let client = SocialClient::new(SocialConfig::production("ProjectsLauncher/test")).unwrap();
         assert_eq!(
             client.presence_url().as_str(),
-            "wss://social.projects.gg/v1/presence?caps=callServer,crews,plans"
+            "wss://social.projects.gg/v1/presence?caps=callServer,crews,plans,badges"
         );
         assert_eq!(
             client.friend_share_link("abcdefgh").unwrap().as_str(),
@@ -1712,7 +1727,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             local.presence_url().as_str(),
-            "ws://127.0.0.1:8797/v1/presence?caps=callServer,crews,plans"
+            "ws://127.0.0.1:8797/v1/presence?caps=callServer,crews,plans,badges"
         );
     }
 }

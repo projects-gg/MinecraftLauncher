@@ -1,5 +1,6 @@
 //! Client for the Projects Launcher friends service (`services/social` in the Studio
-//! repository): Discord sign-in, friends, blocks, privacy, friend categories, teams, settings
+//! repository): Discord sign-in, friends, blocks, privacy, friend categories, teams (TEAM6: crew
+//! tags before names, hidden crews, join requests from a tag's card, "Hoş geldin"), settings
 //! backup, the presence WebSocket, crew chat and direct messages with their history on this
 //! device (CHAT2: replies, stickers, reactions, "yazıyor…", read marks, link cards), reports, and
 //! what moderators' measures mean for the player.
@@ -87,14 +88,15 @@ pub use history::{HISTORY_LIMIT, crew_conversation, direct_conversation, same_em
 pub use links::{find_links, first_link, host_of};
 pub use model::{
     Avatar, BlockedUser, ChatBody, ChatCaps, ChatDeletion, ChatExtras, ChatLinkRules, ChatMessage,
-    ChatQuota, ChatReacted, ChatRejection, ChatReplyRef, ChatStatus, CodeLookup, CrewEntry,
-    CrewLink, CrewMute, CrewMuteEdit, DEFAULT_CREW_LIMIT, DEFAULT_TEAM_COLOR, DEFAULT_TEAM_FRAME,
-    EditFeatures, FEATURE_CHAT, FIRST_EMBLEMS, Friend, FriendGroup, FriendGroups, FriendRequest,
-    FriendsOverview, JOIN_REQUEST_LIFETIME_SECS, JoinMode, JoinOutcome, JoinRequest, LastSeen,
-    Limited, LimitedItem, LimitedKey, Limits, LinkCard, LinkRule, MAX_FRIEND_GROUPS, MAX_MUTE_SECS,
-    Me, ModNotice, NoticeKind, PLAN_NOTE_MAX, PermissionLevel, PermissionsEdit, Privacy,
-    ProfileUpdate, PublicProfile, Reaction, ReadMark, Relation, ReportReason, RequestOutcome,
-    SessionInfo, SettingsBackup, SettingsMeta, SettingsPrecondition, StatusMode,
+    ChatQuota, ChatReacted, ChatRejection, ChatReplyRef, ChatStatus, CodeLookup, CrewBadge,
+    CrewEntry, CrewLink, CrewMute, CrewMuteEdit, DEFAULT_CREW_LIMIT, DEFAULT_TEAM_COLOR,
+    DEFAULT_TEAM_FRAME, EditFeatures, FEATURE_CHAT, FIRST_EMBLEMS, Friend, FriendGroup,
+    FriendGroups, FriendRequest, FriendsOverview, JOIN_REQUEST_LIFETIME_SECS, JoinMode,
+    JoinOutcome, JoinRequest, LastSeen, Limited, LimitedItem, LimitedKey, Limits, LinkCard,
+    LinkRule, MAX_FRIEND_GROUPS, MAX_MUTE_SECS, Me, ModNotice, NoticeKind, PLAN_NOTE_MAX,
+    PermissionLevel, PermissionsEdit, Privacy, ProfileUpdate, PublicProfile, Reaction, ReadMark,
+    Relation, ReportReason, RequestOutcome, SessionInfo, SettingsBackup, SettingsMeta,
+    SettingsPrecondition, StatusMode, TEAM_FEATURE_BADGE_REQUESTS, TEAM_FEATURE_BADGES,
     TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS, TEAM_FEATURE_CREW_FRIEND_REQUESTS,
     TEAM_FEATURE_LINK, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE,
     TEAM_FEATURE_PLAN_NOTES, TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS, TEAM_FEATURE_ROLES, Team,
@@ -107,25 +109,26 @@ pub use presence::{
     PresenceOptions, StopReason,
 };
 pub use protocol::{
-    CHAT_CAP, CHAT_EXTRA_CAPS, CallAnswer, CallEndReason, CallKind, CrewCall, CrewPlan, Game,
-    GameLocation, Invite, LocalStatus, OnlineStatus, PLANS_CAP, PRESENCE_CAPS, PlanAnswer,
+    BADGES_CAP, CHAT_CAP, CHAT_EXTRA_CAPS, CallAnswer, CallEndReason, CallKind, CrewCall, CrewPlan,
+    Game, GameLocation, Invite, LocalStatus, OnlineStatus, PLANS_CAP, PRESENCE_CAPS, PlanAnswer,
     Presence, PresenceState, REACTIONS_CAP, READS_CAP, REPLIES_CAP, STICKERS_CAP, TYPING_CAP,
     is_projects_host, presence_caps,
 };
 pub use qr::{QrPath, qr_path};
 pub use service::{ServiceConfig, SocialService, SocialUpdate, UpdateSink};
-pub use state::{Connection, INVITE_LIFETIME_SECS, SocialState};
+pub use state::{Connection, GREET_WINDOW_SECS, INVITE_LIFETIME_SECS, SocialState};
 pub use stickers::{Sticker, sticker, sticker_sets, sticker_text};
 pub use store::{KEYRING_SERVICE, KeyringTokenStore, MemoryTokenStore, TokenStore};
 pub use together::{MAX_INTERVAL_SECS, Periods, Together, TogetherLog};
 pub use view::{
-    ActivityView, AuthPhase, CallAnswerView, CallOutcome, CallPlace, CardIcon, CardKind, CardState,
-    ChatCardView, ChatChangeView, ChatDeletedView, ChatExtrasView, ChatLinksView, ChatMessageView,
-    ChatPage, ChatReactionView, ChatReplyView, ChatTypingView, ChatView, ConversationView,
-    CrewCallView, CrewNotificationsView, FriendGroupsView, FriendView, GroupMember, InviteResult,
-    InviteView, JoinRequestView, JoinResult, LastMessageView, LimitedView, LookupView, MeView,
-    MessageState, ModNoticeView, PlanAnswerView, PlanView, ProfileView, ReportPlan, ReportReaction,
-    ReportTarget, RequestView, RestrictionView, SendFailure, SendOutcome, SignInFailure,
-    SocialNotice, SocialView, TeamInviteView, TeamLookupView, TeamMemberView, TeamRequestView,
+    ActivityView, AuthPhase, BadgeRefusal, BadgeRequestResult, CallAnswerView, CallOutcome,
+    CallPlace, CardIcon, CardKind, CardState, ChatCardView, ChatChangeView, ChatDeletedView,
+    ChatExtrasView, ChatLinksView, ChatMessageView, ChatPage, ChatReactionView, ChatReplyView,
+    ChatTypingView, ChatView, ConversationView, CrewBadgeView, CrewCallView, CrewJoinView,
+    CrewNotificationsView, FriendGroupsView, FriendView, GroupMember, InviteResult, InviteView,
+    JoinRequestView, JoinResult, LastMessageView, LimitedView, LookupView, MeView, MessageState,
+    ModNoticeView, PlanAnswerView, PlanView, ProfileView, ReportPlan, ReportReaction, ReportTarget,
+    RequestView, RestrictionView, SendFailure, SendOutcome, SignInFailure, SocialNotice,
+    SocialView, TagOffView, TeamInviteView, TeamLookupView, TeamMemberView, TeamRequestView,
     TeamView,
 };

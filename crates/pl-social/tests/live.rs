@@ -18,14 +18,15 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use pl_social::{
-    CallAnswer, CallEndReason, CallKind, CardState, ChatBody, ChatMessageView, ChatReactionView,
-    ChatRejection, ChatSetup, Connection, ConversationView, CrewKey, CrewMuteEdit, ErrorCode,
-    FEATURE_CHAT, GameLocation, InviteOutcome, JoinMode, JoinOutcome, LimitedKey, LinkRule,
-    LocalStatus, LoginAttempt, MemoryTokenStore, MessageState, PermissionLevel, PermissionsEdit,
-    PlanAnswer, PresenceEvent, PresenceHandle, PresenceOptions, PresenceState, ProfileUpdate,
-    Relation, ReportReason, RequestOutcome, SendFailure, ServiceConfig, Session,
-    SettingsPrecondition, SocialClient, SocialConfig, SocialError, SocialService, SocialUpdate,
-    SocialView, StatusMode, StopReason, TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS,
+    BadgeRequestResult, CallAnswer, CallEndReason, CallKind, CardState, ChatBody, ChatMessageView,
+    ChatReactionView, ChatRejection, ChatSetup, Connection, ConversationView, CrewKey,
+    CrewMuteEdit, ErrorCode, FEATURE_CHAT, GameLocation, InviteOutcome, JoinMode, JoinOutcome,
+    LimitedKey, LinkRule, LocalStatus, LoginAttempt, MemoryTokenStore, MessageState,
+    PermissionLevel, PermissionsEdit, PlanAnswer, PresenceEvent, PresenceHandle, PresenceOptions,
+    PresenceState, ProfileUpdate, Relation, ReportReason, RequestOutcome, SendFailure,
+    ServiceConfig, Session, SettingsPrecondition, SocialClient, SocialConfig, SocialError,
+    SocialService, SocialUpdate, SocialView, StatusMode, StopReason, TEAM_FEATURE_BADGE_REQUESTS,
+    TEAM_FEATURE_BADGES, TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS,
     TEAM_FEATURE_CREW_FRIEND_REQUESTS, TEAM_FEATURE_LINK, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI,
     TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES, TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS,
     TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamNotifications, TeamNotificationsEdit, TeamRelation,
@@ -2326,6 +2327,439 @@ async fn the_launchers_chat_extras_end_to_end() {
     ayse_again.configure(None);
     bora_app.configure(None);
     for session in [bora, ayse] {
+        session.delete_account().await.unwrap();
+    }
+}
+
+/// TEAM6: a crew tag put on and seen by a friend (live too) and the crew, never by a stranger; a
+/// report and a join request from the tag's card (it waits even in an open crew, the leader sees
+/// through whom; the crew's message names who came in); hiding the crew takes the tag off and
+/// keeps it off; "Etiketten istek" off shows on the card.
+#[tokio::test]
+#[ignore = "needs `pnpm dev` and `pnpm dev:discord` in services/social"]
+async fn crew_tags_hidden_crews_and_requests_from_a_tag() {
+    let client = client();
+    client.health().await.expect("wrangler dev is running");
+    let leader_id = new_user_id(51);
+    let wearer_id = new_user_id(52);
+    let friend_id = new_user_id(53);
+    let stranger_id = new_user_id(54);
+    let leader = sign_in(&client, &leader_id, "lider").await;
+    let wearer = sign_in(&client, &wearer_id, "ayse").await;
+    let friend = sign_in(&client, &friend_id, "bora").await;
+    let stranger = sign_in(&client, &stranger_id, "yabanci").await;
+    let features = leader.teams().await.unwrap().team_features;
+    let has = |name: &str| features.iter().any(|f| f == name);
+    if !(has(TEAM_FEATURE_BADGES) && has(TEAM_FEATURE_BADGE_REQUESTS)) {
+        eprintln!("this service has no crew tags: nothing to try");
+        for session in [stranger, friend, wearer, leader] {
+            session.delete_account().await.unwrap();
+        }
+        return;
+    }
+    let crew = leader
+        .create_team("Gece Kartalları", "GKR", "sword", None, true)
+        .await
+        .unwrap()
+        .team
+        .unwrap();
+    assert!(!crew.hidden && crew.badge_requests);
+    wearer
+        .join_team(&crew_code(&crew.code), true)
+        .await
+        .unwrap();
+    let wearer_code = wearer.me().await.unwrap().friend_code;
+    friend.send_request(&wearer_code).await.unwrap();
+    wearer.accept_request(&friend_id).await.unwrap();
+
+    // Joining puts no tag on: the player does.
+    assert!(wearer.me().await.unwrap().profile.badge.is_none());
+    let worn = wearer
+        .update_profile(&ProfileUpdate::default().badge(Some(&crew.id)))
+        .await
+        .unwrap()
+        .profile
+        .badge
+        .expect("the answer carries the card");
+    assert_eq!(
+        (
+            worn.crew.as_str(),
+            worn.tag.as_str(),
+            worn.name.as_str(),
+            worn.members,
+            worn.requests
+        ),
+        (crew.id.as_str(), "GKR", "Gece Kartalları", 2, true)
+    );
+    assert_eq!(worn.created_on, crew.created_on);
+    // The friend sees it before the name, the crew in its list; a stranger nowhere.
+    let seen = friend.friends().await.unwrap();
+    assert_eq!(
+        seen.friends[0]
+            .profile
+            .badge
+            .as_ref()
+            .map(|b| b.crew.as_str()),
+        Some(crew.id.as_str())
+    );
+    let listed = leader.teams().await.unwrap().crews.unwrap();
+    assert!(
+        listed[0]
+            .team
+            .members
+            .iter()
+            .any(|m| m.profile.id == wearer_id && m.profile.badge.is_some())
+    );
+    let looked_up = stranger.lookup_code(&wearer_code).await.unwrap();
+    assert!(looked_up.user.badge.is_none());
+
+    // Live: the friend's socket hears it go and come back.
+    let mut friend_presence = friend.connect_presence(options());
+    expect(&mut friend_presence, "the friend connected", |e| {
+        matches!(e, PresenceEvent::Connected { .. })
+    })
+    .await;
+    wearer
+        .update_profile(&ProfileUpdate::default().badge(None))
+        .await
+        .unwrap();
+    expect(
+        &mut friend_presence,
+        "the tag taken off",
+        |e| matches!(e, PresenceEvent::BadgeChanged { id, badge: None } if *id == wearer_id),
+    )
+    .await;
+    wearer
+        .update_profile(&ProfileUpdate::default().badge(Some(&crew.id)))
+        .await
+        .unwrap();
+    expect(&mut friend_presence, "the tag put on", |e| {
+        matches!(
+            e,
+            PresenceEvent::BadgeChanged { id, badge: Some(badge) }
+                if *id == wearer_id && badge.crew == crew.id
+        )
+    })
+    .await;
+
+    // "Ekibi rapor et" from the card: the wearer's friend may, a stranger may not.
+    let from_card = json!({"kind": "crew", "id": crew.id, "via": wearer_id});
+    friend
+        .report(from_card.clone(), ReportReason::Name, None, false)
+        .await
+        .unwrap();
+    let not_seen = stranger
+        .report(from_card, ReportReason::Name, None, false)
+        .await
+        .unwrap_err();
+    assert_eq!(not_seen.code(), Some(&ErrorCode::TargetNotFound));
+
+    // A join request from the card waits, even in an open crew; asking again answers the same.
+    let mut leader_presence = leader.connect_presence(options());
+    expect(&mut leader_presence, "the leader connected", |e| {
+        matches!(e, PresenceEvent::Connected { .. })
+    })
+    .await;
+    let mut wearer_presence = wearer.connect_presence(options());
+    expect(&mut wearer_presence, "the wearer connected", |e| {
+        matches!(e, PresenceEvent::Connected { .. })
+    })
+    .await;
+    let asked = friend
+        .request_from_badge(&crew.id, &wearer_id)
+        .await
+        .unwrap();
+    assert_eq!(asked.team.id, crew.id);
+    let again = friend
+        .request_from_badge(&crew.id, &wearer_id)
+        .await
+        .unwrap();
+    assert_eq!(again.sent_at, asked.sent_at);
+    expect(&mut leader_presence, "the request through the tag", |e| {
+        matches!(
+            e,
+            PresenceEvent::TeamRequests { requests, added, .. }
+                if added.as_deref() == Some(friend_id.as_str())
+                    && requests.iter().any(|r| r.via.as_deref() == Some(wearer_id.as_str()))
+        )
+    })
+    .await;
+    let waiting = leader.teams().await.unwrap().crews.unwrap();
+    assert_eq!(
+        waiting[0].requests[0].via.as_deref(),
+        Some(wearer_id.as_str())
+    );
+    // Not the wearer's friend: the card is stale for them.
+    let stale = stranger
+        .request_from_badge(&crew.id, &wearer_id)
+        .await
+        .unwrap_err();
+    assert_eq!(stale.code(), Some(&ErrorCode::BadgeRequestClosed));
+    // Taken in: the crew's message names who came in, on every member's socket.
+    leader
+        .accept_team_request(&crew.id, &friend_id)
+        .await
+        .unwrap();
+    expect(
+        &mut wearer_presence,
+        "who came in",
+        |e| matches!(e, PresenceEvent::TeamChanged { joined, .. } if joined.contains(&friend_id)),
+    )
+    .await;
+
+    // Hidden: the tag comes off everywhere and cannot be worn; only the leader hides.
+    let edit = |hidden: Option<bool>, badge_requests: Option<bool>| TeamEdit {
+        hidden,
+        badge_requests,
+        ..TeamEdit::default()
+    };
+    let not_leader = wearer
+        .update_team(&crew.id, &edit(Some(true), None))
+        .await
+        .unwrap_err();
+    assert_eq!(not_leader.code(), Some(&ErrorCode::TeamFounderOnly));
+    let hidden = leader
+        .update_team(&crew.id, &edit(Some(true), None))
+        .await
+        .unwrap()
+        .team
+        .unwrap();
+    assert!(hidden.hidden);
+    assert!(hidden.members.iter().all(|m| m.profile.badge.is_none()));
+    expect(
+        &mut wearer_presence,
+        "the crew hidden",
+        |e| matches!(e, PresenceEvent::TeamChanged { team: Some(team), .. } if team.hidden),
+    )
+    .await;
+    expect(
+        &mut friend_presence,
+        "the tag gone with it",
+        |e| matches!(e, PresenceEvent::BadgeChanged { id, badge: None } if *id == wearer_id),
+    )
+    .await;
+    assert!(wearer.me().await.unwrap().profile.badge.is_none());
+    let refused = wearer
+        .update_profile(&ProfileUpdate::default().badge(Some(&crew.id)))
+        .await
+        .unwrap_err();
+    assert_eq!(refused.code(), Some(&ErrorCode::TeamHidden));
+    // Shown again: no tag comes back by itself.
+    leader
+        .update_team(&crew.id, &edit(Some(false), None))
+        .await
+        .unwrap();
+    assert!(wearer.me().await.unwrap().profile.badge.is_none());
+
+    // "Etiketten istek" off: the card takes no requests.
+    let off = leader
+        .update_team(&crew.id, &edit(None, Some(false)))
+        .await
+        .unwrap()
+        .team
+        .unwrap();
+    assert!(!off.badge_requests);
+    let card = wearer
+        .update_profile(&ProfileUpdate::default().badge(Some(&crew.id)))
+        .await
+        .unwrap()
+        .profile
+        .badge
+        .unwrap();
+    assert!(!card.requests);
+    assert_eq!(card.members, 3);
+
+    wearer_presence.shutdown().await;
+    leader_presence.shutdown().await;
+    friend_presence.shutdown().await;
+    for session in [stranger, friend, wearer, leader] {
+        session.delete_account().await.unwrap();
+    }
+}
+
+/// A launcher signed in as `session`'s player with crews and chat on; waits until it is online
+/// with chat and its extras and the crews are in.
+async fn crew_launcher(session: &Session, chat_dir: &Path) -> (SocialService, Updates) {
+    let tokens = Arc::new(MemoryTokenStore::new());
+    tokens.save(session.token()).unwrap();
+    let updates = Updates::default();
+    let sink: UpdateSink = {
+        let updates = updates.clone();
+        Arc::new(move |update: SocialUpdate| updates.lock().unwrap().push(update))
+    };
+    let service = SocialService::new(
+        reqwest::Client::new(),
+        ServiceConfig {
+            user_agent: "ProjectsLauncher/integration-test".into(),
+            device: "Integration PC".into(),
+            presence: options(),
+        },
+        tokens,
+        tokio::runtime::Handle::current(),
+        sink,
+    );
+    service.keep_chat_in(chat_dir);
+    service.set_chat_enabled(true);
+    service.set_teams_enabled(true);
+    service.configure(Some(base_url()));
+    until_view(&service, "online with crews, chat and its extras", |view| {
+        view.loaded
+            && view.teams
+            && view.connection == Connection::Online
+            && view
+                .chat
+                .as_ref()
+                .and_then(|chat| chat.extras.as_ref())
+                .is_some_and(|extras| extras.stickers)
+    })
+    .await;
+    (service, updates)
+}
+
+/// TEAM6 through the launchers' own friends services, the way their UI uses them: the wearer's
+/// chip reaches a friend's view live, a request from it shows "aracılığıyla" at the leader's, the
+/// newcomer's line shows in the crew's chat and "Selam ver" sends the sticker, and hiding the crew
+/// tells the wearer's launcher once.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs `pnpm dev` and `pnpm dev:discord` in services/social"]
+async fn the_launchers_crew_tags_end_to_end() {
+    let client = client();
+    client.health().await.expect("wrangler dev is running");
+    let leader_id = new_user_id(61);
+    let wearer_id = new_user_id(62);
+    let friend_id = new_user_id(63);
+    let leader = sign_in(&client, &leader_id, "lider").await;
+    let wearer = sign_in(&client, &wearer_id, "ayse").await;
+    let friend = sign_in(&client, &friend_id, "bora").await;
+    let features = leader.teams().await.unwrap().team_features;
+    if !features.iter().any(|f| f == TEAM_FEATURE_BADGE_REQUESTS) {
+        eprintln!("this service has no crew tags: nothing to try");
+        for session in [friend, wearer, leader] {
+            session.delete_account().await.unwrap();
+        }
+        return;
+    }
+    let crew = leader
+        .create_team("Gece Kartalları", "GKR", "sword", None, true)
+        .await
+        .unwrap()
+        .team
+        .unwrap();
+    wearer
+        .join_team(&crew_code(&crew.code), true)
+        .await
+        .unwrap();
+    let wearer_code = wearer.me().await.unwrap().friend_code;
+    friend.send_request(&wearer_code).await.unwrap();
+    wearer.accept_request(&friend_id).await.unwrap();
+    let folders = tempfile::tempdir().unwrap();
+    let (leader_app, leader_saw) = crew_launcher(&leader, &folders.path().join("lider")).await;
+    let (wearer_app, wearer_saw) = crew_launcher(&wearer, &folders.path().join("ayse")).await;
+    let (friend_app, _) = crew_launcher(&friend, &folders.path().join("bora")).await;
+
+    // The tag on: the wearer's own card, and the chip before the name at the friend's, live.
+    wearer_app.set_badge(Some(&crew.id)).await.unwrap();
+    let mine = wearer_app.view().me.unwrap().badge.unwrap();
+    assert_eq!((mine.tag.as_str(), mine.requests), ("GKR", true));
+    until_view(&friend_app, "the chip at the friend's", |view| {
+        view.friends
+            .iter()
+            .any(|f| f.id == wearer_id && f.badge.as_ref().is_some_and(|b| b.tag == "GKR"))
+    })
+    .await;
+    until_view(&leader_app, "the chip in the crew's list", |view| {
+        view.crews
+            .first()
+            .is_some_and(|c| c.wearers == 1 && c.members.iter().any(|m| m.badge.is_some()))
+    })
+    .await;
+
+    // From the card: the request waits; the leader sees through whom.
+    assert_eq!(
+        friend_app
+            .request_from_badge(&crew.id, &wearer_id)
+            .await
+            .unwrap(),
+        BadgeRequestResult::Sent
+    );
+    assert!(
+        friend_app
+            .view()
+            .team_requests
+            .iter()
+            .any(|r| r.team_id == crew.id)
+    );
+    until_view(&leader_app, "\"Ayşe aracılığıyla\"", |view| {
+        view.crews.first().is_some_and(|c| {
+            c.requests
+                .iter()
+                .any(|r| r.id == friend_id && r.via.as_deref() == Some(wearer_id.as_str()))
+        })
+    })
+    .await;
+
+    // Taken in: the line in the crew's chat at the leader's and the newcomer's own; the leader
+    // says hi with the sticker, once.
+    leader_app
+        .answer_team_request(&crew.id, &friend_id, true)
+        .await
+        .unwrap();
+    let view = until_view(&leader_app, "the newcomer's line", |view| {
+        view.crew_joins.iter().any(|j| j.id == friend_id)
+    })
+    .await;
+    let line = view.crew_joins.iter().find(|j| j.id == friend_id).unwrap();
+    assert!(!line.mine && line.greet_until.is_some() && line.crew == crew.id);
+    until_view(&friend_app, "the newcomer's own line", |view| {
+        view.crew_joins.iter().any(|j| j.mine && j.crew == crew.id)
+    })
+    .await;
+    let conv = crew_conversation(&crew.id);
+    leader_app
+        .crew_greet(&crew.id, &friend_id, "Hoş geldin! 👋")
+        .unwrap();
+    until_message(&wearer_saw, "the greeting", &conv, |m| {
+        m.sticker.as_deref() == Some("pl1/hi")
+    })
+    .await;
+    assert!(leader_app.crew_greet(&crew.id, &friend_id, "x").is_err());
+    assert!(
+        leader_app
+            .view()
+            .crew_joins
+            .iter()
+            .all(|j| j.greet_until.is_none())
+    );
+
+    // The leader hides the crew: the wearer's launcher says so once; its tag is off.
+    leader_app.set_team_hidden(&crew.id, true).await.unwrap();
+    until_update(
+        &wearer_saw,
+        "the tag taken off by hiding",
+        |update| match update {
+            SocialUpdate::TagOff(off) if off.crew == crew.id => Some(()),
+            _ => None,
+        },
+    )
+    .await;
+    until_view(&wearer_app, "no tag", |view| {
+        view.me.as_ref().is_some_and(|me| me.badge.is_none())
+            && view.crews.first().is_some_and(|c| c.hidden)
+    })
+    .await;
+    // The leader hid it themself: their launcher says nothing of the kind.
+    assert!(
+        !leader_saw
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|update| matches!(update, SocialUpdate::TagOff(_)))
+    );
+
+    for app in [friend_app, wearer_app, leader_app] {
+        app.configure(None);
+    }
+    for session in [friend, wearer, leader] {
         session.delete_account().await.unwrap();
     }
 }

@@ -33,16 +33,16 @@ use crate::closed::ClosedInvitesFile;
 use crate::codes::{crew_code, normalize_crew_link, normalize_friend_code, normalize_team_code};
 use crate::error::{ErrorCode, Result, SocialError};
 use crate::game::{self, GameActivity};
-use crate::history::{Change, Conversation, Entry, History};
+use crate::history::{Change, Conversation, Entry, History, crew_conversation};
 use crate::links::{find_links, first_link};
 use crate::model::{
     ChatBody, ChatExtras, ChatMessage, ChatStatus, CrewMuteEdit, EditFeatures, FIRST_EMBLEMS,
     FriendGroup, FriendGroups, JoinMode, JoinOutcome, LimitedKey, LinkRule, MAX_FRIEND_GROUPS,
     ProfileUpdate, ReportReason, RequestOutcome, SessionInfo, SettingsMeta, SettingsPrecondition,
-    StatusMode, TEAM_FEATURE_CALLS, TEAM_FEATURE_CREW_FRIEND_REQUESTS, TEAM_FEATURE_LINK,
-    TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES,
-    TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamLookup,
-    TeamNotificationsEdit, TeamRole,
+    StatusMode, TEAM_FEATURE_BADGE_REQUESTS, TEAM_FEATURE_BADGES, TEAM_FEATURE_CALLS,
+    TEAM_FEATURE_CREW_FRIEND_REQUESTS, TEAM_FEATURE_LINK, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI,
+    TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES, TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS,
+    TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamLookup, TeamNotificationsEdit, TeamRole,
 };
 use crate::presence::{ChatSetup, PresenceControl, PresenceEvent, PresenceOptions, StopReason};
 use crate::protocol::{CallAnswer, LocalStatus, PlanAnswer};
@@ -52,11 +52,11 @@ use crate::stickers;
 use crate::store::TokenStore;
 use crate::together::{Periods, Together, TogetherLog};
 use crate::view::{
-    ActivityView, AuthPhase, CallOutcome, CallPlace, ChatCardView, ChatChangeView, ChatExtrasView,
-    ChatLinksView, ChatPage, ChatTypingView, ChatView, ConversationView, CrewNotificationsView,
-    GroupMember, InviteResult, JoinResult, LastMessageView, LookupView, ProfileView, ReportTarget,
-    RestrictionView, SendFailure, SendOutcome, SignInFailure, SocialNotice, SocialView,
-    TeamLookupView, me_view,
+    ActivityView, AuthPhase, BadgeRefusal, BadgeRequestResult, CallOutcome, CallPlace,
+    ChatCardView, ChatChangeView, ChatExtrasView, ChatLinksView, ChatPage, ChatTypingView,
+    ChatView, ConversationView, CrewNotificationsView, GroupMember, InviteResult, JoinResult,
+    LastMessageView, LookupView, ProfileView, ReportTarget, RestrictionView, SendFailure,
+    SendOutcome, SignInFailure, SocialNotice, SocialView, TagOffView, TeamLookupView, me_view,
 };
 
 /// After a reconnect the friend list is fetched again only when it is older than this.
@@ -74,6 +74,9 @@ pub enum SocialUpdate {
     Chat(ChatChangeView),
     /// Someone writes in a conversation ("yazıyor…", CHAT2): shown for 6 seconds after the last.
     Typing(ChatTypingView),
+    /// The leader hid the crew whose tag the player wore, so it came off (TEAM6): "Lider ekibi
+    /// gizledi; etiketin çıkarıldı." Once, never for the player's own change.
+    TagOff(TagOffView),
 }
 
 /// Chat events that came before the history could be opened (the profile was not known yet:
@@ -452,6 +455,7 @@ impl SocialService {
         let mut restricted = None;
         let deliver;
         let typing;
+        let tag_off;
         let notices = {
             let mut core = self.lock();
             if core.generation != generation || core.epoch != epoch {
@@ -467,6 +471,9 @@ impl SocialService {
             let calls = teams && core.state.offers(TEAM_FEATURE_CALLS);
             let requests = teams && core.state.offers(TEAM_FEATURE_REQUESTS);
             let plans = teams && core.state.offers(TEAM_FEATURE_PLANS);
+            // TEAM6: said only while crew tags show at all.
+            let badges = teams && core.state.offers(TEAM_FEATURE_BADGES);
+            tag_off = core.state.take_tag_off().filter(|_| badges);
             notices.retain(|notice| match notice {
                 SocialNotice::TeamInvite { .. }
                 | SocialNotice::TeamGone { .. }
@@ -516,6 +523,9 @@ impl SocialService {
         self.emit_view();
         for notice in notices {
             self.notify(notice);
+        }
+        if let Some(tag_off) = tag_off {
+            (self.inner.sink)(SocialUpdate::TagOff(tag_off));
         }
         if deliver {
             self.kick_sender();
@@ -1137,6 +1147,8 @@ impl SocialService {
             look,
             roles: self.offers(TEAM_FEATURE_ROLES),
             requests: self.offers(TEAM_FEATURE_REQUESTS),
+            badges: self.offers(TEAM_FEATURE_BADGES),
+            badge_requests: self.offers(TEAM_FEATURE_BADGE_REQUESTS),
         });
         if edit.is_empty() {
             return Ok(());
@@ -1155,7 +1167,7 @@ impl SocialService {
         let (_, generation) = self
             .call(|session| async move { session.disband_team(&team).await })
             .await?;
-        self.update(generation, |core| core.state.team_left(&id));
+        self.update(generation, |core| core.state.team_left(&id, true));
         Ok(())
     }
 
@@ -1166,7 +1178,7 @@ impl SocialService {
         let (_, generation) = self
             .call(|session| async move { session.leave_team(&team).await })
             .await?;
-        self.update(generation, |core| core.state.team_left(&id));
+        self.update(generation, |core| core.state.team_left(&id, false));
         Ok(())
     }
 
@@ -1450,6 +1462,104 @@ impl SocialService {
             },
         )
         .await
+    }
+
+    // --- crew tags (TEAM6) ----------------------------------------------------------------------
+
+    /// Puts on the tag of one of the player's crews (`team`), in place of any other, or takes the
+    /// tag off (None; a service with `badges`). The service's `me` brings it: the profile and the
+    /// player's own entries in the crews change then, other devices and friends hear it live.
+    pub async fn set_badge(&self, team: Option<&str>) -> Result<()> {
+        if !self.offers(TEAM_FEATURE_BADGES) {
+            return Err(SocialError::InvalidInput("crew tags"));
+        }
+        let team = team.map(|team| self.crew_id(team)).transpose()?;
+        self.update_profile(ProfileUpdate::default().badge(team.as_deref()))
+            .await
+    }
+
+    /// "Görünürlük": hides one of the player's crews, or shows it again (the leader; a service
+    /// with `badges`). Hiding takes every member's tag of it off; showing puts none back.
+    pub async fn set_team_hidden(&self, team: &str, hidden: bool) -> Result<()> {
+        if !self.offers(TEAM_FEATURE_BADGES) {
+            return Err(SocialError::InvalidInput("crew tags"));
+        }
+        self.edit_team(
+            team,
+            TeamEdit {
+                hidden: Some(hidden),
+                ..TeamEdit::default()
+            },
+        )
+        .await
+    }
+
+    /// "Etiketten istek": whether members' friends may ask to join one of the player's crews from
+    /// its tag's card (the leader; a service with `badgeRequests`). Requests already waiting stay
+    /// answerable.
+    pub async fn set_team_badge_requests(&self, team: &str, on: bool) -> Result<()> {
+        if !self.offers(TEAM_FEATURE_BADGE_REQUESTS) {
+            return Err(SocialError::InvalidInput("tag requests"));
+        }
+        self.edit_team(
+            team,
+            TeamEdit {
+                badge_requests: Some(on),
+                ..TeamEdit::default()
+            },
+        )
+        .await
+    }
+
+    /// "Katılma isteği gönder" on the card of the tag `via` wears (a service with
+    /// `badgeRequests`): a join request to crew `team` that waits for its leaders, even in an open
+    /// crew; it shows among the player's requests at once. The crew's refusals and the player's
+    /// own limits are answers (the card says why in one line), anything else an error.
+    pub async fn request_from_badge(&self, team: &str, via: &str) -> Result<BadgeRequestResult> {
+        if !self.offers(TEAM_FEATURE_BADGE_REQUESTS) {
+            return Err(SocialError::InvalidInput("tag requests"));
+        }
+        let (crew, wearer) = (team.to_owned(), via.to_owned());
+        match self
+            .call(|session| async move { session.request_from_badge(&crew, &wearer).await })
+            .await
+        {
+            Ok((request, generation)) => {
+                self.update(generation, |core| core.state.join_requested(request));
+                Ok(BadgeRequestResult::Sent)
+            }
+            Err(error) => {
+                let now = unix_now();
+                match badge_refusal(&error, now) {
+                    Some(reason) => Ok(BadgeRequestResult::Refused {
+                        reason,
+                        until: turkey_day_end(now),
+                    }),
+                    None => Err(error),
+                }
+            }
+        }
+    }
+
+    /// "Selam ver" on the line of someone who came into crew `crew` (TEAM6): the `pl1/hi` sticker
+    /// where stickers go, else `text` ("Hoş geldin! 👋" in the player's language), as a message of
+    /// the crew's chat like any other. Once per line, within 10 minutes. Returns the message's key.
+    pub fn crew_greet(&self, crew: &str, id: &str, text: &str) -> Result<String> {
+        if !self.lock().state.may_greet(crew, id, unix_now()) {
+            return Err(SocialError::InvalidInput("greeting"));
+        }
+        let conv = crew_conversation(crew);
+        let key = match self.chat_sticker(&conv, GREETING_STICKER, None) {
+            Ok(key) => key,
+            // No stickers on this connection, or not that set: the words.
+            Err(SocialError::InvalidInput("chat extras" | "chat sticker")) => {
+                self.chat_send(&conv, text)?
+            }
+            Err(error) => return Err(error),
+        };
+        let generation = self.lock().generation;
+        self.update(generation, |core| core.state.greeted(crew, id));
+        Ok(key)
     }
 
     // --- crew plans ("Planlar", TEAM5) -----------------------------------------------------------
@@ -2810,9 +2920,16 @@ impl SocialService {
                     }
                     (wire, Some(id.clone()))
                 }
-                ReportTarget::Crew { id, code } => {
+                ReportTarget::Crew { id, code, via } => {
                     let mut wire = serde_json::json!({ "kind": "crew", "id": id });
-                    if let Some(code) = code.as_ref().and_then(|c| normalize_team_code(c)) {
+                    // From a tag's card (TEAM6): whose tag it was (the service checks it and keeps
+                    // nothing of it). The service takes one way of seeing the crew.
+                    let via = via
+                        .as_deref()
+                        .filter(|_| core.state.offers(TEAM_FEATURE_BADGES));
+                    if let Some(via) = via {
+                        wire["via"] = via.into();
+                    } else if let Some(code) = code.as_ref().and_then(|c| normalize_team_code(c)) {
                         wire["code"] = code.into();
                     }
                     (wire, None)
@@ -2983,6 +3100,40 @@ fn remember_closed_invites(core: &mut Core) {
     if !closed.is_empty() {
         core.state.remember_closed_invites(closed, now);
     }
+}
+
+/// The sticker "Selam ver" sends (TEAM6; "Selam").
+const GREETING_STICKER: &str = "pl1/hi";
+
+/// Turkey's offset from UTC: the service's days (its daily limits) are Turkey days.
+const TURKEY_OFFSET_SECS: i64 = 3 * 3_600;
+
+/// The end of the Turkey day `now` is in (Unix seconds).
+fn turkey_day_end(now: i64) -> i64 {
+    (now + TURKEY_OFFSET_SECS).div_euclid(86_400) * 86_400 + 86_400 - TURKEY_OFFSET_SECS
+}
+
+/// A refusal of a join request from a tag's card (TEAM6), as the card says it; None for what is
+/// not one (an outage, a burst of requests, a lost session).
+fn badge_refusal(error: &SocialError, now: i64) -> Option<BadgeRefusal> {
+    if let SocialError::RateLimited { retry_after, .. } = error {
+        // The player's 10 a day wait until the Turkey day ends; a burst waits a minute.
+        let left = (turkey_day_end(now) - now).unsigned_abs();
+        let daily = retry_after.is_some_and(|wait| wait.as_secs().saturating_add(120) >= left);
+        return daily.then_some(BadgeRefusal::OwnDaily);
+    }
+    Some(match error.code()? {
+        // A crew that is gone, as one that stopped taking them: the card was stale.
+        ErrorCode::BadgeRequestClosed | ErrorCode::TeamNotFound => BadgeRefusal::Closed,
+        ErrorCode::LimitBadgeRequests => BadgeRefusal::Today,
+        ErrorCode::LimitTeamRequests => BadgeRefusal::WaitingFull,
+        ErrorCode::LimitTeamMembers => BadgeRefusal::Full,
+        ErrorCode::BlockedMember => BadgeRefusal::Blocked,
+        ErrorCode::LimitOutgoingTeamRequests => BadgeRefusal::OwnWaiting,
+        ErrorCode::LimitCrews => BadgeRefusal::OwnCrews,
+        ErrorCode::AlreadyMember => BadgeRefusal::Member,
+        _ => return None,
+    })
 }
 
 /// Back to signed out, keeping the configuration and the saved token.
@@ -3557,6 +3708,14 @@ fn build_view(core: &mut Core) -> SocialView {
     let teams = core.teams && core.state.teams_supported();
     let calls = teams && core.state.offers(TEAM_FEATURE_CALLS);
     let share_server = core.state.me().is_some_and(|me| me.privacy.share_server);
+    // Crew tags (TEAM6) belong to crews: none shows while crews are off here.
+    let mut friends = core.state.friends();
+    if !teams {
+        for friend in &mut friends {
+            friend.badge = None;
+        }
+    }
+    let my_badge = if teams { core.state.my_badge() } else { None };
     let mut crews = if teams {
         core.state.crew_views(now)
     } else {
@@ -3591,9 +3750,9 @@ fn build_view(core: &mut Core) -> SocialView {
         enabled: core.url.is_some(),
         auth: core.auth,
         connection: core.state.connection(),
-        me: core.state.me().map(|me| me_view(me, share)),
+        me: core.state.me().map(|me| me_view(me, share, my_badge)),
         loaded: core.state.loaded(),
-        friends: core.state.friends(),
+        friends,
         incoming: core.state.incoming(),
         outgoing: core.state.outgoing(),
         blocked: core.state.blocked_users(),
@@ -3621,6 +3780,11 @@ fn build_view(core: &mut Core) -> SocialView {
         },
         plans: if teams && core.state.offers(TEAM_FEATURE_PLANS) {
             core.state.plans(now)
+        } else {
+            Vec::new()
+        },
+        crew_joins: if teams {
+            core.state.crew_joins()
         } else {
             Vec::new()
         },
@@ -3715,7 +3879,10 @@ mod tests {
                 .iter()
                 .filter_map(|update| match update {
                     SocialUpdate::Notice(notice) => Some(notice.clone()),
-                    SocialUpdate::View(_) | SocialUpdate::Chat(_) | SocialUpdate::Typing(_) => None,
+                    SocialUpdate::View(_)
+                    | SocialUpdate::Chat(_)
+                    | SocialUpdate::Typing(_)
+                    | SocialUpdate::TagOff(_) => None,
                 })
                 .collect()
         }
@@ -4730,6 +4897,364 @@ mod tests {
         assert_eq!(
             *bodies.lock().unwrap(),
             vec![r#"{"code":"ABCD-EFGH","multi":true}"#.to_owned()]
+        );
+    }
+
+    /// TEAM6's card of crew `crew`.
+    fn badge_json(crew: &str, name: &str, tag: &str) -> String {
+        format!(
+            r#"{{"crew":"{crew}","tag":"{tag}","color":"navy","frame":"shield","emblem":"bolt",
+            "name":"{name}","motto":"","createdOn":"2026-09-20","members":3,"requests":true}}"#
+        )
+    }
+
+    /// The friend list of a service with crew tags (`features`): Bora wears PvP's tag, the player
+    /// none; the player leads Gece Kartalları and is in PvP.
+    fn friends_with_tags(features: &str) -> String {
+        let pvp = badge_json("fedcba9876543210", "PvP", "PVP");
+        let crew_b = CREW_B.replace(
+            r#""role":"founder","joinedAt":4}"#,
+            &format!(r#""role":"founder","joinedAt":4,"badge":{pvp}}}"#),
+        );
+        format!(
+            r#"{{"friends":[{{"id":"223456789012345678","username":"bora","displayName":"Bora",
+            "avatar":"preset:fox","avatarHash":null,"since":"2026-10-01","lastSeen":"today",
+            "badge":{pvp}}}],"incoming":[],"outgoing":[],"blocked":[],
+            "limits":{{"friends":200,"outgoingRequests":50,"teamMembers":30,"groups":20}},
+            "team":{CREW_A},"teamInvited":[],
+            "crews":[{{"team":{CREW_A},"invited":[]}},{{"team":{crew_b},"invited":[]}}],
+            "crewLimit":5,"teamInvites":[],"teamRequests":[],"teamFeatures":{features}}}"#
+        )
+    }
+
+    #[test]
+    fn the_turkey_day_ends_at_midnight_in_turkey() {
+        // 2026-10-22 20:59:59 UTC is 23:59:59 in Turkey; a second later the next day starts.
+        let before = 1_792_702_799;
+        assert_eq!(turkey_day_end(before), before + 1);
+        assert_eq!(turkey_day_end(before + 1), before + 1 + 86_400);
+        // A daily limit waits until then; a burst a minute.
+        let daily = SocialError::RateLimited {
+            retry_after: Some(Duration::from_secs(3_000)),
+            item: None,
+        };
+        let now = before - 2_999;
+        assert_eq!(badge_refusal(&daily, now), Some(BadgeRefusal::OwnDaily));
+        let burst = SocialError::RateLimited {
+            retry_after: Some(Duration::from_secs(60)),
+            item: None,
+        };
+        assert_eq!(badge_refusal(&burst, now), None);
+        assert_eq!(badge_refusal(&SocialError::Network("x".into()), now), None);
+    }
+
+    #[tokio::test]
+    async fn crew_tags_are_worn_hidden_asked_from_and_reported_as_the_service_offers_them() {
+        let bodies = Arc::new(Mutex::new(Vec::<String>::new()));
+        let wearing = ME.replace(
+            r#""size":64}"#,
+            &format!(
+                r#""size":64}},"badge":{}"#,
+                badge_json("0123456789abcdef", "Gece Kartalları", "GKR")
+            ),
+        );
+        let server = MockServer::start({
+            let bodies = bodies.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| {
+                    if req.method != "GET" {
+                        bodies
+                            .lock()
+                            .unwrap()
+                            .push(format!("{} {} {}", req.method, req.path, req.body_text()));
+                    }
+                    match (req.method.as_str(), req.path.as_str()) {
+                        ("GET", "/v1/me") => MockReply::json(200, ME),
+                        ("GET", "/v1/friends") => MockReply::json(
+                            200,
+                            &friends_with_tags(
+                                r#"["look","roles","multi","requests","link","badges","badgeRequests"]"#,
+                            ),
+                        ),
+                        ("PATCH", "/v1/me") => MockReply::json(200, &wearing),
+                        ("PATCH", "/v1/teams/0123456789abcdef") => MockReply::json(
+                            200,
+                            &format!(
+                                r#"{{"team":{},"invited":[]}}"#,
+                                CREW_A.replace(r#""members":["#, r#""hidden":true,"members":["#)
+                            ),
+                        ),
+                        ("POST", "/v1/teams/9999aaaabbbbcccc/requests") => MockReply::json(
+                            202,
+                            r#"{"request":{"team":{"id":"9999aaaabbbbcccc","name":"Skyblock",
+                                "tag":"SKY","emblem":"castle","members":6,"join":"open"},
+                                "sentAt":1792519000}}"#,
+                        ),
+                        ("POST", "/v1/teams/aaaabbbbccccdddd/requests") => MockReply::json(
+                            422,
+                            r#"{"error":{"code":"limit_badge_requests","message":"x"}}"#,
+                        ),
+                        ("POST", "/v1/teams/bbbbccccddddeeee/requests") => MockReply::json(
+                            409,
+                            r#"{"error":{"code":"badge_request_closed","message":"x"}}"#,
+                        ),
+                        ("POST", "/v1/teams/ccccddddeeeeffff/requests") => MockReply::json(
+                            429,
+                            r#"{"error":{"code":"rate_limited","message":"Too many requests"}}"#,
+                        )
+                        .with_header("Retry-After", "60"),
+                        ("POST", "/v1/reports") => {
+                            MockReply::json(201, r#"{"id":"r1","status":"open"}"#)
+                        }
+                        _ => {
+                            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+                        }
+                    }
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.set_teams_enabled(true);
+        harness.service.configure(url(&server));
+        let view = harness.until("friends", |view| view.loaded).await;
+        assert_eq!(
+            view.friends[0].badge.as_ref().map(|b| b.tag.as_str()),
+            Some("PVP")
+        );
+        assert!(view.me.as_ref().unwrap().badge.is_none());
+        assert_eq!(
+            view.crews[1].members[0]
+                .badge
+                .as_ref()
+                .map(|b| b.crew.as_str()),
+            Some("fedcba9876543210")
+        );
+
+        // Worn: the answer's `me` brings the card, also onto the player's own crew entries.
+        harness
+            .service
+            .set_badge(Some("0123456789abcdef"))
+            .await
+            .unwrap();
+        let view = harness.service.view();
+        assert_eq!(
+            view.me
+                .as_ref()
+                .unwrap()
+                .badge
+                .as_ref()
+                .map(|b| b.tag.as_str()),
+            Some("GKR")
+        );
+        assert_eq!(view.crews[0].wearers, 1);
+        // A crew that is not the player's goes nowhere.
+        assert!(matches!(
+            harness.service.set_badge(Some("1111222233334444")).await,
+            Err(SocialError::InvalidInput("not in a team"))
+        ));
+        harness.service.set_badge(None).await.unwrap();
+
+        // The leader's two settings.
+        harness
+            .service
+            .set_team_hidden("0123456789abcdef", true)
+            .await
+            .unwrap();
+        assert!(harness.service.view().crews[0].hidden);
+        harness
+            .service
+            .set_team_badge_requests("0123456789abcdef", false)
+            .await
+            .unwrap();
+
+        // From Bora's card: sent; the crew's day full; a stale card; a burst is an error.
+        let bora = "223456789012345678";
+        assert_eq!(
+            harness
+                .service
+                .request_from_badge("9999aaaabbbbcccc", bora)
+                .await
+                .unwrap(),
+            BadgeRequestResult::Sent
+        );
+        assert_eq!(harness.service.view().team_requests[0].name, "Skyblock");
+        let now = unix_now();
+        match harness
+            .service
+            .request_from_badge("aaaabbbbccccdddd", bora)
+            .await
+            .unwrap()
+        {
+            BadgeRequestResult::Refused { reason, until } => {
+                assert_eq!(reason, BadgeRefusal::Today);
+                assert!(until > now && until <= now + 86_400);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        assert!(matches!(
+            harness
+                .service
+                .request_from_badge("bbbbccccddddeeee", bora)
+                .await
+                .unwrap(),
+            BadgeRequestResult::Refused {
+                reason: BadgeRefusal::Closed,
+                ..
+            }
+        ));
+        let burst = harness
+            .service
+            .request_from_badge("ccccddddeeeeffff", bora)
+            .await;
+        // (In the last minutes of a Turkey day a minute's wait reaches the next one.)
+        if turkey_day_end(unix_now()) - unix_now() > 300 {
+            assert!(matches!(burst, Err(SocialError::RateLimited { .. })));
+        }
+
+        // "Ekibi rapor et" from the card: the wearer goes, the code does not.
+        harness
+            .service
+            .report(
+                ReportTarget::Crew {
+                    id: "fedcba9876543210".into(),
+                    code: Some("EKP-WXYZ-1234".into()),
+                    via: Some(bora.into()),
+                },
+                ReportReason::Name,
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+
+        // Crews off in the signed config: no tag shows at all.
+        harness.service.set_teams_enabled(false);
+        let view = harness.service.view();
+        assert!(view.friends.iter().all(|f| f.badge.is_none()));
+        assert!(view.crew_joins.is_empty());
+
+        let sent = bodies.lock().unwrap().clone();
+        assert_eq!(
+            sent,
+            vec![
+                r#"PATCH /v1/me {"badge":"0123456789abcdef"}"#.to_owned(),
+                r#"PATCH /v1/me {"badge":null}"#.to_owned(),
+                r#"PATCH /v1/teams/0123456789abcdef {"hidden":true}"#.to_owned(),
+                r#"PATCH /v1/teams/0123456789abcdef {"badgeRequests":false}"#.to_owned(),
+                format!(r#"POST /v1/teams/9999aaaabbbbcccc/requests {{"via":"{bora}"}}"#),
+                format!(r#"POST /v1/teams/aaaabbbbccccdddd/requests {{"via":"{bora}"}}"#),
+                format!(r#"POST /v1/teams/bbbbccccddddeeee/requests {{"via":"{bora}"}}"#),
+                format!(r#"POST /v1/teams/ccccddddeeeeffff/requests {{"via":"{bora}"}}"#),
+                format!(
+                    r#"POST /v1/reports {{"reason":"name","target":{{"id":"fedcba9876543210","kind":"crew","via":"{bora}"}}}}"#
+                ),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn an_older_service_never_hears_of_crew_tags() {
+        let bodies = Arc::new(Mutex::new(Vec::<String>::new()));
+        let server = MockServer::start({
+            let bodies = bodies.clone();
+            move |req| {
+                presence_refused(&req.path).unwrap_or_else(|| {
+                    if req.method != "GET" {
+                        bodies.lock().unwrap().push(req.body_text());
+                    }
+                    match (req.method.as_str(), req.path.as_str()) {
+                        ("GET", "/v1/me") => MockReply::json(200, ME),
+                        // A card a service sends without listing `badges` shows nowhere either.
+                        ("GET", "/v1/friends") => MockReply::json(
+                            200,
+                            &friends_with_tags(r#"["look","roles","multi","requests"]"#),
+                        ),
+                        ("POST", "/v1/reports") => {
+                            MockReply::json(201, r#"{"id":"r1","status":"open"}"#)
+                        }
+                        ("PATCH", "/v1/teams/0123456789abcdef") => {
+                            MockReply::json(200, &format!(r#"{{"team":{CREW_A},"invited":[]}}"#))
+                        }
+                        _ => {
+                            MockReply::json(404, r#"{"error":{"code":"not_found","message":"x"}}"#)
+                        }
+                    }
+                })
+            }
+        })
+        .await;
+        let tokens = Arc::new(MemoryTokenStore::new());
+        tokens.save(&token()).unwrap();
+        let harness = Harness::new(tokens);
+        harness.service.set_teams_enabled(true);
+        harness.service.configure(url(&server));
+        let view = harness.until("friends", |view| view.loaded).await;
+        assert!(view.friends[0].badge.is_none());
+        assert!(view.crews[1].members.iter().all(|m| m.badge.is_none()));
+        assert!(matches!(
+            harness.service.set_badge(Some("0123456789abcdef")).await,
+            Err(SocialError::InvalidInput("crew tags"))
+        ));
+        assert!(matches!(
+            harness
+                .service
+                .set_team_hidden("0123456789abcdef", true)
+                .await,
+            Err(SocialError::InvalidInput("crew tags"))
+        ));
+        assert!(matches!(
+            harness
+                .service
+                .set_team_badge_requests("0123456789abcdef", true)
+                .await,
+            Err(SocialError::InvalidInput("tag requests"))
+        ));
+        assert!(matches!(
+            harness
+                .service
+                .request_from_badge("fedcba9876543210", "223456789012345678")
+                .await,
+            Err(SocialError::InvalidInput("tag requests"))
+        ));
+        // A visibility change is left out of an edit; the rest goes.
+        harness
+            .service
+            .edit_team(
+                "0123456789abcdef",
+                TeamEdit {
+                    emblem: Some("crown".into()),
+                    hidden: Some(true),
+                    badge_requests: Some(false),
+                    ..TeamEdit::default()
+                },
+            )
+            .await
+            .unwrap();
+        // A report from a card goes the old way: by its code.
+        harness
+            .service
+            .report(
+                ReportTarget::Crew {
+                    id: "fedcba9876543210".into(),
+                    code: Some("EKP-WXYZ-1234".into()),
+                    via: Some("223456789012345678".into()),
+                },
+                ReportReason::Name,
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            *bodies.lock().unwrap(),
+            vec![
+                r#"{"emblem":"crown"}"#.to_owned(),
+                r#"{"reason":"name","target":{"code":"WXYZ-1234","id":"fedcba9876543210","kind":"crew"}}"#
+                    .to_owned(),
+            ]
         );
     }
 

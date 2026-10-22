@@ -192,7 +192,7 @@ impl From<pl_mc::Error> for CmdError {
 }
 
 /// "28 Ekim" / "28 October" (with the year when it is not this one), on this computer's clock.
-fn day_month(unix: i64, lang: Lang) -> String {
+pub(crate) fn day_month(unix: i64, lang: Lang) -> String {
     const TR: [&str; 12] = [
         "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim",
         "Kasım", "Aralık",

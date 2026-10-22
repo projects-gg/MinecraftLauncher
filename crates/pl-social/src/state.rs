@@ -8,11 +8,12 @@ use serde::Serialize;
 
 use crate::codes::crew_code;
 use crate::model::{
-    BlockedUser, CrewEntry, CrewMute, DEFAULT_CREW_LIMIT, Friend, FriendGroups, FriendRequest,
-    FriendsOverview, JOIN_REQUEST_LIFETIME_SECS, JoinRequest, Limits, Me, ModNotice, NoticeKind,
-    PublicProfile, RequestOutcome, SettingsMeta, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE,
-    TEAM_FEATURE_PLAN_NOTES, Team, TeamAnswer, TeamExit, TeamInvite, TeamMember, TeamNotifications,
-    TeamRequest, TeamRole, TeamsOverview, crews_of,
+    BlockedUser, CrewBadge, CrewEntry, CrewMute, DEFAULT_CREW_LIMIT, Friend, FriendGroups,
+    FriendRequest, FriendsOverview, JOIN_REQUEST_LIFETIME_SECS, JoinRequest, Limits, Me, ModNotice,
+    NoticeKind, PublicProfile, RequestOutcome, SettingsMeta, TEAM_FEATURE_BADGE_REQUESTS,
+    TEAM_FEATURE_BADGES, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES, Team,
+    TeamAnswer, TeamExit, TeamInvite, TeamMember, TeamNotifications, TeamRequest, TeamRole,
+    TeamsOverview, crews_of,
 };
 use crate::presence::{PresenceEvent, StopReason};
 use crate::protocol::{
@@ -21,9 +22,10 @@ use crate::protocol::{
 };
 use crate::together::Together;
 use crate::view::{
-    CallAnswerView, CrewCallView, FriendGroupsView, FriendView, GroupMember, InviteView,
-    JoinRequestView, ModNoticeView, PlanAnswerView, PlanView, ProfileView, RequestView,
-    SocialNotice, TeamInviteView, TeamMemberView, TeamRequestView, TeamView,
+    CallAnswerView, CrewBadgeView, CrewCallView, CrewJoinView, FriendGroupsView, FriendView,
+    GroupMember, InviteView, JoinRequestView, ModNoticeView, PlanAnswerView, PlanView, ProfileView,
+    RequestView, SocialNotice, TagOffView, TeamInviteView, TeamMemberView, TeamRequestView,
+    TeamView,
 };
 
 /// How long a received invite stays worth answering (the service delivers them for an hour).
@@ -31,6 +33,13 @@ pub const INVITE_LIFETIME_SECS: i64 = 3_600;
 const MAX_INVITES: usize = 30;
 /// Team invites shown at a time (the service lists at most this many too).
 const MAX_TEAM_INVITES: usize = 20;
+/// "Selam ver" stays this long after someone came in (TEAM6).
+pub const GREET_WINDOW_SECS: i64 = 600;
+/// "Ekibe katıldı" lines kept per crew (TEAM6): a crew has at most 30 members.
+const MAX_CREW_JOINS: usize = 30;
+/// A tag that came off live (its `badge` message) and its crew's message saying the crew was
+/// hidden belong together within this long, in either order (TEAM6).
+const TAG_DROP_SECS: i64 = 60;
 /// A dropped connection that comes back within this long counts as "reconnecting", not as an
 /// outage.
 const RECONNECT_GRACE_SECS: u64 = 30;
@@ -73,6 +82,24 @@ pub struct SocialState {
     /// This computer's clock minus the service's (seconds), from the last `hello`: plans carry
     /// the service's times.
     plan_skew: i64,
+    /// Who came into the player's crews while connected, in the order they came (TEAM6).
+    joins: Vec<CrewJoin>,
+    /// The crew whose tag the player wore when a `badge` message took it off, and when (TEAM6).
+    tag_dropped: Option<(String, i64)>,
+    /// The leader hid the crew whose tag the player wore: to be said once (TEAM6).
+    tag_off: Option<TagOffView>,
+}
+
+/// Someone who came into one of the player's crews (TEAM6, "Hoş geldin").
+#[derive(Debug, Clone)]
+struct CrewJoin {
+    crew: String,
+    id: String,
+    name: String,
+    /// Unix seconds, this computer's clock.
+    at: i64,
+    /// "Selam ver" was pressed.
+    greeted: bool,
 }
 
 /// A crew call with its times on this computer's clock.
@@ -128,7 +155,11 @@ impl SocialState {
         for notice in std::mem::take(&mut me.notices) {
             self.add_notice(notice);
         }
+        // The player's own entries in the crews' member lists wear what `me` says (TEAM6): a tag
+        // put on here shows on the crew pages at once.
+        let (id, badge) = (me.profile.id.clone(), me.profile.badge.clone());
         self.me = Some(me);
+        self.set_badge_of(&id, badge.as_ref());
     }
 
     /// The friend list arrived. Its crews become one list in the player's order (`crews`), also
@@ -244,14 +275,58 @@ impl SocialState {
                 crew,
                 reason,
                 by,
+                joined,
             } => {
+                // TEAM6: whether this hides a crew whose tag the player wore (its tag may have
+                // come off just before, by a `badge` message), and which crew is gone.
+                let hides_my_tag = team.as_ref().is_some_and(|team| {
+                    team.hidden
+                        && self.crew(&team.id).is_some_and(|entry| !entry.team.hidden)
+                        && (self.my_badge_crew() == Some(team.id.as_str())
+                            || self.tag_dropped.as_ref().is_some_and(|(dropped, at)| {
+                                *dropped == team.id && now - at <= TAG_DROP_SECS
+                            }))
+                });
+                let gone = match (team, crew) {
+                    (Some(_), _) => None,
+                    (None, Some(id)) => Some(id.clone()),
+                    (None, None) => self.crews().first().map(|entry| entry.team.id.clone()),
+                };
                 if let Some(notice) =
                     self.crew_changed(team.as_ref(), crew.as_deref(), *reason, by.as_deref())
                 {
                     notices.push(notice);
                 }
+                if let Some(team) = team {
+                    self.badges_from(team);
+                    self.crew_joined(team, joined, now);
+                    let mine = self.me.as_ref().map(|me| me.profile.id.as_str());
+                    if hides_my_tag && by.as_deref() != mine {
+                        self.tag_off = Some(TagOffView {
+                            crew: team.id.clone(),
+                            name: team.name.clone(),
+                        });
+                        self.tag_dropped = None;
+                    }
+                }
+                if let Some(gone) = gone {
+                    self.crew_badges_gone(&gone, *reason == Some(TeamExit::Disbanded));
+                }
                 self.prune_crew_calls();
                 self.prune_crew_plans();
+                self.prune_crew_joins();
+            }
+            PresenceEvent::BadgeChanged { id, badge } => {
+                // The player's own tag went off live: its crew's "hidden" may come next.
+                let mine = self.me.as_ref().is_some_and(|me| me.profile.id == *id);
+                if mine {
+                    let before = self.my_badge_crew().map(str::to_owned);
+                    let after = badge.as_ref().map(|badge| badge.crew.as_str());
+                    self.tag_dropped = before
+                        .filter(|crew| after != Some(crew.as_str()))
+                        .map(|crew| (crew, now));
+                }
+                self.set_badge_of(id, badge.as_ref());
             }
             PresenceEvent::TeamRequests {
                 crew,
@@ -259,6 +334,7 @@ impl SocialState {
                 added,
             } => {
                 let heard = self.crew_heard(crew, now);
+                let badges = self.offers(TEAM_FEATURE_BADGES);
                 if let Some(entry) = self
                     .crews_mut()
                     .and_then(|crews| crews.iter_mut().find(|entry| &entry.team.id == crew))
@@ -271,7 +347,7 @@ impl SocialState {
                     if let Some(request) = fresh.filter(|_| heard) {
                         notices.push(SocialNotice::JoinRequest {
                             crew: crew.clone(),
-                            request: join_request_view(request),
+                            request: join_request_view(request, &entry.team.members, badges),
                         });
                     }
                 }
@@ -1049,10 +1125,15 @@ impl SocialState {
     /// roles): that crew, a new one last; with one crew per player it replaces the one there was.
     pub fn team_answer(&mut self, answer: TeamAnswer) {
         let multi = self.offers(TEAM_FEATURE_MULTI);
-        let Some(overview) = &mut self.overview else {
+        let Some(team) = answer.team else {
             return;
         };
-        let Some(team) = answer.team else {
+        if self.overview.is_none() {
+            return;
+        }
+        // The crew as it is now carries its members' tags as they are now (TEAM6).
+        self.badges_from(&team);
+        let Some(overview) = &mut self.overview else {
             return;
         };
         overview.team_invites.retain(|i| i.team.id != team.id);
@@ -1081,13 +1162,222 @@ impl SocialState {
         }
     }
 
-    /// The player left (or ended) one of their crews.
-    pub fn team_left(&mut self, team_id: &str) {
+    /// The player left one of their crews, or ended it (`ended`: every tag of it goes too).
+    pub fn team_left(&mut self, team_id: &str, ended: bool) {
         if let Some(crews) = self.crews_mut() {
             crews.retain(|entry| entry.team.id != team_id);
         }
+        self.crew_badges_gone(team_id, ended);
         self.prune_crew_calls();
         self.prune_crew_plans();
+        self.prune_crew_joins();
+    }
+
+    // --- crew tags (TEAM6) ----------------------------------------------------------------------
+
+    /// The crew whose tag the player wears now.
+    fn my_badge_crew(&self) -> Option<&str> {
+        self.me
+            .as_ref()
+            .and_then(|me| me.profile.badge.as_ref())
+            .map(|badge| badge.crew.as_str())
+    }
+
+    /// One player's tag changed: their card everywhere they show (the profile, the friend list,
+    /// every crew's member list).
+    fn set_badge_of(&mut self, id: &str, badge: Option<&CrewBadge>) {
+        if let Some(me) = self.me.as_mut().filter(|me| me.profile.id == id) {
+            me.profile.badge = badge.cloned();
+        }
+        let Some(overview) = &mut self.overview else {
+            return;
+        };
+        for friend in overview.friends.iter_mut().filter(|f| f.profile.id == id) {
+            friend.profile.badge = badge.cloned();
+        }
+        for entry in overview.crews.iter_mut().flatten() {
+            for member in entry.team.members.iter_mut().filter(|m| m.profile.id == id) {
+                member.profile.badge = badge.cloned();
+            }
+        }
+    }
+
+    /// A crew as it is now (its message, or an answer) carries its members' tags as they are now:
+    /// those cards go everywhere they show; and since only members wear a crew's tag, anyone else
+    /// shown with this crew's card is shown without it (the service tells them apart too).
+    fn badges_from(&mut self, team: &Team) {
+        let worn: HashMap<&str, Option<&CrewBadge>> = team
+            .members
+            .iter()
+            .map(|member| (member.profile.id.as_str(), member.profile.badge.as_ref()))
+            .collect();
+        let fix = |profile: &mut PublicProfile| match worn.get(profile.id.as_str()) {
+            Some(badge) => profile.badge = badge.cloned(),
+            None if profile
+                .badge
+                .as_ref()
+                .is_some_and(|badge| badge.crew == team.id) =>
+            {
+                profile.badge = None;
+            }
+            None => {}
+        };
+        if let Some(me) = &mut self.me {
+            fix(&mut me.profile);
+        }
+        let Some(overview) = &mut self.overview else {
+            return;
+        };
+        for friend in &mut overview.friends {
+            fix(&mut friend.profile);
+        }
+        for entry in overview.crews.iter_mut().flatten() {
+            for member in &mut entry.team.members {
+                fix(&mut member.profile);
+            }
+        }
+    }
+
+    /// The player is no longer in crew `crew`: their tag of it goes; when the crew ended, every
+    /// card of it goes.
+    fn crew_badges_gone(&mut self, crew: &str, ended: bool) {
+        if self.my_badge_crew() == Some(crew)
+            && let Some(id) = self.me.as_ref().map(|me| me.profile.id.clone())
+        {
+            self.set_badge_of(&id, None);
+        }
+        if !ended {
+            return;
+        }
+        let take_off = |profile: &mut PublicProfile| {
+            if profile
+                .badge
+                .as_ref()
+                .is_some_and(|badge| badge.crew == crew)
+            {
+                profile.badge = None;
+            }
+        };
+        if let Some(overview) = &mut self.overview {
+            for friend in &mut overview.friends {
+                take_off(&mut friend.profile);
+            }
+            for entry in overview.crews.iter_mut().flatten() {
+                for member in &mut entry.team.members {
+                    take_off(&mut member.profile);
+                }
+            }
+        }
+    }
+
+    /// A profile's tag as the view shows it: only while the service offers crew tags, and the
+    /// card takes requests only while it offers requests from tags.
+    fn badge_view(&self, profile: &PublicProfile) -> Option<Box<CrewBadgeView>> {
+        if !self.offers(TEAM_FEATURE_BADGES) {
+            return None;
+        }
+        let mut view = CrewBadgeView::from(profile.badge.as_ref()?);
+        view.requests &= self.offers(TEAM_FEATURE_BADGE_REQUESTS);
+        Some(Box::new(view))
+    }
+
+    /// The player's own tag as the view shows it.
+    pub fn my_badge(&self) -> Option<Box<CrewBadgeView>> {
+        self.badge_view(&self.me.as_ref()?.profile)
+    }
+
+    /// The leader hid the crew whose tag the player wore (said once).
+    pub fn take_tag_off(&mut self) -> Option<TagOffView> {
+        self.tag_off.take()
+    }
+
+    // --- "Hoş geldin" (TEAM6) ---------------------------------------------------------------
+
+    /// Who came into `team` now (by code, link, invite or an accepted request): a line each in its
+    /// chat, at most [`MAX_CREW_JOINS`] a crew (the oldest go).
+    fn crew_joined(&mut self, team: &Team, joined: &[String], now: i64) {
+        let mut added = false;
+        for id in joined {
+            let Some(member) = team.members.iter().find(|m| &m.profile.id == id) else {
+                continue;
+            };
+            self.joins.push(CrewJoin {
+                crew: team.id.clone(),
+                id: id.clone(),
+                name: member.profile.name().to_owned(),
+                at: now,
+                greeted: false,
+            });
+            added = true;
+        }
+        if !added {
+            return;
+        }
+        let mut extra = self
+            .joins
+            .iter()
+            .filter(|join| join.crew == team.id)
+            .count()
+            .saturating_sub(MAX_CREW_JOINS);
+        self.joins.retain(|join| {
+            if extra > 0 && join.crew == team.id {
+                extra -= 1;
+                false
+            } else {
+                true
+            }
+        });
+    }
+
+    /// Lines live in crews: those of a crew the player left go.
+    fn prune_crew_joins(&mut self) {
+        if self.overview.is_none() {
+            return;
+        }
+        let crews: HashSet<String> = self.crew_order().into_iter().collect();
+        self.joins.retain(|join| crews.contains(&join.crew));
+    }
+
+    /// The crews' "Ekibe katıldı" lines, oldest first.
+    pub fn crew_joins(&self) -> Vec<CrewJoinView> {
+        let me = self.me.as_ref().map(|me| me.profile.id.as_str());
+        self.joins
+            .iter()
+            .map(|join| {
+                let mine = me == Some(join.id.as_str());
+                CrewJoinView {
+                    crew: join.crew.clone(),
+                    id: join.id.clone(),
+                    name: join.name.clone(),
+                    mine,
+                    at: join.at,
+                    greet_until: (!mine && !join.greeted).then_some(join.at + GREET_WINDOW_SECS),
+                }
+            })
+            .collect()
+    }
+
+    /// "Selam ver" may still be pressed on `id`'s line in crew `crew` at `now`.
+    pub fn may_greet(&self, crew: &str, id: &str, now: i64) -> bool {
+        let me = self.me.as_ref().map(|me| me.profile.id.as_str());
+        me != Some(id)
+            && self.joins.iter().any(|join| {
+                join.crew == crew
+                    && join.id == id
+                    && !join.greeted
+                    && now < join.at + GREET_WINDOW_SECS
+            })
+    }
+
+    /// "Selam ver" was pressed: the button goes from every line of `id` in that crew.
+    pub fn greeted(&mut self, crew: &str, id: &str) {
+        for join in self
+            .joins
+            .iter_mut()
+            .filter(|join| join.crew == crew && join.id == id)
+        {
+            join.greeted = true;
+        }
     }
 
     pub fn team_code(&mut self, team_id: &str, code: String) {
@@ -1327,18 +1617,24 @@ impl SocialState {
                     discord_url: member.profile.discord_profile_url(),
                     joined_at: member.joined_at,
                     together_month: 0,
+                    badge: self.badge_view(&member.profile),
                 }
             })
             .collect();
         let mine = members.iter().find(|m| m.me);
         let role = mine.map_or(TeamRole::Member, |m| m.role);
         let moderator = mine.is_some_and(|m| m.moderator);
+        let badges = self.offers(TEAM_FEATURE_BADGES);
         let requests = entry
             .requests
             .iter()
             .filter(|r| now - r.sent_at < JOIN_REQUEST_LIFETIME_SECS)
-            .map(join_request_view)
+            .map(|request| join_request_view(request, &team.members, badges))
             .collect();
+        let wearers = members
+            .iter()
+            .filter(|m| m.badge.as_ref().is_some_and(|badge| badge.crew == team.id))
+            .count();
         Some(TeamView {
             id: team.id.clone(),
             name: team.name.clone(),
@@ -1362,6 +1658,9 @@ impl SocialState {
             link_url: None,
             requests,
             together_week: 0,
+            hidden: badges && team.hidden,
+            badge_requests: team.badge_requests,
+            wearers: u32::try_from(wearers).unwrap_or(u32::MAX),
         })
     }
 
@@ -1404,14 +1703,20 @@ impl SocialState {
             .retain(|i| !dismissed.get(&i.from).is_some_and(|at| i.at <= *at));
     }
 
-    /// Friends with their presence, in the service's order.
+    /// Friends with their presence and the crew tags they wear, in the service's order.
     pub fn friends(&self) -> Vec<FriendView> {
         self.overview
             .as_ref()
             .map(|o| {
                 o.friends
                     .iter()
-                    .map(|friend| friend_view(friend, self.online.get(&friend.profile.id)))
+                    .map(|friend| {
+                        friend_view(
+                            friend,
+                            self.online.get(&friend.profile.id),
+                            self.badge_view(&friend.profile),
+                        )
+                    })
                     .collect()
             })
             .unwrap_or_default()
@@ -1480,7 +1785,11 @@ impl SocialState {
     fn friend_view(&self, id: &str) -> Option<FriendView> {
         let overview = self.overview.as_ref()?;
         let friend = overview.friends.iter().find(|f| f.profile.id == id)?;
-        Some(friend_view(friend, self.online.get(id)))
+        Some(friend_view(
+            friend,
+            self.online.get(id),
+            self.badge_view(&friend.profile),
+        ))
     }
 
     /// A presence message carries the friend's current picture.
@@ -1580,7 +1889,11 @@ fn moved(before: &CrewCall, next: &CrewCall) -> bool {
         || (before.server.is_some() && next.server.is_some() && before.server != next.server)
 }
 
-fn friend_view(friend: &Friend, presence: Option<&Presence>) -> FriendView {
+fn friend_view(
+    friend: &Friend,
+    presence: Option<&Presence>,
+    badge: Option<Box<CrewBadgeView>>,
+) -> FriendView {
     let profile = &friend.profile;
     let online = presence.filter(|p| p.state != PresenceState::Offline);
     FriendView {
@@ -1597,6 +1910,7 @@ fn friend_view(friend: &Friend, presence: Option<&Presence>) -> FriendView {
             .filter(|p| p.state == PresenceState::Playing)
             .and_then(|p| p.game.clone()),
         discord_url: profile.discord_profile_url(),
+        badge,
     }
 }
 
@@ -1615,8 +1929,20 @@ fn team_invite_view(invite: &TeamInvite) -> TeamInviteView {
     }
 }
 
-fn join_request_view(request: &JoinRequest) -> JoinRequestView {
+/// A join request to a crew of `members`; `badges`: the service offers crew tags (a request from
+/// a tag says through whose, TEAM6).
+fn join_request_view(
+    request: &JoinRequest,
+    members: &[TeamMember],
+    badges: bool,
+) -> JoinRequestView {
     let profile = ProfileView::from(&request.from);
+    // "Ayşe aracılığıyla": the member is in the crew's list while the service names them.
+    let via = request
+        .via
+        .as_deref()
+        .filter(|_| badges)
+        .and_then(|via| members.iter().find(|m| m.profile.id == via));
     JoinRequestView {
         id: profile.id,
         name: profile.name,
@@ -1624,6 +1950,8 @@ fn join_request_view(request: &JoinRequest) -> JoinRequestView {
         avatar: profile.avatar,
         avatar_url: profile.avatar_url,
         sent_at: request.sent_at,
+        via: via.map(|m| m.profile.id.clone()),
+        via_name: via.map(|m| m.profile.name().to_owned()),
     }
 }
 
@@ -1671,6 +1999,7 @@ mod tests {
             display_name: Some(name.into()),
             avatar: "discord".into(),
             avatar_hash: None,
+            badge: None,
         }
     }
 
@@ -2182,6 +2511,8 @@ mod tests {
             text_locked_until: None,
             join: crate::model::JoinMode::Open,
             link: None,
+            hidden: false,
+            badge_requests: true,
         }
     }
 
@@ -2514,6 +2845,7 @@ mod tests {
                 crew: None,
                 reason: Some(TeamExit::Left),
                 by: Some(ME.into()),
+                joined: Vec::new(),
             },
             NOW,
         );
@@ -2551,6 +2883,7 @@ mod tests {
                 crew: None,
                 reason: None,
                 by: Some("1".into()),
+                joined: Vec::new(),
             },
             NOW,
         );
@@ -2588,6 +2921,7 @@ mod tests {
                 crew: None,
                 reason: None,
                 by: None,
+                joined: Vec::new(),
             },
             NOW,
         );
@@ -2636,6 +2970,7 @@ mod tests {
                 crew: None,
                 reason: None,
                 by: None,
+                joined: Vec::new(),
             },
             NOW,
         );
@@ -2649,6 +2984,7 @@ mod tests {
                 crew: None,
                 reason: Some(TeamExit::Kicked),
                 by: Some("2".into()),
+                joined: Vec::new(),
             },
             NOW,
         );
@@ -2668,6 +3004,7 @@ mod tests {
                 crew: None,
                 reason: Some(TeamExit::Disbanded),
                 by: Some("100000000000000000".into()),
+                joined: Vec::new(),
             },
             NOW,
         );
@@ -2874,6 +3211,7 @@ mod tests {
                 crew: Some(CREW_B.into()),
                 reason: Some(TeamExit::Kicked),
                 by: Some("2".into()),
+                joined: Vec::new(),
             },
             NOW,
         );
@@ -2896,6 +3234,7 @@ mod tests {
                 crew: Some("aaaaaaaaaaaaaaaa".into()),
                 reason: Some(TeamExit::Disbanded),
                 by: Some("2".into()),
+                joined: Vec::new(),
             },
             NOW,
         );
@@ -2998,6 +3337,7 @@ mod tests {
                 crew: Some("1111222233334444".into()),
                 reason: None,
                 by: None,
+                joined: Vec::new(),
             },
             NOW,
         );
@@ -3024,7 +3364,7 @@ mod tests {
         let views = state.crew_views(NOW);
         assert_eq!(views[0].invited, vec!["5".to_owned()]);
         assert_eq!(views[0].code, "EKP-WXYZ-1234");
-        state.team_left("5555666677778888");
+        state.team_left("5555666677778888", false);
         assert_eq!(crew_ids(&state).len(), 3);
 
         // Zeki is in both crews; Ayşe only in Gece Kartalları, which the player mutes.
@@ -3071,6 +3411,7 @@ mod tests {
         JoinRequest {
             from: profile(id, name),
             sent_at,
+            via: None,
         }
     }
 
@@ -3146,6 +3487,7 @@ mod tests {
                 crew: Some(CREW_B.into()),
                 reason: None,
                 by: Some("2".into()),
+                joined: Vec::new(),
             },
             NOW,
         );
@@ -3197,6 +3539,7 @@ mod tests {
                 crew: Some(sky.id.clone()),
                 reason: None,
                 by: Some("801".into()),
+                joined: Vec::new(),
             },
             NOW,
         );
@@ -3213,6 +3556,7 @@ mod tests {
                 crew: Some("5555666677778888".into()),
                 reason: None,
                 by: Some("801".into()),
+                joined: Vec::new(),
             },
             NOW,
         );
@@ -3374,7 +3718,7 @@ mod tests {
             NOW,
         );
         assert_eq!(state.plans(NOW).len(), 1);
-        state.team_left(CREW_A);
+        state.team_left(CREW_A, false);
         assert!(state.plans(NOW).is_empty());
     }
 
@@ -3415,5 +3759,414 @@ mod tests {
         let together = state.together_now(&on_projects);
         assert_eq!(together.people.len(), 1);
         assert_eq!(together.crews.len(), 1);
+    }
+
+    // --- crew tags and "Hoş geldin" (TEAM6) ------------------------------------------------------
+
+    /// The card of a crew's tag, as the service makes it.
+    fn card(crew: &str, name: &str, tag: &str) -> CrewBadge {
+        CrewBadge {
+            crew: crew.into(),
+            tag: tag.into(),
+            color: "navy".into(),
+            frame: "shield".into(),
+            emblem: "bolt".into(),
+            name: name.into(),
+            motto: "Gece bizimdir".into(),
+            created_on: "2026-09-20".into(),
+            members: 3,
+            requests: true,
+        }
+    }
+
+    /// `multi()` on a service with crew tags: the player and Ayşe (a friend, in A) wear A's tag
+    /// ("GK"), Bora (a friend, B's leader) wears B's ("PVP"), Can (a friend in no crew) none.
+    fn tagged() -> SocialState {
+        let mut state = multi();
+        if let Some(overview) = &mut state.overview {
+            overview.team_features.extend([
+                TEAM_FEATURE_BADGES.into(),
+                TEAM_FEATURE_BADGE_REQUESTS.into(),
+            ]);
+        }
+        let a = card(CREW_A, "Gece Kartalları", "GK");
+        state.set_badge_of(ME, Some(&a));
+        state.set_badge_of("1", Some(&a));
+        state.set_badge_of("2", Some(&card(CREW_B, "PvP", "PVP")));
+        state
+    }
+
+    /// Crew A as the player holds it now, to change and send back as its message.
+    fn crew_a(state: &SocialState) -> Team {
+        state.crew(CREW_A).unwrap().team.clone()
+    }
+
+    fn crew_message(team: Team, by: &str, joined: &[&str]) -> PresenceEvent {
+        PresenceEvent::TeamChanged {
+            crew: Some(team.id.clone()),
+            team: Some(team),
+            reason: None,
+            by: Some(by.into()),
+            joined: joined.iter().map(|id| (*id).to_owned()).collect(),
+        }
+    }
+
+    fn badge_of<'a>(friends: &'a [FriendView], id: &str) -> Option<&'a str> {
+        by_id(friends, id).badge.as_ref().map(|b| b.tag.as_str())
+    }
+
+    fn member_badge(state: &SocialState, crew: usize, id: &str) -> Option<String> {
+        state.crew_views(NOW)[crew]
+            .members
+            .iter()
+            .find(|m| m.id == id)
+            .and_then(|m| m.badge.as_ref())
+            .map(|b| b.name.clone())
+    }
+
+    #[test]
+    fn crew_tags_follow_their_wearers_into_every_list() {
+        let mut state = tagged();
+        let friends = state.friends();
+        assert_eq!(badge_of(&friends, "1"), Some("GK"));
+        assert_eq!(badge_of(&friends, "2"), Some("PVP"));
+        assert_eq!(badge_of(&friends, "3"), None);
+        assert_eq!(
+            member_badge(&state, 0, "1").as_deref(),
+            Some("Gece Kartalları")
+        );
+        // In B's list the player and Bora wear their tags (the player A's, of another crew).
+        assert_eq!(
+            member_badge(&state, 1, ME).as_deref(),
+            Some("Gece Kartalları")
+        );
+        let views = state.crew_views(NOW);
+        assert_eq!((views[0].wearers, views[1].wearers), (2, 1));
+        assert!(!views[0].hidden && views[0].badge_requests);
+        let mine = state.my_badge().unwrap();
+        assert_eq!((mine.tag.as_str(), mine.requests), ("GK", true));
+
+        // Live: Ayşe takes hers off, then puts on another; Zeki (in both crews) puts B's on.
+        state.apply(
+            &PresenceEvent::BadgeChanged {
+                id: "1".into(),
+                badge: None,
+            },
+            NOW,
+        );
+        assert_eq!(badge_of(&state.friends(), "1"), None);
+        assert_eq!(member_badge(&state, 0, "1"), None);
+        state.apply(
+            &PresenceEvent::BadgeChanged {
+                id: "9".into(),
+                badge: Some(card(CREW_B, "PvP", "PVP")),
+            },
+            NOW,
+        );
+        assert_eq!(member_badge(&state, 0, "9").as_deref(), Some("PvP"));
+        assert_eq!(member_badge(&state, 1, "9").as_deref(), Some("PvP"));
+        // Someone this launcher does not show changes nothing.
+        state.apply(
+            &PresenceEvent::BadgeChanged {
+                id: "77".into(),
+                badge: Some(card(CREW_B, "PvP", "PVP")),
+            },
+            NOW,
+        );
+        assert_eq!(state.friends().len(), 3);
+
+        // Studio's request switch off: the cards stay, none takes requests.
+        if let Some(overview) = &mut state.overview {
+            overview
+                .team_features
+                .retain(|f| f != TEAM_FEATURE_BADGE_REQUESTS);
+        }
+        assert_eq!(state.my_badge().map(|b| b.requests), Some(false));
+        // Crew tags off (or an older service): no card anywhere, no hidden crew.
+        if let Some(overview) = &mut state.overview {
+            overview.team_features.retain(|f| f != TEAM_FEATURE_BADGES);
+            if let Some(crews) = &mut overview.crews {
+                crews[0].team.hidden = true;
+            }
+        }
+        assert!(state.friends().iter().all(|f| f.badge.is_none()));
+        assert!(state.my_badge().is_none());
+        let views = state.crew_views(NOW);
+        assert!(views[0].members.iter().all(|m| m.badge.is_none()));
+        assert!(!views[0].hidden && views[0].wearers == 0);
+    }
+
+    #[test]
+    fn a_crews_message_carries_its_members_tags_as_they_are_now() {
+        let mut state = tagged();
+        // A is renamed: the card of everyone wearing it follows, in every list.
+        let renamed = card(CREW_A, "Gece Şahinleri", "GK");
+        let mut a = crew_a(&state);
+        a.name = "Gece Şahinleri".into();
+        for member in &mut a.members {
+            if member.profile.id == ME || member.profile.id == "1" {
+                member.profile.badge = Some(renamed.clone());
+            }
+        }
+        state.apply(&crew_message(a.clone(), "1", &[]), NOW);
+        assert_eq!(
+            by_id(&state.friends(), "1")
+                .badge
+                .as_ref()
+                .map(|b| b.name.as_str()),
+            Some("Gece Şahinleri")
+        );
+        assert_eq!(
+            state.my_badge().map(|b| b.name),
+            Some("Gece Şahinleri".into())
+        );
+        assert_eq!(
+            member_badge(&state, 1, ME).as_deref(),
+            Some("Gece Şahinleri")
+        );
+        // Bora is not in A: B's card stays his.
+        assert_eq!(badge_of(&state.friends(), "2"), Some("PVP"));
+        // Only members wear a crew's tag: a friend still shown with A's card who is not in it
+        // loses it with A's next message.
+        state.set_badge_of("3", Some(&renamed));
+        state.apply(&crew_message(a.clone(), "1", &[]), NOW);
+        assert_eq!(badge_of(&state.friends(), "3"), None);
+        // An answer of the player's own change carries them too (Ayşe took hers off meanwhile).
+        for member in &mut a.members {
+            if member.profile.id == "1" {
+                member.profile.badge = None;
+            }
+        }
+        state.team_answer(TeamAnswer {
+            team: Some(a),
+            invited: vec![],
+        });
+        assert_eq!(badge_of(&state.friends(), "1"), None);
+    }
+
+    #[test]
+    fn hiding_the_crew_whose_tag_the_player_wore_says_so_once_in_either_order() {
+        let hidden = |state: &SocialState| {
+            let mut a = crew_a(state);
+            a.hidden = true;
+            for member in &mut a.members {
+                member.profile.badge = None;
+            }
+            a
+        };
+        // The crew's message first: the tag comes off with it.
+        let mut state = tagged();
+        let a = hidden(&state);
+        state.apply(&crew_message(a.clone(), "1", &[]), NOW);
+        assert!(state.my_badge().is_none());
+        assert_eq!(badge_of(&state.friends(), "1"), None);
+        assert!(state.crew_views(NOW)[0].hidden);
+        assert_eq!(
+            state.take_tag_off(),
+            Some(TagOffView {
+                crew: CREW_A.into(),
+                name: "Gece Kartalları".into()
+            })
+        );
+        assert_eq!(state.take_tag_off(), None);
+        // The message again (or the player's own `badge` message after it) says nothing more.
+        state.apply(&crew_message(a, "1", &[]), NOW);
+        state.apply(
+            &PresenceEvent::BadgeChanged {
+                id: ME.into(),
+                badge: None,
+            },
+            NOW,
+        );
+        assert_eq!(state.take_tag_off(), None);
+
+        // The player's own `badge` message first: the crew's message right after still says it.
+        let mut state = tagged();
+        state.apply(
+            &PresenceEvent::BadgeChanged {
+                id: ME.into(),
+                badge: None,
+            },
+            NOW,
+        );
+        let a = hidden(&state);
+        state.apply(&crew_message(a, "1", &[]), NOW + 2);
+        assert!(state.take_tag_off().is_some());
+
+        // Long after the tag came off, hiding the crew is not about it.
+        let mut state = tagged();
+        state.apply(
+            &PresenceEvent::BadgeChanged {
+                id: ME.into(),
+                badge: None,
+            },
+            NOW,
+        );
+        let a = hidden(&state);
+        state.apply(&crew_message(a, "1", &[]), NOW + TAG_DROP_SECS + 1);
+        assert!(state.take_tag_off().is_none());
+
+        // The player hid it themself (here or on another device): nothing to say.
+        let mut state = tagged();
+        let a = hidden(&state);
+        state.apply(&crew_message(a, ME, &[]), NOW);
+        assert!(state.take_tag_off().is_none());
+        assert!(state.my_badge().is_none());
+
+        // Another crew's tag worn: hiding A takes nothing of the player's.
+        let mut state = tagged();
+        state.set_badge_of(ME, Some(&card(CREW_B, "PvP", "PVP")));
+        let mut a = hidden(&state);
+        for member in &mut a.members {
+            if member.profile.id == ME {
+                member.profile.badge = Some(card(CREW_B, "PvP", "PVP"));
+            }
+        }
+        state.apply(&crew_message(a, "1", &[]), NOW);
+        assert!(state.take_tag_off().is_none());
+        assert_eq!(state.my_badge().map(|b| b.tag), Some("PVP".into()));
+    }
+
+    #[test]
+    fn leaving_or_ending_a_crew_takes_its_tags() {
+        // The player leaves A: their own A tag goes, Ayşe keeps hers (A goes on without them).
+        let mut state = tagged();
+        state.apply(
+            &PresenceEvent::TeamChanged {
+                team: None,
+                crew: Some(CREW_A.into()),
+                reason: Some(TeamExit::Left),
+                by: Some(ME.into()),
+                joined: Vec::new(),
+            },
+            NOW,
+        );
+        assert!(state.my_badge().is_none());
+        assert_eq!(member_badge(&state, 0, ME), None);
+        assert_eq!(badge_of(&state.friends(), "1"), Some("GK"));
+        // B ends: every card of it goes.
+        state.apply(
+            &PresenceEvent::TeamChanged {
+                team: None,
+                crew: Some(CREW_B.into()),
+                reason: Some(TeamExit::Disbanded),
+                by: Some("2".into()),
+                joined: Vec::new(),
+            },
+            NOW,
+        );
+        assert_eq!(badge_of(&state.friends(), "2"), None);
+        // The same through the player's own calls.
+        let mut state = tagged();
+        state.team_left(CREW_B, true);
+        assert_eq!(badge_of(&state.friends(), "2"), None);
+        state.team_left(CREW_A, false);
+        assert!(state.my_badge().is_none());
+        assert_eq!(badge_of(&state.friends(), "1"), Some("GK"));
+    }
+
+    #[test]
+    fn the_players_own_tag_shows_on_their_entries_once_the_service_answers() {
+        let mut state = tagged();
+        let mut wearing = me();
+        wearing.profile.badge = Some(card(CREW_B, "PvP", "PVP"));
+        state.set_me(wearing);
+        assert_eq!(state.my_badge().map(|b| b.tag), Some("PVP".into()));
+        assert_eq!(member_badge(&state, 0, ME).as_deref(), Some("PvP"));
+        assert_eq!(member_badge(&state, 1, ME).as_deref(), Some("PvP"));
+        assert_eq!(
+            (
+                state.crew_views(NOW)[0].wearers,
+                state.crew_views(NOW)[1].wearers
+            ),
+            (1, 2)
+        );
+        state.set_me(me());
+        assert_eq!(member_badge(&state, 0, ME), None);
+    }
+
+    #[test]
+    fn who_came_in_shows_in_the_crews_chat_with_selam_ver_for_ten_minutes() {
+        let mut state = tagged();
+        let mut a = crew_a(&state);
+        a.members.push(TeamMember {
+            profile: profile("5", "Ece"),
+            role: TeamRole::Member,
+            moderator: false,
+            joined_at: NOW,
+        });
+        // Someone named who is not in the list (a race) gets no line.
+        state.apply(&crew_message(a.clone(), "1", &["5", "88"]), NOW);
+        let joins = state.crew_joins();
+        assert_eq!(
+            joins,
+            [CrewJoinView {
+                crew: CREW_A.into(),
+                id: "5".into(),
+                name: "Ece".into(),
+                mine: false,
+                at: NOW,
+                greet_until: Some(NOW + GREET_WINDOW_SECS),
+            }]
+        );
+        assert!(state.may_greet(CREW_A, "5", NOW + GREET_WINDOW_SECS - 1));
+        assert!(!state.may_greet(CREW_A, "5", NOW + GREET_WINDOW_SECS));
+        assert!(!state.may_greet(CREW_B, "5", NOW));
+        state.greeted(CREW_A, "5");
+        assert_eq!(state.crew_joins()[0].greet_until, None);
+        assert!(!state.may_greet(CREW_A, "5", NOW));
+
+        // The player's own coming in: "Ekibe katıldın", nothing to greet.
+        let b = state.crew(CREW_B).unwrap().team.clone();
+        state.apply(&crew_message(b, "2", &[ME]), NOW + 5);
+        let own = state.crew_joins().pop().unwrap();
+        assert!(own.mine && own.greet_until.is_none());
+        assert!(!state.may_greet(CREW_B, ME, NOW + 5));
+
+        // At most 30 lines a crew: the oldest go.
+        for n in 0..40 {
+            state.apply(&crew_message(a.clone(), "1", &["5"]), NOW + 10 + n);
+        }
+        let in_a: Vec<_> = state
+            .crew_joins()
+            .into_iter()
+            .filter(|join| join.crew == CREW_A)
+            .collect();
+        assert_eq!(in_a.len(), MAX_CREW_JOINS);
+        assert_eq!(in_a[0].at, NOW + 20);
+        // Leaving the crew takes its lines.
+        state.team_left(CREW_A, false);
+        assert!(state.crew_joins().iter().all(|join| join.crew != CREW_A));
+        assert_eq!(state.crew_joins().len(), 1);
+    }
+
+    #[test]
+    fn a_request_from_a_tag_names_the_member_it_came_through() {
+        let mut state = tagged();
+        let mut from_tag = join_request("5", "Ece", NOW - 60);
+        from_tag.via = Some("1".into());
+        let mut gone = join_request("6", "Fatih", NOW - 30);
+        gone.via = Some("77".into());
+        state.apply(
+            &PresenceEvent::TeamRequests {
+                crew: CREW_A.into(),
+                requests: vec![from_tag, gone, join_request("7", "Gül", NOW - 10)],
+                added: Some("5".into()),
+            },
+            NOW,
+        );
+        let requests = &state.crew_views(NOW)[0].requests;
+        assert_eq!(
+            requests
+                .iter()
+                .map(|r| (r.via.as_deref(), r.via_name.as_deref()))
+                .collect::<Vec<_>>(),
+            [(Some("1"), Some("Ayşe")), (None, None), (None, None)]
+        );
+        // Without crew tags the line is not shown.
+        if let Some(overview) = &mut state.overview {
+            overview.team_features.retain(|f| f != TEAM_FEATURE_BADGES);
+        }
+        assert!(state.crew_views(NOW)[0].requests[0].via.is_none());
     }
 }

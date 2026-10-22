@@ -4,18 +4,19 @@
 //! may point it at a local `wrangler dev` with `PROJECTS_SOCIAL_URL`. Teams follow
 //! `features.teams` (debug builds: also `PROJECTS_SOCIAL_TEAMS=1`), chat `features.chat` (debug
 //! builds: also `PROJECTS_SOCIAL_CHAT=1`); chat changes go out as `social-chat`, someone writing
-//! ("yazıyor…", CHAT2) as `social-chat-typing`.
+//! ("yazıyor…", CHAT2) as `social-chat-typing`, a crew tag its crew's leader took off by hiding the
+//! crew (TEAM6) as `social-tag-off`.
 
 use std::sync::Arc;
 
-use pl_lang::pick;
+use pl_lang::{Lang, pick};
 use pl_mc::launch::{GameEvent, QuickPlay};
 use pl_social::{
-    CallAnswer, CallOutcome, ChatCardView, ChatPage, ChatQuota, CrewMuteEdit, ErrorCode,
-    FriendGroup, GroupMember, InviteResult, JoinMode, JoinResult, LookupView, PermissionsEdit,
-    PlanAnswer, ProfileUpdate, ReportReason, ReportTarget, SendOutcome, SessionInfo, SettingsMeta,
-    SocialError, SocialService, SocialUpdate, SocialView, StatusMode, TeamEdit, TeamLook,
-    TeamLookupView, TeamNotificationsEdit,
+    BadgeRequestResult, CallAnswer, CallOutcome, ChatCardView, ChatPage, ChatQuota, CrewMuteEdit,
+    ErrorCode, FriendGroup, GroupMember, InviteResult, JoinMode, JoinResult, LookupView,
+    PermissionsEdit, PlanAnswer, ProfileUpdate, ReportReason, ReportTarget, SendOutcome,
+    SessionInfo, SettingsMeta, SocialError, SocialService, SocialUpdate, SocialView, StatusMode,
+    TeamEdit, TeamLook, TeamLookupView, TeamNotificationsEdit,
 };
 use tauri::{AppHandle, Emitter, State};
 
@@ -41,6 +42,7 @@ pub fn create(
             SocialUpdate::Notice(notice) => emitter.emit("social-notice", notice),
             SocialUpdate::Chat(change) => emitter.emit("social-chat", change),
             SocialUpdate::Typing(typing) => emitter.emit("social-chat-typing", typing),
+            SocialUpdate::TagOff(tag_off) => emitter.emit("social-tag-off", tag_off),
         };
         overlay.on_social(update);
     });
@@ -471,7 +473,7 @@ pub async fn social_team_edit(
         frame,
         motto,
         permissions,
-        join: None,
+        ..TeamEdit::default()
     };
     let text = edit.changes_text();
     match state.social.edit_team(&team, edit).await {
@@ -1175,10 +1177,199 @@ pub async fn social_set_chat_privacy(
     Ok(state.social.update_profile(update).await?)
 }
 
+// --- crew tags (TEAM6) ------------------------------------------------------------------------
+
+/// "Ekip etiketleri şu an kapalı.": Studio switched them off, or the service does not offer them.
+fn tags_off(error: SocialError) -> crate::error::CmdError {
+    crate::error::CmdError::new(
+        "SOSYAL-TAKIM-ETIKET-KAPALI",
+        pick(
+            "Ekip etiketleri şu an kapalı.",
+            "Crew tags are off right now.",
+        ),
+        error.to_string(),
+    )
+}
+
+/// Why a tag could not be put on (or taken off), in the words of the tag (the rest as every
+/// friends error).
+fn wear_error(error: SocialError) -> crate::error::CmdError {
+    let off = matches!(
+        &error,
+        SocialError::InvalidInput("crew tags")
+            | SocialError::Refused {
+                code: ErrorCode::BadgesOff,
+                ..
+            }
+    );
+    if off {
+        return tags_off(error);
+    }
+    let lang = Lang::current();
+    let words = match &error {
+        SocialError::Refused {
+            code: ErrorCode::TeamHidden,
+            ..
+        } => Some((
+            "SOSYAL-TAKIM-ETIKET-GIZLI",
+            lang.pick("Lider ekibi gizledi.", "The leader hid the crew.")
+                .to_owned(),
+        )),
+        SocialError::TextLocked { until } => Some((
+            "SOSYAL-TAKIM-ETIKET-KILIT",
+            match until {
+                Some(until) => {
+                    let date = crate::error::day_month(*until, lang);
+                    lang.pick(
+                        format!("Etiket {date} tarihine kadar takılamaz."),
+                        format!("The tag can't be worn until {date}."),
+                    )
+                }
+                None => lang
+                    .pick(
+                        "Etiket şu an takılamaz.",
+                        "The tag can't be worn right now.",
+                    )
+                    .to_owned(),
+            },
+        )),
+        SocialError::Refused {
+            code: ErrorCode::TeamNameRejected,
+            ..
+        } => Some((
+            "SOSYAL-TAKIM-ETIKET-AD",
+            lang.pick(
+                "Bu etiket takılamaz; lider ekibin adını ya da etiketini değiştirmeli.",
+                "This tag can't be worn; the leader needs to change the crew's name or tag.",
+            )
+            .to_owned(),
+        )),
+        SocialError::InvalidInput("not in a team")
+        | SocialError::Refused {
+            code: ErrorCode::TeamNotFound,
+            ..
+        } => Some((
+            "SOSYAL-TAKIM-ETIKET-EKIP",
+            lang.pick(
+                "Artık bu ekipte değilsin.",
+                "You're no longer in this crew.",
+            )
+            .to_owned(),
+        )),
+        _ => None,
+    };
+    match words {
+        Some((code, message)) => crate::error::CmdError::new(code, message, error.to_string()),
+        None => error.into(),
+    }
+}
+
+/// Puts on the tag of one of the player's crews (`team`), in place of any other, or takes the
+/// tag off (`null`). "Geri al" is the same command with what was worn before. The view changes
+/// once the service answers.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_set_badge(state: State<'_, AppState>, team: Option<String>) -> CmdResult<()> {
+    state
+        .social
+        .set_badge(team.as_deref())
+        .await
+        .map_err(wear_error)
+}
+
+/// A crew's settings change at most 10 times a day, together with its name, tag and motto.
+fn crew_settings(result: Result<(), SocialError>) -> CmdResult<()> {
+    match result {
+        Err(error @ SocialError::RateLimited { .. }) => Err(crate::error::CmdError::new(
+            "SOSYAL-TAKIM-AYAR",
+            pick(
+                "Ekibin ayarları bugün çok değişti. Yarın yeniden dene.",
+                "The crew's settings changed a lot today. Try again tomorrow.",
+            ),
+            error.to_string(),
+        )),
+        Err(error @ SocialError::InvalidInput("crew tags" | "tag requests")) => {
+            Err(tags_off(error))
+        }
+        other => Ok(other?),
+    }
+}
+
+/// "Görünürlük" of one of the player's crews (the leader): `hidden` takes every member's tag of it
+/// off and keeps it from being worn; showing it again puts none back.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_hidden(
+    state: State<'_, AppState>,
+    team: String,
+    hidden: bool,
+) -> CmdResult<()> {
+    crew_settings(state.social.set_team_hidden(&team, hidden).await)
+}
+
+/// "Etiketten istek" of one of the player's crews (the leader): whether members' friends may ask
+/// to join from the tag's card. Requests already waiting stay answerable.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_team_badge_requests(
+    state: State<'_, AppState>,
+    team: String,
+    on: bool,
+) -> CmdResult<()> {
+    crew_settings(state.social.set_team_badge_requests(&team, on).await)
+}
+
+/// "Katılma isteği gönder" on the card of the tag `via` (a friend) wears: a join request to crew
+/// `team` that waits for its leaders. The crew's refusals and the player's own limits are answers
+/// (`refused`, why, and until when the button stays away on this computer); only what keeps the
+/// request from the service is an error.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_request_from_badge(
+    state: State<'_, AppState>,
+    team: String,
+    via: String,
+) -> CmdResult<BadgeRequestResult> {
+    match state.social.request_from_badge(&team, &via).await {
+        Err(error @ SocialError::InvalidInput("tag requests")) => Err(crate::error::CmdError::new(
+            "SOSYAL-TAKIM-ETIKET-ISTEK",
+            pick(
+                "Bu ekip şu an etiketten istek almıyor.",
+                "This crew isn't taking requests from its tag right now.",
+            ),
+            error.to_string(),
+        )),
+        other => Ok(other?),
+    }
+}
+
+/// "Selam ver" on the line of `id`, who came into crew `crew`: the "Selam" sticker (where
+/// stickers go, else "Hoş geldin! 👋") goes to the crew's chat as any message. Once, within 10
+/// minutes of their coming; returns the message's key, as `social_chat_send`.
+#[tauri::command]
+#[specta::specta]
+pub fn social_crew_greet(
+    state: State<'_, AppState>,
+    crew: String,
+    id: String,
+) -> CmdResult<String> {
+    state
+        .social
+        .crew_greet(&crew, &id, pick("Hoş geldin! 👋", "Welcome! 👋"))
+        .map_err(|error| match error {
+            SocialError::InvalidInput("greeting") => crate::error::CmdError::new(
+                "SOSYAL-SOHBET-SELAM",
+                pick("Selam verme süresi doldu.", "It's too late to say hi here."),
+                error.to_string(),
+            ),
+            other => chat_extra_error(other),
+        })
+}
+
 // --- reports and moderators' notes (MOD1) -----------------------------------------------------
 
-/// "Rapor et": a player, a crew or a message, with a reason and an optional note (200
-/// characters); `block` also blocks the player.
+/// "Rapor et": a player, a crew (TEAM6: also from the card of a tag, with `via`) or a message,
+/// with a reason and an optional note (200 characters); `block` also blocks the player.
 #[tauri::command]
 #[specta::specta]
 pub async fn social_report(

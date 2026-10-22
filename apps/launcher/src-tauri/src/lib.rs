@@ -183,6 +183,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<pl_social::ChatChangeView>()
         // "social-chat-typing" (someone writes in a conversation, CHAT2).
         .typ::<pl_social::ChatTypingView>()
+        // "social-tag-off" (the crew's leader hid the crew whose tag the player wore, TEAM6).
+        .typ::<pl_social::TagOffView>()
         // Emitted as the plain "overlay-status" event (the in-game overlay's mod connected).
         .typ::<pl_overlay::OverlayStatus>()
         .commands(tauri_specta::collect_commands![
@@ -474,6 +476,11 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_chat_unfurl,
             commands::social::social_chat_link_card,
             commands::social::social_set_chat_privacy,
+            commands::social::social_set_badge,
+            commands::social::social_team_hidden,
+            commands::social::social_team_badge_requests,
+            commands::social::social_request_from_badge,
+            commands::social::social_crew_greet,
             commands::social::social_report,
             commands::social::social_notices_seen,
         ])

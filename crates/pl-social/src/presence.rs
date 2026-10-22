@@ -43,12 +43,13 @@ use crate::backoff::{Backoff, BackoffPolicy, jitter};
 use crate::error::{ErrorCode, Result, SocialError, parse_retry_after};
 use crate::model::{
     ChatBody, ChatCaps, ChatDeletion, ChatMessage, ChatQuota, ChatReacted, ChatRejection,
-    ChatStatus, CrewMute, FriendGroups, JoinRequest, LimitedKey, LinkCard, LinkRule, ModNotice,
-    PublicProfile, Reaction, ReadMark, StatusMode, Team, TeamExit, TeamInvite, TeamNotifications,
+    ChatStatus, CrewBadge, CrewMute, FriendGroups, JoinRequest, LimitedKey, LinkCard, LinkRule,
+    ModNotice, PublicProfile, Reaction, ReadMark, StatusMode, Team, TeamExit, TeamInvite,
+    TeamNotifications,
 };
 use crate::protocol::{
-    CHAT_CAP, CallAnswer, CallEndReason, ClientMessage, CrewCall, CrewPlan, Invite, LocalStatus,
-    PLANS_CAP, PlanAnswer, Presence, ServerMessage, chat_caps,
+    BADGES_CAP, CHAT_CAP, CallAnswer, CallEndReason, ClientMessage, CrewCall, CrewPlan, Invite,
+    LocalStatus, PLANS_CAP, PlanAnswer, Presence, ServerMessage, chat_caps,
 };
 use crate::tls;
 
@@ -231,14 +232,24 @@ pub enum PresenceEvent {
     },
     /// A friend's or a teammate's presence changed.
     Presence(Presence),
-    /// One of your crews changed (members, roles, name, code), or you are no longer in it (None,
-    /// with the reason; `by` is who made the change). `crew` is its id (None from a service with
-    /// one crew per player: the message is about that crew).
+    /// One of your crews changed (members, roles, name, code, its members' tags), or you are no
+    /// longer in it (None, with the reason; `by` is who made the change). `crew` is its id (None
+    /// from a service with one crew per player: the message is about that crew). `joined`: who
+    /// just came in, by code, link, invite or an accepted request (TEAM6: "Hoş geldin"; empty from
+    /// an older service and when the crew was founded).
     TeamChanged {
         team: Option<Team>,
         crew: Option<String>,
         reason: Option<TeamExit>,
         by: Option<String>,
+        joined: Vec<String>,
+    },
+    /// The crew tag a friend or crewmate wears, or the player's own from another device, changed
+    /// (TEAM6; only on a connection the service took `badges` on): their card everywhere, None
+    /// when they wear none now.
+    BadgeChanged {
+        id: String,
+        badge: Option<CrewBadge>,
     },
     /// A friend invited you to their team.
     TeamInvited(TeamInvite),
@@ -1062,6 +1073,7 @@ async fn session(
         chat_on: false,
         chat_caps: ChatCaps::default(),
         plans_on: false,
+        badges_on: false,
         sync: None,
         sync_again: None,
         restricted: None,
@@ -1312,6 +1324,8 @@ struct SessionState {
     chat_caps: ChatCaps,
     /// The service took crew plans on this connection (TEAM5).
     plans_on: bool,
+    /// The service took crew tag changes on this connection (TEAM6).
+    badges_on: bool,
     /// The sync under way: its `rid`, where it started (ms) and whether it is the week-long one
     /// that catches up with chat extras (CHAT2).
     sync: Option<(u32, i64, bool)>,
@@ -1430,8 +1444,10 @@ async fn on_text(
                 chat.caps = state.chat_caps;
                 chat
             });
-            // Plans flow only when the service took them (an older one ignores the capability).
+            // Plans flow only when the service took them (an older one ignores the capability);
+            // so do crew tag changes (TEAM6).
             state.plans_on = caps.iter().any(|cap| cap == PLANS_CAP);
+            state.badges_on = caps.iter().any(|cap| cap == BADGES_CAP);
             state.sync = None;
             state.sync_again = None;
             // Everyone online the player may see: friends, then teammates who are not friends.
@@ -1481,12 +1497,17 @@ async fn on_text(
             crew,
             reason,
             by,
+            joined,
         } => PresenceEvent::TeamChanged {
             team,
             crew,
             reason,
             by,
+            joined,
         },
+        ServerMessage::Badge { id, badge } if state.badges_on => {
+            PresenceEvent::BadgeChanged { id, badge }
+        }
         ServerMessage::TeamInvite { invite } => PresenceEvent::TeamInvited(invite),
         ServerMessage::TeamRequests {
             crew,
@@ -1692,7 +1713,8 @@ async fn on_text(
         | ServerMessage::ChatRead { .. }
         | ServerMessage::Plan { .. }
         | ServerMessage::Plans { .. }
-        | ServerMessage::PlanRemoved { .. } => return Ok(()),
+        | ServerMessage::PlanRemoved { .. }
+        | ServerMessage::Badge { .. } => return Ok(()),
     };
     events.send(event).map_err(gone)
 }
@@ -1898,11 +1920,9 @@ mod tests {
                     .any(|(k, v)| k == "user-agent" && v == "ProjectsLauncher/test")
             );
             // What this launcher understands rides on the address (older services ignore it).
-            assert!(
-                headers
-                    .iter()
-                    .any(|(k, v)| k == ":uri" && v == "/v1/presence?caps=callServer,crews,plans")
-            );
+            assert!(headers.iter().any(
+                |(k, v)| k == ":uri" && v == "/v1/presence?caps=callServer,crews,plans,badges"
+            ));
         }
         send_json(&mut server, hello()).await;
         match handle.next_event().await.unwrap() {
@@ -2450,7 +2470,7 @@ mod tests {
             seen.lock()
                 .unwrap()
                 .iter()
-                .any(|(k, v)| k == ":uri" && v == "/v1/presence?caps=callServer,crews,plans")
+                .any(|(k, v)| k == ":uri" && v == "/v1/presence?caps=callServer,crews,plans,badges")
         );
         let mut greeting = hello();
         greeting["caps"] = serde_json::json!(["callServer", "crews", "plans"]);
@@ -2617,6 +2637,91 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn crew_tags_come_live_only_where_the_service_took_them() {
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut handle = client.session(token()).connect_presence(fast());
+        let mut server = accept(&listener, None, seen).await.unwrap();
+        let mut greeting = hello();
+        greeting["caps"] = serde_json::json!(["callServer", "crews", "plans", "badges"]);
+        send_json(&mut server, greeting).await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::Connected { .. }
+        ));
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "badge", "id": "222222222222222222", "badge": {
+                "crew": "0a1b2c3d4e5f6a7b", "tag": "GK", "color": "navy", "frame": "shield",
+                "emblem": "bolt", "name": "Gece Kartalları", "motto": "", "createdOn": "2026-09-20",
+                "members": 12, "requests": true}}),
+        )
+        .await;
+        match handle.next_event().await.unwrap() {
+            PresenceEvent::BadgeChanged {
+                id,
+                badge: Some(badge),
+            } => {
+                assert_eq!(id, "222222222222222222");
+                assert_eq!((badge.tag.as_str(), badge.members), ("GK", 12));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "badge", "id": "222222222222222222", "badge": null}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::BadgeChanged {
+                id: "222222222222222222".into(),
+                badge: None
+            }
+        );
+        // Who just came in rides on the crew's message ("Hoş geldin").
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "team", "crew": "0a1b2c3d4e5f6a7b", "by": "100",
+                "joined": ["222222222222222222"], "team": {"id": "0a1b2c3d4e5f6a7b",
+                "name": "Gece", "tag": "GK", "emblem": "bolt", "code": "TKM-ABCD-EFGH",
+                "createdOn": "2026-09-20", "members": []}}),
+        )
+        .await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::TeamChanged { joined, .. } if joined == ["222222222222222222"]
+        ));
+        handle.shutdown().await;
+
+        // A service that did not take `badges`: its tag messages never reach the launcher.
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut handle = client.session(token()).connect_presence(fast());
+        let mut server = accept(&listener, None, seen).await.unwrap();
+        send_json(&mut server, hello()).await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::Connected { .. }
+        ));
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "badge", "id": "222222222222222222", "badge": null}),
+        )
+        .await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "status", "status": "dnd"}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::StatusChanged(StatusMode::Dnd)
+        );
+        handle.shutdown().await;
+    }
+
+    #[tokio::test]
     async fn chat_syncs_after_connecting_and_answers_by_rid() {
         let (listener, client) = start().await;
         let seen = Arc::new(Mutex::new(Vec::new()));
@@ -2631,7 +2736,7 @@ mod tests {
                 .unwrap()
                 .iter()
                 .any(|(k, v)| k == ":uri"
-                    && v == "/v1/presence?caps=callServer,crews,plans,chat,replies,stickers,reactions,typing,reads"),
+                    && v == "/v1/presence?caps=callServer,crews,plans,badges,chat,replies,stickers,reactions,typing,reads"),
             "chat and its extras are asked for"
         );
         // A service from before CHAT2 takes chat alone.

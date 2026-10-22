@@ -137,6 +137,15 @@ pub enum ErrorCode {
     UnfurlFailed,
     /// The hub is fetching too much right now: ask again later (CHAT2).
     UnfurlBusy,
+    /// The crew's leader hid it: its tag cannot be worn (TEAM6).
+    TeamHidden,
+    /// Studio switched crew tags off: none can be put on now (TEAM6; taking one off still works).
+    BadgesOff,
+    /// No join request from that tag now (TEAM6): the card was stale (the tag came off, the crew
+    /// was hidden or stopped taking them, the wearer is no longer a friend, a Studio switch).
+    BadgeRequestClosed,
+    /// The crew took its 10 join requests from its tag today (TEAM6; Turkey days).
+    LimitBadgeRequests,
     UpgradeRequired,
     RateLimited,
     Internal,
@@ -224,6 +233,10 @@ const CODES: &[(&str, ErrorCode)] = &[
     ("chat_reactions_full", ErrorCode::ChatReactionsFull),
     ("unfurl_failed", ErrorCode::UnfurlFailed),
     ("unfurl_busy", ErrorCode::UnfurlBusy),
+    ("team_hidden", ErrorCode::TeamHidden),
+    ("badges_off", ErrorCode::BadgesOff),
+    ("badge_request_closed", ErrorCode::BadgeRequestClosed),
+    ("limit_badge_requests", ErrorCode::LimitBadgeRequests),
     ("upgrade_required", ErrorCode::UpgradeRequired),
     ("rate_limited", ErrorCode::RateLimited),
     ("internal", ErrorCode::Internal),

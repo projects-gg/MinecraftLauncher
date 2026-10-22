@@ -16,6 +16,56 @@ pub struct PublicProfile {
     pub avatar: String,
     /// Discord avatar hash, only when `avatar` is `discord` (None = Discord's default avatar).
     pub avatar_hash: Option<String>,
+    /// The card of the crew tag they wear before their name (TEAM6, a service with
+    /// [`TEAM_FEATURE_BADGES`]). It comes only with profiles that reach the player as a friend or
+    /// a crewmate (the friend list, the crews' member lists, a friend just added, `me`); every
+    /// other profile has none, and neither has someone who wears no tag.
+    #[serde(
+        default,
+        deserialize_with = "readable_badge",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub badge: Option<CrewBadge>,
+}
+
+/// The card of a crew tag ("[GK] Ayşe", TEAM6): what a wearer's profile carries. The service makes
+/// it from the crew's own row at every read, so it is as new as the list it came with; it never
+/// names the crew's members, leader, code or invite link.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CrewBadge {
+    /// The crew's id.
+    pub crew: String,
+    /// 2-4 letters or digits, upper case.
+    pub tag: String,
+    #[serde(default = "default_team_color")]
+    pub color: String,
+    #[serde(default = "default_team_frame")]
+    pub frame: String,
+    pub emblem: String,
+    pub name: String,
+    /// Empty when there is none.
+    #[serde(default)]
+    pub motto: String,
+    /// `YYYY-MM-DD`
+    #[serde(default)]
+    pub created_on: String,
+    /// How many are in the crew.
+    #[serde(default)]
+    pub members: u32,
+    /// The crew takes join requests from its tag's card now (its setting and Studio's are on, it
+    /// is not full and its day's 10 are not used up; a service with
+    /// [`TEAM_FEATURE_BADGE_REQUESTS`]). It may be stale: pressing then gets a refusal.
+    #[serde(default)]
+    pub requests: bool,
+}
+
+/// A tag's card this version cannot read is no card: the profile around it still reads.
+pub(crate) fn readable_badge<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<CrewBadge>, D::Error> {
+    let raw = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(raw.and_then(|value| serde_json::from_value(value).ok()))
 }
 
 impl PublicProfile {
@@ -303,6 +353,13 @@ pub const TEAM_FEATURE_PLANS: &str = "plans";
 pub const TEAM_FEATURE_PLAN_NOTES: &str = "planNotes";
 /// `teamFeatures`: a friend request to a crewmate without their code (FIX2).
 pub const TEAM_FEATURE_CREW_FRIEND_REQUESTS: &str = "crewFriendRequests";
+/// `teamFeatures`: crew tags before players' names (`badge` on profiles, `PATCH /v1/me {badge}`),
+/// hidden crews and reports from a tag (TEAM6). Listed only while Studio's "Ekip etiketleri" is on.
+pub const TEAM_FEATURE_BADGES: &str = "badges";
+/// `teamFeatures`: join requests from a tag's card (`POST /v1/teams/:id/requests {via}`, the
+/// crew's "Etiketten istek", `via` on requests; TEAM6). Listed only with [`TEAM_FEATURE_BADGES`]
+/// and while Studio's "Etiketten katılma istekleri" is on.
+pub const TEAM_FEATURE_BADGE_REQUESTS: &str = "badgeRequests";
 /// A plan's note: one line of at most this many characters (code points).
 pub const PLAN_NOTE_MAX: usize = 80;
 
@@ -724,6 +781,18 @@ pub struct Team {
     /// The crew's invite link, `XXXX-XXXX-XXXX` (a service with [`TEAM_FEATURE_LINK`]), or none.
     #[serde(default)]
     pub link: Option<String>,
+    /// The leader hid the crew (TEAM6, a service with [`TEAM_FEATURE_BADGES`]): its tag shows
+    /// nowhere and cannot be worn. Everything else about the crew stays.
+    #[serde(default)]
+    pub hidden: bool,
+    /// "Etiketten istek" (TEAM6, a service with [`TEAM_FEATURE_BADGE_REQUESTS`]): members'
+    /// friends may ask to join from the tag's card. On by default, as the service keeps it.
+    #[serde(default = "badge_requests_on")]
+    pub badge_requests: bool,
+}
+
+fn badge_requests_on() -> bool {
+    true
 }
 
 /// What an invite, a code or a link shows of a team before joining it.
@@ -764,6 +833,10 @@ pub struct JoinRequest {
     pub from: PublicProfile,
     /// Unix seconds.
     pub sent_at: i64,
+    /// The member whose tag's card the request came from (TEAM6), while they are still in the
+    /// crew: "Ayşe aracılığıyla". None for requests by code or link.
+    #[serde(default)]
+    pub via: Option<String>,
 }
 
 /// The player's join request to a crew they looked up, while it waits.
@@ -913,6 +986,14 @@ pub struct TeamEdit {
     /// The join setting (the leader; [`TEAM_FEATURE_REQUESTS`]).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub join: Option<JoinMode>,
+    /// "Görünürlük": the crew hidden or shown (the leader; [`TEAM_FEATURE_BADGES`], TEAM6).
+    /// Counts with the name, tag and motto (10 a day per crew).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hidden: Option<bool>,
+    /// "Etiketten istek" (the leader; [`TEAM_FEATURE_BADGE_REQUESTS`], TEAM6). Counts like
+    /// `hidden`.
+    #[serde(rename = "badgeRequests", skip_serializing_if = "Option::is_none")]
+    pub badge_requests: Option<bool>,
 }
 
 /// What a service offers that a crew change may use (`teamFeatures`).
@@ -924,6 +1005,10 @@ pub struct EditFeatures {
     pub roles: bool,
     /// [`TEAM_FEATURE_REQUESTS`]: the join setting and `permissions.admit`.
     pub requests: bool,
+    /// [`TEAM_FEATURE_BADGES`]: the crew's visibility (TEAM6).
+    pub badges: bool,
+    /// [`TEAM_FEATURE_BADGE_REQUESTS`]: "Etiketten istek" (TEAM6).
+    pub badge_requests: bool,
 }
 
 impl TeamEdit {
@@ -938,13 +1023,20 @@ impl TeamEdit {
     }
 
     /// Without what a service would refuse: the look without looks, permissions without roles,
-    /// the join setting and `admit` without join requests (and an empty permissions change).
+    /// the join setting and `admit` without join requests, the visibility without crew tags and
+    /// "Etiketten istek" without requests from tags (and an empty permissions change).
     pub fn limited_to(self, offers: EditFeatures) -> Self {
         let mut edit = self;
         if !offers.look {
             edit.color = None;
             edit.frame = None;
             edit.motto = None;
+        }
+        if !offers.badges {
+            edit.hidden = None;
+        }
+        if !offers.badge_requests {
+            edit.badge_requests = None;
         }
         if !offers.requests {
             edit.join = None;
@@ -1043,6 +1135,11 @@ pub struct ProfileUpdate {
     /// "Yazıyor bilgisi" (CHAT2; an older service turns the field away).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub share_typing: Option<bool>,
+    /// The crew tag worn (TEAM6): `Some(Some(team id))` puts that crew's on in place of any
+    /// other, `Some(None)` takes it off (`null`). Only to a service with [`TEAM_FEATURE_BADGES`]:
+    /// an older one turns the field away.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub badge: Option<Option<String>>,
 }
 
 impl ProfileUpdate {
@@ -1073,6 +1170,12 @@ impl ProfileUpdate {
 
     pub fn share_typing(mut self, share: bool) -> Self {
         self.share_typing = Some(share);
+        self
+    }
+
+    /// Puts on the tag of crew `team`, or takes the tag off (None; TEAM6).
+    pub fn badge(mut self, team: Option<&str>) -> Self {
+        self.badge = Some(team.map(str::to_owned));
         self
     }
 }
@@ -1856,6 +1959,7 @@ mod tests {
             look: true,
             roles: true,
             requests: true,
+            ..EditFeatures::default()
         };
         assert!(nothing.limited_to(everything).is_empty());
     }
@@ -1936,6 +2040,7 @@ mod tests {
             look: true,
             roles: true,
             requests: true,
+            ..EditFeatures::default()
         };
         assert_eq!(edit.clone().limited_to(everything), edit);
         let older = EditFeatures {
@@ -2117,6 +2222,152 @@ mod tests {
             serde_json::to_string(&chat).unwrap(),
             r#"{"shareRead":false,"shareTyping":true}"#
         );
+        // TEAM6: a tag put on names its crew; taking it off is `null`; untouched, nothing goes.
+        assert_eq!(
+            serde_json::to_string(&ProfileUpdate::default().badge(Some("0a1b2c3d4e5f6a7b")))
+                .unwrap(),
+            r#"{"badge":"0a1b2c3d4e5f6a7b"}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&ProfileUpdate::default().badge(None)).unwrap(),
+            r#"{"badge":null}"#
+        );
+        assert_eq!(
+            serde_json::to_string(&ProfileUpdate::default()).unwrap(),
+            "{}"
+        );
+    }
+
+    const BADGE: &str = r#"{"crew":"0a1b2c3d4e5f6a7b","tag":"GK","color":"navy","frame":"shield",
+        "emblem":"bolt","name":"Gece Kartalları","motto":"Gece bizimdir","createdOn":"2026-09-20",
+        "members":12,"requests":true}"#;
+
+    #[test]
+    fn crew_tags_come_with_friends_crewmates_and_me_and_nowhere_else() {
+        let overview: FriendsOverview = serde_json::from_str(&format!(
+            r#"{{"friends":[{{"id":"1","username":"ayse","displayName":"Ayşe","avatar":"discord",
+                "avatarHash":null,"since":"2026-10-01","lastSeen":"today","badge":{BADGE}}},
+                {{"id":"2","username":"bora","displayName":null,"avatar":"discord","avatarHash":null,
+                "since":"2026-10-01","lastSeen":null,"badge":null}}],
+                "incoming":[{{"id":"3","username":"c","displayName":null,"avatar":"discord",
+                "avatarHash":null,"sentAt":5}}],"outgoing":[],"blocked":[],
+                "limits":{{"friends":200,"outgoingRequests":50,"teamMembers":30}},
+                "teamFeatures":["badges","badgeRequests"],
+                "crews":[{{"team":{{"id":"0a1b2c3d4e5f6a7b","name":"Gece Kartalları","tag":"GK",
+                  "emblem":"bolt","color":"navy","frame":"shield","motto":"Gece bizimdir",
+                  "code":"TKM-ABCD-EFGH","createdOn":"2026-09-20","hidden":false,
+                  "badgeRequests":false,"members":[{{"id":"1","username":"ayse","displayName":"Ayşe",
+                  "avatar":"discord","avatarHash":null,"role":"founder","joinedAt":5,
+                  "badge":{BADGE}}}]}},
+                  "requests":[{{"from":{{"id":"4","username":"d","displayName":null,
+                  "avatar":"discord","avatarHash":null}},"sentAt":9,"via":"1"}}]}}]}}"#
+        ))
+        .unwrap();
+        let card = overview.friends[0].profile.badge.as_ref().unwrap();
+        assert_eq!(
+            (
+                card.crew.as_str(),
+                card.tag.as_str(),
+                card.members,
+                card.requests
+            ),
+            ("0a1b2c3d4e5f6a7b", "GK", 12, true)
+        );
+        assert_eq!(card.created_on, "2026-09-20");
+        assert!(overview.friends[1].profile.badge.is_none());
+        assert!(overview.incoming[0].profile.badge.is_none());
+        let crew = &overview.crews.as_ref().unwrap()[0];
+        assert!(!crew.team.hidden && !crew.team.badge_requests);
+        assert_eq!(
+            crew.team.members[0]
+                .profile
+                .badge
+                .as_ref()
+                .map(|b| b.name.as_str()),
+            Some("Gece Kartalları")
+        );
+        assert_eq!(crew.requests[0].via.as_deref(), Some("1"));
+
+        let me: Me = serde_json::from_str(&format!(
+            r#"{{"id":"1","username":"ayse","displayName":"Ayşe","avatar":"discord","avatarHash":null,
+                "discordAvatarHash":null,"friendCode":"PRJ-ABCD-EFGH","status":"online",
+                "privacy":{{"shareServer":false,"shareLastSeen":true}},"createdOn":"2026-10-16",
+                "settings":null,"badge":{BADGE}}}"#
+        ))
+        .unwrap();
+        assert_eq!(me.profile.badge.map(|b| b.tag), Some("GK".to_owned()));
+        // A card this version cannot read is no card; the profile still reads.
+        let odd: Friend = serde_json::from_str(
+            r#"{"id":"1","username":"ayse","displayName":null,"avatar":"discord","avatarHash":null,
+                "since":"2026-10-01","lastSeen":null,"badge":{"crew":7}}"#,
+        )
+        .unwrap();
+        assert!(odd.profile.badge.is_none());
+        // A sparse card takes the defaults of a crew from before looks.
+        let sparse: CrewBadge = serde_json::from_str(
+            r#"{"crew":"0a1b2c3d4e5f6a7b","tag":"GK","emblem":"bolt","name":"Gece"}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                sparse.color.as_str(),
+                sparse.frame.as_str(),
+                sparse.requests
+            ),
+            ("gold", "cut", false)
+        );
+        // A profile without a tag writes none (nothing new in what is kept or sent).
+        let plain = serde_json::to_value(&overview.friends[1].profile).unwrap();
+        assert!(plain.get("badge").is_none());
+    }
+
+    #[test]
+    fn crews_from_before_tags_read_visible_and_taking_requests() {
+        let team: Team = serde_json::from_str(
+            r#"{"id":"0a1b2c3d4e5f6a7b","name":"Gece","tag":"GK","emblem":"bolt",
+                "code":"TKM-ABCD-EFGH","createdOn":"2026-09-20","members":[]}"#,
+        )
+        .unwrap();
+        assert!(!team.hidden && team.badge_requests);
+        let request: JoinRequest = serde_json::from_str(
+            r#"{"from":{"id":"4","username":"d","displayName":null,"avatar":"discord",
+                "avatarHash":null},"sentAt":9}"#,
+        )
+        .unwrap();
+        assert!(request.via.is_none());
+    }
+
+    #[test]
+    fn the_crews_tag_settings_go_only_to_a_service_that_has_them() {
+        let edit = TeamEdit {
+            hidden: Some(true),
+            badge_requests: Some(false),
+            ..TeamEdit::default()
+        };
+        assert_eq!(
+            serde_json::to_string(&edit).unwrap(),
+            r#"{"hidden":true,"badgeRequests":false}"#
+        );
+        let tags = EditFeatures {
+            badges: true,
+            badge_requests: true,
+            ..EditFeatures::default()
+        };
+        assert_eq!(edit.clone().limited_to(tags), edit);
+        // Studio's request switch off: the visibility still goes, "Etiketten istek" does not.
+        let tags_only = EditFeatures {
+            badges: true,
+            ..EditFeatures::default()
+        };
+        assert_eq!(
+            edit.clone().limited_to(tags_only),
+            TeamEdit {
+                hidden: Some(true),
+                ..TeamEdit::default()
+            }
+        );
+        // An older service: nothing.
+        assert!(edit.limited_to(EditFeatures::default()).is_empty());
     }
 
     #[test]

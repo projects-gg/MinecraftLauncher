@@ -1092,8 +1092,37 @@ export const commands = {
 	/**  "Görüldü bilgisi" and "Yazıyor bilgisi" (both ways: off, the player sees none either). */
 	socialSetChatPrivacy: (shareRead: boolean | null, shareTyping: boolean | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_set_chat_privacy", { shareRead, shareTyping })),
 	/**
-	 *  "Rapor et": a player, a crew or a message, with a reason and an optional note (200
-	 *  characters); `block` also blocks the player.
+	 *  Puts on the tag of one of the player's crews (`team`), in place of any other, or takes the
+	 *  tag off (`null`). "Geri al" is the same command with what was worn before. The view changes
+	 *  once the service answers.
+	 */
+	socialSetBadge: (team: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_set_badge", { team })),
+	/**
+	 *  "Görünürlük" of one of the player's crews (the leader): `hidden` takes every member's tag of it
+	 *  off and keeps it from being worn; showing it again puts none back.
+	 */
+	socialTeamHidden: (team: string, hidden: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_hidden", { team, hidden })),
+	/**
+	 *  "Etiketten istek" of one of the player's crews (the leader): whether members' friends may ask
+	 *  to join from the tag's card. Requests already waiting stay answerable.
+	 */
+	socialTeamBadgeRequests: (team: string, on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("social_team_badge_requests", { team, on })),
+	/**
+	 *  "Katılma isteği gönder" on the card of the tag `via` (a friend) wears: a join request to crew
+	 *  `team` that waits for its leaders. The crew's refusals and the player's own limits are answers
+	 *  (`refused`, why, and until when the button stays away on this computer); only what keeps the
+	 *  request from the service is an error.
+	 */
+	socialRequestFromBadge: (team: string, via: string) => typedError<BadgeRequestResult, CmdError>(__TAURI_INVOKE("social_request_from_badge", { team, via })),
+	/**
+	 *  "Selam ver" on the line of `id`, who came into crew `crew`: the "Selam" sticker (where
+	 *  stickers go, else "Hoş geldin! 👋") goes to the crew's chat as any message. Once, within 10
+	 *  minutes of their coming; returns the message's key, as `social_chat_send`.
+	 */
+	socialCrewGreet: (crew: string, id: string) => typedError<string, CmdError>(__TAURI_INVOKE("social_crew_greet", { crew, id })),
+	/**
+	 *  "Rapor et": a player, a crew (TEAM6: also from the card of a tag, with `via`) or a message,
+	 *  with a reason and an optional note (200 characters); `block` also blocks the player.
 	 */
 	socialReport: (target: ReportTarget, reason: ReportReason, note: string | null, block: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("social_report", { target, reason, note, block })),
 	/**  The launcher showed these moderators' notes. */
@@ -1422,6 +1451,44 @@ export type BackupProgress = {
 	bytesDone: number,
 	bytesTotal: number,
 };
+
+/**  Why a join request from a tag's card did not go (TEAM6). */
+export type BadgeRefusal = 
+/**
+ *  "Bu ekip şu an etiketten istek almıyor.": the card was stale (the tag came off, the crew
+ *  was hidden or stopped taking them, the wearer is no longer a friend, the crew is gone).
+ */
+"closed" | 
+/**  "Bu ekip bugün daha fazla istek almıyor.": the crew's 10 from its tag today. */
+"today" | 
+/**  "Bu ekibin bekleyen istekleri dolu.": 20 wait at the crew. */
+"waitingFull" | 
+/**  "Bu ekip dolu." */
+"full" | 
+/**  "Bu ekipte engellediğin biri var.": the player's own block. */
+"blocked" | 
+/**  The player has 3 join requests waiting (TEAM5's words). */
+"ownWaiting" | 
+/**  The player is in as many crews as they may be (TEAM4's words). */
+"ownCrews" | 
+/**  The player's 10 join requests today (TEAM5's words). */
+"ownDaily" | 
+/**  The player is in that crew already. */
+"member";
+
+/**
+ *  What "Katılma isteği gönder" on a tag's card led to (TEAM6). A refusal is an answer, not an
+ *  error: one quiet line on the card says why (never a toast), and the button stays away for that
+ *  crew on this computer until `until`, the end of the Turkey day; nothing is tried again.
+ */
+export type BadgeRequestResult = 
+/**
+ *  The request waits for the crew's leaders ("İsteğin bekliyor · Geri çek"; it is in
+ *  `teamRequests`), also when one waited already.
+ */
+{ status: "sent" } | { status: "refused"; reason: BadgeRefusal; 
+/**  Unix seconds: the end of today in Turkey (UTC+3). */
+until: number };
 
 export type BannerView = {
 	id: string,
@@ -2074,6 +2141,38 @@ export type CreatedInstance = {
 	name: string,
 };
 
+/**
+ *  The card of a crew tag a friend, a crewmate or the player wears (TEAM6): the chip before the
+ *  name (`tag` on the crew's colour) and the card it opens. Opening the card asks nothing: it is
+ *  all here.
+ */
+export type CrewBadgeView = {
+	/**  The crew's id. */
+	crew: string,
+	tag: string,
+	/**  A key of the crew palette. */
+	color: string,
+	/**  `cut`, `shield`, `banner` or `hex`. */
+	frame: string,
+	/**  `sword`, `shield`, … (a shield for one this launcher does not know). */
+	emblem: string,
+	name: string,
+	/**  Empty when there is none. */
+	motto: string,
+	/**  `YYYY-MM-DD` ("Kuruluş Eylül 2026": month and year). */
+	createdOn: string,
+	/**  How many are in the crew. */
+	members: number,
+	/**
+	 *  The crew takes join requests from its tag's card now (always false while the service does
+	 *  not offer them). "Katılma isteği gönder" shows only when, besides, the wearer is the
+	 *  player's friend, the player is not in the crew, invited to it or waiting for its answer,
+	 *  is below the crew limit with fewer than 3 requests waiting, and this computer was not
+	 *  refused for that crew today.
+	 */
+	requests: boolean,
+};
+
 /**  "Ekibi çağır": an open crew call. */
 export type CrewCallView = CrewCallView_Serialize | CrewCallView_Deserialize;
 
@@ -2143,6 +2242,29 @@ export type CrewCallView_Serialize = {
 	answers: CallAnswerView[],
 	/**  The player's own answer (any of their devices). */
 	myAnswer: CallAnswer | null,
+};
+
+/**
+ *  "Ayşe ekibe katıldı · Selam ver" in a crew's chat (TEAM6): someone came in (by code, link,
+ *  invite or an accepted request) while this launcher was connected. For the player themself,
+ *  "Ekibe katıldın". A quiet line among the messages at `at`; nothing keeps it.
+ */
+export type CrewJoinView = {
+	/**  The crew's id (its chat is `c:<id>`). */
+	crew: string,
+	/**  Who came in. */
+	id: string,
+	/**  Their name as the crew listed them when they came. */
+	name: string,
+	/**  The player themself came in. */
+	mine: boolean,
+	/**  When, on this computer's clock (Unix seconds). */
+	at: number,
+	/**
+	 *  "Selam ver" may be pressed until then (Unix seconds, this computer's clock: 10 minutes);
+	 *  None for the player's own line and once it was pressed.
+	 */
+	greetUntil: number | null,
 };
 
 /**
@@ -2455,6 +2577,8 @@ export type FriendView_Deserialize = {
 	game: Game_Deserialize | null,
 	/**  Their Discord profile, for "Discord'dan mesaj at". */
 	discordUrl: string,
+	/**  The crew tag they wear before their name (TEAM6; None while crew tags are off). */
+	badge: CrewBadgeView | null,
 };
 
 export type FriendView_Serialize = {
@@ -2474,6 +2598,8 @@ export type FriendView_Serialize = {
 	game: Game_Serialize | null,
 	/**  Their Discord profile, for "Discord'dan mesaj at". */
 	discordUrl: string,
+	/**  The crew tag they wear before their name (TEAM6; None while crew tags are off). */
+	badge: CrewBadgeView | null,
 };
 
 export type Game = Game_Serialize | Game_Deserialize;
@@ -3063,6 +3189,12 @@ export type JoinRequestView = {
 	avatarUrl: string | null,
 	/**  Unix seconds. */
 	sentAt: number,
+	/**
+	 *  The member whose tag's card it came from (TEAM6): "Ayşe aracılığıyla", with their name as
+	 *  the crew lists them. None for a request by code or link, and while crew tags are off.
+	 */
+	via: string | null,
+	viaName: string | null,
 };
 
 /**  What asking to join a crew led to. */
@@ -3518,6 +3650,8 @@ export type MeView = {
 	backup: SettingsMeta | null,
 	/**  A limited account ("Sınırlı hesap"): only the player sees it. */
 	limited: LimitedView | null,
+	/**  The crew tag the player wears (TEAM6; None when none, and while crew tags are off). */
+	badge: CrewBadgeView | null,
 };
 
 /**  "Belleği artır/düşür ve yeniden dene". */
@@ -4755,7 +4889,12 @@ export type ReportTarget =
  *  A player; from a plan card (FIX2) its maker, with the plan as the moderators' evidence;
  *  from a reaction's list (CHAT2) who gave it, with the reaction.
  */
-{ kind: "player"; id: string; plan?: ReportPlan | null; reaction?: ReportReaction | null } | { kind: "crew"; id: string; code: string | null } | { kind: "message"; conv: string; id: number };
+{ kind: "player"; id: string; plan?: ReportPlan | null; reaction?: ReportReaction | null } | 
+/**
+ *  A crew; `code` when it was looked up by code, `via` (TEAM6) when it is reported from the
+ *  card of the tag that friend or crewmate wears ("Ekibi rapor et").
+ */
+{ kind: "crew"; id: string; code: string | null; via?: string | null } | { kind: "message"; conv: string; id: number };
 
 export type RequestView = {
 	id: string,
@@ -5420,6 +5559,12 @@ export type SocialView_Deserialize = {
 	 *  `endsAt`: the launcher hides them then.
 	 */
 	plans: PlanView[],
+	/**
+	 *  "Ayşe ekibe katıldı" lines of the player's crews' chats (TEAM6), oldest first: whoever came
+	 *  in while this launcher was connected, in this run only (nothing keeps them), at most 30 a
+	 *  crew. Only while `teams`.
+	 */
+	crewJoins: CrewJoinView[],
 	/**  "Birlikte oynanan süre" is kept on this computer (the player may switch it off). */
 	together: boolean,
 	/**
@@ -5503,6 +5648,12 @@ export type SocialView_Serialize = {
 	 *  `endsAt`: the launcher hides them then.
 	 */
 	plans: PlanView[],
+	/**
+	 *  "Ayşe ekibe katıldı" lines of the player's crews' chats (TEAM6), oldest first: whoever came
+	 *  in while this launcher was connected, in this run only (nothing keeps them), at most 30 a
+	 *  crew. Only while `teams`.
+	 */
+	crewJoins: CrewJoinView[],
 	/**  "Birlikte oynanan süre" is kept on this computer (the player may switch it off). */
 	together: boolean,
 	/**
@@ -5732,6 +5883,17 @@ export type SyncSummary = {
 };
 
 /**
+ *  The crew tag the player wore came off because the crew's leader hid the crew (TEAM6, the
+ *  `social-tag-off` event): "Lider ekibi gizledi; etiketin çıkarıldı." Never for the leader's own
+ *  change, nor when the tag came off on another device of the player's.
+ */
+export type TagOffView = {
+	crew: string,
+	/**  The crew's name. */
+	name: string,
+};
+
+/**
  *  Why the player is no longer in their team (presence `{"t":"team","team":null}`). A reason this
  *  version does not know reads as `Other`.
  */
@@ -5807,6 +5969,8 @@ export type TeamMemberView_Deserialize = {
 	 *  it ("Birlikte oynanan süre"; 0 while it is off).
 	 */
 	togetherMonth: number,
+	/**  The crew tag they wear, of any crew (TEAM6; None while crew tags are off). */
+	badge: CrewBadgeView | null,
 };
 
 export type TeamMemberView_Serialize = {
@@ -5836,6 +6000,8 @@ export type TeamMemberView_Serialize = {
 	 *  it ("Birlikte oynanan süre"; 0 while it is off).
 	 */
 	togetherMonth: number,
+	/**  The crew tag they wear, of any crew (TEAM6; None while crew tags are off). */
+	badge: CrewBadgeView | null,
 };
 
 /**
@@ -5990,6 +6156,18 @@ export type TeamView_Deserialize = {
 	 *  computer kept it ("Birlikte oynanan süre"; 0 while it is off).
 	 */
 	togetherWeek: number,
+	/**
+	 *  "Görünürlük: Gizli" (TEAM6): the leader hid the crew, its tag shows nowhere and cannot be
+	 *  worn ("Gizli ekip"). False while the service does not offer crew tags.
+	 */
+	hidden: boolean,
+	/**
+	 *  "Etiketten istek" (TEAM6): members' friends may ask to join from the tag's card (the
+	 *  leader's setting; it comes back as it was when the crew shows again).
+	 */
+	badgeRequests: boolean,
+	/**  How many members wear this crew's tag ("Etiketi takan 8 üyenin etiketi çıkarılacak."). */
+	wearers: number,
 };
 
 export type TeamView_Serialize = {
@@ -6048,6 +6226,18 @@ export type TeamView_Serialize = {
 	 *  computer kept it ("Birlikte oynanan süre"; 0 while it is off).
 	 */
 	togetherWeek: number,
+	/**
+	 *  "Görünürlük: Gizli" (TEAM6): the leader hid the crew, its tag shows nowhere and cannot be
+	 *  worn ("Gizli ekip"). False while the service does not offer crew tags.
+	 */
+	hidden: boolean,
+	/**
+	 *  "Etiketten istek" (TEAM6): members' friends may ask to join from the tag's card (the
+	 *  leader's setting; it comes back as it was when the crew shows again).
+	 */
+	badgeRequests: boolean,
+	/**  How many members wear this crew's tag ("Etiketi takan 8 üyenin etiketi çıkarılacak."). */
+	wearers: number,
 };
 
 /**  Something in the launcher trash. */

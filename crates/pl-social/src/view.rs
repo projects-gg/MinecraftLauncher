@@ -71,6 +71,10 @@ pub struct SocialView {
     /// while `teams` and the service offers `plans` on this connection). They are over at
     /// `endsAt`: the launcher hides them then.
     pub plans: Vec<PlanView>,
+    /// "Ayşe ekibe katıldı" lines of the player's crews' chats (TEAM6), oldest first: whoever came
+    /// in while this launcher was connected, in this run only (nothing keeps them), at most 30 a
+    /// crew. Only while `teams`.
+    pub crew_joins: Vec<CrewJoinView>,
     /// "Birlikte oynanan süre" is kept on this computer (the player may switch it off).
     pub together: bool,
     /// Open crew calls the player sees, their own included (only while `teams` and the service
@@ -519,9 +523,13 @@ pub enum ReportTarget {
         #[serde(default)]
         reaction: Option<ReportReaction>,
     },
+    /// A crew; `code` when it was looked up by code, `via` (TEAM6) when it is reported from the
+    /// card of the tag that friend or crewmate wears ("Ekibi rapor et").
     Crew {
         id: String,
         code: Option<String>,
+        #[serde(default)]
+        via: Option<String>,
     },
     Message {
         conv: String,
@@ -706,6 +714,14 @@ pub struct TeamView {
     /// Seconds the player was on Projects this week with someone of this crew there too, as this
     /// computer kept it ("Birlikte oynanan süre"; 0 while it is off).
     pub together_week: u32,
+    /// "Görünürlük: Gizli" (TEAM6): the leader hid the crew, its tag shows nowhere and cannot be
+    /// worn ("Gizli ekip"). False while the service does not offer crew tags.
+    pub hidden: bool,
+    /// "Etiketten istek" (TEAM6): members' friends may ask to join from the tag's card (the
+    /// leader's setting; it comes back as it was when the crew shows again).
+    pub badge_requests: bool,
+    /// How many members wear this crew's tag ("Etiketi takan 8 üyenin etiketi çıkarılacak.").
+    pub wearers: u32,
 }
 
 /// Someone who asked to join one of the player's crews.
@@ -719,6 +735,130 @@ pub struct JoinRequestView {
     pub avatar_url: Option<String>,
     /// Unix seconds.
     pub sent_at: i64,
+    /// The member whose tag's card it came from (TEAM6): "Ayşe aracılığıyla", with their name as
+    /// the crew lists them. None for a request by code or link, and while crew tags are off.
+    pub via: Option<String>,
+    pub via_name: Option<String>,
+}
+
+/// The card of a crew tag a friend, a crewmate or the player wears (TEAM6): the chip before the
+/// name (`tag` on the crew's colour) and the card it opens. Opening the card asks nothing: it is
+/// all here.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CrewBadgeView {
+    /// The crew's id.
+    pub crew: String,
+    pub tag: String,
+    /// A key of the crew palette.
+    pub color: String,
+    /// `cut`, `shield`, `banner` or `hex`.
+    pub frame: String,
+    /// `sword`, `shield`, … (a shield for one this launcher does not know).
+    pub emblem: String,
+    pub name: String,
+    /// Empty when there is none.
+    pub motto: String,
+    /// `YYYY-MM-DD` ("Kuruluş Eylül 2026": month and year).
+    pub created_on: String,
+    /// How many are in the crew.
+    pub members: u32,
+    /// The crew takes join requests from its tag's card now (always false while the service does
+    /// not offer them). "Katılma isteği gönder" shows only when, besides, the wearer is the
+    /// player's friend, the player is not in the crew, invited to it or waiting for its answer,
+    /// is below the crew limit with fewer than 3 requests waiting, and this computer was not
+    /// refused for that crew today.
+    pub requests: bool,
+}
+
+impl From<&crate::model::CrewBadge> for CrewBadgeView {
+    fn from(badge: &crate::model::CrewBadge) -> Self {
+        Self {
+            crew: badge.crew.clone(),
+            tag: badge.tag.clone(),
+            color: badge.color.clone(),
+            frame: badge.frame.clone(),
+            emblem: badge.emblem.clone(),
+            name: badge.name.clone(),
+            motto: badge.motto.clone(),
+            created_on: badge.created_on.clone(),
+            members: badge.members,
+            requests: badge.requests,
+        }
+    }
+}
+
+/// "Ayşe ekibe katıldı · Selam ver" in a crew's chat (TEAM6): someone came in (by code, link,
+/// invite or an accepted request) while this launcher was connected. For the player themself,
+/// "Ekibe katıldın". A quiet line among the messages at `at`; nothing keeps it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CrewJoinView {
+    /// The crew's id (its chat is `c:<id>`).
+    pub crew: String,
+    /// Who came in.
+    pub id: String,
+    /// Their name as the crew listed them when they came.
+    pub name: String,
+    /// The player themself came in.
+    pub mine: bool,
+    /// When, on this computer's clock (Unix seconds).
+    pub at: i64,
+    /// "Selam ver" may be pressed until then (Unix seconds, this computer's clock: 10 minutes);
+    /// None for the player's own line and once it was pressed.
+    pub greet_until: Option<i64>,
+}
+
+/// The crew tag the player wore came off because the crew's leader hid the crew (TEAM6, the
+/// `social-tag-off` event): "Lider ekibi gizledi; etiketin çıkarıldı." Never for the leader's own
+/// change, nor when the tag came off on another device of the player's.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct TagOffView {
+    pub crew: String,
+    /// The crew's name.
+    pub name: String,
+}
+
+/// What "Katılma isteği gönder" on a tag's card led to (TEAM6). A refusal is an answer, not an
+/// error: one quiet line on the card says why (never a toast), and the button stays away for that
+/// crew on this computer until `until`, the end of the Turkey day; nothing is tried again.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(tag = "status", rename_all = "camelCase")]
+pub enum BadgeRequestResult {
+    /// The request waits for the crew's leaders ("İsteğin bekliyor · Geri çek"; it is in
+    /// `teamRequests`), also when one waited already.
+    Sent,
+    Refused {
+        reason: BadgeRefusal,
+        /// Unix seconds: the end of today in Turkey (UTC+3).
+        until: i64,
+    },
+}
+
+/// Why a join request from a tag's card did not go (TEAM6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum BadgeRefusal {
+    /// "Bu ekip şu an etiketten istek almıyor.": the card was stale (the tag came off, the crew
+    /// was hidden or stopped taking them, the wearer is no longer a friend, the crew is gone).
+    Closed,
+    /// "Bu ekip bugün daha fazla istek almıyor.": the crew's 10 from its tag today.
+    Today,
+    /// "Bu ekibin bekleyen istekleri dolu.": 20 wait at the crew.
+    WaitingFull,
+    /// "Bu ekip dolu."
+    Full,
+    /// "Bu ekipte engellediğin biri var.": the player's own block.
+    Blocked,
+    /// The player has 3 join requests waiting (TEAM5's words).
+    OwnWaiting,
+    /// The player is in as many crews as they may be (TEAM4's words).
+    OwnCrews,
+    /// The player's 10 join requests today (TEAM5's words).
+    OwnDaily,
+    /// The player is in that crew already.
+    Member,
 }
 
 /// One of the player's own join requests that waits.
@@ -815,6 +955,8 @@ pub struct TeamMemberView {
     /// Seconds the player and they were on Projects together this month, as this computer kept
     /// it ("Birlikte oynanan süre"; 0 while it is off).
     pub together_month: u32,
+    /// The crew tag they wear, of any crew (TEAM6; None while crew tags are off).
+    pub badge: Option<Box<CrewBadgeView>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -881,6 +1023,8 @@ pub struct MeView {
     pub backup: Option<SettingsMeta>,
     /// A limited account ("Sınırlı hesap"): only the player sees it.
     pub limited: Option<LimitedView>,
+    /// The crew tag the player wears (TEAM6; None when none, and while crew tags are off).
+    pub badge: Option<Box<CrewBadgeView>>,
 }
 
 /// Someone shown with name and picture (requests, blocked users, code lookups).
@@ -925,6 +1069,8 @@ pub struct FriendView {
     pub game: Option<Game>,
     /// Their Discord profile, for "Discord'dan mesaj at".
     pub discord_url: String,
+    /// The crew tag they wear before their name (TEAM6; None while crew tags are off).
+    pub badge: Option<Box<CrewBadgeView>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -1121,7 +1267,12 @@ pub enum SocialNotice {
     SignedOutRemotely,
 }
 
-pub(crate) fn me_view(me: &Me, share: Option<(String, Option<QrPath>)>) -> MeView {
+/// The player's own card; `badge`: their crew tag as the view may show it (TEAM6).
+pub(crate) fn me_view(
+    me: &Me,
+    share: Option<(String, Option<QrPath>)>,
+    badge: Option<Box<CrewBadgeView>>,
+) -> MeView {
     let (share_link, qr) = match share {
         Some((link, qr)) => (Some(link), qr),
         None => (None, None),
@@ -1144,6 +1295,7 @@ pub(crate) fn me_view(me: &Me, share: Option<(String, Option<QrPath>)>) -> MeVie
         privacy: me.privacy,
         backup: me.settings.clone(),
         limited: me.limited.as_ref().map(LimitedView::of),
+        badge,
     }
 }
 

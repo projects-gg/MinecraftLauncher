@@ -5,18 +5,22 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::model::{
-    ChatCaps, ChatDeletion, ChatMessage, ChatReacted, ChatStatus, CrewMute, FriendGroups,
-    JoinRequest, LastSeen, LinkCard, ModNotice, PublicProfile, Reaction, ReadMark, StatusMode,
-    Team, TeamExit, TeamInvite, TeamNotifications,
+    ChatCaps, ChatDeletion, ChatMessage, ChatReacted, ChatStatus, CrewBadge, CrewMute,
+    FriendGroups, JoinRequest, LastSeen, LinkCard, ModNotice, PublicProfile, Reaction, ReadMark,
+    StatusMode, Team, TeamExit, TeamInvite, TeamNotifications,
 };
 
 /// What this launcher understands on the presence socket (`GET /v1/presence?caps=…`): crew calls
-/// that carry their server and may end with `server` (`callServer`), several crews (`crews`) and
-/// crew plans (`plans`, TEAM5). Older services ignore the query.
-pub const PRESENCE_CAPS: &str = "callServer,crews,plans";
+/// that carry their server and may end with `server` (`callServer`), several crews (`crews`),
+/// crew plans (`plans`, TEAM5) and crew tag changes (`badges`, TEAM6). Older services ignore the
+/// query, and names they do not know.
+pub const PRESENCE_CAPS: &str = "callServer,crews,plans,badges";
 
 /// Crew plans (TEAM5): the capability the service names in `hello.caps` when it took it.
 pub const PLANS_CAP: &str = "plans";
+
+/// Crew tag changes (TEAM6): `badge` messages flow only when the service named it in `hello.caps`.
+pub const BADGES_CAP: &str = "badges";
 
 /// Crew chat and direct messages (CHAT1): asked for only while the signed content allows chat.
 pub const CHAT_CAP: &str = "chat";
@@ -548,6 +552,16 @@ pub(crate) enum ServerMessage {
         /// Who made the change.
         #[serde(default)]
         by: Option<String>,
+        /// Who just came in (TEAM6: "Hoş geldin" in the crew's chat; none from an older service).
+        #[serde(default)]
+        joined: Vec<String>,
+    },
+    /// The crew tag a friend or crewmate wears (or the player's own, from another device) changed
+    /// (TEAM6, with `badges` in the capabilities): replace their card wherever they show.
+    Badge {
+        id: String,
+        #[serde(default, deserialize_with = "crate::model::readable_badge")]
+        badge: Option<CrewBadge>,
     },
     TeamInvite {
         invite: TeamInvite,
@@ -825,7 +839,8 @@ mod tests {
                 team: None,
                 crew: None,
                 reason: Some(TeamExit::Kicked),
-                by: Some(_)
+                by: Some(_),
+                ..
             }
         ));
         let groups: ServerMessage = serde_json::from_str(
@@ -1069,10 +1084,10 @@ mod tests {
 
     #[test]
     fn chat_frames_both_ways() {
-        assert_eq!(presence_caps(false), "callServer,crews,plans");
+        assert_eq!(presence_caps(false), "callServer,crews,plans,badges");
         assert_eq!(
             presence_caps(true),
-            "callServer,crews,plans,chat,replies,stickers,reactions,typing,reads"
+            "callServer,crews,plans,badges,chat,replies,stickers,reactions,typing,reads"
         );
         let json = |message: &ClientMessage| serde_json::to_string(message).unwrap();
         assert_eq!(
@@ -1207,6 +1222,52 @@ mod tests {
         let bye: ServerMessage =
             serde_json::from_str(r#"{"t":"bye","reason":"restricted","until":null}"#).unwrap();
         assert!(matches!(bye, ServerMessage::Bye { until: None, .. }));
+    }
+
+    #[test]
+    fn crew_tag_frames_and_who_just_came_in() {
+        let worn: ServerMessage = serde_json::from_str(
+            r#"{"t":"badge","id":"223456789012345678","badge":{"crew":"0a1b2c3d4e5f6a7b",
+                "tag":"GK","color":"navy","frame":"shield","emblem":"bolt","name":"Gece Kartalları",
+                "motto":"","createdOn":"2026-09-20","members":12,"requests":false}}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            worn,
+            ServerMessage::Badge { id, badge: Some(badge) }
+                if id == "223456789012345678" && badge.tag == "GK" && badge.members == 12
+        ));
+        let off: ServerMessage =
+            serde_json::from_str(r#"{"t":"badge","id":"223456789012345678","badge":null}"#)
+                .unwrap();
+        assert!(matches!(off, ServerMessage::Badge { badge: None, .. }));
+        // A card this version cannot read is no card, not an unreadable message.
+        let odd: ServerMessage =
+            serde_json::from_str(r#"{"t":"badge","id":"223456789012345678","badge":"GK"}"#)
+                .unwrap();
+        assert!(matches!(odd, ServerMessage::Badge { badge: None, .. }));
+        let joined: ServerMessage = serde_json::from_str(
+            r#"{"t":"team","crew":"0a1b2c3d4e5f6a7b","by":"123456789012345678",
+                "joined":["223456789012345678"],"team":{"id":"0a1b2c3d4e5f6a7b","name":"Gece",
+                "tag":"GK","emblem":"bolt","code":"TKM-ABCD-EFGH","createdOn":"2026-09-20",
+                "hidden":true,"badgeRequests":false,"members":[]}}"#,
+        )
+        .unwrap();
+        match joined {
+            ServerMessage::Team {
+                team: Some(team),
+                joined,
+                ..
+            } => {
+                assert_eq!(joined, ["223456789012345678"]);
+                assert!(team.hidden && !team.badge_requests);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        // An older service names nobody.
+        let older: ServerMessage =
+            serde_json::from_str(r#"{"t":"team","team":null,"reason":"left"}"#).unwrap();
+        assert!(matches!(older, ServerMessage::Team { joined, .. } if joined.is_empty()));
     }
 
     #[test]

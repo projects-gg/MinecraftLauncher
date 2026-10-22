@@ -789,6 +789,7 @@ pub(crate) mod tests {
             },
             backup: None,
             limited: None,
+            badge: None,
         }
     }
 
@@ -810,6 +811,7 @@ pub(crate) mod tests {
             dnd: false,
             game,
             discord_url: String::new(),
+            badge: None,
         }
     }
 
@@ -853,6 +855,7 @@ pub(crate) mod tests {
                     discord_url: String::new(),
                     joined_at: 0,
                     together_month: 0,
+                    badge: None,
                 })
                 .collect(),
             invited: Vec::new(),
@@ -864,6 +867,9 @@ pub(crate) mod tests {
             link_url: None,
             requests: Vec::new(),
             together_week: 0,
+            hidden: false,
+            badge_requests: true,
+            wearers: 0,
         }
     }
 
@@ -941,6 +947,7 @@ pub(crate) mod tests {
             team_invites: Vec::new(),
             team_requests: Vec::new(),
             plans: Vec::new(),
+            crew_joins: Vec::new(),
             together: false,
             calls: vec![CrewCallView {
                 id: "k1".into(),
