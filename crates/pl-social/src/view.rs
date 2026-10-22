@@ -5,9 +5,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::model::{
-    CrewMute, FriendGroup, JoinMode, LimitedItem, LimitedKey, Limits, Me, NoticeKind, Privacy,
-    PublicProfile, Relation, ReportReason, SettingsMeta, StatusMode, TeamExit, TeamPermissions,
-    TeamRelation, TeamRole, discord_avatar_url,
+    ChatExtras, ChatLinkRules, CrewMute, FriendGroup, JoinMode, LimitedItem, LimitedKey, Limits,
+    LinkRule, Me, NoticeKind, Privacy, PublicProfile, Relation, ReportReason, SettingsMeta,
+    StatusMode, TeamExit, TeamPermissions, TeamRelation, TeamRole, discord_avatar_url,
 };
 use crate::protocol::{
     CallAnswer, CallKind, Game, LocalStatus, PlanAnswer, PresenceState, is_projects_host,
@@ -154,6 +154,66 @@ pub struct ChatView {
     /// The player's crews and every conversation this device holds, the newest first (crews
     /// without messages last).
     pub conversations: Vec<ConversationView>,
+    /// What chat offers beyond CHAT1 now (CHAT2): the service took the capability and Studio has
+    /// it on (links: Studio's switch). None from an older service: none of them.
+    pub extras: Option<ChatExtrasView>,
+    /// The sticker sets the service takes and this launcher has (`pl1`); stickers of any other
+    /// set show as a quiet box.
+    pub sticker_sets: Vec<String>,
+    /// The link rules the service applies now, while links are on (CHAT2): the composer checks
+    /// with them, and a link in a message may be pressed only while it passes them.
+    pub links: Option<ChatLinksView>,
+}
+
+/// What chat offers beyond CHAT1 now (CHAT2), one switch each.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatExtrasView {
+    pub replies: bool,
+    pub stickers: bool,
+    pub reactions: bool,
+    /// "Yazıyor…".
+    pub typing: bool,
+    /// Read marks ("Görüldü" in direct messages).
+    pub reads: bool,
+    /// Plain `https` links that pass the rules (and their cards).
+    pub links: bool,
+}
+
+impl From<ChatExtras> for ChatExtrasView {
+    fn from(extras: ChatExtras) -> Self {
+        Self {
+            replies: extras.replies,
+            stickers: extras.stickers,
+            reactions: extras.reactions,
+            typing: extras.typing,
+            reads: extras.reads,
+            links: extras.links,
+        }
+    }
+}
+
+/// The link rules the service applies now (CHAT2): the rule table's version (`chat-links.json`;
+/// the composer's copy may be older), Studio's trusted hosts (opened without the warning) and
+/// blocked hosts or pages, whether Discord invites may be linked.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatLinksView {
+    pub rules: u32,
+    pub trusted: Vec<String>,
+    pub blocked: Vec<String>,
+    pub invites: bool,
+}
+
+impl From<&ChatLinkRules> for ChatLinksView {
+    fn from(links: &ChatLinkRules) -> Self {
+        Self {
+            rules: links.rules,
+            trusted: links.trusted.clone(),
+            blocked: links.blocked.clone(),
+            invites: links.invites,
+        }
+    }
 }
 
 /// One conversation in the list.
@@ -174,6 +234,9 @@ pub struct ConversationView {
     pub writable: bool,
     /// A message of the player's did not go.
     pub failed: bool,
+    /// A direct conversation's friend has seen up to this message id ("Görüldü", CHAT2): only
+    /// while both keep "Görüldü bilgisi" on.
+    pub peer_read: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -181,13 +244,15 @@ pub struct ConversationView {
 pub struct LastMessageView {
     pub from: String,
     pub mine: bool,
-    /// Empty when it was deleted for everyone.
+    /// Empty when it was deleted for everyone, or for a sticker.
     pub text: String,
     /// Unix milliseconds on this computer's clock.
     pub at: i64,
     /// It was deleted for everyone, by this user id (`staff`: Projects' moderators; empty: not
     /// known).
     pub deleted_by: Option<String>,
+    /// A sticker (`pl1/gg`, CHAT2): "Çıkartma · GG".
+    pub sticker: Option<String>,
 }
 
 /// Where one of the player's messages stands.
@@ -225,6 +290,14 @@ pub enum SendFailure {
     NotAllowed,
     /// The connection: it may go again.
     Connection,
+    /// The day's stickers are used up (CHAT2; 100, 20 for a limited account).
+    Stickers,
+    /// The day's messages with links are used up (CHAT2; 30).
+    Links,
+    /// A limited account (a new Discord account) sends no links (CHAT2).
+    LimitedLinks,
+    /// Studio switched this extra off (CHAT2: stickers).
+    FeatureOff,
 }
 
 /// One message of a conversation.
@@ -245,7 +318,10 @@ pub struct ChatMessageView {
     pub edited: bool,
     pub state: MessageState,
     pub failure: Option<SendFailure>,
-    /// Unix ms (this computer): the player may edit it until then (their own, sent; 15 minutes).
+    /// With `failure` `link`: the link rule that refused it, when the service said (CHAT2).
+    pub failure_rule: Option<LinkRule>,
+    /// Unix ms (this computer): the player may edit it until then (their own, sent; 15 minutes;
+    /// never a sticker).
     pub edit_until: Option<i64>,
     /// Unix ms: the player may delete it for everyone until then (their own, or any in a crew
     /// they lead or moderate; 7 days).
@@ -253,6 +329,148 @@ pub struct ChatMessageView {
     /// Deleted for everyone: a tombstone in the message's place (the same key; `text` is empty,
     /// nothing may be done with it).
     pub deleted: Option<ChatDeletedView>,
+    /// A sticker (`pl1/gg`) in place of the text (CHAT2; `text` is empty).
+    pub sticker: Option<String>,
+    /// The message it answers, as this computer holds it (CHAT2).
+    pub reply: Option<ChatReplyView>,
+    /// Its reactions as the player sees them (CHAT2): kinds in the order first given, people in
+    /// the order they reacted.
+    pub reactions: Vec<ChatReactionView>,
+    /// Its first link's card, once asked for (CHAT2).
+    pub card: Option<ChatCardView>,
+}
+
+/// The message a reply answers (CHAT2): the service keeps only the link; what it said comes from
+/// this computer's own history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatReplyView {
+    pub id: i64,
+    /// Its sender.
+    pub from: String,
+    /// Its key on screen, when this computer holds it (to scroll to it).
+    pub key: Option<String>,
+    /// What it said, as held here.
+    pub text: Option<String>,
+    pub sticker: Option<String>,
+    /// Deleted for everyone: "Mesaj silindi".
+    pub deleted: bool,
+    /// Not on this computer (older than its history, cleared, or from someone no longer seen):
+    /// "Önceki bir mesaj", nothing to scroll to.
+    pub missing: bool,
+}
+
+/// One kind of reaction on a message (CHAT2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatReactionView {
+    /// One fully qualified emoji.
+    pub e: String,
+    /// User ids, in the order they reacted.
+    pub by: Vec<String>,
+    /// The player is among them.
+    pub mine: bool,
+}
+
+/// What the hub said about a link (CHAT2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CardState {
+    /// Its card.
+    Ready,
+    /// Nothing to show: the plain card (the icon and the domain).
+    Plain,
+    /// The link leads somewhere the rules refuse: plain text, not pressable ("Bu bağlantı
+    /// açılamaz.").
+    Refused,
+}
+
+/// The launcher's own icon for a card's site (never the site's favicon); one it does not know
+/// reads as `globe`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CardIcon {
+    Projects,
+    Youtube,
+    Twitch,
+    Kick,
+    Modrinth,
+    Discord,
+    Instagram,
+    Tiktok,
+    X,
+    Globe,
+}
+
+impl CardIcon {
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "projects" => Self::Projects,
+            "youtube" => Self::Youtube,
+            "twitch" => Self::Twitch,
+            "kick" => Self::Kick,
+            "modrinth" => Self::Modrinth,
+            "discord" => Self::Discord,
+            "instagram" => Self::Instagram,
+            "tiktok" => Self::Tiktok,
+            "x" => Self::X,
+            _ => Self::Globe,
+        }
+    }
+}
+
+/// A card's shape: `video` and `stream` with a 16:9 picture, `project` with a square icon beside
+/// the text, `page` text only (one this version does not know).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum CardKind {
+    Video,
+    Stream,
+    Project,
+    Page,
+}
+
+impl CardKind {
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "video" => Self::Video,
+            "stream" => Self::Stream,
+            "project" => Self::Project,
+            _ => Self::Page,
+        }
+    }
+}
+
+/// A link's preview card (CHAT2 §9), made by the service's hub: this computer never fetches
+/// anything from the site.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatCardView {
+    pub state: CardState,
+    /// The link as written.
+    pub url: String,
+    /// A name to show ("YouTube"), else the domain.
+    pub site: String,
+    pub icon: CardIcon,
+    pub kind: CardKind,
+    pub title: Option<String>,
+    pub author: Option<String>,
+    pub desc: Option<String>,
+    /// A `data:image/…;base64,` picture (trusted sites only), `w` × `h` pixels.
+    pub image: Option<String>,
+    pub w: Option<u32>,
+    pub h: Option<u32>,
+    /// With `refused`: the rule, when the service said.
+    pub rule: Option<LinkRule>,
+}
+
+/// Someone writes in a conversation ("yazıyor…", CHAT2; the `social-chat-typing` event): shown
+/// for 6 seconds after the last, ended at once by their message or their going offline.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatTypingView {
+    pub conv: String,
+    pub by: String,
 }
 
 /// Who deleted a message for everyone, and when.
@@ -292,11 +510,14 @@ pub struct ChatChangeView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ReportTarget {
-    /// A player; from a plan card (FIX2) its maker, with the plan as the moderators' evidence.
+    /// A player; from a plan card (FIX2) its maker, with the plan as the moderators' evidence;
+    /// from a reaction's list (CHAT2) who gave it, with the reaction.
     Player {
         id: String,
         #[serde(default)]
         plan: Option<ReportPlan>,
+        #[serde(default)]
+        reaction: Option<ReportReaction>,
     },
     Crew {
         id: String,
@@ -313,6 +534,15 @@ pub enum ReportTarget {
 pub struct ReportPlan {
     pub crew: String,
     pub id: String,
+}
+
+/// The reaction a player is reported from (CHAT2): the conversation, the message's id and the
+/// emoji.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
+pub struct ReportReaction {
+    pub conv: String,
+    pub id: i64,
+    pub e: String,
 }
 
 /// Where "Ekibi çağır" stands (CALL1): a call starts only while the player plays, in a game this

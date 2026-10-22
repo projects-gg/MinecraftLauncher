@@ -3,18 +3,19 @@
 //! (moments worth a toast). The feature flag comes from the signed launcher config; debug builds
 //! may point it at a local `wrangler dev` with `PROJECTS_SOCIAL_URL`. Teams follow
 //! `features.teams` (debug builds: also `PROJECTS_SOCIAL_TEAMS=1`), chat `features.chat` (debug
-//! builds: also `PROJECTS_SOCIAL_CHAT=1`); chat changes go out as `social-chat`.
+//! builds: also `PROJECTS_SOCIAL_CHAT=1`); chat changes go out as `social-chat`, someone writing
+//! ("yazıyor…", CHAT2) as `social-chat-typing`.
 
 use std::sync::Arc;
 
 use pl_lang::pick;
 use pl_mc::launch::{GameEvent, QuickPlay};
 use pl_social::{
-    CallAnswer, CallOutcome, ChatPage, CrewMuteEdit, ErrorCode, FriendGroup, GroupMember,
-    InviteResult, JoinMode, JoinResult, LookupView, PermissionsEdit, PlanAnswer, ProfileUpdate,
-    ReportReason, ReportTarget, SendOutcome, SessionInfo, SettingsMeta, SocialError, SocialService,
-    SocialUpdate, SocialView, StatusMode, TeamEdit, TeamLook, TeamLookupView,
-    TeamNotificationsEdit,
+    CallAnswer, CallOutcome, ChatCardView, ChatPage, ChatQuota, CrewMuteEdit, ErrorCode,
+    FriendGroup, GroupMember, InviteResult, JoinMode, JoinResult, LookupView, PermissionsEdit,
+    PlanAnswer, ProfileUpdate, ReportReason, ReportTarget, SendOutcome, SessionInfo, SettingsMeta,
+    SocialError, SocialService, SocialUpdate, SocialView, StatusMode, TeamEdit, TeamLook,
+    TeamLookupView, TeamNotificationsEdit,
 };
 use tauri::{AppHandle, Emitter, State};
 
@@ -39,6 +40,7 @@ pub fn create(
             SocialUpdate::View(view) => emitter.emit("social-view", &**view),
             SocialUpdate::Notice(notice) => emitter.emit("social-notice", notice),
             SocialUpdate::Chat(change) => emitter.emit("social-chat", change),
+            SocialUpdate::Typing(typing) => emitter.emit("social-chat-typing", typing),
         };
         overlay.on_social(update);
     });
@@ -998,6 +1000,179 @@ pub fn social_chat_read(state: State<'_, AppState>, conv: String) {
 #[specta::specta]
 pub fn social_chat_clear(state: State<'_, AppState>, conv: String) {
     state.social.chat_clear(&conv);
+}
+
+// --- chat extras (CHAT2) ----------------------------------------------------------------------
+
+/// Chat extras' own refusals in words (the rest as every friends error).
+fn chat_extra_error(error: SocialError) -> crate::error::CmdError {
+    let words = match &error {
+        SocialError::InvalidInput("chat extras")
+        | SocialError::Refused {
+            code: ErrorCode::ChatFeatureOff,
+            ..
+        } => Some((
+            "SOSYAL-SOHBET-EK",
+            "Bu şu an kullanılamıyor.",
+            "This isn't available right now.",
+        )),
+        SocialError::InvalidInput("chat sticker") => Some((
+            "SOSYAL-CIKARTMA",
+            "Bu çıkartma gönderilemez.",
+            "This sticker can't be sent.",
+        )),
+        SocialError::InvalidInput("reaction") => Some((
+            "SOSYAL-TEPKI",
+            "Bu tepki verilemez.",
+            "This reaction can't be given.",
+        )),
+        SocialError::InvalidInput("chat link") => Some((
+            "SOSYAL-BAGLANTI",
+            "Bu bağlantının önizlemesi yok.",
+            "This link has no preview.",
+        )),
+        SocialError::Refused {
+            code: ErrorCode::ChatReactionsFull,
+            detail,
+            ..
+        } if detail.as_deref() == Some("kinds") => Some((
+            "SOSYAL-TEPKI-DOLU",
+            "Bu mesaja daha fazla farklı tepki eklenemez.",
+            "This message can't take more kinds of reactions.",
+        )),
+        SocialError::Refused {
+            code: ErrorCode::ChatReactionsFull,
+            ..
+        } => Some((
+            "SOSYAL-TEPKI-DOLU",
+            "Bir mesaja en çok 5 farklı tepki verebilirsin.",
+            "You can give a message up to 5 different reactions.",
+        )),
+        SocialError::RateLimited {
+            item: Some(ChatQuota::Reactions),
+            ..
+        } => Some((
+            "SOSYAL-TEPKI-SINIR",
+            "Bugün çok tepki verdin. Yarın yeniden dene.",
+            "You've reacted a lot today. Try again tomorrow.",
+        )),
+        SocialError::RateLimited {
+            item: Some(ChatQuota::Stickers),
+            ..
+        } => Some((
+            "SOSYAL-CIKARTMA-SINIR",
+            "Bugün çok çıkartma gönderdin. Yarın yeniden dene.",
+            "You've sent a lot of stickers today. Try again tomorrow.",
+        )),
+        _ => None,
+    };
+    match words {
+        Some((code, tr, en)) => crate::error::CmdError::new(code, pick(tr, en), error.to_string()),
+        None => error.into(),
+    }
+}
+
+/// Sends a message as a reply to message `reply` (its id) of the same conversation. Returns its
+/// key, as `social_chat_send`.
+#[tauri::command]
+#[specta::specta]
+pub fn social_chat_reply(
+    state: State<'_, AppState>,
+    conv: String,
+    text: String,
+    reply: i64,
+) -> CmdResult<String> {
+    state
+        .social
+        .chat_reply(&conv, &text, reply)
+        .map_err(chat_extra_error)
+}
+
+/// Sends a Projects sticker (`pl1/gg`), maybe as a reply to message `reply`. Returns its key.
+#[tauri::command]
+#[specta::specta]
+pub fn social_chat_sticker(
+    state: State<'_, AppState>,
+    conv: String,
+    sticker: String,
+    reply: Option<i64>,
+) -> CmdResult<String> {
+    state
+        .social
+        .chat_sticker(&conv, &sticker, reply)
+        .map_err(chat_extra_error)
+}
+
+/// Gives (`on`) or takes back the player's reaction `emoji` on message `id`: shown at once, put
+/// back when the service refuses.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_chat_react(
+    state: State<'_, AppState>,
+    conv: String,
+    id: i64,
+    emoji: String,
+    on: bool,
+) -> CmdResult<()> {
+    state
+        .social
+        .chat_react(&conv, id, &emoji, on)
+        .await
+        .map_err(chat_extra_error)
+}
+
+/// The player writes in a conversation (a key in a box with text and focus; not while editing,
+/// not while the window is away). Goes at most every 4 seconds, only when someone can see it.
+#[tauri::command]
+#[specta::specta]
+pub fn social_chat_typing(state: State<'_, AppState>, conv: String) {
+    state.social.chat_typing(&conv);
+}
+
+/// The card of a message's first link (`key`: the message's key on screen), once, when it comes
+/// on screen; the message comes back with its `card` on `social-chat`.
+#[tauri::command]
+#[specta::specta]
+pub async fn social_chat_unfurl(
+    state: State<'_, AppState>,
+    conv: String,
+    key: String,
+) -> CmdResult<()> {
+    state
+        .social
+        .chat_unfurl(&conv, &key)
+        .await
+        .map_err(chat_extra_error)
+}
+
+/// The card of a link written in the composer (one plain `https` link, as written).
+#[tauri::command]
+#[specta::specta]
+pub async fn social_chat_link_card(
+    state: State<'_, AppState>,
+    url: String,
+) -> CmdResult<ChatCardView> {
+    state
+        .social
+        .chat_link_card(&url)
+        .await
+        .map_err(chat_extra_error)
+}
+
+/// "Görüldü bilgisi" and "Yazıyor bilgisi" (both ways: off, the player sees none either).
+#[tauri::command]
+#[specta::specta]
+pub async fn social_set_chat_privacy(
+    state: State<'_, AppState>,
+    share_read: Option<bool>,
+    share_typing: Option<bool>,
+) -> CmdResult<()> {
+    let update = ProfileUpdate {
+        share_read,
+        share_typing,
+        ..ProfileUpdate::default()
+    };
+    Ok(state.social.update_profile(update).await?)
 }
 
 // --- reports and moderators' notes (MOD1) -----------------------------------------------------

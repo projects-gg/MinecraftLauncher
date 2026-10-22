@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::model::{ChatRejection, LimitedKey, SettingsMeta};
+use crate::model::{ChatQuota, ChatRejection, LimitedKey, LinkRule, SettingsMeta};
 
 /// Stable error codes of the service (`{"error": {"code": …}}`).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -126,6 +126,17 @@ pub enum ErrorCode {
     /// A plan's note is not one line of at most 80 characters, or chat's checks turned it away
     /// (FIX2).
     InvalidPlanNote,
+    /// Studio switched this chat extra off (CHAT2; the refusal's `detail` names it: `replies`,
+    /// `stickers`, `reactions` or `links`).
+    ChatFeatureOff,
+    /// The player has 5 different reactions on the message (`detail` `mine`), or the message has 10
+    /// kinds (`kinds`; CHAT2).
+    ChatReactionsFull,
+    /// Nothing to show for a link (CHAT2; `detail`: the link rule, when the link leads somewhere
+    /// the rules refuse).
+    UnfurlFailed,
+    /// The hub is fetching too much right now: ask again later (CHAT2).
+    UnfurlBusy,
     UpgradeRequired,
     RateLimited,
     Internal,
@@ -209,6 +220,10 @@ const CODES: &[(&str, ErrorCode)] = &[
     ("plan_exists", ErrorCode::PlanExists),
     ("plan_not_found", ErrorCode::PlanNotFound),
     ("invalid_plan_note", ErrorCode::InvalidPlanNote),
+    ("chat_feature_off", ErrorCode::ChatFeatureOff),
+    ("chat_reactions_full", ErrorCode::ChatReactionsFull),
+    ("unfurl_failed", ErrorCode::UnfurlFailed),
+    ("unfurl_busy", ErrorCode::UnfurlBusy),
     ("upgrade_required", ErrorCode::UpgradeRequired),
     ("rate_limited", ErrorCode::RateLimited),
     ("internal", ErrorCode::Internal),
@@ -247,8 +262,12 @@ pub enum SocialError {
     #[error("not signed in, or the session has ended")]
     Unauthorized,
     /// Too many requests, or a daily quota is used up. Wait `retry_after` before trying again.
+    /// `item`: a chat quota of its own ran out (CHAT2: stickers, reactions, links, cards).
     #[error("rate limited")]
-    RateLimited { retry_after: Option<Duration> },
+    RateLimited {
+        retry_after: Option<Duration>,
+        item: Option<ChatQuota>,
+    },
     /// The service is down or a free-plan daily limit was reached. Wait `retry_after` (often
     /// until 00:00 UTC) or back off; keep the launcher working without social features.
     #[error("the friends service is unavailable")]
@@ -257,11 +276,14 @@ pub enum SocialError {
     #[error("settings changed on another device")]
     SettingsConflict { current: Option<SettingsMeta> },
     /// The service understood the request and refused it (validation, limits, not found…).
+    /// `detail`: what a socket refusal is about, where the service says (CHAT2: the extra of
+    /// `chat_feature_off`, `mine` or `kinds` of `chat_reactions_full`, the rule of `unfurl_failed`).
     #[error("request refused: {code} (HTTP {status})")]
     Refused {
         status: u16,
         code: ErrorCode,
         message: String,
+        detail: Option<String>,
     },
     #[error("network error: {0}")]
     Network(String),
@@ -287,9 +309,13 @@ pub enum SocialError {
     /// Moderators reset the crew's name, tag and motto; they stay locked until `until`.
     #[error("the crew's texts are locked")]
     TextLocked { until: Option<i64> },
-    /// The service turned a chat text away: a link, a phone number or a listed word.
+    /// The service turned a chat text away: a link, a phone number or a listed word. `rule`: why
+    /// a link was refused (CHAT2), when the service said.
     #[error("chat text refused: {reason:?}")]
-    ChatRejected { reason: ChatRejection },
+    ChatRejected {
+        reason: ChatRejection,
+        rule: Option<LinkRule>,
+    },
     /// A moderator muted the player in chat until `until` (Unix seconds, the hub's clock).
     #[error("muted in chat")]
     ChatMuted { until: Option<i64> },
@@ -317,10 +343,26 @@ impl SocialError {
 
     pub fn retry_after(&self) -> Option<Duration> {
         match self {
-            Self::RateLimited { retry_after }
+            Self::RateLimited { retry_after, .. }
             | Self::Unavailable { retry_after }
             | Self::SignupsClosed { retry_after }
             | Self::Limited { retry_after, .. } => *retry_after,
+            _ => None,
+        }
+    }
+
+    /// What a socket refusal is about, where the service said (CHAT2; see `Refused`).
+    pub fn detail(&self) -> Option<&str> {
+        match self {
+            Self::Refused { detail, .. } => detail.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// The chat quota of its own that ran out for the day (CHAT2), for a rate limit that says.
+    pub fn quota(&self) -> Option<ChatQuota> {
+        match self {
+            Self::RateLimited { item, .. } => *item,
             _ => None,
         }
     }
@@ -383,7 +425,10 @@ pub(crate) fn from_response(status: u16, retry_after: Option<&str>, body: &[u8])
     });
     match (status, envelope) {
         (401, _) => SocialError::Unauthorized,
-        (429, _) => SocialError::RateLimited { retry_after },
+        (429, _) => SocialError::RateLimited {
+            retry_after,
+            item: None,
+        },
         (412, Some(body)) => SocialError::SettingsConflict {
             current: body.current,
         },
@@ -406,6 +451,7 @@ pub(crate) fn from_response(status: u16, retry_after: Option<&str>, body: &[u8])
             status,
             code: ErrorCode::parse(&body.code),
             message: body.message,
+            detail: None,
         },
         (_, None) => SocialError::Protocol(format!("HTTP {status} without an error body")),
     }
@@ -433,7 +479,7 @@ mod tests {
         let body = br#"{"error":{"code":"rate_limited","message":"Daily limit","retryAfter":120}}"#;
         let error = from_response(429, None, body);
         assert!(
-            matches!(error, SocialError::RateLimited { retry_after: Some(d) } if d.as_secs() == 120)
+            matches!(error, SocialError::RateLimited { retry_after: Some(d), item: None } if d.as_secs() == 120)
         );
         assert!(error.is_transient());
 

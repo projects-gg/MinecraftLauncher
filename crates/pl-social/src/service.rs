@@ -10,7 +10,7 @@
 //! reconnect, never on a timer; presence arrives as events; nothing retries in a loop (the
 //! presence task backs off by itself, a manual "try again" is throttled).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::path::PathBuf;
 use std::sync::atomic::Ordering;
@@ -21,36 +21,42 @@ use tokio::runtime::Handle;
 use url::Url;
 
 use crate::auth::{LoginAttempt, SignedIn, auth_code_from_deep_link};
+use crate::cards::StoredCard;
 use crate::chat::{
-    EDIT_WINDOW_MS, PAGE_SIZE, REPORT_CONTEXT, RESEND_WINDOW_MS, TOO_FAST_WAIT_MAX, Viewer,
-    change_view, entry_view, failure_of, merge, message_view, new_nonce, prepare_plan_note,
-    prepare_text,
+    CARD_WINDOW_MS, Context, EDIT_WINDOW_MS, PAGE_SIZE, REACT_WINDOW_MS, REPORT_CONTEXT,
+    RESEND_WINDOW_MS, ReactionStep, TOO_FAST_WAIT_MAX, Viewer, card_view, change_view, context_of,
+    entry_view, failure_of, merge, message_view, new_nonce, prepare_plan_note, prepare_text,
+    reaction_step,
 };
 use crate::client::{CrewKey, Session, SocialClient, SocialConfig};
 use crate::closed::ClosedInvitesFile;
 use crate::codes::{crew_code, normalize_crew_link, normalize_friend_code, normalize_team_code};
 use crate::error::{ErrorCode, Result, SocialError};
 use crate::game::{self, GameActivity};
-use crate::history::{Change, Conversation, History};
+use crate::history::{Change, Conversation, Entry, History};
+use crate::links::{find_links, first_link};
 use crate::model::{
-    ChatMessage, ChatStatus, CrewMuteEdit, EditFeatures, FIRST_EMBLEMS, FriendGroup, FriendGroups,
-    JoinMode, JoinOutcome, LimitedKey, MAX_FRIEND_GROUPS, ProfileUpdate, ReportReason,
-    RequestOutcome, SessionInfo, SettingsMeta, SettingsPrecondition, TEAM_FEATURE_CALLS,
-    TEAM_FEATURE_CREW_FRIEND_REQUESTS, TEAM_FEATURE_LINK, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI,
-    TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES, TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS,
-    TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamLookup, TeamNotificationsEdit, TeamRole,
+    ChatBody, ChatExtras, ChatMessage, ChatStatus, CrewMuteEdit, EditFeatures, FIRST_EMBLEMS,
+    FriendGroup, FriendGroups, JoinMode, JoinOutcome, LimitedKey, LinkRule, MAX_FRIEND_GROUPS,
+    ProfileUpdate, ReportReason, RequestOutcome, SessionInfo, SettingsMeta, SettingsPrecondition,
+    StatusMode, TEAM_FEATURE_CALLS, TEAM_FEATURE_CREW_FRIEND_REQUESTS, TEAM_FEATURE_LINK,
+    TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES,
+    TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS, TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamLookup,
+    TeamNotificationsEdit, TeamRole,
 };
 use crate::presence::{ChatSetup, PresenceControl, PresenceEvent, PresenceOptions, StopReason};
 use crate::protocol::{CallAnswer, LocalStatus, PlanAnswer};
 use crate::qr::{QrPath, qr_path};
 use crate::state::{Connection, SocialState};
+use crate::stickers;
 use crate::store::TokenStore;
 use crate::together::{Periods, Together, TogetherLog};
 use crate::view::{
-    ActivityView, AuthPhase, CallOutcome, CallPlace, ChatChangeView, ChatPage, ChatView,
-    ConversationView, CrewNotificationsView, GroupMember, InviteResult, JoinResult,
-    LastMessageView, LookupView, ProfileView, ReportTarget, RestrictionView, SendFailure,
-    SendOutcome, SignInFailure, SocialNotice, SocialView, TeamLookupView, me_view,
+    ActivityView, AuthPhase, CallOutcome, CallPlace, ChatCardView, ChatChangeView, ChatExtrasView,
+    ChatLinksView, ChatPage, ChatTypingView, ChatView, ConversationView, CrewNotificationsView,
+    GroupMember, InviteResult, JoinResult, LastMessageView, LookupView, ProfileView, ReportTarget,
+    RestrictionView, SendFailure, SendOutcome, SignInFailure, SocialNotice, SocialView,
+    TeamLookupView, me_view,
 };
 
 /// After a reconnect the friend list is fetched again only when it is older than this.
@@ -66,11 +72,20 @@ pub enum SocialUpdate {
     Notice(SocialNotice),
     /// What changed in one chat conversation (CHAT1).
     Chat(ChatChangeView),
+    /// Someone writes in a conversation ("yazıyor…", CHAT2): shown for 6 seconds after the last.
+    Typing(ChatTypingView),
 }
 
 /// Chat events that came before the history could be opened (the profile was not known yet:
 /// the service was down at start) wait at most this many.
 const CHAT_BACKLOG_MAX: usize = 2_000;
+/// The player's own "yazıyor…" goes at most this often per conversation (CHAT2).
+const TYPING_EVERY: Duration = Duration::from_secs(4);
+/// A read mark goes at most this often per conversation (CHAT2); the newest that waited goes
+/// when the time is up.
+const MARK_EVERY: Duration = Duration::from_secs(2);
+/// A busy hub's wait for a card is honoured once, if it is at most this long (CHAT2).
+const CARD_RETRY_MAX: Duration = Duration::from_secs(10);
 
 pub type UpdateSink = Arc<dyn Fn(SocialUpdate) + Send + Sync>;
 
@@ -101,6 +116,21 @@ struct Inner {
     sink: UpdateSink,
     runtime: Handle,
     core: Mutex<Core>,
+    /// One link card is asked at a time (the service's rule per socket, CHAT2).
+    cards_turn: tokio::sync::Mutex<()>,
+}
+
+/// When a conversation's read mark last went, and the newest one waiting for its time (CHAT2).
+#[derive(Debug, Default)]
+struct MarkPace {
+    sent: Option<Instant>,
+    waiting: Option<i64>,
+}
+
+/// What the hub said about a link, to keep or for this run only.
+enum CardAnswer {
+    Keep(StoredCard),
+    Passing,
 }
 
 #[derive(Default)]
@@ -162,6 +192,15 @@ struct Core {
     sending: bool,
     /// Messages that met "too fast" once (they go again by themselves once).
     too_fast: HashSet<String>,
+    /// When the player's own "yazıyor…" last went, per conversation (CHAT2).
+    typing_sent: HashMap<String, Instant>,
+    /// Read marks per conversation (CHAT2).
+    marks: HashMap<String, MarkPace>,
+    /// The player's reactions on their way, per message (`conv|id`; CHAT2): the service's answer
+    /// stands once none is left.
+    reacting: HashMap<String, u32>,
+    /// Links whose cards were asked in this run (CHAT2).
+    cards_asked: HashSet<String>,
     /// The account was suspended or banned in this run (shown on the sign-in screen).
     restriction: Option<RestrictionView>,
     /// The settings backup waits until then (Unix seconds; storage protection).
@@ -187,6 +226,7 @@ impl SocialService {
                 sink,
                 runtime,
                 core: Mutex::new(Core::default()),
+                cards_turn: tokio::sync::Mutex::new(()),
             }),
         }
     }
@@ -411,6 +451,7 @@ impl SocialService {
         let mut quietly = false;
         let mut restricted = None;
         let deliver;
+        let typing;
         let notices = {
             let mut core = self.lock();
             if core.generation != generation || core.epoch != epoch {
@@ -455,6 +496,7 @@ impl SocialService {
             }
             let chat = apply_chat(&mut core, &event);
             deliver = chat.deliver;
+            typing = chat.typing;
             notices.extend(chat.notices);
             notices
         };
@@ -464,6 +506,11 @@ impl SocialService {
         }
         if ended {
             self.end_session(generation, quietly);
+            return;
+        }
+        // "Yazıyor…" changes nothing else: no new view for it.
+        if let Some(typing) = typing {
+            (self.inner.sink)(SocialUpdate::Typing(typing));
             return;
         }
         self.emit_view();
@@ -933,7 +980,7 @@ impl SocialService {
         Ok(code)
     }
 
-    /// Picture, status mode or privacy switches.
+    /// Picture, status mode or privacy switches (CHAT2: "Görüldü bilgisi", "Yazıyor bilgisi").
     pub async fn update_profile(&self, update: ProfileUpdate) -> Result<()> {
         let (me, generation) = self
             .call(|session| async move { session.update_profile(&update).await })
@@ -1667,7 +1714,7 @@ impl SocialService {
         }
         match control.call_crew(named).await {
             Ok(()) => Ok(CallOutcome::Called),
-            Err(SocialError::RateLimited { retry_after }) => Ok(CallOutcome::Wait {
+            Err(SocialError::RateLimited { retry_after, .. }) => Ok(CallOutcome::Wait {
                 seconds: retry_after
                     .map_or(300, |wait| {
                         u32::try_from(wait.as_secs()).unwrap_or(u32::MAX)
@@ -1913,7 +1960,7 @@ impl SocialService {
         Ok(())
     }
 
-    // --- chat (CHAT1) ------------------------------------------------------------------------
+    // --- chat (CHAT1, CHAT2) ------------------------------------------------------------------
 
     /// Keeps the chat history under this folder (`<folder>/<account id>/`); without it, for this
     /// run only.
@@ -1944,18 +1991,14 @@ impl SocialService {
         if core.auth != AuthPhase::SignedIn {
             return Err(SocialError::Unauthorized);
         }
-        let status = match core.chat_status {
+        let status = match &core.chat_status {
             Some(status) if core.chat_enabled => status,
             _ => return Err(SocialError::InvalidInput("chat off")),
         };
         if !status.on {
             return Err(SocialError::InvalidInput("chat off"));
         }
-        let skew = core.chat_skew_ms / 1000;
-        if status
-            .muted_until
-            .is_some_and(|until| until + skew > unix_now())
-        {
+        if muted(status, core.chat_skew_ms) {
             return Err(SocialError::ChatMuted {
                 until: status.muted_until,
             });
@@ -1970,13 +2013,24 @@ impl SocialService {
     pub fn chat_page(&self, conv: &str, before: Option<i64>) -> ChatPage {
         let mut core = self.lock();
         let viewer = viewer(&core, conv);
-        let (entries, more) = match core.history.as_mut() {
-            Some(history) => history.page(conv, before, PAGE_SIZE),
-            None => (Vec::new(), false),
+        let Some(history) = core.history.as_mut() else {
+            return ChatPage {
+                conv: conv.to_owned(),
+                messages: Vec::new(),
+                more: false,
+            };
         };
+        let (entries, more) = history.page(conv, before, PAGE_SIZE);
+        let messages = entries
+            .iter()
+            .map(|entry| {
+                let context = context_of(history, conv, entry);
+                entry_view(entry, &viewer, context)
+            })
+            .collect();
         ChatPage {
             conv: conv.to_owned(),
-            messages: entries.iter().map(|e| entry_view(e, &viewer)).collect(),
+            messages,
             more,
         }
     }
@@ -1987,21 +2041,69 @@ impl SocialService {
     pub fn chat_send(&self, conv: &str, text: &str) -> Result<String> {
         self.chat_writable(conv)?;
         let text = prepare_text(text).ok_or(SocialError::InvalidInput("chat text"))?;
+        self.post(conv, ChatBody::Text(text), None)
+    }
+
+    /// Sends a message as a reply to message `reply` of the same conversation (CHAT2), held here.
+    /// Like [`SocialService::chat_send`]; refused while replies are not on.
+    pub fn chat_reply(&self, conv: &str, text: &str, reply: i64) -> Result<String> {
+        self.chat_writable(conv)?;
+        if !self.chat_offers(|extras| extras.replies) {
+            return Err(SocialError::InvalidInput("chat extras"));
+        }
+        let text = prepare_text(text).ok_or(SocialError::InvalidInput("chat text"))?;
+        self.post(conv, ChatBody::Text(text), Some(reply))
+    }
+
+    /// Sends a Projects sticker (`pl1/gg`, CHAT2), maybe as a reply: of a set the service takes
+    /// and this launcher has. Like [`SocialService::chat_send`].
+    pub fn chat_sticker(&self, conv: &str, sticker: &str, reply: Option<i64>) -> Result<String> {
+        self.chat_writable(conv)?;
+        let taken = {
+            let core = self.lock();
+            let set = sticker.split_once('/').map_or("", |(set, _)| set);
+            core.chat_status
+                .as_ref()
+                .is_some_and(|status| status.stickers.iter().any(|s| s == set))
+        };
+        if !self.chat_offers(|extras| extras.stickers)
+            || (reply.is_some() && !self.chat_offers(|extras| extras.replies))
+        {
+            return Err(SocialError::InvalidInput("chat extras"));
+        }
+        if !taken || stickers::sticker(sticker).is_none() {
+            return Err(SocialError::InvalidInput("chat sticker"));
+        }
+        self.post(conv, ChatBody::Sticker(sticker.to_owned()), reply)
+    }
+
+    /// A message of the player's waits to go (shown at once); `reply` must be a message held here.
+    fn post(&self, conv: &str, body: ChatBody, reply: Option<i64>) -> Result<String> {
         let nonce = new_nonce();
         {
             let mut core = self.lock();
-            let viewer = viewer(&core, conv);
-            let change = core
+            let history = core
                 .history
                 .as_mut()
-                .and_then(|history| history.add_outgoing(conv, &text, &nonce, unix_now_ms()))
                 .ok_or(SocialError::InvalidInput("chat not allowed"))?;
-            let view = change_view(&change, &viewer);
-            core.chat_outbox.push(view);
+            if let Some(id) = reply
+                && history.message(conv, id).is_none()
+            {
+                return Err(SocialError::InvalidInput("chat message"));
+            }
+            let change = history
+                .add_outgoing(conv, &body, reply, &nonce, unix_now_ms())
+                .ok_or(SocialError::InvalidInput("chat not allowed"))?;
+            push_change(&mut core, &change);
         }
         self.emit_view();
         self.kick_sender();
         Ok(format!("n:{nonce}"))
+    }
+
+    /// Whether chat offers this extra now (CHAT2): the socket took it and Studio has it on.
+    fn chat_offers(&self, extra: impl Fn(&ChatExtras) -> bool) -> bool {
+        offered(&self.lock()).is_some_and(|extras| extra(&extras))
     }
 
     /// "Tekrar dene" on a message that did not go.
@@ -2020,15 +2122,14 @@ impl SocialService {
         self.chat_writable(&conv)?;
         {
             let mut core = self.lock();
-            let viewer = viewer(&core, &conv);
             // A manual retry starts the clock again: it may go by itself after a reconnect too.
             let at = unix_now_ms();
-            if let Some(history) = core.history.as_mut() {
+            let change = core.history.as_mut().and_then(|history| {
                 history.restart_outgoing(nonce, at);
-                if let Some(change) = history.set_outgoing(nonce, None) {
-                    let view = change_view(&change, &viewer);
-                    core.chat_outbox.push(view);
-                }
+                history.set_outgoing(nonce, None, None)
+            });
+            if let Some(change) = change {
+                push_change(&mut core, &change);
             }
             core.too_fast.remove(nonce);
         }
@@ -2051,31 +2152,26 @@ impl SocialService {
             else {
                 return;
             };
-            let viewer = viewer(&core, &change.conv);
-            let view = change_view(&change, &viewer);
-            core.chat_outbox.push(view);
+            push_change(&mut core, &change);
         }
         self.emit_view();
     }
 
-    /// Edits the player's own message (within 15 minutes). The new version reaches the view.
+    /// Edits the player's own message (within 15 minutes; never a sticker). The new version
+    /// reaches the view.
     pub async fn chat_edit(&self, conv: &str, id: i64, text: &str) -> Result<()> {
         self.chat_writable(conv)?;
         let text = prepare_text(text).ok_or(SocialError::InvalidInput("chat text"))?;
         let (control, message, generation) = {
             let mut core = self.lock();
-            let me = core
-                .state
-                .me()
-                .map(|me| me.profile.id.clone())
-                .unwrap_or_default();
+            let me = my_id(&core);
             let skew = core.chat_skew_ms;
             let message = core
                 .history
                 .as_mut()
                 .and_then(|history| history.message(conv, id))
                 .ok_or(SocialError::InvalidInput("chat message"))?;
-            if message.from != me {
+            if message.from != me || message.sticker.is_some() {
                 return Err(SocialError::InvalidInput("chat message"));
             }
             if message.id + skew + EDIT_WINDOW_MS <= unix_now_ms() {
@@ -2083,6 +2179,7 @@ impl SocialService {
                     status: 409,
                     code: ErrorCode::ChatTooOld,
                     message: String::new(),
+                    detail: None,
                 });
             }
             let control = core
@@ -2118,11 +2215,7 @@ impl SocialService {
             if core.auth != AuthPhase::SignedIn {
                 return Err(SocialError::Unauthorized);
             }
-            let me = core
-                .state
-                .me()
-                .map(|me| me.profile.id.clone())
-                .unwrap_or_default();
+            let me = my_id(&core);
             let message = core
                 .history
                 .as_mut()
@@ -2144,16 +2237,337 @@ impl SocialService {
         Ok(())
     }
 
-    /// Everything in a conversation is read now (it is on screen, scrolled to the newest).
+    /// Everything in a conversation is read now: it is on screen at its newest message, someone
+    /// else's newest message there for a second with the window in front. With read marks on
+    /// (CHAT2) the service hears it too: the player's other devices keep their unread counts in
+    /// step, and in a direct conversation the friend may see "Görüldü".
     pub fn chat_read(&self, conv: &str) {
-        let changed = self
-            .lock()
-            .history
-            .as_mut()
-            .is_some_and(|history| history.mark_read(conv));
+        let (changed, mark) = {
+            let mut core = self.lock();
+            let reads = offered(&core).is_some_and(|extras| extras.reads);
+            let online = core.state.connection() == Connection::Online;
+            let Some(history) = core.history.as_mut() else {
+                return;
+            };
+            let changed = history.mark_read(conv);
+            let mark = (reads && online)
+                .then(|| history.read_target(conv))
+                .flatten()
+                .filter(|id| *id > history.mark(conv));
+            (changed, mark)
+        };
+        if let Some(id) = mark {
+            self.send_mark(conv, id);
+        }
         if changed {
             self.emit_view();
         }
+    }
+
+    /// A read mark goes at most every 2 seconds per conversation; the newest that waited goes
+    /// when the time is up.
+    fn send_mark(&self, conv: &str, id: i64) {
+        let mut core = self.lock();
+        let now = Instant::now();
+        let generation = core.generation;
+        let pace = core.marks.entry(conv.to_owned()).or_default();
+        if let Some(sent) = pace.sent
+            && now.duration_since(sent) < MARK_EVERY
+        {
+            let first = pace.waiting.is_none();
+            pace.waiting = pace.waiting.max(Some(id));
+            if first {
+                let wait = MARK_EVERY - now.duration_since(sent);
+                let service = self.clone();
+                let conv = conv.to_owned();
+                self.spawn(async move {
+                    tokio::time::sleep(wait).await;
+                    service.flush_mark(generation, &conv);
+                });
+            }
+            return;
+        }
+        pace.sent = Some(now);
+        pace.waiting = None;
+        mark_now(&mut core, conv, id);
+    }
+
+    /// The mark that waited for its time goes, unless one as new went meanwhile.
+    fn flush_mark(&self, generation: u64, conv: &str) {
+        let mut core = self.lock();
+        if core.generation != generation {
+            return;
+        }
+        let Some(pace) = core.marks.get_mut(conv) else {
+            return;
+        };
+        let Some(id) = pace.waiting.take() else {
+            return;
+        };
+        pace.sent = Some(Instant::now());
+        mark_now(&mut core, conv, id);
+    }
+
+    /// The player writes in a conversation (a key in a box with text and focus, not while
+    /// editing, not while the window is away; CHAT2). "Yazıyor…" goes at most every 4 seconds,
+    /// only while someone else in the conversation is online, and never while the player is
+    /// invisible, muted or keeps "Yazıyor bilgisi" off.
+    pub fn chat_typing(&self, conv: &str) {
+        let mut core = self.lock();
+        let Some(status) = core.chat_status.as_ref() else {
+            return;
+        };
+        if !core.chat_enabled
+            || !status.on
+            || !status.offered().is_some_and(|extras| extras.typing)
+            || muted(status, core.chat_skew_ms)
+        {
+            return;
+        }
+        let Some(me) = core.state.me() else {
+            return;
+        };
+        if me.status == StatusMode::Invisible || !me.privacy.shares_typing() {
+            return;
+        }
+        let me = me.profile.id.clone();
+        if !conversation_writable(&core.state, conv) || !someone_online(&core.state, conv, &me) {
+            return;
+        }
+        let now = Instant::now();
+        if core
+            .typing_sent
+            .get(conv)
+            .is_some_and(|at| now.duration_since(*at) < TYPING_EVERY)
+        {
+            return;
+        }
+        if core.typing_sent.len() > 256 {
+            core.typing_sent
+                .retain(|_, at| now.duration_since(*at) < TYPING_EVERY);
+        }
+        core.typing_sent.insert(conv.to_owned(), now);
+        if let Some(control) = &core.presence {
+            control.chat_typing(conv);
+        }
+    }
+
+    /// Gives (`on`) or takes back the player's reaction on message `id` (CHAT2): shown at once,
+    /// settled by the service's answer (put back when it refuses). On messages younger than a week
+    /// only; at most 5 different of the player's on a message and 10 kinds on it; never 🖕.
+    pub async fn chat_react(&self, conv: &str, id: i64, emoji: &str, on: bool) -> Result<()> {
+        self.chat_writable(conv)?;
+        if !self.chat_offers(|extras| extras.reactions) {
+            return Err(SocialError::InvalidInput("chat extras"));
+        }
+        let (control, e, generation) = {
+            let mut core = self.lock();
+            let me = my_id(&core);
+            let skew = core.chat_skew_ms;
+            let control = core
+                .presence
+                .clone()
+                .ok_or(SocialError::Unavailable { retry_after: None })?;
+            let history = core
+                .history
+                .as_mut()
+                .ok_or(SocialError::InvalidInput("chat message"))?;
+            let message = history
+                .message(conv, id)
+                .ok_or(SocialError::InvalidInput("chat message"))?;
+            if message.id + skew + REACT_WINDOW_MS <= unix_now_ms() {
+                return Err(SocialError::InvalidInput("chat message"));
+            }
+            let ReactionStep::Send { e } = reaction_step(emoji, on, &message.reactions, &me)?
+            else {
+                return Ok(());
+            };
+            let change = history.react(conv, id, &me, &e, on);
+            *core.reacting.entry(reacting_key(conv, id)).or_default() += 1;
+            if let Some(change) = change {
+                push_change(&mut core, &change);
+            }
+            (control, e, core.generation)
+        };
+        self.emit_view();
+        let result = control.chat_react(conv, id, &e, on).await;
+        {
+            let mut core = self.lock();
+            if core.generation != generation {
+                return result.map(drop);
+            }
+            let key = reacting_key(conv, id);
+            let left = core.reacting.get_mut(&key).map_or(0, |n| {
+                *n = n.saturating_sub(1);
+                *n
+            });
+            if left == 0 {
+                core.reacting.remove(&key);
+            }
+            let me = my_id(&core);
+            let change = core.history.as_mut().and_then(|history| match &result {
+                // The service's word stands once nothing else of the player's is on its way.
+                Ok(reactions) if left == 0 => history.set_reactions(conv, id, reactions),
+                Ok(_) => None,
+                // Not taken: what was shown goes back.
+                Err(_) => history.react(conv, id, &me, &e, !on),
+            });
+            if let Some(change) = change {
+                push_change(&mut core, &change);
+            }
+        }
+        self.emit_view();
+        result.map(drop)
+    }
+
+    /// The card of a message's first link (CHAT2): asked once, when the message comes on screen
+    /// (younger than a week, while links are on); the message comes back with it. Nothing comes
+    /// when there is nothing to ask.
+    pub async fn chat_unfurl(&self, conv: &str, key: &str) -> Result<()> {
+        let (control, url, generation) = {
+            let mut core = self.lock();
+            if !offered(&core).is_some_and(|extras| extras.links) {
+                return Ok(());
+            }
+            let skew = core.chat_skew_ms;
+            let Some(history) = core.history.as_mut() else {
+                return Ok(());
+            };
+            let Some(Entry::Sent(message)) = history.entry_by_key(conv, key) else {
+                return Ok(());
+            };
+            if message.sticker.is_some() || message.id + skew + CARD_WINDOW_MS <= unix_now_ms() {
+                return Ok(());
+            }
+            let Some(url) = first_link(&message.text).map(str::to_owned) else {
+                return Ok(());
+            };
+            if history.cards().get(&url).is_some() {
+                // Known already: the message as it is (with its card) for the screen that asked.
+                let change = Change::of(conv, Entry::Sent(message));
+                push_change(&mut core, &change);
+                drop(core);
+                self.emit_view();
+                return Ok(());
+            }
+            if !core.cards_asked.insert(url.clone()) {
+                return Ok(());
+            }
+            let Some(control) = core.presence.clone() else {
+                core.cards_asked.remove(&url);
+                return Ok(());
+            };
+            (control, url, core.generation)
+        };
+        let answer = self.fetch_card(&control, &url).await;
+        {
+            let mut core = self.lock();
+            if core.generation != generation {
+                return Ok(());
+            }
+            let change = core.history.as_mut().and_then(|history| {
+                match answer {
+                    CardAnswer::Keep(card) => history.cards().put(&url, card),
+                    CardAnswer::Passing => history.cards().put_passing(&url),
+                }
+                history
+                    .entry_by_key(conv, key)
+                    .map(|entry| Change::of(conv, entry))
+            });
+            if let Some(change) = change {
+                push_change(&mut core, &change);
+            }
+        }
+        self.emit_view();
+        Ok(())
+    }
+
+    /// The card of a link written in the composer (CHAT2): the same card the message gets once it
+    /// is sent. `url` is one plain `https` link as written.
+    pub async fn chat_link_card(&self, url: &str) -> Result<ChatCardView> {
+        if find_links(url) != [url] || first_link(url) != Some(url) {
+            return Err(SocialError::InvalidInput("chat link"));
+        }
+        let (control, generation) = {
+            let mut core = self.lock();
+            if !offered(&core).is_some_and(|extras| extras.links) {
+                return Err(SocialError::InvalidInput("chat off"));
+            }
+            if let Some(stored) = core
+                .history
+                .as_mut()
+                .and_then(|history| history.cards().get(url))
+            {
+                return Ok(card_view(url, &stored));
+            }
+            let control = core
+                .presence
+                .clone()
+                .ok_or(SocialError::Unavailable { retry_after: None })?;
+            (control, core.generation)
+        };
+        let answer = self.fetch_card(&control, url).await;
+        let mut core = self.lock();
+        let stored = match answer {
+            CardAnswer::Keep(card) => {
+                if core.generation == generation
+                    && let Some(history) = core.history.as_mut()
+                {
+                    history.cards().put(url, card.clone());
+                    return Ok(history
+                        .cards()
+                        .get(url)
+                        .map_or_else(|| card_view(url, &card), |kept| card_view(url, &kept)));
+                }
+                card
+            }
+            CardAnswer::Passing => StoredCard::Plain,
+        };
+        Ok(card_view(url, &stored))
+    }
+
+    /// Asks the hub for a link's card, one at a time; a busy hub's short wait is honoured once.
+    async fn fetch_card(&self, control: &PresenceControl, url: &str) -> CardAnswer {
+        let _turn = self.inner.cards_turn.lock().await;
+        // Another request may have brought it while this one waited for its turn.
+        if let Some(stored) = self
+            .lock()
+            .history
+            .as_mut()
+            .and_then(|history| history.cards().get(url))
+        {
+            return match stored {
+                StoredCard::Plain => CardAnswer::Passing,
+                stored => CardAnswer::Keep(stored),
+            };
+        }
+        for attempt in 0..2 {
+            match control.chat_unfurl(url).await {
+                Ok(card) => {
+                    return CardAnswer::Keep(StoredCard::Ready {
+                        card: Box::new(card),
+                    });
+                }
+                Err(error) if error.code() == Some(&ErrorCode::UnfurlFailed) => {
+                    return CardAnswer::Keep(match error.detail() {
+                        Some(rule) => StoredCard::Refused {
+                            rule: Some(LinkRule::parse(rule)),
+                        },
+                        None => StoredCard::Plain,
+                    });
+                }
+                Err(SocialError::Unavailable {
+                    retry_after: Some(wait),
+                }) if attempt == 0 && wait <= CARD_RETRY_MAX => {
+                    tokio::time::sleep(wait).await;
+                }
+                Err(error) => {
+                    tracing::debug!(%error, "no card for a link this time");
+                    return CardAnswer::Passing;
+                }
+            }
+        }
+        CardAnswer::Passing
     }
 
     /// "Geçmişi temizle": the conversation's messages leave this device for good (the service's
@@ -2168,50 +2582,46 @@ impl SocialService {
             else {
                 return;
             };
-            let viewer = viewer(&core, conv);
-            let view = change_view(&change, &viewer);
-            core.chat_outbox.push(view);
+            push_change(&mut core, &change);
         }
         self.emit_view();
     }
 
-    /// A message as the service now has it (an answer to an edit): into the history and the view.
+    /// A message as the service now has it (an answer to an edit): into the history and the view,
+    /// with the replies that quote it.
     fn chat_store(&self, generation: u64, message: &ChatMessage) {
         {
             let mut core = self.lock();
             if core.generation != generation {
                 return;
             }
-            let viewer = viewer(&core, &message.conv);
-            if let Some(change) = core
-                .history
-                .as_mut()
-                .and_then(|history| history.put(message))
-            {
-                let view = change_view(&change, &viewer);
-                core.chat_outbox.push(view);
+            let change = core.history.as_mut().and_then(|history| {
+                let change = history.put(message)?;
+                Some(with_replies(history, change, message.id))
+            });
+            if let Some(change) = change {
+                push_change(&mut core, &change);
             }
         }
         self.emit_view();
     }
 
     /// A message of this device's history was deleted for everyone (`by`: who, empty when not
-    /// known yet): it turns into its tombstone, now (the hub's clock).
+    /// known yet): it turns into its tombstone, now (the hub's clock), and the replies that quote
+    /// it say so.
     fn chat_tombstone(&self, generation: u64, conv: &str, id: i64, by: &str) {
         {
             let mut core = self.lock();
             if core.generation != generation {
                 return;
             }
-            let viewer = viewer(&core, conv);
             let at = unix_now_ms() - core.chat_skew_ms;
-            if let Some(change) = core
-                .history
-                .as_mut()
-                .and_then(|history| history.delete(conv, id, by, at))
-            {
-                let view = change_view(&change, &viewer);
-                core.chat_outbox.push(view);
+            let change = core.history.as_mut().and_then(|history| {
+                let change = history.delete(conv, id, by, at)?;
+                Some(with_replies(history, change, id))
+            });
+            if let Some(change) = change {
+                push_change(&mut core, &change);
             }
         }
         self.emit_view();
@@ -2232,64 +2642,66 @@ impl SocialService {
 
     /// Sends the waiting messages one at a time, in the order typed, while the connection is up.
     /// A message that waited longer than the service remembers a resend is not sent by itself; it
-    /// waits for "Tekrar dene".
+    /// waits for "Tekrar dene". A reply goes with the message it answers as held here; when that
+    /// is gone, or the service no longer takes replies, the message goes without its link.
     async fn send_waiting(&self) {
         loop {
-            let next = {
-                let mut core = self.lock();
-                let online = core.state.connection() == Connection::Online
-                    && core.chat_status.is_some()
-                    && core.chat_synced;
-                let now = unix_now_ms();
-                let mut stale = Vec::new();
-                let pick = core.history.as_ref().and_then(|history| {
-                    history
-                        .outgoing()
-                        .iter()
-                        .filter(|o| o.failed.is_none())
-                        .find(|o| {
-                            if now - o.at > RESEND_WINDOW_MS {
-                                stale.push(o.nonce.clone());
-                                false
-                            } else {
-                                true
-                            }
-                        })
-                        .cloned()
-                });
-                for nonce in stale {
-                    let conv = core
-                        .history
-                        .as_ref()
-                        .and_then(|h| h.outgoing_of(&nonce))
-                        .map(|o| o.conv.clone())
-                        .unwrap_or_default();
-                    let viewer = viewer(&core, &conv);
-                    if let Some(change) = core
-                        .history
-                        .as_mut()
-                        .and_then(|h| h.set_outgoing(&nonce, Some(SendFailure::Connection)))
-                    {
-                        let view = change_view(&change, &viewer);
-                        core.chat_outbox.push(view);
+            let next =
+                {
+                    let mut core = self.lock();
+                    let online = core.state.connection() == Connection::Online
+                        && core.chat_status.is_some()
+                        && core.chat_synced;
+                    let now = unix_now_ms();
+                    let mut stale = Vec::new();
+                    let pick = core.history.as_ref().and_then(|history| {
+                        history
+                            .outgoing()
+                            .iter()
+                            .filter(|o| o.failed.is_none())
+                            .find(|o| {
+                                if now - o.at > RESEND_WINDOW_MS {
+                                    stale.push(o.nonce.clone());
+                                    false
+                                } else {
+                                    true
+                                }
+                            })
+                            .cloned()
+                    });
+                    for nonce in stale {
+                        if let Some(change) = core.history.as_mut().and_then(|h| {
+                            h.set_outgoing(&nonce, Some(SendFailure::Connection), None)
+                        }) {
+                            push_change(&mut core, &change);
+                        }
                     }
-                }
-                match (core.presence.clone(), pick) {
-                    (Some(control), Some(outgoing)) if online => {
-                        Some((control, outgoing, core.generation))
+                    // The message a reply answers, as held now (its latest version).
+                    let parent = pick.as_ref().and_then(|outgoing| {
+                        let id = outgoing.reply?;
+                        core.history.as_mut()?.message(&outgoing.conv, id)
+                    });
+                    match (core.presence.clone(), pick) {
+                        (Some(control), Some(outgoing)) if online => {
+                            Some((control, outgoing, parent, core.generation))
+                        }
+                        _ => {
+                            core.sending = false;
+                            None
+                        }
                     }
-                    _ => {
-                        core.sending = false;
-                        None
-                    }
-                }
-            };
-            let Some((control, outgoing, generation)) = next else {
+                };
+            let Some((control, outgoing, parent, generation)) = next else {
                 self.emit_view();
                 return;
             };
             let result = control
-                .chat_send(&outgoing.conv, &outgoing.text, &outgoing.nonce)
+                .chat_post(
+                    &outgoing.conv,
+                    &outgoing.body(),
+                    parent.as_ref(),
+                    &outgoing.nonce,
+                )
                 .await;
             let mut wait = None;
             {
@@ -2298,11 +2710,23 @@ impl SocialService {
                     core.sending = false;
                     return;
                 }
-                let viewer = viewer(&core, &outgoing.conv);
                 let change = match result {
                     Ok(message) => core.history.as_mut().and_then(|h| h.put(&message)),
+                    // The message it answers is gone (or was never held), or the service no
+                    // longer takes replies: it goes again at once, without the link.
+                    Err(error)
+                        if outgoing.reply.is_some()
+                            && (parent.is_none()
+                                || error.code() == Some(&ErrorCode::MessageNotFound)
+                                || (error.code() == Some(&ErrorCode::ChatFeatureOff)
+                                    && error.detail() == Some("replies"))) =>
+                    {
+                        core.history
+                            .as_mut()
+                            .and_then(|h| h.unlink_outgoing(&outgoing.nonce))
+                    }
                     Err(error) => {
-                        let failure = failure_of(&error);
+                        let (failure, rule) = failure_of(&error);
                         if let SocialError::ChatMuted { until } = error
                             && let Some(status) = core.chat_status.as_mut()
                         {
@@ -2338,13 +2762,12 @@ impl SocialService {
                             failure => core
                                 .history
                                 .as_mut()
-                                .and_then(|h| h.set_outgoing(&outgoing.nonce, Some(failure))),
+                                .and_then(|h| h.set_outgoing(&outgoing.nonce, Some(failure), rule)),
                         }
                     }
                 };
                 if let Some(change) = change {
-                    let view = change_view(&change, &viewer);
-                    core.chat_outbox.push(view);
+                    push_change(&mut core, &change);
                 }
             }
             self.emit_view();
@@ -2357,9 +2780,9 @@ impl SocialService {
     // --- reports and moderators' notes (MOD1) -------------------------------------------------
 
     /// "Rapor et": a player, a crew or a message (with the 20 messages before it this device
-    /// holds, as the moderators' context). `block` also blocks the player (players and messages).
-    /// A second report about the same thing while the first is open changes nothing; either way
-    /// the player hears "Raporun iletildi.".
+    /// holds, as the moderators' context; CHAT2: a reply with the message it answers). `block`
+    /// also blocks the player (players and messages). A second report about the same thing while
+    /// the first is open changes nothing; either way the player hears "Raporun iletildi.".
     pub async fn report(
         &self,
         target: ReportTarget,
@@ -2369,14 +2792,21 @@ impl SocialService {
     ) -> Result<()> {
         let (wire, blocked) = {
             let mut core = self.lock();
+            let extras = offered(&core).is_some();
             match &target {
-                ReportTarget::Player { id, plan } => {
+                ReportTarget::Player { id, plan, reaction } => {
                     let mut wire = serde_json::json!({ "kind": "player", "id": id });
                     // From a plan card (FIX2): the plan goes along as the moderators' evidence.
                     if let Some(plan) = plan.as_ref()
                         && core.state.offers(TEAM_FEATURE_PLAN_NOTES)
                     {
                         wire["plan"] = serde_json::json!({ "crew": plan.crew, "id": plan.id });
+                    }
+                    // From a reaction's list (CHAT2): the reaction, which the service checks.
+                    if let Some(reaction) = reaction.as_ref().filter(|_| extras) {
+                        wire["reaction"] = serde_json::json!({
+                            "conv": reaction.conv, "id": reaction.id, "e": reaction.e,
+                        });
                     }
                     (wire, Some(id.clone()))
                 }
@@ -2395,20 +2825,26 @@ impl SocialService {
                     let message = history
                         .message(conv, *id)
                         .ok_or(SocialError::InvalidInput("chat message"))?;
-                    let before: Vec<serde_json::Value> = history
-                        .before(conv, *id, REPORT_CONTEXT)
-                        .iter()
-                        .map(ChatMessage::sealed)
-                        .collect();
+                    let earlier = history.before(conv, *id, REPORT_CONTEXT);
+                    // A reply's quoted message goes along when it is not among those (CHAT2).
+                    let quoted = message
+                        .reply
+                        .as_ref()
+                        .filter(|reply| earlier.iter().all(|m| m.id != reply.id))
+                        .and_then(|reply| history.message(conv, reply.id))
+                        .map(|quoted| quoted.sealed());
+                    let before: Vec<serde_json::Value> =
+                        earlier.iter().map(ChatMessage::sealed).collect();
                     let sender = message.from.clone();
-                    (
-                        serde_json::json!({
-                            "kind": "message",
-                            "message": message.sealed(),
-                            "before": before,
-                        }),
-                        Some(sender),
-                    )
+                    let mut wire = serde_json::json!({
+                        "kind": "message",
+                        "message": message.sealed(),
+                        "before": before,
+                    });
+                    if let Some(quoted) = quoted {
+                        wire["quoted"] = quoted;
+                    }
+                    (wire, Some(sender))
                 }
             }
         };
@@ -2572,6 +3008,7 @@ fn reset(core: &mut Core) {
     core.groups_saved = None;
     core.history = None;
     core.chat_setup.since.store(0, Ordering::Relaxed);
+    core.chat_setup.catch_up.store(-1, Ordering::Relaxed);
     core.chat_status = None;
     core.chat_skew_ms = 0;
     core.chat_synced = false;
@@ -2579,6 +3016,10 @@ fn reset(core: &mut Core) {
     core.chat_outbox.clear();
     core.sending = false;
     core.too_fast.clear();
+    core.typing_sent.clear();
+    core.marks.clear();
+    core.reacting.clear();
+    core.cards_asked.clear();
     core.backup_waits_until = None;
 }
 
@@ -2630,6 +3071,9 @@ fn open_history(core: &mut Core) {
     core.chat_setup
         .since
         .store(history.sync_since(), Ordering::Relaxed);
+    core.chat_setup
+        .catch_up
+        .store(history.catch_up_since(), Ordering::Relaxed);
     core.history = Some(history);
     for event in std::mem::take(&mut core.chat_backlog) {
         let outcome = apply_chat(core, &event);
@@ -2638,21 +3082,18 @@ fn open_history(core: &mut Core) {
     }
 }
 
-/// What a chat event did: changes for the UI (in the outbox), news worth telling, and whether
-/// waiting messages may go now.
+/// What a chat event did: changes for the UI (in the outbox), news worth telling, whether
+/// waiting messages may go now, and someone writing ("yazıyor…", CHAT2).
 #[derive(Default)]
 struct ChatOutcome {
     notices: Vec<SocialNotice>,
     deliver: bool,
+    typing: Option<ChatTypingView>,
 }
 
 /// How the player sees a conversation's messages (their times, what they may still do).
 fn viewer(core: &Core, conv: &str) -> Viewer {
-    let me = core
-        .state
-        .me()
-        .map(|me| me.profile.id.clone())
-        .unwrap_or_default();
+    let me = my_id(core);
     let moderates = match Conversation::parse(conv) {
         Some(Conversation::Crew(team)) => core.state.crew(&team).is_some_and(|entry| {
             entry
@@ -2671,6 +3112,29 @@ fn viewer(core: &Core, conv: &str) -> Viewer {
     }
 }
 
+/// The signed-in player's id (empty before the profile is known).
+fn my_id(core: &Core) -> String {
+    core.state
+        .me()
+        .map(|me| me.profile.id.clone())
+        .unwrap_or_default()
+}
+
+/// What chat offers beyond CHAT1 on this connection (CHAT2), while it may show.
+fn offered(core: &Core) -> Option<ChatExtras> {
+    core.chat_status
+        .as_ref()
+        .filter(|status| core.chat_enabled && status.on)?
+        .offered()
+}
+
+/// A moderator muted the player in chat until a time still to come (the hub's clock).
+fn muted(status: &ChatStatus, skew_ms: i64) -> bool {
+    status
+        .muted_until
+        .is_some_and(|until| until + skew_ms / 1000 > unix_now())
+}
+
 /// The player may write in `conv` now: a crew they are in, or a friend (both ways).
 fn conversation_writable(state: &SocialState, conv: &str) -> bool {
     let Some(me) = state.me().map(|me| me.profile.id.as_str()) else {
@@ -2681,6 +3145,24 @@ fn conversation_writable(state: &SocialState, conv: &str) -> bool {
         Some(direct @ Conversation::Direct(..)) => direct
             .peer(me)
             .is_some_and(|peer| state.friends().iter().any(|f| f.id == peer)),
+        None => false,
+    }
+}
+
+/// Someone else in the conversation is online now: the friend, or a crewmate (CHAT2: only then
+/// does "yazıyor…" go).
+fn someone_online(state: &SocialState, conv: &str, me: &str) -> bool {
+    match Conversation::parse(conv) {
+        Some(direct @ Conversation::Direct(..)) => {
+            direct.peer(me).is_some_and(|peer| state.is_online(peer))
+        }
+        Some(Conversation::Crew(team)) => state.crew(&team).is_some_and(|entry| {
+            entry
+                .team
+                .members
+                .iter()
+                .any(|member| member.profile.id != me && state.is_online(&member.profile.id))
+        }),
         None => false,
     }
 }
@@ -2698,13 +3180,53 @@ fn sender_name(state: &SocialState, id: &str) -> Option<String> {
         .map(|m| m.profile.name().to_owned())
 }
 
+/// A message's key among the player's reactions on their way.
+fn reacting_key(conv: &str, id: i64) -> String {
+    format!("{conv}|{id}")
+}
+
+/// A change for the UI, sent with the next view: each entry with what its view needs from the
+/// history (the message a reply answers, a card).
+fn push_change(core: &mut Core, change: &Change) {
+    let viewer = viewer(core, &change.conv);
+    let view = match core.history.as_mut() {
+        Some(history) => change_view(change, &viewer, |entry| {
+            context_of(history, &change.conv, entry)
+        }),
+        None => change_view(change, &viewer, |_| Context::default()),
+    };
+    core.chat_outbox.push(view);
+}
+
+/// The change with the entries that quote message `id` (their quote changed with it; CHAT2).
+fn with_replies(history: &mut History, mut change: Change, id: i64) -> Change {
+    let conv = change.conv.clone();
+    for entry in history.replies_to(&conv, id) {
+        let key = entry.key();
+        if !change.upsert.iter().any(|e| e.key() == key) {
+            change.upsert.push(entry);
+        }
+    }
+    change
+}
+
+/// The player's read mark goes to the service now (CHAT2).
+fn mark_now(core: &mut Core, conv: &str, id: i64) {
+    if let Some(control) = &core.presence {
+        control.chat_read(conv, id);
+    }
+    if let Some(history) = core.history.as_mut() {
+        history.set_mark(conv, id);
+    }
+}
+
 /// Applies a chat event: the state of this connection, the history, the UI's changes.
 fn apply_chat(core: &mut Core, event: &PresenceEvent) -> ChatOutcome {
     let mut outcome = ChatOutcome::default();
     let now_ms = unix_now_ms();
     match event {
         PresenceEvent::Connected { chat, clock, .. } => {
-            core.chat_status = *chat;
+            core.chat_status = chat.clone();
             core.chat_synced = false;
             if let Some(clock) = clock {
                 core.chat_skew_ms = now_ms - clock * 1_000;
@@ -2712,15 +3234,34 @@ fn apply_chat(core: &mut Core, event: &PresenceEvent) -> ChatOutcome {
             return outcome;
         }
         PresenceEvent::ChatState(status) => {
-            core.chat_status = Some(*status);
+            core.chat_status = Some(status.clone());
             return outcome;
         }
-        PresenceEvent::ChatSynced { clock } => {
+        PresenceEvent::ChatSynced { clock, caught_up } => {
             if let Some(clock) = clock {
                 core.chat_skew_ms = now_ms - clock;
             }
             core.chat_synced = true;
+            // The week-long sync with chat extras is done (CHAT2): later ones start at the newest.
+            if *caught_up && let Some(history) = core.history.as_mut() {
+                history.set_caught_up();
+                core.chat_setup.catch_up.store(-1, Ordering::Relaxed);
+            }
             outcome.deliver = true;
+            return outcome;
+        }
+        // Someone writes (CHAT2): only while the player shares and sees it; never their own.
+        PresenceEvent::ChatTyping { conv, by } => {
+            let me = core.state.me();
+            let shown = offered(core).is_some_and(|extras| extras.typing)
+                && me.is_some_and(|me| me.privacy.shares_typing() && me.profile.id != *by)
+                && Conversation::parse(conv).is_some();
+            if shown {
+                outcome.typing = Some(ChatTypingView {
+                    conv: conv.clone(),
+                    by: by.clone(),
+                });
+            }
             return outcome;
         }
         PresenceEvent::Disconnected { .. } | PresenceEvent::Stopped(_) => {
@@ -2730,7 +3271,9 @@ fn apply_chat(core: &mut Core, event: &PresenceEvent) -> ChatOutcome {
         PresenceEvent::ChatMessage(_)
         | PresenceEvent::ChatEdited(_)
         | PresenceEvent::ChatDeleted { .. }
-        | PresenceEvent::ChatSync { .. } => {}
+        | PresenceEvent::ChatSync { .. }
+        | PresenceEvent::ChatReacted { .. }
+        | PresenceEvent::ChatRead { .. } => {}
         _ => return outcome,
     }
     if core.history.is_none() {
@@ -2739,10 +3282,20 @@ fn apply_chat(core: &mut Core, event: &PresenceEvent) -> ChatOutcome {
         }
         return outcome;
     }
+    // Marks of the friend's show only while the player shares (and so sees) them.
+    let sees_marks = core.state.me().is_some_and(|me| me.privacy.shares_read());
     let mut changes: Vec<Change> = Vec::new();
     let mut news: Option<ChatMessage> = None;
     if let Some(history) = core.history.as_mut() {
         let me = history.me().to_owned();
+        // A read mark: the player's own from another device, or the friend's ("Görüldü").
+        let mark = |history: &mut History, conv: &str, by: &str, id: i64| {
+            if by == me {
+                history.read_up_to(conv, id);
+            } else if sees_marks {
+                history.set_peer_read(conv, id);
+            }
+        };
         match event {
             PresenceEvent::ChatMessage(message) => {
                 if let Some(change) = history.put(message) {
@@ -2752,34 +3305,66 @@ fn apply_chat(core: &mut Core, event: &PresenceEvent) -> ChatOutcome {
                     changes.push(change);
                 }
             }
-            PresenceEvent::ChatEdited(message) => changes.extend(history.put(message)),
+            // An edit, a deletion: the replies that quote it show it as it is now.
+            PresenceEvent::ChatEdited(message) => {
+                if let Some(change) = history.put(message) {
+                    changes.push(with_replies(history, change, message.id));
+                }
+            }
             // A message this device holds turns into its tombstone (FIX2).
             PresenceEvent::ChatDeleted { conv, id, by, at } => {
-                changes.extend(history.delete(conv, *id, by, *at));
+                if let Some(change) = history.delete(conv, *id, by, *at) {
+                    changes.push(with_replies(history, change, *id));
+                }
             }
             PresenceEvent::ChatSync {
                 conv,
                 messages,
                 deleted,
+                reacted,
+                reads,
             } => {
                 let mut list = Vec::new();
                 for message in messages {
                     list.extend(history.put(message));
                 }
                 for deletion in deleted {
-                    list.extend(history.delete(conv, deletion.id, &deletion.by, deletion.at));
+                    if let Some(change) =
+                        history.delete(conv, deletion.id, &deletion.by, deletion.at)
+                    {
+                        list.push(with_replies(history, change, deletion.id));
+                    }
+                }
+                for message in reacted {
+                    list.extend(history.set_reactions(conv, message.id, &message.reactions));
+                }
+                for read in reads {
+                    mark(history, conv, &read.by, read.id);
                 }
                 changes.extend(merge(list));
             }
+            PresenceEvent::ChatReacted {
+                conv,
+                id,
+                by,
+                e,
+                on,
+            } => {
+                // The player's own reactions on their way settle with the service's answer.
+                let waiting = *by == me && core.reacting.contains_key(&reacting_key(conv, *id));
+                if !waiting {
+                    changes.extend(history.react(conv, *id, by, e, *on));
+                }
+            }
+            PresenceEvent::ChatRead { conv, by, id } => mark(history, conv, by, *id),
             _ => {}
         }
         core.chat_setup
             .since
             .store(history.sync_since(), Ordering::Relaxed);
     }
-    for change in changes {
-        let viewer = viewer(core, &change.conv);
-        core.chat_outbox.push(change_view(&change, &viewer));
+    for change in &changes {
+        push_change(core, change);
     }
     if let Some(message) = news {
         let viewer = viewer(core, &message.conv);
@@ -2787,9 +3372,14 @@ fn apply_chat(core: &mut Core, event: &PresenceEvent) -> ChatOutcome {
             Some(Conversation::Crew(team)) => Some(team),
             _ => None,
         };
+        let context = core
+            .history
+            .as_mut()
+            .map(|history| context_of(history, &message.conv, &Entry::Sent(message.clone())))
+            .unwrap_or_default();
         outcome.notices.push(SocialNotice::ChatMessage {
             conv: message.conv.clone(),
-            message: Box::new(message_view(&message, &viewer)),
+            message: Box::new(message_view(&message, &viewer, context)),
             name: sender_name(&core.state, &message.from),
             crew,
         });
@@ -2802,8 +3392,10 @@ fn chat_view(core: &mut Core, now: i64) -> Option<ChatView> {
     if !core.chat_enabled {
         return None;
     }
-    let status = core.chat_status?;
+    let status = core.chat_status.clone()?;
     let me = core.state.me()?.profile.id.clone();
+    let sees_marks = core.state.me().is_some_and(|me| me.privacy.shares_read());
+    let extras = status.offered();
     let skew = core.chat_skew_ms;
     let friends = core.state.friends();
     let blocked: HashSet<String> = core
@@ -2868,6 +3460,11 @@ fn chat_view(core: &mut Core, now: i64) -> Option<ChatView> {
         {
             titles.push((conv.to_owned(), name.clone()));
         }
+        let peer_read = (peer.is_some()
+            && sees_marks
+            && extras.is_some_and(|extras| extras.reads)
+            && meta.peer_read > 0)
+            .then_some(meta.peer_read);
         list.push(ConversationView {
             id: conv.to_owned(),
             peer,
@@ -2879,10 +3476,12 @@ fn chat_view(core: &mut Core, now: i64) -> Option<ChatView> {
                 text: last.t.clone(),
                 at: last.i + skew,
                 deleted_by: last.d.clone(),
+                sticker: last.s.clone(),
             }),
             unread: meta.unread,
             writable,
             failed: failed.contains(conv),
+            peer_read,
         });
     }
     // Every crew of the player's has its chat, messages or not.
@@ -2898,6 +3497,7 @@ fn chat_view(core: &mut Core, now: i64) -> Option<ChatView> {
                 unread: 0,
                 writable: true,
                 failed: false,
+                peer_read: None,
             });
         }
     }
@@ -2905,6 +3505,12 @@ fn chat_view(core: &mut Core, now: i64) -> Option<ChatView> {
         history.set_title(&conv, &title);
     }
     list.sort_by_key(|c| std::cmp::Reverse(c.last.as_ref().map_or(i64::MIN, |last| last.at)));
+    let sticker_sets = status
+        .stickers
+        .iter()
+        .filter(|set| stickers::sticker_sets().contains(set))
+        .cloned()
+        .collect();
     Some(ChatView {
         on: status.on,
         mailbox: status.mailbox,
@@ -2914,6 +3520,13 @@ fn chat_view(core: &mut Core, now: i64) -> Option<ChatView> {
             .map(|until| until + skew / 1_000)
             .filter(|until| *until > now),
         conversations: list,
+        links: status
+            .links
+            .as_ref()
+            .filter(|_| extras.is_some_and(|extras| extras.links))
+            .map(ChatLinksView::from),
+        extras: extras.map(ChatExtrasView::from),
+        sticker_sets,
     })
 }
 
@@ -3102,7 +3715,7 @@ mod tests {
                 .iter()
                 .filter_map(|update| match update {
                     SocialUpdate::Notice(notice) => Some(notice.clone()),
-                    SocialUpdate::View(_) | SocialUpdate::Chat(_) => None,
+                    SocialUpdate::View(_) | SocialUpdate::Chat(_) | SocialUpdate::Typing(_) => None,
                 })
                 .collect()
         }

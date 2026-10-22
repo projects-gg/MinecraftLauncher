@@ -4009,6 +4009,7 @@ dependencies = [
  "keyring",
  "qrcode",
  "rand 0.10.3",
+ "regex",
  "reqwest",
  "rustls",
  "rustls-platform-verifier",

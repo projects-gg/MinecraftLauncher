@@ -536,6 +536,10 @@ fn failure_of(failure: Option<SocialFailure>) -> SendFailure {
         Some(SocialFailure::Muted) => SendFailure::Muted,
         Some(SocialFailure::Off) => SendFailure::Off,
         Some(SocialFailure::NotAllowed) => SendFailure::NotAllowed,
+        // CHAT2's own daily limits and switches, until the overlay says them itself.
+        Some(SocialFailure::Stickers | SocialFailure::Links) => SendFailure::DailyLimit,
+        Some(SocialFailure::LimitedLinks) => SendFailure::Link,
+        Some(SocialFailure::FeatureOff) => SendFailure::Off,
         Some(SocialFailure::Connection) | None => SendFailure::Offline,
     }
 }
@@ -780,6 +784,8 @@ pub(crate) mod tests {
             privacy: Privacy {
                 share_server: false,
                 share_last_seen: true,
+                share_read: None,
+                share_typing: None,
             },
             backup: None,
             limited: None,
@@ -876,6 +882,7 @@ pub(crate) mod tests {
             unread,
             writable: true,
             failed: false,
+            peer_read: None,
         }
     }
 
@@ -975,6 +982,9 @@ pub(crate) mod tests {
                     conversation("d:f-ayse:me", Some("f-ayse"), None, 2),
                     conversation("c:t1", None, Some("t1"), 0),
                 ],
+                extras: None,
+                sticker_sets: Vec::new(),
+                links: None,
             }),
             notices: Vec::new(),
             restriction: None,
@@ -993,9 +1003,14 @@ pub(crate) mod tests {
             edited: false,
             state,
             failure: None,
+            failure_rule: None,
             edit_until: None,
             delete_until: None,
             deleted: None,
+            sticker: None,
+            reply: None,
+            reactions: Vec::new(),
+            card: None,
         }
     }
 

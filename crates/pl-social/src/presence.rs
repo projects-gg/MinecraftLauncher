@@ -11,6 +11,10 @@
 //! - Chat (CHAT1, [`ChatSetup`]): asked for in the capabilities; after every connect the task
 //!   syncs what changed since the device's newest message (continuing with the service's cursor
 //!   at once), then everything arrives live. Sends, edits and deletes are answered by `rid`.
+//! - Chat extras (CHAT2): replies, stickers, reactions, "yazıyor…" and read marks are asked for
+//!   with chat, one capability each; a frame of one the service did not take never goes out (an
+//!   older service would refuse it). The first sync after the device gained them reaches back a
+//!   week once ([`ChatSetup::catch_up`]). Link cards are asked on the same socket.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -38,22 +42,45 @@ use crate::auth::SessionToken;
 use crate::backoff::{Backoff, BackoffPolicy, jitter};
 use crate::error::{ErrorCode, Result, SocialError, parse_retry_after};
 use crate::model::{
-    ChatDeletion, ChatMessage, ChatRejection, ChatStatus, CrewMute, FriendGroups, JoinRequest,
-    LimitedKey, ModNotice, PublicProfile, StatusMode, Team, TeamExit, TeamInvite,
-    TeamNotifications,
+    ChatBody, ChatCaps, ChatDeletion, ChatMessage, ChatQuota, ChatReacted, ChatRejection,
+    ChatStatus, CrewMute, FriendGroups, JoinRequest, LimitedKey, LinkCard, LinkRule, ModNotice,
+    PublicProfile, Reaction, ReadMark, StatusMode, Team, TeamExit, TeamInvite, TeamNotifications,
 };
 use crate::protocol::{
     CHAT_CAP, CallAnswer, CallEndReason, ClientMessage, CrewCall, CrewPlan, Invite, LocalStatus,
-    PLANS_CAP, PlanAnswer, Presence, ServerMessage,
+    PLANS_CAP, PlanAnswer, Presence, ServerMessage, chat_caps,
 };
 use crate::tls;
 
 /// Chat on the presence socket (CHAT1). `since` is where the next sync starts (ms on the hub's
 /// clock: the device's newest message minus a minute); the owner keeps it up to date.
-#[derive(Debug, Clone, Default)]
+/// `catch_up` (CHAT2): where the first sync with chat extras starts instead (the newest message
+/// minus 7 days: stickers, reply links and reactions the device could not get before come then),
+/// or a negative number once the device has caught up.
+#[derive(Debug, Clone)]
 pub struct ChatSetup {
     pub since: Arc<AtomicI64>,
+    pub catch_up: Arc<AtomicI64>,
 }
+
+impl Default for ChatSetup {
+    fn default() -> Self {
+        Self::from_since(0)
+    }
+}
+
+impl ChatSetup {
+    /// Syncs from `since`, nothing to catch up.
+    pub fn from_since(since: i64) -> Self {
+        Self {
+            since: Arc::new(AtomicI64::new(since)),
+            catch_up: Arc::new(AtomicI64::new(-1)),
+        }
+    }
+}
+
+/// A link's card can take this long: the hub reads the page itself (3 s, up to 3 redirects).
+const UNFURL_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// A refused sync waits at least this long before it is asked again (one a minute per socket).
 const SYNC_RETRY_MIN: Duration = Duration::from_secs(5);
@@ -146,15 +173,41 @@ pub enum PresenceEvent {
         at: i64,
     },
     /// One conversation of a sync: messages sent or edited, and deletions, since the device's
-    /// newest (each message carries its `conv`).
+    /// newest (each message carries its `conv`); with CHAT2's capabilities the messages whose
+    /// reactions alone changed, and a direct conversation's read marks.
     ChatSync {
         conv: String,
         messages: Vec<ChatMessage>,
         deleted: Vec<ChatDeletion>,
+        reacted: Vec<ChatReacted>,
+        reads: Vec<ReadMark>,
     },
     /// The sync after a connect is over (`clock`: the hub's time in ms, when it said so).
+    /// `caught_up`: it was the device's first with chat extras, reaching back a week (CHAT2).
     ChatSynced {
         clock: Option<i64>,
+        caught_up: bool,
+    },
+    /// A reaction was given (`on`) or taken back, the player's own from another device too
+    /// (CHAT2).
+    ChatReacted {
+        conv: String,
+        id: i64,
+        by: String,
+        e: String,
+        on: bool,
+    },
+    /// Someone writes in a conversation ("yazıyor…", CHAT2): shown for 6 seconds after the last.
+    ChatTyping {
+        conv: String,
+        by: String,
+    },
+    /// A read mark moved (CHAT2): the player's own from another device, or in a direct
+    /// conversation the friend's.
+    ChatRead {
+        conv: String,
+        by: String,
+        id: i64,
     },
     /// A one-time note from moderators.
     Notice(ModNotice),
@@ -287,7 +340,9 @@ enum PlanRequest {
 enum ChatRequest {
     Send {
         conv: String,
-        text: String,
+        body: ChatBody,
+        /// The message answered, as held (CHAT2).
+        reply: Option<serde_json::Value>,
         nonce: String,
     },
     Edit {
@@ -297,6 +352,48 @@ enum ChatRequest {
     Delete {
         msg: serde_json::Value,
     },
+    /// CHAT2.
+    React {
+        conv: String,
+        id: i64,
+        e: String,
+        on: bool,
+    },
+    /// CHAT2.
+    Unfurl {
+        url: String,
+    },
+}
+
+impl ChatRequest {
+    /// The capability the request needs on this connection (CHAT2), when it needs one.
+    fn needs(&self, caps: ChatCaps) -> Option<&'static str> {
+        match self {
+            Self::Send {
+                body: ChatBody::Sticker(_),
+                ..
+            } if !caps.stickers => Some("stickers"),
+            Self::Send { reply: Some(_), .. } if !caps.replies => Some("replies"),
+            Self::React { .. } if !caps.reactions => Some("reactions"),
+            _ => None,
+        }
+    }
+}
+
+/// What the service answered a chat request with: the message as stored (a send, an edit), a
+/// message's reactions (a reaction), a link's card.
+#[derive(Debug, Default)]
+struct ChatAnswer {
+    msg: Option<ChatMessage>,
+    reactions: Option<Vec<Reaction>>,
+    card: Option<LinkCard>,
+}
+
+/// A chat frame that is never answered (CHAT2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Signal {
+    Typing { conv: String },
+    Read { conv: String, id: i64 },
 }
 
 enum Command {
@@ -310,8 +407,9 @@ enum Command {
     },
     Chat {
         request: ChatRequest,
-        reply: oneshot::Sender<Result<Option<ChatMessage>>>,
+        reply: oneshot::Sender<Result<ChatAnswer>>,
     },
+    Signal(Signal),
     Plan {
         request: PlanRequest,
         reply: oneshot::Sender<Result<Option<CrewPlan>>>,
@@ -328,7 +426,7 @@ impl Command {
             Self::Crew { reply, .. } => drop(reply.send(Err(error()))),
             Self::Chat { reply, .. } => drop(reply.send(Err(error()))),
             Self::Plan { reply, .. } => drop(reply.send(Err(error()))),
-            Self::Shutdown => {}
+            Self::Signal(_) | Self::Shutdown => {}
         }
     }
 }
@@ -432,12 +530,29 @@ impl PresenceControl {
     /// `friend_not_found`, `team_not_found`, `bad_request`) or `Unavailable`/`Network` while the
     /// connection is down or the answer was lost.
     pub async fn chat_send(&self, conv: &str, text: &str, nonce: &str) -> Result<ChatMessage> {
+        self.chat_post(conv, &ChatBody::Text(text.to_owned()), None, nonce)
+            .await
+    }
+
+    /// Sends a text or a sticker (CHAT2), maybe as a reply to `reply` (a message of the same
+    /// conversation, as held: its seals). Like [`PresenceControl::chat_send`]; without the
+    /// connection's `stickers` or `replies` it fails at once with `Refused` `chat_feature_off`
+    /// (the refusal's detail names the extra).
+    pub async fn chat_post(
+        &self,
+        conv: &str,
+        body: &ChatBody,
+        reply: Option<&ChatMessage>,
+        nonce: &str,
+    ) -> Result<ChatMessage> {
         self.chat(ChatRequest::Send {
             conv: conv.to_owned(),
-            text: text.to_owned(),
+            body: body.clone(),
+            reply: reply.map(|message| serde_json::json!({ "msg": message.sealed() })),
             nonce: nonce.to_owned(),
         })
         .await?
+        .msg
         .ok_or_else(|| SocialError::Protocol("a chat answer without its message".into()))
     }
 
@@ -448,6 +563,7 @@ impl PresenceControl {
             text: text.to_owned(),
         })
         .await?
+        .msg
         .ok_or_else(|| SocialError::Protocol("a chat answer without its message".into()))
     }
 
@@ -462,13 +578,74 @@ impl PresenceControl {
         .map(drop)
     }
 
-    async fn chat(&self, request: ChatRequest) -> Result<Option<ChatMessage>> {
+    /// Gives (`on`) or takes back the player's reaction `e` on message `id` (CHAT2); answers the
+    /// message's reactions as the player sees them. Everyone else in the conversation, the
+    /// player's other devices too, get [`PresenceEvent::ChatReacted`]. Fails with `Refused`
+    /// (`chat_reactions_full` with `mine` or `kinds`, `message_not_found`, `chat_feature_off`),
+    /// `ChatRejected` (`words`: 🖕), `ChatMuted` or `RateLimited` (the day's reactions: item).
+    pub async fn chat_react(
+        &self,
+        conv: &str,
+        id: i64,
+        e: &str,
+        on: bool,
+    ) -> Result<Vec<Reaction>> {
+        Ok(self
+            .chat(ChatRequest::React {
+                conv: conv.to_owned(),
+                id,
+                e: e.to_owned(),
+                on,
+            })
+            .await?
+            .reactions
+            .unwrap_or_default())
+    }
+
+    /// The card of a link (CHAT2), made by the hub (this computer never fetches the site). Fails
+    /// with `Refused` `unfurl_failed` (nothing to show; with the link rule as detail when the link
+    /// leads somewhere the rules refuse) or `chat_feature_off`, `Unavailable` (the hub is busy:
+    /// ask again after the wait), `RateLimited` (the day's cards).
+    pub async fn chat_unfurl(&self, url: &str) -> Result<LinkCard> {
+        self.request(
+            ChatRequest::Unfurl {
+                url: url.to_owned(),
+            },
+            self.invite_timeout.max(UNFURL_TIMEOUT),
+        )
+        .await?
+        .card
+        .ok_or_else(|| SocialError::Protocol("a card answer without its card".into()))
+    }
+
+    /// "Yazıyor…" in a conversation (CHAT2): never answered, dropped while the connection does
+    /// not take it. The caller keeps to one every 4 seconds.
+    pub fn chat_typing(&self, conv: &str) {
+        let _ = self.commands.try_send(Command::Signal(Signal::Typing {
+            conv: conv.to_owned(),
+        }));
+    }
+
+    /// The player has read a conversation up to message `id` (CHAT2): never answered, dropped
+    /// while the connection does not take it. The caller sends only forward.
+    pub fn chat_read(&self, conv: &str, id: i64) {
+        let _ = self.commands.try_send(Command::Signal(Signal::Read {
+            conv: conv.to_owned(),
+            id,
+        }));
+    }
+
+    async fn chat(&self, request: ChatRequest) -> Result<ChatAnswer> {
+        self.request(request, self.invite_timeout).await
+    }
+
+    async fn request(&self, request: ChatRequest, wait: Duration) -> Result<ChatAnswer> {
         let (reply, answer) = oneshot::channel();
         self.commands
             .send(Command::Chat { request, reply })
             .await
             .map_err(|_| SocialError::Unavailable { retry_after: None })?;
-        match timeout(self.invite_timeout, answer).await {
+        match timeout(wait, answer).await {
             Ok(Ok(result)) => result,
             Ok(Err(_)) => Err(SocialError::Network("presence connection closed".into())),
             Err(_) => Err(SocialError::Network("no answer from the service".into())),
@@ -848,7 +1025,7 @@ type Sink = SplitSink<Socket, Message>;
 enum Reply {
     Invite(oneshot::Sender<Result<InviteOutcome>>),
     Crew(oneshot::Sender<Result<()>>),
-    Chat(oneshot::Sender<Result<Option<ChatMessage>>>),
+    Chat(oneshot::Sender<Result<ChatAnswer>>),
     Plan(oneshot::Sender<Result<Option<CrewPlan>>>),
 }
 
@@ -883,6 +1060,7 @@ async fn session(
         keepalive: options.keepalive,
         chat: chat.cloned(),
         chat_on: false,
+        chat_caps: ChatCaps::default(),
         plans_on: false,
         sync: None,
         sync_again: None,
@@ -956,7 +1134,29 @@ async fn session(
                                 let _ = reply.send(Err(chat_off()));
                                 continue;
                             }
+                            // An extra this connection did not take: an older service would
+                            // refuse its frame (CHAT2).
+                            if let Some(extra) = request.needs(state.chat_caps) {
+                                let _ = reply.send(Err(feature_off(extra)));
+                                continue;
+                            }
                             (chat_message(request, rid), Reply::Chat(reply))
+                        }
+                        Command::Signal(signal) => {
+                            let frame = match signal {
+                                Signal::Typing { conv } if state.chat_on && state.chat_caps.typing => {
+                                    ClientMessage::ChatTyping { conv }
+                                }
+                                Signal::Read { conv, id } if state.chat_on && state.chat_caps.reads => {
+                                    ClientMessage::ChatRead { conv, id }
+                                }
+                                // Not on this connection: nothing to tell (CHAT2).
+                                Signal::Typing { .. } | Signal::Read { .. } => continue,
+                            };
+                            if send(&mut sink, &frame).await.is_err() {
+                                break RETRY_NOW;
+                            }
+                            continue;
                         }
                         Command::Plan { request, reply } => {
                             if !state.plans_on {
@@ -1012,14 +1212,35 @@ fn crew_message(request: CrewRequest, rid: u32) -> ClientMessage {
 
 fn chat_message(request: ChatRequest, rid: u32) -> ClientMessage {
     match request {
-        ChatRequest::Send { conv, text, nonce } => ClientMessage::Chat {
+        ChatRequest::Send {
             conv,
-            text,
+            body,
+            reply,
             nonce,
-            rid,
-        },
+        } => {
+            let (text, sticker) = match body {
+                ChatBody::Text(text) => (Some(text), None),
+                ChatBody::Sticker(sticker) => (None, Some(sticker)),
+            };
+            ClientMessage::Chat {
+                conv,
+                text,
+                sticker,
+                reply,
+                nonce,
+                rid,
+            }
+        }
         ChatRequest::Edit { msg, text } => ClientMessage::ChatEdit { msg, text, rid },
         ChatRequest::Delete { msg } => ClientMessage::ChatDelete { msg, rid },
+        ChatRequest::React { conv, id, e, on } => ClientMessage::ChatReact {
+            conv,
+            id,
+            e,
+            on,
+            rid,
+        },
+        ChatRequest::Unfurl { url } => ClientMessage::ChatUnfurl { url, rid },
     }
 }
 
@@ -1029,6 +1250,17 @@ fn chat_off() -> SocialError {
         status: 403,
         code: ErrorCode::ChatOff,
         message: String::new(),
+        detail: None,
+    }
+}
+
+/// A chat extra this connection does not have (CHAT2): as when Studio switched it off.
+fn feature_off(extra: &str) -> SocialError {
+    SocialError::Refused {
+        status: 403,
+        code: ErrorCode::ChatFeatureOff,
+        message: String::new(),
+        detail: Some(extra.to_owned()),
     }
 }
 
@@ -1057,6 +1289,7 @@ fn plans_off() -> SocialError {
         status: 400,
         code: ErrorCode::BadRequest,
         message: String::new(),
+        detail: None,
     }
 }
 
@@ -1075,10 +1308,13 @@ struct SessionState {
     chat: Option<ChatSetup>,
     /// The service took chat on this connection.
     chat_on: bool,
+    /// The chat extras the service took on this connection (CHAT2).
+    chat_caps: ChatCaps,
     /// The service took crew plans on this connection (TEAM5).
     plans_on: bool,
-    /// The sync under way: its `rid` and where it started (ms).
-    sync: Option<(u32, i64)>,
+    /// The sync under way: its `rid`, where it started (ms) and whether it is the week-long one
+    /// that catches up with chat extras (CHAT2).
+    sync: Option<(u32, i64, bool)>,
     /// A refused sync is asked again then.
     sync_again: Option<Instant>,
     /// The `bye` before the close said the account is restricted (until when; None for good).
@@ -1115,16 +1351,25 @@ async fn send_status(
 }
 
 /// Asks what changed since the device's newest message (after every connect, never on a timer).
+/// The first sync with chat extras reaches back a week instead (CHAT2).
 async fn start_sync(
     state: &mut SessionState,
     sink: &mut Sink,
 ) -> std::result::Result<(), tungstenite::Error> {
-    let since = match &state.chat {
-        Some(setup) if state.chat_on => setup.since.load(Ordering::Relaxed).max(0),
+    let (since, catching_up) = match &state.chat {
+        Some(setup) if state.chat_on => {
+            let since = setup.since.load(Ordering::Relaxed).max(0);
+            let catch_up = setup.catch_up.load(Ordering::Relaxed);
+            if state.chat_caps.any() && catch_up >= 0 {
+                (since.min(catch_up), true)
+            } else {
+                (since, false)
+            }
+        }
         _ => return Ok(()),
     };
     let rid = state.rid();
-    state.sync = Some((rid, since));
+    state.sync = Some((rid, since, catching_up));
     send(
         sink,
         &ClientMessage::ChatSync {
@@ -1172,10 +1417,19 @@ async fn on_text(
             if let Some(seconds) = keepalive_seconds.filter(|s| (15..=300).contains(s)) {
                 state.keepalive = state.keepalive.min(Duration::from_secs(seconds));
             }
-            // Chat flows only when it was asked for and the service took it.
+            // Chat flows only when it was asked for and the service took it; so do its extras.
             let chat_on =
                 state.chat.is_some() && caps.iter().any(|cap| cap == CHAT_CAP) && chat.is_some();
             state.chat_on = chat_on;
+            state.chat_caps = if chat_on {
+                chat_caps(&caps)
+            } else {
+                ChatCaps::default()
+            };
+            let chat = chat.map(|mut chat| {
+                chat.caps = state.chat_caps;
+                chat
+            });
             // Plans flow only when the service took them (an older one ignores the capability).
             state.plans_on = caps.iter().any(|cap| cap == PLANS_CAP);
             state.sync = None;
@@ -1273,6 +1527,8 @@ async fn on_text(
             conv,
             mut messages,
             deleted,
+            reacted,
+            reads,
         } if state.chat_on => {
             for message in &mut messages {
                 message.conv.clone_from(&conv);
@@ -1281,14 +1537,16 @@ async fn on_text(
                 conv,
                 messages,
                 deleted,
+                reacted,
+                reads,
             }
         }
         ServerMessage::ChatSynced { rid, now, more } => match state.sync {
-            Some((sync, since)) if rid == Some(sync) => {
+            Some((sync, since, catching_up)) if rid == Some(sync) => {
                 if let Some(after) = more {
                     // The rest at once, with the cursor just given.
                     let rid = state.rid();
-                    state.sync = Some((rid, since));
+                    state.sync = Some((rid, since, catching_up));
                     return send(
                         sink,
                         &ClientMessage::ChatSync {
@@ -1301,17 +1559,44 @@ async fn on_text(
                     .map_err(|_| RETRY_NOW);
                 }
                 state.sync = None;
-                PresenceEvent::ChatSynced { clock: now }
+                PresenceEvent::ChatSynced {
+                    clock: now,
+                    caught_up: catching_up,
+                }
             }
             _ => return Ok(()),
         },
-        ServerMessage::ChatState { chat } if state.chat_on => PresenceEvent::ChatState(chat),
+        ServerMessage::ChatState { mut chat } if state.chat_on => {
+            chat.caps = state.chat_caps;
+            PresenceEvent::ChatState(chat)
+        }
+        ServerMessage::ChatReacted {
+            conv,
+            id,
+            by,
+            e,
+            on,
+        } if state.chat_on && state.chat_caps.reactions => PresenceEvent::ChatReacted {
+            conv,
+            id,
+            by,
+            e,
+            on,
+        },
+        ServerMessage::ChatTyping { conv, by } if state.chat_on && state.chat_caps.typing => {
+            PresenceEvent::ChatTyping { conv, by }
+        }
+        ServerMessage::ChatRead { conv, by, id } if state.chat_on && state.chat_caps.reads => {
+            PresenceEvent::ChatRead { conv, by, id }
+        }
         ServerMessage::Notice { notice } => PresenceEvent::Notice(notice),
         ServerMessage::Ack {
             rid,
             delivered,
             msg,
             plan,
+            reactions,
+            card,
         } => {
             match rid.and_then(|rid| pending.remove(&rid)) {
                 Some(Reply::Invite(reply)) => {
@@ -1326,7 +1611,11 @@ async fn on_text(
                     let _ = reply.send(Ok(()));
                 }
                 Some(Reply::Chat(reply)) => {
-                    let _ = reply.send(Ok(msg.clone()));
+                    let _ = reply.send(Ok(ChatAnswer {
+                        msg: msg.clone(),
+                        reactions,
+                        card: card.map(|card| *card),
+                    }));
                 }
                 Some(Reply::Plan(reply)) => {
                     let _ = reply.send(Ok(plan));
@@ -1348,11 +1637,12 @@ async fn on_text(
             code,
             retry_after,
             reason,
+            rule,
             until,
             item,
         } => {
             if let Some(rid) = rid {
-                if state.sync.is_some_and(|(sync, _)| sync == rid) {
+                if state.sync.is_some_and(|(sync, _, _)| sync == rid) {
                     // A sync too soon after the last one (one a minute per socket): asked again
                     // after the wait. Whatever comes meanwhile comes live.
                     state.sync = None;
@@ -1363,17 +1653,21 @@ async fn on_text(
                         state.sync_again = Some(Instant::now() + wait);
                     }
                     return events
-                        .send(PresenceEvent::ChatSynced { clock: None })
+                        .send(PresenceEvent::ChatSynced {
+                            clock: None,
+                            caught_up: false,
+                        })
                         .map_err(gone);
                 }
                 if let Some(reply) = pending.remove(&rid) {
-                    reply.fail(socket_error(
-                        &code,
+                    reply.fail(socket_error(&SocketRefusal {
+                        code: &code,
                         retry_after,
-                        reason.as_deref(),
+                        reason: reason.as_deref(),
+                        rule: rule.as_deref(),
                         until,
-                        item.as_deref(),
-                    ));
+                        item: item.as_deref(),
+                    }));
                     return Ok(());
                 }
             }
@@ -1393,6 +1687,9 @@ async fn on_text(
         | ServerMessage::ChatDeleted { .. }
         | ServerMessage::ChatSync { .. }
         | ServerMessage::ChatState { .. }
+        | ServerMessage::ChatReacted { .. }
+        | ServerMessage::ChatTyping { .. }
+        | ServerMessage::ChatRead { .. }
         | ServerMessage::Plan { .. }
         | ServerMessage::Plans { .. }
         | ServerMessage::PlanRemoved { .. } => return Ok(()),
@@ -1400,23 +1697,43 @@ async fn on_text(
     events.send(event).map_err(gone)
 }
 
-/// The error of a socket request (an invite, a crew call, chat or plan request).
-fn socket_error(
-    code: &str,
+/// What an `error` frame says, as it said it.
+struct SocketRefusal<'a> {
+    code: &'a str,
     retry_after: Option<u64>,
-    reason: Option<&str>,
+    reason: Option<&'a str>,
+    rule: Option<&'a str>,
     until: Option<i64>,
-    item: Option<&str>,
-) -> SocialError {
+    item: Option<&'a str>,
+}
+
+/// The error of a socket request (an invite, a crew call, chat or plan request).
+fn socket_error(refusal: &SocketRefusal<'_>) -> SocialError {
+    let SocketRefusal {
+        code,
+        retry_after,
+        reason,
+        rule,
+        until,
+        item,
+    } = *refusal;
     let status = match code {
         "rate_limited" => {
             return SocialError::RateLimited {
                 retry_after: retry_after.map(Duration::from_secs),
+                item: item.map(ChatQuota::parse),
             };
         }
         "chat_rejected" => {
             return SocialError::ChatRejected {
                 reason: ChatRejection::parse(reason.unwrap_or_default()),
+                rule: rule.map(LinkRule::parse),
+            };
+        }
+        // The hub fetches too much right now: ask again after the wait (CHAT2).
+        "unfurl_busy" => {
+            return SocialError::Unavailable {
+                retry_after: retry_after.map(Duration::from_secs),
             };
         }
         // A plan's note (FIX2): chat's reasons, or none for its form (a line break, too long).
@@ -1438,16 +1755,28 @@ fn socket_error(
         "internal" => return SocialError::Unavailable { retry_after: None },
         "friend_not_found" | "team_not_found" | "call_not_found" | "message_not_found"
         | "plan_not_found" => 404,
-        "team_not_permitted" | "chat_off" | "chat_not_permitted" => 403,
-        "call_active" | "call_needs_server" | "call_server_hidden" | "chat_too_old"
-        | "plan_exists" => 409,
-        "plan_time" | "limit_team_plans" => 422,
+        "team_not_permitted" | "chat_off" | "chat_not_permitted" | "chat_feature_off" => 403,
+        "call_active"
+        | "call_needs_server"
+        | "call_server_hidden"
+        | "chat_too_old"
+        | "plan_exists"
+        | "chat_reactions_full" => 409,
+        "plan_time" | "limit_team_plans" | "unfurl_failed" => 422,
         _ => 400,
+    };
+    // What the refusal is about, where the service said (CHAT2).
+    let detail = match code {
+        "chat_feature_off" => item,
+        "chat_reactions_full" => reason,
+        "unfurl_failed" => rule,
+        _ => None,
     };
     SocialError::Refused {
         status,
         code: ErrorCode::parse(code),
         message: String::new(),
+        detail: detail.map(str::to_owned),
     }
 }
 
@@ -1782,20 +2111,31 @@ mod tests {
                 at_least: Duration::from_secs(300)
             }
         );
+        let refusal = |code| SocketRefusal {
+            code,
+            retry_after: None,
+            reason: None,
+            rule: None,
+            until: None,
+            item: None,
+        };
         assert!(matches!(
-            socket_error("rate_limited", Some(30), None, None, None),
-            SocialError::RateLimited { retry_after: Some(d) } if d == Duration::from_secs(30)
+            socket_error(&SocketRefusal {
+                retry_after: Some(30),
+                ..refusal("rate_limited")
+            }),
+            SocialError::RateLimited { retry_after: Some(d), item: None } if d == Duration::from_secs(30)
         ));
         assert_eq!(
-            socket_error("friend_not_found", None, None, None, None).code(),
+            socket_error(&refusal("friend_not_found")).code(),
             Some(&ErrorCode::FriendNotFound)
         );
         assert_eq!(
-            socket_error("call_active", None, None, None, None).code(),
+            socket_error(&refusal("call_active")).code(),
             Some(&ErrorCode::CallActive)
         );
         assert!(matches!(
-            socket_error("call_not_found", None, None, None, None),
+            socket_error(&refusal("call_not_found")),
             SocialError::Refused {
                 status: 404,
                 code: ErrorCode::CallNotFound,
@@ -1804,13 +2144,11 @@ mod tests {
         ));
         // Plans (TEAM5): a new Discord account is told what and until when.
         assert!(matches!(
-            socket_error(
-                "account_limited",
-                None,
-                None,
-                Some(1_792_600_000),
-                Some("crew_plans")
-            ),
+            socket_error(&SocketRefusal {
+                until: Some(1_792_600_000),
+                item: Some("crew_plans"),
+                ..refusal("account_limited")
+            }),
             SocialError::Limited {
                 item: LimitedKey::CrewPlans,
                 until: Some(1_792_600_000),
@@ -1818,14 +2156,75 @@ mod tests {
             }
         ));
         assert_eq!(
-            socket_error("plan_exists", None, None, None, None).code(),
+            socket_error(&refusal("plan_exists")).code(),
             Some(&ErrorCode::PlanExists)
         );
         assert!(matches!(
-            socket_error("plan_not_found", None, None, None, None),
+            socket_error(&refusal("plan_not_found")),
             SocialError::Refused {
                 status: 404,
                 code: ErrorCode::PlanNotFound,
+                ..
+            }
+        ));
+        // Chat extras (CHAT2): each refusal keeps what it is about.
+        assert!(matches!(
+            socket_error(&SocketRefusal {
+                reason: Some("link"),
+                rule: Some("shortener"),
+                ..refusal("chat_rejected")
+            }),
+            SocialError::ChatRejected {
+                reason: ChatRejection::Link,
+                rule: Some(LinkRule::Shortener)
+            }
+        ));
+        assert!(matches!(
+            socket_error(&SocketRefusal {
+                retry_after: Some(40_000),
+                item: Some("stickers"),
+                ..refusal("rate_limited")
+            }),
+            SocialError::RateLimited {
+                item: Some(ChatQuota::Stickers),
+                ..
+            }
+        ));
+        let full = socket_error(&SocketRefusal {
+            reason: Some("mine"),
+            ..refusal("chat_reactions_full")
+        });
+        assert_eq!(
+            (full.code(), full.detail()),
+            (Some(&ErrorCode::ChatReactionsFull), Some("mine"))
+        );
+        let off = socket_error(&SocketRefusal {
+            item: Some("stickers"),
+            ..refusal("chat_feature_off")
+        });
+        assert_eq!(off.detail(), Some("stickers"));
+        let failed = socket_error(&SocketRefusal {
+            rule: Some("grabber"),
+            ..refusal("unfurl_failed")
+        });
+        assert_eq!(
+            (failed.code(), failed.detail()),
+            (Some(&ErrorCode::UnfurlFailed), Some("grabber"))
+        );
+        assert!(matches!(
+            socket_error(&SocketRefusal {
+                retry_after: Some(2),
+                ..refusal("unfurl_busy")
+            }),
+            SocialError::Unavailable { retry_after: Some(d) } if d == Duration::from_secs(2)
+        ));
+        assert!(matches!(
+            socket_error(&SocketRefusal {
+                item: Some("chat_links"),
+                ..refusal("account_limited")
+            }),
+            SocialError::Limited {
+                item: LimitedKey::ChatLinks,
                 ..
             }
         ));
@@ -2231,9 +2630,11 @@ mod tests {
             seen.lock()
                 .unwrap()
                 .iter()
-                .any(|(k, v)| k == ":uri" && v == "/v1/presence?caps=callServer,crews,plans,chat"),
-            "chat is asked for"
+                .any(|(k, v)| k == ":uri"
+                    && v == "/v1/presence?caps=callServer,crews,plans,chat,replies,stickers,reactions,typing,reads"),
+            "chat and its extras are asked for"
         );
+        // A service from before CHAT2 takes chat alone.
         let mut greeting = hello();
         greeting["caps"] = serde_json::json!(["callServer", "crews", "chat"]);
         greeting["chat"] = serde_json::json!({"on": true, "mailbox": true, "mailboxBack": null,
@@ -2275,6 +2676,7 @@ mod tests {
                 conv,
                 messages,
                 deleted,
+                ..
             } => {
                 assert_eq!(
                     messages[0].conv, conv,
@@ -2287,7 +2689,8 @@ mod tests {
         assert_eq!(
             handle.next_event().await.unwrap(),
             PresenceEvent::ChatSynced {
-                clock: Some(1_792_521_000_000)
+                clock: Some(1_792_521_000_000),
+                caught_up: false
             }
         );
 
@@ -2335,9 +2738,33 @@ mod tests {
         assert!(matches!(
             edit.await.unwrap().unwrap_err(),
             SocialError::ChatRejected {
-                reason: ChatRejection::Link
+                reason: ChatRejection::Link,
+                rule: None
             }
         ));
+        // Without the extras on this connection, nothing of them goes out: a sticker or a
+        // reaction fails at once, typing and read marks stay home.
+        let control = handle.control();
+        let sticker = control
+            .chat_post(
+                "c:0123456789abcdef",
+                &ChatBody::Sticker("pl1/gg".into()),
+                None,
+                "n2",
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(
+            (sticker.code(), sticker.detail()),
+            (Some(&ErrorCode::ChatFeatureOff), Some("stickers"))
+        );
+        let reaction = control
+            .chat_react("c:0123456789abcdef", 1_792_521_000_500, "👍", true)
+            .await
+            .unwrap_err();
+        assert_eq!(reaction.detail(), Some("reactions"));
+        control.chat_typing("c:0123456789abcdef");
+        control.chat_read("c:0123456789abcdef", 1_792_521_000_500);
 
         // Live messages, edits and deletes.
         send_json(
@@ -2417,6 +2844,239 @@ mod tests {
         // The next frame the server reads is the status, not a sync.
         handle.set_status(LocalStatus::Singleplayer);
         assert_eq!(next_json(&mut server).await["t"], "status");
+        handle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn chat_extras_go_out_only_as_the_service_takes_them() {
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        // The device gains the extras: its first sync reaches back a week.
+        let setup = ChatSetup::from_since(1_792_520_000_000);
+        setup
+            .catch_up
+            .store(1_792_520_000_000 - 7 * 86_400_000, Ordering::Relaxed);
+        let mut handle = client
+            .session(token())
+            .connect_presence_with_chat(fast(), setup.clone());
+        let mut server = accept(&listener, None, seen).await.unwrap();
+        let mut greeting = hello();
+        greeting["caps"] = serde_json::json!([
+            "callServer",
+            "crews",
+            "chat",
+            "replies",
+            "stickers",
+            "reactions",
+            "typing",
+            "reads"
+        ]);
+        greeting["chat"] = serde_json::json!({"on": true, "mailbox": true, "mailboxBack": null,
+            "perDay": 500, "mutedUntil": null, "stickers": ["pl1"],
+            "extras": {"replies": true, "stickers": true, "reactions": true, "typing": true,
+                "reads": true, "links": true},
+            "links": {"rules": 2, "trusted": ["projects.gg"], "blocked": [], "invites": true}});
+        send_json(&mut server, greeting).await;
+        match handle.next_event().await.unwrap() {
+            PresenceEvent::Connected {
+                chat: Some(chat), ..
+            } => {
+                assert!(chat.caps.stickers && chat.caps.reads);
+                assert!(chat.offered().unwrap().reactions);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        let sync = next_json(&mut server).await;
+        assert_eq!(sync["since"], 1_792_520_000_000_i64 - 7 * 86_400_000);
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "chat_sync", "conv": "d:1:2",
+                "messages": [{"id": 1_792_520_100_000_i64, "from": "2", "sticker": "pl1/hi", "mac": "m"}],
+                "deleted": [], "reacted": [{"id": 9, "reactions": [{"e": "👍", "by": ["2"]}]}],
+                "reads": [{"by": "2", "id": 1_792_520_100_000_i64}]}),
+        )
+        .await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "chat_synced", "rid": sync["rid"], "now": 9}),
+        )
+        .await;
+        match handle.next_event().await.unwrap() {
+            PresenceEvent::ChatSync {
+                messages,
+                reacted,
+                reads,
+                ..
+            } => {
+                assert_eq!(messages[0].sticker.as_deref(), Some("pl1/hi"));
+                assert_eq!(reacted[0].id, 9);
+                assert_eq!(reads[0].by, "2");
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        assert_eq!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::ChatSynced {
+                clock: Some(9),
+                caught_up: true
+            }
+        );
+
+        let control = handle.control();
+        // A sticker answering a message goes with that message as held.
+        let answered = ChatMessage {
+            conv: "d:1:2".into(),
+            id: 1_792_520_100_000,
+            from: "2".into(),
+            mac: "m".into(),
+            sticker: Some("pl1/hi".into()),
+            ..ChatMessage::default()
+        };
+        let post = tokio::spawn({
+            let control = control.clone();
+            let answered = answered.clone();
+            async move {
+                control
+                    .chat_post(
+                        "d:1:2",
+                        &ChatBody::Sticker("pl1/gg".into()),
+                        Some(&answered),
+                        "n1",
+                    )
+                    .await
+            }
+        });
+        let frame = next_json(&mut server).await;
+        assert_eq!(frame["sticker"], "pl1/gg");
+        assert!(frame.get("text").is_none());
+        assert_eq!(frame["reply"]["msg"]["sticker"], "pl1/hi");
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "ack", "rid": frame["rid"], "msg": {"conv": "d:1:2",
+                "id": 1_792_520_200_000_i64, "from": "1", "sticker": "pl1/gg", "mac": "s",
+                "nonce": "n1", "reply": {"id": 1_792_520_100_000_i64, "from": "2"}, "rmac": "r"}}),
+        )
+        .await;
+        let stored = post.await.unwrap().unwrap();
+        assert_eq!(stored.reply.as_ref().map(|r| r.id), Some(1_792_520_100_000));
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::ChatMessage(m) if m.sticker.as_deref() == Some("pl1/gg")
+        ));
+
+        // A reaction is answered with the message's reactions.
+        let react = tokio::spawn({
+            let control = control.clone();
+            async move {
+                control
+                    .chat_react("d:1:2", 1_792_520_100_000, "😂", true)
+                    .await
+            }
+        });
+        let frame = next_json(&mut server).await;
+        assert_eq!(
+            (
+                frame["t"].as_str(),
+                frame["e"].as_str(),
+                frame["on"].as_bool()
+            ),
+            (Some("chat_react"), Some("😂"), Some(true))
+        );
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "ack", "rid": frame["rid"],
+                "reactions": [{"e": "😂", "by": ["1"]}]}),
+        )
+        .await;
+        assert_eq!(react.await.unwrap().unwrap()[0].by, ["1"]);
+
+        // Typing and read marks go out without a rid; nothing answers them.
+        control.chat_typing("d:1:2");
+        assert_eq!(
+            next_json(&mut server).await,
+            serde_json::json!({"t": "chat_typing", "conv": "d:1:2"})
+        );
+        control.chat_read("d:1:2", 1_792_520_100_000);
+        assert_eq!(
+            next_json(&mut server).await,
+            serde_json::json!({"t": "chat_read", "conv": "d:1:2", "id": 1_792_520_100_000_i64})
+        );
+
+        // A card, then a link the rules refuse.
+        let card = tokio::spawn({
+            let control = control.clone();
+            async move { control.chat_unfurl("https://youtu.be/dQw4w9WgXcQ").await }
+        });
+        let frame = next_json(&mut server).await;
+        assert_eq!(frame["t"], "chat_unfurl");
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "ack", "rid": frame["rid"], "card": {"url": "https://youtu.be/dQw4w9WgXcQ",
+                "site": "YouTube", "icon": "youtube", "kind": "video", "title": "Bir video"}}),
+        )
+        .await;
+        assert_eq!(card.await.unwrap().unwrap().site, "YouTube");
+        let refused = tokio::spawn({
+            let control = control.clone();
+            async move { control.chat_unfurl("https://grabify.link/x").await }
+        });
+        let frame = next_json(&mut server).await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "error", "rid": frame["rid"], "code": "unfurl_failed", "rule": "grabber"}),
+        )
+        .await;
+        let error = refused.await.unwrap().unwrap_err();
+        assert_eq!(error.detail(), Some("grabber"));
+
+        // What others do arrives as events.
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "chat_reacted", "conv": "d:1:2", "id": 1_792_520_100_000_i64,
+                "by": "2", "e": "😂", "on": true}),
+        )
+        .await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::ChatReacted { on: true, ref by, .. } if by == "2"
+        ));
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "chat_typing", "conv": "d:1:2", "by": "2"}),
+        )
+        .await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::ChatTyping { ref by, .. } if by == "2"
+        ));
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "chat_read", "conv": "d:1:2", "by": "2", "id": 1_792_520_200_000_i64}),
+        )
+        .await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::ChatRead {
+                id: 1_792_520_200_000,
+                ..
+            }
+        ));
+        // A new state keeps what the socket took.
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "chat_state", "chat": {"on": true, "mailbox": true,
+                "perDay": 500, "stickers": ["pl1"], "extras": {"replies": true, "stickers": false,
+                "reactions": true, "typing": true, "reads": true, "links": false}}}),
+        )
+        .await;
+        match handle.next_event().await.unwrap() {
+            PresenceEvent::ChatState(state) => {
+                let offered = state.offered().unwrap();
+                assert!(offered.replies && !offered.stickers && !offered.links);
+                assert!(state.caps.stickers, "the socket still takes them");
+            }
+            other => panic!("unexpected {other:?}"),
+        }
         handle.shutdown().await;
     }
 }

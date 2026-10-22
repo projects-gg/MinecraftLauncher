@@ -19,6 +19,8 @@ tracing = { workspace = true }
 sha2 = { workspace = true }
 base64 = { workspace = true }
 rand = { workspace = true }
+# Finding the links of a chat message as the service does (CHAT2: a message's card).
+regex = { workspace = true }
 # "Birlikte oynanan süre" counts by the local week and month.
 jiff = { workspace = true }
 # UI-facing views are exported to TypeScript by the launcher (tauri-specta).

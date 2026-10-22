@@ -121,6 +121,26 @@ pub struct Privacy {
     pub share_server: bool,
     /// Show a coarse "last seen" to friends (default on).
     pub share_last_seen: bool,
+    /// "Görüldü bilgisi" (CHAT2): read marks in direct messages, both ways (off: the player sees
+    /// none either). On by default; None from a service without chat extras.
+    #[serde(default)]
+    pub share_read: Option<bool>,
+    /// "Yazıyor bilgisi" (CHAT2): "yazıyor…", both ways. On by default; None from a service
+    /// without chat extras.
+    #[serde(default)]
+    pub share_typing: Option<bool>,
+}
+
+impl Privacy {
+    /// Read marks are shared (and seen): on unless the player turned them off.
+    pub fn shares_read(&self) -> bool {
+        self.share_read != Some(false)
+    }
+
+    /// "Yazıyor…" is shared (and seen): on unless the player turned it off.
+    pub fn shares_typing(&self) -> bool {
+        self.share_typing != Some(false)
+    }
 }
 
 /// Settings backup metadata, enough for "Bu bilgisayara ayarlarını getireyim mi?".
@@ -1017,6 +1037,12 @@ pub struct ProfileUpdate {
     pub share_server: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub share_last_seen: Option<bool>,
+    /// "Görüldü bilgisi" (CHAT2; an older service turns the field away).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub share_read: Option<bool>,
+    /// "Yazıyor bilgisi" (CHAT2; an older service turns the field away).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub share_typing: Option<bool>,
 }
 
 impl ProfileUpdate {
@@ -1037,6 +1063,16 @@ impl ProfileUpdate {
 
     pub fn share_last_seen(mut self, share: bool) -> Self {
         self.share_last_seen = Some(share);
+        self
+    }
+
+    pub fn share_read(mut self, share: bool) -> Self {
+        self.share_read = Some(share);
+        self
+    }
+
+    pub fn share_typing(mut self, share: bool) -> Self {
+        self.share_typing = Some(share);
         self
     }
 }
@@ -1063,6 +1099,12 @@ pub enum LimitedKey {
     CrewLink,
     /// Making crew plans (answering them is fine; TEAM5).
     CrewPlans,
+    /// Links in chat messages (CHAT2).
+    ChatLinks,
+    /// Stickers a day (CHAT2).
+    ChatStickers,
+    /// Reaction changes a day (CHAT2).
+    ChatReactions,
     Other,
 }
 
@@ -1076,6 +1118,9 @@ impl LimitedKey {
             "chat_messages" => Self::ChatMessages,
             "crew_link" => Self::CrewLink,
             "crew_plans" => Self::CrewPlans,
+            "chat_links" => Self::ChatLinks,
+            "chat_stickers" => Self::ChatStickers,
+            "chat_reactions" => Self::ChatReactions,
             _ => Self::Other,
         }
     }
@@ -1186,13 +1231,32 @@ pub struct ModNotice {
     pub reason: Option<ReportReason>,
 }
 
-// --- chat (CHAT1) -------------------------------------------------------------------------------
+// --- chat (CHAT1, CHAT2) -------------------------------------------------------------------------
+
+/// The message a reply answers (CHAT2): its id and sender. The service keeps only this link (with a
+/// seal of its own), never the quoted text: a device shows the message from its own history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ChatReplyRef {
+    pub id: i64,
+    pub from: String,
+}
+
+/// One kind of reaction on a message (CHAT2): a fully qualified emoji and who gave it, in the
+/// order they reacted. Only people the player sees are listed (counts may differ between players).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Reaction {
+    pub e: String,
+    #[serde(default)]
+    pub by: Vec<String>,
+}
 
 /// A chat message as the service seals it: crew chat `c:<team id>`, direct `d:<id>:<id>`. `id` is
 /// the hub's clock in milliseconds when it took the message, the order key within a conversation
 /// (an edit keeps it); `mac` proves the version is genuine and goes back unchanged in an edit, a
-/// delete or a report. `nonce` (the sender's own key) reaches only the sender's devices.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// delete or a report. `nonce` (the sender's own key) reaches only the sender's devices. CHAT2 adds
+/// a sticker in place of the text, the link to the message a reply answers with that link's seal,
+/// and the reactions (each only to sockets that take them).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatMessage {
     /// Missing inside a sync answer (the conversation is said once there).
@@ -1200,6 +1264,8 @@ pub struct ChatMessage {
     pub conv: String,
     pub id: i64,
     pub from: String,
+    /// The text; empty for a sticker.
+    #[serde(default)]
     pub text: String,
     pub mac: String,
     /// Milliseconds, when the message was edited ("düzenlendi").
@@ -1207,24 +1273,92 @@ pub struct ChatMessage {
     pub edited_at: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub nonce: Option<String>,
+    /// A Projects sticker (`pl1/gg`) in place of the text (CHAT2). Never edited.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sticker: Option<String>,
+    /// The message this one answers (CHAT2), and the seal of that link (22 characters).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reply: Option<ChatReplyRef>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rmac: Option<String>,
+    /// Its reactions as the player sees them (CHAT2); none when absent.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reactions: Vec<Reaction>,
 }
 
 impl ChatMessage {
-    /// The message as the service wants it back (an edit, a delete, a report): without the
-    /// sender's own nonce.
+    /// The message as the service wants it back (an edit, a delete, a report, the message a reply
+    /// answers): what its seals cover, a sticker in place of the text and a reply's link with its
+    /// own seal; without the sender's own nonce and the reactions.
     pub fn sealed(&self) -> serde_json::Value {
         let mut value = serde_json::json!({
             "conv": self.conv,
             "id": self.id,
             "from": self.from,
-            "text": self.text,
             "mac": self.mac,
         });
+        match &self.sticker {
+            Some(sticker) => value["sticker"] = sticker.as_str().into(),
+            None => value["text"] = self.text.as_str().into(),
+        }
         if let Some(at) = self.edited_at {
             value["editedAt"] = at.into();
         }
+        if let (Some(reply), Some(rmac)) = (&self.reply, &self.rmac) {
+            value["reply"] = serde_json::json!({ "id": reply.id, "from": reply.from });
+            value["rmac"] = rmac.as_str().into();
+        }
         value
     }
+}
+
+/// What a chat message carries: a text, or a Projects sticker (CHAT2, `pl1/gg`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ChatBody {
+    Text(String),
+    Sticker(String),
+}
+
+/// A message of a sync whose reactions changed while the message itself did not (CHAT2; an empty
+/// list once the last went).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ChatReacted {
+    pub id: i64,
+    #[serde(default)]
+    pub reactions: Vec<Reaction>,
+}
+
+/// A read mark (CHAT2): `by` has read a conversation up to message `id`.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ReadMark {
+    pub by: String,
+    pub id: i64,
+}
+
+/// A link's preview card as the hub made it (`ack.card`, CHAT2): fetched by the hub, never by this
+/// computer. `icon` names one of the launcher's own icons, `kind` the card's shape.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LinkCard {
+    pub url: String,
+    #[serde(default)]
+    pub site: String,
+    #[serde(default)]
+    pub icon: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub author: Option<String>,
+    #[serde(default)]
+    pub desc: Option<String>,
+    /// `data:image/jpeg|png|webp;base64,…` (trusted sites only), `w` × `h` pixels.
+    #[serde(default)]
+    pub image: Option<String>,
+    #[serde(default)]
+    pub w: Option<u32>,
+    #[serde(default)]
+    pub h: Option<u32>,
 }
 
 /// A deletion in a sync answer.
@@ -1239,8 +1373,9 @@ pub struct ChatDeletion {
 }
 
 /// `hello.chat` / `chat_state`: the service's switch, the mailbox, the player's daily limit and a
-/// moderator's mute.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+/// moderator's mute; CHAT2 adds which extras Studio has on, the sticker sets the service takes and
+/// the link rules. `caps` is no part of the message: the extras this connection's socket took.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatStatus {
     #[serde(default)]
@@ -1255,6 +1390,34 @@ pub struct ChatStatus {
     /// Unix seconds (the hub's clock): the player may not send until then.
     #[serde(default)]
     pub muted_until: Option<i64>,
+    /// The extras Studio has on now (CHAT2; None from an older service: none of them).
+    #[serde(default)]
+    pub extras: Option<ChatExtras>,
+    /// The sticker sets the service takes (CHAT2, `pl1`).
+    #[serde(default)]
+    pub stickers: Vec<String>,
+    /// The link rules and Studio's lists, while links are on (CHAT2).
+    #[serde(default)]
+    pub links: Option<ChatLinkRules>,
+    /// The extras this connection's socket took (`hello.caps`; the presence task fills it in).
+    #[serde(skip)]
+    pub caps: ChatCaps,
+}
+
+impl ChatStatus {
+    /// What the player may use beyond CHAT1 now: the socket took it and Studio has it on (links:
+    /// Studio's switch alone, a link is text). None from an older service.
+    pub fn offered(&self) -> Option<ChatExtras> {
+        let on = self.extras?;
+        Some(ChatExtras {
+            replies: on.replies && self.caps.replies,
+            stickers: on.stickers && self.caps.stickers,
+            reactions: on.reactions && self.caps.reactions,
+            typing: on.typing && self.caps.typing,
+            reads: on.reads && self.caps.reads,
+            links: on.links,
+        })
+    }
 }
 
 fn mailbox_on() -> bool {
@@ -1263,6 +1426,148 @@ fn mailbox_on() -> bool {
 
 fn chat_per_day() -> u32 {
     500
+}
+
+/// CHAT2's extras, one switch each: replies, stickers, reactions, "yazıyor…", read marks, links
+/// (one a newer service adds is left out; one it leaves out is off).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+pub struct ChatExtras {
+    #[serde(default)]
+    pub replies: bool,
+    #[serde(default)]
+    pub stickers: bool,
+    #[serde(default)]
+    pub reactions: bool,
+    #[serde(default)]
+    pub typing: bool,
+    #[serde(default)]
+    pub reads: bool,
+    #[serde(default)]
+    pub links: bool,
+}
+
+/// The chat capabilities a socket took (`hello.caps`, CHAT2): what the service sends it and takes
+/// from it. A socket without them gets exactly what CHAT1 sent.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ChatCaps {
+    pub replies: bool,
+    pub stickers: bool,
+    pub reactions: bool,
+    pub typing: bool,
+    pub reads: bool,
+}
+
+impl ChatCaps {
+    /// Any of CHAT2's capabilities.
+    pub fn any(&self) -> bool {
+        self.replies || self.stickers || self.reactions || self.typing || self.reads
+    }
+}
+
+/// The link rules the service applies (`hello.chat.links`, CHAT2): the rule table's version
+/// (`chat-links.json`), Studio's trusted hosts, blocked hosts and pages, and whether Discord
+/// invites may be linked.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ChatLinkRules {
+    #[serde(default)]
+    pub rules: u32,
+    #[serde(default)]
+    pub trusted: Vec<String>,
+    #[serde(default)]
+    pub blocked: Vec<String>,
+    #[serde(default = "invites_on")]
+    pub invites: bool,
+}
+
+fn invites_on() -> bool {
+    true
+}
+
+/// Why the service turned a link away (`chat_rejected` with `link` and `rule`, CHAT2; the rule
+/// table `chat-links.json`). One this version does not know reads as `Other`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum LinkRule {
+    /// Links are off (Studio's switch, or an older service).
+    Off,
+    /// Not a plain `https://` link with a host name, or an address hidden in the text.
+    Form,
+    /// More than 3 links.
+    Count,
+    Http,
+    Credentials,
+    Ip,
+    Port,
+    /// A brand's name on someone else's host, or a host that is not plain ASCII.
+    Lookalike,
+    Long,
+    Shortener,
+    Grabber,
+    /// Adult and gambling sites.
+    Adult,
+    Scam,
+    File,
+    /// A Discord invite while Studio keeps them off.
+    Invite,
+    /// Studio blocked the site or the page.
+    Blocked,
+    Other,
+}
+
+impl<'de> Deserialize<'de> for LinkRule {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(Self::parse(&String::deserialize(deserializer)?))
+    }
+}
+
+impl LinkRule {
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "off" => Self::Off,
+            "form" => Self::Form,
+            "count" => Self::Count,
+            "http" => Self::Http,
+            "credentials" => Self::Credentials,
+            "ip" => Self::Ip,
+            "port" => Self::Port,
+            "lookalike" => Self::Lookalike,
+            "long" => Self::Long,
+            "shortener" => Self::Shortener,
+            "grabber" => Self::Grabber,
+            "adult" => Self::Adult,
+            "scam" => Self::Scam,
+            "file" => Self::File,
+            "invite" => Self::Invite,
+            "blocked" => Self::Blocked,
+            _ => Self::Other,
+        }
+    }
+}
+
+/// A chat quota of its own that ran out for the day (`rate_limited` with `item`, CHAT2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChatQuota {
+    /// Stickers (100 a day; 20 for a limited account).
+    Stickers,
+    /// Reaction changes (300 a day; 100 for a limited account).
+    Reactions,
+    /// Messages with links (30 a day).
+    Links,
+    /// Link cards the hub fetched for the player (60 a day).
+    Unfurls,
+    Other,
+}
+
+impl ChatQuota {
+    pub fn parse(value: &str) -> Self {
+        match value {
+            "stickers" => Self::Stickers,
+            "reactions" => Self::Reactions,
+            "links" => Self::Links,
+            "unfurls" => Self::Unfurls,
+            _ => Self::Other,
+        }
+    }
 }
 
 /// Why the service turned a chat text away (`chat_rejected`). One this version does not know
@@ -1804,5 +2109,42 @@ mod tests {
             serde_json::to_string(&update).unwrap(),
             r#"{"status":"invisible","shareLastSeen":false}"#
         );
+        // CHAT2's two switches go only when set.
+        let chat = ProfileUpdate::default()
+            .share_read(false)
+            .share_typing(true);
+        assert_eq!(
+            serde_json::to_string(&chat).unwrap(),
+            r#"{"shareRead":false,"shareTyping":true}"#
+        );
+    }
+
+    #[test]
+    fn chat_privacy_and_link_rules_read_as_older_services_send_them() {
+        // An older service has neither switch: both count as on.
+        let older: Privacy =
+            serde_json::from_str(r#"{"shareServer":false,"shareLastSeen":true}"#).unwrap();
+        assert!(older.shares_read() && older.shares_typing());
+        let off: Privacy = serde_json::from_str(
+            r#"{"shareServer":false,"shareLastSeen":true,"shareRead":false,"shareTyping":true}"#,
+        )
+        .unwrap();
+        assert!(!off.shares_read() && off.shares_typing());
+        // A rule this version does not know is `other`, and every rule comes back as it went.
+        for (wire, rule) in [
+            ("\"shortener\"", LinkRule::Shortener),
+            ("\"invite\"", LinkRule::Invite),
+            ("\"hologram\"", LinkRule::Other),
+        ] {
+            assert_eq!(serde_json::from_str::<LinkRule>(wire).unwrap(), rule);
+        }
+        let shown = serde_json::to_string(&LinkRule::Lookalike).unwrap();
+        assert_eq!(shown, "\"lookalike\"");
+        assert_eq!(
+            serde_json::from_str::<LinkRule>(&shown).unwrap(),
+            LinkRule::Lookalike
+        );
+        assert_eq!(ChatQuota::parse("stickers"), ChatQuota::Stickers);
+        assert_eq!(LimitedKey::parse("chat_links"), LimitedKey::ChatLinks);
     }
 }

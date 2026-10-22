@@ -1,7 +1,8 @@
 //! Client for the Projects Launcher friends service (`services/social` in the Studio
 //! repository): Discord sign-in, friends, blocks, privacy, friend categories, teams, settings
 //! backup, the presence WebSocket, crew chat and direct messages with their history on this
-//! device, reports, and what moderators' measures mean for the player.
+//! device (CHAT2: replies, stickers, reactions, "yazıyor…", read marks, link cards), reports, and
+//! what moderators' measures mean for the player.
 //!
 //! Two layers:
 //! - [`SocialClient`] / [`Session`] / [`PresenceHandle`]: the HTTP API and the presence socket,
@@ -41,6 +42,7 @@
 
 mod auth;
 mod backoff;
+mod cards;
 mod chat;
 mod client;
 mod closed;
@@ -49,12 +51,14 @@ mod error;
 mod game;
 mod gate;
 mod history;
+mod links;
 mod model;
 mod presence;
 mod protocol;
 mod qr;
 mod service;
 mod state;
+mod stickers;
 mod store;
 mod tls;
 mod together;
@@ -65,7 +69,11 @@ mod testutil;
 
 pub use auth::{AUTH_DONE_LINK, LoginAttempt, SessionToken, SignedIn, auth_code_from_deep_link};
 pub use backoff::{Backoff, BackoffPolicy};
-pub use chat::{CHAT_LINES_MAX, CHAT_TEXT_MAX, DELETE_WINDOW_MS, EDIT_WINDOW_MS};
+pub use cards::{CARDS_MAX_BYTES, StoredCard};
+pub use chat::{
+    CARD_WINDOW_MS, CHAT_LINES_MAX, CHAT_TEXT_MAX, DELETE_WINDOW_MS, EDIT_WINDOW_MS,
+    REACT_WINDOW_MS, REACTION_KINDS, REACTIONS_PER_PLAYER,
+};
 pub use client::{CrewKey, PRODUCTION_URL, ReportAnswer, Session, SocialClient, SocialConfig};
 pub use codes::{
     CREW_CODE_PREFIX, FRIEND_DEEP_LINK_PREFIX, crew_code, crew_link_url,
@@ -75,15 +83,17 @@ pub use codes::{
 pub use error::{ErrorCode, Result, SocialError};
 pub use game::{GameActivity, LogSignal, log_signal, may_signal, server_label};
 pub use gate::service_url;
-pub use history::{HISTORY_LIMIT, crew_conversation, direct_conversation};
+pub use history::{HISTORY_LIMIT, crew_conversation, direct_conversation, same_emoji};
+pub use links::{find_links, first_link, host_of};
 pub use model::{
-    Avatar, BlockedUser, ChatDeletion, ChatMessage, ChatRejection, ChatStatus, CodeLookup,
-    CrewEntry, CrewLink, CrewMute, CrewMuteEdit, DEFAULT_CREW_LIMIT, DEFAULT_TEAM_COLOR,
-    DEFAULT_TEAM_FRAME, EditFeatures, FEATURE_CHAT, FIRST_EMBLEMS, Friend, FriendGroup,
-    FriendGroups, FriendRequest, FriendsOverview, JOIN_REQUEST_LIFETIME_SECS, JoinMode,
-    JoinOutcome, JoinRequest, LastSeen, Limited, LimitedItem, LimitedKey, Limits,
-    MAX_FRIEND_GROUPS, MAX_MUTE_SECS, Me, ModNotice, NoticeKind, PLAN_NOTE_MAX, PermissionLevel,
-    PermissionsEdit, Privacy, ProfileUpdate, PublicProfile, Relation, ReportReason, RequestOutcome,
+    Avatar, BlockedUser, ChatBody, ChatCaps, ChatDeletion, ChatExtras, ChatLinkRules, ChatMessage,
+    ChatQuota, ChatReacted, ChatRejection, ChatReplyRef, ChatStatus, CodeLookup, CrewEntry,
+    CrewLink, CrewMute, CrewMuteEdit, DEFAULT_CREW_LIMIT, DEFAULT_TEAM_COLOR, DEFAULT_TEAM_FRAME,
+    EditFeatures, FEATURE_CHAT, FIRST_EMBLEMS, Friend, FriendGroup, FriendGroups, FriendRequest,
+    FriendsOverview, JOIN_REQUEST_LIFETIME_SECS, JoinMode, JoinOutcome, JoinRequest, LastSeen,
+    Limited, LimitedItem, LimitedKey, Limits, LinkCard, LinkRule, MAX_FRIEND_GROUPS, MAX_MUTE_SECS,
+    Me, ModNotice, NoticeKind, PLAN_NOTE_MAX, PermissionLevel, PermissionsEdit, Privacy,
+    ProfileUpdate, PublicProfile, Reaction, ReadMark, Relation, ReportReason, RequestOutcome,
     SessionInfo, SettingsBackup, SettingsMeta, SettingsPrecondition, StatusMode,
     TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS, TEAM_FEATURE_CREW_FRIEND_REQUESTS,
     TEAM_FEATURE_LINK, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI, TEAM_FEATURE_MUTE,
@@ -97,21 +107,25 @@ pub use presence::{
     PresenceOptions, StopReason,
 };
 pub use protocol::{
-    CHAT_CAP, CallAnswer, CallEndReason, CallKind, CrewCall, CrewPlan, Game, GameLocation, Invite,
-    LocalStatus, OnlineStatus, PLANS_CAP, PRESENCE_CAPS, PlanAnswer, Presence, PresenceState,
+    CHAT_CAP, CHAT_EXTRA_CAPS, CallAnswer, CallEndReason, CallKind, CrewCall, CrewPlan, Game,
+    GameLocation, Invite, LocalStatus, OnlineStatus, PLANS_CAP, PRESENCE_CAPS, PlanAnswer,
+    Presence, PresenceState, REACTIONS_CAP, READS_CAP, REPLIES_CAP, STICKERS_CAP, TYPING_CAP,
     is_projects_host, presence_caps,
 };
 pub use qr::{QrPath, qr_path};
 pub use service::{ServiceConfig, SocialService, SocialUpdate, UpdateSink};
 pub use state::{Connection, INVITE_LIFETIME_SECS, SocialState};
+pub use stickers::{Sticker, sticker, sticker_sets, sticker_text};
 pub use store::{KEYRING_SERVICE, KeyringTokenStore, MemoryTokenStore, TokenStore};
 pub use together::{MAX_INTERVAL_SECS, Periods, Together, TogetherLog};
 pub use view::{
-    ActivityView, AuthPhase, CallAnswerView, CallOutcome, CallPlace, ChatChangeView,
-    ChatDeletedView, ChatMessageView, ChatPage, ChatView, ConversationView, CrewCallView,
-    CrewNotificationsView, FriendGroupsView, FriendView, GroupMember, InviteResult, InviteView,
-    JoinRequestView, JoinResult, LastMessageView, LimitedView, LookupView, MeView, MessageState,
-    ModNoticeView, PlanAnswerView, PlanView, ProfileView, ReportPlan, ReportTarget, RequestView,
-    RestrictionView, SendFailure, SendOutcome, SignInFailure, SocialNotice, SocialView,
-    TeamInviteView, TeamLookupView, TeamMemberView, TeamRequestView, TeamView,
+    ActivityView, AuthPhase, CallAnswerView, CallOutcome, CallPlace, CardIcon, CardKind, CardState,
+    ChatCardView, ChatChangeView, ChatDeletedView, ChatExtrasView, ChatLinksView, ChatMessageView,
+    ChatPage, ChatReactionView, ChatReplyView, ChatTypingView, ChatView, ConversationView,
+    CrewCallView, CrewNotificationsView, FriendGroupsView, FriendView, GroupMember, InviteResult,
+    InviteView, JoinRequestView, JoinResult, LastMessageView, LimitedView, LookupView, MeView,
+    MessageState, ModNoticeView, PlanAnswerView, PlanView, ProfileView, ReportPlan, ReportReaction,
+    ReportTarget, RequestView, RestrictionView, SendFailure, SendOutcome, SignInFailure,
+    SocialNotice, SocialView, TeamInviteView, TeamLookupView, TeamMemberView, TeamRequestView,
+    TeamView,
 };

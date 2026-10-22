@@ -5,8 +5,9 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::model::{
-    ChatDeletion, ChatMessage, ChatStatus, CrewMute, FriendGroups, JoinRequest, LastSeen,
-    ModNotice, PublicProfile, StatusMode, Team, TeamExit, TeamInvite, TeamNotifications,
+    ChatCaps, ChatDeletion, ChatMessage, ChatReacted, ChatStatus, CrewMute, FriendGroups,
+    JoinRequest, LastSeen, LinkCard, ModNotice, PublicProfile, Reaction, ReadMark, StatusMode,
+    Team, TeamExit, TeamInvite, TeamNotifications,
 };
 
 /// What this launcher understands on the presence socket (`GET /v1/presence?caps=…`): crew calls
@@ -20,12 +21,39 @@ pub const PLANS_CAP: &str = "plans";
 /// Crew chat and direct messages (CHAT1): asked for only while the signed content allows chat.
 pub const CHAT_CAP: &str = "chat";
 
-/// The capabilities to ask for: [`PRESENCE_CAPS`], with chat when it may show.
+/// CHAT2's chat capabilities, asked for beside `chat`, one each (the launcher, the phone app and
+/// the overlay update at different times): replies, stickers, reactions, "yazıyor…", read marks.
+pub const REPLIES_CAP: &str = "replies";
+pub const STICKERS_CAP: &str = "stickers";
+pub const REACTIONS_CAP: &str = "reactions";
+pub const TYPING_CAP: &str = "typing";
+pub const READS_CAP: &str = "reads";
+pub const CHAT_EXTRA_CAPS: [&str; 5] = [
+    REPLIES_CAP,
+    STICKERS_CAP,
+    REACTIONS_CAP,
+    TYPING_CAP,
+    READS_CAP,
+];
+
+/// The capabilities to ask for: [`PRESENCE_CAPS`], with chat and its extras when it may show.
 pub fn presence_caps(chat: bool) -> String {
     if chat {
-        format!("{PRESENCE_CAPS},{CHAT_CAP}")
+        format!("{PRESENCE_CAPS},{CHAT_CAP},{}", CHAT_EXTRA_CAPS.join(","))
     } else {
         PRESENCE_CAPS.to_owned()
+    }
+}
+
+/// The chat capabilities the service took (`hello.caps`, CHAT2).
+pub(crate) fn chat_caps(caps: &[String]) -> ChatCaps {
+    let has = |name: &str| caps.iter().any(|cap| cap == name);
+    ChatCaps {
+        replies: has(REPLIES_CAP),
+        stickers: has(STICKERS_CAP),
+        reactions: has(REACTIONS_CAP),
+        typing: has(TYPING_CAP),
+        reads: has(READS_CAP),
     }
 }
 
@@ -354,10 +382,16 @@ pub(crate) enum ClientMessage {
         call: String,
         rid: u32,
     },
-    /// A chat message; `nonce` makes a resend after a lost answer safe.
+    /// A chat message: a text, or a sticker (CHAT2), maybe answering another (`reply`:
+    /// `{"msg": <that message as held>}`, CHAT2). `nonce` makes a resend after a lost answer safe.
     Chat {
         conv: String,
-        text: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        text: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        sticker: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reply: Option<serde_json::Value>,
         nonce: String,
         rid: u32,
     },
@@ -377,6 +411,28 @@ pub(crate) enum ClientMessage {
         since: i64,
         #[serde(skip_serializing_if = "Option::is_none")]
         after: Option<String>,
+        rid: u32,
+    },
+    /// A reaction given (`on`) or taken back (CHAT2).
+    ChatReact {
+        conv: String,
+        id: i64,
+        e: String,
+        on: bool,
+        rid: u32,
+    },
+    /// "Yazıyor…" (CHAT2): no `rid`, never answered.
+    ChatTyping {
+        conv: String,
+    },
+    /// The player has read the conversation up to message `id` (CHAT2): no `rid`, never answered.
+    ChatRead {
+        conv: String,
+        id: i64,
+    },
+    /// The card of a link as written in a message or the composer (CHAT2).
+    ChatUnfurl {
+        url: String,
         rid: u32,
     },
     /// A new crew plan: a time (Unix seconds, a whole quarter of an hour) in one of the player's
@@ -585,13 +641,39 @@ pub(crate) enum ServerMessage {
         #[serde(default)]
         at: i64,
     },
-    /// One conversation of a sync answer.
+    /// One conversation of a sync answer; CHAT2 adds the messages whose reactions alone changed and
+    /// a direct conversation's read marks.
     ChatSync {
         conv: String,
         #[serde(default)]
         messages: Vec<ChatMessage>,
         #[serde(default)]
         deleted: Vec<ChatDeletion>,
+        #[serde(default)]
+        reacted: Vec<ChatReacted>,
+        #[serde(default)]
+        reads: Vec<ReadMark>,
+    },
+    /// A reaction was given (`on`) or taken back, also the player's own from another device
+    /// (CHAT2).
+    ChatReacted {
+        conv: String,
+        id: i64,
+        by: String,
+        e: String,
+        #[serde(default)]
+        on: bool,
+    },
+    /// Someone writes in that conversation (CHAT2).
+    ChatTyping {
+        conv: String,
+        by: String,
+    },
+    /// A read mark moved (CHAT2): the player's own from another device, or a friend's.
+    ChatRead {
+        conv: String,
+        by: String,
+        id: i64,
     },
     /// The end of a sync answer: `now` is the hub's clock (ms), `more` the cursor to go on with.
     ChatSynced {
@@ -620,6 +702,12 @@ pub(crate) enum ServerMessage {
         /// A plan as stored (making one).
         #[serde(default)]
         plan: Option<CrewPlan>,
+        /// A message's reactions as the player sees them (a reaction, CHAT2).
+        #[serde(default)]
+        reactions: Option<Vec<Reaction>>,
+        /// A link's card (CHAT2).
+        #[serde(default)]
+        card: Option<Box<LinkCard>>,
     },
     Error {
         #[serde(default)]
@@ -627,13 +715,17 @@ pub(crate) enum ServerMessage {
         code: String,
         #[serde(default, rename = "retryAfter")]
         retry_after: Option<u64>,
-        /// `chat_rejected`: `link`, `phone` or `words`.
+        /// `chat_rejected`: `link`, `phone` or `words`; `chat_reactions_full`: `mine` or `kinds`.
         #[serde(default)]
         reason: Option<String>,
+        /// `chat_rejected` with `link`, `unfurl_failed`: the link rule (CHAT2).
+        #[serde(default)]
+        rule: Option<String>,
         /// `chat_muted`, `account_limited`: Unix seconds.
         #[serde(default)]
         until: Option<i64>,
-        /// `account_limited`: what is limited (`crew_plans`).
+        /// `account_limited`: what is limited (`crew_plans`, `chat_links`); `rate_limited`: a
+        /// chat quota of its own (`stickers`, …); `chat_feature_off`: the extra (CHAT2).
         #[serde(default)]
         item: Option<String>,
     },
@@ -651,6 +743,7 @@ pub(crate) enum ServerMessage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::ChatReplyRef;
 
     #[test]
     fn status_messages() {
@@ -977,12 +1070,17 @@ mod tests {
     #[test]
     fn chat_frames_both_ways() {
         assert_eq!(presence_caps(false), "callServer,crews,plans");
-        assert_eq!(presence_caps(true), "callServer,crews,plans,chat");
+        assert_eq!(
+            presence_caps(true),
+            "callServer,crews,plans,chat,replies,stickers,reactions,typing,reads"
+        );
         let json = |message: &ClientMessage| serde_json::to_string(message).unwrap();
         assert_eq!(
             json(&ClientMessage::Chat {
                 conv: "c:0a1b2c3d4e5f6a7b".into(),
-                text: "Geliyorum".into(),
+                text: Some("Geliyorum".into()),
+                sticker: None,
+                reply: None,
                 nonce: "q8Zr3kT0aWbc".into(),
                 rid: 11
             }),
@@ -994,8 +1092,8 @@ mod tests {
             from: "1".into(),
             text: "Geliyrum".into(),
             mac: "m".repeat(22),
-            edited_at: None,
             nonce: Some("own".into()),
+            ..ChatMessage::default()
         };
         // The nonce stays home: the service wants the sealed message back as it sent it.
         let sealed: serde_json::Value = serde_json::from_str(&json(&ClientMessage::ChatEdit {
@@ -1055,9 +1153,10 @@ mod tests {
         .unwrap();
         assert!(matches!(
             sync,
-            ServerMessage::ChatSync { conv, messages, deleted }
+            ServerMessage::ChatSync { conv, messages, deleted, reacted, reads }
                 if conv.starts_with("c:") && messages[0].edited_at == Some(9)
                     && messages[0].conv.is_empty() && deleted[0].by == "staff"
+                    && reacted.is_empty() && reads.is_empty()
         ));
         let synced: ServerMessage =
             serde_json::from_str(r#"{"t":"chat_synced","rid":14,"now":1792521300000,"more":"k"}"#)
@@ -1245,5 +1344,185 @@ mod tests {
             }
             other => panic!("unexpected {other:?}"),
         }
+    }
+
+    #[test]
+    fn chat_extras_frames_both_ways() {
+        let json = |message: &ClientMessage| serde_json::to_string(message).unwrap();
+        // A sticker answering a reply: the message answered goes back as held, with both seals.
+        let answered = ChatMessage {
+            conv: "d:1:2".into(),
+            id: 1_792_521_000_123,
+            from: "2".into(),
+            text: "Geliyor musun?".into(),
+            mac: "a".repeat(22),
+            reply: Some(ChatReplyRef {
+                id: 1_792_521_000_100,
+                from: "1".into(),
+            }),
+            rmac: Some("r".repeat(22)),
+            reactions: vec![Reaction {
+                e: "👍".into(),
+                by: vec!["1".into()],
+            }],
+            ..ChatMessage::default()
+        };
+        let sealed = answered.sealed();
+        assert_eq!(
+            sealed["reply"],
+            serde_json::json!({"id": 1_792_521_000_100_i64, "from": "1"})
+        );
+        assert_eq!(sealed["rmac"], "r".repeat(22));
+        assert!(sealed.get("reactions").is_none() && sealed.get("nonce").is_none());
+        let frame: serde_json::Value = serde_json::from_str(&json(&ClientMessage::Chat {
+            conv: "d:1:2".into(),
+            text: None,
+            sticker: Some("pl1/gg".into()),
+            reply: Some(serde_json::json!({ "msg": sealed })),
+            nonce: "Hq2Vw9Lm3Pzt".into(),
+            rid: 19,
+        }))
+        .unwrap();
+        assert_eq!(frame["t"], "chat");
+        assert_eq!(frame["sticker"], "pl1/gg");
+        assert!(frame.get("text").is_none());
+        assert_eq!(frame["reply"]["msg"]["text"], "Geliyor musun?");
+        // A sticker is sealed over its id, in place of the text.
+        let sticker = ChatMessage {
+            conv: "c:0a1b2c3d4e5f6a7b".into(),
+            id: 5,
+            from: "1".into(),
+            mac: "s".repeat(22),
+            sticker: Some("pl1/gg".into()),
+            ..ChatMessage::default()
+        };
+        assert_eq!(
+            sticker.sealed(),
+            serde_json::json!({"conv": "c:0a1b2c3d4e5f6a7b", "id": 5, "from": "1",
+                "sticker": "pl1/gg", "mac": "s".repeat(22)})
+        );
+        assert_eq!(
+            json(&ClientMessage::ChatReact {
+                conv: "c:0a1b2c3d4e5f6a7b".into(),
+                id: 1_792_521_000_123,
+                e: "👍".into(),
+                on: true,
+                rid: 20
+            }),
+            r#"{"t":"chat_react","conv":"c:0a1b2c3d4e5f6a7b","id":1792521000123,"e":"👍","on":true,"rid":20}"#
+        );
+        assert_eq!(
+            json(&ClientMessage::ChatTyping {
+                conv: "d:1:2".into()
+            }),
+            r#"{"t":"chat_typing","conv":"d:1:2"}"#
+        );
+        assert_eq!(
+            json(&ClientMessage::ChatRead {
+                conv: "d:1:2".into(),
+                id: 7
+            }),
+            r#"{"t":"chat_read","conv":"d:1:2","id":7}"#
+        );
+        assert_eq!(
+            json(&ClientMessage::ChatUnfurl {
+                url: "https://youtu.be/dQw4w9WgXcQ".into(),
+                rid: 21
+            }),
+            r#"{"t":"chat_unfurl","url":"https://youtu.be/dQw4w9WgXcQ","rid":21}"#
+        );
+
+        // The state: which extras are on, the sticker sets, the link rules; the caps say which
+        // the socket took.
+        let hello: ServerMessage = serde_json::from_str(
+            r#"{"t":"hello","v":1,"status":"online","caps":["callServer","crews","chat","replies","stickers","typing"],
+                "chat":{"on":true,"mailbox":true,"mailboxBack":null,"perDay":500,"mutedUntil":null,
+                  "extras":{"replies":true,"stickers":true,"reactions":true,"typing":false,"reads":true,"links":true},
+                  "stickers":["pl1"],"links":{"rules":2,"trusted":["projects.gg"],"blocked":[],"invites":false}}}"#,
+        )
+        .unwrap();
+        match hello {
+            ServerMessage::Hello {
+                chat: Some(mut chat),
+                caps,
+                ..
+            } => {
+                assert_eq!(chat.stickers, ["pl1"]);
+                assert_eq!(
+                    chat.links.as_ref().map(|l| (l.rules, l.invites)),
+                    Some((2, false))
+                );
+                chat.caps = chat_caps(&caps);
+                let offered = chat.offered().unwrap();
+                // Typing is off in Studio; reactions and reads were not taken by the socket.
+                assert!(offered.replies && offered.stickers && offered.links);
+                assert!(!offered.typing && !offered.reactions && !offered.reads);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        // An older service: no extras at all.
+        let older: ChatStatus =
+            serde_json::from_str(r#"{"on":true,"mailbox":true,"perDay":500}"#).unwrap();
+        assert!(older.offered().is_none() && older.stickers.is_empty());
+
+        let reacted: ServerMessage = serde_json::from_str(
+            r#"{"t":"chat_reacted","conv":"c:0a1b2c3d4e5f6a7b","id":9,"by":"7","e":"😂","on":false}"#,
+        )
+        .unwrap();
+        assert!(
+            matches!(reacted, ServerMessage::ChatReacted { id: 9, ref by, on: false, .. } if by == "7")
+        );
+        let typing: ServerMessage =
+            serde_json::from_str(r#"{"t":"chat_typing","conv":"d:1:2","by":"2"}"#).unwrap();
+        assert!(matches!(typing, ServerMessage::ChatTyping { ref by, .. } if by == "2"));
+        let read: ServerMessage =
+            serde_json::from_str(r#"{"t":"chat_read","conv":"d:1:2","by":"2","id":7}"#).unwrap();
+        assert!(matches!(read, ServerMessage::ChatRead { id: 7, .. }));
+        let sync: ServerMessage = serde_json::from_str(
+            r#"{"t":"chat_sync","conv":"d:1:2","messages":[{"id":8,"from":"2","sticker":"pl1/hi","mac":"x",
+                "reactions":[{"e":"❤️","by":["1","2"]}]}],"deleted":[],
+                "reacted":[{"id":3,"reactions":[]}],"reads":[{"by":"1","id":8},{"by":"2","id":5}]}"#,
+        )
+        .unwrap();
+        match sync {
+            ServerMessage::ChatSync {
+                messages,
+                reacted,
+                reads,
+                ..
+            } => {
+                assert_eq!(messages[0].sticker.as_deref(), Some("pl1/hi"));
+                assert!(messages[0].text.is_empty());
+                assert_eq!(messages[0].reactions[0].by, ["1", "2"]);
+                assert!(reacted[0].reactions.is_empty());
+                assert_eq!(
+                    reads[1],
+                    ReadMark {
+                        by: "2".into(),
+                        id: 5
+                    }
+                );
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        let ack: ServerMessage =
+            serde_json::from_str(r#"{"t":"ack","rid":20,"reactions":[{"e":"👍","by":["7","1"]}]}"#)
+                .unwrap();
+        assert!(
+            matches!(ack, ServerMessage::Ack { reactions: Some(ref r), msg: None, .. } if r[0].by.len() == 2)
+        );
+        let card: ServerMessage = serde_json::from_str(
+            r#"{"t":"ack","rid":21,"card":{"url":"https://youtu.be/x","site":"YouTube","icon":"youtube",
+                "kind":"video","title":"Bir video","image":"data:image/jpeg;base64,AAAA","w":320,"h":180}}"#,
+        )
+        .unwrap();
+        assert!(matches!(card, ServerMessage::Ack { card: Some(ref c), .. } if c.w == Some(320)));
+        let refused: ServerMessage = serde_json::from_str(
+            r#"{"t":"error","rid":11,"code":"chat_rejected","reason":"link","rule":"shortener"}"#,
+        )
+        .unwrap();
+        assert!(
+            matches!(refused, ServerMessage::Error { rule: Some(ref r), .. } if r == "shortener")
+        );
     }
 }

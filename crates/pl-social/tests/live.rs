@@ -13,34 +13,45 @@
 //! `PL_SOCIAL_URL` overrides the service URL (default `http://127.0.0.1:8797/`). The chat tests
 //! need chat on in the service (its seal key `CHAT_MAC_KEY` in `.dev.vars`, as in the example).
 
-use std::sync::Arc;
-use std::sync::atomic::AtomicI64;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use pl_social::{
-    CallAnswer, CallEndReason, CallKind, ChatRejection, ChatSetup, CrewKey, CrewMuteEdit,
-    ErrorCode, FEATURE_CHAT, GameLocation, InviteOutcome, JoinMode, JoinOutcome, LimitedKey,
-    LocalStatus, LoginAttempt, PermissionLevel, PermissionsEdit, PlanAnswer, PresenceEvent,
-    PresenceHandle, PresenceOptions, PresenceState, ProfileUpdate, Relation, ReportReason,
-    RequestOutcome, Session, SettingsPrecondition, SocialClient, SocialConfig, SocialError,
-    StatusMode, StopReason, TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS,
+    CallAnswer, CallEndReason, CallKind, CardState, ChatBody, ChatMessageView, ChatReactionView,
+    ChatRejection, ChatSetup, Connection, ConversationView, CrewKey, CrewMuteEdit, ErrorCode,
+    FEATURE_CHAT, GameLocation, InviteOutcome, JoinMode, JoinOutcome, LimitedKey, LinkRule,
+    LocalStatus, LoginAttempt, MemoryTokenStore, MessageState, PermissionLevel, PermissionsEdit,
+    PlanAnswer, PresenceEvent, PresenceHandle, PresenceOptions, PresenceState, ProfileUpdate,
+    Relation, ReportReason, RequestOutcome, SendFailure, ServiceConfig, Session,
+    SettingsPrecondition, SocialClient, SocialConfig, SocialError, SocialService, SocialUpdate,
+    SocialView, StatusMode, StopReason, TEAM_FEATURE_CALL_SERVER, TEAM_FEATURE_CALLS,
     TEAM_FEATURE_CREW_FRIEND_REQUESTS, TEAM_FEATURE_LINK, TEAM_FEATURE_LOOK, TEAM_FEATURE_MULTI,
     TEAM_FEATURE_MUTE, TEAM_FEATURE_PLAN_NOTES, TEAM_FEATURE_PLANS, TEAM_FEATURE_REQUESTS,
     TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamNotifications, TeamNotificationsEdit, TeamRelation,
-    auth_code_from_deep_link, crew_code, crew_conversation, direct_conversation,
-    normalize_crew_link,
+    TokenStore, UpdateSink, auth_code_from_deep_link, crew_code, crew_conversation,
+    direct_conversation, normalize_crew_link,
 };
 use serde_json::json;
 use url::Url;
 
-fn client() -> SocialClient {
+/// The local service (`PL_SOCIAL_URL`), never another.
+fn base_url() -> Url {
     let base = std::env::var("PL_SOCIAL_URL").unwrap_or_else(|_| "http://127.0.0.1:8797/".into());
     let base = Url::parse(&base).expect("PL_SOCIAL_URL is a URL");
     assert!(
         matches!(base.host_str(), Some("127.0.0.1" | "localhost")),
         "integration tests only run against a local wrangler dev"
     );
-    SocialClient::new(SocialConfig::new(base, "ProjectsLauncher/integration-test")).unwrap()
+    base
+}
+
+fn client() -> SocialClient {
+    SocialClient::new(SocialConfig::new(
+        base_url(),
+        "ProjectsLauncher/integration-test",
+    ))
+    .unwrap()
 }
 
 /// A fresh fake Discord id (17+ digits) per call.
@@ -166,9 +177,7 @@ async fn pace() {
 
 /// Chat on the socket, syncing from `since` (0: a new device).
 fn chat_from(since: i64) -> ChatSetup {
-    ChatSetup {
-        since: Arc::new(AtomicI64::new(since)),
-    }
+    ChatSetup::from_since(since)
 }
 
 /// Connects with chat and waits for the connect and its first sync; returns the chat state.
@@ -275,7 +284,8 @@ async fn friends_presence_invites_settings_and_deletion() {
     assert!(matches!(
         limited,
         SocialError::RateLimited {
-            retry_after: Some(_)
+            retry_after: Some(_),
+            ..
         }
     ));
 
@@ -659,7 +669,8 @@ async fn crews_look_roles_and_calls() {
         assert!(matches!(
             soon,
             SocialError::RateLimited {
-                retry_after: Some(_)
+                retry_after: Some(_),
+                ..
             }
         ));
         let gone = leader_presence
@@ -1006,7 +1017,7 @@ async fn chat_messages_edits_deletes_syncs_and_reports() {
     ] {
         let refused = ayse_chat.chat_send(&conv, text, nonce).await.unwrap_err();
         assert!(
-            matches!(refused, SocialError::ChatRejected { reason } if reason == wanted),
+            matches!(refused, SocialError::ChatRejected { reason, .. } if reason == wanted),
             "{text}: {refused:?}"
         );
     }
@@ -1684,6 +1695,637 @@ async fn plan_notes_and_crewmate_requests() {
     member_presence.shutdown().await;
     leader_presence.shutdown().await;
     for session in [stranger, member, leader] {
+        session.delete_account().await.unwrap();
+    }
+}
+
+/// CHAT2: chat extras over the socket. Replies carry the message they answer with its seals,
+/// stickers go in place of text, reactions answer with the message's list and reach the other
+/// side, "yazıyor…" and read marks go without an answer, a device that just gained the extras
+/// catches up a week once, a reaction and a reply can be reported, and a link the rules refuse
+/// gets no card.
+#[tokio::test]
+#[ignore = "needs `pnpm dev` and `pnpm dev:discord` in services/social"]
+async fn chat_extras_replies_stickers_reactions_typing_reads_and_cards() {
+    let client = client();
+    client.health().await.expect("wrangler dev is running");
+    let ayse_id = new_user_id(31);
+    let bora_id = new_user_id(32);
+    let ayse = sign_in(&client, &ayse_id, "ayse").await;
+    let bora = sign_in(&client, &bora_id, "bora").await;
+    let ayse_me = ayse.me().await.unwrap();
+    bora.send_request(&ayse_me.friend_code).await.unwrap();
+    ayse.accept_request(&bora_id).await.unwrap();
+    let (mut ayse_live, chat) = connect_chat(&ayse).await;
+    let Some(offered) = chat.offered() else {
+        eprintln!("this service has no chat extras: nothing to try");
+        ayse_live.shutdown().await;
+        for session in [bora, ayse] {
+            session.delete_account().await.unwrap();
+        }
+        return;
+    };
+    assert!(offered.replies && offered.stickers && offered.reactions);
+    assert!(offered.typing && offered.reads && offered.links);
+    assert_eq!(chat.stickers, ["pl1"]);
+    assert_eq!(chat.links.as_ref().map(|links| links.rules), Some(2));
+    // Both share "Görüldü" and "Yazıyor" by default.
+    let privacy = ayse.me().await.unwrap().privacy;
+    assert!(privacy.shares_read() && privacy.shares_typing());
+    let (mut bora_live, _) = connect_chat(&bora).await;
+    let ayse_chat = ayse_live.control();
+    let bora_chat = bora_live.control();
+    let conv = direct_conversation(&ayse_id, &bora_id);
+
+    // Ayşe asks; Bora answers it: the answer carries the link and its own seal.
+    let asked = ayse_chat
+        .chat_send(&conv, "Akşam geliyor musun?", "x2ask")
+        .await
+        .unwrap();
+    expect(
+        &mut bora_live,
+        "the question",
+        |e| matches!(e, PresenceEvent::ChatMessage(m) if m.id == asked.id),
+    )
+    .await;
+    pace().await;
+    let answer = bora_chat
+        .chat_post(
+            &conv,
+            &ChatBody::Text("Geliyorum".into()),
+            Some(&asked),
+            "x2ans",
+        )
+        .await
+        .unwrap();
+    assert_eq!(answer.reply.as_ref().map(|r| r.id), Some(asked.id));
+    assert_eq!(answer.rmac.as_ref().map(String::len), Some(22));
+    match expect(
+        &mut ayse_live,
+        "the answer",
+        |e| matches!(e, PresenceEvent::ChatMessage(m) if m.id == answer.id),
+    )
+    .await
+    {
+        PresenceEvent::ChatMessage(message) => {
+            assert_eq!(
+                message.reply.as_ref().map(|r| (r.id, r.from.as_str())),
+                Some((asked.id, ayse_id.as_str()))
+            );
+            assert_eq!(message.rmac, answer.rmac);
+        }
+        _ => unreachable!(),
+    }
+    // An edit keeps the link (the answer goes back with both seals).
+    pace().await;
+    let edited = bora_chat
+        .chat_edit(&answer, "Geliyorum, 9'da")
+        .await
+        .unwrap();
+    assert_eq!(edited.reply.as_ref().map(|r| r.id), Some(asked.id));
+
+    // A sticker in place of text; it is never edited.
+    pace().await;
+    let sticker = bora_chat
+        .chat_post(&conv, &ChatBody::Sticker("pl1/gg".into()), None, "x2stk")
+        .await
+        .unwrap();
+    assert_eq!(sticker.sticker.as_deref(), Some("pl1/gg"));
+    assert!(sticker.text.is_empty());
+    expect(
+        &mut ayse_live,
+        "the sticker",
+        |e| matches!(e, PresenceEvent::ChatMessage(m) if m.sticker.as_deref() == Some("pl1/gg")),
+    )
+    .await;
+    let unknown = bora_chat
+        .chat_post(&conv, &ChatBody::Sticker("pl1/nope".into()), None, "x2bad")
+        .await
+        .unwrap_err();
+    assert_eq!(unknown.code(), Some(&ErrorCode::BadRequest));
+
+    // Ayşe reacts: the answer is the message's list; Bora hears it.
+    pace().await;
+    let reactions = ayse_chat
+        .chat_react(&conv, answer.id, "❤", true)
+        .await
+        .unwrap();
+    assert_eq!(reactions.len(), 1);
+    assert_eq!(reactions[0].e, "❤️", "the missing VS16 is added");
+    assert_eq!(reactions[0].by, [ayse_id.as_str()]);
+    expect(&mut bora_live, "the reaction", |e| {
+        matches!(e, PresenceEvent::ChatReacted { id, by, on: true, .. } if *id == answer.id && *by == ayse_id)
+    })
+    .await;
+    // Five different of hers at most; 🖕 never.
+    for emoji in ["😂", "🔥", "👍", "😮"] {
+        pace().await;
+        ayse_chat
+            .chat_react(&conv, answer.id, emoji, true)
+            .await
+            .unwrap();
+    }
+    pace().await;
+    let full = ayse_chat
+        .chat_react(&conv, answer.id, "🎉", true)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        (full.code(), full.detail()),
+        (Some(&ErrorCode::ChatReactionsFull), Some("mine"))
+    );
+    let rude = ayse_chat
+        .chat_react(&conv, answer.id, "🖕", true)
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        rude,
+        SocialError::ChatRejected {
+            reason: ChatRejection::Words,
+            ..
+        }
+    ));
+    pace().await;
+    let fewer = ayse_chat
+        .chat_react(&conv, answer.id, "😮", false)
+        .await
+        .unwrap();
+    assert_eq!(fewer.len(), 4);
+
+    // "Yazıyor…" and a read mark reach the other side, unanswered.
+    ayse_chat.chat_typing(&conv);
+    expect(
+        &mut bora_live,
+        "Ayşe writes",
+        |e| matches!(e, PresenceEvent::ChatTyping { by, .. } if *by == ayse_id),
+    )
+    .await;
+    // Writing moved Bora's own mark past what he answered: he reads her next message.
+    pace().await;
+    let later = ayse_chat.chat_send(&conv, "Tamam", "x2ok").await.unwrap();
+    expect(
+        &mut bora_live,
+        "her next message",
+        |e| matches!(e, PresenceEvent::ChatMessage(m) if m.id == later.id),
+    )
+    .await;
+    bora_chat.chat_read(&conv, later.id);
+    expect(&mut ayse_live, "Bora's read mark", |e| {
+        matches!(e, PresenceEvent::ChatRead { by, id, .. } if *by == bora_id && *id == later.id)
+    })
+    .await;
+
+    // Bora's new computer gains the extras: one sync from a week back brings the sticker, the
+    // reply link, the reactions and both marks.
+    let bora_new = sign_in(&client, &bora_id, "bora").await;
+    let setup = ChatSetup::from_since(later.id);
+    setup.catch_up.store(
+        later.id - 7 * 86_400_000,
+        std::sync::atomic::Ordering::Relaxed,
+    );
+    let mut bora_new_live = bora_new.connect_presence_with_chat(options(), setup);
+    match expect(
+        &mut bora_new_live,
+        "the catching-up sync",
+        |e| matches!(e, PresenceEvent::ChatSync { conv: at, .. } if *at == conv),
+    )
+    .await
+    {
+        PresenceEvent::ChatSync {
+            messages, reads, ..
+        } => {
+            let answered = messages.iter().find(|m| m.id == answer.id).unwrap();
+            assert_eq!(answered.reply.as_ref().map(|r| r.id), Some(asked.id));
+            assert_eq!(answered.reactions.len(), 4);
+            assert!(
+                messages
+                    .iter()
+                    .any(|m| m.sticker.as_deref() == Some("pl1/gg"))
+            );
+            assert!(
+                reads.iter().any(|r| r.by == bora_id),
+                "his own mark always: {reads:?}"
+            );
+        }
+        _ => unreachable!(),
+    }
+    assert!(matches!(
+        expect(&mut bora_new_live, "the sync's end", |e| {
+            matches!(e, PresenceEvent::ChatSynced { .. })
+        })
+        .await,
+        PresenceEvent::ChatSynced {
+            caught_up: true,
+            ..
+        }
+    ));
+
+    // A link the rules refuse gets no card, and the hub never fetches it.
+    let refused = bora_new_live
+        .control()
+        .chat_unfurl("https://grabify.link/abc")
+        .await
+        .unwrap_err();
+    assert_eq!(
+        (refused.code(), refused.detail()),
+        (Some(&ErrorCode::UnfurlFailed), Some("grabber"))
+    );
+    bora_new_live.shutdown().await;
+
+    // "Rapor et" on Bora's reply (with the message it answers) and on Ayşe's reaction.
+    let report = ayse
+        .report(
+            json!({ "kind": "message", "message": edited.sealed(), "before": [],
+                "quoted": asked.sealed() }),
+            ReportReason::Inappropriate,
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    assert!(!report.duplicate);
+    let reaction = bora
+        .report(
+            json!({ "kind": "player", "id": ayse_id,
+                "reaction": { "conv": conv, "id": answer.id, "e": "❤️" } }),
+            ReportReason::Harassment,
+            None,
+            false,
+        )
+        .await
+        .unwrap();
+    assert!(!reaction.duplicate);
+
+    // "Yazıyor bilgisi" off: Ayşe's typing reaches nobody any more.
+    ayse.update_profile(&ProfileUpdate::default().share_typing(false))
+        .await
+        .unwrap();
+    assert_eq!(ayse.me().await.unwrap().privacy.share_typing, Some(false));
+
+    // Bora deletes his sticker for everyone.
+    bora_chat.chat_delete(&sticker).await.unwrap();
+    expect(
+        &mut ayse_live,
+        "the sticker gone",
+        |e| matches!(e, PresenceEvent::ChatDeleted { id, .. } if *id == sticker.id),
+    )
+    .await;
+
+    ayse_live.shutdown().await;
+    bora_live.shutdown().await;
+    for session in [bora_new, bora, ayse] {
+        let _ = session.delete_account().await;
+    }
+}
+
+/// What a launcher's friends service told its UI.
+type Updates = Arc<Mutex<Vec<SocialUpdate>>>;
+
+/// A launcher signed in as `session`'s player with chat on, its history kept under `chat_dir`;
+/// waits until it is online with chat and its extras.
+async fn launcher(session: &Session, chat_dir: &Path) -> (SocialService, Updates) {
+    let tokens = Arc::new(MemoryTokenStore::new());
+    tokens.save(session.token()).unwrap();
+    let updates = Updates::default();
+    let sink: UpdateSink = {
+        let updates = updates.clone();
+        Arc::new(move |update: SocialUpdate| updates.lock().unwrap().push(update))
+    };
+    let service = SocialService::new(
+        reqwest::Client::new(),
+        ServiceConfig {
+            user_agent: "ProjectsLauncher/integration-test".into(),
+            device: "Integration PC".into(),
+            presence: options(),
+        },
+        tokens,
+        tokio::runtime::Handle::current(),
+        sink,
+    );
+    service.keep_chat_in(chat_dir);
+    service.set_chat_enabled(true);
+    service.configure(Some(base_url()));
+    until_view(&service, "online with chat and its extras", |view| {
+        view.loaded
+            && view.connection == Connection::Online
+            && view
+                .chat
+                .as_ref()
+                .and_then(|chat| chat.extras.as_ref())
+                .is_some_and(|extras| extras.replies && extras.reactions && extras.reads)
+    })
+    .await;
+    (service, updates)
+}
+
+/// Waits until the launcher's view is as `wanted`; returns it.
+async fn until_view(
+    service: &SocialService,
+    what: &str,
+    wanted: impl Fn(&SocialView) -> bool,
+) -> SocialView {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        let view = service.view();
+        if wanted(&view) {
+            return view;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "timed out waiting for {what}"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+fn conversation<'a>(view: &'a SocialView, conv: &str) -> Option<&'a ConversationView> {
+    view.chat
+        .as_ref()?
+        .conversations
+        .iter()
+        .find(|c| c.id == conv)
+}
+
+/// Waits until the launcher told its UI something `pick` finds (newest first).
+async fn until_update<T>(
+    updates: &Updates,
+    what: &str,
+    pick: impl Fn(&SocialUpdate) -> Option<T>,
+) -> T {
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        let found = updates.lock().unwrap().iter().rev().find_map(&pick);
+        if let Some(found) = found {
+            return found;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "timed out waiting for {what}"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+/// The newest message view of `conv` the launcher showed that `wanted` picks.
+async fn until_message(
+    updates: &Updates,
+    what: &str,
+    conv: &str,
+    wanted: impl Fn(&ChatMessageView) -> bool,
+) -> ChatMessageView {
+    until_update(updates, what, |update| match update {
+        SocialUpdate::Chat(change) if change.conv == conv => {
+            change.upsert.iter().rev().find(|m| wanted(m)).cloned()
+        }
+        _ => None,
+    })
+    .await
+}
+
+/// Waits until the newest view the launcher showed of message `id` of `conv` is as `wanted`.
+async fn until_latest(
+    updates: &Updates,
+    what: &str,
+    conv: &str,
+    id: i64,
+    wanted: impl Fn(&ChatMessageView) -> bool,
+) -> ChatMessageView {
+    let latest = |update: &SocialUpdate| match update {
+        SocialUpdate::Chat(change) if change.conv == conv => change
+            .upsert
+            .iter()
+            .rev()
+            .find(|m| m.id == Some(id))
+            .cloned(),
+        _ => None,
+    };
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        let newest = updates.lock().unwrap().iter().rev().find_map(latest);
+        if let Some(message) = newest.filter(|m| wanted(m)) {
+            return message;
+        }
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "timed out waiting for {what}"
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+}
+
+/// CHAT2 through the launcher's own friends service, the way its UI uses it: a reply shows the
+/// message it answers, a sticker goes as one, the player's reaction shows at once and reaches the
+/// friend (and so does taking it back), "yazıyor…" and "Görüldü" arrive, a link the rules refuse
+/// names its rule and gets no card, a link that goes gets its card, and the history keeps all of
+/// it for the next start.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs `pnpm dev` and `pnpm dev:discord` in services/social"]
+async fn the_launchers_chat_extras_end_to_end() {
+    let client = client();
+    client.health().await.expect("wrangler dev is running");
+    let ayse_id = new_user_id(41);
+    let bora_id = new_user_id(42);
+    let ayse = sign_in(&client, &ayse_id, "ayse").await;
+    let bora = sign_in(&client, &bora_id, "bora").await;
+    let ayse_code = ayse.me().await.unwrap().friend_code;
+    bora.send_request(&ayse_code).await.unwrap();
+    ayse.accept_request(&bora_id).await.unwrap();
+    let folders = tempfile::tempdir().unwrap();
+    let ayse_dir = folders.path().join("ayse");
+    let (ayse_app, ayse_saw) = launcher(&ayse, &ayse_dir).await;
+    let (bora_app, bora_saw) = launcher(&bora, &folders.path().join("bora")).await;
+    let conv = direct_conversation(&ayse_id, &bora_id);
+
+    // Ayşe asks; Bora answers it: both launchers show what the answer answers.
+    let question = "Akşam geliyor musun?";
+    ayse_app.chat_send(&conv, question).unwrap();
+    let asked = until_message(&bora_saw, "the question", &conv, |m| m.text == question).await;
+    let asked_id = asked.id.expect("a message that came has its id");
+    pace().await;
+    bora_app.chat_reply(&conv, "Geliyorum", asked_id).unwrap();
+    let answer = until_message(&ayse_saw, "the answer", &conv, |m| m.text == "Geliyorum").await;
+    let quote = answer
+        .reply
+        .clone()
+        .expect("the answer shows what it answers");
+    assert_eq!(
+        (quote.id, quote.text.as_deref(), quote.missing),
+        (asked_id, Some(question), false)
+    );
+    let answer_id = answer.id.unwrap();
+    let sent = until_message(&bora_saw, "his answer sent", &conv, |m| {
+        m.mine && m.text == "Geliyorum" && m.state == MessageState::Sent
+    })
+    .await;
+    assert_eq!(sent.reply.map(|r| r.id), Some(asked_id));
+
+    // A sticker goes as one; it is never edited.
+    pace().await;
+    bora_app.chat_sticker(&conv, "pl1/gg", None).unwrap();
+    until_message(&ayse_saw, "the sticker", &conv, |m| {
+        m.sticker.as_deref() == Some("pl1/gg")
+    })
+    .await;
+    let own = until_message(&bora_saw, "his sticker sent", &conv, |m| {
+        m.mine && m.sticker.is_some() && m.state == MessageState::Sent
+    })
+    .await;
+    assert!(own.text.is_empty() && own.edit_until.is_none() && own.delete_until.is_some());
+
+    // Ayşe's reaction shows at once and reaches Bora; so does taking it back.
+    ayse_app
+        .chat_react(&conv, answer_id, "👍", true)
+        .await
+        .unwrap();
+    let reacted = until_latest(&ayse_saw, "her reaction", &conv, answer_id, |m| {
+        !m.reactions.is_empty()
+    })
+    .await;
+    assert_eq!(
+        reacted.reactions,
+        [ChatReactionView {
+            e: "👍".into(),
+            by: vec![ayse_id.clone()],
+            mine: true
+        }]
+    );
+    let seen = until_latest(&bora_saw, "her reaction at his", &conv, answer_id, |m| {
+        !m.reactions.is_empty()
+    })
+    .await;
+    assert_eq!(
+        (seen.reactions[0].e.as_str(), seen.reactions[0].mine),
+        ("👍", false)
+    );
+    ayse_app
+        .chat_react(&conv, answer_id, "👍", false)
+        .await
+        .unwrap();
+    until_latest(&bora_saw, "her reaction gone", &conv, answer_id, |m| {
+        m.reactions.is_empty()
+    })
+    .await;
+
+    // "Yazıyor…": it goes once Bora shows online; his launcher tells its UI who writes where.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(15);
+    loop {
+        ayse_app.chat_typing(&conv);
+        let typing = bora_saw.lock().unwrap().iter().any(
+            |update| matches!(update, SocialUpdate::Typing(t) if t.conv == conv && t.by == ayse_id),
+        );
+        if typing {
+            break;
+        }
+        assert!(tokio::time::Instant::now() < deadline, "no typing came");
+        tokio::time::sleep(Duration::from_millis(200)).await;
+    }
+
+    // "Görüldü": Bora reads her newest message; her launcher shows his mark.
+    pace().await;
+    let newest = "Tamam, 9'da";
+    ayse_app.chat_send(&conv, newest).unwrap();
+    let last = until_message(&bora_saw, "her newest", &conv, |m| m.text == newest).await;
+    assert!(last.id.is_some());
+    bora_app.chat_read(&conv);
+    until_view(&bora_app, "nothing unread at his", |view| {
+        conversation(view, &conv).is_some_and(|c| c.unread == 0)
+    })
+    .await;
+    until_view(&ayse_app, "his \"Görüldü\"", |view| {
+        conversation(view, &conv).is_some_and(|c| c.peer_read == last.id)
+    })
+    .await;
+
+    // A link the rules refuse: the message stays here, failed, naming the rule; it gets no card.
+    pace().await;
+    let grabber = "https://grabify.link/abc";
+    let key = ayse_app
+        .chat_send(&conv, &format!("bak {grabber}"))
+        .unwrap();
+    let refused = until_message(&ayse_saw, "the refused link", &conv, |m| {
+        m.key == key && m.state == MessageState::Failed
+    })
+    .await;
+    assert_eq!(
+        (refused.failure, refused.failure_rule),
+        (Some(SendFailure::Link), Some(LinkRule::Grabber))
+    );
+    let card = ayse_app.chat_link_card(grabber).await.unwrap();
+    assert_eq!(
+        (card.state, card.rule),
+        (CardState::Refused, Some(LinkRule::Grabber))
+    );
+    until_view(&ayse_app, "the failed mark", |view| {
+        conversation(view, &conv).is_some_and(|c| c.failed)
+    })
+    .await;
+    ayse_app.chat_discard(&key);
+    until_view(&ayse_app, "the failed message gone", |view| {
+        conversation(view, &conv).is_some_and(|c| !c.failed)
+    })
+    .await;
+
+    // A link that goes: the message comes back with its card once it is on screen (the hub's;
+    // a plain one when the site cannot be reached from here).
+    pace().await;
+    let linked_text = "Bak: https://example.com/";
+    ayse_app.chat_send(&conv, linked_text).unwrap();
+    let linked = until_message(&bora_saw, "the link", &conv, |m| m.text == linked_text).await;
+    bora_app.chat_unfurl(&conv, &linked.key).await.unwrap();
+    let carded = until_latest(&bora_saw, "its card", &conv, linked.id.unwrap(), |m| {
+        m.card.is_some()
+    })
+    .await;
+    let card = carded.card.unwrap();
+    assert_eq!(card.url, "https://example.com/");
+    assert!(
+        matches!(card.state, CardState::Ready | CardState::Plain),
+        "{card:?}"
+    );
+    eprintln!("the example.com card came {:?}", card.state);
+
+    // "Görüldü bilgisi" off from the launcher: the profile says so.
+    bora_app
+        .update_profile(ProfileUpdate::default().share_read(false))
+        .await
+        .unwrap();
+    until_view(&bora_app, "\"Görüldü bilgisi\" off", |view| {
+        view.me
+            .as_ref()
+            .is_some_and(|me| me.privacy.share_read == Some(false))
+    })
+    .await;
+
+    // The next start shows it all from the history: the answer with its quote and without the
+    // reaction taken back, the sticker, his mark.
+    ayse_app.configure(None);
+    drop(ayse_app);
+    let (ayse_again, _) = launcher(&ayse, &ayse_dir).await;
+    let page = ayse_again.chat_page(&conv, None);
+    let kept = page
+        .messages
+        .iter()
+        .find(|m| m.id == Some(answer_id))
+        .expect("the answer is kept");
+    assert_eq!(
+        kept.reply.as_ref().map(|r| (r.id, r.text.as_deref())),
+        Some((asked_id, Some(question)))
+    );
+    assert!(kept.reactions.is_empty());
+    assert!(
+        page.messages
+            .iter()
+            .any(|m| m.sticker.as_deref() == Some("pl1/gg"))
+    );
+    let view = ayse_again.view();
+    assert_eq!(
+        conversation(&view, &conv).and_then(|c| c.peer_read),
+        last.id
+    );
+
+    ayse_again.configure(None);
+    bora_app.configure(None);
+    for session in [bora, ayse] {
         session.delete_account().await.unwrap();
     }
 }

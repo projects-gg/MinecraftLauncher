@@ -350,6 +350,21 @@ fn social_special(error: &pl_social::SocialError) -> Option<(&'static str, Strin
                     "Your Discord account is new, so you can't make plans yet.",
                     false,
                 ),
+                LimitedKey::ChatLinks => (
+                    "Discord hesabın yeni olduğu için sohbette bağlantı gönderemezsin.",
+                    "Your Discord account is new, so you can't send links in chat yet.",
+                    false,
+                ),
+                LimitedKey::ChatStickers => (
+                    "Discord hesabın yeni olduğu için bugün daha fazla çıkartma gönderemezsin.",
+                    "Your Discord account is new, so you can't send more stickers today.",
+                    true,
+                ),
+                LimitedKey::ChatReactions => (
+                    "Discord hesabın yeni olduğu için bugün daha fazla tepki veremezsin.",
+                    "Your Discord account is new, so you can't react more today.",
+                    true,
+                ),
                 LimitedKey::Other => (
                     "Discord hesabın yeni olduğu için bu şimdilik yapılamıyor.",
                     "Your Discord account is new, so this can't be done yet.",
@@ -372,10 +387,59 @@ fn social_special(error: &pl_social::SocialError) -> Option<(&'static str, Strin
                 },
             )
         }
-        E::ChatRejected { reason } => (
+        E::ChatRejected { reason, rule } => (
             "SOSYAL-SOHBET-METIN",
             match reason {
-                ChatRejection::Link => lang.pick("Bağlantı gönderilemez.", "Links can't be sent."),
+                // CHAT2: the link rule says why, in the service's own words for it.
+                ChatRejection::Link => {
+                    use pl_social::LinkRule as R;
+                    match rule {
+                        None => lang.pick("Bağlantı gönderilemez.", "Links can't be sent."),
+                        Some(R::Off) => {
+                            lang.pick("Bağlantılar şu an kapalı.", "Links are off right now.")
+                        }
+                        Some(R::Form) => {
+                            lang.pick("Bağlantı gönderilemez.", "Links can't be sent.")
+                        }
+                        Some(R::Count) => lang.pick(
+                            "Bir mesajda en çok 3 bağlantı olabilir.",
+                            "A message can have up to 3 links.",
+                        ),
+                        Some(R::Http) => lang.pick(
+                            "Yalnız https bağlantıları gönderilebilir.",
+                            "Only https links can be sent.",
+                        ),
+                        Some(R::Long) => {
+                            lang.pick("Bu bağlantı çok uzun.", "This link is too long.")
+                        }
+                        Some(R::Shortener) => lang.pick(
+                            "Kısaltılmış bağlantılar gönderilemez.",
+                            "Shortened links can't be sent.",
+                        ),
+                        Some(R::Lookalike) => lang.pick(
+                            "Bu bağlantı sahte bir siteye benziyor.",
+                            "This link looks like a fake site.",
+                        ),
+                        Some(R::File) => lang.pick(
+                            "Dosya bağlantıları gönderilemez.",
+                            "File links can't be sent.",
+                        ),
+                        Some(R::Invite) => lang.pick(
+                            "Discord davetleri şu an gönderilemez.",
+                            "Discord invites can't be sent right now.",
+                        ),
+                        Some(
+                            R::Credentials
+                            | R::Ip
+                            | R::Port
+                            | R::Grabber
+                            | R::Adult
+                            | R::Scam
+                            | R::Blocked
+                            | R::Other,
+                        ) => lang.pick("Bu bağlantı gönderilemez.", "This link can't be sent."),
+                    }
+                }
                 ChatRejection::Phone => lang.pick(
                     "Telefon numarası gönderilemez.",
                     "Phone numbers can't be sent.",

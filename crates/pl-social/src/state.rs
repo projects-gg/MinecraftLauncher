@@ -468,9 +468,17 @@ impl SocialState {
             | PresenceEvent::ChatEdited(_)
             | PresenceEvent::ChatDeleted { .. }
             | PresenceEvent::ChatSync { .. }
-            | PresenceEvent::ChatSynced { .. } => {}
+            | PresenceEvent::ChatSynced { .. }
+            | PresenceEvent::ChatReacted { .. }
+            | PresenceEvent::ChatTyping { .. }
+            | PresenceEvent::ChatRead { .. } => {}
         }
         notices
+    }
+
+    /// A friend or a teammate is online now (in the launcher or playing).
+    pub fn is_online(&self, id: &str) -> bool {
+        self.online.contains_key(id)
     }
 
     // --- moderators' notes (MOD1) -------------------------------------------------------------
@@ -1683,6 +1691,8 @@ mod tests {
             privacy: Privacy {
                 share_server: false,
                 share_last_seen: true,
+                share_read: None,
+                share_typing: None,
             },
             created_on: "2026-10-16".into(),
             settings: None,

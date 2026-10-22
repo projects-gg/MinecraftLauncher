@@ -1066,6 +1066,32 @@ export const commands = {
 	/**  "Geçmişi temizle": the conversation's messages leave this computer. */
 	socialChatClear: (conv: string) => __TAURI_INVOKE<void>("social_chat_clear", { conv }),
 	/**
+	 *  Sends a message as a reply to message `reply` (its id) of the same conversation. Returns its
+	 *  key, as `social_chat_send`.
+	 */
+	socialChatReply: (conv: string, text: string, reply: number) => typedError<string, CmdError>(__TAURI_INVOKE("social_chat_reply", { conv, text, reply })),
+	/**  Sends a Projects sticker (`pl1/gg`), maybe as a reply to message `reply`. Returns its key. */
+	socialChatSticker: (conv: string, sticker: string, reply: number | null) => typedError<string, CmdError>(__TAURI_INVOKE("social_chat_sticker", { conv, sticker, reply })),
+	/**
+	 *  Gives (`on`) or takes back the player's reaction `emoji` on message `id`: shown at once, put
+	 *  back when the service refuses.
+	 */
+	socialChatReact: (conv: string, id: number, emoji: string, on: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("social_chat_react", { conv, id, emoji, on })),
+	/**
+	 *  The player writes in a conversation (a key in a box with text and focus; not while editing,
+	 *  not while the window is away). Goes at most every 4 seconds, only when someone can see it.
+	 */
+	socialChatTyping: (conv: string) => __TAURI_INVOKE<void>("social_chat_typing", { conv }),
+	/**
+	 *  The card of a message's first link (`key`: the message's key on screen), once, when it comes
+	 *  on screen; the message comes back with its `card` on `social-chat`.
+	 */
+	socialChatUnfurl: (conv: string, key: string) => typedError<null, CmdError>(__TAURI_INVOKE("social_chat_unfurl", { conv, key })),
+	/**  The card of a link written in the composer (one plain `https` link, as written). */
+	socialChatLinkCard: (url: string) => typedError<ChatCardView, CmdError>(__TAURI_INVOKE("social_chat_link_card", { url })),
+	/**  "Görüldü bilgisi" and "Yazıyor bilgisi" (both ways: off, the player sees none either). */
+	socialSetChatPrivacy: (shareRead: boolean | null, shareTyping: boolean | null) => typedError<null, CmdError>(__TAURI_INVOKE("social_set_chat_privacy", { shareRead, shareTyping })),
+	/**
 	 *  "Rapor et": a player, a crew or a message, with a reason and an optional note (200
 	 *  characters); `block` also blocks the player.
 	 */
@@ -1459,6 +1485,30 @@ export type Cape = {
 	active: boolean,
 };
 
+/**
+ *  The launcher's own icon for a card's site (never the site's favicon); one it does not know
+ *  reads as `globe`.
+ */
+export type CardIcon = "projects" | "youtube" | "twitch" | "kick" | "modrinth" | "discord" | "instagram" | "tiktok" | "x" | "globe";
+
+/**
+ *  A card's shape: `video` and `stream` with a 16:9 picture, `project` with a square icon beside
+ *  the text, `page` text only (one this version does not know).
+ */
+export type CardKind = "video" | "stream" | "project" | "page";
+
+/**  What the hub said about a link (CHAT2). */
+export type CardState = 
+/**  Its card. */
+"ready" | 
+/**  Nothing to show: the plain card (the icon and the domain). */
+"plain" | 
+/**
+ *  The link leads somewhere the rules refuse: plain text, not pressable ("Bu bağlantı
+ *  açılamaz.").
+ */
+"refused";
+
 /**  Per-category counts for one action. */
 export type CategoryCounts = {
 	mods: number,
@@ -1473,6 +1523,29 @@ export type CategoryView = {
 	projectType: ModrinthProjectType,
 	/**  `categories`, `features`, `resolutions`, `performance impact`. */
 	header: string,
+};
+
+/**
+ *  A link's preview card (CHAT2 §9), made by the service's hub: this computer never fetches
+ *  anything from the site.
+ */
+export type ChatCardView = {
+	state: CardState,
+	/**  The link as written. */
+	url: string,
+	/**  A name to show ("YouTube"), else the domain. */
+	site: string,
+	icon: CardIcon,
+	kind: CardKind,
+	title: string | null,
+	author: string | null,
+	desc: string | null,
+	/**  A `data:image/…;base64,` picture (trusted sites only), `w` × `h` pixels. */
+	image: string | null,
+	w: number | null,
+	h: number | null,
+	/**  With `refused`: the rule, when the service said. */
+	rule: LinkRule | null,
 };
 
 /**
@@ -1495,6 +1568,31 @@ export type ChatDeletedView = {
 	by: string,
 	/**  Unix milliseconds on this computer's clock, when known. */
 	at: number | null,
+};
+
+/**  What chat offers beyond CHAT1 now (CHAT2), one switch each. */
+export type ChatExtrasView = {
+	replies: boolean,
+	stickers: boolean,
+	reactions: boolean,
+	/**  "Yazıyor…". */
+	typing: boolean,
+	/**  Read marks ("Görüldü" in direct messages). */
+	reads: boolean,
+	/**  Plain `https` links that pass the rules (and their cards). */
+	links: boolean,
+};
+
+/**
+ *  The link rules the service applies now (CHAT2): the rule table's version (`chat-links.json`;
+ *  the composer's copy may be older), Studio's trusted hosts (opened without the warning) and
+ *  blocked hosts or pages, whether Discord invites may be linked.
+ */
+export type ChatLinksView = {
+	rules: number,
+	trusted: string[],
+	blocked: string[],
+	invites: boolean,
 };
 
 export type ChatLogFilter = "all" | "messages" | "chat";
@@ -1524,7 +1622,12 @@ export type ChatMessageView = {
 	edited: boolean,
 	state: MessageState,
 	failure: SendFailure | null,
-	/**  Unix ms (this computer): the player may edit it until then (their own, sent; 15 minutes). */
+	/**  With `failure` `link`: the link rule that refused it, when the service said (CHAT2). */
+	failureRule: LinkRule | null,
+	/**
+	 *  Unix ms (this computer): the player may edit it until then (their own, sent; 15 minutes;
+	 *  never a sticker).
+	 */
 	editUntil: number | null,
 	/**
 	 *  Unix ms: the player may delete it for everyone until then (their own, or any in a crew
@@ -1536,6 +1639,17 @@ export type ChatMessageView = {
 	 *  nothing may be done with it).
 	 */
 	deleted: ChatDeletedView | null,
+	/**  A sticker (`pl1/gg`) in place of the text (CHAT2; `text` is empty). */
+	sticker: string | null,
+	/**  The message it answers, as this computer holds it (CHAT2). */
+	reply: ChatReplyView | null,
+	/**
+	 *  Its reactions as the player sees them (CHAT2): kinds in the order first given, people in
+	 *  the order they reacted.
+	 */
+	reactions: ChatReactionView[],
+	/**  Its first link's card, once asked for (CHAT2). */
+	card: ChatCardView | null,
 };
 
 /**  A conversation's newest messages (or those before a given one), oldest first. */
@@ -1544,6 +1658,47 @@ export type ChatPage = {
 	messages: ChatMessageView[],
 	/**  Older messages remain on this device. */
 	more: boolean,
+};
+
+/**  One kind of reaction on a message (CHAT2). */
+export type ChatReactionView = {
+	/**  One fully qualified emoji. */
+	e: string,
+	/**  User ids, in the order they reacted. */
+	by: string[],
+	/**  The player is among them. */
+	mine: boolean,
+};
+
+/**
+ *  The message a reply answers (CHAT2): the service keeps only the link; what it said comes from
+ *  this computer's own history.
+ */
+export type ChatReplyView = {
+	id: number,
+	/**  Its sender. */
+	from: string,
+	/**  Its key on screen, when this computer holds it (to scroll to it). */
+	key: string | null,
+	/**  What it said, as held here. */
+	text: string | null,
+	sticker: string | null,
+	/**  Deleted for everyone: "Mesaj silindi". */
+	deleted: boolean,
+	/**
+	 *  Not on this computer (older than its history, cleared, or from someone no longer seen):
+	 *  "Önceki bir mesaj", nothing to scroll to.
+	 */
+	missing: boolean,
+};
+
+/**
+ *  Someone writes in a conversation ("yazıyor…", CHAT2; the `social-chat-typing` event): shown
+ *  for 6 seconds after the last, ended at once by their message or their going offline.
+ */
+export type ChatTypingView = {
+	conv: string,
+	by: string,
 };
 
 /**  Crew chat and direct messages (CHAT1). */
@@ -1564,6 +1719,21 @@ export type ChatView = {
 	 *  without messages last).
 	 */
 	conversations: ConversationView[],
+	/**
+	 *  What chat offers beyond CHAT1 now (CHAT2): the service took the capability and Studio has
+	 *  it on (links: Studio's switch). None from an older service: none of them.
+	 */
+	extras: ChatExtrasView | null,
+	/**
+	 *  The sticker sets the service takes and this launcher has (`pl1`); stickers of any other
+	 *  set show as a quiet box.
+	 */
+	stickerSets: string[],
+	/**
+	 *  The link rules the service applies now, while links are on (CHAT2): the composer checks
+	 *  with them, and a link in a message may be pressed only while it passes them.
+	 */
+	links: ChatLinksView | null,
 };
 
 /**  One row of the troubleshooter, in the order the rows are shown. */
@@ -1846,6 +2016,11 @@ export type ConversationView = {
 	writable: boolean,
 	/**  A message of the player's did not go. */
 	failed: boolean,
+	/**
+	 *  A direct conversation's friend has seen up to this message id ("Görüldü", CHAT2): only
+	 *  while both keep "Görüldü bilgisi" on.
+	 */
+	peerRead: number | null,
 };
 
 export type CrashKind = 
@@ -2979,7 +3154,7 @@ export type Lang =
 export type LastMessageView = {
 	from: string,
 	mine: boolean,
-	/**  Empty when it was deleted for everyone. */
+	/**  Empty when it was deleted for everyone, or for a sticker. */
 	text: string,
 	/**  Unix milliseconds on this computer's clock. */
 	at: number,
@@ -2988,6 +3163,8 @@ export type LastMessageView = {
 	 *  known).
 	 */
 	deletedBy: string | null,
+	/**  A sticker (`pl1/gg`, CHAT2): "Çıkartma · GG". */
+	sticker: string | null,
 };
 
 export type LastSeen = "today" | "yesterday" | 
@@ -3176,7 +3353,13 @@ export type LimitedKey =
 /**  Making or renewing a crew's invite link (TEAM5). */
 "crewLink" | 
 /**  Making crew plans (answering them is fine; TEAM5). */
-"crewPlans" | "other";
+"crewPlans" | 
+/**  Links in chat messages (CHAT2). */
+"chatLinks" | 
+/**  Stickers a day (CHAT2). */
+"chatStickers" | 
+/**  Reaction changes a day (CHAT2). */
+"chatReactions" | "other";
 
 /**
  *  A limited account ("Sınırlı hesap", a new Discord account): until when, and what is limited
@@ -3196,6 +3379,26 @@ export type Limits = {
 	/**  Friend categories (None from a service without them). */
 	groups?: number | null,
 };
+
+/**
+ *  Why the service turned a link away (`chat_rejected` with `link` and `rule`, CHAT2; the rule
+ *  table `chat-links.json`). One this version does not know reads as `Other`.
+ */
+export type LinkRule = 
+/**  Links are off (Studio's switch, or an older service). */
+"off" | 
+/**  Not a plain `https://` link with a host name, or an address hidden in the text. */
+"form" | 
+/**  More than 3 links. */
+"count" | "http" | "credentials" | "ip" | "port" | 
+/**  A brand's name on someone else's host, or a host that is not plain ASCII. */
+"lookalike" | "long" | "shortener" | "grabber" | 
+/**  Adult and gambling sites. */
+"adult" | "scam" | "file" | 
+/**  A Discord invite while Studio keeps them off. */
+"invite" | 
+/**  Studio blocked the site or the page. */
+"blocked" | "other";
 
 /**  A link Studio publishes (`LauncherConfig.links.custom`). */
 export type LinkView = {
@@ -4336,6 +4539,16 @@ export type Privacy = {
 	shareServer: boolean,
 	/**  Show a coarse "last seen" to friends (default on). */
 	shareLastSeen: boolean,
+	/**
+	 *  "Görüldü bilgisi" (CHAT2): read marks in direct messages, both ways (off: the player sees
+	 *  none either). On by default; None from a service without chat extras.
+	 */
+	shareRead?: boolean | null,
+	/**
+	 *  "Yazıyor bilgisi" (CHAT2): "yazıyor…", both ways. On by default; None from a service
+	 *  without chat extras.
+	 */
+	shareTyping?: boolean | null,
 };
 
 /**  What one profile brings, read on demand. */
@@ -4510,6 +4723,16 @@ export type ReportPlan = {
 };
 
 /**
+ *  The reaction a player is reported from (CHAT2): the conversation, the message's id and the
+ *  emoji.
+ */
+export type ReportReaction = {
+	conv: string,
+	id: number,
+	e: string,
+};
+
+/**
  *  A report reason, as players pick it and the service names it. One this version does not know
  *  reads as `Other`.
  */
@@ -4528,8 +4751,11 @@ export type ReportReason =
  *  or a message as this device holds it.
  */
 export type ReportTarget = 
-/**  A player; from a plan card (FIX2) its maker, with the plan as the moderators' evidence. */
-{ kind: "player"; id: string; plan?: ReportPlan | null } | { kind: "crew"; id: string; code: string | null } | { kind: "message"; conv: string; id: number };
+/**
+ *  A player; from a plan card (FIX2) its maker, with the plan as the moderators' evidence;
+ *  from a reaction's list (CHAT2) who gave it, with the reaction.
+ */
+{ kind: "player"; id: string; plan?: ReportPlan | null; reaction?: ReportReaction | null } | { kind: "crew"; id: string; code: string | null } | { kind: "message"; conv: string; id: number };
 
 export type RequestView = {
 	id: string,
@@ -4642,7 +4868,15 @@ export type SendFailure =
 /**  No longer friends, or no longer in the crew. */
 "notAllowed" | 
 /**  The connection: it may go again. */
-"connection";
+"connection" | 
+/**  The day's stickers are used up (CHAT2; 100, 20 for a limited account). */
+"stickers" | 
+/**  The day's messages with links are used up (CHAT2; 30). */
+"links" | 
+/**  A limited account (a new Discord account) sends no links (CHAT2). */
+"limitedLinks" | 
+/**  Studio switched this extra off (CHAT2: stickers). */
+"featureOff";
 
 /**  Result of sending a request by code. */
 export type SendOutcome = 
