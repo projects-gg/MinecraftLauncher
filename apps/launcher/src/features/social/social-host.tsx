@@ -3,7 +3,8 @@
 // system notifications), the crew calls' clock, the settings backup, the new-computer question and
 // the crew picker of "Ekiplerini çağır"; chat changes (CHAT1) and how a new message is told,
 // "Rapor et" and moderators' one-time notes (MOD1); join requests, a request taken, crewmates'
-// new plans and the plan reminders (TEAM5).
+// new plans and the plan reminders (TEAM5); the toast when a hidden crew took the player's tag off
+// and "Etiketi tak" on the toast of a request taken (TEAM6).
 import { Button, Dialog, toast } from "@pl/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -17,6 +18,7 @@ import i18n from "@/lib/i18n";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { attempt, notifyOutside } from "./actions";
+import { sayJoined } from "./badge-actions";
 import { useChat } from "./chat/chat-store";
 import { chatMutedNow, crewOf } from "./chat/conversations";
 import { chatNoticeWay, preview } from "./chat/notify";
@@ -300,8 +302,10 @@ function handleNotice(notice: SocialNotice) {
     case "requestAccepted": {
       const text = i18n.t("teams.joined", { name: notice.name });
       void notifyOutside(text);
-      toast.success(text, {
-        action: { label: i18n.t("social.notices.show"), onClick: () => showCrew(notice.crew) },
+      // "Göster", and "Etiketi tak" while the player wears no tag (TEAM6).
+      sayJoined(text, () => notice.crew, {
+        label: i18n.t("social.notices.show"),
+        onClick: () => showCrew(notice.crew),
       });
       break;
     }
@@ -422,6 +426,12 @@ function useSocialSync() {
       useSocialUi.getState().setView(view);
     });
     const stopNotice = api.social.onNotice(handleNotice);
+    // The leader hid the crew whose tag the player wore (TEAM6 §5.3): one toast.
+    const stopTagOff = api.social.onTagOff(() => {
+      const text = i18n.t("team6.hiddenToast");
+      announce(text);
+      toast(text);
+    });
     const stopChat = api.social.onChat((change) => useChat.getState().apply(change));
     void api.social
       .state()
@@ -435,6 +445,7 @@ function useSocialSync() {
       alive = false;
       stopView();
       stopNotice();
+      stopTagOff();
       stopChat();
     };
   }, []);

@@ -44,13 +44,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { memo, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { bigEmojiCount, Sticker, UnknownSticker } from "@/features/emoji";
-import type {
-  ChatExtras,
-  ChatLinkRules,
-  ChatMessage,
-  ChatReaction,
-  SocialProfile,
-} from "@/lib/api/social-types";
+import type { ChatExtras, ChatLinkRules, ChatMessage, ChatReaction } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
 import { copyText } from "../actions";
 import { type MessageAction, messageMenu } from "../menus";
@@ -62,7 +56,7 @@ import { MessageToolbar } from "./message-toolbar";
 import { ReactionChips } from "./reaction-ui";
 import { REACTION_WINDOW_MS, sameEmoji, reactable as takesReactions } from "./reactions";
 import { QuoteBlock, type Quoted } from "./reply";
-import { SenderName } from "./sender-name";
+import { type ChatPerson, SenderName } from "./sender-name";
 import { messageLinks } from "./text";
 
 /** What a row needs from its conversation. */
@@ -104,7 +98,7 @@ export interface RowShared {
   writable: boolean;
   /** The quick reactions' six. */
   quick: readonly string[];
-  people: (id: string) => Pick<SocialProfile, "name" | "avatar" | "avatarUrl">;
+  people: (id: string) => ChatPerson;
 }
 
 const timeFormat = () => dateTimeFormat({ hour: "2-digit", minute: "2-digit" });
@@ -268,7 +262,7 @@ function MessageRowView({
   text: string;
   /** Deleted for everyone (or by the player, waiting for the answer): what its tombstone says. */
   tombstone: string | null;
-  sender: Pick<SocialProfile, "name" | "avatar" | "avatarUrl">;
+  sender: ChatPerson;
   place: RowPlace;
   /** Where the sender's own menu opens from (their face and name, a right click; FIX2). */
   personPlace?: PersonPlace;
@@ -552,6 +546,8 @@ function MessageRowView({
             <PersonContextMenu person={{ id: message.from, ...sender }} place={personPlace}>
               <SenderName
                 name={sender.name}
+                badge={sender.badge}
+                wearer={message.from}
                 className="mb-1 ml-1 max-w-full text-[12px] font-semibold text-ash-300"
               />
             </PersonContextMenu>

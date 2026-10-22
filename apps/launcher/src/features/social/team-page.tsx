@@ -25,6 +25,7 @@ import {
   Check,
   Clock,
   Copy,
+  EyeSlash,
   LockSimple,
   MagnifyingGlass,
   MegaphoneSimple,
@@ -65,8 +66,10 @@ import type {
 import { dateTimeFormat } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
 import { attempt, copyText } from "./actions";
+import { sayJoined, useMyBadge } from "./badge-actions";
 import { callNames, callWaitUntil, liveCalls, waitMinutes } from "./calls";
 import { CrewChat } from "./chat/crew-chat";
+import { BadgedName, WearToggle } from "./crew-badge";
 import { CallStrip } from "./crew-call";
 import { CallReason, useCallPress } from "./crew-call-picker";
 import {
@@ -145,7 +148,16 @@ function CreateCrew() {
       }),
     );
     setBusy(false);
-    if (done !== undefined) announce(t("teams.create.done", { name }));
+    // With crew tags: "Etiketi tak" on the toast while the player wears none (TEAM6).
+    if (done !== undefined) {
+      sayJoined(
+        t("teams.create.done", { name }),
+        () =>
+          [...useSocialUi.getState().view.crews]
+            .reverse()
+            .find((crew) => crew.role === "founder" && crew.name === name)?.id,
+      );
+    }
   };
 
   if (limit) {
@@ -273,7 +285,7 @@ function JoinCrew({ first = false }: { first?: boolean }) {
       });
       return;
     }
-    announce(t("teams.joined", { name: lookup.name }));
+    sayJoined(t("teams.joined", { name: lookup.name }), () => lookup.teamId);
   };
 
   const withdraw = async (lookup: TeamLookup) => {
@@ -758,6 +770,7 @@ function CrewCard({
   const founded = localDay(team.createdOn);
   const anniversary = crewAnniversary(team.createdOn, new Date());
   const together = togetherTime(team.togetherWeek ?? 0);
+  const hidden = useSocialUi((s) => s.view.crew.badges) && Boolean(team.hidden);
   // The crew's own menu on a right click, as on its header in the friend list (FIX2); it is on
   // screen already, so no "Ekibi aç", and its order rows move it along the rail above.
   const items = useCrewItems(team, { onOpen: false, sideways: true });
@@ -773,6 +786,8 @@ function CrewCard({
                 {team.name}
               </span>
               <TeamTag tag={team.tag} color={team.color} />
+              {/* "Etiketi tak" / worn (TEAM6). */}
+              <WearToggle team={team} />
             </p>
             {team.motto ? (
               <p className="mt-0.5 text-[13px] leading-snug text-ash-300" data-selectable>
@@ -800,6 +815,21 @@ function CrewCard({
                   {t("crewWave2.together.week", { time: together })}
                 </span>
               ) : null}
+              {/* Its leader hid it (TEAM6): its tag shows nowhere. */}
+              <AnimatePresence initial={false}>
+                {hidden ? (
+                  <motion.span
+                    key="hidden"
+                    className="inline-flex items-center gap-1"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1, transition: enter(0.22) }}
+                    exit={{ opacity: 0, transition: leave(0.16) }}
+                  >
+                    <EyeSlash size={14} aria-hidden />
+                    {t("team6.hiddenChip")}
+                  </motion.span>
+                ) : null}
+              </AnimatePresence>
             </p>
             {anniversary ? (
               <p className="mt-1.5 flex items-center gap-1.5 text-[12.5px] font-medium text-gold-300">
@@ -828,16 +858,22 @@ function CrewCard({
   );
 }
 
-/** The player's own row: their face, their badge, "Sen". */
+/** The player's own row: their face, the tag they wear (TEAM6), their badge, "Sen". */
 function MeRow({ member }: { member: TeamMember }) {
   const { t } = useTranslation();
+  const badge = useMyBadge();
   return (
     <div className="flex items-center gap-3 py-1.5 pr-2 pl-2">
       <SocialAvatar source={member} size={32} />
-      <span className="flex min-w-0 flex-1 items-center gap-1.5">
-        <span className="truncate text-[14px] font-semibold text-bone-50">{member.name}</span>
+      <BadgedName
+        name={member.name}
+        badge={badge}
+        wearer={member.id}
+        className="flex-1"
+        nameClassName="text-[14px] font-semibold text-bone-50"
+      >
         <RoleBadge member={member} />
-      </span>
+      </BadgedName>
       <span className="text-[12px] text-ash-400">{t("teams.you")}</span>
     </div>
   );

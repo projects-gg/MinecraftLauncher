@@ -1,6 +1,7 @@
-// A direct conversation in the friends panel: the header carries the friend (picture, presence),
-// a small ghost "Discord'dan mesajlaş" (Discord's own mark, the app when it is installed) and the
-// conversation's menu (mute here, clear the history here, report); the body is the conversation.
+// A direct conversation in the friends panel: the header carries the friend (picture, presence,
+// the crew tag they wear, TEAM6), a small ghost "Discord'dan mesajlaş" (Discord's own mark, the app
+// when it is installed) and the conversation's menu (mute here, clear the history here, report);
+// the body is the conversation.
 import { BellSlash, Broom, CaretLeft, DotsThree, Flag, SpeakerHigh } from "@phosphor-icons/react";
 import { Button, cn, Dialog, IconButton, Menu, type MenuItem, toast } from "@pl/ui";
 import { Dialog as RadixDialog } from "radix-ui";
@@ -8,8 +9,9 @@ import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import discordSymbol from "@/assets/brand/discord-symbol-white.png";
 import { api } from "@/lib/api";
-import type { ChatMessage, Friend, SocialProfile } from "@/lib/api/social-types";
+import type { ChatMessage, Friend } from "@/lib/api/social-types";
 import { currentLanguage } from "@/lib/i18n";
+import { BadgeChip, useShownBadge } from "../crew-badge";
 import { untilText } from "../crew-notify";
 import { openInDiscord } from "../discord-link";
 import { presenceLine } from "../model";
@@ -21,6 +23,7 @@ import type { ComposerState } from "./composer";
 import { Conversation, useUnreadAtOpen } from "./conversation";
 import { chatMutedNow, peerOf } from "./conversations";
 import { messageLine } from "./preview";
+import type { ChatPerson } from "./sender-name";
 
 /** Discord's mark in its own colour, drawn from the official symbol as a mask. */
 export function DiscordGlyph({ height = 11, className }: { height?: number; className?: string }) {
@@ -40,8 +43,9 @@ export function DiscordGlyph({ height = 11, className }: { height?: number; clas
   );
 }
 
-/** Who wrote a message, as the lists know them (the player, friends, crewmates). */
-export function usePeople(): (id: string) => Pick<SocialProfile, "name" | "avatar" | "avatarUrl"> {
+/** Who wrote a message, as the lists know them (the player, friends, crewmates), with the crew tag
+ * they wear (TEAM6). */
+export function usePeople(): (id: string) => ChatPerson {
   const { t } = useTranslation();
   const me = useSocialUi((s) => s.view.me);
   const friends = useSocialUi((s) => s.view.friends);
@@ -154,6 +158,7 @@ export function ChatHeader() {
   const mutes = useSocialPrefs((s) => s.chatMutes);
   const setMute = useSocialPrefs((s) => s.setChatMute);
   const [clearing, setClearing] = useState(false);
+  const badge = useShownBadge(peer?.badge);
   if (!conv) return null;
   const muted = chatMutedNow(conv, mutes, Date.now());
   const name = peer?.name ?? title ?? t("chat.list.someone");
@@ -213,16 +218,20 @@ export function ChatHeader() {
             dnd={peer?.dnd}
           />
           <div className="min-w-0 flex-1">
-            <RadixDialog.Title className="flex items-center gap-1.5 truncate text-[15px] leading-tight font-semibold text-bone-50">
-              <span className="truncate">{name}</span>
-              {muted ? (
-                <BellSlash
-                  size={13}
-                  className="shrink-0 text-ash-400"
-                  aria-label={t("chat.list.muted")}
-                />
-              ) : null}
-            </RadixDialog.Title>
+            <div className="flex min-w-0 items-center gap-1.5">
+              {/* The tag they wear (TEAM6): a button of its own, outside the title's words. */}
+              {badge && peer ? <BadgeChip badge={badge} wearer={peer.id} mode="button" /> : null}
+              <RadixDialog.Title className="flex min-w-0 items-center gap-1.5 truncate text-[15px] leading-tight font-semibold text-bone-50">
+                <span className="truncate">{name}</span>
+                {muted ? (
+                  <BellSlash
+                    size={13}
+                    className="shrink-0 text-ash-400"
+                    aria-label={t("chat.list.muted")}
+                  />
+                ) : null}
+              </RadixDialog.Title>
+            </div>
             {peer ? (
               <p className="truncate text-[12px] text-ash-300">{presenceLine(peer, t)}</p>
             ) : null}

@@ -38,6 +38,29 @@ export interface SocialProfile {
   avatarUrl?: string;
 }
 
+/**
+ * The crew tag a player wears before their name (TEAM6): the card of one of their crews, made from
+ * the crew's own row at every read (never a copy). Only friends and crewmates get it, and only
+ * while the crew exists, is not hidden, its texts are not locked and Studio has tags on.
+ */
+export interface CrewBadge extends CrewLook {
+  /** The crew's id. */
+  crew: string;
+  /** 2-4 letters or digits, upper case. */
+  tag: string;
+  name: string;
+  /** Empty when there is none. */
+  motto: string;
+  /** `YYYY-MM-DD`. */
+  createdOn: string;
+  /** How many are in the crew. */
+  members: number;
+  /** The crew takes join requests from its tag now: its setting, Studio's switch, not full and
+   * fewer than 10 such requests today (the service decides; the player's own conditions are the
+   * launcher's). */
+  requests: boolean;
+}
+
 export interface Friend extends SocialProfile {
   /** `YYYY-MM-DD`. */
   since?: string;
@@ -47,6 +70,8 @@ export interface Friend extends SocialProfile {
   game?: SocialGame;
   /** Their Discord profile ("Discord'dan mesaj at"). */
   discordUrl: string;
+  /** The crew tag they wear (TEAM6); none while they wear none. */
+  badge?: CrewBadge;
 }
 
 export interface FriendRequest extends SocialProfile {
@@ -100,6 +125,8 @@ export interface SocialMe extends SocialProfile {
   backup?: BackupMeta;
   /** A limited account ("Sınırlı hesap", a new Discord account); only the player sees it. */
   limited?: LimitedAccount;
+  /** The crew tag the player wears (TEAM6); none while they wear none. */
+  badge?: CrewBadge;
 }
 
 /** What a limited account may not do, or does less of. */
@@ -157,8 +184,9 @@ export type ReportTarget =
       plan?: { crew: string; id: string };
       reaction?: { conv: string; id: number; e: string };
     }
-  /** `code`: the crew was looked up by code. */
-  | { kind: "crew"; id: string; code?: string }
+  /** `code`: the crew was looked up by code; `via`: reported from the tag a friend or crewmate wears
+   * (TEAM6: that player's id, never kept by the service). */
+  | { kind: "crew"; id: string; code?: string; via?: string }
   /** A message as this computer holds it (with the messages before it as context). */
   | { kind: "message"; conv: string; id: number };
 
@@ -449,6 +477,11 @@ export interface CrewFeatures {
   planNotes: boolean;
   /** "Arkadaş ekle" on a crewmate, without their code (FIX2). */
   crewFriendRequests: boolean;
+  /** Crew tags before names, their cards and hidden crews (TEAM6). */
+  badges: boolean;
+  /** Join requests from a tag's card and the crews' "Etiketten istek" (TEAM6; only with
+   * `badges`). */
+  badgeRequests: boolean;
 }
 
 /** How newcomers with the crew's code or invite link get in: at once, or once approved. */
@@ -461,6 +494,10 @@ export type JoinResult = "joined" | "requested";
 export interface JoinRequest extends SocialProfile {
   /** Unix seconds. */
   sentAt: number;
+  /** From a tag's card (TEAM6): the member whose tag it was, while they are still in the crew, and
+   * their name as the crew lists them ("Ayşe aracılığıyla"). */
+  via?: string;
+  viaName?: string;
 }
 
 /** One of the player's own join requests that waits (it goes by itself after 7 days). */
@@ -555,6 +592,8 @@ export interface TeamMember extends SocialProfile {
   joinedAt: number;
   /** Seconds on Projects together this month, as this computer kept it (0 while it is off). */
   togetherMonth?: number;
+  /** The crew tag they wear (TEAM6), of this crew or another; none while they wear none. */
+  badge?: CrewBadge;
 }
 
 /** How a crew looks: its emblem on a coloured frame. */
@@ -602,6 +641,49 @@ export interface SocialTeam extends CrewLook {
   requests?: JoinRequest[];
   /** Seconds on Projects this week with someone of this crew there too (this computer only). */
   togetherWeek?: number;
+  /** Its leader hid it (TEAM6): its tag shows nowhere and cannot be worn. */
+  hidden?: boolean;
+  /** "Etiketten istek" (TEAM6): friends of its wearers may ask to join from the tag's card (on
+   * unless its leader turned it off). */
+  badgeRequests?: boolean;
+  /** How many of its members wear its tag (TEAM6: "Etiketi takan 8 üyenin…"). */
+  wearers?: number;
+}
+
+/** Why a join request from a tag's card did not go (TEAM6): the crew's refusals and the player's
+ * own limits, as answers (never errors). */
+export type BadgeRefusal =
+  | "closed"
+  | "today"
+  | "waitingFull"
+  | "full"
+  | "blocked"
+  | "ownWaiting"
+  | "ownCrews"
+  | "ownDaily"
+  | "member";
+
+/** What "Katılma isteği gönder" on a tag's card led to (TEAM6): the request waits, or why not and
+ * until when (Unix seconds: the end of the Turkey day) the button stays away on this computer. */
+export type BadgeAsk =
+  | { status: "sent" }
+  | { status: "refused"; reason: BadgeRefusal; until: number };
+
+/** Someone who came into one of the player's crews while this launcher was connected (TEAM6 "Hoş
+ * geldin"): a quiet line in its chat; nothing keeps it. */
+export interface CrewJoin {
+  crew: string;
+  /** Who came in. */
+  id: string;
+  /** Their name as the crew listed them. */
+  name: string;
+  /** The player themself ("Ekibe katıldın"). */
+  mine: boolean;
+  /** Unix seconds, this computer's clock. */
+  at: number;
+  /** "Selam ver" may be pressed until then (Unix seconds); none on the player's own and once it
+   * was pressed. */
+  greetUntil?: number;
 }
 
 export interface TeamInvite extends CrewLook {
@@ -734,6 +816,8 @@ export interface SocialSnapshot {
   restriction?: { until?: number };
   /** The settings backup waits until then (Unix seconds): the service protects its storage. */
   backupWaitsUntil?: number;
+  /** Who came into the player's crews while this launcher was connected (TEAM6 "Hoş geldin"). */
+  crewJoins?: CrewJoin[];
 }
 
 export type SocialNotice =
@@ -807,6 +891,8 @@ export const HIDDEN_SNAPSHOT: SocialSnapshot = {
     plans: false,
     planNotes: false,
     crewFriendRequests: false,
+    badges: false,
+    badgeRequests: false,
   },
   crews: [],
   crewLimit: 1,
@@ -921,6 +1007,24 @@ export interface SocialApi {
   setTeamLink(teamId: string, on: boolean): Promise<string | null>;
   /** How newcomers with the code or the link get in (the leader). */
   setJoinMode(teamId: string, join: JoinMode): Promise<void>;
+  /** Puts on the tag of one of the player's crews, in place of any worn before, or takes it off
+   * (`null`; TEAM6). */
+  setBadge(teamId: string | null): Promise<void>;
+  /** "Görünürlük" (`hidden`: the tag shows nowhere, every worn one comes off) and "Etiketten istek"
+   * of a crew the player leads (TEAM6). */
+  setBadgeSettings(
+    teamId: string,
+    change: { hidden?: boolean; badgeRequests?: boolean },
+  ): Promise<void>;
+  /** "Katılma isteği gönder" on a tag's card (TEAM6): a join request that always waits for the
+   * crew's answer; `via` is the friend whose tag it is. A refusal is an answer, not an error. */
+  requestFromBadge(teamId: string, via: string): Promise<BadgeAsk>;
+  /** "Selam ver" on the line of `id`, who came into `crew` (TEAM6): the "Selam" sticker (or
+   * "Hoş geldin! 👋" without stickers) goes to the crew's chat as any message; once. */
+  greetNewcomer(crew: string, id: string): Promise<void>;
+  /** The crew tag the player wore came off because its leader hid the crew (TEAM6; never for the
+   * leader's own change). Returns an unsubscribe function. */
+  onTagOff(listener: (off: { crew: string; name: string }) => void): () => void;
   /** A new plan at `at` (Unix seconds, a whole quarter of an hour), with its note when the
    * service keeps notes; answers its id. */
   makePlan(crew: string, at: number, note?: string): Promise<string>;

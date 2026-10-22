@@ -5,6 +5,7 @@ import type {
   ChatMessage,
   ChatState,
   Conversation,
+  CrewBadge,
   SocialProfile,
   SocialSnapshot,
   SocialTeam,
@@ -65,8 +66,12 @@ export function unreadDirect(chat: ChatState | undefined, mutes: ChatMutes, nowM
 export interface ConversationFace {
   /** The friend's or the crew's name, else the last known one. */
   name: string | null;
-  /** The friend (or the last known picture). */
-  person?: SocialProfile & { state?: "offline" | "launcher" | "playing"; dnd?: boolean };
+  /** The friend (or the last known picture), with the crew tag they wear (TEAM6). */
+  person?: SocialProfile & {
+    state?: "offline" | "launcher" | "playing";
+    dnd?: boolean;
+    badge?: CrewBadge;
+  };
   crew?: SocialTeam;
 }
 

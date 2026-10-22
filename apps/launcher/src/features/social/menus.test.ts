@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TeamMember } from "@/lib/api/social-types";
 import {
+  badgeMenu,
   callMenu,
   categoryMenu,
   leavingOf,
@@ -490,6 +491,59 @@ describe("teamMenu", () => {
     expect(leavingOf(team("member", 1))).toBe("leave");
     expect(leavingOf(team("founder", 1))).toBe("close");
     expect(leavingOf(team("founder", 2))).toBe("disband");
+  });
+
+  it("puts the crew's tag on or takes it off in the primary crew's group (TEAM6)", () => {
+    const plan = (badge?: "wear" | "worn" | "hidden" | "locked", order?: boolean) =>
+      words(
+        teamMenu({
+          team: team("member", 4),
+          friendsOutside: 3,
+          badge,
+          order: order ? { first: false, last: false } : undefined,
+        }),
+      );
+    // One crew: the tag's row is the group.
+    expect(plan("wear")).toEqual([
+      "open",
+      "toggle",
+      "-",
+      "copyCode",
+      "invite",
+      "-",
+      "wearTag",
+      "-",
+      "leave",
+    ]);
+    expect(plan("worn")).toContain("takeOffTag");
+    expect(plan("worn")).not.toContain("wearTag");
+    // Several crews: after "Ana ekip yap", before the moves.
+    expect(plan("wear", true)).toEqual([
+      "open",
+      "toggle",
+      "-",
+      "copyCode",
+      "invite",
+      "-",
+      "makeMain",
+      "wearTag",
+      "moveUp",
+      "moveDown",
+      "-",
+      "leave",
+    ]);
+    // Soft while it cannot be worn (the reason is in its words).
+    expect(plan("hidden")).toContain("wearTag(off)");
+    expect(plan("locked")).toContain("wearTag(off)");
+    // A service without tags: no row.
+    expect(plan()).not.toContain("wearTag");
+    expect(plan()).not.toContain("takeOffTag");
+  });
+});
+
+describe("badgeMenu", () => {
+  it("offers someone outside the crew only to report it (TEAM6)", () => {
+    expect(words(badgeMenu())).toEqual(["report"]);
   });
 });
 

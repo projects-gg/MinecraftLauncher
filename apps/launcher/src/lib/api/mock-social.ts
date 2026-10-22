@@ -45,8 +45,11 @@
 // - `backupWaits`: storage protection: the settings backup waits;
 // - `&reports=limit` on any scenario: "Rapor et" says the day's reports are used up;
 // - the crews' second wave (TEAM5: join requests, invite links, plans, time together): its
-//   scenarios and switches are in mock-crew-wave2.ts (`crewApproval`, `crewPlans`, `crewAsk`…).
+//   scenarios and switches are in mock-crew-wave2.ts (`crewApproval`, `crewPlans`, `crewAsk`…);
+// - crew tags (TEAM6: tags before names, their cards, hidden crews, requests from a tag, "Hoş
+//   geldin"): mock-crew-badges.ts (`badges`, `badgesLive`, `badgesHidden`, `badgesJoined`).
 import { CHAT_SCENARIOS, mockChat } from "./mock-chat";
+import { BADGE_SCENARIOS, badgesApi, badgesSnapshot, startBadges } from "./mock-crew-badges";
 import { startWave2, WAVE2_SCENARIOS, wave2Api, wave2Snapshot } from "./mock-crew-wave2";
 import { pick } from "./mock-lang";
 import type {
@@ -299,6 +302,7 @@ const OLD_CREWS = scenario() === "crewOld";
 const MULTI =
   !OLD_CREWS &&
   (["crews", "crewsFull", "crewCallMulti", "crewAsk", "crewAccepted"].includes(scenario()) ||
+    BADGE_SCENARIOS.includes(scenario()) ||
     searchParam("multi") !== null);
 /** How many crews the player may be in (`&crewLimit=`; `crewsFull`: the three they are in). */
 function previewLimit(): number {
@@ -590,6 +594,9 @@ function initial(): SocialSnapshot {
           planNotes: false,
           // FIX2: "Arkadaş ekle" on a crewmate (`&fix2=0`: a service from before it).
           crewFriendRequests: searchParam("fix2") !== "0",
+          // On with crew tags' data (mock-crew-badges.ts).
+          badges: false,
+          badgeRequests: false,
         },
     crewNotifications: keepsMutes
       ? {
@@ -609,6 +616,8 @@ function initial(): SocialSnapshot {
   if (WAVE2_SCENARIOS.includes(name)) {
     return crewed([previewTeam(!name.startsWith("crewPlan"))]);
   }
+  // Crew tags' (mock-crew-badges.ts): the three crews of `crews`.
+  if (BADGE_SCENARIOS.includes(name)) return crewed(previewCrews());
   switch (name) {
     case "groups":
       return { ...base, groups: previewGroups() };
@@ -771,6 +780,8 @@ const NO_CREW_FEATURES = {
   plans: false,
   planNotes: false,
   crewFriendRequests: false,
+  badges: false,
+  badgeRequests: false,
 };
 
 // Chat (CHAT1) lives in mock-chat.ts, on this preview's data.
@@ -782,8 +793,29 @@ const chat = mockChat({
   tell,
 });
 let view = withPlace(
-  placed(chat.prepare(wave2Snapshot(initial(), { scenario: scenario(), param: searchParam }))),
+  placed(
+    chat.prepare(
+      badgesSnapshot(
+        wave2Snapshot(initial(), { scenario: scenario(), param: searchParam }),
+        badgesContext(),
+      ),
+    ),
+  ),
 );
+
+/** What mock-crew-badges.ts works on: this preview's data and its ways to change it. */
+function badgesContext() {
+  return {
+    scenario: scenario(),
+    param: searchParam,
+    view: () => view,
+    commit,
+    fail: (code: string, tr: string, en: string) => new MockSocialError(code, pick(tr, en)),
+    pick,
+    send: (conv: string, text: string) => chat.api.chatSend(conv, text),
+    sendSticker: (conv: string, sticker: string) => chat.api.chatSendSticker(conv, sticker),
+  };
+}
 
 function withPlace(snapshot: SocialSnapshot): SocialSnapshot {
   // The hidden server's address shows once the player shares it ("Aç ve çağır").
@@ -812,6 +844,7 @@ if (typeof window !== "undefined") {
   const name = scenario();
   chat.start();
   startWave2(wave2Context());
+  startBadges(badgesContext());
   // `&liveAt=<ms>`: when the live moderators' step comes.
   const liveAt = Number(searchParam("liveAt")) || 1600;
   if (name === "restrictedLive") {
@@ -1000,6 +1033,7 @@ function wave2Context() {
   };
 }
 const wave2 = wave2Api(wave2Context());
+const badges = badgesApi(badgesContext());
 /** Crews whose leaders approve newcomers (with the second wave). */
 const APPROVING = new Set(["fedcba9876543210"]);
 
@@ -1021,6 +1055,11 @@ export const mockSocial: SocialApi = {
   cancelPlan: wave2.cancelPlan,
   setTogether: wave2.setTogether,
   clearTogether: wave2.clearTogether,
+  setBadge: badges.setBadge,
+  setBadgeSettings: badges.setBadgeSettings,
+  requestFromBadge: badges.requestFromBadge,
+  greetNewcomer: badges.greetNewcomer,
+  onTagOff: badges.onTagOff,
   async state() {
     await delay(120);
     return view;

@@ -5,14 +5,15 @@
 // everyone turns into its quiet tombstone in place, saying who deleted it (FIX2; the player's own
 // deletion shows at once). The conversation is read once it is on screen at its newest message. A
 // crew's conversation also shows quiet local lines at their time (its plans, TEAM5: "Ayşe
-// Cumartesi 21:00 için plan yaptı"); the service's chat holds nothing about them.
+// Cumartesi 21:00 için plan yaptı"; who came in, TEAM6: "Ayşe ekibe katıldı" with "Selam ver");
+// the service's chat holds nothing about them.
 //
 // CHAT2: "Ayşe yazıyor" floats over the composer; a friend's message counts as read after a
 // second on screen with the window in front (their side may show "Görüldü"), and "Görüldü" shows
 // under the player's last message the friend has seen. A quote's press scrolls to the message (an
 // older page loads first when it is not shown yet) and lights it once. Reactions show at once and
 // settle with the service's answer; a card is asked for when its message comes on screen.
-import { ArrowDown, CalendarBlank } from "@phosphor-icons/react";
+import { ArrowDown, CalendarBlank, HandWaving } from "@phosphor-icons/react";
 import { cn, toast } from "@pl/ui";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import {
@@ -28,7 +29,7 @@ import { useTranslation } from "react-i18next";
 import { announce, friendlyError } from "@/features/accounts/use-accounts";
 import { useEmojiPrefs } from "@/features/emoji";
 import { api } from "@/lib/api";
-import type { ChatMessage, SocialProfile } from "@/lib/api/social-types";
+import type { ChatMessage } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
 import { enter, glide, leave, useSocialMotion } from "../motion";
 import type { PersonPlace } from "../person-menu";
@@ -41,6 +42,7 @@ import { MessageRow, type RowActions, type RowShared } from "./message-row";
 import { quickReactions, reactVerdict, withMyReaction } from "./reactions";
 import { type Quoted, quotedOf } from "./reply";
 import { READ_AFTER_MS, seenKey } from "./seen";
+import type { ChatPerson } from "./sender-name";
 import { onlineIn, useTyping, useTypingFeed, writersOf } from "./typing";
 import { TypingPill } from "./typing-pill";
 
@@ -64,12 +66,17 @@ function dayLabel(t: (key: string) => string, at: number, nowMs: number): string
   ).format(new Date(at));
 }
 
-/** A quiet line of this computer's at its time among the messages (a crew plan, TEAM5). */
+/** A quiet line of this computer's at its time among the messages (a crew plan, TEAM5; someone
+ * who came into the crew, TEAM6). */
 export interface ChatLine {
   key: string;
   /** Unix ms. */
   at: number;
   text: string;
+  /** Its mark: a plan's calendar (the default) or a newcomer's waving hand. */
+  kind?: "plan" | "welcome";
+  /** One small action beside it while it may be pressed ("Selam ver"). */
+  action?: { label: string; onPress: () => void };
 }
 
 type Item = { kind: "message"; message: ChatMessage } | { kind: "line"; line: ChatLine };
@@ -80,8 +87,8 @@ const sameDay = (a: number, b: number) => new Date(a).toDateString() === new Dat
 export interface ConversationProps {
   conv: string;
   crew: boolean;
-  /** Who wrote what: the player's friends and crewmates by id. */
-  people: (id: string) => Pick<SocialProfile, "name" | "avatar" | "avatarUrl">;
+  /** Who wrote what: the player's friends and crewmates by id (with the tag they wear). */
+  people: (id: string) => ChatPerson;
   composer: ComposerState;
   /** A quiet line over the composer (mailbox off, waiting for the connection). */
   notice: string | null;
@@ -518,15 +525,43 @@ export function Conversation({
                         exit={{ opacity: 0, transition: leave(0.16) }}
                       >
                         {dayLine}
-                        <p className="flex items-center justify-center gap-1.5 px-6 py-1.5 text-center text-[12px] text-ash-400">
-                          <CalendarBlank
-                            size={13}
-                            weight="duotone"
-                            className="shrink-0 text-gold-300"
-                            aria-hidden
-                          />
-                          {line.text}
-                        </p>
+                        <div
+                          className={cn(
+                            "flex items-center justify-center gap-1.5 px-6 text-center text-[12px] text-ash-400",
+                            // Its "Selam ver" comes and goes inside the line's own height.
+                            line.kind === "welcome" ? "min-h-8 py-1" : "py-1.5",
+                          )}
+                        >
+                          {line.kind === "welcome" ? (
+                            <HandWaving
+                              size={13}
+                              weight="duotone"
+                              className="shrink-0 text-gold-300"
+                              aria-hidden
+                            />
+                          ) : (
+                            <CalendarBlank
+                              size={13}
+                              weight="duotone"
+                              className="shrink-0 text-gold-300"
+                              aria-hidden
+                            />
+                          )}
+                          <span>{line.text}</span>
+                          <AnimatePresence initial={false}>
+                            {line.action ? (
+                              <motion.span
+                                key="action"
+                                className="ml-1 flex"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1, transition: enter(0.2) }}
+                                exit={{ opacity: 0, transition: leave(0.16) }}
+                              >
+                                <LineAction action={line.action} />
+                              </motion.span>
+                            ) : null}
+                          </AnimatePresence>
+                        </div>
                       </motion.li>
                     );
                   }
@@ -640,6 +675,25 @@ export function Conversation({
         />
       </div>
     </div>
+  );
+}
+
+/** A line's one action ("Selam ver"): small, chamfered, gold words on the quiet line. */
+function LineAction({ action }: { action: NonNullable<ChatLine["action"]> }) {
+  return (
+    <button
+      type="button"
+      onClick={action.onPress}
+      className="group/line relative inline-flex h-6 shrink-0 cursor-pointer items-center outline-none transition-[transform,scale] duration-150 ease-out active:scale-[0.97]"
+    >
+      <span
+        aria-hidden
+        className="chamfer absolute -inset-[2px] bg-gold-300 opacity-0 transition-opacity duration-150 [--cut:6px] group-focus-visible/line:opacity-100"
+      />
+      <span className="chamfer relative inline-flex h-6 items-center bg-gold-500/12 px-2 text-[12px] font-semibold text-gold-200 transition-colors duration-150 [--cut:5px] group-hover/line:bg-gold-500/20">
+        {action.label}
+      </span>
+    </button>
   );
 }
 

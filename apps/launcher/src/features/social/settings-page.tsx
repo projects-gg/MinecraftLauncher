@@ -1,10 +1,10 @@
 // "Arkadaş ayarları": profile picture (bundled pictures, the Discord photo, the Minecraft head),
-// privacy (with crews, "Birlikte oynanan süre": kept on this computer only, deleted when turned
-// off or with "Süreleri sil", TEAM5), favourite notifications, the settings backup, sessions,
-// blocked players, sign-out and "Verilerimi sil". The same component shows in the panel and in
-// Settings → Arkadaşlar.
+// privacy (the crew tag worn before the name, TEAM6; with crews, "Birlikte oynanan süre": kept on
+// this computer only, deleted when turned off or with "Süreleri sil", TEAM5), favourite
+// notifications, the settings backup, sessions, blocked players, sign-out and "Verilerimi sil". The
+// same component shows in the panel and in Settings → Arkadaşlar.
 import { Desktop, SignOut, Trash } from "@phosphor-icons/react";
-import { Button, Dialog, Skeleton, Switch } from "@pl/ui";
+import { Button, Dialog, Select, Skeleton, Switch } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useState } from "react";
@@ -15,6 +15,8 @@ import { api } from "@/lib/api";
 import type { SocialMe, SocialSession } from "@/lib/api/social-types";
 import { formatRelative } from "@/lib/format";
 import { attempt } from "./actions";
+import { wearTag } from "./badge-actions";
+import { tagChoices } from "./badges";
 import { CrewNotifyGroup } from "./crew-notify";
 import { dayMonth, limitOf } from "./limits";
 import { rise, useSocialMotion } from "./motion";
@@ -163,6 +165,48 @@ function TogetherSetting() {
   );
 }
 
+/** "Ekip etiketi" (TEAM6): the crew whose tag the player wears before their name, or none; who
+ * sees it under it. Crews whose tag cannot be worn now are left out (the crew menu says why). */
+function TagSetting() {
+  const { t } = useTranslation();
+  const on = useSocialUi((s) => s.view.crew.badges);
+  const crews = useSocialUi((s) => s.view.crews);
+  const worn = useSocialUi((s) =>
+    s.badgePending !== undefined ? s.badgePending : (s.view.me?.badge?.crew ?? null),
+  );
+  if (!on || crews.length === 0) return null;
+  const choices = tagChoices(crews, Date.now()).filter(
+    (choice) => choice.blocked === null || choice.crew.id === worn,
+  );
+  return (
+    <div>
+      <div className="flex items-center gap-3">
+        <span className="min-w-0 flex-1 text-[13px] font-medium text-bone-100">
+          {t("team6.choose")}
+        </span>
+        <Select
+          className="w-[200px]"
+          label={t("team6.choose")}
+          value={worn ?? NO_TAG}
+          onValueChange={(value) => void wearTag(value === NO_TAG ? null : value)}
+          options={[
+            { value: NO_TAG, label: t("team6.none") },
+            ...choices.map(({ crew, main }) => ({
+              value: crew.id,
+              label: crew.name,
+              hint: main ? t("crews.main") : undefined,
+            })),
+          ]}
+        />
+      </div>
+      <p className="mt-1 text-[12px] leading-snug text-ash-400">{t("team6.whoSees")}</p>
+    </div>
+  );
+}
+
+/** "Yok" in the tag picker (Radix selects take no empty value). */
+const NO_TAG = "none";
+
 function PrivacySection({ me }: { me: SocialMe }) {
   const { t } = useTranslation();
   const crews = useSocialUi((s) => s.view.teams);
@@ -181,6 +225,7 @@ function PrivacySection({ me }: { me: SocialMe }) {
   return (
     <Section title={t("social.settings.privacy")}>
       <div className="space-y-3.5">
+        <TagSetting />
         <Switch
           checked={me.privacy.shareServer}
           onCheckedChange={(shareServer) => set({ shareServer })}

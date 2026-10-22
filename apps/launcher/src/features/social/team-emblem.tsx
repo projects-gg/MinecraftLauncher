@@ -155,22 +155,34 @@ export function CrewMark({
   );
 }
 
-/** `[GKR]` beside a crew's name: the crew colour at 24 % under bone text. */
+/**
+ * The tag's three sizes (TEAM6 §3.5): `sm` 16 px by chat names, `md` 18 px in lists and beside a
+ * crew's name, `lg` 20 px in a person card's title. Text never under 11 px (docs/design.md §3).
+ */
+const TAG_SIZES = {
+  sm: "h-4 px-1 text-[11px] tracking-[0.04em] [--cut:4px]",
+  md: "h-[18px] px-1.5 text-[11px] tracking-[0.06em]",
+  lg: "h-5 px-[7px] text-[12px] tracking-[0.06em]",
+} as const;
+
+export type TagSize = keyof typeof TAG_SIZES;
+
+/** `[GKR]` beside a crew's name, or before a player's (TEAM6): the crew colour at 24 % under bone
+ * text. The chip never shrinks; the name beside it truncates. */
 export function TeamTag({
   tag,
   color,
+  size = "md",
   className,
 }: {
   tag: string;
   color?: string;
+  size?: TagSize;
   className?: string;
 }) {
   return (
     <Chip
-      className={cn(
-        "h-[18px] px-1.5 font-display text-[11px] tracking-[0.06em] text-bone-50",
-        className,
-      )}
+      className={cn("font-display text-bone-50", TAG_SIZES[size], className)}
       style={{ background: tagTint(color ?? "gold") }}
     >
       {tag}
@@ -179,14 +191,22 @@ export function TeamTag({
 }
 
 /** The emblem alone, large and faint, behind the crew card's corner (it carries the crew's sign). */
-export function CrewWatermark({ look, size = 150 }: { look: CrewLook; size?: number }) {
+export function CrewWatermark({
+  look,
+  size = 150,
+  className = "-top-6 -right-7",
+}: {
+  look: CrewLook;
+  size?: number;
+  className?: string;
+}) {
   const Glyph = emblemIcon(look.emblem);
   return (
     <Glyph
       aria-hidden
       size={size}
       weight="fill"
-      className="pointer-events-none absolute -top-6 -right-7 select-none"
+      className={cn("pointer-events-none absolute select-none", className)}
       color={CREW_COLORS[crewColor(look.color)].edge}
       style={{ opacity: 0.07 }}
     />

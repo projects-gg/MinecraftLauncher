@@ -11,13 +11,13 @@ import { Popover } from "radix-ui";
 import { memo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { EmojiPickerButton } from "@/features/emoji";
-import type { ChatReaction, SocialProfile } from "@/lib/api/social-types";
+import type { ChatReaction } from "@/lib/api/social-types";
 import { PersonContextMenu, type PersonPlace, usePersonItems } from "../person-menu";
 import { SocialFace } from "../social-face";
 import { REACTIONS_PER_PERSON, reactors, reactVerdict } from "./reactions";
-import { SenderName } from "./sender-name";
+import { type ChatPerson, SenderName } from "./sender-name";
 
-type People = (id: string) => Pick<SocialProfile, "name" | "avatar" | "avatarUrl">;
+type People = (id: string) => ChatPerson;
 
 /** A spring in for a new chip, the roll of a changing count. */
 const CHIP_IN = { duration: 0.16, ease: easeOutExpo };
@@ -69,7 +69,12 @@ function ReactorRow({
   const row = (
     <span className="group/reactor flex h-9 items-center gap-2.5 rounded-md pr-0.5 pl-1.5 text-[13px] text-bone-100">
       <SocialFace source={person} size={24} />
-      <SenderName name={self ? t("chat2.reactions.you") : person.name} className="flex-1" />
+      <SenderName
+        name={self ? t("chat2.reactions.you") : person.name}
+        badge={self ? undefined : person.badge}
+        wearer={self ? undefined : id}
+        className="flex-1"
+      />
       {self ? null : (
         <Menu
           align="end"

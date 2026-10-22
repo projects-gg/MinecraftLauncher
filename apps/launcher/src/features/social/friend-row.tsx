@@ -39,6 +39,7 @@ import type { Friend, FriendGroup, SocialTeam } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
 import { attempt, inviteCoolingDown, inviteFriend } from "./actions";
 import { directConversation } from "./chat/conversations";
+import { BadgedName, badgeRowLabel, focusFirstAction, useShownBadge } from "./crew-badge";
 import type { InviteState } from "./crews";
 import { DiscordButton } from "./discord-button";
 import { openInDiscord } from "./discord-link";
@@ -213,9 +214,16 @@ function FriendCard({
           surface="var(--color-obsidian-900)"
         />
         <div className="min-w-0">
-          <p className="truncate font-display text-[18px] leading-tight font-semibold text-bone-50">
-            {friend.name}
-          </p>
+          {/* The tag they wear before the name, a button of its own here (TEAM6). */}
+          <BadgedName
+            name={friend.name}
+            badge={friend.badge}
+            wearer={friend.id}
+            size="lg"
+            chip="button"
+            className="gap-2"
+            nameClassName="font-display text-[18px] leading-tight font-semibold text-bone-50"
+          />
           <p className="truncate text-[12.5px] text-ash-400" data-selectable>
             @{friend.username}
           </p>
@@ -510,6 +518,7 @@ export function FriendRow({
   const [intent, setIntent] = useState<Confirm | null>(null);
   const joinable = friend.state === "playing" && isJoinable(friend.game);
   const line = presenceLine(friend, t);
+  const badge = useShownBadge(friend.badge);
 
   // Remove and block ask first, in the card: it opens at the question once the menu is gone.
   const openAt = (question: Confirm) =>
@@ -550,20 +559,21 @@ export function FriendRow({
               onClick={(event) => {
                 if (event.detail > 1 && open) event.preventDefault();
               }}
-              aria-label={`${friend.name}, ${line}`}
+              aria-label={`${badgeRowLabel(friend.name, badge, t)}, ${line}`}
               className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] py-2 pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300"
             >
               <SocialAvatar source={friend} size={36} state={friend.state} dnd={friend.dnd} />
               <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1.5">
-                  <span
-                    className={cn(
-                      "truncate text-[14px] font-semibold",
-                      friend.state === "offline" ? "text-bone-100/70" : "text-bone-50",
-                    )}
-                  >
-                    {friend.name}
-                  </span>
+                <BadgedName
+                  name={friend.name}
+                  badge={friend.badge}
+                  wearer={friend.id}
+                  dim={friend.state === "offline"}
+                  nameClassName={cn(
+                    "text-[14px] font-semibold",
+                    friend.state === "offline" ? "text-bone-100/70" : "text-bone-50",
+                  )}
+                >
                   {favorite ? (
                     <Star
                       size={12}
@@ -572,7 +582,7 @@ export function FriendRow({
                       aria-label={t("social.list.favorite")}
                     />
                   ) : null}
-                </span>
+                </BadgedName>
                 <span className="relative block h-[18px] overflow-hidden">
                   <AnimatePresence mode="popLayout" initial={false}>
                     <motion.span
@@ -601,6 +611,7 @@ export function FriendRow({
                   sideOffset={14}
                   collisionPadding={16}
                   aria-label={friend.name}
+                  onOpenAutoFocus={focusFirstAction}
                 >
                   <motion.div
                     className="z-50 rounded-[var(--radius-panel)] border border-white/8 bg-obsidian-900/96 p-4 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_30px_80px_rgb(34_6_6/0.6)] backdrop-blur-xl outline-none [html[data-perf=on]_&]:backdrop-blur-none"

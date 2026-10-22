@@ -4,8 +4,9 @@
 // menu (FIX2: the answers first, "Engelle" asked once, in place, "Rapor et" last); the same menu
 // opens on right click. The player's own waiting
 // requests sit on "Ekip kur ya da katıl" with "Geri çek". A row that goes fades while the rows
-// under it glide up; nothing moves by itself.
-import { Check, DotsThree, X } from "@phosphor-icons/react";
+// under it glide up; nothing moves by itself. A request from a tag's card (TEAM6) says whose tag
+// it came through ("Ayşe aracılığıyla"), while that member is still in the crew.
+import { Check, DotsThree, TagSimple, X } from "@phosphor-icons/react";
 import { Button, ContextMenu, IconButton, Menu } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
@@ -57,6 +58,10 @@ function RequestRow({ team, request }: { team: SocialTeam; request: JoinRequest 
       if (question === "block") setAsking(true);
     },
   });
+  // From a tag's card (TEAM6): the member whose tag it was, so those who answer can ask them.
+  const viaName = request.via
+    ? (request.viaName ?? team.members.find((member) => member.id === request.via)?.name)
+    : undefined;
 
   return (
     <ContextMenu items={items}>
@@ -67,6 +72,13 @@ function RequestRow({ team, request }: { team: SocialTeam; request: JoinRequest 
             <span className="block truncate text-[13.5px] font-semibold text-bone-50">
               {request.name}
             </span>
+            {/* Under the name, the member whose tag it came through (TEAM6), then when. */}
+            {viaName ? (
+              <span className="flex min-w-0 items-center gap-1 text-[12px] text-ash-300">
+                <TagSimple size={12} className="shrink-0" aria-hidden />
+                <span className="truncate">{t("team6.requests.via", { name: viaName })}</span>
+              </span>
+            ) : null}
             <span className="block truncate text-[12px] text-ash-400">
               {t("crewWave2.requests.asked", { when: ago(request.sentAt) })}
             </span>

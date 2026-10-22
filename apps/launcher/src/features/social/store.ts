@@ -115,6 +115,10 @@ interface SocialUi {
   /** A status just chosen, shown until the service confirms it (the old one comes back on failure). */
   statusPending: StatusMode | null;
   setStatusPending: (status: StatusMode | null) => void;
+  /** The crew tag just put on (a crew's id) or taken off (null), shown until the service's list
+   * shows it (TEAM6); undefined while nothing waits. */
+  badgePending: string | null | undefined;
+  setBadgePending: (badge: string | null | undefined) => void;
 
   /** Crew calls whose Home line the player closed with × (this session only; not an answer). */
   closedCalls: string[];
@@ -153,7 +157,10 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
   view: HIDDEN_SNAPSHOT,
   setView: (view) => {
     if (view.seq < get().view.seq) return;
-    set({ view });
+    // A tag change under way ends once the list shows it.
+    const pending = get().badgePending;
+    const settled = pending !== undefined && (view.me?.badge?.crew ?? null) === pending;
+    set(settled ? { view, badgePending: undefined } : { view });
     if (!view.enabled && get().open) set({ open: false });
   },
 
@@ -232,6 +239,8 @@ export const useSocialUi = create<SocialUi>()((set, get) => ({
 
   statusPending: null,
   setStatusPending: (statusPending) => set({ statusPending }),
+  badgePending: undefined,
+  setBadgePending: (badgePending) => set({ badgePending }),
 
   callLineClosed: null,
   closeCallLine: (callLineClosed) => set({ callLineClosed }),

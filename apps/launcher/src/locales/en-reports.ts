@@ -11,7 +11,7 @@ export const enReports = {
   reasonsLabel: "Reason",
   reasons: {
     playerName: "Inappropriate name",
-    crewName: "Inappropriate name or motto",
+    crewName: "Inappropriate name, tag or motto",
     profile: "Inappropriate profile picture",
     harassment: "Harassment or bullying",
     inappropriate: "Inappropriate message",

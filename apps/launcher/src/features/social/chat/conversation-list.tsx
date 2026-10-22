@@ -4,7 +4,8 @@
 // so. A press opens it (a friend's on the chat page, a crew's on its crew page, "Sohbet"). Its
 // right click (Shift+F10, the menu key) is the friend's own menu, or the crew's "Sohbeti aç" and
 // "Ekibi aç" (FIX2). CHAT2: a sticker reads "Çıkartma: GG"; while someone writes there, the
-// last line is a quiet "yazıyor…" (screen readers are not told).
+// last line is a quiet "yazıyor…" (screen readers are not told). A friend's row carries the crew
+// tag they wear before the name (TEAM6).
 import { BellSlash, ChatsCircle, Prohibit, UsersThree, WarningCircle } from "@phosphor-icons/react";
 import { ContextMenu, cn, EmptyState, type MenuItem } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
@@ -12,6 +13,7 @@ import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
 import type { Conversation, SocialTeam } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
+import { BadgedName, badgeRowLabel, useShownBadge } from "../crew-badge";
 import { openMenuFromKey } from "../menu-key";
 import { enter, glide, leave, useSocialMotion } from "../motion";
 import { PersonContextMenu, type PersonRef } from "../person-menu";
@@ -123,8 +125,9 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
           : last.text
     : t("chat.list.noMessages");
   const typingNow = extras.typing && writing && !conversation.failed;
+  const badge = useShownBadge(face.person?.badge);
   const label = [
-    name,
+    badgeRowLabel(name, badge, t),
     unread ? t("chat.list.unread", { count: conversation.unread }) : null,
     preview,
   ]
@@ -159,17 +162,18 @@ function Row({ conversation, nowMs }: { conversation: Conversation; nowMs: numbe
           />
         )}
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-1.5">
-            <span
-              className={cn(
-                "truncate text-[14px]",
-                unread ? "font-semibold text-bone-50" : "font-medium text-bone-100",
-              )}
-            >
-              {name}
-            </span>
+          {/* A friend's conversation: the crew tag they wear before the name (TEAM6). */}
+          <BadgedName
+            name={name}
+            badge={face.person?.badge}
+            wearer={face.person?.id ?? ""}
+            nameClassName={cn(
+              "text-[14px]",
+              unread ? "font-semibold text-bone-50" : "font-medium text-bone-100",
+            )}
+          >
             {muted ? <BellSlash size={12} className="shrink-0 text-ash-400" aria-hidden /> : null}
-          </span>
+          </BadgedName>
           <span
             className={cn(
               "flex items-center gap-1 truncate text-[12.5px]",

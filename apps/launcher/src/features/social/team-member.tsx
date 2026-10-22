@@ -38,6 +38,7 @@ import { api } from "@/lib/api";
 import type { SocialTeam, TeamMember } from "@/lib/api/social-types";
 import { attempt } from "./actions";
 import { directConversation } from "./chat/conversations";
+import { BadgedName, badgeRowLabel, focusFirstAction, useShownBadge } from "./crew-badge";
 import { DiscordButton } from "./discord-button";
 import { openInDiscord } from "./discord-link";
 import { JoinButton } from "./friend-row";
@@ -346,10 +347,18 @@ function MemberCard({
           surface="var(--color-obsidian-900)"
         />
         <div className="min-w-0">
-          <p className="flex items-center gap-1.5 truncate font-display text-[18px] leading-tight font-semibold text-bone-50">
-            <span className="truncate">{member.name}</span>
+          {/* The tag they wear before the name, a button of its own here (TEAM6). */}
+          <BadgedName
+            name={member.name}
+            badge={member.badge}
+            wearer={member.id}
+            size="lg"
+            chip="button"
+            className="gap-2"
+            nameClassName="font-display text-[18px] leading-tight font-semibold text-bone-50"
+          >
             <RoleBadge member={member} size={15} />
-          </p>
+          </BadgedName>
           <p className="truncate text-[12.5px] text-ash-400" data-selectable>
             @{member.username}
           </p>
@@ -549,6 +558,7 @@ export function TeamMemberRow({
   const presence = member.blocked
     ? t("teams.member.blocked")
     : presenceLine(friend && member.state === "offline" ? friend : member, t);
+  const badge = useShownBadge(member.badge);
   const shown =
     line === "presence" ||
     member.blocked ||
@@ -591,7 +601,7 @@ export function TeamMemberRow({
               onClick={(event) => {
                 if (event.detail > 1 && open) event.preventDefault();
               }}
-              aria-label={`${member.name}, ${presence}`}
+              aria-label={`${badgeRowLabel(member.name, badge, t)}, ${presence}`}
               className={cn(
                 "flex min-w-0 flex-1 cursor-pointer items-center gap-3 rounded-[var(--radius-panel)] pl-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-gold-300",
                 line === "where" ? "py-1.5" : "py-2",
@@ -605,19 +615,20 @@ export function TeamMemberRow({
                 dnd={member.dnd}
               />
               <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-1.5">
-                  <span
-                    className={cn(
-                      "truncate text-[14px] font-semibold",
-                      member.state === "offline" || member.blocked
-                        ? "text-bone-100/70"
-                        : "text-bone-50",
-                    )}
-                  >
-                    {member.name}
-                  </span>
+                <BadgedName
+                  name={member.name}
+                  badge={member.badge}
+                  wearer={member.id}
+                  dim={member.state === "offline" || member.blocked}
+                  nameClassName={cn(
+                    "text-[14px] font-semibold",
+                    member.state === "offline" || member.blocked
+                      ? "text-bone-100/70"
+                      : "text-bone-50",
+                  )}
+                >
                   <RoleBadge member={member} />
-                </span>
+                </BadgedName>
                 {sub ? (
                   <span className="relative block h-[18px] overflow-hidden">
                     <AnimatePresence mode="popLayout" initial={false}>
@@ -648,6 +659,7 @@ export function TeamMemberRow({
                   sideOffset={14}
                   collisionPadding={16}
                   aria-label={member.name}
+                  onOpenAutoFocus={focusFirstAction}
                 >
                   <motion.div
                     className="z-50 rounded-[var(--radius-panel)] border border-white/8 bg-obsidian-900/96 p-4 shadow-[inset_0_1px_0_rgb(255_255_255/0.06),0_30px_80px_rgb(34_6_6/0.6)] backdrop-blur-xl outline-none [html[data-perf=on]_&]:backdrop-blur-none"

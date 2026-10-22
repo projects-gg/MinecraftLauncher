@@ -18,6 +18,7 @@ import {
   PencilSimple,
   SignOut,
   Star,
+  TagSimple,
   Trash,
   UserPlus,
   UsersThree,
@@ -32,6 +33,8 @@ import { api } from "@/lib/api";
 import type { SocialTeam, TeamInvite } from "@/lib/api/social-types";
 import { formatRelative } from "@/lib/format";
 import { attempt, copyText } from "./actions";
+import { sayJoined, wearTag } from "./badge-actions";
+import { wearState } from "./badges";
 import { callOrAsk } from "./call-actions";
 import { callNames, callWaitUntil, liveCalls } from "./calls";
 import { muteItems, unmuteCrew, useCrewMute } from "./crew-notify";
@@ -87,6 +90,11 @@ export function useCrewItems(team: SocialTeam, place: CrewMenuPlace = {}) {
         : "ready";
   const at = crews.findIndex((c) => c.id === team.id);
   const chat = useSocialUi((s) => s.view.chat !== undefined);
+  // TEAM6: the crew's tag ("Etiketi tak" / "Etiketi çıkar"), a change under way included.
+  const worn = useSocialUi((s) =>
+    s.badgePending !== undefined ? s.badgePending : (s.view.me?.badge?.crew ?? null),
+  );
+  const badge = crew.badges ? wearState(team, worn, Date.now()) : undefined;
   const full = teamMenu({
     team,
     friendsOutside,
@@ -100,6 +108,7 @@ export function useCrewItems(team: SocialTeam, place: CrewMenuPlace = {}) {
         : undefined,
     chat,
     report: true,
+    badge,
   });
   const drop: TeamAction[] = [];
   if (!onToggle) drop.push("toggle");
@@ -155,6 +164,25 @@ export function useCrewItems(team: SocialTeam, place: CrewMenuPlace = {}) {
           label: t("crews.makeMain"),
           icon: <Star size={16} />,
           onSelect: () => makeMainCrew(team.id),
+        };
+      case "wearTag":
+        // Soft while it cannot be worn, its reason beside it (a menu row has no tooltip).
+        return {
+          label:
+            badge === "hidden"
+              ? `${t("team6.wear")} (${t("team6.hiddenShort")})`
+              : badge === "locked"
+                ? `${t("team6.wear")} (${t("team6.lockedShort")})`
+                : t("team6.wear"),
+          icon: <TagSimple size={16} />,
+          disabled: row.disabled,
+          onSelect: () => void wearTag(team.id),
+        };
+      case "takeOffTag":
+        return {
+          label: t("team6.takeOff"),
+          icon: <TagSimple size={16} />,
+          onSelect: () => void wearTag(null),
         };
       case "moveUp":
       case "moveDown": {
@@ -335,7 +363,10 @@ export function TeamInviteRow({ invite }: { invite: TeamInvite }) {
         : api.social.declineTeamInvite(invite.teamId),
     );
     setBusy(false);
-    if (done !== undefined && accept) announce(t("teams.joined", { name: invite.name }));
+    // With crew tags: "Etiketi tak" on the toast while the player wears none (TEAM6).
+    if (done !== undefined && accept) {
+      sayJoined(t("teams.joined", { name: invite.name }), () => invite.teamId);
+    }
   };
   // "Rapor et": the crew, or who sent the invite (the dialog asks which).
   const report: MenuItem[] = [

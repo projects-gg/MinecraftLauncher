@@ -197,6 +197,7 @@ export function Menu({
   strip,
   align = "end",
   side = "bottom",
+  onOpenChange,
 }: {
   trigger: ReactElement;
   items: Array<MenuItem | null>;
@@ -204,9 +205,11 @@ export function Menu({
   strip?: readonly MenuStripItem[];
   align?: "start" | "center" | "end";
   side?: "top" | "right" | "bottom" | "left";
+  /** When it opens and closes (a hover card holds itself open meanwhile). */
+  onOpenChange?: (open: boolean) => void;
 }) {
   return (
-    <DropdownMenu.Root>
+    <DropdownMenu.Root onOpenChange={onOpenChange}>
       <DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content

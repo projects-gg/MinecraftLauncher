@@ -12,7 +12,7 @@ export const trReports = {
   reasonsLabel: "Neden",
   reasons: {
     playerName: "Uygunsuz ad",
-    crewName: "Uygunsuz ad ya da slogan",
+    crewName: "Uygunsuz ad, etiket ya da slogan",
     profile: "Uygunsuz profil resmi",
     harassment: "Taciz ya da zorbalık",
     inappropriate: "Uygunsuz mesaj",

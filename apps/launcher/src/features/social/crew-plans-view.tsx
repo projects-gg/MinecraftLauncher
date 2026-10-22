@@ -50,6 +50,7 @@ import { api } from "@/lib/api";
 import type { CrewPlan, PlanAnswer, SocialTeam, TeamMember } from "@/lib/api/social-types";
 import { attempt } from "./actions";
 import { holdFocus } from "./chat/focus";
+import { BadgedName } from "./crew-badge";
 import {
   answersBy,
   canPlan,
@@ -232,17 +233,20 @@ function AnswerRow({ member, team }: { member: TeamMember; team: SocialTeam }) {
         state={member.me || member.blocked ? undefined : member.state}
         dnd={member.dnd}
       />
-      <span className="flex min-w-0 flex-1 items-center gap-1.5">
-        <span
-          className={cn(
-            "truncate text-[13px]",
-            member.me ? "font-semibold text-bone-50" : "text-bone-100",
-          )}
-        >
-          {member.name}
-        </span>
+      {/* The crew tag they wear before the name (TEAM6). */}
+      <BadgedName
+        name={member.name}
+        badge={member.badge}
+        wearer={member.id}
+        size="sm"
+        className="flex-1"
+        nameClassName={cn(
+          "text-[13px]",
+          member.me ? "font-semibold text-bone-50" : "text-bone-100",
+        )}
+      >
         <RoleBadge member={member} size={11} />
-      </span>
+      </BadgedName>
       {member.me ? (
         <span className="pr-1.5 text-[12px] text-ash-400">{t("fix2.menu.you")}</span>
       ) : (

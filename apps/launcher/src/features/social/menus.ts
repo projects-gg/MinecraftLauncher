@@ -292,6 +292,8 @@ export type TeamAction =
   | "invite"
   | "edit"
   | "makeMain"
+  | "wearTag"
+  | "takeOffTag"
   | "moveUp"
   | "moveDown"
   | "mute"
@@ -327,6 +329,12 @@ export interface TeamInput {
   chat?: boolean;
   /** "Ekibi rapor et" (MOD1). */
   report?: boolean;
+  /**
+   * The crew's tag and the player (TEAM6): "Etiketi tak", "Etiketi çıkar" while it is worn, or
+   * "Etiketi tak" soft while the crew cannot be worn (hidden by its leader, its texts locked). Left
+   * out while the service has no tags.
+   */
+  badge?: "wear" | "worn" | "hidden" | "locked";
 }
 
 export function teamMenu({
@@ -339,6 +347,7 @@ export function teamMenu({
   order,
   chat = false,
   report = false,
+  badge,
 }: TeamInput): Plan<TeamAction> {
   const full = team.members.length >= team.limit;
   return tidy<TeamAction>([
@@ -353,9 +362,18 @@ export function teamMenu({
       (canEdit ?? team.role === "founder") && { action: "edit" },
     ),
     null,
+    // "Ana ekip yap"'s group: the crew and the player (its place, its tag).
+    ...only<TeamAction>(
+      Boolean(order) && !order?.first && { action: "makeMain" },
+      badge === "worn" && { action: "takeOffTag" },
+      badge !== undefined &&
+        badge !== "worn" && {
+          action: "wearTag",
+          disabled: badge === "hidden" || badge === "locked",
+        },
+    ),
     ...(order
       ? only<TeamAction>(
-          !order.first && { action: "makeMain" },
           { action: "moveUp", disabled: order.first },
           { action: "moveDown", disabled: order.last },
         )
@@ -366,6 +384,19 @@ export function teamMenu({
     report ? { action: "report" } : null,
     { action: leavingOf(team) },
   ]);
+}
+
+// --- a crew tag's card, for someone outside its crew (TEAM6) --------------------------------------------
+
+export type BadgeAction = "report";
+
+/**
+ * The "…" of a tag's card (and a standalone chip's right click) for someone who is not in its crew:
+ * "Ekibi rapor et" (its name, tag or motto), the tag as how it was seen. The crew's members get the
+ * crew's own menu (`teamMenu`) there instead; the card's bottom row carries what the player may do.
+ */
+export function badgeMenu(): Plan<BadgeAction> {
+  return [{ action: "report" }];
 }
 
 // --- a crew plan's card (TEAM5, its note FIX2) ---------------------------------------------------------

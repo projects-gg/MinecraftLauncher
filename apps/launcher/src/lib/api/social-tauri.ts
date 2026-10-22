@@ -8,7 +8,9 @@ import {
   type ChatView,
   type CmdError,
   type ConversationView,
+  type CrewBadgeView,
   type CrewCallView,
+  type CrewJoinView,
   commands,
   type FriendGroupsView,
   type FriendView,
@@ -21,6 +23,7 @@ import {
   type ProfileView,
   type RequestView,
   type SocialView,
+  type TagOffView,
   type TeamInviteView,
   type TeamLookupView,
   type TeamMemberView,
@@ -33,8 +36,10 @@ import type {
   ChatMessage,
   ChatState,
   Conversation,
+  CrewBadge,
   CrewCall,
   CrewFeatures,
+  CrewJoin,
   CrewPlan,
   Friend,
   FriendGroups,
@@ -91,6 +96,24 @@ function profile(v: ProfileView): SocialProfile {
   };
 }
 
+/** A crew tag's card (TEAM6): only while the service lists `badges` (else none at all). */
+function badge(v: CrewBadgeView | null | undefined): CrewBadge | undefined {
+  return v
+    ? {
+        crew: v.crew,
+        tag: v.tag,
+        color: v.color,
+        frame: v.frame,
+        emblem: v.emblem,
+        name: v.name,
+        motto: v.motto,
+        createdOn: v.createdOn,
+        members: v.members,
+        requests: v.requests,
+      }
+    : undefined;
+}
+
 function friend(v: FriendView): Friend {
   return {
     id: v.id,
@@ -104,6 +127,7 @@ function friend(v: FriendView): Friend {
     dnd: v.dnd,
     game: game(v.game),
     discordUrl: v.discordUrl,
+    badge: badge(v.badge),
   };
 }
 
@@ -152,6 +176,7 @@ function me(v: MeView): SocialMe {
             .map((item) => ({ key: item.key as LimitedKey, perDay: opt(item.perDay) })),
         }
       : undefined,
+    badge: badge(v.badge),
   };
 }
 
@@ -282,11 +307,24 @@ function teamMember(v: TeamMemberView): TeamMember {
     discordUrl: v.discordUrl,
     joinedAt: v.joinedAt,
     togetherMonth: v.togetherMonth,
+    badge: badge(v.badge),
   };
 }
 
 function joinRequest(v: JoinRequestView): JoinRequest {
-  return { ...profile(v), sentAt: v.sentAt };
+  // TEAM6: from a tag's card, the member whose tag it was ("Ayşe aracılığıyla").
+  return { ...profile(v), sentAt: v.sentAt, via: opt(v.via), viaName: opt(v.viaName) };
+}
+
+function crewJoin(v: CrewJoinView): CrewJoin {
+  return {
+    crew: v.crew,
+    id: v.id,
+    name: v.name,
+    mine: v.mine,
+    at: v.at,
+    greetUntil: opt(v.greetUntil),
+  };
 }
 
 function teamRequest(v: TeamRequestView): TeamRequest {
@@ -372,6 +410,10 @@ function team(v: TeamView): SocialTeam {
     linkUrl: opt(v.linkUrl),
     requests: v.requests.map(joinRequest),
     togetherWeek: v.togetherWeek,
+    // TEAM6 (false and 0 while the service has no crew tags).
+    hidden: v.hidden,
+    badgeRequests: v.badgeRequests,
+    wearers: v.wearers,
   };
 }
 
@@ -422,6 +464,9 @@ export function crewFeatures(list: readonly string[]): CrewFeatures {
     plans: list.includes("plans"),
     planNotes: list.includes("planNotes"),
     crewFriendRequests: list.includes("crewFriendRequests"),
+    badges: list.includes("badges"),
+    // Requests from a tag only with the tags themselves.
+    badgeRequests: list.includes("badges") && list.includes("badgeRequests"),
   };
 }
 
@@ -465,6 +510,7 @@ export function snapshot(v: SocialView): SocialSnapshot {
     notices: v.notices.map(modNotice).filter((n): n is ModNotice => n !== null),
     restriction: v.restriction ? { until: opt(v.restriction.until) } : undefined,
     backupWaitsUntil: opt(v.backupWaitsUntil),
+    crewJoins: v.crewJoins.map(crewJoin),
   };
 }
 
@@ -710,6 +756,34 @@ export const tauriSocial: SocialApi = {
   async setJoinMode(teamId, join) {
     await ok(commands.socialTeamJoinMode(teamId, join));
   },
+  // TEAM6 (pl-social): sent only while `teamFeatures` lists them (the interface shows nothing of
+  // them otherwise); "Geri al" is the same call with the old value.
+  async setBadge(teamId) {
+    await ok(commands.socialSetBadge(teamId));
+  },
+  async setBadgeSettings(teamId, change) {
+    if (change.hidden !== undefined) await ok(commands.socialTeamHidden(teamId, change.hidden));
+    if (change.badgeRequests !== undefined) {
+      await ok(commands.socialTeamBadgeRequests(teamId, change.badgeRequests));
+    }
+  },
+  async requestFromBadge(teamId, via) {
+    const answer = await ok(commands.socialRequestFromBadge(teamId, via));
+    return answer.status === "sent"
+      ? { status: "sent" }
+      : { status: "refused", reason: answer.reason, until: answer.until };
+  },
+  async greetNewcomer(crew, id) {
+    await ok(commands.socialCrewGreet(crew, id));
+  },
+  onTagOff(listener) {
+    const unlisten = listen<TagOffView>("social-tag-off", (event) =>
+      listener({ crew: event.payload.crew, name: event.payload.name }),
+    );
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  },
   makePlan: (crew, at, note) => ok(commands.socialPlanMake(crew, at, note ?? null)),
   async setPlanNote(planId, note) {
     await ok(commands.socialPlanNote(planId, note));
@@ -785,7 +859,13 @@ export const tauriSocial: SocialApi = {
   async report(target, reason, note, block) {
     const wire =
       target.kind === "crew"
-        ? { kind: "crew" as const, id: target.id, code: target.code ?? null }
+        ? // TEAM6: from a tag's card, the wearer as `via` (the backend sends one of code and via).
+          {
+            kind: "crew" as const,
+            id: target.id,
+            code: target.code ?? null,
+            via: target.via ?? null,
+          }
         : target.kind === "player"
           ? {
               kind: "player" as const,
