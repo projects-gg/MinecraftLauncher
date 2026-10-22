@@ -35,6 +35,7 @@ import { AfkHead } from "../afk-head";
 import { isFriendly } from "../errors";
 import { type CloudAccount, type CloudLiveEvent, cloudApi } from "./api";
 import { looksSensitive } from "./sensitive";
+import { issueKey, textProblem } from "./settings-model";
 import { CloudStateLine } from "./state-line";
 import { isInGame } from "./status";
 import { storeAccount } from "./use-cloud";
@@ -257,6 +258,13 @@ export function CloudConsole({
   const send = async () => {
     const line = text.trim();
     if (!line || !account || !running || sending) return;
+    // The settings' rule and words (pl_cloud_afk::check_text): said here, nothing is sent.
+    const problem = textProblem(line);
+    if (problem) {
+      const key = issueKey({ place: "console", index: null, field: "text", problem });
+      setSendError(t(`cloudAfk.settings.issues.${key}`));
+      return;
+    }
     setSending(true);
     setSendError(null);
     const list = histories.get(account.id) ?? [];

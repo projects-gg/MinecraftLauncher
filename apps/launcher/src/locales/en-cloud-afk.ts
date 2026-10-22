@@ -302,6 +302,7 @@ export const enCloudAfk = {
       space: "It can't start or end with a space.",
       control: "Don't use line breaks or invisible characters.",
       backslash: "It can't start with a backslash (\\).",
+      unicode: "There's a broken character. Type the line again.",
       variable: "Only %username%, %serverip%, %serverport% and %datetime% can be used.",
       secret: "A command with a password must be secret.",
       range: "This value isn't accepted.",

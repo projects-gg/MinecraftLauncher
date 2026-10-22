@@ -301,6 +301,7 @@ export const trCloudAfk = {
       space: "Başında ya da sonunda boşluk olamaz.",
       control: "Satır sonu ve görünmeyen karakter kullanma.",
       backslash: "Ters bölü (\\) ile başlayamaz.",
+      unicode: "Bozuk bir karakter var. Satırı yeniden yaz.",
       variable: "Yalnız %username%, %serverip%, %serverport% ve %datetime% kullanılabilir.",
       secret: "Şifre içeren komut gizli olmalı.",
       range: "Bu değer kabul edilmiyor.",

@@ -1,7 +1,9 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { enCloudAfk } from "@/locales/en-cloud-afk";
 import { trCloudAfk } from "@/locales/tr-cloud-afk";
 import type { CloudAccount, CloudEditData } from "./api";
+import { looksSensitive } from "./sensitive";
 import {
   type Draft,
   isDirty,
@@ -93,6 +95,29 @@ function view(): CloudEditData {
 
 const LIMITS = { minIntervalSec: 60, minRuleCooldownSec: 10 };
 
+/** The contract's shared text cases, copied into the crate with a `//` header naming the source. */
+const shared = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../../../../../crates/pl-cloud-afk/tests/vectors/text-rule-v1.json",
+      import.meta.url,
+    ),
+    "utf8",
+  )
+    .split("\n")
+    .filter((line) => !line.startsWith("//"))
+    .join("\n"),
+) as {
+  cases: {
+    name: string;
+    text: string | null;
+    utf16?: string[];
+    units: number;
+    problem: string | null;
+    sensitive?: boolean;
+  }[];
+};
+
 function draftWith(change: (draft: Draft) => void): Draft {
   const draft = toDraft(view());
   change(draft);
@@ -116,6 +141,21 @@ describe("textProblem", () => {
     expect(textProblem("\\say")).toBe("backslash");
     expect(textProblem("\u00a0\\say")).toBe("backslash");
     expect(textProblem("%player% selam")).toBe("variable");
+  });
+});
+
+describe("the shared text cases", () => {
+  it("come out as the contract says, a lone surrogate included", () => {
+    expect(shared.cases).toHaveLength(60);
+    for (const sample of shared.cases) {
+      const units = (sample.utf16 ?? []).map((unit) => Number.parseInt(unit, 16));
+      const text = sample.text ?? String.fromCharCode(...units);
+      expect(text.length, sample.name).toBe(sample.units);
+      expect(textProblem(text), sample.name).toBe(sample.problem);
+      if (sample.sensitive !== undefined) {
+        expect(looksSensitive(text), sample.name).toBe(sample.sensitive);
+      }
+    }
   });
 });
 
@@ -288,6 +328,7 @@ describe("issueKey", () => {
       text: [
         "empty",
         "length",
+        "unicode",
         "space",
         "control",
         "backslash",

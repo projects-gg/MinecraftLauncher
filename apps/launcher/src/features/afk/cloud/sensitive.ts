@@ -46,8 +46,20 @@ function fold(text: string): string {
 const FOLDED = new Set(SENSITIVE_COMMANDS.map(fold));
 const TURKISH_LOWER = new Set(SENSITIVE_COMMANDS.map((name) => name.toLocaleLowerCase("tr")));
 
+/**
+ * What a client trims before it reads a line (MCC does): White_Space and
+ * Default_Ignorable_Code_Point. A `\` after them still starts its internal command
+ * (pl_cloud_afk::without_leading_ignorable, the contract's text rule 4).
+ */
+const LEADING_IGNORABLE = /^[\p{White_Space}\p{Default_Ignorable_Code_Point}]+/u;
+
+export function withoutLeadingIgnorable(text: string): string {
+  return text.replace(LEADING_IGNORABLE, "");
+}
+
+/** The first word (up to a space or tab), after the leading characters a client trims. */
 export function firstWord(line: string): string {
-  return line.trim().split(/[ \t]/, 1)[0] ?? "";
+  return withoutLeadingIgnorable(line).trim().split(/[ \t]/, 1)[0] ?? "";
 }
 
 /** The first word is a password command (also a Turkish keyboard's capitals: `/GİRİŞ`). */

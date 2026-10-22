@@ -4,7 +4,7 @@
 // last word; these checks only answer while typing.
 import type { CloudEditConfig, CloudIssue, CloudRowText } from "@/bindings";
 import type { CloudEdit, CloudEditData } from "./api";
-import { looksSensitive } from "./sensitive";
+import { looksSensitive, withoutLeadingIgnorable } from "./sensitive";
 
 export type Issue = CloudIssue;
 export type Command = CloudEditConfig["commands"][number];
@@ -124,16 +124,22 @@ export function typed(words: Words, text: string): Words {
   return { kind: "plain", text };
 }
 
-/** The contract's text rule (pl_cloud_afk::check_text), for the line under a field. */
+/**
+ * The contract's text rule (pl_cloud_afk::check_text), for the line under a field; the shared
+ * cases are crates/pl-cloud-afk/tests/vectors/text-rule-v1.json.
+ */
 export function textProblem(text: string): string | null {
   if (text === "") return "empty";
   if (text.length > MAX_TEXT) return "length";
+  // A lone UTF-16 surrogate (a broken paste): not well-formed Unicode.
+  if (/\p{Cs}/u.test(text)) return "unicode";
   if (text.startsWith(" ") || text.endsWith(" ")) return "space";
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: the rule is about control characters
-  if (/[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(text)) return "control";
-  if (text.trimStart().startsWith("\\")) return "backslash";
+  if (/[\p{Cc}\p{Zl}\p{Zp}]/u.test(text)) return "control";
+  // A client trims these first: a `\` after them still starts its internal command.
+  if (withoutLeadingIgnorable(text).startsWith("\\")) return "backslash";
   for (const match of text.matchAll(/%([A-Za-z0-9_\u0080-\uffff]+)%/g)) {
-    if (!VARIABLES.has((match[1] ?? "").toLowerCase())) return "variable";
+    if (!VARIABLES.has((match[1] ?? "").replace(/[A-Z]/g, (c) => c.toLowerCase())))
+      return "variable";
   }
   return null;
 }
@@ -258,6 +264,7 @@ export function issueKey(issue: Issue): string {
       return [
         "empty",
         "length",
+        "unicode",
         "space",
         "control",
         "backslash",
