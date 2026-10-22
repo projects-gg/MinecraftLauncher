@@ -1,0 +1,77 @@
+/* The emoji and sticker picker (CHAT2-L). Cells are actions, so their plate and their focus ring
+   are chamfered (docs/design.md §1, two shapes). The ring belongs to the keyboard: it lights only
+   on the grid's active cell while the grid has keyboard focus. Only transform and opacity move. */
+
+.emoji-glyph {
+  display: inline-block;
+  font-family: "PL Emoji", "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+  font-style: normal;
+  font-weight: 400;
+  line-height: 1;
+}
+
+.picker-plate,
+.picker-ring,
+.picker-ring-static {
+  position: absolute;
+  inset: 2px;
+  pointer-events: none;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+}
+
+.picker-plate {
+  background: rgb(255 255 255 / 0.08);
+  opacity: 0;
+  transition: opacity 90ms ease-out;
+}
+
+.picker-ring,
+.picker-ring-static {
+  box-shadow: inset 0 0 0 2px var(--color-gold-300, #f6d58e);
+  opacity: 0;
+}
+
+.picker-ring-static {
+  inset: 0;
+}
+
+@media (hover: hover) {
+  .picker-cell:hover .picker-plate {
+    opacity: 1;
+  }
+}
+
+.picker-grid:focus-visible .picker-cell[data-active] .picker-plate,
+.picker-grid:focus-visible .picker-cell[data-active] .picker-ring,
+:focus-visible > .picker-ring-static {
+  opacity: 1;
+}
+
+/* The glyph lifts under the pointer and presses in; a still glyph under reduced motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .picker-cell .emoji-glyph {
+    transition: transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .picker-cell:active .emoji-glyph {
+    transform: scale(0.9);
+  }
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .picker-cell:hover .emoji-glyph {
+    transform: scale(1.12);
+  }
+
+  .picker-cell:hover:active .emoji-glyph {
+    transform: scale(0.94);
+  }
+}
+
+/* The rail's gold mark glides to the group at the top (a CSS transition: a new group mid-glide
+   carries on from where the mark is). */
+.rail-marker {
+  transition:
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 150ms ease-out;
+}

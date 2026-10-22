@@ -1,0 +1,50 @@
+// Chat extras (CHAT2): the emoji and sticker picker, stickers. Short, friendly, sentence case.
+export const enChat2 = {
+  picker: {
+    open: "Emoji and stickers",
+    openEmoji: "Emoji",
+    label: "Emoji and stickers",
+    tabs: {
+      label: "Kind",
+      emoji: "Emoji",
+      stickers: "Stickers",
+    },
+    search: "Search emoji",
+    clear: "Clear search",
+    grid: "Emoji",
+    recent: "Recently used",
+    empty: "No emoji found",
+    results_one: "{{count}} emoji found",
+    results_other: "{{count}} emoji found",
+    groups: "Groups",
+  },
+  groups: {
+    smileys: "Smileys and emotion",
+    people: "People",
+    nature: "Animals and nature",
+    food: "Food and drink",
+    travel: "Travel and places",
+    activities: "Activities",
+    objects: "Objects",
+    symbols: "Symbols",
+    flags: "Flags",
+  },
+  tone: {
+    label: "Skin tone",
+    current: "Skin tone: {{tone}}",
+    options: {
+      default: "Default",
+      light: "Light",
+      mediumLight: "Medium-light",
+      medium: "Medium",
+      mediumDark: "Medium-dark",
+      dark: "Dark",
+    },
+  },
+  stickers: {
+    grid: "Stickers",
+    recent: "Recently used",
+    label: "{{name}} sticker",
+    unknown: "Sticker",
+  },
+};
