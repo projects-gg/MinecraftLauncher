@@ -52,6 +52,13 @@ public final class ToastCard {
     final String hintKey;
     final int hintKeyWidth;
     final String hintAfter;
+    // The short strings again, in the form the game draws: made once here, not on every frame (each String
+    // draw runs the game's bidirectional text pass).
+    private final FormattedCharSequence initialLine;
+    private final FormattedCharSequence countLine;
+    private final FormattedCharSequence hintBeforeLine;
+    private final FormattedCharSequence hintKeyLine;
+    private final FormattedCharSequence hintAfterLine;
     final float height;
     final Component narration;
 
@@ -73,6 +80,11 @@ public final class ToastCard {
         this.hintKeyWidth = b.hintKey == null ? 0 : Fonts.small().width(b.hintKey) + 2 * KEY_PAD;
         this.hintAfter = b.hintAfter;
         this.narration = b.narration;
+        this.initialLine = line(b.initial);
+        this.countLine = line(b.countText);
+        this.hintBeforeLine = line(b.hintBefore);
+        this.hintKeyLine = line(b.hintKey);
+        this.hintAfterLine = line(b.hintAfter);
         if (kind == Kind.TRAVEL) {
             this.height = PAD_Y + Math.max(FACE, body.size() * LINE_H) + PAD_Y;
             return;
@@ -82,6 +94,10 @@ public final class ToastCard {
             h += HINT_GAP + HINT_H;
         }
         this.height = h + PAD_Y;
+    }
+
+    private static FormattedCharSequence line(String text) {
+        return text == null || text.isEmpty() ? null : Texts.visual(text);
     }
 
     private static final class Builder {
@@ -210,7 +226,7 @@ public final class ToastCard {
             float px = tx + titleWidth + 4;
             float py = ty + (TITLE_H - 9) / 2f;
             Draw.frame(g, Frames.PILL, px, py, countWidth, 9);
-            Draw.text(g, Fonts.small(), countText, px + 4, Fonts.centeredY(Fonts.Face.SMALL, py + 4.5f),
+            Draw.text(g, Fonts.small(), countLine, px + 4, Fonts.centeredY(Fonts.Face.SMALL, py + 4.5f),
                 Theme.BONE_100);
         }
         ty += TITLE_H;
@@ -266,8 +282,8 @@ public final class ToastCard {
                 Draw.disc(g, FACE, cx, cy, Theme.OBSIDIAN_600);
                 if (crewChat) {
                     Draw.icon(g, Icon.CREW, 10, cx - 5, cy - 5, Theme.BONE_100);
-                } else {
-                    Draw.text(g, Fonts.strong(), initial, cx - initialWidth / 2f,
+                } else if (initialLine != null) {
+                    Draw.text(g, Fonts.strong(), initialLine, cx - initialWidth / 2f,
                         Fonts.centeredY(Fonts.Face.STRONG, cy), Theme.BONE_100);
                 }
             }
@@ -278,18 +294,18 @@ public final class ToastCard {
         Font small = Fonts.small();
         float textY = Fonts.centeredY(Fonts.Face.SMALL, y + HINT_H / 2f);
         float cx = x;
-        if (hintBefore != null && !hintBefore.isEmpty()) {
-            Draw.text(g, small, hintBefore, cx, textY, Theme.ASH_300);
+        if (hintBeforeLine != null) {
+            Draw.text(g, small, hintBeforeLine, cx, textY, Theme.ASH_300);
             cx += hintBeforeWidth + 3;
         }
-        if (hintKey == null) {
+        if (hintKeyLine == null) {
             return;
         }
         Draw.frame(g, Frames.KEYCAP, cx, y, hintKeyWidth, HINT_H);
-        Draw.text(g, small, hintKey, cx + KEY_PAD, textY - 0.5f, Theme.BONE_100);
+        Draw.text(g, small, hintKeyLine, cx + KEY_PAD, textY - 0.5f, Theme.BONE_100);
         cx += hintKeyWidth + 3;
-        if (!hintAfter.isEmpty()) {
-            Draw.text(g, small, hintAfter, cx, textY, Theme.ASH_300);
+        if (hintAfterLine != null) {
+            Draw.text(g, small, hintAfterLine, cx, textY, Theme.ASH_300);
         }
     }
 }
