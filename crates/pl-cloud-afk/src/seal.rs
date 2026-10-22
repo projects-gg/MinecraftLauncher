@@ -499,7 +499,7 @@ mod tests {
         let vectors = seal_vectors();
         let keys = vault_keys(&vectors);
         let invalid = vectors["invalid"].as_array().unwrap();
-        assert_eq!(invalid.len(), 30);
+        assert_eq!(invalid.len(), 58);
         for vector in invalid {
             let name = s(vector, "name");
             let server = server(vector);

@@ -61,6 +61,6 @@ pub use service::{
     CloudEdit, CloudEditView, CloudOverview, CloudSaveOutcome, CloudService, CloudSession,
 };
 pub use text::{
-    CloudTextProblem, MAX_TEXT_UNITS, check_text, is_sensitive, looks_sensitive, preview,
-    sensitive_command_names,
+    CloudTextProblem, MAX_TEXT_UNITS, check_text, check_text_utf16, is_leading_ignorable,
+    is_sensitive, looks_sensitive, preview, sensitive_command_names, without_leading_ignorable,
 };

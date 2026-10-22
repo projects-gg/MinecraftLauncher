@@ -12,7 +12,7 @@ use crate::model::{
     CommandInput, ConfigInput, PayloadInput, RuleInput, VaultKey,
 };
 use crate::seal::{SealError, SealTarget, fingerprint, seal};
-use crate::text::{CloudTextProblem, check_text, looks_sensitive, preview};
+use crate::text::{check_text, looks_sensitive, preview};
 
 /// Hard maxima of the schema, whatever Studio's numbers say.
 const HARD_MAX_ROWS: usize = 50;
@@ -146,17 +146,6 @@ impl CloudIssue {
     }
 }
 
-fn text_problem(problem: CloudTextProblem) -> &'static str {
-    match problem {
-        CloudTextProblem::Empty => "empty",
-        CloudTextProblem::Length => "length",
-        CloudTextProblem::Space => "space",
-        CloudTextProblem::Control => "control",
-        CloudTextProblem::Backslash => "backslash",
-        CloudTextProblem::Variable => "variable",
-    }
-}
-
 /// The editor's form of the account view: a secret row shows its words when this computer kept a
 /// copy of exactly that seal (the same `fp`), else only its preview.
 pub fn edit_config(view: &CloudConfigView, copies: &RowCopies) -> CloudEditConfig {
@@ -238,7 +227,7 @@ fn check_words(
         CloudRowText::Sealed { .. } => return,
     };
     if let Err(problem) = check_text(text) {
-        issues.push(CloudIssue::row(place, index, field, text_problem(problem)));
+        issues.push(CloudIssue::row(place, index, field, problem.as_str()));
     }
 }
 
