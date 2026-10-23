@@ -31,6 +31,10 @@ function useChangeToasts() {
         }
       } catch {
         toast.error(t("projectsSkin.note.saveFailed"));
+      } finally {
+        // An open panel shows the change in line at once; the job's own message comes only
+        // when it closes.
+        void queryClient.invalidateQueries({ queryKey: PROJECTS_SKIN_KEY });
       }
     };
 
