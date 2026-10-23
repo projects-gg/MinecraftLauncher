@@ -137,7 +137,8 @@ public final class LinkScreen extends Screen {
         Draw.frame(g, Frames.DIALOG, cardX, cardY, WIDTH, cardH);
         float x = cardX + PAD;
         float y = cardY + PAD;
-        Draw.icon(g, Icon.GLOBE, 12, x, y + 1, Theme.GOLD_300);
+        // The icon of what "Aç" does, as "Sunucuya bağlan" carries "Bağlan"'s (no globe: decoration).
+        Draw.icon(g, Icon.OPEN, 12, x, y + 1, Theme.GOLD_300);
         Draw.text(g, Fonts.display(), title, x + 17, Fonts.centeredY(Fonts.Face.DISPLAY, y + 7), Theme.BONE_50);
         y += 14 + 4;
         for (FormattedCharSequence line : body) {

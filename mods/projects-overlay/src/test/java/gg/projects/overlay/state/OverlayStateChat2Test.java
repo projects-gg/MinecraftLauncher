@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import gg.projects.overlay.bridge.Protocol;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -200,5 +201,18 @@ class OverlayStateChat2Test {
         apply("{\"t\":\"welcome\",\"proto\":1,\"me\":{\"name\":\"Mert\"},\"features\":[\"friends\",\"chat\"]}");
         assertTrue(state.writers("c:t1", 1_100).isEmpty());
         assertNull(state.note(1_100));
+    }
+
+    @Test
+    void newMessagesGoesOverTheFirstUnreadFromOthers() {
+        apply("{\"t\":\"msg\",\"conv\":\"c:t1\",\"id\":\"i:1\",\"sid\":1,\"from\":\"Mert\",\"text\":\"a\"}");
+        apply("{\"t\":\"msg\",\"conv\":\"c:t1\",\"id\":\"i:2\",\"sid\":2,\"from\":\"Deniz\",\"text\":\"b\"}");
+        apply("{\"t\":\"msg\",\"conv\":\"c:t1\",\"id\":\"i:3\",\"sid\":3,\"from\":\"Ece\",\"mine\":true,\"text\":\"c\"}");
+        List<OverlayState.ChatLine> lines = new ArrayList<>(state.lines("c:t1"));
+        // The player's own message after them is never unread: one unread is Deniz's, not the player's.
+        assertSame(line("c:t1", "i:2"), OverlayState.firstUnread(lines, 1));
+        assertSame(line("c:t1", "i:1"), OverlayState.firstUnread(lines, 2));
+        assertSame(line("c:t1", "i:1"), OverlayState.firstUnread(lines, 9), "more unread than kept: the top");
+        assertNull(OverlayState.firstUnread(List.of(), 1));
     }
 }

@@ -44,7 +44,7 @@ import org.joml.Matrix3x2fStack;
  * one gives or takes back the same reaction; the pointer on it names who), the links the launcher lets the
  * player press, a link's card as a line in the bubble, and "Görüldü" under the last message a friend has seen.
  * A message under the pointer, or picked with the arrow keys, shows "Tepki ver" and "Yanıtla" beside it;
- * "Tepki ver" opens six quick reactions.
+ * "Tepki ver" opens six quick reactions and "Yanıtla" in their place.
  *
  * <p>The list sits at its newest message: a new one rises in and the older ones glide up to make room.
  * Scrolled up, it stays where it is and a "Yeni mesajlar" pill takes the player down. A short conversation
@@ -71,7 +71,10 @@ public final class MessageList extends PanelWidget {
     private static final int TOOL = 14;
     private static final int TOOL_GAP = 2;
     private static final int TOOL_PAD = 2;
-    private static final int QUICK_CELL = 18;
+    /** A quick reaction's cell: the 16 px glyph with room on both sides (its focus ring keeps off the next one). */
+    private static final int QUICK_CELL = 22;
+    /** More room under a time in the middle of a group ("Görüldü"), so it reads as the bubble above's. */
+    private static final int META_GAP = 3;
     /** The fades at the list's edges; a message picked with the keys is brought out of them. */
     private static final int FADE = ShapeSet.LIST_FADE;
     /** From the newest message's bottom to the end of the content (its gap and the list's own margin). */
@@ -181,6 +184,8 @@ public final class MessageList extends PanelWidget {
     private long laidOutSeen = -1;
     private long nextTimeout = Long.MAX_VALUE;
     private int unreadAtOpen;
+    /** The first message that was unread when the conversation opened: "Yeni mesajlar" stays over it. */
+    private OverlayState.ChatLine dividerLine;
     private float contentHeight;
     /** Where the rows end (the content's height without the room below them). */
     private float rowsEnd;
@@ -189,6 +194,11 @@ public final class MessageList extends PanelWidget {
     private boolean pinned = true;
     private long settleUntil;
     private boolean newBelow;
+    /** The last layout added a message after the newest one the list had (only that brings the pill). */
+    private boolean arrivedBelow;
+    /** The floating line's height (0 when none can show) and how much of it shows this frame (0 to 1). */
+    private int floatLineH;
+    private float floatShown;
     private boolean reducedMotion;
     private long lastFrame;
     private Component lastNarration = Component.empty();
@@ -218,8 +228,6 @@ public final class MessageList extends PanelWidget {
     private int selected = -1;
     private int stripRow = -1;
     private int stripFocus;
-    /** The strip was opened with the keyboard: it offers "Yanıtla" too (the pointer has the toolbar). */
-    private boolean stripKeyboard;
     private final float[] quickW = new float[QUICK.length];
     private long stripOpenedAt;
     private OverlayState.ChatLine stripLine;
@@ -255,6 +263,7 @@ public final class MessageList extends PanelWidget {
      * and it never covers a word. The launcher keeps the same room under its messages for its typing pill.
      */
     public void setFloatingLine(int height) {
+        floatLineH = Math.max(0, height);
         float room = height <= 0 ? 0f : Math.max(0f, height + 2 + 3 - END_PAD);
         if (room == floatRoom) {
             return;
@@ -265,6 +274,24 @@ public final class MessageList extends PanelWidget {
             if (pinned) {
                 scroll.snap(maxScroll());
             }
+        }
+    }
+
+    /**
+     * How much the floating line shows this frame (the screen sets it before the list draws). Scrolled up, the
+     * messages fade out above it instead of passing under it, so it covers no word there either.
+     */
+    public void setFloatingShown(float alpha) {
+        floatShown = alpha;
+    }
+
+    /** The player went elsewhere (the field, a reply, the stickers): the pick and the quick reactions let go. */
+    @Override
+    public void setFocused(boolean focused) {
+        super.setFocused(focused);
+        if (!focused) {
+            closeStrip();
+            selected = -1;
         }
     }
 
@@ -300,6 +327,7 @@ public final class MessageList extends PanelWidget {
         conversation = conv;
         crew = crewChat;
         unreadAtOpen = Math.max(0, unread);
+        dividerLine = null;
         laidOutRevision = -1;
         known.clear();
         rows.clear();
@@ -345,7 +373,6 @@ public final class MessageList extends PanelWidget {
         // The first message of an empty conversation appears in its place (it rises in by itself): gliding
         // up from the empty list's bottom would carry it across the whole list.
         boolean wasEmpty = rows.isEmpty();
-        float oldMax = maxScroll();
         float oldTop = scroll.value();
         OverlayState.ChatLine keepSelected = selected >= 0 && selected < rows.size() ? rows.get(selected).line : null;
         layout(state, now, first, seen);
@@ -360,14 +387,25 @@ public final class MessageList extends PanelWidget {
             }
         }
         float max = maxScroll();
-        if (first || reducedMotion || wasEmpty) {
+        if (first || wasEmpty) {
             scroll.snap(pinned ? max : Math.min(max, oldTop));
         } else if (pinned) {
-            // The older messages glide up as the new one comes in.
-            scroll.snap(Math.min(oldTop, max));
-            scroll.setTarget(max);
-        } else if (max > oldMax + 0.5f) {
-            newBelow = true;
+            if (reducedMotion) {
+                scroll.snap(max);
+            } else {
+                // The older messages glide up as the new one comes in.
+                scroll.snap(Math.min(oldTop, max));
+                scroll.setTarget(max);
+            }
+        } else {
+            if (reducedMotion) {
+                scroll.snap(Math.min(max, oldTop));
+            }
+            // Scrolled up, the list stays where it is. A message that came in after the newest one brings the
+            // pill (with reduced motion too); a bubble that only grew (a reaction, its card, "Görüldü") does not.
+            if (arrivedBelow) {
+                newBelow = true;
+            }
         }
     }
 
@@ -425,11 +463,18 @@ public final class MessageList extends PanelWidget {
         int textMax = maxBubble - 2 * BUBBLE_PAD_X;
         List<OverlayState.ChatLine> lines = new ArrayList<>(state.lines(conversation));
         OverlayState.ChatLine seenLine = crew ? null : OverlayState.seenLine(lines, seen);
-        int dividerAt = unreadAtOpen > 0 ? Math.max(0, lines.size() - unreadAtOpen) : -1;
+        if (first) {
+            // While the history comes in; then the divider stays over the same message (it slid down one row
+            // with every message that came after, the player's own too).
+            dividerLine = unreadAtOpen > 0 ? OverlayState.firstUnread(lines, unreadAtOpen) : null;
+        }
+        int dividerAt = dividerLine == null ? -1 : lines.indexOf(dividerLine);
         StickerSet set = StickerSet.get();
         float y = 4f;
         Row previous = null;
         Set<String> seenIds = new HashSet<>();
+        int lastKnown = -1;
+        int lastArrival = -1;
         for (int i = 0; i < lines.size(); i++) {
             OverlayState.ChatLine line = lines.get(i);
             OverlayState.ChatLine next = i + 1 < lines.size() ? lines.get(i + 1) : null;
@@ -519,19 +564,25 @@ public final class MessageList extends PanelWidget {
             }
             row.actionable = !line.deleted && line.sid > 0 && row.delivery == OverlayState.Delivery.SENT;
             row.height = y - row.y;
-            String id = line.id != null ? line.id : line.clientId;
+            // The player's own message keeps its first key: it gets the service's id only when the launcher
+            // confirms it, and with that id first it rose in (a sticker moved) a second time.
+            String id = line.clientId != null ? line.clientId : line.id;
             if (id != null) {
                 seenIds.add(id);
-                if (!first && !known.contains(id)) {
+                if (known.contains(id)) {
+                    lastKnown = i;
+                } else if (!first) {
                     row.appearedAt = now;
+                    lastArrival = i;
                 }
             }
             rows.add(row);
-            y += ROW_GAP;
+            y += ROW_GAP + (row.meta && !lastOfGroup ? META_GAP : 0);
             previous = row;
         }
         known.clear();
         known.addAll(seenIds);
+        arrivedBelow = lastArrival > lastKnown;
         rowsEnd = y;
         contentHeight = rows.isEmpty() ? 0f : y + 4f + floatRoom;
         lastNarration = rows.isEmpty() ? Texts.tr("chat.empty") : narrationOf(rows.get(rows.size() - 1));
@@ -835,7 +886,8 @@ public final class MessageList extends PanelWidget {
             toBottom();
             return;
         }
-        if (stripRow >= 0) {
+        boolean hadStrip = stripRow >= 0;
+        if (hadStrip) {
             int cell = quickAt(mx, my);
             if (cell >= 0) {
                 activateStrip(cell);
@@ -865,7 +917,8 @@ public final class MessageList extends PanelWidget {
                     return;
                 }
             }
-            int tool = toolAt(row, mx, local);
+            // The toolbar was hidden under the open strip: this press only closed the strip.
+            int tool = hadStrip ? -1 : toolAt(row, mx, local);
             if (tool == 0 && canReact) {
                 openStrip(i, -1);
                 return;
@@ -911,7 +964,6 @@ public final class MessageList extends PanelWidget {
         }
         stripRow = row;
         stripLine = rows.get(row).line;
-        stripKeyboard = focus >= 0;
         stripFocus = Math.max(0, focus);
         stripOpenedAt = now();
     }
@@ -925,7 +977,8 @@ public final class MessageList extends PanelWidget {
     private int stripCount() {
         Row row = stripRow >= 0 && stripRow < rows.size() ? rows.get(stripRow) : null;
         int n = row != null && canReact && reactable(row) ? QUICK.length : 0;
-        return n + (canReply && stripKeyboard ? 1 : 0);
+        // "Yanıtla" too, however it opened: the toolbar steps aside while the strip is open.
+        return n + (canReply ? 1 : 0);
     }
 
     private void activateStrip(int cell) {
@@ -971,7 +1024,7 @@ public final class MessageList extends PanelWidget {
     /** Which toolbar button (0 react, 1 reply) is at {@code mx}, row-local {@code ly}; -1 none. */
     private int toolAt(Row row, float mx, float ly) {
         int n = toolCount(row);
-        if (n == 0 || !(hoverRowIs(row) || rowIndex(row) == selected)) {
+        if (n == 0 || stripRow >= 0 || !(hoverRowIs(row) || rowIndex(row) == selected)) {
             return -1;
         }
         float tx = toolbarX(row, n) + TOOL_PAD;
@@ -1144,6 +1197,16 @@ public final class MessageList extends PanelWidget {
             Draw.column(g, ShapeSet.FADE_BOTTOM, x0 - 3, y0 + h - FADE, w + 6, FADE);
             Draw.popAlpha();
         }
+        // Scrolled up while the floating line shows: the messages fade out above it (at the newest message
+        // its room is empty, so nothing changes there).
+        float band = (floatLineH > 0 ? floatShown : 0f) * Math.min(1f, Math.max(0f, (maxScroll() - top) / FADE));
+        if (band > 0.01f) {
+            float bandTop = y0 + h - floatLineH - 4 - (newBelow ? 18 : 0);
+            Draw.pushAlpha(band);
+            Draw.fill(g, x0 - 3, bandTop, x0 + w + 3, y0 + h, ShapeSet.PANEL_FILL);
+            Draw.column(g, ShapeSet.FADE_BOTTOM, x0 - 3, bandTop - FADE, w + 6, FADE);
+            Draw.popAlpha();
+        }
         g.disableScissor();
         Draw.stratum(g);
         drawToolbar(g, now);
@@ -1286,7 +1349,8 @@ public final class MessageList extends PanelWidget {
         } else {
             drawBubble(g, row, bx, by, pending, ui, small);
         }
-        if (index == selected && keyboardFocus()) {
+        if (index == selected && keyboardFocus() && stripRow < 0) {
+            // While the quick reactions are open the keys are there: one gold ring, on their cell.
             Draw.frame(g, Frames.FOCUS_BUBBLE, bx, by, row.bubbleW, row.bubbleH);
         }
         if (hoverLink && index == hoverRow) {
@@ -1321,8 +1385,8 @@ public final class MessageList extends PanelWidget {
             Draw.text(g, small, row.quoteName, tx, textY, lit ? Theme.BONE_100 : Theme.ASH_300);
             tx += row.quoteNameW;
         }
-        Draw.text(g, small, row.quoteText, tx, textY, row.quoteQuiet ? Theme.ASH_500 : lit ? Theme.ASH_300
-            : Theme.ASH_400);
+        // "Önceki bir mesaj" and "Mesaj silindi" as quiet as the rest (ash-500 is never text: 4:1 there).
+        Draw.text(g, small, row.quoteText, tx, textY, lit && !row.quoteQuiet ? Theme.ASH_300 : Theme.ASH_400);
         if (lit) {
             g.requestCursor(CursorTypes.POINTING_HAND);
         }
@@ -1434,7 +1498,8 @@ public final class MessageList extends PanelWidget {
 
     /** "Tepki ver" and "Yanıtla" beside the message under the pointer (or picked with the keys). */
     private void drawToolbar(GuiGraphicsExtractor g, long now) {
-        int index = stripRow >= 0 ? stripRow : hoverRow >= 0 ? hoverRow : selected;
+        // The open strip has both actions: one popover at a time.
+        int index = stripRow >= 0 ? -1 : hoverRow >= 0 ? hoverRow : selected;
         if (index < 0 || index >= rows.size()) {
             return;
         }
@@ -1453,7 +1518,7 @@ public final class MessageList extends PanelWidget {
         float bx = x + TOOL_PAD;
         for (int k = 0; k < n; k++) {
             int kind = react ? k : 1;
-            boolean lit = index == hoverRow && hoverTool == kind || (kind == 0 && stripRow == index);
+            boolean lit = index == hoverRow && hoverTool == kind;
             if (lit) {
                 Draw.frame(g, Frames.CHIP_HOVER, bx, y + TOOL_PAD, TOOL, TOOL);
                 g.requestCursor(CursorTypes.POINTING_HAND);
@@ -1464,7 +1529,7 @@ public final class MessageList extends PanelWidget {
         }
     }
 
-    /** The six quick reactions (and "Yanıtla" for the keyboard), over the message. */
+    /** The six quick reactions and "Yanıtla", over the message (its toolbar steps aside meanwhile). */
     private void drawStrip(GuiGraphicsExtractor g, long now, Font small) {
         if (stripRow < 0 || stripRow >= rows.size()) {
             return;

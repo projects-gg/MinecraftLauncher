@@ -847,6 +847,21 @@ public final class OverlayState {
         return found;
     }
 
+    /**
+     * Where "Yeni mesajlar" goes when a conversation opens with {@code unread} messages: over the oldest of the
+     * newest that many from others (the player's own, sent or not, are never unread). With more unread than the
+     * device keeps, over the first line; none for an empty conversation.
+     */
+    public static ChatLine firstUnread(List<ChatLine> lines, int unread) {
+        int left = unread;
+        for (int i = lines.size() - 1; i >= 0; i--) {
+            if (!lines.get(i).mine && --left == 0) {
+                return lines.get(i);
+            }
+        }
+        return lines.isEmpty() ? null : lines.get(0);
+    }
+
     /** New activity puts a conversation first (the panel keeps its own order while it is open). */
     private void moveToFront(String conv) {
         Conversation c = conversations.get(conv);

@@ -252,6 +252,8 @@ public final class Chat2Scenario implements ClientModInitializer {
                 }
                 if (at(1, 0.6)) {
                     shot(mc, "note-refused-reaction");
+                    // A reaction only makes a bubble taller: no "Yeni mesajlar".
+                    results.addProperty("pillAfterReactions", panel.newMessagesBelow());
                     go(Step.REPLY);
                 }
             }
@@ -274,6 +276,8 @@ public final class Chat2Scenario implements ClientModInitializer {
                 }
                 if (at(2, 4.1)) {
                     shot(mc, "replying");
+                    // Writing the reply: the picked message (and its toolbar) let go.
+                    results.addProperty("pickKeptWhileReplying", panel.messagePicked());
                     panel.keyPressed(new KeyEvent(InputConstants.KEY_RETURN, 0, 0));
                 }
                 if (at(3, 4.25)) {
@@ -353,7 +357,15 @@ public final class Chat2Scenario implements ClientModInitializer {
                     }
                 }
                 if (at(2, 2.0)) {
+                    // The messages fade out above "yazıyor…" instead of passing under it.
                     shot(mc, "crew-scrolled-up");
+                    // A message comes in while the player reads above: "Yeni mesajlar" (with reduced motion
+                    // too), the line moves over it.
+                    dev(overlay, "sticker-in", "conv", "crew:gece", "from", "Mert", "sticker", "pl1/gg");
+                }
+                if (at(3, 2.7)) {
+                    shot(mc, "crew-new-below");
+                    results.addProperty("newBelowShown", panel != null && panel.newMessagesBelow());
                     if (panel != null) {
                         key(panel, InputConstants.KEY_END);
                         panel.askLink("https://www.youtube.com/watch?v=dQw4w9WgXcQ");

@@ -275,6 +275,16 @@ public final class OverlayScreen extends Screen {
         togglePicker();
     }
 
+    /** Whether the conversation shows "Yeni mesajlar" (the scenario driver checks it). */
+    public boolean newMessagesBelow() {
+        return messages.pillShowing();
+    }
+
+    /** Whether a message is still picked with the keys (the scenario driver checks it). */
+    public boolean messagePicked() {
+        return messages.hasSelection();
+    }
+
     /** Asks about a link as pressing it in a message does (only one the mod would ever open). */
     public void askLink(String url) {
         LinkScreen ask = LinkScreen.of(this, url);
@@ -680,6 +690,9 @@ public final class OverlayScreen extends Screen {
                 int ph = StickerPicker.height(cw, !overlay.settings().recentStickers().isEmpty());
                 int py = Math.max(HEADER_H + 6, above - 4 - ph);
                 PanelWidget.place(picker, x0, py, cw, Math.max(20, Math.min(ph, above - 4 - py)));
+                // The conversation ends above it (its newest message and edge fade stay in view): no sliver of a
+                // bubble shows over the picker's edge.
+                listBottom = Math.min(listBottom, py - 6);
             }
         } else {
             composerNote = composerReason();
@@ -1011,6 +1024,7 @@ public final class OverlayScreen extends Screen {
         render(g, tabs, mouseX, mouseY);
         render(g, chips, mouseX, mouseY);
         Draw.stratum(g);
+        messages.setFloatingShown(lineText == null ? 0f : lineAlpha.value(now));
         render(g, messages, mouseX, mouseY);
         if (messages.visible) {
             drawConversationLine(g, now);
@@ -1150,13 +1164,14 @@ public final class OverlayScreen extends Screen {
         }
         int x0 = panelX + P;
         int cw = panelW - 2 * P;
+        // As the launcher's strip: the gold arrow beside both lines, who is answered over what was said (no
+        // colored bar at the edge).
         Draw.frame(g, Frames.CARD, x0, replyY, cw, REPLY_H);
-        Draw.fill(g, x0 + 4, replyY + 4, x0 + 5.5f, replyY + REPLY_H - 4, Theme.withAlpha(Theme.GOLD_400, 0.75f));
-        Draw.icon(g, Icon.REPLY, 8, x0 + 9, replyY + 3, Theme.GOLD_300);
+        Draw.icon(g, Icon.REPLY, 8, x0 + 7, replyY + (REPLY_H - 8) / 2f, Theme.GOLD_300);
         Draw.text(g, Fonts.small(), replyTitle, x0 + 20, Fonts.centeredY(Fonts.Face.SMALL, replyY + 6.5f),
+            Theme.BONE_100);
+        Draw.text(g, Fonts.small(), replyQuote, x0 + 20, Fonts.centeredY(Fonts.Face.SMALL, replyY + 14.5f),
             Theme.ASH_300);
-        Draw.text(g, Fonts.small(), replyQuote, x0 + 9, Fonts.centeredY(Fonts.Face.SMALL, replyY + 14.5f),
-            Theme.BONE_300);
         render(g, replyClose, mouseX, mouseY);
     }
 
