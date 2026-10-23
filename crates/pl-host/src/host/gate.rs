@@ -65,9 +65,11 @@ pub struct Identity {
     pub id: String,
     /// Unique within that publish id, from 1.
     pub conn: u64,
+    /// The guest's id in the session.
     pub guest: GuestId,
     /// The in-game name from the game `hello`.
     pub name: String,
+    /// The game authenticates with Mojang for this connection.
     pub premium: bool,
     /// The friend's binding digest.
     pub friend: String,

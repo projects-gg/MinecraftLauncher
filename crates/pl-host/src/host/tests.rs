@@ -115,6 +115,7 @@ struct GuestSide {
     slot: Slot,
     order: Mutex<Vec<PathKind>>,
     creds: AtomicU64,
+    ttl_secs: AtomicU64,
     relays: AtomicU32,
     log: Mutex<Vec<String>>,
     events: mpsc::UnboundedSender<GuestEvent>,
@@ -133,7 +134,7 @@ impl GuestPaths for GuestSide {
             let order = self.order.lock().unwrap().clone();
             let creds = Creds {
                 id: self.creds.fetch_add(1, Ordering::Relaxed),
-                ttl: Duration::from_secs(7_200),
+                ttl: Duration::from_secs(self.ttl_secs.load(Ordering::Relaxed)),
             };
             let first_turn = order.first() == Some(&PathKind::Turn);
             match reason {
@@ -264,6 +265,20 @@ async fn try_join(
     Arc<GuestSide>,
     mpsc::UnboundedReceiver<GuestEvent>,
 ) {
+    try_join_with(world, friend, name, order, Duration::from_secs(7_200)).await
+}
+
+async fn try_join_with(
+    world: &World,
+    friend: &str,
+    name: &str,
+    order: &[PathKind],
+    ttl: Duration,
+) -> (
+    Result<GuestSession, JoinFailure>,
+    Arc<GuestSide>,
+    mpsc::UnboundedReceiver<GuestEvent>,
+) {
     let join: Join = world.session.invite(friend).await.unwrap();
     let (tx, events) = mpsc::unbounded_channel();
     let side = Arc::new(GuestSide {
@@ -272,6 +287,7 @@ async fn try_join(
         slot: join.slot,
         order: Mutex::new(order.to_vec()),
         creds: AtomicU64::new(100),
+        ttl_secs: AtomicU64::new(ttl.as_secs()),
         relays: AtomicU32::new(0),
         log: Mutex::new(Vec::new()),
         events: tx,
@@ -731,4 +747,346 @@ async fn the_hosts_turn_renewal_moves_its_guests_to_a_new_allocation() {
         world.side.log.lock().unwrap()
     );
     exchange(&mut game, &mut conn, 20_000, 9).await;
+}
+
+/// A PLJ1 client that sends raw records: what a well-behaved guest never would.
+struct RawClient {
+    stream: crate::transport::BoxStream,
+    cipher: crate::tunnel::noise::Cipher,
+    sent: u64,
+    received: u64,
+}
+
+impl RawClient {
+    async fn open(world: &World, join: &Join, kind: PathKind) -> Self {
+        let host = world
+            .net
+            .all()
+            .into_iter()
+            .find(|p| p.kind == kind && !p.kill.is_dead())
+            .unwrap();
+        let mut stream = host.connect().unwrap();
+        let path = crate::policy::fake::FakeGuestPath { host: host.clone() };
+        let cipher = crate::tunnel::handshake::open(&mut stream, join, &path)
+            .await
+            .unwrap();
+        Self {
+            stream,
+            cipher,
+            sent: 0,
+            received: 0,
+        }
+    }
+
+    async fn send(&mut self, record: crate::tunnel::record::Record) {
+        let ciphertext = self.cipher.seal(self.sent, &record.encode()).unwrap();
+        self.sent += 1;
+        self.stream
+            .write_all(&crate::tunnel::record::frame(&ciphertext))
+            .await
+            .unwrap();
+    }
+
+    async fn send_json(&mut self, json: &str) {
+        self.send(crate::tunnel::record::Record::Ctrl(
+            json.as_bytes().to_vec(),
+        ))
+        .await;
+    }
+
+    /// The next control message, `None` once the stream ended (pings are skipped).
+    async fn recv(&mut self) -> Option<crate::tunnel::control::Control> {
+        use crate::tunnel::record::Record;
+        loop {
+            let mut len = [0u8; 2];
+            self.stream.read_exact(&mut len).await.ok()?;
+            let mut ciphertext = vec![0u8; u16::from_be_bytes(len) as usize];
+            self.stream.read_exact(&mut ciphertext).await.ok()?;
+            let plain = self.cipher.open(self.received, &ciphertext)?;
+            self.received += 1;
+            if let Record::Ctrl(body) = Record::decode(&plain).ok()? {
+                return crate::tunnel::control::Control::parse(&body).ok();
+            }
+        }
+    }
+}
+
+const CONTROL_HELLO: &str = r#"{"t":"hello","v":1,"kind":"control","name":"Notch","premium":false,"launcher":"2.1.0","caps":[]}"#;
+
+#[tokio::test(start_paused = true)]
+async fn hosts_refuse_what_a_guest_should_not_send() {
+    use crate::tunnel::control::Control;
+    let world = open_world(&[PathKind::E4mc], 7).await;
+    let join = world.session.invite(FRIEND_A).await.unwrap();
+    for hello in [
+        r#"{"t":"hello","v":2,"kind":"control","name":"Notch","premium":false,"caps":[]}"#,
+        r#"{"t":"hello","v":1,"kind":"voice","caps":[]}"#,
+    ] {
+        let mut raw = RawClient::open(&world, &join, PathKind::E4mc).await;
+        raw.send_json(hello).await;
+        assert_eq!(
+            raw.recv().await,
+            Some(Control::No(Refusal::Unsupported)),
+            "{hello}"
+        );
+        assert_eq!(raw.recv().await, None, "the stream ends after `no`");
+    }
+    // A resume of a stream the host never had.
+    let mut raw = RawClient::open(&world, &join, PathKind::E4mc).await;
+    raw.send_json(
+        r#"{"t":"hello","v":1,"kind":"resume","stream":"AAAAAAAAAAA","recv":0,"caps":[]}"#,
+    )
+    .await;
+    assert_eq!(raw.recv().await, Some(Control::No(Refusal::Resume)));
+    // Game bytes on a control stream close it.
+    let mut raw = RawClient::open(&world, &join, PathKind::E4mc).await;
+    raw.send_json(CONTROL_HELLO).await;
+    assert!(matches!(raw.recv().await, Some(Control::Ok(_))));
+    assert!(matches!(raw.recv().await, Some(Control::Manifest(_))));
+    assert!(matches!(raw.recv().await, Some(Control::State(_))));
+    raw.send(crate::tunnel::record::Record::Data {
+        offset: 0,
+        bytes: vec![1],
+    })
+    .await;
+    assert_eq!(raw.recv().await, None);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_guest_opens_at_most_five_streams_a_minute() {
+    use crate::tunnel::control::Control;
+    let world = open_world(&[PathKind::E4mc], 7).await;
+    let join = world.session.invite(FRIEND_A).await.unwrap();
+    let mut kept = Vec::new();
+    for _ in 0..5 {
+        let mut raw = RawClient::open(&world, &join, PathKind::E4mc).await;
+        raw.send_json(CONTROL_HELLO).await;
+        assert!(matches!(raw.recv().await, Some(Control::Ok(_))));
+        kept.push(raw);
+    }
+    let mut sixth = RawClient::open(&world, &join, PathKind::E4mc).await;
+    sixth.send_json(CONTROL_HELLO).await;
+    assert_eq!(sixth.recv().await, Some(Control::No(Refusal::Busy)));
+    tokio::time::sleep(Duration::from_secs(61)).await;
+    let mut later = RawClient::open(&world, &join, PathKind::E4mc).await;
+    later.send_json(CONTROL_HELLO).await;
+    assert!(matches!(later.recv().await, Some(Control::Ok(_))));
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_host_opens_turn_when_a_guest_asks_for_it() {
+    let world = open_world(&[PathKind::E4mc], 7).await;
+    assert!(!world.session.paths().has(PathKind::Turn));
+    // The service grants the host TURN once a guest of the session got credentials.
+    *world.side.order.lock().unwrap() = vec![PathKind::Turn, PathKind::E4mc];
+    let guest = join_world(&world, FRIEND_A, "Notch", &[PathKind::Turn, PathKind::E4mc]).await;
+    assert!(world.session.paths().has(PathKind::Turn));
+    let turn = world
+        .net
+        .all()
+        .into_iter()
+        .find(|p| p.kind == PathKind::Turn)
+        .unwrap();
+    assert_eq!(
+        turn.admitted.lock().unwrap().len(),
+        1,
+        "the guest's relay is permitted"
+    );
+    assert_eq!(
+        *guest.side.log.lock().unwrap(),
+        ["turn_creds/primary", "world_peer/turn"]
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_service_moves_a_guest_off_turn() {
+    let mut world = open_world(&[PathKind::Turn, PathKind::E4mc], 7).await;
+    let mut guest = join_world(&world, FRIEND_A, "Notch", &[PathKind::Turn, PathKind::E4mc]).await;
+    let (mut game, bytes) = connect_game(&guest, 9999).await;
+    let (mut conn, _) = world_accepts(&mut world).await;
+    let mut kept = vec![0u8; bytes.len()];
+    conn.read_exact(&mut kept).await.unwrap();
+    // The service's `turn_move` reaches the guest (the host's e4mc opens on the guest's request).
+    guest.session.turn_move("cap");
+    exchange(&mut game, &mut conn, 120_000, 3).await;
+    let moved = next_guest_event(&mut guest, |e| {
+        matches!(e, GuestEvent::Report(Event::Move { .. }))
+    })
+    .await;
+    let GuestEvent::Report(Event::Move {
+        from, to, why, ok, ..
+    }) = moved
+    else {
+        unreachable!()
+    };
+    assert_eq!(
+        (from, to, why, ok),
+        (
+            PathKind::Turn,
+            PathKind::E4mc,
+            crate::report::MoveCause::Cap,
+            true
+        )
+    );
+    exchange(&mut game, &mut conn, 30_000, 4).await;
+    let log = guest.side.log.lock().unwrap().clone();
+    assert!(log.contains(&"world_peer/e4mc".to_owned()), "{log:?}");
+    assert!(log.contains(&"turn_release/100".to_owned()), "{log:?}");
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_guests_turn_renewal_moves_it_to_a_new_allocation() {
+    let mut world = open_world(&[PathKind::Turn], 7).await;
+    let (result, side, events) = try_join_with(
+        &world,
+        FRIEND_A,
+        "Notch",
+        &[PathKind::Turn],
+        Duration::from_secs(25 * 60),
+    )
+    .await;
+    let mut guest = Guest {
+        side,
+        session: result.unwrap(),
+        events,
+    };
+    let (mut game, bytes) = connect_game(&guest, 9999).await;
+    let (mut conn, _) = world_accepts(&mut world).await;
+    let mut kept = vec![0u8; bytes.len()];
+    conn.read_exact(&mut kept).await.unwrap();
+    for round in 0..6u8 {
+        tokio::time::sleep(Duration::from_secs(60)).await;
+        exchange(&mut game, &mut conn, 10_000, round).await;
+    }
+    let moved = next_guest_event(&mut guest, |e| {
+        matches!(e, GuestEvent::Report(Event::Move { .. }))
+    })
+    .await;
+    let GuestEvent::Report(Event::Move {
+        from, to, why, ok, ..
+    }) = moved
+    else {
+        unreachable!()
+    };
+    assert_eq!(
+        (from, to, why, ok),
+        (
+            PathKind::Turn,
+            PathKind::Turn,
+            crate::report::MoveCause::Renew,
+            true
+        )
+    );
+    let log = guest.side.log.lock().unwrap().clone();
+    assert!(log.contains(&"turn_creds/renew".to_owned()), "{log:?}");
+    assert!(
+        log.contains(&"turn_release/100".to_owned()),
+        "the old credentials go: {log:?}"
+    );
+    let turn = world
+        .net
+        .all()
+        .into_iter()
+        .find(|p| p.kind == PathKind::Turn)
+        .unwrap();
+    assert_eq!(
+        turn.admitted.lock().unwrap().len(),
+        2,
+        "both allocations were permitted"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_guest_count_goes_out_at_most_every_ten_seconds() {
+    let mut world = open_world(&[PathKind::E4mc], 7).await;
+    next_host_event(&mut world, |e| matches!(e, HostEvent::Announce { .. })).await;
+    let opened = tokio::time::Instant::now();
+    let a = join_world(&world, FRIEND_A, "Notch", &[PathKind::E4mc]).await;
+    let b = join_world(&world, FRIEND_B, "jeb_", &[PathKind::E4mc]).await;
+    let (_game_a, _) = connect_game(&a, 9999).await;
+    let (_conn_a, _) = world_accepts(&mut world).await;
+    let (_game_b, _) = connect_game(&b, 9999).await;
+    let (_conn_b, _) = world_accepts(&mut world).await;
+    let announced = next_host_event(&mut world, |e| matches!(e, HostEvent::Announce { .. })).await;
+    assert!(
+        opened.elapsed() >= Duration::from_secs(10),
+        "{:?}",
+        opened.elapsed()
+    );
+    assert!(
+        matches!(
+            announced,
+            HostEvent::Announce {
+                guests: 2,
+                max: 7,
+                ..
+            }
+        ),
+        "{announced:?}"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_unused_turn_allocation_is_released_after_five_minutes() {
+    let mut world = open_world(&[PathKind::Turn], 7).await;
+    tokio::time::sleep(Duration::from_secs(301)).await;
+    let turn = world
+        .net
+        .all()
+        .into_iter()
+        .find(|p| p.kind == PathKind::Turn)
+        .unwrap();
+    assert!(turn.kill.is_dead());
+    assert!(world.session.paths().is_empty());
+    assert!(
+        world
+            .side
+            .log
+            .lock()
+            .unwrap()
+            .contains(&"turn_release/1".to_owned())
+    );
+    next_host_event(
+        &mut world,
+        |e| matches!(e, HostEvent::Announce { paths, .. } if paths.is_empty()),
+    )
+    .await;
+    // The next invite opens a path again.
+    let guest = join_world(&world, FRIEND_A, "Notch", &[PathKind::Turn]).await;
+    assert!(world.session.paths().has(PathKind::Turn));
+    drop(guest);
+}
+
+#[tokio::test(start_paused = true)]
+async fn the_hosts_report_counts_guests_and_moves() {
+    let mut world = open_world(&[PathKind::Turn, PathKind::E4mc], 7).await;
+    let guest = join_world(&world, FRIEND_A, "Notch", &[PathKind::Turn, PathKind::E4mc]).await;
+    let (mut game, bytes) = connect_game(&guest, 9999).await;
+    let (mut conn, _) = world_accepts(&mut world).await;
+    let mut kept = vec![0u8; bytes.len()];
+    conn.read_exact(&mut kept).await.unwrap();
+    world.session.turn_move("off").await;
+    exchange(&mut game, &mut conn, 50_000, 1).await;
+    next_host_event(&mut world, |e| {
+        matches!(e, HostEvent::Report(Event::Move { ok: true, .. }))
+    })
+    .await;
+    world.session.close().await;
+    let summary = next_host_event(&mut world, |e| {
+        matches!(e, HostEvent::Report(Event::Session { .. }))
+    })
+    .await;
+    let HostEvent::Report(Event::Session {
+        guests,
+        moves,
+        turn_rx,
+        e4mc_rx,
+        ..
+    }) = summary
+    else {
+        unreachable!()
+    };
+    assert_eq!((guests, moves), (1, 1));
+    assert!(turn_rx > 0 && e4mc_rx > 0, "{turn_rx} {e4mc_rx}");
+    next_host_event(&mut world, |e| matches!(e, HostEvent::Closed)).await;
 }

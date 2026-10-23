@@ -49,26 +49,34 @@ pub struct GameEndpoint {
     pub proto: i32,
     /// The publish id of `host-publish` (1–32 of `[A-Za-z0-9_-]`).
     pub publish_id: String,
+    /// The gate key from this game's bridge token.
     pub gate: GateKey,
 }
 
 /// What a session is opened with.
 #[derive(Debug)]
 pub struct HostConfig {
+    /// The session's id (also in the `world` messages sent before the session opened).
     pub session: SessionId,
+    /// The session's Noise key pair.
     pub key: HostKey,
     /// The guest limit, 1–7 (after the service's answer).
     pub max_guests: u8,
     /// The host's in-game name: never admitted for a guest.
     pub host_name: String,
+    /// The host's Minecraft version (`join.mc`).
     pub mc: String,
     /// The official pack's family id the install follows (`join.pack`).
     pub pack: Option<String>,
+    /// The world manifest every control stream gets.
     pub manifest: Manifest,
+    /// Where the world listens.
     pub game: GameEndpoint,
     /// The world's folder, where `projects-guests.json` is.
     pub world_dir: PathBuf,
+    /// This computer's binding key.
     pub binding: BindingKey,
+    /// The timers and limits ([`Policy::default`]).
     pub policy: Policy,
 }
 
@@ -96,9 +104,11 @@ pub enum HostEvent {
 pub struct GuestUpdate {
     /// The friend's user id.
     pub friend: String,
+    /// The guest's id in the session (the bridge's `host-guest` names it).
     pub guest: GuestId,
     /// The in-game name, once a stream named it.
     pub name: Option<String>,
+    /// Where the guest is now.
     pub status: GuestStatus,
 }
 
@@ -121,6 +131,7 @@ pub enum GuestStatus {
 
 /// The launcher's side of a session: [`HostPaths`] and somewhere to put [`HostEvent`]s.
 pub trait HostEnv: HostPaths {
+    /// Something to send or show; called from the session's tasks, so it must not block.
     fn event(&self, event: HostEvent);
 }
 
@@ -402,6 +413,7 @@ impl HostSession {
         Ok(Self { inner, _last: last })
     }
 
+    /// The session's id.
     pub fn session_id(&self) -> SessionId {
         self.inner.session
     }
@@ -763,19 +775,27 @@ impl Inner {
 
     /// Opens a path of `kind` unless one is open; one opening at a time.
     async fn ensure_path(self: &Arc<Self>, kind: PathKind) -> bool {
+        self.ensure_path_with(kind, None).await
+    }
+
+    /// [`Inner::ensure_path`] with TURN credentials already in hand (released if not used).
+    async fn ensure_path_with(self: &Arc<Self>, kind: PathKind, creds: Option<Creds>) -> bool {
         let _one = self.opening.lock().await;
+        let env: &dyn HostPaths = self.env.as_ref();
         {
             let st = self.state();
-            if !st.open {
-                return false;
-            }
-            if st.paths.iter().any(|p| p.kind == kind && !p.retiring) {
-                return true;
+            if !st.open || st.paths.iter().any(|p| p.kind == kind && !p.retiring) {
+                let open = st.open;
+                drop(st);
+                if let Some(creds) = creds {
+                    env.turn_release(creds);
+                }
+                return open;
             }
         }
         let report = |event| self.report(event);
-        let env: &dyn HostPaths = self.env.as_ref();
-        let Some(opened) = open_path(env, kind, None, CredsReason::Primary, &report).await else {
+        let given = if kind == PathKind::Turn { creds } else { None };
+        let Some(opened) = open_path(env, kind, given, CredsReason::Primary, &report).await else {
             return false;
         };
         if kind == PathKind::Turn {
@@ -799,22 +819,24 @@ impl Inner {
         true
     }
 
-    /// Opens some path when none is open: the service's order first.
+    /// Opens some path when none is open, in the service's order.
     async fn ensure_any_path(self: &Arc<Self>) {
-        let order = match self.env.turn_creds(CredsReason::Primary).await {
-            Ok(answer) => {
-                if let Some(creds) = answer.creds {
-                    // `ensure_path` asks again; these are not needed.
-                    self.env.turn_release(creds);
-                }
-                answer.order
-            }
-            Err(_) => vec![PathKind::E4mc],
+        let (order, mut creds) = match self.env.turn_creds(CredsReason::Primary).await {
+            Ok(answer) => (answer.order, answer.creds),
+            Err(_) => (vec![PathKind::E4mc], None),
         };
         for kind in order {
-            if self.ensure_path(kind).await {
-                return;
+            let given = if kind == PathKind::Turn {
+                creds.take()
+            } else {
+                None
+            };
+            if self.ensure_path_with(kind, given).await {
+                break;
             }
+        }
+        if let Some(unused) = creds {
+            self.env.turn_release(unused);
         }
     }
 
@@ -1300,7 +1322,11 @@ async fn serve_stream(inner: Arc<Inner>, path_id: u64, kind: PathKind, mut strea
                 return;
             }
             Ok(Some(In::Control(Err(ControlError::Unknown(_))))) => {}
-            _ => return,
+            _ => {
+                // Closed without a word, like an opening that timed out.
+                inner.failed_opening();
+                return;
+            }
         }
     };
     match hello {

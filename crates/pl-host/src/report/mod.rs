@@ -279,7 +279,9 @@ pub enum Event {
         path: PathKind,
         role: Role,
         step: Step,
+        /// One of §12.2's codes.
         code: Cow<'static, str>,
+        /// How long the attempt took, in `ms` buckets.
         ms: u32,
         /// The e4mc relay's id (`eu`), host side.
         region: Option<String>,

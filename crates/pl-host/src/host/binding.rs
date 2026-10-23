@@ -32,6 +32,7 @@ type HmacSha256 = Hmac<Sha256>;
 pub struct BindingKey(Zeroizing<[u8; 32]>);
 
 impl BindingKey {
+    /// A key from its bytes (tests and vectors).
     pub fn from_bytes(bytes: [u8; 32]) -> Self {
         Self(Zeroizing::new(bytes))
     }
@@ -91,8 +92,11 @@ pub fn is_valid_name(name: &str) -> bool {
 /// One binding.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct Binding {
+    /// The in-game name.
     pub name: String,
+    /// The friend's digest ([`BindingKey::digest`]).
     pub friend: String,
+    /// The last login with this name (Unix seconds).
     pub last: i64,
 }
 

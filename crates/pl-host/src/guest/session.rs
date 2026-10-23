@@ -34,6 +34,7 @@ use crate::tunnel::{GuestId, Join, Paths, StreamId};
 /// What a guest joins with.
 #[derive(Debug, Clone)]
 pub struct GuestConfig {
+    /// The invite (`world_invite.join`), checked with [`Join::parse`].
     pub join: Join,
     /// The in-game name the guest will log in with.
     pub name: String,
@@ -41,6 +42,7 @@ pub struct GuestConfig {
     pub premium: bool,
     /// This launcher's version (`hello.launcher`).
     pub launcher: String,
+    /// The timers and limits ([`Policy::default`]).
     pub policy: Policy,
 }
 
@@ -77,6 +79,7 @@ pub enum GuestEvent {
 
 /// The launcher's side of a guest session: [`GuestPaths`] and somewhere to put [`GuestEvent`]s.
 pub trait GuestEnv: GuestPaths {
+    /// Something to show or send; called from the session's task, so it must not block.
     fn event(&self, event: GuestEvent);
 }
 
@@ -228,6 +231,7 @@ impl GuestSession {
         Ok(Self { cmd, view, policy })
     }
 
+    /// The guest's id in the host's session.
     pub fn guest_id(&self) -> GuestId {
         self.view.lock().expect("view").guest
     }

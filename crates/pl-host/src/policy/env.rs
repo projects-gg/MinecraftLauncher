@@ -128,6 +128,7 @@ pub trait GuestPaths: Send + Sync {
 
 /// The result of opening the host's e4mc path.
 pub struct E4mcOpened {
+    /// The path, or the step and code it failed with.
     pub result: Result<Arc<dyn HostPath>, PathError>,
     /// The relay's id (`eu`, …), for telemetry.
     pub region: Option<String>,
