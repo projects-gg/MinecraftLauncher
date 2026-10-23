@@ -2,6 +2,7 @@ import { FilePlus, FolderOpen, Info, MagnifyingGlassPlus, Trash } from "@phospho
 import {
   Button,
   Chip,
+  ContentIcon,
   ContextMenu,
   cn,
   easeOutExpo,
@@ -19,7 +20,6 @@ import { SetBadgeChip } from "@/features/modsets/parts";
 import { api, type ContentKind, type PackEntry } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
-import { ContentIcon } from "@/shell/content-icon";
 import { TabEmpty } from "../parts";
 
 /** From this many packs on, the tab offers a search field. */

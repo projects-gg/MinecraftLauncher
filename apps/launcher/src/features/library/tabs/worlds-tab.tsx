@@ -13,6 +13,7 @@ import {
 import {
   Button,
   Chip,
+  ContentIcon,
   ContextMenu,
   cn,
   easeOutExpo,
@@ -38,7 +39,6 @@ import {
   type WorldDetail,
 } from "@/lib/api";
 import { formatBytes, formatPercent, formatRelative } from "@/lib/format";
-import { ContentIcon } from "@/shell/content-icon";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { ConfirmDialog, InlineNotice, TabEmpty, TabSection, TrashRow } from "../parts";

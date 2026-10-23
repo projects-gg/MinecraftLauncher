@@ -36,7 +36,8 @@
 //   `chatMailbox` (mock-chat.ts; `&chat=1` turns chat on in any scenario);
 // - `limited`: a new Discord account ("Sınırlı hesap"; SPAM1) without a crew: its chip, no crew
 //   founding, no settings backup, no more code lookups today;
-// - `warning` / `profileReset`: a moderators' one-time note waits (MOD1); `crewReset`: moderators
+// - `warning` / `profileReset`: a moderators' one-time note waits (MOD1); `skinReset`: staff
+//   reset the Projects skin, with a 7-day block (SKIN1); `crewReset`: moderators
 //   reset the crew's name, locked for three days; `crewGone`: they disband the crew live
 //   (`&liveAt=<ms>`, as `restrictedLive`);
 // - `restricted` / `banned`: the sign-in screen of a suspended / banned account, which signing in
@@ -124,6 +125,7 @@ function previewLimited(): LimitedAccount {
       { key: "chatMessages", perDay: 100 },
       { key: "crewLink" },
       { key: "crewPlans" },
+      { key: "skinChange" },
     ],
   };
 }
@@ -703,6 +705,18 @@ function initial(): SocialSnapshot {
       return {
         ...base,
         notices: [{ id: "n-reset", kind: "profileReset", at: now() - 600, reason: "name" }],
+      };
+    case "skinReset":
+      return {
+        ...base,
+        notices: [
+          {
+            id: "n-skin",
+            kind: "skinReset",
+            at: now() - 300,
+            blocked: { until: now() + 7 * 86400 },
+          },
+        ],
       };
     case "restricted":
       return { ...signedOut(base), restriction: { until: now() + 7 * 86400 } };

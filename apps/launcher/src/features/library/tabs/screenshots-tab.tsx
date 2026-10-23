@@ -1,5 +1,5 @@
 import { ArrowSquareOut, Copy, FolderOpen, Trash } from "@phosphor-icons/react";
-import { Button, ContextMenu, cn, IconButton, Skeleton, toast } from "@pl/ui";
+import { Button, ContentIcon, ContextMenu, cn, IconButton, Skeleton, toast } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
@@ -7,7 +7,6 @@ import { useTranslation } from "react-i18next";
 import { copyErrorDetails, showError } from "@/features/content/jobs";
 import { api, type InstanceDetail, type Screenshot, type TrashItem } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
-import { ContentIcon } from "@/shell/content-icon";
 import { ConfirmDialog, TabEmpty, TabSection, TrashRow } from "../parts";
 import { shotTime, trashLabel } from "../trash-label";
 import { formatWhen } from "../when";

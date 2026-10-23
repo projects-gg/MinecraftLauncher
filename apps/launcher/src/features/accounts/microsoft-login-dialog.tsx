@@ -1,7 +1,7 @@
 // Microsoft sign-in: starts as soon as it opens (the player already pressed "Microsoft ile giriş
 // yap"), follows the browser steps, then says plainly what happened.
 import { Check, CircleNotch, Copy } from "@phosphor-icons/react";
-import { Button, cn, easeOutExpo, PlayerHead, springSnappy } from "@pl/ui";
+import { Button, ContentIcon, cn, easeOutExpo, PlayerHead, springSnappy } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, MotionConfig, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,7 +10,6 @@ import { MicrosoftMark } from "@/features/settings/microsoft-mark";
 import { type AccountSummary, api, type LoginStep, type MicrosoftLoginResult } from "@/lib/api";
 import { copyDetails } from "@/lib/clipboard";
 import { playSound } from "@/lib/sound";
-import { ContentIcon } from "@/shell/content-icon";
 import { AccountDialog } from "./account-dialog";
 import { useCalm } from "./calm";
 import { useAccountsUi } from "./store";
