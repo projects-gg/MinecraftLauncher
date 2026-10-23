@@ -99,6 +99,9 @@ pub struct AppState {
     pub content_refreshing: AtomicBool,
     /// The optional friends feature (off until the signed config turns it on).
     pub social: pl_social::SocialService,
+    /// SKIN1: Projects skins of username accounts and the game account link
+    /// (`commands::projects_skin`).
+    pub projects_skin: pl_social::ProjectsSkins,
     /// The in-game overlay: its choices and the running game's bridge (`crate::overlay`).
     pub overlay: pl_overlay::Overlay,
     /// The Discord bot's news feed (`<data>/cache/feed/`); used only while the signed config
@@ -184,6 +187,8 @@ impl AppState {
             &root,
             overlay.clone(),
         );
+        let projects_skin =
+            crate::commands::projects_skin::create(app, &social, &http, &root, handle.clone());
 
         // AFK accounts (Projects Console Client sessions). Events go straight to the UI (and
         // state changes to the tray's summary). A connect that finds no client installed and no
@@ -236,6 +241,7 @@ impl AppState {
             login_cancel: Mutex::new(None),
             content_refreshing: AtomicBool::new(false),
             social,
+            projects_skin,
             overlay,
             feed,
         })

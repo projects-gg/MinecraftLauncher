@@ -164,7 +164,19 @@ fn decode_rgba(bytes: &[u8]) -> Result<Rgba, HeadError> {
     let mut buffer = vec![0; size];
     let info = reader.next_frame(&mut buffer).map_err(decode)?;
     let data = &buffer[..info.buffer_size()];
-    let pixels = match info.color_type {
+    let pixels = rgba_pixels(data, info.color_type)
+        .ok_or_else(|| HeadError::Decode("palette was not expanded".to_owned()))?;
+    Ok(Rgba {
+        width: info.width,
+        height: info.height,
+        pixels,
+    })
+}
+
+/// The 8-bit pixels of a frame decoded with `normalize_to_color8` as RGBA. None for a palette
+/// that was not expanded.
+pub(crate) fn rgba_pixels(data: &[u8], color_type: png::ColorType) -> Option<Vec<u8>> {
+    Some(match color_type {
         png::ColorType::Rgba => data.to_vec(),
         png::ColorType::Rgb => data
             .as_chunks::<3>()
@@ -179,14 +191,7 @@ fn decode_rgba(bytes: &[u8]) -> Result<Rgba, HeadError> {
             .flat_map(|&[g, a]| [g, g, g, a])
             .collect(),
         png::ColorType::Grayscale => data.iter().flat_map(|&g| [g, g, g, 255]).collect(),
-        png::ColorType::Indexed => {
-            return Err(HeadError::Decode("palette was not expanded".to_owned()));
-        }
-    };
-    Ok(Rgba {
-        width: info.width,
-        height: info.height,
-        pixels,
+        png::ColorType::Indexed => return None,
     })
 }
 

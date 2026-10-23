@@ -476,8 +476,8 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
     out.trim().to_owned()
 }
 
-/// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams` and
-/// `chat`, which stay off until Studio turns them on.
+/// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`
+/// and `skins`, which stay off until Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -499,6 +499,11 @@ pub struct Features {
     /// is live; written only when on.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub chat: bool,
+    /// Projects skins for username accounts and linking a game account from the launcher, inside
+    /// the friends feature (needs `friends` too; SKIN1). Off by default until the friends service
+    /// with SKIN1 and ProBot's side are live; written only when on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub skins: bool,
 }
 
 impl Default for Features {
@@ -511,6 +516,7 @@ impl Default for Features {
             friends: false,
             teams: false,
             chat: false,
+            skins: false,
         }
     }
 }
@@ -648,6 +654,16 @@ mod tests {
         assert!(chat.features.chat && !chat.features.teams);
         assert_eq!(
             serde_json::to_value(&chat).unwrap()["features"]["chat"],
+            serde_json::Value::Bool(true)
+        );
+        // Projects skins the same way (SKIN1).
+        assert!(!chat.features.skins);
+        assert!(written["features"].get("skins").is_none());
+        let skins: LauncherConfig =
+            serde_json::from_str(r#"{"features": {"friends": true, "skins": true}}"#).unwrap();
+        assert!(skins.features.skins && !skins.features.chat);
+        assert_eq!(
+            serde_json::to_value(&skins).unwrap()["features"]["skins"],
             serde_json::Value::Bool(true)
         );
     }

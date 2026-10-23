@@ -251,6 +251,11 @@ pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
         snapshot.config.features.teams,
         snapshot.config.features.chat,
     );
+    crate::commands::projects_skin::apply_flag(
+        &state.projects_skin,
+        snapshot.config.features.friends,
+        snapshot.config.features.skins,
+    );
     state
         .afk
         .set_client_release(afk_client_release(state, snapshot));
