@@ -9,6 +9,7 @@
 import { CaretDown, DotsThree, TShirt } from "@phosphor-icons/react";
 import {
   Button,
+  ContentIcon,
   ContextMenu,
   cn,
   IconButton,
@@ -32,7 +33,6 @@ import { useSocialUi } from "@/features/social/store";
 import type { AccountSummary } from "@/lib/api";
 import { projectsSkinApi } from "@/lib/api/projects-skin-api";
 import type { ProjectsLink } from "@/lib/api/projects-skin-types";
-import { ContentIcon } from "@/shell/content-icon";
 import { UnlinkDialog } from "./link-area";
 import { LinkCode } from "./link-code";
 import { PROJECTS_SKIN_KEY, useProjectsSkinOverview } from "./queries";

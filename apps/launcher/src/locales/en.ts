@@ -27,6 +27,7 @@ import { enPlacement } from "./en-placement";
 import { enPlayOpen } from "./en-play-open";
 import { enPlayTogether } from "./en-play-together";
 import { enPrepare } from "./en-prepare";
+import { enProjectsSkin } from "./en-projects-skin";
 import { enReminders } from "./en-reminders";
 import { enReports } from "./en-reports";
 import { enSafety } from "./en-safety";
@@ -289,6 +290,7 @@ export const en: DeepPartial<Strings> = {
   chat2: enChat2,
   team6: enTeam6,
   cloudAfk: enCloudAfk,
+  projectsSkin: enProjectsSkin,
   nav: {
     home: "Home",
     library: "Library",

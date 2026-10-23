@@ -57,7 +57,9 @@ export function CloudSection({
   const moveDesktop = desktop.find((d) => d.id === ui.moveFor);
   // Getting a new account starts on the site's front page, which explains the offer (owner, 23 Oct).
   const buy = () =>
-    cloudApi.open("start").catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")));
+    cloudApi
+      .open("start")
+      .catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")));
 
   return (
     <section

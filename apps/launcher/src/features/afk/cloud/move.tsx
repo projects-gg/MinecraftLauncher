@@ -359,7 +359,9 @@ export function CloudMoveDialog({
 
   // Like the AFK page's own button: the site's front page, not straight to checkout (owner, 23 Oct).
   const buy = () =>
-    cloudApi.open("start").catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")));
+    cloudApi
+      .open("start")
+      .catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")));
 
   const empty = accounts.length === 0;
   const footer = empty ? (
