@@ -361,12 +361,18 @@ async fn refreshes_keep_it_alive_and_revocation_ends_it() {
         (lost.step, lost.code.as_ref()),
         (Step::Alloc, "turn_alloc_unauthorized")
     );
+    // A lost path fails at once rather than after QUIC's idle timeout.
+    let Err(error) = within(2, host.accept()).await else {
+        panic!("a lost path accepts nothing");
+    };
+    assert_eq!(error.code, "turn_alloc_unauthorized");
     let lost = within(10, async {
         server.revoke(GUEST.0);
         path.closed().await
     })
     .await;
     assert_eq!(lost.code, "turn_alloc_unauthorized");
+    assert!(within(2, path.open()).await.is_err());
 }
 
 #[tokio::test(flavor = "multi_thread")]

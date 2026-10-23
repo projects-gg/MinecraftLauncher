@@ -517,6 +517,7 @@ pub async fn open_host(
         ))
         .abort_handle(),
     );
+    tasks.add(tokio::spawn(close_when_lost(&allocation, endpoint.clone())).abort_handle());
     Ok(TurnHostPath {
         inner: Arc::new(HostInner {
             allocation,
@@ -754,6 +755,8 @@ pub async fn allocate(ice: &IceServers, config: &TurnConfig) -> Result<TurnGuest
         Arc::new(quinn::TokioRuntime),
     )
     .map_err(|_| failed())?;
+    // Ends once the allocation does (which dropping the node also brings about).
+    tokio::spawn(close_when_lost(&allocation, endpoint.clone()));
     Ok(TurnGuest {
         node: Arc::new(GuestNode {
             allocation,
@@ -762,6 +765,19 @@ pub async fn allocate(ice: &IceServers, config: &TurnConfig) -> Result<TurnGuest
             paths: Mutex::new(HashMap::new()),
         }),
     })
+}
+
+/// Closes the QUIC endpoint once the allocation is gone, so streams and `accept` fail at once
+/// instead of after QUIC's idle timeout. Holds only the endpoint and the allocation's state watch.
+fn close_when_lost(
+    allocation: &Allocation,
+    endpoint: Endpoint,
+) -> impl Future<Output = ()> + use<> {
+    let mut dead = allocation.shared().dead();
+    async move {
+        let _ = dead.wait_for(Option::is_some).await;
+        endpoint.close(VarInt::from_u32(0), b"");
+    }
 }
 
 impl TurnGuest {
