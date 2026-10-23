@@ -134,7 +134,7 @@ public final class LinkScreen extends Screen {
         Draw.pushAlpha(Ease.OUT.at(Math.min(1f, (now - openedAt) / 160f)));
         g.pose().pushMatrix();
         g.pose().translate(0f, rise);
-        Draw.frame(g, Frames.TOAST, cardX, cardY, WIDTH, cardH);
+        Draw.frame(g, Frames.DIALOG, cardX, cardY, WIDTH, cardH);
         float x = cardX + PAD;
         float y = cardY + PAD;
         Draw.icon(g, Icon.GLOBE, 12, x, y + 1, Theme.GOLD_300);

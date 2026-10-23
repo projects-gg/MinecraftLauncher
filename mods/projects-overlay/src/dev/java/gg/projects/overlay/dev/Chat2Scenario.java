@@ -70,7 +70,7 @@ public final class Chat2Scenario implements ClientModInitializer {
     private int slice;
     private double sliceStart = -1;
     private boolean recording;
-    private final long[][] perfByConv = new long[2][6];
+    private final long[][] perfByConv = new long[2][7];
     private final long[] allocByConv = new long[2];
     private final long[] framesByConv = new long[2];
     private long allocAtSlice;
@@ -462,7 +462,7 @@ public final class Chat2Scenario implements ClientModInitializer {
         if (recording && t >= sliceStart + SLICE_S) {
             FrameClock.record(-1);
             long[] drained = Perf.drain();
-            for (int i = 0; i < drained.length; i++) {
+            for (int i = 0; i < Math.min(drained.length, perfByConv[mode].length); i++) {
                 perfByConv[mode][i] += drained[i];
             }
             allocByConv[mode] += allocated() - allocAtSlice;
@@ -528,6 +528,8 @@ public final class Chat2Scenario implements ClientModInitializer {
         JsonObject o = perf(drained);
         o.addProperty("layoutsMadePerCall", drained[3] == 0 ? 0 : round(drained[4] / (double) drained[3]));
         o.addProperty("layoutsReusedPerCall", drained[3] == 0 ? 0 : round(drained[5] / (double) drained[3]));
+        // What the panel's own drawing allocates (its code and the game's record for each element it submits).
+        o.addProperty("panelBytesPerCall", drained[3] == 0 ? 0 : Math.round(drained[6] / (double) drained[3]));
         o.addProperty("frames", frames);
         o.addProperty("renderThreadBytesPerFrame", frames == 0 ? 0 : Math.round(allocatedBytes / (double) frames));
         return o;

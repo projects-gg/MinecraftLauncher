@@ -114,16 +114,19 @@ public final class MessageList extends PanelWidget {
         float bubbleW;
         float bubbleH;
         boolean meta;
-        String time;
-        String edited;
+        // Every word a frame draws keeps its layout (no text is laid out again while nothing changes).
+        FormattedCharSequence time;
+        float timeW;
+        FormattedCharSequence edited;
         boolean seen;
         float metaTop;
         float metaWidth;
         OverlayState.Delivery delivery;
-        String reason;
+        FormattedCharSequence reason;
+        float reasonW;
         boolean rewrite;
-        String firstAction;
-        String secondAction;
+        FormattedCharSequence firstAction;
+        FormattedCharSequence secondAction;
         float firstActionX;
         float firstActionW;
         float secondActionX;
@@ -143,7 +146,7 @@ public final class MessageList extends PanelWidget {
         StickerSet.Sticker sticker;
         boolean unknownSticker;
         FormattedCharSequence cardSite;
-        float cardSiteW;
+        float cardTitleX;
         FormattedCharSequence cardTitle;
         float chipsTop;
         int chips;
@@ -178,12 +181,17 @@ public final class MessageList extends PanelWidget {
     private long lastFrame;
     private Component lastNarration = Component.empty();
     private String deletedText = "";
-    private String editedText = "";
-    private String seenText = "";
-    private String dividerText = "";
-    private String newBelowText = "";
+    private FormattedCharSequence editedWord = FormattedCharSequence.EMPTY;
+    private float editedW;
+    private FormattedCharSequence seenWord = FormattedCharSequence.EMPTY;
+    private float seenW;
+    private FormattedCharSequence dividerWord = FormattedCharSequence.EMPTY;
+    private float dividerW;
+    private FormattedCharSequence newBelowWord = FormattedCharSequence.EMPTY;
     private float newBelowWidth;
-    private String emptyText = "";
+    private FormattedCharSequence emptyWord = FormattedCharSequence.EMPTY;
+    private float emptyW;
+    private final FormattedCharSequence[] quickLines = new FormattedCharSequence[QUICK.length];
     // What the player may do now (CHAT2): set on every refresh.
     private boolean canReply;
     private boolean canReact;
@@ -215,6 +223,14 @@ public final class MessageList extends PanelWidget {
     public MessageList(Actions actions) {
         super(0, 0, 100, 100, Texts.tr("chat.list"));
         this.actions = actions;
+        for (int i = 0; i < QUICK.length; i++) {
+            quickLines[i] = Texts.visual(QUICK_SHOWN[i]);
+        }
+    }
+
+    private void setEmpty(String words, Font small) {
+        emptyWord = Texts.visual(words);
+        emptyW = small.width(words);
     }
 
     public void setReducedMotion(boolean value) {
@@ -273,7 +289,13 @@ public final class MessageList extends PanelWidget {
         if (conversation == null) {
             rows.clear();
             contentHeight = 0f;
-            emptyText = Texts.str("chat.none");
+            boolean tr = Texts.turkish();
+            if (laidOutRevision != -2 || tr != turkish) {
+                // Once, not on every frame: nothing is open, nothing changes.
+                turkish = tr;
+                setEmpty(Texts.str("chat.none"), Fonts.small());
+                laidOutRevision = -2;
+            }
             return;
         }
         int revision = state.lineRevision(conversation);
@@ -334,14 +356,22 @@ public final class MessageList extends PanelWidget {
         turkish = Texts.turkish();
         for (int i = 0; i < QUICK.length; i++) {
             quickW[i] = ui.width(QUICK_SHOWN[i]);
+            quickLines[i] = Texts.visual(QUICK_SHOWN[i]);
         }
         deletedText = Texts.str("chat.deleted");
-        editedText = Texts.str("chat.edited");
-        seenText = Texts.str("chat.seen");
-        dividerText = Texts.str("chat.divider");
-        newBelowText = Texts.str("chat.new_below");
-        newBelowWidth = small.width(newBelowText) + 22f;
-        emptyText = Texts.str("chat.empty");
+        String edited = Texts.str("chat.edited");
+        editedWord = Texts.visual(edited);
+        editedW = small.width(edited);
+        String seenWords = Texts.str("chat.seen");
+        seenWord = Texts.visual(seenWords);
+        seenW = small.width(seenWords);
+        String divider = Texts.str("chat.divider");
+        dividerWord = Texts.visual(divider);
+        dividerW = small.width(divider);
+        String below = Texts.str("chat.new_below");
+        newBelowWord = Texts.visual(below);
+        newBelowWidth = small.width(below) + 22f;
+        setEmpty(Texts.str("chat.empty"), small);
         rows.clear();
         nextTimeout = Long.MAX_VALUE;
         int width = getWidth();
@@ -413,22 +443,28 @@ public final class MessageList extends PanelWidget {
             row.meta = lastOfGroup || row.delivery != OverlayState.Delivery.SENT || (line.edited && !line.deleted)
                 || row.seen;
             if (row.meta) {
-                row.time = time(line.at);
-                row.edited = line.edited && !line.deleted ? editedText : null;
-                row.metaWidth = small.width(row.time) + (row.edited == null ? 0 : small.width(row.edited) + 4)
-                    + (row.seen ? small.width(seenText) + 4 : line.mine ? 11 : 0);
+                String time = time(line.at);
+                row.time = Texts.visual(time);
+                row.timeW = small.width(time);
+                row.edited = line.edited && !line.deleted ? editedWord : null;
+                row.metaWidth = row.timeW + (row.edited == null ? 0 : editedW + 4)
+                    + (row.seen ? seenW + 4 : line.mine ? 11 : 0);
                 y += 2;
                 row.metaTop = y - row.y;
                 y += SMALL_H;
             }
             if (failed) {
                 String reason = line.failureAt(now);
-                row.reason = failureText(reason, line.failureRule);
+                String why = failureText(reason, line.failureRule);
+                row.reason = Texts.visual(why);
+                row.reasonW = small.width(why);
                 row.rewrite = isRewrite(reason) && line.sticker == null;
-                row.firstAction = Texts.str(row.rewrite ? "chat.rewrite" : "chat.retry");
-                row.secondAction = Texts.str("chat.discard");
-                row.firstActionW = small.width(row.firstAction) + 8;
-                row.secondActionW = small.width(row.secondAction) + 8;
+                String firstWords = Texts.str(row.rewrite ? "chat.rewrite" : "chat.retry");
+                String secondWords = Texts.str("chat.discard");
+                row.firstAction = Texts.visual(firstWords);
+                row.secondAction = Texts.visual(secondWords);
+                row.firstActionW = small.width(firstWords) + 8;
+                row.secondActionW = small.width(secondWords) + 8;
                 row.secondActionX = row.secondActionW;
                 row.firstActionX = row.secondActionW + 2 + row.firstActionW;
                 y += 2 + SMALL_H + 2;
@@ -511,7 +547,7 @@ public final class MessageList extends PanelWidget {
         if (line.card != null) {
             String site = Texts.fit(small, line.card.site(), textMax / 2);
             row.cardSite = Texts.visual(site);
-            row.cardSiteW = small.width(site) + small.width(" · ");
+            row.cardTitleX = small.width(site);
             String title = Texts.fit(small, " · " + line.card.title(), Math.max(20, textMax - small.width(site)));
             row.cardTitle = Texts.visual(title);
             float cardW = small.width(site) + small.width(title);
@@ -1024,8 +1060,8 @@ public final class MessageList extends PanelWidget {
         Font ui = Fonts.ui();
         Font small = Fonts.small();
         if (rows.isEmpty()) {
-            Draw.text(g, small, emptyText, x0 + (w - small.width(emptyText)) / 2f,
-                Fonts.centeredY(Fonts.Face.SMALL, y0 + h / 2f), Theme.ASH_400);
+            Draw.text(g, small, emptyWord, x0 + (w - emptyW) / 2f, Fonts.centeredY(Fonts.Face.SMALL, y0 + h / 2f),
+                Theme.ASH_400);
             return;
         }
         float top = scroll.value();
@@ -1056,7 +1092,7 @@ public final class MessageList extends PanelWidget {
             float py = y0 + h - 18f;
             Draw.frame(g, Frames.CHIP_SELECTED, px, py, pw, 14);
             Draw.icon(g, Icon.DOWN, 8, px + 6, py + 3, Theme.GOLD_300);
-            Draw.text(g, small, newBelowText, px + 16, Fonts.centeredY(Fonts.Face.SMALL, py + 7), Theme.BONE_100);
+            Draw.text(g, small, newBelowWord, px + 16, Fonts.centeredY(Fonts.Face.SMALL, py + 7), Theme.BONE_100);
         }
     }
 
@@ -1144,19 +1180,19 @@ public final class MessageList extends PanelWidget {
         int mouseY, long now, Font ui, Font small) {
         float rowTop = y;
         if (row.divider) {
-            String label = dividerText;
-            float lw = small.width(label);
+            float lw = dividerW;
             float mid = y + DIVIDER_H / 2f - 1;
             Draw.hairline(g, x0, x0 + (w - lw) / 2f - 6, mid, Theme.withAlpha(Theme.GOLD_400, 0.35f));
             Draw.hairline(g, x0 + (w + lw) / 2f + 6, right, mid, Theme.withAlpha(Theme.GOLD_400, 0.35f));
-            Draw.text(g, small, label, x0 + (w - lw) / 2f, Fonts.centeredY(Fonts.Face.SMALL, mid), Theme.GOLD_300);
+            Draw.text(g, small, dividerWord, x0 + (w - lw) / 2f, Fonts.centeredY(Fonts.Face.SMALL, mid),
+                Theme.GOLD_300);
         }
         if (row.name != null) {
             float ny = rowTop + (row.divider ? DIVIDER_H : 0);
             Draw.text(g, small, row.name, x0 + 1, Fonts.centeredY(Fonts.Face.SMALL, ny + SMALL_H / 2f), Theme.ASH_300);
         }
         if (row.quote) {
-            drawQuote(g, row, rowTop + row.quoteTop, x0, right, small);
+            drawQuote(g, index, row, rowTop + row.quoteTop, x0, right, small);
         }
         float by = rowTop + row.bubbleTop;
         float bx = row.mine ? right - row.bubbleW : x0;
@@ -1201,9 +1237,8 @@ public final class MessageList extends PanelWidget {
         }
         if (row.reason != null) {
             float ry = rowTop + row.metaTop + (row.meta ? SMALL_H : 0) + 2;
-            float rw = small.width(row.reason);
-            Draw.text(g, small, row.reason, right - rw - 1, Fonts.centeredY(Fonts.Face.SMALL, ry + SMALL_H / 2f),
-                Theme.FLARE_300);
+            Draw.text(g, small, row.reason, right - row.reasonW - 1,
+                Fonts.centeredY(Fonts.Face.SMALL, ry + SMALL_H / 2f), Theme.FLARE_300);
             float ay = y - row.y + row.actionsY;
             drawAction(g, row.firstAction, right - row.firstActionX, ay, row.firstActionW, mouseX, mouseY, small);
             drawAction(g, row.secondAction, right - row.secondActionX, ay, row.secondActionW, mouseX, mouseY,
@@ -1211,9 +1246,9 @@ public final class MessageList extends PanelWidget {
         }
     }
 
-    private void drawQuote(GuiGraphicsExtractor g, Row row, float qy, int x0, float right, Font small) {
+    private void drawQuote(GuiGraphicsExtractor g, int index, Row row, float qy, int x0, float right, Font small) {
         float qx = row.mine ? right - row.quoteW : x0;
-        boolean lit = hoverQuote && rows.indexOf(row) == hoverRow;
+        boolean lit = hoverQuote && index == hoverRow;
         // A thin bar, then the quoted words: quiet, so the message itself stays the thing to read.
         Draw.fill(g, qx + 1, qy + 1, qx + 2.5f, qy + QUOTE_H - 1, lit ? Theme.ASH_300 : Theme.withAlpha(Theme.ASH_500,
             0.8f));
@@ -1254,8 +1289,7 @@ public final class MessageList extends PanelWidget {
                     Theme.withAlpha(0xFFFFFF, 0.08f));
                 float cy = Fonts.centeredY(Fonts.Face.SMALL, ty + 1 + SMALL_H / 2f);
                 Draw.text(g, small, row.cardSite, bx + BUBBLE_PAD_X, cy, Theme.ASH_300);
-                Draw.text(g, small, row.cardTitle, bx + BUBBLE_PAD_X + row.cardSiteW - small.width(" · "), cy,
-                    Theme.ASH_400);
+                Draw.text(g, small, row.cardTitle, bx + BUBBLE_PAD_X + row.cardTitleX, cy, Theme.ASH_400);
             }
         }
         Draw.popAlpha();
@@ -1316,8 +1350,8 @@ public final class MessageList extends PanelWidget {
         float textY = Fonts.centeredY(Fonts.Face.SMALL, my + SMALL_H / 2f);
         if (row.seen) {
             // "Görüldü" in place of the tick: no time of its own, quiet.
-            Draw.text(g, small, seenText, mx, textY, Theme.ASH_300);
-            mx += small.width(seenText) + 4;
+            Draw.text(g, small, seenWord, mx, textY, Theme.ASH_300);
+            mx += seenW + 4;
         } else if (row.mine) {
             Icon mark = switch (row.delivery) {
                 case PENDING -> Icon.CLOCK;
@@ -1331,7 +1365,7 @@ public final class MessageList extends PanelWidget {
         }
         Draw.text(g, small, row.time, mx, textY, Theme.ASH_400);
         if (row.edited != null) {
-            Draw.text(g, small, row.edited, mx + small.width(row.time) + 4, textY, Theme.ASH_400);
+            Draw.text(g, small, row.edited, mx + row.timeW + 4, textY, Theme.ASH_400);
         }
     }
 
@@ -1420,7 +1454,7 @@ public final class MessageList extends PanelWidget {
                 m.pushMatrix();
                 m.translate(cx + (QUICK_CELL - 2f * quickW[i]) / 2f + 1f, cy + 1f);
                 m.scale(2f, 2f);
-                Draw.text(g, Fonts.ui(), QUICK_SHOWN[i], 0, -0.5f, Theme.BONE_50);
+                Draw.text(g, Fonts.ui(), quickLines[i], 0, -0.5f, Theme.BONE_50);
                 m.popMatrix();
             } else {
                 Draw.icon(g, Icon.REPLY, 10, cx + (QUICK_CELL - 10) / 2f, cy + (QUICK_CELL - 10) / 2f,
@@ -1463,8 +1497,8 @@ public final class MessageList extends PanelWidget {
         Draw.popAlpha();
     }
 
-    private void drawAction(GuiGraphicsExtractor g, String label, float x, float y, float w, int mouseX, int mouseY,
-        Font small) {
+    private void drawAction(GuiGraphicsExtractor g, FormattedCharSequence label, float x, float y, float w, int mouseX,
+        int mouseY, Font small) {
         boolean lit = isHovered() && mouseX >= x && mouseX < x + w && mouseY >= y && mouseY < y + 12;
         if (lit) {
             Draw.frame(g, Frames.CHIP_HOVER, x, y - 1, w, 14);

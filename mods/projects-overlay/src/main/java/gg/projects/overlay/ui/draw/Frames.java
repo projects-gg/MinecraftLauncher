@@ -21,6 +21,13 @@ public enum Frames {
         Theme.withAlpha(Theme.GOLD_400, 0.34f))
         .withHighlight(Theme.withAlpha(Theme.GOLD_200, 0.08f))
         .withShadow(Theme.withAlpha(0x220606, 0.5f), 8f, 3f).fixedWidth(Sizes.TOAST_WIDTH)),
+    /**
+     * A question over the game (a link to open, a friend's server to join): the toast's card at any width (the
+     * toast's own frame is baked at the toast's width only), a little denser, since it is read word by word.
+     */
+    DIALOG(FrameSpec.rounded(6, Theme.withAlpha(Theme.OBSIDIAN_900, Alphas.DIALOG), Theme.withAlpha(0xFFFFFF, 0.10f))
+        .withHighlight(Theme.withAlpha(0xFFFFFF, 0.07f))
+        .withShadow(Theme.withAlpha(0x220606, 0.5f), 8f, 3f)),
     /** Cards inside the panel (crew call, notices). */
     CARD(FrameSpec.rounded(5, Theme.withAlpha(Theme.OBSIDIAN_800, 0.86f), Theme.withAlpha(0xFFFFFF, 0.07f))),
     /** The crew call card: a touch of gold, the one loud thing in the panel. */
@@ -75,12 +82,13 @@ public enum Frames {
         .withGradient(Theme.mix(Theme.GOLD_300, Theme.GOLD_400, 0.45f), Theme.GOLD_600).chamfer().fixed(12)),
     /**
      * CHAT2: small surfaces over the conversation (a message's toolbar, the quick reactions, the sticker
-     * picker, a tooltip): nearly opaque so the messages under them do not read through, with a soft shadow.
+     * picker, a tooltip): opaque, since text under text never reads well (even 3 % of a white sticker's
+     * outline showed through on a dark screen), with a soft shadow.
      */
-    POPOVER(FrameSpec.rounded(5, Theme.withAlpha(Theme.OBSIDIAN_850, 0.97f), Theme.withAlpha(0xFFFFFF, 0.11f))
+    POPOVER(FrameSpec.rounded(5, Theme.OBSIDIAN_850, Theme.withAlpha(0xFFFFFF, 0.11f))
         .withHighlight(Theme.withAlpha(0xFFFFFF, 0.05f))
         .withShadow(Theme.withAlpha(0x0A0408, 0.55f), 5f, 2f)),
-    TOOLTIP(FrameSpec.rounded(4, Theme.withAlpha(Theme.OBSIDIAN_950, 0.96f), Theme.withAlpha(0xFFFFFF, 0.12f))
+    TOOLTIP(FrameSpec.rounded(4, Theme.OBSIDIAN_950, Theme.withAlpha(0xFFFFFF, 0.12f))
         .withShadow(Theme.withAlpha(0x0A0408, 0.5f), 4f, 1.5f)),
     /** A reaction under a message: an action, so chamfered; the player's own carries a gold edge. */
     REACTION(FrameSpec.rounded(2.5f, Theme.withAlpha(0xFFFFFF, 0.06f), Theme.withAlpha(0xFFFFFF, 0.10f))
@@ -126,6 +134,8 @@ public enum Frames {
         public static final float TOAST = 0.80f;
         /** The panel, over the scrim that already dims the world a little. */
         public static final float PANEL = 0.88f;
+        /** A question over the dimmed game: read word by word, so denser than a toast. */
+        public static final float DIALOG = 0.92f;
 
         private Alphas() {
         }
