@@ -525,7 +525,10 @@ mod tests {
                 answer
             );
         }
-        assert_eq!(WorldGameMode::from_wire("hardcore"), WorldGameMode::Survival);
+        assert_eq!(
+            WorldGameMode::from_wire("hardcore"),
+            WorldGameMode::Survival
+        );
         assert_eq!(WorldGameMode::from_wire("creative").as_str(), "creative");
     }
 }

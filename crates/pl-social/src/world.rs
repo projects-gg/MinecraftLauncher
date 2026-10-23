@@ -143,7 +143,9 @@ pub enum WorldFrame {
         reason: &'static str,
     },
     /// The launcher is done with these credentials.
-    TurnRelease { username: Hidden<String> },
+    TurnRelease {
+        username: Hidden<String>,
+    },
     /// After a reconnect: credentials the launcher still uses (at most 4 a frame).
     TurnHeld {
         session: String,
@@ -635,7 +637,13 @@ mod tests {
         ];
         for frame in &frames {
             let shown = format!("{frame:?}");
-            for secret in ["PSK-SECRET", "USER-SECRET", "SLOT-SECRET", "162.159", "sess"] {
+            for secret in [
+                "PSK-SECRET",
+                "USER-SECRET",
+                "SLOT-SECRET",
+                "162.159",
+                "sess",
+            ] {
                 assert!(!shown.contains(secret), "{shown}");
             }
         }
@@ -647,7 +655,10 @@ mod tests {
         }))
         .unwrap();
         let shown = format!("{ice:?}");
-        assert!(!shown.contains("SECRET") && !shown.contains("cloudflare"), "{shown}");
+        assert!(
+            !shown.contains("SECRET") && !shown.contains("cloudflare"),
+            "{shown}"
+        );
         assert_eq!(ice.credential.expose(), "PASS-SECRET");
         let invite: WorldInvite = serde_json::from_value(json!({
             "id": "0123456789abcdef", "from": "f1", "at": 5, "session": "s",

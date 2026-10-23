@@ -3413,9 +3413,7 @@ mod tests {
                 role: WorldRole::Guest,
                 reason: "primary",
             };
-            control
-                .world_request(frame, Duration::from_secs(5))
-                .await
+            control.world_request(frame, Duration::from_secs(5)).await
         });
         let sent = next_json(&mut server).await;
         assert_eq!(sent["t"], "turn_creds");
@@ -3441,9 +3439,7 @@ mod tests {
                 role: WorldRole::Guest,
                 reason: "fallback",
             };
-            control
-                .world_request(frame, Duration::from_secs(5))
-                .await
+            control.world_request(frame, Duration::from_secs(5)).await
         });
         let sent = next_json(&mut server).await;
         send_json(
@@ -3546,7 +3542,13 @@ mod tests {
         let seen = Arc::new(Mutex::new(Vec::new()));
         let mut handle = client.session(token()).connect_presence(fast());
         let mut server = accept(&listener, None, seen.clone()).await.unwrap();
-        assert!(!seen.lock().unwrap().iter().any(|(_, value)| value.contains("worlds")));
+        assert!(
+            !seen
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(_, value)| value.contains("worlds"))
+        );
         send_json(&mut server, hello()).await;
         assert!(matches!(
             handle.next_event().await,

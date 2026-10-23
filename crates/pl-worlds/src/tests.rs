@@ -320,14 +320,14 @@ impl Harness {
     /// A game of `projects` whose hosting mod is in world `W`.
     async fn in_world(&self) {
         self.worlds.game_started("projects", Some("t".repeat(43)));
+        self.worlds.on_bridge(HostSignal::Connected { hosts: true });
         self.worlds
-            .on_bridge(HostSignal::Connected { hosts: true });
-        self.worlds.on_bridge(HostSignal::Frame(FromGame::HostWorld {
-            open: true,
-            folder: "W".into(),
-            mode: "survival".into(),
-            lan: false,
-        }));
+            .on_bridge(HostSignal::Frame(FromGame::HostWorld {
+                open: true,
+                folder: "W".into(),
+                mode: "survival".into(),
+                lan: false,
+            }));
         // The install's check runs in the background.
         eventually("the game's install was looked at", || {
             self.bridge
@@ -363,8 +363,7 @@ fn join_vector() -> serde_json::Value {
         env!("CARGO_MANIFEST_DIR"),
         "/../pl-host/testdata/invite/join.json"
     );
-    let file: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+    let file: serde_json::Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
     file["join"].clone()
 }
 
@@ -501,8 +500,7 @@ async fn todays_opens_used_up_is_the_limit_and_nothing_reaches_the_game() {
 async fn a_request_the_launcher_may_not_open_is_refused_in_the_game() {
     let h = Harness::with(|launcher| launcher.hostable = false).switched_on();
     h.worlds.game_started("projects", Some("t".repeat(43)));
-    h.worlds
-        .on_bridge(HostSignal::Connected { hosts: true });
+    h.worlds.on_bridge(HostSignal::Connected { hosts: true });
     h.worlds.on_bridge(HostSignal::Frame(FromGame::HostWorld {
         open: true,
         folder: "W".into(),
@@ -533,7 +531,10 @@ async fn opening_from_the_launcher_backs_up_starts_the_game_and_publishes_once_i
     assert_eq!(h.worlds.open(request).await, WorldOpenOutcome::Start);
     let view = h.worlds.view();
     let Some(HostSessionView::Opening {
-        step, guests, world_name, ..
+        step,
+        guests,
+        world_name,
+        ..
     }) = view.session
     else {
         panic!("an opening")
@@ -570,8 +571,12 @@ async fn opening_from_the_launcher_backs_up_starts_the_game_and_publishes_once_i
     })
     .await;
     // The service let the session go again.
-    assert!(h.service.frames().iter().any(|f| matches!(f,
-        WorldFrame::World { open: false, .. })));
+    assert!(
+        h.service
+            .frames()
+            .iter()
+            .any(|f| matches!(f, WorldFrame::World { open: false, .. }))
+    );
 }
 
 #[tokio::test]
@@ -640,7 +645,10 @@ async fn nothing_shows_and_nothing_opens_while_any_switch_is_off() {
     let place = h.worlds.place("projects").await;
     assert!(place.shown && place.playing.is_none());
     h.in_world().await;
-    assert_eq!(h.worlds.place("projects").await.playing.as_deref(), Some("W"));
+    assert_eq!(
+        h.worlds.place("projects").await.playing.as_deref(),
+        Some("W")
+    );
     assert_eq!(h.worlds.place("other").await.playing, None);
 }
 
@@ -681,7 +689,11 @@ async fn a_world_invite_shows_tells_and_marks_the_friend_until_the_world_closes(
     assert_eq!(view.invites.len(), 1);
     let shown = &view.invites[0];
     assert_eq!(
-        (shown.name.as_str(), shown.mc.as_str(), shown.avatar.as_deref()),
+        (
+            shown.name.as_str(),
+            shown.mc.as_str(),
+            shown.avatar.as_deref()
+        ),
         ("Ayşe", "26.1.2", Some("a3"))
     );
     assert!(shown.join.is_none() && !shown.quiet);
@@ -937,7 +949,10 @@ async fn telemetry_goes_as_world_reports_and_waits_while_the_socket_is_down() {
         unreachable!()
     };
     let frame: serde_json::Value = serde_json::from_str(&frame).unwrap();
-    assert_eq!((frame["mc"].clone(), frame["lv"].clone()), ("26.1.2".into(), "2.1.0-test".into()));
+    assert_eq!(
+        (frame["mc"].clone(), frame["lv"].clone()),
+        ("26.1.2".into(), "2.1.0-test".into())
+    );
     // Down: kept (its bytes carried), sent once the socket is back.
     h.worlds.on_service(WorldEvent::Down);
     h.worlds.report("26.1.2", usage);

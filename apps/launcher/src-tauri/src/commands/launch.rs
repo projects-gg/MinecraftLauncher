@@ -1196,7 +1196,9 @@ async fn prepare_and_spawn(
     .await
     .map_err(CmdError::from)?;
     // World sharing (HOST1): the gate key of the game's worlds comes from its bridge's token.
-    let host_token = overlay.endpoint().map(|endpoint| endpoint.secret().to_owned());
+    let host_token = overlay
+        .endpoint()
+        .map(|endpoint| endpoint.secret().to_owned());
     // The game runs: its bridge stays until it ends.
     let overlay_port = overlay.keep();
     let process = Arc::new(process);

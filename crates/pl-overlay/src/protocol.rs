@@ -261,7 +261,10 @@ pub enum ToGame {
     },
     /// HOST1 (H10): take this guest out now (`removed`, `blocked`, `restricted`; the mod says
     /// "Bu dünyadan çıkarıldın." for all).
-    HostRemove { guest: String, reason: String },
+    HostRemove {
+        guest: String,
+        reason: String,
+    },
     /// HOST1 (H11): stop sharing (`player`, `left-world`, `restricted`, `launcher-exit`, `error`).
     HostStop {
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -578,7 +581,9 @@ mod tests {
         )
         .unwrap();
         assert!(world.is_host());
-        assert!(matches!(world, FromGame::HostWorld { open: true, ref folder, .. } if folder == "Yeni Dünya"));
+        assert!(
+            matches!(world, FromGame::HostWorld { open: true, ref folder, .. } if folder == "Yeni Dünya")
+        );
         let left: FromGame = serde_json::from_str(r#"{"t":"host-world","open":false}"#).unwrap();
         assert!(matches!(left, FromGame::HostWorld { open: false, .. }));
         let request: FromGame = serde_json::from_str(
@@ -602,11 +607,12 @@ mod tests {
                 reason: String::new()
             }
         );
-        let refused: FromGame = serde_json::from_str(
-            r#"{"t":"host-published","id":"p1","ok":false,"reason":"lan"}"#,
-        )
-        .unwrap();
-        assert!(matches!(refused, FromGame::HostPublished { ok: false, ref reason, .. } if reason == "lan"));
+        let refused: FromGame =
+            serde_json::from_str(r#"{"t":"host-published","id":"p1","ok":false,"reason":"lan"}"#)
+                .unwrap();
+        assert!(
+            matches!(refused, FromGame::HostPublished { ok: false, ref reason, .. } if reason == "lan")
+        );
         let guest: FromGame = serde_json::from_str(
             r#"{"t":"host-guest","conn":3,"guest":"g1","name":"Notch","state":"in"}"#,
         )
@@ -615,11 +621,15 @@ mod tests {
         let more: FromGame =
             serde_json::from_str(r#"{"t":"host-invite","invite":["f3"]}"#).unwrap();
         assert!(matches!(more, FromGame::HostInvite { ref invite } if invite == &["f3"]));
-        let remove: FromGame =
-            serde_json::from_str(r#"{"t":"host-remove","guest":"g2"}"#).unwrap();
+        let remove: FromGame = serde_json::from_str(r#"{"t":"host-remove","guest":"g2"}"#).unwrap();
         assert_eq!(remove, FromGame::HostRemove { guest: "g2".into() });
         let stop: FromGame = serde_json::from_str(r#"{"t":"host-stop"}"#).unwrap();
-        assert_eq!(stop, FromGame::HostStop { reason: String::new() });
+        assert_eq!(
+            stop,
+            FromGame::HostStop {
+                reason: String::new()
+            }
+        );
         let join: FromGame = serde_json::from_str(r#"{"t":"join","friend":"f1"}"#).unwrap();
         assert!(!join.is_host());
 

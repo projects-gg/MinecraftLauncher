@@ -70,9 +70,9 @@ impl Bridge for OverlayLink {
     }
 
     fn connect(&self, port: u16, label: String) -> BoxFuture<'_, bool> {
-        Box::pin(async move {
-            self.0.connect_world_in_game(port, label).await == ConnectOutcome::Done
-        })
+        Box::pin(
+            async move { self.0.connect_world_in_game(port, label).await == ConnectOutcome::Done },
+        )
     }
 }
 
@@ -478,7 +478,7 @@ impl Launcher for AppLauncher {
                 crate::commands::official::instance_family(
                     &snapshot.index,
                     &instance,
-                    Some(&game_dir),
+                    Some(game_dir.as_path()),
                 )
             });
             let follows = matches!((&official, &family), (Some((_, official)), Some(family)) if official == family);

@@ -1,6 +1,8 @@
 //! Who owns a loopback TCP connection: the local endpoint of a friend's world takes only the
 //! connection of the game the launcher started (HOST1, `crates/pl-host/PROTOCOL.md` §8). Windows
-//! reads the TCP table with owning processes; elsewhere nothing is known and the caller decides.
+//! reads the TCP table with owning processes (IP Helper's `GetExtendedTcpTable`, declared here so
+//! the shared `windows` build keeps its features); elsewhere nothing is known and the caller
+//! decides.
 
 /// The process that owns the client end of a loopback connection from `127.0.0.1:client_port`
 /// (the address an accepting socket sees), when the system tells.
@@ -16,63 +18,91 @@ pub fn loopback_owner(client_port: u16) -> Option<u32> {
     }
 }
 
+/// `MIB_TCPROW_OWNER_PID`: addresses and ports as the table stores them (ports in network byte
+/// order in the low 16 bits).
+#[cfg(windows)]
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct TcpRowOwnerPid {
+    state: u32,
+    local_addr: u32,
+    local_port: u32,
+    remote_addr: u32,
+    remote_port: u32,
+    owning_pid: u32,
+}
+
+#[cfg(windows)]
+#[link(name = "iphlpapi")]
+unsafe extern "system" {
+    /// IP Helper (iphlpapi.dll), on every Windows the launcher runs on.
+    fn GetExtendedTcpTable(
+        table: *mut core::ffi::c_void,
+        size: *mut u32,
+        order: i32,
+        family: u32,
+        class: i32,
+        reserved: u32,
+    ) -> u32;
+}
+
 #[cfg(windows)]
 fn windows_owner(client_port: u16) -> Option<u32> {
-    use windows::Win32::NetworkManagement::IpHelper::{
-        GetExtendedTcpTable, MIB_TCPROW_OWNER_PID, MIB_TCPTABLE_OWNER_PID,
-        TCP_TABLE_OWNER_PID_CONNECTIONS,
-    };
     /// `AF_INET` (the table of IPv4 connections).
     const AF_INET: u32 = 2;
+    /// `TCP_TABLE_OWNER_PID_CONNECTIONS`.
+    const OWNER_PID_CONNECTIONS: i32 = 4;
+    const NO_ERROR: u32 = 0;
     const LOOPBACK: u32 = u32::from_ne_bytes([127, 0, 0, 1]);
+    /// The table starts with its row count (`dwNumEntries`), then the rows.
+    const HEADER: usize = std::mem::size_of::<u32>();
 
     // The table can grow between the size question and the read: a few tries.
     let mut size: u32 = 0;
     for _ in 0..4 {
-        let mut buf = vec![0u64; (size as usize).div_ceil(8).max(1)];
-        // SAFETY: `buf` holds `size` writable bytes, aligned for the table's u32 fields.
+        let mut buf = vec![0u32; (size as usize).div_ceil(4).max(1)];
+        let mut asked = u32::try_from(buf.len() * 4).ok()?;
+        // SAFETY: `buf` holds `asked` writable bytes, aligned for the table's u32 fields; the
+        // call writes at most that many and says how many it needs otherwise.
         let status = unsafe {
             GetExtendedTcpTable(
-                Some(buf.as_mut_ptr().cast()),
-                &mut size,
-                false,
+                buf.as_mut_ptr().cast(),
+                &mut asked,
+                0,
                 AF_INET,
-                TCP_TABLE_OWNER_PID_CONNECTIONS,
+                OWNER_PID_CONNECTIONS,
                 0,
             )
         };
-        if status != 0 {
-            // ERROR_INSUFFICIENT_BUFFER: `size` now says how much is needed.
+        if status != NO_ERROR {
+            // ERROR_INSUFFICIENT_BUFFER: `asked` says how much is needed now.
+            size = asked;
             continue;
         }
-        let bytes = (size as usize).min(buf.len() * 8);
-        if bytes < std::mem::size_of::<u32>() {
+        let written = (asked as usize).min(buf.len() * 4);
+        if written < HEADER {
             return None;
         }
-        // SAFETY: the call wrote a MIB_TCPTABLE_OWNER_PID of `size` bytes into `buf`.
-        let table = unsafe { &*buf.as_ptr().cast::<MIB_TCPTABLE_OWNER_PID>() };
-        let header = std::mem::offset_of!(MIB_TCPTABLE_OWNER_PID, table);
-        let fits = (bytes.saturating_sub(header)) / std::mem::size_of::<MIB_TCPROW_OWNER_PID>();
-        let count = (table.dwNumEntries as usize).min(fits);
-        // SAFETY: `count` rows follow the header inside the bytes the call wrote.
+        let count = buf[0] as usize;
+        let fits = (written - HEADER) / std::mem::size_of::<TcpRowOwnerPid>();
+        // SAFETY: `min(count, fits)` rows of plain u32 fields follow the count inside the bytes
+        // the call wrote, aligned like `buf`.
         let rows = unsafe {
-            let first = buf
-                .as_ptr()
-                .cast::<u8>()
-                .add(header)
-                .cast::<MIB_TCPROW_OWNER_PID>();
-            std::slice::from_raw_parts(first, count)
+            std::slice::from_raw_parts(
+                buf.as_ptr().add(1).cast::<TcpRowOwnerPid>(),
+                count.min(fits),
+            )
         };
         // Ports sit in the low 16 bits in network byte order.
         let port = |raw: u32| u16::from_be((raw & 0xFFFF) as u16);
         return rows
             .iter()
             .find(|row| {
-                row.dwLocalAddr == LOOPBACK
-                    && row.dwRemoteAddr == LOOPBACK
-                    && port(row.dwLocalPort) == client_port
+                row.local_addr == LOOPBACK
+                    && row.remote_addr == LOOPBACK
+                    && port(row.local_port) == client_port
             })
-            .map(|row| row.dwOwningPid);
+            .map(|row| row.owning_pid);
     }
     None
 }

@@ -20,8 +20,8 @@ use crate::OverlayConfig;
 use crate::feed::{self, Mirror, Scene, Sends};
 use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
-    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_HOST, FromGame, MAX_MESSAGE_CHARS,
-    SendFailure, ToGame,
+    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_HOST, FromGame, MAX_MESSAGE_CHARS, SendFailure,
+    ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 

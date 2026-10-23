@@ -16,7 +16,9 @@ pub mod view;
 #[cfg(test)]
 mod tests;
 
-pub use link::{CREDS_WAIT, CredsTable, GuestLink, HostLink, PEER_WAIT, PeerWaiters, Service, Transports};
+pub use link::{
+    CREDS_WAIT, CredsTable, GuestLink, HostLink, PEER_WAIT, PeerWaiters, Service, Transports,
+};
 pub use manager::{
     Account, Bridge, HostInstall, Launcher, PlayTogether, Progress, UiEvent, UiSink, Worlds,
     WorldsConfig, refusal_text, world_label,

@@ -14,8 +14,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use pl_host::guest::{GuestConfig, GuestEnd, GuestEvent, GuestSession, RefusalText};
 use pl_host::guest::local::AcceptFilter;
+use pl_host::guest::{GuestConfig, GuestEnd, GuestEvent, GuestSession, RefusalText};
 use pl_host::host::binding::BindingKey;
 use pl_host::host::gate::GateKey;
 use pl_host::host::{
@@ -280,7 +280,6 @@ struct State {
     allowed: bool,
     /// The last connection took `worlds` (with Studio's switch); kept while it reconnects.
     taken: Option<WorldsStatus>,
-    online: bool,
     friends: HashMap<String, Person>,
     on_projects: bool,
     game: Game,
@@ -679,7 +678,6 @@ impl Worlds {
                 let (again, held) = {
                     let mut st = self.state();
                     st.taken = taken.then_some(status);
-                    st.online = taken;
                     let again = st.hosting.as_ref().and_then(|h| {
                         let live = h.live.as_ref()?;
                         Some(WorldFrame::World {
@@ -720,7 +718,6 @@ impl Worlds {
                 self.changed();
             }
             WorldEvent::Down => {
-                self.state().online = false;
                 self.set_online(false);
             }
             WorldEvent::Invite { invite, quiet } => self.on_invite(invite, quiet),
@@ -754,8 +751,7 @@ impl Worlds {
                     let Some(hosting) = st.hosting.as_mut() else {
                         return;
                     };
-                    if hosting.session.map(|s| s.to_string()).as_deref() != Some(session.as_str())
-                    {
+                    if hosting.session.map(|s| s.to_string()).as_deref() != Some(session.as_str()) {
                         return;
                     }
                     hosting.removing.insert(to.clone(), "removed");
@@ -867,19 +863,25 @@ impl Worlds {
 
     /// Sends what waits once it is due; with nothing waiting it sleeps on a notification only.
     async fn telemetry_task(self) {
+        let mut last = None;
         loop {
             let next = lock(&self.inner.telemetry.reporter).next_deadline();
-            match next {
-                Some(at) => {
-                    tokio::select! {
-                        () = tokio::time::sleep_until(tokio::time::Instant::from_std(at)) => {
-                            let frames = lock(&self.inner.telemetry.reporter).poll(Instant::now());
-                            self.send_reports(frames);
-                        }
-                        () = self.inner.telemetry.wake.notified() => {}
-                    }
+            // A deadline that did not move after its poll would spin: it waits a second then.
+            let at = match next {
+                Some(at) if last == Some(at) && at <= Instant::now() => at + Duration::from_secs(1),
+                Some(at) => at,
+                None => {
+                    self.inner.telemetry.wake.notified().await;
+                    continue;
                 }
-                None => self.inner.telemetry.wake.notified().await,
+            };
+            tokio::select! {
+                () = tokio::time::sleep_until(tokio::time::Instant::from_std(at)) => {
+                    let frames = lock(&self.inner.telemetry.reporter).poll(Instant::now());
+                    self.send_reports(frames);
+                    last = next;
+                }
+                () = self.inner.telemetry.wake.notified() => {}
             }
         }
     }
@@ -919,7 +921,12 @@ impl Worlds {
             && game.instance_id.as_deref() == Some(instance_id)
             && game.connected
             && game.hosts)
-            .then(|| game.world.as_ref().filter(|w| !w.lan).map(|w| w.folder.clone()))
+            .then(|| {
+                game.world
+                    .as_ref()
+                    .filter(|w| !w.lan)
+                    .map(|w| w.folder.clone())
+            })
             .flatten();
         HostPlace { shown, playing }
     }
@@ -927,11 +934,7 @@ impl Worlds {
     /// "Dünyayı aç" from the launcher (see [`WorldOpenOutcome`]). Refusals come as `openFailed`.
     pub async fn open(&self, request: WorldOpenRequest) -> WorldOpenOutcome {
         let switch_on = self.state().switch_on();
-        let install = self
-            .inner
-            .launcher
-            .host_install(&request.instance_id)
-            .await;
+        let install = self.inner.launcher.host_install(&request.instance_id).await;
         let Some(install) = install.filter(|i| i.hostable && switch_on) else {
             self.notice(HostNotice::OpenFailed {
                 reason: WorldOpenFailure::Unavailable,
@@ -988,11 +991,10 @@ impl Worlds {
 
         // A backup first when the last one is older than a day ("Arkadaşlarına açılmadan önce").
         let progress = self.opening_progress(generation);
-        let backup = self.inner.launcher.backup_if_old(
-            &request.instance_id,
-            &request.folder,
-            progress,
-        );
+        let backup =
+            self.inner
+                .launcher
+                .backup_if_old(&request.instance_id, &request.folder, progress);
         tokio::select! {
             ok = backup => {
                 if !ok {
@@ -1112,10 +1114,7 @@ impl Worlds {
     pub fn dismiss_failure(&self) {
         let dismissed = {
             let mut st = self.state();
-            if matches!(
-                st.hosting.as_ref().map(|h| h.phase),
-                Some(Phase::Failed(_))
-            ) {
+            if matches!(st.hosting.as_ref().map(|h| h.phase), Some(Phase::Failed(_))) {
                 st.hosting = None;
                 true
             } else {
@@ -1260,8 +1259,11 @@ impl Worlds {
         let (live, joins) = {
             let mut st = self.state();
             let live = st.hosting.take().and_then(|h| h.live);
-            let joins: Vec<GuestSession> =
-                st.invites.iter_mut().filter_map(|i| i.live.take()).collect();
+            let joins: Vec<GuestSession> = st
+                .invites
+                .iter_mut()
+                .filter_map(|i| i.live.take())
+                .collect();
             (live, joins)
         };
         if let Some(live) = live {
@@ -1308,10 +1310,7 @@ impl Worlds {
     pub async fn meet_on_projects(&self, friends: Vec<String>) {
         let now_on_projects = {
             let mut st = self.state();
-            if matches!(
-                st.hosting.as_ref().map(|h| h.phase),
-                Some(Phase::Failed(_))
-            ) {
+            if matches!(st.hosting.as_ref().map(|h| h.phase), Some(Phase::Failed(_))) {
                 st.hosting = None;
             }
             if st.on_projects {
@@ -1522,23 +1521,27 @@ impl Worlds {
                 return;
             }
         };
-        let (pending, world_name) = {
+        let opened = {
             let mut st = self.state();
-            let Some(hosting) = st.hosting.as_mut().filter(|h| h.generation == generation) else {
-                drop(st);
-                // Left meanwhile.
-                live.close().await;
-                return;
-            };
-            hosting.live = Some(live);
-            hosting.phase = Phase::Open;
-            let pending: Vec<String> = hosting
-                .guests
-                .iter()
-                .filter(|g| g.state == WorldGuestState::Pending)
-                .map(|g| g.friend.clone())
-                .collect();
-            (pending, hosting.world_name.clone())
+            st.hosting
+                .as_mut()
+                .filter(|h| h.generation == generation)
+                .map(|hosting| {
+                    hosting.live = Some(live.clone());
+                    hosting.phase = Phase::Open;
+                    let pending: Vec<String> = hosting
+                        .guests
+                        .iter()
+                        .filter(|g| g.state == WorldGuestState::Pending)
+                        .map(|g| g.friend.clone())
+                        .collect();
+                    (pending, hosting.world_name.clone())
+                })
+        };
+        let Some((pending, world_name)) = opened else {
+            // Left meanwhile.
+            live.close().await;
+            return;
         };
         tracing::info!("the player's world is open to friends");
         self.changed();
@@ -1594,11 +1597,7 @@ impl Worlds {
         };
         match event {
             HostEvent::Report(event) => self.report(mc, event),
-            HostEvent::Announce {
-                guests,
-                max,
-                paths,
-            } => {
+            HostEvent::Announce { guests, max, paths } => {
                 if let Some(session) = session {
                     self.inner.service.send(WorldFrame::World {
                         open: true,
@@ -1976,32 +1975,30 @@ impl Worlds {
                 return;
             }
             let max = st.max_guests();
-            match st.invite(&invite.session) {
-                Some(known) => {
-                    known.quiet = quiet;
-                    known.join = join;
-                }
-                None => {
-                    let entry = Invite {
-                        session: invite.session.clone(),
-                        from: invite.from.clone(),
-                        at: invite.at,
-                        quiet,
-                        join,
-                        guests: 0,
-                        max,
-                        stage: None,
-                        generation: 0,
-                        ask: None,
-                        live: None,
-                        task: None,
-                        in_game: false,
-                        progress_at: None,
-                    };
-                    // One invite per friend: a newer world replaces an older one.
-                    st.invites.retain(|i| i.from != invite.from || i.live.is_some());
-                    st.invites.insert(0, entry);
-                }
+            if let Some(known) = st.invite(&invite.session) {
+                known.quiet = quiet;
+                known.join = join;
+            } else {
+                let entry = Invite {
+                    session: invite.session.clone(),
+                    from: invite.from.clone(),
+                    at: invite.at,
+                    quiet,
+                    join,
+                    guests: 0,
+                    max,
+                    stage: None,
+                    generation: 0,
+                    ask: None,
+                    live: None,
+                    task: None,
+                    in_game: false,
+                    progress_at: None,
+                };
+                // One invite per friend: a newer world replaces an older one.
+                st.invites
+                    .retain(|i| i.from != invite.from || i.live.is_some());
+                st.invites.insert(0, entry);
             }
             let view = st
                 .invites
@@ -2295,20 +2292,23 @@ impl Worlds {
                 return;
             }
         };
-        {
+        let kept = {
             let mut st = self.state();
             match st
                 .invites
                 .iter_mut()
                 .find(|i| i.session == session && i.generation == generation)
             {
-                Some(invite) => invite.live = Some(live.clone()),
-                None => {
-                    drop(st);
-                    live.leave().await;
-                    return;
+                Some(invite) => {
+                    invite.live = Some(live.clone());
+                    true
                 }
+                None => false,
             }
+        };
+        if !kept {
+            live.leave().await;
+            return;
         }
         // The name: another account when this one can't come in.
         loop {
@@ -2354,8 +2354,15 @@ impl Worlds {
         else {
             return;
         };
-        self.ready(session, generation, &live, &instance_id, missing, &manifest.mc)
-            .await;
+        self.ready(
+            session,
+            generation,
+            &live,
+            &instance_id,
+            missing,
+            &manifest.mc,
+        )
+        .await;
     }
 
     /// "Katıl" again while the session still lives (the game left the world, or "Vazgeç" on the
@@ -2378,8 +2385,15 @@ impl Worlds {
         else {
             return;
         };
-        self.ready(session, generation, &live, &instance_id, missing, &manifest.mc)
-            .await;
+        self.ready(
+            session,
+            generation,
+            &live,
+            &instance_id,
+            missing,
+            &manifest.mc,
+        )
+        .await;
     }
 
     /// Which install joins (§10.2), asking where the player decides.
@@ -2404,23 +2418,24 @@ impl Worlds {
                 None => None,
             };
             let decision = decide(manifest, &installs, latest.as_deref(), host, refreshed);
-            let decision = match (&copy, decision) {
-                // "Kurulumu kopyala": a copy even where an install would do.
-                (Some(_), Decision::Use { .. } | Decision::UpdatePack { .. }) => {
-                    match installs
-                        .iter()
-                        .find(|i| i.copy_of.as_deref() == Some(host) && i.mc == manifest.mc)
-                    {
-                        Some(earlier) => Decision::UpdateCopy {
-                            install: earlier.id.clone(),
-                        },
-                        None => Decision::Copy {
-                            add: manifest.mods.clone(),
-                            sets: manifest.sets.clone(),
-                        },
-                    }
+            // "Kurulumu kopyala": a copy even where an install would do.
+            let forced = copy.is_some()
+                && matches!(decision, Decision::Use { .. } | Decision::UpdatePack { .. });
+            let decision = if forced {
+                let earlier = installs
+                    .iter()
+                    .find(|i| i.copy_of.as_deref() == Some(host) && i.mc == manifest.mc);
+                match earlier {
+                    Some(earlier) => Decision::UpdateCopy {
+                        install: earlier.id.clone(),
+                    },
+                    None => Decision::Copy {
+                        add: manifest.mods.clone(),
+                        sets: manifest.sets.clone(),
+                    },
                 }
-                (_, decision) => decision,
+            } else {
+                decision
             };
             match decision {
                 Decision::Use {
@@ -2431,7 +2446,11 @@ impl Worlds {
                 Decision::UpdatePack { install } => return Some((install, manifest.unknown)),
                 Decision::Install { mc } => {
                     let answer = self
-                        .ask(session, generation, WorldJoinAsk::Install { mc: mc.clone() })
+                        .ask(
+                            session,
+                            generation,
+                            WorldJoinAsk::Install { mc: mc.clone() },
+                        )
                         .await;
                     if answer != Some(WorldJoinAnswer::Install) {
                         self.leave_join(session, generation).await;
@@ -2793,61 +2812,57 @@ fn invite_view(st: &State, invite: &Invite) -> WorldInviteView {
 
 fn build_view(st: &State) -> HostView {
     let enabled = st.enabled();
-    let session = st
-        .hosting
-        .as_ref()
-        .filter(|_| enabled)
-        .map(|h| {
-            let guests: Vec<WorldGuest> = h
-                .guests
-                .iter()
-                .map(|g| {
-                    let person = st.person(&g.friend);
-                    WorldGuest {
-                        friend: g.friend.clone(),
-                        name: person.name,
-                        avatar: person.avatar,
-                        avatar_url: person.avatar_url,
-                        game_name: g.game_name.clone(),
-                        state: g.state,
-                    }
-                })
-                .collect();
-            let (instance_id, folder, world_name, max) = (
-                h.instance_id.clone(),
-                h.folder.clone(),
-                h.world_name.clone(),
-                h.max,
-            );
-            match h.phase {
-                Phase::Opening(step, percent) => HostSessionView::Opening {
-                    instance_id,
-                    folder,
-                    world_name,
-                    guests,
-                    max,
-                    step,
-                    percent,
-                },
-                Phase::Open => HostSessionView::Open {
-                    instance_id,
-                    folder,
-                    world_name,
-                    guests,
-                    max,
-                    mode: h.mode,
-                    commands: h.commands,
-                },
-                Phase::Failed(reason) => HostSessionView::Failed {
-                    instance_id,
-                    folder,
-                    world_name,
-                    guests,
-                    max,
-                    reason,
-                },
-            }
-        });
+    let session = st.hosting.as_ref().filter(|_| enabled).map(|h| {
+        let guests: Vec<WorldGuest> = h
+            .guests
+            .iter()
+            .map(|g| {
+                let person = st.person(&g.friend);
+                WorldGuest {
+                    friend: g.friend.clone(),
+                    name: person.name,
+                    avatar: person.avatar,
+                    avatar_url: person.avatar_url,
+                    game_name: g.game_name.clone(),
+                    state: g.state,
+                }
+            })
+            .collect();
+        let (instance_id, folder, world_name, max) = (
+            h.instance_id.clone(),
+            h.folder.clone(),
+            h.world_name.clone(),
+            h.max,
+        );
+        match h.phase {
+            Phase::Opening(step, percent) => HostSessionView::Opening {
+                instance_id,
+                folder,
+                world_name,
+                guests,
+                max,
+                step,
+                percent,
+            },
+            Phase::Open => HostSessionView::Open {
+                instance_id,
+                folder,
+                world_name,
+                guests,
+                max,
+                mode: h.mode,
+                commands: h.commands,
+            },
+            Phase::Failed(reason) => HostSessionView::Failed {
+                instance_id,
+                folder,
+                world_name,
+                guests,
+                max,
+                reason,
+            },
+        }
+    });
     HostView {
         seq: st.seq,
         enabled,

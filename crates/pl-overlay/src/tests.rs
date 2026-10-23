@@ -573,7 +573,10 @@ async fn world_sharing_hears_a_hosting_mod_and_only_it_gets_host_frames() {
         binding: "sW9hzU3c".into(),
     }]);
     let publish = game.next_of("host-publish").await;
-    assert_eq!((publish["id"].clone(), publish["max"].clone()), ("p1".into(), 7.into()));
+    assert_eq!(
+        (publish["id"].clone(), publish["max"].clone()),
+        ("p1".into(), 7.into())
+    );
 
     // "Katıl" in game on Mert's world goes to world sharing, not to the friends feature.
     game.send(serde_json::json!({"t":"join","friend":"f-mert"}))

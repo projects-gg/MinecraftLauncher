@@ -9,11 +9,11 @@
 // player's language; `code` and `details` for "Ayrıntıları kopyala").
 import { listen } from "@tauri-apps/api/event";
 import {
+  type HostNotice as BindingNotice,
+  type HostPlace as BindingPlace,
+  type HostView as BindingView,
   type CmdError,
   commands,
-  type HostNotice as BindingNotice,
-  type HostView as BindingView,
-  type HostPlace as BindingPlace,
 } from "@/bindings";
 import type { HostApi, HostNotice, HostPlace, HostView } from "./host-types";
 
@@ -46,7 +46,9 @@ export const tauriHost: HostApi = {
     return asView(await ok(commands.hostState()));
   },
   onChange(listener) {
-    const unlisten = listen<BindingView>("host-changed", (event) => listener(asView(event.payload)));
+    const unlisten = listen<BindingView>("host-changed", (event) =>
+      listener(asView(event.payload)),
+    );
     return () => {
       void unlisten.then((stop) => stop());
     };

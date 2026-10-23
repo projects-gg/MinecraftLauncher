@@ -15,8 +15,7 @@ use std::time::Duration;
 use pl_host::guest::{GuestEnv, GuestEvent};
 use pl_host::host::{HostEnv, HostEvent};
 use pl_host::policy::env::{
-    Creds, CredsAnswer, CredsError, CredsReason, E4mcOpened, GuestPaths, HostPaths,
-    TurnAllocation,
+    Creds, CredsAnswer, CredsError, CredsReason, E4mcOpened, GuestPaths, HostPaths, TurnAllocation,
 };
 use pl_host::transport::e4mc::{self, E4mcConfig};
 use pl_host::transport::turn::{self, IceServers, QuicIdentity, Secret, TurnConfig, TurnGuest};
@@ -46,7 +45,9 @@ pub trait Service: Send + Sync + 'static {
 }
 
 pub(crate) fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
-    mutex.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    mutex
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 /// Credentials a session holds.
@@ -211,9 +212,7 @@ async fn ask_creds(
                 .iter()
                 .filter_map(|kind| path_kind(kind))
                 .collect();
-            let creds = answer
-                .ice
-                .map(|ice| table.add(ice, session, role, host));
+            let creds = answer.ice.map(|ice| table.add(ice, session, role, host));
             let region = answer.e4mc.map(|hint| hint.region);
             Ok((CredsAnswer { order, creds }, region))
         }

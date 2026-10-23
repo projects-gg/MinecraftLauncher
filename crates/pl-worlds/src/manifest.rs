@@ -163,7 +163,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let mods = dir.path().join("mods");
         std::fs::create_dir_all(&mods).unwrap();
-        let sodium = jar(&mods, "sodium.jar", Some(r#"{"id":"sodium","environment":"client"}"#));
+        let sodium = jar(
+            &mods,
+            "sodium.jar",
+            Some(r#"{"id":"sodium","environment":"client"}"#),
+        );
         let fabric_api = jar(&mods, "fabric-api.jar", Some(r#"{"id":"fabric-api"}"#));
         let voice = jar(
             &mods,
@@ -178,7 +182,11 @@ mod tests {
         assert_eq!(fabric_environment(&sodium), Some(Some("client".into())));
         assert_eq!(fabric_environment(&fabric_api), Some(None));
         let jars = scan(&mods);
-        assert_eq!(jars.len(), 4, "the jars with a fabric.mod.json, enabled ones only");
+        assert_eq!(
+            jars.len(),
+            4,
+            "the jars with a fabric.mod.json, enabled ones only"
+        );
         assert_eq!(jars.iter().filter(|j| j.both_side).count(), 3);
 
         let sha = |path: &Path| sha1_hex(path).unwrap();
@@ -208,7 +216,10 @@ mod tests {
                 ModRef::new("P7dR8mSH", "api-1")
             ]
         );
-        assert_eq!(manifest.unknown, 1, "the homemade jar Modrinth does not know");
+        assert_eq!(
+            manifest.unknown, 1,
+            "the homemade jar Modrinth does not know"
+        );
         assert!(manifest.hash_ok());
         assert!(scan(&dir.path().join("none")).is_empty());
     }
