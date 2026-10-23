@@ -1,0 +1,93 @@
+{
+  "comment": "Resuming the game stream on another path: both sides resend from the other's recv.",
+  "protocol": "Noise_NKpsk0_25519_ChaChaPoly_BLAKE2s",
+  "hostStaticPrivateHex": "c1a00503b720ba6e7154c31d593c8ac9588e5b5cffdb0993967faa596221a8dc",
+  "hostStaticPublicHex": "9c331e0537d6bf1512e74878605d36c545cc77f57dd459c5c35696f5a7240177",
+  "hostStaticPublicB64u": "nDMeBTfWvxUS50h4YF02xUXMd_V91FnFw1aW9ackAXc",
+  "guestEphemeralPrivateHex": "97f5cfd12296de03319e6094ab9bfc25cd3659b62a261abf812a6a84c578b382",
+  "guestEphemeralPublicHex": "dd9320b9542a43f90fc91a38757e50eea133fd240f5648372ce48b1b3dc6392b",
+  "hostEphemeralPrivateHex": "38f8342198b20bcef8e79589654fad71c46cd06bee0b604f02386a058afddca8",
+  "hostEphemeralPublicHex": "4516bf747c4b4fecec6ebb6736784bd71ddb488ccf13dcbf943ec0950ec20851",
+  "pskHex": "1ca9a5b0b8d225ca3bea0f4ce4ec579c532acf34ff21fa25975a251bbc69c8f0",
+  "pskB64u": "HKmlsLjSJco76g9M5OxXnFMqzzT_Ifoll1olG7xpyPA",
+  "slotHex": "452996881dff3e7c85cdb87965e08ecd",
+  "slotB64u": "RSmWiB3_PnyFzbh5ZeCOzQ",
+  "sessionHex": "b2dba25fd0139348b6fb6fe1f188a45d",
+  "sessionB64u": "stuiX9ATk0i2-2_h8YikXQ",
+  "prologueHex": "504c4a31452996881dff3e7c85cdb87965e08ecdb2dba25fd0139348b6fb6fe1f188a45d",
+  "msg1Hex": "dd9320b9542a43f90fc91a38757e50eea133fd240f5648372ce48b1b3dc6392b30e32d7d6e583be1cf14082ad1193192",
+  "msg2Hex": "4516bf747c4b4fecec6ebb6736784bd71ddb488ccf13dcbf943ec0950ec20851ed5e1b0b8582ae7ab8eda45a27bd41bb",
+  "openingHex": "44504c4a31452996881dff3e7c85cdb87965e08ecddd9320b9542a43f90fc91a38757e50eea133fd240f5648372ce48b1b3dc6392b30e32d7d6e583be1cf14082ad1193192",
+  "replyHex": "304516bf747c4b4fecec6ebb6736784bd71ddb488ccf13dcbf943ec0950ec20851ed5e1b0b8582ae7ab8eda45a27bd41bb",
+  "handshakeHashHex": "d1dfef5c2c1240ecb66bb532323572956f656f8479998cd3d939606d5ba25ca4",
+  "transport": [
+    {
+      "dir": "guest->host",
+      "nonce": 0,
+      "record": {
+        "type": "ctrl",
+        "json": {
+          "t": "hello",
+          "v": 1,
+          "kind": "resume",
+          "stream": "90X7p9BQF-g",
+          "recv": 4096,
+          "caps": []
+        }
+      },
+      "plaintextHex": "017b2274223a2268656c6c6f222c2276223a312c226b696e64223a22726573756d65222c2273747265616d223a223930583770394251462d67222c2272656376223a343039362c2263617073223a5b5d7d",
+      "ciphertextHex": "85be38d5bafc2c5a169d32864f198292d6036a5cdeecf2839e5f656e2af955214fe748393074c4f7fd7de7850097a9d5cf3a6c5a39d5b37f25f39464560153e8300b30339469e0d85c12fadb96462d6fca86383c835421e73b7ef9d230d2b2ba2e",
+      "frameHex": "006185be38d5bafc2c5a169d32864f198292d6036a5cdeecf2839e5f656e2af955214fe748393074c4f7fd7de7850097a9d5cf3a6c5a39d5b37f25f39464560153e8300b30339469e0d85c12fadb96462d6fca86383c835421e73b7ef9d230d2b2ba2e"
+    },
+    {
+      "dir": "host->guest",
+      "nonce": 0,
+      "record": {
+        "type": "ctrl",
+        "json": {
+          "t": "ok",
+          "stream": "90X7p9BQF-g",
+          "recv": 1500
+        }
+      },
+      "plaintextHex": "017b2274223a226f6b222c2273747265616d223a223930583770394251462d67222c2272656376223a313530307d",
+      "ciphertextHex": "ce5ce704d38d43435645c5bec07131fe7907a8b28a1eeb7ff11f1d6f69ca91deb6c0d3c7c9e35801738a0f74c2263bc638906fae1269ff3b525a7eed7274",
+      "frameHex": "003ece5ce704d38d43435645c5bec07131fe7907a8b28a1eeb7ff11f1d6f69ca91deb6c0d3c7c9e35801738a0f74c2263bc638906fae1269ff3b525a7eed7274"
+    },
+    {
+      "dir": "host->guest",
+      "nonce": 1,
+      "record": {
+        "type": "data",
+        "offset": 4096,
+        "payloadHex": "05017461696c"
+      },
+      "plaintextHex": "03000000000000100005017461696c",
+      "ciphertextHex": "1f61d05387b668016a24c6f0310d6732576dcf08865b0aa55c5120b0edd19e",
+      "frameHex": "001f1f61d05387b668016a24c6f0310d6732576dcf08865b0aa55c5120b0edd19e"
+    },
+    {
+      "dir": "guest->host",
+      "nonce": 1,
+      "record": {
+        "type": "data",
+        "offset": 1500,
+        "payloadHex": "03006162"
+      },
+      "plaintextHex": "0300000000000005dc03006162",
+      "ciphertextHex": "74a6c89ee93156479c4a31975fd393d6e534fd3a52f145072abf77ff22",
+      "frameHex": "001d74a6c89ee93156479c4a31975fd393d6e534fd3a52f145072abf77ff22"
+    },
+    {
+      "dir": "guest->host",
+      "nonce": 2,
+      "record": {
+        "type": "ack",
+        "next": 4102
+      },
+      "plaintextHex": "040000000000001006",
+      "ciphertextHex": "5f75e31a078bdbfb0c03060e417145af673c3725f024501426",
+      "frameHex": "00195f75e31a078bdbfb0c03060e417145af673c3725f024501426"
+    }
+  ]
+}

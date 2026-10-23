@@ -1,0 +1,1037 @@
+{
+  "comment": "Which install the guest uses (see PROTOCOL.md, Install matching). latestPack: the pack version the guest's signed content names for that Minecraft version.",
+  "scenarios": [
+    {
+      "case": "exact match",
+      "host": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.3.0"
+        },
+        "sets": [],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "Qw3erT7y",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          }
+        ],
+        "unknown": 0,
+        "hash": "ae05df1166d0ff4647b2964efa422a2ab1968a06700f838d31c4d4f55299a5cc"
+      },
+      "installs": [
+        {
+          "name": "Projects",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.3.0"
+          },
+          "sets": [],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "Qw3erT7y",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "lastPlayed": 1792500000
+        }
+      ],
+      "latestPack": "2.3.0",
+      "expect": {
+        "action": "use",
+        "install": "Projects"
+      },
+      "hostId": "234567890123456789"
+    },
+    {
+      "case": "guest has an extra both-side mod",
+      "host": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.3.0"
+        },
+        "sets": [],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "Qw3erT7y",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          }
+        ],
+        "unknown": 0,
+        "hash": "ae05df1166d0ff4647b2964efa422a2ab1968a06700f838d31c4d4f55299a5cc"
+      },
+      "installs": [
+        {
+          "name": "Projects",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.3.0"
+          },
+          "sets": [],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "Qw3erT7y",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            },
+            {
+              "project": "own00001",
+              "version": "own00002",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "lastPlayed": 1792500000
+        }
+      ],
+      "latestPack": "2.3.0",
+      "expect": {
+        "action": "use",
+        "install": "Projects",
+        "note": "a superset is used; a registry error in game offers the copy"
+      },
+      "hostId": "234567890123456789"
+    },
+    {
+      "case": "host has extra Modrinth mods",
+      "host": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.3.0"
+        },
+        "sets": [
+          "pvp"
+        ],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "Qw3erT7y",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          },
+          {
+            "project": "aBcD1234",
+            "version": "eFgH5678",
+            "env": "both"
+          },
+          {
+            "project": "zYxW9876",
+            "version": "vUtS5432",
+            "env": "both"
+          }
+        ],
+        "unknown": 0,
+        "hash": "97969226d2ea670227d67074f8808be9051471013afd14098aec1629cdcb248a"
+      },
+      "installs": [
+        {
+          "name": "Projects",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.3.0"
+          },
+          "sets": [],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "Qw3erT7y",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "lastPlayed": 1792500000
+        }
+      ],
+      "latestPack": "2.3.0",
+      "expect": {
+        "action": "copy",
+        "add": [
+          {
+            "project": "aBcD1234",
+            "version": "eFgH5678"
+          },
+          {
+            "project": "zYxW9876",
+            "version": "vUtS5432"
+          }
+        ],
+        "sets": [
+          "pvp"
+        ],
+        "name": "{host}'in dünyası"
+      },
+      "hostId": "234567890123456789"
+    },
+    {
+      "case": "an earlier copy for this host matches",
+      "host": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.3.0"
+        },
+        "sets": [
+          "pvp"
+        ],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "Qw3erT7y",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          },
+          {
+            "project": "aBcD1234",
+            "version": "eFgH5678",
+            "env": "both"
+          },
+          {
+            "project": "zYxW9876",
+            "version": "vUtS5432",
+            "env": "both"
+          }
+        ],
+        "unknown": 0,
+        "hash": "97969226d2ea670227d67074f8808be9051471013afd14098aec1629cdcb248a"
+      },
+      "installs": [
+        {
+          "name": "Projects",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.3.0"
+          },
+          "sets": [],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "Qw3erT7y",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "lastPlayed": 1792500000
+        },
+        {
+          "name": "Ayşe'nin dünyası",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.3.0"
+          },
+          "sets": [
+            "pvp"
+          ],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "Qw3erT7y",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            },
+            {
+              "project": "aBcD1234",
+              "version": "eFgH5678",
+              "env": "both"
+            },
+            {
+              "project": "zYxW9876",
+              "version": "vUtS5432",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "lastPlayed": 1792500000,
+          "copyOf": "234567890123456789"
+        }
+      ],
+      "hostId": "234567890123456789",
+      "latestPack": "2.3.0",
+      "expect": {
+        "action": "use",
+        "install": "Ayşe'nin dünyası"
+      }
+    },
+    {
+      "case": "an earlier copy for this host is out of date",
+      "host": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.3.0"
+        },
+        "sets": [
+          "pvp"
+        ],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "Qw3erT7y",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          },
+          {
+            "project": "aBcD1234",
+            "version": "eFgH5678",
+            "env": "both"
+          },
+          {
+            "project": "zYxW9876",
+            "version": "vUtS5432",
+            "env": "both"
+          }
+        ],
+        "unknown": 0,
+        "hash": "97969226d2ea670227d67074f8808be9051471013afd14098aec1629cdcb248a"
+      },
+      "installs": [
+        {
+          "name": "Projects",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.3.0"
+          },
+          "sets": [],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "Qw3erT7y",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "lastPlayed": 1792500000
+        },
+        {
+          "name": "Ayşe'nin dünyası",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.3.0"
+          },
+          "sets": [],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "Qw3erT7y",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            },
+            {
+              "project": "aBcD1234",
+              "version": "old00001",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "lastPlayed": 1792500000,
+          "copyOf": "234567890123456789"
+        }
+      ],
+      "hostId": "234567890123456789",
+      "latestPack": "2.3.0",
+      "expect": {
+        "action": "update-copy",
+        "install": "Ayşe'nin dünyası"
+      }
+    },
+    {
+      "case": "guest pack older than the host's, host's is the latest",
+      "host": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.3.0"
+        },
+        "sets": [],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "Qw3erT7y",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          }
+        ],
+        "unknown": 0,
+        "hash": "ae05df1166d0ff4647b2964efa422a2ab1968a06700f838d31c4d4f55299a5cc"
+      },
+      "installs": [
+        {
+          "name": "Projects",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.2.0"
+          },
+          "sets": [],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "oldVer01",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "lastPlayed": 1792500000
+        }
+      ],
+      "latestPack": "2.3.0",
+      "expect": {
+        "action": "update-pack",
+        "install": "Projects"
+      },
+      "hostId": "234567890123456789"
+    },
+    {
+      "case": "host pack older than the latest",
+      "host": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.2.0"
+        },
+        "sets": [],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "oldVer01",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          }
+        ],
+        "unknown": 0,
+        "hash": "b4584d2757cb82a1ab42ad8fded4e11765588aacf8e01dcb7eb4c010f1ac28fe"
+      },
+      "installs": [
+        {
+          "name": "Projects",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.3.0"
+          },
+          "sets": [],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "Qw3erT7y",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "lastPlayed": 1792500000
+        }
+      ],
+      "latestPack": "2.3.0",
+      "expect": {
+        "action": "host-pack-old"
+      },
+      "hostId": "234567890123456789"
+    },
+    {
+      "case": "host pack newer than this launcher knows",
+      "host": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.4.0"
+        },
+        "sets": [],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "Qw3erT7y",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          }
+        ],
+        "unknown": 0,
+        "hash": "ae05df1166d0ff4647b2964efa422a2ab1968a06700f838d31c4d4f55299a5cc"
+      },
+      "installs": [
+        {
+          "name": "Projects",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.3.0"
+          },
+          "sets": [],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "Qw3erT7y",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "lastPlayed": 1792500000
+        }
+      ],
+      "latestPack": "2.3.0",
+      "expect": {
+        "action": "refresh-content",
+        "then": "refresh the signed content once and decide again; still unknown: 'Bağlanılamadı. Tekrar dene.'"
+      },
+      "hostId": "234567890123456789"
+    },
+    {
+      "case": "no install of that Minecraft version",
+      "host": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.3",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.3.0"
+        },
+        "sets": [],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "Qw3erT7y",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          }
+        ],
+        "unknown": 0,
+        "hash": "ae05df1166d0ff4647b2964efa422a2ab1968a06700f838d31c4d4f55299a5cc"
+      },
+      "installs": [
+        {
+          "name": "Projects",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.3.0"
+          },
+          "sets": [],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "Qw3erT7y",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "lastPlayed": 1792500000
+        }
+      ],
+      "latestPack": "2.3.0",
+      "expect": {
+        "action": "install",
+        "mc": "26.3"
+      },
+      "hostId": "234567890123456789"
+    },
+    {
+      "case": "unknown jars on the host",
+      "host": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.3.0"
+        },
+        "sets": [],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "Qw3erT7y",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          }
+        ],
+        "unknown": 2,
+        "hash": "ae05df1166d0ff4647b2964efa422a2ab1968a06700f838d31c4d4f55299a5cc"
+      },
+      "installs": [
+        {
+          "name": "Projects",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.3.0"
+          },
+          "sets": [],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "Qw3erT7y",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "lastPlayed": 1792500000
+        }
+      ],
+      "latestPack": "2.3.0",
+      "expect": {
+        "action": "use",
+        "install": "Projects",
+        "warnUnknown": 2
+      },
+      "hostId": "234567890123456789"
+    },
+    {
+      "case": "two candidates: the official install wins over an older copy for someone else",
+      "host": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.3.0"
+        },
+        "sets": [],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "Qw3erT7y",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          }
+        ],
+        "unknown": 0,
+        "hash": "ae05df1166d0ff4647b2964efa422a2ab1968a06700f838d31c4d4f55299a5cc"
+      },
+      "installs": [
+        {
+          "name": "Mert'in dünyası",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.3.0"
+          },
+          "sets": [],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "Qw3erT7y",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "lastPlayed": 1792500000,
+          "copyOf": "123456789012345678"
+        },
+        {
+          "name": "Projects",
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.3.0"
+          },
+          "sets": [],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "Qw3erT7y",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "lastPlayed": 1792500000
+        }
+      ],
+      "hostId": "234567890123456789",
+      "latestPack": "2.3.0",
+      "expect": {
+        "action": "use",
+        "install": "Projects"
+      }
+    }
+  ]
+}

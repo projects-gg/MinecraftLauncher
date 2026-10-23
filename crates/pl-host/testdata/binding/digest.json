@@ -1,0 +1,21 @@
+{
+  "comment": "Name binding digests. The key is this computer's guest binding key (32 random bytes in the launcher's data folder).",
+  "bindingKeyHex": "7c3476611069f805b16d920ce1b9d96a6ebbb21437874517b37c6ee0621728d7",
+  "keyId": "sW9hzU3c",
+  "keyIdRule": "base64url(SHA-256(key)[0..6]) (8 characters)",
+  "digestRule": "base64url(HMAC-SHA256(key, ASCII \"projects guest binding v1\" || 0x00 || UTF-8 friend user id)[0..16]) (22 characters)",
+  "digests": [
+    {
+      "friend": "123456789012345678",
+      "digest": "1UbirWHKbvkTXKMZNmDDug"
+    },
+    {
+      "friend": "234567890123456789",
+      "digest": "n7ppm8zILloa1X-qpWnqVA"
+    },
+    {
+      "friend": "345678901234567890",
+      "digest": "K9sApXlhlewD1zz01lv8HA"
+    }
+  ]
+}

@@ -1,0 +1,133 @@
+{
+  "comment": "Plaintext records (before Noise encryption). Type byte, then the body.",
+  "varints": [
+    {
+      "value": 0,
+      "hex": "00"
+    },
+    {
+      "value": 1,
+      "hex": "01"
+    },
+    {
+      "value": 2,
+      "hex": "02"
+    },
+    {
+      "value": 48,
+      "hex": "30"
+    },
+    {
+      "value": 68,
+      "hex": "44"
+    },
+    {
+      "value": 127,
+      "hex": "7f"
+    },
+    {
+      "value": 128,
+      "hex": "8001"
+    },
+    {
+      "value": 255,
+      "hex": "ff01"
+    },
+    {
+      "value": 300,
+      "hex": "ac02"
+    },
+    {
+      "value": 9999,
+      "hex": "8f4e"
+    },
+    {
+      "value": 25565,
+      "hex": "ddc701"
+    },
+    {
+      "value": 2097151,
+      "hex": "ffff7f"
+    },
+    {
+      "value": 2097152,
+      "hex": "80808001"
+    },
+    {
+      "value": 2147483647,
+      "hex": "ffffffff07"
+    },
+    {
+      "value": -1,
+      "hex": "ffffffff0f"
+    }
+  ],
+  "records": [
+    {
+      "record": {
+        "type": "ctrl",
+        "json": {
+          "t": "bye",
+          "reason": "closed"
+        }
+      },
+      "hex": "017b2274223a22627965222c22726561736f6e223a22636c6f736564227d"
+    },
+    {
+      "record": {
+        "type": "data",
+        "offset": 0,
+        "payloadHex": "1000"
+      },
+      "hex": "0300000000000000001000"
+    },
+    {
+      "record": {
+        "type": "data",
+        "offset": 70000,
+        "payloadHex": "616263"
+      },
+      "hex": "030000000000011170616263"
+    },
+    {
+      "record": {
+        "type": "ack",
+        "next": 65536
+      },
+      "hex": "040000000000010000"
+    },
+    {
+      "record": {
+        "type": "ping",
+        "bodyHex": "0001020304050607"
+      },
+      "hex": "050001020304050607"
+    },
+    {
+      "record": {
+        "type": "pong",
+        "bodyHex": "0001020304050607"
+      },
+      "hex": "060001020304050607"
+    }
+  ],
+  "splitControl": {
+    "comment": "A manifest of 320 mods is longer than one record: a ctrl-part piece of 16,383 bytes, then the final ctrl piece. Concatenate the bodies and parse once.",
+    "jsonSha256": "b17cca514ddfc91cc56a92ff0cfcd38b477316362a7d1a71c3f5410840848fc7",
+    "jsonLength": 18516,
+    "pieces": [
+      {
+        "type": "ctrl-part",
+        "length": 16384,
+        "sha256": "4ffa378075419f5b915d9bb9353e5b9610f7c209127c087e66127b7044e1a8ab",
+        "headHex": "027b2274223a226d616e6966657374222c2276223a312c22"
+      },
+      {
+        "type": "ctrl",
+        "length": 2134,
+        "sha256": "8e5afc26ef76cb63fcb6fa44ffbf71c70b01c6df90491d1a96a86a163830c74e",
+        "headHex": "01656374223a227030303030323834222c2276657273696f"
+      }
+    ]
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "comment": "Monthly aliases and TURN customIdentifier labels (service side).",
+  "accountingKeySecret": "bMGue1w2cW3rVZui2vBCAlhNy29UQxPJO-ko7I6bUmo",
+  "accountingKeyHex": "6cc1ae7b5c36716deb559ba2daf04202584dcb6f544313c93be928ec8e9b526a",
+  "aliasRule": "first 12 hex characters of HMAC-SHA256(key = base64url-decoded TURN_ACCOUNTING_KEY, message = \"turn-alias:\" + cycle start (YYYY-MM-DD, UTC) + \":\" + Discord id)",
+  "customIdentifierRule": "\"w1.\" + alias + \".\" + session id (22 characters) + \".\" + (\"h\" host | \"g\" guest)",
+  "session": "stuiX9ATk0i2-2_h8YikXQ",
+  "rows": [
+    {
+      "cycleStart": "2026-10-01",
+      "discordId": "234567890123456789",
+      "role": "h",
+      "alias": "a19553b48a57",
+      "customIdentifier": "w1.a19553b48a57.stuiX9ATk0i2-2_h8YikXQ.h"
+    },
+    {
+      "cycleStart": "2026-10-01",
+      "discordId": "123456789012345678",
+      "role": "g",
+      "alias": "dd4083244b52",
+      "customIdentifier": "w1.dd4083244b52.stuiX9ATk0i2-2_h8YikXQ.g"
+    },
+    {
+      "cycleStart": "2026-11-01",
+      "discordId": "234567890123456789",
+      "role": "h",
+      "alias": "f6fa1c25a90d",
+      "customIdentifier": "w1.f6fa1c25a90d.stuiX9ATk0i2-2_h8YikXQ.h"
+    },
+    {
+      "cycleStart": "2026-11-01",
+      "discordId": "123456789012345678",
+      "role": "g",
+      "alias": "ba0f09a3db79",
+      "customIdentifier": "w1.ba0f09a3db79.stuiX9ATk0i2-2_h8YikXQ.g"
+    },
+    {
+      "cycleStart": "2026-10-15",
+      "discordId": "234567890123456789",
+      "role": "h",
+      "alias": "ad7bd5cc040b",
+      "customIdentifier": "w1.ad7bd5cc040b.stuiX9ATk0i2-2_h8YikXQ.h"
+    },
+    {
+      "cycleStart": "2026-10-15",
+      "discordId": "123456789012345678",
+      "role": "g",
+      "alias": "d8e1a4f76ef9",
+      "customIdentifier": "w1.d8e1a4f76ef9.stuiX9ATk0i2-2_h8YikXQ.g"
+    }
+  ]
+}

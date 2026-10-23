@@ -1,0 +1,171 @@
+{
+  "comment": "How a host launcher prepares its first path after host-published (PROTOCOL.md, Opening a world).",
+  "scenarios": [
+    {
+      "case": "TURN first",
+      "order": [
+        "turn",
+        "e4mc"
+      ],
+      "ice": true,
+      "script": {
+        "turn": [
+          "alloc:ok"
+        ]
+      },
+      "expect": {
+        "paths": [
+          "turn"
+        ],
+        "events": [
+          [
+            "turn",
+            "alloc",
+            "ok"
+          ]
+        ],
+        "invites": "sent with the TURN address"
+      }
+    },
+    {
+      "case": "TURN allocation fails, e4mc opens",
+      "order": [
+        "turn",
+        "e4mc"
+      ],
+      "ice": true,
+      "script": {
+        "turn": [
+          "alloc:turn_alloc_timeout"
+        ],
+        "e4mc": [
+          "broker:ok",
+          "quic:ok",
+          "domain:ok"
+        ]
+      },
+      "expect": {
+        "paths": [
+          "e4mc"
+        ],
+        "events": [
+          [
+            "turn",
+            "alloc",
+            "turn_alloc_timeout"
+          ],
+          [
+            "e4mc",
+            "domain",
+            "ok"
+          ]
+        ],
+        "messages": [
+          "turn_release"
+        ]
+      }
+    },
+    {
+      "case": "measured session: e4mc first",
+      "order": [
+        "e4mc",
+        "turn"
+      ],
+      "ice": false,
+      "script": {
+        "e4mc": [
+          "broker:ok",
+          "quic:ok",
+          "domain:ok"
+        ]
+      },
+      "expect": {
+        "paths": [
+          "e4mc"
+        ],
+        "events": [
+          [
+            "e4mc",
+            "domain",
+            "ok"
+          ]
+        ]
+      }
+    },
+    {
+      "case": "broker down, first fallback relay works",
+      "order": [
+        "e4mc"
+      ],
+      "ice": false,
+      "script": {
+        "e4mc": [
+          "broker:e4mc_broker_timeout",
+          "quic:ok",
+          "domain:ok"
+        ]
+      },
+      "expect": {
+        "paths": [
+          "e4mc"
+        ],
+        "relay": "eu.e4mc.link",
+        "events": [
+          [
+            "e4mc",
+            "broker",
+            "e4mc_broker_timeout"
+          ],
+          [
+            "e4mc",
+            "domain",
+            "ok"
+          ]
+        ]
+      }
+    },
+    {
+      "case": "nothing works",
+      "order": [
+        "turn",
+        "e4mc"
+      ],
+      "ice": true,
+      "script": {
+        "turn": [
+          "alloc:turn_alloc_timeout"
+        ],
+        "e4mc": [
+          "broker:e4mc_broker_timeout",
+          "quic:e4mc_quic_timeout"
+        ]
+      },
+      "expect": {
+        "paths": [],
+        "events": [
+          [
+            "turn",
+            "alloc",
+            "turn_alloc_timeout"
+          ],
+          [
+            "e4mc",
+            "broker",
+            "e4mc_broker_timeout"
+          ],
+          [
+            "e4mc",
+            "quic",
+            "e4mc_quic_timeout"
+          ]
+        ],
+        "text": "Dünyan şu an açılamıyor.",
+        "messages": [
+          "turn_release",
+          "world/open:false",
+          "host-stop"
+        ]
+      }
+    }
+  ]
+}

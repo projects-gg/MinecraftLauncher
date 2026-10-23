@@ -1,0 +1,44 @@
+{
+  "comment": "Openings and frames a host must refuse. Same host key, psk, slot and session as the other files unless the case says otherwise.",
+  "cases": [
+    {
+      "case": "wrong psk",
+      "openingHex": "44504c4a31452996881dff3e7c85cdb87965e08ecd6ece413314bf3fb2bf1af5d71217211943eb43219b89d6d38060d295e545992c49abcbd0d0d7f8b17b26533660a394e1",
+      "expect": "host closes silently (msg1 does not decrypt)"
+    },
+    {
+      "case": "tampered msg1 tag",
+      "openingHex": "44504c4a31452996881dff3e7c85cdb87965e08ecd6ece413314bf3fb2bf1af5d71217211943eb43219b89d6d38060d295e545992c624ff98390bc47e08876d63427ab2a32",
+      "expect": "host closes silently"
+    },
+    {
+      "case": "guest used another session id in the prologue",
+      "openingHex": "44504c4a31452996881dff3e7c85cdb87965e08ecd6ece413314bf3fb2bf1af5d71217211943eb43219b89d6d38060d295e545992c736c4161dec0c6dabab4a2058ec4925b",
+      "expect": "host closes silently"
+    },
+    {
+      "case": "unknown slot",
+      "openingHex": "44504c4a31db286071ad1f8d6004020f8efa2fbab46ece413314bf3fb2bf1af5d71217211943eb43219b89d6d38060d295e545992c624ff98390bc47e08976d63427ab2a32",
+      "expect": "host closes silently without trying any key"
+    },
+    {
+      "case": "wrong length prefix",
+      "openingHex": "45504c4a31452996881dff3e7c85cdb87965e08ecd6ece413314bf3fb2bf1af5d71217211943eb43219b89d6d38060d295e545992c624ff98390bc47e08976d63427ab2a3200",
+      "expect": "host closes silently"
+    },
+    {
+      "case": "wrong magic",
+      "openingHex": "44504c4a32452996881dff3e7c85cdb87965e08ecd6ece413314bf3fb2bf1af5d71217211943eb43219b89d6d38060d295e545992c624ff98390bc47e08976d63427ab2a32",
+      "expect": "host closes silently"
+    },
+    {
+      "case": "tampered transport frame after a good handshake",
+      "msg1Hex": "6ece413314bf3fb2bf1af5d71217211943eb43219b89d6d38060d295e545992c624ff98390bc47e08976d63427ab2a32",
+      "msg2Hex": "eb184735c70decea203078454d5be235a57fe53543e7863e71a8da51ee7b65012d5c70f90a3981aaa332c0b2e4bf1773",
+      "guestEphemeralPrivateHex": "bb5e358f37981fb15654e7fb7712b60df26b3113e04d6c931f656f081141ce40",
+      "hostEphemeralPrivateHex": "c09f306f10c3d96a017bf9b206224fd5c640e012fdb29918c98a8c5936fcb647",
+      "frameHex": "00719227aba1a5bd971061ffb45c4ff512936af20b8db59c6c1fc3f3341c60debe1e0690a6065299b7b46200fcf9856b1d52a27d5d5c53760674ca65c9601f3854b476b812c711c8579a03c68a9d07172930709eb029145506c97539654562ef3bed3db20837fb57ca5ac5c0f11796c72097fb",
+      "expect": "decryption fails: close the stream (no answer)"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "comment": "QUIClime as the e4mc relay speaks it (vgskye/e4mc-quiclime, branch kity), and what the guest launcher sends.",
+  "control": {
+    "serverboundRequestDomainHex": "247b226b696e64223a22726571756573745f646f6d61696e5f61737369676e6d656e74227d",
+    "serverboundFraming": "Minecraft VarInt length, then JSON (the relay accepts 0..8192 bytes)",
+    "clientboundDomainAssignedHex": "477b226b696e64223a22646f6d61696e5f61737369676e6d656e745f636f6d706c657465222c22646f6d61696e223a2261626c652d616369642e65752e65346d632e6c696e6b227d",
+    "clientboundFraming": "one length byte (u8), then JSON",
+    "domain": "able-acid.eu.e4mc.link"
+  },
+  "guestFirstWrite": {
+    "comment": "Handshake packet (next state 2, login) for the relay's routing, then the PLJ1 opening framed as one more Minecraft packet. One TCP write.",
+    "handshakeHex": "1d008f4e1661626c652d616369642e65752e65346d632e6c696e6b63dd02",
+    "openingHex": "44504c4a31452996881dff3e7c85cdb87965e08ecdd42c32388c80fac22183777e1a7154191d3b03a4caa3d094f2df4bcc7184db332f65ec0d00f7ebfa0b7e25ce8fd09695",
+    "bothHex": "1d008f4e1661626c652d616369642e65752e65346d632e6c696e6b63dd0244504c4a31452996881dff3e7c85cdb87965e08ecdd42c32388c80fac22183777e1a7154191d3b03a4caa3d094f2df4bcc7184db332f65ec0d00f7ebfa0b7e25ce8fd09695",
+    "protocol": 9999,
+    "port": 25565
+  },
+  "hostStreamStart": {
+    "comment": "The relay re-encodes the handshake before the guest's bytes. Canonical VarInts make it byte-identical to what the guest sent.",
+    "hex": "1d008f4e1661626c652d616369642e65752e65346d632e6c696e6b63dd0244504c4a31452996881dff3e7c85cdb87965e08ecdd42c32388c80fac22183777e1a7154191d3b03a4caa3d094f2df4bcc7184db332f65ec0d00f7ebfa0b7e25ce8fd09695"
+  },
+  "relayRefusals": [
+    {
+      "code": "e4mc_unknown_domain",
+      "hex": "40003e7b0a202020202274657874223a2022556e6b6e6f776e207365727665722e20436865636b206164647265737320616e642074727920616761696e2e220a7d",
+      "match": "anything but \"too fast\" in the text"
+    },
+    {
+      "code": "e4mc_rate_limited",
+      "hex": "5d005b7b0a202020202274657874223a2022596f752061726520747279696e6720746f20636f6e6e65637420746f6f20666173742e20506c6561736520776169742061206d696e757465206265666f7265207265747279696e672e220a7d",
+      "match": "the text contains \"too fast\""
+    }
+  ],
+  "replyRule": "After the first write the guest reads one VarInt length L. L == 48: L bytes are msg2. Otherwise read L bytes (L <= 4096): packet id 0x00 and a string -> a relay refusal by its text; anything else -> plj_auth_failed.",
+  "domains": {
+    "valid": [
+      "able-acid.eu.e4mc.link",
+      "t-shirt-yo-yo.de.e4mc.link",
+      "drop-down-zebra.na.e4mc.link"
+    ],
+    "invalid": [
+      "able-acid.eu.e4mc.link.evil.example",
+      "e4mc.link",
+      "eu.e4mc.link",
+      "able-acid.eu.e4mc.link:25565",
+      "ABLE-ACID.EU.E4MC.LINK",
+      "able_acid.eu.e4mc.link",
+      "a.b.c.e4mc.link",
+      "127.0.0.1",
+      ""
+    ],
+    "rule": "^[a-z0-9-]{1,63}\\.[a-z0-9-]{1,63}\\.e4mc\\.link$, at most 253 characters"
+  }
+}

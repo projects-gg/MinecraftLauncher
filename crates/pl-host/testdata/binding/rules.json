@@ -1,0 +1,69 @@
+{
+  "comment": "Admission by name, given binding/projects-guests.example.json, host name \"Ayse\" and the binding key above. Names compare ASCII case-insensitively.",
+  "hostName": "Ayse",
+  "cases": [
+    {
+      "name": "Notch",
+      "friend": "123456789012345678",
+      "expect": "ok"
+    },
+    {
+      "name": "notch",
+      "friend": "123456789012345678",
+      "expect": "ok"
+    },
+    {
+      "name": "Notch",
+      "friend": "345678901234567890",
+      "expect": "taken"
+    },
+    {
+      "name": "NewName",
+      "friend": "345678901234567890",
+      "expect": "ok",
+      "then": "bound to Can on first login"
+    },
+    {
+      "name": "Ayse",
+      "friend": "123456789012345678",
+      "expect": "host"
+    },
+    {
+      "name": "AYSE",
+      "friend": "345678901234567890",
+      "expect": "host"
+    },
+    {
+      "name": "jeb_",
+      "friend": "234567890123456789",
+      "expect": "ok"
+    },
+    {
+      "name": "Notch",
+      "friend": "123456789012345678",
+      "fileKey": "AAAAAAAA",
+      "expect": "ok",
+      "then": "a file written under another key counts as empty"
+    },
+    {
+      "name": "No",
+      "friend": "123456789012345678",
+      "expect": "invalid"
+    },
+    {
+      "name": "has space",
+      "friend": "123456789012345678",
+      "expect": "invalid"
+    },
+    {
+      "name": "Ayşe",
+      "friend": "123456789012345678",
+      "expect": "invalid"
+    },
+    {
+      "name": "a_very_long_name_17",
+      "friend": "123456789012345678",
+      "expect": "invalid"
+    }
+  ]
+}

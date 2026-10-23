@@ -1,0 +1,91 @@
+{
+  "comment": "Service side. Day share = min(factor * (quota * second threshold - used through yesterday) / days left including today, that remainder). Budget days are UTC days.",
+  "dayShare": [
+    {
+      "quotaGB": 1000,
+      "turnOnlyPercent": 85,
+      "factor": 1.5,
+      "usedThroughYesterdayGB": 0,
+      "daysLeftIncludingToday": 31,
+      "dayShareGB": 41.129
+    },
+    {
+      "quotaGB": 1000,
+      "turnOnlyPercent": 85,
+      "factor": 1.5,
+      "usedThroughYesterdayGB": 0,
+      "daysLeftIncludingToday": 30,
+      "dayShareGB": 42.5
+    },
+    {
+      "quotaGB": 1000,
+      "turnOnlyPercent": 85,
+      "factor": 1.5,
+      "usedThroughYesterdayGB": 420,
+      "daysLeftIncludingToday": 15,
+      "dayShareGB": 43.0
+    },
+    {
+      "quotaGB": 1000,
+      "turnOnlyPercent": 85,
+      "factor": 1.5,
+      "usedThroughYesterdayGB": 840,
+      "daysLeftIncludingToday": 2,
+      "dayShareGB": 7.5
+    },
+    {
+      "quotaGB": 1000,
+      "turnOnlyPercent": 85,
+      "factor": 1.5,
+      "usedThroughYesterdayGB": 850,
+      "daysLeftIncludingToday": 3,
+      "dayShareGB": 0.0
+    },
+    {
+      "quotaGB": 1000,
+      "turnOnlyPercent": 85,
+      "factor": 1.5,
+      "usedThroughYesterdayGB": 900,
+      "daysLeftIncludingToday": 5,
+      "dayShareGB": 0.0
+    },
+    {
+      "quotaGB": 1000,
+      "turnOnlyPercent": 85,
+      "factor": 1.5,
+      "usedThroughYesterdayGB": 100,
+      "daysLeftIncludingToday": 1,
+      "dayShareGB": 750.0
+    },
+    {
+      "quotaGB": 1000,
+      "turnOnlyPercent": 85,
+      "factor": 1.5,
+      "usedThroughYesterdayGB": 0,
+      "daysLeftIncludingToday": 0,
+      "dayShareGB": 0.0
+    }
+  ],
+  "safeSide": [
+    {
+      "analyticsAgeMin": 10,
+      "actAsAtLeastPercent": null
+    },
+    {
+      "analyticsAgeMin": 30,
+      "actAsAtLeastPercent": 85
+    },
+    {
+      "analyticsAgeMin": 119,
+      "actAsAtLeastPercent": 85
+    },
+    {
+      "analyticsAgeMin": 120,
+      "actAsAtLeastPercent": 95
+    }
+  ],
+  "unknownCycleDay": {
+    "cycle": "calendar month (UTC)",
+    "quotaFactor": 0.95
+  }
+}

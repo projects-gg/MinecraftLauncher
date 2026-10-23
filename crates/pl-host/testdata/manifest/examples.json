@@ -1,0 +1,152 @@
+{
+  "comment": "World manifests as the host sends them on the control stream.",
+  "hashRule": "lowercase hex SHA-256 of UTF-8 \"plj-mods-v1\\n\" followed by one line \"<project>:<version>\\n\" per mod, the lines sorted bytewise",
+  "examples": [
+    {
+      "case": "official pack only",
+      "manifest": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.3.0"
+        },
+        "sets": [],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "Qw3erT7y",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          }
+        ],
+        "unknown": 0,
+        "hash": "ae05df1166d0ff4647b2964efa422a2ab1968a06700f838d31c4d4f55299a5cc"
+      },
+      "canonicalHex": "706c6a2d6d6f64732d76310a3973366f736d35673a6154386b71324c6d0a486132385236434c3a51773365725437790a50376452386d53483a395956724b59305a0a"
+    },
+    {
+      "case": "two extra Modrinth mods and the pvp set",
+      "manifest": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.3.0"
+        },
+        "sets": [
+          "pvp"
+        ],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "Qw3erT7y",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          },
+          {
+            "project": "aBcD1234",
+            "version": "eFgH5678",
+            "env": "both"
+          },
+          {
+            "project": "zYxW9876",
+            "version": "vUtS5432",
+            "env": "both"
+          }
+        ],
+        "unknown": 0,
+        "hash": "97969226d2ea670227d67074f8808be9051471013afd14098aec1629cdcb248a"
+      }
+    },
+    {
+      "case": "two jars Modrinth does not know",
+      "manifest": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.3.0"
+        },
+        "sets": [],
+        "mods": [
+          {
+            "project": "9s6osm5g",
+            "version": "aT8kq2Lm",
+            "env": "both"
+          },
+          {
+            "project": "Ha28R6CL",
+            "version": "Qw3erT7y",
+            "env": "both"
+          },
+          {
+            "project": "P7dR8mSH",
+            "version": "9YVrKY0Z",
+            "env": "both"
+          }
+        ],
+        "unknown": 2,
+        "hash": "ae05df1166d0ff4647b2964efa422a2ab1968a06700f838d31c4d4f55299a5cc"
+      }
+    },
+    {
+      "case": "empty list",
+      "manifest": {
+        "t": "manifest",
+        "v": 1,
+        "mc": "26.1.2",
+        "loader": {
+          "kind": "fabric",
+          "version": "0.19.5"
+        },
+        "pack": {
+          "family": "projects",
+          "id": "projects-26.1.2",
+          "version": "2.3.0"
+        },
+        "sets": [],
+        "mods": [],
+        "unknown": 0,
+        "hash": "44f11ba9b7cfdd1e481f48ffb58c962896f5e4cb5ffebf34d09ad46d7a0494ca"
+      },
+      "note": "hash of the header line alone"
+    }
+  ]
+}
