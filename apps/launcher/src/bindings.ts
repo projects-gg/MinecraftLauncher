@@ -241,6 +241,43 @@ export const commands = {
 	overlayState: () => __TAURI_INVOKE<OverlayStateView>("overlay_state"),
 	/**  [`connect_in_game`] for the page. */
 	overlayConnectInGame: (target: string) => __TAURI_INVOKE<ConnectOutcome>("overlay_connect_in_game", { target }),
+	/**  The view now (the page's start; every change after comes as `host-changed`). */
+	hostState: () => typedError<HostView_Serialize, CmdError>(__TAURI_INVOKE("host_state")),
+	/**
+	 *  Whether an instance's worlds offer "Arkadaşlarınla oyna", and the world open in its running
+	 *  game.
+	 */
+	hostPlace: (instanceId: string) => typedError<HostPlace_Serialize, CmdError>(__TAURI_INVOKE("host_place", { instanceId })),
+	/**
+	 *  "Dünyayı aç": the backup a world needs first, then `start` (the page starts the game into the
+	 *  world), `running` (it opens in place) or `cancelled`.
+	 */
+	hostOpen: (request: WorldOpenRequest) => typedError<WorldOpenOutcome, CmdError>(__TAURI_INVOKE("host_open", { request })),
+	/**  "Vazgeç" during the backup, or the game did not start after all. */
+	hostCancelOpen: () => typedError<null, CmdError>(__TAURI_INVOKE("host_cancel_open")),
+	/**  "Davet et" while the world is open. */
+	hostInvite: (friends: string[]) => typedError<WorldInviteOutcome, CmdError>(__TAURI_INVOKE("host_invite", { friends })),
+	/**  "Dünyadan çıkar". */
+	hostRemove: (friend: string) => typedError<null, CmdError>(__TAURI_INVOKE("host_remove", { friend })),
+	/**  "Paylaşımı kapat". */
+	hostStop: () => typedError<null, CmdError>(__TAURI_INVOKE("host_stop")),
+	/**  "Kapat" on a failed opening. */
+	hostDismissFailure: () => typedError<null, CmdError>(__TAURI_INVOKE("host_dismiss_failure")),
+	/**  "Projects'te buluşun": these friends get "Birlikte oyna" once the player is on Projects. */
+	hostMeetOnProjects: (friends: string[]) => typedError<null, CmdError>(__TAURI_INVOKE("host_meet_on_projects", { friends })),
+	/**
+	 *  "Katıl" on a world invite (also "Tekrar dene", "Yeniden katıl"); `copy_name`: "Kurulumu
+	 *  kopyala", the copy's name in the player's language.
+	 */
+	hostJoin: (session: string, copyName: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("host_join", { session, copyName })),
+	/**  The answer to a join's question. */
+	hostAnswer: (session: string, answer: WorldJoinAnswer) => typedError<null, CmdError>(__TAURI_INVOKE("host_answer", { session, answer })),
+	/**  "Vazgeç" on a join, or its game never started. */
+	hostCancelJoin: (session: string) => typedError<null, CmdError>(__TAURI_INVOKE("host_cancel_join", { session })),
+	/**  "Kapat" on a world invite. */
+	hostDismissInvite: (session: string) => typedError<null, CmdError>(__TAURI_INVOKE("host_dismiss_invite", { session })),
+	/**  "Bağlan" in game: the overlay moves the running game into the world, showing `label`. */
+	hostConnectInGame: (session: string, label: string) => typedError<boolean, CmdError>(__TAURI_INVOKE("host_connect_in_game", { session, label })),
 	/**
 	 *  Server List Ping. Never fails: an unreachable server is reported as offline. Without a name
 	 *  and address it pings the featured server Studio published (else `play.projects.gg`).
@@ -3400,6 +3437,95 @@ export type HomeView = {
 	links: LinksView,
 	offline: boolean,
 	fromCache: boolean,
+};
+
+/**  Moments worth a toast or a notification. */
+export type HostNotice = HostNotice_Serialize | HostNotice_Deserialize;
+
+/**  Moments worth a toast or a notification. */
+export type HostNotice_Deserialize = 
+/**  A world invite arrived live (never a quiet one). */
+({ kind: "invite"; invite: WorldInviteView_Deserialize }) & { failure?: never; name?: never; reason?: never; session?: never; why?: never; worldName?: never } | 
+/**  The player's world opened. */
+({ kind: "opened"; worldName: string }) & { failure?: never; invite?: never; name?: never; reason?: never; session?: never; why?: never } | ({ kind: "openFailed"; reason: WorldOpenFailure }) & { failure?: never; invite?: never; name?: never; session?: never; why?: never; worldName?: never } | ({ kind: "inviteRefused"; why: WorldInviteRefusal }) & { failure?: never; invite?: never; name?: never; reason?: never; session?: never; worldName?: never } | ({ kind: "joinFailed"; session: string; name: string; failure: WorldJoinFailure }) & { invite?: never; reason?: never; why?: never; worldName?: never };
+
+/**  Moments worth a toast or a notification. */
+export type HostNotice_Serialize = 
+/**  A world invite arrived live (never a quiet one). */
+({ kind: "invite"; invite: WorldInviteView_Serialize }) & { failure?: never; name?: never; reason?: never; session?: never; why?: never; worldName?: never } | 
+/**  The player's world opened. */
+({ kind: "opened"; worldName: string }) & { failure?: never; invite?: never; name?: never; reason?: never; session?: never; why?: never } | ({ kind: "openFailed"; reason: WorldOpenFailure }) & { failure?: never; invite?: never; name?: never; session?: never; why?: never; worldName?: never } | ({ kind: "inviteRefused"; why: WorldInviteRefusal }) & { failure?: never; invite?: never; name?: never; reason?: never; session?: never; worldName?: never } | ({ kind: "joinFailed"; session: string; name: string; failure: WorldJoinFailure }) & { invite?: never; reason?: never; why?: never; worldName?: never };
+
+/**  Whether an instance's worlds offer "Arkadaşlarınla oyna". */
+export type HostPlace = HostPlace_Serialize | HostPlace_Deserialize;
+
+/**  Whether an instance's worlds offer "Arkadaşlarınla oyna". */
+export type HostPlace_Deserialize = {
+	shown: boolean,
+	/**  The game runs this instance with this world (its folder) open and the overlay connected. */
+	playing: string | null,
+};
+
+/**  Whether an instance's worlds offer "Arkadaşlarınla oyna". */
+export type HostPlace_Serialize = {
+	shown: boolean,
+	/**  The game runs this instance with this world (its folder) open and the overlay connected. */
+	playing?: string | null,
+};
+
+/**
+ *  The player's own world session (`HostSession` in the interface): the common fields and its
+ *  phase, written flat with `phase` naming the variant.
+ */
+export type HostSessionView = HostSessionView_Serialize | HostSessionView_Deserialize;
+
+/**
+ *  The player's own world session (`HostSession` in the interface): the common fields and its
+ *  phase, written flat with `phase` naming the variant.
+ */
+export type HostSessionView_Deserialize = ({ phase: "opening"; instanceId: string; folder: string; worldName: string; guests: WorldGuest_Deserialize[]; max: number; step: WorldOpeningStep; 
+/**  The backup's progress (0–100) while `step` is `backup`. */
+percent: number | null }) & { commands?: never; mode?: never; reason?: never } | ({ phase: "open"; instanceId: string; folder: string; worldName: string; guests: WorldGuest_Deserialize[]; max: number; mode: WorldGameMode; commands: boolean }) & { percent?: never; reason?: never; step?: never } | 
+/**  It did not open; kept until "Tekrar dene", "Projects'te buluşun" or "Kapat". */
+({ phase: "failed"; instanceId: string; folder: string; worldName: string; guests: WorldGuest_Deserialize[]; max: number; reason: WorldOpenFailure }) & { commands?: never; mode?: never; percent?: never; step?: never };
+
+/**
+ *  The player's own world session (`HostSession` in the interface): the common fields and its
+ *  phase, written flat with `phase` naming the variant.
+ */
+export type HostSessionView_Serialize = ({ phase: "opening"; instanceId: string; folder: string; worldName: string; guests: WorldGuest_Serialize[]; max: number; step: WorldOpeningStep; 
+/**  The backup's progress (0–100) while `step` is `backup`. */
+percent?: number | null }) & { commands?: never; mode?: never; reason?: never } | ({ phase: "open"; instanceId: string; folder: string; worldName: string; guests: WorldGuest_Serialize[]; max: number; mode: WorldGameMode; commands: boolean }) & { percent?: never; reason?: never; step?: never } | 
+/**  It did not open; kept until "Tekrar dene", "Projects'te buluşun" or "Kapat". */
+({ phase: "failed"; instanceId: string; folder: string; worldName: string; guests: WorldGuest_Serialize[]; max: number; reason: WorldOpenFailure }) & { commands?: never; mode?: never; percent?: never; step?: never };
+
+/**  Everything the page shows; sent whole on every change. */
+export type HostView = HostView_Serialize | HostView_Deserialize;
+
+/**  Everything the page shows; sent whole on every change. */
+export type HostView_Deserialize = {
+	/**  Grows with every view. */
+	seq: number,
+	/**  Signed content, service and sign-in all allow it: false shows nothing. */
+	enabled: boolean,
+	/**  Guest limit of a new session (Studio, 1–7). */
+	maxGuests: number,
+	session: HostSessionView_Deserialize | null,
+	/**  Newest first. */
+	invites: WorldInviteView_Deserialize[],
+};
+
+/**  Everything the page shows; sent whole on every change. */
+export type HostView_Serialize = {
+	/**  Grows with every view. */
+	seq: number,
+	/**  Signed content, service and sign-in all allow it: false shows nothing. */
+	enabled: boolean,
+	/**  Guest limit of a new session (Studio, 1–7). */
+	maxGuests: number,
+	session: HostSessionView_Serialize | null,
+	/**  Newest first. */
+	invites: WorldInviteView_Serialize[],
 };
 
 /**  What kind of file is being imported into a game directory. */
@@ -7512,6 +7638,163 @@ export type WorldDetailView = {
 	/**  False when `level.dat` could not be read (the other fields are then guesses). */
 	readable: boolean,
 };
+
+/**  The game mode guests play in (`survival`, `creative`, `adventure`). */
+export type WorldGameMode = "survival" | "creative" | "adventure";
+
+export type WorldGuest = WorldGuest_Serialize | WorldGuest_Deserialize;
+
+/**  A friend in the player's world session. */
+export type WorldGuestState = 
+/**  The opening has not sent its invites yet. */
+"pending" | "invited" | 
+/**  On their way in (their launcher connected, or their game is logging in). */
+"joining" | "in";
+
+export type WorldGuest_Deserialize = {
+	friend: string,
+	name: string,
+	avatar: string | null,
+	avatarUrl: string | null,
+	/**  The in-game name they came with, once they reached the world. */
+	gameName: string | null,
+	state: WorldGuestState,
+};
+
+export type WorldGuest_Serialize = {
+	friend: string,
+	name: string,
+	avatar?: string | null,
+	avatarUrl?: string | null,
+	/**  The in-game name they came with, once they reached the world. */
+	gameName?: string | null,
+	state: WorldGuestState,
+};
+
+/**  The answer of `host_invite`: `sent`, or why not. */
+export type WorldInviteOutcome = "sent" | "daily" | "session" | "limited";
+
+/**  Why invites did not go out. */
+export type WorldInviteRefusal = 
+/**  Today's invites are used up. */
+"daily" | 
+/**  The session's live invites (20). */
+"session" | 
+/**  A limited account's daily ones (10). */
+"limited";
+
+/**  A friend's world invite. */
+export type WorldInviteView = WorldInviteView_Serialize | WorldInviteView_Deserialize;
+
+/**  A friend's world invite. */
+export type WorldInviteView_Deserialize = {
+	/**  The world session; one invite per session. */
+	session: string,
+	from: string,
+	name: string,
+	avatar: string | null,
+	avatarUrl: string | null,
+	mc: string,
+	guests: number,
+	max: number,
+	/**  Unix seconds. */
+	at: number,
+	quiet: boolean,
+	join: WorldJoinStage_Deserialize | null,
+};
+
+/**  A friend's world invite. */
+export type WorldInviteView_Serialize = {
+	/**  The world session; one invite per session. */
+	session: string,
+	from: string,
+	name: string,
+	avatar?: string | null,
+	avatarUrl?: string | null,
+	mc: string,
+	guests: number,
+	max: number,
+	/**  Unix seconds. */
+	at: number,
+	quiet: boolean,
+	join?: WorldJoinStage_Serialize | null,
+};
+
+/**  The answer to a join's question. */
+export type WorldJoinAnswer = 
+/**  "Kopyala ve katıl": the new install's name in the player's language. */
+{ kind: "copy"; name: string } | 
+/**  "Kur ve katıl". */
+{ kind: "install" } | 
+/**  Join with another of the player's accounts (it becomes the active one). */
+{ kind: "account"; accountId: string };
+
+/**  What a join's window asks. */
+export type WorldJoinAsk = 
+/**  A new install with exactly the world's mods ("Kopyala ve katıl"). */
+{ kind: "copy"; mods: number; bytes: number; unknown: number } | 
+/**  No install of the world's Minecraft version: the official pack is installed for it. */
+{ kind: "install"; mc: string } | 
+/**  The account's in-game name cannot come in. */
+{ kind: "name"; verdict: WorldNameVerdict; name: string };
+
+/**  How a "Katıl" ended. */
+export type WorldJoinFailure = "full" | "closed" | "removed" | "unreachable" | "hostPackOld" | "mods";
+
+/**  Where a "Katıl" is. */
+export type WorldJoinStage = WorldJoinStage_Serialize | WorldJoinStage_Deserialize;
+
+/**  Where a "Katıl" is. */
+export type WorldJoinStage_Deserialize = ({ kind: "preparing"; percent: number | null }) & { ask?: never; failure?: never; instanceId?: never; missing?: never; port?: never } | ({ kind: "ask"; ask: WorldJoinAsk }) & { failure?: never; instanceId?: never; missing?: never; percent?: never; port?: never } | 
+/**  The game starts with `instance_id` straight into the world through `127.0.0.1:port`. */
+({ kind: "ready"; instanceId: string; port: number; missing: number }) & { ask?: never; failure?: never; percent?: never } | ({ kind: "connecting" }) & { ask?: never; failure?: never; instanceId?: never; missing?: never; percent?: never; port?: never } | ({ kind: "in" }) & { ask?: never; failure?: never; instanceId?: never; missing?: never; percent?: never; port?: never } | 
+/**  The way broke and did not come back: "Yeniden katıl". */
+({ kind: "lost" }) & { ask?: never; failure?: never; instanceId?: never; missing?: never; percent?: never; port?: never } | ({ kind: "failed"; failure: WorldJoinFailure }) & { ask?: never; instanceId?: never; missing?: never; percent?: never; port?: never };
+
+/**  Where a "Katıl" is. */
+export type WorldJoinStage_Serialize = ({ kind: "preparing"; percent?: number | null }) & { ask?: never; failure?: never; instanceId?: never; missing?: never; port?: never } | ({ kind: "ask"; ask: WorldJoinAsk }) & { failure?: never; instanceId?: never; missing?: never; percent?: never; port?: never } | 
+/**  The game starts with `instance_id` straight into the world through `127.0.0.1:port`. */
+({ kind: "ready"; instanceId: string; port: number; missing: number }) & { ask?: never; failure?: never; percent?: never } | ({ kind: "connecting" }) & { ask?: never; failure?: never; instanceId?: never; missing?: never; percent?: never; port?: never } | ({ kind: "in" }) & { ask?: never; failure?: never; instanceId?: never; missing?: never; percent?: never; port?: never } | 
+/**  The way broke and did not come back: "Yeniden katıl". */
+({ kind: "lost" }) & { ask?: never; failure?: never; instanceId?: never; missing?: never; percent?: never; port?: never } | ({ kind: "failed"; failure: WorldJoinFailure }) & { ask?: never; instanceId?: never; missing?: never; percent?: never; port?: never };
+
+/**  Why a name cannot come in: the host's own (or not a valid name), or bound to another friend. */
+export type WorldNameVerdict = "own" | "taken";
+
+/**  Why the player's world did not open. */
+export type WorldOpenFailure = 
+/**  Today's opens are used up. */
+"limit" | 
+/**  No way works now ("Dünyan şu an açılamıyor."). */
+"unavailable";
+
+/**  The answer of `host_open`. */
+export type WorldOpenOutcome = 
+/**  The caller starts the game into the world now (quick play). */
+"start" | 
+/**  The game runs with the world open: it opens in place. */
+"running" | 
+/**  "Vazgeç" during the backup. */
+"cancelled";
+
+/**  "Dünyayı aç" from the launcher. */
+export type WorldOpenRequest = {
+	instanceId: string,
+	folder: string,
+	mode: WorldGameMode,
+	commands: boolean,
+	/**  Friend ids, at most the guest limit. */
+	invite: string[],
+};
+
+/**  Where an opening from the launcher is. */
+export type WorldOpeningStep = 
+/**  A backup first (the last one is older than a day). */
+"backup" | 
+/**  The game starts into the world. */
+"starting" | 
+/**  The world loaded: it opens on this computer, a way is prepared, the invites go out. */
+"publishing";
 
 export type WorldView = {
 	folder: string,

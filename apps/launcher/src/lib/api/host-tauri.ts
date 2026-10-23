@@ -36,6 +36,11 @@ async function ok<T>(promise: Promise<Res<T>>): Promise<T> {
   return result.data;
 }
 
+/** A command that answers nothing (`null` on the wire). */
+async function done(promise: Promise<Res<null>>): Promise<void> {
+  await ok(promise);
+}
+
 // The same shapes; absent optional fields never arrive as `null` (see the top of the file).
 const asView = (view: BindingView) => view as unknown as HostView;
 const asNotice = (notice: BindingNotice) => notice as unknown as HostNotice;
@@ -65,15 +70,15 @@ export const tauriHost: HostApi = {
     return asPlace(await ok(commands.hostPlace(instanceId)));
   },
   open: (request) => ok(commands.hostOpen(request)),
-  cancelOpen: () => ok(commands.hostCancelOpen()),
+  cancelOpen: () => done(commands.hostCancelOpen()),
   invite: (friends) => ok(commands.hostInvite(friends)),
-  remove: (friend) => ok(commands.hostRemove(friend)),
-  stop: () => ok(commands.hostStop()),
-  dismissFailure: () => ok(commands.hostDismissFailure()),
-  meetOnProjects: (friends) => ok(commands.hostMeetOnProjects(friends)),
-  join: (session, options) => ok(commands.hostJoin(session, options?.copy?.name ?? null)),
-  answer: (session, answer) => ok(commands.hostAnswer(session, answer)),
-  cancelJoin: (session) => ok(commands.hostCancelJoin(session)),
-  dismissInvite: (session) => ok(commands.hostDismissInvite(session)),
+  remove: (friend) => done(commands.hostRemove(friend)),
+  stop: () => done(commands.hostStop()),
+  dismissFailure: () => done(commands.hostDismissFailure()),
+  meetOnProjects: (friends) => done(commands.hostMeetOnProjects(friends)),
+  join: (session, options) => done(commands.hostJoin(session, options?.copy?.name ?? null)),
+  answer: (session, answer) => done(commands.hostAnswer(session, answer)),
+  cancelJoin: (session) => done(commands.hostCancelJoin(session)),
+  dismissInvite: (session) => done(commands.hostDismissInvite(session)),
   connectInGame: (session, label) => ok(commands.hostConnectInGame(session, label)),
 };
