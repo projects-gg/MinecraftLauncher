@@ -28,6 +28,7 @@ import { trPlacement } from "./tr-placement";
 import { trPlayOpen } from "./tr-play-open";
 import { trPlayTogether } from "./tr-play-together";
 import { trPrepare } from "./tr-prepare";
+import { trProjectsSkin } from "./tr-projects-skin";
 import { trReminders } from "./tr-reminders";
 import { trReports } from "./tr-reports";
 import { trSafety } from "./tr-safety";
@@ -83,6 +84,7 @@ export const tr = {
   chat2: trChat2,
   team6: trTeam6,
   cloudAfk: trCloudAfk,
+  projectsSkin: trProjectsSkin,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
