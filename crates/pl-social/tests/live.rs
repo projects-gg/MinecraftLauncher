@@ -12,6 +12,9 @@
 //!
 //! `PL_SOCIAL_URL` overrides the service URL (default `http://127.0.0.1:8797/`). The chat tests
 //! need chat on in the service (its seal key `CHAT_MAC_KEY` in `.dev.vars`, as in the example).
+//! SKIN1's tests need its switches on in the local D1 (`service_config`: `mc_link_on`, `skins_on`)
+//! and the fake ProBot (`node scripts/fake-mc-bot.mjs`); `PL_FAKE_MC_BOT` is its control address
+//! (default `http://127.0.0.1:8799/`).
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -32,6 +35,15 @@ use pl_social::{
     TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamNotifications, TeamNotificationsEdit, TeamRelation,
     TokenStore, UpdateSink, auth_code_from_deep_link, crew_code, crew_conversation,
     direct_conversation, normalize_crew_link,
+};
+// SKIN1
+use pl_auth::SkinVariant;
+use pl_social::{
+    FEATURE_MC_LINK, FEATURE_SKINS, McBlocked, McCheck, McJobState, McLinkState, McMessage,
+    McPremium, McSkinBy, McSkinKind, McSource, NoticeKind, ProjectsLinkState, ProjectsSkinAccess,
+    ProjectsSkinBy, ProjectsSkinChange, ProjectsSkinKind, ProjectsSkinOutcome, ProjectsSkinPick,
+    ProjectsSkinRefusalCode, ProjectsSkinResultCode, ProjectsSkinSave, ProjectsSkins, SkinAccount,
+    SkinsConfig,
 };
 use serde_json::json;
 use url::Url;
@@ -2762,4 +2774,583 @@ async fn the_launchers_crew_tags_end_to_end() {
     for session in [friend, wearer, leader] {
         session.delete_account().await.unwrap();
     }
+}
+
+// --- SKIN1: the game account link and Projects skins ------------------------------------------
+
+/// The fake ProBot's control address (`PL_FAKE_MC_BOT`), never another.
+fn fake_bot_url() -> Url {
+    let base = std::env::var("PL_FAKE_MC_BOT").unwrap_or_else(|_| "http://127.0.0.1:8799/".into());
+    let base = Url::parse(&base).expect("PL_FAKE_MC_BOT is a URL");
+    assert!(
+        matches!(base.host_str(), Some("127.0.0.1" | "localhost")),
+        "the fake ProBot runs locally"
+    );
+    base
+}
+
+/// One event as ProBot sends it (README "ProBot jobs" → "Events"), through the fake ProBot.
+async fn bot_event(event: serde_json::Value) {
+    let reply = reqwest::Client::new()
+        .post(fake_bot_url().join("event").unwrap())
+        .json(&event)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        reply.status().is_success(),
+        "the fake ProBot took the event"
+    );
+}
+
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = 0xffff_ffffu32;
+    for &byte in bytes {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            crc = if crc & 1 == 1 {
+                (crc >> 1) ^ 0xedb8_8320
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
+}
+
+/// A 64×64 RGBA skin file of one colour (written with stored deflate blocks).
+fn skin_file(shade: u8) -> Vec<u8> {
+    let mut raw = Vec::new();
+    for y in 0..64u32 {
+        raw.push(0);
+        for x in 0..64u32 {
+            let base = y < 32 || (16..48).contains(&x);
+            raw.extend_from_slice(&if base {
+                [shade, 90, 160, 255]
+            } else {
+                [0, 0, 0, 0]
+            });
+        }
+    }
+    let mut zlib = vec![0x78, 0x01];
+    let blocks: Vec<&[u8]> = raw.chunks(65_535).collect();
+    for (index, block) in blocks.iter().enumerate() {
+        zlib.push(u8::from(index + 1 == blocks.len()));
+        let len = u16::try_from(block.len()).unwrap();
+        zlib.extend_from_slice(&len.to_le_bytes());
+        zlib.extend_from_slice(&(!len).to_le_bytes());
+        zlib.extend_from_slice(block);
+    }
+    let (mut a, mut b) = (1u32, 0u32);
+    for &byte in &raw {
+        a = (a + u32::from(byte)) % 65_521;
+        b = (b + a) % 65_521;
+    }
+    zlib.extend_from_slice(&((b << 16) | a).to_be_bytes());
+    let chunk = |kind: &[u8], body: &[u8]| {
+        let mut out = u32::try_from(body.len()).unwrap().to_be_bytes().to_vec();
+        let mut typed = kind.to_vec();
+        typed.extend_from_slice(body);
+        out.extend_from_slice(&typed);
+        out.extend_from_slice(&crc32(&typed).to_be_bytes());
+        out
+    };
+    let mut ihdr = 64u32.to_be_bytes().to_vec();
+    ihdr.extend_from_slice(&64u32.to_be_bytes());
+    ihdr.extend_from_slice(&[8, 6, 0, 0, 0]);
+    let mut out = b"\x89PNG\r\n\x1a\n".to_vec();
+    out.extend(chunk(b"IHDR", &ihdr));
+    out.extend(chunk(b"IDAT", &zlib));
+    out.extend(chunk(b"IEND", &[]));
+    out
+}
+
+/// A unique game account name for this run (3–16 of `A–Z a–z 0–9 _`).
+fn game_name(user_id: &str, tag: &str) -> String {
+    format!("{tag}{}", &user_id[user_id.len() - 8..])
+}
+
+/// Waits for the socket's `mc` message about job `id`.
+async fn expect_mc(handle: &mut PresenceHandle, id: &str) -> McMessage {
+    match expect(handle, "the job's mc message", |event| {
+        matches!(event, PresenceEvent::Mc(message)
+            if message.job.as_ref().is_some_and(|job| job.id == id))
+    })
+    .await
+    {
+        PresenceEvent::Mc(message) => *message,
+        _ => unreachable!(),
+    }
+}
+
+/// SKIN1 at the service with the fake ProBot: linking with a code (a wrong one, a malformed one,
+/// twice), a PNG skin and a premium one applied and told on the socket (`mc`), what `GET /v1/mc`
+/// says then, refusals with their details, a check the service answers itself, a staff reset with
+/// its notice, a staff block, unlinking.
+#[tokio::test]
+#[ignore = "needs `pnpm dev`, `pnpm dev:discord` and `node scripts/fake-mc-bot.mjs` in services/social, SKIN1 on"]
+async fn minecraft_link_and_projects_skin() {
+    let client = client();
+    client.health().await.expect("wrangler dev is running");
+    let user_id = new_user_id(61);
+    let session = sign_in(&client, &user_id, "skinci").await;
+    let name = game_name(&user_id, "Sk");
+    let mut handle = session.connect_presence(options());
+    expect(&mut handle, "connected", |e| {
+        matches!(e, PresenceEvent::Connected { .. })
+    })
+    .await;
+
+    let state = session.mc_state().await.unwrap();
+    assert!(
+        state.offers(FEATURE_MC_LINK) && state.offers(FEATURE_SKINS),
+        "SKIN1 on and ProBot seen: {:?}",
+        state.features
+    );
+    assert_eq!(state.link.state, McLinkState::Unknown);
+    assert_eq!(state.limits.skins_per_day, 3);
+
+    // A malformed code never opens a job; a wrong one is ProBot's answer.
+    let malformed = session.mc_link(&name, "12").await.unwrap_err();
+    assert_eq!(
+        (malformed.status, malformed.code.as_str()),
+        (400, "invalid_pin")
+    );
+    let wrong = session.mc_link(&name, "000000").await.unwrap();
+    assert_eq!(wrong.state, McJobState::Pending);
+    let told = expect_mc(&mut handle, &wrong.id).await;
+    assert_eq!(told.job.unwrap().code(), "pin_invalid");
+
+    // The right code links; again is "already linked" with the name.
+    let job = session.mc_link(&name, "482913").await.unwrap();
+    let told = expect_mc(&mut handle, &job.id).await;
+    assert_eq!(told.job.unwrap().code(), "linked");
+    assert!(told.link.linked_to(&name));
+    let again = session.mc_link(&name, "482913").await.unwrap_err();
+    assert_eq!(
+        (again.status, again.code.as_str(), again.name.as_deref()),
+        (409, "already_linked", Some(name.as_str()))
+    );
+
+    // A PNG cleaned by the launcher: queued, then applied (the fake ProBot's texture: the PNG's
+    // digest).
+    let clean = pl_auth::clean_skin(&skin_file(30)).unwrap();
+    let job = session
+        .mc_put_skin(
+            &name,
+            &McSource::Png {
+                variant: SkinVariant::Slim,
+                png: clean.png.clone(),
+                sha256: clean.sha256.clone(),
+            },
+        )
+        .await
+        .unwrap();
+    let told = expect_mc(&mut handle, &job.id).await;
+    let applied = told.job.unwrap();
+    assert!(applied.applied(), "{applied:?}");
+    let texture = applied.result.unwrap().texture.unwrap();
+    let state = session.mc_state().await.unwrap();
+    let skin = state.skin.unwrap();
+    assert_eq!(
+        (skin.kind, skin.texture.as_deref(), skin.variant),
+        (McSkinKind::Png, Some(texture.as_str()), SkinVariant::Slim)
+    );
+    assert_eq!(state.limits.skins_left, 2, "an applied change counts");
+    assert!(state.jobs.iter().any(|job| job.applied()));
+
+    // A checksum that does not match is refused before any job.
+    let bad = session
+        .mc_put_skin(
+            &name,
+            &McSource::Png {
+                variant: SkinVariant::Classic,
+                png: clean.png.clone(),
+                sha256: "0".repeat(64),
+            },
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        (bad.status, bad.code.as_str(), bad.reason.as_deref()),
+        (400, "invalid_skin", Some("checksum"))
+    );
+    // The skin of another game account than the link's: refused while the link is fresh.
+    let other = session
+        .mc_put_skin("Someone_Else", &McSource::Default)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        (other.status, other.code.as_str(), other.name.as_deref()),
+        (409, "other_account", Some(name.as_str()))
+    );
+
+    // A premium player's skin as Mojang signed it (the fake ProBot does not check the signature).
+    let premium = McPremium {
+        name: "Dream".into(),
+        id: "ec70bcaf702f4bb8b48d276fa52a780c".into(),
+        texture: "f".repeat(64),
+        variant: SkinVariant::Classic,
+        value: "dmFsdWU=".into(),
+        signature: "c2lnbmF0dXJl".into(),
+    };
+    let job = session
+        .mc_put_skin(&name, &McSource::Premium(premium))
+        .await
+        .unwrap();
+    let told = expect_mc(&mut handle, &job.id).await;
+    assert!(told.job.unwrap().applied());
+    let skin = told.skin.unwrap();
+    assert_eq!(
+        (skin.kind, skin.premium.as_deref()),
+        (McSkinKind::Premium, Some("Dream"))
+    );
+
+    // The service learned the link a moment ago: a check answers without a job.
+    assert!(matches!(
+        session.mc_check().await.unwrap(),
+        McCheck::Link(link) if link.linked_to(&name)
+    ));
+
+    // A staff reset in game: the skin is the default by staff, a notice tells it.
+    bot_event(serde_json::json!({"kind": "skin_reset", "discordId": user_id, "until": 0})).await;
+    // Both arrive, in either order.
+    let (mut reset, mut noticed) = (None, false);
+    while reset.is_none() || !noticed {
+        match expect(&mut handle, "the reset's mc message and notice", |event| {
+            matches!(event, PresenceEvent::Mc(message) if message.job.is_none())
+                || matches!(event, PresenceEvent::Notice(_))
+        })
+        .await
+        {
+            PresenceEvent::Mc(message) => reset = Some(*message),
+            PresenceEvent::Notice(notice) => {
+                assert_eq!(notice.kind, NoticeKind::SkinReset);
+                noticed = true;
+            }
+            _ => unreachable!(),
+        }
+    }
+    let reset = reset.unwrap();
+    let skin = reset.skin.unwrap();
+    assert_eq!((skin.kind, skin.by), (McSkinKind::Default, McSkinBy::Staff));
+    assert_eq!(reset.blocked, None, "until 0: no block");
+
+    // Unlinking: ProBot's job, then no link at all.
+    let job = session.mc_unlink().await.unwrap();
+    let told = expect_mc(&mut handle, &job.id).await;
+    assert_eq!(told.job.unwrap().code(), "unlinked");
+    assert_eq!(told.link.state, McLinkState::None);
+    let none = session.mc_unlink().await.unwrap_err();
+    assert_eq!((none.status, none.code.as_str()), (404, "not_linked"));
+    let unlinked = session
+        .mc_put_skin(&name, &McSource::Default)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        (unlinked.status, unlinked.code.as_str()),
+        (409, "not_linked")
+    );
+
+    // A staff block: the fake ProBot blocks "Engelli" for a day, and the service keeps it.
+    let blocked_id = new_user_id(62);
+    let blocked = sign_in(&client, &blocked_id, "engelli").await;
+    let mut blocked_handle = blocked.connect_presence(options());
+    expect(&mut blocked_handle, "connected", |e| {
+        matches!(e, PresenceEvent::Connected { .. })
+    })
+    .await;
+    let job = blocked.mc_link("Engelli", "482913").await.unwrap();
+    expect_mc(&mut blocked_handle, &job.id).await;
+    let job = blocked
+        .mc_put_skin("Engelli", &McSource::Default)
+        .await
+        .unwrap();
+    let told = expect_mc(&mut blocked_handle, &job.id).await;
+    let failed = told.job.unwrap();
+    assert_eq!(failed.code(), "skin_blocked");
+    let until = failed.result.unwrap().until.flatten().unwrap();
+    assert!(until > unix_now());
+    let refused = blocked
+        .mc_put_skin("Engelli", &McSource::Default)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        (refused.status, refused.code.as_str(), refused.until),
+        (403, "skin_blocked", Some(Some(until)))
+    );
+    assert_eq!(
+        blocked.mc_state().await.unwrap().blocked,
+        Some(McBlocked { until: Some(until) })
+    );
+
+    handle.shutdown().await;
+    blocked_handle.shutdown().await;
+    for session in [session, blocked] {
+        session.delete_account().await.unwrap();
+    }
+}
+
+/// SKIN1 through the launcher's own backend (`ProjectsSkins`), the way its interface uses it: the
+/// entry points read the service once, a code links the account and the job's change arrives, a
+/// picked file is saved and applied ("Geri al" offered once a skin came before), "Geri al" sends
+/// the earlier skin again, a staff reset is a "read again" with the friends feature's notice, and
+/// unlinking closes as its job.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[ignore = "needs `pnpm dev`, `pnpm dev:discord` and `node scripts/fake-mc-bot.mjs` in services/social, SKIN1 on"]
+async fn the_launchers_projects_skin_end_to_end() {
+    let client = client();
+    client.health().await.expect("wrangler dev is running");
+    let user_id = new_user_id(63);
+    let session = sign_in(&client, &user_id, "gorunum").await;
+    let name = game_name(&user_id, "Pj");
+    let dir = tempfile::tempdir().unwrap();
+
+    let tokens = Arc::new(MemoryTokenStore::new());
+    tokens.save(session.token()).unwrap();
+    let updates = Updates::default();
+    let sink: UpdateSink = {
+        let updates = updates.clone();
+        Arc::new(move |update: SocialUpdate| updates.lock().unwrap().push(update))
+    };
+    let social = SocialService::new(
+        reqwest::Client::new(),
+        ServiceConfig {
+            user_agent: "ProjectsLauncher/integration-test".into(),
+            device: "Integration PC".into(),
+            presence: options(),
+        },
+        tokens,
+        tokio::runtime::Handle::current(),
+        sink,
+    );
+    let changes: Arc<Mutex<Vec<ProjectsSkinChange>>> = Arc::default();
+    let account = SkinAccount {
+        id: "8c1f0e7a-2d4b-4f61-9a3e-5b7c9d1e2f30".into(),
+        name: name.clone(),
+    };
+    let skins = ProjectsSkins::new(
+        &social,
+        reqwest::Client::new(),
+        SkinsConfig {
+            store_dir: dir.path().join("skins").join("projects"),
+            versions_dir: dir.path().join("versions"),
+            // Never asked here: no premium names and no default looks in this test.
+            mojang: pl_auth::MojangEndpoints::with_base("http://127.0.0.1:9"),
+        },
+        tokio::runtime::Handle::current(),
+        {
+            let changes = changes.clone();
+            Arc::new(move |change| changes.lock().unwrap().push(change))
+        },
+        {
+            let account = account.clone();
+            Arc::new(move || vec![account.clone()])
+        },
+    );
+    skins.set_shown(true);
+    social.configure(Some(base_url()));
+    until_view(&social, "online", |view| {
+        view.loaded && view.connection == Connection::Online
+    })
+    .await;
+    let until_change = |what: &'static str, wanted: Box<dyn Fn(&ProjectsSkinChange) -> bool>| {
+        let changes = changes.clone();
+        async move {
+            let deadline = tokio::time::Instant::now() + Duration::from_secs(20);
+            loop {
+                let found = changes
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .rev()
+                    .find(|c| wanted(c))
+                    .cloned();
+                if let Some(found) = found {
+                    return found;
+                }
+                assert!(
+                    tokio::time::Instant::now() < deadline,
+                    "timed out waiting for {what}"
+                );
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+        }
+    };
+    let job_closed = |id: String| -> Box<dyn Fn(&ProjectsSkinChange) -> bool> {
+        Box::new(
+            move |change| matches!(change, ProjectsSkinChange::Job { job, .. } if job.id == id),
+        )
+    };
+
+    // The entry points: the service's switches at once, the link after a read in the background.
+    let first = skins.overview();
+    assert!(first.shown);
+    assert_eq!(first.service.map(|s| (s.link, s.skins)), Some((true, true)));
+    until_change(
+        "the background read",
+        Box::new(|change| *change == ProjectsSkinChange::State),
+    )
+    .await;
+    assert_eq!(
+        skins.overview().link.map(|link| link.state),
+        Some(ProjectsLinkState::Unknown)
+    );
+
+    // Not linked yet: the panel is ready, and saving waits for the link (ProBot's answer).
+    let view = skins.state(&account).await;
+    assert_eq!(view.access, ProjectsSkinAccess::Ready);
+    assert!(view.skin.is_none());
+
+    // The code box: the job's change arrives with the account.
+    let ProjectsSkinOutcome::Sent { job } = skins.link(&account, "482913").await else {
+        panic!("sent");
+    };
+    let ProjectsSkinChange::Job {
+        job: linked,
+        account_id,
+        ..
+    } = until_change("linked", job_closed(job.id.clone())).await
+    else {
+        unreachable!();
+    };
+    assert_eq!(linked.result.unwrap().code, ProjectsSkinResultCode::Linked);
+    assert_eq!(account_id.as_deref(), Some(account.id.as_str()));
+    assert_eq!(
+        skins.state(&account).await.link.state,
+        ProjectsLinkState::Linked
+    );
+
+    // A picked file, saved and applied: nothing to put back after the first one.
+    let first_file = dir.path().join("first.png");
+    std::fs::write(&first_file, skin_file(40)).unwrap();
+    let ProjectsSkinPick::Ready { choice } = skins.pick_file(first_file).await else {
+        panic!("a fine skin");
+    };
+    let ProjectsSkinOutcome::Sent { job } = skins
+        .save(
+            &account,
+            ProjectsSkinSave::Choice {
+                id: choice.id,
+                variant: SkinVariant::Slim,
+            },
+        )
+        .await
+    else {
+        panic!("sent");
+    };
+    assert!(job.picture.is_some());
+    let ProjectsSkinChange::Job {
+        job: saved, undo, ..
+    } = until_change("the first skin", job_closed(job.id.clone())).await
+    else {
+        unreachable!();
+    };
+    assert_eq!(saved.result.unwrap().code, ProjectsSkinResultCode::Applied);
+    assert!(!undo);
+    let view = skins.state(&account).await;
+    let skin = view.skin.unwrap();
+    assert!(skin.picture.is_some(), "this computer's copy");
+    assert_eq!(skin.variant, SkinVariant::Slim);
+    assert_eq!(view.limits.left, 2);
+
+    // A second one: "Geri al" is offered (the first is kept, changes are left).
+    let second_file = dir.path().join("second.png");
+    std::fs::write(&second_file, skin_file(200)).unwrap();
+    let ProjectsSkinPick::Ready { choice } = skins.pick_file(second_file).await else {
+        panic!("a fine skin");
+    };
+    let ProjectsSkinOutcome::Sent { job } = skins
+        .save(
+            &account,
+            ProjectsSkinSave::Choice {
+                id: choice.id,
+                variant: SkinVariant::Classic,
+            },
+        )
+        .await
+    else {
+        panic!("sent");
+    };
+    let ProjectsSkinChange::Job { undo, .. } =
+        until_change("the second skin", job_closed(job.id.clone())).await
+    else {
+        unreachable!();
+    };
+    assert!(undo, "Geri al");
+    assert!(skins.state(&account).await.can_undo);
+
+    // "Geri al": the first skin again.
+    let ProjectsSkinOutcome::Sent { job } = skins.save(&account, ProjectsSkinSave::Undo).await
+    else {
+        panic!("sent");
+    };
+    let ProjectsSkinChange::Job {
+        job: undone, undo, ..
+    } = until_change("the undo", job_closed(job.id.clone())).await
+    else {
+        unreachable!();
+    };
+    assert_eq!(undone.result.unwrap().code, ProjectsSkinResultCode::Applied);
+    assert!(!undo, "no change is left today");
+    assert_eq!(
+        skins.state(&account).await.skin.unwrap().variant,
+        SkinVariant::Slim
+    );
+
+    // Three changes today: the fourth is refused with the wait.
+    let ProjectsSkinOutcome::Refused { refusal } =
+        skins.save(&account, ProjectsSkinSave::Default).await
+    else {
+        panic!("refused");
+    };
+    assert_eq!(refusal.code, ProjectsSkinRefusalCode::Quota);
+    assert!(refusal.retry_after.is_some());
+
+    // A staff reset: "read again", and the friends feature shows its notice with no block.
+    changes.lock().unwrap().clear();
+    bot_event(serde_json::json!({"kind": "skin_reset", "discordId": user_id, "until": 0})).await;
+    until_change(
+        "the reset",
+        Box::new(|change| *change == ProjectsSkinChange::State),
+    )
+    .await;
+    let view = until_view(&social, "the reset's notice", |view| {
+        view.notices
+            .iter()
+            .any(|notice| notice.kind == NoticeKind::SkinReset)
+    })
+    .await;
+    let notice = view
+        .notices
+        .iter()
+        .find(|notice| notice.kind == NoticeKind::SkinReset)
+        .unwrap();
+    assert_eq!(notice.blocked, None);
+    let skin = skins.state(&account).await.skin.unwrap();
+    assert_eq!(
+        (skin.kind, skin.by, skin.picture),
+        (ProjectsSkinKind::Default, ProjectsSkinBy::Staff, None)
+    );
+
+    // Unlinking closes as its job.
+    let ProjectsSkinOutcome::Sent { job } = skins.unlink().await else {
+        panic!("sent");
+    };
+    let ProjectsSkinChange::Job { job: unlinked, .. } =
+        until_change("unlinked", job_closed(job.id.clone())).await
+    else {
+        unreachable!();
+    };
+    assert_eq!(
+        unlinked.result.unwrap().code,
+        ProjectsSkinResultCode::Unlinked
+    );
+    assert_eq!(
+        skins.overview().link.map(|link| link.state),
+        Some(ProjectsLinkState::None)
+    );
+
+    social.configure(None);
+    session.delete_account().await.unwrap();
 }

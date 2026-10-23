@@ -47,7 +47,7 @@ pub async fn read_skin_file(path: &Path) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-fn read_capped(path: &Path) -> Result<Vec<u8>, SkinFileProblem> {
+pub(crate) fn read_capped(path: &Path) -> Result<Vec<u8>, SkinFileProblem> {
     let unreadable = |error: std::io::Error| SkinFileProblem::Unreadable { kind: error.kind() };
     let file = std::fs::File::open(path).map_err(unreadable)?;
     let meta = file.metadata().map_err(unreadable)?;

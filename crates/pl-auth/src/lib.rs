@@ -16,6 +16,8 @@
 //!   Mojang texture or from the default skin in a local client jar.
 //! - [`SkinHistory`]: the skins each Microsoft profile wore, kept on this computer so the player
 //!   can go back to an old one ([`AuthManager::wear_history_skin`]).
+//! - Projects skins of username accounts (SKIN1): [`clean_skin`] checks and re-encodes a skin
+//!   file the player picked, [`MojangLookup`] reads a premium player's signed skin by name.
 
 mod avatar;
 mod config;
@@ -29,10 +31,12 @@ mod loopback;
 mod manager;
 mod microsoft;
 mod model;
+mod mojang_lookup;
 mod offline;
 mod page;
 mod pkce;
 mod secrets;
+mod skin_png;
 mod skins;
 mod store;
 #[cfg(test)]
@@ -67,10 +71,16 @@ pub use model::{
     MinecraftProfile, Ownership, ProfileSkin, SessionCheck, Skin, SkinVariant, UserType,
     launch_identity,
 };
+pub use mojang_lookup::{
+    LOOKUP_TTL, MojangEndpoints, MojangLookup, PremiumLookup, PremiumSkin, is_premium_name,
+};
 pub use offline::{
     OFFLINE_ACCESS_TOKEN, OFFLINE_NAME_MAX, OFFLINE_NAME_MIN, offline_uuid, validate_offline_name,
 };
 pub use secrets::{KeyringStore, MemoryStore, SecretStore};
+pub use skin_png::{
+    CLEAN_SKIN_MAX_BYTES, CleanSkin, SkinPngProblem, clean_skin, read_clean_skin, skin_preview,
+};
 pub use skins::{
     MAX_SKIN_BYTES, TEXTURE_HOST, is_mojang_texture_url, read_skin_file, validate_skin_png,
 };

@@ -192,6 +192,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<pl_social::ChatTypingView>()
         // "social-tag-off" (the crew's leader hid the crew whose tag the player wore, TEAM6).
         .typ::<pl_social::TagOffView>()
+        // "projects-skin-changed" (SKIN1: a job closed, a link made elsewhere, read again).
+        .typ::<pl_social::ProjectsSkinChange>()
         // Emitted as the plain "overlay-status" event (the in-game overlay's mod connected).
         .typ::<pl_overlay::OverlayStatus>()
         // Emitted as the plain "cloud-afk-live" event (a watched 7/24 Bulut console).
@@ -527,6 +529,17 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::social::social_crew_greet,
             commands::social::social_report,
             commands::social::social_notices_seen,
+            // SKIN1: Projects skins of username accounts and the game account link
+            commands::projects_skin::projects_skin_overview,
+            commands::projects_skin::projects_skin_state,
+            commands::projects_skin::projects_skin_default,
+            commands::projects_skin::projects_skin_pick_file,
+            commands::projects_skin::projects_skin_lookup,
+            commands::projects_skin::projects_skin_save,
+            commands::projects_skin::projects_skin_cancel,
+            commands::projects_skin::projects_link,
+            commands::projects_skin::projects_unlink,
+            commands::projects_skin::projects_link_check,
         ])
 }
 

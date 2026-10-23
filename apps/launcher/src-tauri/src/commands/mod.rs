@@ -25,6 +25,7 @@ pub mod modpack_update;
 pub mod modrinth;
 pub mod modsets;
 pub mod official;
+pub mod projects_skin;
 pub mod resume;
 pub mod server;
 pub mod shortcut;

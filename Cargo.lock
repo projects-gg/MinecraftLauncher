@@ -4466,6 +4466,7 @@ dependencies = [
  "futures",
  "jiff",
  "keyring",
+ "pl-auth",
  "qrcode",
  "rand 0.10.3",
  "regex",

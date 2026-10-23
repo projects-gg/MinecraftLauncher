@@ -365,6 +365,11 @@ fn social_special(error: &pl_social::SocialError) -> Option<(&'static str, Strin
                     "Your Discord account is new, so you can't react more today.",
                     true,
                 ),
+                LimitedKey::SkinChange => (
+                    "Discord hesabın yeni olduğu için Projects skinini değiştiremezsin.",
+                    "Your Discord account is new, so you can't change your Projects skin yet.",
+                    false,
+                ),
                 LimitedKey::Other => (
                     "Discord hesabın yeni olduğu için bu şimdilik yapılamıyor.",
                     "Your Discord account is new, so this can't be done yet.",

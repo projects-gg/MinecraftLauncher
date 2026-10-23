@@ -1,29 +1,26 @@
-// Tauri implementation of `projectsSkinApi` (SKIN1).
-//
-// ─── SKIN1-R PLUGS IN HERE ──────────────────────────────────────────────────────────────────────
-// The Rust commands do not exist yet (docs/tasks/skin1-l-r.md lists the names and shapes the
-// interface assumes). Until they do, the app reports the feature as not shown, so no entry point
-// (the account card's T-shirt, the link row, the palette) ever appears, and every other call
-// refuses. Once `bindings.ts` has them, replace the stubs below with the generated calls:
-//
-//   overview:   ok(commands.projectsSkinOverview())
-//   state:      ok(commands.projectsSkinState(accountId))
-//   defaultLook: ok(commands.projectsSkinDefault(accountId))
-//   readFile:   ok(commands.projectsSkinPickFile(path))
-//   lookup:     ok(commands.projectsSkinLookup(accountId, name))
-//   save:       ok(commands.projectsSkinSave(accountId, save))
-//   cancel:     ok(commands.projectsSkinCancel(jobId))
-//   link:       ok(commands.projectsLink(accountId, pin))
-//   unlink:     ok(commands.projectsUnlink())
-//   linkCheck:  ok(commands.projectsLinkCheck())
-//   onChange:   listen<ProjectsSkinChange>("projects-skin-changed", (event) => listener(event.payload))
-//
-// The views are built to match the types in projects-skin-types.ts field for field, so each call
-// is the command's data as it is (map here only where a binding differs).
-// ─────────────────────────────────────────────────────────────────────────────────────────────────
+// Tauri implementation of `projectsSkinApi` (SKIN1): the commands of
+// `src-tauri/src/commands/projects_skin.rs` over `pl_social::ProjectsSkins`. The views match
+// projects-skin-types.ts field for field; only the optional details the backend sends as `null`
+// (a refusal's or a result's `name`, a refusal's `retryAfter`) become `undefined` here.
+import { listen } from "@tauri-apps/api/event";
 import { open } from "@tauri-apps/plugin-dialog";
-import type { CmdError } from "@/bindings";
-import type { ProjectsSkinApi } from "./projects-skin-types";
+import {
+  type ProjectsSkinChange as ChangeBinding,
+  type CmdError,
+  commands,
+  type ProjectsSkinJob as JobBinding,
+  type ProjectsSkinOutcome as OutcomeBinding,
+  type ProjectsSkinRefusal as RefusalBinding,
+  type ProjectsSkinView as ViewBinding,
+} from "@/bindings";
+import type {
+  ProjectsSkinApi,
+  ProjectsSkinChange,
+  ProjectsSkinJob,
+  ProjectsSkinOutcome,
+  ProjectsSkinRefusal,
+  ProjectsSkinView,
+} from "./projects-skin-types";
 
 /** A failed command: friendly `message`, plus `code`/`details` for "copy details". */
 export class ProjectsSkinCommandError extends Error {
@@ -36,21 +33,59 @@ export class ProjectsSkinCommandError extends Error {
   }
 }
 
-/** Until SKIN1-R: the commands are missing, so nothing of the feature runs. */
-const missing = (): never => {
-  throw new ProjectsSkinCommandError({
-    code: "PSKIN-YOK",
-    message: "",
-    details: "projects_skin commands are not in this build",
-  });
-};
+type Res<T> = { status: "ok"; data: T } | { status: "error"; error: CmdError };
+
+async function ok<T>(promise: Promise<Res<T>>): Promise<T> {
+  const result = await promise;
+  if (result.status === "error") throw new ProjectsSkinCommandError(result.error);
+  return result.data;
+}
+
+function job(v: JobBinding): ProjectsSkinJob {
+  return {
+    ...v,
+    result: v.result
+      ? {
+          code: v.result.code,
+          ...(v.result.name ? { name: v.result.name } : {}),
+          ...(v.result.until !== undefined ? { until: v.result.until } : {}),
+        }
+      : null,
+  };
+}
+
+function refusal(v: RefusalBinding): ProjectsSkinRefusal {
+  return {
+    code: v.code,
+    ...(v.until !== undefined ? { until: v.until } : {}),
+    ...(v.name ? { name: v.name } : {}),
+    ...(typeof v.retryAfter === "number" ? { retryAfter: v.retryAfter } : {}),
+  };
+}
+
+function outcome(v: OutcomeBinding): ProjectsSkinOutcome {
+  return v.status === "sent"
+    ? { status: "sent", job: job(v.job) }
+    : { status: "refused", refusal: refusal(v.refusal) };
+}
+
+function view(v: ViewBinding): ProjectsSkinView {
+  return {
+    ...v,
+    job: v.job ? job(v.job) : null,
+    lastJob: v.lastJob ? job(v.lastJob) : null,
+    linkJob: v.linkJob ? job(v.linkJob) : null,
+  };
+}
+
+function change(v: ChangeBinding): ProjectsSkinChange {
+  return v.kind === "job" ? { ...v, job: job(v.job) } : v;
+}
 
 export const tauriProjectsSkin: ProjectsSkinApi = {
-  async overview() {
-    return { shown: false, service: null, link: null };
-  },
-  state: async () => missing(),
-  defaultLook: async () => missing(),
+  overview: () => ok(commands.projectsSkinOverview()),
+  state: async (accountId) => view(await ok(commands.projectsSkinState(accountId))),
+  defaultLook: (accountId) => ok(commands.projectsSkinDefault(accountId)),
   async pickFile() {
     const chosen = await open({
       multiple: false,
@@ -59,12 +94,19 @@ export const tauriProjectsSkin: ProjectsSkinApi = {
     });
     return typeof chosen === "string" ? chosen : null;
   },
-  readFile: async () => missing(),
-  lookup: async () => missing(),
-  save: async () => missing(),
-  cancel: async () => missing(),
-  link: async () => missing(),
-  unlink: async () => missing(),
-  linkCheck: async () => missing(),
-  onChange: () => () => {},
+  readFile: (path) => ok(commands.projectsSkinPickFile(path)),
+  lookup: (accountId, name) => ok(commands.projectsSkinLookup(accountId, name)),
+  save: async (accountId, save) => outcome(await ok(commands.projectsSkinSave(accountId, save))),
+  cancel: (jobId) => ok(commands.projectsSkinCancel(jobId)),
+  link: async (accountId, pin) => outcome(await ok(commands.projectsLink(accountId, pin))),
+  unlink: async () => outcome(await ok(commands.projectsUnlink())),
+  linkCheck: () => ok(commands.projectsLinkCheck()).then(() => undefined),
+  onChange(listener) {
+    const unlisten = listen<ChangeBinding>("projects-skin-changed", (event) =>
+      listener(change(event.payload)),
+    );
+    return () => {
+      void unlisten.then((fn) => fn());
+    };
+  },
 };

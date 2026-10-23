@@ -251,6 +251,11 @@ pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
         snapshot.config.features.teams,
         snapshot.config.features.chat,
     );
+    crate::commands::projects_skin::apply_flag(
+        &state.projects_skin,
+        snapshot.config.features.friends,
+        snapshot.config.features.skins,
+    );
     crate::host::apply_flag(
         state,
         snapshot.config.features.friends,

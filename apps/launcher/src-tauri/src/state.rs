@@ -99,6 +99,9 @@ pub struct AppState {
     pub content_refreshing: AtomicBool,
     /// The optional friends feature (off until the signed config turns it on).
     pub social: pl_social::SocialService,
+    /// SKIN1: Projects skins of username accounts and the game account link
+    /// (`commands::projects_skin`).
+    pub projects_skin: pl_social::ProjectsSkins,
     /// The in-game overlay: its choices and the running game's bridge (`crate::overlay`).
     pub overlay: pl_overlay::Overlay,
     /// "Dünyanı arkadaşlarına aç" (HOST1, `crate::host`): off until the signed config and the
@@ -187,6 +190,8 @@ impl AppState {
             &root,
             overlay.clone(),
         );
+        let projects_skin =
+            crate::commands::projects_skin::create(app, &social, &http, &root, handle.clone());
         let worlds = crate::host::create(app, &root, version, social.clone(), overlay.clone());
 
         // AFK accounts (Projects Console Client sessions). Events go straight to the UI (and
@@ -240,6 +245,7 @@ impl AppState {
             login_cancel: Mutex::new(None),
             content_refreshing: AtomicBool::new(false),
             social,
+            projects_skin,
             overlay,
             worlds,
             feed,

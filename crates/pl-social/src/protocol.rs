@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Deserializer, Serialize};
 
+use crate::minecraft::McMessage;
 use crate::model::{
     ChatCaps, ChatDeletion, ChatMessage, ChatReacted, ChatStatus, CrewBadge, CrewMute,
     FriendGroups, JoinRequest, LastSeen, LinkCard, ModNotice, PublicProfile, Reaction, ReadMark,
@@ -12,15 +13,18 @@ use crate::model::{
 
 /// What this launcher understands on the presence socket (`GET /v1/presence?caps=…`): crew calls
 /// that carry their server and may end with `server` (`callServer`), several crews (`crews`),
-/// crew plans (`plans`, TEAM5) and crew tag changes (`badges`, TEAM6). Older services ignore the
-/// query, and names they do not know.
-pub const PRESENCE_CAPS: &str = "callServer,crews,plans,badges";
+/// crew plans (`plans`, TEAM5), crew tag changes (`badges`, TEAM6) and SKIN1's game account link
+/// and Projects skin news (`mc`). Older services ignore the query, and names they do not know.
+pub const PRESENCE_CAPS: &str = "callServer,crews,plans,badges,mc";
 
 /// Crew plans (TEAM5): the capability the service names in `hello.caps` when it took it.
 pub const PLANS_CAP: &str = "plans";
 
 /// Crew tag changes (TEAM6): `badge` messages flow only when the service named it in `hello.caps`.
 pub const BADGES_CAP: &str = "badges";
+
+/// SKIN1: `mc` messages (a job closed, the link changed elsewhere, staff reset the skin).
+pub const MC_CAP: &str = "mc";
 
 /// Crew chat and direct messages (CHAT1): asked for only while the signed content allows chat.
 pub const CHAT_CAP: &str = "chat";
@@ -771,6 +775,9 @@ pub(crate) enum ServerMessage {
     WorldState {
         worlds: crate::world::WorldsStatus,
     },
+    /// SKIN1 (with `mc` in the capabilities): a job of the player's closed, or ProBot reported a
+    /// link change or a staff reset of the Projects skin.
+    Mc(Box<McMessage>),
     Ack {
         #[serde(default)]
         rid: Option<u32>,
@@ -1160,10 +1167,10 @@ mod tests {
 
     #[test]
     fn chat_frames_both_ways() {
-        assert_eq!(presence_caps(false), "callServer,crews,plans,badges");
+        assert_eq!(presence_caps(false), "callServer,crews,plans,badges,mc");
         assert_eq!(
             presence_caps(true),
-            "callServer,crews,plans,badges,chat,replies,stickers,reactions,typing,reads"
+            "callServer,crews,plans,badges,mc,chat,replies,stickers,reactions,typing,reads"
         );
         let json = |message: &ClientMessage| serde_json::to_string(message).unwrap();
         assert_eq!(

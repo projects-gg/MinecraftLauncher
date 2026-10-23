@@ -145,6 +145,14 @@ function Editor({
     }
   }, []);
 
+  // A job in line this panel did not send (sent before it opened, from a toast's "Geri al" or
+  // from another launcher) is followed the same way: the toast leaves its failure to the open
+  // panel.
+  const openJobId = view.job?.id ?? null;
+  useEffect(() => {
+    if (openJobId && openJobId !== sentJob) setSentJob(openJobId);
+  }, [openJobId, sentJob]);
+
   // The job this panel sent: its end clears the pick (saved) or says why (failed).
   useEffect(() => {
     if (!sentJob || view.job?.id === sentJob) return;

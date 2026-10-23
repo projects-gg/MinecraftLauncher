@@ -8,6 +8,9 @@ license.workspace = true
 publish = false
 
 [dependencies]
+# SKIN1: skin pictures (checking and re-encoding a skin file, the preview), a premium player's
+# signed skin from Mojang, the arm model type and the default skins of username accounts.
+pl-auth = { workspace = true }
 tokio = { workspace = true }
 futures = { workspace = true }
 reqwest = { workspace = true }

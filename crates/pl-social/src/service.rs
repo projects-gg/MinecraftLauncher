@@ -35,6 +35,7 @@ use crate::error::{ErrorCode, Result, SocialError};
 use crate::game::{self, GameActivity};
 use crate::history::{Change, Conversation, Entry, History, crew_conversation};
 use crate::links::{find_links, first_link};
+use crate::minecraft::{McSignal, McSink};
 use crate::model::{
     ChatBody, ChatExtras, ChatMessage, ChatStatus, CrewMuteEdit, EditFeatures, FIRST_EMBLEMS,
     FriendGroup, FriendGroups, JoinMode, JoinOutcome, LimitedKey, LinkRule, MAX_FRIEND_GROUPS,
@@ -45,7 +46,7 @@ use crate::model::{
     TEAM_FEATURE_ROLES, TeamEdit, TeamLook, TeamLookup, TeamNotificationsEdit, TeamRole,
 };
 use crate::presence::{ChatSetup, PresenceControl, PresenceEvent, PresenceOptions, StopReason};
-use crate::protocol::{CallAnswer, LocalStatus, PlanAnswer};
+use crate::protocol::{CallAnswer, LocalStatus, PlanAnswer, is_projects_host};
 use crate::qr::{QrPath, qr_path};
 use crate::state::{Connection, SocialState};
 use crate::stickers;
@@ -123,6 +124,8 @@ struct Inner {
     cards_turn: tokio::sync::Mutex<()>,
     /// World sessions (HOST1): who hears them, what the connection took.
     worlds: crate::world::WorldsHub,
+    /// SKIN1's listener for `mc` messages and reconnects (`crate::minecraft`).
+    mc: Mutex<Option<McSink>>,
 }
 
 /// When a conversation's read mark last went, and the newest one waiting for its time (CHAT2).
@@ -235,6 +238,7 @@ impl SocialService {
                 core: Mutex::new(Core::default()),
                 cards_turn: tokio::sync::Mutex::new(()),
                 worlds: crate::world::WorldsHub::default(),
+                mc: Mutex::new(None),
             }),
         }
     }
@@ -479,11 +483,17 @@ impl SocialService {
         let deliver;
         let typing;
         let tag_off;
+        let mc;
         let notices = {
             let mut core = self.lock();
             if core.generation != generation || core.epoch != epoch {
                 return;
             }
+            mc = match &event {
+                PresenceEvent::Mc(message) => Some(McSignal::Message(message.clone())),
+                PresenceEvent::Connected { .. } => Some(McSignal::Connected),
+                _ => None,
+            };
             if matches!(event, PresenceEvent::GroupsChanged(_)) && core.groups_saving {
                 // This device's own save is on its way and wins; its echo arrives after it.
                 return;
@@ -530,6 +540,13 @@ impl SocialService {
             notices.extend(chat.notices);
             notices
         };
+        if let Some(signal) = mc {
+            self.tell_mc(signal);
+            // SKIN1's news change nothing of the friends view.
+            if matches!(event, PresenceEvent::Mc(_)) {
+                return;
+            }
+        }
         if let Some(until) = restricted {
             self.end_restricted(generation, until);
             return;
@@ -3090,6 +3107,56 @@ impl SocialService {
         {
             tracing::info!(%error, "the notes' seen mark waits for the next start");
         }
+    }
+
+    // --- SKIN1 (`crate::minecraft`) ----------------------------------------------------------
+
+    /// SKIN1 hears the socket's `mc` messages and reconnects from now on.
+    pub(crate) fn set_mc_sink(&self, sink: McSink) {
+        *self
+            .inner
+            .mc
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(sink);
+    }
+
+    /// Called without the core's lock: the listener asks the service back.
+    fn tell_mc(&self, signal: McSignal) {
+        let sink = self
+            .inner
+            .mc
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        if let Some(sink) = sink {
+            sink(signal);
+        }
+    }
+
+    /// The signed-in session and its generation (bumped by every sign-out).
+    pub(crate) fn mc_session(&self) -> Option<(Session, u64)> {
+        self.signed_in().ok()
+    }
+
+    /// A `/v1/mc` request found the session ended: as any other request does.
+    pub(crate) fn mc_unauthorized(&self, generation: u64) {
+        self.end_session(generation, false);
+    }
+
+    /// The features of the last friend list (`GET /v1/friends`); None before it came.
+    pub(crate) fn friends_features(&self) -> Option<Vec<String>> {
+        self.lock().state.features().map(<[String]>::to_vec)
+    }
+
+    /// The game this launcher started is on projects.gg right now (what friends see as
+    /// "Projects'te").
+    pub(crate) fn on_projects(&self) -> bool {
+        matches!(&self.lock().activity, LocalStatus::Playing { host: Some(host) } if is_projects_host(host))
+    }
+
+    /// The presence socket is connected (its `mc` messages arrive).
+    pub(crate) fn socket_online(&self) -> bool {
+        self.lock().state.connection() == Connection::Online
     }
 
     // --- the game -------------------------------------------------------------------------

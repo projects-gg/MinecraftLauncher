@@ -41,6 +41,7 @@ use url::Url;
 use crate::auth::SessionToken;
 use crate::backoff::{Backoff, BackoffPolicy, jitter};
 use crate::error::{ErrorCode, Result, SocialError, parse_retry_after};
+use crate::minecraft::McMessage;
 use crate::model::{
     ChatBody, ChatCaps, ChatDeletion, ChatMessage, ChatQuota, ChatReacted, ChatRejection,
     ChatStatus, CrewBadge, CrewMute, FriendGroups, JoinRequest, LimitedKey, LinkCard, LinkRule,
@@ -216,6 +217,9 @@ pub enum PresenceEvent {
     },
     /// A one-time note from moderators.
     Notice(ModNotice),
+    /// SKIN1: a job of the player's closed (`job`), or the link or the Projects skin changed
+    /// elsewhere; `link`, `skin` and `blocked` are what the service knows now.
+    Mc(Box<McMessage>),
     /// A crew call, new or changed: replaces the one with the same id. `quiet`: show it but do
     /// not announce it (your own call, do-not-disturb, or a call that is only new to you).
     Call {
@@ -1760,6 +1764,7 @@ async fn on_text(
         ServerMessage::WorldState { worlds } if state.worlds_on => {
             PresenceEvent::World(WorldEvent::Status(worlds))
         }
+        ServerMessage::Mc(message) => PresenceEvent::Mc(message),
         ServerMessage::Ack {
             rid,
             delivered,
@@ -2101,9 +2106,10 @@ mod tests {
                     .any(|(k, v)| k == "user-agent" && v == "ProjectsLauncher/test")
             );
             // What this launcher understands rides on the address (older services ignore it).
-            assert!(headers.iter().any(
-                |(k, v)| k == ":uri" && v == "/v1/presence?caps=callServer,crews,plans,badges"
-            ));
+            assert!(
+                headers.iter().any(|(k, v)| k == ":uri"
+                    && v == "/v1/presence?caps=callServer,crews,plans,badges,mc")
+            );
         }
         send_json(&mut server, hello()).await;
         match handle.next_event().await.unwrap() {
@@ -2651,7 +2657,8 @@ mod tests {
             seen.lock()
                 .unwrap()
                 .iter()
-                .any(|(k, v)| k == ":uri" && v == "/v1/presence?caps=callServer,crews,plans,badges")
+                .any(|(k, v)| k == ":uri"
+                    && v == "/v1/presence?caps=callServer,crews,plans,badges,mc")
         );
         let mut greeting = hello();
         greeting["caps"] = serde_json::json!(["callServer", "crews", "plans"]);
@@ -2917,7 +2924,7 @@ mod tests {
                 .unwrap()
                 .iter()
                 .any(|(k, v)| k == ":uri"
-                    && v == "/v1/presence?caps=callServer,crews,plans,badges,chat,replies,stickers,reactions,typing,reads"),
+                    && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,chat,replies,stickers,reactions,typing,reads"),
             "chat and its extras are asked for"
         );
         // A service from before CHAT2 takes chat alone.

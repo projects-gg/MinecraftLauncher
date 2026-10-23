@@ -116,6 +116,17 @@ pub struct ModNoticeView {
     pub at: i64,
     /// What it was about (a report reason), when the moderators said.
     pub reason: Option<ReportReason>,
+    /// `skinReset` (SKIN1): staff also keep the player from changing skins (`until` null: for
+    /// good); None: nothing is blocked.
+    pub blocked: Option<SkinBlockView>,
+}
+
+/// How long staff keep the player from changing their Projects skin (SKIN1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct SkinBlockView {
+    /// Unix seconds; null: for good.
+    pub until: Option<i64>,
 }
 
 /// A limited account ("Sınırlı hesap", a new Discord account): until when, and what is limited

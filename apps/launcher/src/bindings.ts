@@ -1171,6 +1171,26 @@ export const commands = {
 	socialReport: (target: ReportTarget, reason: ReportReason, note: string | null, block: boolean) => typedError<null, CmdError>(__TAURI_INVOKE("social_report", { target, reason, note, block })),
 	/**  The launcher showed these moderators' notes. */
 	socialNoticesSeen: (ids: string[]) => typedError<null, CmdError>(__TAURI_INVOKE("social_notices_seen", { ids })),
+	/**  Entry points, the service's switches and the link as last known (from memory). */
+	projectsSkinOverview: () => typedError<ProjectsSkinOverview, CmdError>(__TAURI_INVOKE("projects_skin_overview")),
+	/**  The Görünüm panel's view of a username account: the service read now, this computer's copy. */
+	projectsSkinState: (accountId: string) => typedError<ProjectsSkinView_Serialize, CmdError>(__TAURI_INVOKE("projects_skin_state", { accountId })),
+	/**  What the account looks like on Projects without a Projects skin. */
+	projectsSkinDefault: (accountId: string) => typedError<ProjectsSkinLook, CmdError>(__TAURI_INVOKE("projects_skin_default", { accountId })),
+	/**  Reads (at most 1 MiB), checks and re-encodes the skin file the player picked. */
+	projectsSkinPickFile: (path: string) => typedError<ProjectsSkinPick, CmdError>(__TAURI_INVOKE("projects_skin_pick_file", { path })),
+	/**  A premium player's skin by name (Mojang; kept 10 minutes). */
+	projectsSkinLookup: (accountId: string, name: string) => typedError<ProjectsSkinLookup, CmdError>(__TAURI_INVOKE("projects_skin_lookup", { accountId, name })),
+	/**  Saves a picked skin, the default or the one before ("Geri al") as the Projects skin. */
+	projectsSkinSave: (accountId: string, save: ProjectsSkinSave) => typedError<ProjectsSkinOutcome_Serialize, CmdError>(__TAURI_INVOKE("projects_skin_save", { accountId, save })),
+	/**  Cancels a job ProBot has not taken yet; false once it has (`409 job_taken`). */
+	projectsSkinCancel: (jobId: string) => typedError<boolean, CmdError>(__TAURI_INVOKE("projects_skin_cancel", { jobId })),
+	/**  Links the Discord account to the account's name with the code from `/discord eşle`. */
+	projectsLink: (accountId: string, pin: string) => typedError<ProjectsSkinOutcome_Serialize, CmdError>(__TAURI_INVOKE("projects_link", { accountId, pin })),
+	/**  Removes the link (the Projects skin stays). */
+	projectsUnlink: () => typedError<ProjectsSkinOutcome_Serialize, CmdError>(__TAURI_INVOKE("projects_unlink")),
+	/**  Asks ProBot for the link; the answer arrives as `projects-skin-changed`. */
+	projectsLinkCheck: () => typedError<null, CmdError>(__TAURI_INVOKE("projects_link_check")),
 };
 
 /* Types */
@@ -4147,7 +4167,9 @@ export type LimitedKey =
 /**  Stickers a day (CHAT2). */
 "chatStickers" | 
 /**  Reaction changes a day (CHAT2). */
-"chatReactions" | "other";
+"chatReactions" | 
+/**  Changing the Projects skin (SKIN1; linking is fine). */
+"skinChange" | "other";
 
 /**
  *  A limited account ("Sınırlı hesap", a new Discord account): until when, and what is limited
@@ -4609,6 +4631,11 @@ export type ModNoticeView = {
 	at: number,
 	/**  What it was about (a report reason), when the moderators said. */
 	reason: ReportReason | null,
+	/**
+	 *  `skinReset` (SKIN1): staff also keep the player from changing skins (`until` null: for
+	 *  good); None: nothing is blocked.
+	 */
+	blocked: SkinBlockView | null,
 };
 
 /**  Choices from the mod center. */
@@ -4988,7 +5015,12 @@ export type NoticeKind =
 /**  "Topluluk kurallarına aykırı davranış nedeniyle uyarı aldın." */
 "warning" | 
 /**  The profile picture went back to the default. */
-"profileReset" | "other";
+"profileReset" | 
+/**
+ *  Staff in game reset the player's Projects skin (SKIN1), perhaps keeping them from changing
+ *  it for a while ([`ModNotice::until`]).
+ */
+"skinReset" | "other";
 
 /**
  *  The notification choices this computer keeps (Settings → Arkadaşlar and the chat's "Sessize
@@ -5379,6 +5411,333 @@ export type ProjectBriefView = {
 	id: string,
 	title: string,
 	iconUrl: string | null,
+};
+
+/**  The Discord account's link to a game account on Projects. */
+export type ProjectsLink = {
+	state: ProjectsLinkState,
+	/**  The linked game account (the last known one while `unknown`; null for `none`). */
+	name: string | null,
+	at: number | null,
+	/**  When the service last learned it from ProBot; null: never. */
+	checkedAt: number | null,
+};
+
+export type ProjectsLinkState = "linked" | "none" | "unknown";
+
+/**  The Projects skin as last changed from a launcher (or reset by staff). */
+export type ProjectsSkin = {
+	kind: ProjectsSkinKind,
+	variant: SkinVariant,
+	/**  `premium`: the premium player's name as Mojang writes it. */
+	premium: string | null,
+	at: number,
+	by: ProjectsSkinBy,
+	/**  64×64 PNG data URL; null for `default` and when neither a copy nor Mojang has it. */
+	picture: string | null,
+};
+
+/**  Why the panel can do nothing with the service right now. */
+export type ProjectsSkinAccess = 
+/**  Not signed in to friends (Discord). */
+"signedOut" | 
+/**  The service's skin switch is off (or it has no SKIN1). */
+"off" | 
+/**  The service did not answer, or ProBot is away. */
+"unreachable" | 
+/**  The Discord session ended. */
+"session" | "ready";
+
+export type ProjectsSkinBy = "launcher" | "staff";
+
+/**  `projects-skin-changed`: something the panel, the link row or a toast cares about. */
+export type ProjectsSkinChange = ProjectsSkinChange_Serialize | ProjectsSkinChange_Deserialize;
+
+/**  `projects-skin-changed`: something the panel, the link row or a toast cares about. */
+export type ProjectsSkinChange_Deserialize = 
+/**  A job of the player's closed. */
+({ kind: "job"; job: ProjectsSkinJob_Deserialize; 
+/**  The launcher account the job was for (by name), if it is still here. */
+accountId: string | null; 
+/**  "Geri al" can follow an applied skin: the one before is kept and a change is left. */
+undo: boolean; 
+/**  The game this launcher started is on projects.gg right now. */
+onProjects: boolean }) & { name?: never } | 
+/**  The Discord account was linked outside a code typed here (in game, codeless, Discord). */
+({ kind: "linked"; name: string }) & { accountId?: never; job?: never; onProjects?: never; undo?: never } | 
+/**  Anything else (a staff reset, a link removed elsewhere, a refresh): read the state again. */
+({ kind: "state" }) & { accountId?: never; job?: never; name?: never; onProjects?: never; undo?: never };
+
+/**  `projects-skin-changed`: something the panel, the link row or a toast cares about. */
+export type ProjectsSkinChange_Serialize = 
+/**  A job of the player's closed. */
+({ kind: "job"; job: ProjectsSkinJob_Serialize; 
+/**  The launcher account the job was for (by name), if it is still here. */
+accountId: string | null; 
+/**  "Geri al" can follow an applied skin: the one before is kept and a change is left. */
+undo: boolean; 
+/**  The game this launcher started is on projects.gg right now. */
+onProjects: boolean }) & { name?: never } | 
+/**  The Discord account was linked outside a code typed here (in game, codeless, Discord). */
+({ kind: "linked"; name: string }) & { accountId?: never; job?: never; onProjects?: never; undo?: never } | 
+/**  Anything else (a staff reset, a link removed elsewhere, a refresh): read the state again. */
+({ kind: "state" }) & { accountId?: never; job?: never; name?: never; onProjects?: never; undo?: never };
+
+/**  A skin the player picked, checked and ready to save. */
+export type ProjectsSkinChoice = {
+	/**  Handed back to `save`; lives in the backend for this run. Never shown. */
+	id: string,
+	kind: ProjectsSkinChoiceKind,
+	/**  64×64 PNG data URL (a 64×32 file is converted already), the base layer opaque. */
+	picture: string,
+	/**  `png`: the file's name; `premium`: the player's name as Mojang writes it. */
+	name: string,
+	/**  `premium`: from the texture. `png`: classic (the interface guesses from the picture). */
+	variant: SkinVariant,
+	/**  `png`: an old 64×32 skin (no slim arms). */
+	legacy: boolean,
+	/**  `png`: more than 5% of the base layer is see-through. */
+	blackParts: boolean,
+	/**  `premium`: the account's own name. */
+	own: boolean,
+};
+
+export type ProjectsSkinChoiceKind = "png" | "premium";
+
+/**  One job of the player's. */
+export type ProjectsSkinJob = ProjectsSkinJob_Serialize | ProjectsSkinJob_Deserialize;
+
+export type ProjectsSkinJobKind = "link" | "unlink" | "check" | "skin";
+
+export type ProjectsSkinJobState = "pending" | "working" | "queued" | "done" | "failed" | "cancelled";
+
+/**  One job of the player's. */
+export type ProjectsSkinJob_Deserialize = {
+	/**  Never shown. */
+	id: string,
+	kind: ProjectsSkinJobKind,
+	state: ProjectsSkinJobState,
+	/**  The game account it is for (`link` and `skin`). */
+	name: string | null,
+	/**  `skin`: what it saves. */
+	source: ProjectsSkinKind | null,
+	/**  Once closed. */
+	result: ProjectsSkinResult_Deserialize | null,
+	/**
+	 *  `skin` sent from this computer: the skin it saves (64×64 PNG data URL; null for
+	 *  `default`).
+	 */
+	picture: string | null,
+	/**  `skin` sent from this computer: its arm model. */
+	variant: SkinVariant | null,
+	createdAtMs: number,
+	updatedAtMs: number,
+};
+
+/**  One job of the player's. */
+export type ProjectsSkinJob_Serialize = {
+	/**  Never shown. */
+	id: string,
+	kind: ProjectsSkinJobKind,
+	state: ProjectsSkinJobState,
+	/**  The game account it is for (`link` and `skin`). */
+	name: string | null,
+	/**  `skin`: what it saves. */
+	source: ProjectsSkinKind | null,
+	/**  Once closed. */
+	result: ProjectsSkinResult_Serialize | null,
+	/**
+	 *  `skin` sent from this computer: the skin it saves (64×64 PNG data URL; null for
+	 *  `default`).
+	 */
+	picture: string | null,
+	/**  `skin` sent from this computer: its arm model. */
+	variant: SkinVariant | null,
+	createdAtMs: number,
+	updatedAtMs: number,
+};
+
+export type ProjectsSkinKind = "png" | "premium" | "default";
+
+/**  A new Discord account may not change skins until then. */
+export type ProjectsSkinLimited = {
+	until: number,
+};
+
+export type ProjectsSkinLimits = {
+	/**  Skin changes a day (Studio, 1–10). */
+	perDay: number,
+	/**  Changes left today (Turkey days; only `applied` counts). */
+	left: number,
+	/**  When today's changes come back. */
+	resetAt: number,
+	/**  Link tries left (the lower of this hour's and today's). */
+	linkTriesLeft: number,
+	/**  After the service turned a link try away as too many: when tries open again. */
+	linkRetryAt: number | null,
+};
+
+/**  What an account looks like on Projects without a Projects skin. */
+export type ProjectsSkinLook = {
+	picture: string,
+	variant: SkinVariant,
+	/**  A premium account of the same name lends its skin (else Minecraft's default skin). */
+	premium: boolean,
+};
+
+/**  A premium player's skin, or why not. */
+export type ProjectsSkinLookup = { status: "found"; choice: ProjectsSkinChoice } | 
+/**  "Bu adda bir Minecraft hesabı yok." */
+{ status: "noAccount" } | 
+/**  The player wears Minecraft's default skin: nothing to keep. */
+{ status: "noSkin" } | 
+/**  Mojang did not answer (asked again after 10 minutes at the earliest). */
+{ status: "unreachable" };
+
+/**  `save`, `link`, `unlink`: a job on its way, or a refusal. */
+export type ProjectsSkinOutcome = ProjectsSkinOutcome_Serialize | ProjectsSkinOutcome_Deserialize;
+
+/**  `save`, `link`, `unlink`: a job on its way, or a refusal. */
+export type ProjectsSkinOutcome_Deserialize = ({ status: "sent"; job: ProjectsSkinJob_Deserialize }) & { refusal?: never } | ({ status: "refused"; refusal: ProjectsSkinRefusal_Deserialize }) & { job?: never };
+
+/**  `save`, `link`, `unlink`: a job on its way, or a refusal. */
+export type ProjectsSkinOutcome_Serialize = ({ status: "sent"; job: ProjectsSkinJob_Serialize }) & { refusal?: never } | ({ status: "refused"; refusal: ProjectsSkinRefusal_Serialize }) & { job?: never };
+
+/**  What the launcher offers at all. Answered from memory, never waiting for the network. */
+export type ProjectsSkinOverview = {
+	/**  The signed content has `features.friends` and `features.skins`: the entry points show. */
+	shown: boolean,
+	/**  Null while unknown (signed out, or nothing heard yet). */
+	service: ProjectsSkinService | null,
+	/**  Null while signed out or never learned. */
+	link: ProjectsLink | null,
+};
+
+/**  A skin file as a skin, or why not. */
+export type ProjectsSkinPick = { status: "ready"; choice: ProjectsSkinChoice } | { status: "refused"; reason: ProjectsSkinPickRefusal };
+
+export type ProjectsSkinPickRefusal = "notPng" | "dimensions" | "tooBig" | "empty" | "unreadable";
+
+export type ProjectsSkinRefusal = ProjectsSkinRefusal_Serialize | ProjectsSkinRefusal_Deserialize;
+
+/**  Why the service (or this launcher) turned a request away before any job. */
+export type ProjectsSkinRefusalCode = "off" | "unreachable" | "session" | "limited" | "blocked" | "restricted" | "pending" | "notLinked" | "otherAccount" | "alreadyLinked" | "quota" | "tries" | "invalidPin" | "invalidSkin" | "choiceGone";
+
+export type ProjectsSkinRefusal_Deserialize = {
+	code: ProjectsSkinRefusalCode,
+	/**  `limited`, `blocked`: until when (null: for good). */
+	until?: number | null,
+	/**  `otherAccount`, `alreadyLinked`: the linked game account. */
+	name?: string | null,
+	/**  `tries`, `quota`, `unreachable`: seconds until trying again may work. */
+	retryAfter?: number | null,
+};
+
+export type ProjectsSkinRefusal_Serialize = {
+	code: ProjectsSkinRefusalCode,
+	/**  `limited`, `blocked`: until when (null: for good). */
+	until?: number | null,
+	/**  `otherAccount`, `alreadyLinked`: the linked game account. */
+	name?: string | null,
+	/**  `tries`, `quota`, `unreachable`: seconds until trying again may work. */
+	retryAfter?: number | null,
+};
+
+export type ProjectsSkinResult = ProjectsSkinResult_Serialize | ProjectsSkinResult_Deserialize;
+
+/**  How a job ended: the service's codes in camelCase; one this version does not know is `error`. */
+export type ProjectsSkinResultCode = "linked" | "unlinked" | "applied" | "notLinked" | "otherAccount" | "minecraftTaken" | "pinInvalid" | "pinExpired" | "paused" | "skinBlocked" | "premiumInvalid" | "premiumDisabled" | "invalidImage" | "mineskinBusy" | "superseded" | "timeout" | "cancelled" | "error";
+
+export type ProjectsSkinResult_Deserialize = {
+	code: ProjectsSkinResultCode,
+	/**  `otherAccount`: the game account the Discord account is linked to. */
+	name?: string | null,
+	/**  `skinBlocked`: until when (null: for good). */
+	until?: number | null,
+};
+
+export type ProjectsSkinResult_Serialize = {
+	code: ProjectsSkinResultCode,
+	/**  `otherAccount`: the game account the Discord account is linked to. */
+	name?: string | null,
+	/**  `skinBlocked`: until when (null: for good). */
+	until?: number | null,
+};
+
+/**  What `save` sends. */
+export type ProjectsSkinSave = 
+/**  A picked skin; `variant` counts for `png` only (a premium skin keeps its own). */
+{ kind: "choice"; id: string; variant: SkinVariant } | 
+/**  "Varsayılana dön". */
+{ kind: "default" } | 
+/**  "Geri al": the skin before the last change. */
+{ kind: "undo" };
+
+/**  The service's switches as its last answer listed them. */
+export type ProjectsSkinService = {
+	/**  `mcLink`: linking from the launcher. */
+	link: boolean,
+	/**  `skins`: Projects skins. */
+	skins: boolean,
+};
+
+/**  The Görünüm panel's view of one username account. */
+export type ProjectsSkinView = ProjectsSkinView_Serialize | ProjectsSkinView_Deserialize;
+
+/**  The Görünüm panel's view of one username account. */
+export type ProjectsSkinView_Deserialize = {
+	accountId: string,
+	/**  The game account's name. */
+	name: string,
+	access: ProjectsSkinAccess,
+	/**  Lobi did not take ProBot's queue lately: a saved skin waits in line meanwhile. */
+	serverAway: boolean,
+	link: ProjectsLink,
+	/**  Null: no Projects skin set from a launcher for this account (or linked to another). */
+	skin: ProjectsSkin | null,
+	/**  This account's skin job still open. */
+	job: ProjectsSkinJob_Deserialize | null,
+	/**  This account's skin job that closed last (the last day). */
+	lastJob: ProjectsSkinJob_Deserialize | null,
+	/**  The link family's open job. */
+	linkJob: ProjectsSkinJob_Deserialize | null,
+	limits: ProjectsSkinLimits,
+	/**  Staff keep the player from changing skins (`until` null: for good). */
+	blocked: SkinBlockView | null,
+	/**  A new Discord account may not change skins until then. */
+	limited: ProjectsSkinLimited | null,
+	/**  "Geri al" can put back the skin before the last change (kept on this computer). */
+	canUndo: boolean,
+	/**  The game this launcher started is on projects.gg right now. */
+	onProjects: boolean,
+};
+
+/**  The Görünüm panel's view of one username account. */
+export type ProjectsSkinView_Serialize = {
+	accountId: string,
+	/**  The game account's name. */
+	name: string,
+	access: ProjectsSkinAccess,
+	/**  Lobi did not take ProBot's queue lately: a saved skin waits in line meanwhile. */
+	serverAway: boolean,
+	link: ProjectsLink,
+	/**  Null: no Projects skin set from a launcher for this account (or linked to another). */
+	skin: ProjectsSkin | null,
+	/**  This account's skin job still open. */
+	job: ProjectsSkinJob_Serialize | null,
+	/**  This account's skin job that closed last (the last day). */
+	lastJob: ProjectsSkinJob_Serialize | null,
+	/**  The link family's open job. */
+	linkJob: ProjectsSkinJob_Serialize | null,
+	limits: ProjectsSkinLimits,
+	/**  Staff keep the player from changing skins (`until` null: for good). */
+	blocked: SkinBlockView | null,
+	/**  A new Discord account may not change skins until then. */
+	limited: ProjectsSkinLimited | null,
+	/**  "Geri al" can put back the skin before the last change (kept on this computer). */
+	canUndo: boolean,
+	/**  The game this launcher started is on projects.gg right now. */
+	onProjects: boolean,
 };
 
 /**
@@ -5996,6 +6355,12 @@ export type SignInFailure =
 "restricted" | 
 /**  No new accounts are made right now; this Discord account has none yet. */
 "signupsClosed";
+
+/**  How long staff keep the player from changing their Projects skin (SKIN1). */
+export type SkinBlockView = {
+	/**  Unix seconds; null: for good. */
+	until: number | null,
+};
 
 /**  A skin PNG the player picked or dropped, checked and ready for the preview. */
 export type SkinFilePreview = {
