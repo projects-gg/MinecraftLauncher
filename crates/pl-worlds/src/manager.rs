@@ -242,12 +242,21 @@ struct Hosting {
     from_launcher: bool,
     cancel: Option<oneshot::Sender<()>>,
     session: Option<SessionId>,
-    publish: Option<(String, oneshot::Sender<Result<(u16, i32), String>>)>,
+    publish: Option<PublishWait>,
     live: Option<HostSession>,
     /// Why the next `host-remove` for a friend goes (`removed`, `blocked`, `restricted`).
     removing: HashMap<String, &'static str>,
     /// The last `host-state` the mod got.
     mirrored: Option<serde_json::Value>,
+}
+
+/// Where the mod opened the world (`host-published`): its port and protocol, or why not.
+type Published = Result<(u16, i32), String>;
+
+/// An opening waiting for the mod's `host-published` with this publish id.
+struct PublishWait {
+    id: String,
+    answer: oneshot::Sender<Published>,
 }
 
 struct Invite {
@@ -1461,7 +1470,10 @@ impl Worlds {
             hosting.session = Some(session);
             hosting.max = max;
             hosting.phase = Phase::Opening(WorldOpeningStep::Publishing, None);
-            hosting.publish = Some((publish_id.clone(), published_tx));
+            hosting.publish = Some(PublishWait {
+                id: publish_id.clone(),
+                answer: published_tx,
+            });
         }
         self.changed();
         self.inner.bridge.send(vec![ToGame::HostPublish {
@@ -1789,13 +1801,13 @@ impl Worlds {
                 let waiter = {
                     let mut st = self.state();
                     st.hosting.as_mut().and_then(|h| {
-                        let ours = h.publish.as_ref().is_some_and(|(wanted, _)| *wanted == id);
+                        let ours = h.publish.as_ref().is_some_and(|wait| wait.id == id);
                         if ours { h.publish.take() } else { None }
                     })
                 };
                 match waiter {
-                    Some((_, tx)) => {
-                        let _ = tx.send(if ok && port != 0 {
+                    Some(wait) => {
+                        let _ = wait.answer.send(if ok && port != 0 {
                             Ok((port, proto))
                         } else {
                             Err(reason)

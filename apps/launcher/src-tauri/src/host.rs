@@ -445,10 +445,10 @@ async fn add_mods(
                         total_bytes,
                         ..
                     } = p
-                        && total_bytes > 0
+                        && let Some(percent) =
+                            done_bytes.saturating_mul(100).checked_div(total_bytes)
                     {
-                        let percent = (done_bytes.saturating_mul(100) / total_bytes).min(99);
-                        report(u8::try_from(percent).unwrap_or(99));
+                        report(u8::try_from(percent.min(99)).unwrap_or(99));
                     }
                 })),
             },
@@ -553,9 +553,8 @@ impl Launcher for AppLauncher {
             let world = game_dir.join("saves").join(&folder);
             let dest = pl_mc::gamefiles::default_backup_path(&game_dir, &folder);
             let report: pl_mc::gamefiles::BackupProgressFn = Arc::new(move |p| {
-                if p.bytes_total > 0 {
-                    let percent = (p.bytes_done.saturating_mul(100) / p.bytes_total).min(100);
-                    progress(u8::try_from(percent).unwrap_or(100));
+                if let Some(percent) = p.bytes_done.saturating_mul(100).checked_div(p.bytes_total) {
+                    progress(u8::try_from(percent.min(100)).unwrap_or(100));
                 }
             });
             match pl_mc::gamefiles::backup_world(
@@ -587,9 +586,7 @@ impl Launcher for AppLauncher {
     fn use_account(&self, account_id: &str) -> BoxFuture<'_, Option<Account>> {
         let id = uuid::Uuid::parse_str(account_id).ok();
         Box::pin(async move {
-            let state = self.state();
-            state.auth.set_active(id?).ok()?;
-            drop(state);
+            self.state().auth.set_active(id?).ok()?;
             self.account()
         })
     }

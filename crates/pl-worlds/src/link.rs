@@ -119,36 +119,38 @@ impl CredsTable {
     /// usernames each) for the credentials still in use (PROTOCOL.md §3.3).
     pub fn held_frames(&self) -> Vec<WorldFrame> {
         let held = lock(&self.held);
-        let mut groups: Vec<(String, WorldRole, Option<String>, Vec<Hidden<String>>)> = Vec::new();
+        let mut frames: Vec<WorldFrame> = Vec::new();
         let mut ids: Vec<&u64> = held.keys().collect();
         ids.sort();
         for id in ids {
             let entry = &held[id];
             let username = Hidden(entry.ice.username.expose().clone());
-            match groups.iter_mut().find(|(session, role, host, names)| {
-                *session == entry.session
+            let open = frames.iter_mut().find_map(|frame| match frame {
+                WorldFrame::TurnHeld {
+                    session,
+                    role,
+                    host,
+                    usernames,
+                } if *session == entry.session
                     && *role == entry.role
                     && *host == entry.host
-                    && names.len() < HELD_PER_FRAME
-            }) {
-                Some((_, _, _, names)) => names.push(username),
-                None => groups.push((
-                    entry.session.clone(),
-                    entry.role,
-                    entry.host.clone(),
-                    vec![username],
-                )),
+                    && usernames.len() < HELD_PER_FRAME =>
+                {
+                    Some(usernames)
+                }
+                _ => None,
+            });
+            match open {
+                Some(usernames) => usernames.push(username),
+                None => frames.push(WorldFrame::TurnHeld {
+                    session: entry.session.clone(),
+                    role: entry.role,
+                    host: entry.host.clone(),
+                    usernames: vec![username],
+                }),
             }
         }
-        groups
-            .into_iter()
-            .map(|(session, role, host, usernames)| WorldFrame::TurnHeld {
-                session,
-                role,
-                host,
-                usernames,
-            })
-            .collect()
+        frames
     }
 
     /// Gives back the credentials and closes what was made with them: allocations first, then
