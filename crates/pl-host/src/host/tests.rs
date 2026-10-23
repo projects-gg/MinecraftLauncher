@@ -533,6 +533,15 @@ async fn a_dead_path_moves_the_game_to_the_other_one() {
         unreachable!()
     };
     assert_eq!((from, to, ok), (PathKind::Turn, PathKind::E4mc, true));
+    // Off TURN, the guest's credentials go.
+    let side = guest.side.clone();
+    eventually(move || {
+        side.log
+            .lock()
+            .unwrap()
+            .contains(&"turn_release/100".to_owned())
+    })
+    .await;
     drop(first);
 }
 
@@ -929,9 +938,28 @@ async fn the_service_moves_a_guest_off_turn() {
         )
     );
     exchange(&mut game, &mut conn, 30_000, 4).await;
+    // The credentials go once the control stream followed the game to e4mc.
+    let side = guest.side.clone();
+    eventually(move || {
+        side.log
+            .lock()
+            .unwrap()
+            .contains(&"turn_release/100".to_owned())
+    })
+    .await;
     let log = guest.side.log.lock().unwrap().clone();
     assert!(log.contains(&"world_peer/e4mc".to_owned()), "{log:?}");
-    assert!(log.contains(&"turn_release/100".to_owned()), "{log:?}");
+}
+
+/// Waits (in the paused clock) until `done` holds.
+async fn eventually(done: impl Fn() -> bool) {
+    for _ in 0..1_000 {
+        if done() {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the condition never held");
 }
 
 #[tokio::test(start_paused = true)]
@@ -1089,4 +1117,41 @@ async fn the_hosts_report_counts_guests_and_moves() {
     assert_eq!((guests, moves), (1, 1));
     assert!(turn_rx > 0 && e4mc_rx > 0, "{turn_rx} {e4mc_rx}");
     next_host_event(&mut world, |e| matches!(e, HostEvent::Closed)).await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_refused_renewal_moves_the_guests_to_e4mc() {
+    let mut world =
+        open_world_with(&[PathKind::Turn], 7, Duration::from_secs(25 * 60), |_| {}).await;
+    let mut guest = join_world(&world, FRIEND_A, "Notch", &[PathKind::Turn, PathKind::E4mc]).await;
+    let (mut game, bytes) = connect_game(&guest, 9999).await;
+    let (mut conn, _) = world_accepts(&mut world).await;
+    let mut kept = vec![0u8; bytes.len()];
+    conn.read_exact(&mut kept).await.unwrap();
+    // The budget refuses the renewal.
+    world.side.turn_ok.store(false, Ordering::SeqCst);
+    for round in 0..6u8 {
+        tokio::time::sleep(Duration::from_secs(60)).await;
+        exchange(&mut game, &mut conn, 10_000, round).await;
+    }
+    let moved = next_guest_event(&mut guest, |e| {
+        matches!(e, GuestEvent::Report(Event::Move { .. }))
+    })
+    .await;
+    let GuestEvent::Report(Event::Move { from, to, ok, .. }) = moved else {
+        unreachable!()
+    };
+    assert_eq!((from, to, ok), (PathKind::Turn, PathKind::E4mc, true));
+    assert!(world.session.paths().has(PathKind::E4mc));
+    assert!(!world.session.paths().has(PathKind::Turn));
+    tokio::time::sleep(Duration::from_secs(31)).await;
+    assert!(
+        world
+            .side
+            .log
+            .lock()
+            .unwrap()
+            .contains(&"turn_release/1".to_owned())
+    );
+    exchange(&mut game, &mut conn, 10_000, 9).await;
 }

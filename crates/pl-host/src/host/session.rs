@@ -985,71 +985,75 @@ impl Inner {
     /// TURN credential renewal (§5.5): a new allocation, the guests moved to it, the old one
     /// retired. Refused: the guests move to e4mc.
     async fn renew(self: &Arc<Self>, id: u64) {
-        let in_use = {
-            let mut st = self.state();
-            st.renewing = true;
-            path_in_use(&st, id)
-        };
+        let renewed = self.renew_allocation(id).await;
+        if !renewed {
+            // `move_off` opens e4mc itself, so the opening lock is not held here.
+            self.move_off(PathKind::Turn, PathKind::E4mc, MoveWhy::Renew)
+                .await;
+        }
+        self.state().renewing = false;
+    }
+
+    /// The renewal's first part, one path opening at a time: `true` when the guests were sent to
+    /// a new allocation or none was needed.
+    async fn renew_allocation(self: &Arc<Self>, id: u64) -> bool {
+        // A guest's `world_peer` may be opening a path too.
+        let _one = self.opening.lock().await;
+        let in_use = path_in_use(&self.state(), id);
         if !in_use {
             // A host with no guest on TURN releases instead.
             self.close_path(id).await;
-            self.state().renewing = false;
-            return;
+            return true;
         }
         let report = |event| self.report(event);
         let env: &dyn HostPaths = self.env.as_ref();
-        let renewed = open_path(env, PathKind::Turn, None, CredsReason::Renew, &report).await;
-        match renewed {
-            Some(opened) => {
-                let relays: Vec<SocketAddrV4> = {
-                    let st = self.state();
-                    st.slots
-                        .iter()
-                        .filter(|s| !s.removed)
-                        .flat_map(|s| s.relays.clone())
-                        .collect()
-                };
-                for relay in relays {
-                    let _ = opened.path.admit_peer(relay).await;
-                }
-                {
-                    let mut st = self.state();
-                    if let Some(old) = st.paths.iter_mut().find(|p| p.id == id) {
-                        old.retiring = true;
-                    }
-                }
-                self.add_path(PathKind::Turn, opened);
-                let now = Instant::now();
-                let mut st = self.state();
-                for slot in st.slots.iter_mut().filter(|s| !s.removed) {
-                    let on_old = slot.control.as_ref().is_some_and(|c| c.path == id)
-                        || slot.live_games().any(|g| g.path == id);
-                    if !on_old {
-                        continue;
-                    }
-                    slot.moving = Some(Moving {
-                        from: PathKind::Turn,
-                        to: PathKind::Turn,
-                        why: MoveWhy::Renew,
-                        since: now,
-                    });
-                    if let Some(control) = &slot.control {
-                        push(
-                            &control.tx,
-                            Control::Move {
-                                to: PathKind::Turn,
-                                why: MoveWhy::Renew,
-                            },
-                        );
-                    }
-                }
-            }
-            None => {
-                self.move_off(PathKind::Turn, PathKind::E4mc, MoveWhy::Renew)
-                    .await
+        let Some(opened) = open_path(env, PathKind::Turn, None, CredsReason::Renew, &report).await
+        else {
+            return false;
+        };
+        let relays: Vec<SocketAddrV4> = {
+            let st = self.state();
+            st.slots
+                .iter()
+                .filter(|s| !s.removed)
+                .flat_map(|s| s.relays.clone())
+                .collect()
+        };
+        for relay in relays {
+            let _ = opened.path.admit_peer(relay).await;
+        }
+        {
+            let mut st = self.state();
+            if let Some(old) = st.paths.iter_mut().find(|p| p.id == id) {
+                old.retiring = true;
             }
         }
-        self.state().renewing = false;
+        self.add_path(PathKind::Turn, opened);
+        let now = Instant::now();
+        let mut st = self.state();
+        for slot in st.slots.iter_mut().filter(|s| !s.removed) {
+            let on_old = slot.control.as_ref().is_some_and(|c| c.path == id)
+                || slot.live_games().any(|g| g.path == id);
+            if !on_old {
+                continue;
+            }
+            slot.moving = Some(Moving {
+                from: PathKind::Turn,
+                to: PathKind::Turn,
+                why: MoveWhy::Renew,
+                since: now,
+            });
+            if let Some(control) = &slot.control {
+                push(
+                    &control.tx,
+                    Control::Move {
+                        to: PathKind::Turn,
+                        why: MoveWhy::Renew,
+                    },
+                );
+            }
+        }
+        true
     }
 
     async fn close(self: &Arc<Self>) {
@@ -1143,7 +1147,7 @@ impl Inner {
             }
         }
         let ids: Vec<u64> = st.paths.iter().map(|p| p.id).collect();
-        let renewing = st.renewing;
+        let mut renewing = st.renewing;
         let mut usage = Vec::new();
         for id in ids {
             let in_use = path_in_use(&st, id);
@@ -1181,6 +1185,8 @@ impl Inner {
                 let lead = Duration::from_secs(self.policy.turn.renew_when_left_s);
                 let due = entry.creds_since + creds.ttl.saturating_sub(lead);
                 if now >= due && !renewing {
+                    // One renewal at a time: the flag is set before the job runs.
+                    renewing = true;
                     jobs.push(Job::Renew(id));
                 } else if now < due {
                     soon(due, &mut next);
@@ -1197,6 +1203,7 @@ impl Inner {
                 soon(due, &mut next);
             }
         }
+        st.renewing = renewing;
         drop(st);
         if let Some(event) = announce {
             self.env.event(event);
@@ -1312,8 +1319,9 @@ async fn serve_stream(inner: Arc<Inner>, path_id: u64, kind: PathKind, mut strea
     }
     let keepalive = Keepalive::from_policy(&inner.policy);
     let mut channel = Channel::spawn(stream, cipher, keepalive, Some(inner.rtt.for_kind(kind)));
+    let hello_by = Instant::now() + HELLO_WAIT;
     let hello = loop {
-        match timeout(HELLO_WAIT, channel.recv()).await {
+        match tokio::time::timeout_at(hello_by, channel.recv()).await {
             Ok(Some(In::Control(Ok(Control::Hello(hello))))) => break hello,
             Ok(Some(In::Control(Err(
                 ControlError::UnsupportedHello | ControlError::Malformed(_),

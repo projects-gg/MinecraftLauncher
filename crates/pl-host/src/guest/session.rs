@@ -632,14 +632,18 @@ impl Driver {
                 // The game stream broke too: its resume brings a control stream.
                 return Next::Go;
             }
-            // With a game on the current route the control stream comes back on the same route
+            // With a game on the current route the control stream comes back on that very route
             // (the game's own stream decides when to move); without one, any path will do.
-            let targets = if self.game.is_some() {
-                vec![self.route.kind]
-            } else {
-                self.targets(None)
-            };
-            for kind in targets {
+            if self.game.is_some() {
+                let attempt = self.attempt_deadline(deadline);
+                let route = self.route.clone();
+                if self.new_control(&route, attempt).await.is_some() {
+                    return Next::Go;
+                }
+                sleep_until((Instant::now() + RETRY_PAUSE).min(deadline)).await;
+                continue;
+            }
+            for kind in self.targets(None) {
                 let attempt = self.attempt_deadline(deadline);
                 if let Some(route) = self.route_to(kind, attempt).await
                     && self.new_control(&route, attempt).await.is_some()
@@ -839,6 +843,11 @@ impl Driver {
         self.close_route_usage();
         let old = std::mem::replace(&mut self.route, route);
         tokio::spawn(async move { old.path.close().await });
+        if self.route.kind != PathKind::Turn {
+            // Off TURN: its credentials are not used any more (§5.5).
+            let mut turn = self.turn.take();
+            release(&self.ctx(), &mut turn);
+        }
     }
 
     /// Opens a resume stream on `route` for the game link; on `ok` the link continues on it.
