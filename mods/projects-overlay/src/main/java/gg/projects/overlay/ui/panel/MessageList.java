@@ -199,6 +199,8 @@ public final class MessageList extends PanelWidget {
     /** The floating line's height (0 when none can show) and how much of it shows this frame (0 to 1). */
     private int floatLineH;
     private float floatShown;
+    /** Where the drawn messages end this frame (above the floating line while scrolled up). */
+    private float visibleBottom = Float.MAX_VALUE;
     private boolean reducedMotion;
     private long lastFrame;
     private Component lastNarration = Component.empty();
@@ -769,8 +771,9 @@ public final class MessageList extends PanelWidget {
     private void reveal(int i) {
         Row row = rows.get(i);
         float top = scroll.target();
-        float h = getHeight();
         float margin = FADE + 2;
+        // Clear of the floating line too, while it shows over the scrolled-up list.
+        float h = Math.max(3 * margin, Math.min(getHeight(), visibleBottom - getY()));
         float target = top;
         if (row.y - margin < top) {
             target = row.y - margin;
@@ -894,6 +897,9 @@ public final class MessageList extends PanelWidget {
                 return;
             }
             closeStrip();
+        }
+        if (my >= visibleBottom) {
+            return;
         }
         float cy = my - getY() + scroll.value();
         float right = getX() + getWidth();
@@ -1167,8 +1173,14 @@ public final class MessageList extends PanelWidget {
             return;
         }
         float top = scroll.value();
+        // Scrolled up while the floating line shows ("yazıyor…", a note): the messages end above it, with the
+        // edge's fade, instead of passing under it. The edge rises with the line's own fade, so nothing pops; at
+        // the newest message its room is empty, so nothing changes there.
+        float band = (floatLineH > 0 ? floatShown : 0f) * Math.min(1f, Math.max(0f, (maxScroll() - top) / FADE));
+        float bottom = y0 + h - (band > 0.01f ? band * (floatLineH + 4 + (newBelow ? 18 : 0)) : 0f);
+        visibleBottom = bottom;
         trackPointer(mouseX, mouseY, top);
-        g.enableScissor(x0 - 3, y0, x0 + w + 3, y0 + h);
+        g.enableScissor(x0 - 3, y0, x0 + w + 3, Math.round(bottom));
         float right = x0 + w;
         for (int i = 0; i < rows.size(); i++) {
             Row row = rows.get(i);
@@ -1186,7 +1198,7 @@ public final class MessageList extends PanelWidget {
         // The edges fade into the panel while there is more beyond them (the strength follows the scroll, so
         // nothing pops): no hard cut through a bubble right under the conversation chips.
         float above = Math.min(1f, Math.max(0f, top / FADE));
-        float below = Math.min(1f, Math.max(0f, (maxScroll() - top - floatRoom - 2f) / FADE));
+        float below = Math.max(band, Math.min(1f, Math.max(0f, (maxScroll() - top - floatRoom - 2f) / FADE)));
         if (above > 0.01f) {
             Draw.pushAlpha(above);
             Draw.column(g, ShapeSet.FADE_TOP, x0 - 3, y0, w + 6, FADE);
@@ -1194,17 +1206,7 @@ public final class MessageList extends PanelWidget {
         }
         if (below > 0.01f) {
             Draw.pushAlpha(below);
-            Draw.column(g, ShapeSet.FADE_BOTTOM, x0 - 3, y0 + h - FADE, w + 6, FADE);
-            Draw.popAlpha();
-        }
-        // Scrolled up while the floating line shows: the messages fade out above it (at the newest message
-        // its room is empty, so nothing changes there).
-        float band = (floatLineH > 0 ? floatShown : 0f) * Math.min(1f, Math.max(0f, (maxScroll() - top) / FADE));
-        if (band > 0.01f) {
-            float bandTop = y0 + h - floatLineH - 4 - (newBelow ? 18 : 0);
-            Draw.pushAlpha(band);
-            Draw.fill(g, x0 - 3, bandTop, x0 + w + 3, y0 + h, ShapeSet.PANEL_FILL);
-            Draw.column(g, ShapeSet.FADE_BOTTOM, x0 - 3, bandTop - FADE, w + 6, FADE);
+            Draw.column(g, ShapeSet.FADE_BOTTOM, x0 - 3, bottom - FADE, w + 6, FADE);
             Draw.popAlpha();
         }
         g.disableScissor();
@@ -1236,6 +1238,11 @@ public final class MessageList extends PanelWidget {
         }
         if (stripRow >= 0) {
             hoverQuick = quickAt(mouseX, mouseY);
+        }
+        if (mouseY >= visibleBottom) {
+            // Under the floating line: nothing of the list shows there.
+            updateTooltip(-1, -1);
+            return;
         }
         float cy = mouseY - getY() + top;
         for (int i = 0; i < rows.size(); i++) {
@@ -1509,7 +1516,7 @@ public final class MessageList extends PanelWidget {
             return;
         }
         float y = getY() + row.y + row.bubbleTop - scroll.value() + TOOL_PAD - 1 - TOOL_PAD;
-        if (y < getY() - 2 || y + TOOL + 2 * TOOL_PAD > getY() + getHeight() + 2) {
+        if (y < getY() - 2 || y + TOOL + 2 * TOOL_PAD > Math.min(getY() + getHeight(), visibleBottom) + 2) {
             return;
         }
         float x = toolbarX(row, n);
