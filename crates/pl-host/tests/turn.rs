@@ -116,6 +116,8 @@ async fn quic_between_allocations(kind: &str, code: &str) {
     } = pair(&server, &config, &[kind], &[kind]).await;
     assert_eq!(host.attempt_code(), code);
     assert_eq!(guest.attempt_code(), code);
+    assert_eq!(host.tcp_only(), code == "turn_tcp_only");
+    assert_eq!(guest.tcp_only(), code == "turn_tcp_only");
     assert_eq!(
         host.address(),
         PathAddress::Turn {

@@ -624,6 +624,11 @@ impl TurnHostPath {
         attempt_code(&self.inner.allocation)
     }
 
+    /// Whether the allocation went over TCP or TLS.
+    pub fn tcp_only(&self) -> bool {
+        self.inner.allocation.shared().proto().is_stream()
+    }
+
     /// A path on a new allocation made with fresh credentials, the same identity (so the pin stays)
     /// and every guest admitted here admitted there first (PROTOCOL.md §5.5, §6.7).
     pub async fn renew(&self, ice: &IceServers) -> Result<TurnHostPath, PathError> {
@@ -768,6 +773,11 @@ impl TurnGuest {
     /// `ok`, or `turn_tcp_only` when the allocation went over TCP or TLS (PROTOCOL.md §12.2).
     pub fn attempt_code(&self) -> &'static str {
         attempt_code(&self.node.allocation)
+    }
+
+    /// Whether the allocation went over TCP or TLS.
+    pub fn tcp_only(&self) -> bool {
+        self.node.allocation.shared().proto().is_stream()
     }
 
     /// Permits the host's relay address and connects to it, accepting only the certificate whose
