@@ -3,6 +3,11 @@
 pub mod e4mc;
 pub mod turn;
 
+// HOST1-R2 (additive): what both paths share. `net` is public for its configuration types.
+mod mc;
+pub mod net;
+mod quic;
+
 use std::borrow::Cow;
 use std::future::Future;
 use std::net::SocketAddrV4;
