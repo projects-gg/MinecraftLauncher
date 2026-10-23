@@ -625,6 +625,7 @@ mod tests {
             body: "Akşam bedwars?".into(),
             conv: Some("d:1:2".into()),
             crew: None,
+            sticker: None,
         });
         h.control
             .send(Control::Send {
@@ -846,6 +847,7 @@ mod tests {
                     mine: false,
                     edited: false,
                     deleted: false,
+                    ..crate::protocol::MsgView::default()
                 };
                 1
             ],

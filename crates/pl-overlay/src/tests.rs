@@ -14,7 +14,7 @@ use tokio::net::TcpStream;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::time::timeout;
 
-use crate::feed::tests::{message, view};
+use crate::feed::tests::{chat2_view, message, view};
 use crate::protocol::ByeReason;
 use crate::{Endpoint, Overlay, OverlayConfig, OverlayStatus, PORT_ARG, SocialActions, TOKEN_ARG};
 
@@ -23,11 +23,17 @@ const WAIT: Duration = Duration::from_secs(5);
 #[derive(Default)]
 struct Calls {
     sent: Vec<(String, String)>,
+    replies: Vec<(String, String, i64)>,
+    stickers: Vec<(String, String, Option<i64>)>,
     discarded: Vec<String>,
     read: Vec<String>,
+    typing: Vec<String>,
+    reacts: Vec<(String, i64, String, bool)>,
+    unfurls: Vec<(String, String)>,
     dismissed: Vec<String>,
     answers: Vec<(String, SocialAnswer)>,
     refuse: Option<SocialError>,
+    refuse_reaction: Option<SocialError>,
 }
 
 /// The friends feature as the overlay uses it, recording what it was asked.
@@ -56,11 +62,15 @@ impl SocialActions for FakeSocial {
     }
 
     fn chat_page(&self, conv: &str) -> ChatPage {
+        let mut linked = message("i:3", "f-ayse", false, MessageState::Sent);
+        linked.text = "bak https://youtu.be/dQw4w9WgXcQ".into();
+        linked.at = now_ms();
         ChatPage {
             conv: conv.to_owned(),
             messages: vec![
                 message("i:1", "f-ayse", false, MessageState::Sent),
                 message("i:2", "me", true, MessageState::Sent),
+                linked,
             ],
             more: false,
         }
@@ -75,12 +85,60 @@ impl SocialActions for FakeSocial {
         Ok(format!("n:k{}", calls.sent.len()))
     }
 
+    fn chat_reply(&self, conv: &str, text: &str, reply: i64) -> pl_social::Result<String> {
+        let mut calls = self.calls();
+        calls
+            .replies
+            .push((conv.to_owned(), text.to_owned(), reply));
+        Ok(format!("n:r{}", calls.replies.len()))
+    }
+
+    fn chat_sticker(
+        &self,
+        conv: &str,
+        sticker: &str,
+        reply: Option<i64>,
+    ) -> pl_social::Result<String> {
+        let mut calls = self.calls();
+        calls
+            .stickers
+            .push((conv.to_owned(), sticker.to_owned(), reply));
+        Ok(format!("n:s{}", calls.stickers.len()))
+    }
+
     fn chat_discard(&self, key: &str) {
         self.calls().discarded.push(key.to_owned());
     }
 
     fn chat_read(&self, conv: &str) {
         self.calls().read.push(conv.to_owned());
+    }
+
+    fn chat_typing(&self, conv: &str) {
+        self.calls().typing.push(conv.to_owned());
+    }
+
+    fn chat_react(
+        &self,
+        conv: &str,
+        id: i64,
+        emoji: &str,
+        on: bool,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let mut calls = self.calls();
+        calls
+            .reacts
+            .push((conv.to_owned(), id, emoji.to_owned(), on));
+        std::future::ready(calls.refuse_reaction.take().map_or(Ok(()), Err))
+    }
+
+    fn chat_unfurl(
+        &self,
+        conv: &str,
+        key: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        self.calls().unfurls.push((conv.to_owned(), key.to_owned()));
+        std::future::ready(Ok(()))
     }
 
     fn dismiss_invite(&self, id: &str) {
@@ -476,5 +534,179 @@ async fn without_a_game_nothing_listens_and_a_new_start_replaces_the_old_session
         .await;
     assert!(!overlay.active());
     // Stopping again is harmless.
+    overlay.stop(ByeReason::LauncherExit).await;
+}
+
+fn now_ms() -> i64 {
+    i64::try_from(
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis(),
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn chat2_from_the_panel_and_to_it() {
+    let social = FakeSocial::new(chat2_view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+    let mut game = MockMod::connect_with(&endpoint, &["connect", "chat2"]).await;
+    let welcome = game.next_of("welcome").await;
+    assert_eq!(
+        welcome["features"],
+        serde_json::json!([
+            "friends",
+            "chat",
+            "calls",
+            "replies",
+            "reactions",
+            "stickers",
+            "typing",
+            "reads",
+            "links"
+        ])
+    );
+    let snapshot = game.next_of("snapshot").await;
+    assert_eq!(snapshot["convs"][0]["seen"], 5);
+
+    // "Yazıyor…" reaches the game only while the panel is open.
+    let typing = || {
+        SocialUpdate::Typing(pl_social::ChatTypingView {
+            conv: "d:f-ayse:me".into(),
+            by: "f-ayse".into(),
+        })
+    };
+    overlay.on_social(typing());
+    game.send(serde_json::json!({"t":"open-conv","conv":"d:f-ayse:me"}))
+        .await;
+    let history = game.next_of("history").await;
+    assert_eq!(
+        history["msgs"][2]["links"][0]["url"],
+        "https://youtu.be/dQw4w9WgXcQ"
+    );
+    assert_eq!(history["msgs"][2]["sid"], 3);
+    // Opening it asks for the card of the link on screen, once.
+    eventually("the card was asked for", || {
+        social.calls().unfurls == [("d:f-ayse:me".to_owned(), "i:3".to_owned())]
+    })
+    .await;
+    overlay.on_social(typing());
+    let frame = game.next_of("typing").await;
+    assert_eq!(
+        frame,
+        serde_json::json!({"t":"typing","conv":"d:f-ayse:me","by":"f-ayse","name":"Ayşe"})
+    );
+    // The player writes: passed on, a burst only once.
+    game.send(serde_json::json!({"t":"typing","conv":"d:f-ayse:me"}))
+        .await;
+    game.send(serde_json::json!({"t":"typing","conv":"d:f-ayse:me"}))
+        .await;
+    eventually("typing passed on", || !social.calls().typing.is_empty()).await;
+
+    // A sticker as a reply, and a reply in words.
+    game.send(serde_json::json!({
+        "t":"send","cid":"s1","conv":"d:f-ayse:me","sticker":"pl1/gg","reply":3
+    }))
+    .await;
+    game.send(serde_json::json!({
+        "t":"send","cid":"r1","conv":"d:f-ayse:me","text":"tamam","reply":3
+    }))
+    .await;
+    eventually("both went", || {
+        social.calls().stickers.len() == 1 && social.calls().replies.len() == 1
+    })
+    .await;
+    assert_eq!(
+        social.calls().stickers[0],
+        ("d:f-ayse:me".to_owned(), "pl1/gg".to_owned(), Some(3))
+    );
+    assert_eq!(
+        social.calls().replies[0],
+        ("d:f-ayse:me".to_owned(), "tamam".to_owned(), 3)
+    );
+    assert_eq!(social.calls().typing.len(), 1);
+    // A made-up sticker never reaches the friends feature.
+    game.send(serde_json::json!({"t":"send","cid":"s2","conv":"d:f-ayse:me","sticker":"../x"}))
+        .await;
+    assert_eq!(
+        game.next_of("send-failed").await,
+        serde_json::json!({"t":"send-failed","cid":"s2","reason":"feature-off"})
+    );
+
+    // A reaction goes; a refused one comes back to the panel.
+    game.send(serde_json::json!({"t":"react","conv":"d:f-ayse:me","sid":1,"e":"👍","on":true}))
+        .await;
+    eventually("the reaction went", || social.calls().reacts.len() == 1).await;
+    social.calls().refuse_reaction = Some(SocialError::Refused {
+        status: 409,
+        code: pl_social::ErrorCode::ChatReactionsFull,
+        message: String::new(),
+        detail: Some("mine".into()),
+    });
+    game.send(serde_json::json!({"t":"react","conv":"d:f-ayse:me","sid":1,"e":"😂","on":true}))
+        .await;
+    assert_eq!(
+        game.next_of("react-failed").await,
+        serde_json::json!({
+            "t":"react-failed","conv":"d:f-ayse:me","sid":1,"e":"😂","reason":"full"
+        })
+    );
+
+    // The panel closes: no more "yazıyor…".
+    game.send(serde_json::json!({"t":"panel","open":false}))
+        .await;
+    // The panel's frame and the launcher's next update race: let the frame land first.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    overlay.on_social(typing());
+    overlay.on_social(SocialUpdate::Notice(SocialNotice::ChatMessage {
+        conv: "d:f-ayse:me".into(),
+        message: Box::new({
+            let mut sticker = message("i:20", "f-ayse", false, MessageState::Sent);
+            sticker.text = String::new();
+            sticker.sticker = Some("pl1/hi".into());
+            sticker
+        }),
+        name: Some("Ayşe".into()),
+        crew: None,
+    }));
+    let toast = game.next().await.unwrap();
+    assert_eq!(toast["t"], "toast", "no typing frame came before it");
+    assert_eq!(toast["body"], "Çıkartma · Selam");
+    assert_eq!(toast["sticker"], "pl1/hi");
+    overlay.stop(ByeReason::LauncherExit).await;
+}
+
+#[tokio::test]
+async fn an_older_mod_hears_none_of_chat2s_frames() {
+    let social = FakeSocial::new(chat2_view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+    let mut game = MockMod::connect_with(&endpoint, &["connect"]).await;
+    game.next_of("snapshot").await;
+    game.send(serde_json::json!({"t":"open-conv","conv":"d:f-ayse:me"}))
+        .await;
+    game.next_of("history").await;
+    overlay.on_social(SocialUpdate::Typing(pl_social::ChatTypingView {
+        conv: "d:f-ayse:me".into(),
+        by: "f-ayse".into(),
+    }));
+    // A sticker message reads as words; no card is asked for a mod that cannot show it.
+    overlay.on_social(SocialUpdate::Chat(ChatChangeView {
+        conv: "d:f-ayse:me".into(),
+        upsert: vec![{
+            let mut sticker = message("i:21", "f-ayse", false, MessageState::Sent);
+            sticker.text = String::new();
+            sticker.sticker = Some("pl1/gg".into());
+            sticker
+        }],
+        remove: Vec::new(),
+        reset: false,
+    }));
+    let msg = game.next().await.unwrap();
+    assert_eq!(msg["t"], "msg", "no typing frame came before it");
+    assert_eq!(msg["text"], "[Çıkartma: GG]");
+    assert!(social.calls().unfurls.is_empty());
     overlay.stop(ByeReason::LauncherExit).await;
 }

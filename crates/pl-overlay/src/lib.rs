@@ -16,6 +16,7 @@
 
 mod feed;
 mod hub;
+pub mod links;
 pub mod policy;
 pub mod protocol;
 mod server;

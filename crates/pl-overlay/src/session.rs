@@ -3,23 +3,25 @@
 //! An actor task owns everything a session knows (the newest view, what the mod was told, the
 //! panel's messages on their way) and waits on two channels: what the friends feature says
 //! ([`Msg`], forwarded by [`crate::Overlay`]) and what the bridge says ([`BridgeEvent`]). It never
-//! waits on the network itself: answering a call runs in a task of its own.
+//! waits on the network itself: answering a call, reacting and asking for a link's card run in
+//! tasks of their own.
 
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use pl_social::{
-    CallAnswer as SocialAnswer, ChatChangeView, ChatPage, SocialError, SocialNotice, SocialService,
-    SocialView,
+    CallAnswer as SocialAnswer, ChatChangeView, ChatMessageView, ChatPage, ChatRejection,
+    ChatTypingView, ErrorCode, SocialError, SocialNotice, SocialService, SocialView,
 };
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::OverlayConfig;
-use crate::feed::{self, Mirror, Scene, Sends};
+use crate::feed::{self, Listener, Mirror, Scene, Sends};
 use crate::protocol::{
-    ByeReason, CallAnswer, FEATURE_CONNECT, FromGame, MAX_MESSAGE_CHARS, SendFailure, ToGame,
+    ByeReason, CallAnswer, FEATURE_CONNECT, FromGame, MAX_MESSAGE_CHARS, ReactFailure, SendFailure,
+    ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 
@@ -60,8 +62,33 @@ pub trait SocialActions: Clone + Send + Sync + 'static {
     fn view(&self) -> SocialView;
     fn chat_page(&self, conv: &str) -> ChatPage;
     fn chat_send(&self, conv: &str, text: &str) -> pl_social::Result<String>;
+    /// CHAT2: a message answering message `reply` (its service id).
+    fn chat_reply(&self, conv: &str, text: &str, reply: i64) -> pl_social::Result<String>;
+    /// CHAT2: a Projects sticker, maybe as a reply.
+    fn chat_sticker(
+        &self,
+        conv: &str,
+        sticker: &str,
+        reply: Option<i64>,
+    ) -> pl_social::Result<String>;
     fn chat_discard(&self, key: &str);
     fn chat_read(&self, conv: &str);
+    /// CHAT2: the player writes in a conversation ("yazıyor…"; the friends feature paces it).
+    fn chat_typing(&self, conv: &str);
+    /// CHAT2: gives (`on`) or takes back the player's reaction on message `id`.
+    fn chat_react(
+        &self,
+        conv: &str,
+        id: i64,
+        emoji: &str,
+        on: bool,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
+    /// CHAT2: asks for the card of a message's first link; the message comes back with it.
+    fn chat_unfurl(
+        &self,
+        conv: &str,
+        key: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
     fn dismiss_invite(&self, id: &str);
     fn answer_call(
         &self,
@@ -83,12 +110,53 @@ impl SocialActions for SocialService {
         SocialService::chat_send(self, conv, text)
     }
 
+    fn chat_reply(&self, conv: &str, text: &str, reply: i64) -> pl_social::Result<String> {
+        SocialService::chat_reply(self, conv, text, reply)
+    }
+
+    fn chat_sticker(
+        &self,
+        conv: &str,
+        sticker: &str,
+        reply: Option<i64>,
+    ) -> pl_social::Result<String> {
+        SocialService::chat_sticker(self, conv, sticker, reply)
+    }
+
     fn chat_discard(&self, key: &str) {
         SocialService::chat_discard(self, key);
     }
 
     fn chat_read(&self, conv: &str) {
         SocialService::chat_read(self, conv);
+    }
+
+    fn chat_typing(&self, conv: &str) {
+        SocialService::chat_typing(self, conv);
+    }
+
+    fn chat_react(
+        &self,
+        conv: &str,
+        id: i64,
+        emoji: &str,
+        on: bool,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let service = self.clone();
+        let conv = conv.to_owned();
+        let emoji = emoji.to_owned();
+        async move { service.chat_react(&conv, id, &emoji, on).await }
+    }
+
+    fn chat_unfurl(
+        &self,
+        conv: &str,
+        key: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let service = self.clone();
+        let conv = conv.to_owned();
+        let key = key.to_owned();
+        async move { service.chat_unfurl(&conv, &key).await }
     }
 
     fn dismiss_invite(&self, id: &str) {
@@ -111,6 +179,8 @@ pub(crate) enum Msg {
     View(Arc<SocialView>),
     Chat(ChatChangeView),
     Notice(SocialNotice),
+    /// Someone writes in a conversation (CHAT2).
+    Typing(ChatTypingView),
     Config(OverlayConfig),
     /// "Bağlan": the game joins `target` (`host[:port]`); `reply` hears how it went.
     Connect {
@@ -128,6 +198,29 @@ pub(crate) enum Msg {
 const SEND_BURST: usize = 5;
 /// ... within this long (a person types slower; anything faster is a stuck key or a bad mod).
 const SEND_WINDOW: Duration = Duration::from_secs(5);
+/// The panel gives or takes back at most this many reactions within [`SEND_WINDOW`].
+const REACT_BURST: usize = 8;
+/// "Yazıyor…" from the panel is passed on at most this often (the friends feature sends it at most
+/// every 4 s per conversation; this only keeps a stuck mod from keeping it busy).
+const TYPING_GAP: Duration = Duration::from_secs(1);
+/// Cards asked for at most when a conversation opens in the panel (its newest messages first).
+const CARDS_PER_OPEN: usize = 8;
+/// Cards asked for in one session at most (each message once; the friends feature keeps them).
+const CARDS_PER_SESSION: usize = 200;
+/// A sticker reference as the service takes it (`pl1/gg`).
+fn sticker_ref_ok(sticker: &str) -> bool {
+    let Some((set, name)) = sticker.split_once('/') else {
+        return false;
+    };
+    (1..=8).contains(&set.len())
+        && set
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
+        && (1..=24).contains(&name.len())
+        && name
+            .bytes()
+            .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+}
 
 /// Called with `true` once the mod is greeted and `false` when it goes.
 pub(crate) type ConnectedFn = Arc<dyn Fn(bool) + Send + Sync>;
@@ -141,6 +234,10 @@ struct Live {
     open: Option<String>,
     /// The mod switches servers on `connect`.
     connects: bool,
+    /// Its language and whether it knows CHAT2.
+    listener: Listener,
+    /// When the panel last said the player writes.
+    typed_at: Option<Instant>,
 }
 
 pub(crate) struct Session<S> {
@@ -154,6 +251,9 @@ pub(crate) struct Session<S> {
     live: Option<Live>,
     sends: Sends,
     recent_sends: VecDeque<Instant>,
+    recent_reacts: VecDeque<Instant>,
+    /// Messages (`conv` and key) whose card this session asked for already.
+    carded: HashSet<(String, String)>,
     connected: ConnectedFn,
     pending_connect: Option<PendingConnect>,
     next_connect: u64,
@@ -167,15 +267,66 @@ fn now_ms() -> i64 {
         })
 }
 
-/// Why `chat_send` refused at once.
-fn refusal_of(error: &SocialError) -> SendFailure {
+/// Why `chat_send` (or a reply, or a sticker) refused at once.
+fn refusal_of(error: &SocialError, listener: Listener) -> SendFailure {
     match error {
         SocialError::ChatMuted { .. } => SendFailure::Muted,
-        SocialError::InvalidInput(what) if *what == "chat off" => SendFailure::Off,
-        SocialError::InvalidInput(what) if *what == "chat text" => SendFailure::TooLong,
+        SocialError::InvalidInput("chat off") => SendFailure::Off,
+        SocialError::InvalidInput("chat text") => SendFailure::TooLong,
+        SocialError::InvalidInput("chat extras" | "chat sticker") if listener.chat2 => {
+            SendFailure::FeatureOff
+        }
+        SocialError::InvalidInput("chat extras" | "chat sticker") => SendFailure::Off,
         SocialError::InvalidInput(_) => SendFailure::NotAllowed,
         _ => SendFailure::Offline,
     }
+}
+
+/// Why a reaction did not go.
+fn react_failure(error: &SocialError) -> ReactFailure {
+    match error {
+        SocialError::Refused {
+            code: ErrorCode::ChatReactionsFull,
+            detail,
+            ..
+        } => {
+            if detail.as_deref() == Some("kinds") {
+                ReactFailure::Kinds
+            } else {
+                ReactFailure::Full
+            }
+        }
+        SocialError::Refused {
+            code: ErrorCode::MessageNotFound,
+            ..
+        }
+        | SocialError::InvalidInput("chat message") => ReactFailure::Old,
+        SocialError::Refused {
+            code: ErrorCode::ChatFeatureOff,
+            ..
+        }
+        | SocialError::InvalidInput("chat extras" | "chat off") => ReactFailure::Off,
+        SocialError::InvalidInput("reaction")
+        | SocialError::ChatRejected {
+            reason: ChatRejection::Words,
+            ..
+        } => ReactFailure::Words,
+        SocialError::InvalidInput(_) => ReactFailure::NotAllowed,
+        SocialError::ChatMuted { .. } => ReactFailure::Muted,
+        SocialError::RateLimited { .. } | SocialError::Limited { .. } => ReactFailure::Rate,
+        _ => ReactFailure::Offline,
+    }
+}
+
+/// Drops the times older than `window`; whether `max` are left.
+fn full(recent: &mut VecDeque<Instant>, now: Instant, window: Duration, max: usize) -> bool {
+    while recent
+        .front()
+        .is_some_and(|at| now.duration_since(*at) >= window)
+    {
+        recent.pop_front();
+    }
+    recent.len() >= max
 }
 
 impl<S: SocialActions> Session<S> {
@@ -199,6 +350,8 @@ impl<S: SocialActions> Session<S> {
             live: None,
             sends: Sends::default(),
             recent_sends: VecDeque::new(),
+            recent_reacts: VecDeque::new(),
+            carded: HashSet::new(),
             connected,
             pending_connect: None,
             next_connect: 0,
@@ -268,6 +421,13 @@ impl<S: SocialActions> Session<S> {
         self.view = view;
     }
 
+    /// The live mod's language and features (an older one's, while none is connected).
+    fn listener(&self) -> Listener {
+        self.live
+            .as_ref()
+            .map_or_else(Listener::default, |live| live.listener)
+    }
+
     fn send(&self, frames: Vec<ToGame>) {
         if let Some(live) = &self.live
             && !frames.is_empty()
@@ -297,6 +457,7 @@ impl<S: SocialActions> Session<S> {
             }
             Msg::Chat(change) => self.on_chat(&change),
             Msg::Notice(notice) => self.on_notice(&notice),
+            Msg::Typing(typing) => self.on_typing(&typing),
             Msg::Config(config) => {
                 // Conversation mutes and the reduced-motion choice show in the panel.
                 self.config = config;
@@ -352,7 +513,8 @@ impl<S: SocialActions> Session<S> {
     }
 
     fn on_chat(&mut self, change: &ChatChangeView) {
-        let out = feed::chat_frames(change, &self.scene, &mut self.sends);
+        let listener = self.listener();
+        let out = feed::chat_frames(change, &self.scene, &mut self.sends, listener);
         for key in &out.discard {
             self.social.chat_discard(key);
         }
@@ -365,10 +527,55 @@ impl<S: SocialActions> Session<S> {
             self.social.chat_read(&change.conv);
         }
         self.send(out.frames);
+        if open_here {
+            // A message that came onto the panel's screen with a link gets its card, once.
+            self.ask_cards(&change.conv, change.upsert.iter().rev(), usize::MAX);
+        }
+    }
+
+    /// Asks for the cards of messages the panel shows (CHAT2 §9.3: each device once, only for what
+    /// comes on screen): one task asks them in turn; each message comes back with its card.
+    fn ask_cards<'a>(
+        &mut self,
+        conv: &str,
+        messages: impl Iterator<Item = &'a ChatMessageView>,
+        max: usize,
+    ) {
+        if !self.listener().chat2 {
+            return;
+        }
+        let now = now_ms();
+        let mut asks = Vec::new();
+        for message in messages {
+            if asks.len() >= max || self.carded.len() >= CARDS_PER_SESSION {
+                break;
+            }
+            if feed::wants_card(message, &self.scene, now)
+                && self.carded.insert((conv.to_owned(), message.key.clone()))
+            {
+                asks.push(self.social.chat_unfurl(conv, &message.key));
+            }
+        }
+        if asks.is_empty() {
+            return;
+        }
+        tokio::spawn(async move {
+            for ask in asks {
+                if let Err(error) = ask.await {
+                    tracing::debug!(%error, "no card for a link in the in-game overlay");
+                }
+            }
+        });
     }
 
     fn on_notice(&mut self, notice: &SocialNotice) {
-        let Some(toast) = feed::toast_of(notice, &self.scene, &self.config.notify, now_ms()) else {
+        let Some(toast) = feed::toast_of(
+            notice,
+            &self.scene,
+            &self.config.notify,
+            now_ms(),
+            self.listener(),
+        ) else {
             return;
         };
         // The conversation the panel shows says it in place.
@@ -378,6 +585,28 @@ impl<S: SocialActions> Session<S> {
         if !shown {
             self.send(vec![ToGame::Toast(toast)]);
         }
+    }
+
+    /// "Yazıyor…" reaches the game only while its panel is open (nothing to show otherwise) and
+    /// only a mod that knows it.
+    fn on_typing(&mut self, typing: &ChatTypingView) {
+        let Some(live) = &self.live else {
+            return;
+        };
+        if !live.listener.chat2
+            || !live.panel
+            || !self.scene.offers(|extras| extras.typing)
+            || typing.by == self.scene.me_id
+            || self.scene.is_blocked(&typing.by)
+        {
+            return;
+        }
+        let name = self.scene.sender(&typing.conv, &typing.by);
+        self.send(vec![ToGame::Typing {
+            conv: typing.conv.clone(),
+            by: typing.by.clone(),
+            name,
+        }]);
     }
 
     fn on_event(&mut self, event: BridgeEvent) {
@@ -411,6 +640,8 @@ impl<S: SocialActions> Session<S> {
                     panel: false,
                     open: None,
                     connects: features.iter().any(|f| f == FEATURE_CONNECT),
+                    listener: Listener::from_hello(&language, &features),
+                    typed_at: None,
                 }));
                 self.send(frames);
             }
@@ -440,14 +671,40 @@ impl<S: SocialActions> Session<S> {
             }
             FromGame::OpenConv { conv } => {
                 let page = self.social.chat_page(&conv);
-                self.send(vec![feed::history_frame(&page, &self.scene)]);
+                self.send(vec![feed::history_frame(
+                    &page,
+                    &self.scene,
+                    self.listener(),
+                )]);
                 self.social.chat_read(&conv);
                 if let Some(live) = self.live.as_mut() {
                     live.panel = true;
-                    live.open = Some(conv);
+                    live.open = Some(conv.clone());
                 }
+                // The newest messages with links get their cards.
+                self.ask_cards(&conv, page.messages.iter().rev(), CARDS_PER_OPEN);
             }
-            FromGame::Send { cid, conv, text } => self.on_send(cid, &conv, &text),
+            FromGame::Send {
+                cid,
+                conv,
+                text,
+                reply,
+                sticker,
+            } => self.on_send(cid, &conv, &text, reply, sticker.as_deref()),
+            FromGame::React { conv, sid, e, on } => self.on_react(conv, sid, e, on),
+            FromGame::Typing { conv } => {
+                let now = Instant::now();
+                if let Some(live) = self.live.as_mut() {
+                    if live
+                        .typed_at
+                        .is_some_and(|at| now.duration_since(at) < TYPING_GAP)
+                    {
+                        return;
+                    }
+                    live.typed_at = Some(now);
+                }
+                self.social.chat_typing(&conv);
+            }
             FromGame::Answer { call, answer } => {
                 let answer = match answer {
                     CallAnswer::Coming => SocialAnswer::Yes,
@@ -492,19 +749,26 @@ impl<S: SocialActions> Session<S> {
         }
     }
 
-    fn on_send(&mut self, cid: String, conv: &str, text: &str) {
+    fn on_send(
+        &mut self,
+        cid: String,
+        conv: &str,
+        text: &str,
+        reply: Option<i64>,
+        sticker: Option<&str>,
+    ) {
+        let listener = self.listener();
         let now = Instant::now();
-        while self
-            .recent_sends
-            .front()
-            .is_some_and(|at| now.duration_since(*at) >= SEND_WINDOW)
-        {
-            self.recent_sends.pop_front();
-        }
-        let refused = if self.recent_sends.len() >= SEND_BURST {
+        let refused = if full(&mut self.recent_sends, now, SEND_WINDOW, SEND_BURST) {
             Some(SendFailure::Rate)
-        } else if text.chars().count() > MAX_MESSAGE_CHARS {
+        } else if sticker.is_none() && text.chars().count() > MAX_MESSAGE_CHARS {
             Some(SendFailure::TooLong)
+        } else if sticker.is_some_and(|sticker| !sticker_ref_ok(sticker)) {
+            Some(if listener.chat2 {
+                SendFailure::FeatureOff
+            } else {
+                SendFailure::Off
+            })
         } else if !self.scene.online {
             // Told at once instead of waiting for the friends service to come back.
             Some(SendFailure::Offline)
@@ -512,17 +776,144 @@ impl<S: SocialActions> Session<S> {
             None
         };
         if let Some(reason) = refused {
-            self.send(vec![ToGame::SendFailed { cid, reason }]);
+            self.send(vec![ToGame::SendFailed {
+                cid,
+                reason,
+                rule: None,
+            }]);
             return;
         }
         self.recent_sends.push_back(now);
-        match self.social.chat_send(conv, text) {
+        let sent = match (sticker, reply) {
+            (Some(sticker), reply) => self.social.chat_sticker(conv, sticker, reply),
+            (None, Some(reply)) => match self.social.chat_reply(conv, text, reply) {
+                // The message it answers is not held here any more, or Studio switched replies
+                // off meanwhile: it goes as a plain message (the player does not lose it).
+                Err(SocialError::InvalidInput("chat message" | "chat extras")) => {
+                    self.social.chat_send(conv, text)
+                }
+                other => other,
+            },
+            (None, None) => self.social.chat_send(conv, text),
+        };
+        match sent {
             // Its progress (on its way, sent, refused) arrives as chat changes.
             Ok(key) => self.sends.insert(key, cid),
             Err(error) => self.send(vec![ToGame::SendFailed {
                 cid,
-                reason: refusal_of(&error),
+                reason: refusal_of(&error, listener),
+                rule: None,
             }]),
         }
+    }
+
+    /// The panel gives or takes back a reaction: shown at once by the friends feature (the message
+    /// comes back with it), settled by the service; a refusal is told to the panel.
+    fn on_react(&mut self, conv: String, sid: i64, e: String, on: bool) {
+        let Some(conn) = self.live.as_ref().map(|live| live.conn) else {
+            return;
+        };
+        let refused = if full(
+            &mut self.recent_reacts,
+            Instant::now(),
+            SEND_WINDOW,
+            REACT_BURST,
+        ) {
+            Some(ReactFailure::Rate)
+        } else if !self.scene.online {
+            Some(ReactFailure::Offline)
+        } else if !self.scene.offers(|extras| extras.reactions) {
+            Some(ReactFailure::Off)
+        } else {
+            None
+        };
+        if let Some(reason) = refused {
+            self.send(vec![ToGame::ReactFailed {
+                conv,
+                sid,
+                e,
+                reason,
+            }]);
+            return;
+        }
+        self.recent_reacts.push_back(Instant::now());
+        let reacting = self.social.chat_react(&conv, sid, &e, on);
+        let control = self.control.clone();
+        tokio::spawn(async move {
+            if let Err(error) = reacting.await {
+                tracing::debug!(%error, "the overlay's reaction did not go");
+                let _ = control.send(Control::Send {
+                    conn,
+                    frames: vec![ToGame::ReactFailed {
+                        conv,
+                        sid,
+                        e,
+                        reason: react_failure(&error),
+                    }],
+                });
+            }
+        });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_a_plain_sticker_reference_goes() {
+        assert!(sticker_ref_ok("pl1/gg"));
+        assert!(sticker_ref_ok("pl1/come-on"));
+        assert!(!sticker_ref_ok("pl1/../gg"));
+        assert!(!sticker_ref_ok("PL1/gg"));
+        assert!(!sticker_ref_ok("pl1gg"));
+        assert!(!sticker_ref_ok("verylongset/gg"));
+        assert!(!sticker_ref_ok("pl1/"));
+    }
+
+    #[test]
+    fn refusals_name_what_the_panel_can_say() {
+        let chat2 = Listener {
+            english: false,
+            chat2: true,
+        };
+        assert_eq!(
+            refusal_of(&SocialError::InvalidInput("chat sticker"), chat2),
+            SendFailure::FeatureOff
+        );
+        assert_eq!(
+            refusal_of(
+                &SocialError::InvalidInput("chat sticker"),
+                Listener::default()
+            ),
+            SendFailure::Off
+        );
+        let full = |detail: &str| SocialError::Refused {
+            status: 409,
+            code: ErrorCode::ChatReactionsFull,
+            message: String::new(),
+            detail: Some(detail.to_owned()),
+        };
+        assert_eq!(react_failure(&full("mine")), ReactFailure::Full);
+        assert_eq!(react_failure(&full("kinds")), ReactFailure::Kinds);
+        assert_eq!(
+            react_failure(&SocialError::InvalidInput("chat message")),
+            ReactFailure::Old
+        );
+        assert_eq!(
+            react_failure(&SocialError::ChatRejected {
+                reason: ChatRejection::Words,
+                rule: None
+            }),
+            ReactFailure::Words
+        );
+        assert_eq!(
+            react_failure(&SocialError::ChatMuted { until: None }),
+            ReactFailure::Muted
+        );
+        assert_eq!(
+            react_failure(&SocialError::Unavailable { retry_after: None }),
+            ReactFailure::Offline
+        );
     }
 }

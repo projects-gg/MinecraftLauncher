@@ -14,15 +14,17 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use pl_social::{
-    AuthPhase, CallAnswer as SocialAnswer, ChatChangeView, ChatMessageView, ChatPage, Connection,
-    GameLocation, MessageState, PresenceState, SendFailure as SocialFailure, SocialNotice,
-    SocialView, StatusMode, TEAM_FEATURE_CALLS,
+    AuthPhase, CallAnswer as SocialAnswer, CardState, ChatChangeView, ChatExtrasView,
+    ChatMessageView, ChatPage, Connection, GameLocation, MessageState, PresenceState,
+    SendFailure as SocialFailure, SocialNotice, SocialView, StatusMode, TEAM_FEATURE_CALLS,
 };
 
+use crate::links::{self, LinkLists};
 use crate::policy::{self, CrewMute, CrewSettings, Mute, Notice, NotifyPrefs, Situation};
 use crate::protocol::{
-    AnswerCounts, CallAnswer, CallView, ConvKind, ConvView, FriendView, MAX_HISTORY,
-    MAX_LAUNCHER_FRAME, Me, MsgView, PROTO, Place, SendFailure, ToGame, ToastView,
+    AnswerCounts, CallAnswer, CallView, CardView, ConvKind, ConvView, FriendView, LinkView,
+    MAX_HISTORY, MAX_LAUNCHER_FRAME, MAX_QUOTE_CHARS, Me, MsgView, PROTO, Place, ReactionView,
+    ReplyView, SendFailure, ToGame, ToastView,
 };
 
 /// Conversations a snapshot lists at most (the newest first).
@@ -51,6 +53,10 @@ pub struct Scene {
     /// What the toast rules look at.
     pub service: Option<CrewSettings>,
     pub crews: Vec<CrewMute>,
+    /// What chat offers beyond CHAT1 now (CHAT2): the service took it and Studio has it on.
+    pub extras: Option<ChatExtrasView>,
+    /// Studio's link lists while links are on (CHAT2): which links of a message may be pressed.
+    pub links: Option<LinkLists>,
     /// User id → name (the player, friends, crewmates).
     names: HashMap<String, String>,
     crew_names: HashMap<String, String>,
@@ -159,6 +165,37 @@ impl Scene {
         if view.teams && view.team_features.iter().any(|f| f == TEAM_FEATURE_CALLS) {
             features.push("calls".to_owned());
         }
+        // CHAT2's extras, each on its own (Studio may switch one off at once).
+        let extras = view
+            .chat
+            .as_ref()
+            .filter(|chat| chat.on)
+            .and_then(|chat| chat.extras);
+        if let Some(extras) = extras {
+            for (on, name) in [
+                (extras.replies, "replies"),
+                (extras.reactions, "reactions"),
+                (extras.stickers, "stickers"),
+                (extras.typing, "typing"),
+                (extras.reads, "reads"),
+                (extras.links, "links"),
+            ] {
+                if on {
+                    features.push(name.to_owned());
+                }
+            }
+        }
+        let links = view
+            .chat
+            .as_ref()
+            .and_then(|chat| chat.links.as_ref())
+            .filter(|_| extras.is_some_and(|extras| extras.links))
+            .map(|lists| LinkLists {
+                trusted: lists.trusted.clone(),
+                blocked: lists.blocked.clone(),
+                invites: lists.invites,
+            });
+        let reads = extras.is_some_and(|extras| extras.reads);
 
         let mut friends: Vec<FriendView> = view
             .friends
@@ -214,6 +251,7 @@ impl Scene {
                     unread: conv.unread,
                     muted: prefs.conversation_muted(&conv.id, now_ms) || crew_muted,
                     writable: chat_on && conv.writable,
+                    seen: conv.peer_read.filter(|_| reads && crew.is_none()),
                 }
             })
             .collect();
@@ -307,12 +345,19 @@ impl Scene {
             calls,
             service,
             crews,
+            extras,
+            links,
             names,
             crew_names,
             blocked: view.blocked.iter().map(|b| b.id.clone()).collect(),
             invites,
             shared,
         }
+    }
+
+    /// CHAT2 offers this extra now.
+    pub fn offers(&self, extra: impl Fn(&ChatExtrasView) -> bool) -> bool {
+        self.extras.as_ref().is_some_and(extra)
     }
 
     /// Where "Bağlan" may send the running game: `target` (`host[:port]`) when it is Projects or
@@ -347,7 +392,7 @@ impl Scene {
 
     /// The name a message shows for its sender: as the lists know them, else the conversation's
     /// title for a direct conversation (the sender is the other one), else "someone".
-    fn sender(&self, conv: &str, from: &str) -> String {
+    pub(crate) fn sender(&self, conv: &str, from: &str) -> String {
         if let Some(name) = self.name_of(from) {
             return name.to_owned();
         }
@@ -525,7 +570,7 @@ fn fitting_snapshot(scene: &Scene) -> (Vec<FriendView>, Vec<ConvView>, Vec<CallV
     }
 }
 
-fn failure_of(failure: Option<SocialFailure>) -> SendFailure {
+fn failure_of(failure: Option<SocialFailure>, listener: Listener) -> SendFailure {
     match failure {
         Some(SocialFailure::Link) => SendFailure::Link,
         Some(SocialFailure::Phone) => SendFailure::Phone,
@@ -536,7 +581,12 @@ fn failure_of(failure: Option<SocialFailure>) -> SendFailure {
         Some(SocialFailure::Muted) => SendFailure::Muted,
         Some(SocialFailure::Off) => SendFailure::Off,
         Some(SocialFailure::NotAllowed) => SendFailure::NotAllowed,
-        // CHAT2's own daily limits and switches, until the overlay says them itself.
+        // CHAT2's own daily limits and switches: a mod that knows them hears them, an older one
+        // the nearest reason it knows.
+        Some(SocialFailure::Stickers) if listener.chat2 => SendFailure::Stickers,
+        Some(SocialFailure::Links) if listener.chat2 => SendFailure::Links,
+        Some(SocialFailure::LimitedLinks) if listener.chat2 => SendFailure::LimitedLinks,
+        Some(SocialFailure::FeatureOff) if listener.chat2 => SendFailure::FeatureOff,
         Some(SocialFailure::Stickers | SocialFailure::Links) => SendFailure::DailyLimit,
         Some(SocialFailure::LimitedLinks) => SendFailure::Link,
         Some(SocialFailure::FeatureOff) => SendFailure::Off,
@@ -544,8 +594,150 @@ fn failure_of(failure: Option<SocialFailure>) -> SendFailure {
     }
 }
 
+/// Who hears the frames: the game's language (a sticker in words, for a mod that cannot draw it)
+/// and whether the mod knows CHAT2 (`chat2` in its hello: it hears the precise reasons).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Listener {
+    pub english: bool,
+    pub chat2: bool,
+}
+
+impl Listener {
+    /// From the mod's hello: its language (`tr_tr`, `en_us`; the launcher's own when it says
+    /// none) and its features.
+    pub fn from_hello(language: &str, features: &[String]) -> Self {
+        let english = if language.trim().is_empty() {
+            pl_lang::pick("tr", "en") == "en"
+        } else {
+            !language.trim().to_ascii_lowercase().starts_with("tr")
+        };
+        Self {
+            english,
+            chat2: features
+                .iter()
+                .any(|feature| feature == crate::protocol::FEATURE_CHAT2),
+        }
+    }
+}
+
+/// A sticker as a toast says it: "Çıkartma · GG" ("Çıkartma" for one of a set this launcher does
+/// not have).
+fn sticker_words(reference: &str, english: bool) -> String {
+    let word = if english { "Sticker" } else { "Çıkartma" };
+    match pl_social::sticker(reference) {
+        Some(found) => {
+            let name = if english {
+                &found.name_en
+            } else {
+                &found.name_tr
+            };
+            format!("{word} · {name}")
+        }
+        None => word.to_owned(),
+    }
+}
+
+/// At most `max` characters of `text`, with an ellipsis when it was longer.
+fn clip(text: &str, max: usize) -> String {
+    let mut chars = text.chars();
+    let kept: String = chars.by_ref().take(max).collect();
+    if chars.next().is_some() {
+        format!("{}…", kept.trim_end())
+    } else {
+        kept
+    }
+}
+
+/// Names of reactors a reaction shows besides the count.
+const REACTION_NAMES: usize = 3;
+
 /// A message as the mod shows it.
-pub fn msg_view(conv: &str, message: &ChatMessageView, scene: &Scene) -> MsgView {
+pub fn msg_view(
+    conv: &str,
+    message: &ChatMessageView,
+    scene: &Scene,
+    listener: Listener,
+) -> MsgView {
+    let deleted = message.deleted.is_some();
+    let sticker = message.sticker.clone().filter(|_| !deleted);
+    let text = if deleted {
+        // A tombstone (deleted for everyone) carries no text; the mod says "Bu mesaj silindi".
+        String::new()
+    } else if let Some(sticker) = &sticker {
+        pl_social::sticker_text(sticker, listener.english)
+    } else {
+        message.text.clone()
+    };
+    let links: Vec<LinkView> = match &scene.links {
+        Some(lists) if !deleted && sticker.is_none() => links::pressable(&message.text, lists)
+            .into_iter()
+            .map(|link| LinkView {
+                url: link.url,
+                trusted: link.trusted,
+            })
+            .collect(),
+        _ => Vec::new(),
+    };
+    // The first link's card, while that link may still be pressed (a card for a link the rules
+    // turned back into text is not shown).
+    let card = message
+        .card
+        .as_ref()
+        .filter(|card| card.state == CardState::Ready)
+        .filter(|card| links.first().is_some_and(|link| link.url == card.url))
+        .and_then(|card| {
+            let title = card.title.as_deref().map(str::trim).unwrap_or_default();
+            (!title.is_empty()).then(|| CardView {
+                site: clip(&card.site, 48),
+                title: clip(title, MAX_QUOTE_CHARS),
+            })
+        });
+    let reply = message.reply.as_ref().filter(|_| !deleted).map(|reply| {
+        let gone = reply.missing || scene.is_blocked(&reply.from);
+        let mine = !gone && reply.from == scene.me_id;
+        ReplyView {
+            id: reply.key.clone().filter(|_| !gone),
+            sid: reply.id,
+            from: if gone {
+                String::new()
+            } else if mine {
+                scene.me.clone()
+            } else {
+                scene.sender(conv, &reply.from)
+            },
+            mine,
+            text: reply
+                .text
+                .as_deref()
+                .filter(|_| !gone && !reply.deleted && reply.sticker.is_none())
+                .map(|text| clip(text, MAX_QUOTE_CHARS)),
+            sticker: reply.sticker.clone().filter(|_| !gone && !reply.deleted),
+            deleted: !gone && reply.deleted,
+            missing: gone,
+        }
+    });
+    let reactions = if deleted {
+        Vec::new()
+    } else {
+        message
+            .reactions
+            .iter()
+            .filter(|reaction| !reaction.by.is_empty())
+            .map(|reaction| ReactionView {
+                e: reaction.e.clone(),
+                n: u32::try_from(reaction.by.len()).unwrap_or(u32::MAX),
+                mine: reaction.mine,
+                who: reaction
+                    .by
+                    .iter()
+                    .filter(|id| **id != scene.me_id)
+                    .filter_map(|id| scene.name_of(id))
+                    .take(REACTION_NAMES)
+                    .map(str::to_owned)
+                    .collect(),
+            })
+            .collect()
+    };
     MsgView {
         conv: Some(conv.to_owned()),
         id: message.key.clone(),
@@ -555,16 +747,17 @@ pub fn msg_view(conv: &str, message: &ChatMessageView, scene: &Scene) -> MsgView
         } else {
             scene.sender(conv, &message.from)
         },
-        // A tombstone (deleted for everyone) carries no text; the mod says "Bu mesaj silindi".
-        text: if message.deleted.is_some() {
-            String::new()
-        } else {
-            message.text.clone()
-        },
+        text,
         at: message.at,
         mine: message.mine,
-        edited: message.edited && message.deleted.is_none(),
-        deleted: message.deleted.is_some(),
+        edited: message.edited && !deleted,
+        deleted,
+        sid: message.id,
+        sticker,
+        reply,
+        reactions,
+        links,
+        card,
     }
 }
 
@@ -598,7 +791,35 @@ impl Sends {
     }
 }
 
-pub fn chat_frames(change: &ChatChangeView, scene: &Scene, sends: &mut Sends) -> ChatOutcome {
+/// The name of a link rule as the service says it (`shortener`).
+fn rule_name(rule: pl_social::LinkRule) -> Option<String> {
+    serde_json::to_value(rule)
+        .ok()
+        .and_then(|value| value.as_str().map(str::to_owned))
+}
+
+/// Whether the panel should ask for a message's card (CHAT2 §9.3): links are on, it went, it is
+/// not a sticker nor deleted, it has none yet, its first link may be pressed, and it is younger
+/// than a week (the service's mailbox; older ones are never asked for).
+pub fn wants_card(message: &ChatMessageView, scene: &Scene, now_ms: i64) -> bool {
+    let Some(lists) = &scene.links else {
+        return false;
+    };
+    message.state == MessageState::Sent
+        && message.deleted.is_none()
+        && message.sticker.is_none()
+        && message.card.is_none()
+        && message.at > now_ms - pl_social::CARD_WINDOW_MS
+        && pl_social::first_link(&message.text)
+            .is_some_and(|url| links::problem(url, lists).is_none())
+}
+
+pub fn chat_frames(
+    change: &ChatChangeView,
+    scene: &Scene,
+    sends: &mut Sends,
+    listener: Listener,
+) -> ChatOutcome {
     let mut out = ChatOutcome::default();
     let conv = change.conv.as_str();
     if change.reset {
@@ -627,14 +848,27 @@ pub fn chat_frames(change: &ChatChangeView, scene: &Scene, sends: &mut Sends) ->
                     out.frames.push(ToGame::Sent {
                         cid,
                         id: message.key.clone(),
+                        sid: message.id,
                     });
+                    // What the panel cannot work out itself follows (the quote as this computer
+                    // holds it, the links it may press): the same message again, by its id.
+                    if listener.chat2 {
+                        out.frames.push(ToGame::Msg(Box::new(msg_view(
+                            conv, message, scene, listener,
+                        ))));
+                    }
                 }
                 MessageState::Failed => {
                     sends.by_key.remove(&message.key);
                     sends.dropped.insert(message.key.clone());
+                    let reason = failure_of(message.failure, listener);
                     out.frames.push(ToGame::SendFailed {
                         cid,
-                        reason: failure_of(message.failure),
+                        reason,
+                        rule: message
+                            .failure_rule
+                            .filter(|_| listener.chat2 && reason == SendFailure::Link)
+                            .and_then(rule_name),
                     });
                     out.discard.push(message.key.clone());
                 }
@@ -645,14 +879,16 @@ pub fn chat_frames(change: &ChatChangeView, scene: &Scene, sends: &mut Sends) ->
         // message deleted for everyone comes back as its tombstone (same id).
         if message.state == MessageState::Sent {
             out.arrived |= !message.mine && message.deleted.is_none();
-            out.frames.push(ToGame::Msg(msg_view(conv, message, scene)));
+            out.frames.push(ToGame::Msg(Box::new(msg_view(
+                conv, message, scene, listener,
+            ))));
         }
     }
     out
 }
 
 /// The answer to `open-conv`: the newest messages that went, oldest first.
-pub fn history_frame(page: &ChatPage, scene: &Scene) -> ToGame {
+pub fn history_frame(page: &ChatPage, scene: &Scene, listener: Listener) -> ToGame {
     let sent: Vec<&ChatMessageView> = page
         .messages
         .iter()
@@ -666,7 +902,7 @@ pub fn history_frame(page: &ChatPage, scene: &Scene) -> ToGame {
             .skip(skip)
             .map(|message| MsgView {
                 conv: None,
-                ..msg_view(&page.conv, message, scene)
+                ..msg_view(&page.conv, message, scene, listener)
             })
             .collect(),
     }
@@ -678,6 +914,7 @@ pub fn toast_of(
     scene: &Scene,
     prefs: &NotifyPrefs,
     now_ms: i64,
+    listener: Listener,
 ) -> Option<ToastView> {
     let situation = Situation {
         dnd: scene.dnd,
@@ -701,17 +938,26 @@ pub fn toast_of(
             let from = name
                 .clone()
                 .unwrap_or_else(|| scene.sender(conv, &message.from));
+            // A sticker is told in words ("Çıkartma · GG"); a mod that knows it draws it too.
+            let text = match &message.sticker {
+                Some(sticker) => sticker_words(sticker, listener.english),
+                None => message.text.clone(),
+            };
             policy::toast_for(
                 &Notice::Message {
                     conv,
                     crew: crew_name,
                     from: &from,
-                    text: &message.text,
+                    text: &text,
                     mine: message.mine,
                     blocked: scene.is_blocked(&message.from),
                 },
                 &situation,
             )
+            .map(|toast| ToastView {
+                sticker: message.sticker.clone().filter(|_| listener.chat2),
+                ..toast
+            })
         }
         SocialNotice::CrewCall { call } if !call.mine => {
             let crew = call
@@ -1253,7 +1499,7 @@ pub(crate) mod tests {
             remove: vec!["i:0".into()],
             reset: false,
         };
-        let out = chat_frames(&change, &scene, &mut sends);
+        let out = chat_frames(&change, &scene, &mut sends, Listener::default());
         assert!(out.arrived);
         let json: Vec<serde_json::Value> = out
             .frames
@@ -1275,12 +1521,13 @@ pub(crate) mod tests {
             remove: Vec::new(),
             reset: false,
         };
-        let out = chat_frames(&sent, &scene, &mut sends);
+        let out = chat_frames(&sent, &scene, &mut sends, Listener::default());
         assert_eq!(
             out.frames,
             [ToGame::Sent {
                 cid: "cid-1".into(),
-                id: "n:abc".into()
+                id: "n:abc".into(),
+                sid: None,
             }]
         );
         assert!(!out.arrived && sends.pending() == 0);
@@ -1298,12 +1545,14 @@ pub(crate) mod tests {
             },
             &scene,
             &mut sends,
+            Listener::default(),
         );
         assert_eq!(
             out.frames,
             [ToGame::SendFailed {
                 cid: "cid-2".into(),
-                reason: SendFailure::Link
+                reason: SendFailure::Link,
+                rule: None,
             }]
         );
         assert_eq!(out.discard, ["n:def"]);
@@ -1317,6 +1566,7 @@ pub(crate) mod tests {
             },
             &scene,
             &mut sends,
+            Listener::default(),
         );
         assert!(out.frames.is_empty());
 
@@ -1330,6 +1580,7 @@ pub(crate) mod tests {
             },
             &scene,
             &mut Sends::default(),
+            Listener::default(),
         );
         assert_eq!(
             out.frames,
@@ -1352,6 +1603,7 @@ pub(crate) mod tests {
             },
             &scene,
             &mut Sends::default(),
+            Listener::default(),
         );
         assert!(!out.arrived, "nothing new to read");
         let json = serde_json::to_value(&out.frames[0]).unwrap();
@@ -1366,7 +1618,16 @@ pub(crate) mod tests {
             name: Some("Ayşe".into()),
             crew: None,
         };
-        assert!(toast_of(&notice, &scene, &NotifyPrefs::default(), NOW).is_none());
+        assert!(
+            toast_of(
+                &notice,
+                &scene,
+                &NotifyPrefs::default(),
+                NOW,
+                Listener::default()
+            )
+            .is_none()
+        );
         // A history carries it in its place.
         let ToGame::History { msgs, .. } = history_frame(
             &ChatPage {
@@ -1378,6 +1639,7 @@ pub(crate) mod tests {
                 more: false,
             },
             &scene,
+            Listener::default(),
         ) else {
             panic!()
         };
@@ -1398,6 +1660,7 @@ pub(crate) mod tests {
                 more: true,
             },
             &scene,
+            Listener::default(),
         );
         let ToGame::History { conv, msgs } = frame else {
             panic!()
@@ -1421,7 +1684,7 @@ pub(crate) mod tests {
             name: Some("Ayşe".into()),
             crew: None,
         };
-        let toast = toast_of(&dm, &scene, &prefs, NOW).unwrap();
+        let toast = toast_of(&dm, &scene, &prefs, NOW, Listener::default()).unwrap();
         assert_eq!(
             (toast.title.as_str(), toast.body.as_str()),
             ("Ayşe", "metin i:7")
@@ -1434,14 +1697,14 @@ pub(crate) mod tests {
             crew: Some("t1".into()),
         };
         assert!(
-            toast_of(&crew_chat, &scene, &prefs, NOW).is_none(),
+            toast_of(&crew_chat, &scene, &prefs, NOW, Listener::default()).is_none(),
             "crew chat is quiet by default"
         );
         let loud = NotifyPrefs {
             crew_chat: true,
             ..NotifyPrefs::default()
         };
-        let toast = toast_of(&crew_chat, &scene, &loud, NOW).unwrap();
+        let toast = toast_of(&crew_chat, &scene, &loud, NOW, Listener::default()).unwrap();
         assert_eq!(
             (toast.title.as_str(), toast.crew.as_deref()),
             ("Cem", Some("Gece Kuşları"))
@@ -1450,7 +1713,7 @@ pub(crate) mod tests {
         let call = SocialNotice::CrewCall {
             call: Box::new(v.calls[0].clone()),
         };
-        let toast = toast_of(&call, &scene, &prefs, NOW).unwrap();
+        let toast = toast_of(&call, &scene, &prefs, NOW, Listener::default()).unwrap();
         assert_eq!(
             (
                 toast.key.as_str(),
@@ -1468,7 +1731,8 @@ pub(crate) mod tests {
                 },
                 &scene,
                 &prefs,
-                NOW
+                NOW,
+                Listener::default()
             )
             .is_none()
         );
@@ -1477,7 +1741,9 @@ pub(crate) mod tests {
             invite: v.invites[0].clone(),
         };
         assert_eq!(
-            toast_of(&invite, &scene, &prefs, NOW).unwrap().title,
+            toast_of(&invite, &scene, &prefs, NOW, Listener::default())
+                .unwrap()
+                .title,
             "Ayşe"
         );
 
@@ -1485,14 +1751,15 @@ pub(crate) mod tests {
         let mut dnd = v.clone();
         dnd.me.as_mut().unwrap().status = StatusMode::Dnd;
         let quiet = Scene::from_view(&dnd, &prefs, NOW);
-        assert!(toast_of(&dm, &quiet, &prefs, NOW).is_none());
-        assert!(toast_of(&call, &quiet, &prefs, NOW).is_none());
+        assert!(toast_of(&dm, &quiet, &prefs, NOW, Listener::default()).is_none());
+        assert!(toast_of(&call, &quiet, &prefs, NOW, Listener::default()).is_none());
         assert!(
             toast_of(
                 &SocialNotice::FriendOnline { id: "f-can".into() },
                 &scene,
                 &prefs,
-                NOW
+                NOW,
+                Listener::default()
             )
             .is_none()
         );
@@ -1504,7 +1771,7 @@ pub(crate) mod tests {
             name: None,
             crew: None,
         };
-        assert!(toast_of(&blocked, &scene, &prefs, NOW).is_none());
+        assert!(toast_of(&blocked, &scene, &prefs, NOW, Listener::default()).is_none());
     }
 
     #[test]
@@ -1514,19 +1781,392 @@ pub(crate) mod tests {
             "d:f-ayse:me",
             &message("i:1", "gone-id", false, MessageState::Sent),
             &scene,
+            Listener::default(),
         );
         assert_eq!(in_dm.from, "Ayşe", "the other one of a direct conversation");
         let in_crew = msg_view(
             "c:t1",
             &message("i:2", "gone-id", false, MessageState::Sent),
             &scene,
+            Listener::default(),
         );
         assert!(!in_crew.from.is_empty());
         let mine = msg_view(
             "c:t1",
             &message("i:3", "me", true, MessageState::Sent),
             &scene,
+            Listener::default(),
         );
         assert_eq!(mine.from, "Ece");
+    }
+
+    /// `view()` with every CHAT2 extra on and Studio's default link lists.
+    pub fn chat2_view() -> SocialView {
+        let mut v = view();
+        if let Some(chat) = v.chat.as_mut() {
+            chat.extras = Some(ChatExtrasView {
+                replies: true,
+                stickers: true,
+                reactions: true,
+                typing: true,
+                reads: true,
+                links: true,
+            });
+            let lists = links::default_lists();
+            chat.links = Some(pl_social::ChatLinksView {
+                rules: links::version(),
+                trusted: lists.trusted,
+                blocked: lists.blocked,
+                invites: true,
+            });
+            chat.conversations[0].peer_read = Some(5);
+            chat.conversations[1].peer_read = Some(5);
+        }
+        v
+    }
+
+    const CHAT2: Listener = Listener {
+        english: false,
+        chat2: true,
+    };
+
+    #[test]
+    fn chat2_extras_are_features_each_on_its_own() {
+        let scene = Scene::from_view(&chat2_view(), &NotifyPrefs::default(), NOW);
+        assert_eq!(
+            scene.features,
+            [
+                "friends",
+                "chat",
+                "calls",
+                "replies",
+                "reactions",
+                "stickers",
+                "typing",
+                "reads",
+                "links"
+            ]
+        );
+        assert!(scene.offers(|e| e.typing));
+        // "Görüldü" belongs to direct conversations only.
+        assert_eq!(scene.convs[0].seen, Some(5));
+        assert_eq!(scene.convs[1].seen, None);
+        // Studio switches one off: the rest stay, the mod is greeted again.
+        let mut fewer = chat2_view();
+        if let Some(extras) = fewer.chat.as_mut().and_then(|chat| chat.extras.as_mut()) {
+            extras.reads = false;
+            extras.links = false;
+        }
+        let scene = Scene::from_view(&fewer, &NotifyPrefs::default(), NOW);
+        assert!(!scene.features.iter().any(|f| f == "reads" || f == "links"));
+        assert_eq!(scene.convs[0].seen, None);
+        assert!(scene.links.is_none());
+        // Chat off: none of them.
+        let mut off = chat2_view();
+        if let Some(chat) = off.chat.as_mut() {
+            chat.on = false;
+        }
+        let scene = Scene::from_view(&off, &NotifyPrefs::default(), NOW);
+        assert_eq!(scene.features, ["friends", "calls"]);
+    }
+
+    #[test]
+    fn a_message_carries_its_reply_reactions_links_and_card() {
+        let scene = Scene::from_view(&chat2_view(), &NotifyPrefs::default(), NOW);
+        let mut m = message("i:8", "u-cem", false, MessageState::Sent);
+        m.text = "şuna bak https://www.youtube.com/watch?v=dQw4w9WgXcQ ve https://bit.ly/x".into();
+        m.reply = Some(pl_social::ChatReplyView {
+            id: 7,
+            from: "me".into(),
+            key: Some("n:abc".into()),
+            text: Some("Ş".repeat(200)),
+            sticker: None,
+            deleted: false,
+            missing: false,
+        });
+        m.reactions = vec![
+            pl_social::ChatReactionView {
+                e: "👍".into(),
+                by: vec![
+                    "me".into(),
+                    "f-ayse".into(),
+                    "u-cem".into(),
+                    "x-unknown".into(),
+                ],
+                mine: true,
+            },
+            pl_social::ChatReactionView {
+                e: "😂".into(),
+                by: Vec::new(),
+                mine: false,
+            },
+        ];
+        m.card = Some(pl_social::ChatCardView {
+            state: CardState::Ready,
+            url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ".into(),
+            site: "YouTube".into(),
+            icon: pl_social::CardIcon::Youtube,
+            kind: pl_social::CardKind::Video,
+            title: Some("  Rekor kırıldı  ".into()),
+            author: None,
+            desc: None,
+            image: Some("data:image/jpeg;base64,AAAA".into()),
+            w: Some(320),
+            h: Some(180),
+            rule: None,
+        });
+        let view = msg_view("c:t1", &m, &scene, CHAT2);
+        assert_eq!(view.sid, Some(8));
+        let reply = view.reply.clone().unwrap();
+        assert_eq!(
+            (
+                reply.id.as_deref(),
+                reply.sid,
+                reply.from.as_str(),
+                reply.mine
+            ),
+            (Some("n:abc"), 7, "Ece", true)
+        );
+        let quoted = reply.text.unwrap();
+        assert_eq!(quoted.chars().count(), MAX_QUOTE_CHARS + 1);
+        assert!(quoted.ends_with('…'));
+        // Counts, the player's own marked, a few names of the others; an empty kind is left out.
+        assert_eq!(view.reactions.len(), 1);
+        assert_eq!(view.reactions[0].n, 4);
+        assert!(view.reactions[0].mine);
+        assert_eq!(view.reactions[0].who, ["Ayşe", "Cem"]);
+        // The shortener stays text; the trusted video may be pressed, and its card shows.
+        assert_eq!(
+            view.links,
+            [LinkView {
+                url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ".into(),
+                trusted: true
+            }]
+        );
+        assert_eq!(
+            view.card,
+            Some(CardView {
+                site: "YouTube".into(),
+                title: "Rekor kırıldı".into()
+            })
+        );
+        // No picture ever reaches the game.
+        assert!(
+            !serde_json::to_string(&ToGame::Msg(Box::new(view)))
+                .unwrap()
+                .contains("data:image")
+        );
+
+        // Links switched off: no link may be pressed, no card shows.
+        let mut off = chat2_view();
+        if let Some(extras) = off.chat.as_mut().and_then(|chat| chat.extras.as_mut()) {
+            extras.links = false;
+        }
+        let quiet = Scene::from_view(&off, &NotifyPrefs::default(), NOW);
+        let view = msg_view("c:t1", &m, &quiet, CHAT2);
+        assert!(view.links.is_empty() && view.card.is_none());
+    }
+
+    #[test]
+    fn a_quote_says_what_this_computer_holds() {
+        let scene = Scene::from_view(&chat2_view(), &NotifyPrefs::default(), NOW);
+        let quote = |reply: pl_social::ChatReplyView| {
+            let mut m = message("i:9", "f-ayse", false, MessageState::Sent);
+            m.reply = Some(reply);
+            msg_view("d:f-ayse:me", &m, &scene, CHAT2).reply.unwrap()
+        };
+        let base = pl_social::ChatReplyView {
+            id: 3,
+            from: "f-ayse".into(),
+            key: Some("i:3".into()),
+            text: Some("akşam?".into()),
+            sticker: None,
+            deleted: false,
+            missing: false,
+        };
+        let theirs = quote(base.clone());
+        assert_eq!((theirs.from.as_str(), theirs.mine), ("Ayşe", false));
+        let sticker = quote(pl_social::ChatReplyView {
+            text: None,
+            sticker: Some("pl1/gg".into()),
+            ..base.clone()
+        });
+        assert_eq!(sticker.sticker.as_deref(), Some("pl1/gg"));
+        let deleted = quote(pl_social::ChatReplyView {
+            deleted: true,
+            ..base.clone()
+        });
+        assert!(deleted.deleted && deleted.text.is_none());
+        // Not here any more, or from someone blocked: "Önceki bir mesaj", no name, nothing to scroll to.
+        let missing = quote(pl_social::ChatReplyView {
+            missing: true,
+            key: None,
+            ..base.clone()
+        });
+        assert!(missing.missing && missing.from.is_empty() && missing.id.is_none());
+        let blocked = quote(pl_social::ChatReplyView {
+            from: "x-bad".into(),
+            ..base
+        });
+        assert!(blocked.missing && blocked.text.is_none() && blocked.from.is_empty());
+    }
+
+    #[test]
+    fn a_sticker_is_drawn_by_a_new_mod_and_told_in_words_to_an_old_one() {
+        let scene = Scene::from_view(&chat2_view(), &NotifyPrefs::default(), NOW);
+        let mut m = message("i:10", "f-ayse", false, MessageState::Sent);
+        m.text = String::new();
+        m.sticker = Some("pl1/gg".into());
+        let view = msg_view("d:f-ayse:me", &m, &scene, Listener::default());
+        assert_eq!(view.sticker.as_deref(), Some("pl1/gg"));
+        assert_eq!(view.text, "[Çıkartma: GG]");
+        let english = msg_view(
+            "d:f-ayse:me",
+            &m,
+            &scene,
+            Listener {
+                english: true,
+                chat2: false,
+            },
+        );
+        assert_eq!(english.text, "[Sticker: GG]");
+        // Its toast says it in words; only a mod that knows stickers hears which one.
+        let notice = SocialNotice::ChatMessage {
+            conv: "d:f-ayse:me".into(),
+            message: Box::new(m.clone()),
+            name: Some("Ayşe".into()),
+            crew: None,
+        };
+        let old = toast_of(
+            &notice,
+            &scene,
+            &NotifyPrefs::default(),
+            NOW,
+            Listener::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            (old.body.as_str(), old.sticker.as_deref()),
+            ("Çıkartma · GG", None)
+        );
+        let new = toast_of(&notice, &scene, &NotifyPrefs::default(), NOW, CHAT2).unwrap();
+        assert_eq!(new.sticker.as_deref(), Some("pl1/gg"));
+        // Deleted: nothing of it is left.
+        let mut gone = m;
+        gone.deleted = Some(pl_social::ChatDeletedView {
+            by: "f-ayse".into(),
+            at: None,
+        });
+        let view = msg_view("d:f-ayse:me", &gone, &scene, CHAT2);
+        assert!(view.sticker.is_none() && view.text.is_empty() && view.deleted);
+    }
+
+    #[test]
+    fn the_panels_own_message_comes_back_whole_for_a_new_mod() {
+        let scene = Scene::from_view(&chat2_view(), &NotifyPrefs::default(), NOW);
+        let mut sends = Sends::default();
+        sends.insert("n:abc".into(), "cid-1".into());
+        let mut sent = message("n:abc", "me", true, MessageState::Sent);
+        sent.id = Some(12);
+        let change = ChatChangeView {
+            conv: "d:f-ayse:me".into(),
+            upsert: vec![sent],
+            remove: Vec::new(),
+            reset: false,
+        };
+        let out = chat_frames(&change, &scene, &mut sends, CHAT2);
+        assert_eq!(
+            out.frames[0],
+            ToGame::Sent {
+                cid: "cid-1".into(),
+                id: "n:abc".into(),
+                sid: Some(12)
+            }
+        );
+        assert!(matches!(&out.frames[1], ToGame::Msg(m) if m.id == "n:abc" && m.sid == Some(12)));
+
+        // A refusal names CHAT2's own reasons and the link rule to a mod that knows them.
+        sends.insert("n:def".into(), "cid-2".into());
+        let mut failed = message("n:def", "me", true, MessageState::Failed);
+        failed.failure = Some(SocialFailure::Link);
+        failed.failure_rule = Some(pl_social::LinkRule::Shortener);
+        let mut stickers = message("n:ghi", "me", true, MessageState::Failed);
+        stickers.failure = Some(SocialFailure::Stickers);
+        sends.insert("n:ghi".into(), "cid-3".into());
+        let change = ChatChangeView {
+            conv: "d:f-ayse:me".into(),
+            upsert: vec![failed.clone(), stickers.clone()],
+            remove: Vec::new(),
+            reset: false,
+        };
+        let out = chat_frames(&change, &scene, &mut sends, CHAT2);
+        assert_eq!(
+            out.frames,
+            [
+                ToGame::SendFailed {
+                    cid: "cid-2".into(),
+                    reason: SendFailure::Link,
+                    rule: Some("shortener".into()),
+                },
+                ToGame::SendFailed {
+                    cid: "cid-3".into(),
+                    reason: SendFailure::Stickers,
+                    rule: None,
+                },
+            ]
+        );
+        // An older mod hears the nearest reason it knows.
+        sends.insert("n:def".into(), "cid-2".into());
+        sends.insert("n:ghi".into(), "cid-3".into());
+        let change = ChatChangeView {
+            conv: "d:f-ayse:me".into(),
+            upsert: vec![failed, stickers],
+            remove: Vec::new(),
+            reset: false,
+        };
+        let out = chat_frames(&change, &scene, &mut sends, Listener::default());
+        assert_eq!(
+            out.frames,
+            [
+                ToGame::SendFailed {
+                    cid: "cid-2".into(),
+                    reason: SendFailure::Link,
+                    rule: None,
+                },
+                ToGame::SendFailed {
+                    cid: "cid-3".into(),
+                    reason: SendFailure::DailyLimit,
+                    rule: None,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn cards_are_asked_only_for_recent_links_that_may_be_pressed() {
+        let scene = Scene::from_view(&chat2_view(), &NotifyPrefs::default(), NOW);
+        let mut m = message("i:11", "f-ayse", false, MessageState::Sent);
+        m.text = "https://youtu.be/dQw4w9WgXcQ".into();
+        assert!(wants_card(&m, &scene, NOW));
+        let old = ChatMessageView {
+            at: NOW - pl_social::CARD_WINDOW_MS - 1,
+            ..m.clone()
+        };
+        assert!(!wants_card(&old, &scene, NOW));
+        let refused = ChatMessageView {
+            text: "https://bit.ly/x".into(),
+            ..m.clone()
+        };
+        assert!(!wants_card(&refused, &scene, NOW));
+        let quiet = Scene::from_view(&view(), &NotifyPrefs::default(), NOW);
+        assert!(!wants_card(&m, &quiet, NOW), "links off");
+        assert_eq!(
+            Listener::from_hello("en_us", &["connect".into(), "chat2".into()]),
+            Listener {
+                english: true,
+                chat2: true
+            }
+        );
+        assert_eq!(Listener::from_hello("tr_tr", &[]), Listener::default());
     }
 }

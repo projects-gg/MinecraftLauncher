@@ -60,8 +60,27 @@ pub enum FromGame {
     Send {
         cid: String,
         conv: String,
+        /// Empty for a sticker.
+        #[serde(default)]
         text: String,
+        /// CHAT2: the message it answers, by its `sid`.
+        #[serde(default)]
+        reply: Option<i64>,
+        /// CHAT2: a Projects sticker (`pl1/gg`) instead of text.
+        #[serde(default)]
+        sticker: Option<String>,
     },
+    /// CHAT2: the player gives (`on`) or takes back their reaction `e` on message `sid`. The message
+    /// comes back with its reactions; a refusal is `react-failed`.
+    React {
+        conv: String,
+        sid: i64,
+        e: String,
+        on: bool,
+    },
+    /// CHAT2: the player writes in the panel's field ("yazıyor…"; the mod sends it at most every
+    /// 4 s, only while the field has text).
+    Typing { conv: String },
     /// The player answered a crew call.
     Answer { call: String, answer: CallAnswer },
     /// The player pressed "Join" on a friend (the mod connects after its own confirmation).
@@ -81,6 +100,9 @@ pub enum FromGame {
 
 /// The `hello` feature of a mod that switches servers on [`ToGame::Connect`].
 pub const FEATURE_CONNECT: &str = "connect";
+/// The `hello` feature of a mod that knows CHAT2's frames and fields (`docs/tasks/ovl2-protocol.md`,
+/// CHAT2-O): it hears "yazıyor…" and the precise reasons, and its panel asks for link cards.
+pub const FEATURE_CHAT2: &str = "chat2";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -117,8 +139,9 @@ pub enum ToGame {
         id: String,
     },
     Conv(ConvView),
-    /// A new message, or a known one again (same `id`) after an edit.
-    Msg(MsgView),
+    /// A new message, or a known one again (same `id`) after an edit. (Boxed: a message with
+    /// CHAT2's fields is the largest frame by far.)
+    Msg(Box<MsgView>),
     /// A message left the conversation (deleted for everyone, or dropped here).
     MsgGone {
         conv: String,
@@ -133,10 +156,31 @@ pub enum ToGame {
     Sent {
         cid: String,
         id: String,
+        /// CHAT2: the service's id of the message (replies and reactions name it).
+        #[serde(skip_serializing_if = "Option::is_none")]
+        sid: Option<i64>,
     },
     SendFailed {
         cid: String,
         reason: SendFailure,
+        /// CHAT2, with `link`: the link rule that refused it, when the service said.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        rule: Option<String>,
+    },
+    /// CHAT2: someone writes in a conversation now (`by` an opaque person key, `name` as the lists
+    /// show it). Shown for 6 s after the last; a message of theirs ends it. Sent only while the panel
+    /// is open, and only to a mod that said `chat2`.
+    Typing {
+        conv: String,
+        by: String,
+        name: String,
+    },
+    /// CHAT2: the player's reaction did not go (the message comes back as it was).
+    ReactFailed {
+        conv: String,
+        sid: i64,
+        e: String,
+        reason: ReactFailure,
     },
     Call(CallView),
     CallEnd {
@@ -201,6 +245,10 @@ pub struct ConvView {
     pub muted: bool,
     /// The player may write here now (still friends, still in the crew, chat on).
     pub writable: bool,
+    /// CHAT2, direct conversations: the friend has seen the messages up to this `sid` ("Görüldü";
+    /// only while both keep "Görüldü bilgisi" on).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seen: Option<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -210,7 +258,7 @@ pub enum ConvKind {
     Crew,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct MsgView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub conv: Option<String>,
@@ -218,6 +266,7 @@ pub struct MsgView {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cid: Option<String>,
     pub from: String,
+    /// A sticker's words ("[Çıkartma: GG]", in the game's language) for a mod that cannot draw it.
     pub text: String,
     /// Unix time in milliseconds.
     pub at: i64,
@@ -228,6 +277,87 @@ pub struct MsgView {
     /// Deleted for everyone: `text` is empty and the mod shows a quiet "Bu mesaj silindi" line.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub deleted: bool,
+    /// CHAT2: the service's id (replies and reactions name a message by it; "Görüldü" compares it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sid: Option<i64>,
+    /// CHAT2: a Projects sticker (`pl1/gg`); the mod draws it from its own atlas.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sticker: Option<String>,
+    /// CHAT2: the message it answers, as this computer holds it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reply: Option<ReplyView>,
+    /// CHAT2: its reactions, kinds in the order first given.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub reactions: Vec<ReactionView>,
+    /// CHAT2: the links of its text the player may press now (they pass the rule table and
+    /// Studio's lists); any other stays plain text. Only `https`.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<LinkView>,
+    /// CHAT2: its first link's card, made by the launcher ("YouTube · <başlık>").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub card: Option<CardView>,
+}
+
+/// The message a reply answers (CHAT2): the service keeps only the link, the words come from this
+/// computer's own history.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct ReplyView {
+    /// Its `id` in the conversation, when this computer holds it (the mod scrolls to it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    pub sid: i64,
+    /// Its sender as the lists show them (empty when `missing`).
+    pub from: String,
+    /// The player's own message.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub mine: bool,
+    /// What it said, at most [`MAX_QUOTE_CHARS`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sticker: Option<String>,
+    /// Deleted for everyone: "Mesaj silindi".
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub deleted: bool,
+    /// Not on this computer, or from someone no longer seen: "Önceki bir mesaj".
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub missing: bool,
+}
+
+/// Characters of a quoted message the bridge carries (the mod shows one line of it).
+pub const MAX_QUOTE_CHARS: usize = 120;
+
+/// One kind of reaction on a message (CHAT2).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct ReactionView {
+    /// One emoji, as the service keeps it (send it back as it is to give or take the same one).
+    pub e: String,
+    /// How many people gave it.
+    pub n: u32,
+    /// The player is one of them.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub mine: bool,
+    /// The first few of the others, by name (the mod's "Ayşe, Mert ve 2 kişi daha").
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub who: Vec<String>,
+}
+
+/// A link the player may press (CHAT2).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct LinkView {
+    /// As written in the text.
+    pub url: String,
+    /// A site Studio trusts.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub trusted: bool,
+}
+
+/// A link's card as the overlay shows it: one quiet line (CHAT2; no picture in game).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct CardView {
+    /// "YouTube", else the domain.
+    pub site: String,
+    pub title: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -273,6 +403,9 @@ pub struct ToastView {
     /// The crew of a crew chat message (`title` is the sender).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub crew: Option<String>,
+    /// CHAT2: a sticker message (`body` says "Çıkartma · GG"); the mod may draw a small picture.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sticker: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -314,6 +447,36 @@ pub enum SendFailure {
     Off,
     /// No longer friends, or no longer in the crew.
     NotAllowed,
+    /// CHAT2: the day's stickers are used up.
+    Stickers,
+    /// CHAT2: the day's messages with links are used up.
+    Links,
+    /// CHAT2: a new Discord account sends no links yet.
+    LimitedLinks,
+    /// CHAT2: Studio switched this extra (stickers, replies) off.
+    FeatureOff,
+}
+
+/// Why a reaction did not go (CHAT2). The mod says something general for one it does not know.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReactFailure {
+    /// The player has 5 reactions on that message already.
+    Full,
+    /// The message carries 10 kinds already.
+    Kinds,
+    /// The message is older than a week (or no longer here).
+    Old,
+    /// That emoji is never a reaction (🖕).
+    Words,
+    Rate,
+    Muted,
+    /// Reactions are switched off.
+    Off,
+    /// No longer friends, or no longer in the crew.
+    NotAllowed,
+    /// No connection to the friends service.
+    Offline,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -439,11 +602,13 @@ mod tests {
             body: "Mert".into(),
             conv: None,
             crew: None,
+            sticker: None,
         });
         let json = serde_json::to_value(&toast).unwrap();
         assert_eq!(json["t"], "toast");
         assert_eq!(json["kind"], "call");
         assert!(json.get("conv").is_none() && json.get("crew").is_none());
+        assert!(json.get("sticker").is_none());
 
         let bye = serde_json::to_value(ToGame::Bye {
             reason: ByeReason::GameStartClose,
@@ -478,9 +643,11 @@ mod tests {
         let failed = serde_json::to_value(ToGame::SendFailed {
             cid: "c".into(),
             reason: SendFailure::DailyLimit,
+            rule: None,
         })
         .unwrap();
         assert_eq!(failed["reason"], "daily-limit");
+        assert!(failed.get("rule").is_none());
         let call = serde_json::to_value(ToGame::Call(CallView {
             id: "k".into(),
             crew: "Gece Kuşları".into(),
@@ -498,7 +665,7 @@ mod tests {
         assert!(call.get("own").is_none());
         assert_eq!(call["mine"], "coming");
         assert_eq!(call["answers"]["cant"], 0);
-        let msg = serde_json::to_value(ToGame::Msg(MsgView {
+        let msg = serde_json::to_value(ToGame::Msg(Box::new(MsgView {
             conv: Some("d:1:2".into()),
             id: "i:1".into(),
             cid: None,
@@ -508,9 +675,150 @@ mod tests {
             mine: false,
             edited: false,
             deleted: false,
-        }))
+            ..MsgView::default()
+        })))
         .unwrap();
         assert!(msg.get("edited").is_none() && msg.get("cid").is_none());
         assert!(msg.get("deleted").is_none());
+        // An OVL2 message carries none of CHAT2's fields.
+        for field in ["sid", "sticker", "reply", "reactions", "links", "card"] {
+            assert!(msg.get(field).is_none(), "{field}");
+        }
+    }
+
+    #[test]
+    fn chat2_actions_of_the_panel_parse() {
+        // An older mod's send still reads (no reply, no sticker).
+        let plain: FromGame =
+            serde_json::from_str(r#"{"t":"send","cid":"c1","conv":"d:1","text":"selam"}"#).unwrap();
+        assert!(
+            matches!(plain, FromGame::Send { reply: None, sticker: None, ref text, .. } if text == "selam")
+        );
+        let sticker: FromGame = serde_json::from_str(
+            r#"{"t":"send","cid":"c2","conv":"d:1","sticker":"pl1/gg","reply":1800000000123}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            sticker,
+            FromGame::Send { ref text, reply: Some(1_800_000_000_123), sticker: Some(ref s), .. }
+                if text.is_empty() && s == "pl1/gg"
+        ));
+        let react: FromGame =
+            serde_json::from_str(r#"{"t":"react","conv":"c:t1","sid":42,"e":"👍","on":true}"#)
+                .unwrap();
+        assert_eq!(
+            react,
+            FromGame::React {
+                conv: "c:t1".into(),
+                sid: 42,
+                e: "👍".into(),
+                on: true
+            }
+        );
+        let typing: FromGame = serde_json::from_str(r#"{"t":"typing","conv":"c:t1"}"#).unwrap();
+        assert_eq!(
+            typing,
+            FromGame::Typing {
+                conv: "c:t1".into()
+            }
+        );
+        // A reaction without its emoji is not one.
+        assert!(
+            serde_json::from_str::<FromGame>(r#"{"t":"react","conv":"c","sid":1,"on":true}"#)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn chat2_frames_to_the_game_use_the_wire_names() {
+        let typing = serde_json::to_value(ToGame::Typing {
+            conv: "c:t1".into(),
+            by: "u-cem".into(),
+            name: "Cem".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            typing,
+            serde_json::json!({"t":"typing","conv":"c:t1","by":"u-cem","name":"Cem"})
+        );
+        let failed = serde_json::to_value(ToGame::ReactFailed {
+            conv: "c:t1".into(),
+            sid: 7,
+            e: "👍".into(),
+            reason: ReactFailure::NotAllowed,
+        })
+        .unwrap();
+        assert_eq!(failed["t"], "react-failed");
+        assert_eq!(failed["reason"], "not-allowed");
+        let sent = serde_json::to_value(ToGame::Sent {
+            cid: "c".into(),
+            id: "n:x".into(),
+            sid: Some(9),
+        })
+        .unwrap();
+        assert_eq!(
+            sent,
+            serde_json::json!({"t":"sent","cid":"c","id":"n:x","sid":9})
+        );
+        let refused = serde_json::to_value(ToGame::SendFailed {
+            cid: "c".into(),
+            reason: SendFailure::Link,
+            rule: Some("shortener".into()),
+        })
+        .unwrap();
+        assert_eq!(refused["rule"], "shortener");
+        assert_eq!(
+            serde_json::to_value(SendFailure::LimitedLinks).unwrap(),
+            "limited-links"
+        );
+        let msg = serde_json::to_value(ToGame::Msg(Box::new(MsgView {
+            conv: Some("c:t1".into()),
+            id: "i:8".into(),
+            from: "Cem".into(),
+            text: "bak https://youtu.be/x".into(),
+            at: 8,
+            sid: Some(8),
+            reply: Some(ReplyView {
+                id: Some("i:7".into()),
+                sid: 7,
+                from: "Ece".into(),
+                mine: true,
+                text: Some("geliyor musun".into()),
+                ..ReplyView::default()
+            }),
+            reactions: vec![ReactionView {
+                e: "👍".into(),
+                n: 2,
+                mine: true,
+                who: vec!["Ayşe".into()],
+            }],
+            links: vec![LinkView {
+                url: "https://youtu.be/x".into(),
+                trusted: true,
+            }],
+            card: Some(CardView {
+                site: "YouTube".into(),
+                title: "Rekor".into(),
+            }),
+            ..MsgView::default()
+        })))
+        .unwrap();
+        assert_eq!(msg["sid"], 8);
+        assert_eq!(
+            msg["reply"],
+            serde_json::json!({"id":"i:7","sid":7,"from":"Ece","mine":true,"text":"geliyor musun"})
+        );
+        assert_eq!(
+            msg["reactions"][0],
+            serde_json::json!({"e":"👍","n":2,"mine":true,"who":["Ayşe"]})
+        );
+        assert_eq!(
+            msg["links"][0],
+            serde_json::json!({"url":"https://youtu.be/x","trusted":true})
+        );
+        assert_eq!(
+            msg["card"],
+            serde_json::json!({"site":"YouTube","title":"Rekor"})
+        );
     }
 }

@@ -180,9 +180,10 @@ impl Overlay {
             SocialUpdate::View(view) => Msg::View(Arc::from(view)),
             SocialUpdate::Notice(notice) => Msg::Notice(notice),
             SocialUpdate::Chat(change) => Msg::Chat(change),
-            // "Yazıyor…" (CHAT2) and a crew tag taken off by its crew's leader (TEAM6) do not
-            // reach the game yet.
-            SocialUpdate::Typing(_) | SocialUpdate::TagOff(_) => return,
+            // "Yazıyor…" (CHAT2): the session passes it on while the panel is open.
+            SocialUpdate::Typing(typing) => Msg::Typing(typing),
+            // A crew tag taken off by its crew's leader (TEAM6) does not reach the game yet.
+            SocialUpdate::TagOff(_) => return,
         };
         let _ = msgs.send(msg);
     }
