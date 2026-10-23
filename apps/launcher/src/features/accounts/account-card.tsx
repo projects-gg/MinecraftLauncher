@@ -1,6 +1,7 @@
 // One account in the account center: face, name, type, activity and its actions. The whole
 // left part switches to the account; actions sit on the right (edit or appearance, pin, remove).
-// Offline accounts edit in place: name, and the picture behind the face button.
+// Offline accounts edit in place: name, and the picture behind the face button; while Projects
+// skins are offered (SKIN1) their T-shirt opens the Projects skin panel, before the pencil.
 import {
   Check,
   PencilSimple,
@@ -35,6 +36,8 @@ export interface AccountCardProps {
   /** Resolves to an error message, or null once saved. */
   onRename: (name: string) => Promise<string | null>;
   onSkins: () => void;
+  /** Username accounts while Projects skins are offered (SKIN1): the T-shirt's panel. */
+  onProjectsSkin?: () => void;
   onRelogin: () => void;
   onPin: () => void;
   /** Offline accounts: a bundled picture, or null for the head. */
@@ -198,6 +201,7 @@ export function AccountCard({
   onRemove,
   onRename,
   onSkins,
+  onProjectsSkin,
   onRelogin,
   onPin,
   onAvatar,
@@ -342,12 +346,22 @@ export function AccountCard({
                 onClick={onSkins}
               />
             ) : (
-              <IconButton
-                label={t("accounts.center.edit")}
-                icon={<PencilSimple size={18} />}
-                className={actionClass}
-                onClick={() => setEditing(true)}
-              />
+              <>
+                {onProjectsSkin ? (
+                  <IconButton
+                    label={t("accounts.center.skins")}
+                    icon={<TShirt size={18} />}
+                    className={actionClass}
+                    onClick={onProjectsSkin}
+                  />
+                ) : null}
+                <IconButton
+                  label={t("accounts.center.edit")}
+                  icon={<PencilSimple size={18} />}
+                  className={actionClass}
+                  onClick={() => setEditing(true)}
+                />
+              </>
             )}
             <PinButton pinned={Boolean(account.pinned)} onToggle={onPin} />
             <IconButton

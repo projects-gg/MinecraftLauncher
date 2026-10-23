@@ -45,6 +45,8 @@ import {
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
+import { ProjectsLinkRow } from "@/features/projects-skin/link-row";
+import { useProjectsSkinOverview } from "@/features/projects-skin/queries";
 import { SocialAccountRow } from "@/features/social/account-row";
 import { type AccountSummary, api } from "@/lib/api";
 import { AccountCard } from "./account-card";
@@ -407,6 +409,8 @@ export function AccountCenter({
   const openAppearance = useAccountsUi((s) => s.openAppearance);
   const fresh = useAccountsUi((s) => s.fresh);
   const markFresh = useAccountsUi((s) => s.markFresh);
+  // Username accounts get the Projects skin panel while the signed content offers it (SKIN1).
+  const projectsSkins = Boolean(useProjectsSkinOverview().data?.shown);
   const addInput = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
   const listId = useId();
@@ -590,6 +594,11 @@ export function AccountCenter({
                       onRemove={() => remove(account, index)}
                       onRename={(name) => rename(account, name)}
                       onSkins={() => openAppearance(account.id)}
+                      onProjectsSkin={
+                        account.kind === "offline" && projectsSkins
+                          ? () => openAppearance(account.id)
+                          : undefined
+                      }
                       onRelogin={() => openLogin(account.id)}
                       onPin={() => {
                         setActed(account.id);
@@ -631,6 +640,7 @@ export function AccountCenter({
               <div className="space-y-2">
                 <AfkRow onOpen={openAfk} />
                 <SocialAccountRow onOpen={() => onNavigate?.()} />
+                <ProjectsLinkRow />
               </div>
             )}
             <motion.div
@@ -702,9 +712,14 @@ export function AccountCenterSheet() {
                     returnFocus.focus();
                   }
                 }}
-                // Escape inside a rename cancels the rename, not the whole sheet.
+                // Escape inside a rename cancels the rename, not the whole sheet; inside the
+                // open "Projects eşlemesi" row it closes the row.
                 onEscapeKeyDown={(event) => {
-                  if ((event.target as Element | null)?.closest?.("[data-rename-form]")) {
+                  if (
+                    (event.target as Element | null)?.closest?.(
+                      "[data-rename-form], [data-link-form]",
+                    )
+                  ) {
                     event.preventDefault();
                   }
                 }}

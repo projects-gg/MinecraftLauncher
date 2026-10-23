@@ -155,6 +155,23 @@ export const PALETTE_WORDS = {
     related: ["kullanıcı adı", "çevrimdışı", "offline", "username", "cracked"],
   },
   accountCenter: { keywords: ["hesap", "hesaplar", "çıkış yap", "logout", "accounts"] },
+  // SKIN1: the Projects skin of a username account, and the game account's link on Projects.
+  projectsSkin: {
+    keywords: [
+      "skin",
+      "görünüm",
+      "projects skini",
+      "skin değiştir",
+      "kostüm",
+      "karakter",
+      "kıyafet",
+      "dış görünüş",
+    ],
+  },
+  projectsLink: {
+    keywords: ["eşle", "eşleme", "discord eşle", "hesabı eşle", "doğrula", "doğrulama", "link"],
+    related: ["discord", "doğrulanmış rol", "verified"],
+  },
   friends: { keywords: ["arkadaş", "arkadaşlar", "discord", "friends"] },
   addFriend: { keywords: ["arkadaş ekle", "kod", "davet", "PRJ"] },
 
