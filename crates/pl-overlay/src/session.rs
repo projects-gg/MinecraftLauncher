@@ -18,8 +18,10 @@ use tokio::sync::{mpsc, oneshot};
 
 use crate::OverlayConfig;
 use crate::feed::{self, Mirror, Scene, Sends};
+use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
-    ByeReason, CallAnswer, FEATURE_CONNECT, FromGame, MAX_MESSAGE_CHARS, SendFailure, ToGame,
+    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_HOST, FromGame, MAX_MESSAGE_CHARS,
+    SendFailure, ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 
@@ -112,9 +114,11 @@ pub(crate) enum Msg {
     Chat(ChatChangeView),
     Notice(SocialNotice),
     Config(OverlayConfig),
-    /// "Bağlan": the game joins `target` (`host[:port]`); `reply` hears how it went.
+    /// "Bağlan": the game joins `target` (`host[:port]`); `reply` hears how it went. With `label`
+    /// (HOST1, H12) the target is the launcher's own way to a friend's world on `127.0.0.1`.
     Connect {
         target: String,
+        label: Option<String>,
         reply: oneshot::Sender<ConnectOutcome>,
     },
     /// Ends the session; `done` fires once the bridge closed.
@@ -122,6 +126,11 @@ pub(crate) enum Msg {
         reason: ByeReason,
         done: Option<oneshot::Sender<()>>,
     },
+    /// HOST1: frames for a mod that hosts (dropped for one that does not).
+    Host(Vec<ToGame>),
+    /// HOST1: the friends who invited the player to their world, and whether the player may open
+    /// theirs now.
+    Worlds(WorldsShown),
 }
 
 /// The panel sends at most this many messages ...
@@ -141,6 +150,8 @@ struct Live {
     open: Option<String>,
     /// The mod switches servers on `connect`.
     connects: bool,
+    /// The mod hosts worlds (HOST1: `host` in its hello).
+    hosts: bool,
 }
 
 pub(crate) struct Session<S> {
@@ -157,6 +168,9 @@ pub(crate) struct Session<S> {
     connected: ConnectedFn,
     pending_connect: Option<PendingConnect>,
     next_connect: u64,
+    /// HOST1: world sharing hears the mod here; what it shows of worlds.
+    host: HostSink,
+    worlds: WorldsShown,
 }
 
 fn now_ms() -> i64 {
@@ -165,6 +179,19 @@ fn now_ms() -> i64 {
         .map_or(0, |since| {
             i64::try_from(since.as_millis()).unwrap_or(i64::MAX)
         })
+}
+
+/// The scene of a view with what world sharing shows (HOST1): the friends who invited the player
+/// to their world, and `host` among the features while the player may open theirs.
+fn scene_of(view: &SocialView, config: &OverlayConfig, worlds: &WorldsShown) -> Scene {
+    let mut scene = Scene::from_view(view, &config.notify, now_ms());
+    if scene.signed_in {
+        scene.mark_worlds(&worlds.marks);
+        if worlds.may_host {
+            scene.features.push(FEATURE_HOST.to_owned());
+        }
+    }
+    scene
 }
 
 /// Why `chat_send` refused at once.
@@ -185,10 +212,12 @@ impl<S: SocialActions> Session<S> {
         config: OverlayConfig,
         control: mpsc::UnboundedSender<Control>,
         connected: ConnectedFn,
+        host: HostSink,
+        worlds: WorldsShown,
     ) -> Self {
         // The friends feature as it is now; every change after comes as a message.
         let view = Arc::new(social.view());
-        let scene = Scene::from_view(&view, &config.notify, now_ms());
+        let scene = scene_of(&view, &config, &worlds);
         Self {
             social,
             launcher,
@@ -202,6 +231,8 @@ impl<S: SocialActions> Session<S> {
             connected,
             pending_connect: None,
             next_connect: 0,
+            host,
+            worlds,
         }
     }
 
@@ -261,10 +292,13 @@ impl<S: SocialActions> Session<S> {
         if was != self.live.is_some() {
             (self.connected)(self.live.is_some());
         }
+        if was && self.live.is_none() {
+            (self.host)(HostSignal::Gone);
+        }
     }
 
     fn set_view(&mut self, view: Arc<SocialView>) {
-        self.scene = Scene::from_view(&view, &self.config.notify, now_ms());
+        self.scene = scene_of(&view, &self.config, &self.worlds);
         self.view = view;
     }
 
@@ -303,15 +337,36 @@ impl<S: SocialActions> Session<S> {
                 self.set_view(Arc::clone(&self.view));
                 self.refresh();
             }
-            Msg::Connect { target, reply } => self.on_connect(&target, reply),
+            Msg::Connect {
+                target,
+                label,
+                reply,
+            } => self.on_connect(&target, label, reply),
             Msg::Stop { .. } => {}
+            Msg::Host(frames) => {
+                if self.live.as_ref().is_some_and(|live| live.hosts) {
+                    self.send(frames);
+                }
+            }
+            Msg::Worlds(worlds) => {
+                if self.worlds != worlds {
+                    self.worlds = worlds;
+                    self.set_view(Arc::clone(&self.view));
+                    self.refresh();
+                }
+            }
         }
     }
 
     /// "Bağlan", which the player chose and confirmed in the launcher: the game joins the server
     /// itself instead of restarting. Only Projects or an address shared now, one at a time, and
     /// only to a mod that can.
-    fn on_connect(&mut self, target: &str, reply: oneshot::Sender<ConnectOutcome>) {
+    fn on_connect(
+        &mut self,
+        target: &str,
+        label: Option<String>,
+        reply: oneshot::Sender<ConnectOutcome>,
+    ) {
         // One at a time: an earlier one still counts until it is answered, given up by its caller
         // or older than the wait (checked here: nothing ticks meanwhile).
         if let Some(pending) = &self.pending_connect
@@ -325,24 +380,36 @@ impl<S: SocialActions> Session<S> {
         let refused = match &self.live {
             None => Some("no-overlay"),
             Some(live) if !live.connects => Some("unsupported"),
+            // A friend's world needs a mod that shows its label instead of the address (HOST1).
+            Some(live) if label.is_some() && !live.hosts => Some("unsupported"),
             Some(_) => None,
         };
         if let Some(reason) = refused {
             let _ = reply.send(ConnectOutcome::unavailable(reason));
             return;
         }
-        let Some((host, port)) = self.scene.connect_target(target) else {
+        let target = match &label {
+            // The launcher's own way to a friend's world: `127.0.0.1` and nothing else (H12).
+            Some(_) => feed::server_address(target).filter(|(host, _)| host == "127.0.0.1"),
+            None => self.scene.connect_target(target),
+        };
+        let Some((host, port)) = target else {
             tracing::info!("the launcher did not send the game to a server nobody shares");
             let _ = reply.send(ConnectOutcome::unavailable("not-allowed"));
             return;
         };
         self.next_connect += 1;
         let id = self.next_connect.to_string();
-        tracing::info!(%host, port, "the game joins a server the player chose in the launcher");
+        if label.is_some() {
+            tracing::info!("the game joins a friend's world the player chose");
+        } else {
+            tracing::info!(%host, port, "the game joins a server the player chose in the launcher");
+        }
         self.send(vec![ToGame::Connect {
             id: id.clone(),
             host,
             port,
+            label,
         }]);
         self.pending_connect = Some(PendingConnect {
             id,
@@ -405,14 +472,17 @@ impl<S: SocialActions> Session<S> {
                         .reply
                         .send(ConnectOutcome::unavailable("no-overlay"));
                 }
+                let hosts = features.iter().any(|f| f == FEATURE_HOST);
                 self.set_live(Some(Live {
                     conn,
                     mirror,
                     panel: false,
                     open: None,
                     connects: features.iter().any(|f| f == FEATURE_CONNECT),
+                    hosts,
                 }));
                 self.send(frames);
+                (self.host)(HostSignal::Connected { hosts });
             }
             BridgeEvent::Frame { conn, frame } => {
                 if self.live.as_ref().is_some_and(|live| live.conn == conn) {
@@ -461,6 +531,28 @@ impl<S: SocialActions> Session<S> {
                         tracing::info!(%error, "the overlay's call answer did not go");
                     }
                 });
+            }
+            // HOST1: the player's world, to the launcher's world sharing (a mod that hosts only).
+            frame @ (FromGame::HostWorld { .. }
+            | FromGame::HostRequest { .. }
+            | FromGame::HostPublished { .. }
+            | FromGame::HostGuest { .. }
+            | FromGame::HostInvite { .. }
+            | FromGame::HostRemove { .. }
+            | FromGame::HostStop { .. }) => {
+                if self.live.as_ref().is_some_and(|live| live.hosts) {
+                    (self.host)(HostSignal::Frame(frame));
+                }
+            }
+            // A friend who invited the player to their world: the launcher joins it (H15).
+            FromGame::Join { friend }
+                if self
+                    .scene
+                    .friend(&friend)
+                    .is_some_and(|f| f.world.is_some()) =>
+            {
+                tracing::info!("the player joins a friend's world from the in-game overlay");
+                (self.host)(HostSignal::Join { friend });
             }
             FromGame::Join { friend } => {
                 if self.scene.friend(&friend).is_some_and(|f| f.joinable) {

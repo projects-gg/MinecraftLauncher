@@ -15,6 +15,7 @@
 //! tasks wait on their channels and sockets (no timers, no polling).
 
 mod feed;
+mod host;
 mod hub;
 pub mod policy;
 pub mod protocol;
@@ -25,6 +26,7 @@ mod tests;
 mod token;
 
 pub use feed::{MAX_CONVS, MAX_FRIENDS};
+pub use host::{HostSignal, HostSink, WorldsShown};
 pub use hub::{Overlay, OverlayConfig, OverlayStatus};
 pub use server::{
     BYE_TIMEOUT, Bridge, BridgeEvent, ConnId, Control, Endpoint, PORT_ARG, TOKEN_ARG,

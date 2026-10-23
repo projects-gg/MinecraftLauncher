@@ -548,6 +548,8 @@ impl SocialState {
             | PresenceEvent::ChatReacted { .. }
             | PresenceEvent::ChatTyping { .. }
             | PresenceEvent::ChatRead { .. } => {}
+            // World sessions belong to the launcher's host (HOST1, `crate::world`).
+            PresenceEvent::World(_) => {}
         }
         notices
     }

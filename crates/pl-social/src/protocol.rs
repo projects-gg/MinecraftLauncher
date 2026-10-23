@@ -520,6 +520,10 @@ pub(crate) enum ServerMessage {
         /// Every plan of the player's crews they see (only with `plans` in the capabilities).
         #[serde(default, deserialize_with = "readable_plans_opt")]
         plans: Option<Vec<CrewPlan>>,
+        /// World sessions (HOST1): Studio's switch and the guest limit (only with `worlds` in
+        /// the capabilities).
+        #[serde(default)]
+        worlds: Option<crate::world::WorldsStatus>,
     },
     /// A crew call, new or changed (its server or kind, its crews, or answers that went away):
     /// replaces the one with the same id. `quiet`: show it, never announce it.
@@ -705,6 +709,68 @@ pub(crate) enum ServerMessage {
     Notice {
         notice: ModNotice,
     },
+    /// World sessions (HOST1, `crate::world`; only with `worlds` in the capabilities): a friend's
+    /// invite, `quiet` on do-not-disturb.
+    WorldInvite {
+        invite: crate::world::WorldInvite,
+        #[serde(default)]
+        quiet: bool,
+    },
+    /// The world the player was invited to changed (its count, or new `paths`).
+    WorldUpdate {
+        #[serde(default)]
+        from: String,
+        session: String,
+        #[serde(default)]
+        guests: u8,
+        #[serde(default)]
+        max: u8,
+        #[serde(default)]
+        paths: Option<crate::world::Hidden<serde_json::Value>>,
+    },
+    WorldClosed {
+        #[serde(default)]
+        from: String,
+        session: String,
+    },
+    /// The invite was taken back: to the guest with `from`, to the host with `to`.
+    WorldRevoked {
+        #[serde(default)]
+        from: Option<String>,
+        session: String,
+        #[serde(default)]
+        to: Option<String>,
+    },
+    /// To the host: a guest's path signal.
+    WorldPeer {
+        session: String,
+        from: String,
+        slot: String,
+        path: String,
+        #[serde(default)]
+        relay: Option<crate::world::Hidden<String>>,
+    },
+    /// To a guest: the host's paths after its signal.
+    WorldPeerOk {
+        session: String,
+        #[serde(default)]
+        from: String,
+        #[serde(default)]
+        slot: String,
+        paths: crate::world::Hidden<serde_json::Value>,
+    },
+    /// Move this session's TURN streams to e4mc; the credentials go after `grace` seconds.
+    TurnMove {
+        session: String,
+        #[serde(default)]
+        reason: String,
+        #[serde(default)]
+        grace: u64,
+    },
+    /// Studio's switch for world sessions or the guest limit changed.
+    WorldState {
+        worlds: crate::world::WorldsStatus,
+    },
     Ack {
         #[serde(default)]
         rid: Option<u32>,
@@ -722,6 +788,16 @@ pub(crate) enum ServerMessage {
         /// A link's card (CHAT2).
         #[serde(default)]
         card: Option<Box<LinkCard>>,
+        /// The first answer to `world{open:true}` (HOST1).
+        #[serde(default)]
+        world: Option<crate::world::WorldAck>,
+        /// A `turn_creds` answer (HOST1): the paths to try, TURN credentials, the e4mc region.
+        #[serde(default)]
+        order: Option<Vec<String>>,
+        #[serde(default)]
+        ice: Option<crate::world::TurnIce>,
+        #[serde(default)]
+        e4mc: Option<crate::world::E4mcHint>,
     },
     Error {
         #[serde(default)]

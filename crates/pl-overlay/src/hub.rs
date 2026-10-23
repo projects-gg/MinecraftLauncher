@@ -15,8 +15,9 @@ use pl_social::SocialUpdate;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{mpsc, oneshot};
 
+use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::policy::NotifyPrefs;
-use crate::protocol::ByeReason;
+use crate::protocol::{ByeReason, ToGame};
 use crate::server::{Bridge, Endpoint};
 use crate::session::{CONNECT_WAIT, ConnectOutcome, ConnectedFn, Msg, Session, SocialActions};
 
@@ -67,6 +68,8 @@ struct Running {
 struct Inner {
     config: OverlayConfig,
     running: Option<Running>,
+    /// What world sharing shows in every session (HOST1).
+    worlds: WorldsShown,
 }
 
 struct Shared {
@@ -74,6 +77,8 @@ struct Shared {
     next: AtomicU64,
     connected: AtomicBool,
     status: Mutex<Option<StatusFn>>,
+    /// World sharing (HOST1) hears the running session's mod here.
+    host: Mutex<Option<HostSink>>,
 }
 
 /// Cheap to clone; the launcher keeps one.
@@ -97,10 +102,12 @@ impl Overlay {
                 inner: Mutex::new(Inner {
                     config,
                     running: None,
+                    worlds: WorldsShown::default(),
                 }),
                 next: AtomicU64::new(1),
                 connected: AtomicBool::new(false),
                 status: Mutex::new(None),
+                host: Mutex::new(None),
             }),
         }
     }
@@ -200,18 +207,28 @@ impl Overlay {
         let (control, control_rx) = mpsc::unbounded_channel();
         let (events_tx, events) = mpsc::unbounded_channel();
         let (msgs, msgs_rx) = mpsc::unbounded_channel();
-        let config = {
+        let (config, worlds) = {
             let mut inner = self.lock();
             inner.running = Some(Running {
                 id,
                 port: endpoint.port(),
                 msgs: msgs.clone(),
             });
-            inner.config.clone()
+            (inner.config.clone(), inner.worlds.clone())
         };
         let hub = self.clone();
         let connected: ConnectedFn = Arc::new(move |on| hub.report(id, on, false));
-        let session = Session::new(social, launcher.into(), config, control, connected);
+        let hub = self.clone();
+        let host: HostSink = Arc::new(move |signal| hub.host_signal(id, signal));
+        let session = Session::new(
+            social,
+            launcher.into(),
+            config,
+            control,
+            connected,
+            host,
+            worlds,
+        );
         tokio::spawn(bridge.serve(control_rx, events_tx));
         tokio::spawn(session.run(msgs_rx, events));
         tracing::info!(port = endpoint.port(), "in-game overlay bridge ready");

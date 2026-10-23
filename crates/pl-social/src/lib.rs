@@ -64,6 +64,7 @@ mod store;
 mod tls;
 mod together;
 mod view;
+mod world;
 
 #[cfg(test)]
 mod testutil;
@@ -131,4 +132,8 @@ pub use view::{
     RequestView, RestrictionView, SendFailure, SendOutcome, SignInFailure, SocialNotice,
     SocialView, TagOffView, TeamInviteView, TeamLookupView, TeamMemberView, TeamRequestView,
     TeamView,
+};
+pub use world::{
+    E4mcHint, Hidden, TurnIce, WORLDS_CAP, WorldAck, WorldAnswer, WorldError, WorldEvent,
+    WorldFrame, WorldInvite, WorldRole, WorldSink, WorldsStatus,
 };
