@@ -107,7 +107,8 @@ export function useCrewItems(team: SocialTeam, place: CrewMenuPlace = {}) {
         ? { first: at === 0, last: at === crews.length - 1 }
         : undefined,
     chat,
-    report: true,
+    // The leader runs the crew, so reporting it is someone else's step; members and moderators keep it.
+    report: team.role !== "founder",
     badge,
   });
   const drop: TeamAction[] = [];
