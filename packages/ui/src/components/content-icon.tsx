@@ -295,6 +295,50 @@ export const CONTENT_SPRITES = {
       "................",
     ],
   },
+  /** Two smiling players, the second a step back and looking at the first: friends. */
+  friends: {
+    shadow: "o",
+    rows: [
+      "................",
+      "................",
+      "................",
+      "........ooooooo.",
+      "........ooooooo.",
+      ".sssssss.ddddoo.",
+      ".sssssss.dddddd.",
+      ".sllllls.kmdkmd.",
+      ".lllllll.dddddd.",
+      ".lholohl.sdddsd.",
+      ".lllllll.dsssdd.",
+      ".lslllsl.ssssss.",
+      ".llsssll........",
+      ".mmmmmmm........",
+      "................",
+      "................",
+    ],
+  },
+  /** A speech bubble with three dots: messages (an empty conversation or list of them). */
+  chat: {
+    shadow: "o",
+    rows: [
+      "................",
+      "................",
+      "..lllllllllll...",
+      ".lhmmmmmmmmmmd..",
+      ".lmmmmmmmmmmmd..",
+      ".lmmmmmmmmmmmd..",
+      ".lmmommommommd..",
+      ".lmmmmmmmmmmmd..",
+      ".lmmmmmmmmmmmd..",
+      ".lmmmmmmmmmmmd..",
+      "..sssssssssss...",
+      "..ss............",
+      "..s.............",
+      "................",
+      "................",
+      "................",
+    ],
+  },
   /** A check mark (jade): something finished. */
   done: {
     rows: [
