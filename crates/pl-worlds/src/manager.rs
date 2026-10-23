@@ -934,13 +934,18 @@ impl Worlds {
     /// "Dünyayı aç" from the launcher (see [`WorldOpenOutcome`]). Refusals come as `openFailed`.
     pub async fn open(&self, request: WorldOpenRequest) -> WorldOpenOutcome {
         let switch_on = self.state().switch_on();
-        let install = self.inner.launcher.host_install(&request.instance_id).await;
-        let Some(install) = install.filter(|i| i.hostable && switch_on) else {
+        let hostable = self
+            .inner
+            .launcher
+            .host_install(&request.instance_id)
+            .await
+            .is_some_and(|install| install.hostable);
+        if !(hostable && switch_on) {
             self.notice(HostNotice::OpenFailed {
                 reason: WorldOpenFailure::Unavailable,
             });
             return WorldOpenOutcome::Cancelled;
-        };
+        }
         let world_name = self
             .inner
             .launcher
