@@ -145,7 +145,9 @@ export type LimitedKey =
   /** CHAT2: 20 stickers a day (`perDay`). */
   | "chatStickers"
   /** CHAT2: 100 reaction changes a day (`perDay`). */
-  | "chatReactions";
+  | "chatReactions"
+  /** SKIN1: changing the Projects skin (the service's `skin_change`). */
+  | "skinChange";
 
 export interface LimitedAccount {
   /** Unix seconds: the limits lift by themselves then. */
@@ -156,10 +158,13 @@ export interface LimitedAccount {
 /** A one-time note from Projects' moderators. */
 export interface ModNotice {
   id: string;
-  kind: "warning" | "profileReset";
+  /** `skinReset` (SKIN1): staff in game reset the player's Projects skin. */
+  kind: "warning" | "profileReset" | "skinReset";
   /** Unix seconds. */
   at: number;
   reason?: ReportReason;
+  /** `skinReset`: skin changes stay off until then (`until` null: for good); none: no block. */
+  blocked?: { until: number | null };
 }
 
 /** A report reason, as players pick it. */
