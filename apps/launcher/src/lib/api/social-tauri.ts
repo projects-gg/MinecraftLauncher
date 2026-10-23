@@ -278,7 +278,14 @@ function chatChange(v: ChatChangeView): ChatChange {
 
 function modNotice(v: ModNoticeView): ModNotice | null {
   if (v.kind === "other") return null;
-  return { id: v.id, kind: v.kind, at: v.at, reason: opt(v.reason) };
+  return {
+    id: v.id,
+    kind: v.kind,
+    at: v.at,
+    reason: opt(v.reason),
+    // SKIN1 `skinReset`: skin changes stay off until then (null: for good); none: no block.
+    ...(v.blocked ? { blocked: { until: v.blocked.until } } : {}),
+  };
 }
 
 function groups(v: FriendGroupsView): FriendGroups {
