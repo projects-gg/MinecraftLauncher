@@ -1,9 +1,6 @@
 [workspace]
 resolver = "3"
 members = ["crates/*", "apps/launcher/src-tauri"]
-# HOST1: crates/pl-host holds only its protocol contract and test vectors for now; HOST1-R1 removes
-# this line when it adds the crate's Cargo.toml.
-exclude = ["crates/pl-host"]
 
 [workspace.package]
 version = "2.0.0"
@@ -29,6 +26,7 @@ pl-lang = { path = "crates/pl-lang" }
 pl-import = { path = "crates/pl-import" }
 pl-overlay = { path = "crates/pl-overlay" }
 pl-cloud-afk = { path = "crates/pl-cloud-afk" }
+pl-host = { path = "crates/pl-host" }
 
 # Async runtime
 tokio = { version = "1.53", features = ["rt-multi-thread", "macros", "fs", "process", "io-util", "sync", "time", "net"] }
