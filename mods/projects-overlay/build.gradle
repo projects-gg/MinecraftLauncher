@@ -108,6 +108,20 @@ processResources {
     filesMatching('fabric.mod.json') {
         expand props
     }
+
+    // The chat stickers come from the shared package (packages/stickers, CHAT2 §8.3): the set's manifest (names,
+    // atlas cells, motion) and its atlas for the overlay, one 8 x 4 grid of 160 px tiles.
+    def stickers = file('../../packages/stickers/pl1')
+    from(stickers) {
+        include 'manifest.json'
+        rename 'manifest.json', 'pl1.json'
+        into 'assets/projects_overlay/stickers'
+    }
+    from(new File(stickers, 'overlay')) {
+        include 'pl1-atlas.png'
+        rename 'pl1-atlas.png', 'pl1.png'
+        into 'assets/projects_overlay/stickers'
+    }
 }
 
 tasks.withType(JavaCompile).configureEach {

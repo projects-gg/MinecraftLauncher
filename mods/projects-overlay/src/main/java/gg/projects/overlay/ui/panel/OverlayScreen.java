@@ -1,5 +1,6 @@
 package gg.projects.overlay.ui.panel;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.OverlayClient;
 import gg.projects.overlay.Perf;
@@ -7,7 +8,10 @@ import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.Protocol;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.settings.OverlaySettings;
+import gg.projects.overlay.motion.Tween;
 import gg.projects.overlay.state.OverlayState;
+import gg.projects.overlay.stickers.StickerArt;
+import gg.projects.overlay.stickers.StickerSet;
 import gg.projects.overlay.toast.ToastLayer;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.Texts;
@@ -37,6 +41,11 @@ import net.minecraft.util.FormattedCharSequence;
  * with its answers; then chats (conversation chips, the conversation, the message field) or friends, or the
  * settings page.
  *
+ * <p>Chat extras (CHAT2): a sticker button in the message field opens the sticker picker; "Yanıtla" puts a
+ * strip over the field ("Yanıtlanıyor: Ayşe", Esc or ✕ takes it away); "Ayşe yazıyor…" floats at the bottom of
+ * the conversation while someone writes (and the player's own writing is told, at most every 4 s); a reaction
+ * that did not go says why in the same place for a moment. Esc closes what is open over the panel first.
+ *
  * <p>Widgets live as long as the panel: launcher data only updates what they show, so focus, the draft and
  * the caret stay where they are. It slides in on the drawer curve (opacity only under reduced motion);
  * closing hands the last picture to the HUD, which fades it out while the game already has the input.
@@ -47,6 +56,8 @@ public final class OverlayScreen extends Screen {
     private static final int P = 10;
     private static final int HEADER_H = 30;
     private static final int COMPOSER_H = 22;
+    private static final int REPLY_H = 20;
+    private static final int LINE_PLATE_H = 14;
     private static final long ENTER_MS = 220;
     private static final long EXIT_MS = 140;
     private static final long PAGE_MS = 220;
@@ -72,6 +83,10 @@ public final class OverlayScreen extends Screen {
     private final SendButton send;
     private final FriendList friends;
     private final SettingsList settingsList;
+    private final IconButton stickerButton;
+    private final IconButton replyClose;
+    private final StickerPicker picker;
+    private final Tween lineAlpha = new Tween(0f);
     private final List<Notice> notices = new ArrayList<>();
 
     private Page page;
@@ -98,6 +113,20 @@ public final class OverlayScreen extends Screen {
     private String statusText = "";
     private BridgeClient.Status statusShown;
     private String dndText = "";
+    /** The message the player answers (CHAT2), and the strip over the field that says so. */
+    private OverlayState.Reply replyTo;
+    private int replyY = -1;
+    private FormattedCharSequence replyTitle;
+    private FormattedCharSequence replyQuote;
+    /** "Ayşe yazıyor…" or a note: what the line at the bottom of the conversation says now. */
+    private FormattedCharSequence lineText;
+    private float lineWidth;
+    private boolean lineIsNote;
+    private int lineTypingRevision = -1;
+    private long lineChangesAt;
+    private OverlayState.Note lineNote;
+    private String lineConversation;
+    private String lastDraft = "";
 
     public OverlayScreen(OverlayClient overlay) {
         super(Texts.tr("panel.title"));
@@ -122,7 +151,11 @@ public final class OverlayScreen extends Screen {
             public void retry(OverlayState.ChatLine line) {
                 OverlayState.ChatLine taken = state.takeFailed(line.clientId, now());
                 if (taken != null && conversation != null) {
-                    overlay.sendChat(conversation, taken.text);
+                    if (taken.sticker != null) {
+                        overlay.sendSticker(conversation, taken.sticker, taken.reply);
+                    } else {
+                        overlay.sendChat(conversation, taken.text, taken.reply);
+                    }
                     messages.toBottom();
                 }
             }
@@ -132,6 +165,10 @@ public final class OverlayScreen extends Screen {
                 OverlayState.ChatLine taken = state.takeFailed(line.clientId, now());
                 if (taken != null) {
                     field.setValue(taken.text);
+                    lastDraft = field.getValue();
+                    if (taken.reply != null && taken.reply.sid() > 0) {
+                        setReply(taken.reply);
+                    }
                     setFocused(field);
                 }
             }
@@ -140,12 +177,36 @@ public final class OverlayScreen extends Screen {
             public void discard(OverlayState.ChatLine line) {
                 state.takeFailed(line.clientId, now());
             }
+
+            @Override
+            public void reply(OverlayState.ChatLine line) {
+                startReply(line);
+            }
+
+            @Override
+            public void react(OverlayState.ChatLine line, String emoji, String shown, boolean on) {
+                if (conversation != null) {
+                    overlay.react(conversation, line, emoji, shown, on);
+                }
+            }
+
+            @Override
+            public void openLink(String url, boolean trusted) {
+                LinkScreen ask = LinkScreen.of(OverlayScreen.this, url);
+                if (ask != null) {
+                    Compat.setScreen(minecraft, ask);
+                }
+            }
         });
         quick = new QuickReplies(this::sendText);
         field = new ComposerField(Texts.tr("chat.field"));
         field.setMaxLength(Protocol.MAX_MESSAGE_CHARS);
         send = new SendButton(this::canSend, this::sendDraft);
         friends = new FriendList(this::joinFriend);
+        stickerButton = new IconButton(Icon.STICKER, Texts.tr("chat.stickers"), this::togglePicker);
+        replyClose = new IconButton(Icon.CLOSE, Texts.tr("chat.reply.cancel"), this::clearReply);
+        picker = new StickerPicker(this::sendSticker);
+        picker.visible = false;
         settingsList = new SettingsList(overlay::settings, overlay::updateSettings, overlay.key()::keyName,
             () -> Compat.setScreen(minecraft, new KeyBindsScreen(this, minecraft.options)));
         lastListPage = state.has("chat") || !state.welcomed() ? Page.CHATS : Page.FRIENDS;
@@ -196,6 +257,30 @@ public final class OverlayScreen extends Screen {
         return settingsList;
     }
 
+    /** Shows a conversation, as its chip does (the scenario driver uses it too). */
+    public void showConversation(String id) {
+        openConversation(id);
+    }
+
+    /** Puts the keyboard on the conversation, as Tab would (the scenario driver picks messages with the keys). */
+    public void focusMessages() {
+        PanelInput.usedKeyboard();
+        setFocused(messages);
+    }
+
+    /** Opens or closes the sticker picker, as its button does. */
+    public void toggleStickers() {
+        togglePicker();
+    }
+
+    /** Asks about a link as pressing it in a message does (only one the mod would ever open). */
+    public void askLink(String url) {
+        LinkScreen ask = LinkScreen.of(this, url);
+        if (ask != null) {
+            Compat.setScreen(minecraft, ask);
+        }
+    }
+
     private String pickConversation() {
         String wanted = overlay.preferredConversation();
         if (wanted != null && state.conversation(wanted) != null) {
@@ -219,8 +304,10 @@ public final class OverlayScreen extends Screen {
             openedAt = now();
             pageChangedAt = 0;
         }
-        for (AbstractWidget w : new AbstractWidget[] {gear, back, retry, hintOk, answers[0], answers[1], answers[2],
-            callJoin, tabs, chips, messages, quick, field, send, friends, settingsList}) {
+        // The picker floats over the conversation: it is asked about a click before the list under it.
+        for (AbstractWidget w : new AbstractWidget[] {picker, gear, back, retry, hintOk, answers[0], answers[1],
+            answers[2], callJoin, tabs, chips, messages, quick, replyClose, field, stickerButton, send, friends,
+            settingsList}) {
             addWidget(w);
         }
         Shapes.prepare();
@@ -297,6 +384,7 @@ public final class OverlayScreen extends Screen {
         page = next;
         overlay.rememberPage(next);
         pageChangedAt = now();
+        picker.close();
         layout();
         setFocused(initialFocus());
         if (page == Page.CHATS && conversation != null) {
@@ -310,6 +398,8 @@ public final class OverlayScreen extends Screen {
         }
         conversation = id;
         overlay.rememberConversation(id);
+        clearReply();
+        picker.close();
         messages.open(id, isCrew(id), unreadOf(id));
         overlay.openConversation(id);
         chips.update(state, id);
@@ -331,6 +421,7 @@ public final class OverlayScreen extends Screen {
             return;
         }
         field.setValue("");
+        lastDraft = "";
         sendText(text);
     }
 
@@ -338,8 +429,84 @@ public final class OverlayScreen extends Screen {
         if (conversation == null || !composerOpen()) {
             return;
         }
-        overlay.sendChat(conversation, text);
+        overlay.sendChat(conversation, text, replying() ? replyTo : null);
+        clearReply();
         messages.toBottom();
+    }
+
+    private void sendSticker(String sticker) {
+        if (conversation == null || !composerOpen() || !state.has("stickers")) {
+            return;
+        }
+        picker.close();
+        overlay.sendSticker(conversation, sticker, replying() ? replyTo : null);
+        clearReply();
+        messages.toBottom();
+        setFocused(field);
+    }
+
+    // ---- Replies, stickers, "yazıyor…" (CHAT2) --------------------------------------------------------
+
+    private boolean replying() {
+        return replyTo != null && state.has("replies") && conversation != null;
+    }
+
+    private void startReply(OverlayState.ChatLine line) {
+        if (!composerOpen() || !state.has("replies") || line.sid <= 0) {
+            return;
+        }
+        setReply(OverlayState.quoteOf(line));
+        setFocused(field);
+    }
+
+    private void setReply(OverlayState.Reply quote) {
+        replyTo = quote;
+        Font small = Fonts.small();
+        int room = Math.max(40, panelW - 2 * P - 8 - 12 - 6 - IconButton.SIZE - 4);
+        String name = quote.mine() ? Texts.str("chat.quote.you") : quote.from().isEmpty() ? Texts.str("toast.someone")
+            : quote.from();
+        replyTitle = Texts.visual(Texts.fit(small, Texts.str("chat.replying", name), room));
+        String said;
+        if (quote.sticker() != null) {
+            StickerSet.Sticker sticker = StickerSet.get().find(quote.sticker());
+            said = sticker == null ? Texts.str("chat.sticker") : Texts.str("chat.sticker.named",
+                sticker.name(Texts.turkish()));
+        } else {
+            said = quote.text() == null ? "" : quote.text();
+        }
+        replyQuote = Texts.visual(Texts.fit(small, said, room));
+        layout();
+    }
+
+    private void clearReply() {
+        if (replyTo != null) {
+            replyTo = null;
+            layout();
+        }
+    }
+
+    private void togglePicker() {
+        if (picker.isOpen()) {
+            picker.close();
+            setFocused(field);
+        } else if (composerOpen() && state.has("stickers") && !StickerSet.get().isEmpty()) {
+            messages.dismiss();
+            picker.open(overlay.settings().recentStickers(), now());
+            layout();
+            setFocused(picker);
+        }
+    }
+
+    /** The field changed: the player writes, so "yazıyor…" may go (only with text in it). */
+    private void draftChanged() {
+        String value = field.getValue();
+        if (value.equals(lastDraft)) {
+            return;
+        }
+        lastDraft = value;
+        if (!value.isBlank() && conversation != null && composerOpen() && state.has("typing")) {
+            overlay.typing(conversation);
+        }
     }
 
     private void answer(String answer) {
@@ -472,23 +639,52 @@ public final class OverlayScreen extends Screen {
             field.visible = true;
             field.setEditable(true);
             send.visible = true;
-            PanelWidget.place(field, x0 + 8, composerY + (COMPOSER_H - 12) / 2, cw - 8 - SendButton.SIZE - 6, 12);
+            boolean stickers = state.has("stickers") && !StickerSet.get().isEmpty();
+            int stickerRoom = stickers ? IconButton.SIZE + 2 : 0;
+            PanelWidget.place(field, x0 + 8, composerY + (COMPOSER_H - 12) / 2,
+                cw - 8 - SendButton.SIZE - 6 - stickerRoom, 12);
             PanelWidget.place(send, x0 + cw - SendButton.SIZE - 2, composerY + (COMPOSER_H - SendButton.SIZE) / 2,
                 SendButton.SIZE, SendButton.SIZE);
+            stickerButton.visible = stickers;
+            if (stickers) {
+                PanelWidget.place(stickerButton, send.getX() - 2 - IconButton.SIZE,
+                    composerY + (COMPOSER_H - IconButton.SIZE) / 2, IconButton.SIZE, IconButton.SIZE);
+                boolean open = picker.isOpen();
+                stickerButton.setColors(open ? Theme.GOLD_300 : Theme.ASH_400, open ? Theme.GOLD_200 : Theme.BONE_100);
+            } else {
+                picker.close();
+            }
             field.setPlaceholder(Texts.tr(isCrew(conversation) ? "chat.hint.crew" : "chat.hint"));
+            int above = composerY;
+            replyY = -1;
+            if (replying()) {
+                replyY = composerY - 4 - REPLY_H;
+                replyClose.visible = true;
+                PanelWidget.place(replyClose, x0 + cw - IconButton.SIZE - 2, replyY + (REPLY_H - IconButton.SIZE) / 2,
+                    IconButton.SIZE, IconButton.SIZE);
+                above = replyY;
+                listBottom = replyY - 6;
+            }
             if (isCrew(conversation)) {
                 quick.visible = true;
-                int qy = composerY - 6 - QuickReplies.HEIGHT;
+                int qy = above - 6 - QuickReplies.HEIGHT;
                 PanelWidget.place(quick, x0, qy, cw, QuickReplies.HEIGHT);
                 quick.setHidden(!field.getValue().isEmpty(), now);
                 listBottom = qy - 6;
             }
+            if (picker.isOpen()) {
+                int ph = StickerPicker.height(cw, !overlay.settings().recentStickers().isEmpty());
+                PanelWidget.place(picker, x0, Math.max(y, above - 4 - ph), cw, ph);
+            }
         } else {
             composerNote = composerReason();
+            picker.close();
+            replyY = -1;
         }
         messages.visible = true;
         PanelWidget.place(messages, x0, y, cw, Math.max(20, listBottom - y));
         messages.refresh(state, now);
+        picker.setReducedMotion(reduced);
     }
 
     private String composerReason() {
@@ -503,8 +699,11 @@ public final class OverlayScreen extends Screen {
 
     private void hideAll() {
         for (AbstractWidget w : new AbstractWidget[] {retry, hintOk, answers[0], answers[1], answers[2], callJoin,
-            tabs, chips, messages, quick, field, send, friends, settingsList}) {
+            tabs, chips, messages, quick, field, send, friends, settingsList, stickerButton, replyClose}) {
             w.visible = false;
+        }
+        if (page != Page.CHATS || conversation == null) {
+            picker.close();
         }
     }
 
@@ -611,6 +810,10 @@ public final class OverlayScreen extends Screen {
             close();
             return true;
         }
+        if (event.key() == InputConstants.KEY_ESCAPE && dismissInner()) {
+            // Esc closes what is open over the panel first: the picker, the quick reactions, the reply.
+            return true;
+        }
         if (typing && event.isConfirmation()) {
             sendDraft();
             return true;
@@ -618,7 +821,30 @@ public final class OverlayScreen extends Screen {
         if (event.isCycleFocus() || event.isUp() || event.isDown() || event.isLeft() || event.isRight()) {
             PanelInput.usedKeyboard();
         }
-        return super.keyPressed(event);
+        boolean handled = super.keyPressed(event);
+        if (typing) {
+            // Pasting, deleting: the draft may have changed without a character typed.
+            draftChanged();
+        }
+        return handled;
+    }
+
+    /** Closes the innermost thing open over the panel; false when there is none. */
+    private boolean dismissInner() {
+        if (picker.isOpen()) {
+            picker.close();
+            layout();
+            setFocused(field.visible ? field : chips);
+            return true;
+        }
+        if (messages.dismiss()) {
+            return true;
+        }
+        if (replyTo != null) {
+            clearReply();
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -626,6 +852,9 @@ public final class OverlayScreen extends Screen {
         boolean handled = super.charTyped(event);
         if (page == Page.CHATS && quick.visible) {
             quick.setHidden(!field.getValue().isEmpty(), now());
+        }
+        if (field.isFocused()) {
+            draftChanged();
         }
         return handled;
     }
@@ -639,6 +868,13 @@ public final class OverlayScreen extends Screen {
         if (event.x() < panelX) {
             // A click on the world goes back to the game.
             close();
+            return true;
+        }
+        if (picker.isOpen() && !picker.isMouseOver(event.x(), event.y())
+            && !stickerButton.isMouseOver(event.x(), event.y())) {
+            // A click beside the picker closes it, and only that.
+            picker.close();
+            layout();
             return true;
         }
         return super.mouseClicked(event, doubleClick);
@@ -679,6 +915,7 @@ public final class OverlayScreen extends Screen {
 
     @Override
     public void removed() {
+        picker.close();
         overlay.panelClosed();
     }
 
@@ -768,10 +1005,18 @@ public final class OverlayScreen extends Screen {
         render(g, chips, mouseX, mouseY);
         Draw.stratum(g);
         render(g, messages, mouseX, mouseY);
+        if (messages.visible) {
+            drawConversationLine(g, now);
+        }
         Draw.stratum(g);
         render(g, quick, mouseX, mouseY);
         if (page == Page.CHATS && conversation != null) {
+            drawReplyStrip(g, mouseX, mouseY);
             drawComposer(g, mouseX, mouseY);
+        }
+        if (picker.visible) {
+            Draw.stratum(g);
+            render(g, picker, mouseX, mouseY);
         }
         Draw.stratum(g);
         render(g, friends, mouseX, mouseY);
@@ -876,7 +1121,12 @@ public final class OverlayScreen extends Screen {
         Draw.frame(g, focused ? Frames.FIELD_FOCUS : lit ? Frames.FIELD_HOVER : Frames.FIELD, x0, composerY, cw,
             COMPOSER_H);
         render(g, field, mouseX, mouseY);
+        render(g, stickerButton, mouseX, mouseY);
         render(g, send, mouseX, mouseY);
+        if (stickerButton.visible && (stickerButton.isHovered() || stickerButton.isFocused())) {
+            // The pictures get ready while the pointer is on the button: the picker opens with them.
+            StickerArt.prepare(StickerPicker.artSize(cw));
+        }
         int length = field.getValue().codePointCount(0, field.getValue().length());
         if (length >= 250) {
             String count = length + "/" + Protocol.MAX_MESSAGE_CHARS;
@@ -884,6 +1134,78 @@ public final class OverlayScreen extends Screen {
             Draw.text(g, small, count, send.getX() - 4 - small.width(count), composerY - 10f,
                 length >= Protocol.MAX_MESSAGE_CHARS ? Theme.FLARE_300 : Theme.ASH_400);
         }
+    }
+
+    /** "Yanıtlanıyor: Ayşe" and the quoted line over the field, with ✕. */
+    private void drawReplyStrip(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        if (replyY < 0 || replyTitle == null) {
+            return;
+        }
+        int x0 = panelX + P;
+        int cw = panelW - 2 * P;
+        Draw.frame(g, Frames.CARD, x0, replyY, cw, REPLY_H);
+        Draw.fill(g, x0 + 4, replyY + 4, x0 + 5.5f, replyY + REPLY_H - 4, Theme.withAlpha(Theme.GOLD_400, 0.75f));
+        Draw.icon(g, Icon.REPLY, 8, x0 + 9, replyY + 3, Theme.GOLD_300);
+        Draw.text(g, Fonts.small(), replyTitle, x0 + 20, Fonts.centeredY(Fonts.Face.SMALL, replyY + 6.5f),
+            Theme.ASH_300);
+        Draw.text(g, Fonts.small(), replyQuote, x0 + 9, Fonts.centeredY(Fonts.Face.SMALL, replyY + 14.5f),
+            Theme.BONE_300);
+        render(g, replyClose, mouseX, mouseY);
+    }
+
+    /**
+     * The line at the bottom of the conversation: a note for a moment (a reaction that did not go), else who
+     * writes there ("Ayşe yazıyor…", no moving dots). It floats over the messages: nothing moves when it comes
+     * or goes. Its words are made only when they change.
+     */
+    private void drawConversationLine(GuiGraphicsExtractor g, long now) {
+        long wall = System.currentTimeMillis();
+        OverlayState.Note note = state.note(wall);
+        if (note != null && conversation != null && !note.conversation().equals(conversation)) {
+            note = null;
+        }
+        boolean rebuild = note != lineNote || !java.util.Objects.equals(conversation, lineConversation)
+            || state.typingRevision() != lineTypingRevision || wall >= lineChangesAt;
+        if (rebuild) {
+            lineNote = note;
+            lineConversation = conversation;
+            lineTypingRevision = state.typingRevision();
+            lineChangesAt = Long.MAX_VALUE;
+            String words = null;
+            lineIsNote = note != null;
+            if (note != null) {
+                words = Texts.str("chat.note." + note.key());
+                lineChangesAt = note.at() + OverlayState.NOTE_MS;
+            } else if (conversation != null && state.has("typing")) {
+                List<String> names = state.writers(conversation, wall);
+                if (!names.isEmpty()) {
+                    words = names.size() == 1 ? Texts.str("chat.typing.one", names.get(0))
+                        : names.size() == 2 ? Texts.str("chat.typing.two", names.get(0), names.get(1))
+                        : Texts.str("chat.typing.more", names.get(0), names.get(1), names.size() - 2);
+                }
+                lineChangesAt = state.typingEndsAt(conversation);
+            }
+            if (words != null) {
+                Font small = Fonts.small();
+                String fitted = Texts.fit(small, words, messages.getWidth() - 12);
+                lineText = Texts.visual(fitted);
+                lineWidth = small.width(fitted) + 12;
+                lineAlpha.animateTo(1f, now, 120, Ease.OUT);
+            } else {
+                lineAlpha.animateTo(0f, now, 90, Ease.OUT);
+            }
+        }
+        float a = lineAlpha.value(now);
+        if (a <= 0.01f || lineText == null) {
+            return;
+        }
+        float x = messages.getX();
+        float y = messages.getY() + messages.getHeight() - LINE_PLATE_H - 2 - (messages.pillShowing() ? 18 : 0);
+        Draw.pushAlpha(a);
+        Draw.frame(g, Frames.POPOVER, x, y, lineWidth, LINE_PLATE_H);
+        Draw.text(g, Fonts.small(), lineText, x + 6, Fonts.centeredY(Fonts.Face.SMALL, y + LINE_PLATE_H / 2f),
+            lineIsNote ? Theme.FLARE_300 : Theme.ASH_300);
+        Draw.popAlpha();
     }
 
     @Override

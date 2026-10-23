@@ -72,7 +72,32 @@ public enum Frames {
     SEGMENT_WELL(FrameSpec.rounded(3, Theme.withAlpha(Theme.OBSIDIAN_950, 0.55f), Theme.withAlpha(0xFFFFFF, 0.09f))
         .chamfer().fixed(16)),
     SEGMENT_PLATE(FrameSpec.rounded(2.5f, 0, Theme.GOLD_600)
-        .withGradient(Theme.mix(Theme.GOLD_300, Theme.GOLD_400, 0.45f), Theme.GOLD_600).chamfer().fixed(12));
+        .withGradient(Theme.mix(Theme.GOLD_300, Theme.GOLD_400, 0.45f), Theme.GOLD_600).chamfer().fixed(12)),
+    /**
+     * CHAT2: small surfaces over the conversation (a message's toolbar, the quick reactions, the sticker
+     * picker, a tooltip): nearly opaque so the messages under them do not read through, with a soft shadow.
+     */
+    POPOVER(FrameSpec.rounded(5, Theme.withAlpha(Theme.OBSIDIAN_850, 0.97f), Theme.withAlpha(0xFFFFFF, 0.11f))
+        .withHighlight(Theme.withAlpha(0xFFFFFF, 0.05f))
+        .withShadow(Theme.withAlpha(0x0A0408, 0.55f), 5f, 2f)),
+    TOOLTIP(FrameSpec.rounded(4, Theme.withAlpha(Theme.OBSIDIAN_950, 0.96f), Theme.withAlpha(0xFFFFFF, 0.12f))
+        .withShadow(Theme.withAlpha(0x0A0408, 0.5f), 4f, 1.5f)),
+    /** A reaction under a message: an action, so chamfered; the player's own carries a gold edge. */
+    REACTION(FrameSpec.rounded(2.5f, Theme.withAlpha(0xFFFFFF, 0.06f), Theme.withAlpha(0xFFFFFF, 0.10f))
+        .chamfer().fixed(12)),
+    REACTION_HOVER(FrameSpec.rounded(2.5f, Theme.withAlpha(0xFFFFFF, 0.11f), Theme.withAlpha(0xFFFFFF, 0.18f))
+        .chamfer().fixed(12)),
+    REACTION_MINE(FrameSpec.rounded(2.5f, Theme.withAlpha(Theme.mix(Theme.OBSIDIAN_700, Theme.GOLD_500, 0.2f), 0.95f),
+        Theme.withAlpha(Theme.GOLD_400, 0.55f)).chamfer().fixed(12)),
+    FOCUS_12(FrameSpec.rounded(2.5f, 0, 0).withRing(Theme.GOLD_300, 1.5f).chamfer().fixed(12)),
+    /** A message picked with the keyboard, and the moment a quote takes the player to its message. */
+    FOCUS_BUBBLE(FrameSpec.rounded(5, 0, 0).withRing(Theme.GOLD_300, 1.5f)),
+    FLASH(FrameSpec.rounded(5, Theme.withAlpha(Theme.GOLD_400, 0.16f), Theme.withAlpha(Theme.GOLD_400, 0.45f))),
+    /** A sticker's place while its picture is on its way, and a sticker of a set this build does not have. */
+    STICKER_TILE(FrameSpec.rounded(6, Theme.withAlpha(0xFFFFFF, 0.045f), Theme.withAlpha(0xFFFFFF, 0.07f))),
+    /** A cell of the sticker picker or the quick reactions under the pointer, or picked with the keyboard. */
+    CELL_HOVER(FrameSpec.rounded(3, Theme.withAlpha(0xFFFFFF, 0.08f), Theme.withAlpha(0xFFFFFF, 0.12f)).chamfer()),
+    CELL_FOCUS(FrameSpec.rounded(3, 0, 0).withRing(Theme.GOLD_300, 1.5f).chamfer());
 
     /** The toast card's width in GUI pixels. */
     public static final int TOAST_WIDTH = Sizes.TOAST_WIDTH;

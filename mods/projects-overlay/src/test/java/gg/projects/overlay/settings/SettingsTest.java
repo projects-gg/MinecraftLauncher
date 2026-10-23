@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -47,6 +48,30 @@ class SettingsTest {
     }
 
     @Test
+    void recentStickersPutTheLastSentFirstAndKeepEight() {
+        OverlaySettings s = OverlaySettings.DEFAULTS;
+        for (String id : new String[] {"a", "b", "c", "d", "e", "f", "g", "h", "i"}) {
+            s = s.withStickerUsed("pl1/" + id);
+        }
+        assertEquals(OverlaySettings.RECENT_STICKERS, s.recentStickers().size());
+        assertEquals("pl1/i", s.recentStickers().get(0));
+        s = s.withStickerUsed("pl1/e");
+        assertEquals(List.of("pl1/e", "pl1/i", "pl1/h", "pl1/g", "pl1/f", "pl1/d", "pl1/c", "pl1/b"),
+            s.recentStickers());
+        // They are not a display preference: a reset keeps them, and they do not make settings non-default.
+        assertTrue(s.isDefault());
+        assertEquals(s.recentStickers(), s.withCorner(OverlaySettings.Corner.TOP_RIGHT).reset().recentStickers());
+    }
+
+    @Test
+    void onlyStickerReferencesAreReadBack() {
+        OverlaySettings s = SettingsStore.parse("{\"recentStickers\":[\"pl1/gg\",\"../../x\",5,\"pl1/gg\","
+            + "\"pl1/hi\"]}");
+        assertEquals(List.of("pl1/gg", "pl1/hi"), s.recentStickers());
+        assertEquals(List.of(), SettingsStore.parse("{\"recentStickers\":\"pl1/gg\"}").recentStickers());
+    }
+
+    @Test
     void unknownKindsCountAsMessages() {
         OverlaySettings s = OverlaySettings.DEFAULTS.withMessageToasts(false);
         assertFalse(s.showsKind("something-new"));
@@ -56,7 +81,7 @@ class SettingsTest {
     @Test
     void writesAndReadsEveryField() throws IOException {
         OverlaySettings s = new OverlaySettings(false, true, false, true, false, OverlaySettings.Duration.LONG,
-            OverlaySettings.Corner.TOP_RIGHT, true, false, 35, true, 90, true);
+            OverlaySettings.Corner.TOP_RIGHT, true, false, 35, true, 90, true, List.of("pl1/gg", "pl1/hi"));
         Path file = dir.resolve(SettingsStore.FILE_NAME);
         SettingsStore.write(file, s);
         assertEquals(s, SettingsStore.read(file));

@@ -8,6 +8,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
 
@@ -62,6 +63,77 @@ public final class Texts {
      */
     public static FormattedCharSequence visual(String line) {
         return PreparedLine.of(Language.getInstance().getVisualOrder(FormattedText.of(line)));
+    }
+
+    /** A link the player may press, where it sits in a wrapped text (line index, x range in GUI pixels). */
+    public record LinkSpan(int line, float x0, float x1, String url, boolean trusted) {
+    }
+
+    /** A text wrapped with its links drawn as links, and where they are. */
+    public record Wrapped(List<FormattedCharSequence> lines, List<LinkSpan> links) {
+    }
+
+    /**
+     * {@code text} wrapped to {@code width} (at most {@code maxLines}), its links ({@code urls}, as written, in
+     * order; each found once from where the previous one ended) underlined in {@code linkColor}. Links that are
+     * not found, and a text longer than {@code maxLines}, come out as plain text.
+     */
+    public static Wrapped wrapWithLinks(Font font, String text, List<String> urls, List<Boolean> trusted, int width,
+        int maxLines, int linkColor) {
+        int n = urls.size();
+        int[] starts = new int[n];
+        int[] ends = new int[n];
+        int found = 0;
+        int from = 0;
+        for (int i = 0; i < n; i++) {
+            int at = text.indexOf(urls.get(i), from);
+            starts[i] = at;
+            ends[i] = at < 0 ? -1 : at + urls.get(i).length();
+            if (at >= 0) {
+                found++;
+                from = ends[i];
+            }
+        }
+        if (found == 0) {
+            return new Wrapped(wrap(font, text, width, maxLines), List.of());
+        }
+        List<int[]> ranges = new ArrayList<>();
+        font.getSplitter().splitLines(text, width, Style.EMPTY, false, (style, start, end) -> ranges.add(
+            new int[] {start, end}));
+        if (ranges.isEmpty() || ranges.size() > maxLines) {
+            return new Wrapped(wrap(font, text, width, maxLines), List.of());
+        }
+        Style link = Style.EMPTY.withColor(linkColor & 0xFFFFFF).withUnderlined(true);
+        List<FormattedCharSequence> lines = new ArrayList<>(ranges.size());
+        List<LinkSpan> spans = new ArrayList<>(found);
+        for (int li = 0; li < ranges.size(); li++) {
+            int s = ranges.get(li)[0];
+            int e = ranges.get(li)[1];
+            MutableComponent line = Component.empty();
+            int pos = s;
+            for (int k = 0; k < n; k++) {
+                if (starts[k] < 0) {
+                    continue;
+                }
+                int ls = Math.max(s, starts[k]);
+                int le = Math.min(e, ends[k]);
+                if (ls >= le) {
+                    continue;
+                }
+                if (pos < ls) {
+                    line.append(Component.literal(text.substring(pos, ls)));
+                }
+                line.append(Component.literal(text.substring(ls, le)).withStyle(link));
+                spans.add(new LinkSpan(li, font.width(text.substring(s, ls)), font.width(text.substring(s, le)),
+                    urls.get(k), trusted.get(k)));
+                pos = le;
+            }
+            if (pos < e) {
+                line.append(Component.literal(text.substring(pos, e)));
+            }
+            lines.add(PreparedLine.of(Language.getInstance().getVisualOrder(line)));
+        }
+        return new Wrapped(lines, spans);
     }
 
     private static String rest(List<FormattedText> parts, int from) {

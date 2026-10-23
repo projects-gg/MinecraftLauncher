@@ -30,7 +30,12 @@ public enum Icon {
     KEYBOARD("Keyboard"),
     RESET("ArrowCounterClockwise"),
     UNPLUGGED("Plugs"),
-    JOIN("SignIn");
+    JOIN("SignIn"),
+    SMILEY("Smiley"),
+    REPLY("ArrowBendUpLeft"),
+    STICKER("Sticker"),
+    GLOBE("Globe"),
+    OPEN("ArrowSquareOut");
 
     /** The sizes icons are drawn at, in GUI pixels. */
     public static final int[] SIZES = {8, 10, 12};

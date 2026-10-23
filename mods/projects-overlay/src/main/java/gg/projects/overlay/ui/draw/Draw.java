@@ -278,6 +278,23 @@ public final class Draw {
         pose.popMatrix();
     }
 
+    /**
+     * A region of a texture ({@code uw x vh} texels at {@code u, v} of a {@code tw x th} texture) over the box
+     * {@code x, y, w, h}, tinted {@code tint} and faded with the current opacity (stickers).
+     */
+    public static void texture(GuiGraphicsExtractor g, Identifier tex, float x, float y, int w, int h, float u,
+        float v, int uw, int vh, int tw, int th, int tint) {
+        int c = color(tint);
+        if (Theme.alpha(c) == 0) {
+            return;
+        }
+        Matrix3x2fStack pose = g.pose();
+        pose.pushMatrix();
+        pose.translate(x, y);
+        blit(g, tex, 0, 0, u, v, w, h, uw, vh, tw, th, c);
+        pose.popMatrix();
+    }
+
     private static void blit(GuiGraphicsExtractor g, Identifier tex, int x, int y, float u, float v, int w, int h,
         int uw, int vh, int tw, int th, int color) {
         g.blit(RenderPipelines.GUI_TEXTURED, tex, x, y, u, v, w, h, uw, vh, tw, th, color);

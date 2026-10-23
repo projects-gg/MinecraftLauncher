@@ -27,10 +27,21 @@ public final class Protocol {
     public static final int MAX_MESSAGE_CHARS = 300;
     /** Longest name or title rendered from launcher data. */
     public static final int MAX_NAME_CHARS = 48;
-    /** What this build does beyond the first protocol, listed in {@code hello}; the launcher sends only these. */
-    public static final List<String> FEATURES = List.of("connect");
+    /**
+     * What this build does beyond the first protocol, listed in {@code hello}; the launcher sends only these:
+     * {@code connect} (the launcher's "Bağlan"), {@code chat2} (chat extras: replies, reactions, stickers,
+     * "yazıyor…", "Görüldü", links; docs/tasks/ovl2-protocol.md, CHAT2-O).
+     */
+    public static final List<String> FEATURES = List.of("connect", "chat2");
     /** Minecraft's legacy formatting sign; launcher text must never carry formatting into the game. */
     private static final int SECTION_SIGN = 0xA7;
+    /** The keycap mark (1️⃣): the digit stays, the mark would draw as a dashed box. */
+    private static final int KEYCAP = 0x20E3;
+    /** Variation selectors 15 and 16 (text or emoji style), skin tone modifiers: the game's font has no colour. */
+    private static final int VS15 = 0xFE0E;
+    private static final int VS16 = 0xFE0F;
+    private static final int TONE_FIRST = 0x1F3FB;
+    private static final int TONE_LAST = 0x1F3FF;
 
     private Protocol() {
     }
@@ -80,10 +91,47 @@ public final class Protocol {
     }
 
     public static JsonObject send(String clientId, String conversation, String text) {
+        return send(clientId, conversation, text, 0);
+    }
+
+    /** A message, as a reply to the message with service id {@code replySid} when that is not 0. */
+    public static JsonObject send(String clientId, String conversation, String text, long replySid) {
         JsonObject o = message("send");
         o.addProperty("cid", clientId);
         o.addProperty("conv", conversation);
         o.addProperty("text", text);
+        if (replySid > 0) {
+            o.addProperty("reply", replySid);
+        }
+        return o;
+    }
+
+    /** A Projects sticker ({@code pl1/gg}), maybe as a reply. */
+    public static JsonObject sendSticker(String clientId, String conversation, String sticker, long replySid) {
+        JsonObject o = message("send");
+        o.addProperty("cid", clientId);
+        o.addProperty("conv", conversation);
+        o.addProperty("sticker", sticker);
+        if (replySid > 0) {
+            o.addProperty("reply", replySid);
+        }
+        return o;
+    }
+
+    /** Gives ({@code on}) or takes back the player's reaction {@code emoji} on message {@code sid}. */
+    public static JsonObject react(String conversation, long sid, String emoji, boolean on) {
+        JsonObject o = message("react");
+        o.addProperty("conv", conversation);
+        o.addProperty("sid", sid);
+        o.addProperty("e", emoji);
+        o.addProperty("on", on);
+        return o;
+    }
+
+    /** The player writes in the panel ("yazıyor…"). */
+    public static JsonObject typing(String conversation) {
+        JsonObject o = message("typing");
+        o.addProperty("conv", conversation);
         return o;
     }
 
@@ -156,9 +204,17 @@ public final class Protocol {
         return fallback;
     }
 
+    /** A whole number field, 0 when absent or not a number. */
+    public static long id(JsonObject o, String key) {
+        return Math.max(0L, num(o, key, 0L));
+    }
+
     /**
      * Turns launcher text into plain text for the game's font: drops the legacy formatting sign, control and
      * format characters (bidi overrides, zero-width marks) and line breaks, and caps the length in code points.
+     * Emoji keep their single-colour glyph from the game's font, without what only colour fonts draw: the style
+     * selectors (VS15, VS16; "❤️" reads "❤"), skin tone modifiers ("👍🏽" reads "👍") and the keycap mark ("1️⃣"
+     * reads "1"). Each of those would otherwise show as a dashed box or a coloured square (CHAT2 §3.2).
      */
     public static String plain(String s, int maxCodePoints) {
         if (s == null || s.isEmpty() || maxCodePoints <= 0) {
@@ -176,7 +232,8 @@ public final class Protocol {
             }
             int kind = Character.getType(cp);
             if (cp == SECTION_SIGN || kind == Character.CONTROL || kind == Character.FORMAT
-                || kind == Character.SURROGATE || kind == Character.UNASSIGNED || kind == Character.PRIVATE_USE) {
+                || kind == Character.SURROGATE || kind == Character.UNASSIGNED || kind == Character.PRIVATE_USE
+                || cp == VS15 || cp == VS16 || cp == KEYCAP || (cp >= TONE_FIRST && cp <= TONE_LAST)) {
                 continue;
             }
             if (pendingSpace) {

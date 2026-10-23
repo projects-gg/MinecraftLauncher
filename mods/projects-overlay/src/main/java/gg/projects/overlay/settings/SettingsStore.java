@@ -1,6 +1,7 @@
 package gg.projects.overlay.settings;
 
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
@@ -13,10 +14,13 @@ import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
+import gg.projects.overlay.state.OverlayState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -142,7 +146,8 @@ public final class SettingsStore {
             number(sounds, "messageVolume", d.messageVolume()),
             bool(sounds, "call", d.callSound()),
             number(sounds, "callVolume", d.callVolume()),
-            bool(root, "hintSeen", d.hintSeen()));
+            bool(root, "hintSeen", d.hintSeen()),
+            stickers(root, "recentStickers"));
     }
 
     static String format(OverlaySettings s) {
@@ -165,6 +170,11 @@ public final class SettingsStore {
         sounds.addProperty("callVolume", s.callVolume());
         root.add("sounds", sounds);
         root.addProperty("hintSeen", s.hintSeen());
+        JsonArray recent = new JsonArray();
+        for (String sticker : s.recentStickers()) {
+            recent.add(sticker);
+        }
+        root.add("recentStickers", recent);
         return new GsonBuilder().setPrettyPrinting().create().toJson(root) + "\n";
     }
 
@@ -201,6 +211,22 @@ public final class SettingsStore {
             }
         }
         return fallback;
+    }
+
+    /** Sticker references ({@code pl1/gg}); anything else is left out. */
+    private static List<String> stickers(JsonObject o, String key) {
+        JsonElement e = o.get(key);
+        if (e == null || !e.isJsonArray()) {
+            return List.of();
+        }
+        List<String> out = new ArrayList<>();
+        for (JsonElement item : e.getAsJsonArray()) {
+            if (item instanceof JsonPrimitive p && p.isString() && OverlayState.stickerRef(p.getAsString())
+                && !out.contains(p.getAsString()) && out.size() < OverlaySettings.RECENT_STICKERS) {
+                out.add(p.getAsString());
+            }
+        }
+        return out;
     }
 
     private static String string(JsonObject o, String key) {

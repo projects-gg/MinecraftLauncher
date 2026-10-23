@@ -1,8 +1,15 @@
 package gg.projects.overlay.compat;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.textures.FilterMode;
+import java.net.URI;
+import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.util.Util;
 
 /**
  * What differs between Minecraft versions, for 26.1.2. One copy per version lives in src/<compat>/java; the
@@ -40,5 +47,19 @@ public final class Compat {
     /** F1: the HUD is hidden (screenshots, videos). */
     public static boolean hudHidden(Minecraft mc) {
         return mc.options.hideGui;
+    }
+
+    /** Opens a web address in the player's browser, the way the game opens a link from its chat. */
+    public static void openUri(URI uri) {
+        Util.getPlatform().openUri(uri);
+    }
+
+    /** A texture sampled with linear filtering: stickers stay smooth while they move, sharp where they rest. */
+    public static DynamicTexture smoothTexture(Supplier<String> label, NativeImage image) {
+        return new DynamicTexture(label, image) {
+            {
+                sampler = RenderSystem.getSamplerCache().getClampToEdge(FilterMode.LINEAR);
+            }
+        };
     }
 }

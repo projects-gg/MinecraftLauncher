@@ -11,6 +11,7 @@ import gg.projects.overlay.connect.ServerTarget;
 import gg.projects.overlay.settings.OverlaySettings;
 import gg.projects.overlay.settings.SettingsStore;
 import gg.projects.overlay.state.OverlayState;
+import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.toast.ToastLayer;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.draw.Shapes;
@@ -45,6 +46,8 @@ public final class OverlayClient implements ClientModInitializer {
     private static final String WARM =
         "abcçdefgğhıijklmnoöprsştuüvyzqwxABCÇDEFGĞHIİJKLMNOÖPRSŞTUÜVYZQWX0123456789 .,:;!?'\"()-/%+…";
     private static final int WARM_PER_TICK = 18;
+    /** "Yazıyor…" goes at most this often (CHAT2 §4; the launcher and the service pace it too). */
+    private static final long TYPING_EVERY_MS = 4_000;
 
     private static volatile OverlayClient instance;
 
@@ -62,6 +65,8 @@ public final class OverlayClient implements ClientModInitializer {
     private boolean hadLevel;
     private int warmIndex = -1;
     private int warmScale = -1;
+    private String typedIn;
+    private long typedAt;
 
     @Override
     public void onInitializeClient() {
@@ -169,6 +174,7 @@ public final class OverlayClient implements ClientModInitializer {
         boolean hasLevel = mc.level != null;
         if (hadLevel && !hasLevel) {
             toasts.reset();
+            StickerArt.releaseAll();
         }
         if (!hadLevel && hasLevel) {
             warmIndex = 0;
@@ -176,6 +182,7 @@ public final class OverlayClient implements ClientModInitializer {
         hadLevel = hasLevel;
         connector.tick(monotonicMs());
         Shapes.prepare();
+        StickerArt.tick(monotonicMs());
         warmFonts(mc);
     }
 
@@ -225,6 +232,9 @@ public final class OverlayClient implements ClientModInitializer {
 
     public void panelClosed() {
         bridge.send(Protocol.panel(false));
+        // No "yazıyor…" comes while the panel is closed: what was shown would only go stale.
+        state.clearTyping();
+        typedIn = null;
     }
 
     public void openConversation(String conversation) {
@@ -233,11 +243,59 @@ public final class OverlayClient implements ClientModInitializer {
     }
 
     public void sendChat(String conversation, String text) {
-        String clientId = state.addPending(conversation, text, System.currentTimeMillis());
-        if (!bridge.send(Protocol.send(clientId, conversation, text))) {
+        sendChat(conversation, text, null);
+    }
+
+    /** The player's message, as a reply to the message {@code quote} stands for when not null (CHAT2). */
+    public void sendChat(String conversation, String text, OverlayState.Reply quote) {
+        long reply = quote == null ? 0 : quote.sid();
+        String clientId = state.addPending(conversation, text, null, reply > 0 ? quote : null,
+            System.currentTimeMillis());
+        if (!bridge.send(Protocol.send(clientId, conversation, text, reply))) {
             state.markFailed(clientId, "offline");
         }
+        typedIn = null;
         refreshScreen();
+    }
+
+    /** A Projects sticker ({@code pl1/gg}), maybe as a reply (CHAT2 §8). */
+    public void sendSticker(String conversation, String sticker, OverlayState.Reply quote) {
+        long reply = quote == null ? 0 : quote.sid();
+        String clientId = state.addPending(conversation, "", sticker, reply > 0 ? quote : null,
+            System.currentTimeMillis());
+        if (!bridge.send(Protocol.sendSticker(clientId, conversation, sticker, reply))) {
+            state.markFailed(clientId, "offline");
+        }
+        updateSettings(s -> s.withStickerUsed(sticker));
+        refreshScreen();
+    }
+
+    /**
+     * Gives ({@code on}) or takes back the player's reaction (CHAT2 §7): the launcher shows it at once and
+     * sends the message back with it. The limits the panel knows are told without asking.
+     */
+    public void react(String conversation, OverlayState.ChatLine line, String emoji, String shown, boolean on) {
+        long now = System.currentTimeMillis();
+        if (on && line.reaction(shown) == null && line.reactions.size() >= OverlayState.REACTION_KINDS) {
+            state.note(conversation, "react.kinds", now);
+        } else if (on && line.ownReactions() >= OverlayState.REACTIONS_PER_PLAYER) {
+            state.note(conversation, "react.full", now);
+        } else if (!bridge.send(Protocol.react(conversation, line.sid, emoji, on))) {
+            state.note(conversation, "react.failed", now);
+        }
+        refreshScreen();
+    }
+
+    /** The player writes in the panel's field: "yazıyor…" at most every 4 s (CHAT2 §4). */
+    public void typing(String conversation) {
+        long now = monotonicMs();
+        if (conversation.equals(typedIn) && now - typedAt < TYPING_EVERY_MS) {
+            return;
+        }
+        if (bridge.send(Protocol.typing(conversation))) {
+            typedIn = conversation;
+            typedAt = now;
+        }
     }
 
     public void answer(String call, String answer) {

@@ -43,6 +43,11 @@ public final class FrameClock {
         slot = s;
     }
 
+    /** Frames recorded into slot {@code s} so far. */
+    public static int count(int s) {
+        return COUNT[s];
+    }
+
     /** Stops recording and summarizes slot 0. */
     public static JsonObject stop() {
         slot = -1;

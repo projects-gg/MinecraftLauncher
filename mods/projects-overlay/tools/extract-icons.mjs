@@ -29,6 +29,11 @@ const ICONS = [
   ["ArrowCounterClockwise", "bold"],
   ["Plugs", "regular"],
   ["SignIn", "regular"],
+  ["Smiley", "regular"],
+  ["ArrowBendUpLeft", "bold"],
+  ["Sticker", "regular"],
+  ["Globe", "regular"],
+  ["ArrowSquareOut", "regular"],
 ];
 
 const license = readFileSync(join(pkg, "LICENSE"), "utf8")

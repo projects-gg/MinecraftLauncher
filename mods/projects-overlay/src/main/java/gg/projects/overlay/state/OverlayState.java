@@ -29,6 +29,17 @@ public final class OverlayState {
     public static final long SEND_TIMEOUT_MS = 10_000;
     /** Failure reason of a message nobody answered for. */
     public static final String TIMEOUT = "timeout";
+    /** A writer shows this long after their last "yazıyor…" (CHAT2 §4). */
+    public static final long TYPING_SHOW_MS = 6_000;
+    /** A note (a reaction that did not go) shows this long. */
+    public static final long NOTE_MS = 3_200;
+    /** Reactions go only on messages younger than this (the service's mailbox keeps a week). */
+    public static final long REACT_WINDOW_MS = 7L * 86_400_000L - 60_000L;
+    /** Different emoji one player puts on one message, and kinds one message carries (CHAT2 §7). */
+    public static final int REACTIONS_PER_PLAYER = 5;
+    public static final int REACTION_KINDS = 10;
+    /** Characters of a quoted message the launcher sends (it ends in an ellipsis when cut). */
+    public static final int MAX_QUOTE_CHARS = 121;
 
     public record Friend(String id, String name, String where, boolean joinable, String host) {
         public boolean onProjects() {
@@ -48,7 +59,12 @@ public final class OverlayState {
         }
     }
 
-    public record Conversation(String id, String kind, String title, int unread, boolean muted, boolean writable) {
+    /**
+     * A conversation. {@code seen} (direct conversations, CHAT2): the friend has seen the player's messages up to
+     * this service id ("Görüldü"), 0 when not known or not shared.
+     */
+    public record Conversation(String id, String kind, String title, int unread, boolean muted, boolean writable,
+        long seen) {
         public boolean crew() {
             return kind.equals("crew");
         }
@@ -63,6 +79,37 @@ public final class OverlayState {
 
     public enum Delivery { PENDING, SENT, FAILED }
 
+    /**
+     * The message a reply answers, as the launcher holds it (CHAT2): {@code id} is its line's id when that is
+     * here (the list scrolls to it); {@code missing}: "Önceki bir mesaj".
+     */
+    public record Reply(String id, long sid, String from, boolean mine, String text, String sticker,
+        boolean deleted, boolean missing) {
+    }
+
+    /**
+     * One kind of reaction: {@code emoji} as the launcher sent it (sent back as it is), {@code shown} as the
+     * game's font draws it, how many gave it, whether the player did, a few of the others' names.
+     */
+    public record Reaction(String emoji, String shown, int count, boolean mine, List<String> who) {
+    }
+
+    /** A link the player may press (the launcher decided), as written in the text. */
+    public record Link(String url, boolean trusted) {
+    }
+
+    /** A link's card as one quiet line ("YouTube · Rekor kırıldı"). */
+    public record Card(String site, String title) {
+    }
+
+    /** Someone writing in a conversation, until when (this computer's clock). */
+    public record Writer(String by, String name, long until) {
+    }
+
+    /** A short note in the panel: a reaction that did not go ({@code key} names the words). */
+    public record Note(String conversation, String key, long at) {
+    }
+
     public static final class ChatLine {
         public final String clientId;
         public final String from;
@@ -76,6 +123,16 @@ public final class OverlayState {
         public boolean deleted;
         public Delivery delivery;
         public String failure;
+        /** With failure {@code link}: the rule that refused it, when the launcher said. */
+        public String failureRule;
+        /** CHAT2: the service's id (replies and reactions name a message by it), 0 while unknown. */
+        public long sid;
+        /** CHAT2: a sticker ({@code pl1/gg}) in place of text, or null. */
+        public String sticker;
+        public Reply reply;
+        public List<Reaction> reactions = List.of();
+        public List<Link> links = List.of();
+        public Card card;
 
         ChatLine(String id, String clientId, String from, String text, boolean mine, Delivery delivery, long at,
             long createdAt) {
@@ -102,11 +159,35 @@ public final class OverlayState {
             }
             return failure;
         }
+
+        /** How many of this message's reactions are the player's. */
+        public int ownReactions() {
+            int n = 0;
+            for (Reaction r : reactions) {
+                if (r.mine()) {
+                    n++;
+                }
+            }
+            return n;
+        }
+
+        /** The reaction kind showing {@code emoji} (as drawn), or null. */
+        public Reaction reaction(String shown) {
+            for (Reaction r : reactions) {
+                if (r.shown().equals(shown)) {
+                    return r;
+                }
+            }
+            return null;
+        }
     }
 
     /** A toast the launcher asked for; the mod may still skip it (hidden GUI, conversation already open). */
     public record ToastRequest(String kind, String key, String title, String body, String conversation,
-        String crew) {
+        String crew, String sticker) {
+        public ToastRequest(String kind, String key, String title, String body, String conversation, String crew) {
+            this(kind, key, title, body, conversation, crew, null);
+        }
     }
 
     private final Map<String, Friend> friends = new LinkedHashMap<>();
@@ -114,6 +195,7 @@ public final class OverlayState {
     private final Map<String, Deque<ChatLine>> lines = new HashMap<>();
     private final Map<String, Integer> lineRevisions = new HashMap<>();
     private final Map<String, CrewCall> calls = new LinkedHashMap<>();
+    private final Map<String, LinkedHashMap<String, Writer>> writers = new HashMap<>();
     private final Set<String> features = new HashSet<>();
 
     private BridgeClient.Status status = BridgeClient.Status.CONNECTING;
@@ -123,6 +205,8 @@ public final class OverlayState {
     private boolean dnd;
     private boolean reducedMotion;
     private int revision;
+    private int typingRevision;
+    private Note note;
 
     public BridgeClient.Status status() {
         return status;
@@ -217,17 +301,114 @@ public final class OverlayState {
         return lines.computeIfAbsent(conversation, k -> new ArrayDeque<>());
     }
 
+    /** A line of {@code conversation} by its id, or null. */
+    public ChatLine line(String conversation, String id) {
+        Deque<ChatLine> deque = lines.get(conversation);
+        return deque == null || id == null ? null : findById(deque, null, id);
+    }
+
     public void setStatus(BridgeClient.Status next, String reason) {
         status = next;
         statusReason = reason;
         revision++;
     }
 
+    // ---- "Yazıyor…" and notes ------------------------------------------------------------------------
+
+    /** Bumps whenever someone starts or stops writing somewhere. */
+    public int typingRevision() {
+        return typingRevision;
+    }
+
+    /** Who writes in {@code conversation} now, by name, in the order they started. */
+    public List<String> writers(String conversation, long now) {
+        LinkedHashMap<String, Writer> people = writers.get(conversation);
+        if (people == null || people.isEmpty()) {
+            return List.of();
+        }
+        List<String> names = new ArrayList<>(people.size());
+        for (Writer w : people.values()) {
+            if (w.until() > now) {
+                names.add(w.name());
+            }
+        }
+        return names;
+    }
+
+    /** When the first writer of {@code conversation} stops showing, or {@link Long#MAX_VALUE}. */
+    public long typingEndsAt(String conversation) {
+        LinkedHashMap<String, Writer> people = writers.get(conversation);
+        long first = Long.MAX_VALUE;
+        if (people != null) {
+            for (Writer w : people.values()) {
+                first = Math.min(first, w.until());
+            }
+        }
+        return first;
+    }
+
+    /** Forgets every writer (the panel closed: no frames come while it is). */
+    public void clearTyping() {
+        if (!writers.isEmpty()) {
+            writers.clear();
+            typingRevision++;
+        }
+    }
+
+    private void stopWriting(String conversation, String name) {
+        LinkedHashMap<String, Writer> people = writers.get(conversation);
+        if (people != null && people.values().removeIf(w -> w.name().equals(name))) {
+            typingRevision++;
+        }
+    }
+
+    private void stopWritingEverywhere(String by) {
+        boolean changed = false;
+        for (LinkedHashMap<String, Writer> people : writers.values()) {
+            changed |= people.remove(by) != null;
+        }
+        if (changed) {
+            typingRevision++;
+        }
+    }
+
+    /** The note to show now (a reaction that did not go), or null. */
+    public Note note(long now) {
+        return note != null && now - note.at() < NOTE_MS ? note : null;
+    }
+
+    /** Shows a note ({@code chat.note.<key>}) in {@code conversation} for a moment. */
+    public void note(String conversation, String key, long now) {
+        note = new Note(conversation, key, now);
+        revision++;
+    }
+
+    // ---- The player's own messages ---------------------------------------------------------------------
+
     /** Adds the player's own message before the launcher confirms it; returns the client id to send. */
     public String addPending(String conversation, String text, long now) {
+        return addPending(conversation, text, null, null, now);
+    }
+
+    /**
+     * Adds the player's own message (words, or a sticker when {@code sticker} is not null), maybe answering the
+     * message {@code quote} stands for, before the launcher confirms it; returns the client id to send.
+     */
+    public String addPending(String conversation, String text, String sticker, Reply quote, long now) {
         String clientId = UUID.randomUUID().toString();
-        append(conversation, new ChatLine(null, clientId, me, text, true, Delivery.PENDING, now, now));
+        ChatLine line = new ChatLine(null, clientId, me, sticker == null ? text : "", true, Delivery.PENDING, now,
+            now);
+        line.sticker = sticker;
+        line.reply = quote;
+        append(conversation, line);
         return clientId;
+    }
+
+    /** What a reply quotes, made from a line the panel shows. */
+    public static Reply quoteOf(ChatLine line) {
+        String text = line.sticker != null || line.deleted ? null
+            : Protocol.plain(line.text, MAX_QUOTE_CHARS);
+        return new Reply(line.id, line.sid, line.from, line.mine, text, line.sticker, line.deleted, false);
     }
 
     public void markFailed(String clientId, String reason) {
@@ -255,6 +436,8 @@ public final class OverlayState {
         return null;
     }
 
+    // ---- Launcher frames -------------------------------------------------------------------------------
+
     /** Applies one launcher frame and returns a toast to show, or null. */
     public ToastRequest apply(JsonObject frame, long now) {
         ToastRequest toast = null;
@@ -269,6 +452,8 @@ public final class OverlayState {
                     friends.clear();
                     conversations.clear();
                     calls.clear();
+                    writers.clear();
+                    note = null;
                 }
                 me = name;
                 welcomed = true;
@@ -283,6 +468,7 @@ public final class OverlayState {
                         }
                     }
                 }
+                typingRevision++;
             }
             case "snapshot" -> {
                 friends.clear();
@@ -296,7 +482,13 @@ public final class OverlayState {
                 forEach(frame, "calls", this::putCall);
                 dnd = Protocol.bool(frame, "dnd", dnd);
             }
-            case "friend" -> putFriend(frame);
+            case "friend" -> {
+                putFriend(frame);
+                if ("offline".equals(Protocol.str(frame, "where", ""))) {
+                    // Gone offline: no longer writing anywhere.
+                    stopWritingEverywhere(Protocol.str(frame, "id", ""));
+                }
+            }
             case "friend-gone" -> friends.remove(Protocol.str(frame, "id", ""));
             case "conv" -> putConversation(frame);
             case "dnd" -> dnd = Protocol.bool(frame, "on", false);
@@ -347,25 +539,67 @@ public final class OverlayState {
                     line.delivery = Delivery.SENT;
                     line.failure = null;
                     line.id = Protocol.str(frame, "id", line.id);
+                    long sid = Protocol.id(frame, "sid");
+                    line.sid = sid > 0 ? sid : line.sid;
                     touch(conversationOf(line));
                 }
             }
-            case "send-failed" -> markFailed(Protocol.str(frame, "cid", ""), Protocol.str(frame, "reason", "error"));
+            case "send-failed" -> {
+                String cid = Protocol.str(frame, "cid", "");
+                markFailed(cid, Protocol.str(frame, "reason", "error"));
+                ChatLine line = findByClientId(cid);
+                if (line != null) {
+                    line.failureRule = Protocol.str(frame, "rule", null);
+                }
+            }
+            case "typing" -> {
+                String conv = Protocol.str(frame, "conv", "");
+                String by = Protocol.str(frame, "by", "");
+                if (conv.isEmpty() || by.isEmpty()) {
+                    return null;
+                }
+                String name = name(frame, "name");
+                writers.computeIfAbsent(conv, k -> new LinkedHashMap<>())
+                    .put(by, new Writer(by, name.isEmpty() ? "?" : name, now + TYPING_SHOW_MS));
+                typingRevision++;
+            }
+            case "react-failed" -> {
+                String conv = Protocol.str(frame, "conv", "");
+                note = new Note(conv, "react." + reactReason(Protocol.str(frame, "reason", "")), now);
+            }
             case "call" -> putCall(frame);
             case "call-end" -> calls.remove(Protocol.str(frame, "id", ""));
-            case "toast" -> toast = new ToastRequest(
-                Protocol.str(frame, "kind", "message"),
-                Protocol.plain(Protocol.str(frame, "key", Protocol.str(frame, "id", "")), 64),
-                name(frame, "title"),
-                Protocol.plain(Protocol.str(frame, "body", ""), Protocol.MAX_MESSAGE_CHARS),
-                Protocol.str(frame, "conv", null),
-                Protocol.plain(Protocol.str(frame, "crew", ""), Protocol.MAX_NAME_CHARS));
+            case "toast" -> {
+                String sticker = Protocol.str(frame, "sticker", null);
+                toast = new ToastRequest(
+                    Protocol.str(frame, "kind", "message"),
+                    Protocol.plain(Protocol.str(frame, "key", Protocol.str(frame, "id", "")), 64),
+                    name(frame, "title"),
+                    Protocol.plain(Protocol.str(frame, "body", ""), Protocol.MAX_MESSAGE_CHARS),
+                    Protocol.str(frame, "conv", null),
+                    Protocol.plain(Protocol.str(frame, "crew", ""), Protocol.MAX_NAME_CHARS),
+                    sticker == null || !stickerRef(sticker) ? null : sticker);
+            }
             default -> {
                 return null;
             }
         }
         revision++;
         return toast;
+    }
+
+    /** A reaction refusal's words ({@code chat.note.react.<key>}); one this build does not know reads general. */
+    private static String reactReason(String reason) {
+        return switch (reason) {
+            case "full", "kinds", "old", "words", "rate", "muted", "off" -> reason;
+            case "not-allowed" -> "not_allowed";
+            default -> "failed";
+        };
+    }
+
+    /** A sticker reference as the service takes it ({@code pl1/gg}). */
+    public static boolean stickerRef(String value) {
+        return value != null && value.matches("[a-z0-9]{1,8}/[a-z0-9-]{1,24}");
     }
 
     private void putFriend(JsonObject o) {
@@ -398,11 +632,13 @@ public final class OverlayState {
         if (c == null) {
             return;
         }
-        boolean known = conversations.containsKey(c.id());
-        conversations.put(c.id(), c);
-        if (!known) {
+        Conversation before = conversations.put(c.id(), c);
+        if (before == null) {
             // A new conversation comes first.
             moveToFront(c.id());
+        } else if (before.seen() != c.seen()) {
+            // "Görüldü" moved: the list draws it.
+            touch(c.id());
         }
     }
 
@@ -413,7 +649,7 @@ public final class OverlayState {
         }
         return new Conversation(id, Protocol.str(o, "kind", "dm"), name(o, "title"),
             (int) Math.max(0, Math.min(9999, Protocol.num(o, "unread", 0))), Protocol.bool(o, "muted", false),
-            Protocol.bool(o, "writable", true));
+            Protocol.bool(o, "writable", true), Protocol.id(o, "seen"));
     }
 
     private void putCall(JsonObject o) {
@@ -447,7 +683,7 @@ public final class OverlayState {
         Deque<ChatLine> deque = lines(conv);
         ChatLine known = findById(deque, clientId, id);
         if (known != null) {
-            // The same message again: confirmed, edited or deleted.
+            // The same message again: confirmed, edited, deleted, or with new reactions or its card.
             known.id = id == null ? known.id : id;
             if (deleted) {
                 known.deleted = true;
@@ -460,6 +696,7 @@ public final class OverlayState {
             known.at = at;
             known.delivery = Delivery.SENT;
             known.failure = null;
+            putExtras(known, o);
             touch(conv);
             return;
         }
@@ -467,14 +704,147 @@ public final class OverlayState {
             // The deletion of a message this game never showed: nothing to mark.
             return;
         }
-        ChatLine line = new ChatLine(id, clientId, name(o, "from"), deleted ? "" : text,
-            Protocol.bool(o, "mine", false), Delivery.SENT, at, now);
+        String from = name(o, "from");
+        boolean mine = Protocol.bool(o, "mine", false);
+        ChatLine line = new ChatLine(id, clientId, from, deleted ? "" : text, mine, Delivery.SENT, at, now);
         line.edited = edited && !deleted;
         line.deleted = deleted;
+        putExtras(line, o);
         append(conv, line);
         if (live) {
             moveToFront(conv);
+            if (!mine) {
+                // Their message ends their "yazıyor…" at once.
+                stopWriting(conv, from);
+            }
         }
+    }
+
+    /** CHAT2's fields of a message (absent from an older launcher: the line keeps none). */
+    private static void putExtras(ChatLine line, JsonObject o) {
+        long sid = Protocol.id(o, "sid");
+        line.sid = sid > 0 ? sid : line.sid;
+        if (line.deleted) {
+            line.sticker = null;
+            line.reply = null;
+            line.reactions = List.of();
+            line.links = List.of();
+            line.card = null;
+            return;
+        }
+        String sticker = Protocol.str(o, "sticker", null);
+        line.sticker = stickerRef(sticker) ? sticker : line.sticker;
+        if (line.sticker != null && sticker != null) {
+            // A sticker's words are for a mod that cannot draw it.
+            line.text = "";
+        }
+        JsonObject reply = obj(o, "reply");
+        if (reply != null) {
+            String quotedSticker = Protocol.str(reply, "sticker", null);
+            String quoted = Protocol.str(reply, "text", null);
+            line.reply = new Reply(Protocol.str(reply, "id", null), Protocol.id(reply, "sid"), name(reply, "from"),
+                Protocol.bool(reply, "mine", false),
+                quoted == null ? null : Protocol.plain(quoted, MAX_QUOTE_CHARS),
+                stickerRef(quotedSticker) ? quotedSticker : null, Protocol.bool(reply, "deleted", false),
+                Protocol.bool(reply, "missing", false));
+        } else if (o.has("sid")) {
+            // The launcher's word stands (a reply whose message was gone went as a plain one).
+            line.reply = null;
+        }
+        JsonArray reactions = arr(o, "reactions");
+        if (reactions != null || o.has("sid")) {
+            // A launcher that knows reactions sends the whole list each time (none: the field is left out).
+            line.reactions = reactionsOf(reactions);
+        }
+        JsonArray links = arr(o, "links");
+        if (links != null || o.has("sid")) {
+            line.links = linksOf(links);
+        }
+        JsonObject card = obj(o, "card");
+        if (card != null) {
+            String site = Protocol.plain(Protocol.str(card, "site", ""), Protocol.MAX_NAME_CHARS);
+            String title = Protocol.plain(Protocol.str(card, "title", ""), MAX_QUOTE_CHARS);
+            line.card = site.isEmpty() || title.isEmpty() ? null : new Card(site, title);
+        } else if (o.has("sid")) {
+            line.card = null;
+        }
+    }
+
+    private static List<Reaction> reactionsOf(JsonArray a) {
+        if (a == null || a.isEmpty()) {
+            return List.of();
+        }
+        List<Reaction> out = new ArrayList<>(Math.min(a.size(), REACTION_KINDS));
+        for (JsonElement e : a) {
+            if (!e.isJsonObject() || out.size() >= REACTION_KINDS) {
+                continue;
+            }
+            JsonObject r = e.getAsJsonObject();
+            String emoji = Protocol.str(r, "e", "");
+            // Only what fits an emoji: a few code points, nothing that formats or breaks lines.
+            String shown = Protocol.plain(emoji, 8);
+            int count = (int) Math.max(0, Math.min(9999, Protocol.num(r, "n", 0)));
+            if (emoji.isEmpty() || emoji.length() > 32 || shown.isEmpty() || count == 0) {
+                continue;
+            }
+            List<String> who = new ArrayList<>(3);
+            JsonArray names = arr(r, "who");
+            if (names != null) {
+                for (JsonElement n : names) {
+                    if (n.isJsonPrimitive() && n.getAsJsonPrimitive().isString() && who.size() < 3) {
+                        String name = Protocol.plain(n.getAsString(), Protocol.MAX_NAME_CHARS);
+                        if (!name.isEmpty()) {
+                            who.add(name);
+                        }
+                    }
+                }
+            }
+            out.add(new Reaction(emoji, shown, count, Protocol.bool(r, "mine", false), List.copyOf(who)));
+        }
+        return List.copyOf(out);
+    }
+
+    /** The launcher's pressable links: only plain {@code https} addresses, at most three. */
+    private static List<Link> linksOf(JsonArray a) {
+        if (a == null || a.isEmpty()) {
+            return List.of();
+        }
+        List<Link> out = new ArrayList<>(3);
+        for (JsonElement e : a) {
+            if (!e.isJsonObject() || out.size() >= 3) {
+                continue;
+            }
+            JsonObject l = e.getAsJsonObject();
+            String url = Protocol.str(l, "url", "");
+            if (LinkRule.safe(url)) {
+                out.add(new Link(url, Protocol.bool(l, "trusted", false)));
+            }
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * The line that shows "Görüldü" (CHAT2 §5): the player's last sent message the friend's mark reaches, with
+     * no message of the friend's after it (an answer says it was seen by itself). Null when there is none.
+     */
+    public static ChatLine seenLine(Iterable<ChatLine> lines, long seen) {
+        if (seen <= 0) {
+            return null;
+        }
+        ChatLine found = null;
+        for (ChatLine line : lines) {
+            if (!line.mine) {
+                found = null;
+                continue;
+            }
+            if (line.delivery != Delivery.SENT || line.sid <= 0 || line.deleted) {
+                continue;
+            }
+            if (line.sid <= seen) {
+                found = line;
+            }
+        }
+        return found;
     }
 
     /** New activity puts a conversation first (the panel keeps its own order while it is open). */
@@ -549,7 +919,8 @@ public final class OverlayState {
         return null;
     }
 
-    private String conversationOf(ChatLine line) {
+    /** The conversation a line is in, or null. */
+    public String conversationOf(ChatLine line) {
         for (Map.Entry<String, Deque<ChatLine>> entry : lines.entrySet()) {
             if (entry.getValue().contains(line)) {
                 return entry.getKey();

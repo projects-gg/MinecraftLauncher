@@ -7,7 +7,11 @@
   "license": "GPL-3.0-only",
   "environment": "client",
   "entrypoints": {
-    "client": ["gg.projects.overlay.dev.ScenarioDriver", "gg.projects.overlay.dev.ConnectScenario"]
+    "client": [
+      "gg.projects.overlay.dev.ScenarioDriver",
+      "gg.projects.overlay.dev.ConnectScenario",
+      "gg.projects.overlay.dev.Chat2Scenario"
+    ]
   },
   "mixins": [
     {

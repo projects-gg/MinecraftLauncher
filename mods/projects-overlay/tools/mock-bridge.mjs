@@ -2,9 +2,12 @@
 // It listens on 127.0.0.1 only and never connects anywhere.
 //
 //   node tools/mock-bridge.mjs [--port 0] [--token <t>] [--info <file>] [--log <file>] [--auto-demo]
-//                              [--reduced-motion] [--signed-out] [--quiet]
+//                              [--reduced-motion] [--signed-out] [--quiet] [--chat2]
 //
 // --info writes {"port","token"} once listening, for the script that starts the game.
+// --chat2 plays a launcher with CHAT2's extras (docs/tasks/ovl2-protocol.md, CHAT2-O): message ids (sid),
+// stickers, replies, reactions, links and cards, "Görüldü", "yazıyor…"; the panel's stickers, replies and
+// reactions are answered as the launcher would (a reaction with 😮 is refused as "full", for the note).
 // The game's scenario driver sends {"t":"dev","cmd":...} frames to script the scenario; the real launcher
 // ignores unknown frame types, so these exist only here. Frames follow ovl1.md §3 and the additions in
 // docs/tasks/ovl2-protocol.md (L1-L16, and "connect" with its "connect-result").
@@ -120,6 +123,102 @@ const state = {
   calls: [],
 };
 
+// CHAT2: the same conversations with the extras a CHAT2 launcher sends (each message's sid is its order key).
+const EXTRAS = ["replies", "reactions", "stickers", "typing", "reads", "links"];
+let nextSid = 1000;
+const newSid = () => nextSid++;
+if (args.chat2) {
+  const ayse = state.convs.find((c) => c.id === "dm:ayse");
+  ayse.unread = 0;
+  state.history["dm:ayse"] = [
+    {
+      id: "m1",
+      sid: 101,
+      from: "OVL2Test",
+      text: "Bugün bedwars turnuvası var mıydı?",
+      at: minutes(42),
+      mine: true,
+    },
+    {
+      id: "m2",
+      sid: 102,
+      from: "Ayşe",
+      text: "Evet, 21:00'de başlıyor. Kurallar burada: https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      at: minutes(40),
+      mine: false,
+      links: [{ url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", trusted: true }],
+      card: { site: "YouTube", title: "Bedwars turnuva kuralları (2026)" },
+      reactions: [{ e: "👍", n: 1, mine: true }],
+    },
+    {
+      id: "m3",
+      sid: 103,
+      from: "Ayşe",
+      text: "",
+      sticker: "pl1/gg",
+      at: minutes(39),
+      mine: false,
+    },
+    {
+      id: "m4",
+      sid: 104,
+      from: "OVL2Test",
+      text: "Tamam, ben de geliyorum!",
+      at: minutes(3),
+      mine: true,
+      reply: { id: "m2", sid: 102, from: "Ayşe", text: "Evet, 21:00'de başlıyor. Kurallar burada:…" },
+      reactions: [
+        { e: "❤️", n: 1, who: ["Ayşe"] },
+        { e: "🔥", n: 1, who: ["Ayşe"] },
+      ],
+    },
+    {
+      id: "m5",
+      sid: 105,
+      from: "OVL2Test",
+      text: "Haritayı bu sefer ben seçeceğim.",
+      at: minutes(2),
+      mine: true,
+    },
+  ];
+  // Ayşe saw up to m4: "Görüldü" sits under it until she writes.
+  ayse.seen = 104;
+  state.history["crew:gece"] = [
+    {
+      id: "m6",
+      sid: 106,
+      from: "Mert",
+      text: "Yarın 21:00'de antrenman var, unutmayın.",
+      at: minutes(90),
+      mine: false,
+      reactions: [
+        { e: "👍", n: 4, mine: true, who: ["Deniz", "Ayşe", "Can"] },
+        { e: "🔥", n: 2, who: ["Deniz", "Elif"] },
+        { e: "😂", n: 1, who: ["Can"] },
+      ],
+    },
+    {
+      id: "m7",
+      sid: 107,
+      from: "Deniz",
+      text: "Ben gelemeyebilirim, haber veririm.",
+      at: minutes(80),
+      mine: false,
+      reply: { id: "m6", sid: 106, from: "Mert", text: "Yarın 21:00'de antrenman var, unutmayın." },
+    },
+    { id: "m7b", sid: 108, from: "Deniz", text: "", sticker: "pl1/sleepy", at: minutes(79), mine: false },
+    {
+      id: "m8",
+      sid: 109,
+      from: "OVL2Test",
+      text: "Tamam, ben oradayım.",
+      at: minutes(75),
+      mine: true,
+      reply: { sid: 90, from: "", missing: true },
+    },
+  ];
+}
+
 function parseArgs(list) {
   const out = {};
   for (let i = 0; i < list.length; i++) {
@@ -233,7 +332,7 @@ function welcome(socket) {
     me: state.me,
     dnd: Boolean(args.dnd),
     reducedMotion: Boolean(args.reducedMotion),
-    features: args.signedOut ? [] : ["friends", "chat", "calls"],
+    features: args.signedOut ? [] : ["friends", "chat", "calls", ...(args.chat2 ? EXTRAS : [])],
   });
   send(socket, {
     t: "snapshot",
@@ -261,20 +360,51 @@ function conv(id) {
 }
 
 /** A new message from someone else: the message, its conversation's count and the toast. */
-function incoming(socket, convId, from, text) {
+function incoming(socket, convId, from, text, sticker) {
   const c = conv(convId);
   const msg = { t: "msg", conv: convId, id: `m${nextId++}`, from, text, at: now(), mine: false };
+  if (args.chat2) {
+    msg.sid = newSid();
+    if (sticker) {
+      msg.sticker = sticker;
+      msg.text = `[Çıkartma: ${stickerName(sticker)}]`;
+    }
+  }
   state.history[convId].push(msg);
   send(socket, msg);
   if (c) {
     c.unread += 1;
     send(socket, { t: "conv", ...c });
   }
-  const toast = { t: "toast", kind: "message", key: convId, title: from, body: text, conv: convId };
+  const body = sticker ? `Çıkartma · ${stickerName(sticker)}` : text;
+  const toast = { t: "toast", kind: "message", key: convId, title: from, body, conv: convId };
+  if (sticker) {
+    toast.sticker = sticker;
+  }
   if (c?.kind === "crew") {
     toast.crew = c.title;
   }
   send(socket, toast);
+}
+
+const STICKER_NAMES = { "pl1/gg": "GG", "pl1/hi": "Selam", "pl1/love": "Kalp", "pl1/party": "Kutlama" };
+function stickerName(ref) {
+  return STICKER_NAMES[ref] ?? "Çıkartma";
+}
+
+/** The message a reply answers, as the launcher resolves it from its own history. */
+function quoteOf(convId, replySid) {
+  const original = (state.history[convId] ?? []).find((m) => m.sid === replySid);
+  if (!original) {
+    return { sid: replySid, from: "", missing: true };
+  }
+  const quote = { id: original.id, sid: original.sid, from: original.from, mine: Boolean(original.mine) };
+  if (original.sticker) {
+    quote.sticker = original.sticker;
+  } else {
+    quote.text = original.text.length > 120 ? `${original.text.slice(0, 120)}…` : original.text;
+  }
+  return quote;
 }
 
 function startCall(socket, id, crew, from) {
@@ -318,6 +448,10 @@ function onFrame(socket, frame) {
       break;
     }
     case "send": {
+      if (args.chat2 && (typeof frame.sticker === "string" || typeof frame.reply === "number")) {
+        onChat2Send(socket, frame);
+        break;
+      }
       const text = typeof frame.text === "string" ? frame.text : "";
       if (text.length === 0 || [...text].length > MAX_TEXT) {
         send(socket, { t: "send-failed", cid: frame.cid, reason: "too-long" });
@@ -335,8 +469,20 @@ function onFrame(socket, frame) {
       if (!state.history[frame.conv]) {
         state.history[frame.conv] = [];
       }
-      state.history[frame.conv].push({ id, from: state.me.name, text, at: now(), mine: true });
-      later(250, () => send(socket, { t: "sent", cid: frame.cid, id }));
+      const mine = { id, from: state.me.name, text, at: now(), mine: true };
+      if (args.chat2) {
+        mine.sid = newSid();
+      }
+      state.history[frame.conv].push(mine);
+      later(250, () => {
+        send(socket, { t: "sent", cid: frame.cid, id, ...(args.chat2 ? { sid: mine.sid } : {}) });
+        if (args.chat2) {
+          send(socket, { t: "msg", conv: frame.conv, ...mine });
+        }
+      });
+      if (args.chat2 && args.quietReplies) {
+        break;
+      }
       later(1200, () => {
         const reply = {
           t: "msg",
@@ -347,6 +493,9 @@ function onFrame(socket, frame) {
           at: now(),
           mine: false,
         };
+        if (args.chat2) {
+          reply.sid = newSid();
+        }
         state.history[frame.conv].push(reply);
         send(socket, reply);
         send(socket, {
@@ -372,6 +521,14 @@ function onFrame(socket, frame) {
       }
       break;
     }
+    case "react":
+      if (args.chat2) {
+        onReact(socket, frame);
+      }
+      break;
+    case "typing":
+      // The player writes in the panel: a launcher passes it to the friends service; the mock only logs it.
+      break;
     case "dev":
       onDev(socket, frame);
       break;
@@ -379,6 +536,66 @@ function onFrame(socket, frame) {
       // panel, join, connect-result and anything newer: the mock only logs them.
       break;
   }
+}
+
+/** CHAT2: a sticker or a reply from the panel, answered as the launcher does (sent, then the whole message). */
+function onChat2Send(socket, frame) {
+  const history = state.history[frame.conv] ?? (state.history[frame.conv] = []);
+  const msg = { id: `m${nextId++}`, sid: newSid(), from: state.me.name, at: now(), mine: true };
+  if (typeof frame.sticker === "string") {
+    if (!/^[a-z0-9]{1,8}[/][a-z0-9-]{1,24}$/.test(frame.sticker)) {
+      later(100, () => send(socket, { t: "send-failed", cid: frame.cid, reason: "feature-off" }));
+      return;
+    }
+    msg.sticker = frame.sticker;
+    msg.text = `[Çıkartma: ${stickerName(frame.sticker)}]`;
+  } else {
+    msg.text = typeof frame.text === "string" ? frame.text : "";
+  }
+  if (typeof frame.reply === "number") {
+    msg.reply = quoteOf(frame.conv, frame.reply);
+  }
+  history.push(msg);
+  later(220, () => {
+    send(socket, { t: "sent", cid: frame.cid, id: msg.id, sid: msg.sid });
+    send(socket, { t: "msg", conv: frame.conv, ...msg });
+  });
+}
+
+/** CHAT2: a reaction from the panel. 😮 is refused ("full") so the scenario can show the note. */
+function onReact(socket, frame) {
+  const msg = (state.history[frame.conv] ?? []).find((m) => m.sid === frame.sid);
+  if (!msg) {
+    send(socket, { t: "react-failed", conv: frame.conv, sid: frame.sid, e: frame.e, reason: "old" });
+    return;
+  }
+  if (frame.e === "😮") {
+    later(80, () =>
+      send(socket, { t: "react-failed", conv: frame.conv, sid: frame.sid, e: frame.e, reason: "full" }),
+    );
+    return;
+  }
+  const reactions = msg.reactions ?? (msg.reactions = []);
+  const vs16 = String.fromCodePoint(0xfe0f);
+  const same = (r) => r.e.replace(vs16, "") === frame.e.replace(vs16, "");
+  let kind = reactions.find(same);
+  if (frame.on) {
+    if (!kind) {
+      kind = { e: frame.e, n: 0, who: [] };
+      reactions.push(kind);
+    }
+    if (!kind.mine) {
+      kind.mine = true;
+      kind.n += 1;
+    }
+  } else if (kind?.mine) {
+    kind.mine = false;
+    kind.n -= 1;
+    if (kind.n <= 0) {
+      reactions.splice(reactions.indexOf(kind), 1);
+    }
+  }
+  later(60, () => send(socket, { t: "msg", conv: frame.conv, ...msg }));
 }
 
 function onDev(socket, frame) {
@@ -398,6 +615,35 @@ function onDev(socket, frame) {
     case "more":
       incoming(socket, "dm:ayse", "Ayşe", "Hâlâ orada mısın?");
       break;
+    case "sticker-in":
+      // CHAT2: a sticker from a friend (a toast with its picture; in the open conversation it arrives moving).
+      incoming(socket, frame.conv ?? "dm:ayse", frame.from ?? "Ayşe", "", frame.sticker ?? "pl1/party");
+      break;
+    case "typing": {
+      // CHAT2: "yazıyor…" from the launcher (a real one sends it only while the panel is open).
+      const convId = frame.conv ?? "dm:ayse";
+      const people = convId.startsWith("crew:")
+        ? [
+            ["f-mert", "Mert"],
+            ["f-deniz", "Deniz"],
+            ["f-ece", "Ece"],
+          ]
+        : [["f-ayse", "Ayşe"]];
+      for (const [by, name] of people.slice(0, Number(frame.count ?? people.length))) {
+        send(socket, { t: "typing", conv: convId, by, name });
+      }
+      break;
+    }
+    case "seen": {
+      // CHAT2: the friend has seen the player's newest message.
+      const c = conv(frame.conv ?? "dm:ayse");
+      const newest = (state.history[c.id] ?? []).filter((m) => m.mine && m.sid).at(-1);
+      if (newest) {
+        c.seen = newest.sid;
+        send(socket, { t: "conv", ...c });
+      }
+      break;
+    }
     case "connect": {
       // The launcher's "Bağlan" after the player confirmed there (a crew call, an invite, a plan).
       const out = { t: "connect", id: frame.id ?? `c${nextId++}`, host: frame.host };

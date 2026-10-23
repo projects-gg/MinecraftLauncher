@@ -1,6 +1,8 @@
 package gg.projects.overlay.toast;
 
 import gg.projects.overlay.state.OverlayState;
+import gg.projects.overlay.stickers.StickerArt;
+import gg.projects.overlay.stickers.StickerSet;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
@@ -17,7 +19,8 @@ import net.minecraft.util.FormattedCharSequence;
  * One toast, laid out once when it arrives (or updates) and only drawn afterwards: a face on the left (a
  * name's initial, or the crew, call, invite or info sign), the name in bold with its count, the crew's name
  * under it for crew chat, up to two lines of text, and the hint with the key that opens the overlay. A
- * travel toast ("Projects sunucusuna bağlanılıyor…") is one sentence beside the gold join sign.
+ * travel toast ("Projects sunucusuna bağlanılıyor…") is one sentence beside the gold join sign. A sticker
+ * message (CHAT2) shows the sticker small before its words ("Çıkartma · GG"), unless message text is hidden.
  */
 public final class ToastCard {
     public static final int WIDTH = Frames.TOAST_WIDTH;
@@ -32,6 +35,8 @@ public final class ToastCard {
     static final int HINT_GAP = 4;
     static final int HINT_H = 10;
     static final int MAX_BODY_LINES = 2;
+    /** A sticker's picture in a toast, GUI pixels (CHAT2 §8.3). */
+    static final int STICKER = 16;
     private static final int KEY_PAD = 3;
 
     public enum Kind { MESSAGE, CALL, INVITE, INFO, TRAVEL }
@@ -47,6 +52,8 @@ public final class ToastCard {
     final int countWidth;
     final FormattedCharSequence crew;
     final List<FormattedCharSequence> body;
+    /** A sticker message's sticker, drawn small before the words. */
+    final StickerSet.Sticker sticker;
     final String hintBefore;
     final int hintBeforeWidth;
     final String hintKey;
@@ -74,6 +81,7 @@ public final class ToastCard {
         this.countWidth = b.countWidth;
         this.crew = b.crew;
         this.body = b.body;
+        this.sticker = b.sticker;
         this.hintBefore = b.hintBefore;
         this.hintBeforeWidth = b.hintBefore == null ? 0 : Fonts.small().width(b.hintBefore);
         this.hintKey = b.hintKey;
@@ -89,7 +97,8 @@ public final class ToastCard {
             this.height = PAD_Y + Math.max(FACE, body.size() * LINE_H) + PAD_Y;
             return;
         }
-        float h = PAD_Y + TITLE_H + (crew != null ? SMALL_H : 0) + 1 + body.size() * LINE_H;
+        float h = PAD_Y + TITLE_H + (crew != null ? SMALL_H : 0) + 1
+            + (sticker != null ? Math.max(STICKER + 1, body.size() * LINE_H) : body.size() * LINE_H);
         if (kind != Kind.INFO) {
             h += HINT_GAP + HINT_H;
         }
@@ -111,6 +120,7 @@ public final class ToastCard {
         int countWidth;
         FormattedCharSequence crew;
         List<FormattedCharSequence> body;
+        StickerSet.Sticker sticker;
         String hintBefore;
         String hintKey;
         String hintAfter;
@@ -163,7 +173,15 @@ public final class ToastCard {
         if (b.kind == Kind.MESSAGE && crewName != null) {
             b.crew = Texts.visual(Texts.fit(small, crewName, TEXT_W));
         }
-        b.body = Texts.wrap(Fonts.ui(), bodyText, TEXT_W, MAX_BODY_LINES);
+        if (b.kind == Kind.MESSAGE && showText && request.sticker() != null) {
+            b.sticker = StickerSet.get().find(request.sticker());
+        }
+        if (b.sticker != null) {
+            StickerArt.prepare(STICKER);
+            b.body = Texts.wrap(Fonts.ui(), bodyText, TEXT_W - STICKER - 5, 1);
+        } else {
+            b.body = Texts.wrap(Fonts.ui(), bodyText, TEXT_W, MAX_BODY_LINES);
+        }
         if (b.kind != Kind.INFO) {
             if (keyName == null) {
                 b.hintBefore = Texts.str("toast.hint.unbound");
@@ -238,9 +256,20 @@ public final class ToastCard {
         ty += 1;
         // An update in place: the text comes up from dim, so the eye sees it changed.
         Draw.pushAlpha(0.45f + 0.55f * refresh);
-        for (FormattedCharSequence line : body) {
-            Draw.text(g, Fonts.ui(), line, tx, Fonts.centeredY(Fonts.Face.UI, ty + LINE_H / 2f), Theme.BONE_300);
-            ty += LINE_H;
+        if (sticker != null) {
+            if (!StickerArt.draw(g, sticker, STICKER, Draw.snap(tx), Draw.snap(ty))) {
+                Draw.frame(g, Frames.STICKER_TILE, tx, ty, STICKER, STICKER);
+            }
+            for (FormattedCharSequence line : body) {
+                Draw.text(g, Fonts.ui(), line, tx + STICKER + 5, Fonts.centeredY(Fonts.Face.UI, ty + STICKER / 2f),
+                    Theme.BONE_300);
+            }
+            ty += STICKER + 1;
+        } else {
+            for (FormattedCharSequence line : body) {
+                Draw.text(g, Fonts.ui(), line, tx, Fonts.centeredY(Fonts.Face.UI, ty + LINE_H / 2f), Theme.BONE_300);
+                ty += LINE_H;
+            }
         }
         Draw.popAlpha();
         if (kind != Kind.INFO) {
