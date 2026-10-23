@@ -2,11 +2,18 @@
 // it, a short panel (what it does, the price from /offer, "afk.projects.gg'de başla"). Purchase and
 // linking always happen on the site. The panel's three points rise in once; nothing moves after.
 import { ArrowSquareOut, CaretRight } from "@phosphor-icons/react";
-import { Button, cn, Dialog, easeOutExpo, useMotionPrefs } from "@pl/ui";
+import {
+  Button,
+  ContentIcon,
+  type ContentIconKind,
+  cn,
+  Dialog,
+  easeOutExpo,
+  useMotionPrefs,
+} from "@pl/ui";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { useSocialUi } from "@/features/social/store";
-import { ContentIcon, type ContentIconKind } from "@/shell/content-icon";
 import { afkFailed } from "../errors";
 import { type CloudOverview, cloudApi } from "./api";
 import { formatPrice } from "./status";

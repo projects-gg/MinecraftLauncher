@@ -4,7 +4,9 @@
 // notice, and in a quieter corner remove, block and "Rapor et" (MOD1), the first two confirmed in
 // place with one sentence. The row's menu (a right click, Shift+F10 or the menu key, or its "…")
 // is the person menu every place shows (person-menu.tsx, FIX2). With several crews (TEAM4) "Ekibe
-// davet et" asks which crew (a menu of them, each with its mark).
+// davet et" asks which crew (a menu of them, each with its mark). A friend whose world invite the
+// player has (HOST1) reads "Dünyasında" with "2/8", and "Katıl" joins their world (only invitees
+// ever see this; everyone else still sees "Tek oyunculu").
 import {
   Bell,
   ChatCircle,
@@ -34,7 +36,11 @@ import { type KeyboardEvent, type PointerEvent as ReactPointerEvent, useState } 
 import { useTranslation } from "react-i18next";
 import { useCalm } from "@/features/accounts/calm";
 import { announce } from "@/features/accounts/use-accounts";
+import { PeopleCount, WorldJoinButton } from "@/features/host/parts";
+import { inviteFrom, invitePeople } from "@/features/host/rules";
+import { useHostUi } from "@/features/host/store";
 import { api } from "@/lib/api";
+import type { WorldInvite } from "@/lib/api/host-types";
 import type { Friend, FriendGroup, SocialTeam } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
 import { attempt, inviteCoolingDown, inviteFriend } from "./actions";
@@ -97,6 +103,28 @@ function useOpenChat(friend: Pick<Friend, "id">): (() => void) | null {
   const openChat = useSocialUi((s) => s.openChat);
   if (!chat || !me) return null;
   return () => openChat(directConversation(me, friend.id), { from: "list" });
+}
+
+/** The friend's world invite to the player (HOST1), while world sharing is on. */
+function useWorldInvite(friend: Pick<Friend, "id">): WorldInvite | null {
+  return useHostUi((s) => (s.view.enabled ? inviteFrom(s.view.invites, friend.id) : null));
+}
+
+/** "Dünyasında" and "2/8" (the friend's world, the friend counted). */
+function WorldLine({ invite }: { invite: WorldInvite }) {
+  const { t } = useTranslation();
+  const people = invitePeople(invite);
+  return (
+    <>
+      {t("host.invite.inWorld")}{" "}
+      <PeopleCount
+        count={people.count}
+        max={people.max}
+        label={t("host.invite.count", people)}
+        className="ml-1 text-ash-400"
+      />
+    </>
+  );
 }
 
 /** "Rapor et" about a friend. */
@@ -184,6 +212,7 @@ function FriendCard({
   const invitable = useCanInvite();
   const [confirm, setConfirm] = useState<Confirm | null>(initialConfirm);
   const [busy, setBusy] = useState(false);
+  const world = useWorldInvite(friend);
   const joinable = friend.state === "playing" && isJoinable(friend.game);
   const coolingDown = inviteCoolingDown(friend.id, cooldown);
   const openChat = useOpenChat(friend);
@@ -230,14 +259,14 @@ function FriendCard({
           <p
             className={cn(
               "mt-1 truncate text-[13px]",
-              joinable
+              joinable || world
                 ? "text-jade-400"
                 : friend.state === "offline"
                   ? "text-ash-400"
                   : "text-ash-300",
             )}
           >
-            {presenceLine(friend, t)}
+            {world ? <WorldLine invite={world} /> : presenceLine(friend, t)}
             {friend.dnd ? (
               <span className="text-gold-300"> ({t("social.presence.dnd")})</span>
             ) : null}
@@ -251,7 +280,11 @@ function FriendCard({
       ) : null}
 
       <div className="mt-4 flex flex-col gap-2">
-        {joinable ? <JoinButton size="md" variant="primary" className="w-full" /> : null}
+        {world ? (
+          <WorldJoinButton invite={world} size="md" variant="primary" className="w-full" />
+        ) : joinable ? (
+          <JoinButton size="md" variant="primary" className="w-full" />
+        ) : null}
         {invitable ? (
           <Button
             variant="secondary"
@@ -265,9 +298,9 @@ function FriendCard({
         ) : null}
         {openChat ? (
           <Button
-            variant={joinable ? "secondary" : "primary"}
+            variant={joinable || world ? "secondary" : "primary"}
             className="w-full"
-            icon={<ChatCircle size={16} weight={joinable ? "regular" : "fill"} />}
+            icon={<ChatCircle size={16} weight={joinable || world ? "regular" : "fill"} />}
             onClick={() => {
               onDone();
               openChat();
@@ -516,8 +549,9 @@ export function FriendRow({
   const { reduce } = useSocialMotion();
   const [open, setOpen] = useState(false);
   const [intent, setIntent] = useState<Confirm | null>(null);
+  const world = useWorldInvite(friend);
   const joinable = friend.state === "playing" && isJoinable(friend.game);
-  const line = presenceLine(friend, t);
+  const line = world ? t("host.invite.inWorld") : presenceLine(friend, t);
   const badge = useShownBadge(friend.badge);
 
   // Remove and block ask first, in the card: it opens at the question once the menu is gone.
@@ -589,11 +623,11 @@ export function FriendRow({
                       key={line}
                       className={cn(
                         "absolute inset-x-0 truncate text-[12.5px] leading-[18px]",
-                        joinable ? "text-jade-400" : "text-ash-400",
+                        joinable || world ? "text-jade-400" : "text-ash-400",
                       )}
                       {...swap(reduce)}
                     >
-                      {line}
+                      {world ? <WorldLine invite={world} /> : line}
                     </motion.span>
                   </AnimatePresence>
                 </span>
@@ -644,7 +678,11 @@ export function FriendRow({
           </AnimatePresence>
         </Popover.Root>
         <AnimatePresence initial={false}>
-          {joinable ? (
+          {world ? (
+            <motion.span key="world" className="flex" data-no-drag {...rise(reduce, 0, 0.2)}>
+              <WorldJoinButton invite={world} />
+            </motion.span>
+          ) : joinable ? (
             <motion.span key="join" className="flex" data-no-drag {...rise(reduce, 0, 0.2)}>
               <JoinButton />
             </motion.span>

@@ -1,12 +1,11 @@
 // "Devam et": the world or server the selected instance played last, one click away (1.20+ quick
 // play). A quiet button beside OYNA; OYNA stays the loud one.
 import { Play } from "@phosphor-icons/react";
-import { cn } from "@pl/ui";
+import { ContentIcon, cn } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api, type InstanceSummary, type ResumeTarget } from "@/lib/api";
-import { ContentIcon } from "@/shell/content-icon";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { sameAsAutoJoin } from "./model";

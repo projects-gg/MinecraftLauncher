@@ -13,6 +13,7 @@ import {
 import {
   Button,
   Chip,
+  ContentIcon,
   ContextMenu,
   cn,
   easeOutExpo,
@@ -30,6 +31,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { copyErrorDetails, newJobId, showError } from "@/features/content/jobs";
+import { useWorldShare, WorldShareAction, WorldShareChip } from "@/features/host/world-row";
 import {
   api,
   type InstanceDetail,
@@ -38,7 +40,6 @@ import {
   type WorldDetail,
 } from "@/lib/api";
 import { formatBytes, formatPercent, formatRelative } from "@/lib/format";
-import { ContentIcon } from "@/shell/content-icon";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { ConfirmDialog, InlineNotice, TabEmpty, TabSection, TrashRow } from "../parts";
@@ -256,6 +257,8 @@ export function WorldsTab({ instance }: { instance: InstanceDetail }) {
   const play = useLaunch((s) => s.play);
   const selectInstance = usePrefs((s) => s.selectInstance);
   const quickPlay = canQuickPlay(instance.mcVersion);
+  // "Arkadaşlarınla oyna" (HOST1): only where the instance may share its worlds.
+  const share = useWorldShare(instance, locked);
   // Rows glide when a world or its backups come and go (not in Performance mode).
   const glides = useMotionPrefs().layout;
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -296,7 +299,8 @@ export function WorldsTab({ instance }: { instance: InstanceDetail }) {
   const trashItems = (trash.data ?? []).filter(
     (item) => item.kind === "world" || item.kind === "backup",
   );
-  const busy = Object.keys(jobs).some((key) => key.startsWith(`${id}:`));
+  // A backup or restore runs, or an opening's backup (HOST1): one job at a time here.
+  const busy = Object.keys(jobs).some((key) => key.startsWith(`${id}:`)) || share.busy;
   const totalBytes = worldList.reduce((sum, w) => sum + w.sizeBytes, 0);
 
   const toggle = (folder: string) =>
@@ -412,51 +416,55 @@ export function WorldsTab({ instance }: { instance: InstanceDetail }) {
    * A world's actions, for its "more" menu and its right-click menu (which also offers
    * "Yedekle", the row's own button).
    */
-  const worldItems = (world: WorldDetail, withBackup: boolean): Array<MenuItem | null> => [
-    ...(withBackup
-      ? [
-          {
-            label: t("instance.worlds.backup"),
-            icon: <Archive size={16} />,
-            disabled: locked || busy,
-            onSelect: () => void backup(world),
-          },
-        ]
-      : []),
-    ...(quickPlay
-      ? [
-          {
-            label: t("instance.worlds.play"),
-            icon: <Play size={16} />,
-            disabled: locked || !world.readable,
-            onSelect: () => {
-              selectInstance(id);
-              void play(id, { quickPlay: { kind: "singleplayer", world: world.folder } });
+  const worldItems = (world: WorldDetail, withBackup: boolean): Array<MenuItem | null> => {
+    const shareItem = share.menuItem(world);
+    return [
+      ...(withBackup
+        ? [
+            {
+              label: t("instance.worlds.backup"),
+              icon: <Archive size={16} />,
+              disabled: locked || busy,
+              onSelect: () => void backup(world),
             },
-          },
-        ]
-      : []),
-    ...(withBackup || quickPlay ? [null] : []),
-    {
-      label: t("datapacks.menu"),
-      icon: <Stack size={16} />,
-      disabled: !world.readable,
-      onSelect: () => setDatapacksFor(world),
-    },
-    {
-      label: t("instance.worlds.openWorldFolder"),
-      icon: <FolderOpen size={16} />,
-      onSelect: () => void api.openInstanceFolder(id, `saves/${world.folder}`).catch(showError),
-    },
-    null,
-    {
-      label: t("instance.worlds.delete"),
-      icon: <Trash size={16} />,
-      danger: true,
-      disabled: locked || busy,
-      onSelect: () => setDeleting(world),
-    },
-  ];
+          ]
+        : []),
+      ...(quickPlay
+        ? [
+            {
+              label: t("instance.worlds.play"),
+              icon: <Play size={16} />,
+              disabled: locked || !world.readable,
+              onSelect: () => {
+                selectInstance(id);
+                void play(id, { quickPlay: { kind: "singleplayer", world: world.folder } });
+              },
+            },
+          ]
+        : []),
+      ...(shareItem ? [shareItem] : []),
+      ...(withBackup || quickPlay || shareItem ? [null] : []),
+      {
+        label: t("datapacks.menu"),
+        icon: <Stack size={16} />,
+        disabled: !world.readable,
+        onSelect: () => setDatapacksFor(world),
+      },
+      {
+        label: t("instance.worlds.openWorldFolder"),
+        icon: <FolderOpen size={16} />,
+        onSelect: () => void api.openInstanceFolder(id, `saves/${world.folder}`).catch(showError),
+      },
+      null,
+      {
+        label: t("instance.worlds.delete"),
+        icon: <Trash size={16} />,
+        danger: true,
+        disabled: locked || busy,
+        onSelect: () => setDeleting(world),
+      },
+    ];
+  };
 
   const backupRow = (item: WorldBackup, showWorld: boolean) => (
     <BackupRow
@@ -543,6 +551,7 @@ export function WorldsTab({ instance }: { instance: InstanceDetail }) {
               const own = backupsByWorld.get(world.folder) ?? [];
               const open = expanded.has(world.folder);
               const job = jobs[backupJobKey(id, world.folder)];
+              const shared = share.actionFor(world);
               return (
                 <motion.li
                   key={world.folder}
@@ -562,6 +571,7 @@ export function WorldsTab({ instance }: { instance: InstanceDetail }) {
                             {world.name}
                           </span>
                           <ModeChip world={world} />
+                          <WorldShareChip action={shared} />
                           {world.readable ? null : (
                             <Chip tone="flare">{t("instance.worlds.unreadable")}</Chip>
                           )}
@@ -619,6 +629,7 @@ export function WorldsTab({ instance }: { instance: InstanceDetail }) {
                           </Button>
                         )}
                       </div>
+                      <WorldShareAction action={shared} instance={instance} world={world} />
                       <Menu
                         trigger={
                           <IconButton

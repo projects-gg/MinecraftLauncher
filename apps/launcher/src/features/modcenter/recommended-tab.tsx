@@ -2,6 +2,7 @@ import { ArrowCounterClockwise, ArrowSquareOut, ArrowsClockwise } from "@phospho
 import {
   Button,
   Chip,
+  ContentIcon,
   cn,
   EmptyState,
   SearchInput,
@@ -28,7 +29,6 @@ import {
   type ModSelection,
 } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
-import { ContentIcon } from "@/shell/content-icon";
 import { type ModDraft, useDrafts } from "@/stores/drafts";
 import { fade, glide, type MotionPrefs, pop, swap, useMotionPrefs } from "./motion";
 import { JobLine } from "./parts";

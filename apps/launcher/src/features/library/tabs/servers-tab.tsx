@@ -9,6 +9,7 @@ import {
 } from "@phosphor-icons/react";
 import {
   Button,
+  ContentIcon,
   ContextMenu,
   Dialog,
   Field,
@@ -35,7 +36,6 @@ import {
 } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
 import { formatCount } from "@/lib/format";
-import { ContentIcon } from "@/shell/content-icon";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { InlineNotice, TabEmpty } from "../parts";

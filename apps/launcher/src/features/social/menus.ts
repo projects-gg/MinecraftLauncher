@@ -110,7 +110,9 @@ export type PersonAction =
   | "declineRequest"
   | "cancelRequest"
   | "join"
+  | "joinWorld"
   | "invite"
+  | "worldInvite"
   | "chat"
   | "message"
   | "addFriend"
@@ -123,6 +125,7 @@ export type PersonAction =
   | "unmakeModerator"
   | "makeFounder"
   | "removeMember"
+  | "removeFromWorld"
   | "removeFriend"
   | "block"
   | "unblock"
@@ -185,6 +188,16 @@ export interface PersonInput {
   crew?: PersonCrew;
   /** "Rapor et": the service takes a report about them from here (MOD1). */
   report?: boolean;
+  /**
+   * HOST1: their world invite to the player: "Katıl" joins their world (off while the player is on
+   * the way there or in it already).
+   */
+  worldJoin?: "ready" | "here";
+  /**
+   * HOST1: the player's world is open: "Dünyana çağır" for a friend (off once they are invited,
+   * or while every place is taken), and "Dünyadan çıkar" for a guest.
+   */
+  world?: { invite: "ready" | "invited" | "full"; guest: boolean };
 }
 
 /** The rows of one group that apply (a `null` in a plan is a separator, never a missing row). */
@@ -207,10 +220,22 @@ export function personMenu(input: PersonInput): Plan<PersonAction> {
     ...only<PersonAction>(
       together && Boolean(input.joinable) && { action: "join", disabled: Boolean(input.here) },
       together &&
+        input.worldJoin !== undefined && {
+          action: "joinWorld",
+          disabled: input.worldJoin === "here",
+        },
+      together &&
         friend &&
         (input.invite ?? "hidden") !== "hidden" && {
           action: "invite",
           disabled: input.invite === "waiting",
+        },
+      together &&
+        friend &&
+        input.world !== undefined && {
+          action: "worldInvite",
+          disabled: input.world.invite !== "ready",
+          checked: input.world.invite === "invited" ? true : undefined,
         },
       together && friend && Boolean(input.chat) && { action: "chat" },
       Boolean(input.discord) && { action: "message" },
@@ -247,6 +272,9 @@ export function personMenu(input: PersonInput): Plan<PersonAction> {
           crew.removable && { action: "removeMember" },
         )
       : []),
+    null,
+    // The player's open world (HOST1): its guest leaves it (a block also does, by itself).
+    ...only<PersonAction>(Boolean(input.world?.guest) && { action: "removeFromWorld" }),
     null,
     ...only<PersonAction>(
       friend && { action: "removeFriend" },

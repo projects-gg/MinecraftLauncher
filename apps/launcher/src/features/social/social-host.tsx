@@ -9,6 +9,7 @@ import { Button, Dialog, toast } from "@pl/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { announce } from "@/features/accounts/use-accounts";
+import { WorldShareHost } from "@/features/host/host";
 import { shownInGame } from "@/features/overlay/store";
 import { useOverlaySync } from "@/features/overlay/use-overlay-sync";
 import { api } from "@/lib/api";
@@ -663,6 +664,8 @@ export function SocialHost() {
       <PersonAskDialog />
       <NoticeDialog />
       <PlanReminders />
+      {/* "Dünyanı arkadaşlarına aç" (HOST1): its view, notices and windows. */}
+      <WorldShareHost />
     </>
   );
 }

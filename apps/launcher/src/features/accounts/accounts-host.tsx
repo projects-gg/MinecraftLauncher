@@ -1,9 +1,11 @@
 // Everything the account surfaces open, mounted once with the main window's title bar: the
-// account center sheet, the Microsoft sign-in, the skin panel, the AFK launch question and a
-// polite live region for screen readers.
+// account center sheet, the Microsoft sign-in, the skin panels (Microsoft's, and the Projects
+// skin of username accounts with its toasts, SKIN1), the AFK launch question and a polite live
+// region for screen readers.
 import { prewarmImages } from "@pl/ui";
 import { useEffect, useState } from "react";
 import { PRESET_AVATARS } from "@/features/avatars/presets";
+import { ProjectsSkinHost } from "@/features/projects-skin/host";
 import { AppearanceSheet } from "@/features/skins/appearance-sheet";
 import { AccountCenterSheet } from "./account-center";
 import { AfkLaunchGuardDialog } from "./afk-guard";
@@ -69,6 +71,7 @@ export function AccountsHost() {
           openLogin(appearance?.id ?? null);
         }}
       />
+      <ProjectsSkinHost />
       <AfkLaunchGuardDialog />
       <LiveRegion />
     </>
