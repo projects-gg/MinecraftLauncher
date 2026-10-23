@@ -2,6 +2,7 @@ import { ArrowsClockwise, CircleNotch } from "@phosphor-icons/react";
 import {
   Button,
   Chip,
+  ContentIcon,
   Dialog,
   EntranceGate,
   easeOutExpo,
@@ -20,7 +21,6 @@ import { AfkHead } from "@/features/afk/afk-head";
 import { type AfkAccount, api } from "@/lib/api";
 import i18n from "@/lib/i18n";
 import { isTauri } from "@/lib/platform";
-import { ContentIcon } from "@/shell/content-icon";
 import { useLaunch } from "@/stores/launch";
 import { takePendingNotes, useUpdate } from "@/stores/update";
 import { chooseNotes, landingRoute, loadAfterUpdate, type ReleaseNotes } from "./after-update";

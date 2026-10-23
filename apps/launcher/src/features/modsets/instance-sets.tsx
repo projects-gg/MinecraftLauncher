@@ -1,5 +1,15 @@
 import { ArrowsClockwise, DotsThree, Plus, Trash } from "@phosphor-icons/react";
-import { Button, Chip, cn, EmptyState, IconButton, Menu, Skeleton, toast } from "@pl/ui";
+import {
+  Button,
+  Chip,
+  ContentIcon,
+  cn,
+  EmptyState,
+  IconButton,
+  Menu,
+  Skeleton,
+  toast,
+} from "@pl/ui";
 import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useMemo, useRef } from "react";
@@ -22,7 +32,6 @@ import {
   type SyncSummary,
 } from "@/lib/api";
 import { formatBytes, listFormat } from "@/lib/format";
-import { ContentIcon } from "@/shell/content-icon";
 import { describeSummary, setName, setSummary } from "./model";
 import { PurposeMark, useWords } from "./parts";
 

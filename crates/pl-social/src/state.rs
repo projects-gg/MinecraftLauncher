@@ -24,8 +24,8 @@ use crate::together::Together;
 use crate::view::{
     CallAnswerView, CrewBadgeView, CrewCallView, CrewJoinView, FriendGroupsView, FriendView,
     GroupMember, InviteView, JoinRequestView, ModNoticeView, PlanAnswerView, PlanView, ProfileView,
-    RequestView, SocialNotice, TagOffView, TeamInviteView, TeamMemberView, TeamRequestView,
-    TeamView,
+    RequestView, SkinBlockView, SocialNotice, TagOffView, TeamInviteView, TeamMemberView,
+    TeamRequestView, TeamView,
 };
 
 /// How long a received invite stays worth answering (the service delivers them for an hour).
@@ -539,6 +539,8 @@ impl SocialState {
             }
             PresenceEvent::Notice(notice) => self.add_notice(notice.clone()),
             // Chat lives in the service's history (history.rs), not here.
+            // SKIN1's news go to `crate::minecraft`.
+            PresenceEvent::Mc(_) => {}
             PresenceEvent::ChatState(_)
             | PresenceEvent::ChatMessage(_)
             | PresenceEvent::ChatEdited(_)
@@ -579,6 +581,14 @@ impl SocialState {
                 kind: notice.kind,
                 at: notice.at,
                 reason: notice.reason,
+                // Only a skin reset blocks anything; a time of 0 or less is no block.
+                blocked: match (notice.kind, notice.until) {
+                    (NoticeKind::SkinReset, Some(None)) => Some(SkinBlockView { until: None }),
+                    (NoticeKind::SkinReset, Some(Some(until))) if until > 0 => {
+                        Some(SkinBlockView { until: Some(until) })
+                    }
+                    _ => None,
+                },
             })
             .collect()
     }
@@ -725,6 +735,12 @@ impl SocialState {
     }
 
     /// The service offers this part of crews (`look`, `calls`, …).
+    /// The features the service named with the friend list (`GET /v1/friends`): `chat`, SKIN1's
+    /// `mcLink`, `skins` and `mcCodeless`. None before the list came.
+    pub fn features(&self) -> Option<&[String]> {
+        self.overview.as_ref().map(|o| o.features.as_slice())
+    }
+
     pub fn offers(&self, feature: &str) -> bool {
         self.team_features().iter().any(|f| f == feature)
     }

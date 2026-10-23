@@ -13,6 +13,15 @@ export {
 } from "./components/bits";
 export { type Brand, BrandMark } from "./components/brand-mark";
 export { Button, type ButtonProps, IconButton, type IconButtonProps } from "./components/button";
+export {
+  CONTENT_SPRITES,
+  ContentIcon,
+  type ContentIconKind,
+  type SpriteSize,
+  type SpriteTone,
+  spritePaths,
+  spriteSize,
+} from "./components/content-icon";
 export { Countdown, countdownCells, countdownTickMs } from "./components/countdown";
 export { Dialog } from "./components/dialog";
 export {

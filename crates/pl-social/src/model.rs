@@ -1208,6 +1208,8 @@ pub enum LimitedKey {
     ChatStickers,
     /// Reaction changes a day (CHAT2).
     ChatReactions,
+    /// Changing the Projects skin (SKIN1; linking is fine).
+    SkinChange,
     Other,
 }
 
@@ -1224,6 +1226,7 @@ impl LimitedKey {
             "chat_links" => Self::ChatLinks,
             "chat_stickers" => Self::ChatStickers,
             "chat_reactions" => Self::ChatReactions,
+            "skin_change" => Self::SkinChange,
             _ => Self::Other,
         }
     }
@@ -1261,6 +1264,9 @@ pub enum NoticeKind {
     Warning,
     /// The profile picture went back to the default.
     ProfileReset,
+    /// Staff in game reset the player's Projects skin (SKIN1), perhaps keeping them from changing
+    /// it for a while ([`ModNotice::until`]).
+    SkinReset,
     Other,
 }
 
@@ -1269,6 +1275,7 @@ impl<'de> Deserialize<'de> for NoticeKind {
         Ok(match String::deserialize(deserializer)?.as_str() {
             "warning" => Self::Warning,
             "profile_reset" => Self::ProfileReset,
+            "skin_reset" => Self::SkinReset,
             _ => Self::Other,
         })
     }
@@ -1332,6 +1339,26 @@ pub struct ModNotice {
     /// What the moderators acted on (a report reason).
     #[serde(default)]
     pub reason: Option<ReportReason>,
+    /// `skin_reset` (SKIN1): skin changes stay off until then (Unix seconds; `Some(None)`: for
+    /// good). `None`: the note has no `until`, nothing is blocked.
+    #[serde(
+        default,
+        deserialize_with = "present",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub until: Option<Option<i64>>,
+}
+
+/// A time that may be missing (`None`) or `null` (`Some(None)`). Anything else that is not a
+/// whole number reads as missing, so one odd field never hides the note.
+fn present<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Option<i64>>, D::Error> {
+    Ok(match serde_json::Value::deserialize(deserializer)? {
+        serde_json::Value::Null => Some(None),
+        serde_json::Value::Number(number) => number.as_i64().map(Some),
+        _ => None,
+    })
 }
 
 // --- chat (CHAT1, CHAT2) -------------------------------------------------------------------------

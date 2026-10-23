@@ -18,6 +18,7 @@ import {
 } from "@phosphor-icons/react";
 import {
   Button,
+  ContentIcon,
   ContextMenu,
   IconButton,
   type MenuItem,
@@ -387,8 +388,8 @@ function EmptyFriends() {
       className="flex flex-col items-center px-6 pt-12 pb-6 text-center"
       {...rise(reduce, 8, 0.32)}
     >
-      <span className="flex size-16 items-center justify-center rounded-[var(--radius-head)] bg-gold-700/25 text-gold-300 ring-1 ring-gold-400/25">
-        <UserPlus size={32} weight="duotone" aria-hidden />
+      <span className="flex size-16 items-center justify-center rounded-[var(--radius-head)] bg-gold-700/25 ring-1 ring-gold-400/25">
+        <ContentIcon kind="friends" />
       </span>
       <h3 className="mt-4 font-display text-[19px] font-semibold text-bone-50">
         {t("social.list.emptyTitle")}

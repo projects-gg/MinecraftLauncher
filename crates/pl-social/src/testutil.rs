@@ -33,7 +33,7 @@ impl Recorded {
 pub(crate) struct MockReply {
     status: u16,
     headers: Vec<(String, String)>,
-    body: String,
+    body: Vec<u8>,
 }
 
 impl MockReply {
@@ -41,7 +41,7 @@ impl MockReply {
         Self {
             status,
             headers: vec![("Content-Type".into(), "application/json".into())],
-            body: body.to_owned(),
+            body: body.as_bytes().to_vec(),
         }
     }
 
@@ -50,7 +50,16 @@ impl MockReply {
         Self {
             status,
             headers: Vec::new(),
-            body: String::new(),
+            body: Vec::new(),
+        }
+    }
+
+    /// Any bytes (SKIN1's textures).
+    pub fn bytes(status: u16, content_type: &str, body: Vec<u8>) -> Self {
+        Self {
+            status,
+            headers: vec![("Content-Type".into(), content_type.to_owned())],
+            body,
         }
     }
 
@@ -157,11 +166,9 @@ async fn serve(
         for (name, value) in &reply.headers {
             response.push_str(&format!("{name}: {value}\r\n"));
         }
-        response.push_str(&format!(
-            "Content-Length: {}\r\n\r\n{}",
-            reply.body.len(),
-            reply.body
-        ));
-        stream.write_all(response.as_bytes()).await?;
+        response.push_str(&format!("Content-Length: {}\r\n\r\n", reply.body.len()));
+        let mut bytes = response.into_bytes();
+        bytes.extend_from_slice(&reply.body);
+        stream.write_all(&bytes).await?;
     }
 }

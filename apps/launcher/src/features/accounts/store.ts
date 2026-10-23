@@ -46,6 +46,10 @@ interface AccountsUi {
   fresh: string | null;
   markFresh: (id: string | null) => void;
 
+  /** The palette asked for the "Projects eşlemesi" row (it opens once the center shows it). */
+  linkRowWanted: boolean;
+  wantLinkRow: (wanted: boolean) => void;
+
   /** Hosts (dialogs and sheets) mounted: the AFK launch guard only asks when one is. */
   hosts: number;
   setHostMounted: (mounted: boolean) => void;
@@ -74,6 +78,9 @@ export const useAccountsUi = create<AccountsUi>()((set) => ({
 
   fresh: null,
   markFresh: (fresh) => set({ fresh }),
+
+  linkRowWanted: false,
+  wantLinkRow: (linkRowWanted) => set({ linkRowWanted }),
 
   hosts: 0,
   setHostMounted: (mounted) => set((s) => ({ hosts: Math.max(0, s.hosts + (mounted ? 1 : -1)) })),

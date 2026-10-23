@@ -1,5 +1,14 @@
 import { ArrowLeft, Plus } from "@phosphor-icons/react";
-import { Button, Dialog, EmptyState, IconButton, Skeleton, SwapLabel, toast } from "@pl/ui";
+import {
+  Button,
+  ContentIcon,
+  Dialog,
+  EmptyState,
+  IconButton,
+  Skeleton,
+  SwapLabel,
+  toast,
+} from "@pl/ui";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "motion/react";
@@ -12,7 +21,6 @@ import { useDebounced } from "@/features/content/use-content";
 import { type Direction, stepVariants, useMotionPrefs } from "@/features/modcenter/motion";
 import { api, type InstanceDetail, type SetCard } from "@/lib/api";
 import { formatBytes, listFormat } from "@/lib/format";
-import { ContentIcon } from "@/shell/content-icon";
 import { refreshSets } from "./instance-sets";
 import { changedChoices, describeSummary, fitFor, setName } from "./model";
 import { PurposeMark, SetCardSkeletons, SetContents, SetPicker, useWords } from "./parts";

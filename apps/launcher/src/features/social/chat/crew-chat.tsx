@@ -4,8 +4,7 @@
 // (TEAM5), from the plans this computer has; so do newcomers while this launcher was connected
 // (TEAM6 "Hoş geldin": "Ayşe ekibe katıldı" with "Selam ver", which sends the "Selam" sticker, or
 // "Hoş geldin! 👋" without stickers, once and for ten minutes; "Ekibe katıldın" for the player).
-import { ChatsCircle } from "@phosphor-icons/react";
-import { toast } from "@pl/ui";
+import { ContentIcon, toast } from "@pl/ui";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { friendlyError } from "@/features/accounts/use-accounts";
@@ -123,7 +122,7 @@ export function CrewChat({ team, onScreen }: { team: SocialTeam; onScreen: boole
       lines={lines}
       empty={
         <div className="flex flex-col items-center gap-2 text-center">
-          <ChatsCircle size={28} className="text-ash-400" aria-hidden />
+          <ContentIcon kind="chat" quiet />
           <p className="text-[13px] text-ash-400">{t("chat.list.noMessages")}</p>
         </div>
       }

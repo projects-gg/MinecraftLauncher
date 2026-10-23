@@ -1,14 +1,13 @@
 // The overview's shortcuts: the last worlds and the featured server with their own "Oyna" and
 // "Katıl", and the newest screenshots opening the full-window viewer.
 import { Play } from "@phosphor-icons/react";
-import { Button, Chip, cn, Skeleton, toast } from "@pl/ui";
+import { Button, Chip, ContentIcon, cn, Skeleton, toast } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { showError } from "@/features/content/jobs";
 import { api, type SavedServer, type Screenshot, type TrashItem } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
-import { ContentIcon } from "@/shell/content-icon";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import { ConfirmDialog } from "../parts";

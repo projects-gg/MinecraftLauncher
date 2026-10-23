@@ -2,8 +2,9 @@
 //! repository): Discord sign-in, friends, blocks, privacy, friend categories, teams (TEAM6: crew
 //! tags before names, hidden crews, join requests from a tag's card, "Hoş geldin"), settings
 //! backup, the presence WebSocket, crew chat and direct messages with their history on this
-//! device (CHAT2: replies, stickers, reactions, "yazıyor…", read marks, link cards), reports, and
-//! what moderators' measures mean for the player.
+//! device (CHAT2: replies, stickers, reactions, "yazıyor…", read marks, link cards), reports,
+//! what moderators' measures mean for the player, and SKIN1: the game account's link to the
+//! Discord account and the Projects skin of username accounts ([`ProjectsSkins`]).
 //!
 //! Two layers:
 //! - [`SocialClient`] / [`Session`] / [`PresenceHandle`]: the HTTP API and the presence socket,
@@ -53,6 +54,7 @@ mod game;
 mod gate;
 mod history;
 mod links;
+mod minecraft;
 mod model;
 mod presence;
 mod protocol;
@@ -86,6 +88,19 @@ pub use game::{GameActivity, LogSignal, log_signal, may_signal, server_label};
 pub use gate::service_url;
 pub use history::{HISTORY_LIMIT, crew_conversation, direct_conversation, same_emoji};
 pub use links::{find_links, first_link, host_of};
+pub use minecraft::{
+    AccountsFn, FEATURE_MC_CODELESS, FEATURE_MC_LINK, FEATURE_SKINS, KEPT_UNUSED, McBlocked,
+    McCheck, McDeclined, McFailure, McHealth, McIntent, McJob, McJobKind, McJobResult, McJobState,
+    McLimitedUntil, McLimits, McLink, McLinkState, McMessage, McPremium, McSkin, McSkinBy,
+    McSkinKind, McSource, McState, ProjectsLink, ProjectsLinkState, ProjectsSkin,
+    ProjectsSkinAccess, ProjectsSkinBy, ProjectsSkinChange, ProjectsSkinChoice,
+    ProjectsSkinChoiceKind, ProjectsSkinJob, ProjectsSkinJobKind, ProjectsSkinJobState,
+    ProjectsSkinKind, ProjectsSkinLimited, ProjectsSkinLimits, ProjectsSkinLook,
+    ProjectsSkinLookup, ProjectsSkinOutcome, ProjectsSkinOverview, ProjectsSkinPick,
+    ProjectsSkinPickRefusal, ProjectsSkinRefusal, ProjectsSkinRefusalCode, ProjectsSkinResult,
+    ProjectsSkinResultCode, ProjectsSkinSave, ProjectsSkinService, ProjectsSkinView, ProjectsSkins,
+    SkinAccount, SkinChangeSink, SkinsConfig,
+};
 pub use model::{
     Avatar, BlockedUser, ChatBody, ChatCaps, ChatDeletion, ChatExtras, ChatLinkRules, ChatMessage,
     ChatQuota, ChatReacted, ChatRejection, ChatReplyRef, ChatStatus, CodeLookup, CrewBadge,
@@ -110,9 +125,9 @@ pub use presence::{
 };
 pub use protocol::{
     BADGES_CAP, CHAT_CAP, CHAT_EXTRA_CAPS, CallAnswer, CallEndReason, CallKind, CrewCall, CrewPlan,
-    Game, GameLocation, Invite, LocalStatus, OnlineStatus, PLANS_CAP, PRESENCE_CAPS, PlanAnswer,
-    Presence, PresenceState, REACTIONS_CAP, READS_CAP, REPLIES_CAP, STICKERS_CAP, TYPING_CAP,
-    is_projects_host, presence_caps,
+    Game, GameLocation, Invite, LocalStatus, MC_CAP, OnlineStatus, PLANS_CAP, PRESENCE_CAPS,
+    PlanAnswer, Presence, PresenceState, REACTIONS_CAP, READS_CAP, REPLIES_CAP, STICKERS_CAP,
+    TYPING_CAP, is_projects_host, presence_caps,
 };
 pub use qr::{QrPath, qr_path};
 pub use service::{ServiceConfig, SocialService, SocialUpdate, UpdateSink};
@@ -128,7 +143,7 @@ pub use view::{
     CrewNotificationsView, FriendGroupsView, FriendView, GroupMember, InviteResult, InviteView,
     JoinRequestView, JoinResult, LastMessageView, LimitedView, LookupView, MeView, MessageState,
     ModNoticeView, PlanAnswerView, PlanView, ProfileView, ReportPlan, ReportReaction, ReportTarget,
-    RequestView, RestrictionView, SendFailure, SendOutcome, SignInFailure, SocialNotice,
-    SocialView, TagOffView, TeamInviteView, TeamLookupView, TeamMemberView, TeamRequestView,
-    TeamView,
+    RequestView, RestrictionView, SendFailure, SendOutcome, SignInFailure, SkinBlockView,
+    SocialNotice, SocialView, TagOffView, TeamInviteView, TeamLookupView, TeamMemberView,
+    TeamRequestView, TeamView,
 };

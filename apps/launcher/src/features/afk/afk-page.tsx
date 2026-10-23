@@ -17,6 +17,7 @@ import {
 import {
   Button,
   Chip,
+  ContentIcon,
   ContextMenu,
   cn,
   Dialog,
@@ -38,7 +39,6 @@ import { type Ref, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { isAfkIdle } from "@/features/accounts/afk-match";
 import { type AfkAccount, api } from "@/lib/api";
-import { ContentIcon } from "@/shell/content-icon";
 import { AfkConsole } from "./afk-console";
 import { AfkHead } from "./afk-head";
 import { CloudLocation, useCloudPlaces, useMoveMenuItem } from "./cloud/location";

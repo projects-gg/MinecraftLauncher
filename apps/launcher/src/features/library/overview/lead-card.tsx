@@ -1,11 +1,11 @@
 // The card on top of the overview's play column: "Devam et" back into the last world or server,
 // or, while there is none, the one empty state with "Oyna". The whole card is the button.
 import { Play } from "@phosphor-icons/react";
+import { ContentIcon } from "@pl/ui";
 import { useId } from "react";
 import { useTranslation } from "react-i18next";
 import type { ResumeTarget } from "@/lib/api";
 import { formatRelative } from "@/lib/format";
-import { ContentIcon } from "@/shell/content-icon";
 import { useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
 import type { LeadCard as LeadKind } from "./model";

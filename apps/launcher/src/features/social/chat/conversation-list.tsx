@@ -7,7 +7,7 @@
 // last line is a quiet "yazıyor…" (screen readers are not told). A friend's row carries the crew
 // tag they wear before the name (TEAM6).
 import { BellSlash, ChatsCircle, Prohibit, UsersThree, WarningCircle } from "@phosphor-icons/react";
-import { ContextMenu, cn, EmptyState, type MenuItem } from "@pl/ui";
+import { ContentIcon, ContextMenu, cn, EmptyState, type MenuItem } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
 import type { ReactElement } from "react";
 import { useTranslation } from "react-i18next";
@@ -252,7 +252,7 @@ export function ConversationList() {
     return (
       <div className="pt-10">
         <EmptyState
-          icon={<ChatsCircle size={30} />}
+          icon={<ContentIcon kind="chat" />}
           title={t("chat.list.empty")}
           body={t("chat.list.emptyBody")}
         />

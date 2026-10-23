@@ -17,6 +17,7 @@ import {
   Keyboard,
   Lifebuoy,
   Lightning,
+  LinkSimple,
   MagnifyingGlass,
   Memory,
   Mountains,
@@ -49,6 +50,7 @@ import { ACCOUNTS_KEY, switchAccount } from "@/features/accounts/use-accounts";
 import { runAfk } from "@/features/afk/errors";
 import { showError } from "@/features/content/jobs";
 import type { InstanceTab } from "@/features/library/instance-page";
+import { useProjectsSkinOverview } from "@/features/projects-skin/queries";
 import { useSocialUi } from "@/features/social/store";
 import { api, type ServerStatus } from "@/lib/api";
 import { copyText } from "@/lib/clipboard";
@@ -187,6 +189,7 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
   const openCenter = useAccountsUi((s) => s.openCenter);
   const friendsOn = useSocialUi((s) => s.view.enabled);
   const friendsSignedIn = useSocialUi((s) => s.view.auth === "signedIn");
+  const projectsSkin = useProjectsSkinOverview().data;
 
   useEffect(() => {
     if (!open) {
@@ -439,8 +442,25 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
                 ),
               ]
             : activeAccount
-              ? // Offline accounts have no skin here: their picture is chosen in the account center.
+              ? // Offline accounts: their Projects skin while it is offered (SKIN1), and their
+                // picture, chosen in the account center.
                 [
+                  ...(projectsSkin?.shown
+                    ? [
+                        entry(
+                          "action:projects-skin",
+                          t("projectsSkin.palette.skin"),
+                          <TShirt size={18} />,
+                          () =>
+                            run(() =>
+                              afterClose(() =>
+                                useAccountsUi.getState().openAppearance(activeAccount.id),
+                              ),
+                            ),
+                          { words: PALETTE_WORDS.projectsSkin },
+                        ),
+                      ]
+                    : []),
                   entry(
                     "action:avatar",
                     t("accounts.avatar.change"),
@@ -488,6 +508,24 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
                   <UserPlus size={18} />,
                   () => run(() => openFriends("add")),
                   { words: PALETTE_WORDS.addFriend, extra: [t("social.add.yourCode")] },
+                ),
+              ]
+            : []),
+          // The game account's link on Projects (SKIN1): the account center, at its row.
+          ...(friendsSignedIn && projectsSkin?.shown && projectsSkin.service?.link
+            ? [
+                entry(
+                  "action:projects-link",
+                  projectsSkin.link?.state === "linked"
+                    ? t("projectsSkin.palette.linked")
+                    : t("projectsSkin.palette.link"),
+                  <LinkSimple size={18} />,
+                  () =>
+                    run(() => {
+                      useAccountsUi.getState().wantLinkRow(true);
+                      openAccounts("list");
+                    }),
+                  { words: PALETTE_WORDS.projectsLink },
                 ),
               ]
             : []),
