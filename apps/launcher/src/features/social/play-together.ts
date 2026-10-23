@@ -17,10 +17,15 @@ export function canInvite(activity: SocialActivity, shareServer: boolean): boole
   return isProjectsHost(activity.host) || shareServer;
 }
 
-/** Where an invite's "Katıl" connects: projects.gg, or another server's address. */
+/**
+ * Where an invite's "Katıl" connects: projects.gg, another server's address, or a friend's world
+ * (HOST1) through the launcher's own way to it on this computer: `instance` is the install the
+ * join prepared, `label` what the overlay shows in game instead of an address.
+ */
 export type JoinTarget =
   | { kind: "projects" }
-  | { kind: "server"; host: string; port: number | null; address: string };
+  | { kind: "server"; host: string; port: number | null; address: string }
+  | { kind: "world"; session: string; instance: string; port: number; label: string };
 
 export function joinTarget(server: SocialGame | undefined): JoinTarget | null {
   if (!server || server.where === "singleplayer") return null;
@@ -30,18 +35,25 @@ export function joinTarget(server: SocialGame | undefined): JoinTarget | null {
   return parsed ? { kind: "server", ...parsed, address: server.host } : null;
 }
 
-/** How the target is named to the player: "Projects", or the server's address. */
+/** How the target is named to the player: "Projects", the server's address, a world's label. */
 export function targetName(target: JoinTarget): string {
+  if (target.kind === "world") return target.label;
   return target.kind === "projects" ? "Projects" : target.address;
 }
 
-/** The address a player types in the game's "Doğrudan Bağlan". */
+/**
+ * The address a player types in the game's "Doğrudan Bağlan" (a friend's world has none to show:
+ * its way exists only on this computer, and the address never shows).
+ */
 export function targetAddress(target: JoinTarget): string {
+  if (target.kind === "world") return `127.0.0.1:${target.port}`;
   return target.kind === "projects" ? "play.projects.gg" : target.address;
 }
 
 /** The player is already on `target` (their own game, as the friends service sees it). */
 export function onTarget(target: JoinTarget, activity: SocialActivity): boolean {
+  // A friend's world is never seen from outside (its join says where it is).
+  if (target.kind === "world") return false;
   if (activity.state !== "playing" || !activity.host) return false;
   if (target.kind === "projects") return isProjectsHost(activity.host);
   const here = parseServerAddress(activity.host);
@@ -90,6 +102,8 @@ export function restartInstance(
   running: string | null,
   instances: ReadonlyArray<{ id: string; autoJoin?: string }>,
 ): string | null {
+  // A friend's world opens with the install its join prepared, whichever ran.
+  if (target.kind === "world") return target.instance;
   const instance = running ? instances.find((i) => i.id === running) : undefined;
   if (!instance) return null;
   if (target.kind === "server") return instance.id;

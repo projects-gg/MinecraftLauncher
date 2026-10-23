@@ -8,6 +8,8 @@
 // the player's word, after one sentence about what may be lost. While a game is prepared or opens,
 // its start stops and begins again into the server. The address sits under the question with its
 // copy button, for whoever would rather join from the game. Mounted once, by SocialHost.
+// A friend's world (HOST1, joinWorld) goes the same way once its join is ready, in its own words
+// and without an address: the game moves in game only when it runs the install the join prepared.
 import { Check, Copy, Play } from "@phosphor-icons/react";
 import { Button, Dialog, IconButton, toast } from "@pl/ui";
 import type { TFunction } from "i18next";
@@ -16,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 import { announce } from "@/features/accounts/use-accounts";
+import { startFriendWorld } from "@/features/host/launch";
 import { api } from "@/lib/api";
 import type { SocialInvite } from "@/lib/api/social-types";
 import i18n from "@/lib/i18n";
@@ -93,16 +96,31 @@ function ask(target: JoinTarget, inviteId?: string): boolean {
   const step = joinStep(target, gameNow(phase), activity);
   if (step === "already") return false;
   leave();
+  // A friend's world is reached in game only from the install its join prepared.
+  const sameInstance =
+    target.kind !== "world" || useLaunch.getState().instanceId === target.instance;
   useJoinAsk.setState({
     ask: {
       inviteId,
       target,
       step,
-      inGame: step === "restart" && inGameReady(),
+      inGame: step === "restart" && sameInstance && inGameReady(),
       world: activity.state !== "playing",
     },
   });
   return true;
+}
+
+/**
+ * A friend's world once its join is ready (HOST1): with the game closed it starts straight in (no
+ * question: "Katıl" said it); with a game open or opening, the question first.
+ */
+export function joinWorld(target: Extract<JoinTarget, { kind: "world" }>) {
+  if (gameNow(useLaunch.getState().phase) === "closed") {
+    void start(target, null);
+    return;
+  }
+  ask(target);
 }
 
 /** "Katıl" on an invite: asks first (and says so when the player is there already). */
@@ -158,6 +176,10 @@ export function canJoinInvite(invite: SocialInvite): boolean {
 
 /** Starts the game into `target`: with the instance that ran, where it can go (`running`). */
 async function start(target: JoinTarget, running: string | null) {
+  if (target.kind === "world") {
+    startFriendWorld(target);
+    return;
+  }
   const instances = running ? await api.instances().catch(() => []) : [];
   const prefer = restartInstance(target, running, instances) ?? undefined;
   if (target.kind === "projects") await joinProjects(prefer);
@@ -173,7 +195,11 @@ function step(id: number, event: CloseEvent) {
   const { target, running } = flow;
   if (next === "connected" || next === "start") {
     closeAsk();
-    announce(i18n.t("fix2.connect.connecting", { server: targetName(target) }));
+    announce(
+      target.kind === "world"
+        ? i18n.t("host.connect.connecting")
+        : i18n.t("fix2.connect.connecting", { server: targetName(target) }),
+    );
     if (next === "start") void start(target, running);
     return;
   }
@@ -326,6 +352,7 @@ function Waiting() {
 
 /** Title and sentence for where the question or the way is. */
 function words(t: TFunction, shown: Ask) {
+  if (shown.target.kind === "world") return worldWords(t, shown);
   const server = targetName(shown.target);
   const saved = shown.world ? ` ${t("fix2.connect.saved")}` : "";
   const closing = shown.closing?.kind;
@@ -366,6 +393,34 @@ function words(t: TFunction, shown: Ask) {
         title: t("fix2.connect.restartTitle"),
         body: t("fix2.connect.restartBody", { server }) + saved,
       };
+}
+
+/** The same steps for a friend's world (HOST1): "arkadaşının dünyası", never an address. */
+function worldWords(t: TFunction, shown: Ask) {
+  const saved = shown.world ? ` ${t("fix2.connect.saved")}` : "";
+  const closing = shown.closing?.kind;
+  if (closing === "inGame") {
+    return { title: t("fix2.connect.movingTitle"), body: t("host.connect.movingBody") };
+  }
+  if (closing === "closing" || closing === "stopping") {
+    const saving = shown.world && closing === "closing" ? `${t("fix2.connect.saving")} ` : "";
+    return {
+      title: t("fix2.connect.closingTitle"),
+      body: saving + t("host.connect.closingBody"),
+    };
+  }
+  if (closing === "overdue") {
+    return { title: t("fix2.connect.overdueTitle"), body: t("fix2.connect.overdueBody") };
+  }
+  if (closing === "forcing") {
+    return { title: t("fix2.connect.forcingTitle"), body: t("host.connect.closingBody") };
+  }
+  if (shown.step === "reopen") {
+    return { title: t("fix2.connect.restartTitle"), body: t("host.connect.reopenBody") };
+  }
+  return shown.inGame
+    ? { title: t("host.connect.moveTitle"), body: t("host.connect.moveBody") + saved }
+    : { title: t("fix2.connect.restartTitle"), body: t("host.connect.restartBody") + saved };
 }
 
 export function JoinDialog() {
@@ -429,7 +484,10 @@ export function JoinDialog() {
       footer={footer}
     >
       {closing === undefined ? (
-        <AddressRow target={shown.target} />
+        // A friend's world has no address to show (host1.md §1.1).
+        shown.target.kind === "world" ? null : (
+          <AddressRow target={shown.target} />
+        )
       ) : closing === "overdue" ? null : (
         <Waiting />
       )}

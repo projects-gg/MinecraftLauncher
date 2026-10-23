@@ -1,5 +1,7 @@
 // Home screen's friends line: one quiet glass pill over the art, under the banners (model.ts →
 // homeStrip decides which, most pressing first):
+// - a friend's world invite (HOST1, before every other line): their face, "Mert seni dünyasına
+//   çağırıyor", "Katıl" (it says where the join is in place) and × (closes the line here only);
 // - a crewmate's call the player has not answered: their face with a small megaphone, "Ayşe ekibi
 //   çağırıyor" (naming the crews with several) and "Geliyorum"; × closes it here, for this call
 //   only (it is not an answer);
@@ -25,6 +27,9 @@ import { AnimatePresence, motion } from "motion/react";
 import type { ReactElement, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { presetAvatar } from "@/features/avatars/presets";
+import { homeInvite } from "@/features/host/rules";
+import { useHostUi } from "@/features/host/store";
+import { HomeWorldLine } from "@/features/host/world-invite";
 import { api } from "@/lib/api";
 import type { TeamMember } from "@/lib/api/social-types";
 import { dateTimeFormat } from "@/lib/format";
@@ -539,7 +544,13 @@ export function FriendsHomeStrip() {
       now,
     });
   const plan = homePlan(view.plans, now, closedPlans)?.phase ?? null;
-  const kind = homeStrip(view, closed, { closedCalls, gameBusy: busy, now, callable, plan });
+  // A friend's world invite (HOST1) is the most pressing: it asks the player personally.
+  const world = useHostUi((s) =>
+    s.view.enabled ? homeInvite(s.view.invites, s.homeClosed) : null,
+  );
+  const kind = world
+    ? ("world" as const)
+    : homeStrip(view, closed, { closedCalls, gameBusy: busy, now, callable, plan });
 
   return (
     <AnimatePresence initial={false} mode="popLayout">
@@ -562,7 +573,11 @@ export function FriendsHomeStrip() {
             transition: leave(0.3),
           }}
         >
-          {kind === "playing" ? (
+          {kind === "world" ? (
+            world ? (
+              <HomeWorldLine invite={world} />
+            ) : null
+          ) : kind === "playing" ? (
             <PlayingLine />
           ) : kind === "call" ? (
             <CallLine />

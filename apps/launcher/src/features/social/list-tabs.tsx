@@ -1,13 +1,24 @@
 // The list page while chat is on (CHAT1): "Arkadaşlar" and "Mesajlar" (with how many are unread),
 // the friend list and the conversations. Without chat it is the friend list alone, as before.
+// While the player's world is shared (HOST1) "Dünyan açık" sits above both.
 import { TabPanel, Tabs } from "@pl/ui";
 import { useTranslation } from "react-i18next";
+import { WorldStrip } from "@/features/host/world-strip";
 import { ConversationList } from "./chat/conversation-list";
 import { unreadAll } from "./chat/conversations";
 import { ListPage } from "./list-page";
 import { type ListTab, useSocialUi } from "./store";
 
 export function ListTabs() {
+  return (
+    <>
+      <WorldStrip />
+      <ListBody />
+    </>
+  );
+}
+
+function ListBody() {
   const { t } = useTranslation();
   const chat = useSocialUi((s) => s.view.chat);
   const tab = useSocialUi((s) => s.listTab);

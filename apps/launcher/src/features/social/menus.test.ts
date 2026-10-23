@@ -256,6 +256,45 @@ describe("personMenu", () => {
   it("has nothing for the player's own row", () => {
     expect(personMenu({ ...friend, me: true })).toEqual([]);
   });
+
+  it("joins a friend's world from their invite (HOST1)", () => {
+    // In singleplayer there is no "Birlikte oyna": the world's "Katıl" leads.
+    const host = { ...friend, invite: "hidden" as const, worldJoin: "ready" as const };
+    expect(words(personMenu(host)).slice(0, 3)).toEqual(["joinWorld", "chat", "message"]);
+    expect(words(personMenu({ ...host, worldJoin: "here" }))[0]).toBe("joinWorld(off)");
+    expect(words(personMenu({ ...host, blocked: true }))).not.toContain("joinWorld");
+  });
+
+  it("invites friends to the player's open world and removes its guests (HOST1)", () => {
+    const open = { ...friend, invite: "hidden" as const };
+    expect(
+      words(personMenu({ ...open, world: { invite: "ready", guest: false } })).slice(0, 3),
+    ).toEqual(["worldInvite", "chat", "message"]);
+    // A guest: invited (off, checked) and, in a group of its own, "Dünyadan çıkar".
+    expect(
+      words(personMenu({ ...open, categories: false, world: { invite: "invited", guest: true } })),
+    ).toEqual([
+      "worldInvite(off)✓",
+      "chat",
+      "message",
+      "-",
+      "favorite",
+      "notifyOnline",
+      "-",
+      "removeFromWorld",
+      "-",
+      "removeFriend",
+      "block",
+      "report",
+    ]);
+    expect(words(personMenu({ ...open, world: { invite: "full", guest: false } }))).toContain(
+      "worldInvite(off)",
+    );
+    // Someone blocked is no guest to invite.
+    expect(
+      words(personMenu({ ...open, blocked: true, world: { invite: "ready", guest: false } })),
+    ).not.toContain("worldInvite");
+  });
 });
 
 describe("planMenu", () => {
