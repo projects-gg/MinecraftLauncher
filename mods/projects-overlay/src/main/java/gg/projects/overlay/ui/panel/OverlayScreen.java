@@ -122,6 +122,8 @@ public final class OverlayScreen extends Screen {
     private FormattedCharSequence lineText;
     private float lineWidth;
     private boolean lineIsNote;
+    /** The line is coming (it rises 3 px as it fades in, like the launcher's pill); going, it only fades. */
+    private boolean lineComing;
     private int lineTypingRevision = -1;
     private long lineChangesAt;
     private OverlayState.Note lineNote;
@@ -683,6 +685,8 @@ public final class OverlayScreen extends Screen {
         }
         messages.visible = true;
         PanelWidget.place(messages, x0, y, cw, Math.max(20, listBottom - y));
+        // "Yazıyor…" and the reaction notes float over the list's bottom: the newest message keeps clear of them.
+        messages.setFloatingLine(state.has("typing") || state.has("reactions") ? LINE_PLATE_H : 0);
         messages.refresh(state, now);
         picker.setReducedMotion(reduced);
     }
@@ -1190,9 +1194,11 @@ public final class OverlayScreen extends Screen {
                 String fitted = Texts.fit(small, words, messages.getWidth() - 12);
                 lineText = Texts.visual(fitted);
                 lineWidth = small.width(fitted) + 12;
-                lineAlpha.animateTo(1f, now, 120, Ease.OUT);
+                lineComing = lineAlpha.value(now) < 0.5f;
+                lineAlpha.animateTo(1f, now, 160, Ease.OUT);
             } else {
-                lineAlpha.animateTo(0f, now, 90, Ease.OUT);
+                lineComing = false;
+                lineAlpha.animateTo(0f, now, 110, Ease.OUT);
             }
         }
         float a = lineAlpha.value(now);
@@ -1200,7 +1206,9 @@ public final class OverlayScreen extends Screen {
             return;
         }
         float x = messages.getX();
-        float y = messages.getY() + messages.getHeight() - LINE_PLATE_H - 2 - (messages.pillShowing() ? 18 : 0);
+        float rise = lineComing && !reducedMotion() ? (1f - a) * 3f : 0f;
+        float y = messages.getY() + messages.getHeight() - LINE_PLATE_H - 2 - (messages.pillShowing() ? 18 : 0)
+            + rise;
         Draw.pushAlpha(a);
         Draw.frame(g, Frames.POPOVER, x, y, lineWidth, LINE_PLATE_H);
         Draw.text(g, Fonts.small(), lineText, x + 6, Fonts.centeredY(Fonts.Face.SMALL, y + LINE_PLATE_H / 2f),

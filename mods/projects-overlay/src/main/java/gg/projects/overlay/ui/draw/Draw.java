@@ -209,6 +209,22 @@ public final class Draw {
         pose.popMatrix();
     }
 
+    /** A baked vertical strip stretched over {@code w x h} (a list's fades at its top and bottom). */
+    public static void column(GuiGraphicsExtractor g, String key, float x, float y, int w, int h) {
+        int c = color(0xFFFFFFFF);
+        AtlasPacker.Region r = Shapes.ready() ? Shapes.region(key) : null;
+        if (r == null || Theme.alpha(c) == 0) {
+            return;
+        }
+        Matrix3x2fStack pose = g.pose();
+        pose.pushMatrix();
+        pose.translate(x, y);
+        // Every column of it is the same: one texel column stretched over the width.
+        blit(g, Shapes.texture(), 0, 0, r.x(), r.y(), w, h, 1, r.height(), Shapes.textureWidth(),
+            Shapes.textureHeight(), c);
+        pose.popMatrix();
+    }
+
     /** A filled rectangle, edges on screen pixels. */
     public static void fill(GuiGraphicsExtractor g, float x0, float y0, float x1, float y1, int argb) {
         int c = color(argb);

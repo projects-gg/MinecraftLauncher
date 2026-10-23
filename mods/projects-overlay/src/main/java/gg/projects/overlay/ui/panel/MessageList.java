@@ -15,6 +15,7 @@ import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
+import gg.projects.overlay.ui.draw.ShapeSet;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -46,7 +47,10 @@ import org.joml.Matrix3x2fStack;
  * "Tepki ver" opens six quick reactions.
  *
  * <p>The list sits at its newest message: a new one rises in and the older ones glide up to make room.
- * Scrolled up, it stays where it is and a "Yeni mesajlar" pill takes the player down.
+ * Scrolled up, it stays where it is and a "Yeni mesajlar" pill takes the player down. A short conversation
+ * sits at the bottom, over the field (as in the launcher), and the list's edges fade into the panel while
+ * there is more above or below. The newest message keeps clear of the line that floats over the bottom edge
+ * ("yazıyor…", a note), so that line never covers a word.
  */
 public final class MessageList extends PanelWidget {
     private static final int BUBBLE_PAD_X = 6;
@@ -68,6 +72,10 @@ public final class MessageList extends PanelWidget {
     private static final int TOOL_GAP = 2;
     private static final int TOOL_PAD = 2;
     private static final int QUICK_CELL = 18;
+    /** The fades at the list's edges; a message picked with the keys is brought out of them. */
+    private static final int FADE = ShapeSet.LIST_FADE;
+    /** From the newest message's bottom to the end of the content (its gap and the list's own margin). */
+    private static final float END_PAD = ROW_GAP + 4f;
     private static final long ENTER_MS = 200;
     private static final long STRIP_MS = 130;
     private static final long FLASH_MS = 1100;
@@ -174,6 +182,10 @@ public final class MessageList extends PanelWidget {
     private long nextTimeout = Long.MAX_VALUE;
     private int unreadAtOpen;
     private float contentHeight;
+    /** Where the rows end (the content's height without the room below them). */
+    private float rowsEnd;
+    /** Room kept under the newest message for the line floating over the list's bottom edge. */
+    private float floatRoom;
     private boolean pinned = true;
     private long settleUntil;
     private boolean newBelow;
@@ -235,6 +247,25 @@ public final class MessageList extends PanelWidget {
 
     public void setReducedMotion(boolean value) {
         reducedMotion = value;
+    }
+
+    /**
+     * A line {@code height} GUI pixels tall floats 2 above the list's bottom edge (the panel's "yazıyor…" and
+     * notes; 0 when none can show): the newest message stays 3 above it, so nothing moves when it comes or goes
+     * and it never covers a word. The launcher keeps the same room under its messages for its typing pill.
+     */
+    public void setFloatingLine(int height) {
+        float room = height <= 0 ? 0f : Math.max(0f, height + 2 + 3 - END_PAD);
+        if (room == floatRoom) {
+            return;
+        }
+        floatRoom = room;
+        if (!rows.isEmpty()) {
+            contentHeight = rowsEnd + 4f + floatRoom;
+            if (pinned) {
+                scroll.snap(maxScroll());
+            }
+        }
     }
 
     public String conversation() {
@@ -311,6 +342,9 @@ public final class MessageList extends PanelWidget {
             return;
         }
         boolean first = laidOutRevision == -1 || now < settleUntil;
+        // The first message of an empty conversation appears in its place (it rises in by itself): gliding
+        // up from the empty list's bottom would carry it across the whole list.
+        boolean wasEmpty = rows.isEmpty();
         float oldMax = maxScroll();
         float oldTop = scroll.value();
         OverlayState.ChatLine keepSelected = selected >= 0 && selected < rows.size() ? rows.get(selected).line : null;
@@ -326,7 +360,7 @@ public final class MessageList extends PanelWidget {
             }
         }
         float max = maxScroll();
-        if (first || reducedMotion) {
+        if (first || reducedMotion || wasEmpty) {
             scroll.snap(pinned ? max : Math.min(max, oldTop));
         } else if (pinned) {
             // The older messages glide up as the new one comes in.
@@ -346,8 +380,20 @@ public final class MessageList extends PanelWidget {
         return -1;
     }
 
+    /**
+     * The scroll that shows the newest message at the bottom. Below zero for a conversation shorter than the
+     * list: it then sits at the bottom, over the field, and does not scroll.
+     */
     private float maxScroll() {
-        return Math.max(0f, contentHeight - getHeight());
+        return contentHeight - getHeight();
+    }
+
+    private float minScroll() {
+        return Math.min(0f, maxScroll());
+    }
+
+    private float clampScroll(float target) {
+        return Math.max(minScroll(), Math.min(maxScroll(), target));
     }
 
     private void layout(OverlayState state, long now, boolean first, long seen) {
@@ -486,7 +532,8 @@ public final class MessageList extends PanelWidget {
         }
         known.clear();
         known.addAll(seenIds);
-        contentHeight = rows.isEmpty() ? 0f : y + 4f;
+        rowsEnd = y;
+        contentHeight = rows.isEmpty() ? 0f : y + 4f + floatRoom;
         lastNarration = rows.isEmpty() ? Texts.tr("chat.empty") : narrationOf(rows.get(rows.size() - 1));
         tooltipRow = -1;
     }
@@ -652,8 +699,7 @@ public final class MessageList extends PanelWidget {
     }
 
     private void scrollBy(float delta) {
-        float target = Math.max(0f, Math.min(maxScroll(), scroll.target() + delta));
-        scrollTo(target);
+        scrollTo(clampScroll(scroll.target() + delta));
     }
 
     private void scrollTo(float target) {
@@ -668,18 +714,21 @@ public final class MessageList extends PanelWidget {
         }
     }
 
-    /** Brings row {@code i} into view (keyboard picking: no glide, the keys repeat). */
+    /** Brings row {@code i} into view, clear of the edges' fades (keyboard picking: no glide, the keys repeat). */
     private void reveal(int i) {
         Row row = rows.get(i);
         float top = scroll.target();
         float h = getHeight();
+        float margin = FADE + 2;
         float target = top;
-        if (row.y - 4 < top) {
-            target = row.y - 4;
-        } else if (row.y + row.height + 4 > top + h) {
-            target = row.y + row.height + 4 - h;
+        if (row.y - margin < top) {
+            target = row.y - margin;
+        } else if (i == rows.size() - 1) {
+            target = maxScroll();
+        } else if (row.y + row.height + margin > top + h) {
+            target = row.y + row.height + margin - h;
         }
-        target = Math.max(0f, Math.min(maxScroll(), target));
+        target = clampScroll(target);
         pinned = target >= maxScroll() - 1f;
         scroll.snap(target);
     }
@@ -690,7 +739,7 @@ public final class MessageList extends PanelWidget {
             Row row = rows.get(i);
             if (id.equals(row.line.id)) {
                 float target = row.y + row.height / 2f - getHeight() / 2f;
-                scrollTo(Math.max(0f, Math.min(maxScroll(), target)));
+                scrollTo(clampScroll(target));
                 flashLine = row.line;
                 flashAt = now();
                 return;
@@ -1079,6 +1128,20 @@ public final class MessageList extends PanelWidget {
             float rise = reducedMotion || row.sticker != null ? 0f : (1f - eased) * 4f;
             Draw.pushAlpha(eased);
             drawRow(g, i, row, ry + rise, x0, w, right, mouseX, mouseY, now, ui, small);
+            Draw.popAlpha();
+        }
+        // The edges fade into the panel while there is more beyond them (the strength follows the scroll, so
+        // nothing pops): no hard cut through a bubble right under the conversation chips.
+        float above = Math.min(1f, Math.max(0f, top / FADE));
+        float below = Math.min(1f, Math.max(0f, (maxScroll() - top - floatRoom - 2f) / FADE));
+        if (above > 0.01f) {
+            Draw.pushAlpha(above);
+            Draw.column(g, ShapeSet.FADE_TOP, x0 - 3, y0, w + 6, FADE);
+            Draw.popAlpha();
+        }
+        if (below > 0.01f) {
+            Draw.pushAlpha(below);
+            Draw.column(g, ShapeSet.FADE_BOTTOM, x0 - 3, y0 + h - FADE, w + 6, FADE);
             Draw.popAlpha();
         }
         g.disableScissor();

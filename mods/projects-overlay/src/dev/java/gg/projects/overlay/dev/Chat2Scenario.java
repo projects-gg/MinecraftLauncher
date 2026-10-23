@@ -329,6 +329,11 @@ public final class Chat2Scenario implements ClientModInitializer {
                 }
                 if (at(2, 1.6)) {
                     shot(mc, "sticker-in");
+                    // Ayşe writes again under her own sticker: the line keeps clear of it.
+                    dev(overlay, "typing", "conv", RICH);
+                }
+                if (at(3, 2.1)) {
+                    shot(mc, "typing-under-theirs");
                     if (panel != null) {
                         panel.showConversation("crew:gece");
                     }
@@ -342,6 +347,15 @@ public final class Chat2Scenario implements ClientModInitializer {
                 if (at(1, 1.2)) {
                     shot(mc, "crew-rich-typing");
                     if (panel != null) {
+                        // Scrolled up: the list's edges fade into the panel.
+                        panel.focusMessages();
+                        key(panel, InputConstants.KEY_PAGEUP);
+                    }
+                }
+                if (at(2, 2.0)) {
+                    shot(mc, "crew-scrolled-up");
+                    if (panel != null) {
+                        key(panel, InputConstants.KEY_END);
                         panel.askLink("https://www.youtube.com/watch?v=dQw4w9WgXcQ");
                     }
                     go(Step.LINK);

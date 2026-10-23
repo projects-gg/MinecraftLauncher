@@ -152,6 +152,25 @@ class ShapesTest {
     }
 
     @Test
+    void theListFadesRunFromThePanelToClear() throws IOException {
+        int k = 3;
+        ShapeBaker.Image top = ShapeSet.column(ShapeSet.LIST_FADE * k, k, ShapeSet.PANEL_FILL, true, 1.6f);
+        ShapeBaker.Image bottom = ShapeSet.column(ShapeSet.LIST_FADE * k, k, ShapeSet.PANEL_FILL, false, 1.6f);
+        assertEquals(k, top.width());
+        assertEquals(ShapeSet.LIST_FADE * k, top.height());
+        int panel = Theme.alpha(ShapeSet.PANEL_FILL);
+        // Nearly the panel at the edge, clear at the far end, mostly clear in the middle (words still read).
+        assertTrue(alpha(top, 0, 0) > panel - 12 && alpha(top, 0, 0) <= panel);
+        assertTrue(alpha(top, k - 1, top.height() - 1) < 6);
+        assertTrue(alpha(top, 1, top.height() / 2) < panel / 2);
+        assertEquals(alpha(top, 0, 2), alpha(bottom, 0, bottom.height() - 3));
+        assertEquals(ShapeSet.PANEL_FILL & 0xFFFFFF, top.argb()[0] & 0xFFFFFF);
+        AtlasPacker.Atlas atlas = ShapeSet.bake(2, Icon.loadPaths());
+        assertTrue(atlas.regions().containsKey(ShapeSet.FADE_TOP));
+        assertTrue(atlas.regions().containsKey(ShapeSet.FADE_BOTTOM));
+    }
+
+    @Test
     void colorMath() {
         assertEquals(0x80FFFFFF, Theme.fade(0xFFFFFFFF, 128 / 255f));
         assertEquals(0xFF0A090C, Theme.mix(0xFF0A090C, 0xFFFFFFFF, 0f));

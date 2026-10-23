@@ -13,6 +13,10 @@ public final class ShapeSet {
     public static final String FADE_RIGHT = "strip:fade_right";
     public static final int PANEL_SHADOW_WIDTH = 18;
     public static final int FADE_WIDTH = 14;
+    /** The fades at the top and bottom of a list while there is more above or below it (CHAT2-O). */
+    public static final String FADE_TOP = "strip:fade_top";
+    public static final String FADE_BOTTOM = "strip:fade_bottom";
+    public static final int LIST_FADE = 8;
     /** The panel's surface, which the row fades blend into. */
     public static final int PANEL_FILL = Theme.withAlpha(Theme.OBSIDIAN_900, Frames.Alphas.PANEL);
 
@@ -48,6 +52,8 @@ public final class ShapeSet {
         packer.add(PANEL_SHADOW, strip(PANEL_SHADOW_WIDTH * k, k, 0x000000, 0f, 0.32f, 2.2f));
         packer.add(FADE_LEFT, strip(FADE_WIDTH * k, k, PANEL_FILL, 1f, 0f, 1f));
         packer.add(FADE_RIGHT, strip(FADE_WIDTH * k, k, PANEL_FILL, 0f, 1f, 1f));
+        packer.add(FADE_TOP, column(LIST_FADE * k, k, PANEL_FILL, true, 1.6f));
+        packer.add(FADE_BOTTOM, column(LIST_FADE * k, k, PANEL_FILL, false, 1.6f));
         if (paths != null) {
             for (Map.Entry<Icon, String> e : paths.entrySet()) {
                 for (int size : Icon.SIZES) {
@@ -76,5 +82,24 @@ public final class ShapeSet {
             }
         }
         return new ShapeBaker.Image(width, k, argb);
+    }
+
+    /**
+     * A one GUI pixel wide vertical strip {@code height} texels tall: the color's own alpha at the top when
+     * {@code fromTop} (else at the bottom), clear at the other end. Eased by {@code power}, so it is mostly clear
+     * and words under it read until right at the edge.
+     */
+    static ShapeBaker.Image column(int height, int k, int color, boolean fromTop, float power) {
+        int[] argb = new int[k * height];
+        float base = Theme.alpha(color) == 0 ? 1f : Theme.alpha(color) / 255f;
+        for (int y = 0; y < height; y++) {
+            float t = (y + 0.5f) / height;
+            float a = (float) Math.pow(fromTop ? 1f - t : t, power);
+            int c = Theme.withAlpha(color, a * base);
+            for (int x = 0; x < k; x++) {
+                argb[y * k + x] = c;
+            }
+        }
+        return new ShapeBaker.Image(k, height, argb);
     }
 }
