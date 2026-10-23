@@ -1,11 +1,20 @@
 import { Gauge, Package, Sparkle, Sword } from "@phosphor-icons/react";
-import { Chip, cn, PixelBrackets, Skeleton, Switch, Tooltip } from "@pl/ui";
+import {
+  Chip,
+  ContentIcon,
+  type ContentIconKind,
+  cn,
+  PixelBrackets,
+  Skeleton,
+  Switch,
+  spriteSize,
+  Tooltip,
+} from "@pl/ui";
 import { type KeyboardEvent, type ReactNode, type Ref, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { ProjectIcon } from "@/features/content/parts";
 import type { LoaderKind, SetBadge, SetCard, SetItem, SetPurpose, SetVariant } from "@/lib/api";
 import { formatBytes, listFormat } from "@/lib/format";
-import { ContentIcon, type ContentIconKind, spriteSize } from "@/shell/content-icon";
 import {
   countWords,
   enabledItems,

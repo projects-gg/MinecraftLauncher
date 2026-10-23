@@ -12,6 +12,7 @@ import {
 } from "@phosphor-icons/react";
 import {
   Button,
+  ContentIcon,
   cn,
   Dialog,
   EmptyState,
@@ -26,7 +27,6 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useId, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AfkAccount } from "@/lib/api";
-import { ContentIcon } from "@/shell/content-icon";
 import { AfkHead } from "../afk-head";
 import { afkFailed, isFriendly } from "../errors";
 import { type CloudAccount, type CloudMoveData, type CloudMovePlan, cloudApi } from "./api";

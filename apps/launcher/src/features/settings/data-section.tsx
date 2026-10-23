@@ -5,7 +5,7 @@ import {
   Lifebuoy,
   WarningCircle,
 } from "@phosphor-icons/react";
-import { Button, Dialog, Progress, Skeleton, SwapLabel } from "@pl/ui";
+import { Button, ContentIcon, Dialog, Progress, Skeleton, SwapLabel } from "@pl/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { motion } from "motion/react";
 import { type ReactNode, useEffect, useState } from "react";
@@ -14,7 +14,6 @@ import { useImportJob } from "@/features/import/import-job";
 import { glide, useMotionPrefs } from "@/features/modcenter/motion";
 import { api, type MovePlan, type MoveProgress } from "@/lib/api";
 import { formatBytes, formatCount, formatPercent } from "@/lib/format";
-import { ContentIcon } from "@/shell/content-icon";
 import { useUi } from "@/stores/ui";
 import { CleanupCard } from "./cleanup/cleanup-card";
 import { TrashRow } from "./cleanup/trash-row";

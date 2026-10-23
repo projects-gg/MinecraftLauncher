@@ -1,8 +1,10 @@
 // Content icons (ICON1, docs/design.md §6): the thing a tile or an empty state stands for (a
 // world, a server, a pack, a set's purpose) as our own 16 x 16 pixel sprites in the launcher's
 // golds, drawn on whole pixels like SignalBars. Controls and inline status marks stay Phosphor.
-import { cn } from "@pl/ui";
+// Shared here (ICON2) so the launcher and Studio draw the same sprites; the Android app draws the
+// same rows (`PixelSprites.java`).
 import type { CSSProperties } from "react";
+import { cn } from "../lib/cn";
 
 /**
  * A sprite's colours: "h" to "o" the golds 200 to 700, "k" the deep dirt under them, "F", "f",

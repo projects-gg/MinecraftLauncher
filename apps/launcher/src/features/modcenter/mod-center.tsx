@@ -1,5 +1,5 @@
 import { Plus, WarningCircle } from "@phosphor-icons/react";
-import { Button, EmptyState, Segmented, Skeleton } from "@pl/ui";
+import { Button, ContentIcon, EmptyState, Segmented, Skeleton } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
@@ -14,7 +14,6 @@ import { ModHealthSection } from "@/features/modhealth/health-banner";
 import { AddSetDialog } from "@/features/modsets/add-set-dialog";
 import { InstanceSets, useInstanceSets } from "@/features/modsets/instance-sets";
 import { api, type InstanceDetail, type ModCenterItem } from "@/lib/api";
-import { ContentIcon } from "@/shell/content-icon";
 import { useLaunch } from "@/stores/launch";
 import { ModIssuesBanner } from "./issues-banner";
 import { MigrateDialog } from "./migrate-dialog";

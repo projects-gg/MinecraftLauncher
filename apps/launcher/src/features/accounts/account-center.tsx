@@ -4,6 +4,7 @@
 // left gutter, its menu, or Alt+↑/↓); the rest sorted by activity, never by hand.
 import { ArrowDown, ArrowUp, CaretRight, DotsSixVertical, Robot, X } from "@phosphor-icons/react";
 import {
+  ContentIcon,
   cn,
   EntranceGate,
   easeOutExpo,
@@ -46,7 +47,6 @@ import {
 import { useTranslation } from "react-i18next";
 import { SocialAccountRow } from "@/features/social/account-row";
 import { type AccountSummary, api } from "@/lib/api";
-import { ContentIcon } from "@/shell/content-icon";
 import { AccountCard } from "./account-card";
 import { movePinned, pinnedIds, withPinnedOrder } from "./account-order";
 import { AddAccount } from "./add-account";

@@ -1,5 +1,5 @@
 import { FolderOpen } from "@phosphor-icons/react";
-import { Button, Chip, cn, Skeleton } from "@pl/ui";
+import { Button, Chip, ContentIcon, cn, Skeleton } from "@pl/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearch } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
@@ -7,7 +7,6 @@ import { useTranslation } from "react-i18next";
 import { copyErrorDetails, showError } from "@/features/content/jobs";
 import { api, type GameLogSession, type InstanceDetail } from "@/lib/api";
 import { formatBytes, formatDuration } from "@/lib/format";
-import { ContentIcon } from "@/shell/content-icon";
 import { TabEmpty } from "../parts";
 import { useGameRunning } from "../use-game-running";
 import { formatWhen, logFileWhen } from "../when";
