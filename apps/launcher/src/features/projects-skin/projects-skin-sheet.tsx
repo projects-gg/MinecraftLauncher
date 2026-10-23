@@ -27,6 +27,7 @@ import { Dialog } from "radix-ui";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AccountFace } from "@/features/accounts/account-face";
+import { useAccountsUi } from "@/features/accounts/store";
 import { useAccounts } from "@/features/accounts/use-accounts";
 import { useDropAnnouncement, useDropZone } from "@/features/drop/store";
 import { announcementOf, zoneTitle } from "@/features/drop/text";
@@ -453,7 +454,9 @@ function Editor({
             session={panel.body === "session"}
             onConnect={() => {
               onClose();
-              // The panel slides out first; the friends panel follows with its way in.
+              // The account center under it goes too (as from its Discord row): the panel
+              // slides out first, the friends panel follows with its way in.
+              useAccountsUi.getState().closeCenter();
               window.setTimeout(() => useSocialUi.getState().openPanel({ page: "list" }), 160);
             }}
           />
