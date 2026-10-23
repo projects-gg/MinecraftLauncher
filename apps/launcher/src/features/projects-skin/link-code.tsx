@@ -182,7 +182,13 @@ export function LinkCode({
 
   return (
     <div className={cn("transition-opacity duration-150", disabled && "opacity-50")}>
-      <div ref={box} className="relative w-fit">
+      <div
+        ref={box}
+        className={cn(
+          "relative w-fit transition-opacity duration-150",
+          triesClosed && "opacity-55",
+        )}
+      >
         <div className="flex" style={{ gap: GAP }}>
           {Array.from({ length: PIN_LENGTH }, (_, index) => {
             const digit = value[index];
