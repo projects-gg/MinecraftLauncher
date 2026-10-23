@@ -122,6 +122,8 @@ struct Inner {
     core: Mutex<Core>,
     /// One link card is asked at a time (the service's rule per socket, CHAT2).
     cards_turn: tokio::sync::Mutex<()>,
+    /// World sessions (HOST1): who hears them, what the connection took.
+    worlds: crate::world::WorldsHub,
     /// SKIN1's listener for `mc` messages and reconnects (`crate::minecraft`).
     mc: Mutex<Option<McSink>>,
 }
@@ -213,6 +215,8 @@ struct Core {
     backup_waits_until: Option<i64>,
     /// "Birlikte oynanan süre", kept on this computer (TEAM5). Survives sign-outs.
     together: TogetherLog,
+    /// World sessions may run (signed config `features.worlds`, HOST1). Survives sign-outs.
+    worlds_enabled: bool,
 }
 
 impl SocialService {
@@ -233,6 +237,7 @@ impl SocialService {
                 runtime,
                 core: Mutex::new(Core::default()),
                 cards_turn: tokio::sync::Mutex::new(()),
+                worlds: crate::world::WorldsHub::default(),
                 mc: Mutex::new(None),
             }),
         }
@@ -430,13 +435,10 @@ impl SocialService {
         let (control, mut events) = {
             // Callers may run outside the runtime (deep links arrive on the UI thread).
             let _runtime = self.inner.runtime.enter();
-            if core.chat_enabled {
-                session
-                    .connect_presence_with_chat(self.inner.config.presence, core.chat_setup.clone())
-                    .split()
-            } else {
-                session.connect_presence(self.inner.config.presence).split()
-            }
+            let chat = core.chat_enabled.then(|| core.chat_setup.clone());
+            session
+                .connect_presence_with(self.inner.config.presence, chat, core.worlds_enabled)
+                .split()
         };
         control.set_status(core.activity.clone());
         // Replacing the control closes the previous connection cleanly.
@@ -453,6 +455,27 @@ impl SocialService {
     }
 
     fn on_presence(&self, generation: u64, epoch: u64, event: PresenceEvent) {
+        // World sessions (HOST1) go to the launcher's host as they come: no view changes. A drop
+        // of this connection tells it too.
+        let world = match &event {
+            PresenceEvent::World(world) => Some(world.clone()),
+            PresenceEvent::Disconnected { .. } | PresenceEvent::Stopped(_) => {
+                Some(crate::world::WorldEvent::Down)
+            }
+            _ => None,
+        };
+        if let Some(world) = world {
+            let current = {
+                let core = self.lock();
+                core.generation == generation && core.epoch == epoch
+            };
+            if current {
+                self.inner.worlds.deliver(world);
+            }
+            if matches!(event, PresenceEvent::World(_)) {
+                return;
+            }
+        }
         let mut refetch = false;
         let mut ended = false;
         let mut quietly = false;
@@ -2128,6 +2151,58 @@ impl SocialService {
             }
         }
         self.emit_view();
+    }
+
+    /// World sessions may run (HOST1: signed config `features.worlds`; friends must be on too).
+    /// The presence connection asks for them only while they may: a change reconnects it.
+    pub fn set_worlds_enabled(&self, on: bool) {
+        let mut core = self.lock();
+        if core.worlds_enabled == on {
+            return;
+        }
+        core.worlds_enabled = on;
+        if core.auth == AuthPhase::SignedIn && core.presence.is_some() {
+            self.start_presence(&mut core);
+        }
+    }
+
+    /// Hears every world session frame of the presence connection, whether a connection took
+    /// them (after each connect) and its drops (HOST1, `crate::world`). Called from the
+    /// connection's task: it must not block.
+    pub fn on_world(&self, sink: impl Fn(crate::world::WorldEvent) + Send + Sync + 'static) {
+        self.inner.worlds.set_sink(Arc::new(sink));
+    }
+
+    /// World sessions run now: signed in, connected, and the service took them on this
+    /// connection, with Studio's switch and guest limit. None otherwise.
+    pub fn worlds(&self) -> Option<crate::world::WorldsStatus> {
+        let live = {
+            let core = self.lock();
+            core.worlds_enabled && core.auth == AuthPhase::SignedIn && core.presence.is_some()
+        };
+        live.then(|| self.inner.worlds.status()).flatten()
+    }
+
+    /// A world frame the service answers (HOST1): its `ack`, or why not, within `wait`.
+    pub async fn world_request(
+        &self,
+        frame: crate::world::WorldFrame,
+        wait: Duration,
+    ) -> std::result::Result<crate::world::WorldAnswer, crate::world::WorldError> {
+        let control = self
+            .lock()
+            .presence
+            .clone()
+            .ok_or(crate::world::WorldError::Unavailable)?;
+        control.world_request(frame, wait).await
+    }
+
+    /// A world frame nobody answers (HOST1); dropped without a connection.
+    pub fn world_send(&self, frame: crate::world::WorldFrame) {
+        let control = self.lock().presence.clone();
+        if let Some(control) = control {
+            control.world_send(frame);
+        }
     }
 
     /// What the view's conversation `conv` may do now: chat on, not muted, still friends or still

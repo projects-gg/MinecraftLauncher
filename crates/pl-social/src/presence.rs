@@ -53,6 +53,10 @@ use crate::protocol::{
     LocalStatus, PLANS_CAP, PlanAnswer, Presence, ServerMessage, chat_caps,
 };
 use crate::tls;
+use crate::world::{WORLDS_CAP, WorldAnswer, WorldError, WorldEvent, WorldFrame};
+
+/// What a world request (HOST1) gets back.
+type WorldResult = std::result::Result<WorldAnswer, WorldError>;
 
 /// Chat on the presence socket (CHAT1). `since` is where the next sync starts (ms on the hub's
 /// clock: the device's newest message minus a minute); the owner keeps it up to date.
@@ -295,6 +299,9 @@ pub enum PresenceEvent {
     },
     /// The task ended and will not reconnect.
     Stopped(StopReason),
+    /// World sessions (HOST1): after every connect whether the service took them, then their
+    /// frames (only on a connection that took `worlds`).
+    World(WorldEvent),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -429,6 +436,11 @@ enum Command {
         request: PlanRequest,
         reply: oneshot::Sender<Result<Option<CrewPlan>>>,
     },
+    /// A world frame (HOST1); `reply` for one the service answers by `rid`.
+    World {
+        frame: WorldFrame,
+        reply: Option<oneshot::Sender<WorldResult>>,
+    },
     Shutdown,
 }
 
@@ -441,7 +453,10 @@ impl Command {
             Self::Crew { reply, .. } => drop(reply.send(Err(error()))),
             Self::Chat { reply, .. } => drop(reply.send(Err(error()))),
             Self::Plan { reply, .. } => drop(reply.send(Err(error()))),
-            Self::Signal(_) | Self::Shutdown => {}
+            Self::World {
+                reply: Some(reply), ..
+            } => drop(reply.send(Err(WorldError::Unavailable))),
+            Self::Signal(_) | Self::World { .. } | Self::Shutdown => {}
         }
     }
 }
@@ -631,6 +646,40 @@ impl PresenceControl {
         .await?
         .card
         .ok_or_else(|| SocialError::Protocol("a card answer without its card".into()))
+    }
+
+    /// A world frame (HOST1, `crate::world`) the service answers by `rid`: its `ack`, or its
+    /// `error` as [`WorldError::Refused`]. Fails at once with [`WorldError::Off`] on a connection
+    /// that did not take `worlds`, with [`WorldError::Unavailable`] while disconnected or when no
+    /// answer came within `wait`.
+    pub async fn world_request(&self, frame: WorldFrame, wait: Duration) -> WorldResult {
+        let (reply, answer) = oneshot::channel();
+        self.commands
+            .send(Command::World {
+                frame,
+                reply: Some(reply),
+            })
+            .await
+            .map_err(|_| WorldError::Unavailable)?;
+        match timeout(wait, answer).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) | Err(_) => Err(WorldError::Unavailable),
+        }
+    }
+
+    /// A world frame nobody answers (HOST1: counts, path answers, credentials let go, telemetry):
+    /// dropped while disconnected or on a connection that did not take `worlds`.
+    pub fn world_send(&self, frame: WorldFrame) {
+        let command = Command::World { frame, reply: None };
+        if let Err(mpsc::error::TrySendError::Full(command)) = self.commands.try_send(command)
+            && let Ok(runtime) = tokio::runtime::Handle::try_current()
+        {
+            // A burst (a reconnect's claims and counts): it waits its turn instead of going.
+            let commands = self.commands.clone();
+            runtime.spawn(async move {
+                let _ = commands.send(command).await;
+            });
+        }
     }
 
     /// "Yazıyor…" in a conversation (CHAT2): never answered, dropped while the connection does
@@ -1042,6 +1091,8 @@ enum Reply {
     Crew(oneshot::Sender<Result<()>>),
     Chat(oneshot::Sender<Result<ChatAnswer>>),
     Plan(oneshot::Sender<Result<Option<CrewPlan>>>),
+    /// HOST1.
+    World(oneshot::Sender<WorldResult>),
 }
 
 impl Reply {
@@ -1051,6 +1102,7 @@ impl Reply {
             Self::Crew(reply) => drop(reply.send(Err(error))),
             Self::Chat(reply) => drop(reply.send(Err(error))),
             Self::Plan(reply) => drop(reply.send(Err(error))),
+            Self::World(reply) => drop(reply.send(Err(WorldError::Unavailable))),
         }
     }
 }
@@ -1078,6 +1130,7 @@ async fn session(
         chat_caps: ChatCaps::default(),
         plans_on: false,
         badges_on: false,
+        worlds_on: false,
         sync: None,
         sync_again: None,
         restricted: None,
@@ -1181,6 +1234,26 @@ async fn session(
                                 continue;
                             }
                             (plan_message(request, rid), Reply::Plan(reply))
+                        }
+                        Command::World { frame, reply } => {
+                            if !state.worlds_on {
+                                // An older service would refuse the frame (HOST1).
+                                if let Some(reply) = reply {
+                                    let _ = reply.send(Err(WorldError::Off));
+                                }
+                                continue;
+                            }
+                            let text = frame.text(reply.is_some().then_some(rid));
+                            if sink.send(Message::text(text)).await.is_err() {
+                                if let Some(reply) = reply {
+                                    let _ = reply.send(Err(WorldError::Unavailable));
+                                }
+                                break RETRY_NOW;
+                            }
+                            if let Some(reply) = reply {
+                                pending.insert(rid, Reply::World(reply));
+                            }
+                            continue;
                         }
                         Command::Shutdown => continue,
                     };
@@ -1330,6 +1403,8 @@ struct SessionState {
     plans_on: bool,
     /// The service took crew tag changes on this connection (TEAM6).
     badges_on: bool,
+    /// The service took world sessions on this connection (HOST1).
+    worlds_on: bool,
     /// The sync under way: its `rid`, where it started (ms) and whether it is the week-long one
     /// that catches up with chat extras (CHAT2).
     sync: Option<(u32, i64, bool)>,
@@ -1427,6 +1502,7 @@ async fn on_text(
             caps,
             chat,
             plans,
+            worlds,
         } => {
             tracing::debug!(?caps, "presence connected");
             state.greeted = true;
@@ -1469,6 +1545,15 @@ async fn on_text(
                     None
                 },
             });
+            // World sessions flow only when the service took them (HOST1); a connection that did
+            // not says nothing of them (the drop before it said so).
+            state.worlds_on = caps.iter().any(|cap| cap == WORLDS_CAP);
+            if state.worlds_on {
+                let _ = events.send(PresenceEvent::World(WorldEvent::Hello {
+                    taken: true,
+                    status: worlds.unwrap_or_default(),
+                }));
+            }
             send_status(state, sink, status)
                 .await
                 .map_err(|_| RETRY_NOW)?;
@@ -1615,6 +1700,70 @@ async fn on_text(
             PresenceEvent::ChatRead { conv, by, id }
         }
         ServerMessage::Notice { notice } => PresenceEvent::Notice(notice),
+        ServerMessage::WorldInvite { invite, quiet } if state.worlds_on => {
+            PresenceEvent::World(WorldEvent::Invite { invite, quiet })
+        }
+        ServerMessage::WorldUpdate {
+            from,
+            session,
+            guests,
+            max,
+            paths,
+        } if state.worlds_on => PresenceEvent::World(WorldEvent::Update {
+            from,
+            session,
+            guests,
+            max,
+            paths,
+        }),
+        ServerMessage::WorldClosed { from, session } if state.worlds_on => {
+            PresenceEvent::World(WorldEvent::Closed { from, session })
+        }
+        ServerMessage::WorldRevoked { from, session, to } if state.worlds_on => {
+            PresenceEvent::World(match (to, from) {
+                (Some(to), _) => WorldEvent::RevokedGuest { session, to },
+                (None, from) => WorldEvent::Revoked {
+                    from: from.unwrap_or_default(),
+                    session,
+                },
+            })
+        }
+        ServerMessage::WorldPeer {
+            session,
+            from,
+            slot,
+            path,
+            relay,
+        } if state.worlds_on => PresenceEvent::World(WorldEvent::Peer {
+            session,
+            from,
+            slot,
+            path,
+            relay,
+        }),
+        ServerMessage::WorldPeerOk {
+            session,
+            from,
+            slot,
+            paths,
+        } if state.worlds_on => PresenceEvent::World(WorldEvent::PeerOk {
+            session,
+            from,
+            slot,
+            paths,
+        }),
+        ServerMessage::TurnMove {
+            session,
+            reason,
+            grace,
+        } if state.worlds_on => PresenceEvent::World(WorldEvent::TurnMove {
+            session,
+            reason,
+            grace,
+        }),
+        ServerMessage::WorldState { worlds } if state.worlds_on => {
+            PresenceEvent::World(WorldEvent::Status(worlds))
+        }
         ServerMessage::Mc(message) => PresenceEvent::Mc(message),
         ServerMessage::Ack {
             rid,
@@ -1623,8 +1772,21 @@ async fn on_text(
             plan,
             reactions,
             card,
+            world,
+            order,
+            ice,
+            e4mc,
         } => {
             match rid.and_then(|rid| pending.remove(&rid)) {
+                Some(Reply::World(reply)) => {
+                    let _ = reply.send(Ok(WorldAnswer {
+                        delivered,
+                        world,
+                        order: order.unwrap_or_default(),
+                        ice,
+                        e4mc,
+                    }));
+                }
                 Some(Reply::Invite(reply)) => {
                     let outcome = if delivered == Some(true) {
                         InviteOutcome::Delivered
@@ -1686,14 +1848,25 @@ async fn on_text(
                         .map_err(gone);
                 }
                 if let Some(reply) = pending.remove(&rid) {
-                    reply.fail(socket_error(&SocketRefusal {
-                        code: &code,
-                        retry_after,
-                        reason: reason.as_deref(),
-                        rule: rule.as_deref(),
-                        until,
-                        item: item.as_deref(),
-                    }));
+                    match reply {
+                        // A world request hears the service's words as they are (HOST1).
+                        Reply::World(reply) => {
+                            let _ = reply.send(Err(WorldError::Refused {
+                                code,
+                                reason,
+                                item,
+                                retry_after,
+                            }));
+                        }
+                        reply => reply.fail(socket_error(&SocketRefusal {
+                            code: &code,
+                            retry_after,
+                            reason: reason.as_deref(),
+                            rule: rule.as_deref(),
+                            until,
+                            item: item.as_deref(),
+                        })),
+                    }
                     return Ok(());
                 }
             }
@@ -1719,7 +1892,15 @@ async fn on_text(
         | ServerMessage::Plan { .. }
         | ServerMessage::Plans { .. }
         | ServerMessage::PlanRemoved { .. }
-        | ServerMessage::Badge { .. } => return Ok(()),
+        | ServerMessage::Badge { .. }
+        | ServerMessage::WorldInvite { .. }
+        | ServerMessage::WorldUpdate { .. }
+        | ServerMessage::WorldClosed { .. }
+        | ServerMessage::WorldRevoked { .. }
+        | ServerMessage::WorldPeer { .. }
+        | ServerMessage::WorldPeerOk { .. }
+        | ServerMessage::TurnMove { .. }
+        | ServerMessage::WorldState { .. } => return Ok(()),
     };
     events.send(event).map_err(gone)
 }
@@ -3189,6 +3370,221 @@ mod tests {
             }
             other => panic!("unexpected {other:?}"),
         }
+        handle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn world_frames_go_out_by_rid_and_come_back_as_world_events() {
+        use crate::world::{Hidden, WorldRole, WorldsStatus};
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut handle = client
+            .session(token())
+            .connect_presence_with(fast(), None, true);
+        let mut server = accept(&listener, None, seen.clone()).await.unwrap();
+        assert!(seen.lock().unwrap().iter().any(|(name, value)| {
+            name == ":uri" && value.contains("caps=") && value.ends_with(",worlds")
+        }));
+        let mut hello = hello();
+        hello["caps"] = serde_json::json!(["worlds"]);
+        hello["worlds"] = serde_json::json!({"on": true, "maxGuests": 5});
+        send_json(&mut server, hello).await;
+        assert!(matches!(
+            handle.next_event().await,
+            Some(PresenceEvent::Connected { .. })
+        ));
+        assert_eq!(
+            handle.next_event().await,
+            Some(PresenceEvent::World(WorldEvent::Hello {
+                taken: true,
+                status: WorldsStatus {
+                    on: true,
+                    max_guests: 5
+                }
+            }))
+        );
+
+        // A request goes out with its rid; the ack carries the order and the credentials.
+        let control = handle.control();
+        let asking = tokio::spawn(async move {
+            let frame = WorldFrame::TurnCreds {
+                session: "s".into(),
+                host: Some("h".into()),
+                role: WorldRole::Guest,
+                reason: "primary",
+            };
+            control.world_request(frame, Duration::from_secs(5)).await
+        });
+        let sent = next_json(&mut server).await;
+        assert_eq!(sent["t"], "turn_creds");
+        assert_eq!(sent["reason"], "primary");
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "ack", "rid": sent["rid"], "order": ["turn", "e4mc"],
+                "ice": {"urls": ["turn:turn.example:3478?transport=udp"], "username": "u",
+                        "credential": "c", "ttl": 7200}}),
+        )
+        .await;
+        let answer = asking.await.unwrap().unwrap();
+        assert_eq!(answer.order, ["turn", "e4mc"]);
+        let ice = answer.ice.unwrap();
+        assert_eq!((ice.username.expose().as_str(), ice.ttl), ("u", 7200));
+
+        // An error comes back as the service said it.
+        let control = handle.control();
+        let asking = tokio::spawn(async move {
+            let frame = WorldFrame::TurnCreds {
+                session: "s".into(),
+                host: Some("h".into()),
+                role: WorldRole::Guest,
+                reason: "fallback",
+            };
+            control.world_request(frame, Duration::from_secs(5)).await
+        });
+        let sent = next_json(&mut server).await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "error", "rid": sent["rid"], "code": "turn_denied",
+                "reason": "budget"}),
+        )
+        .await;
+        assert_eq!(
+            asking.await.unwrap(),
+            Err(WorldError::Refused {
+                code: "turn_denied".into(),
+                reason: Some("budget".into()),
+                item: None,
+                retry_after: None,
+            })
+        );
+
+        // Frames nobody answers go without a rid.
+        handle.control().world_send(WorldFrame::TurnRelease {
+            username: Hidden("u".into()),
+        });
+        assert_eq!(
+            next_json(&mut server).await,
+            serde_json::json!({"t": "turn_release", "username": "u"})
+        );
+
+        // The service's frames become world events.
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "world_invite", "quiet": true, "invite": {
+                "id": "0123456789abcdef", "from": "f1", "at": 5, "session": "s",
+                "join": {"v": 1}}}),
+        )
+        .await;
+        match handle.next_event().await {
+            Some(PresenceEvent::World(WorldEvent::Invite { invite, quiet })) => {
+                assert!(quiet);
+                assert_eq!((invite.from.as_str(), invite.at), ("f1", 5));
+                assert_eq!(invite.join.expose()["v"], 1);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "world_revoked", "session": "s", "to": "f2"}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await,
+            Some(PresenceEvent::World(WorldEvent::RevokedGuest {
+                session: "s".into(),
+                to: "f2".into()
+            }))
+        );
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "world_revoked", "session": "s", "from": "f1"}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await,
+            Some(PresenceEvent::World(WorldEvent::Revoked {
+                from: "f1".into(),
+                session: "s".into()
+            }))
+        );
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "turn_move", "session": "s", "reason": "budget", "grace": 20}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await,
+            Some(PresenceEvent::World(WorldEvent::TurnMove {
+                session: "s".into(),
+                reason: "budget".into(),
+                grace: 20
+            }))
+        );
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "world_state", "worlds": {"on": false, "maxGuests": 3}}),
+        )
+        .await;
+        assert_eq!(
+            handle.next_event().await,
+            Some(PresenceEvent::World(WorldEvent::Status(WorldsStatus {
+                on: false,
+                max_guests: 3
+            })))
+        );
+        handle.shutdown().await;
+    }
+
+    #[tokio::test]
+    async fn without_worlds_on_the_connection_none_of_them_flows() {
+        use crate::world::WorldRole;
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut handle = client.session(token()).connect_presence(fast());
+        let mut server = accept(&listener, None, seen.clone()).await.unwrap();
+        assert!(
+            !seen
+                .lock()
+                .unwrap()
+                .iter()
+                .any(|(_, value)| value.contains("worlds"))
+        );
+        send_json(&mut server, hello()).await;
+        assert!(matches!(
+            handle.next_event().await,
+            Some(PresenceEvent::Connected { .. })
+        ));
+        let frame = WorldFrame::TurnCreds {
+            session: "s".into(),
+            host: None,
+            role: WorldRole::Host,
+            reason: "primary",
+        };
+        assert_eq!(
+            handle
+                .control()
+                .world_request(frame, Duration::from_secs(5))
+                .await,
+            Err(WorldError::Off)
+        );
+        // An invite on a connection that did not take worlds is dropped; the next event is the
+        // presence after it.
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "world_invite", "invite": {"from": "f1", "session": "s",
+                "join": {}}}),
+        )
+        .await;
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "presence", "presence": {"id": "111111111111111111",
+                "state": "offline", "status": "online", "game": null}}),
+        )
+        .await;
+        assert!(matches!(
+            handle.next_event().await,
+            Some(PresenceEvent::Presence(_))
+        ));
         handle.shutdown().await;
     }
 }

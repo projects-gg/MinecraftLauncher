@@ -1,0 +1,56 @@
+[package]
+name = "pl-host"
+description = "Opening a singleplayer world to friends (HOST1): the PLJ1 tunnel, admission, paths and install matching"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+# PLJ1 is Noise_NKpsk0_25519_ChaChaPoly_BLAKE2s; the test vectors were checked with exactly this
+# version. Only the primitives PLJ1 uses (no AES, SHA-2 or ring).
+snow = { version = "=0.10.0", default-features = false, features = [
+    "use-chacha20poly1305",
+    "use-blake2",
+    "use-curve25519",
+    "use-getrandom",
+] }
+# Session ids, slots, PSKs and the binding key come straight from the operating system's CSPRNG.
+getrandom = "0.3"
+# PLG1's gate key and MAC, the name binding digests.
+hmac = "0.13"
+sha2 = { workspace = true }
+base64 = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+# Keys and PSKs are wiped from memory when a session ends.
+zeroize = "1"
+
+# transport (HOST1-R2: the e4mc and TURN paths add their dependencies below this line)
+# QUIC to the e4mc relay and between two TURN allocations: the quinn, rustls (aws-lc-rs provider) and
+# platform verifier the workspace already builds. Every rustls config names its provider (no ring).
+quinn = { version = "0.11.12", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs"] }
+rustls = { version = "0.23.46", default-features = false, features = ["std", "tls12", "aws_lc_rs"] }
+rustls-platform-verifier = "0.7.1"
+# TURN over TLS (`turns:`).
+tokio-rustls = { version = "0.26.6", default-features = false }
+# The per-session QUIC certificate the guest pins (P-256, self-signed). MIT OR Apache-2.0.
+rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs", "zeroize"] }
+# The e4mc broker request.
+reqwest = { workspace = true }
+# STUN long-term credentials (MD5 key, HMAC-SHA1 integrity) and FINGERPRINT (CRC-32).
+md-5 = { workspace = true }
+sha1 = { workspace = true }
+crc32fast = "1.5.2"
+bytes = { workspace = true }
+# Ending an e4mc guest's TCP streams from the path (shutdown of both directions).
+socket2 = "0.6.5"
+
+[dev-dependencies]
+hex = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["test-util"] }

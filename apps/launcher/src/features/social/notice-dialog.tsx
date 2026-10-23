@@ -4,7 +4,7 @@
 // reason when the moderators gave one and a link to the community rules.
 import { ShieldWarning } from "@phosphor-icons/react";
 import { Button, Dialog } from "@pl/ui";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import type { ModNotice } from "@/lib/api/social-types";
@@ -17,16 +17,21 @@ export function NoticeDialog() {
   const notices = useSocialUi((s) => s.view.notices);
   const signedIn = useSocialUi((s) => s.view.auth === "signedIn");
   const [shown, setShown] = useState<ModNotice | null>(null);
+  // Closed here: the list keeps a notice until the service took "seen", which must not show it again.
+  const dismissed = useRef(new Set<string>());
 
   // One at a time, oldest first; the next one comes after "Anladım".
   useEffect(() => {
     if (shown || !signedIn) return;
-    const next = notices[0];
+    const next = notices.find((notice) => !dismissed.current.has(notice.id));
     if (next) setShown(next);
   }, [notices, shown, signedIn]);
 
   const done = () => {
-    if (shown) void api.social.noticesSeen([shown.id]);
+    if (shown) {
+      dismissed.current.add(shown.id);
+      void api.social.noticesSeen([shown.id]);
+    }
     setShown(null);
   };
 

@@ -44,6 +44,8 @@ pub fn create(
             SocialUpdate::Typing(typing) => emitter.emit("social-chat-typing", typing),
             SocialUpdate::TagOff(tag_off) => emitter.emit("social-tag-off", tag_off),
         };
+        // World sharing reads the friends' names and where the player is (HOST1).
+        crate::host::on_social(&emitter, &update);
         overlay.on_social(update);
     });
     let tokens: Arc<dyn pl_social::TokenStore> =

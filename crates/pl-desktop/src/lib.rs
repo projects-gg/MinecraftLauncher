@@ -19,6 +19,8 @@
 //!   waiting for its end.
 //! - [`toast`]: the system notifications on Windows: the toast's text, and where Windows finds the
 //!   launcher's name and picture for it.
+//! - [`tcp`]: which process owns a loopback connection (the local endpoint of a friend's world
+//!   takes only the game's).
 
 pub mod close;
 pub mod discord;
@@ -30,6 +32,7 @@ pub mod identity;
 pub mod link;
 pub mod process;
 pub mod shortcut;
+pub mod tcp;
 #[cfg(test)]
 mod test_support;
 pub mod toast;

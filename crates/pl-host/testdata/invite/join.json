@@ -1,0 +1,72 @@
+{
+  "comment": "The join object a host sends one invitee (relayed by the service, never read by it), and path address checks.",
+  "join": {
+    "v": 1,
+    "session": "stuiX9ATk0i2-2_h8YikXQ",
+    "key": "nDMeBTfWvxUS50h4YF02xUXMd_V91FnFw1aW9ackAXc",
+    "slot": "RSmWiB3_PnyFzbh5ZeCOzQ",
+    "psk": "HKmlsLjSJco76g9M5OxXnFMqzzT_Ifoll1olG7xpyPA",
+    "mc": "26.1.2",
+    "proto": 9999,
+    "pack": "projects",
+    "paths": {
+      "turn": {
+        "relay": "162.159.207.10:51234",
+        "pin": "5eoeWw1q8rcJRIkM8HdSqNF4aWVfg6QxmhxVS0sWIjk"
+      },
+      "e4mc": {
+        "domain": "able-acid.eu.e4mc.link"
+      }
+    }
+  },
+  "joinBytes": 368,
+  "frame": {
+    "t": "world_invite",
+    "session": "stuiX9ATk0i2-2_h8YikXQ",
+    "to": "123456789012345678",
+    "join": {
+      "v": 1,
+      "session": "stuiX9ATk0i2-2_h8YikXQ",
+      "key": "nDMeBTfWvxUS50h4YF02xUXMd_V91FnFw1aW9ackAXc",
+      "slot": "RSmWiB3_PnyFzbh5ZeCOzQ",
+      "psk": "HKmlsLjSJco76g9M5OxXnFMqzzT_Ifoll1olG7xpyPA",
+      "mc": "26.1.2",
+      "proto": 9999,
+      "pack": "projects",
+      "paths": {
+        "turn": {
+          "relay": "162.159.207.10:51234",
+          "pin": "5eoeWw1q8rcJRIkM8HdSqNF4aWVfg6QxmhxVS0sWIjk"
+        },
+        "e4mc": {
+          "domain": "able-acid.eu.e4mc.link"
+        }
+      }
+    },
+    "rid": 4
+  },
+  "frameBytes": 465,
+  "relayAddresses": {
+    "valid": [
+      "162.159.207.10:51234",
+      "104.30.1.2:3478",
+      "141.101.90.1:65535"
+    ],
+    "invalid": [
+      "10.0.0.5:5000",
+      "127.0.0.1:25565",
+      "169.254.1.1:5000",
+      "100.64.0.1:5000",
+      "192.168.1.10:5000",
+      "172.16.0.1:5000",
+      "0.0.0.0:5000",
+      "224.0.0.1:5000",
+      "255.255.255.255:5000",
+      "203.0.113.7:5000",
+      "162.159.207.10",
+      "162.159.207.10:0",
+      "[2606:4700::1]:3478",
+      "162.159.207.010:51234"
+    ]
+  }
+}

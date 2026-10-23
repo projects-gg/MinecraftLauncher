@@ -24,7 +24,7 @@ use crate::policy::{self, CrewMute, CrewSettings, Mute, Notice, NotifyPrefs, Sit
 use crate::protocol::{
     AnswerCounts, CallAnswer, CallView, CardView, ConvKind, ConvView, FriendView, LinkView,
     MAX_HISTORY, MAX_LAUNCHER_FRAME, MAX_QUOTE_CHARS, Me, MsgView, PROTO, Place, ReactionView,
-    ReplyView, SendFailure, ToGame, ToastView,
+    ReplyView, SendFailure, ToGame, ToastView, WorldMark,
 };
 
 /// Conversations a snapshot lists at most (the newest first).
@@ -209,6 +209,7 @@ impl Scene {
                     joinable: place == Place::Projects
                         || (place == Place::Server && host.is_some()),
                     host,
+                    world: None,
                 }
             })
             .collect();
@@ -358,6 +359,17 @@ impl Scene {
     /// CHAT2 offers this extra now.
     pub fn offers(&self, extra: impl Fn(&ChatExtrasView) -> bool) -> bool {
         self.extras.as_ref().is_some_and(extra)
+    }
+
+    /// HOST1 (H13): the friends who invited the player to their open world, with its count: their
+    /// rows say so and "Katıl" works (a world join). Nobody else learns that a world is open.
+    pub fn mark_worlds(&mut self, marks: &HashMap<String, WorldMark>) {
+        for friend in &mut self.friends {
+            friend.world = marks.get(&friend.id).copied();
+            if friend.world.is_some() {
+                friend.joinable = true;
+            }
+        }
     }
 
     /// Where "Bağlan" may send the running game: `target` (`host[:port]`) when it is Projects or

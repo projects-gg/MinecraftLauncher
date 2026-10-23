@@ -1,0 +1,123 @@
+{
+  "comment": "A game stream: hello, ok, the game's first bytes, acks, the host side's close.",
+  "gameBytesGuestToHostHex": "10008f4e093132372e302e302e31c3cb021700054e6f74636800000000000000000000000000000000",
+  "protocol": "Noise_NKpsk0_25519_ChaChaPoly_BLAKE2s",
+  "hostStaticPrivateHex": "c1a00503b720ba6e7154c31d593c8ac9588e5b5cffdb0993967faa596221a8dc",
+  "hostStaticPublicHex": "9c331e0537d6bf1512e74878605d36c545cc77f57dd459c5c35696f5a7240177",
+  "hostStaticPublicB64u": "nDMeBTfWvxUS50h4YF02xUXMd_V91FnFw1aW9ackAXc",
+  "guestEphemeralPrivateHex": "26c81d61aebb29d190516e16e5eb41fd28aa7ce1fc8dd5e438c840304e8c0d0b",
+  "guestEphemeralPublicHex": "046eb2399df2de7777421f33f996327038e5c6a5ea555bf1e6cab61f97e6662b",
+  "hostEphemeralPrivateHex": "db807bd4936883d08c55f96594318e0ebccb1e032c6a863b421c5cd946e6c176",
+  "hostEphemeralPublicHex": "fb7d85539ac2f0b7bf32baa49d75939497ad78c620a201a0abe0c80b685dbc67",
+  "pskHex": "1ca9a5b0b8d225ca3bea0f4ce4ec579c532acf34ff21fa25975a251bbc69c8f0",
+  "pskB64u": "HKmlsLjSJco76g9M5OxXnFMqzzT_Ifoll1olG7xpyPA",
+  "slotHex": "452996881dff3e7c85cdb87965e08ecd",
+  "slotB64u": "RSmWiB3_PnyFzbh5ZeCOzQ",
+  "sessionHex": "b2dba25fd0139348b6fb6fe1f188a45d",
+  "sessionB64u": "stuiX9ATk0i2-2_h8YikXQ",
+  "prologueHex": "504c4a31452996881dff3e7c85cdb87965e08ecdb2dba25fd0139348b6fb6fe1f188a45d",
+  "msg1Hex": "046eb2399df2de7777421f33f996327038e5c6a5ea555bf1e6cab61f97e6662b47f1c623dba21e3c8acafe61d42bf573",
+  "msg2Hex": "fb7d85539ac2f0b7bf32baa49d75939497ad78c620a201a0abe0c80b685dbc67454d8cf2d51b8dac74ddebfe78ab0b81",
+  "openingHex": "44504c4a31452996881dff3e7c85cdb87965e08ecd046eb2399df2de7777421f33f996327038e5c6a5ea555bf1e6cab61f97e6662b47f1c623dba21e3c8acafe61d42bf573",
+  "replyHex": "30fb7d85539ac2f0b7bf32baa49d75939497ad78c620a201a0abe0c80b685dbc67454d8cf2d51b8dac74ddebfe78ab0b81",
+  "handshakeHashHex": "376e369f18737e1bb3160264dc6198aef952060cd73143ddbbc337efd99575cb",
+  "transport": [
+    {
+      "dir": "guest->host",
+      "nonce": 0,
+      "record": {
+        "type": "ctrl",
+        "json": {
+          "t": "hello",
+          "v": 1,
+          "kind": "game",
+          "name": "Notch",
+          "premium": false,
+          "mc": "26.1.2",
+          "proto": 9999,
+          "caps": []
+        }
+      },
+      "plaintextHex": "017b2274223a2268656c6c6f222c2276223a312c226b696e64223a2267616d65222c226e616d65223a224e6f746368222c227072656d69756d223a66616c73652c226d63223a2232362e312e32222c2270726f746f223a393939392c2263617073223a5b5d7d",
+      "ciphertextHex": "0469a8073bb443c46329e2f28f65d30b59d7f592b7fa8d227ace476052f0de8616e6f05192b61c300530fbd91559c62b9cf188c8064a7d638f3cd57bcd983b5361d3808457f0ba8200897ee4d13e2854812a807b873df94beaec2a0e17315c730919ac03ec692fc1cfe22625ea99043c952e7972b54a",
+      "frameHex": "00760469a8073bb443c46329e2f28f65d30b59d7f592b7fa8d227ace476052f0de8616e6f05192b61c300530fbd91559c62b9cf188c8064a7d638f3cd57bcd983b5361d3808457f0ba8200897ee4d13e2854812a807b873df94beaec2a0e17315c730919ac03ec692fc1cfe22625ea99043c952e7972b54a"
+    },
+    {
+      "dir": "host->guest",
+      "nonce": 0,
+      "record": {
+        "type": "ctrl",
+        "json": {
+          "t": "ok",
+          "guest": "g1",
+          "stream": "90X7p9BQF-g",
+          "caps": []
+        }
+      },
+      "plaintextHex": "017b2274223a226f6b222c226775657374223a226731222c2273747265616d223a223930583770394251462d67222c2263617073223a5b5d7d",
+      "ciphertextHex": "949545b808b1bab03d3ec783baf019021a87547d7ea8aedfe979375e19c4a0df009936676aebfcd0461eeff2af392189d6b2f8ae3a97d146d2b5e067ad59b94e9bd25e2cc716719f12",
+      "frameHex": "0049949545b808b1bab03d3ec783baf019021a87547d7ea8aedfe979375e19c4a0df009936676aebfcd0461eeff2af392189d6b2f8ae3a97d146d2b5e067ad59b94e9bd25e2cc716719f12"
+    },
+    {
+      "dir": "guest->host",
+      "nonce": 1,
+      "record": {
+        "type": "data",
+        "offset": 0,
+        "payloadHex": "10008f4e093132372e302e302e31c3cb021700054e6f74636800000000000000000000000000000000"
+      },
+      "plaintextHex": "03000000000000000010008f4e093132372e302e302e31c3cb021700054e6f74636800000000000000000000000000000000",
+      "ciphertextHex": "f23512832ee3048f4fffa7e82d7792341741c249a72604a9446520209f179a5c0a3c61f681123706ca95fbcd6f578d1b740f7a52096344f0a9330a75a5a66e4ee292",
+      "frameHex": "0042f23512832ee3048f4fffa7e82d7792341741c249a72604a9446520209f179a5c0a3c61f681123706ca95fbcd6f578d1b740f7a52096344f0a9330a75a5a66e4ee292"
+    },
+    {
+      "dir": "host->guest",
+      "nonce": 1,
+      "record": {
+        "type": "ack",
+        "next": 41
+      },
+      "plaintextHex": "040000000000000029",
+      "ciphertextHex": "8c0022171b876e2f585d8fa2876088946f1efe6f3e9c3d5100",
+      "frameHex": "00198c0022171b876e2f585d8fa2876088946f1efe6f3e9c3d5100"
+    },
+    {
+      "dir": "host->guest",
+      "nonce": 2,
+      "record": {
+        "type": "data",
+        "offset": 0,
+        "payloadHex": "0a0230313233343536373839"
+      },
+      "plaintextHex": "0300000000000000000a0230313233343536373839",
+      "ciphertextHex": "4985fd61c66e22df4c02df8c58da855847dde52562d0156b246c4211b3200411ad16d3ddea",
+      "frameHex": "00254985fd61c66e22df4c02df8c58da855847dde52562d0156b246c4211b3200411ad16d3ddea"
+    },
+    {
+      "dir": "guest->host",
+      "nonce": 2,
+      "record": {
+        "type": "ack",
+        "next": 12
+      },
+      "plaintextHex": "04000000000000000c",
+      "ciphertextHex": "8c9ac3f503a6442c3094475300af69b8d06012c8c931aa81e7",
+      "frameHex": "00198c9ac3f503a6442c3094475300af69b8d06012c8c931aa81e7"
+    },
+    {
+      "dir": "host->guest",
+      "nonce": 3,
+      "record": {
+        "type": "ctrl",
+        "json": {
+          "t": "close",
+          "reason": "eof",
+          "at": 12
+        }
+      },
+      "plaintextHex": "017b2274223a22636c6f7365222c22726561736f6e223a22656f66222c226174223a31327d",
+      "ciphertextHex": "223f823a9312e81fdf823bd3300d15533661ade1758cbe29afccae5e92adf8709e95e52835df44efcad098bec6092bc9b4b1374ce0",
+      "frameHex": "0035223f823a9312e81fdf823bd3300d15533661ade1758cbe29afccae5e92adf8709e95e52835df44efcad098bec6092bc9b4b1374ce0"
+    }
+  ]
+}

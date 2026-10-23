@@ -5,6 +5,7 @@
 // seconds (`overlay::connect_in_game`). Anything but "done": the game closes and starts again.
 import { commands } from "@/bindings";
 import { useOverlay } from "@/features/overlay/store";
+import { hostApi } from "@/lib/api/host-api";
 import { mockConnectInGame, mockInGameReady } from "@/lib/api/mock-connect";
 import { isTauri } from "@/lib/platform";
 import { type JoinTarget, targetAddress } from "./play-together";
@@ -14,9 +15,15 @@ export function inGameReady(): boolean {
   return isTauri() ? useOverlay.getState().connected : mockInGameReady();
 }
 
-/** Whether the overlay took the player to `target` (`host[:port]`, as the shell takes it). */
+/**
+ * Whether the overlay took the player to `target` (`host[:port]`, as the shell takes it). A
+ * friend's world (HOST1) goes through its join, which hands the overlay the world's label.
+ */
 export async function connectInGame(target: JoinTarget): Promise<boolean> {
   if (!inGameReady()) return false;
+  if (target.kind === "world") {
+    return hostApi.connectInGame(target.session, target.label).catch(() => false);
+  }
   if (!isTauri()) return mockConnectInGame();
   try {
     const outcome = await commands.overlayConnectInGame(targetAddress(target));

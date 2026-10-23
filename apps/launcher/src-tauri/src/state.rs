@@ -104,6 +104,9 @@ pub struct AppState {
     pub projects_skin: pl_social::ProjectsSkins,
     /// The in-game overlay: its choices and the running game's bridge (`crate::overlay`).
     pub overlay: pl_overlay::Overlay,
+    /// "Dünyanı arkadaşlarına aç" (HOST1, `crate::host`): off until the signed config and the
+    /// service turn it on.
+    pub worlds: pl_worlds::Worlds,
     /// The Discord bot's news feed (`<data>/cache/feed/`); used only while the signed config
     /// enables it (`commands::feed`).
     pub feed: pl_content::FeedClient,
@@ -189,6 +192,7 @@ impl AppState {
         );
         let projects_skin =
             crate::commands::projects_skin::create(app, &social, &http, &root, handle.clone());
+        let worlds = crate::host::create(app, &root, version, social.clone(), overlay.clone());
 
         // AFK accounts (Projects Console Client sessions). Events go straight to the UI (and
         // state changes to the tray's summary). A connect that finds no client installed and no
@@ -243,6 +247,7 @@ impl AppState {
             social,
             projects_skin,
             overlay,
+            worlds,
             feed,
         })
     }

@@ -12,7 +12,8 @@
       "!**/src-tauri",
       "!**/dist",
       "!crates/pl-afk/tests/golden",
-      "!crates/pl-cloud-afk/tests/vectors"
+      "!crates/pl-cloud-afk/tests/vectors",
+      "!crates/pl-host/testdata"
     ]
   },
   "formatter": {

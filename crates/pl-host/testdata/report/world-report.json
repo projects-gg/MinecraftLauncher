@@ -1,0 +1,327 @@
+{
+  "comment": "Telemetry frames on the presence socket (see PROTOCOL.md, Telemetry).",
+  "valid": [
+    {
+      "t": "world_report",
+      "mc": "26.1.2",
+      "lv": "2.1.0",
+      "r": [
+        {
+          "k": "a",
+          "path": "turn",
+          "role": "guest",
+          "step": "alloc",
+          "code": "ok",
+          "ms": 200
+        },
+        {
+          "k": "a",
+          "path": "e4mc",
+          "role": "host",
+          "step": "domain",
+          "code": "ok",
+          "ms": 400,
+          "region": "eu"
+        },
+        {
+          "k": "a",
+          "path": "e4mc",
+          "role": "guest",
+          "step": "plj",
+          "code": "e4mc_rate_limited",
+          "ms": 100
+        },
+        {
+          "k": "m",
+          "from": "turn",
+          "to": "e4mc",
+          "why": "budget",
+          "code": "resume_ok",
+          "ms": 800
+        },
+        {
+          "k": "s",
+          "role": "host",
+          "min": 60,
+          "guests": 3,
+          "turnRx": 412000000,
+          "e4mcRx": 0,
+          "moves": 1,
+          "rttTurn": 40,
+          "rttE4mc": 0
+        }
+      ]
+    },
+    {
+      "t": "world_report",
+      "mc": "26.2",
+      "lv": "2.1.0",
+      "r": [
+        {
+          "k": "u",
+          "session": "stuiX9ATk0i2-2_h8YikXQ",
+          "role": "host",
+          "turnRx": 9437184
+        }
+      ]
+    }
+  ],
+  "invalid": [
+    {
+      "case": "an address in a code",
+      "frame": {
+        "t": "world_report",
+        "mc": "26.1.2",
+        "lv": "2.1.0",
+        "r": [
+          {
+            "k": "a",
+            "path": "e4mc",
+            "role": "guest",
+            "step": "tcp",
+            "code": "able-acid.eu.e4mc.link",
+            "ms": 100
+          }
+        ]
+      },
+      "expect": "drop the event (code not in the list)"
+    },
+    {
+      "case": "unbucketed time",
+      "frame": {
+        "t": "world_report",
+        "mc": "26.1.2",
+        "lv": "2.1.0",
+        "r": [
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 187
+          }
+        ]
+      },
+      "expect": "drop the event"
+    },
+    {
+      "case": "unknown field",
+      "frame": {
+        "t": "world_report",
+        "mc": "26.1.2",
+        "lv": "2.1.0",
+        "r": [
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200,
+            "ip": "1.2.3.4"
+          }
+        ]
+      },
+      "expect": "drop the event: an event with a field outside its list is refused whole"
+    },
+    {
+      "case": "a step that does not belong to the path",
+      "frame": {
+        "t": "world_report",
+        "mc": "26.1.2",
+        "lv": "2.1.0",
+        "r": [
+          {
+            "k": "a",
+            "path": "e4mc",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          }
+        ]
+      },
+      "expect": "drop the event"
+    },
+    {
+      "case": "21 events",
+      "frame": {
+        "t": "world_report",
+        "mc": "26.1.2",
+        "lv": "2.1.0",
+        "r": [
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          },
+          {
+            "k": "a",
+            "path": "turn",
+            "role": "guest",
+            "step": "alloc",
+            "code": "ok",
+            "ms": 200
+          }
+        ]
+      },
+      "expect": "drop the frame"
+    }
+  ]
+}

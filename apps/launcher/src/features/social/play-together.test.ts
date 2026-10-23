@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { SocialActivity } from "@/lib/api/social-types";
 import {
   canInvite,
+  type JoinTarget,
   joinStep,
   joinTarget,
   onTarget,
   playInstance,
+  restartInstance,
   targetAddress,
   targetName,
 } from "./play-together";
@@ -113,5 +115,32 @@ describe("playInstance", () => {
     expect(playInstance(instances, "fabric-1-21")).toBe("fabric-1-21");
     expect(playInstance(instances, "deleted")).toBeNull();
     expect(playInstance(instances, null)).toBeNull();
+  });
+});
+
+describe("a friend's world (HOST1)", () => {
+  const world: JoinTarget = {
+    kind: "world",
+    session: "s1",
+    instance: "copy-of-mert",
+    port: 49152,
+    label: "Arkadaş dünyası: Mert",
+  };
+
+  it("is named by its label and never seen from the player's presence", () => {
+    expect(targetName(world)).toBe("Arkadaş dünyası: Mert");
+    expect(onTarget(world, projects)).toBe(false);
+    expect(onTarget(world, { state: "playing", host: "127.0.0.1:49152" })).toBe(false);
+  });
+
+  it("asks before taking an open game there, and starts with the install its join prepared", () => {
+    expect(joinStep(world, "open", projects)).toBe("restart");
+    expect(joinStep(world, "opening", projects)).toBe("reopen");
+    expect(restartInstance(world, "projects", [{ id: "projects" }])).toBe("copy-of-mert");
+    expect(restartInstance(world, null, [])).toBe("copy-of-mert");
+  });
+
+  it("goes through the launcher's own way on this computer", () => {
+    expect(targetAddress(world)).toBe("127.0.0.1:49152");
   });
 });

@@ -246,6 +246,39 @@ pub fn app_quit(app: AppHandle) {
     quit(&app);
 }
 
+/// The tray's "Çıkış": while the player's world is open to friends it asks first (they would
+/// drop), otherwise it quits at once.
+#[cfg(desktop)]
+fn quit_from_tray(app: &AppHandle) {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+
+    let hosting = app
+        .try_state::<AppState>()
+        .is_some_and(|state| state.worlds.hosting());
+    if !hosting {
+        quit(app);
+        return;
+    }
+    let lang = pl_lang::Lang::current();
+    let handle = app.clone();
+    app.dialog()
+        .message(lang.pick(
+            "Dünyan açık. Çıkarsan arkadaşların düşer.",
+            "Your world is open. Your friends will drop if you quit.",
+        ))
+        .title(TRAY_TITLE)
+        .kind(MessageDialogKind::Warning)
+        .buttons(MessageDialogButtons::OkCancelCustom(
+            lang.pick("Çık", "Quit").to_owned(),
+            lang.pick("Vazgeç", "Cancel").to_owned(),
+        ))
+        .show(move |leave| {
+            if leave {
+                quit(&handle);
+            }
+        });
+}
+
 /// Leaves for real (the tray's "Çıkış", the close button when nothing keeps the launcher,
 /// "Oyun açılınca launcher: Kapansın"): AFK sessions are stopped cleanly first. A game that runs
 /// plays on by itself; the next start follows it again (`commands::launch::detach_running`).
@@ -259,7 +292,12 @@ pub(crate) fn quit(app: &AppHandle) {
 fn quit_for(app: &AppHandle, reason: pl_overlay::protocol::ByeReason) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        // The overlay first: its goodbye leaves before anything else can hold the exit up.
+        // World sharing first (HOST1): the mod hears `host-stop{launcher-exit}` while its bridge
+        // is still there, guests hear the world closed, joins are left.
+        if let Some(state) = app.try_state::<AppState>() {
+            state.worlds.shutdown().await;
+        }
+        // The overlay next: its goodbye leaves before anything else can hold the exit up.
         crate::overlay::leaving(&app, reason).await;
         let state = app.state::<AppState>();
         if state.afk.any_active() {
@@ -280,6 +318,14 @@ fn quit_for(app: &AppHandle, reason: pl_overlay::protocol::ByeReason) {
 pub fn launcher_leave_for_game(app: AppHandle) {
     let activity = close_activity(&app);
     let action = close::leave_for_game(activity);
+    // The player's world open to friends (or opening), or a friend's world the player joined,
+    // keeps the launcher in the tray: the way to it lives here (HOST1, host1.md §6.1).
+    let action = match app.try_state::<AppState>() {
+        Some(state) if state.worlds.keeps_launcher() => CloseAction::Hide {
+            hint: Some(close::TrayHint::Tray),
+        },
+        _ => action,
+    };
     tracing::info!(
         ?action,
         ?activity,
@@ -567,7 +613,7 @@ pub fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
             "open" => focus_main_window(app),
             "play" => open_link(app, DeepLink::Play),
             "afk" => open_link(app, DeepLink::Afk),
-            "quit" => quit(app),
+            "quit" => quit_from_tray(app),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {

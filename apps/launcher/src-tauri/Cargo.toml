@@ -66,6 +66,8 @@ pl-lang = { workspace = true }
 pl-import = { workspace = true }
 pl-overlay = { workspace = true }
 pl-cloud-afk = { workspace = true }
+pl-host = { workspace = true }
+pl-worlds = { workspace = true }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-single-instance = { workspace = true }

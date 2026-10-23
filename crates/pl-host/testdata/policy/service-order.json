@@ -1,0 +1,756 @@
+{
+  "comment": "The service's answer to turn_creds (README \"TURN budget\", Order rules). monthPercent is after the safe-side rule; e4mc is its health (ok, unknown, degraded, blocked).",
+  "scenarios": [
+    {
+      "case": "plenty of budget",
+      "reason": "primary",
+      "role": "guest",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "turn",
+          "e4mc"
+        ],
+        "ice": true
+      }
+    },
+    {
+      "case": "day share used, e4mc healthy",
+      "reason": "primary",
+      "role": "guest",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 42,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "e4mc",
+          "turn"
+        ],
+        "ice": false
+      }
+    },
+    {
+      "case": "day share used, e4mc degraded",
+      "reason": "primary",
+      "role": "guest",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 42,
+        "dayShareGB": 42,
+        "e4mc": "degraded",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "turn",
+          "e4mc"
+        ],
+        "ice": true
+      }
+    },
+    {
+      "case": "twice the day share used, e4mc degraded",
+      "reason": "primary",
+      "role": "guest",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 84,
+        "dayShareGB": 42,
+        "e4mc": "degraded",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "e4mc"
+        ],
+        "ice": false
+      }
+    },
+    {
+      "case": "85 to 95 percent, e4mc healthy",
+      "reason": "primary",
+      "role": "guest",
+      "input": {
+        "monthPercent": 88,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "e4mc",
+          "turn"
+        ],
+        "ice": false
+      }
+    },
+    {
+      "case": "85 to 95 percent, e4mc blocked",
+      "reason": "primary",
+      "role": "guest",
+      "input": {
+        "monthPercent": 88,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "blocked",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "turn"
+        ],
+        "ice": true
+      }
+    },
+    {
+      "case": "95 percent",
+      "reason": "primary",
+      "role": "guest",
+      "input": {
+        "monthPercent": 95,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "e4mc"
+        ],
+        "ice": false
+      }
+    },
+    {
+      "case": "95 percent, e4mc blocked",
+      "reason": "primary",
+      "role": "guest",
+      "input": {
+        "monthPercent": 96,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "blocked",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [],
+        "ice": false
+      }
+    },
+    {
+      "case": "TURN switched off",
+      "reason": "primary",
+      "role": "host",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": false,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "e4mc"
+        ],
+        "ice": false
+      }
+    },
+    {
+      "case": "e4mc switched off",
+      "reason": "primary",
+      "role": "host",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": false,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "turn"
+        ],
+        "ice": true
+      }
+    },
+    {
+      "case": "e4mc switched off, day share used",
+      "reason": "primary",
+      "role": "host",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 50,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": false,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "turn"
+        ],
+        "ice": true
+      }
+    },
+    {
+      "case": "measured session",
+      "reason": "primary",
+      "role": "host",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": true,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "e4mc",
+          "turn"
+        ],
+        "ice": false
+      }
+    },
+    {
+      "case": "measured session but e4mc degraded",
+      "reason": "primary",
+      "role": "guest",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "degraded",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": true,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "turn",
+          "e4mc"
+        ],
+        "ice": true
+      }
+    },
+    {
+      "case": "preferred e4mc",
+      "reason": "primary",
+      "role": "guest",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "e4mc",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "e4mc",
+          "turn"
+        ],
+        "ice": false
+      }
+    },
+    {
+      "case": "preferred turn ignores the day share",
+      "reason": "primary",
+      "role": "guest",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 60,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "turn",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "turn",
+          "e4mc"
+        ],
+        "ice": true
+      }
+    },
+    {
+      "case": "preferred turn keeps the monthly rule",
+      "reason": "primary",
+      "role": "guest",
+      "input": {
+        "monthPercent": 90,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "turn",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "e4mc",
+          "turn"
+        ],
+        "ice": false
+      }
+    },
+    {
+      "case": "player limit reached",
+      "reason": "primary",
+      "role": "guest",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": true,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "e4mc"
+        ],
+        "ice": false
+      }
+    },
+    {
+      "case": "concurrent TURN connections full",
+      "reason": "primary",
+      "role": "guest",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": true
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "e4mc"
+        ],
+        "ice": false
+      }
+    },
+    {
+      "case": "e4mc daily session cap reached, new session",
+      "reason": "primary",
+      "role": "host",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": true
+      },
+      "expect": {
+        "order": [
+          "turn"
+        ],
+        "ice": true
+      }
+    },
+    {
+      "case": "fallback within budget",
+      "reason": "fallback",
+      "role": "guest",
+      "input": {
+        "monthPercent": 88,
+        "todayGB": 42,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "turn"
+        ],
+        "ice": true
+      }
+    },
+    {
+      "case": "fallback at 95 percent",
+      "reason": "fallback",
+      "role": "guest",
+      "input": {
+        "monthPercent": 95,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "error": "turn_denied",
+        "reason": "budget"
+      }
+    },
+    {
+      "case": "fallback beyond twice the day share",
+      "reason": "fallback",
+      "role": "guest",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 84,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "error": "turn_denied",
+        "reason": "day"
+      }
+    },
+    {
+      "case": "fallback, TURN off",
+      "reason": "fallback",
+      "role": "guest",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": false,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "error": "turn_denied",
+        "reason": "off"
+      }
+    },
+    {
+      "case": "fallback, session limit",
+      "reason": "fallback",
+      "role": "guest",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": true,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "error": "turn_denied",
+        "reason": "session"
+      }
+    },
+    {
+      "case": "renew at 96 percent",
+      "reason": "renew",
+      "role": "host",
+      "input": {
+        "monthPercent": 96,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "turn"
+        ],
+        "ice": true
+      }
+    },
+    {
+      "case": "renew at 98 percent",
+      "reason": "renew",
+      "role": "host",
+      "input": {
+        "monthPercent": 98,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "error": "turn_denied",
+        "reason": "budget"
+      }
+    },
+    {
+      "case": "renew over the player limit",
+      "reason": "renew",
+      "role": "guest",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": true,
+          "full": false
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "error": "turn_denied",
+        "reason": "player"
+      }
+    },
+    {
+      "case": "renew when concurrency is full",
+      "reason": "renew",
+      "role": "guest",
+      "input": {
+        "monthPercent": 10,
+        "todayGB": 5,
+        "dayShareGB": 42,
+        "e4mc": "ok",
+        "turnOn": true,
+        "e4mcOn": true,
+        "preferred": "auto",
+        "measured": false,
+        "limits": {
+          "session": false,
+          "player": false,
+          "full": true
+        },
+        "e4mcCapReached": false
+      },
+      "expect": {
+        "order": [
+          "turn"
+        ],
+        "ice": true
+      }
+    }
+  ]
+}

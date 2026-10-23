@@ -1,0 +1,334 @@
+{
+  "comment": "How a guest launcher works through the service's order (PROTOCOL.md, Path policy). script entries are step:outcome in the order they happen; messages lists presence frames as t/reason or t/path.",
+  "scenarios": [
+    {
+      "case": "TURN first and it works",
+      "order": [
+        "turn",
+        "e4mc"
+      ],
+      "ice": true,
+      "invitePaths": [
+        "turn"
+      ],
+      "script": {
+        "turn": [
+          "alloc:ok",
+          "peer:ok",
+          "quic:ok",
+          "plj:ok"
+        ]
+      },
+      "expect": {
+        "messages": [
+          "turn_creds/primary",
+          "world_peer/turn"
+        ],
+        "events": [
+          [
+            "turn",
+            "plj",
+            "ok"
+          ]
+        ],
+        "result": "connected:turn"
+      }
+    },
+    {
+      "case": "TURN allocation times out, e4mc from the invite works",
+      "order": [
+        "turn",
+        "e4mc"
+      ],
+      "ice": true,
+      "invitePaths": [
+        "turn",
+        "e4mc"
+      ],
+      "script": {
+        "turn": [
+          "alloc:turn_alloc_timeout"
+        ],
+        "e4mc": [
+          "tcp:ok",
+          "plj:ok"
+        ]
+      },
+      "expect": {
+        "messages": [
+          "turn_creds/primary",
+          "turn_release"
+        ],
+        "events": [
+          [
+            "turn",
+            "alloc",
+            "turn_alloc_timeout"
+          ],
+          [
+            "e4mc",
+            "plj",
+            "ok"
+          ]
+        ],
+        "result": "connected:e4mc"
+      }
+    },
+    {
+      "case": "e4mc first (day share used), rate limited, TURN as fallback",
+      "order": [
+        "e4mc",
+        "turn"
+      ],
+      "ice": false,
+      "invitePaths": [
+        "e4mc"
+      ],
+      "script": {
+        "e4mc": [
+          "tcp:ok",
+          "plj:e4mc_rate_limited"
+        ],
+        "turn": [
+          "creds:ok",
+          "alloc:ok",
+          "peer:ok",
+          "quic:ok",
+          "plj:ok"
+        ]
+      },
+      "expect": {
+        "messages": [
+          "turn_creds/primary",
+          "turn_creds/fallback",
+          "world_peer/turn"
+        ],
+        "events": [
+          [
+            "e4mc",
+            "plj",
+            "e4mc_rate_limited"
+          ],
+          [
+            "turn",
+            "plj",
+            "ok"
+          ]
+        ],
+        "result": "connected:turn"
+      }
+    },
+    {
+      "case": "e4mc first, the host has not opened e4mc yet",
+      "order": [
+        "e4mc",
+        "turn"
+      ],
+      "ice": false,
+      "invitePaths": [
+        "turn"
+      ],
+      "script": {
+        "e4mc": [
+          "peer:ok",
+          "tcp:ok",
+          "plj:ok"
+        ]
+      },
+      "expect": {
+        "messages": [
+          "turn_creds/primary",
+          "world_peer/e4mc"
+        ],
+        "events": [
+          [
+            "e4mc",
+            "plj",
+            "ok"
+          ]
+        ],
+        "result": "connected:e4mc"
+      }
+    },
+    {
+      "case": "both paths fail",
+      "order": [
+        "turn",
+        "e4mc"
+      ],
+      "ice": true,
+      "invitePaths": [
+        "turn",
+        "e4mc"
+      ],
+      "script": {
+        "turn": [
+          "alloc:turn_alloc_unauthorized"
+        ],
+        "e4mc": [
+          "tcp:e4mc_tcp_timeout"
+        ]
+      },
+      "expect": {
+        "messages": [
+          "turn_creds/primary",
+          "turn_release"
+        ],
+        "events": [
+          [
+            "turn",
+            "alloc",
+            "turn_alloc_unauthorized"
+          ],
+          [
+            "e4mc",
+            "tcp",
+            "e4mc_tcp_timeout"
+          ]
+        ],
+        "result": "failed",
+        "text": "Bağlanılamadı. Tekrar dene."
+      }
+    },
+    {
+      "case": "fallback to TURN refused by the budget",
+      "order": [
+        "e4mc",
+        "turn"
+      ],
+      "ice": false,
+      "invitePaths": [
+        "e4mc"
+      ],
+      "script": {
+        "e4mc": [
+          "tcp:ok",
+          "plj:e4mc_unknown_domain"
+        ],
+        "turn": [
+          "creds:turn_denied_budget"
+        ]
+      },
+      "expect": {
+        "messages": [
+          "turn_creds/primary",
+          "turn_creds/fallback"
+        ],
+        "events": [
+          [
+            "e4mc",
+            "plj",
+            "e4mc_unknown_domain"
+          ],
+          [
+            "turn",
+            "creds",
+            "turn_denied_budget"
+          ]
+        ],
+        "result": "failed",
+        "text": "Bağlanılamadı. Tekrar dene."
+      }
+    },
+    {
+      "case": "the host refuses: the world is full",
+      "order": [
+        "turn",
+        "e4mc"
+      ],
+      "ice": true,
+      "invitePaths": [
+        "turn",
+        "e4mc"
+      ],
+      "script": {
+        "turn": [
+          "alloc:ok",
+          "peer:ok",
+          "quic:ok",
+          "plj:no:full"
+        ]
+      },
+      "expect": {
+        "messages": [
+          "turn_creds/primary",
+          "world_peer/turn",
+          "turn_release"
+        ],
+        "events": [
+          [
+            "turn",
+            "plj",
+            "plj_full"
+          ]
+        ],
+        "result": "refused:full",
+        "text": "Dünya dolu.",
+        "note": "a refusal is final: the other path is not tried"
+      }
+    },
+    {
+      "case": "stale e4mc address answers like another server",
+      "order": [
+        "e4mc",
+        "turn"
+      ],
+      "ice": false,
+      "invitePaths": [
+        "e4mc",
+        "turn"
+      ],
+      "script": {
+        "e4mc": [
+          "tcp:ok",
+          "plj:plj_auth_failed"
+        ],
+        "turn": [
+          "creds:ok",
+          "alloc:ok",
+          "peer:ok",
+          "quic:ok",
+          "plj:ok"
+        ]
+      },
+      "expect": {
+        "messages": [
+          "turn_creds/primary",
+          "turn_creds/fallback",
+          "world_peer/turn"
+        ],
+        "events": [
+          [
+            "e4mc",
+            "plj",
+            "plj_auth_failed"
+          ],
+          [
+            "turn",
+            "plj",
+            "ok"
+          ]
+        ],
+        "result": "connected:turn",
+        "note": "auth failure is a path failure: try the next path"
+      }
+    },
+    {
+      "case": "no path offered",
+      "order": [],
+      "ice": false,
+      "invitePaths": [
+        "turn"
+      ],
+      "script": {},
+      "expect": {
+        "messages": [
+          "turn_creds/primary"
+        ],
+        "events": [],
+        "result": "failed",
+        "text": "Bağlanılamadı. Tekrar dene."
+      }
+    }
+  ]
+}

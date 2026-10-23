@@ -1010,6 +1010,27 @@ impl Session {
         )
     }
 
+    /// The presence connection with chat when `chat` is given (CHAT1) and world sessions when
+    /// `worlds` (HOST1: `worlds` in the capabilities; its frames flow once the service took it).
+    pub fn connect_presence_with(
+        &self,
+        options: PresenceOptions,
+        chat: Option<ChatSetup>,
+        worlds: bool,
+    ) -> PresenceHandle {
+        let mut url = self.client.presence_url_with(chat.is_some());
+        if worlds {
+            crate::world::ask_for_worlds(&mut url);
+        }
+        PresenceHandle::spawn(
+            url,
+            self.token.clone(),
+            self.client.user_agent().to_owned(),
+            options,
+            chat,
+        )
+    }
+
     /// "Rapor et" (MOD1): `target` is the JSON the service takes (`{"kind": "player", "id"}`,
     /// `{"kind": "crew", "id", "code"?}`, `{"kind": "message", "message", "before"}`). A note of at
     /// most 200 characters; `block` also blocks the player (players and messages only). Answers

@@ -1,0 +1,6 @@
+{
+  "comment": "A per-session QUIC certificate (ECDSA P-256, self-signed, SAN plj.invalid) and its pin. The certificate is random: regenerating gives another one.",
+  "certificateDerB64": "MIIBRzCB7qADAgECAhQsiKfcfDFwfOdnLzLL8QMq9xReVjAKBggqhkjOPQQDAjAWMRQwEgYDVQQDDAtwbGouaW52YWxpZDAeFw0yNjEwMjIyMzU1MDBaFw0yNjEwMjUwMDAwMDBaMBYxFDASBgNVBAMMC3Bsai5pbnZhbGlkMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEyn+GzZnjxTKsfvLRtXfDRd4OegXPFTe66re1sfU0cg3SuFcF/4+R8/ACL7iH3LWY2RfW+vqA+X7y7AYu3w5OZKMaMBgwFgYDVR0RBA8wDYILcGxqLmludmFsaWQwCgYIKoZIzj0EAwIDSAAwRQIgNEBsAmUF18wf2//6dyD2sH39na0gTeawnk6gdb3mw3MCIQDyLSxyDOkrzxxMnJ2ZetN7fJbut2PC2+8OlOPFnV5hVQ==",
+  "pin": "fBrabSH_5W9jse2tv2xjF1ppBuZ1XSjoo-hp42Z5ffY",
+  "pinRule": "base64url(SHA-256(end-entity certificate DER)) (43 characters)"
+}

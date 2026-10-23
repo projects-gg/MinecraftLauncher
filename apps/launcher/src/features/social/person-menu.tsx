@@ -4,13 +4,15 @@
 // and a chat's header, Home's lines, requests. The rows and their order come from
 // menus.ts → `personMenu`; this file words them, gives them their icons and does them. What needs
 // one sentence first (unfriend, block, hand on the leadership, remove from the crew) is asked in
-// the row's own card where it has one, else in a small dialog here.
+// the row's own card where it has one, else in a small dialog here. World sharing (HOST1) adds
+// "Katıl" to a friend's world, "Dünyana çağır" and "Dünyadan çıkar" (asked in its own dialog).
 import {
   Bell,
   ChatCircle,
   Check,
   Crown,
   DiscordLogo,
+  DoorOpen,
   DotsThree,
   Flag,
   FolderSimple,
@@ -19,6 +21,7 @@ import {
   Play,
   Prohibit,
   ShieldStar,
+  SignOut,
   Star,
   UserCheck,
   UserMinus,
@@ -28,11 +31,15 @@ import {
 } from "@phosphor-icons/react";
 import { Button, ContextMenu, Dialog, IconButton, Menu, type MenuItem, toast } from "@pl/ui";
 import type { TFunction } from "i18next";
-import { type ReactElement, useRef } from "react";
+import { type ReactElement, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { create } from "zustand";
 import { announce } from "@/features/accounts/use-accounts";
+import { inviteFriends, pressJoin } from "@/features/host/actions";
+import { hostMenuKey, inviteFrom, personWorld } from "@/features/host/rules";
+import { useHostUi } from "@/features/host/store";
 import { api } from "@/lib/api";
+import type { HostView } from "@/lib/api/host-types";
 import type { SocialProfile, SocialSnapshot, SocialTeam, TeamMember } from "@/lib/api/social-types";
 import { attempt, inviteCoolingDown, inviteFriend } from "./actions";
 import { directConversation } from "./chat/conversations";
@@ -227,6 +234,8 @@ export interface PersonEnv {
   notifies: (id: string) => boolean;
   /** The player's game is on projects.gg already ("Katıl" is off). */
   here: boolean;
+  /** World sharing (HOST1): the player's open world and friends' world invites. */
+  host: HostView;
 }
 
 export function usePersonEnv(): PersonEnv {
@@ -235,6 +244,10 @@ export function usePersonEnv(): PersonEnv {
   const cooldown = useSocialUi((s) => s.inviteCooldown);
   const prefs = useSocialPrefs();
   const here = useThere(PROJECTS);
+  // World sharing (HOST1): menus render again only when what they show of it changes.
+  const hostKey = useHostUi((s) => hostMenuKey(s.view));
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the key says when it changed
+  const host = useMemo(() => useHostUi.getState().view, [hostKey]);
   return {
     t,
     view,
@@ -242,6 +255,7 @@ export function usePersonEnv(): PersonEnv {
     favorites: prefs.favorites,
     notifies: (id) => notifiesOnline(prefs, id),
     here,
+    host,
   };
 }
 
@@ -299,6 +313,7 @@ export function personItems(
   const crew = place.crew;
   const crewMember = crew?.members.find((m) => m.id === person.id);
   const roles = view.crew.roles;
+  const world = personWorld(env.host, person.id, Boolean(friend));
   const plan = personMenu({
     me: person.id === me,
     friend: Boolean(friend),
@@ -334,6 +349,8 @@ export function personItems(
       request === "incoming" ||
       request === "join" ||
       view.incoming.some((r) => r.id === person.id),
+    worldJoin: world.join,
+    world: world.host,
   });
 
   const ask = (question: PersonQuestion) => {
@@ -385,6 +402,17 @@ export function personItems(
           disabled: row.disabled,
           onSelect: () => joinOrAsk(PROJECTS),
         };
+      case "joinWorld": {
+        const invite = inviteFrom(env.host.invites, person.id);
+        return {
+          label: t("social.actions.join"),
+          icon: <Play size={16} />,
+          disabled: row.disabled,
+          onSelect: () => {
+            if (invite) pressJoin(invite);
+          },
+        };
+      }
       case "invite":
         return {
           label: row.disabled ? t("social.actions.invited") : t("social.actions.invite"),
@@ -392,6 +420,24 @@ export function personItems(
           disabled: row.disabled,
           onSelect: () => void inviteFriend(person),
         };
+      case "worldInvite":
+        return {
+          label: row.checked ? t("host.menu.invited") : t("host.menu.invite"),
+          icon: <DoorOpen size={16} />,
+          disabled: row.disabled,
+          checked: row.checked ? true : undefined,
+          onSelect: () => void inviteFriends([person.id]),
+        };
+      case "removeFromWorld": {
+        const guest = env.host.session?.guests.find((g) => g.friend === person.id);
+        return {
+          label: t("host.remove.action"),
+          icon: <SignOut size={16} />,
+          onSelect: () => {
+            if (guest) useHostUi.getState().askRemove(guest);
+          },
+        };
+      }
       case "chat":
         return {
           label: t("fix2.menu.chat"),

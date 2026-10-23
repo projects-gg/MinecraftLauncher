@@ -31,6 +31,9 @@ import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { announce } from "@/features/accounts/use-accounts";
+import { inviteKeys, inviteList } from "@/features/host/rules";
+import { useHostUi } from "@/features/host/store";
+import { WorldInviteRow } from "@/features/host/world-invite";
 import { api } from "@/lib/api";
 import type {
   CrewCall,
@@ -461,6 +464,7 @@ type Item =
   | { key: string; kind: "request"; request: FriendRequest }
   | { key: string; kind: "sent"; request: FriendRequest }
   | { key: string; kind: "invite"; invite: SocialInvite }
+  | { key: string; kind: "worldInvite"; session: string }
   | { key: string; kind: "teamInvite"; invite: TeamInvite }
   | { key: string; kind: "teamHeader"; team: SocialTeam; folded: boolean }
   | { key: string; kind: "call"; call: CrewCall; team: SocialTeam }
@@ -488,6 +492,9 @@ export function ListPage() {
   const { t } = useTranslation();
   const { reduce, layout } = useSocialMotion();
   const view = useSocialUi((s) => s.view);
+  // Friends' world invites (HOST1) wait with the other invites.
+  const worldKeys = useHostUi((s) => (s.view.enabled ? inviteKeys(s.view.invites) : ""));
+  const worldInvites = useMemo(() => inviteList(worldKeys), [worldKeys]);
   const favorites = useSocialPrefs((s) => s.favorites);
   const collapsed = useSocialPrefs((s) => s.collapsed);
   const toggleCollapsed = useSocialPrefs((s) => s.toggleCollapsed);
@@ -597,13 +604,20 @@ export function ListPage() {
       if (!entries.length) return;
       list.push({ key: `h:${key}`, kind: "header", label, count: entries.length }, ...entries);
     };
-    section(
-      "invites",
-      t("social.list.invites"),
-      view.invites
+    section("invites", t("social.list.invites"), [
+      ...worldInvites
         .filter((invite) => hit(invite.name))
-        .map((invite) => ({ key: `i:${invite.id}`, kind: "invite", invite })),
-    );
+        .map(
+          (invite): Item => ({
+            key: `w:${invite.session}`,
+            kind: "worldInvite",
+            session: invite.session,
+          }),
+        ),
+      ...view.invites
+        .filter((invite) => hit(invite.name))
+        .map((invite): Item => ({ key: `i:${invite.id}`, kind: "invite", invite })),
+    ]);
     if (view.teams) {
       section(
         "teamInvites",
@@ -724,6 +738,7 @@ export function ListPage() {
     return list;
   }, [
     view.invites,
+    worldInvites,
     view.teams,
     view.teamInvites,
     view.incoming,
@@ -855,6 +870,7 @@ export function ListPage() {
     !view.incoming.length &&
     !view.outgoing.length &&
     !view.invites.length &&
+    !worldInvites.length &&
     !view.teamInvites.length &&
     !crews.length;
 
@@ -905,6 +921,8 @@ export function ListPage() {
         return <SentRow request={item.request} />;
       case "invite":
         return <InviteRow invite={item.invite} />;
+      case "worldInvite":
+        return <WorldInviteRow session={item.session} />;
       case "teamInvite":
         return <TeamInviteRow invite={item.invite} />;
       case "teamHeader":

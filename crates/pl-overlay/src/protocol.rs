@@ -93,6 +93,64 @@ pub enum FromGame {
         #[serde(default)]
         reason: String,
     },
+    /// HOST1 (H3; from a mod whose hello lists `host`): the player entered (`open`) or left a
+    /// singleplayer world. `folder` is its folder in `saves/`, `mode` the world's game mode, `lan`
+    /// whether vanilla "LAN'a Aç" is on.
+    HostWorld {
+        open: bool,
+        #[serde(default)]
+        folder: String,
+        #[serde(default)]
+        mode: String,
+        #[serde(default)]
+        lan: bool,
+    },
+    /// HOST1 (H4): "Davet et" in the game: the mode guests play in, whether they may use commands,
+    /// the friends to invite.
+    HostRequest {
+        #[serde(default)]
+        mode: String,
+        #[serde(default)]
+        commands: bool,
+        #[serde(default)]
+        invite: Vec<String>,
+    },
+    /// HOST1 (H6): the answer to [`ToGame::HostPublish`]: the world's port on `127.0.0.1` and the
+    /// game's protocol number, or why not (`busy`, `lan`, `not-world`, `error`).
+    HostPublished {
+        id: String,
+        ok: bool,
+        #[serde(default)]
+        port: u16,
+        #[serde(default)]
+        proto: i32,
+        #[serde(default)]
+        reason: String,
+    },
+    /// HOST1 (H7): a guest got in (`in`), left (`out`) or was turned away at the gate (`refused`).
+    HostGuest {
+        #[serde(default)]
+        conn: u64,
+        #[serde(default)]
+        guest: String,
+        #[serde(default)]
+        name: String,
+        state: String,
+        #[serde(default)]
+        reason: String,
+    },
+    /// HOST1 (H9): more invites from the open world.
+    HostInvite {
+        #[serde(default)]
+        invite: Vec<String>,
+    },
+    /// HOST1 (H10): the player pressed "Dünyadan çıkar" in the game.
+    HostRemove { guest: String },
+    /// HOST1 (H11): the player stopped sharing, or is leaving the world.
+    HostStop {
+        #[serde(default)]
+        reason: String,
+    },
     /// Anything newer than this launcher.
     #[serde(other)]
     Unknown,
@@ -103,6 +161,27 @@ pub const FEATURE_CONNECT: &str = "connect";
 /// The `hello` feature of a mod that knows CHAT2's frames and fields (`docs/tasks/ovl2-protocol.md`,
 /// CHAT2-O): it hears "yazıyor…" and the precise reasons, and its panel asks for link cards.
 pub const FEATURE_CHAT2: &str = "chat2";
+
+/// The `hello` feature of a mod that hosts worlds (HOST1, H1), and the `welcome` feature that says
+/// this player may open their world now (H2).
+pub const FEATURE_HOST: &str = "host";
+
+impl FromGame {
+    /// One of HOST1's frames: they go to the launcher's world sharing, never to the friends
+    /// feature.
+    pub fn is_host(&self) -> bool {
+        matches!(
+            self,
+            Self::HostWorld { .. }
+                | Self::HostRequest { .. }
+                | Self::HostPublished { .. }
+                | Self::HostGuest { .. }
+                | Self::HostInvite { .. }
+                | Self::HostRemove { .. }
+                | Self::HostStop { .. }
+        )
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -199,10 +278,68 @@ pub enum ToGame {
         id: String,
         host: String,
         port: u16,
+        /// HOST1 (H12): what the mod shows instead of the address ("Arkadaş dünyası: Ayşe"); with
+        /// it `host` is `127.0.0.1`, the launcher's own way to a friend's world. Only to a mod that
+        /// said `host`.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
+    /// HOST1 (H5): open the world on `127.0.0.1` only (no LAN announcement), its gate for this
+    /// publish id. Only right after the player's "Davet et" or "Dünyayı aç".
+    HostPublish {
+        id: String,
+        mode: String,
+        commands: bool,
+        max: u8,
+        /// The name binding key's id (PROTOCOL.md §9).
+        binding: String,
+    },
+    /// HOST1 (H8): the session as the mod's screens show it, whole, on every change.
+    HostState {
+        open: bool,
+        max: u8,
+        guests: Vec<HostGuestView>,
+        /// `unavailable` or `limit`, only when the world did not open.
+        #[serde(skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+    /// HOST1 (H10): take this guest out now (`removed`, `blocked`, `restricted`; the mod says
+    /// "Bu dünyadan çıkarıldın." for all).
+    HostRemove {
+        guest: String,
+        reason: String,
+    },
+    /// HOST1 (H11): stop sharing (`player`, `left-world`, `restricted`, `launcher-exit`, `error`).
+    HostStop {
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<String>,
     },
     Bye {
         reason: ByeReason,
     },
+}
+
+/// A friend in the player's world session, for the mod's screens (H8).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct HostGuestView {
+    /// The guest id (`g1` …; empty until the friend's launcher connected).
+    pub guest: String,
+    /// The friend's user id.
+    pub friend: String,
+    /// The friend's shown name.
+    pub label: String,
+    /// The in-game name, once known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    /// `invited`, `joining` or `in`.
+    pub state: &'static str,
+}
+
+/// A friend who invited the player to their open world (H13): shown as `guests + 1` of `max + 1`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct WorldMark {
+    pub guests: u8,
+    pub max: u8,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -221,6 +358,9 @@ pub struct FriendView {
     /// The other server's address, only when they share it (`where: server`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub host: Option<String>,
+    /// HOST1 (H13): they invited the player to their open world (then `joinable`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub world: Option<WorldMark>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -419,6 +559,9 @@ pub enum ToastKind {
     /// "Play together": `title` is the friend; the mod words it.
     Invite,
     Info,
+    /// HOST1 (H14): a world invite, `title` the friend ("%s seni dünyasına çağırıyor"). Only to a
+    /// mod that said `host`.
+    World,
 }
 
 /// Why a message did not go. The mod shows a general "could not send" for a reason it does not
@@ -585,12 +728,143 @@ mod tests {
             id: "1".into(),
             host: "play.projects.gg".into(),
             port: 25565,
+            label: None,
         })
         .unwrap();
         assert_eq!(
             connect,
             serde_json::json!({"t":"connect","id":"1","host":"play.projects.gg","port":25565})
         );
+    }
+
+    #[test]
+    fn host_frames_read_and_write_as_the_log_says() {
+        let world: FromGame = serde_json::from_str(
+            r#"{"t":"host-world","open":true,"folder":"Yeni Dünya","mode":"survival","lan":false}"#,
+        )
+        .unwrap();
+        assert!(world.is_host());
+        assert!(
+            matches!(world, FromGame::HostWorld { open: true, ref folder, .. } if folder == "Yeni Dünya")
+        );
+        let left: FromGame = serde_json::from_str(r#"{"t":"host-world","open":false}"#).unwrap();
+        assert!(matches!(left, FromGame::HostWorld { open: false, .. }));
+        let request: FromGame = serde_json::from_str(
+            r#"{"t":"host-request","mode":"creative","commands":true,"invite":["f1","f2"]}"#,
+        )
+        .unwrap();
+        assert!(
+            matches!(request, FromGame::HostRequest { commands: true, ref invite, .. } if invite.len() == 2)
+        );
+        let published: FromGame = serde_json::from_str(
+            r#"{"t":"host-published","id":"p1","ok":true,"port":51234,"proto":774}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            published,
+            FromGame::HostPublished {
+                id: "p1".into(),
+                ok: true,
+                port: 51234,
+                proto: 774,
+                reason: String::new()
+            }
+        );
+        let refused: FromGame =
+            serde_json::from_str(r#"{"t":"host-published","id":"p1","ok":false,"reason":"lan"}"#)
+                .unwrap();
+        assert!(
+            matches!(refused, FromGame::HostPublished { ok: false, ref reason, .. } if reason == "lan")
+        );
+        let guest: FromGame = serde_json::from_str(
+            r#"{"t":"host-guest","conn":3,"guest":"g1","name":"Notch","state":"in"}"#,
+        )
+        .unwrap();
+        assert!(matches!(guest, FromGame::HostGuest { conn: 3, ref state, .. } if state == "in"));
+        let more: FromGame =
+            serde_json::from_str(r#"{"t":"host-invite","invite":["f3"]}"#).unwrap();
+        assert!(matches!(more, FromGame::HostInvite { ref invite } if invite == &["f3"]));
+        let remove: FromGame = serde_json::from_str(r#"{"t":"host-remove","guest":"g2"}"#).unwrap();
+        assert_eq!(remove, FromGame::HostRemove { guest: "g2".into() });
+        let stop: FromGame = serde_json::from_str(r#"{"t":"host-stop"}"#).unwrap();
+        assert_eq!(
+            stop,
+            FromGame::HostStop {
+                reason: String::new()
+            }
+        );
+        let join: FromGame = serde_json::from_str(r#"{"t":"join","friend":"f1"}"#).unwrap();
+        assert!(!join.is_host());
+
+        let publish = serde_json::to_value(ToGame::HostPublish {
+            id: "p1".into(),
+            mode: "survival".into(),
+            commands: false,
+            max: 7,
+            binding: "sW9hzU3c".into(),
+        })
+        .unwrap();
+        assert_eq!(
+            publish,
+            serde_json::json!({"t":"host-publish","id":"p1","mode":"survival","commands":false,"max":7,"binding":"sW9hzU3c"})
+        );
+        let state = serde_json::to_value(ToGame::HostState {
+            open: true,
+            max: 7,
+            guests: vec![HostGuestView {
+                guest: "g1".into(),
+                friend: "f1".into(),
+                label: "Mert".into(),
+                name: Some("Notch".into()),
+                state: "in",
+            }],
+            error: None,
+        })
+        .unwrap();
+        assert_eq!(state["t"], "host-state");
+        assert_eq!(state["guests"][0]["label"], "Mert");
+        assert!(state.get("error").is_none());
+        let failed = serde_json::to_value(ToGame::HostState {
+            open: false,
+            max: 7,
+            guests: Vec::new(),
+            error: Some("limit".into()),
+        })
+        .unwrap();
+        assert_eq!(failed["error"], "limit");
+        assert_eq!(
+            serde_json::to_value(ToGame::HostRemove {
+                guest: "g1".into(),
+                reason: "removed".into()
+            })
+            .unwrap(),
+            serde_json::json!({"t":"host-remove","guest":"g1","reason":"removed"})
+        );
+        assert_eq!(
+            serde_json::to_value(ToGame::HostStop {
+                reason: Some("launcher-exit".into())
+            })
+            .unwrap(),
+            serde_json::json!({"t":"host-stop","reason":"launcher-exit"})
+        );
+        let connect = serde_json::to_value(ToGame::Connect {
+            id: "2".into(),
+            host: "127.0.0.1".into(),
+            port: 50123,
+            label: Some("Arkadaş dünyası: Ayşe".into()),
+        })
+        .unwrap();
+        assert_eq!(connect["label"], "Arkadaş dünyası: Ayşe");
+        let toast = serde_json::to_value(ToGame::Toast(ToastView {
+            kind: ToastKind::World,
+            key: "world:s".into(),
+            title: "Ayşe".into(),
+            body: String::new(),
+            conv: None,
+            crew: None,
+        }))
+        .unwrap();
+        assert_eq!(toast["kind"], "world");
     }
 
     #[test]
@@ -625,11 +899,22 @@ mod tests {
             place: Place::Projects,
             joinable: true,
             host: None,
+            world: None,
         }))
         .unwrap();
         assert_eq!(friend["where"], "projects");
         assert_eq!(friend["t"], "friend");
-        assert!(friend.get("host").is_none());
+        assert!(friend.get("host").is_none() && friend.get("world").is_none());
+        let inviting = serde_json::to_value(ToGame::Friend(FriendView {
+            id: "f2".into(),
+            name: "Mert".into(),
+            place: Place::Single,
+            joinable: true,
+            host: None,
+            world: Some(WorldMark { guests: 1, max: 7 }),
+        }))
+        .unwrap();
+        assert_eq!(inviting["world"], serde_json::json!({"guests":1,"max":7}));
 
         let gone = serde_json::to_value(ToGame::MsgGone {
             conv: "d:1:2".into(),

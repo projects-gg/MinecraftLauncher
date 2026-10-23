@@ -476,8 +476,8 @@ pub fn fill_placeholders(text: &str, lookup: &dyn Fn(&str) -> Option<String>) ->
     out.trim().to_owned()
 }
 
-/// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`
-/// and `skins`, which stay off until Studio turns them on.
+/// Feature flags; everything is on unless Studio turns it off, except `friends`, `teams`, `chat`,
+/// `skins` and `worlds`, which stay off until Studio turns them on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase", default)]
 pub struct Features {
@@ -504,6 +504,11 @@ pub struct Features {
     /// with SKIN1 and ProBot's side are live; written only when on.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub skins: bool,
+    /// "Dünyanı arkadaşlarına aç" (HOST1): a player opens their singleplayer world to friends
+    /// (needs `friends` too, and the friends service's `worlds`). Off by default until the
+    /// service's world sessions and the overlay mod that hosts are live; written only when on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub worlds: bool,
 }
 
 impl Default for Features {
@@ -517,6 +522,7 @@ impl Default for Features {
             teams: false,
             chat: false,
             skins: false,
+            worlds: false,
         }
     }
 }

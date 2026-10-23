@@ -1,0 +1,115 @@
+{
+  "v": 1,
+  "guest": {
+    "pathAttemptMs": 4000,
+    "localAcceptWindowMs": 60000,
+    "controlLingerMs": 120000,
+    "resumeTryMs": 12000,
+    "newStreamsPerMinute": 5
+  },
+  "host": {
+    "openingTimeoutMs": 5000,
+    "failedOpeningsPerMinute": 20,
+    "busyMs": 60000,
+    "maxStreamsPerGuest": 2,
+    "maxNewStreamsPerGuestPerMinute": 5,
+    "resumeWindowMs": 15000,
+    "oldPathLingerMs": 30000,
+    "worldCountMinIntervalMs": 10000,
+    "maxLiveInvites": 20
+  },
+  "plj": {
+    "maxRecordPlaintext": 16384,
+    "maxControlMessage": 65536,
+    "pingAfterIdleMs": 1000,
+    "deadAfterSilenceMs": 3500,
+    "ackEveryBytes": 65536,
+    "ackDelayMs": 250,
+    "maxUnackedBytes": 8388608
+  },
+  "turn": {
+    "credentialTtlS": 7200,
+    "renewWhenLeftS": 1200,
+    "allocationLifetimeS": 600,
+    "refreshWhenLeftS": 120,
+    "permissionRefreshS": 240,
+    "channelRefreshS": 480,
+    "udpHeadStartMs": 1000,
+    "urlPreference": [
+      "turn:*:3478?transport=udp",
+      "turn:*:443?transport=udp",
+      "turns:*:443?transport=tcp",
+      "turn:*:80?transport=tcp",
+      "turns:*:5349?transport=tcp",
+      "turn:*:3478?transport=tcp"
+    ],
+    "hostReleaseIdleMs": 300000
+  },
+  "e4mc": {
+    "brokerUrl": "https://broker.e4mc.link/getBestRelay",
+    "fallbackRelays": [
+      "eu.e4mc.link",
+      "de.e4mc.link",
+      "uk.e4mc.link"
+    ],
+    "relayPort": 25575,
+    "playerPort": 25565,
+    "alpn": "quiclime",
+    "brokerTimeoutMs": 1500,
+    "quicConnectTimeoutMs": 2500,
+    "domainTimeoutMs": 2000,
+    "keepAliveMs": 5000,
+    "idleTimeoutMs": 15000,
+    "userAgent": "ProjectsLauncher/<version> (+https://projects.gg)"
+  },
+  "quic": {
+    "alpn": "plj1",
+    "serverName": "plj.invalid",
+    "idleTimeoutMs": 10000,
+    "keepAliveMs": 2000,
+    "maxBidiStreamsPerConnection": 4,
+    "datagrams": false,
+    "initialMtu": 1200
+  },
+  "report": {
+    "maxEventsPerFrame": 20,
+    "flushAfterMs": 60000,
+    "usageEveryMs": 300000,
+    "maxFramesPerMinute": 20,
+    "msBuckets": [
+      0,
+      50,
+      100,
+      200,
+      400,
+      800,
+      1600,
+      3200,
+      6400
+    ],
+    "minuteBuckets": [
+      0,
+      5,
+      15,
+      30,
+      60,
+      120,
+      240,
+      480
+    ],
+    "rttBuckets": [
+      0,
+      10,
+      20,
+      40,
+      60,
+      80,
+      100,
+      150,
+      200,
+      300,
+      500,
+      1000
+    ]
+  }
+}

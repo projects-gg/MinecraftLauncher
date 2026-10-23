@@ -1,0 +1,182 @@
+{
+  "comment": "A control stream: hello, ok, manifest, state, ping/pong, move, bye.",
+  "protocol": "Noise_NKpsk0_25519_ChaChaPoly_BLAKE2s",
+  "hostStaticPrivateHex": "c1a00503b720ba6e7154c31d593c8ac9588e5b5cffdb0993967faa596221a8dc",
+  "hostStaticPublicHex": "9c331e0537d6bf1512e74878605d36c545cc77f57dd459c5c35696f5a7240177",
+  "hostStaticPublicB64u": "nDMeBTfWvxUS50h4YF02xUXMd_V91FnFw1aW9ackAXc",
+  "guestEphemeralPrivateHex": "ac5ca17e18846f4126d6fb38a482b79ffc0c7d05841c330e435a1c125b7081c2",
+  "guestEphemeralPublicHex": "d42c32388c80fac22183777e1a7154191d3b03a4caa3d094f2df4bcc7184db33",
+  "hostEphemeralPrivateHex": "16dfe2ca8d5184813c96f39c950637e396d2f3b4fb6923569c0ae955e9539972",
+  "hostEphemeralPublicHex": "1ca6efc8472a36e21dc41a94b6ffcafd7887eb059b84bf60bed4794f6944dd39",
+  "pskHex": "1ca9a5b0b8d225ca3bea0f4ce4ec579c532acf34ff21fa25975a251bbc69c8f0",
+  "pskB64u": "HKmlsLjSJco76g9M5OxXnFMqzzT_Ifoll1olG7xpyPA",
+  "slotHex": "452996881dff3e7c85cdb87965e08ecd",
+  "slotB64u": "RSmWiB3_PnyFzbh5ZeCOzQ",
+  "sessionHex": "b2dba25fd0139348b6fb6fe1f188a45d",
+  "sessionB64u": "stuiX9ATk0i2-2_h8YikXQ",
+  "prologueHex": "504c4a31452996881dff3e7c85cdb87965e08ecdb2dba25fd0139348b6fb6fe1f188a45d",
+  "msg1Hex": "d42c32388c80fac22183777e1a7154191d3b03a4caa3d094f2df4bcc7184db332f65ec0d00f7ebfa0b7e25ce8fd09695",
+  "msg2Hex": "1ca6efc8472a36e21dc41a94b6ffcafd7887eb059b84bf60bed4794f6944dd39a58ef6bb6b94cf1e5ae5fad5d93eb8ab",
+  "openingHex": "44504c4a31452996881dff3e7c85cdb87965e08ecdd42c32388c80fac22183777e1a7154191d3b03a4caa3d094f2df4bcc7184db332f65ec0d00f7ebfa0b7e25ce8fd09695",
+  "replyHex": "301ca6efc8472a36e21dc41a94b6ffcafd7887eb059b84bf60bed4794f6944dd39a58ef6bb6b94cf1e5ae5fad5d93eb8ab",
+  "handshakeHashHex": "414065c28e072ff05b184a989cdb9de1f43dea03b56b4b5051b988242ece5c27",
+  "transport": [
+    {
+      "dir": "guest->host",
+      "nonce": 0,
+      "record": {
+        "type": "ctrl",
+        "json": {
+          "t": "hello",
+          "v": 1,
+          "kind": "control",
+          "name": "Notch",
+          "premium": false,
+          "launcher": "2.1.0",
+          "caps": []
+        }
+      },
+      "plaintextHex": "017b2274223a2268656c6c6f222c2276223a312c226b696e64223a22636f6e74726f6c222c226e616d65223a224e6f746368222c227072656d69756d223a66616c73652c226c61756e63686572223a22322e312e30222c2263617073223a5b5d7d",
+      "ciphertextHex": "e8804402c5780f0e2b55cf848d3029c8481920de6b8bb283140d557f09f4230f97a89245219cc67f129306053423dab012dc2a26166e90ee9ef0245d4062c49d0b9eaf4ad9fc77ee049f0b8cd646d96cb1a62b4a61b02bdd3af1af43343f5e886a20289a2e568800743cd7a45ade9543b8",
+      "frameHex": "0071e8804402c5780f0e2b55cf848d3029c8481920de6b8bb283140d557f09f4230f97a89245219cc67f129306053423dab012dc2a26166e90ee9ef0245d4062c49d0b9eaf4ad9fc77ee049f0b8cd646d96cb1a62b4a61b02bdd3af1af43343f5e886a20289a2e568800743cd7a45ade9543b8"
+    },
+    {
+      "dir": "host->guest",
+      "nonce": 0,
+      "record": {
+        "type": "ctrl",
+        "json": {
+          "t": "ok",
+          "guest": "g1",
+          "stream": "9Ut5XyNfdwE",
+          "name": "ok",
+          "caps": []
+        }
+      },
+      "plaintextHex": "017b2274223a226f6b222c226775657374223a226731222c2273747265616d223a223955743558794e66647745222c226e616d65223a226f6b222c2263617073223a5b5d7d",
+      "ciphertextHex": "862e496d3b117bd7727665954db0de532f0367bdf1e16e4716eaa3740062c2f512796035b32a16f70c8a28b2a7c44a6fa56cfdbc3908b5e6643878f10c24016424c457b6d6220079317b53535e0b9116000187039e",
+      "frameHex": "0055862e496d3b117bd7727665954db0de532f0367bdf1e16e4716eaa3740062c2f512796035b32a16f70c8a28b2a7c44a6fa56cfdbc3908b5e6643878f10c24016424c457b6d6220079317b53535e0b9116000187039e"
+    },
+    {
+      "dir": "host->guest",
+      "nonce": 1,
+      "record": {
+        "type": "ctrl",
+        "json": {
+          "t": "manifest",
+          "v": 1,
+          "mc": "26.1.2",
+          "loader": {
+            "kind": "fabric",
+            "version": "0.19.5"
+          },
+          "pack": {
+            "family": "projects",
+            "id": "projects-26.1.2",
+            "version": "2.3.0"
+          },
+          "sets": [
+            "pvp"
+          ],
+          "mods": [
+            {
+              "project": "9s6osm5g",
+              "version": "aT8kq2Lm",
+              "env": "both"
+            },
+            {
+              "project": "Ha28R6CL",
+              "version": "Qw3erT7y",
+              "env": "both"
+            },
+            {
+              "project": "P7dR8mSH",
+              "version": "9YVrKY0Z",
+              "env": "both"
+            }
+          ],
+          "unknown": 0,
+          "hash": "ae05df1166d0ff4647b2964efa422a2ab1968a06700f838d31c4d4f55299a5cc"
+        }
+      },
+      "plaintextHex": "017b2274223a226d616e6966657374222c2276223a312c226d63223a2232362e312e32222c226c6f61646572223a7b226b696e64223a22666162726963222c2276657273696f6e223a22302e31392e35227d2c227061636b223a7b2266616d696c79223a2270726f6a65637473222c226964223a2270726f6a656374732d32362e312e32222c2276657273696f6e223a22322e332e30227d2c2273657473223a5b22707670225d2c226d6f6473223a5b7b2270726f6a656374223a223973366f736d3567222c2276657273696f6e223a226154386b71324c6d222c22656e76223a22626f7468227d2c7b2270726f6a656374223a22486132385236434c222c2276657273696f6e223a225177336572543779222c22656e76223a22626f7468227d2c7b2270726f6a656374223a2250376452386d5348222c2276657273696f6e223a22395956724b59305a222c22656e76223a22626f7468227d5d2c22756e6b6e6f776e223a302c2268617368223a2261653035646631313636643066663436343762323936346566613432326132616231393638613036373030663833386433316334643466353532393961356363227d",
+      "ciphertextHex": "5ef7dd388bd4da86152ab246b5ca86a9ea52b238f189d0d697b2d317971dbe2c9824f03a03566e5547db2cad4d8713bd28fcf3ae2460272201b36a57b919ce33a98e676c764aae2f9c06773298a426c0032a35bb56ca8b8094189fbed3b927bb8773e7908951c74a232ce643346f19a9ed9d1a40ef208499fff9a4dddc20614d70840589454f87edad9cdd94ba38f1072d38374e49fdac231831e2c4f2d79b4de1383c2c142369e92a61b914f2e0084835c6cf798d2a518a01f58e323100721c2bd1fa5169c670767d829dd0a1fc078f4d15f3f8a43aa5bc25d6b9868aec96da9b3c2b4bd72c1de4d120f36f0c66cb2bdd88e34bdff18ae5065ca292f8831cae87c0cdbe93d714bdc851bba5bbe627646527ba25051c6af508794c46c98fd1a9327aaaca30ad036f67174f2a47fc2fc43930ad4a328c5c9a246f91942224f5266cff27c97bc8571398750779aca1014f8099405bf40f2fb072417e638894271f197936d48fb5116e4fa572fced430815e53f9b5b4ce4906996e9856bac43661c9d5f3945748c651bca4b665097d8b67ac9956221ccb3b2f5f2581963d958cf9e245aad27a5c4b92d1255826dc9c164b21957171aba2f14cfa295a4c75d417b61f7ea",
+      "frameHex": "01c25ef7dd388bd4da86152ab246b5ca86a9ea52b238f189d0d697b2d317971dbe2c9824f03a03566e5547db2cad4d8713bd28fcf3ae2460272201b36a57b919ce33a98e676c764aae2f9c06773298a426c0032a35bb56ca8b8094189fbed3b927bb8773e7908951c74a232ce643346f19a9ed9d1a40ef208499fff9a4dddc20614d70840589454f87edad9cdd94ba38f1072d38374e49fdac231831e2c4f2d79b4de1383c2c142369e92a61b914f2e0084835c6cf798d2a518a01f58e323100721c2bd1fa5169c670767d829dd0a1fc078f4d15f3f8a43aa5bc25d6b9868aec96da9b3c2b4bd72c1de4d120f36f0c66cb2bdd88e34bdff18ae5065ca292f8831cae87c0cdbe93d714bdc851bba5bbe627646527ba25051c6af508794c46c98fd1a9327aaaca30ad036f67174f2a47fc2fc43930ad4a328c5c9a246f91942224f5266cff27c97bc8571398750779aca1014f8099405bf40f2fb072417e638894271f197936d48fb5116e4fa572fced430815e53f9b5b4ce4906996e9856bac43661c9d5f3945748c651bca4b665097d8b67ac9956221ccb3b2f5f2581963d958cf9e245aad27a5c4b92d1255826dc9c164b21957171aba2f14cfa295a4c75d417b61f7ea"
+    },
+    {
+      "dir": "host->guest",
+      "nonce": 2,
+      "record": {
+        "type": "ctrl",
+        "json": {
+          "t": "state",
+          "guests": 1,
+          "max": 7,
+          "paths": {
+            "turn": {
+              "relay": "162.159.207.10:51234",
+              "pin": "5eoeWw1q8rcJRIkM8HdSqNF4aWVfg6QxmhxVS0sWIjk"
+            },
+            "e4mc": {
+              "domain": "able-acid.eu.e4mc.link"
+            }
+          }
+        }
+      },
+      "plaintextHex": "017b2274223a227374617465222c22677565737473223a312c226d6178223a372c227061746873223a7b227475726e223a7b2272656c6179223a223136322e3135392e3230372e31303a3531323334222c2270696e223a2235656f65577731713872634a52496b4d38486453714e463461575666673651786d68785653307357496a6b227d2c2265346d63223a7b22646f6d61696e223a2261626c652d616369642e65752e65346d632e6c696e6b227d7d7d",
+      "ciphertextHex": "4893a533bf5672ce017b8efec55c0a175cb69e44676d0b22a61cfe4798837303ae93824230da29bc925870f6a9e9083e6eee05854bf40267531dc74b24f0685c0b2d2718038f1911ff040cc15865d48489443691fc8b88d962693f5e5b2ddb6b9345583094ace7c0e73ea89b950a86fa71cb680b6243942f38eadcce61dc0cbe6f6e625d0564bbc934590b6b03c8f1a9d339c9d7b64cfc152bd9503e53210cf646085e83827b32bea4ecf07cc48923f779a8d58029c22f2be5c03d16b292f1d00ceb",
+      "frameHex": "00c24893a533bf5672ce017b8efec55c0a175cb69e44676d0b22a61cfe4798837303ae93824230da29bc925870f6a9e9083e6eee05854bf40267531dc74b24f0685c0b2d2718038f1911ff040cc15865d48489443691fc8b88d962693f5e5b2ddb6b9345583094ace7c0e73ea89b950a86fa71cb680b6243942f38eadcce61dc0cbe6f6e625d0564bbc934590b6b03c8f1a9d339c9d7b64cfc152bd9503e53210cf646085e83827b32bea4ecf07cc48923f779a8d58029c22f2be5c03d16b292f1d00ceb"
+    },
+    {
+      "dir": "guest->host",
+      "nonce": 1,
+      "record": {
+        "type": "ping",
+        "bodyHex": "c44e284bf151910e"
+      },
+      "plaintextHex": "05c44e284bf151910e",
+      "ciphertextHex": "2e331bba93fe69198d763cd2d0c4e36484afca823f575e12c5",
+      "frameHex": "00192e331bba93fe69198d763cd2d0c4e36484afca823f575e12c5"
+    },
+    {
+      "dir": "host->guest",
+      "nonce": 3,
+      "record": {
+        "type": "pong",
+        "bodyHex": "c44e284bf151910e"
+      },
+      "plaintextHex": "06c44e284bf151910e",
+      "ciphertextHex": "d28b9801f9ee898acde2f843425e454220fd698467f52bcbb1",
+      "frameHex": "0019d28b9801f9ee898acde2f843425e454220fd698467f52bcbb1"
+    },
+    {
+      "dir": "host->guest",
+      "nonce": 4,
+      "record": {
+        "type": "ctrl",
+        "json": {
+          "t": "move",
+          "to": "e4mc",
+          "why": "budget"
+        }
+      },
+      "plaintextHex": "017b2274223a226d6f7665222c22746f223a2265346d63222c22776879223a22627564676574227d",
+      "ciphertextHex": "40c0f3d9428a4590668324a7bc2ba839476e99f7f4b7545cd0a92641bb71012b875b370bcf915cfbf99f90a358ddaf89a10d158a124c8232",
+      "frameHex": "003840c0f3d9428a4590668324a7bc2ba839476e99f7f4b7545cd0a92641bb71012b875b370bcf915cfbf99f90a358ddaf89a10d158a124c8232"
+    },
+    {
+      "dir": "guest->host",
+      "nonce": 2,
+      "record": {
+        "type": "ctrl",
+        "json": {
+          "t": "bye",
+          "reason": "leave"
+        }
+      },
+      "plaintextHex": "017b2274223a22627965222c22726561736f6e223a226c65617665227d",
+      "ciphertextHex": "abbc89081e49fee6af3367257ce4d6d78c887a6eb7de4f8b4df31e9a37cd93c5b4ccf2f7fbc36fdf05e66a0ad7",
+      "frameHex": "002dabbc89081e49fee6af3367257ce4d6d78c887a6eb7de4f8b4df31e9a37cd93c5b4ccf2f7fbc36fdf05e66a0ad7"
+    }
+  ]
+}

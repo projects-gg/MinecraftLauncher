@@ -72,20 +72,24 @@ export function LinkCode({
   const [error, setError] = useState<Note | null>(null);
   const [focused, setFocused] = useState(false);
   const holdCodeBox = useProjectsSkinUi((s) => s.holdCodeBox);
+  // The tries this box used up itself: closed at once, whether or not the caller knows the time
+  // (the account center's row does not; the panel learns it only when it reads again).
+  const [ownRetryAt, setOwnRetryAt] = useState<number | null>(null);
+  const closesAt = Math.max(retryAt ?? 0, ownRetryAt ?? 0) || null;
   // One timer reopens the box when the tries come back (nothing ticks meanwhile).
   const [, reopen] = useState(0);
   useEffect(() => {
-    if (retryAt == null) return;
-    const wait = retryAt * 1000 - Date.now();
+    if (closesAt == null) return;
+    const wait = closesAt * 1000 - Date.now();
     if (wait <= 0) return;
     const timer = window.setTimeout(() => reopen((n) => n + 1), Math.min(wait + 250, 2 ** 31 - 1));
     return () => window.clearTimeout(timer);
-  }, [retryAt]);
+  }, [closesAt]);
   const nowSec = Math.floor(Date.now() / 1000);
-  const triesClosed = retryAt != null && retryAt > nowSec;
+  const triesClosed = closesAt != null && closesAt > nowSec;
   const shownError: Note | null =
     error ??
-    (triesClosed ? { key: "tries", tone: "error", wait: waitWords(retryAt - nowSec) } : null);
+    (triesClosed ? { key: "tries", tone: "error", wait: waitWords(closesAt - nowSec) } : null);
   const usable = !disabled && !triesClosed && phase === "idle";
 
   // The latest callbacks, for answers that arrive after a render.
@@ -99,7 +103,8 @@ export function LinkCode({
     [],
   );
 
-  const fail = (note: Note) => {
+  /** A refused code: the box shakes once and starts again; `null` when the closed box says why. */
+  const fail = (note: Note | null) => {
     setPhase("idle");
     setError(note);
     setValue("");
@@ -133,6 +138,13 @@ export function LinkCode({
       const sent = await projectsSkinApi.link(accountId, pin);
       if (sent.status === "refused") {
         release();
+        if (sent.refusal.code === "tries" && mounted.current) {
+          // Closed until the tries come back; the wait is said in place of an error, so the
+          // box opens again by itself, clean.
+          setOwnRetryAt(Math.floor(Date.now() / 1000) + Math.max(1, sent.refusal.retryAfter ?? 60));
+          fail(null);
+          return;
+        }
         settle(linkRefusalOutcome(sent.refusal, Math.floor(Date.now() / 1000)));
         return;
       }
@@ -170,7 +182,13 @@ export function LinkCode({
 
   return (
     <div className={cn("transition-opacity duration-150", disabled && "opacity-50")}>
-      <div ref={box} className="relative w-fit">
+      <div
+        ref={box}
+        className={cn(
+          "relative w-fit transition-opacity duration-150",
+          triesClosed && "opacity-55",
+        )}
+      >
         <div className="flex" style={{ gap: GAP }}>
           {Array.from({ length: PIN_LENGTH }, (_, index) => {
             const digit = value[index];
