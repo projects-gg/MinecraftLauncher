@@ -675,8 +675,11 @@ public final class OverlayScreen extends Screen {
                 listBottom = qy - 6;
             }
             if (picker.isOpen()) {
+                // Over the conversation, right above the field. On a short screen (GUI 3 at 720p, the recent row
+                // shown) it rises over the tabs as well: it never covers the field it belongs to.
                 int ph = StickerPicker.height(cw, !overlay.settings().recentStickers().isEmpty());
-                PanelWidget.place(picker, x0, Math.max(y, above - 4 - ph), cw, ph);
+                int py = Math.max(HEADER_H + 6, above - 4 - ph);
+                PanelWidget.place(picker, x0, py, cw, Math.max(20, Math.min(ph, above - 4 - py)));
             }
         } else {
             composerNote = composerReason();
