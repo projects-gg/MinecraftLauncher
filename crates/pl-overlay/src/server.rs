@@ -626,6 +626,7 @@ mod tests {
             conv: Some("d:1:2".into()),
             crew: None,
             sticker: None,
+            badge: None,
         });
         h.control
             .send(Control::Send {

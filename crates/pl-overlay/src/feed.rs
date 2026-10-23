@@ -10,21 +10,27 @@
 //! - [`chat_frames`] turns one conversation's change into `msg`, `msg-gone`, `history` (cleared),
 //!   `sent` and `send-failed`.
 //! - [`toast_of`] asks [`crate::policy`] about a notice.
+//!
+//! Crew tags (TEAM6-O): the scene keeps the cards of the tags friends and crewmates wear and who
+//! wears which; a mod that said `tags` hears the cards once (`badges`) and then only their
+//! changes, and the crews' "Ece ekibe katıldı" lines (`note`). Friends, messages and toasts name a
+//! crew by its id.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use pl_social::{
     AuthPhase, CallAnswer as SocialAnswer, CardState, ChatChangeView, ChatExtrasView,
-    ChatMessageView, ChatPage, Connection, GameLocation, MessageState, PresenceState,
-    SendFailure as SocialFailure, SocialNotice, SocialView, StatusMode, TEAM_FEATURE_CALLS,
+    ChatMessageView, ChatPage, Connection, CrewBadgeView, GameLocation, MessageState,
+    PresenceState, SendFailure as SocialFailure, SocialNotice, SocialView, StatusMode,
+    TEAM_FEATURE_BADGES, TEAM_FEATURE_CALLS,
 };
 
 use crate::links::{self, LinkLists};
 use crate::policy::{self, CrewMute, CrewSettings, Mute, Notice, NotifyPrefs, Situation};
 use crate::protocol::{
-    AnswerCounts, CallAnswer, CallView, CardView, ConvKind, ConvView, FriendView, LinkView,
-    MAX_HISTORY, MAX_LAUNCHER_FRAME, MAX_QUOTE_CHARS, Me, MsgView, PROTO, Place, ReactionView,
-    ReplyView, SendFailure, ToGame, ToastView, WorldMark,
+    AnswerCounts, BadgeView, CallAnswer, CallView, CardView, ConvKind, ConvView, FEATURE_TAGS,
+    FriendView, LinkView, MAX_HISTORY, MAX_LAUNCHER_FRAME, MAX_QUOTE_CHARS, Me, MsgView, NoteKind,
+    PROTO, Place, ReactionView, ReplyView, SendFailure, ToGame, ToastView, WorldMark,
 };
 
 /// Conversations a snapshot lists at most (the newest first).
@@ -57,6 +63,15 @@ pub struct Scene {
     pub extras: Option<ChatExtrasView>,
     /// Studio's link lists while links are on (CHAT2): which links of a message may be pressed.
     pub links: Option<LinkLists>,
+    /// Crew tags are on (TEAM6): the service offers them and Studio has them on.
+    pub tags: bool,
+    /// The cards of the tags friends and crewmates wear, by crew id (only while `tags`; a hidden
+    /// crew's never comes from the service).
+    pub badges: BTreeMap<String, BadgeView>,
+    /// The crews' "Ece ekibe katıldı" lines, oldest first (TEAM6 §7).
+    pub joins: Vec<JoinLine>,
+    /// User id → the crew whose tag they wear (friends and crewmates; only while `tags`).
+    wears: HashMap<String, String>,
     /// User id → name (the player, friends, crewmates).
     names: HashMap<String, String>,
     crew_names: HashMap<String, String>,
@@ -112,6 +127,83 @@ fn answer_of(answer: SocialAnswer) -> CallAnswer {
     }
 }
 
+/// "Ece ekibe katıldı" in a crew's chat, as the mod hears it (`note`, TEAM6-O T7).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JoinLine {
+    pub conv: String,
+    /// Stays the same for the same arrival (who and when).
+    pub id: String,
+    pub name: String,
+    pub mine: bool,
+    /// Unix milliseconds.
+    pub at: i64,
+}
+
+impl JoinLine {
+    fn frame(&self) -> ToGame {
+        ToGame::Note {
+            conv: self.conv.clone(),
+            id: self.id.clone(),
+            kind: NoteKind::Joined,
+            name: self.name.clone(),
+            mine: self.mine,
+            at: self.at,
+        }
+    }
+}
+
+/// A crew tag's card for the mod: the month it was founded (`YYYY-MM`, the mod words it) and
+/// whether the player is in that crew.
+fn badge_view(badge: &CrewBadgeView, view: &SocialView) -> BadgeView {
+    let month = badge.created_on.get(..7).filter(|month| {
+        let bytes = month.as_bytes();
+        bytes[4] == b'-'
+            && bytes[..4].iter().all(u8::is_ascii_digit)
+            && bytes[5..].iter().all(u8::is_ascii_digit)
+    });
+    BadgeView {
+        tag: badge.tag.clone(),
+        color: badge.color.clone(),
+        frame: badge.frame.clone(),
+        emblem: badge.emblem.clone(),
+        name: badge.name.clone(),
+        motto: badge.motto.trim().to_owned(),
+        since: month.unwrap_or_default().to_owned(),
+        members: badge.members,
+        mine: view.crews.iter().any(|crew| crew.id == badge.crew),
+    }
+}
+
+/// The crews' "Ece ekibe katıldı" lines in their chats, oldest first; none of someone the player
+/// blocked (their own always shows), none where the crew has no conversation here.
+fn join_lines(view: &SocialView, blocked: &HashSet<String>) -> Vec<JoinLine> {
+    let Some(chat) = view.chat.as_ref().filter(|_| view.teams) else {
+        return Vec::new();
+    };
+    view.crew_joins
+        .iter()
+        .filter_map(|join| {
+            let conv = chat
+                .conversations
+                .iter()
+                .find(|conv| conv.crew.as_deref() == Some(join.crew.as_str()))?;
+            let shut = blocked.contains(&join.id)
+                || view.crews.iter().any(|crew| {
+                    crew.members
+                        .iter()
+                        .any(|member| member.id == join.id && member.blocked)
+                });
+            (join.mine || !shut).then(|| JoinLine {
+                conv: conv.id.clone(),
+                id: format!("j:{}:{}", join.id, join.at),
+                name: join.name.clone(),
+                mine: join.mine,
+                at: join.at.saturating_mul(1000),
+            })
+        })
+        .collect()
+}
+
 impl Scene {
     pub fn from_view(view: &SocialView, prefs: &NotifyPrefs, now_ms: i64) -> Self {
         let Some(me) = view
@@ -165,6 +257,34 @@ impl Scene {
         if view.teams && view.team_features.iter().any(|f| f == TEAM_FEATURE_CALLS) {
             features.push("calls".to_owned());
         }
+        // Crew tags (TEAM6): the service offers them and Studio has them on. Switched off, a new
+        // greeting tells the mod and it hides every chip at once.
+        let tags = view.teams && view.team_features.iter().any(|f| f == TEAM_FEATURE_BADGES);
+        if tags {
+            features.push(FEATURE_TAGS.to_owned());
+        }
+        let mut badges: BTreeMap<String, BadgeView> = BTreeMap::new();
+        let mut wears: HashMap<String, String> = HashMap::new();
+        if tags {
+            let mut worn: HashMap<&str, Option<&CrewBadgeView>> = HashMap::new();
+            for crew in &view.crews {
+                for member in crew.members.iter().filter(|member| !member.me) {
+                    worn.insert(&member.id, member.badge.as_deref());
+                }
+            }
+            // The friend list's word wins, as it does for names.
+            for friend in &view.friends {
+                worn.insert(&friend.id, friend.badge.as_deref());
+            }
+            for (id, badge) in worn {
+                if let Some(badge) = badge.filter(|badge| !badge.crew.is_empty()) {
+                    badges
+                        .entry(badge.crew.clone())
+                        .or_insert_with(|| badge_view(badge, view));
+                    wears.insert(id.to_owned(), badge.crew.clone());
+                }
+            }
+        }
         // CHAT2's extras, each on its own (Studio may switch one off at once).
         let extras = view
             .chat
@@ -210,6 +330,7 @@ impl Scene {
                         || (place == Place::Server && host.is_some()),
                     host,
                     world: None,
+                    badge: wears.get(&friend.id).cloned(),
                 }
             })
             .collect();
@@ -334,6 +455,9 @@ impl Scene {
             )
             .collect();
 
+        let blocked: HashSet<String> = view.blocked.iter().map(|b| b.id.clone()).collect();
+        let joins = join_lines(view, &blocked);
+
         Self {
             signed_in: true,
             me_id: me.id.clone(),
@@ -348,12 +472,35 @@ impl Scene {
             crews,
             extras,
             links,
+            tags,
+            badges,
+            joins,
+            wears,
             names,
             crew_names,
-            blocked: view.blocked.iter().map(|b| b.id.clone()).collect(),
+            blocked,
             invites,
             shared,
         }
+    }
+
+    /// The crew whose tag `id` wears, as friends and crewmates see it (None while tags are off).
+    pub fn badge_of(&self, id: &str) -> Option<&str> {
+        self.wears.get(id).map(String::as_str)
+    }
+
+    /// Someone wears another tag than before, or none any more: messages the panel shows name the
+    /// old one (they carry it), so its conversation comes again.
+    pub fn wears_differ(&self, other: &Self) -> bool {
+        self.wears != other.wears
+    }
+
+    /// A crew's conversation (`c:` ids; a listed conversation says so itself).
+    pub(crate) fn is_crew_conv(&self, conv: &str) -> bool {
+        self.convs
+            .iter()
+            .find(|one| one.id == conv)
+            .map_or_else(|| conv.starts_with("c:"), |one| one.kind == ConvKind::Crew)
     }
 
     /// CHAT2 offers this extra now.
@@ -435,10 +582,24 @@ pub struct Mirror {
     convs: BTreeMap<String, ConvView>,
     calls: BTreeMap<String, CallView>,
     dnd: bool,
+    /// The mod draws crew tags (`tags` in its hello): it hears `badges` and `note` (TEAM6-O).
+    tags: bool,
+    badges: BTreeMap<String, BadgeView>,
+    /// The "ekibe katıldı" lines it heard.
+    joins: HashSet<String>,
 }
 
 impl Mirror {
-    /// `welcome` and `snapshot`: everything after a handshake or a change of account.
+    /// For a mod that knows TEAM6-O's frames (`tags` in its hello) or not.
+    pub fn for_mod(tags: bool) -> Self {
+        Self {
+            tags,
+            ..Self::default()
+        }
+    }
+
+    /// `welcome` and `snapshot`: everything after a handshake or a change of account. A mod that
+    /// draws tags hears every card first (`badges`, the whole set) and the crews' join lines after.
     pub fn greet(&mut self, scene: &Scene, launcher: &str, reduced_motion: bool) -> Vec<ToGame> {
         let identity = Identity {
             me_id: scene.me_id.clone(),
@@ -461,12 +622,16 @@ impl Mirror {
             features: identity.features.clone(),
         };
         let (friends, convs, calls) = fitting_snapshot(scene);
+        let tags = self.tags;
         *self = Self {
             identity: Some(identity),
             friends: friends.iter().map(|f| (f.id.clone(), f.clone())).collect(),
             convs: convs.iter().map(|c| (c.id.clone(), c.clone())).collect(),
             calls: calls.iter().map(|c| (c.id.clone(), c.clone())).collect(),
             dnd: scene.dnd,
+            tags,
+            badges: BTreeMap::new(),
+            joins: HashSet::new(),
         };
         let snapshot = ToGame::Snapshot {
             friends,
@@ -474,7 +639,21 @@ impl Mirror {
             calls,
             dnd: scene.dnd,
         };
-        vec![welcome, snapshot]
+        if !tags {
+            return vec![welcome, snapshot];
+        }
+        self.badges = scene.badges.clone();
+        let cards = scene
+            .badges
+            .iter()
+            .map(|(crew, card)| (crew.clone(), Some(card.clone())))
+            .collect();
+        let mut frames = vec![welcome, ToGame::Badges { all: true, cards }, snapshot];
+        for join in &scene.joins {
+            self.joins.insert(join.id.clone());
+            frames.push(join.frame());
+        }
+        frames
     }
 
     /// The differences since the mod last heard, or a new greeting.
@@ -496,6 +675,22 @@ impl Mirror {
         if scene.dnd != self.dnd {
             self.dnd = scene.dnd;
             frames.push(ToGame::Dnd { on: scene.dnd });
+        }
+        if self.tags && self.badges != scene.badges {
+            // The cards first: the friends that follow may name a new one.
+            let mut cards: BTreeMap<String, Option<BadgeView>> = scene
+                .badges
+                .iter()
+                .filter(|(crew, card)| self.badges.get(*crew) != Some(*card))
+                .map(|(crew, card)| (crew.clone(), Some(card.clone())))
+                .collect();
+            for crew in self.badges.keys() {
+                if !scene.badges.contains_key(crew) {
+                    cards.insert(crew.clone(), None);
+                }
+            }
+            self.badges = scene.badges.clone();
+            frames.push(ToGame::Badges { all: false, cards });
         }
         diff(
             &mut self.friends,
@@ -521,6 +716,13 @@ impl Mirror {
             |c| ToGame::Call(c.clone()),
             |id| ToGame::CallEnd { id },
         );
+        if self.tags {
+            for join in &scene.joins {
+                if self.joins.insert(join.id.clone()) {
+                    frames.push(join.frame());
+                }
+            }
+        }
         frames
     }
 }
@@ -770,6 +972,12 @@ pub fn msg_view(
         reactions,
         links,
         card,
+        // The chip before a name over someone's group: only crew chat names its senders.
+        badge: if message.mine || !scene.is_crew_conv(conv) {
+            None
+        } else {
+            scene.badge_of(&message.from).map(str::to_owned)
+        },
     }
 }
 
@@ -968,6 +1176,8 @@ pub fn toast_of(
             )
             .map(|toast| ToastView {
                 sticker: message.sticker.clone().filter(|_| listener.chat2),
+                // "[GK] Ayşe" in the card's title: a friend's or a crewmate's tag.
+                badge: scene.badge_of(&message.from).map(str::to_owned),
                 ..toast
             })
         }
@@ -2180,5 +2390,215 @@ pub(crate) mod tests {
             }
         );
         assert_eq!(Listener::from_hello("tr_tr", &[]), Listener::default());
+    }
+
+    pub fn card(crew: &str, tag: &str, name: &str) -> Box<CrewBadgeView> {
+        Box::new(CrewBadgeView {
+            crew: crew.into(),
+            tag: tag.into(),
+            color: "navy".into(),
+            frame: "shield".into(),
+            emblem: "moon".into(),
+            name: name.into(),
+            motto: " Gece bizimdir ".into(),
+            created_on: "2026-09-14".into(),
+            members: 12,
+            requests: true,
+        })
+    }
+
+    /// The test view with crew tags on: Ayşe (a friend) wears Gece Kartalları's tag, Cem (a
+    /// crewmate, not a friend) and Mert (a friend) the player's own crew's; two came into the crew
+    /// meanwhile (one of them blocked) and the player too.
+    pub fn team6_view() -> SocialView {
+        let mut v = view();
+        v.team_features.push("badges".into());
+        v.friends[0].badge = Some(card("t9", "GK", "Gece Kartalları"));
+        v.friends[3].badge = Some(card("t1", "GKŞ", "Gece Kuşları"));
+        v.crews[0].members[1].badge = Some(card("t1", "GKŞ", "Gece Kuşları"));
+        let join = |id: &str, name: &str, mine: bool, at: i64| pl_social::CrewJoinView {
+            crew: "t1".into(),
+            id: id.into(),
+            name: name.into(),
+            mine,
+            at,
+            greet_until: None,
+        };
+        v.crew_joins = vec![
+            join("me", "Ece", true, NOW / 1000 - 600),
+            join("x-bad", "Kötü", false, NOW / 1000 - 300),
+            join("u-deniz", "Deniz", false, NOW / 1000 - 60),
+        ];
+        v
+    }
+
+    fn kinds(frames: &[ToGame]) -> Vec<String> {
+        frames
+            .iter()
+            .map(|f| {
+                serde_json::to_value(f).unwrap()["t"]
+                    .as_str()
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn crew_tags_ride_on_friends_crew_messages_and_toasts() {
+        let prefs = NotifyPrefs::default();
+        let scene = Scene::from_view(&team6_view(), &prefs, NOW);
+        assert_eq!(scene.features, ["friends", "chat", "calls", "tags"]);
+        assert_eq!(
+            scene.badges.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["t1", "t9"]
+        );
+        let theirs = &scene.badges["t9"];
+        assert_eq!(
+            (theirs.since.as_str(), theirs.motto.as_str(), theirs.mine),
+            ("2026-09", "Gece bizimdir", false)
+        );
+        assert!(scene.badges["t1"].mine, "the player's own crew");
+        assert_eq!(scene.friend("f-ayse").unwrap().badge.as_deref(), Some("t9"));
+        assert_eq!(scene.friend("f-can").unwrap().badge, None);
+        // Crew chat names its senders: a crewmate's tag rides on their message, never on the
+        // player's own, and a direct conversation names nobody.
+        let cem = msg_view(
+            "c:t1",
+            &message("i:1", "u-cem", false, MessageState::Sent),
+            &scene,
+            CHAT2,
+        );
+        assert_eq!(cem.badge.as_deref(), Some("t1"));
+        let mine = msg_view(
+            "c:t1",
+            &message("i:2", "me", true, MessageState::Sent),
+            &scene,
+            CHAT2,
+        );
+        assert_eq!(mine.badge, None);
+        let direct = msg_view(
+            "d:f-ayse:me",
+            &message("i:3", "f-ayse", false, MessageState::Sent),
+            &scene,
+            CHAT2,
+        );
+        assert_eq!(direct.badge, None);
+        // The toast's title carries it: "[GK] Ayşe".
+        let toast = toast_of(
+            &SocialNotice::ChatMessage {
+                conv: "d:f-ayse:me".into(),
+                message: Box::new(message("i:4", "f-ayse", false, MessageState::Sent)),
+                name: None,
+                crew: None,
+            },
+            &scene,
+            &prefs,
+            NOW,
+            CHAT2,
+        )
+        .unwrap();
+        assert_eq!(toast.badge.as_deref(), Some("t9"));
+        // Join lines: the player's own and Deniz's; nothing of someone the player blocked.
+        let joins: Vec<(&str, bool)> = scene
+            .joins
+            .iter()
+            .map(|j| (j.name.as_str(), j.mine))
+            .collect();
+        assert_eq!(joins, [("Ece", true), ("Deniz", false)]);
+        assert_eq!(scene.joins[1].conv, "c:t1");
+        assert_eq!(scene.joins[1].at, (NOW / 1000 - 60) * 1000);
+    }
+
+    #[test]
+    fn a_mod_that_draws_tags_hears_the_cards_once_then_only_what_changed() {
+        let prefs = NotifyPrefs::default();
+        let scene = Scene::from_view(&team6_view(), &prefs, NOW);
+        // An older mod: no cards and no lines (the friends' `badge` fields it skips).
+        let old = Mirror::default().greet(&scene, "2.0.0", false);
+        assert_eq!(kinds(&old), ["welcome", "snapshot"]);
+
+        let mut mirror = Mirror::for_mod(true);
+        let greeting = mirror.greet(&scene, "2.0.0", false);
+        assert_eq!(
+            kinds(&greeting),
+            ["welcome", "badges", "snapshot", "note", "note"]
+        );
+        let ToGame::Badges { all, cards } = &greeting[1] else {
+            panic!("no cards");
+        };
+        assert!(*all && cards.len() == 2 && cards.values().all(Option::is_some));
+        assert!(mirror.update(&scene, "2.0.0", false).is_empty());
+
+        // Its leader writes a new motto: only that card again.
+        let mut v = team6_view();
+        v.friends[0].badge.as_mut().unwrap().motto = "Şafakta buluşuruz".into();
+        let frames = mirror.update(&Scene::from_view(&v, &prefs, NOW), "2.0.0", false);
+        assert_eq!(kinds(&frames), ["badges"], "her row names the same crew");
+        let ToGame::Badges { all, cards } = &frames[0] else {
+            panic!()
+        };
+        assert!(!*all);
+        assert_eq!(
+            cards["t9"].as_ref().map(|card| card.motto.as_str()),
+            Some("Şafakta buluşuruz")
+        );
+        assert!(!cards.contains_key("t1"));
+
+        // Ayşe takes it off (or her leader hides the crew): the card goes, her row loses it.
+        v.friends[0].badge = None;
+        // Somebody new comes in meanwhile.
+        v.crew_joins.push(pl_social::CrewJoinView {
+            crew: "t1".into(),
+            id: "u-elif".into(),
+            name: "Elif".into(),
+            mine: false,
+            at: NOW / 1000,
+            greet_until: Some(NOW / 1000 + 600),
+        });
+        let after = Scene::from_view(&v, &prefs, NOW);
+        assert!(after.wears_differ(&scene));
+        let frames = mirror.update(&after, "2.0.0", false);
+        assert_eq!(kinds(&frames), ["badges", "friend", "note"]);
+        let ToGame::Badges { cards, .. } = &frames[0] else {
+            panic!()
+        };
+        assert_eq!(cards.get("t9"), Some(&None));
+        assert!(matches!(&frames[1], ToGame::Friend(f) if f.id == "f-ayse" && f.badge.is_none()));
+        assert!(matches!(&frames[2], ToGame::Note { name, .. } if name == "Elif"));
+    }
+
+    #[test]
+    fn tags_switched_off_greet_again_without_any() {
+        let prefs = NotifyPrefs::default();
+        let mut mirror = Mirror::for_mod(true);
+        mirror.greet(
+            &Scene::from_view(&team6_view(), &prefs, NOW),
+            "2.0.0",
+            false,
+        );
+        // Studio's switch (or a service without them): the profiles carry no cards any more and
+        // the service stops offering them.
+        let mut off = team6_view();
+        off.team_features.retain(|f| f != "badges");
+        let scene = Scene::from_view(&off, &prefs, NOW);
+        assert!(!scene.tags && scene.badges.is_empty());
+        assert!(scene.friends.iter().all(|f| f.badge.is_none()));
+        assert_eq!(
+            msg_view(
+                "c:t1",
+                &message("i:1", "u-cem", false, MessageState::Sent),
+                &scene,
+                CHAT2
+            )
+            .badge,
+            None
+        );
+        let frames = mirror.update(&scene, "2.0.0", false);
+        assert_eq!(kinds(&frames)[..3], ["welcome", "badges", "snapshot"]);
+        assert!(
+            matches!(&frames[0], ToGame::Welcome { features, .. } if !features.iter().any(|f| f == "tags"))
+        );
+        assert!(matches!(&frames[1], ToGame::Badges { all: true, cards } if cards.is_empty()));
     }
 }

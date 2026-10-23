@@ -21,8 +21,8 @@ use crate::OverlayConfig;
 use crate::feed::{self, Listener, Mirror, Scene, Sends};
 use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
-    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_HOST, FromGame, MAX_MESSAGE_CHARS,
-    ReactFailure, SendFailure, ToGame,
+    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_HOST, FEATURE_TAGS, FromGame,
+    MAX_MESSAGE_CHARS, ReactFailure, SendFailure, ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 
@@ -248,6 +248,8 @@ struct Live {
     typed_at: Option<Instant>,
     /// The mod hosts worlds (HOST1: `host` in its hello).
     hosts: bool,
+    /// The mod draws crew tags (TEAM6-O: `tags` in its hello).
+    tags: bool,
 }
 
 pub(crate) struct Session<S> {
@@ -449,9 +451,32 @@ impl<S: SocialActions> Session<S> {
         }
     }
 
-    fn set_view(&mut self, view: Arc<SocialView>) {
-        self.scene = scene_of(&view, &self.config, &self.worlds);
+    /// Takes a new view; whether someone now wears another crew tag than before (or none).
+    fn set_view(&mut self, view: Arc<SocialView>) -> bool {
+        let scene = scene_of(&view, &self.config, &self.worlds);
+        let wears_changed = scene.wears_differ(&self.scene);
+        self.scene = scene;
         self.view = view;
+        wears_changed
+    }
+
+    /// Someone took off their crew tag or wears another (TEAM6-O): the messages the panel shows
+    /// carry the old one, so the conversation on screen comes again (only to a mod that draws tags;
+    /// the next `open-conv` refreshes any other).
+    fn reshow_open_conversation(&self) {
+        let Some(live) = &self.live else {
+            return;
+        };
+        // Only crew chat names its senders.
+        let Some(conv) = live
+            .open
+            .as_deref()
+            .filter(|conv| live.panel && live.tags && self.scene.is_crew_conv(conv))
+        else {
+            return;
+        };
+        let page = self.social.chat_page(conv);
+        self.send(vec![feed::history_frame(&page, &self.scene, live.listener)]);
     }
 
     /// The live mod's language and features (an older one's, while none is connected).
@@ -485,8 +510,12 @@ impl<S: SocialActions> Session<S> {
     fn on_msg(&mut self, msg: Msg) {
         match msg {
             Msg::View(view) => {
-                self.set_view(view);
+                let wears_changed = self.set_view(view);
                 self.refresh();
+                if wears_changed {
+                    // After the cards (in the refresh), so every chip it names is known.
+                    self.reshow_open_conversation();
+                }
             }
             Msg::Chat(change) => self.on_chat(&change),
             Msg::Notice(notice) => self.on_notice(&notice),
@@ -692,7 +721,8 @@ impl<S: SocialActions> Session<S> {
                     ?features,
                     "the in-game overlay connected"
                 );
-                let mut mirror = Mirror::default();
+                let tags = features.iter().any(|f| f == FEATURE_TAGS);
+                let mut mirror = Mirror::for_mod(tags);
                 let frames = mirror.greet(&self.scene, &self.launcher, self.config.reduced_motion);
                 // A reconnect forgets a "Bağlan" the earlier connection never answered.
                 if let Some(pending) = self.pending_connect.take() {
@@ -710,6 +740,7 @@ impl<S: SocialActions> Session<S> {
                     listener: Listener::from_hello(&language, &features),
                     typed_at: None,
                     hosts,
+                    tags,
                 }));
                 self.send(frames);
                 (self.host)(HostSignal::Connected { hosts });

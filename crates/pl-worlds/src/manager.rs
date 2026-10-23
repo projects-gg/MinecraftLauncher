@@ -2031,6 +2031,7 @@ impl Worlds {
                     conv: None,
                     crew: None,
                     sticker: None,
+                    badge: None,
                 })
             });
             (view, toast)

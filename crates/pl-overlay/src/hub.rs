@@ -189,7 +189,8 @@ impl Overlay {
             SocialUpdate::Chat(change) => Msg::Chat(change),
             // "Yazıyor…" (CHAT2): the session passes it on while the panel is open.
             SocialUpdate::Typing(typing) => Msg::Typing(typing),
-            // A crew tag taken off by its crew's leader (TEAM6) does not reach the game yet.
+            // The player's own crew tag taken off by its crew's leader (TEAM6) does not reach the
+            // game: the overlay never shows the player's own tag, the launcher's toast says it.
             SocialUpdate::TagOff(_) => return,
         };
         let _ = msgs.send(msg);

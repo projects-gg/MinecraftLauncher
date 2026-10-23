@@ -2,6 +2,7 @@
 //! frames and fields, so additions keep the version and only breaking changes bump [`PROTO`]. Every
 //! addition is recorded in `docs/tasks/ovl2-protocol.md` (shared with the mod's side).
 
+use std::collections::BTreeMap;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -166,6 +167,11 @@ pub const FEATURE_CHAT2: &str = "chat2";
 /// this player may open their world now (H2).
 pub const FEATURE_HOST: &str = "host";
 
+/// The `hello` feature of a mod that draws crew tags (TEAM6-O, T1: it reads `badge` and hears the
+/// `badges` and `note` frames), and the `welcome` feature that says crew tags are on now (T2: the
+/// service offers them and Studio has them on).
+pub const FEATURE_TAGS: &str = "tags";
+
 impl FromGame {
     /// One of HOST1's frames: they go to the launcher's world sharing, never to the friends
     /// feature.
@@ -269,6 +275,29 @@ pub enum ToGame {
     Dnd {
         on: bool,
     },
+    /// TEAM6-O (T3): the cards of the crew tags friends and crewmates wear, by crew id; friends,
+    /// messages and toasts name a crew with `badge`. With `all` the list is the whole set (it
+    /// replaces what the mod holds); otherwise it changes only the crews it names, `null` taking
+    /// one away (hidden by its leader, worn by nobody the player sees, tags switched off). Only to
+    /// a mod that said `tags`.
+    Badges {
+        all: bool,
+        cards: BTreeMap<String, Option<BadgeView>>,
+    },
+    /// TEAM6-O (T7): a quiet line in a crew's chat ("Ece ekibe katıldı"; the mod words it). Lines
+    /// are not kept anywhere: whoever came in while this launcher ran. Only to a mod that said
+    /// `tags`.
+    Note {
+        conv: String,
+        id: String,
+        kind: NoteKind,
+        name: String,
+        /// The player themself came in ("Ekibe katıldın").
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        mine: bool,
+        /// Unix milliseconds, this computer's clock.
+        at: i64,
+    },
     /// The player chose "Bağlan" in the launcher (a call, an invite, a plan) and confirmed it:
     /// the game joins this server now. The one command the launcher gives the game; sent only
     /// right after that choice, only for Projects or an address a friend or crew shared, one at a
@@ -361,6 +390,41 @@ pub struct FriendView {
     /// HOST1 (H13): they invited the player to their open world (then `joinable`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub world: Option<WorldMark>,
+    /// TEAM6-O (T4): the crew whose tag they wear (its card came in `badges`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub badge: Option<String>,
+}
+
+/// A crew tag's card as the overlay shows it (TEAM6-O, T3): the chip (`tag` on the crew's colour)
+/// and the bubble it opens (the mark, the name, the motto, "Kuruluş Eylül 2026 · 12 üye"). It never
+/// names the crew's members, leader, code or link.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct BadgeView {
+    pub tag: String,
+    /// A key of the crew palette (`gold`, `navy`, …; an unknown one draws gold).
+    pub color: String,
+    /// `cut`, `shield`, `banner` or `hex`.
+    pub frame: String,
+    /// `sword`, `shield`, … (an unknown one draws a shield).
+    pub emblem: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub motto: String,
+    /// `YYYY-MM`: the month the crew was founded (the mod says it in its own words).
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub since: String,
+    pub members: u32,
+    /// The player is in this crew ("Sen de bu ekiptesin").
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub mine: bool,
+}
+
+/// What a quiet line in a crew's chat says (TEAM6-O, T7).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum NoteKind {
+    /// "Ece ekibe katıldı" (the player's own: "Ekibe katıldın").
+    Joined,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -436,6 +500,10 @@ pub struct MsgView {
     /// CHAT2: its first link's card, made by the launcher ("YouTube · <başlık>").
     #[serde(skip_serializing_if = "Option::is_none")]
     pub card: Option<CardView>,
+    /// TEAM6-O (T5): the crew tag its sender wears, on someone else's message in a crew's chat
+    /// (the chip before the name over their group).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub badge: Option<String>,
 }
 
 /// The message a reply answers (CHAT2): the service keeps only the link, the words come from this
@@ -546,6 +614,9 @@ pub struct ToastView {
     /// CHAT2: a sticker message (`body` says "Çıkartma · GG"); the mod may draw a small picture.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sticker: Option<String>,
+    /// TEAM6-O (T6): a message's sender wears this crew's tag (the chip before `title`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub badge: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -863,6 +934,7 @@ mod tests {
             conv: None,
             crew: None,
             sticker: None,
+            badge: None,
         }))
         .unwrap();
         assert_eq!(toast["kind"], "world");
@@ -878,12 +950,13 @@ mod tests {
             conv: None,
             crew: None,
             sticker: None,
+            badge: None,
         });
         let json = serde_json::to_value(&toast).unwrap();
         assert_eq!(json["t"], "toast");
         assert_eq!(json["kind"], "call");
         assert!(json.get("conv").is_none() && json.get("crew").is_none());
-        assert!(json.get("sticker").is_none());
+        assert!(json.get("sticker").is_none() && json.get("badge").is_none());
 
         let bye = serde_json::to_value(ToGame::Bye {
             reason: ByeReason::GameStartClose,
@@ -901,11 +974,13 @@ mod tests {
             joinable: true,
             host: None,
             world: None,
+            badge: None,
         }))
         .unwrap();
         assert_eq!(friend["where"], "projects");
         assert_eq!(friend["t"], "friend");
         assert!(friend.get("host").is_none() && friend.get("world").is_none());
+        assert!(friend.get("badge").is_none());
         let inviting = serde_json::to_value(ToGame::Friend(FriendView {
             id: "f2".into(),
             name: "Mert".into(),
@@ -913,6 +988,7 @@ mod tests {
             joinable: true,
             host: None,
             world: Some(WorldMark { guests: 1, max: 7 }),
+            badge: None,
         }))
         .unwrap();
         assert_eq!(inviting["world"], serde_json::json!({"guests":1,"max":7}));
@@ -966,10 +1042,68 @@ mod tests {
         .unwrap();
         assert!(msg.get("edited").is_none() && msg.get("cid").is_none());
         assert!(msg.get("deleted").is_none());
-        // An OVL2 message carries none of CHAT2's fields.
-        for field in ["sid", "sticker", "reply", "reactions", "links", "card"] {
+        // An OVL2 message carries none of CHAT2's fields (nor TEAM6-O's).
+        for field in [
+            "sid",
+            "sticker",
+            "reply",
+            "reactions",
+            "links",
+            "card",
+            "badge",
+        ] {
             assert!(msg.get(field).is_none(), "{field}");
         }
+    }
+
+    #[test]
+    fn team6_frames_to_the_game_use_the_wire_names() {
+        let card = BadgeView {
+            tag: "GK".into(),
+            color: "navy".into(),
+            frame: "shield".into(),
+            emblem: "moon".into(),
+            name: "Gece Kartalları".into(),
+            motto: String::new(),
+            since: "2026-09".into(),
+            members: 12,
+            mine: false,
+        };
+        let badges = serde_json::to_value(ToGame::Badges {
+            all: false,
+            cards: BTreeMap::from([("t1".to_owned(), Some(card)), ("t2".to_owned(), None)]),
+        })
+        .unwrap();
+        assert_eq!(
+            badges,
+            serde_json::json!({"t":"badges","all":false,"cards":{
+                "t1":{"tag":"GK","color":"navy","frame":"shield","emblem":"moon",
+                      "name":"Gece Kartalları","since":"2026-09","members":12},
+                "t2":null}})
+        );
+        let note = serde_json::to_value(ToGame::Note {
+            conv: "c:t1".into(),
+            id: "j:u-ece:1800000000".into(),
+            kind: NoteKind::Joined,
+            name: "Ece".into(),
+            mine: false,
+            at: 1_800_000_000_000,
+        })
+        .unwrap();
+        assert_eq!(
+            note,
+            serde_json::json!({"t":"note","conv":"c:t1","id":"j:u-ece:1800000000","kind":"joined",
+                "name":"Ece","at":1_800_000_000_000_i64})
+        );
+        let msg = serde_json::to_value(ToGame::Msg(Box::new(MsgView {
+            conv: Some("c:t1".into()),
+            id: "i:9".into(),
+            from: "Cem".into(),
+            badge: Some("t1".into()),
+            ..MsgView::default()
+        })))
+        .unwrap();
+        assert_eq!(msg["badge"], "t1");
     }
 
     #[test]

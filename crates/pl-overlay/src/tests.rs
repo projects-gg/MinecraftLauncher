@@ -712,6 +712,90 @@ async fn an_older_mod_hears_none_of_chat2s_frames() {
 }
 
 #[tokio::test]
+async fn crew_tags_reach_a_mod_that_draws_them_and_follow_their_wearers() {
+    use crate::feed::tests::team6_view;
+
+    let social = FakeSocial::new(team6_view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+
+    // An older mod: the rows carry `badge` (it skips the field), no card and no line comes.
+    let mut old = MockMod::connect_with(&endpoint, &["connect", "chat2"]).await;
+    old.next_of("welcome").await;
+    let snapshot = old.next().await.unwrap();
+    assert_eq!(snapshot["t"], "snapshot", "no cards before it");
+    drop(old);
+
+    let mut game = MockMod::connect_with(&endpoint, &["connect", "chat2", "tags"]).await;
+    let welcome = game.next_of("welcome").await;
+    assert!(
+        welcome["features"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f == "tags")
+    );
+    let cards = game.next().await.unwrap();
+    assert_eq!(
+        (cards["t"].clone(), cards["all"].clone()),
+        ("badges".into(), true.into())
+    );
+    assert_eq!(cards["cards"]["t9"]["tag"], "GK");
+    assert_eq!(cards["cards"]["t9"]["since"], "2026-09");
+    assert_eq!(cards["cards"]["t1"]["mine"], true);
+    let snapshot = game.next().await.unwrap();
+    assert_eq!(snapshot["t"], "snapshot");
+    let ayse = snapshot["friends"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["id"] == "f-ayse")
+        .unwrap()
+        .clone();
+    assert_eq!(ayse["badge"], "t9");
+    let first = game.next_of("note").await;
+    assert_eq!(
+        (first["name"].clone(), first["mine"].clone()),
+        ("Ece".into(), true.into())
+    );
+    let second = game.next_of("note").await;
+    assert_eq!(
+        (
+            second["conv"].clone(),
+            second["kind"].clone(),
+            second["name"].clone()
+        ),
+        ("c:t1".into(), "joined".into(), "Deniz".into())
+    );
+
+    // The panel shows the crew's chat: Ayşe's message names her tag.
+    game.send(serde_json::json!({"t":"open-conv","conv":"c:t1"}))
+        .await;
+    let history = game.next_of("history").await;
+    assert_eq!(history["msgs"][0]["badge"], "t9");
+    assert!(
+        history["msgs"][1].get("badge").is_none(),
+        "the player's own"
+    );
+
+    // Ayşe takes her tag off: her card goes, her row loses it, and the conversation on screen
+    // comes again without it.
+    let mut off = team6_view();
+    off.friends[0].badge = None;
+    *social.view.lock().unwrap() = off.clone();
+    overlay.on_social(SocialUpdate::View(Box::new(off)));
+    let gone = game.next_of("badges").await;
+    assert_eq!(gone["all"], false);
+    assert!(gone["cards"]["t9"].is_null());
+    let row = game.next_of("friend").await;
+    assert!(row["id"] == "f-ayse" && row.get("badge").is_none());
+    let again = game.next_of("history").await;
+    assert_eq!(again["conv"], "c:t1");
+    assert!(again["msgs"][0].get("badge").is_none());
+    overlay.stop(ByeReason::LauncherExit).await;
+}
+
+#[tokio::test]
 async fn world_sharing_hears_a_hosting_mod_and_only_it_gets_host_frames() {
     use crate::protocol::{FromGame, ToGame, WorldMark};
     use crate::{ConnectOutcome, HostSignal, WorldsShown};

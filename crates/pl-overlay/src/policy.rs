@@ -206,6 +206,7 @@ pub fn toast_for(notice: &Notice<'_>, s: &Situation<'_>) -> Option<ToastView> {
             conv: Some(conv.to_owned()),
             crew: crew.map(|(_, name)| name.to_owned()),
             sticker: None,
+            badge: None,
         },
         Notice::Call { id, crew, from, .. } => ToastView {
             kind: ToastKind::Call,
@@ -215,6 +216,7 @@ pub fn toast_for(notice: &Notice<'_>, s: &Situation<'_>) -> Option<ToastView> {
             conv: None,
             crew: None,
             sticker: None,
+            badge: None,
         },
         Notice::Invite { id, from, .. } => ToastView {
             kind: ToastKind::Invite,
@@ -224,6 +226,7 @@ pub fn toast_for(notice: &Notice<'_>, s: &Situation<'_>) -> Option<ToastView> {
             conv: None,
             crew: None,
             sticker: None,
+            badge: None,
         },
     })
 }
