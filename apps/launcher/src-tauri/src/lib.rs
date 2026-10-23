@@ -2,6 +2,7 @@
 
 mod commands;
 mod error;
+mod host;
 mod identity;
 mod notify;
 mod overlay;
@@ -195,6 +196,9 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<pl_overlay::OverlayStatus>()
         // Emitted as the plain "cloud-afk-live" event (a watched 7/24 Bulut console).
         .typ::<pl_cloud_afk::CloudLiveEvent>()
+        // "host-changed" / "host-notice" (world sharing, HOST1).
+        .typ::<pl_worlds::HostView>()
+        .typ::<pl_worlds::HostNotice>()
         .commands(tauri_specta::collect_commands![
             commands::app::app_info,
             commands::app::app_set_language,
@@ -249,6 +253,21 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             overlay::overlay_configure,
             overlay::overlay_state,
             overlay::overlay_connect_in_game,
+            // world sharing (HOST1; shown only while the signed config and the service offer it)
+            commands::host::host_state,
+            commands::host::host_place,
+            commands::host::host_open,
+            commands::host::host_cancel_open,
+            commands::host::host_invite,
+            commands::host::host_remove,
+            commands::host::host_stop,
+            commands::host::host_dismiss_failure,
+            commands::host::host_meet_on_projects,
+            commands::host::host_join,
+            commands::host::host_answer,
+            commands::host::host_cancel_join,
+            commands::host::host_dismiss_invite,
+            commands::host::host_connect_in_game,
             commands::server::server_status,
             commands::troubleshoot::troubleshoot_run,
             commands::troubleshoot::troubleshoot_crash,

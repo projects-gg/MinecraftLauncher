@@ -415,6 +415,17 @@ news feed, the launcher's built-in recommended Minecraft version.
   (MOD1, SPAM1) is live and its privacy text is published. Writers omit it while it is `false`;
   launchers that do not know the field ignore it. Studio sets it next to "Arkadaşlar" (it can't
   be switched on while `friends` is off).
+- `features.worlds`: "Dünyanı arkadaşlarına aç" (HOST1): a player opens their singleplayer world
+  to the friends they invite, who join through a relay (`launcher/crates/pl-host/PROTOCOL.md`).
+  Off by default and only shown while `features.friends` is on too. Launchers also need the
+  friends service to take `worlds` on its presence socket with Studio's switch on (`hello.worlds`,
+  `world_state`); otherwise nothing of it shows. While it is `false` (or missing) launchers do not
+  ask for `worlds`, show no "Arkadaşlarınla oyna", no world invites and tell the overlay mod
+  nothing of hosting. Turn it on only after the service's world sessions are live, the overlay mod
+  that hosts (its `hello` lists `host`) is in the official pack for every version it covers, and
+  the privacy text names the relays and the telemetry. Writers omit it while it is `false`;
+  launchers that do not know the field ignore it. Publishing it needs a Studio of `aa95309` or
+  later (STUDIO3).
 - `newsFeed`: the Discord bot's feed ([News feed (Discord bot)](#news-feed-discord-bot)).
   `mirrors`: 1–4 distinct `https://` bases with a host, ending in `/`, without credentials, query
   or fragment. `keys`: 1–4 distinct `{ keyId, publicKey }`, `publicKey` the base64 of a 32-byte

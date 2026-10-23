@@ -16,6 +16,7 @@ import { trFriendMenus } from "./tr-friend-menus";
 import { trGraphics } from "./tr-graphics";
 import { trHelp } from "./tr-help";
 import { trHomeLinks } from "./tr-home-links";
+import { trHost } from "./tr-host";
 import { trImport } from "./tr-import";
 import { trKeyClash } from "./tr-key-clash";
 import { trLib1 } from "./tr-lib1";
@@ -85,6 +86,7 @@ export const tr = {
   team6: trTeam6,
   cloudAfk: trCloudAfk,
   projectsSkin: trProjectsSkin,
+  host: trHost,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",

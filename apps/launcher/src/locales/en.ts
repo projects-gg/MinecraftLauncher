@@ -15,6 +15,7 @@ import { enFriendMenus } from "./en-friend-menus";
 import { enGraphics } from "./en-graphics";
 import { enHelp } from "./en-help";
 import { enHomeLinks } from "./en-home-links";
+import { enHost } from "./en-host";
 import { enImport } from "./en-import";
 import { enKeyClash } from "./en-key-clash";
 import { enLib1 } from "./en-lib1";
@@ -291,6 +292,7 @@ export const en: DeepPartial<Strings> = {
   team6: enTeam6,
   cloudAfk: enCloudAfk,
   projectsSkin: enProjectsSkin,
+  host: enHost,
   nav: {
     home: "Home",
     library: "Library",

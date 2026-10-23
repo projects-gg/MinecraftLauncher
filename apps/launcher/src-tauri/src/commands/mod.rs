@@ -11,6 +11,7 @@ pub mod datapacks;
 pub mod discord;
 pub mod drop;
 pub mod feed;
+pub mod host;
 pub mod import;
 pub mod instances;
 pub mod java;

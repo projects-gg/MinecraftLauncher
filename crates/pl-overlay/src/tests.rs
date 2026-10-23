@@ -478,3 +478,136 @@ async fn without_a_game_nothing_listens_and_a_new_start_replaces_the_old_session
     // Stopping again is harmless.
     overlay.stop(ByeReason::LauncherExit).await;
 }
+
+#[tokio::test]
+async fn world_sharing_hears_a_hosting_mod_and_only_it_gets_host_frames() {
+    use crate::protocol::{FromGame, ToGame, WorldMark};
+    use crate::{ConnectOutcome, HostSignal, WorldsShown};
+
+    let social = FakeSocial::new(view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&heard);
+    overlay.on_host(move |signal| sink.lock().unwrap().push(signal));
+    // Set before the game: kept for the session that starts later. Mert invited the player.
+    overlay.set_worlds(WorldsShown {
+        marks: [("f-mert".to_owned(), WorldMark { guests: 1, max: 7 })].into(),
+        may_host: true,
+    });
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+
+    // An older mod: its host frames go nowhere and a world connect is not for it.
+    let mut old = MockMod::connect_with(&endpoint, &["connect"]).await;
+    old.next_of("snapshot").await;
+    old.send(serde_json::json!({"t":"host-world","open":true,"folder":"W","mode":"survival"}))
+        .await;
+    assert_eq!(
+        overlay
+            .connect_world_in_game(50123, "Arkadaş dünyası: Mert".into())
+            .await,
+        ConnectOutcome::Unavailable {
+            reason: "unsupported".into()
+        }
+    );
+    eventually("the older mod's hello reached world sharing", || {
+        heard
+            .lock()
+            .unwrap()
+            .contains(&HostSignal::Connected { hosts: false })
+    })
+    .await;
+
+    // A mod that hosts: `host` in its welcome, Mert's row marked and joinable.
+    let mut game = MockMod::connect_with(&endpoint, &["connect", "host"]).await;
+    let welcome = game.next_of("welcome").await;
+    assert!(
+        welcome["features"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f == "host")
+    );
+    let snapshot = game.next_of("snapshot").await;
+    let mert = snapshot["friends"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["id"] == "f-mert")
+        .unwrap()
+        .clone();
+    assert_eq!(mert["world"], serde_json::json!({"guests": 1, "max": 7}));
+    assert_eq!(mert["joinable"], true);
+    eventually("the hosting mod's hello reached world sharing", || {
+        heard
+            .lock()
+            .unwrap()
+            .contains(&HostSignal::Connected { hosts: true })
+    })
+    .await;
+    assert!(
+        !heard
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|s| matches!(s, HostSignal::Frame(_))),
+        "the older mod's frame went nowhere"
+    );
+
+    // Its world reaches world sharing; world sharing's frames reach it.
+    game.send(
+        serde_json::json!({"t":"host-world","open":true,"folder":"Yeni Dünya","mode":"creative","lan":false}),
+    )
+    .await;
+    eventually("the world reached world sharing", || {
+        heard.lock().unwrap().iter().any(|s| {
+            matches!(s, HostSignal::Frame(FromGame::HostWorld { open: true, folder, .. })
+                if folder == "Yeni Dünya")
+        })
+    })
+    .await;
+    overlay.host_send(vec![ToGame::HostPublish {
+        id: "p1".into(),
+        mode: "creative".into(),
+        commands: false,
+        max: 7,
+        binding: "sW9hzU3c".into(),
+    }]);
+    let publish = game.next_of("host-publish").await;
+    assert_eq!((publish["id"].clone(), publish["max"].clone()), ("p1".into(), 7.into()));
+
+    // "Katıl" in game on Mert's world goes to world sharing, not to the friends feature.
+    game.send(serde_json::json!({"t":"join","friend":"f-mert"}))
+        .await;
+    eventually("the in-game join reached world sharing", || {
+        heard.lock().unwrap().contains(&HostSignal::Join {
+            friend: "f-mert".into(),
+        })
+    })
+    .await;
+    assert!(social.calls().dismissed.is_empty());
+
+    // Into Mert's world in game: 127.0.0.1 and the label, nothing else.
+    let asking = {
+        let overlay = overlay.clone();
+        tokio::spawn(async move {
+            overlay
+                .connect_world_in_game(50123, "Arkadaş dünyası: Mert".into())
+                .await
+        })
+    };
+    let connect = game.next_of("connect").await;
+    assert_eq!(connect["host"], "127.0.0.1");
+    assert_eq!(connect["port"], 50123);
+    assert_eq!(connect["label"], "Arkadaş dünyası: Mert");
+    game.send(serde_json::json!({"t":"connect-result","id":connect["id"],"ok":true}))
+        .await;
+    assert_eq!(asking.await.unwrap(), ConnectOutcome::Done);
+
+    // The game goes: world sharing hears it.
+    drop(game);
+    eventually("world sharing heard the mod go", || {
+        heard.lock().unwrap().contains(&HostSignal::Gone)
+    })
+    .await;
+    overlay.stop(ByeReason::LauncherExit).await;
+}

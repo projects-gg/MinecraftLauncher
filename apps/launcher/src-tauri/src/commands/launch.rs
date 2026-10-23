@@ -1195,6 +1195,8 @@ async fn prepare_and_spawn(
     )
     .await
     .map_err(CmdError::from)?;
+    // World sharing (HOST1): the gate key of the game's worlds comes from its bridge's token.
+    let host_token = overlay.endpoint().map(|endpoint| endpoint.secret().to_owned());
     // The game runs: its bridge stays until it ends.
     let overlay_port = overlay.keep();
     let process = Arc::new(process);
@@ -1203,6 +1205,7 @@ async fn prepare_and_spawn(
         process: Arc::clone(&process),
         adopted: false,
     });
+    state.worlds.game_started(&instance.id, host_token);
     crate::commands::cleanup::status_changed(app);
     // A cancel that came while the game was being started (after the last checkpoint, before it
     // counted as running) still stops it: the page already went back to OYNA.
@@ -1253,6 +1256,8 @@ async fn prepare_and_spawn(
         state.running.lock().take();
         // Its overlay bridge goes with it (the mod is gone already).
         crate::overlay::game_ended(&state, overlay_port).await;
+        // The player's world closes with its game (HOST1).
+        state.worlds.game_exited();
         crate::commands::cleanup::status_changed(&app);
         crate::shot_copy::session_ended(&app);
         // Java runtime updates waiting for the game can take their place now.

@@ -244,13 +244,26 @@ impl Overlay {
     /// fails or the game does not answer within [`CONNECT_WAIT`]: the caller then starts the game
     /// again as before.
     pub async fn connect_in_game(&self, target: &str) -> ConnectOutcome {
+        self.connect(target.to_owned(), None).await
+    }
+
+    /// HOST1 (H12): "Katıl" on a friend's world while the game runs: the game moves to the
+    /// launcher's own way to that world (`127.0.0.1:port`) and the mod shows `label` ("Arkadaş
+    /// dünyası: Ayşe") instead of an address. The same rules as [`Overlay::connect_in_game`], and
+    /// only with a mod whose hello lists `host`.
+    pub async fn connect_world_in_game(&self, port: u16, label: String) -> ConnectOutcome {
+        self.connect(format!("127.0.0.1:{port}"), Some(label)).await
+    }
+
+    async fn connect(&self, target: String, label: Option<String>) -> ConnectOutcome {
         let msgs = match &self.lock().running {
             Some(running) => running.msgs.clone(),
             None => return ConnectOutcome::unavailable("no-overlay"),
         };
         let (reply, answer) = oneshot::channel();
         let asked = Msg::Connect {
-            target: target.to_owned(),
+            target,
+            label,
             reply,
         };
         if msgs.send(asked).is_err() {
@@ -297,6 +310,60 @@ impl Overlay {
             .is_ok()
         {
             let _ = tokio::time::timeout(STOP_WAIT, closed).await;
+        }
+    }
+
+    /// World sharing (HOST1) hears the running game's mod: its hello (whether it hosts), its
+    /// `host-*` frames, an in-game "Katıl" on a world invite, and its going.
+    pub fn on_host(&self, sink: impl Fn(HostSignal) + Send + Sync + 'static) {
+        *self
+            .shared
+            .host
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
+    }
+
+    /// HOST1: frames for the running game's mod (H5, H8, H10, H11, H14), dropped unless its hello
+    /// lists `host`. Only right after the player's own press, or for a security event (H16).
+    pub fn host_send(&self, frames: Vec<ToGame>) {
+        if let Some(running) = &self.lock().running {
+            let _ = running.msgs.send(Msg::Host(frames));
+        }
+    }
+
+    /// HOST1: what every game session shows of world sharing (H2, H13): the friends who invited
+    /// the player to their open world, and whether the player may open theirs now. Kept for the
+    /// sessions that start later.
+    pub fn set_worlds(&self, worlds: WorldsShown) {
+        let msgs = {
+            let mut inner = self.lock();
+            if inner.worlds == worlds {
+                return;
+            }
+            inner.worlds = worlds.clone();
+            inner.running.as_ref().map(|running| running.msgs.clone())
+        };
+        if let Some(msgs) = msgs {
+            let _ = msgs.send(Msg::Worlds(worlds));
+        }
+    }
+
+    /// A session's mod said something to world sharing: only the running session counts, and the
+    /// going of the last one (taken away by [`Overlay::stop`]) when no newer one runs.
+    fn host_signal(&self, session: u64, signal: HostSignal) {
+        let running = self.lock().running.as_ref().map(|running| running.id);
+        let counts = running == Some(session) || (running.is_none() && signal == HostSignal::Gone);
+        if !counts {
+            return;
+        }
+        let sink = self
+            .shared
+            .host
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        if let Some(sink) = sink {
+            sink(signal);
         }
     }
 

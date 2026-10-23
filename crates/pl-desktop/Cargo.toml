@@ -22,8 +22,8 @@ sysinfo = { workspace = true }
 [target.'cfg(windows)'.dependencies]
 # Shell links through IShellLinkW, the game's window (game_window), waiting for a game the
 # launcher left running (process). Only features Tauri's window layer already enables, so the
-# shared `windows` build is reused.
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_System_Com", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+# shared `windows` build is reused; plus the IP Helper for who owns a loopback connection (tcp).
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_NetworkManagement_IpHelper", "Win32_System_Com", "Win32_System_Threading", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }

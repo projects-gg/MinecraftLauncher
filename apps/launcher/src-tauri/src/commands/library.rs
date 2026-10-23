@@ -84,7 +84,7 @@ pub(crate) fn jobs_running(app: &AppHandle) -> bool {
     !library_jobs(app).tokens.lock().is_empty()
 }
 
-fn world_lock(app: &AppHandle, instance_id: &str) -> Arc<tokio::sync::Mutex<()>> {
+pub(crate) fn world_lock(app: &AppHandle, instance_id: &str) -> Arc<tokio::sync::Mutex<()>> {
     library_jobs(app)
         .locks
         .lock()

@@ -251,6 +251,11 @@ pub(crate) fn apply_snapshot(state: &AppState, snapshot: &ContentSnapshot) {
         snapshot.config.features.teams,
         snapshot.config.features.chat,
     );
+    crate::host::apply_flag(
+        state,
+        snapshot.config.features.friends,
+        snapshot.config.features.worlds,
+    );
     state
         .afk
         .set_client_release(afk_client_release(state, snapshot));

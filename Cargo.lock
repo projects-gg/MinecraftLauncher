@@ -4485,6 +4485,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "pl-worlds"
+version = "2.0.0"
+dependencies = [
+ "hex",
+ "pl-host",
+ "pl-lang",
+ "pl-overlay",
+ "pl-social",
+ "serde",
+ "serde_json",
+ "sha1",
+ "specta",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "zip 9.0.3",
+]
+
+[[package]]
 name = "plist"
 version = "1.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4719,12 +4738,14 @@ dependencies = [
  "pl-data",
  "pl-desktop",
  "pl-discord",
+ "pl-host",
  "pl-import",
  "pl-lang",
  "pl-mc",
  "pl-net",
  "pl-overlay",
  "pl-social",
+ "pl-worlds",
  "regex",
  "semver",
  "serde",

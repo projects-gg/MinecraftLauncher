@@ -499,6 +499,11 @@ pub struct Features {
     /// is live; written only when on.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub chat: bool,
+    /// "Dünyanı arkadaşlarına aç" (HOST1): a player opens their singleplayer world to friends
+    /// (needs `friends` too, and the friends service's `worlds`). Off by default until the
+    /// service's world sessions and the overlay mod that hosts are live; written only when on.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub worlds: bool,
 }
 
 impl Default for Features {
@@ -511,6 +516,7 @@ impl Default for Features {
             friends: false,
             teams: false,
             chat: false,
+            worlds: false,
         }
     }
 }
