@@ -9,6 +9,7 @@ import {
 import {
   Button,
   Chip,
+  ContentIcon,
   cn,
   easeOutExpo,
   IconButton,
@@ -40,7 +41,6 @@ import { SetBadgeChip } from "@/features/modsets/parts";
 import { api, type InstalledContent, type InstanceDetail, type ModEntry } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
 import { matchesQuery } from "@/lib/search";
-import { ContentIcon } from "@/shell/content-icon";
 import { useIncomingMods } from "../incoming-mods";
 import { TabEmpty } from "../parts";
 import { IncomingModsList, IncomingModsSkeleton, PackItemChip } from "./incoming-mods-list";

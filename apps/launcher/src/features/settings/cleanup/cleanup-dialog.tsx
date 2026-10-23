@@ -1,5 +1,5 @@
 import { Archive, ArrowCounterClockwise, Broom, CheckCircle, Trash } from "@phosphor-icons/react";
-import { Button, cn, Dialog, Progress, toast } from "@pl/ui";
+import { Button, ContentIcon, cn, Dialog, Progress, toast } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -16,7 +16,6 @@ import {
 } from "@/features/modcenter/motion";
 import { api, type RemovedSet } from "@/lib/api";
 import { formatBytes } from "@/lib/format";
-import { ContentIcon } from "@/shell/content-icon";
 import { ErrorLine, type Failure, failure } from "../failure";
 import { AnimatedBytes } from "./animated-bytes";
 import type { CleanupPlan } from "./model";

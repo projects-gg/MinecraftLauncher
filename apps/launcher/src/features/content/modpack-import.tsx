@@ -1,5 +1,16 @@
 import { FileArrowUp, FileZip, Package, Sun, TShirt, Warning } from "@phosphor-icons/react";
-import { Button, Chip, cn, DropZone, EntranceGate, Field, Input, Skeleton, Switch } from "@pl/ui";
+import {
+  Button,
+  Chip,
+  ContentIcon,
+  cn,
+  DropZone,
+  EntranceGate,
+  Field,
+  Input,
+  Skeleton,
+  Switch,
+} from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -10,7 +21,6 @@ import { hasModpack } from "@/features/drop/zones";
 import { api, type ModpackImportResult, type PackOptionalFile, type PackPreview } from "@/lib/api";
 import { notifyWhenAway } from "@/lib/attention";
 import { formatBytes, formatCount } from "@/lib/format";
-import { ContentIcon } from "@/shell/content-icon";
 import { trackTask } from "@/stores/progress";
 import { newJobId, type RunningJob, showError } from "./jobs";
 import { optionalFolder, optionalTotals, prettyFileName } from "./optional-files";

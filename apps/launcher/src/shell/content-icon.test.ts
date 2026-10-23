@@ -1,5 +1,5 @@
+import { CONTENT_SPRITES, type ContentIconKind, spritePaths, spriteSize } from "@pl/ui";
 import { describe, expect, it } from "vitest";
-import { CONTENT_SPRITES, type ContentIconKind, spritePaths, spriteSize } from "./content-icon";
 
 const TONES = new Set([..."hlmdsokFfeJjq"]);
 const kinds = Object.keys(CONTENT_SPRITES) as ContentIconKind[];
