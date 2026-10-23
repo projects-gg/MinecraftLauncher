@@ -31,6 +31,24 @@ tracing = { workspace = true }
 zeroize = "1"
 
 # transport (HOST1-R2: the e4mc and TURN paths add their dependencies below this line)
+# QUIC to the e4mc relay and between two TURN allocations: the quinn, rustls (aws-lc-rs provider) and
+# platform verifier the workspace already builds. Every rustls config names its provider (no ring).
+quinn = { version = "0.11.12", default-features = false, features = ["runtime-tokio", "rustls-aws-lc-rs"] }
+rustls = { version = "0.23.46", default-features = false, features = ["std", "tls12", "aws_lc_rs"] }
+rustls-platform-verifier = "0.7.1"
+# TURN over TLS (`turns:`).
+tokio-rustls = { version = "0.26.6", default-features = false }
+# The per-session QUIC certificate the guest pins (P-256, self-signed). MIT OR Apache-2.0.
+rcgen = { version = "0.14.10", default-features = false, features = ["aws_lc_rs", "zeroize"] }
+# The e4mc broker request.
+reqwest = { workspace = true }
+# STUN long-term credentials (MD5 key, HMAC-SHA1 integrity) and FINGERPRINT (CRC-32).
+md-5 = { workspace = true }
+sha1 = { workspace = true }
+crc32fast = "1.5.2"
+bytes = { workspace = true }
+# Ending an e4mc guest's TCP streams from the path (shutdown of both directions).
+socket2 = "0.6.5"
 
 [dev-dependencies]
 hex = { workspace = true }
