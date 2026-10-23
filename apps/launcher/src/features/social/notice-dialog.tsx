@@ -1,4 +1,5 @@
-// Moderators' one-time notes (MOD1): a warning, or a profile picture put back to the default. Each
+// Moderators' one-time notes (MOD1): a warning, or a profile picture put back to the default; and
+// staff in game resetting the Projects skin (SKIN1), with how long skin changes stay off. Each
 // shows once, on whichever device sees it first ("Anladım" marks it seen with the service), with the
 // reason when the moderators gave one and a link to the community rules.
 import { ShieldWarning } from "@phosphor-icons/react";
@@ -8,7 +9,7 @@ import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import type { ModNotice } from "@/lib/api/social-types";
 import { openWebLink } from "@/lib/links";
-import { COMMUNITY_RULES_URL } from "./limits";
+import { COMMUNITY_RULES_URL, dayMonth } from "./limits";
 import { useSocialUi } from "./store";
 
 export function NoticeDialog() {
@@ -29,7 +30,20 @@ export function NoticeDialog() {
     setShown(null);
   };
 
-  const warning = shown?.kind === "warning";
+  const kind = shown?.kind;
+  const title =
+    kind === "warning"
+      ? t("safety.notice.warningTitle")
+      : kind === "skinReset"
+        ? t("projectsSkin.notice.title")
+        : t("safety.notice.profileResetTitle");
+  const description =
+    kind === "warning"
+      ? t("safety.notice.warning")
+      : kind === "skinReset"
+        ? t("projectsSkin.notice.body")
+        : t("safety.notice.profileReset");
+  const blocked = kind === "skinReset" ? shown?.blocked : undefined;
   return (
     <Dialog
       open={shown !== null}
@@ -39,10 +53,10 @@ export function NoticeDialog() {
       title={
         <span className="flex items-center gap-2.5">
           <ShieldWarning size={20} weight="duotone" className="text-gold-300" aria-hidden />
-          {warning ? t("safety.notice.warningTitle") : t("safety.notice.profileResetTitle")}
+          {title}
         </span>
       }
-      description={warning ? t("safety.notice.warning") : t("safety.notice.profileReset")}
+      description={description}
       closeLabel={t("common.close")}
       width={440}
       dismissOnOutsideClick={false}
@@ -57,8 +71,15 @@ export function NoticeDialog() {
         </>
       }
     >
+      {blocked ? (
+        <p className="text-[13px] text-bone-100">
+          {blocked.until === null
+            ? t("projectsSkin.notice.forever")
+            : t("projectsSkin.notice.until", { date: dayMonth(blocked.until) })}
+        </p>
+      ) : null}
       {shown?.reason ? (
-        <p className="text-[13px] text-ash-300">
+        <p className={blocked ? "mt-1.5 text-[13px] text-ash-300" : "text-[13px] text-ash-300"}>
           {t("safety.notice.reason", { reason: t(`safety.notice.reasons.${shown.reason}`) })}
         </p>
       ) : null}
