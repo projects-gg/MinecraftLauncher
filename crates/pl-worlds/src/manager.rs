@@ -2030,6 +2030,7 @@ impl Worlds {
                     body: String::new(),
                     conv: None,
                     crew: None,
+                    sticker: None,
                 })
             });
             (view, toast)

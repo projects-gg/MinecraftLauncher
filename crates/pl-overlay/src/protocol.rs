@@ -862,6 +862,7 @@ mod tests {
             body: String::new(),
             conv: None,
             crew: None,
+            sticker: None,
         }))
         .unwrap();
         assert_eq!(toast["kind"], "world");
