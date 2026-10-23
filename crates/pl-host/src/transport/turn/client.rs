@@ -1045,3 +1045,97 @@ impl Drop for Allocation {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn auth() -> Auth {
+        Auth {
+            username: Secret::new("user"),
+            password: Secret::new("pass"),
+            realm: None,
+            nonce: None,
+            key: None,
+            algorithms: None,
+        }
+    }
+
+    fn challenge(nonce: &[u8], algorithms: Option<&[u8]>) -> Vec<u8> {
+        let mut builder = Builder::new(method::ALLOCATE, Class::Error, [3u8; 12]);
+        builder
+            .attr(attr::ERROR_CODE, &[0, 0, 4, 1])
+            .attr(attr::REALM, b"realm.example")
+            .attr(attr::NONCE, nonce);
+        if let Some(list) = algorithms {
+            builder.attr(attr::PASSWORD_ALGORITHMS, list);
+        }
+        builder.finish()
+    }
+
+    #[test]
+    fn nothing_is_signed_before_the_challenge() {
+        let mut builder = Builder::new(method::ALLOCATE, Class::Request, [1u8; 12]);
+        assert!(auth().sign(&mut builder).is_none());
+        let raw = builder.finish();
+        assert!(stun::parse(&raw).unwrap().get(attr::USERNAME).is_none());
+    }
+
+    #[test]
+    fn a_challenge_signs_with_the_long_term_key() {
+        let mut auth = auth();
+        let raw = challenge(b"plain-nonce", None);
+        assert!(auth.challenge(&stun::parse(&raw).unwrap()));
+        let mut builder = Builder::new(method::REFRESH, Class::Request, [2u8; 12]);
+        let key = auth.sign(&mut builder).unwrap();
+        assert_eq!(*key, *stun::long_term_key("user", "realm.example", "pass"));
+        builder.integrity(key.as_ref());
+        let signed = builder.finish();
+        let message = stun::parse(&signed).unwrap();
+        assert_eq!(message.get(attr::USERNAME), Some(&b"user"[..]));
+        assert_eq!(message.get(attr::REALM), Some(&b"realm.example"[..]));
+        assert_eq!(message.get(attr::NONCE), Some(&b"plain-nonce"[..]));
+        assert_eq!(message.get(attr::PASSWORD_ALGORITHM), None);
+        assert_eq!(message.check_integrity(key.as_ref()), Some(true));
+    }
+
+    #[test]
+    fn a_listed_md5_algorithm_is_echoed_with_the_cookie() {
+        // SHA-256 (2) and MD5 (1), each without parameters.
+        let list = [0x00, 0x02, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00];
+        let mut auth = auth();
+        let raw = challenge(b"obMatJos2AAAAnonce", Some(&list));
+        assert!(auth.challenge(&stun::parse(&raw).unwrap()));
+        let mut builder = Builder::new(method::ALLOCATE, Class::Request, [4u8; 12]);
+        auth.sign(&mut builder).unwrap();
+        let signed = builder.finish();
+        let message = stun::parse(&signed).unwrap();
+        assert_eq!(message.get(attr::PASSWORD_ALGORITHMS), Some(&list[..]));
+        assert_eq!(
+            message.get(attr::PASSWORD_ALGORITHM),
+            Some(&stun::PASSWORD_ALGORITHM_MD5[..])
+        );
+        // Without the cookie the list is not ours to echo.
+        let raw = challenge(b"plain-nonce", Some(&list));
+        assert!(auth.challenge(&stun::parse(&raw).unwrap()));
+        assert!(auth.algorithms.is_none());
+    }
+
+    #[test]
+    fn a_challenge_without_a_nonce_is_not_retried() {
+        let mut builder = Builder::new(method::ALLOCATE, Class::Error, [5u8; 12]);
+        builder.attr(attr::ERROR_CODE, &[0, 0, 4, 1]);
+        let raw = builder.finish();
+        assert!(!auth().challenge(&stun::parse(&raw).unwrap()));
+    }
+
+    #[test]
+    fn refreshes_come_before_the_lifetime_ends() {
+        let delay = refresh_delay(Duration::from_secs(600), Duration::from_secs(120));
+        assert_eq!(delay, Duration::from_secs(480));
+        assert_eq!(
+            refresh_delay(Duration::from_secs(60), Duration::from_secs(120)),
+            Duration::from_secs(1)
+        );
+    }
+}

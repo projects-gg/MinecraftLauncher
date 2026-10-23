@@ -495,3 +495,26 @@ async fn a_guest_can_reconnect_on_the_same_allocation() {
         "one allocation served both"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn closing_one_of_two_paths_to_a_host_keeps_the_other() {
+    let ca = TestCa::new();
+    let server = TurnServer::start(&ca, &[HOST, GUEST]).await;
+    let config = config(&ca);
+    let Pair {
+        host,
+        guest,
+        identity,
+    } = pair(&server, &config, &["udp"], &["udp"]).await;
+    let first = within(10, guest.connect(host.relay(), identity.pin()))
+        .await
+        .unwrap();
+    let second = within(10, guest.connect(host.relay(), identity.pin()))
+        .await
+        .unwrap();
+    within(5, first.close()).await;
+    within(5, first.close()).await;
+    // Past the forgotten-peer linger: the permission still holds for the second path.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    exchange(&host, &second, 5_000).await;
+}

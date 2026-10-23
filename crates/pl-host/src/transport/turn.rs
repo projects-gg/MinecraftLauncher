@@ -713,6 +713,8 @@ struct GuestNode {
     allocation: Allocation,
     endpoint: Endpoint,
     config: TurnConfig,
+    /// Open paths per host relay address: its permission lasts while any of them does.
+    paths: Mutex<HashMap<SocketAddrV4, usize>>,
 }
 
 impl GuestNode {
@@ -752,6 +754,7 @@ pub async fn allocate(ice: &IceServers, config: &TurnConfig) -> Result<TurnGuest
             allocation,
             endpoint,
             config: config.clone(),
+            paths: Mutex::new(HashMap::new()),
         }),
     })
 }
@@ -793,8 +796,11 @@ impl TurnGuest {
             connection: tokio::sync::Mutex::new(None),
             closed: watch::channel(false).0,
         };
+        // A failed handshake leaves the permission in place: another path of this allocation may
+        // use the same relay address.
         let connection = path.handshake().await?;
         *path.connection.lock().await = Some(connection);
+        *lock(&node.paths).entry(host_relay).or_default() += 1;
         Ok(path)
     }
 
@@ -916,11 +922,21 @@ impl GuestPath for TurnGuestPath {
 
     fn close(&self) -> BoxFuture<'_, ()> {
         Box::pin(async move {
-            self.closed.send_replace(true);
+            if self.closed.send_replace(true) {
+                return;
+            }
             if let Some(connection) = self.connection.lock().await.take() {
                 connection.close(VarInt::from_u32(0), b"");
             }
-            self.node.allocation.forget(self.host);
+            let last_to_this_host = {
+                let mut paths = lock(&self.node.paths);
+                let open = paths.entry(self.host).or_default();
+                *open = open.saturating_sub(1);
+                *open == 0
+            };
+            if last_to_this_host {
+                self.node.allocation.forget(self.host);
+            }
             // The last holder of the allocation deletes it now, so the credentials can be released.
             if Arc::strong_count(&self.node) == 1 {
                 self.node.shutdown().await;
