@@ -8,6 +8,7 @@
   "environment": "client",
   "entrypoints": {
     "client": [
+      "gg.projects.overlay.dev.PeopleScenario",
       "gg.projects.overlay.dev.ScenarioDriver",
       "gg.projects.overlay.dev.ConnectScenario",
       "gg.projects.overlay.dev.Chat2Scenario",

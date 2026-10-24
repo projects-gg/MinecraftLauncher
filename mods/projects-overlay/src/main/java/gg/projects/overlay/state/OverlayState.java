@@ -117,6 +117,14 @@ public final class OverlayState {
     }
 
     /**
+     * How a friend menu action went (OVL-UX), said for a moment under the friend list: {@code key} names the words
+     * ({@code people.note.<key>}) with the friend's {@code name}, or {@code text} is the line itself (world sharing's);
+     * {@code error} when it did not go.
+     */
+    public record PersonNote(String key, String name, String text, boolean error, long at) {
+    }
+
+    /**
      * A crew tag's card (TEAM6): the chip ({@code tag} on the crew's colour) and the bubble it opens. {@code since}
      * is the month the crew was founded ("2026-09", empty when not known); {@code mine}: the player is in it.
      */
@@ -235,6 +243,21 @@ public final class OverlayState {
     private int revision;
     private int typingRevision;
     private Note note;
+    // ---- The friend menu (OVL-UX) ----
+    /** The crew whose tag the player wears (P9), or null. */
+    private String meBadge;
+    /** Friend id → their direct conversation (P10), while chat is on. */
+    private final Map<String, String> directs = new HashMap<>();
+    /** Friends whose Discord profile is known (P11). */
+    private final Set<String> discords = new HashSet<>();
+    /** Direct conversations the panel opened before they had a message, and whose they are. */
+    private final LinkedHashMap<String, Conversation> drafts = new LinkedHashMap<>();
+    private final Map<String, String> draftFriends = new HashMap<>();
+    /** When "Birlikte oyna" last went to each friend (this computer's clock). */
+    private final Map<String, Long> invitedAt = new HashMap<>();
+    /** The names of friends an action is on its way for (an unfriended one leaves the list before the answer). */
+    private final Map<String, String> actionNames = new HashMap<>();
+    private PersonNote personNote;
 
     public BridgeClient.Status status() {
         return status;
@@ -314,13 +337,31 @@ public final class OverlayState {
         return friends.get(id);
     }
 
-    /** Newest activity first. */
+    /** Newest activity first; a direct conversation the panel just opened for a friend (OVL-UX) before them. */
     public Collection<Conversation> conversations() {
-        return conversations.values();
+        if (drafts.isEmpty()) {
+            return conversations.values();
+        }
+        List<Conversation> all = new ArrayList<>(drafts.size() + conversations.size());
+        for (Conversation draft : drafts.values()) {
+            if (friends.containsKey(draftFriends.get(draft.id()))) {
+                all.add(draft);
+            }
+        }
+        all.addAll(conversations.values());
+        return all;
     }
 
     public Conversation conversation(String id) {
-        return id == null ? null : conversations.get(id);
+        if (id == null) {
+            return null;
+        }
+        Conversation c = conversations.get(id);
+        if (c == null && (c = drafts.get(id)) != null && !friends.containsKey(draftFriends.get(id))) {
+            // No longer a friend: nothing to write in.
+            return null;
+        }
+        return c;
     }
 
     public int unreadTotal() {
@@ -432,6 +473,128 @@ public final class OverlayState {
         revision++;
     }
 
+    // ---- The friend menu (OVL-UX) -----------------------------------------------------------------------
+
+    /** "Birlikte oyna" to one friend waits this long after one went (the service's own five minutes). */
+    public static final long INVITE_WAIT_MS = 5L * 60_000L;
+
+    /** The crew whose tag the player wears while tags are on (its card: {@link #badge(String)}), or null. */
+    public String meBadge() {
+        return tagsOn() ? meBadge : null;
+    }
+
+    /** {@code friendId}'s direct conversation while chat is on (it may have no message yet), or null. */
+    public String dm(String friendId) {
+        return friendId == null || !has("chat") ? null : directs.get(friendId);
+    }
+
+    /** Whether {@code friendId}'s Discord profile is known ("Discord'dan mesaj at"). */
+    public boolean discord(String friendId) {
+        return friendId != null && discords.contains(friendId);
+    }
+
+    /**
+     * {@code friendId}'s direct conversation, ready to show: the one there is, else an empty one until its first
+     * message (the launcher sends the real one then). Null when they cannot be written to from here.
+     */
+    public String openDirect(String friendId) {
+        String id = dm(friendId);
+        Friend friend = friendId == null ? null : friends.get(friendId);
+        if (id == null || friend == null) {
+            return null;
+        }
+        if (!conversations.containsKey(id) && !drafts.containsKey(id)) {
+            drafts.put(id, new Conversation(id, "dm", friend.name(), 0, false, true, 0));
+            draftFriends.put(id, friendId);
+            revision++;
+        }
+        return id;
+    }
+
+    /** Whether "Birlikte oyna" to {@code friendId} waits for its five minutes. */
+    public boolean inviteWaiting(String friendId, long now) {
+        Long at = friendId == null ? null : invitedAt.get(friendId);
+        return at != null && now - at < INVITE_WAIT_MS;
+    }
+
+    /** An action for {@code friendId} goes now: their name is kept for the answer's words. */
+    public void actionSent(String friendId) {
+        Friend friend = friends.get(friendId);
+        if (friend != null) {
+            actionNames.put(friendId, friend.name());
+        }
+    }
+
+    /** The note under the friend list now, or null. */
+    public PersonNote personNote(long now) {
+        return personNote != null && now - personNote.at() < NOTE_MS ? personNote : null;
+    }
+
+    /** Shows a note under the friend list for a moment (the mod's own, as when nothing could be sent). */
+    public void personNote(String key, String name, boolean error, long now) {
+        personNote = new PersonNote(key, name == null ? "" : name, null, error, now);
+        revision++;
+    }
+
+    /** Shows a line of world sharing's under the friend list for a moment (an invite to the world that did not go). */
+    public void personNoteText(String text, boolean error, long now) {
+        personNote = new PersonNote(null, "", text, error, now);
+        revision++;
+    }
+
+    /** P10, P11: what the friend's frame says of their conversation and Discord. */
+    private void putFriendExtras(String id, JsonObject o) {
+        String dm = Protocol.str(o, "dm", "");
+        if (dm.isEmpty() || dm.length() > 160) {
+            directs.remove(id);
+        } else {
+            directs.put(id, dm);
+        }
+        if (Protocol.bool(o, "discord", false)) {
+            discords.add(id);
+        } else {
+            discords.remove(id);
+        }
+    }
+
+    /** Another account signed in: nothing of the previous one's menu stays. */
+    private void forgetPeople() {
+        drafts.clear();
+        draftFriends.clear();
+        invitedAt.clear();
+        actionNames.clear();
+        personNote = null;
+    }
+
+    /** P8: how a friend menu action went; the words come from the action and the reason. */
+    private void onFriendResult(JsonObject frame, long now) {
+        String friend = Protocol.str(frame, "friend", "");
+        String action = Protocol.str(frame, "action", "");
+        boolean ok = Protocol.bool(frame, "ok", false);
+        String reason = Protocol.str(frame, "reason", "failed");
+        Friend known = friends.get(friend);
+        String name = actionNames.containsKey(friend) ? actionNames.remove(friend) : known == null ? ""
+            : known.name();
+        String key = switch (action) {
+            case "invite" -> {
+                if (ok || reason.equals("wait")) {
+                    // As the launcher: the next one to them waits five minutes either way.
+                    invitedAt.put(friend, now);
+                }
+                yield ok ? (Protocol.bool(frame, "queued", false) ? "invite_queued" : "invited")
+                    : reason.equals("wait") ? "invite_wait" : "invite_failed";
+            }
+            case "unfriend" -> ok ? "removed" : "failed";
+            case "block" -> ok ? "blocked" : "failed";
+            case "report" -> ok ? "reported" : "report_failed";
+            case "discord" -> ok ? null : "failed";
+            default -> null;
+        };
+        if (key != null) {
+            personNote = new PersonNote(key, name, null, !ok, now);
+        }
+    }
+
     // ---- The player's own messages ---------------------------------------------------------------------
 
     /** Adds the player's own message before the launcher confirms it; returns the client id to send. */
@@ -494,6 +657,7 @@ public final class OverlayState {
             case "welcome" -> {
                 JsonObject self = obj(frame, "me");
                 String name = self == null ? "" : name(self, "name");
+                boolean otherAccount = welcomed && !name.equals(me);
                 if (welcomed && !name.equals(me)) {
                     // Another account: nothing of the previous one stays on screen.
                     lines.clear();
@@ -509,6 +673,11 @@ public final class OverlayState {
                 // Tags may have come or gone with the features: what is laid out is laid out again.
                 badgeRevision++;
                 me = name;
+                // OVL-UX (P9): the tag the player wears, before their name in the panel's header.
+                meBadge = self == null ? null : crewId(self);
+                if (otherAccount) {
+                    forgetPeople();
+                }
                 welcomed = true;
                 dnd = Protocol.bool(frame, "dnd", false);
                 reducedMotion = Protocol.bool(frame, "reducedMotion", false);
@@ -530,6 +699,8 @@ public final class OverlayState {
                 forEachConversation(frame, next);
                 conversations.clear();
                 conversations.putAll(next);
+                // A conversation the panel opened before its first message is the real one now (OVL-UX).
+                drafts.keySet().removeIf(conversations::containsKey);
                 lines.keySet().removeIf(id -> !conversations.containsKey(id) && !hasPending(lines.get(id)));
                 calls.clear();
                 forEach(frame, "calls", this::putCall);
@@ -624,6 +795,7 @@ public final class OverlayState {
             case "call-end" -> calls.remove(Protocol.str(frame, "id", ""));
             case "badges" -> putBadges(frame);
             case "note" -> putArrival(frame);
+            case "friend-result" -> onFriendResult(frame, now);
             case "toast" -> {
                 String sticker = Protocol.str(frame, "sticker", null);
                 String kind = Protocol.str(frame, "kind", "message");
@@ -665,6 +837,8 @@ public final class OverlayState {
         if (id.isEmpty()) {
             return;
         }
+        putFriendExtras(id, o);
+
         String host = Protocol.plain(Protocol.str(o, "host", ""), 255);
         friends.put(id, new Friend(id, name(o, "name"), Protocol.str(o, "where", "offline"),
             Protocol.bool(o, "joinable", false), host.isEmpty() ? null : host, crewId(o)));
@@ -759,6 +933,8 @@ public final class OverlayState {
         if (c == null) {
             return;
         }
+        // The real one of a conversation the panel opened before its first message (OVL-UX).
+        drafts.remove(c.id());
         Conversation before = conversations.put(c.id(), c);
         if (before == null) {
             // A new conversation comes first.

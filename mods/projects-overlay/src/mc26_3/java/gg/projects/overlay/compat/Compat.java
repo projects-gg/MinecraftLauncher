@@ -22,6 +22,9 @@ public final class Compat {
     /** The key type a keyboard key mapping uses. */
     public static final InputConstants.Type KEYBOARD = InputConstants.Type.KEYBOARD;
 
+    /** The menu (application) key, SDL's scancode: opens the picked row's menu, as Shift+F10 (OVL-UX). */
+    public static final int KEY_MENU = 101;
+
     private Compat() {
     }
 

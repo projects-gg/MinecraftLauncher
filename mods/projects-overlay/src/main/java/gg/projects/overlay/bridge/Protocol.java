@@ -59,6 +59,7 @@ public final class Protocol {
         for (String feature : FEATURES) {
             features.add(feature);
         }
+        features.add(PEOPLE);
         o.add("features", features);
         return o;
     }
@@ -147,6 +148,59 @@ public final class Protocol {
     /** The player joins a friend (after the in-game confirmation); the launcher marks their invites answered. */
     public static JsonObject join(String friend) {
         JsonObject o = message("join");
+        o.addProperty("friend", friend);
+        return o;
+    }
+
+    // ---- The friend menu (OVL-UX, rows P1–P11 of docs/tasks/ovl2-protocol.md) ----------------------------
+
+    /**
+     * The friend menu's feature in {@code hello} (OVL-UX): the mod hears {@code friend-result}. Sent beside
+     * {@link #FEATURES}.
+     */
+    public static final String PEOPLE = "people";
+    /** Report reasons the friend menu offers for a player (the launcher's player reasons). */
+    public static final List<String> REPORT_REASONS = List.of("name", "profile", "harassment", "spam", "scam",
+        "other");
+    /** Longest note a report takes (the launcher's {@code NOTE_MAX}). */
+    public static final int MAX_REPORT_NOTE_CHARS = 200;
+
+    /** "Birlikte oyna" to a friend (P3); the answer is {@code friend-result}. */
+    public static JsonObject invite(String friend) {
+        return friendFrame("invite", friend);
+    }
+
+    /** "Discord'dan mesaj at" (P4): the launcher opens the friend's Discord profile. */
+    public static JsonObject discord(String friend) {
+        return friendFrame("discord", friend);
+    }
+
+    /** "Arkadaşlıktan çıkar" (P5), after the mod's question. */
+    public static JsonObject unfriend(String friend) {
+        return friendFrame("unfriend", friend);
+    }
+
+    /** "Engelle" (P6), after the mod's question. */
+    public static JsonObject block(String friend) {
+        return friendFrame("block", friend);
+    }
+
+    /** "Rapor et" (P7): one of {@link #REPORT_REASONS}, a note for moderators (may be empty), maybe a block. */
+    public static JsonObject report(String friend, String reason, String note, boolean block) {
+        JsonObject o = friendFrame("report", friend);
+        o.addProperty("reason", reason);
+        String clean = plain(note, MAX_REPORT_NOTE_CHARS);
+        if (!clean.isEmpty()) {
+            o.addProperty("note", clean);
+        }
+        if (block) {
+            o.addProperty("block", true);
+        }
+        return o;
+    }
+
+    private static JsonObject friendFrame(String type, String friend) {
+        JsonObject o = message(type);
         o.addProperty("friend", friend);
         return o;
     }
