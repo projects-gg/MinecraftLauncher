@@ -8,6 +8,8 @@ export const trSmall9 = {
   join: {
     /** A world invite's row after the game turned away for mods it lacks ("Kurulumu kopyala"). */
     missingMods: "Bazı modlar sende yok.",
+    /** Home's line for that invite: who, and why its button copies the install. */
+    homeMissingMods: "{{name}} sende olmayan modlarla oynuyor",
   },
   palette: {
     /** Ctrl+K: the Worlds tab of the command bar's instance, where "Arkadaşlarınla oyna" is. */

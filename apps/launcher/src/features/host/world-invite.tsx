@@ -3,7 +3,7 @@
 // "Katıl" says where the join is in place (parts.tsx); while it is under way "Kapat" keeps its
 // place but waits, so nothing beside it moves. A right click (Shift+F10, the menu key) offers the
 // row's own actions, then the friend's whole menu (FIX2).
-import { Play, X } from "@phosphor-icons/react";
+import { Copy, Play, X } from "@phosphor-icons/react";
 import { ContextMenu, IconButton, type MenuItem } from "@pl/ui";
 import { useTranslation } from "react-i18next";
 import { openMenuFromKey } from "@/features/social/menu-key";
@@ -13,20 +13,23 @@ import { useSocialUi } from "@/features/social/store";
 import type { WorldInvite } from "@/lib/api/host-types";
 import { dismissWorldInvite, pressJoin } from "./actions";
 import { Faces, PeopleCount, WorldJoinButton } from "./parts";
-import { invitePeople, joinActive } from "./rules";
+import { invitePeople, joinActive, retryWithCopy } from "./rules";
 import { useHostUi } from "./store";
 
 function useInviteItems(invite: WorldInvite): Array<MenuItem | null> {
   const { t } = useTranslation();
   const active = joinActive(invite.join);
+  // After the game turned away for missing mods the row's button is "Kurulumu kopyala": the menu
+  // names the same action the same way.
+  const copy = retryWithCopy(invite.join);
   const people = usePeopleItems(
     [{ id: invite.from, name: invite.name, avatar: invite.avatar, avatarUrl: invite.avatarUrl }],
     { from: "list" },
   );
   return [
     {
-      label: t("social.actions.join"),
-      icon: <Play size={16} />,
+      label: copy ? t("host.join.copyAction") : t("social.actions.join"),
+      icon: copy ? <Copy size={16} /> : <Play size={16} />,
       disabled: active,
       onSelect: () => pressJoin(invite),
     },
@@ -65,7 +68,7 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
   const items = useInviteItems(invite);
   const active = joinActive(invite.join);
   // The game turned away for mods it lacks: the row says so beside "Kurulumu kopyala".
-  const missingMods = invite.join?.kind === "failed" && invite.join.failure === "mods";
+  const missingMods = retryWithCopy(invite.join);
   return (
     <ContextMenu items={items}>
       <div className="mb-1.5 flex items-center gap-3 rounded-[var(--radius-panel)] bg-gold-500/[0.07] py-2 pr-1.5 pl-2 ring-1 ring-gold-400/15">
@@ -116,7 +119,11 @@ export function HomeWorldLine({ invite }: { invite: WorldInvite }) {
   const items = useInviteItems(invite);
   const openPanel = useSocialUi((s) => s.openPanel);
   const closeHome = useHostUi((s) => s.closeHome);
-  const text = t("host.invite.title", { name: invite.name });
+  // After missing mods the line says why its button copies the install (Home has no row below
+  // the name for it, and the toast that said it may be long gone when the player comes back).
+  const text = retryWithCopy(invite.join)
+    ? t("small9.join.homeMissingMods", { name: invite.name })
+    : t("host.invite.title", { name: invite.name });
   return (
     <>
       <ContextMenu items={items}>

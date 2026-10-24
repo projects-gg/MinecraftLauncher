@@ -5,6 +5,7 @@ export const enSmall9 = {
   },
   join: {
     missingMods: "You're missing some mods.",
+    homeMissingMods: "{{name}} is playing with mods you don't have",
   },
   palette: {
     openWorld: "Open your world to friends",
