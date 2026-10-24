@@ -9,4 +9,10 @@ export const trSmall9 = {
     /** A world invite's row after the game turned away for mods it lacks ("Kurulumu kopyala"). */
     missingMods: "Bazı modlar sende yok.",
   },
+  palette: {
+    /** Ctrl+K: the Worlds tab of the command bar's instance, where "Arkadaşlarınla oyna" is. */
+    openWorld: "Dünyanı arkadaşlarına aç",
+    /** Ctrl+K while the player's world is open: its sheet. */
+    manageWorld: "Dünyanı yönet",
+  },
 };
