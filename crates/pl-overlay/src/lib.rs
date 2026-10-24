@@ -13,10 +13,14 @@
 //!
 //! Costs nothing while idle: between games every update is dropped at once, during a game the
 //! tasks wait on their channels and sockets (no timers, no polling).
+//!
+//! The mod itself ships with the launcher, one jar per Minecraft version; [`install`] keeps the
+//! right one in the instance a game starts from (OVL-B).
 
 mod feed;
 mod host;
 mod hub;
+pub mod install;
 pub mod links;
 pub mod policy;
 pub mod protocol;

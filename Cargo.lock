@@ -4449,13 +4449,17 @@ version = "2.0.0"
 dependencies = [
  "base64 0.23.1",
  "pl-lang",
+ "pl-mc",
+ "pl-net",
  "pl-social",
  "rand 0.10.3",
  "serde",
  "serde_json",
  "specta",
+ "tempfile",
  "tokio",
  "tracing",
+ "zip 9.0.3",
 ]
 
 [[package]]
