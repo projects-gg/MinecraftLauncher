@@ -157,9 +157,49 @@ jobs:
           fi
           echo "id=$id" >> "$GITHUB_OUTPUT"
 
+  # The in-game overlay's jars every launcher bundle ships (scripts/release/overlay-jars.mjs): one
+  # per Minecraft version of mods/projects-overlay/build.gradle, built and tested once, then put in
+  # the launcher's resource folder by every build job below. A launcher release build refuses to
+  # compile without them (apps/launcher/src-tauri/build.rs).
+  overlay:
+    name: Overlay mod jars
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
+        with:
+          distribution: temurin
+          java-version: "25"
+
+      # Gradle and Loom's Minecraft files from the overlay workflow's cache (written on v2).
+      - uses: gradle/actions/setup-gradle@3f5f9adaf7d9fecd50b5935e54106014257a94e6 # v6.4.0
+        with:
+          cache-read-only: true
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - name: Build, test and check the jars
+        run: |
+          node scripts/release/overlay-jars.mjs build --test --force --out overlay-jars
+          node scripts/release/overlay-jars.mjs check --out overlay-jars --source
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: overlay-jars
+          path: overlay-jars/
+          if-no-files-found: error
+          retention-days: 30
+
   launcher:
     name: Launcher (${{ matrix.key }})
-    needs: prepare
+    needs: [prepare, overlay]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
     permissions:
@@ -184,6 +224,14 @@ jobs:
         with:
           targets: ${{ matrix.targets }}
           cache: "false"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: overlay-jars
+          path: apps/launcher/src-tauri/overlay
+
+      - name: Check the overlay jars
+        run: node scripts/release/overlay-jars.mjs check --source
 
       - name: Stamp the version
         run: node scripts/release/set-version.mjs "$VERSION"
@@ -264,7 +312,7 @@ jobs:
   # bundle, sign the installer, then re-create the updater signature over the signed installer.
   launcher-windows-signed:
     name: Launcher (windows, signed)
-    needs: prepare
+    needs: [prepare, overlay]
     if: needs.prepare.outputs.signpath == 'true'
     runs-on: windows-latest
     timeout-minutes: 180
@@ -289,6 +337,14 @@ jobs:
       - uses: ./.github/actions/setup-rust
         with:
           cache: "false"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: overlay-jars
+          path: apps/launcher/src-tauri/overlay
+
+      - name: Check the overlay jars
+        run: node scripts/release/overlay-jars.mjs check --source
 
       - name: Stamp the version
         run: node scripts/release/set-version.mjs "$VERSION"

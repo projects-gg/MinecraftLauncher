@@ -93,7 +93,8 @@ public record OverlaySettings(
     public boolean showsKind(String kind) {
         return switch (kind) {
             case "call" -> callToasts;
-            case "invite" -> inviteToasts;
+            // A friend's world invite (HOST1) is a "Birlikte oyna" invite as well.
+            case "invite", "world" -> inviteToasts;
             case "info" -> infoToasts;
             default -> messageToasts;
         };

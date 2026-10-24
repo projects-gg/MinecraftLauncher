@@ -34,6 +34,7 @@ import net.minecraft.client.gui.screens.options.controls.KeyBindsScreen;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 
@@ -54,7 +55,8 @@ import net.minecraft.util.FormattedCharSequence;
  * closing hands the last picture to the HUD, which fades it out while the game already has the input.
  */
 public final class OverlayScreen extends Screen {
-    public enum Page { CHATS, FRIENDS, SETTINGS }
+    /** The panel's pages; {@code WORLD} is world sharing (HOST1), reached from its card or the pause menu. */
+    public enum Page { CHATS, FRIENDS, SETTINGS, WORLD }
 
     private static final int P = 10;
     private static final int HEADER_H = 30;
@@ -93,6 +95,10 @@ public final class OverlayScreen extends Screen {
     private final IconButton stickerButton;
     private final IconButton replyClose;
     private final StickerPicker picker;
+    /** World sharing: its page and the card the other pages carry (HOST1). */
+    private final HostPanel host;
+    /** The screen the panel came from (the pause menu), or null: closing goes back to it. */
+    private final Screen parent;
     private final Tween lineAlpha = new Tween(0f);
     private final List<Notice> notices = new ArrayList<>();
     /** OVL-UX: a friend's menu, and the player's own name and tag in the header with the tag's bubble. */
@@ -131,6 +137,7 @@ public final class OverlayScreen extends Screen {
     private boolean closing;
     private String titleText = "";
     private String settingsTitle = "";
+    private String worldTitle = "";
     private String dndText = "";
     /** The message the player answers (CHAT2), and the strip over the field that says so. */
     private OverlayState.Reply replyTo;
@@ -150,11 +157,21 @@ public final class OverlayScreen extends Screen {
     private String lastDraft = "";
 
     public OverlayScreen(OverlayClient overlay) {
+        this(overlay, null, null);
+    }
+
+    /**
+     * The panel opened on {@code start} (null: where it was last), from {@code parent} (the pause menu's "Arkadaşlarını
+     * çağır"; null from the game): closing then goes back there, and the game stays paused as it was.
+     */
+    public OverlayScreen(OverlayClient overlay, Page start, Screen parent) {
         super(Texts.tr("panel.title"));
         this.overlay = overlay;
         this.state = overlay.state();
+        this.parent = parent;
         gear = new IconButton(Icon.GEAR, Texts.tr("settings.title"), () -> setPage(Page.SETTINGS));
-        back = new IconButton(Icon.BACK, Texts.tr("panel.back"), () -> setPage(lastListPage));
+        back = new IconButton(Icon.BACK, Texts.tr("panel.back"), this::goBack);
+        host = new HostPanel(this, overlay);
         retry = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("retry"), null, overlay::retry);
         for (int i = 0; i < ANSWERS.length; i++) {
             String answer = ANSWERS[i];
@@ -244,12 +261,17 @@ public final class OverlayScreen extends Screen {
         settingsList = new SettingsList(overlay::settings, overlay::updateSettings, overlay.key()::keyName,
             () -> Compat.setScreen(minecraft, new KeyBindsScreen(this, minecraft.options)));
         lastListPage = state.has("chat") || !state.welcomed() ? Page.CHATS : Page.FRIENDS;
-        page = overlay.lastPage() == Page.SETTINGS ? lastListPage : overlay.lastPage();
+        page = overlay.lastPage() == Page.SETTINGS || overlay.lastPage() == Page.WORLD ? lastListPage
+            : overlay.lastPage();
         if (page == Page.CHATS && state.welcomed() && !state.has("chat")) {
             page = Page.FRIENDS;
         }
-        if (page != Page.SETTINGS) {
+        if (page != Page.SETTINGS && page != Page.WORLD) {
             lastListPage = page;
+        }
+        if (start == Page.WORLD) {
+            page = Page.WORLD;
+            host.sync(now());
         }
         // The tabs open on the page the panel opens on (the plate stood on "Sohbetler" over the friend list).
         tabs.select(lastListPage == Page.FRIENDS ? 1 : 0);
@@ -320,8 +342,107 @@ public final class OverlayScreen extends Screen {
         }
 
         OverlayScreen panel = screen instanceof OverlayScreen p ? p : screen instanceof JoinScreen j ? j.panel()
-            : screen instanceof LinkScreen l ? l.panel() : null;
+            : screen instanceof LinkScreen l ? l.panel() : screen instanceof ConfirmScreen c ? c.panel() : null;
         return panel == null ? 0 : panel.hudRight();
+    }
+
+    // ---- World sharing (HOST1) ---------------------------------------------------------------------------
+
+    /** The world page's state changed: the content changes with the panel's page change, then lays out again. */
+    void hostModeChanged() {
+        pageChangedAt = now();
+        layout();
+        setFocused(host.initialFocus());
+    }
+
+    /** Something on the world page changed size or meaning (a pick): lay out again. */
+    void hostLayout() {
+        layout();
+    }
+
+    /** A question over the panel (sending a friend off, closing the world, meeting on Projects, joining a world). */
+    void ask(ConfirmScreen.Question question, Runnable onConfirm) {
+        Compat.setScreen(minecraft, new ConfirmScreen(this, question, onConfirm));
+    }
+
+    /** The game is in a singleplayer world (a question says it is saved before leaving). */
+    boolean inSingleplayer() {
+        return minecraft != null && minecraft.hasSingleplayerServer();
+    }
+
+    /**
+     * "Katıl" on a friend's world invite (H15): asked once, then the launcher prepares the matching install and moves
+     * the game there ({@code connect} with the world's label) or restarts it.
+     */
+    void joinWorld(String friendId) {
+        if (state.world(friendId) == null || !state.online()) {
+            return;
+        }
+        ask(new ConfirmScreen.Question(Texts.tr("world.join.title"), Texts.str("world.join.body"),
+            inSingleplayer() ? Texts.str("join.saved") : null, Texts.tr("friend.join"), Icon.JOIN, false), () -> {
+                overlay.joinWorld(friendId);
+                close();
+            });
+    }
+
+    /** The friend whose world invite the card shows: one the player is not in already, the first of the list. */
+    String worldInviteToShow() {
+        for (OverlayState.Friend f : state.friends()) {
+            if (state.world(f.id()) != null && f.online() && !overlay.inWorldOf(f.id())) {
+                return f.id();
+            }
+        }
+        return null;
+    }
+
+    /** Where a guest's row is on the world page (the scenario driver points at it), or null. */
+    public float[] hostRow(String friendId) {
+        return host.list.visible ? host.list.rowCenter(friendId) : null;
+    }
+
+    /** The world page's buttons (the scenario driver presses them as the pointer would). */
+    public void pressHost(String which) {
+        ActionButton b = switch (which) {
+            case "primary" -> host.primary;
+            case "meet" -> host.meet;
+            case "stop" -> host.stop;
+            case "card-open" -> host.cardOpen;
+            case "card-manage" -> host.cardManage;
+            case "card-join" -> host.cardJoin;
+            default -> null;
+        };
+        if (b != null && b.visible && b.active) {
+            // As a mouse would: most players click here, and a key press would leave the keyboard ring on.
+            b.onClick(new MouseButtonEvent(b.getX() + b.getWidth() / 2.0, b.getY() + b.getHeight() / 2.0,
+                new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)), false);
+        }
+    }
+
+    /** The world page's friend list (the scenario driver ticks rows with the keys). */
+    public void focusHostList() {
+        PanelInput.usedKeyboard();
+        setFocused(host.list);
+    }
+
+    /** What the world page shows now ({@code PICK}, {@code OPENING}, {@code FAILED}, {@code OPEN}, {@code MORE}). */
+    public String hostMode() {
+        return host.mode().name();
+    }
+
+    /** The friends ticked on the world page (the scenario driver checks them). */
+    public List<String> hostPicks() {
+        return host.list.picked();
+    }
+
+    private void goBack() {
+        if (page == Page.WORLD && host.back()) {
+            return;
+        }
+        if (parent != null && page == Page.WORLD) {
+            close();
+            return;
+        }
+        setPage(lastListPage);
     }
 
     /** Puts the keyboard on the friend list, as Tab would (the scenario driver picks a row with the keys). */
@@ -624,6 +745,9 @@ public final class OverlayScreen extends Screen {
             callJoin, tabs, chips, messages, quick, replyClose, field, stickerButton, send, friends, settingsList}) {
             addWidget(w);
         }
+        for (AbstractWidget w : host.widgets()) {
+            addWidget(w);
+        }
         Shapes.prepare();
         if (conversation != null) {
             messages.open(conversation, isCrew(conversation), unreadOf(conversation));
@@ -643,6 +767,7 @@ public final class OverlayScreen extends Screen {
             case CHATS -> composerOpen() ? field : chips;
             case FRIENDS -> friends;
             case SETTINGS -> settingsList;
+            case WORLD -> host.initialFocus();
         };
     }
 
@@ -661,8 +786,18 @@ public final class OverlayScreen extends Screen {
         sync(false);
     }
 
+    /** World sharing changed on the game's side (opened, a guest came or went, closed): lay out again. */
+    public void hostChanged() {
+        sync(true);
+    }
+
     private void sync(boolean force) {
-        if (!force && state.revision() == seenRevision) {
+        // World sharing moves on by itself too (the launcher's answer, an opening that never came back).
+        boolean hostMoved = host.sync(now());
+        if (hostMoved && page == Page.WORLD) {
+            pageChangedAt = now();
+        }
+        if (!force && !hostMoved && state.revision() == seenRevision) {
             return;
         }
         seenRevision = state.revision();
@@ -688,12 +823,15 @@ public final class OverlayScreen extends Screen {
         // A tag's bubble belongs to the page it opened on.
         friends.dismissBubble();
         messages.dismissBubble();
-        if (page != Page.SETTINGS) {
+        if (page != Page.SETTINGS && page != Page.WORLD) {
             lastListPage = page;
         }
-        if (next != Page.SETTINGS) {
+        if (next != Page.SETTINGS && next != Page.WORLD) {
             lastListPage = next;
             tabs.select(next == Page.CHATS ? 0 : 1);
+        }
+        if (next == Page.WORLD) {
+            host.sync(now());
         }
         page = next;
         overlay.rememberPage(next);
@@ -838,6 +976,11 @@ public final class OverlayScreen extends Screen {
         if (f == null || !canJoin(f)) {
             return;
         }
+        if (state.world(id) != null) {
+            // Their world invite (H13): the launcher takes the game there.
+            joinWorld(id);
+            return;
+        }
         boolean projects = f.onProjects();
         String host = projects ? OverlayClient.PROJECTS_HOST : f.host();
         if (host == null) {
@@ -861,6 +1004,9 @@ public final class OverlayScreen extends Screen {
     private boolean canJoin(OverlayState.Friend f) {
         if (!f.joinable() || !state.online()) {
             return false;
+        }
+        if (state.world(f.id()) != null) {
+            return !overlay.inWorldOf(f.id());
         }
         if (f.onProjects()) {
             return !overlay.onProjects();
@@ -888,12 +1034,14 @@ public final class OverlayScreen extends Screen {
         boolean reduced = reducedMotion();
         titleText = getTitle().getString();
         settingsTitle = Texts.str("settings.title");
+        worldTitle = host.title();
         dndText = Texts.str("dnd");
         tabs.setReducedMotion(reduced);
         chips.setReducedMotion(reduced);
         messages.setReducedMotion(reduced);
         friends.setReducedMotion(reduced);
         settingsList.setReducedMotion(reduced);
+        host.setReducedMotion(reduced);
         // 38 % of the screen between 220 and 300 GUI px, but never past the middle (GUI 3 at 720p and GUI 6 at 1440p
         // are 426 px wide): the aim point stays in the world, down to 200 px (CHAT2-O2 follow-up).
         panelW = Math.max(220, Math.min(300, Math.round(width * 0.38f)));
@@ -904,8 +1052,9 @@ public final class OverlayScreen extends Screen {
         int cw = panelW - 2 * P;
         hideAll();
         boolean settingsPage = page == Page.SETTINGS;
-        gear.visible = !settingsPage;
-        back.visible = settingsPage;
+        boolean worldPage = page == Page.WORLD;
+        gear.visible = !settingsPage && !worldPage;
+        back.visible = settingsPage || worldPage;
         PanelWidget.place(gear, panelX + panelW - P - IconButton.SIZE + 3, (HEADER_H - IconButton.SIZE) / 2,
             IconButton.SIZE, IconButton.SIZE);
         PanelWidget.place(back, x0 - 4, (HEADER_H - IconButton.SIZE) / 2, IconButton.SIZE, IconButton.SIZE);
@@ -917,10 +1066,20 @@ public final class OverlayScreen extends Screen {
         }
         notices.clear();
         y = layoutNotices(x0, cw, y);
-        call = settingsPage ? null : state.activeCall(System.currentTimeMillis());
+        call = settingsPage || worldPage ? null : state.activeCall(System.currentTimeMillis());
         callY = -1;
         if (call != null && state.has("calls")) {
             y = layoutCall(x0, cw, y);
+        }
+        if (worldPage) {
+            host.layoutPage(x0, y, cw, height - P);
+            host.seen();
+            return;
+        }
+        if (!settingsPage) {
+            // World sharing's card: the open world, "Arkadaşlarını çağır" in a singleplayer world, a friend's invite.
+            y = host.layoutCard(x0, y, cw);
+            host.seen();
         }
         chatTop = y;
         if (settingsPage) {
@@ -1030,6 +1189,7 @@ public final class OverlayScreen extends Screen {
             chips, messages, quick, field, send, friends, settingsList, stickerButton, replyClose}) {
             w.visible = false;
         }
+        host.hideAll();
         if (page != Page.CHATS || conversation == null) {
             picker.close();
         }
@@ -1277,6 +1437,11 @@ public final class OverlayScreen extends Screen {
             return;
         }
         closing = true;
+        if (parent != null) {
+            // Back where it was opened from (the pause menu), which draws itself.
+            Compat.setScreen(minecraft, parent);
+            return;
+        }
         long start = now();
         boolean reduced = reducedMotion();
         ToastLayer layer = overlay.toasts();
@@ -1307,7 +1472,8 @@ public final class OverlayScreen extends Screen {
 
     @Override
     public boolean isPauseScreen() {
-        return false;
+        // From the pause menu the game stays paused as it was; from the game the panel never pauses it.
+        return parent != null && parent.isPauseScreen();
     }
 
     @Override
@@ -1383,6 +1549,9 @@ public final class OverlayScreen extends Screen {
         if (callY >= 0 && call != null) {
             drawCall(g, mouseX, mouseY);
         }
+        if (page != Page.WORLD && page != Page.SETTINGS) {
+            host.drawCard(g, mouseX, mouseY);
+        }
         if (messages.visible) {
             // Cheap unless something changed (or a message waited too long for its answer).
             messages.refresh(state, now);
@@ -1417,6 +1586,10 @@ public final class OverlayScreen extends Screen {
         Draw.stratum(g);
         render(g, friends, mouseX, mouseY);
         render(g, settingsList, mouseX, mouseY);
+        if (page == Page.WORLD) {
+            Draw.stratum(g);
+            host.drawPage(g, mouseX, mouseY);
+        }
         // A crew tag's bubble over everything in the panel (TEAM6), inside it.
         Draw.stratum(g);
         float left = panelX + P;
@@ -1461,10 +1634,10 @@ public final class OverlayScreen extends Screen {
     private void drawHeader(GuiGraphicsExtractor g, int mouseX, int mouseY, long now) {
         int x0 = panelX + P;
         float mid = HEADER_H / 2f;
-        if (page == Page.SETTINGS) {
+        if (page == Page.SETTINGS || page == Page.WORLD) {
             render(g, back, mouseX, mouseY);
-            Draw.text(g, Fonts.display(), settingsTitle, x0 + 15, Fonts.centeredY(Fonts.Face.DISPLAY, mid),
-                Theme.BONE_50);
+            String title = page == Page.WORLD ? worldTitle : settingsTitle;
+            Draw.text(g, Fonts.display(), title, x0 + 15, Fonts.centeredY(Fonts.Face.DISPLAY, mid), Theme.BONE_50);
         } else {
             Draw.text(g, Fonts.display(), titleText, x0, Fonts.centeredY(Fonts.Face.DISPLAY, mid), Theme.BONE_50);
             render(g, gear, mouseX, mouseY);

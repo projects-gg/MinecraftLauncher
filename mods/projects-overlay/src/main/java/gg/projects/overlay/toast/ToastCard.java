@@ -10,6 +10,7 @@ import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
 import gg.projects.overlay.ui.draw.Icon;
+import gg.projects.overlay.ui.draw.PixelSprites;
 import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -22,7 +23,9 @@ import net.minecraft.util.FormattedCharSequence;
  * under it for crew chat, up to two lines of text, and the hint with the key that opens the overlay. A
  * travel toast ("Projects sunucusuna bağlanılıyor…") is one sentence beside the gold join sign. A sticker
  * message (CHAT2) shows the sticker small before its words ("Çıkartma · GG"), unless message text is hidden. A
- * message's sender who wears a crew tag has its chip before the name ("[GK] Ayşe", TEAM6).
+ * message's sender who wears a crew tag has its chip before the name ("[GK] Ayşe", TEAM6). A friend's world invite
+ * (HOST1) has the grass block for its face and "F7 ile katıl"; the host's own notes ("Dünyan arkadaşlarına açık", "Mert
+ * dünyana katıldı") are the overlay's, under the player's "Diğer bildirimler".
  */
 public final class ToastCard {
     public static final int WIDTH = Frames.TOAST_WIDTH;
@@ -41,7 +44,7 @@ public final class ToastCard {
     static final int STICKER = 16;
     private static final int KEY_PAD = 3;
 
-    public enum Kind { MESSAGE, CALL, INVITE, INFO, TRAVEL }
+    public enum Kind { MESSAGE, CALL, INVITE, INFO, TRAVEL, WORLD, HOST }
 
     final Kind kind;
     final String conversation;
@@ -63,6 +66,8 @@ public final class ToastCard {
     final String hintKey;
     final int hintKeyWidth;
     final String hintAfter;
+    /** The face is the world's grass block (a world invite, the world opening) rather than a disc. */
+    final boolean sprite;
     // The short strings again, in the form the game draws: made once here, not on every frame (each String
     // draw runs the game's bidirectional text pass).
     private final FormattedCharSequence initialLine;
@@ -92,6 +97,7 @@ public final class ToastCard {
         this.hintKey = b.hintKey;
         this.hintKeyWidth = b.hintKey == null ? 0 : Fonts.small().width(b.hintKey) + 2 * KEY_PAD;
         this.hintAfter = b.hintAfter;
+        this.sprite = b.sprite;
         this.narration = b.narration;
         this.initialLine = line(b.initial);
         this.countLine = line(b.countText);
@@ -104,10 +110,15 @@ public final class ToastCard {
         }
         float h = PAD_Y + TITLE_H + (crew != null ? SMALL_H : 0) + 1
             + (sticker != null ? Math.max(STICKER + 1, body.size() * LINE_H) : body.size() * LINE_H);
-        if (kind != Kind.INFO) {
+        if (hasHint()) {
             h += HINT_GAP + HINT_H;
         }
         this.height = h + PAD_Y;
+    }
+
+    /** The hint line ("F7 ile arayüzü aç"): every kind but the overlay's quiet notes. */
+    private boolean hasHint() {
+        return hintBefore != null || hintKey != null;
     }
 
     private static FormattedCharSequence line(String text) {
@@ -130,6 +141,7 @@ public final class ToastCard {
         String hintBefore;
         String hintKey;
         String hintAfter;
+        boolean sprite;
         Component narration;
     }
 
@@ -138,6 +150,7 @@ public final class ToastCard {
             case "call" -> Kind.CALL;
             case "invite" -> Kind.INVITE;
             case "info" -> Kind.INFO;
+            case "world" -> Kind.WORLD;
             default -> Kind.MESSAGE;
         };
     }
@@ -163,7 +176,8 @@ public final class ToastCard {
         String bodyText = switch (b.kind) {
             case CALL -> Texts.str("toast.call", request.body().isEmpty() ? someone : request.body());
             case INVITE -> Texts.str("toast.invite");
-            case INFO, TRAVEL -> request.body();
+            case WORLD -> Texts.str("toast.world");
+            case INFO, TRAVEL, HOST -> request.body();
             case MESSAGE -> showText && !request.body().isEmpty() ? request.body() : Texts.str("toast.new_message");
         };
         if (count > 1) {
@@ -191,26 +205,54 @@ public final class ToastCard {
         } else {
             b.body = Texts.wrap(Fonts.ui(), bodyText, TEXT_W, MAX_BODY_LINES);
         }
+        b.sprite = b.kind == Kind.WORLD;
         if (b.kind != Kind.INFO) {
-            if (keyName == null) {
-                b.hintBefore = Texts.str("toast.hint.unbound");
-            } else {
-                // The key sits where the sentence has it ("F7 ile arayüzü aç", "Press F7 to open").
-                String template = Texts.str(b.kind == Kind.CALL ? "toast.hint.call" : "toast.hint.open", "\u0000");
-                int at = template.indexOf('\u0000');
-                b.hintBefore = at < 0 ? template.strip() : template.substring(0, at).strip();
-                b.hintAfter = at < 0 ? "" : template.substring(at + 1).strip();
-                b.hintKey = Texts.fit(small, keyName, 48);
-            }
+            hint(b, b.kind == Kind.CALL ? "toast.hint.call" : b.kind == Kind.WORLD ? "toast.hint.join"
+                : "toast.hint.open", keyName);
         }
         // The chip is drawn; the narrator says it with the name ("Ayşe, etiket GK").
         String spokenName = b.chip == null ? name : Texts.str("row.badge", name, b.chip.badge.tag());
         b.narration = switch (b.kind) {
-            case CALL, INVITE -> Texts.tr("toast.narration.notice", name, bodyText);
-            case INFO, TRAVEL -> Component.literal(name + ". " + bodyText);
+            case CALL, INVITE, WORLD -> Texts.tr("toast.narration.notice", name, bodyText);
+            case INFO, TRAVEL, HOST -> Component.literal(name + ". " + bodyText);
             case MESSAGE -> crewName != null ? Texts.tr("toast.narration.crew", spokenName, crewName, bodyText)
                 : Texts.tr("toast.narration.message", spokenName, bodyText);
         };
+        return new ToastCard(b);
+    }
+
+    /** The hint with the overlay's key where the sentence has it ("F7 ile arayüzü aç", "Press F7 to open"). */
+    private static void hint(Builder b, String key, String keyName) {
+        if (keyName == null) {
+            b.hintBefore = Texts.str("toast.hint.unbound");
+            return;
+        }
+        String template = Texts.str(key, "\u0000");
+        int at = template.indexOf('\u0000');
+        b.hintBefore = at < 0 ? template.strip() : template.substring(0, at).strip();
+        b.hintAfter = at < 0 ? "" : template.substring(at + 1).strip();
+        b.hintKey = Texts.fit(Fonts.small(), keyName, 48);
+    }
+
+    /**
+     * The host's own note (HOST1): {@code title} in bold with {@code body} under it, the grass block for its face when
+     * it is about the world ({@code sprite}) or the friend's initial when it is about them; with {@code hintKey} the
+     * hint line ("F7 ile yönet") follows.
+     */
+    public static ToastCard host(String title, String body, boolean sprite, String hintKey, String keyName) {
+        Builder b = new Builder();
+        b.kind = Kind.HOST;
+        b.sprite = sprite;
+        Font strong = Fonts.strong();
+        String titleText = Texts.fit(strong, title, TEXT_W);
+        b.title = Texts.visual(titleText);
+        b.titleWidth = strong.width(titleText);
+        b.initial = Texts.initial(title);
+        b.body = body == null || body.isEmpty() ? List.of() : Texts.wrap(Fonts.ui(), body, TEXT_W, MAX_BODY_LINES);
+        if (hintKey != null) {
+            hint(b, hintKey, keyName);
+        }
+        b.narration = Component.literal(body == null || body.isEmpty() ? title : title + ". " + body);
         return new ToastCard(b);
     }
 
@@ -288,7 +330,7 @@ public final class ToastCard {
             }
         }
         Draw.popAlpha();
-        if (kind != Kind.INFO) {
+        if (hasHint()) {
             drawHint(g, tx, ty + HINT_GAP);
         }
     }
@@ -306,6 +348,11 @@ public final class ToastCard {
     }
 
     private void drawFace(GuiGraphicsExtractor g, float cx, float cy) {
+        if (sprite) {
+            // Our grass block on whole pixels: a world is a block, never a globe (ICON1).
+            PixelSprites.draw(g, PixelSprites.Sprite.WORLD, cx - PixelSprites.SIZE / 2f, cy - PixelSprites.SIZE / 2f);
+            return;
+        }
         switch (kind) {
             case TRAVEL -> {
                 Draw.disc(g, FACE, cx, cy, Theme.withAlpha(Theme.GOLD_500, 0.2f));
@@ -323,7 +370,7 @@ public final class ToastCard {
                 Draw.disc(g, FACE, cx, cy, Theme.OBSIDIAN_700);
                 Draw.icon(g, Icon.INFO, 10, cx - 5, cy - 5, Theme.ASH_300);
             }
-            case MESSAGE -> {
+            case MESSAGE, HOST, WORLD -> {
                 Draw.disc(g, FACE, cx, cy, Theme.OBSIDIAN_600);
                 if (crewChat) {
                     Draw.icon(g, Icon.CREW, 10, cx - 5, cy - 5, Theme.BONE_100);

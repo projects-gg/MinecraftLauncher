@@ -89,8 +89,8 @@ public final class ToastLayer implements HudElement {
         if (forOpenConversation) {
             return;
         }
-        Sounds.Cue cue = kind == ToastCard.Kind.CALL || kind == ToastCard.Kind.INVITE ? Sounds.Cue.CALL
-            : kind == ToastCard.Kind.MESSAGE ? Sounds.Cue.MESSAGE : null;
+        Sounds.Cue cue = kind == ToastCard.Kind.CALL || kind == ToastCard.Kind.INVITE || kind == ToastCard.Kind.WORLD
+            ? Sounds.Cue.CALL : kind == ToastCard.Kind.MESSAGE ? Sounds.Cue.MESSAGE : null;
         if (cue != null) {
             Sounds.play(cue, settings, now);
         }
@@ -143,6 +143,22 @@ public final class ToastLayer implements HudElement {
         mc.getNarrator().saySystemQueued(card.narration());
     }
 
+    /**
+     * A note of world sharing for the host (HOST1: the world opened, a friend came in or left), under the player's
+     * "Diğer bildirimler". Notes about different friends stack; the same one replaces itself.
+     */
+    public void host(ToastCard card, String key, OverlaySettings settings, boolean reducedMotion) {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null || !settings.infoToasts() || (travel != null && travelAlpha.target() > 0f)) {
+            return;
+        }
+        Shapes.prepare();
+        stack.setAnchoredAtTop(settings.corner() == OverlaySettings.Corner.TOP_RIGHT);
+        stack.setReducedMotion(reducedMotion);
+        stack.push(key, card, card.height(), duration(ToastCard.Kind.HOST, settings, mc), now());
+        mc.getNarrator().saySystemQueued(card.narration());
+    }
+
     /** The panel opened: every toast fades where it is. */
     public void clear() {
         stack.clear(now());
@@ -165,9 +181,9 @@ public final class ToastLayer implements HudElement {
 
     private static long duration(ToastCard.Kind kind, OverlaySettings settings, Minecraft mc) {
         long base = switch (kind) {
-            case CALL, INVITE -> CALL_MS;
+            case CALL, INVITE, WORLD -> CALL_MS;
             case INFO, TRAVEL -> INFO_MS;
-            case MESSAGE -> MESSAGE_MS;
+            case MESSAGE, HOST -> MESSAGE_MS;
         };
         double accessibility = mc.options.notificationDisplayTime().get();
         return Math.round(base * settings.duration().factor * accessibility);

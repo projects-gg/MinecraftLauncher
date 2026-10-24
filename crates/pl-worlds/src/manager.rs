@@ -1879,6 +1879,14 @@ impl Worlds {
                 self.close_hosting(None);
                 self.changed();
             }
+            FromGame::HostMeet { invite } => {
+                // "Projects'te buluşun" from the game (H17): as the page's button, for at most a world's room.
+                let friends: Vec<String> = invite.into_iter().take(7).collect();
+                if !friends.is_empty() {
+                    let worlds = self.clone();
+                    tokio::spawn(async move { worlds.meet_on_projects(friends).await });
+                }
+            }
             _ => {}
         }
     }

@@ -32,9 +32,10 @@ public final class Protocol {
      * {@code connect} (the launcher's "Bağlan"), {@code chat2} (chat extras: replies, reactions, stickers,
      * "yazıyor…", "Görüldü", links; docs/tasks/ovl2-protocol.md, CHAT2-O), {@code tags} (crew tags and their
      * cards, the crews' "ekibe katıldı" lines; TEAM6-O), {@code link} (codeless Discord linking: the launcher's
-     * permit to a Projects server that asks, and its question; SKIN1-O).
+     * permit to a Projects server that asks, and its question; SKIN1-O), {@code host} (opening a singleplayer world
+     * to friends: the gate, the screens, the pause menu's button; HOST1-M, rows H1–H16).
      */
-    public static final List<String> FEATURES = List.of("connect", "chat2", "tags", "link");
+    public static final List<String> FEATURES = List.of("connect", "chat2", "tags", "link", "host");
     /** Minecraft's legacy formatting sign; launcher text must never carry formatting into the game. */
     private static final int SECTION_SIGN = 0xA7;
     /** The keycap mark (1️⃣): the digit stays, the mark would draw as a dashed box. */
@@ -213,6 +214,108 @@ public final class Protocol {
         JsonObject o = message("link-want");
         o.addProperty("name", name);
         return o;
+    }
+
+    // ---- World sharing (HOST1, rows H3–H11 of docs/tasks/ovl2-protocol.md) -----------------------------
+
+    /**
+     * The player entered ({@code open}) or left a singleplayer world (H3): its folder in {@code saves/}, its game mode
+     * and whether vanilla's own LAN sharing is on.
+     */
+    public static JsonObject hostWorld(boolean open, String folder, String mode, boolean lan) {
+        JsonObject o = message("host-world");
+        o.addProperty("open", open);
+        if (open) {
+            o.addProperty("folder", folder);
+            o.addProperty("mode", mode);
+            o.addProperty("lan", lan);
+        }
+        return o;
+    }
+
+    /** "Davet et" in the game with no world open yet (H4): the guests' mode, their commands, the friends to invite. */
+    public static JsonObject hostRequest(String mode, boolean commands, List<String> invite) {
+        JsonObject o = message("host-request");
+        o.addProperty("mode", mode);
+        o.addProperty("commands", commands);
+        o.add("invite", ids(invite));
+        return o;
+    }
+
+    /** The world opened on loopback (H6): its port and the game's protocol number. */
+    public static JsonObject hostPublished(String id, int port, int proto) {
+        JsonObject o = message("host-published");
+        o.addProperty("id", id);
+        o.addProperty("ok", true);
+        o.addProperty("port", port);
+        o.addProperty("proto", proto);
+        return o;
+    }
+
+    /** The world did not open (H6): {@code busy}, {@code lan}, {@code not-world} or {@code error}. */
+    public static JsonObject hostPublishFailed(String id, String reason) {
+        JsonObject o = message("host-published");
+        o.addProperty("id", id);
+        o.addProperty("ok", false);
+        o.addProperty("reason", reason);
+        return o;
+    }
+
+    /**
+     * A guest got in ({@code in}), left ({@code out}) or was turned away at the gate ({@code refused}) (H7); the
+     * reason only with {@code out} and {@code refused}.
+     */
+    public static JsonObject hostGuest(long conn, String guest, String name, String state, String reason) {
+        JsonObject o = message("host-guest");
+        o.addProperty("conn", conn);
+        o.addProperty("guest", guest);
+        o.addProperty("name", name);
+        o.addProperty("state", state);
+        if (reason != null) {
+            o.addProperty("reason", reason);
+        }
+        return o;
+    }
+
+    /** More friends invited from the open world (H9). */
+    public static JsonObject hostInvite(List<String> invite) {
+        JsonObject o = message("host-invite");
+        o.add("invite", ids(invite));
+        return o;
+    }
+
+    /** The player pressed "Dünyadan çıkar" on guest {@code guest} (H10). */
+    public static JsonObject hostRemove(String guest) {
+        JsonObject o = message("host-remove");
+        o.addProperty("guest", guest);
+        return o;
+    }
+
+    /**
+     * "Projects'te buluşun" (H17): these friends get a "Birlikte oyna" invite once the player is on Projects (the game
+     * goes there itself, after the player's confirmation).
+     */
+    public static JsonObject hostMeet(List<String> invite) {
+        JsonObject o = message("host-meet");
+        o.add("invite", ids(invite));
+        return o;
+    }
+
+    /** Sharing stops (H11): {@code player} (the player closed it) or {@code left-world}. */
+    public static JsonObject hostStop(String reason) {
+        JsonObject o = message("host-stop");
+        if (reason != null) {
+            o.addProperty("reason", reason);
+        }
+        return o;
+    }
+
+    private static JsonArray ids(List<String> list) {
+        JsonArray a = new JsonArray();
+        for (String id : list) {
+            a.add(id);
+        }
+        return a;
     }
 
     public static JsonObject message(String type) {

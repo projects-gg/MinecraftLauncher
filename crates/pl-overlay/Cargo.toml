@@ -12,6 +12,10 @@ publish = false
 pl-social = { workspace = true }
 # A message from someone the lists do not know reads "Biri" / "Someone".
 pl-lang = { workspace = true }
+# The mod's jar in a game folder (install.rs): the mods folder scan, the pre-launch mod check, the
+# version ranges and atomic writes are the launcher's own; files are hashed the downloader's way.
+pl-mc = { workspace = true }
+pl-net = { workspace = true }
 base64 = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
@@ -20,3 +24,7 @@ serde_json = { workspace = true }
 specta = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+zip = { workspace = true }

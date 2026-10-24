@@ -18,8 +18,7 @@ export function overlayLine(on: boolean, leaves: boolean, missing: boolean): Ove
 
 /**
  * Whether no instance follows the official pack, the library's rule (`hasOfficial`; a copy
- * counts): the overlay mod comes only with it. Unknown lists count as there, so the line never
- * flickers while the page opens.
+ * counts). Unknown lists count as there, so the line never flickers while the page opens.
  */
 export function officialMissing(
   instances: readonly InstanceSummary[] | undefined,
@@ -28,4 +27,34 @@ export function officialMissing(
   if (!instances) return false;
   if (instances.length > 0 && !official) return false;
   return !hasOfficial(instances, official);
+}
+
+/**
+ * Whether a Fabric instance on a Minecraft version the launcher ships the overlay's mod for
+ * (`versions`, from the backend: `26.2` also takes `26.2.1`) is there: the launcher puts the mod
+ * in it at its start (OVL-B), official pack or not.
+ */
+export function canCarryOverlay(
+  instances: readonly InstanceSummary[] | undefined,
+  versions: readonly string[],
+): boolean {
+  return (instances ?? []).some(
+    (instance) =>
+      instance.loader === "fabric" &&
+      versions.some((v) => instance.mcVersion === v || instance.mcVersion.startsWith(`${v}.`)),
+  );
+}
+
+/**
+ * "Resmî paket kurulu değil" (with "Kur") while no instance can get the overlay: the official pack
+ * is missing and no Fabric instance of the player's own is on a version the mod is shipped for.
+ * Unknown versions count as a home, as unknown lists do.
+ */
+export function overlayHasNoHome(
+  instances: readonly InstanceSummary[] | undefined,
+  official: OfficialStatus | undefined,
+  versions: readonly string[] | undefined,
+): boolean {
+  if (!versions) return false;
+  return officialMissing(instances, official) && !canCarryOverlay(instances, versions);
 }

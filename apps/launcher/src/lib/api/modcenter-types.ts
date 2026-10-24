@@ -35,6 +35,8 @@ export interface ModCenterItem {
   isNew: boolean;
   /** Ids of enabled mods that need this one. */
   requiredBy: string[];
+  /** The launcher's in-game overlay needs it (Fabric API while the switch is on). */
+  launcherNeeds?: boolean;
   installed: boolean;
   /** "Güncelleme var". */
   updateAvailable: boolean;

@@ -2,7 +2,8 @@ name: Overlay mod
 
 # The in-game overlay's Fabric mod (mods/projects-overlay): compile, JUnit and the jar, with its SHA-256, once per
 # Minecraft version (one jar each, built from the same tree with -Pmc; build.gradle pins Fabric API per version).
-# Nothing is published: the jars go into the official pack through Studio, by the owner.
+# Nothing is published here: the launcher ships the jars, and the Release workflow builds them again for its builds
+# (scripts/release/overlay-jars.mjs). This workflow keeps the Gradle cache that build reads.
 
 on:
   push:

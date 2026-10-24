@@ -2794,7 +2794,10 @@ mod tests {
         let m = item_manifest("mods/sodium.jar", &[(OVERLAY_ITEM, true)]);
         let on = SyncPolicy::default();
         let off = SyncPolicy {
-            items: LauncherItems { overlay: false },
+            items: LauncherItems {
+                overlay: false,
+                ..LauncherItems::default()
+            },
             ..SyncPolicy::default()
         };
         let jar = format!("mods/{OVERLAY_ITEM}.jar");
@@ -2941,13 +2944,98 @@ mod tests {
 
         // With the switch off, a version's own jar goes and the next version brings none.
         let off = SyncPolicy {
-            items: LauncherItems { overlay: false },
+            items: LauncherItems {
+                overlay: false,
+                ..LauncherItems::default()
+            },
             ..SyncPolicy::default()
         };
         let plan = plan_sync(&m1, game, Some(&back.active), None, &off)
             .await
             .unwrap();
         assert_eq!(deleted(&plan), [jar1]);
+    }
+
+    #[tokio::test]
+    async fn a_launcher_with_its_own_overlay_jar_takes_over_from_the_pack_item() {
+        use crate::items::{FABRIC_API_PROJECT, OVERLAY_ITEM};
+        use crate::model::ModrinthRef;
+
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        // The live pack's shape: the overlay item needs the library, as sodium does.
+        let jar = "mods/projects-overlay-0.1.0+mc26.1.2.jar";
+        let mut m = version_manifest("26.1.2", Some(jar));
+        for item in &mut m.projects.items {
+            if item.id == "fabric-api" {
+                item.modrinth = Some(ModrinthRef {
+                    project_id: FABRIC_API_PROJECT.into(),
+                    version_id: "api-1".into(),
+                });
+            }
+        }
+        m.validate().unwrap();
+        let contents: [(&str, &[u8]); 4] = [
+            ("mods/fabric-api.jar", b"fabric"),
+            ("mods/sodium.jar", b"sodium"),
+            ("config/sodium.json", b"{}"),
+            (jar, jar.as_bytes()),
+        ];
+        // An older launcher installed the pack's overlay jar.
+        let first = plan_sync(&m, game, None, None, &SyncPolicy::default())
+            .await
+            .unwrap();
+        let state = installed(game, &first, &contents);
+        assert_eq!(state.installed_item(OVERLAY_ITEM), Some(jar));
+
+        // This launcher ships its own: the pack's copy goes like an item switched off, quietly.
+        let bundled = SyncPolicy {
+            items: LauncherItems {
+                overlay: true,
+                overlay_bundled: true,
+            },
+            ..SyncPolicy::default()
+        };
+        let plan = plan_sync(&m, game, Some(&state), None, &bundled)
+            .await
+            .unwrap();
+        assert_eq!(deleted(&plan), [jar]);
+        assert!(plan.downloads.is_empty() && plan.adopted.is_empty());
+        assert!(plan.next_state.installed_item(OVERLAY_ITEM).is_none());
+        assert!(!plan.next_state.items.contains_key(OVERLAY_ITEM));
+        assert!(!status(&plan, OVERLAY_ITEM).effectively_enabled);
+
+        // Sodium switched off: Fabric API stays for the launcher's own jar...
+        let lean = plan_sync(
+            &m,
+            game,
+            Some(&state),
+            Some(&select(&[("sodium", false)])),
+            &bundled,
+        )
+        .await
+        .unwrap();
+        assert!(!deleted(&lean).contains(&"mods/fabric-api.jar"));
+        let library = status(&lean, "fabric-api");
+        assert!(library.effectively_enabled && library.launcher_needs);
+        // ...and goes with the overlay switched off.
+        let off = SyncPolicy {
+            items: LauncherItems {
+                overlay: false,
+                overlay_bundled: true,
+            },
+            ..SyncPolicy::default()
+        };
+        let gone = plan_sync(
+            &m,
+            game,
+            Some(&state),
+            Some(&select(&[("sodium", false)])),
+            &off,
+        )
+        .await
+        .unwrap();
+        assert!(deleted(&gone).contains(&"mods/fabric-api.jar"));
     }
 
     #[tokio::test]

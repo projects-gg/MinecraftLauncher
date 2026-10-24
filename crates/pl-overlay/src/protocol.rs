@@ -156,6 +156,12 @@ pub enum FromGame {
         #[serde(default)]
         reason: String,
     },
+    /// HOST1-M (H17): "Projects'te buluşun" in the game: these friends get a "Birlikte oyna" invite once the
+    /// player is on Projects (the game goes there itself, after the player's confirmation in the game).
+    HostMeet {
+        #[serde(default)]
+        invite: Vec<String>,
+    },
     /// SKIN1-O (K3; from a mod whose hello lists `link`): a Projects server asked the game on
     /// `projects:link` whether its launcher vouches for the player; `name` is the game's own
     /// account name. The launcher answers with `link-offer` (a permit for that account) or
@@ -233,6 +239,7 @@ impl FromGame {
                 | Self::HostInvite { .. }
                 | Self::HostRemove { .. }
                 | Self::HostStop { .. }
+                | Self::HostMeet { .. }
         )
     }
 }
@@ -974,6 +981,10 @@ mod tests {
                 reason: String::new()
             }
         );
+        let meet: FromGame =
+            serde_json::from_str(r#"{"t":"host-meet","invite":["f1","f2"]}"#).unwrap();
+        assert!(meet.is_host());
+        assert!(matches!(meet, FromGame::HostMeet { ref invite } if invite == &["f1", "f2"]));
         let join: FromGame = serde_json::from_str(r#"{"t":"join","friend":"f1"}"#).unwrap();
         assert!(!join.is_host());
 

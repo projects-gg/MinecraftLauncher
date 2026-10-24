@@ -49,6 +49,9 @@
     "active": true,
     "targets": ["nsis", "app", "dmg", "appimage", "deb", "rpm"],
     "createUpdaterArtifacts": true,
+    "resources": {
+      "overlay/": "overlay/"
+    },
     "publisher": "Projects.gg",
     "homepage": "https://projects.gg",
     "copyright": "© Projects.gg",

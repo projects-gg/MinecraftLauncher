@@ -16,7 +16,8 @@
 //!   choices rank below an explicit [`PackSelection`] and above the recorded choices;
 //! - an item a launcher setting owns ([`LauncherItems`]: the in-game overlay, [`OVERLAY_ITEM`])
 //!   follows that setting alone: never recorded, adopted or new, and the mod center does not list
-//!   it.
+//!   it. A launcher that ships the overlay's mod itself never installs that item, and keeps the
+//!   pack's Fabric API installed while the overlay is on ([`LauncherItems::needs`]).
 //!
 //! [`resolve_items`] is pure; [`crate::plan_sync`] turns its result into downloads and
 //! deletions.
@@ -33,6 +34,19 @@ use crate::sync::{InstalledFile, PackState};
 /// owns its choice ([`LauncherItems::overlay`]).
 pub const OVERLAY_ITEM: &str = "projects-overlay";
 
+/// Fabric API's Modrinth project. Studio gives Modrinth items their project id as item id; a pack
+/// item is Fabric API when either says so ([`is_fabric_api`]).
+pub const FABRIC_API_PROJECT: &str = "P7dR8mSH";
+
+/// Whether a pack item installs Fabric API.
+pub fn is_fabric_api(item: &PackItem) -> bool {
+    item.id == FABRIC_API_PROJECT
+        || item
+            .modrinth
+            .as_ref()
+            .is_some_and(|modrinth| modrinth.project_id == FABRIC_API_PROJECT)
+}
+
 /// Pack items a launcher setting owns instead of the mod center: one switch, one place. Such an
 /// item is installed exactly while its setting is on (an enabled item that requires it does not
 /// switch it on), its choice is never recorded in the pack state, a change to its file in the mods
@@ -43,11 +57,20 @@ pub const OVERLAY_ITEM: &str = "projects-overlay";
 pub struct LauncherItems {
     /// "Oyun içi katman" (on by default).
     pub overlay: bool,
+    /// The launcher ships the overlay's mod and puts it in every Fabric instance itself (OVL-B):
+    /// the pack's overlay item is then never installed (a copy an older launcher installed goes
+    /// like any item switched off), and while [`Self::overlay`] is on the pack's Fabric API stays
+    /// installed for the mod ([`Self::needs`]), so the pack, not a second copy, provides it. Off
+    /// by default: older launchers and Studio's previews install the item.
+    pub overlay_bundled: bool,
 }
 
 impl Default for LauncherItems {
     fn default() -> Self {
-        Self { overlay: true }
+        Self {
+            overlay: true,
+            overlay_bundled: false,
+        }
     }
 }
 
@@ -59,7 +82,14 @@ impl LauncherItems {
 
     /// The setting's choice for an item it owns.
     pub fn choice(&self, id: &str) -> Option<bool> {
-        (id == OVERLAY_ITEM).then_some(self.overlay)
+        (id == OVERLAY_ITEM).then_some(self.overlay && !self.overlay_bundled)
+    }
+
+    /// Whether the launcher itself needs `item` installed: Fabric API while the mod the launcher
+    /// ships for the overlay is on. Such an item is installed like a required one (whatever the
+    /// player chose) and its status says why ([`ItemStatus::launcher_needs`]).
+    pub fn needs(&self, item: &PackItem) -> bool {
+        self.overlay && self.overlay_bundled && is_fabric_api(item)
     }
 }
 
@@ -126,6 +156,10 @@ pub struct ItemStatus {
     /// Enabled items that require this one, in manifest order (why it is on although not
     /// selected).
     pub required_by: Vec<String>,
+    /// The launcher's own in-game overlay needs it (Fabric API, [`LauncherItems::needs`]): it is
+    /// installed for that too, whatever the player chose.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub launcher_needs: bool,
     /// The pack state records a file of this item (an earlier sync installed it).
     pub installed: bool,
     /// Installed, but the manifest now has another file for it (new hash or file name).
@@ -242,6 +276,13 @@ pub(crate) fn resolve_with(
     let by_id: HashMap<&str, &PackItem> =
         items.iter().map(|item| (item.id.as_str(), item)).collect();
     let mut enabled: HashSet<&str> = selected.union(&set_on).copied().collect();
+    // What the launcher's own overlay mod needs (Fabric API) is installed like a requirement.
+    enabled.extend(
+        items
+            .iter()
+            .filter(|item| launcher.needs(item))
+            .map(|item| item.id.as_str()),
+    );
     let mut pending: Vec<&str> = enabled.iter().copied().collect();
     while let Some(id) = pending.pop() {
         let Some(item) = by_id.get(id) else { continue };
@@ -294,6 +335,7 @@ pub(crate) fn resolve_with(
                     })
                     .map(|other| other.id.clone())
                     .collect(),
+                launcher_needs: launcher.needs(item),
                 installed: record.is_some(),
                 update_available: record.is_some_and(|(path, installed)| {
                     *path != item.path
@@ -657,10 +699,16 @@ mod tests {
         m
     }
 
+    /// The setting off, as a launcher without the overlay's own jars has it.
+    const OFF: LauncherItems = LauncherItems {
+        overlay: false,
+        overlay_bundled: false,
+    };
+
     #[test]
     fn the_overlay_follows_its_setting_alone() {
         let on = LauncherItems::default();
-        let off = LauncherItems { overlay: false };
+        let off = OFF;
         // A set made before the overlay came: it is installed at once, never new, never recorded.
         let before = resolve_items(&catalog(), None, None);
         let state = state_with(&before);
@@ -724,22 +772,107 @@ mod tests {
             .push(item("overlay-skin", true, &[OVERLAY_ITEM]));
         m.files.push(file("mods/overlay-skin.jar"));
         m.validate().unwrap();
-        let off = resolve_items_with(&m, None, None, &LauncherItems { overlay: false });
+        let off = resolve_items_with(&m, None, None, &OFF);
         assert!(off.is_enabled("overlay-skin"));
         assert!(!off.is_enabled(OVERLAY_ITEM));
+    }
+
+    /// Fabric API the way Studio lists a Modrinth library: its project as id and reference.
+    fn fabric_api(id: &str) -> PackItem {
+        PackItem {
+            modrinth: Some(crate::model::ModrinthRef {
+                project_id: FABRIC_API_PROJECT.into(),
+                version_id: "api-1".into(),
+            }),
+            ..library(id)
+        }
+    }
+
+    fn only(id: &str, on: bool) -> PackSelection {
+        PackSelection {
+            items: BTreeMap::from([(id.to_owned(), on)]),
+            ..PackSelection::default()
+        }
+    }
+
+    #[test]
+    fn a_launcher_with_its_own_overlay_jar_never_installs_the_item() {
+        let bundled = LauncherItems {
+            overlay: true,
+            overlay_bundled: true,
+        };
+        let off = LauncherItems {
+            overlay: false,
+            overlay_bundled: true,
+        };
+        // The live pack's shape: the overlay and a mod both need Fabric API.
+        let m = manifest(vec![
+            item("sodium", true, &[FABRIC_API_PROJECT]),
+            item(OVERLAY_ITEM, true, &[FABRIC_API_PROJECT]),
+            fabric_api(FABRIC_API_PROJECT),
+        ]);
+        let first = resolve_items_with(&m, None, None, &bundled);
+        assert!(
+            !first.is_enabled(OVERLAY_ITEM),
+            "the launcher puts its own in place"
+        );
+        assert!(!first.choices.contains_key(OVERLAY_ITEM));
+        let fabric = first.status(FABRIC_API_PROJECT).unwrap();
+        assert!(fabric.effectively_enabled && fabric.launcher_needs);
+        assert_eq!(fabric.required_by, ["sodium"]);
+        let state = state_with(&first);
+
+        // Nothing in the pack needs Fabric API any more: the overlay alone keeps it.
+        let lean = resolve_items_with(&m, Some(&state), Some(&only("sodium", false)), &bundled);
+        assert_eq!(enabled(&lean), [FABRIC_API_PROJECT]);
+        assert!(
+            lean.status(FABRIC_API_PROJECT)
+                .unwrap()
+                .required_by
+                .is_empty()
+        );
+
+        // Switched off: the library goes with the last mod that needed it.
+        let quiet = resolve_items_with(&m, Some(&state), Some(&only("sodium", false)), &off);
+        assert!(enabled(&quiet).is_empty());
+        assert!(!quiet.status(FABRIC_API_PROJECT).unwrap().launcher_needs);
+
+        // A Fabric API item that is a choice (found by its Modrinth reference) comes back too.
+        let plain = manifest(vec![PackItem {
+            modrinth: fabric_api("api").modrinth,
+            ..item("api", false, &[])
+        }]);
+        let back = resolve_items_with(&plain, None, Some(&only("api", false)), &bundled);
+        let api = back.status("api").unwrap();
+        assert!(api.effectively_enabled && !api.selected && api.launcher_needs);
+
+        // An older launcher (and Studio's preview) installs the item as before.
+        assert!(resolve_items(&m, None, None).is_enabled(OVERLAY_ITEM));
+        assert!(
+            !resolve_items(&m, None, None)
+                .status(FABRIC_API_PROJECT)
+                .unwrap()
+                .launcher_needs
+        );
     }
 
     #[test]
     fn launcher_items_read_and_default_on() {
         assert!(LauncherItems::default().overlay);
+        assert!(!LauncherItems::default().overlay_bundled);
         assert!(LauncherItems::owns(OVERLAY_ITEM) && !LauncherItems::owns("sodium"));
-        assert_eq!(
-            LauncherItems { overlay: false }.choice(OVERLAY_ITEM),
-            Some(false)
-        );
+        assert_eq!(OFF.choice(OVERLAY_ITEM), Some(false));
+        let bundled = LauncherItems {
+            overlay: true,
+            overlay_bundled: true,
+        };
+        assert_eq!(bundled.choice(OVERLAY_ITEM), Some(false));
         assert_eq!(LauncherItems::default().choice("sodium"), None);
         let read: LauncherItems = serde_json::from_str("{}").unwrap();
-        assert!(read.overlay);
+        assert_eq!(read, LauncherItems::default());
+        assert!(is_fabric_api(&library(FABRIC_API_PROJECT)));
+        assert!(is_fabric_api(&fabric_api("fabric-api")));
+        assert!(!is_fabric_api(&library("fabric-api")));
     }
 
     #[test]

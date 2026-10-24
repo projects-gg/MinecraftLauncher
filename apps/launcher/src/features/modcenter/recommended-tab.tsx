@@ -39,7 +39,7 @@ import {
   choicesOf,
   enabledSet,
   matches,
-  neededBy,
+  neededFor,
   pendingSelection,
   safePageUrl,
   totals,
@@ -109,7 +109,7 @@ export function ItemRow({
 }) {
   const { t } = useTranslation();
   const on = enabled.has(item.id);
-  const needed = neededBy(items, enabled, item.id);
+  const needed = neededFor(items, enabled, item, t("overlay.setting"));
   const forced = needed.length > 0;
   const brings = on ? [] : bringsAlong(items, item.id, enabled);
   const names = (list: string[]) => list.join(", ");
@@ -245,7 +245,7 @@ export function LibraryRow({
 }) {
   const { t } = useTranslation();
   const on = enabled.has(item.id);
-  const needed = neededBy(items, enabled, item.id);
+  const needed = neededFor(items, enabled, item, t("overlay.setting"));
   const state = on ? t("modCenter.item.libraryOn") : t("modCenter.item.libraryOff");
   const names = needed.join(", ");
   // A library the player removed or disabled comes back while a mod needs it: say why.

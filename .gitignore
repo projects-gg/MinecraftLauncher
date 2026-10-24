@@ -10,6 +10,9 @@ target/
 # Tauri generated
 apps/*/src-tauri/gen/schemas/
 
+# The in-game overlay's jars, built before a release (scripts/release/overlay-jars.mjs)
+apps/launcher/src-tauri/overlay/
+
 # Secrets — never commit keys or credentials
 .env
 .env.*
