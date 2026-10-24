@@ -721,6 +721,38 @@ async fn install_set(
     Ok(apply_view(&plan, &report))
 }
 
+/// HOST1: a copy of a friend's install takes the host's ready-made sets with their default
+/// choices (the world's own mod list comes after, `crate::host`). Sets the copy has installed
+/// already stay as they are; one the catalog no longer offers for this version is skipped.
+pub(crate) async fn install_for_copy(
+    app: &AppHandle,
+    state: &AppState,
+    instance_id: &str,
+    set_ids: &[String],
+) {
+    if set_ids.is_empty() {
+        return;
+    }
+    let (Ok(instance), Ok(game_dir)) = (
+        state.instances.get(instance_id).await,
+        state.instances.game_dir(instance_id),
+    ) else {
+        return;
+    };
+    let lock = instance_lock(app, instance_id);
+    let _guard = lock.lock().await;
+    let have = ModSetStates::load(&game_dir).await.unwrap_or_default();
+    let cancel = CancellationToken::new();
+    for set_id in set_ids
+        .iter()
+        .filter(|id| !have.sets.get(*id).is_some_and(AddedSet::installed))
+    {
+        if let Err(error) = install_set(app, state, &instance, set_id, None, None, &cancel).await {
+            tracing::info!(set = %set_id, ?error, "a friend's ready-made set was not added to the copy");
+        }
+    }
+}
+
 fn apply_error(error: pl_content::Error) -> CmdError {
     // A disk that fills up on the way says so (and offers "Yer aç").
     let details = error.to_string();

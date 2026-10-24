@@ -7,11 +7,14 @@
 //! a SHA-512 lookup finds); jars Modrinth does not know are only counted. No file name, path or
 //! hash ever leaves the computer in the manifest.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::path::Path;
 
 use pl_host::manifest::{Loader, Manifest, ModRef, PackRef, is_both_side};
+
+/// At most this many of the host's ready-made sets go into a copy (Studio offers a handful).
+pub const MAX_COPY_SETS: usize = 8;
 
 /// An enabled jar of an install.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,6 +141,43 @@ pub fn build(
     )
 }
 
+/// The host's ready-made sets a copy of its install adds (PROTOCOL.md §10.2 step 4), in the
+/// manifest's order: each once, at most [`MAX_COPY_SETS`], and only ids a set can have (1–64
+/// characters from `[A-Za-z0-9._-]`; the catalog decides which exist).
+pub fn copy_sets(manifest: &Manifest) -> Vec<String> {
+    let mut sets: Vec<String> = Vec::new();
+    for id in &manifest.sets {
+        let well_formed = (1..=64).contains(&id.len())
+            && id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'));
+        if well_formed && !sets.contains(id) {
+            sets.push(id.clone());
+            if sets.len() == MAX_COPY_SETS {
+                break;
+            }
+        }
+    }
+    sets
+}
+
+/// The manifest's mods an install still downloads from Modrinth (their version ids): not a
+/// project `provided` brings already (the pack's, whose sync installs them with the game's start,
+/// and the ready-made sets' installed there: a second copy of one mod stops the game), and not a
+/// version already in its `mods/` (`have`).
+pub fn mods_to_add(
+    manifest: &Manifest,
+    provided: &HashSet<String>,
+    have: &HashSet<String>,
+) -> Vec<String> {
+    manifest
+        .mods
+        .iter()
+        .filter(|m| !provided.contains(&m.project) && !have.contains(&m.version))
+        .map(|m| m.version.clone())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,5 +262,60 @@ mod tests {
         );
         assert!(manifest.hash_ok());
         assert!(scan(&dir.path().join("none")).is_empty());
+    }
+
+    fn with_sets_and_mods(sets: &[&str], mods: &[(&str, &str)]) -> Manifest {
+        Manifest::new(
+            "26.1.2",
+            Loader {
+                kind: "fabric".into(),
+                version: "0.19.5".into(),
+            },
+            None,
+            sets.iter().map(|s| (*s).to_owned()).collect(),
+            mods.iter().map(|&(p, v)| ModRef::new(p, v)),
+            0,
+        )
+    }
+
+    /// The host's sets reach a copy once each, well formed, a handful at most.
+    #[test]
+    fn a_copy_takes_the_hosts_sets() {
+        let manifest = with_sets_and_mods(
+            &["pvp", "performance", "pvp", "", "../x", "a b", "pvp.v2_x-1"],
+            &[],
+        );
+        assert_eq!(copy_sets(&manifest), ["pvp", "performance", "pvp.v2_x-1"]);
+        let long = "s".repeat(65);
+        let many: Vec<String> = (0..20).map(|i| format!("set{i}")).collect();
+        let mut ids: Vec<&str> = vec![long.as_str()];
+        ids.extend(many.iter().map(String::as_str));
+        let capped = copy_sets(&with_sets_and_mods(&ids, &[]));
+        assert_eq!(capped.len(), MAX_COPY_SETS);
+        assert_eq!(capped[0], "set0", "an id longer than 64 is not one");
+        assert!(copy_sets(&with_sets_and_mods(&[], &[])).is_empty());
+    }
+
+    /// What the pack or a set brings is never downloaded a second time; a version already there
+    /// neither.
+    #[test]
+    fn a_copy_downloads_only_what_nothing_else_brings() {
+        let manifest = with_sets_and_mods(
+            &["pvp"],
+            &[
+                ("fabric-api", "api-2"),
+                ("zoom", "zoom-1"),
+                ("farmers", "fd-3"),
+                ("voice", "vc-2"),
+            ],
+        );
+        let provided: HashSet<String> = ["fabric-api".to_owned(), "zoom".to_owned()].into();
+        let have: HashSet<String> = ["vc-2".to_owned()].into();
+        assert_eq!(mods_to_add(&manifest, &provided, &have), ["fd-3"]);
+        // The manifest keeps its mods sorted by project.
+        assert_eq!(
+            mods_to_add(&manifest, &HashSet::new(), &HashSet::new()),
+            ["api-2", "fd-3", "vc-2", "zoom-1"]
+        );
     }
 }
