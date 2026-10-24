@@ -77,8 +77,8 @@ async fn restart_backoff_ramps_through_the_account_delay_with_spread() {
     manager.connect(&id).await.unwrap();
 
     until("six launches", LONG, || s.launch_count() >= 6).await;
-    // 15-60 s: 15 s, then doubling (and the ramp) up to 60 s.
-    assert_gaps_near(&gaps(&s, Duration::from_secs(1)), &[15, 30, 60, 60, 60]);
+    // 15-60 s: 15 s, then doubling (and the ramp) up to 60 s, then the steps towards 4 minutes.
+    assert_gaps_near(&gaps(&s, Duration::from_secs(1)), &[15, 30, 60, 90, 120]);
 
     let reconnecting: Vec<u32> = env
         .states(&id)
@@ -123,14 +123,15 @@ async fn new_accounts_reconnect_after_their_short_default_delay() {
         );
     }
 
-    // Changed while the fifth client runs: its restart already waits the new delay.
+    // Changed while the fifth client runs: its restart already waits the new delay (longer than
+    // the back-off's four minutes, so the account's own delay is what counts).
     env.update(&id, |a| {
-        a.auto_relog.delay_min = 120.0;
-        a.auto_relog.delay_max = 120.0;
+        a.auto_relog.delay_min = 300.0;
+        a.auto_relog.delay_max = 300.0;
     });
     until("sixth launch", LONG, || s.launch_count() >= 6).await;
     let gap = exact_gaps(&s, Duration::from_secs(1))[4];
-    assert!((96.0..=144.01).contains(&gap), "{gap}");
+    assert!((240.0..=360.01).contains(&gap), "{gap}");
     manager.shutdown().await;
 }
 

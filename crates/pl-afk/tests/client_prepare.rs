@@ -230,6 +230,7 @@ impl Env {
             ManagerOptions {
                 config: ManagerConfig {
                     stagger,
+                    connect_spacing: Duration::ZERO,
                     ..ManagerConfig::default()
                 },
                 downloader: Some(Downloader::new(Http::new(config).unwrap())),

@@ -5,12 +5,13 @@
 mod common;
 
 use std::path::Path;
+use std::sync::Arc;
 use std::time::Duration;
 
 use common::{TestEnv, is_error, until};
 use pl_afk::{
-    AfkManager, ConsoleLineKind, ConsoleOrigin, FailureReason, ManagerConfig, RestartSchedule,
-    SessionState,
+    AfkManager, ClientProcess, ClientSpawner, ConsoleLineKind, ConsoleOrigin, FailureReason,
+    LaunchSpec, ManagerConfig, ProcessSpawner, RestartSchedule, SessionState,
 };
 
 const WAIT: Duration = Duration::from_secs(30);
@@ -26,6 +27,8 @@ fn fast_config() -> ManagerConfig {
             ..RestartSchedule::default()
         },
         stop_grace: Duration::from_secs(2),
+        // Pacing has its own test below; the others connect at once.
+        connect_spacing: Duration::ZERO,
         ..ManagerConfig::default()
     }
 }
@@ -264,5 +267,105 @@ async fn a_client_ignoring_quit_is_killed() {
     assert!(!snapshot.running);
     assert!(env.states(&id).contains(&SessionState::Stopping));
     assert_eq!(runs(&env, &id), 1);
+    manager.shutdown().await;
+}
+
+/// The real process spawner, noting when each account's client starts.
+struct RecordingSpawner {
+    spawns: parking_lot::Mutex<Vec<(String, std::time::Instant)>>,
+}
+
+impl ClientSpawner for RecordingSpawner {
+    fn spawn(&self, spec: &LaunchSpec) -> std::io::Result<ClientProcess> {
+        let account = spec
+            .cwd
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        self.spawns
+            .lock()
+            .push((account, std::time::Instant::now()));
+        ProcessSpawner.spawn(spec)
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn connections_to_one_server_go_one_by_one_in_order() {
+    const SPACING: Duration = Duration::from_millis(600);
+    let env = fake_env();
+    let ids: Vec<String> = ["Birinci", "Ikinci", "Ucuncu"]
+        .iter()
+        .map(|name| env.add(name).id)
+        .collect();
+    for id in &ids {
+        // Dropped once (the server restarted), then in game.
+        scenario(
+            &env,
+            id,
+            serde_json::json!([
+                [
+                    { "out": r#"@@MCC@@{"e":"connecting","host":"localhost","port":25565}"# },
+                    { "out": r#"@@MCC@@{"e":"disconnected","reason":"ConnectionLost","msg":"Sunucu kapandı"}"# },
+                    { "out": r#"@@MCC@@{"e":"error","reason":"ConnectionLost","versionError":false}"# },
+                    { "exit": 3 }
+                ],
+                [
+                    { "out": r#"@@MCC@@{"e":"connecting","host":"localhost","port":25565}"# },
+                    { "join": true },
+                    { "echoUntilQuit": true }
+                ]
+            ]),
+        );
+    }
+    let spawner = Arc::new(RecordingSpawner {
+        spawns: parking_lot::Mutex::new(Vec::new()),
+    });
+    let config = ManagerConfig {
+        connect_spacing: SPACING,
+        ..fast_config()
+    };
+    let manager = env.manager(Some(spawner.clone()), config);
+    for id in &ids {
+        manager.connect(id).await.unwrap();
+        // A clear order of asking (the actors run on two threads).
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    until("all back in game", WAIT, || {
+        ids.iter()
+            .all(|id| connected(&manager, id) && runs(&env, id) == 2)
+    })
+    .await;
+
+    let spawns = spawner.spawns.lock().clone();
+    assert_eq!(spawns.len(), 6, "{spawns:?}");
+    // The first connections go in the order the accounts asked.
+    let first: Vec<&str> = spawns.iter().take(3).map(|(id, _)| id.as_str()).collect();
+    let asked: Vec<&str> = ids.iter().map(String::as_str).collect();
+    assert_eq!(first, asked);
+    // Never two connections to the server closer than the spacing (a little slack for the
+    // settings each launch reads and writes after its slot).
+    for pair in spawns.windows(2) {
+        let gap = pair[1].1.duration_since(pair[0].1);
+        assert!(
+            gap >= SPACING - Duration::from_millis(100),
+            "{} then {}: {gap:?}",
+            pair[0].0,
+            pair[1].0
+        );
+    }
+    // A reconnect waiting for its turn showed when it would go.
+    for id in &ids {
+        assert!(
+            env.states(id).iter().any(|s| matches!(
+                s,
+                SessionState::Reconnecting {
+                    next_attempt_at: Some(_),
+                    ..
+                }
+            )),
+            "{id}"
+        );
+    }
+    manager.stop_all().await;
     manager.shutdown().await;
 }

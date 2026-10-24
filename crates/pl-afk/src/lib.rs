@@ -20,10 +20,11 @@
 //!
 //! The cloud AFK host (closed source, `projects-studio/services/afk-host`) reuses the client-facing
 //! parts: [`bridge::parse_line`], [`LineFilter`] (with [`LineFilter::with_secrets`]), the restart
-//! rules ([`RestartSchedule`], [`decide_exit`], [`kick_cause`]), the pattern and name checks and the
-//! TOML primitives of the config writer ([`toml_str`], [`toml_arr`], [`dotnet_number`],
-//! [`matches_line`]). It builds with `default-features = false`: the OS keychain store
-//! (`KeyringSecretStore`) is behind the default `keychain` feature.
+//! rules ([`RestartSchedule`], [`decide_exit`], [`kick_cause`]), the connection spacing per
+//! destination ([`MIN_CONNECT_SPACING`]), the pattern and name checks and the TOML primitives of
+//! the config writer ([`toml_str`], [`toml_arr`], [`dotnet_number`], [`matches_line`]). It builds
+//! with `default-features = false`: the OS keychain store (`KeyringSecretStore`) is behind the
+//! default `keychain` feature.
 
 pub mod bridge;
 pub mod client;
@@ -36,6 +37,7 @@ pub mod legacy;
 mod manager;
 mod model;
 mod orphans;
+mod pacing;
 mod page;
 mod paths;
 mod pattern;
@@ -74,6 +76,7 @@ pub use model::{
     new_account_id,
 };
 pub use orphans::RECORD_FILE_NAME;
+pub use pacing::{ConnectPacer, MIN_CONNECT_SPACING, connect_destination};
 pub use page::{LoginCommandLine, LoginCommandsPage, SettingsPage, secret_command_name};
 pub use paths::{ALERTS_FILE_NAME, AfkPaths, CHAT_LOG_FILE_NAME, CONSOLE_LOG_FILE_NAME};
 pub use pattern::{MAX_PATTERN_CHARS, PatternProblem, check_pattern, matches_line};
@@ -82,8 +85,8 @@ pub use process::{
     LaunchSpec, ProcessExit, ProcessSpawner,
 };
 pub use restart::{
-    ExitDecision, Failure, FailureReason, KickCause, REPEATED_KICKS, RestartSchedule, decide_exit,
-    decide_failure, kick_cause,
+    BACKOFF_STEPS, ExitDecision, Failure, FailureReason, KickCause, REPEATED_KICKS,
+    RestartSchedule, decide_exit, decide_failure, kick_cause,
 };
 pub use runtime::{AfkClientBuild, AfkClientRelease, AfkRuntime, CLIENT_EXE_NAME, ClientExe};
 #[cfg(feature = "keychain")]

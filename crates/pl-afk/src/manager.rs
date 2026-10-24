@@ -25,6 +25,7 @@ use crate::form::AccountSettings;
 use crate::housekeeping::{DEFAULT_LOG_CAP_BYTES, purge_login_scripts};
 use crate::model::{AfkAccount, AfkSettings};
 use crate::orphans;
+use crate::pacing::{ConnectPacer, MIN_CONNECT_SPACING};
 use crate::page::SettingsPage;
 use crate::process::{ClientSpawner, ProcessSpawner};
 use crate::restart::RestartSchedule;
@@ -51,6 +52,9 @@ pub struct ManagerConfig {
     pub stop_grace: Duration,
     /// Size cap of the per-account log files.
     pub log_cap_bytes: u64,
+    /// Least time between two connection attempts to one server, whichever accounts make them
+    /// (see [`crate::pacing`]); zero turns the pacing off.
+    pub connect_spacing: Duration,
 }
 
 impl Default for ManagerConfig {
@@ -60,6 +64,7 @@ impl Default for ManagerConfig {
             restart: RestartSchedule::default(),
             stop_grace: Duration::from_secs(4),
             log_cap_bytes: DEFAULT_LOG_CAP_BYTES,
+            connect_spacing: MIN_CONNECT_SPACING,
         }
     }
 }
@@ -245,6 +250,8 @@ impl AfkManager {
             schedule: options.config.restart,
             stop_grace: options.config.stop_grace,
             log_cap: options.config.log_cap_bytes,
+            pacer: ConnectPacer::default(),
+            connect_spacing: options.config.connect_spacing,
         });
         Self {
             inner: Arc::new(Inner {

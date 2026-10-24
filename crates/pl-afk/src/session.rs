@@ -33,6 +33,7 @@ use crate::console::{
 use crate::error::{AfkError, Result};
 use crate::housekeeping::{ConsoleLog, rotate_account_logs};
 use crate::model::{AfkAccount, AutoRelogOptions};
+use crate::pacing::{ConnectPacer, connect_destination};
 use crate::paths::CONSOLE_LOG_FILE_NAME;
 use crate::process::{ClientProcess, ClientSpawner, LaunchSpec};
 use crate::restart::{
@@ -173,6 +174,10 @@ pub(crate) struct SessionEnv {
     pub(crate) schedule: RestartSchedule,
     pub(crate) stop_grace: Duration,
     pub(crate) log_cap: u64,
+    /// Connection slots per server, shared by every account (see [`crate::pacing`]).
+    pub(crate) pacer: ConnectPacer,
+    /// Zero: no pacing.
+    pub(crate) connect_spacing: Duration,
 }
 
 impl SessionEnv {
@@ -269,6 +274,7 @@ impl Session {
             last_cause: None,
             cause_repeats: 0,
             restart_at: None,
+            paced: None,
             kill_at: None,
             failure: None,
             filter: LineFilter::default(),
@@ -403,6 +409,9 @@ struct Actor {
     last_cause: Option<KickCause>,
     cause_repeats: u32,
     restart_at: Option<Instant>,
+    /// A launch waiting at `restart_at` for its connection slot (see [`crate::pacing`]): whether
+    /// it is a restart.
+    paced: Option<bool>,
     kill_at: Option<Instant>,
     /// What the running client last reported through the bridge.
     failure: Option<Failure>,
@@ -444,7 +453,15 @@ impl Actor {
                 Some(event) = io.recv() => self.on_io(event),
                 () = sleep_until(restart_at) => {
                     self.restart_at = None;
-                    self.on_restart_due().await;
+                    match self.paced.take() {
+                        // The connection slot this launch waited for: it is ours, go.
+                        Some(is_restart) => {
+                            if !self.stop_requested && self.process.is_none() {
+                                self.launch_now(is_restart).await;
+                            }
+                        }
+                        None => self.on_restart_due().await,
+                    }
                 }
                 () = sleep_until(kill_at) => {
                     self.kill_at = None;
@@ -461,7 +478,8 @@ impl Actor {
 
     async fn on_start(&mut self) {
         self.shared.lock().start_pending = false;
-        if self.process.is_some() {
+        // Running, or a launch already waits for its connection slot.
+        if self.process.is_some() || self.paced.is_some() {
             return;
         }
         self.stop_requested = false;
@@ -477,6 +495,7 @@ impl Actor {
 
     fn on_stop(&mut self) {
         self.restart_at = None;
+        self.paced = None;
         self.stop_requested = true;
         match &self.process {
             None => {
@@ -526,6 +545,7 @@ impl Actor {
 
     fn on_shutdown(&mut self) {
         self.restart_at = None;
+        self.paced = None;
         self.stop_requested = true;
         if let Some(running) = self.process.take() {
             running.kill.cancel();
@@ -541,10 +561,61 @@ impl Actor {
 
     // --- Launching -----------------------------------------------------------------------------
 
+    /// Launches now, or once this account's turn to connect to its server comes.
     async fn launch(&mut self, is_restart: bool) {
+        if let Some(slot) = self.connect_slot() {
+            self.wait_for_slot(slot, is_restart);
+            return;
+        }
+        self.launch_now(is_restart).await;
+    }
+
+    async fn launch_now(&mut self, is_restart: bool) {
         match self.prepare().await {
             Ok(prepared) => self.spawn_client(prepared, is_restart),
             Err(reason) => self.launch_failed(reason, is_restart),
+        }
+    }
+
+    /// This launch's connection slot when it is not now. The slot is taken either way: the
+    /// accounts connecting to one server go one by one, in the order they got here.
+    fn connect_slot(&self) -> Option<Instant> {
+        let spacing = self.env.connect_spacing;
+        if spacing.is_zero() {
+            return None;
+        }
+        // A removed account fails in `prepare` without touching the server.
+        let account = self.env.store.account(&self.id)?;
+        let now = Instant::now();
+        let slot =
+            self.env
+                .pacer
+                .reserve(&connect_destination(account.effective_host()), spacing, now);
+        (slot > now).then_some(slot)
+    }
+
+    /// Waits for `slot` on the restart timer, so a stop still lands at once. A reconnect shows
+    /// the slot as its next attempt; a first start stays "starting".
+    fn wait_for_slot(&mut self, slot: Instant, is_restart: bool) {
+        let wait = slot.saturating_duration_since(Instant::now());
+        tracing::debug!(account = %self.id, ?wait, "waiting for a connection slot");
+        self.paced = Some(is_restart);
+        self.restart_at = Some(slot);
+        if is_restart {
+            let (attempt, reason) = match &self.shared.lock().state {
+                SessionState::Reconnecting {
+                    attempt, reason, ..
+                } => (*attempt, reason.clone()),
+                _ => (self.restart_attempts, None),
+            };
+            let next_attempt_at = jiff::SignedDuration::try_from(wait)
+                .ok()
+                .and_then(|d| Timestamp::now().checked_add(d).ok());
+            self.set_state(SessionState::Reconnecting {
+                attempt,
+                next_attempt_at,
+                reason,
+            });
         }
     }
 
