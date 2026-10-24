@@ -7,6 +7,7 @@ mod common;
 mod config;
 mod feed;
 mod index;
+mod itemart;
 mod links;
 mod modset;
 mod news;
@@ -36,6 +37,13 @@ pub use index::{
     AFK_AUTO_VERSION, AfkMinecraftVersion, AfkRelease, AfkVersionProblem, FamilyProblem,
     MAX_AFK_MINECRAFT_VERSIONS, PLATFORM_KEYS, PackRef, ROOT_INDEX_SCHEMA, RootIndex,
     compare_minecraft_versions, current_platform_key, family_problems,
+};
+pub use itemart::{
+    DEFAULT_ITEM_ART_HOSTS, GlyphImage, ITEM_ART_SCHEMA, ItemArt, ItemArtAtlas, ItemArtEntry,
+    ItemArtGlyph, ItemArtLookup, ItemArtProblem, MAX_ITEM_ART_ATLAS_COLUMNS,
+    MAX_ITEM_ART_GLYPH_EDGE, MAX_ITEM_ART_GLYPH_OFFSET, MAX_ITEM_ART_GLYPHS, MAX_ITEM_ART_HOSTS,
+    MAX_ITEM_ART_ID_LEN, MAX_ITEM_ART_ITEMS, MAX_ITEM_ART_NAME_CHARS, is_private_use,
+    is_resource_location, is_valid_item_art_host, item_art_host_matches, normalize_item_id,
 };
 pub use jiff::Timestamp;
 pub use links::{CommunityLink, CommunityPlatform};

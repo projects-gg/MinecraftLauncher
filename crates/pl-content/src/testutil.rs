@@ -332,12 +332,75 @@ pub(crate) fn sample_mod_sets(variant: ModSetVariant) -> ModSetCatalog {
 }
 
 /// One publish: documents, signed index, served under `/v1/`.
+/// A small item art document and its PNG files (`(path, bytes)`), as Studio publishes them.
+pub(crate) fn sample_item_art() -> (crate::ItemArt, Vec<(String, Vec<u8>)>) {
+    use crate::fsutil::sha256_hex;
+    use crate::studio::{item_art_atlas_path, item_art_glyph_path};
+    use crate::{DocRef, GlyphImage, ItemArt, ItemArtAtlas, ItemArtEntry, ItemArtGlyph};
+    let file = |path: String, bytes: &[u8]| DocRef {
+        path,
+        sha256: sha256_hex(bytes),
+        size: bytes.len() as u64,
+    };
+    let atlas16: &[u8] = b"atlas sixteen";
+    let atlas32: &[u8] = b"atlas thirty-two";
+    let glyph: &[u8] = b"market background";
+    let atlas16_ref = file(item_art_atlas_path(16, &sha256_hex(atlas16)), atlas16);
+    let atlas32_ref = file(item_art_atlas_path(32, &sha256_hex(atlas32)), atlas32);
+    let glyph_ref = file(item_art_glyph_path(&sha256_hex(glyph)), glyph);
+    let files = vec![
+        (atlas16_ref.path.clone(), atlas16.to_vec()),
+        (atlas32_ref.path.clone(), atlas32.to_vec()),
+        (glyph_ref.path.clone(), glyph.to_vec()),
+    ];
+    let art = ItemArt {
+        atlases: vec![
+            ItemArtAtlas {
+                size: 16,
+                columns: 32,
+                cells: 1,
+                file: atlas16_ref,
+            },
+            ItemArtAtlas {
+                size: 32,
+                columns: 32,
+                cells: 1,
+                file: atlas32_ref,
+            },
+        ],
+        items: vec![ItemArtEntry {
+            item: Some("minecraft:paper".into()),
+            cmd: Some(35),
+            model: None,
+            icon: 0,
+            id: "pro-items-special:eskisayfa1".into(),
+            name: Some("Eski Sayfa 1".into()),
+            pack: Some("pro-items-special".into()),
+        }],
+        glyphs: vec![ItemArtGlyph {
+            ch: "\u{E052}".into(),
+            advance: 257,
+            image: Some(GlyphImage {
+                file: glyph_ref,
+                width: 256,
+                height: 256,
+                ascent: 36,
+                id: "pro-guis:market".into(),
+                pack: Some("pro-guis".into()),
+            }),
+        }],
+        ..ItemArt::default()
+    };
+    (art, files)
+}
+
 pub(crate) struct Publish {
     pub(crate) sequence: u64,
     pub(crate) config: LauncherConfig,
     pub(crate) news: NewsFeed,
     pub(crate) pack: Option<PackManifest>,
     pub(crate) mod_sets: Option<ModSetCatalog>,
+    pub(crate) item_art: Option<crate::ItemArt>,
 }
 
 impl Publish {
@@ -348,6 +411,7 @@ impl Publish {
             news: sample_news(None),
             pack: None,
             mod_sets: None,
+            item_art: None,
         }
     }
 
@@ -359,6 +423,7 @@ impl Publish {
             builder.set_pack("Projects", pack).unwrap();
         }
         builder.set_mod_sets(self.mod_sets.as_ref()).unwrap();
+        builder.set_item_art(self.item_art.as_ref()).unwrap();
         builder.set_sequence(self.sequence);
         let built = builder
             .build("2026-10-15T12:00:00Z".parse().unwrap())

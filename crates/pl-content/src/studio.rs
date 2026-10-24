@@ -21,8 +21,8 @@ use crate::error::{Error, Result};
 use crate::fsutil::sha256_hex;
 use crate::json::to_canonical_json;
 use crate::model::{
-    AfkRelease, DocRef, LauncherConfig, MediaKind, MediaRef, ModSetCatalog, NewsFeed, PackHashes,
-    PackManifest, PackRef, ROOT_INDEX_SCHEMA, RootIndex,
+    AfkRelease, DocRef, ItemArt, LauncherConfig, MediaKind, MediaRef, ModSetCatalog, NewsFeed,
+    PackHashes, PackManifest, PackRef, ROOT_INDEX_SCHEMA, RootIndex,
 };
 use crate::path::check_mirror_path;
 use crate::signing::{SignatureFile, SigningKey, sign_index};
@@ -84,6 +84,7 @@ pub struct IndexBuilder {
     packs: Vec<PackRef>,
     afk: Option<AfkRelease>,
     mod_sets: Option<DocRef>,
+    item_art: Option<DocRef>,
     documents: BTreeMap<String, PublishedDoc>,
 }
 
@@ -103,6 +104,7 @@ impl IndexBuilder {
             packs: previous.packs.clone(),
             afk: previous.afk.clone(),
             mod_sets: previous.mod_sets.clone(),
+            item_art: previous.item_art.clone(),
             documents: BTreeMap::new(),
         }
     }
@@ -135,6 +137,37 @@ impl IndexBuilder {
         };
         let doc_ref = self.add_document(doc, self.mod_sets.clone());
         self.mod_sets = Some(doc_ref.clone());
+        Ok(Some(doc_ref))
+    }
+
+    /// Serializes the item art to `itemart/items.<sha256>.json`; `None` or a document without
+    /// items and glyphs drops the reference. The document must be valid ([`ItemArt::validate`]);
+    /// its PNG files are uploaded by the caller (they are not documents).
+    pub fn set_item_art(&mut self, art: Option<&ItemArt>) -> Result<Option<DocRef>> {
+        self.set_item_art_with(art, |_| {})
+    }
+
+    /// [`Self::set_item_art`] with `edit` applied to the document's JSON (see the module
+    /// documentation).
+    pub fn set_item_art_with(
+        &mut self,
+        art: Option<&ItemArt>,
+        edit: impl FnOnce(&mut Value),
+    ) -> Result<Option<DocRef>> {
+        let Some(art) = art.filter(|art| !art.items.is_empty() || !art.glyphs.is_empty()) else {
+            if let Some(previous) = self.item_art.take() {
+                self.documents.remove(&previous.path);
+            }
+            return Ok(None);
+        };
+        art.validate()?;
+        let doc = PublishedDoc::new(String::new(), edited_json(art, edit)?);
+        let doc = PublishedDoc {
+            path: item_art_path(&doc.sha256),
+            ..doc
+        };
+        let doc_ref = self.add_document(doc, self.item_art.clone());
+        self.item_art = Some(doc_ref.clone());
         Ok(Some(doc_ref))
     }
 
@@ -299,6 +332,7 @@ impl IndexBuilder {
             packs: self.packs,
             afk: self.afk,
             mod_sets: self.mod_sets,
+            item_art: self.item_art,
         };
         index.validate()?;
         let index_bytes = edited_json(&index, edit)?;
@@ -351,6 +385,21 @@ pub fn news_path(sha256: &str) -> String {
 /// `modsets/modsets.<sha256>.json`
 pub fn mod_sets_path(sha256: &str) -> String {
     format!("modsets/modsets.{sha256}.json")
+}
+
+/// `itemart/items.<sha256>.json`
+pub fn item_art_path(sha256: &str) -> String {
+    format!("itemart/items.{sha256}.json")
+}
+
+/// `itemart/atlas-<size>.<sha256>.png`: an icon atlas of the item art.
+pub fn item_art_atlas_path(size: u32, sha256: &str) -> String {
+    format!("itemart/atlas-{size}.{sha256}.png")
+}
+
+/// `itemart/glyph.<sha256>.png`: a menu glyph's picture.
+pub fn item_art_glyph_path(sha256: &str) -> String {
+    format!("itemart/glyph.{sha256}.png")
 }
 
 /// `packs/<id>/<version>.json`; both parts must be single `[A-Za-z0-9._-]` components.
@@ -535,6 +584,48 @@ mod tests {
         broken.sets[0].name = String::new();
         let mut refused = IndexBuilder::new();
         assert!(refused.set_mod_sets(Some(&broken)).is_err());
+    }
+
+    #[test]
+    fn item_art_is_published_as_a_document() {
+        let (art, _) = crate::testutil::sample_item_art();
+        let mut builder = IndexBuilder::new();
+        builder.set_config(&sample_config(None)).unwrap();
+        builder.set_news(&sample_news(None)).unwrap();
+        let doc = builder.set_item_art(Some(&art)).unwrap().unwrap();
+        assert_eq!(doc.path, item_art_path(&doc.sha256));
+        let built = builder.build(at("2026-10-15T12:00:00Z")).unwrap();
+        assert_eq!(built.index.item_art.as_ref(), Some(&doc));
+        let uploaded = built
+            .documents
+            .iter()
+            .find(|published| published.path == doc.path)
+            .unwrap();
+        assert_eq!(
+            serde_json::from_slice::<ItemArt>(&uploaded.bytes).unwrap(),
+            art
+        );
+
+        // Kept by the next publish, dropped when nothing is left to show.
+        let kept = IndexBuilder::from_previous(&built.index)
+            .build(at("2026-10-15T12:01:00Z"))
+            .unwrap();
+        assert_eq!(kept.index.item_art, built.index.item_art);
+        let mut cleared = IndexBuilder::from_previous(&built.index);
+        assert_eq!(
+            cleared.set_item_art(Some(&ItemArt::default())).unwrap(),
+            None
+        );
+        let cleared = cleared.build(at("2026-10-15T12:02:00Z")).unwrap();
+        assert_eq!(cleared.index.item_art, None);
+        assert!(cleared.documents.is_empty());
+
+        // An invalid document is refused.
+        let mut broken = art.clone();
+        broken.hosts = vec!["projects.gg:25565".into()];
+        assert!(IndexBuilder::new().set_item_art(Some(&broken)).is_err());
+        assert_eq!(item_art_atlas_path(16, "ab"), "itemart/atlas-16.ab.png");
+        assert_eq!(item_art_glyph_path("ab"), "itemart/glyph.ab.png");
     }
 
     #[test]

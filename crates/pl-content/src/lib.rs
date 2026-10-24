@@ -205,6 +205,11 @@ mod doc_examples {
                     let catalog: ModSetCatalog = serde_json::from_str(json).unwrap();
                     catalog.validate().unwrap_or_else(|e| panic!("{name}: {e}"));
                 }
+                "ItemArt" => {
+                    check::<ItemArt>(name, json);
+                    let art: ItemArt = serde_json::from_str(json).unwrap();
+                    art.validate().unwrap_or_else(|e| panic!("{name}: {e}"));
+                }
                 "ModSetStates" => check::<ModSetStates>(name, json),
                 "PackState" => check::<PackState>(name, json),
                 "MediaRef" => check::<MediaRef>(name, json),

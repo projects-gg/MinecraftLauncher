@@ -12,6 +12,8 @@
 //! current.json            verified index text + signature, ETags, fetch time, GC hints
 //! docs/<sha256>.json      config, news and pack manifests (content addressed, reused)
 //! media/<sha256>.<ext>    images and videos (served through Tauri's asset protocol)
+//! itemart/<sha256>.png    the item art's atlases and glyph pictures (only the current
+//!                         document's are kept)
 //! ```
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
@@ -31,8 +33,8 @@ use url::Url;
 use crate::error::{Error, Result};
 use crate::fsutil::{normalize_hex, read_optional, sha256_hex, write_atomic};
 use crate::model::{
-    DocRef, FileRef, LauncherConfig, MediaRef, ModSetCatalog, NewsFeed, PackManifest, PackRef,
-    RootIndex,
+    DocRef, FileRef, ItemArt, LauncherConfig, MediaRef, ModSetCatalog, NewsFeed, PackManifest,
+    PackRef, RootIndex,
 };
 use crate::signing::{SignatureFile, VerifyingKey, verify_index};
 
@@ -47,6 +49,9 @@ const SIGNATURE_NAME: &str = "index.json.sig";
 const STATE_NAME: &str = "current.json";
 const DOCS_DIR: &str = "docs";
 const MEDIA_DIR: &str = "media";
+const ITEM_ART_DIR: &str = "itemart";
+/// Largest item art file (an atlas or a glyph picture) a client downloads.
+const MAX_ITEM_ART_FILE_BYTES: u64 = 16 << 20;
 const MAX_INDEX_BYTES: u64 = 4 << 20;
 const MAX_SIGNATURE_BYTES: u64 = 16 << 10;
 const MAX_DOC_BYTES: u64 = 64 << 20;
@@ -315,6 +320,60 @@ impl ContentClient {
             tracing::warn!(%problem, "leaving out a broken mod set");
         }
         Ok(catalog)
+    }
+
+    /// The item art the index references (from the document cache when present), `None` when
+    /// it references none. Downloaded on first use, not with every refresh. Callers use it only
+    /// for accounts on one of its hosts ([`ItemArt::applies_to`]). Loading it deletes the cached
+    /// pictures of older item art documents.
+    pub async fn item_art(&self, index: &RootIndex) -> Result<Option<ItemArt>> {
+        let Some(doc) = &index.item_art else {
+            return Ok(None);
+        };
+        let bytes = self.ensure_doc(doc, None).await?;
+        let art: ItemArt = parse_json(&bytes, &doc.path)?;
+        art.validate()?;
+        let keep: BTreeSet<String> = art
+            .files()
+            .filter_map(|file| normalize_hex(&file.sha256, 64))
+            .collect();
+        if let Err(error) = sweep(&self.cache_dir.join(ITEM_ART_DIR), &keep).await {
+            tracing::warn!(%error, "item art cache cleanup failed");
+        }
+        Ok(Some(art))
+    }
+
+    /// Local path of an item art file (an atlas or a glyph picture of [`Self::item_art`]),
+    /// downloading and verifying it by SHA-256 on first use; cached copies are trusted by size.
+    pub async fn item_art_file(&self, file: &DocRef) -> Result<PathBuf> {
+        file.validate()?;
+        if file.size > MAX_ITEM_ART_FILE_BYTES {
+            return Err(Error::Invalid(format!("{} is too large", file.path)));
+        }
+        let sha256 = normalize_hex(&file.sha256, 64)
+            .ok_or_else(|| Error::Invalid(format!("bad sha256 for {}", file.path)))?;
+        let dest = self
+            .cache_dir
+            .join(ITEM_ART_DIR)
+            .join(format!("{sha256}.png"));
+        let lock = self.media_lock(&sha256);
+        let _guard = lock.lock().await;
+        let urls = self
+            .mirrors
+            .iter()
+            .filter_map(|base| base.join(&file.path).ok())
+            .map(String::from)
+            .collect();
+        let item = DownloadItem::with_urls(urls, &dest)
+            .checksum(Some(Checksum::sha256(&sha256)))
+            .size(Some(file.size));
+        let options = DownloadOptions {
+            concurrency: 1,
+            verify: VerifyMode::Size,
+            ..DownloadOptions::default()
+        };
+        self.downloader.download(item, &options).await?;
+        Ok(dest)
     }
 
     /// Local path of a media file, downloading and verifying it on first use. Cached copies
@@ -1259,6 +1318,56 @@ mod tests {
                 .join(format!("{}.json", doc.sha256))
                 .is_file()
         );
+    }
+
+    #[tokio::test]
+    async fn item_art_and_its_files_use_the_cache() {
+        let server = TestServer::start().await;
+        let signer = key(1);
+        let dir = tempfile::tempdir().unwrap();
+        let content = client(&[server.base()], dir.path(), &signer);
+
+        // An index without item art gives none and asks for nothing.
+        Publish::new(1).put(&server, &signer);
+        let snapshot = content.refresh().await.unwrap();
+        assert_eq!(content.item_art(&snapshot.index).await.unwrap(), None);
+
+        let (art, files) = crate::testutil::sample_item_art();
+        for (path, bytes) in &files {
+            server.put(&format!("/v1/{path}"), bytes.clone());
+        }
+        let mut publish = Publish::new(2);
+        publish.item_art = Some(art.clone());
+        publish.put(&server, &signer);
+        let snapshot = content.refresh().await.unwrap();
+        let doc = snapshot.index.item_art.clone().unwrap();
+        assert_eq!(
+            content.item_art(&snapshot.index).await.unwrap(),
+            Some(art.clone())
+        );
+        content.item_art(&snapshot.index).await.unwrap();
+        assert_eq!(server.hits(&format!("/v1/{}", doc.path)), 1, "cached");
+
+        let atlas = &art.atlases[0].file;
+        let path = content.item_art_file(atlas).await.unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), files[0].1);
+        content.item_art_file(atlas).await.unwrap();
+        assert_eq!(server.hits(&format!("/v1/{}", atlas.path)), 1, "cached");
+
+        // A file of an older document goes when the next document is loaded.
+        let stale = dir
+            .path()
+            .join(ITEM_ART_DIR)
+            .join(format!("{}.png", "c".repeat(64)));
+        std::fs::write(&stale, b"old").unwrap();
+        content.item_art(&snapshot.index).await.unwrap();
+        assert!(!stale.exists());
+        assert!(path.exists());
+
+        // A file that does not match its reference is refused.
+        let mut wrong = atlas.clone();
+        wrong.sha256 = "d".repeat(64);
+        assert!(content.item_art_file(&wrong).await.is_err());
     }
 
     #[test]
