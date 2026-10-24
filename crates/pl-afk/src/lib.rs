@@ -10,7 +10,7 @@
 //! - [`VersionCatalog`]: the game version picker, from the content index or the built-in table.
 //! - [`check_pattern`]: which auto-respond patterns the client can use safely.
 //! - [`build_config`]: `MinecraftClient.ini`, `matches.ini` and `giris-komutlari.txt`, byte-for-byte
-//!   identical to the legacy writer (golden-tested).
+//!   identical to the legacy writer (golden-tested) apart from the `[MCSettings]` locale.
 //! - [`AfkRuntime`]: verified, side-by-side client installs with offline fallback.
 //! - [`AfkManager`]: session actors (bridge events, masked console, `/quit` + kill, restart loop
 //!   honoring the AutoRelog delays, retry limit and kick filter), staggered connect-all/auto-start,

@@ -1,4 +1,5 @@
-//! MCC configuration for one account, byte-for-byte identical to the legacy `AfkConfigWriter`.
+//! MCC configuration for one account, byte-for-byte identical to the legacy `AfkConfigWriter`
+//! apart from one addition: the `[MCSettings]` locale, the language servers see (see `build_ini`).
 //!
 //! Three files are produced per launch: `MinecraftClient.ini` (TOML), `matches.ini` (MCC's own INI
 //! format for AutoRespond) and `giris-komutlari.txt` (the login-commands script run by the
@@ -190,6 +191,14 @@ fn build_ini(
     out.line("[Console.General]");
     out.line("ConsoleMode = \"classic\"");
     out.line("Display_Icon_Banner = false");
+    out.blank();
+
+    // The language the bot tells the server it uses (the locale of the client settings packet;
+    // the vanilla client sends the lower-case code since 1.11). The legacy file had none, so MCC
+    // sent its default `en_US` and servers answered Turkish bots in English. MCC keeps its own
+    // defaults for the table's other keys. The legacy writer's only difference (tests/golden.rs).
+    out.line("[MCSettings]");
+    out.line(lang.pick("Locale = \"tr_tr\"", "Locale = \"en_us\""));
     out.blank();
 
     out.line("[ChatBot]");
@@ -697,6 +706,25 @@ mod tests {
         let english = build_config_in(&account, &[], "", &versions, Lang::En).ini;
         assert!(english.contains("\r\nLanguage = \"en_us\"\r\n"));
         assert_eq!(english.replace("en_us", "tr_tr"), turkish);
+    }
+
+    /// The locale servers see follows the launcher's language, in MCC's `[MCSettings]` table
+    /// (read back as TOML, so it cannot land in another table).
+    #[test]
+    fn servers_hear_the_launchers_language() {
+        let versions = VersionCatalog::built_in();
+        let account = AfkAccount::new("Test");
+        let locale = |lang: Lang| {
+            let ini = build_config_in(&account, &[], "", &versions, lang).ini;
+            let parsed: toml::Table = ini.parse().expect("the ini is TOML");
+            let settings = parsed["MCSettings"]
+                .as_table()
+                .expect("an [MCSettings] table");
+            assert_eq!(settings.len(), 1, "MCC keeps its defaults for the rest");
+            settings["Locale"].as_str().map(str::to_owned)
+        };
+        assert_eq!(locale(Lang::Tr).as_deref(), Some("tr_tr"));
+        assert_eq!(locale(Lang::En).as_deref(), Some("en_us"));
     }
 
     #[test]

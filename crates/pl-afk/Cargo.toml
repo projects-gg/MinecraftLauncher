@@ -38,6 +38,8 @@ keychain = ["dep:keyring"]
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["test-util"] }
+# Reads the generated MinecraftClient.ini back as TOML in tests.
+toml = { workspace = true }
 
 # Test-only stand-in for the Projects Console Client: prints scripted bridge lines and exits with
 # scripted codes so the session state machine can be exercised end to end without a server.

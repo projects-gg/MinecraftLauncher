@@ -4,6 +4,10 @@
 //! by a throwaway .NET 10 harness) for the account in `account.json`, which is that account
 //! serialized by Newtonsoft.Json with the legacy store settings. Each case is loaded through the
 //! legacy reader and rebuilt here; `cases.json` lists the launcher nickname passed to the writer.
+//!
+//! One addition is deliberate: the `[MCSettings]` locale (the language servers see; the legacy
+//! file had none). It is taken out of the rebuilt ini before comparing, so the fixtures stay
+//! exactly what the legacy writer produced.
 
 use std::path::{Path, PathBuf};
 
@@ -28,6 +32,28 @@ fn golden_dir() -> PathBuf {
 fn cases() -> Vec<Case> {
     let text = std::fs::read_to_string(golden_dir().join("cases.json")).unwrap();
     serde_json::from_str(&text).unwrap()
+}
+
+/// The locale table `build_config` (Turkish) adds right before `[ChatBot]`.
+const LOCALE_TABLE: &str = "[MCSettings]\r\nLocale = \"tr_tr\"\r\n\r\n";
+
+/// `file` as the legacy writer would have written it: the ini without its locale table, which
+/// must be there exactly once, in its place.
+fn as_legacy(case: &str, file: &str, actual: &[u8]) -> Vec<u8> {
+    if file != INI_FILE_NAME {
+        return actual.to_vec();
+    }
+    let text = std::str::from_utf8(actual).unwrap();
+    let placed = format!("\r\n{LOCALE_TABLE}[ChatBot]\r\n");
+    assert_eq!(
+        (
+            text.matches(LOCALE_TABLE).count(),
+            text.matches(&placed).count()
+        ),
+        (1, 1),
+        "{case}/{file}: the locale table, once, right before [ChatBot]"
+    );
+    text.replacen(LOCALE_TABLE, "", 1).into_bytes()
 }
 
 /// Fails with the first differing line, shown with escapes, instead of two walls of bytes.
@@ -91,7 +117,8 @@ fn config_matches_the_legacy_writer_byte_for_byte() {
             (LOGIN_SCRIPT_FILE_NAME, &files.login_script),
         ] {
             let expected = std::fs::read(dir.join(file)).unwrap();
-            assert_same(&case.name, file, actual.as_bytes(), &expected);
+            let actual = as_legacy(&case.name, file, actual.as_bytes());
+            assert_same(&case.name, file, &actual, &expected);
         }
     }
 }
@@ -114,6 +141,7 @@ fn written_files_are_utf8_without_bom_and_identical() {
         for file in [INI_FILE_NAME, MATCHES_FILE_NAME, LOGIN_SCRIPT_FILE_NAME] {
             let written = std::fs::read(target.join(file)).unwrap();
             let expected = std::fs::read(dir.join(file)).unwrap();
+            let written = as_legacy(&case.name, file, &written);
             assert_same(&case.name, file, &written, &expected);
         }
     }
