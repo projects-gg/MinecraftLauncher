@@ -447,9 +447,11 @@ public final class PeopleScenario implements ClientModInitializer {
             if (b != null && Compat.screen(mc) instanceof PauseScreen p) {
                 // As after a real Tab: the focused button shows its tooltip.
                 mc.setLastInputType(InputType.KEYBOARD_TAB);
+                // 26.3's key events carry SDL's keycode as well, and the menus read Tab from it (SDLK_TAB, 9).
+                int tabCode = Compat.VERSION.equals("26.3") ? 9 : 0;
                 int tabs = 0;
                 while (p.getFocused() != b && tabs < 24) {
-                    p.keyPressed(new KeyEvent(InputConstants.KEY_TAB, 0, 0));
+                    p.keyPressed(new KeyEvent(InputConstants.KEY_TAB, tabCode, 0));
                     tabs++;
                 }
                 results.addProperty("tabsToButton", p.getFocused() == b ? tabs : -1);
