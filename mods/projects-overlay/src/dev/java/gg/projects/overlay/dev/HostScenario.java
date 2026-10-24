@@ -109,7 +109,8 @@ public final class HostScenario implements ClientModInitializer {
     }
 
     private void script() {
-        act("title", 0, mc -> {
+        // A slow start (resources, a busy machine) can take minutes to reach the title screen.
+        act("title", 0, 240, mc -> {
             boolean ready = Compat.screen(mc) instanceof TitleScreen && !Compat.overlayShowing(mc);
             BridgeClient.Status status = overlay.bridge().status();
             if (!ready || secs() < 3 || (status != BridgeClient.Status.ONLINE && secs() < 30)) {
@@ -120,7 +121,7 @@ public final class HostScenario implements ClientModInitializer {
             openWorld(mc);
             return true;
         });
-        act("loading", 0, mc -> mc.level != null && mc.player != null && Compat.screen(mc) == null);
+        act("loading", 0, 120, mc -> mc.level != null && mc.player != null && Compat.screen(mc) == null);
         act("settle", 4, mc -> {
             results.addProperty("minecraft", Compat.VERSION);
             results.addProperty("guiScale", mc.getWindow().getGuiScale());
