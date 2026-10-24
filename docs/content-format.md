@@ -1151,6 +1151,12 @@ a top-level `projects` object that other launchers ignore; Studio can export a r
     opens no bridge for its games. Switching an instance's version swaps the jar with the rest of
     `mods/` ([Per-version sets](#per-version-sets)): the old version's jar stays with its parked
     set and comes back with it, the new version's sync installs its own.
+  - Desktop launchers from 2.0.1-beta.1.11 ship the overlay's jars themselves and put the one for
+    the instance's version into every Fabric instance before its game starts, the official pack's
+    and the player's own. Such a launcher never installs the `projects-overlay` item (a copy an
+    older launcher installed is removed like an item switched off) and, while "Oyun içi katman" is
+    on, installs the pack's Fabric API item (item id or Modrinth project `P7dR8mSH`) as if a mod
+    required it, because its own jar needs it. The item stays in the pack for older launchers.
 - `optionalGroups` (legacy): switchable sets of `files[]` paths. A file in several groups is
   installed when any of them is enabled. The player's choice is remembered in the pack state;
   new groups start at `defaultEnabled`. Files covered by an item ignore groups; groups still
