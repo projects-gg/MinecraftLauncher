@@ -713,8 +713,8 @@ impl Launcher for AppLauncher {
     }
 
     /// Only the game this launcher started may come in (PROTOCOL.md §8): the connection's owner
-    /// must be its process, when Windows tells who owns it. A game started through a wrapper
-    /// command (`hooks.wrapper`) runs as the wrapper's child and is not recognised (HOST1-E).
+    /// must be its process, or one it started (a wrapper command's Java: `hooks.wrapper` starts
+    /// the game through another program), when Windows tells who owns it.
     fn accept_filter(&self) -> Option<pl_host::guest::local::AcceptFilter> {
         let app = self.app.clone();
         Some(Arc::new(move |remote: std::net::SocketAddr| {
@@ -732,11 +732,11 @@ impl Launcher for AppLauncher {
                 return false;
             };
             match pl_desktop::tcp::loopback_owner(remote.port()) {
-                Some(owner) if owner != game => {
+                Some(owner) if !pl_desktop::process::started_by(owner, game) => {
                     tracing::warn!("a connection to a friend's world came from another program");
                     false
                 }
-                // The game's, or the system can't tell.
+                // The game's (or its wrapper's Java), or the system can't tell.
                 _ => true,
             }
         }))

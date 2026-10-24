@@ -76,7 +76,7 @@ mod win {
     };
     use windows::core::BOOL;
 
-    use super::{descends_from, is_game_window_class};
+    use super::is_game_window_class;
 
     /// What a process tree lookup found: whether each foreign window owner descends from the
     /// game being opened. Another program's GLFW window (a second Minecraft) is looked up once.
@@ -141,16 +141,7 @@ mod win {
         if let Some(&answer) = known.get(&pid) {
             return answer;
         }
-        let mut system = sysinfo::System::new();
-        system.refresh_processes_specifics(
-            sysinfo::ProcessesToUpdate::All,
-            true,
-            sysinfo::ProcessRefreshKind::nothing(),
-        );
-        let answer = descends_from(pid, root, |id| {
-            let process = system.process(sysinfo::Pid::from_u32(id))?;
-            Some((process.parent()?.as_u32(), process.start_time()))
-        });
+        let answer = crate::process::started_by(pid, root);
         known.insert(pid, answer);
         answer
     }
