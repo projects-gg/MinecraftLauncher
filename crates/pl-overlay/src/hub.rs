@@ -203,6 +203,27 @@ impl Overlay {
         social: S,
         launcher: impl Into<String>,
     ) -> io::Result<Endpoint> {
+        self.open(social, launcher.into(), None).await
+    }
+
+    /// [`Overlay::start`] for a game that plays as the account `game` (its game name): the
+    /// session vouches for that account only when a Projects server asks the game (SKIN1-O,
+    /// codeless linking).
+    pub async fn start_with_game<S: SocialActions>(
+        &self,
+        social: S,
+        launcher: impl Into<String>,
+        game: impl Into<String>,
+    ) -> io::Result<Endpoint> {
+        self.open(social, launcher.into(), Some(game.into())).await
+    }
+
+    async fn open<S: SocialActions>(
+        &self,
+        social: S,
+        launcher: String,
+        game: Option<String>,
+    ) -> io::Result<Endpoint> {
         self.stop(ByeReason::LauncherExit).await;
         let (bridge, endpoint) = Bridge::bind().await?;
         let id = self.shared.next.fetch_add(1, Ordering::Relaxed);
@@ -223,13 +244,7 @@ impl Overlay {
         let hub = self.clone();
         let host: HostSink = Arc::new(move |signal| hub.host_signal(id, signal));
         let session = Session::new(
-            social,
-            launcher.into(),
-            config,
-            control,
-            connected,
-            host,
-            worlds,
+            social, launcher, config, control, connected, host, worlds, game,
         );
         tokio::spawn(bridge.serve(control_rx, events_tx));
         tokio::spawn(session.run(msgs_rx, events));

@@ -2,7 +2,7 @@
   "required": true,
   "package": "gg.projects.overlay.dev.mixin",
   "compatibilityLevel": "JAVA_25",
-  "client": ["MinecraftFrameMixin", "WindowNoFocusMixin"],
+  "client": ["LinkProjectsMixin", "MinecraftFrameMixin", "WindowNoFocusMixin"],
   "injectors": {
     "defaultRequire": 1
   }

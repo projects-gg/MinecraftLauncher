@@ -1074,7 +1074,8 @@ async fn prepare_and_spawn(
     // The in-game overlay (OVL2): a fresh bridge for this game while its switch is on and the
     // pack put the mod in place. The game reads the port and the token from two system
     // properties; the printable command masks the token. It closes again unless the game starts.
-    let overlay = crate::overlay::for_launch(state, &game_dir, &launcher_version).await;
+    let overlay =
+        crate::overlay::for_launch(state, &game_dir, &launcher_version, &identity.name).await;
     if let Some(endpoint) = overlay.endpoint() {
         options.launcher_jvm_args.extend(endpoint.jvm_args());
         options.secrets.push(endpoint.secret().to_owned());

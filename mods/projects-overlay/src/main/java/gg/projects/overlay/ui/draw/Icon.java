@@ -37,7 +37,9 @@ public enum Icon {
     GLOBE("Globe"),
     OPEN("ArrowSquareOut"),
     /** "Ece ekibe katıldı" in crew chat (TEAM6 §7), as the launcher's line. */
-    WAVE("HandWaving");
+    WAVE("HandWaving"),
+    /** The Discord account in that question: the symbol alone, uncoloured, as the launcher's link area. */
+    DISCORD("DiscordLogo");
 
     /** The sizes icons are drawn at, in GUI pixels. */
     public static final int[] SIZES = {8, 10, 12};

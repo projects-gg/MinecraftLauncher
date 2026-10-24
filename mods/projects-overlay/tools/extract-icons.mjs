@@ -37,6 +37,7 @@ const ICONS = [
   ["Globe", "regular"],
   ["ArrowSquareOut", "regular"],
   ["HandWaving", "regular"],
+  ["DiscordLogo", "fill"],
 ];
 
 // The crew palette's emblems (crew-look.ts EMBLEMS) and the icons team-emblem.tsx draws them with.

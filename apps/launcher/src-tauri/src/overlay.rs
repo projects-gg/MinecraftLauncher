@@ -153,10 +153,12 @@ impl Drop for OverlayLaunch {
 
 /// A fresh bridge for the game about to start, when the switch is on and the instance has the
 /// pack's overlay mod. Never stops a launch: a bridge that cannot open means a game without it.
+/// `game_name` is the account the game plays as: codeless linking (SKIN1-O) vouches only for it.
 pub async fn for_launch(
     state: &AppState,
     game_dir: &Path,
     launcher_version: &str,
+    game_name: &str,
 ) -> OverlayLaunch {
     let none = OverlayLaunch {
         overlay: None,
@@ -170,7 +172,7 @@ pub async fn for_launch(
     }
     match state
         .overlay
-        .start(state.social.clone(), launcher_version)
+        .start_with_game(state.social.clone(), launcher_version, game_name)
         .await
     {
         Ok(endpoint) => OverlayLaunch {

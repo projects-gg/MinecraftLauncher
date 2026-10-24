@@ -34,7 +34,16 @@ struct Calls {
     answers: Vec<(String, SocialAnswer)>,
     refuse: Option<SocialError>,
     refuse_reaction: Option<SocialError>,
+    /// SKIN1-O: the service offers codeless linking; the permits asked for (by name); a refusal;
+    /// how often the permit was closed.
+    codeless: bool,
+    permits: Vec<String>,
+    refuse_permit: bool,
+    closed: u32,
 }
+
+/// A permit as the service makes them: `i` and 32 base64url characters.
+const NONCE: &str = "iAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB";
 
 /// The friends feature as the overlay uses it, recording what it was asked.
 #[derive(Clone)]
@@ -153,6 +162,28 @@ impl SocialActions for FakeSocial {
         self.calls().answers.push((call.to_owned(), answer));
         std::future::ready(Ok(true))
     }
+
+    fn codeless_offered(&self) -> bool {
+        self.calls().codeless
+    }
+
+    fn codeless_permit(
+        &self,
+        name: &str,
+    ) -> impl Future<Output = Option<pl_social::McIntent>> + Send + 'static {
+        let mut calls = self.calls();
+        calls.permits.push(name.to_owned());
+        let intent = (!calls.refuse_permit).then(|| pl_social::McIntent {
+            nonce: NONCE.to_owned(),
+            expires_at: now_ms() / 1000 + 1_800,
+        });
+        std::future::ready(intent)
+    }
+
+    fn codeless_close(&self) -> impl Future<Output = ()> + Send + 'static {
+        self.calls().closed += 1;
+        std::future::ready(())
+    }
 }
 
 /// The mod's side of the bridge.
@@ -216,6 +247,31 @@ impl MockMod {
             let frame = self.next().await.expect("the bridge closed");
             if frame["t"] == t {
                 return frame;
+            }
+        }
+    }
+
+    /// SKIN1-O: asks for the codeless linking permit and reads the answer (`link-offer` or
+    /// `link-clear`). A `history` asked for right after marks the end: when it comes first,
+    /// nothing answered (None).
+    async fn want_link(&mut self, name: &str) -> Option<serde_json::Value> {
+        // The session hears `link-want` at most every 250 ms.
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        self.send(serde_json::json!({"t":"link-want","name":name}))
+            .await;
+        // The permit comes from a task of its own: let it land before the marker is asked for.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        self.send(serde_json::json!({"t":"open-conv","conv":"d:f-ayse"}))
+            .await;
+        loop {
+            let frame = self.next().await.expect("the bridge closed");
+            match frame["t"].as_str() {
+                Some("link-offer" | "link-clear") => {
+                    self.next_of("history").await;
+                    return Some(frame);
+                }
+                Some("history") => return None,
+                _ => {}
             }
         }
     }
@@ -929,4 +985,98 @@ async fn world_sharing_hears_a_hosting_mod_and_only_it_gets_host_frames() {
     })
     .await;
     overlay.stop(ByeReason::LauncherExit).await;
+}
+
+fn lists(welcome: &serde_json::Value, feature: &str) -> bool {
+    welcome["features"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|f| f == feature)
+}
+
+#[tokio::test]
+async fn codeless_linking_vouches_only_for_the_games_own_account() {
+    let social = FakeSocial::new(view());
+    social.calls().codeless = true;
+    let overlay = Overlay::new(OverlayConfig::default());
+    let endpoint = overlay
+        .start_with_game(social.clone(), "t", "Ahmet")
+        .await
+        .unwrap();
+
+    // An older mod asks nothing and hears nothing of it.
+    let mut old = MockMod::connect_with(&endpoint, &["connect", "chat2"]).await;
+    assert!(lists(&old.next_of("welcome").await, "link"));
+    assert_eq!(old.want_link("Ahmet").await, None);
+    drop(old);
+
+    let mut game = MockMod::connect_with(&endpoint, &["connect", "chat2", "link"]).await;
+    assert!(lists(&game.next_of("welcome").await, "link"));
+    // Another account than the one the game plays as: no permit, the service is not asked.
+    let other = game.want_link("Mehmet").await.unwrap();
+    assert_eq!(other["t"], "link-clear");
+    assert!(social.calls().permits.is_empty());
+    // The game's own account (whatever its case): the permit, for the launcher's spelling.
+    let offer = game.want_link("ahmet").await.unwrap();
+    assert_eq!(offer["t"], "link-offer");
+    assert_eq!(offer["nonce"], NONCE);
+    assert_eq!(offer["name"], "Ahmet");
+    assert!(offer["expiresAt"].as_i64().unwrap() > now_ms() / 1000 + 1_700);
+    // Asked again (`/discord eşle` later): the same permit, the service is not asked again.
+    let again = game.want_link("Ahmet").await.unwrap();
+    assert_eq!(again["nonce"], NONCE);
+    assert_eq!(social.calls().permits, ["Ahmet"]);
+
+    // Another friends account signs in: the permit is worthless, the mod forgets it.
+    let mut other_account = view();
+    let me = other_account.me.as_mut().unwrap();
+    me.id = "me-2".into();
+    me.name = "Deniz".into();
+    *social.view.lock().unwrap() = other_account.clone();
+    overlay.on_social(SocialUpdate::View(Box::new(other_account)));
+    game.next_of("link-clear").await;
+
+    // The game ends: the permit it opened stops working.
+    overlay.stop(ByeReason::LauncherExit).await;
+    eventually("the permit was closed", || social.calls().closed == 1).await;
+}
+
+#[tokio::test]
+async fn without_codeless_linking_the_mod_hears_there_is_no_permit() {
+    // Studio has it off (or the player is not signed in to friends): not in the welcome, and a
+    // server's question gets "none" at once.
+    let social = FakeSocial::new(view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let endpoint = overlay
+        .start_with_game(social.clone(), "t", "Ahmet")
+        .await
+        .unwrap();
+    let mut game = MockMod::connect_with(&endpoint, &["link"]).await;
+    assert!(!lists(&game.next_of("welcome").await, "link"));
+    assert_eq!(game.want_link("Ahmet").await.unwrap()["t"], "link-clear");
+
+    // Switched on: the welcome comes again with it.
+    social.calls().codeless = true;
+    overlay.on_social(SocialUpdate::View(Box::new(view())));
+    assert!(lists(&game.next_of("welcome").await, "link"));
+
+    // The service refuses (linked, said "Hayır" lately, paused): none either.
+    social.calls().refuse_permit = true;
+    assert_eq!(game.want_link("Ahmet").await.unwrap()["t"], "link-clear");
+    assert_eq!(social.calls().permits, ["Ahmet"]);
+    overlay.stop(ByeReason::LauncherExit).await;
+    // A refused permit was asked for, so the session closes what it may have opened.
+    eventually("closed after the game", || social.calls().closed == 1).await;
+
+    // A game this launcher did not name an account for vouches for nobody.
+    let social = FakeSocial::new(view());
+    social.calls().codeless = true;
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+    let mut game = MockMod::connect_with(&endpoint, &["link"]).await;
+    assert!(!lists(&game.next_of("welcome").await, "link"));
+    assert_eq!(game.want_link("Ahmet").await.unwrap()["t"], "link-clear");
+    assert!(social.calls().permits.is_empty());
+    overlay.stop(ByeReason::LauncherExit).await;
+    assert_eq!(social.calls().closed, 0);
 }
