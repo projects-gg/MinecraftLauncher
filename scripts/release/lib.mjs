@@ -138,6 +138,26 @@ export function macBundleVersion(text) {
 }
 
 /**
+ * What set-version.mjs stamps for `text`: the version, and its macOS bundle version.
+ *
+ * A local Windows or Linux build may carry a build number after the prerelease (2.0.1-beta.1.10,
+ * the tenth local build of beta.1). Semver orders it, so the updater takes it, but macOS's three
+ * numbers cannot (macBundleVersion). With `local` such a version stamps no macOS bundle version
+ * (null: the committed one stays, and the build is not for macOS); without it, as in CI, it is
+ * refused, so no macOS bundle ever ships with a bundle version that does not grow.
+ */
+export function versionStamps(text, { local = false } = {}) {
+  const version = parseVersion(text).raw;
+  try {
+    return { version, macBundleVersion: macBundleVersion(version) };
+  } catch (error) {
+    if (local) return { version, macBundleVersion: null };
+    error.message += "; a local Windows or Linux build takes --local";
+    throw error;
+  }
+}
+
+/**
  * Writes `bundle.macOS.bundleVersion` into a Tauri config's text in place; the rest of the file
  * keeps its formatting. The key must be there already (the committed configs carry the value of
  * the repository's placeholder version).

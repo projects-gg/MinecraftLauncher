@@ -58,6 +58,32 @@ test("set-version.mjs stamps the launcher's macOS bundle version", async () => {
   );
 });
 
+test("set-version.mjs --local takes a local build's version and keeps the macOS one", async () => {
+  const script = join(here, "set-version.mjs");
+  const { stdout } = await run(process.execPath, [
+    script,
+    "2.0.1-beta.1.10",
+    "--local",
+    "--dry-run",
+  ]);
+  assert.ok(stdout.includes("would set 2.0.1-beta.1.10 in Cargo.toml"), stdout);
+  assert.ok(stdout.includes("would set 2.0.1-beta.1.10 in apps/launcher/package.json"), stdout);
+  for (const path of configs) {
+    assert.ok(stdout.includes(`would keep the committed macOS bundle version in ${path}`), stdout);
+    assert.ok(!stdout.includes(`(macOS bundle version) in ${path}`), stdout);
+  }
+  // Without --local (CI) the same name is refused, and says how a local build gets it.
+  await assert.rejects(
+    run(process.execPath, [script, "2.0.1-beta.1.10", "--dry-run"]),
+    (err) => err.code === 1 && /no macOS bundle version.*--local/.test(err.stderr),
+  );
+  // A version macOS can number gets its bundle version with --local too.
+  const full = await run(process.execPath, [script, "2.1.0-beta.2", "--local", "--dry-run"]);
+  for (const path of configs) {
+    assert.ok(full.stdout.includes(`would set 2.1.202 (macOS bundle version) in ${path}`));
+  }
+});
+
 test("check-mac-bundle.mjs passes the stamped bundle and stops others", async () => {
   const dir = mkdtempSync(join(tmpdir(), "mac-bundle-"));
   try {

@@ -15,6 +15,7 @@ import {
   setMacBundleVersion,
   sha256Hex,
   signRequest,
+  versionStamps,
 } from "./lib.mjs";
 
 const AWS_EXAMPLE_KEYS = {
@@ -209,6 +210,29 @@ test("versions macOS could not order have no bundle version", () => {
   for (const version of refused) {
     assert.throws(() => macBundleVersion(version), /bundle version|not a valid version/, version);
   }
+});
+
+test("a local Windows or Linux build may carry a build number; CI may not", () => {
+  // The tenth local build of beta.1 sorts like semver, so the updater takes it…
+  assert.ok(compareVersions("2.0.1-beta.1.10", "2.0.1-beta.1.9") > 0);
+  assert.ok(compareVersions("2.0.1-beta.1.10", "2.0.1-beta.1") > 0);
+  assert.ok(compareVersions("2.0.1-beta.1.10", "2.0.1-beta.2") < 0);
+  assert.ok(compareVersions("2.0.1-beta.1.10", "2.0.1") < 0);
+  // …but macOS cannot number it: refused, or stamped without a macOS bundle version locally.
+  assert.throws(() => versionStamps("2.0.1-beta.1.10"), /no macOS bundle version.*--local/);
+  assert.deepEqual(versionStamps("v2.0.1-beta.1.10", { local: true }), {
+    version: "2.0.1-beta.1.10",
+    macBundleVersion: null,
+  });
+  // A version macOS can number is stamped in full either way.
+  for (const local of [false, true]) {
+    assert.deepEqual(versionStamps("v2.0.1-beta.2", { local }), {
+      version: "2.0.1-beta.2",
+      macBundleVersion: "2.0.1202",
+    });
+  }
+  // Not a version at all: refused locally too (no build metadata in mirror paths).
+  assert.throws(() => versionStamps("2.0.1-beta.1+10", { local: true }), /not a valid version/);
 });
 
 test("the macOS bundle version is stamped into a Tauri config in place", () => {
