@@ -55,6 +55,14 @@ public final class BridgeConfig {
         return token;
     }
 
+    /**
+     * The world sharing gate's key (PROTOCOL.md §7.1), derived from the token: the token itself never leaves this
+     * class.
+     */
+    public byte[] gateKey() {
+        return gg.projects.overlay.host.PlgHeader.gateKey(token);
+    }
+
     @Override
     public String toString() {
         return "BridgeConfig[port=" + port + ", token=<redacted>]";

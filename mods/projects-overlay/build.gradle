@@ -136,4 +136,6 @@ java {
 
 test {
     useJUnitPlatform()
+    // World sharing's shared test vectors (HOST1-C): the gate's headers and the name binding rules.
+    systemProperty 'projects.testdata', file('../../crates/pl-host/testdata').absolutePath
 }

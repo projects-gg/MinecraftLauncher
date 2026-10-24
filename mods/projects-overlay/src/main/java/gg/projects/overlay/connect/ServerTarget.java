@@ -5,13 +5,24 @@ import java.util.Locale;
 /**
  * A server the game can go to: a host and a port, checked before anything happens in the game. Projects is
  * one network under several names (play.projects.gg, mc.projects.gg, ...), so all of them are the same place.
- * Pure: no Minecraft classes, so the rules have plain tests.
+ * A friend's world (HOST1, H12) is the launcher's own way there on 127.0.0.1 with a {@code label} the player
+ * reads instead ("Arkadaş dünyası: Ayşe"); the address is never shown then. Pure: no Minecraft classes, so the
+ * rules have plain tests.
  */
-public record ServerTarget(String host, int port) {
+public record ServerTarget(String host, int port, String label) {
     /** Where "Katıl" and "Bağlan" go for Projects. */
     public static final String PROJECTS_HOST = "play.projects.gg";
     public static final int DEFAULT_PORT = 25565;
     private static final int MAX_HOST_CHARS = 253;
+
+    public ServerTarget(String host, int port) {
+        this(host, port, null);
+    }
+
+    /** The same place, read as {@code label} (null or blank: as its address). */
+    public ServerTarget withLabel(String label) {
+        return new ServerTarget(host, port, label == null || label.isBlank() ? null : label);
+    }
 
     /**
      * The target named by launcher fields, or null when they do not name a server.
@@ -109,8 +120,8 @@ public record ServerTarget(String host, int port) {
         return port == DEFAULT_PORT ? h : h + ":" + port;
     }
 
-    /** How the player reads it: "Projects", or the address. */
+    /** How the player reads it: its label, "Projects", or the address. */
     public String displayName() {
-        return projects() ? "Projects" : address();
+        return label != null ? label : projects() ? "Projects" : address();
     }
 }

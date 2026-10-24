@@ -1,0 +1,14 @@
+{
+  "required": true,
+  "package": "gg.projects.overlay.host.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "ConnectionAccessor",
+    "IntegratedServerMixin",
+    "ServerConnectionListenerMixin",
+    "ServerLoginPacketListenerImplMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -167,6 +167,11 @@ public final class FriendList extends PanelWidget {
             if (f.where().equals("server") && f.host() != null) {
                 where = Texts.str("friend.where.server_at", f.host());
             }
+            OverlayState.WorldMark world = state.world(f.id());
+            if (world != null) {
+                // They invited the player to their open world (H13): "Dünyasında · 2/8" (the host counts).
+                where = Texts.str("friend.where.world", (world.guests() + 1) + "/" + (world.max() + 1));
+            }
             row.where = Texts.visual(Texts.fit(small, where, nameRoom));
             row.initial = Texts.initial(f.name());
             row.initialLine = Texts.visual(row.initial);

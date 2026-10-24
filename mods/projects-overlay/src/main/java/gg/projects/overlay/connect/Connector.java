@@ -79,6 +79,10 @@ public final class Connector {
     public void request(JsonObject frame, long now) {
         String id = Protocol.str(frame, "id", "");
         ServerTarget target = ServerTarget.of(Protocol.str(frame, "host", null), Protocol.num(frame, "port", -1));
+        if (target != null) {
+            // A friend's world (H12): what the player reads instead of the launcher's local address.
+            target = target.withLabel(Protocol.plain(Protocol.str(frame, "label", ""), Protocol.MAX_NAME_CHARS));
+        }
         if (id.isEmpty() || id.length() > MAX_ID_CHARS || target == null || !game.valid(target)) {
             answer(id.length() > MAX_ID_CHARS ? "" : id, false, "invalid", false);
             return;

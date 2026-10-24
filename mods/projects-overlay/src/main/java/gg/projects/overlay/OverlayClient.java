@@ -8,6 +8,8 @@ import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.connect.Connector;
 import gg.projects.overlay.connect.MinecraftGame;
 import gg.projects.overlay.connect.ServerTarget;
+import gg.projects.overlay.host.HostController;
+import gg.projects.overlay.host.HostGate;
 import gg.projects.overlay.link.CodelessLink;
 import gg.projects.overlay.link.LinkMessages;
 import gg.projects.overlay.link.LinkPayload;
@@ -15,12 +17,16 @@ import gg.projects.overlay.settings.OverlaySettings;
 import gg.projects.overlay.settings.SettingsStore;
 import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.stickers.StickerArt;
+import gg.projects.overlay.toast.ToastCard;
 import gg.projects.overlay.toast.ToastLayer;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.draw.Shapes;
 import gg.projects.overlay.ui.panel.DiscordLinkScreen;
+import gg.projects.overlay.ui.panel.HostPauseButton;
 import gg.projects.overlay.ui.panel.JoinScreen;
 import gg.projects.overlay.ui.panel.OverlayScreen;
+import java.util.List;
 import java.util.function.UnaryOperator;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
@@ -30,9 +36,12 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
+import net.fabricmc.fabric.api.networking.v1.ServerPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
@@ -67,6 +76,14 @@ public final class OverlayClient implements ClientModInitializer {
     private Connector connector;
     /** Codeless Discord linking with a Projects server (SKIN1-O). */
     private CodelessLink link;
+    /** Opening the player's singleplayer world to friends (HOST1). */
+    private HostController host;
+    /** The friend whose world "Katıl" was pressed for, and when (the launcher's {@code connect} follows). */
+    private String pendingWorld;
+    private long pendingWorldAt;
+    /** The friend's world the game went to with a label, and where that is (its "Katıl" hides while there). */
+    private String worldFriend;
+    private ServerTarget worldTarget;
     private OverlayScreen.Page lastPage = OverlayScreen.Page.CHATS;
     private String lastConversation;
     private String lastToastConversation;
@@ -118,8 +135,13 @@ public final class OverlayClient implements ClientModInitializer {
             }
         });
         // The travel toast stays above the saving, connecting and loading screens (and the pause menu).
-        ScreenEvents.AFTER_INIT.register((mc, screen, width, height) ->
-            ScreenEvents.afterExtract(screen).register((s, g, mouseX, mouseY, delta) -> toasts.extractOverScreen(g)));
+        ScreenEvents.AFTER_INIT.register((mc, screen, width, height) -> {
+            ScreenEvents.afterExtract(screen).register((s, g, mouseX, mouseY, delta) -> toasts.extractOverScreen(g));
+            // "Arkadaşlarını çağır" in the pause menu of a singleplayer world (HOST1, host1.md §4.8).
+            if (screen instanceof PauseScreen pause && pause.showsPauseMenu()) {
+                HostPauseButton.attach(this, pause);
+            }
+        });
         game = new MinecraftGame(this);
         connector = new Connector(game, frame -> bridge.send(frame));
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
@@ -136,6 +158,24 @@ public final class OverlayClient implements ClientModInitializer {
                     Minecraft.getInstance().execute(() -> handleFrame(frame));
                 }
             });
+        host = new HostController(this, new HostController.View() {
+            @Override
+            public void changed() {
+                if (Compat.screen(Minecraft.getInstance()) instanceof OverlayScreen screen) {
+                    screen.hostChanged();
+                }
+            }
+
+            @Override
+            public void guest(String label, boolean in) {
+                showHostNote(label, Texts.str(in ? "host.joined" : "host.left"), false, null, "host-guest:" + label);
+            }
+        });
+        // The gate's key comes from the bridge token (PROTOCOL.md §7.1); the world's server reaches the session there.
+        HostGate.init(config.gateKey(), host);
+        ServerPlayConnectionEvents.JOIN.register((handler, sender, server) -> HostGate.joined(server, handler.player));
+        ServerLifecycleEvents.SERVER_STOPPING.register(HostGate::serverStopping);
+        ServerLifecycleEvents.SERVER_STOPPED.register(HostGate::serverStopped);
         link = new CodelessLink(new CodelessLink.Out() {
             @Override
             public void toServer(String json) {
@@ -190,6 +230,61 @@ public final class OverlayClient implements ClientModInitializer {
         return link;
     }
 
+    /** Opening the player's singleplayer world to friends (HOST1). */
+    public HostController host() {
+        return host;
+    }
+
+    /** The pause menu's "Arkadaşlarını çağır": the panel opens on world sharing and goes back to the menu. */
+    public void openWorldSharing(Screen from) {
+        if (bridge.status() == BridgeClient.Status.OFFLINE) {
+            bridge.retryNow();
+        }
+        Compat.setScreen(Minecraft.getInstance(), new OverlayScreen(this, OverlayScreen.Page.WORLD, from));
+    }
+
+    /**
+     * "Katıl" on a friend's world invite, confirmed (H15): the launcher prepares the matching install and then moves
+     * the game ({@code connect} with the world's label) or restarts it. A short note says it is on its way.
+     */
+    public void joinWorld(String friendId) {
+        if (!bridge.send(Protocol.join(friendId))) {
+            return;
+        }
+        pendingWorld = friendId;
+        pendingWorldAt = monotonicMs();
+        toasts.notice(ToastCard.travel(Texts.str("world.join.preparing")), settings.get(), reducedMotion());
+    }
+
+    /**
+     * "Projects'te buluşun", confirmed: the picked friends get a "Birlikte oyna" invite once the player is on Projects
+     * (the launcher's part), and the game goes to Projects now (a singleplayer world is saved first).
+     */
+    public void meetOnProjects(List<String> friends) {
+        bridge.send(Protocol.hostMeet(friends));
+        connect(new JoinScreen.Target(null, "Projects", PROJECTS_HOST, true));
+    }
+
+    /** The game is in this friend's world now (it went there with their invite). */
+    public boolean inWorldOf(String friendId) {
+        if (friendId == null || !friendId.equals(worldFriend) || worldTarget == null) {
+            return false;
+        }
+        ServerTarget here = game.currentServer();
+        return here != null && here.sameServer(worldTarget);
+    }
+
+    /** A note of world sharing for the host (the world opened, a friend came in or left). */
+    private void showHostNote(String title, String body, boolean sprite, String hintKey, String toastKey) {
+        if (Compat.screen(Minecraft.getInstance()) instanceof OverlayScreen panel
+            && panel.page() == OverlayScreen.Page.WORLD) {
+            // The page shows it already.
+            return;
+        }
+        toasts.host(ToastCard.host(title, body, sprite, hintKey, key.keyName()), toastKey, settings.get(),
+            reducedMotion());
+    }
+
     public OverlaySettings settings() {
         return settings.get();
     }
@@ -238,6 +333,7 @@ public final class OverlayClient implements ClientModInitializer {
         }
         hadLevel = hasLevel;
         connector.tick(monotonicMs());
+        host.tick(mc);
         tickLink(mc);
         Shapes.prepare();
         StickerArt.tick(monotonicMs());
@@ -449,8 +545,13 @@ public final class OverlayClient implements ClientModInitializer {
 
     /** Applies a launcher frame on the render thread. Public for the scenario driver, which replays frames. */
     public void handleFrame(JsonObject frame) {
+        // World sharing's commands (HOST1): opening, closing, sending a guest off.
+        if (host.onFrame(frame)) {
+            return;
+        }
         switch (Protocol.type(frame)) {
             case "connect" -> {
+                noteWorldConnect(frame);
                 connector.request(frame, monotonicMs());
                 return;
             }
@@ -467,14 +568,32 @@ public final class OverlayClient implements ClientModInitializer {
             default -> {
             }
         }
+        OverlayState.HostView before = state.host();
         OverlayState.ToastRequest toast = state.apply(frame, System.currentTimeMillis());
         if (toast != null) {
             showToast(toast);
         }
+        OverlayState.HostView after = state.host();
+        if (after != null && after.open() && (before == null || !before.open()) && host.hosting()) {
+            // The paths are up and the invites went: the world is open (once per opening).
+            showHostNote(Texts.str("host.opened"), null, true, "toast.hint.manage", "host-open");
+        }
         refreshScreen();
     }
 
+    /** A {@code connect} with a label right after the player's "Katıl" on a world invite: that friend's world. */
+    private void noteWorldConnect(JsonObject frame) {
+        String label = Protocol.str(frame, "label", "");
+        if (label.isEmpty() || pendingWorld == null || monotonicMs() - pendingWorldAt > 15 * 60_000L) {
+            return;
+        }
+        worldFriend = pendingWorld;
+        worldTarget = ServerTarget.of(Protocol.str(frame, "host", null), Protocol.num(frame, "port", -1));
+        pendingWorld = null;
+    }
+
     private void onBridgeStatus(BridgeClient.Status status, String reason) {
+        host.onBridgeStatus(status);
         state.setStatus(status, reason);
         if (status != BridgeClient.Status.ONLINE) {
             toasts.clear();
