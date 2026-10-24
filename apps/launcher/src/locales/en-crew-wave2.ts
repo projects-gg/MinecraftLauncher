@@ -32,7 +32,7 @@ export const enCrewWave2: typeof trCrewWave2 = {
     label: "Invite link",
     copied: "Invite link copied",
     create: "Create link",
-    renew: "Renew",
+    renew: "New link",
     renewAsk: "The old link stops working at once.",
     renewed: "New invite link ready",
     off: "Turn off",

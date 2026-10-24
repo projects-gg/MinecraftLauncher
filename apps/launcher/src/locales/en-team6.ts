@@ -1,7 +1,6 @@
 // Crew tags (TEAM6), in English: the same keys as tr-team6.ts.
 export const enTeam6 = {
   wear: "Wear tag",
-  worn: "Wearing tag",
   takeOff: "Take off tag",
   woreToast: "You put on the {{tag}} tag.",
   switchedToast: "Your tag is now {{tag}}.",
@@ -41,7 +40,7 @@ export const enTeam6 = {
     visible: "Visible",
     hidden: "Hidden",
     visibleLine: "Members can show the crew tag before their names.",
-    hiddenLine: "Members can't wear the crew tag.",
+    hiddenLine: "Members can't wear the crew tag, and the forum hides the crew too.",
     ask_one: "{{count}} member will stop wearing the tag.",
     ask_other: "{{count}} members will stop wearing the tag.",
     confirm: "Hide",
@@ -52,8 +51,8 @@ export const enTeam6 = {
     label: "Requests from the tag",
     on: "On",
     off: "Off",
-    onLine: "Members' friends can ask to join from the tag's card.",
-    offLine: "No join requests come from the tag's card.",
+    onLine: "Anyone who sees the tag can ask to join, on the forum too.",
+    offLine: "No one who sees the tag can ask to join, on the forum either.",
     saved: "Requests from the tag saved",
   },
   welcome: {

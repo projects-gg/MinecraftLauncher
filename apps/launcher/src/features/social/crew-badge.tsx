@@ -710,7 +710,8 @@ export function WearToggle({ team }: { team: SocialTeam }) {
         ? t("team6.lockedWhy", { date: dayMonth(team.textLockedUntil ?? 0) })
         : null;
   return (
-    <Tooltip content={why ?? (pressed ? t("team6.worn") : t("team6.wear"))}>
+    // The tip says what a press does; the name stays and `aria-pressed` carries the state.
+    <Tooltip content={why ?? (pressed ? t("team6.takeOff") : t("team6.wear"))}>
       <span className="inline-flex">
         <button
           type="button"

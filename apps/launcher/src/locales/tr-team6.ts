@@ -4,7 +4,6 @@
 // have stay theirs ("Ekibi aç", "Kabul et", "Katılma isteği gönder", "Ana ekip", "Kuruluş").
 export const trTeam6 = {
   wear: "Etiketi tak",
-  worn: "Etiket takılı",
   takeOff: "Etiketi çıkar",
   woreToast: "{{tag}} etiketini taktın.",
   switchedToast: "Etiketin {{tag}} oldu.",
@@ -44,9 +43,9 @@ export const trTeam6 = {
     visible: "Görünür",
     hidden: "Gizli",
     visibleLine: "Üyeler ekip etiketini adlarının önünde gösterebilir.",
-    hiddenLine: "Üyeler ekip etiketini takamaz.",
-    ask_one: "Etiketi takan {{count}} üyenin etiketi çıkarılacak.",
-    ask_other: "Etiketi takan {{count}} üyenin etiketi çıkarılacak.",
+    hiddenLine: "Üyeler ekip etiketini takamaz, ekip forumda da görünmez.",
+    ask_one: "{{count}} üyenin taktığı etiket çıkarılacak.",
+    ask_other: "{{count}} üyenin taktığı etiket çıkarılacak.",
     confirm: "Gizle",
     cancel: "Vazgeç",
     saved: "Görünürlük kaydedildi",
@@ -55,8 +54,8 @@ export const trTeam6 = {
     label: "Etiketten istek",
     on: "Açık",
     off: "Kapalı",
-    onLine: "Üyelerin arkadaşları etiketin kartından katılma isteği gönderebilir.",
-    offLine: "Etiketin kartından katılma isteği gelmez.",
+    onLine: "Etiketi gören herkes katılma isteği gönderebilir, forumda da.",
+    offLine: "Etiketi gören kimse katılma isteği gönderemez, forumda da.",
     saved: "Etiketten istek ayarı kaydedildi",
   },
   welcome: {
