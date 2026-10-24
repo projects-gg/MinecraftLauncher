@@ -109,6 +109,8 @@ public final class CodelessLink {
         }
         waiting = question;
         waitingSince = now;
+        // The screen counts as free only from now on (an earlier question's wait says nothing about this one).
+        free = false;
     }
 
     /** Every tick: the launcher's answer and a waiting question run out. */

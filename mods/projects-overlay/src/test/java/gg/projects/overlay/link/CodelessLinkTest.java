@@ -123,6 +123,18 @@ class CodelessLinkTest {
     }
 
     @Test
+    void eachQuestionWaitsForItsOwnFreeScreen() {
+        link.onQuestion(0, QUESTION, true);
+        LinkMessages.Question first = take();
+        link.dismissed(first);
+        // The next question, much later: the screen must again be free for the whole settle, from now on.
+        link.onQuestion(60_000, QUESTION, true);
+        assertNull(link.takeQuestion(60_000, true));
+        assertNull(link.takeQuestion(60_000 + CodelessLink.SETTLE_MS - 1, true));
+        assertSame(QUESTION, link.takeQuestion(60_000 + CodelessLink.SETTLE_MS, true));
+    }
+
+    @Test
     void escapeLeavingAndWaitingTooLongSendNothing() {
         link.onQuestion(0, QUESTION, true);
         LinkMessages.Question shown = take();

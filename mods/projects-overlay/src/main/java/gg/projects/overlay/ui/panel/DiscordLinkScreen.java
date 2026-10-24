@@ -76,10 +76,12 @@ public final class DiscordLinkScreen extends Screen {
         title = getTitle().getString();
         body = Texts.wrap(ui, Texts.str("codeless.body"), inner, 3);
         hint = Texts.wrap(small, Texts.str("codeless.hint"), inner, 2);
-        // The chip: the Discord symbol, the display name, then the unique user name; the user name gives way first.
+        // The chip: the Discord symbol, the display name, then the unique user name. Too long for one line, the display
+        // name gives way first (down to a third of the row): the user name is what tells two accounts apart.
         float room = inner - (5 + 10 + 4 + 6);
         String at = "@" + question.username();
-        String shownName = Texts.fit(strong, question.displayName(), (int) Math.max(40, room - small.width(at) - 4));
+        float nameRoom = Math.max(room / 3f, room - small.width(at) - 4);
+        String shownName = Texts.fit(strong, question.displayName(), (int) nameRoom);
         float nameW = strong.width(shownName);
         String shownUser = Texts.fit(small, at, (int) Math.max(0, room - nameW - 4));
         name = shownName;
