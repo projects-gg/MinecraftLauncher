@@ -415,6 +415,13 @@ news feed, the launcher's built-in recommended Minecraft version.
   (MOD1, SPAM1) is live and its privacy text is published. Writers omit it while it is `false`;
   launchers that do not know the field ignore it. Studio sets it next to "Arkadaşlar" (it can't
   be switched on while `friends` is off).
+- `features.skins`: Projects skins for username accounts and linking a game account from the
+  launcher (SKIN1) inside the friends feature. Off by default and only shown while
+  `features.friends` is on too. Launchers also need the friends service to list `skins` / `mcLink`
+  in its `features` (Studio's switches in "Sosyal → Ayarlar" on and ProBot seen in the last 15
+  minutes); otherwise nothing of it shows. Writers omit it while it is `false`; launchers that do
+  not know the field ignore it. Publishing it needs a Studio of `aa95309` or later (STUDIO3).
+  Studio sets it next to "Arkadaşlar" (it can't be switched on while `friends` is off).
 - `features.worlds`: "Dünyanı arkadaşlarına aç" (HOST1): a player opens their singleplayer world
   to the friends they invite, who join through a relay (`launcher/crates/pl-host/PROTOCOL.md`).
   Off by default and only shown while `features.friends` is on too. Launchers also need the
