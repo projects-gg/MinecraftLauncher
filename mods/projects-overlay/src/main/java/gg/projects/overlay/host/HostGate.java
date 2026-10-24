@@ -91,6 +91,14 @@ public final class HostGate {
         }
     }
 
+    /**
+     * The world our session published, while it stands. The game itself lets go of its server before halting it
+     * ({@code Minecraft.disconnect}), so a send-off then finds the guests through this.
+     */
+    static MinecraftServer publishedServer() {
+        return publishedOn;
+    }
+
     /** Whether our session published on this server (and, on 26.1.2, it still listens). */
     public static boolean publishedBy(MinecraftServer server) {
         return server != null && publishedOn == server;
@@ -131,8 +139,8 @@ public final class HostGate {
     }
 
     /**
-     * Vanilla's own control turns sharing off ({@code unpublishServer} from the game's screens, 26.2+): our session ends
-     * first, so guests read why in their language before the game closes the listener.
+     * Vanilla's own control turns sharing off ({@code unpublishServer} from the game's screens, 26.2+): our session
+     * ends first, so guests read why in their language before the game closes the listener.
      */
     public static void vanillaUnpublishing(MinecraftServer server) {
         HostSession s = session();
@@ -286,7 +294,11 @@ public final class HostGate {
         }
     }
 
-    /** The world's server is stopping (the host left the world, or the game closes): sharing ends with it. */
+    /**
+     * The world's server is stopping (the host left the world, or the game closes): sharing ends with it. Called first
+     * from {@code IntegratedServer.halt} (the render thread, while guests are still in the world), then again from the
+     * server's own stop, when nothing is left to do.
+     */
     public static void serverStopping(MinecraftServer server) {
         HostSession s = session();
         Listener l = listener;

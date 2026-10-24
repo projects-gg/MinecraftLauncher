@@ -7,11 +7,13 @@ import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.Protocol;
 import gg.projects.overlay.compat.HostCompat;
 import gg.projects.overlay.state.OverlayState;
+import gg.projects.overlay.ui.Texts;
 import io.netty.channel.Channel;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
 import net.minecraft.SharedConstants;
@@ -20,6 +22,7 @@ import net.minecraft.client.server.IntegratedServer;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Util;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +42,8 @@ public final class HostController implements HostGate.Listener {
     public static final int MAX_INVITE = 7;
     /** How often (ticks) the world's own LAN switch and game mode are looked at. */
     private static final int WORLD_CHECK_TICKS = 20;
+    /** How long an opening may wait for the launcher before it reads as failed. */
+    public static final long OPENING_MS = 20_000;
 
     /** What the overlay shows of world sharing. */
     public interface View {
@@ -47,6 +52,36 @@ public final class HostController implements HostGate.Listener {
 
         /** A guest came in ({@code in}) or left; {@code label} as the player knows them. */
         void guest(String label, boolean in);
+    }
+
+    /** What an invite from elsewhere in the overlay did ({@link #inviteFriend}). */
+    public enum WorldInvite {
+        /** The player is not in a singleplayer world: the caller's own invite (to where the player plays) applies. */
+        NOT_HERE(null),
+        /** The open world got one more invite. */
+        INVITED(null),
+        /** The world opens with this friend's invite; the launcher sends it once the world is open. */
+        OPENING(null),
+        /** The world can't be opened now: nothing went out. */
+        UNAVAILABLE("host.failed.unavailable"),
+        /** The launcher is not there: nothing went out. */
+        LAUNCHER_AWAY("host.launcher_needed");
+
+        private final String lineKey;
+
+        WorldInvite(String lineKey) {
+            this.lineKey = lineKey;
+        }
+
+        /** The invite went out, or goes out once the world is open. */
+        public boolean sent() {
+            return this == INVITED || this == OPENING;
+        }
+
+        /** The one short line for an invite that did not go out (the caller shows it where the player is), or null. */
+        public String line() {
+            return lineKey == null ? null : Texts.str(lineKey);
+        }
     }
 
     private final OverlayClient overlay;
@@ -61,6 +96,12 @@ public final class HostController implements HostGate.Listener {
     private int checkIn;
     /** Our open session (any thread reads; changes on the render thread or the world's stopping). */
     private volatile HostSession session;
+    /** When the last {@code host-request} went ({@code Util.getMillis()}), 0 when no opening waits for its answer. */
+    private long requestedAt;
+    /** Why the last opening failed ({@code unavailable}, {@code limit}), null when it did not or a new one began. */
+    private String failure;
+    /** Friends invited while the world was still opening: their invites go once it is open. */
+    private final List<String> waiting = new ArrayList<>();
 
     public HostController(OverlayClient overlay, View view) {
         this.overlay = overlay;
@@ -116,6 +157,55 @@ public final class HostController implements HostGate.Listener {
         return s != null && s.publish().commands();
     }
 
+    /** An invite from the overlay goes to the player's own world now: they are in a singleplayer world. */
+    public boolean invitesToWorld() {
+        return world != null;
+    }
+
+    /**
+     * An invite from elsewhere in the overlay (the friend menu's "Birlikte oyna") while the player is in a singleplayer
+     * world. The owner, 24 Oct: the world switches online by itself, as the launcher's own invite does. With no session
+     * the world opens for this friend ({@code host-request}: the guests play the world's game mode, without commands;
+     * the world page changes those) and the launcher sends the invite once it is open; with one open the friend gets an
+     * invite ({@code host-invite}); while it opens the friend waits for it. Nothing goes out when the world can't open.
+     * Render thread.
+     */
+    public WorldInvite inviteFriend(String friendId) {
+        if (world == null) {
+            return WorldInvite.NOT_HERE;
+        }
+        if (launcherAway()) {
+            return WorldInvite.LAUNCHER_AWAY;
+        }
+        if (friendId == null || friendId.isEmpty()) {
+            return WorldInvite.UNAVAILABLE;
+        }
+        if (hosting()) {
+            return overlay.bridge().send(Protocol.hostInvite(List.of(friendId))) ? WorldInvite.INVITED
+                : WorldInvite.LAUNCHER_AWAY;
+        }
+        if (requesting()) {
+            if (!waiting.contains(friendId) && waiting.size() < MAX_INVITE) {
+                waiting.add(friendId);
+            }
+            return WorldInvite.OPENING;
+        }
+        if (!canInvite()) {
+            return WorldInvite.UNAVAILABLE;
+        }
+        return invite(mode, false, List.of(friendId)) ? WorldInvite.OPENING : WorldInvite.LAUNCHER_AWAY;
+    }
+
+    /** A {@code host-request} waits for the launcher's answer (the page and the card show "Dünyan açılıyor"). */
+    public boolean requesting() {
+        return requestedAt != 0 && !hosting();
+    }
+
+    /** Why the last opening failed ({@code unavailable}, {@code limit}), or null. */
+    public String failure() {
+        return failure;
+    }
+
     /**
      * "Davet et": with no session the world opens for these friends ({@code host-request}; the launcher checks and
      * answers with {@code host-publish}), with one open they get invites ({@code host-invite}).
@@ -138,6 +228,9 @@ public final class HostController implements HostGate.Listener {
         if (!overlay.bridge().send(Protocol.hostRequest(m, commands, ids))) {
             return false;
         }
+        requestedAt = Util.getMillis();
+        failure = null;
+        waiting.clear();
         // A new try clears what the last failed one left on screen.
         overlay.state().hostEnded();
         return true;
@@ -172,6 +265,8 @@ public final class HostController implements HostGate.Listener {
                 return true;
             }
             case "host-stop" -> {
+                requestedAt = 0;
+                waiting.clear();
                 end(null, true);
                 return true;
             }
@@ -198,6 +293,8 @@ public final class HostController implements HostGate.Listener {
             worldSent = false;
             return;
         }
+        requestedAt = 0;
+        waiting.clear();
         if (hosting()) {
             // Without the launcher nobody reaches the world: the guests are told it closed.
             LOG.info("The launcher went away; the world's sharing ends");
@@ -207,6 +304,10 @@ public final class HostController implements HostGate.Listener {
 
     /** Once per client tick: which world the player is in, and whether its LAN switch or mode changed. */
     public void tick(Minecraft mc) {
+        if (requestedAt != 0 && !hosting() && Util.getMillis() - requestedAt > OPENING_MS) {
+            // Nothing came back: it did not open.
+            openingFailed("unavailable");
+        }
         HostSession s = session;
         if (s != null && s.closed()) {
             // Closed under us (the world's server stopped).
@@ -256,6 +357,9 @@ public final class HostController implements HostGate.Listener {
         world = null;
         folder = "";
         lan = false;
+        requestedAt = 0;
+        failure = null;
+        waiting.clear();
         overlay.bridge().send(Protocol.hostWorld(false, null, null, false));
         worldSent = false;
         view.changed();
@@ -279,6 +383,7 @@ public final class HostController implements HostGate.Listener {
         Minecraft mc = Minecraft.getInstance();
         IntegratedServer server = mc.getSingleplayerServer();
         if (server == null || mc.level == null || world != server) {
+            requestedAt = 0;
             overlay.bridge().send(Protocol.hostPublishFailed(id, "not-world"));
             return;
         }
@@ -287,6 +392,7 @@ public final class HostController implements HostGate.Listener {
             return;
         }
         if (HostCompat.vanillaLanOpen(server)) {
+            openingFailed("unavailable");
             overlay.bridge().send(Protocol.hostPublishFailed(id, "lan"));
             return;
         }
@@ -295,6 +401,7 @@ public final class HostController implements HostGate.Listener {
         String binding = Protocol.str(frame, "binding", "");
         if (!guestMode.equals("survival") && !guestMode.equals("creative") && !guestMode.equals("adventure")
             || max < 1 || max > 7 || !KEY_ID.matcher(binding).matches()) {
+            openingFailed("unavailable");
             overlay.bridge().send(Protocol.hostPublishFailed(id, "error"));
             return;
         }
@@ -316,14 +423,62 @@ public final class HostController implements HostGate.Listener {
             s.close();
             HostGate.clear(s);
             LOG.warn("The world could not be opened for friends");
+            openingFailed("unavailable");
             overlay.bridge().send(Protocol.hostPublishFailed(id, "error"));
             return;
         }
         HostGate.markPublished(server);
+        requestedAt = 0;
+        failure = null;
         session = s;
         LOG.info("The world is open to friends on loopback");
         overlay.bridge().send(Protocol.hostPublished(id, port, SharedConstants.getProtocolVersion()));
         view.changed();
+    }
+
+    /** This opening ends without a world: the page and the card say so, and a note when the panel is closed. */
+    private void openingFailed(String why) {
+        requestedAt = 0;
+        waiting.clear();
+        failure = why == null || why.isEmpty() ? "unavailable" : why;
+        overlay.showHostFailure(failureLine(failure));
+        view.changed();
+    }
+
+    /** The one short line for a failed opening. */
+    public static String failureLine(String why) {
+        return Texts.str("limit".equals(why) ? "host.failed.limit" : "host.failed.unavailable");
+    }
+
+    /**
+     * The launcher's mirror changed (H8): once the world is open the player hears it and the friends invited meanwhile
+     * get their invites; a failed opening ({@code error}) ends the wait.
+     */
+    public void mirrorChanged(OverlayState.HostView before, OverlayState.HostView after) {
+        if (after == null) {
+            return;
+        }
+        if (after.open() && (before == null || !before.open()) && hosting()) {
+            // The paths are up and the invites went: the world is open (once per opening).
+            overlay.showHostNote(Texts.str("host.opened"), null, true, "toast.hint.manage", "host-open");
+            if (!waiting.isEmpty()) {
+                overlay.bridge().send(Protocol.hostInvite(List.copyOf(waiting)));
+                waiting.clear();
+            }
+            return;
+        }
+        String error = after.error();
+        if (!after.open() && error != null && !error.isEmpty() && !hosting()
+            && (before == null || !error.equals(before.error()))) {
+            boolean told = requestedAt == 0 && failure != null;
+            requestedAt = 0;
+            waiting.clear();
+            failure = error;
+            if (!told) {
+                overlay.showHostFailure(failureLine(error));
+            }
+            view.changed();
+        }
     }
 
     /** A port on 127.0.0.1 nobody listens on now, or -1. */
@@ -367,9 +522,14 @@ public final class HostController implements HostGate.Listener {
      * world's server thread.
      */
     private void sendOff(HostSession s, List<HostSession.Guest> guests, KickText.Refusal why) {
-        MinecraftServer server = Minecraft.getInstance().getSingleplayerServer();
+        // While the world halts the game has already let go of it: our publish still knows the server.
+        MinecraftServer server = HostGate.publishedServer();
+        if (server == null) {
+            server = Minecraft.getInstance().getSingleplayerServer();
+        }
         for (HostSession.Guest g : guests) {
-            ServerPlayer player = g.uuid() == null || server == null ? null : server.getPlayerList().getPlayer(g.uuid());
+            ServerPlayer player = g.uuid() == null || server == null ? null
+                : server.getPlayerList().getPlayer(g.uuid());
             if (g.stage() == HostSession.Stage.IN && player != null) {
                 String text = KickText.inWorld(why, hostLabel(), HostCompat.language(player));
                 player.connection.disconnect(Component.literal(text));

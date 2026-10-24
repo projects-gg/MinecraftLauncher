@@ -12,6 +12,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyArg;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
@@ -46,5 +47,14 @@ abstract class IntegratedServerMixin {
         if (!HostGate.unpublishing()) {
             HostGate.vanillaUnpublishing((MinecraftServer) (Object) this);
         }
+    }
+
+    /**
+     * The player leaves the world (or the game closes): {@code halt} first takes every guest out of the player list
+     * without a word, then stops the server. Sharing ends here, before that, so guests read why in their own language.
+     */
+    @Inject(method = "halt", at = @At("HEAD"), require = 1)
+    private void projects$endBeforeHalt(boolean wait, CallbackInfo ci) {
+        HostGate.serverStopping((MinecraftServer) (Object) this);
     }
 }

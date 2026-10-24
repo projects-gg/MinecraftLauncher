@@ -288,6 +288,17 @@ public final class OverlayClient implements ClientModInitializer {
             reducedMotion());
     }
 
+    /**
+     * A failed opening of the player's world (HOST1): one short line as a note while the panel is closed; the panel's
+     * card and world page say it themselves.
+     */
+    public void showHostFailure(String line) {
+        if (Compat.screen(Minecraft.getInstance()) instanceof OverlayScreen) {
+            return;
+        }
+        showHostNote(line, null, true, null, "host-failed");
+    }
+
     public OverlaySettings settings() {
         return settings.get();
     }
@@ -576,11 +587,7 @@ public final class OverlayClient implements ClientModInitializer {
         if (toast != null) {
             showToast(toast);
         }
-        OverlayState.HostView after = state.host();
-        if (after != null && after.open() && (before == null || !before.open()) && host.hosting()) {
-            // The paths are up and the invites went: the world is open (once per opening).
-            showHostNote(Texts.str("host.opened"), null, true, "toast.hint.manage", "host-open");
-        }
+        host.mirrorChanged(before, state.host());
         refreshScreen();
     }
 

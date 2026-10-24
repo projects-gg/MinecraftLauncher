@@ -31,6 +31,7 @@ import net.minecraft.client.gui.screens.options.controls.KeyBindsScreen;
 import net.minecraft.client.input.CharacterEvent;
 import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.input.MouseButtonEvent;
+import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.FormattedCharSequence;
 
@@ -376,7 +377,9 @@ public final class OverlayScreen extends Screen {
             default -> null;
         };
         if (b != null && b.visible && b.active) {
-            b.keyPressed(new KeyEvent(InputConstants.KEY_RETURN, 13, 0));
+            // As a mouse would: most players click here, and a key press would leave the keyboard ring on.
+            b.onClick(new MouseButtonEvent(b.getX() + b.getWidth() / 2.0, b.getY() + b.getHeight() / 2.0,
+                new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)), false);
         }
     }
 

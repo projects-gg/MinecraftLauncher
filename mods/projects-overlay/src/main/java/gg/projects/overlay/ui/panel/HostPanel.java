@@ -39,8 +39,6 @@ final class HostPanel {
     private static final int SECTION_H = 12;
     private static final int GAP = 6;
     private static final int CARD_H = 32;
-    /** How long an opening may wait for the launcher before it reads as failed. */
-    private static final long OPENING_MS = 20_000;
     private static final String[] MODES = {"survival", "creative", "adventure"};
 
     private final OverlayScreen screen;
@@ -57,7 +55,6 @@ final class HostPanel {
     final ActionButton cardJoin;
 
     private Mode mode = Mode.PICK;
-    private long requestedAt;
     private String failure;
     private boolean pickedModeByHand;
     private int seenRevision = -1;
@@ -75,6 +72,9 @@ final class HostPanel {
     private int noticeY = -1;
     private int noticeH;
     private List<FormattedCharSequence> noticeLines = List.of();
+    private int cardNoticeY = -1;
+    private int cardNoticeH;
+    private List<FormattedCharSequence> cardNoticeLines = List.of();
     // Card layout.
     private enum Card { NONE, OPEN, INVITE, WORLD_INVITE }
     private Card card = Card.NONE;
@@ -162,7 +162,7 @@ final class HostPanel {
 
     /** Works out the page's state from the session; true when it changed (the screen plays its page change). */
     boolean sync(long now) {
-        Mode next = resolve(now);
+        Mode next = resolve();
         if (next != mode) {
             mode = next;
             return true;
@@ -170,7 +170,7 @@ final class HostPanel {
         return false;
     }
 
-    private Mode resolve(long now) {
+    private Mode resolve() {
         HostController h = host();
         OverlayState.HostView view = state.host();
         if (h.hosting()) {
@@ -179,19 +179,15 @@ final class HostPanel {
             }
             return Mode.OPENING;
         }
-        if (view != null && !view.open()) {
-            failure = view.error();
-            return Mode.FAILED;
-        }
-        if (mode == Mode.OPENING && now - requestedAt < OPENING_MS) {
+        // An opening asked here or from the friend menu, and how the last one ended, are the controller's.
+        if (h.requesting()) {
             return Mode.OPENING;
         }
-        if (mode == Mode.OPENING) {
-            // Nothing came back: it did not open.
-            failure = "unavailable";
+        if (h.failure() != null) {
+            failure = h.failure();
             return Mode.FAILED;
         }
-        return mode == Mode.FAILED ? Mode.FAILED : Mode.PICK;
+        return Mode.PICK;
     }
 
     private void setMode(Mode next) {
@@ -226,7 +222,6 @@ final class HostPanel {
                     list.clearPicks();
                     setMode(Mode.OPEN);
                 } else {
-                    requestedAt = PanelWidget.now();
                     failure = null;
                     setMode(Mode.OPENING);
                 }
@@ -258,7 +253,7 @@ final class HostPanel {
             return;
         }
         screen.ask(new ConfirmScreen.Question(Texts.tr("host.stop.title"), Texts.str("host.stop.ask"), null,
-            Texts.tr("host.stop"), null, true), () -> host().stopSharing());
+            Texts.tr("host.stop"), Icon.LOCK, true), () -> host().stopSharing());
     }
 
     private void askRemove(HostList.Row row) {
@@ -341,8 +336,8 @@ final class HostPanel {
                 PanelWidget.place(meet, primary.visible ? x + width - pw - GAP - mw : x + width - mw, by, mw,
                     ActionButton.HEIGHT);
                 if (mode == Mode.FAILED) {
-                    String why = Texts.str("limit".equals(failure) ? "host.failed.limit" : "host.failed.unavailable");
-                    noticeLines = Texts.wrap(Fonts.ui(), why, width - 8 - 10 - 6 - 8, 2);
+                    noticeLines = Texts.wrap(Fonts.ui(), HostController.failureLine(failure),
+                        width - 8 - 10 - 6 - 8, 2);
                     noticeH = 8 + noticeLines.size() * 10 + 8;
                     noticeY = above - noticeH;
                     above = noticeY - GAP;
@@ -438,13 +433,7 @@ final class HostPanel {
         render(g, modes, mouseX, mouseY);
         render(g, commands, mouseX, mouseY);
         if (noticeY >= 0) {
-            Draw.frame(g, Frames.CARD, x0, noticeY, cw, noticeH);
-            Draw.icon(g, Icon.WARNING, 10, x0 + 8, noticeY + 8, Theme.FLARE_300);
-            float ty = noticeY + 8;
-            for (FormattedCharSequence line : noticeLines) {
-                Draw.text(g, Fonts.ui(), line, x0 + 8 + 10 + 6, Fonts.centeredY(Fonts.Face.UI, ty + 5), Theme.BONE_100);
-                ty += 10;
-            }
+            drawNotice(g, noticeY, noticeH, noticeLines);
         }
         if (noteY >= 0) {
             float ty = noteY;
@@ -458,6 +447,17 @@ final class HostPanel {
         render(g, primary, mouseX, mouseY);
     }
 
+    /** A notice panel across the page: the warning sign and the lines (a failed opening). */
+    private void drawNotice(GuiGraphicsExtractor g, int y, int h, List<FormattedCharSequence> lines) {
+        Draw.frame(g, Frames.CARD, x0, y, cw, h);
+        Draw.icon(g, Icon.WARNING, 10, x0 + 8, y + 8, Theme.FLARE_300);
+        float ty = y + 8;
+        for (FormattedCharSequence line : lines) {
+            Draw.text(g, Fonts.ui(), line, x0 + 8 + 10 + 6, Fonts.centeredY(Fonts.Face.UI, ty + 5), Theme.BONE_100);
+            ty += 10;
+        }
+    }
+
     // ---- The card on the other pages ------------------------------------------------------------------------
 
     /**
@@ -468,6 +468,7 @@ final class HostPanel {
         x0 = x;
         cw = width;
         cardY = -1;
+        cardNoticeY = -1;
         cardFriend = null;
         card = Card.NONE;
         HostController h = host();
@@ -476,18 +477,28 @@ final class HostPanel {
         if (!state.online()) {
             return y;
         }
-        if (h.hosting()) {
+        if (h.hosting() || h.requesting()) {
+            // Open, or opening (asked here or from the friend menu).
             OverlayState.HostView view = state.host();
+            boolean open = h.hosting() && view != null && view.open();
             card = Card.OPEN;
             cardY = y;
             int mw = cardManage.preferredWidth();
             int textW = width - 8 - PixelSprites.SIZE - 7 - mw - 8 - 4;
-            cardTitle = Texts.visual(Texts.fit(strong, Texts.str("host.open"), textW));
+            cardTitle = Texts.visual(Texts.fit(strong, Texts.str(open ? "host.open" : "host.opening"), textW));
             cardSub = Texts.visual(Texts.fit(small, guestNames(view), textW));
             cardManage.visible = true;
             PanelWidget.place(cardManage, x + width - 6 - mw, y + (CARD_H - ActionButton.HEIGHT) / 2, mw,
                 ActionButton.HEIGHT);
             return y + CARD_H + 8;
+        }
+        if (h.failure() != null && h.inWorld()) {
+            // The last opening failed (asked from the friend menu too): one line over whatever card follows.
+            cardNoticeLines = Texts.wrap(Fonts.ui(), HostController.failureLine(h.failure()), width - 8 - 10 - 6 - 8,
+                2);
+            cardNoticeH = 8 + cardNoticeLines.size() * 10 + 8;
+            cardNoticeY = y;
+            y += cardNoticeH + 4;
         }
         // A friend waiting in their world comes before opening one's own (the pause menu still has that).
         String friend = screen.worldInviteToShow();
@@ -517,7 +528,8 @@ final class HostPanel {
             PanelWidget.place(cardOpen, x, y, width, ActionButton.HEIGHT);
             return y + ActionButton.HEIGHT + 8;
         }
-        return y;
+        // The line alone keeps the cards' gap to the page's rows.
+        return cardNoticeY >= 0 ? y + 4 : y;
     }
 
     /** "Mert, Ayşe" for the friends in the world now, or "Henüz kimse yok.". */
@@ -538,6 +550,9 @@ final class HostPanel {
     }
 
     void drawCard(GuiGraphicsExtractor g, int mouseX, int mouseY) {
+        if (cardNoticeY >= 0) {
+            drawNotice(g, cardNoticeY, cardNoticeH, cardNoticeLines);
+        }
         if (cardY < 0) {
             return;
         }

@@ -43,7 +43,9 @@ public enum Icon {
     /** "Arkadaşlarını çağır" (HOST1): the launcher's "Arkadaşlarınla oyna" carries the same sign. */
     USER_PLUS("UserPlus"),
     /** "Dünyadan çıkar" on a guest's row (HOST1). */
-    USER_MINUS("UserMinus");
+    USER_MINUS("UserMinus"),
+    /** The "Paylaşımı kapat" question (HOST1): the world is the player's alone again. */
+    LOCK("LockSimple");
 
     /** The sizes icons are drawn at, in GUI pixels. */
     public static final int[] SIZES = {8, 10, 12};
