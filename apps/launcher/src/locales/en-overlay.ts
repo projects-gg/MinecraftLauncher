@@ -4,4 +4,9 @@ export const enOverlay = {
   settingHelp: "Press F7 in game: messages, friends and crew calls.",
   closeHelp: "Won't work: the launcher closes when the game opens.",
   packMissing: "The official pack isn't installed.",
+  fabricOnly: "Only works in Fabric installs.",
+  toFabric: "Switch to Fabric",
+  versionMissing: "Won't work on Minecraft {{version}}.",
+  toWorking: "Switch install",
+  switchTarget: "{{action}}: {{name}}",
 };
