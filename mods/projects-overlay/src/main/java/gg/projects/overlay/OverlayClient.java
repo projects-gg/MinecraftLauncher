@@ -188,6 +188,10 @@ public final class OverlayClient implements ClientModInitializer {
             }
         });
         LinkPayload.register(this::onLinkMessage);
+        // The pause menu's Projects button in its bottom right corner (OVL-UX; world sharing's "Arkadaşlarını çağır"
+        // takes the top right one).
+        ScreenEvents.AFTER_INIT.register((mc, screen, width, height) ->
+            gg.projects.overlay.ui.panel.PausePanelButton.attach(this, screen));
         // A new connection (or the proxy moving the game to another of its servers) starts over; leaving ends the
         // question: its token means nothing anywhere else.
         ClientPlayConnectionEvents.JOIN.register((handler, sender, mc) -> mc.execute(this::leftServer));
@@ -514,6 +518,55 @@ public final class OverlayClient implements ClientModInitializer {
 
     public void answer(String call, String answer) {
         bridge.send(Protocol.answer(call, answer));
+    }
+
+    // ---- The friend menu (OVL-UX) ------------------------------------------------------------------------
+
+    /** "Birlikte oyna" to a friend (the launcher's play-together invite; on a server only). */
+    public void inviteFriend(String friendId) {
+        friendAction(friendId, Protocol.invite(friendId), "invite_failed");
+    }
+
+    /** "Discord'dan mesaj at": the launcher opens their profile (the Discord app when it is installed). */
+    public void openDiscord(String friendId) {
+        friendAction(friendId, Protocol.discord(friendId), "failed");
+    }
+
+    /** "Arkadaşlıktan çıkar", after the panel's question. */
+    public void unfriend(String friendId) {
+        friendAction(friendId, Protocol.unfriend(friendId), "failed");
+    }
+
+    /** "Engelle", after the panel's question. */
+    public void block(String friendId) {
+        friendAction(friendId, Protocol.block(friendId), "failed");
+    }
+
+    /** "Rapor et": a player's reason, a note for moderators, maybe a block too. */
+    public void report(String friendId, String reason, String note, boolean alsoBlock) {
+        state.reportSent(friendId, alsoBlock);
+        friendAction(friendId, Protocol.report(friendId, reason, note, alsoBlock), "report_failed");
+    }
+
+    /** Sends a friend menu frame; when it cannot go at all the panel says so at once. */
+    private void friendAction(String friendId, JsonObject frame, String failedKey) {
+        OverlayState.Friend friend = state.friend(friendId);
+        state.actionSent(friendId);
+        if (!bridge.send(frame)) {
+            state.personNote(failedKey, friend == null ? "" : friend.name(), true, System.currentTimeMillis());
+        }
+        refreshScreen();
+    }
+
+    /**
+     * The pause menu's Projects button (OVL-UX): opens the panel where it was last, as F7 does; closing it goes back to
+     * the pause menu and the game stays paused.
+     */
+    public void openPanelFrom(Screen from) {
+        if (bridge.status() == BridgeClient.Status.OFFLINE) {
+            bridge.retryNow();
+        }
+        Compat.setScreen(Minecraft.getInstance(), new OverlayScreen(this, null, from));
     }
 
     public void retry() {

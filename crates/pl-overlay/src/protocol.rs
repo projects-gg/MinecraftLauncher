@@ -170,6 +170,27 @@ pub enum FromGame {
         #[serde(default)]
         name: String,
     },
+    /// OVL-UX (P3; the friend menu): "Birlikte oyna" to this friend. Answered with
+    /// `friend-result`.
+    Invite { friend: String },
+    /// OVL-UX (P4): "Discord'dan mesaj at": the launcher opens the friend's Discord profile (in
+    /// the app when it is installed, else on the web). Answered only when it could not.
+    Discord { friend: String },
+    /// OVL-UX (P5): "Arkadaşlıktan çıkar", after the mod's one-sentence question.
+    Unfriend { friend: String },
+    /// OVL-UX (P6): "Engelle", after the mod's question.
+    Block { friend: String },
+    /// OVL-UX (P7): "Rapor et": one of a player's reasons (`name`, `profile`, `harassment`,
+    /// `spam`, `scam`, `other`), a note for moderators (200 characters at most, may be empty) and
+    /// whether to block them too.
+    Report {
+        friend: String,
+        reason: String,
+        #[serde(default)]
+        note: String,
+        #[serde(default)]
+        block: bool,
+    },
     /// Anything newer than this launcher.
     #[serde(other)]
     Unknown,
@@ -195,6 +216,15 @@ pub const FEATURE_TAGS: &str = "tags";
 /// can vouch for the player now (K2: signed in to friends, the service offers codeless linking,
 /// the game was started from here).
 pub const FEATURE_LINK: &str = "link";
+
+/// The `hello` feature of a mod with the friend menu (OVL-UX, P1: it hears `friend-result`), and
+/// the `welcome` feature that says this launcher takes the menu's frames (`invite`, `discord`,
+/// `unfriend`, `block`, `report`; P2: signed in to friends).
+pub const FEATURE_PEOPLE: &str = "people";
+
+/// The `welcome` feature that says "Birlikte oyna" can go now (OVL-UX, P2): the player's game is
+/// on Projects, or on a server they show their friends.
+pub const FEATURE_INVITE: &str = "invite";
 
 impl FromGame {
     /// One of HOST1's frames: they go to the launcher's world sharing, never to the friends
@@ -382,9 +412,46 @@ pub enum ToGame {
     /// no longer good (another friends account, codeless linking switched off): the mod forgets
     /// it and tells a server that asks that it has none. Only to a mod that said `link`.
     LinkClear,
+    /// OVL-UX (P8): how a friend menu action went. `queued`: the invite waits for the friend
+    /// (offline or on do-not-disturb); `reason` when it did not go. Only to a mod that said
+    /// `people`.
+    FriendResult {
+        friend: String,
+        action: FriendAction,
+        ok: bool,
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        queued: bool,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        reason: Option<FriendRefusal>,
+    },
     Bye {
         reason: ByeReason,
     },
+}
+
+/// A friend menu action, as `friend-result` names it (OVL-UX).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FriendAction {
+    Invite,
+    Discord,
+    Unfriend,
+    Block,
+    Report,
+}
+
+/// Why a friend menu action did not go (OVL-UX).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum FriendRefusal {
+    /// "Birlikte oyna" to them waits for its five minutes (or the day's invites are used up).
+    Wait,
+    /// Too many actions from the game in a short time (a stuck key or a bad mod).
+    Rate,
+    /// The friends service cannot be reached now.
+    Offline,
+    /// Anything else: not a friend any more, the service refused, nothing to open.
+    Failed,
 }
 
 /// A friend in the player's world session, for the mod's screens (H8).
@@ -413,6 +480,10 @@ pub struct WorldMark {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Me {
     pub name: String,
+    /// OVL-UX (P9): the crew whose tag the player wears (its card comes in `badges`, to a mod that
+    /// said `tags`), only while crew tags are on.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub badge: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -432,6 +503,13 @@ pub struct FriendView {
     /// TEAM6-O (T4): the crew whose tag they wear (its card came in `badges`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub badge: Option<String>,
+    /// OVL-UX (P10): their direct conversation with the player, while chat is on: the panel opens
+    /// it (a new one too) and messages go there.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dm: Option<String>,
+    /// OVL-UX (P11): their Discord profile is known ("Discord'dan mesaj at").
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub discord: bool,
 }
 
 /// A crew tag's card as the overlay shows it (TEAM6-O, T3): the chip (`tag` on the crew's colour)
@@ -984,6 +1062,79 @@ mod tests {
     }
 
     #[test]
+    fn friend_menu_frames_read_and_write_as_the_log_says() {
+        let invite: FromGame = serde_json::from_str(r#"{"t":"invite","friend":"f1"}"#).unwrap();
+        assert_eq!(
+            invite,
+            FromGame::Invite {
+                friend: "f1".into()
+            }
+        );
+        let discord: FromGame = serde_json::from_str(r#"{"t":"discord","friend":"f1"}"#).unwrap();
+        assert!(matches!(discord, FromGame::Discord { ref friend } if friend == "f1"));
+        let unfriend: FromGame = serde_json::from_str(r#"{"t":"unfriend","friend":"f2"}"#).unwrap();
+        assert!(matches!(unfriend, FromGame::Unfriend { ref friend } if friend == "f2"));
+        let block: FromGame = serde_json::from_str(r#"{"t":"block","friend":"f3"}"#).unwrap();
+        assert!(matches!(block, FromGame::Block { ref friend } if friend == "f3"));
+        let report: FromGame = serde_json::from_str(
+            r#"{"t":"report","friend":"f4","reason":"harassment","note":"sürekli","block":true}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            report,
+            FromGame::Report {
+                friend: "f4".into(),
+                reason: "harassment".into(),
+                note: "sürekli".into(),
+                block: true
+            }
+        );
+        let bare: FromGame =
+            serde_json::from_str(r#"{"t":"report","friend":"f4","reason":"spam"}"#).unwrap();
+        assert!(matches!(bare, FromGame::Report { ref note, block: false, .. } if note.is_empty()));
+        // A frame without its friend is not one of them.
+        assert!(serde_json::from_str::<FromGame>(r#"{"t":"block"}"#).is_err());
+        assert!(!invite.is_host());
+
+        let sent = serde_json::to_value(ToGame::FriendResult {
+            friend: "f1".into(),
+            action: FriendAction::Invite,
+            ok: true,
+            queued: true,
+            reason: None,
+        })
+        .unwrap();
+        assert_eq!(
+            sent,
+            serde_json::json!({"t":"friend-result","friend":"f1","action":"invite","ok":true,"queued":true})
+        );
+        let refused = serde_json::to_value(ToGame::FriendResult {
+            friend: "f2".into(),
+            action: FriendAction::Unfriend,
+            ok: false,
+            queued: false,
+            reason: Some(FriendRefusal::Offline),
+        })
+        .unwrap();
+        assert_eq!(
+            refused,
+            serde_json::json!({"t":"friend-result","friend":"f2","action":"unfriend","ok":false,"reason":"offline"})
+        );
+        let me = serde_json::to_value(Me {
+            name: "Ece".into(),
+            badge: Some("t1".into()),
+        })
+        .unwrap();
+        assert_eq!(me, serde_json::json!({"name":"Ece","badge":"t1"}));
+        let plain = serde_json::to_value(Me {
+            name: "Ece".into(),
+            badge: None,
+        })
+        .unwrap();
+        assert_eq!(plain, serde_json::json!({"name":"Ece"}));
+    }
+
+    #[test]
     fn frames_to_the_game_use_the_wire_names() {
         let toast = ToGame::Toast(ToastView {
             kind: ToastKind::Call,
@@ -1018,12 +1169,15 @@ mod tests {
             host: None,
             world: None,
             badge: None,
+            dm: None,
+            discord: false,
         }))
         .unwrap();
         assert_eq!(friend["where"], "projects");
         assert_eq!(friend["t"], "friend");
         assert!(friend.get("host").is_none() && friend.get("world").is_none());
         assert!(friend.get("badge").is_none());
+        assert!(friend.get("dm").is_none() && friend.get("discord").is_none());
         let inviting = serde_json::to_value(ToGame::Friend(FriendView {
             id: "f2".into(),
             name: "Mert".into(),
@@ -1032,9 +1186,13 @@ mod tests {
             host: None,
             world: Some(WorldMark { guests: 1, max: 7 }),
             badge: None,
+            dm: Some("d:f2:me".into()),
+            discord: true,
         }))
         .unwrap();
         assert_eq!(inviting["world"], serde_json::json!({"guests":1,"max":7}));
+        assert_eq!(inviting["dm"], "d:f2:me");
+        assert_eq!(inviting["discord"], true);
 
         let gone = serde_json::to_value(ToGame::MsgGone {
             conv: "d:1:2".into(),

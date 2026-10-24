@@ -36,6 +36,26 @@ public enum Icon {
     STICKER("Sticker"),
     GLOBE("Globe"),
     OPEN("ArrowSquareOut"),
+    // The friend menu (OVL-UX), with the launcher's person menu signs (person-menu.tsx).
+    /** A friend row's "…". */
+    DOTS("DotsThree"),
+    /** "Mesaj gönder". */
+    MESSAGE("ChatCircle"),
+    /** "Birlikte oyna": the launcher's play-together invite (its sign there too). */
+    PLAY_INVITE("PaperPlaneTilt"),
+    /** "Dünyana çağır": an invite to the player's own world (HOST1), the launcher's sign for it. */
+    WORLD_INVITE("DoorOpen"),
+    /** "Dünyadan çıkar". */
+    SEND_OFF("SignOut"),
+    /** "Arkadaşlıktan çıkar" (the same outline as {@link #USER_MINUS}). */
+    UNFRIEND("UserMinus"),
+    /** "Engelle". */
+    BLOCK("Prohibit"),
+    /** "Rapor et". */
+    REPORT("Flag"),
+    /** A report reason not picked, and the one picked. */
+    RADIO_OFF("Circle"),
+    RADIO_ON("RadioButton"),
     /** "Ece ekibe katıldı" in crew chat (TEAM6 §7), as the launcher's line. */
     WAVE("HandWaving"),
     /** The Discord account in that question: the symbol alone, uncoloured, as the launcher's link area. */

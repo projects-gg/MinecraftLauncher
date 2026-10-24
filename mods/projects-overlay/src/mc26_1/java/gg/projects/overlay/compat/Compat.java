@@ -22,6 +22,9 @@ public final class Compat {
     /** The key type a keyboard key mapping uses. */
     public static final InputConstants.Type KEYBOARD = InputConstants.Type.KEYSYM;
 
+    /** The menu (application) key, GLFW's code: opens the picked row's menu, as Shift+F10 (OVL-UX). */
+    public static final int KEY_MENU = 348;
+
     private Compat() {
     }
 

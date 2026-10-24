@@ -16,6 +16,12 @@
 // --team6 plays crew tags (docs/tasks/ovl2-protocol.md, TEAM6-O): "tags" in the welcome, the cards ("badges")
 // before the snapshot, friends', crew messages' and toasts' "badge", the crews' "ekibe katıldı" lines ("note");
 // dev commands "joined", "tag-change", "hide-crew", "tags-off" and "tags-on" play the live changes.
+// --people plays the friend menu (docs/tasks/ovl2-protocol.md, OVL-UX): "people" and "invite" in the welcome (the
+// player is on Projects), friends' "dm" and "discord", the player's own tag in "me" (with --team6); the menu's frames
+// (invite, discord, unfriend, block, report) are answered with "friend-result" as the launcher would (an invite to an
+// offline friend waits for them, a second one to Mert is too soon; unfriend and block take the friend off the list). A
+// message to a conversation that had none yet makes it real ("conv"). Dev commands "badge-off" / "badge-on" take the
+// player's own tag off and on (a new welcome), "invite-off" leaves Projects.
 // --link plays codeless Discord linking (docs/tasks/ovl2-protocol.md, SKIN1-O): "link" in the welcome; a mod's
 // "link-want" gets a made-up permit ("link-offer") for that name, or "link-clear" for the name "Nobody".
 // --host plays world sharing's host launcher (docs/tasks/ovl2-protocol.md, HOST1, H1-H17): "host" in the welcome;
@@ -291,6 +297,21 @@ const WEARS = {
 };
 const NAMES = { Ayşe: "f-ayse", Can: "f-can", Mert: "f-mert", Deniz: "f-deniz", Elif: "f-elif" };
 const NOTES = [];
+// OVL-UX: friends' direct conversations (the mock's own ids), whose Discord is known, and whether the player is on
+// Projects ("invite").
+let inviteOn = Boolean(args.people);
+const invitedOnce = new Set();
+if (args.people) {
+  for (const friend of state.friends) {
+    friend.dm = `dm:${friend.id.slice(2)}`;
+    if (friend.id !== "f-can") {
+      friend.discord = true;
+    }
+  }
+  if (args.team6) {
+    state.me.badge = "t-gece";
+  }
+}
 let tagsOn = Boolean(args.team6);
 const wornBy = (name) => (tagsOn ? WEARS[NAMES[name]] : undefined);
 if (args.team6) {
@@ -448,6 +469,7 @@ function welcome(socket) {
           "calls",
           ...(args.chat2 ? EXTRAS : []),
           ...(tagsOn ? ["tags"] : []),
+          ...(args.people ? ["people", ...(inviteOn ? ["invite"] : [])] : []),
           ...(args.link ? ["link"] : []),
           ...(args.host ? ["host"] : []),
         ],
@@ -623,6 +645,7 @@ function onFrame(socket, frame) {
       if (!state.history[frame.conv]) {
         state.history[frame.conv] = [];
       }
+      madeReal(socket, frame.conv);
       const mine = { id, from: state.me.name, text, at: now(), mine: true };
       if (args.chat2) {
         mine.sid = newSid();
@@ -680,6 +703,15 @@ function onFrame(socket, frame) {
         onReact(socket, frame);
       }
       break;
+    case "invite":
+    case "discord":
+    case "unfriend":
+    case "block":
+    case "report":
+      if (args.people) {
+        onPeople(socket, frame);
+      }
+      break;
     case "typing":
       // The player writes in the panel: a launcher passes it to the friends service; the mock only logs it.
       break;
@@ -704,9 +736,81 @@ function onFrame(socket, frame) {
   }
 }
 
+/** OVL-UX: a message to a friend's conversation that had none yet makes it real, first in the list. */
+function madeReal(socket, convId) {
+  if (conv(convId)) {
+    return;
+  }
+  const friend = state.friends.find((f) => f.dm === convId);
+  if (!friend) {
+    return;
+  }
+  const made = {
+    id: convId,
+    kind: "dm",
+    title: friend.name,
+    unread: 0,
+    muted: false,
+    writable: true,
+  };
+  state.convs.unshift(made);
+  later(200, () => send(socket, { t: "conv", ...made }));
+}
+
+/** OVL-UX: the friend menu's actions, answered as the launcher would. */
+function onPeople(socket, frame) {
+  const friend = state.friends.find((f) => f.id === frame.friend);
+  const result = (ok, more = {}) =>
+    later(180, () =>
+      send(socket, { t: "friend-result", friend: frame.friend, action: frame.t, ok, ...more }),
+    );
+  if (!friend) {
+    result(false, { reason: "failed" });
+    return;
+  }
+  switch (frame.t) {
+    case "invite":
+      if (!inviteOn) {
+        result(false, { reason: "failed" });
+      } else if (friend.id === "f-mert" && invitedOnce.has(friend.id)) {
+        result(false, { reason: "wait" });
+      } else {
+        invitedOnce.add(friend.id);
+        result(true, friend.where === "offline" ? { queued: true } : {});
+      }
+      break;
+    case "discord":
+      // The launcher opens the profile itself; nothing comes back when it could.
+      if (!friend.discord) {
+        result(false, { reason: "failed" });
+      }
+      break;
+    case "report":
+      if (!["name", "profile", "harassment", "spam", "scam", "other"].includes(frame.reason)) {
+        result(false, { reason: "failed" });
+        break;
+      }
+      result(true);
+      if (frame.block) {
+        gone(socket, friend.id);
+      }
+      break;
+    default:
+      // unfriend, block: the friend leaves the list first, then the answer comes.
+      gone(socket, friend.id);
+      result(true);
+  }
+}
+
+function gone(socket, id) {
+  state.friends = state.friends.filter((f) => f.id !== id);
+  later(120, () => send(socket, { t: "friend-gone", id }));
+}
+
 /** CHAT2: a sticker or a reply from the panel, answered as the launcher does (sent, then the whole message). */
 function onChat2Send(socket, frame) {
   state.history[frame.conv] ??= [];
+  madeReal(socket, frame.conv);
   const history = state.history[frame.conv];
   const msg = { id: `m${nextId++}`, sid: newSid(), from: state.me.name, at: now(), mine: true };
   if (typeof frame.sticker === "string") {
@@ -855,6 +959,17 @@ function onDev(socket, frame) {
       }
       break;
     }
+    case "badge-off":
+    case "badge-on":
+      // The player takes their own tag off (or puts it on): the launcher greets again.
+      state.me.badge = frame.cmd === "badge-on" ? "t-gece" : undefined;
+      welcome(socket);
+      break;
+    case "invite-off":
+      // The player left Projects: "Birlikte oyna" cannot go any more.
+      inviteOn = false;
+      welcome(socket);
+      break;
     case "tags-off":
     case "tags-on":
       // Studio's switch: a new greeting without (or with) "tags".

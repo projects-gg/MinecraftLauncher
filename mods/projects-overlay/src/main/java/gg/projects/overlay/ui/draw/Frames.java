@@ -81,6 +81,18 @@ public enum Frames {
     ROW_HOVER(FrameSpec.rounded(4, Theme.withAlpha(0xFFFFFF, 0.10f), Theme.withAlpha(0xFFFFFF, 0.14f))),
     /** The ring around a row picked with the keys. */
     FOCUS_ROW(FrameSpec.rounded(4, 0, 0).withRing(Theme.GOLD_300, 1.5f)),
+    /** A report reason picked (OVL-UX): the launcher's radio row, a touch of gold under a gold hairline. */
+    CHOICE_PICKED(FrameSpec.rounded(4, Theme.withAlpha(Theme.mix(Theme.OBSIDIAN_800, Theme.GOLD_500, 0.09f), 0.9f),
+        Theme.withAlpha(Theme.GOLD_400, 0.4f))),
+    /**
+     * The pause menu's Projects button (OVL-UX): a square action, so chamfered, obsidian over the game's menu with the
+     * launcher's hairline; lighter under the pointer. Any size (the game's buttons are 20 GUI pixels tall).
+     */
+    PAUSE_BUTTON(FrameSpec.rounded(3, Theme.withAlpha(Theme.OBSIDIAN_800, 0.9f), Theme.withAlpha(0xFFFFFF, 0.14f))
+        .withHighlight(Theme.withAlpha(0xFFFFFF, 0.05f)).chamfer()),
+    PAUSE_BUTTON_HOVER(FrameSpec.rounded(3, Theme.withAlpha(Theme.OBSIDIAN_700, 0.94f), Theme.withAlpha(Theme.GOLD_400,
+        0.45f)).withHighlight(Theme.withAlpha(0xFFFFFF, 0.07f)).chamfer()),
+    FOCUS_PAUSE(FrameSpec.rounded(3, 0, 0).withRing(Theme.GOLD_300, 1.5f).chamfer()),
     /** An address shown in a question (a server, a link): read, not pressed, so rounded. */
     ADDRESS(FrameSpec.rounded(4, Theme.withAlpha(Theme.OBSIDIAN_700, 0.95f), Theme.withAlpha(Theme.GOLD_400, 0.4f))
         .fixed(14)),

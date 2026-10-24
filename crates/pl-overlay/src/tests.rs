@@ -40,6 +40,12 @@ struct Calls {
     permits: Vec<String>,
     refuse_permit: bool,
     closed: u32,
+    /// OVL-UX: the friend menu's actions as the service heard them, and a refusal for the next.
+    invites: Vec<String>,
+    removed: Vec<String>,
+    blocks: Vec<String>,
+    reports: Vec<(String, pl_social::ReportReason, Option<String>, bool)>,
+    refuse_people: Option<SocialError>,
 }
 
 /// A permit as the service makes them: `i` and 32 base64url characters.
@@ -184,6 +190,48 @@ impl SocialActions for FakeSocial {
         self.calls().closed += 1;
         std::future::ready(())
     }
+
+    fn invite(
+        &self,
+        friend: &str,
+    ) -> impl Future<Output = pl_social::Result<pl_social::InviteResult>> + Send + 'static {
+        let mut calls = self.calls();
+        calls.invites.push(friend.to_owned());
+        let answer = match calls.refuse_people.take() {
+            Some(error) => Err(error),
+            // Can is offline: the invite waits for him.
+            None if friend == "f-can" => Ok(pl_social::InviteResult::Queued),
+            None => Ok(pl_social::InviteResult::Delivered),
+        };
+        std::future::ready(answer)
+    }
+
+    fn remove_friend(
+        &self,
+        friend: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let mut calls = self.calls();
+        calls.removed.push(friend.to_owned());
+        std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
+    }
+
+    fn block(&self, friend: &str) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let mut calls = self.calls();
+        calls.blocks.push(friend.to_owned());
+        std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
+    }
+
+    fn report_player(
+        &self,
+        friend: &str,
+        reason: pl_social::ReportReason,
+        note: Option<String>,
+        block: bool,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let mut calls = self.calls();
+        calls.reports.push((friend.to_owned(), reason, note, block));
+        std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
+    }
 }
 
 /// The mod's side of the bridge.
@@ -310,7 +358,7 @@ async fn a_game_session_from_greeting_to_goodbye() {
     assert_eq!(welcome["me"]["name"], "Ece");
     assert_eq!(
         welcome["features"],
-        serde_json::json!(["friends", "chat", "calls"])
+        serde_json::json!(["friends", "chat", "calls", "people"])
     );
     let snapshot = game.next().await.unwrap();
     assert_eq!(snapshot["t"], "snapshot");
@@ -621,7 +669,8 @@ async fn chat2_from_the_panel_and_to_it() {
             "stickers",
             "typing",
             "reads",
-            "links"
+            "links",
+            "people"
         ])
     );
     let snapshot = game.next_of("snapshot").await;
@@ -1079,4 +1128,169 @@ async fn without_codeless_linking_the_mod_hears_there_is_no_permit() {
     assert!(social.calls().permits.is_empty());
     overlay.stop(ByeReason::LauncherExit).await;
     assert_eq!(social.calls().closed, 0);
+}
+
+/// A friend's row in a snapshot.
+fn friend_row(snapshot: &serde_json::Value, id: &str) -> serde_json::Value {
+    snapshot["friends"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["id"] == id)
+        .unwrap()
+        .clone()
+}
+
+#[tokio::test]
+async fn the_friend_menu_invites_and_opens_discord_and_says_how_it_went() {
+    use serde_json::json;
+
+    let mut start = view();
+    // Ayşe's Discord profile is known; the player is on Projects ("Birlikte oyna" can go).
+    start.friends[0].discord_url = "https://discord.com/users/f-ayse".into();
+    start.activity = pl_social::ActivityView::Playing {
+        host: Some("play.projects.gg".into()),
+    };
+    let social = FakeSocial::new(start);
+    let overlay = Overlay::new(OverlayConfig::default());
+    let opened = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&opened);
+    overlay.on_discord(move |id, url| sink.lock().unwrap().push((id, url)));
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+
+    // An older mod: the rows carry the new fields (it skips them); a press of its is carried out,
+    // never answered.
+    let mut old = MockMod::connect_with(&endpoint, &["connect", "chat2"]).await;
+    let welcome = old.next_of("welcome").await;
+    assert!(lists(&welcome, "people") && lists(&welcome, "invite"));
+    let snapshot = old.next_of("snapshot").await;
+    let ayse = friend_row(&snapshot, "f-ayse");
+    assert_eq!(ayse["dm"], "d:me:f-ayse");
+    assert_eq!(ayse["discord"], true);
+    assert!(friend_row(&snapshot, "f-can").get("discord").is_none());
+    old.send(json!({"t":"invite","friend":"f-ayse"})).await;
+    eventually("the older mod's invite went", || {
+        social.calls().invites.len() == 1
+    })
+    .await;
+    old.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    assert_eq!(old.next().await.unwrap()["t"], "history", "no answer first");
+    drop(old);
+
+    let mut game = MockMod::connect_with(&endpoint, &["connect", "chat2", "people"]).await;
+    game.next_of("snapshot").await;
+    // Delivered to Ayşe, waiting for Can (offline).
+    game.send(json!({"t":"invite","friend":"f-ayse"})).await;
+    assert_eq!(
+        game.next_of("friend-result").await,
+        json!({"t":"friend-result","friend":"f-ayse","action":"invite","ok":true})
+    );
+    game.send(json!({"t":"invite","friend":"f-can"})).await;
+    assert_eq!(game.next_of("friend-result").await["queued"], true);
+    // The service says it is too soon.
+    social.calls().refuse_people = Some(SocialError::RateLimited {
+        retry_after: None,
+        item: None,
+    });
+    game.send(json!({"t":"invite","friend":"f-mert"})).await;
+    let wait = game.next_of("friend-result").await;
+    assert_eq!(
+        (wait["ok"].clone(), wait["reason"].clone()),
+        (false.into(), "wait".into())
+    );
+    // Someone not on the friend list: refused at once, the service never asked.
+    game.send(json!({"t":"block","friend":"x-bad"})).await;
+    assert_eq!(game.next_of("friend-result").await["reason"], "failed");
+    assert!(social.calls().blocks.is_empty());
+    // Ayşe's profile opens through the launcher, once for a double press; Can has none.
+    game.send(json!({"t":"discord","friend":"f-ayse"})).await;
+    game.send(json!({"t":"discord","friend":"f-ayse"})).await;
+    game.send(json!({"t":"discord","friend":"f-can"})).await;
+    let none = game.next_of("friend-result").await;
+    assert_eq!(
+        (
+            none["friend"].clone(),
+            none["action"].clone(),
+            none["reason"].clone()
+        ),
+        ("f-can".into(), "discord".into(), "failed".into())
+    );
+    assert_eq!(
+        *opened.lock().unwrap(),
+        [(
+            "f-ayse".to_owned(),
+            "https://discord.com/users/f-ayse".to_owned()
+        )]
+    );
+    assert_eq!(
+        social.calls().invites,
+        ["f-ayse", "f-ayse", "f-can", "f-mert"]
+    );
+    overlay.stop(ByeReason::LauncherExit).await;
+}
+
+#[tokio::test]
+async fn the_friend_menu_unfriends_blocks_reports_and_holds_back_a_flood() {
+    use serde_json::json;
+
+    let social = FakeSocial::new(view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+    let mut game = MockMod::connect_with(&endpoint, &["people"]).await;
+    let welcome = game.next_of("welcome").await;
+    assert!(lists(&welcome, "people"));
+    assert!(
+        !lists(&welcome, "invite"),
+        "in the launcher: no Birlikte oyna"
+    );
+    game.next_of("snapshot").await;
+
+    game.send(json!({"t":"unfriend","friend":"f-mert"})).await;
+    assert_eq!(
+        game.next_of("friend-result").await,
+        json!({"t":"friend-result","friend":"f-mert","action":"unfriend","ok":true})
+    );
+    game.send(json!({"t":"report","friend":"f-zey","reason":"harassment","note":"  sürekli\n küfür ","block":true}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["action"], "report");
+    assert_eq!(
+        social.calls().reports,
+        [(
+            "f-zey".to_owned(),
+            pl_social::ReportReason::Harassment,
+            Some("sürekli küfür".to_owned()),
+            true
+        )]
+    );
+    // A message's reason is not a player's.
+    game.send(json!({"t":"report","friend":"f-zey","reason":"inappropriate"}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["reason"], "failed");
+    // The friends service is away: the block does not go.
+    social.calls().refuse_people = Some(SocialError::Unavailable { retry_after: None });
+    game.send(json!({"t":"block","friend":"f-can"})).await;
+    let away = game.next_of("friend-result").await;
+    assert_eq!(
+        (
+            away["action"].clone(),
+            away["ok"].clone(),
+            away["reason"].clone()
+        ),
+        ("block".into(), false.into(), "offline".into())
+    );
+    // "Birlikte oyna" cannot go now: refused without asking the service.
+    game.send(json!({"t":"invite","friend":"f-ayse"})).await;
+    assert_eq!(game.next_of("friend-result").await["reason"], "failed");
+    assert!(social.calls().invites.is_empty());
+    // Four went through the gate so far; two more go, the next is held back.
+    game.send(json!({"t":"block","friend":"f-ayse"})).await;
+    assert_eq!(game.next_of("friend-result").await["ok"], true);
+    game.send(json!({"t":"block","friend":"f-zey"})).await;
+    assert_eq!(game.next_of("friend-result").await["ok"], true);
+    game.send(json!({"t":"block","friend":"f-can"})).await;
+    assert_eq!(game.next_of("friend-result").await["reason"], "rate");
+    assert_eq!(social.calls().blocks, ["f-can", "f-ayse", "f-zey"]);
+    assert_eq!(social.calls().removed, ["f-mert"]);
+    overlay.stop(ByeReason::LauncherExit).await;
 }

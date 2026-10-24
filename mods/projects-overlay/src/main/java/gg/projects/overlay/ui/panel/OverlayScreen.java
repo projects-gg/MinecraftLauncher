@@ -6,14 +6,18 @@ import gg.projects.overlay.OverlayClient;
 import gg.projects.overlay.Perf;
 import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.Protocol;
+import gg.projects.overlay.host.HostController;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.settings.OverlaySettings;
 import gg.projects.overlay.motion.Tween;
+import gg.projects.overlay.people.FriendMenu;
+import gg.projects.overlay.people.WorldInvites;
 import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.stickers.StickerSet;
 import gg.projects.overlay.toast.ToastLayer;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
@@ -98,6 +102,18 @@ public final class OverlayScreen extends Screen {
     private final Screen parent;
     private final Tween lineAlpha = new Tween(0f);
     private final List<Notice> notices = new ArrayList<>();
+    /** OVL-UX: a friend's menu, and the player's own name and tag in the header with the tag's bubble. */
+    private final PersonMenu menu = new PersonMenu(this::onMenuPick);
+    private final BadgeBubble identityBubble = new BadgeBubble();
+    private int identityRevision = -1;
+    private int identityBadges = -1;
+    private int identityPanelX = -1;
+    private int identityPanelW = -1;
+    private FormattedCharSequence identityName;
+    private TagChip identityChip;
+    private float identityX;
+    /** When a row's press opened a conversation: the second press of a double click stays on the friend list. */
+    private long dmOpenedAt;
 
     private Page page;
     private Page lastListPage;
@@ -223,7 +239,22 @@ public final class OverlayScreen extends Screen {
         field = new ComposerField(Texts.tr("chat.field"));
         field.setMaxLength(Protocol.MAX_MESSAGE_CHARS);
         send = new SendButton(this::canSend, this::sendDraft);
-        friends = new FriendList(this::joinFriend);
+        friends = new FriendList(new FriendList.Actions() {
+            @Override
+            public void join(String friendId) {
+                joinFriend(friendId);
+            }
+
+            @Override
+            public void primary(String friendId, PersonMenu.Anchor dots, boolean keys) {
+                primaryFriend(friendId, dots, keys);
+            }
+
+            @Override
+            public void menu(String friendId, PersonMenu.Anchor anchor, boolean keys) {
+                openFriendMenu(friendId, anchor, keys);
+            }
+        });
         stickerButton = new IconButton(Icon.STICKER, Texts.tr("chat.stickers"), this::togglePicker);
         replyClose = new IconButton(Icon.CLOSE, Texts.tr("chat.reply.cancel"), this::clearReply);
         picker = new StickerPicker(this::sendSticker);
@@ -306,6 +337,11 @@ public final class OverlayScreen extends Screen {
      * else 0: the game's HUD draws only left of that.
      */
     public static int hudRightOf(Screen screen) {
+        if (screen instanceof ReportScreen report) {
+            // The report dialog (OVL-UX) shows the panel behind it too.
+            return report.panel().hudRight();
+        }
+
         OverlayScreen panel = screen instanceof OverlayScreen p ? p : screen instanceof JoinScreen j ? j.panel()
             : screen instanceof LinkScreen l ? l.panel() : screen instanceof ConfirmScreen c ? c.panel() : null;
         return panel == null ? 0 : panel.hudRight();
@@ -452,6 +488,247 @@ public final class OverlayScreen extends Screen {
         if (ask != null) {
             Compat.setScreen(minecraft, ask);
         }
+    }
+
+    // ---- The friend menu and the player's own tag (OVL-UX) -------------------------------------------------
+
+    /** A friend row's own press (a click, Enter): their conversation, or their menu where none opens. */
+    private void primaryFriend(String friendId, PersonMenu.Anchor dots, boolean keys) {
+        if (!messageFriend(friendId)) {
+            openFriendMenu(friendId, dots, keys);
+        }
+    }
+
+    /** Shows a friend's conversation (a new one too) with the field ready to write; false when none can open. */
+    private boolean messageFriend(String friendId) {
+        String conv = state.openDirect(friendId);
+        if (conv == null || !state.has("chat")) {
+            return false;
+        }
+        closeMenu();
+        dmOpenedAt = now();
+        setPage(Page.CHATS);
+        openConversation(conv);
+        setFocused(composerOpen() ? field : chips);
+        return true;
+    }
+
+    /** A friend's menu, at the pointer or under the row's "…" (the launcher's person menu, FIX2-D). */
+    private void openFriendMenu(String friendId, PersonMenu.Anchor anchor, boolean keys) {
+        OverlayState.Friend f = state.friend(friendId);
+        if (f == null || anchor == null) {
+            return;
+        }
+        List<FriendMenu.Row> rows = FriendMenu.plan(menuInput(f));
+        if (rows.isEmpty()) {
+            return;
+        }
+        long now = now();
+        friends.dismissBubble();
+        messages.dismissBubble();
+        identityBubble.dismiss(now);
+        menu.setReducedMotion(reducedMotion());
+        menu.open(f.id(), f.name(), rows, anchor, keys, width, height, now);
+        friends.setMenuFor(f.id(), !anchor.pointer());
+    }
+
+    private FriendMenu.Input menuInput(OverlayState.Friend f) {
+        HostController host = overlay.host();
+        OverlayState.HostView session = state.host();
+        WorldInvites.Offer world = WorldInvites.offer(host.invitesToWorld(), session, host.requesting(),
+            host.lastInvite(), f.id(), f.online());
+        return new FriendMenu.Input(canJoin(f), state.has("people"), state.online(), state.has("invite"),
+            state.inviteWaiting(f.id(), System.currentTimeMillis()), world, WorldInvites.guest(session, f.id()) != null,
+            state.has("chat") && state.dm(f.id()) != null, state.discord(f.id()));
+    }
+
+    /** A row of a friend's menu, picked (one that asks: after its question). */
+    private void onMenuPick(String friendId, FriendMenu.Action action) {
+        friends.setMenuFor(null);
+        switch (action) {
+            case JOIN -> joinFriend(friendId);
+            case INVITE, WORLD_INVITE -> inviteFriend(friendId);
+            case MESSAGE -> messageFriend(friendId);
+            case DISCORD -> overlay.openDiscord(friendId);
+            case REMOVE_FROM_WORLD -> removeFromWorld(friendId);
+            case UNFRIEND -> overlay.unfriend(friendId);
+            case BLOCK -> overlay.block(friendId);
+            case REPORT -> openReport(friendId);
+        }
+    }
+
+    /**
+     * "Dünyana çağır" in a singleplayer world: an invite to it, which opens it to friends first when it is not open yet
+     * (world sharing, HOST1; the world page's card says "Dünyan açılıyor"); elsewhere "Birlikte oyna", the launcher's
+     * play-together invite. A world that can't open says why, and nothing goes out.
+     */
+    private void inviteFriend(String friendId) {
+        OverlayState.Friend f = state.friend(friendId);
+        String name = f == null ? "" : f.name();
+        long wall = System.currentTimeMillis();
+        HostController.WorldInvite sent = overlay.host().inviteFriend(friendId);
+        switch (sent) {
+            case NOT_HERE -> overlay.inviteFriend(friendId);
+            case INVITED -> state.personNote("invited", name, false, wall);
+            case OPENING -> state.personNote("world_opening", name, false, wall);
+            default -> state.personNoteText(sent.line(), true, wall);
+        }
+    }
+
+    /** "Dünyadan çıkar", answered: the guest is sent off now (world sharing; never let back in this session). */
+    private void removeFromWorld(String friendId) {
+        OverlayState.HostGuest guest = WorldInvites.guest(state.host(), friendId);
+        if (guest == null) {
+            return;
+        }
+        overlay.host().removeGuest(guest.guest());
+        OverlayState.Friend f = state.friend(friendId);
+        state.personNote("removed_from_world", f == null ? guest.label() : f.name(), false, System.currentTimeMillis());
+    }
+
+    private void openReport(String friendId) {
+        OverlayState.Friend f = state.friend(friendId);
+        if (f != null) {
+            Compat.setScreen(minecraft, new ReportScreen(this, f.id(), f.name(), state.badge(f.badge())));
+        }
+    }
+
+    /** Closes a friend's menu at once (the page changed, a conversation opened). */
+    private void closeMenu() {
+        menu.dismiss();
+        friends.setMenuFor(null);
+    }
+
+    /** The list keeps its menu's row lit only while the menu is open. */
+    private void syncMenu() {
+        if (!menu.isOpen()) {
+            friends.setMenuFor(null);
+        }
+    }
+
+    /** The player's own name with the tag they wear, laid out when it changes (left of the gear in the header). */
+    private void layoutIdentity() {
+        if (identityRevision == state.revision() && identityBadges == state.badgeRevision()
+            && identityPanelX == panelX && identityPanelW == panelW) {
+            return;
+        }
+        identityRevision = state.revision();
+        identityBadges = state.badgeRevision();
+        identityPanelX = panelX;
+        identityPanelW = panelW;
+        identityName = null;
+        identityChip = null;
+        String me = state.me();
+        if (!state.signedIn() || me.isEmpty()) {
+            return;
+        }
+        OverlayState.Badge badge = state.badge(state.meBadge());
+        // The bubble of the player's own tag leaves out "Sen de bu ekiptesin": it is theirs.
+        TagChip chip = TagChip.of(badge == null ? null : new OverlayState.Badge(badge.crew(), badge.tag(), badge.color(),
+            badge.frame(), badge.emblem(), badge.name(), badge.motto(), badge.since(), badge.members(), false),
+            TagChip.ROW);
+        Font ui = Fonts.ui();
+        float right = panelX + panelW - P - IconButton.SIZE - 1;
+        float titleRight = panelX + P + Fonts.display().width(titleText) + 12;
+        int room = Math.round(right - titleRight - TagChip.room(chip));
+        if (room < 28) {
+            // A very narrow panel keeps its title and the gear.
+            return;
+        }
+        String fitted = Texts.fit(ui, me, room);
+        identityName = Texts.visual(fitted);
+        identityChip = chip;
+        identityX = Draw.snap(right - ui.width(fitted) - TagChip.room(chip));
+    }
+
+    /** The header's "[GK] Ece" on the list pages; the chip opens its bubble as every chip does. */
+    private void drawIdentity(GuiGraphicsExtractor g, int mouseX, int mouseY, long now) {
+        if (page != Page.CHATS && page != Page.FRIENDS) {
+            identityBubble.track(null, false, now);
+            return;
+        }
+        layoutIdentity();
+        if (identityName == null) {
+            identityBubble.track(null, false, now);
+            return;
+        }
+        float mid = HEADER_H / 2f;
+        float x = identityX;
+        BadgeBubble.Target target = null;
+        if (identityChip != null) {
+            identityChip.draw(g, x, mid);
+            float cy = identityChip.top(mid);
+            if (!menu.isOpen() && mouseX >= x && mouseX < x + identityChip.width && mouseY >= cy
+                && mouseY < cy + identityChip.height) {
+                target = new BadgeBubble.Target("me", identityChip.badge, x, cy, identityChip.width,
+                    identityChip.height, 0, HEADER_H, false);
+            }
+            x += TagChip.room(identityChip);
+        }
+        identityBubble.track(target, identityBubble.contains(mouseX, mouseY), now);
+        Draw.text(g, Fonts.ui(), identityName, x, Fonts.centeredY(Fonts.Face.UI, mid), Theme.ASH_300);
+    }
+
+    /** Whose menu is open, or null (the scenario driver checks it). */
+    public String menuFriend() {
+        return menu.friend();
+    }
+
+    /** Whether a friend's menu shows its question (the scenario driver checks it). */
+    public boolean menuAsking() {
+        return menu.asking();
+    }
+
+    /** A friend row's press, as a click would (the scenario driver uses it). */
+    public void pressFriend(String friendId) {
+        PanelInput.usedMouse();
+        primaryFriend(friendId, friends.dotsOf(friendId), false);
+    }
+
+    /** A friend's menu under their "…" (the scenario driver uses it; keys: as Shift+F10 would). */
+    public void openFriendMenu(String friendId, boolean keys) {
+        if (keys) {
+            PanelInput.usedKeyboard();
+        } else {
+            PanelInput.usedMouse();
+        }
+        openFriendMenu(friendId, friends.dotsOf(friendId), keys);
+    }
+
+    /** A friend's menu at a point, as a right click there would (the scenario driver uses it). */
+    public void openFriendMenuAt(String friendId, double x, double y) {
+        PanelInput.usedMouse();
+        openFriendMenu(friendId, PersonMenu.Anchor.at(x, y), false);
+    }
+
+    /** Where a friend's row is on screen (the scenario driver points at it), or null. */
+    public float[] friendRow(String friendId) {
+        return friends.visible ? friends.rowCenter(friendId) : null;
+    }
+
+    /** Puts the keyboard on a friend's row (the scenario driver uses it). */
+    public void pickFriend(String friendId) {
+        PanelInput.usedKeyboard();
+        setFocused(friends);
+        friends.select(friendId);
+    }
+
+    /** Presses a row of the open friend's menu as a click would (the scenario driver); false when it is not there. */
+    public boolean pressMenu(FriendMenu.Action action) {
+        boolean pressed = menu.press(action, width, height, now());
+        syncMenu();
+        return pressed;
+    }
+
+    /** Answers the open menu's question as a click would (the scenario driver): the action, or "Vazgeç". */
+    public void answerMenu(boolean yes) {
+        menu.answer(yes, now());
+        syncMenu();
+    }
+
+    /** Where the header's own tag chip is (the scenario driver points at it), or null. */
+    public float[] identityChip() {
+        return identityChip == null ? null : new float[] {identityX + identityChip.width / 2f, HEADER_H / 2f};
     }
 
     private String pickConversation() {
@@ -930,6 +1207,12 @@ public final class OverlayScreen extends Screen {
         if (page != Page.CHATS || conversation == null) {
             picker.close();
         }
+
+        String menuFor = menu.friend();
+        if (menuFor != null && (page != Page.FRIENDS || state.friend(menuFor) == null)) {
+            // A friend's menu belongs to the friend list (and to a friend still on it).
+            closeMenu();
+        }
     }
 
     private int layoutNotices(int x0, int cw, int y) {
@@ -1034,6 +1317,14 @@ public final class OverlayScreen extends Screen {
             close();
             return true;
         }
+        if (menu.isOpen()) {
+            // A friend's menu takes the keys while it is open (OVL-UX); Tab leaves it and moves on.
+            boolean taken = menu.keyPressed(event, width, height, now());
+            syncMenu();
+            if (taken) {
+                return true;
+            }
+        }
         if (event.key() == InputConstants.KEY_ESCAPE && dismissInner()) {
             // Esc closes what is open over the panel first: the picker, the quick reactions, the reply.
             return true;
@@ -1055,7 +1346,13 @@ public final class OverlayScreen extends Screen {
 
     /** Closes the innermost thing open over the panel; false when there is none. */
     private boolean dismissInner() {
-        if ((friends.visible && friends.closeBubble()) || (messages.visible && messages.closeBubble())) {
+        if (menu.close(now())) {
+            // A friend's menu (OVL-UX) is the topmost thing when it is open.
+            syncMenu();
+            return true;
+        }
+        if ((friends.visible && friends.closeBubble()) || (messages.visible && messages.closeBubble())
+            || identityBubble.close(now())) {
             // A tag's bubble first: it is the topmost thing.
             return true;
         }
@@ -1077,6 +1374,10 @@ public final class OverlayScreen extends Screen {
 
     @Override
     public boolean charTyped(CharacterEvent event) {
+        if (menu.isOpen()) {
+            // Nothing types under an open menu.
+            return true;
+        }
         boolean handled = super.charTyped(event);
         if (page == Page.CHATS && quick.visible) {
             quick.setHidden(!field.getValue().isEmpty(), now());
@@ -1093,7 +1394,23 @@ public final class OverlayScreen extends Screen {
             close();
             return true;
         }
-        if (friends.bubbleContains(event.x(), event.y()) || messages.bubbleContains(event.x(), event.y())) {
+        if (doubleClick && now() - dmOpenedAt < 500) {
+            // A double click on a friend row: its first press opened the conversation, the second lands nowhere.
+            return true;
+        }
+        if (menu.isOpen()) {
+            // A press on a friend's menu does its row; beside it, it closes only the menu (a right click on another
+            // friend opens theirs).
+            boolean onMenu = menu.contains(event.x(), event.y());
+            menu.mouseClicked(event.x(), event.y(), width, height, now());
+            syncMenu();
+            if (onMenu || event.button() != InputConstants.MOUSE_BUTTON_RIGHT || !friends.visible
+                || !friends.isMouseOver(event.x(), event.y())) {
+                return true;
+            }
+        }
+        if (friends.bubbleContains(event.x(), event.y()) || messages.bubbleContains(event.x(), event.y())
+            || identityBubble.contains(event.x(), event.y())) {
             // A tag's bubble beside the panel is the panel's: a press there does not go back to the game.
             return true;
         }
@@ -1110,6 +1427,17 @@ public final class OverlayScreen extends Screen {
             return true;
         }
         return super.mouseClicked(event, doubleClick);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (menu.isOpen()) {
+            // The rows would slide away from their menu: scrolling closes it first.
+            menu.close(now());
+            syncMenu();
+            return true;
+        }
+        return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
     }
 
     @Override
@@ -1223,6 +1551,7 @@ public final class OverlayScreen extends Screen {
         // element would scan all the others (Draw.stratum).
         Draw.stratum(g);
         drawHeader(g, mouseX, mouseY, now);
+        drawIdentity(g, mouseX, mouseY, now);
         for (Notice n : notices) {
             drawNotice(g, n, mouseX, mouseY);
         }
@@ -1283,6 +1612,16 @@ public final class OverlayScreen extends Screen {
         messages.drawBubble(g, now, panelX, left, HEADER_H + 4, right, height - 4);
         g.pose().popMatrix();
         Draw.popAlpha();
+
+        // Over everything else, outside the page's own fade: the header tag's bubble and a friend's menu (OVL-UX).
+        Draw.stratum(g);
+        // Beside the panel its first line stays level with the header's chip (as every tag's bubble does with its own).
+        identityBubble.draw(g, now, panelX, left, 4, right, height - 4);
+        friends.setNote(state.personNote(System.currentTimeMillis()), now);
+        menu.draw(g, mouseX, mouseY, now);
+        if (!menu.isOpen()) {
+            friends.setMenuFor(null);
+        }
         g.pose().popMatrix();
         Draw.popAlpha();
     }
