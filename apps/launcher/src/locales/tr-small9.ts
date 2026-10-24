@@ -15,4 +15,10 @@ export const trSmall9 = {
     /** Ctrl+K while the player's world is open: its sheet. */
     manageWorld: "Dünyanı yönet",
   },
+  settings: {
+    /** Settings → Arkadaşlar: the feature by its name, with what it shares and what it keeps. */
+    worlds: "Dünyanı arkadaşlarına aç",
+    worldsPrivacy:
+      "IP adresin arkadaşlarına görünmez. Açık dünyanı yalnız çağırdığın arkadaşların görür.",
+  },
 };
