@@ -19,6 +19,9 @@ v1/news/news.<sha256>.json         NewsFeed
 v1/media/<sha256>.<ext>            images and videos
 v1/packs/<id>/<version>.json       PackManifest (.mrpack index + "projects" extension)
 v1/modsets/modsets.<sha256>.json   ModSetCatalog (ready-made mod sets, optional)
+v1/itemart/items.<sha256>.json     ItemArt (the Projects server's own item looks, optional)
+v1/itemart/atlas-<size>.<sha256>.png   item art icon atlases
+v1/itemart/glyph.<sha256>.png      item art menu glyph pictures
 v1/files/<sha1>                    files we host for packs (own mods, configs)
 v1/afk/<version>/<platform>.zip    AFK client builds
 v1/releases/<channel>.json         launcher update channel (stable, beta)
@@ -147,6 +150,9 @@ the launcher config: see [News feed (Discord bot)](#news-feed-discord-bot).
 - `packs[]`: `{ id, name, latest, manifest, family?, minecraft?, default? }`, one entry per
   published pack; `latest` is the `versionId` of the referenced manifest. See
   [Pack families](#pack-families) for the last three.
+- `itemArt` (optional `DocRef`): the Projects server's own item looks and menu glyphs for the
+  cloud inventory views, see [Item art](#item-art). Absent when the team publishes none.
+  Clients download it when such a view first needs it, not with every refresh.
 - `modSets` (optional `DocRef`): the ready-made mod sets, see [Mod sets](#mod-sets). Absent
   when the team publishes none. Clients download it when they first need it (the "Hazır set"
   choices), not with every refresh, and keep it in the document cache.
@@ -1599,6 +1605,118 @@ Minecraft version like the pack state (parked as `.projects/versions/<minecraft>
   installed: the mod center offers to install it for that version when the set has a variant
   for it.
 
+## Item art
+
+The Projects server gives many items its own look (ItemsAdder) and draws its menus' backgrounds
+with font pictures in the window title. Item art carries both to the cloud AFK inventory views on
+the site, in the launcher and on the phone, which otherwise draw every item with its ordinary
+sprite. Studio imports it from the server's ItemsAdder folder ("Eşya görselleri") and publishes
+it; the index references the document as `itemArt` (`itemart/items.<sha256>.json`).
+
+<!-- example: ItemArt -->
+```json
+{
+  "schema": 1,
+  "hosts": ["projects.gg"],
+  "atlases": [
+    {
+      "size": 16,
+      "columns": 32,
+      "cells": 2,
+      "file": {
+        "path": "itemart/atlas-16.4f1c0e9b7a5d3c2b1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d.png",
+        "sha256": "4f1c0e9b7a5d3c2b1e0f9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b9c8d",
+        "size": 1843
+      }
+    },
+    {
+      "size": 32,
+      "columns": 32,
+      "cells": 2,
+      "file": {
+        "path": "itemart/atlas-32.8d9c0b1a2f3e4d5c6b7a8f9e0d1c2b3a4f5e6d7c8b9a0f1e2d3c4b5a6f7e8d9c.png",
+        "sha256": "8d9c0b1a2f3e4d5c6b7a8f9e0d1c2b3a4f5e6d7c8b9a0f1e2d3c4b5a6f7e8d9c",
+        "size": 5120
+      }
+    }
+  ],
+  "items": [
+    {
+      "item": "minecraft:paper",
+      "cmd": 35,
+      "icon": 0,
+      "id": "pro-items-special:eskisayfa1",
+      "name": "Eski Sayfa 1",
+      "pack": "pro-items-special"
+    },
+    {
+      "item": "minecraft:netherite_sword",
+      "cmd": 110006,
+      "icon": 1,
+      "id": "violetset:violet_sword",
+      "name": "Violet Sword",
+      "pack": "custom-violetset"
+    }
+  ],
+  "glyphs": [
+    {
+      "char": "\ue052",
+      "advance": 257,
+      "image": {
+        "file": {
+          "path": "itemart/glyph.c2b3a4f5e6d7c8b9a0f1e2d3c4b5a6f7e8d9c0b1a2f3e4d5c6b7a8f9e0d1c2b3.png",
+          "sha256": "c2b3a4f5e6d7c8b9a0f1e2d3c4b5a6f7e8d9c0b1a2f3e4d5c6b7a8f9e0d1c2b3",
+          "size": 20480
+        },
+        "width": 256,
+        "height": 256,
+        "ascent": 36,
+        "id": "pro-guis:market",
+        "pack": "pro-guis"
+      }
+    },
+    { "char": "\uf808", "advance": -8 }
+  ]
+}
+```
+
+- **Only on the server it belongs to.** A client uses the document only for an account whose
+  server host equals a `hosts` entry or is a subdomain of one (`play.projects.gg` matches
+  `projects.gg`); the port, a trailing dot and case are ignored, an IPv4 entry matches only
+  itself. Entries are host names (at least two labels) or IPv4 addresses, without scheme or
+  port, at most 16. Studio starts with `["projects.gg"]` and edits the list. Anywhere else, and
+  when the index has no `itemArt`, items keep their ordinary sprites and titles show as text.
+- **Atlases.** One PNG per icon size, `size` × `size` pixel cells (16 and 32 today; a reader
+  accepts any multiple of 8 from 8 to 128 and picks the size it needs), `columns` cells per row,
+  `cells` in all, filled left to right and top to bottom; every atlas has the same cells. Icons
+  are pixel art: draw them with nearest-neighbour scaling. The cell of an icon is
+  `x = (icon mod columns) × size`, `y = floor(icon / columns) × size`.
+- **Items.** An inventory item names its look by its type and `cmd` (`custom_model_data`: the
+  first float since Minecraft 1.21.4, floored; the whole number before) or by `model` (its
+  `item_model` component); the cloud AFK inventory frames carry both when the server sets them.
+  A client takes the entry whose `model` equals the item's, else the entry whose `item` and
+  `cmd` equal the item's type and `cmd`, else draws the item's ordinary sprite. An entry has
+  `item` with `cmd`, or `model`, or all three; `item` and `model` are namespaced ids
+  (`minecraft:paper`); no two entries claim the same model or the same type and `cmd`. `icon` is
+  the entry's cell (entries may share one). `id` (the server's own `namespace:id`), `name` (plain
+  text, at most 64 characters) and `pack` (the ItemsAdder folder it came from, so third-party
+  packs are visible) are for Studio and support; the item's own name and lore still come from the
+  inventory frame.
+- **Glyphs.** Characters of the server's default font in a private use area (U+E000–U+F8FF,
+  planes 15 and 16): a picture (`image`, drawn `width` × `height` GUI pixels, scaled from the
+  file) or a pure offset. A client lays out a window title the way the game draws it: start at
+  the title's place (x 8, y 6 in the container's GUI pixels for the vanilla containers); for each
+  code point, a glyph with a picture is drawn with its left edge at x and its top at
+  `y + 7 − ascent`, then x moves by `advance`; a glyph without a picture only moves x; any other
+  character is ordinary title text. Glyph characters are never shown as text, also when the title
+  holds glyphs the document does not know (they are left out). Pictures are drawn before the slots
+  and the items, under them.
+- **Files.** Atlases and pictures are immutable (`itemart/atlas-<size>.<sha256>.png`,
+  `itemart/glyph.<sha256>.png`), verified by SHA-256 like documents. Pictures are fetched when a
+  title needs them.
+- Limits: at most 8192 items, 4096 glyphs, 128 columns; glyph pictures at most 1024 × 1024 GUI
+  pixels, `advance` and `ascent` within ±4096.
+
 ## Launcher release channels
 
 `releases/<channel>.json` is Tauri's static updater JSON plus fields Tauri ignores:
@@ -1649,7 +1767,7 @@ Minecraft version like the pack state (parked as `.projects/versions/<minecraft>
 | Objects | `Cache-Control` |
 | --- | --- |
 | `index.json`, `index.json.sig`, `releases/<channel>.json` | `public, max-age=60` |
-| `config/*`, `news/*`, `modsets/*`, `media/*`, `files/*`, `packs/*/*.json`, `afk/*/*`, `releases/<version>/*` | `public, max-age=31536000, immutable` |
+| `config/*`, `news/*`, `modsets/*`, `itemart/*`, `media/*`, `files/*`, `packs/*/*.json`, `afk/*/*`, `releases/<version>/*` | `public, max-age=31536000, immutable` |
 | Feed mirrors: `feed.json`, `feed.json.sig` | `public, max-age=60` |
 | Feed mirrors: `media/*` | `public, max-age=31536000, immutable` |
 
@@ -1661,8 +1779,10 @@ primary is down.
 
 ## Publish order
 
-1. Upload new immutable files: media, `files/<sha1>`, AFK builds, release bundles.
-2. Upload the documents: `config/…`, `news/…`, `packs/<id>/<version>.json`, `modsets/…`.
+1. Upload new immutable files: media, item art pictures (`itemart/*.png`), `files/<sha1>`, AFK
+   builds, release bundles.
+2. Upload the documents: `config/…`, `news/…`, `packs/<id>/<version>.json`, `modsets/…`,
+   `itemart/items.…`.
 3. Check that every new object is readable with the expected size and hash.
 4. Upload `index.json.sig`, then `index.json` last (the commit point). For updates:
    `releases/<version>/…` first, `releases/<channel>.json` last.

@@ -44,6 +44,10 @@ pub struct RootIndex {
     /// Absent when the team publishes none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mod_sets: Option<DocRef>,
+    /// `itemart/items.<sha256>.json` ([`crate::ItemArt`]): the Projects server's own item looks
+    /// and menu glyphs for the cloud inventory views. Absent when the team publishes none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_art: Option<DocRef>,
 }
 
 impl RootIndex {
@@ -64,6 +68,9 @@ impl RootIndex {
         if let Some(mod_sets) = &self.mod_sets {
             mod_sets.validate()?;
         }
+        if let Some(item_art) = &self.item_art {
+            item_art.validate()?;
+        }
         match family_problems(&self.packs).into_iter().next() {
             Some(problem) => Err(Error::Invalid(problem.to_string())),
             None => Ok(()),
@@ -74,12 +81,13 @@ impl RootIndex {
         self.packs.iter().find(|pack| pack.id == id)
     }
 
-    /// Every document this index references (config, news, pack manifests, mod sets).
+    /// Every document this index references (config, news, pack manifests, mod sets, item art).
     pub fn documents(&self) -> impl Iterator<Item = &DocRef> {
         [&self.config, &self.news]
             .into_iter()
             .chain(self.packs.iter().map(|pack| &pack.manifest))
             .chain(self.mod_sets.iter())
+            .chain(self.item_art.iter())
     }
 
     /// Distinct family ids, in index order.
@@ -631,6 +639,7 @@ mod tests {
             packs,
             afk: None,
             mod_sets: None,
+            item_art: None,
         }
     }
 
@@ -666,6 +675,26 @@ mod tests {
             serde_json::from_value(serde_json::to_value(&index).unwrap()).unwrap();
         assert_eq!(back, index);
         index.mod_sets.as_mut().unwrap().sha256 = "xyz".into();
+        assert!(index.validate().is_err());
+    }
+
+    #[test]
+    fn item_art_is_an_optional_document() {
+        let mut index = index(Vec::new());
+        let json = serde_json::to_value(&index).unwrap();
+        assert!(json.get("itemArt").is_none(), "old shape kept");
+        index.item_art = Some(DocRef {
+            path: format!("itemart/items.{}.json", "b".repeat(64)),
+            sha256: "b".repeat(64),
+            size: 10,
+        });
+        index.validate().unwrap();
+        assert_eq!(index.documents().count(), 3);
+        let json = serde_json::to_value(&index).unwrap();
+        assert!(json.get("itemArt").is_some());
+        let back: RootIndex = serde_json::from_value(json).unwrap();
+        assert_eq!(back, index);
+        index.item_art.as_mut().unwrap().path = "itemart/../x.json".into();
         assert!(index.validate().is_err());
     }
 
