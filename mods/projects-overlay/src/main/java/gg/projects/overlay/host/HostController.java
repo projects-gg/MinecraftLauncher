@@ -237,6 +237,10 @@ public final class HostController implements HostGate.Listener {
         if (hosting()) {
             return overlay.bridge().send(Protocol.hostInvite(ids));
         }
+        if (!canInvite()) {
+            // Out of the world (or it went away under an open page): nothing to open.
+            return false;
+        }
         String m = switch (guestMode) {
             case "creative", "adventure" -> guestMode;
             default -> "survival";

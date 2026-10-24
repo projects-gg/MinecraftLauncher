@@ -334,7 +334,7 @@ final class HostPanel {
                 // "Tekrar dene" only with friends to try again for; with none it is "Davet et" waiting for a pick.
                 boolean retry = mode == Mode.FAILED && !list.picked().isEmpty();
                 primary.setLabel(Texts.tr(retry ? "host.retry" : busy ? "host.opening" : "host.invite"));
-                primary.active = online && !busy && !list.picked().isEmpty();
+                primary.active = online && !busy && !list.picked().isEmpty() && host().canInvite();
                 int pw = primary.preferredWidth();
                 PanelWidget.place(primary, x + width - pw, by, pw, ActionButton.HEIGHT);
                 meet.visible = mode != Mode.OPENING;
@@ -399,7 +399,7 @@ final class HostPanel {
             }
             // The picks may have changed with the list (a friend went away).
             boolean any = !list.picked().isEmpty();
-            primary.active = online && !busy && any;
+            primary.active = online && !busy && any && (mode == Mode.MORE || host().canInvite());
             meet.active = online && any;
         }
     }
