@@ -308,6 +308,7 @@ pub async fn reconcile(request: Request<'_>) -> Outcome {
 
     // The overlay jars in the folder: ours, and whether an enabled one of someone else's is there.
     let mut ours: Vec<OurJar> = Vec::new();
+    let mut theirs: Vec<String> = Vec::new();
     let mut others = false;
     for jar in snapshot.jars.iter().filter(|jar| declares_overlay(jar)) {
         let base = jar.base_name().to_owned();
@@ -329,9 +330,14 @@ pub async fn reconcile(request: Request<'_>) -> Outcome {
                 sha1,
             });
         } else {
-            // Changed by the player, or never ours: theirs from now on.
-            record.files.remove(&base);
+            theirs.push(base);
             others |= jar.enabled;
+        }
+    }
+    // A name of ours that now holds only someone else's file (changed by the player): theirs.
+    for base in &theirs {
+        if !ours.iter().any(|our| our.base == *base) {
+            record.files.remove(base);
         }
     }
     // This version's entries whose file is gone (deleted, or replaced by a sync of ours).

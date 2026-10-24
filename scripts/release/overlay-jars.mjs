@@ -232,7 +232,10 @@ export function checkBundle(dir, targets, stamp) {
 
 function gradle(args) {
   const windows = process.platform === "win32";
-  const result = spawnSync(windows ? "gradlew.bat" : "./gradlew", args, {
+  // A full path, not a bare name: cmd.exe may be told not to look in the current folder. Quoted
+  // for the shell (the checkout's path may hold spaces); the arguments never do.
+  const wrapper = windows ? `"${join(MOD_DIR, "gradlew.bat")}"` : "./gradlew";
+  const result = spawnSync(wrapper, args, {
     cwd: MOD_DIR,
     stdio: "inherit",
     shell: windows,
