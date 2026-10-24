@@ -219,6 +219,8 @@ export function hostRowAction(input: RowInput): HostRowAction {
 export type JoinButton =
   | { kind: "join" }
   | { kind: "retry" }
+  /** Mods were missing: "Kurulumu kopyala" (the way that fixes it, `retryWithCopy`). */
+  | { kind: "copy" }
   | { kind: "rejoin" }
   | { kind: "busy"; step: "preparing" | "opening" | "connecting"; percent?: number }
   | { kind: "in" };
@@ -256,7 +258,7 @@ export function joinButton(
     case "lost":
       return { kind: "rejoin" };
     case "failed":
-      return { kind: "retry" };
+      return join.failure === "mods" ? { kind: "copy" } : { kind: "retry" };
   }
 }
 

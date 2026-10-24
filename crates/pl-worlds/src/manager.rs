@@ -59,6 +59,10 @@ const PROGRESS_EVERY: Duration = Duration::from_millis(250);
 /// the page's launch installs or syncs the pack first, which can take minutes on a first join
 /// (PROTOCOL.md §8 says 60 s for a game that is ready). Loopback only, one connection.
 const JOIN_WAIT_MS: u64 = 10 * 60 * 1000;
+/// How long after the game's connection to a friend's world ended its log may still say why:
+/// Fabric's registry sync logs and then closes the connection, and the two reach the launcher in
+/// either order.
+const MISMATCH_GRACE: Duration = Duration::from_secs(30);
 
 /// A percent from the launcher's long work (0–100).
 pub type Progress = Arc<dyn Fn(u8) + Send + Sync>;
@@ -275,6 +279,9 @@ struct Invite {
     /// Asked from the game's overlay: the game moves in by itself once ready.
     in_game: bool,
     progress_at: Option<Instant>,
+    /// When the game's connection to this world last ended ([`Worlds::game_log`] may still hear
+    /// why). Tokio's clock, so tests can move it.
+    game_left: Option<tokio::time::Instant>,
 }
 
 struct Meet {
@@ -637,6 +644,45 @@ impl Worlds {
         }
         self.close_hosting(None);
         self.changed();
+    }
+
+    /// A line of the running game's log (`pl_mc::launch::GameEvent::Line`). When it says a
+    /// friend's world holds mods the game lacks (Fabric's registry sync, [`crate::mismatch`]),
+    /// the join the game is in, or left a moment ago, ends with `mods`: "Bu dünyanın bazı modları
+    /// sende yok." and "Kurulumu kopyala" (PROTOCOL.md §10.2 step 7). Its session is left; the
+    /// copy joins anew. Any other line costs a few substring checks and no lock.
+    pub fn game_log(&self, line: &str) {
+        if !crate::mismatch::is_mod_mismatch(line) {
+            return;
+        }
+        let joined = {
+            let st = self.state();
+            st.invites
+                .iter()
+                .find(|invite| match invite.stage {
+                    Some(WorldJoinStage::Connecting | WorldJoinStage::In) => true,
+                    // The connection just ended (a join the player left forgets it).
+                    None => invite
+                        .game_left
+                        .is_some_and(|at| at.elapsed() < MISMATCH_GRACE),
+                    _ => false,
+                })
+                .map(|invite| {
+                    (
+                        invite.session.clone(),
+                        invite.generation,
+                        invite.live.clone(),
+                    )
+                })
+        };
+        let Some((session, generation, live)) = joined else {
+            return;
+        };
+        tracing::info!("the game said a friend's world holds mods it lacks");
+        self.fail_join(&session, generation, WorldJoinFailure::Mods);
+        if let Some(live) = live {
+            tokio::spawn(async move { live.leave().await });
+        }
     }
 
     /// The overlay's mod said something (`pl_overlay::Overlay::on_host`).
@@ -2019,6 +2065,7 @@ impl Worlds {
                     task: None,
                     in_game: false,
                     progress_at: None,
+                    game_left: None,
                 };
                 // One invite per friend: a newer world replaces an older one.
                 st.invites
@@ -2122,6 +2169,7 @@ impl Worlds {
             }
             invite.in_game = in_game;
             invite.generation = generation;
+            invite.game_left = None;
             invite.stage = Some(WorldJoinStage::Preparing { percent: None });
             match invite.live.clone() {
                 Some(live) if copy.is_none() => Next::Again(live, generation),
@@ -2673,6 +2721,7 @@ impl Worlds {
                             ) =>
                         {
                             invite.stage = None;
+                            invite.game_left = Some(tokio::time::Instant::now());
                             true
                         }
                         _ => false,
@@ -2757,6 +2806,7 @@ impl Worlds {
             invite.generation = next;
             invite.stage = None;
             invite.ask = None;
+            invite.game_left = None;
             if let Some(task) = invite.task.take() {
                 task.abort();
             }
@@ -2804,6 +2854,27 @@ impl Worlds {
     #[cfg(test)]
     pub(crate) fn creds(&self) -> &CredsTable {
         &self.inner.creds
+    }
+
+    /// A join as far as `stage` (tests: no relay is reached, so a join never gets there itself).
+    #[cfg(test)]
+    pub(crate) fn force_join_stage(&self, session: &str, stage: Option<WorldJoinStage>) {
+        if let Some(invite) = self.state().invite(session) {
+            invite.stage = stage;
+        }
+        self.changed();
+    }
+
+    /// What a join's session tells, as if its session said it (tests).
+    #[cfg(test)]
+    pub(crate) fn guest_event(&self, session: &str, event: GuestEvent) {
+        let current = self
+            .state()
+            .invite(session)
+            .map(|invite| (invite.generation, invite.join.mc.clone()));
+        if let Some((generation, mc)) = current {
+            self.on_guest_event(session, generation, &mc, event);
+        }
     }
 }
 

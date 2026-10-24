@@ -271,6 +271,8 @@ describe("Katıl", () => {
     expect(joinButton({ kind: "in" }, idle)).toEqual({ kind: "in" });
     expect(joinButton({ kind: "lost" }, idle)).toEqual({ kind: "rejoin" });
     expect(joinButton({ kind: "failed", failure: "full" }, idle)).toEqual({ kind: "retry" });
+    // Mods were missing: the button says the way that fixes it.
+    expect(joinButton({ kind: "failed", failure: "mods" }, idle)).toEqual({ kind: "copy" });
   });
 
   it("follows the launch once ready", () => {

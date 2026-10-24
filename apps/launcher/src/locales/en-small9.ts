@@ -3,4 +3,7 @@ export const enSmall9 = {
   backups: {
     beforeSharing: "Before opening to friends",
   },
+  join: {
+    missingMods: "You're missing some mods.",
+  },
 };

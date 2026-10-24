@@ -64,6 +64,8 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
   const { t } = useTranslation();
   const items = useInviteItems(invite);
   const active = joinActive(invite.join);
+  // The game turned away for mods it lacks: the row says so beside "Kurulumu kopyala".
+  const missingMods = invite.join?.kind === "failed" && invite.join.failure === "mods";
   return (
     <ContextMenu items={items}>
       <div className="mb-1.5 flex items-center gap-3 rounded-[var(--radius-panel)] bg-gold-500/[0.07] py-2 pr-1.5 pl-2 ring-1 ring-gold-400/15">
@@ -77,8 +79,14 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
             {invite.name}
           </span>
           <span className="flex items-center gap-2 text-[12.5px] text-ash-300">
-            <span className="truncate">{t("host.invite.line")}</span>
-            <InviteCount invite={invite} className="shrink-0 text-ash-400" />
+            {missingMods ? (
+              <span className="truncate text-flare-300">{t("small9.join.missingMods")}</span>
+            ) : (
+              <>
+                <span className="truncate">{t("host.invite.line")}</span>
+                <InviteCount invite={invite} className="shrink-0 text-ash-400" />
+              </>
+            )}
           </span>
         </span>
         <WorldJoinButton invite={invite} />

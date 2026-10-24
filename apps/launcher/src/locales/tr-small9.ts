@@ -5,4 +5,8 @@ export const trSmall9 = {
     /** A world's backup the launcher took before the world first opened to friends. */
     beforeSharing: "Arkadaşlarına açılmadan önce",
   },
+  join: {
+    /** A world invite's row after the game turned away for mods it lacks ("Kurulumu kopyala"). */
+    missingMods: "Bazı modlar sende yok.",
+  },
 };
