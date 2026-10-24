@@ -140,7 +140,7 @@ export function NavRail() {
         <img
           src={logo}
           alt=""
-          className="size-[34px] drop-shadow-[0_0_10px_rgb(232_154_44/0.35)] transition-[filter,transform,scale] duration-300 group-hover:scale-105 group-hover:drop-shadow-[0_0_16px_rgb(240_184_73/0.7)] motion-reduce:group-hover:scale-100"
+          className="size-[34px] transition-[transform,scale] duration-300 group-hover:scale-105 motion-reduce:group-hover:scale-100"
           draggable={false}
         />
       </Link>
