@@ -13,7 +13,7 @@ import { useSocialUi } from "@/features/social/store";
 import type { WorldInvite } from "@/lib/api/host-types";
 import { dismissWorldInvite, pressJoin } from "./actions";
 import { Faces, PeopleCount, WorldJoinButton } from "./parts";
-import { invitePeople, joinActive, retryWithCopy } from "./rules";
+import { inviteFailureKey, invitePeople, joinActive, retryWithCopy } from "./rules";
 import { useHostUi } from "./store";
 
 function useInviteItems(invite: WorldInvite): Array<MenuItem | null> {
@@ -67,8 +67,9 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
   const { t } = useTranslation();
   const items = useInviteItems(invite);
   const active = joinActive(invite.join);
-  // The game turned away for mods it lacks: the row says so beside "Kurulumu kopyala".
-  const missingMods = retryWithCopy(invite.join);
+  // A failed join says why beside its button ("Tekrar dene", or "Kurulumu kopyala" after
+  // missing mods): the toast that said it may be gone when the player looks.
+  const failed = inviteFailureKey(invite.join);
   return (
     <ContextMenu items={items}>
       <div className="mb-1.5 flex items-center gap-3 rounded-[var(--radius-panel)] bg-gold-500/[0.07] py-2 pr-1.5 pl-2 ring-1 ring-gold-400/15">
@@ -82,8 +83,8 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
             {invite.name}
           </span>
           <span className="flex items-center gap-2 text-[12.5px] text-ash-300">
-            {missingMods ? (
-              <span className="truncate text-flare-300">{t("small9.join.missingMods")}</span>
+            {failed ? (
+              <span className="truncate text-flare-300">{t(failed, { name: invite.name })}</span>
             ) : (
               <>
                 <span className="truncate">{t("host.invite.line")}</span>

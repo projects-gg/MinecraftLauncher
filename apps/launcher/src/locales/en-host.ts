@@ -102,7 +102,7 @@ export const enHost = {
     rejoin: "Rejoin",
     missing_one: "Couldn't find {{count}} mod; you may have trouble getting in.",
     missing_other: "Couldn't find {{count}} mods; you may have trouble getting in.",
-    copyAction: "Copy the install",
+    copyAction: "Copy their instance",
     failed: {
       full: "The world is full.",
       closed: "{{name}} closed their world.",
@@ -115,7 +115,7 @@ export const enHost = {
   },
   copy: {
     title: "This world uses other mods",
-    body: "To join, a new install with the same mods is made.",
+    body: "To join, a new instance with the same mods is made.",
     size_one: "{{count}} mod, {{size}}",
     size_other: "{{count}} mods, {{size}}",
     confirm: "Copy and join",

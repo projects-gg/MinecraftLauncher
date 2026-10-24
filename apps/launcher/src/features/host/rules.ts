@@ -295,6 +295,22 @@ export function failureWords(failure: JoinFailure): {
   };
 }
 
+/**
+ * Why a join failed, on its invite row: the toast's words, short enough to sit beside the row's
+ * button (the toast may be long gone when the player looks). None while nothing failed.
+ */
+export function inviteFailureKey(join: JoinStage | undefined): string | null {
+  if (join?.kind !== "failed") return null;
+  switch (join.failure) {
+    case "mods":
+      return "small9.join.missingMods";
+    case "hostPackOld":
+      return "small9.join.packOld";
+    default:
+      return `host.join.failed.${join.failure}`;
+  }
+}
+
 export function refusalKey(why: InviteRefusal): string {
   return why === "session" ? "host.invites.session" : "host.invites.daily";
 }

@@ -17,6 +17,7 @@ import {
   homeInvite,
   hostMenuKey,
   hostRowAction,
+  inviteFailureKey,
   inviteFrom,
   inviteKeys,
   inviteList,
@@ -299,6 +300,21 @@ describe("Katıl", () => {
     expect(retryWithCopy({ kind: "failed", failure: "mods" })).toBe(true);
     expect(retryWithCopy({ kind: "failed", failure: "full" })).toBe(false);
     expect(retryWithCopy(undefined)).toBe(false);
+  });
+
+  it("says on the invite why its join failed", () => {
+    expect(inviteFailureKey(undefined)).toBeNull();
+    expect(inviteFailureKey({ kind: "in" })).toBeNull();
+    expect(inviteFailureKey({ kind: "lost" })).toBeNull();
+    expect(inviteFailureKey({ kind: "failed", failure: "full" })).toBe("host.join.failed.full");
+    expect(inviteFailureKey({ kind: "failed", failure: "unreachable" })).toBe(
+      "host.join.failed.unreachable",
+    );
+    // The row's short words where the toast's sentence would not fit beside the button.
+    expect(inviteFailureKey({ kind: "failed", failure: "mods" })).toBe("small9.join.missingMods");
+    expect(inviteFailureKey({ kind: "failed", failure: "hostPackOld" })).toBe(
+      "small9.join.packOld",
+    );
   });
 
   it("asks one question at a time, the oldest first", () => {

@@ -5,11 +5,12 @@ export const enSmall9 = {
   },
   join: {
     missingMods: "You're missing some mods.",
-    homeMissingMods: "{{name}} is playing with mods you don't have",
+    packOld: "This world's pack is out of date.",
+    homeMissingMods: "You need the same mods as {{name}} to join",
   },
   palette: {
     openWorld: "Open your world to friends",
-    manageWorld: "Manage your world",
+    manageWorld: "Manage your open world",
   },
   settings: {
     worlds: "Open your world to friends",

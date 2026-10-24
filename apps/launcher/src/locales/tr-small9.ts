@@ -8,14 +8,18 @@ export const trSmall9 = {
   join: {
     /** A world invite's row after the game turned away for mods it lacks ("Kurulumu kopyala"). */
     missingMods: "Bazı modlar sende yok.",
-    /** Home's line for that invite: who, and why its button copies the install. */
-    homeMissingMods: "{{name}} sende olmayan modlarla oynuyor",
+    /** The row's short words after the host's pack was out of date (the toast says the rest). */
+    packOld: "Bu dünyanın paketi eski.",
+    /** Home's line for that invite: the goal, the friend, and why its button copies the install
+     * (the name stays without a suffix: "ile" fits every name). */
+    homeMissingMods: "Katılmak için {{name}} ile aynı modlar gerekiyor",
   },
   palette: {
     /** Ctrl+K: the Worlds tab of the command bar's instance, where "Arkadaşlarınla oyna" is. */
     openWorld: "Dünyanı arkadaşlarına aç",
-    /** Ctrl+K while the player's world is open: its sheet. */
-    manageWorld: "Dünyanı yönet",
+    /** Ctrl+K while the player's world is open: its sheet ("açık", so it never reads as the
+     * Worlds tab beside it). */
+    manageWorld: "Açık dünyanı yönet",
   },
   settings: {
     /** Settings → Arkadaşlar: the feature by its name, with what it shares and what it keeps. */
