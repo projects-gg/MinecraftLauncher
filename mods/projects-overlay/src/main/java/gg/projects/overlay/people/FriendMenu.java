@@ -17,16 +17,18 @@ public final class FriendMenu {
     public enum Action {
         /** "Katıl": their server, or their world when they invited the player. */
         JOIN,
-        /**
-         * "Birlikte oyna": on a server the launcher's play-together invite; in a singleplayer world an invite to it that
-         * opens it to friends first ({@link WorldInvites}). Soft "Davet gönderildi" once one went.
-         */
+        /** "Birlikte oyna": the launcher's play-together invite to where the player plays. Soft "Davet gönderildi". */
         INVITE,
+        /**
+         * "Dünyana çağır": in a singleplayer world, an invite to it that opens it to friends first when it is not open
+         * yet ({@link WorldInvites}; the launcher's world invite). Soft "Dünyana çağrıldı" once it went.
+         */
+        WORLD_INVITE,
         /** "Mesaj gönder": their conversation in the panel. */
         MESSAGE,
         /** "Discord'dan mesaj at": their Discord profile, opened by the launcher. */
         DISCORD,
-        /** "Dünyadan çıkar": a guest of the player's open world. */
+        /** "Dünyadan çıkar": a guest of the player's open world, asked first (world sharing's own words). */
         REMOVE_FROM_WORLD,
         /** "Arkadaşlıktan çıkar", asked first. */
         UNFRIEND,
@@ -37,7 +39,7 @@ public final class FriendMenu {
 
         /** One sentence is asked before it goes. */
         public boolean asks() {
-            return this == UNFRIEND || this == BLOCK;
+            return this == REMOVE_FROM_WORLD || this == UNFRIEND || this == BLOCK;
         }
 
         /** Drawn in the error colour (the launcher's danger row). */
@@ -82,7 +84,7 @@ public final class FriendMenu {
         if (world != WorldInvites.Offer.NONE) {
             // In a singleplayer world the invite goes there (the world opens to friends first).
             boolean invited = world == WorldInvites.Offer.INVITED;
-            out.add(new Row(Action.INVITE, !in.online() || world != WorldInvites.Offer.READY, invited));
+            out.add(new Row(Action.WORLD_INVITE, !in.online() || world != WorldInvites.Offer.READY, invited));
         } else if (launcher && in.invite()) {
             out.add(new Row(Action.INVITE, !in.online() || in.inviteWaiting(), in.inviteWaiting()));
         }

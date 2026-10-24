@@ -6,6 +6,7 @@ import gg.projects.overlay.OverlayClient;
 import gg.projects.overlay.Perf;
 import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.Protocol;
+import gg.projects.overlay.host.HostController;
 import gg.projects.overlay.motion.Ease;
 import gg.projects.overlay.settings.OverlaySettings;
 import gg.projects.overlay.motion.Tween;
@@ -532,9 +533,13 @@ public final class OverlayScreen extends Screen {
     }
 
     private FriendMenu.Input menuInput(OverlayState.Friend f) {
+        HostController host = overlay.host();
+        OverlayState.HostView session = state.host();
+        WorldInvites.Offer world = WorldInvites.offer(host.invitesToWorld(), session, host.requesting(),
+            host.lastInvite(), f.id(), f.online());
         return new FriendMenu.Input(canJoin(f), state.has("people"), state.online(), state.has("invite"),
-            state.inviteWaiting(f.id(), System.currentTimeMillis()), WorldInvites.offer(f.id()),
-            WorldInvites.guest(f.id()), state.has("chat") && state.dm(f.id()) != null, state.discord(f.id()));
+            state.inviteWaiting(f.id(), System.currentTimeMillis()), world, WorldInvites.guest(session, f.id()) != null,
+            state.has("chat") && state.dm(f.id()) != null, state.discord(f.id()));
     }
 
     /** A row of a friend's menu, picked (one that asks: after its question). */
@@ -542,10 +547,10 @@ public final class OverlayScreen extends Screen {
         friends.setMenuFor(null);
         switch (action) {
             case JOIN -> joinFriend(friendId);
-            case INVITE -> inviteFriend(friendId);
+            case INVITE, WORLD_INVITE -> inviteFriend(friendId);
             case MESSAGE -> messageFriend(friendId);
             case DISCORD -> overlay.openDiscord(friendId);
-            case REMOVE_FROM_WORLD -> WorldInvites.remove(friendId);
+            case REMOVE_FROM_WORLD -> removeFromWorld(friendId);
             case UNFRIEND -> overlay.unfriend(friendId);
             case BLOCK -> overlay.block(friendId);
             case REPORT -> openReport(friendId);
@@ -553,23 +558,32 @@ public final class OverlayScreen extends Screen {
     }
 
     /**
-     * "Birlikte oyna": in a singleplayer world an invite to it, which opens it to friends first (world sharing,
-     * HOST1-M); elsewhere the launcher's play-together invite.
+     * "Dünyana çağır" in a singleplayer world: an invite to it, which opens it to friends first when it is not open yet
+     * (world sharing, HOST1; the world page's card says "Dünyan açılıyor"); elsewhere "Birlikte oyna", the launcher's
+     * play-together invite. A world that can't open says why, and nothing goes out.
      */
     private void inviteFriend(String friendId) {
         OverlayState.Friend f = state.friend(friendId);
         String name = f == null ? "" : f.name();
         long wall = System.currentTimeMillis();
-        if (WorldInvites.offer(friendId) != WorldInvites.Offer.NONE) {
-            String line = WorldInvites.invite(friendId);
-            if (line == null) {
-                state.personNote("invited", name, false, wall);
-            } else {
-                state.personNoteText(line, true, wall);
-            }
+        HostController.WorldInvite sent = overlay.host().inviteFriend(friendId);
+        switch (sent) {
+            case NOT_HERE -> overlay.inviteFriend(friendId);
+            case INVITED -> state.personNote("invited", name, false, wall);
+            case OPENING -> state.personNote("world_opening", name, false, wall);
+            default -> state.personNoteText(sent.line(), true, wall);
+        }
+    }
+
+    /** "Dünyadan çıkar", answered: the guest is sent off now (world sharing; never let back in this session). */
+    private void removeFromWorld(String friendId) {
+        OverlayState.HostGuest guest = WorldInvites.guest(state.host(), friendId);
+        if (guest == null) {
             return;
         }
-        overlay.inviteFriend(friendId);
+        overlay.host().removeGuest(guest.guest());
+        OverlayState.Friend f = state.friend(friendId);
+        state.personNote("removed_from_world", f == null ? guest.label() : f.name(), false, System.currentTimeMillis());
     }
 
     private void openReport(String friendId) {
@@ -1601,7 +1615,8 @@ public final class OverlayScreen extends Screen {
 
         // Over everything else, outside the page's own fade: the header tag's bubble and a friend's menu (OVL-UX).
         Draw.stratum(g);
-        identityBubble.draw(g, now, panelX, left, HEADER_H + 4, right, height - 4);
+        // Beside the panel its first line stays level with the header's chip (as every tag's bubble does with its own).
+        identityBubble.draw(g, now, panelX, left, 4, right, height - 4);
         friends.setNote(state.personNote(System.currentTimeMillis()), now);
         menu.draw(g, mouseX, mouseY, now);
         if (!menu.isOpen()) {

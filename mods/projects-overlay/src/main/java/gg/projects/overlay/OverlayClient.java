@@ -188,7 +188,8 @@ public final class OverlayClient implements ClientModInitializer {
             }
         });
         LinkPayload.register(this::onLinkMessage);
-        // The pause menu's Projects button in its bottom right corner, beside nothing else (OVL-UX).
+        // The pause menu's Projects button in its bottom right corner (OVL-UX; world sharing's "Arkadaşlarını çağır"
+        // takes the top right one).
         ScreenEvents.AFTER_INIT.register((mc, screen, width, height) ->
             gg.projects.overlay.ui.panel.PausePanelButton.attach(this, screen));
         // A new connection (or the proxy moving the game to another of its servers) starts over; leaving ends the
@@ -543,6 +544,7 @@ public final class OverlayClient implements ClientModInitializer {
 
     /** "Rapor et": a player's reason, a note for moderators, maybe a block too. */
     public void report(String friendId, String reason, String note, boolean alsoBlock) {
+        state.reportSent(friendId, alsoBlock);
         friendAction(friendId, Protocol.report(friendId, reason, note, alsoBlock), "report_failed");
     }
 
@@ -557,15 +559,14 @@ public final class OverlayClient implements ClientModInitializer {
     }
 
     /**
-     * The pause menu's Projects button (OVL-UX): opens the panel as F7 does. The seam for HOST1-M's panel that returns
-     * to its parent screen: once that lands, open {@code new OverlayScreen(this, null, from)} here so closing goes back
-     * to the pause menu and the game stays paused.
+     * The pause menu's Projects button (OVL-UX): opens the panel where it was last, as F7 does; closing it goes back to
+     * the pause menu and the game stays paused.
      */
     public void openPanelFrom(Screen from) {
         if (bridge.status() == BridgeClient.Status.OFFLINE) {
             bridge.retryNow();
         }
-        Compat.setScreen(Minecraft.getInstance(), new OverlayScreen(this));
+        Compat.setScreen(Minecraft.getInstance(), new OverlayScreen(this, null, from));
     }
 
     public void retry() {

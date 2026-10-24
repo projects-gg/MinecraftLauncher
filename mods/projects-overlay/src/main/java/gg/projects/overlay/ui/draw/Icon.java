@@ -41,11 +41,13 @@ public enum Icon {
     DOTS("DotsThree"),
     /** "Mesaj gönder". */
     MESSAGE("ChatCircle"),
-    /** "Birlikte oyna" (to where the player plays, or to their own world). */
+    /** "Birlikte oyna": the launcher's play-together invite (its sign there too). */
     PLAY_INVITE("PaperPlaneTilt"),
+    /** "Dünyana çağır": an invite to the player's own world (HOST1), the launcher's sign for it. */
+    WORLD_INVITE("DoorOpen"),
     /** "Dünyadan çıkar". */
     SEND_OFF("SignOut"),
-    /** "Arkadaşlıktan çıkar". */
+    /** "Arkadaşlıktan çıkar" (the same outline as {@link #USER_MINUS}). */
     UNFRIEND("UserMinus"),
     /** "Engelle". */
     BLOCK("Prohibit"),

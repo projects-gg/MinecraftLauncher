@@ -25,14 +25,16 @@ import net.minecraft.resources.Identifier;
  * the launcher's bridge is connected; nothing otherwise.
  *
  * <p>It never covers another button: its place is chosen at the menu's first frame, once every mod has added its own (Mod
- * Menu, voice chat and replay mods put theirs in the menu's column or a top corner), going up the right edge and then to
- * the left corner if the bottom right is taken, and it stays away when no corner is free. Hover lights its face, a press
+ * Menu, voice chat and replay mods put theirs in the menu's column or a top corner; world sharing's "Arkadaşlarını çağır"
+ * stands in the top right one), going up the right edge and then to the left corner if the bottom right is taken, and it
+ * stays away when no corner is free. Hover lights its face, a press
  * settles the sprite half a pixel; nothing moves otherwise.
  */
 public final class PausePanelButton extends PanelWidget {
     public static final int SIZE = 20;
     private static final int SPRITE = 16;
-    private static final int MARGIN = 6;
+    /** World sharing's "Arkadaşlarını çağır" keeps the same distance from its corner (top right). */
+    private static final int MARGIN = 8;
     /** Rows up the corner it tries before the other corner. */
     private static final int TRIES = 3;
     private static final Identifier SPRITE_TEXTURE = Identifier.fromNamespaceAndPath(OverlayClient.MOD_ID,

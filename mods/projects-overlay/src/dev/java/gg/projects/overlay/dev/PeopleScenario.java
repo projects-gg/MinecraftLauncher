@@ -10,6 +10,7 @@ import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.Protocol;
 import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.people.FriendMenu;
+import gg.projects.overlay.people.WorldInvites;
 import gg.projects.overlay.toast.ToastLayer;
 import gg.projects.overlay.ui.panel.OverlayScreen;
 import gg.projects.overlay.ui.panel.PanelInput;
@@ -44,10 +45,10 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Development-only scenario for OVL-UX, enabled with {@code -Dprojects.overlay.dev.script=people} and the mock launcher's
- * {@code --chat2 --team6 --people}: in a flat test world, the friend list with the player's own tag in the header and its
- * bubble, a row under the driver's pointer (never the OS pointer) with its "…", a friend's menu at the pointer, from
- * the keys (Shift+F10, arrows) and under the "…", "Birlikte oyna" to an offline friend and its note, the unfriend and
- * block questions, the report dialog empty and filled and its note, a row's press opening an existing and a new
+ * {@code --chat2 --team6 --people --host --no-probe}: in a flat test world, the friend list with the player's own tag in
+ * the header and its bubble, a row under the driver's pointer (never the OS pointer) with its "…", a friend's menu at the
+ * pointer, from the keys (Shift+F10, arrows) and under the "…", "Birlikte oyna" opening the world to a friend in one step
+ * (HOST1) and soft for an offline one, a guest of the world sent off after its question, the unfriend and block questions, the report dialog empty and filled and its note, a row's press opening an existing and a new
  * conversation (its first message makes it real), the tag taken off, English, the pause menu's Projects button at GUI
  * scales 1 to 4 and in a small window (checked clear of every other button), reached with Tab and opened with Enter, and
  * the panel's frame time with a menu open. {@code -Dprojects.overlay.dev.people=pause}: the pause menu alone (runs with
@@ -203,15 +204,42 @@ public final class PeopleScenario implements ClientModInitializer {
         });
         step(0.3, "shot menu arrows", mc -> shot(mc, "menu-keys-down"));
         step(0.1, "esc", mc -> key(need(mc), InputConstants.KEY_ESCAPE, 0));
-        // Under the "…" of an offline friend: "Birlikte oyna" waits for him.
+        // In this singleplayer world the menu invites to it ("Dünyana çağır", HOST1): soft for Can, who is offline.
         step(0.4, "menu under dots (Can, offline)", mc -> need(mc).openFriendMenu("f-can", false));
         step(0.4, "shot menu under dots", mc -> shot(mc, "menu-dots-offline"));
-        step(0.1, "invite Can", mc -> results.addProperty("invitePressed", need(mc).pressMenu(
-            FriendMenu.Action.INVITE)));
-        step(0.6, "shot invite note", mc -> shot(mc, "note-invite-queued"));
-        step(0.1, "Can's menu again", mc -> need(mc).openFriendMenu("f-can", false));
-        step(0.4, "shot invite waiting", mc -> shot(mc, "menu-invite-sent"));
         step(0.1, "esc", mc -> key(need(mc), InputConstants.KEY_ESCAPE, 0));
+        // Mert: the world opens for him in one step (its note), then his row says the invite went.
+        step(0.3, "Mert's menu", mc -> need(mc).openFriendMenu("f-mert", false));
+        step(0.1, "invite Mert", mc -> results.addProperty("invitePressed", need(mc).pressMenu(
+            FriendMenu.Action.WORLD_INVITE)));
+        step(0.5, "shot opening note", mc -> {
+            shot(mc, "note-world-opening");
+            results.addProperty("worldOpening", OverlayClient.get().host().requesting()
+                || OverlayClient.get().host().hosting());
+        });
+        step(2.5, "Mert's menu again", mc -> need(mc).openFriendMenu("f-mert", false));
+        step(0.4, "shot invite sent", mc -> {
+            shot(mc, "menu-invite-sent");
+            results.addProperty("worldOpen", OverlayClient.get().host().hosting());
+        });
+        step(0.1, "esc", mc -> key(need(mc), InputConstants.KEY_ESCAPE, 0));
+        // Ayşe in the world (as the launcher mirrors it): her menu sends her off, asked first.
+        step(0.1, "Ayşe in the world", mc -> dev("host-mirror", "guests",
+            "[{\"guest\":\"g1\",\"friend\":\"f-ayse\",\"label\":\"Ayşe\",\"name\":\"Ayse\",\"state\":\"in\"},"
+            + "{\"guest\":\"\",\"friend\":\"f-mert\",\"label\":\"Mert\",\"state\":\"invited\"}]"));
+        step(0.6, "Ayşe's menu", mc -> need(mc).openFriendMenu("f-ayse", false));
+        step(0.4, "shot guest menu", mc -> shot(mc, "menu-guest"));
+        step(0.1, "send off", mc -> need(mc).pressMenu(FriendMenu.Action.REMOVE_FROM_WORLD));
+        step(0.4, "shot send-off question", mc -> {
+            shot(mc, "ask-remove-from-world");
+            results.addProperty("removeAsked", need(mc).menuAsking());
+        });
+        step(0.1, "confirm", mc -> need(mc).answerMenu(true));
+        step(0.8, "shot sent off", mc -> {
+            shot(mc, "note-removed-from-world");
+            results.addProperty("ayseSentOff",
+                WorldInvites.guest(OverlayClient.get().state().host(), "f-ayse") == null);
+        });
         // "Arkadaşlıktan çıkar": its question; "Vazgeç" first, then for real.
         step(0.4, "Zeynep's menu", mc -> need(mc).openFriendMenu("f-zeynep", false));
         step(0.3, "unfriend", mc -> need(mc).pressMenu(FriendMenu.Action.UNFRIEND));
@@ -482,9 +510,12 @@ public final class PeopleScenario implements ClientModInitializer {
         panel.keyPressed(new KeyEvent(key, 0, modifiers));
     }
 
-    private void dev(String cmd) {
+    private void dev(String cmd, String... pairs) {
         JsonObject o = Protocol.message("dev");
         o.addProperty("cmd", cmd);
+        for (int i = 0; i + 1 < pairs.length; i += 2) {
+            o.addProperty(pairs[i], pairs[i + 1]);
+        }
         boolean sent = OverlayClient.get().bridge().send(o);
         event("dev", cmd + (sent ? "" : " (not sent)"));
     }

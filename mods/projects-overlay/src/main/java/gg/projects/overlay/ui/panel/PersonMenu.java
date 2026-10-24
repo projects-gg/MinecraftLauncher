@@ -221,6 +221,7 @@ public final class PersonMenu {
         return switch (row.action()) {
             case JOIN -> "people.join";
             case INVITE -> row.done() ? "people.invited" : "people.invite";
+            case WORLD_INVITE -> row.done() ? "people.world_invited" : "people.world_invite";
             case MESSAGE -> "people.message";
             case DISCORD -> "people.discord";
             case REMOVE_FROM_WORLD -> "people.remove_from_world";
@@ -234,6 +235,7 @@ public final class PersonMenu {
         return switch (row.action()) {
             case JOIN -> Icon.JOIN;
             case INVITE -> row.done() ? Icon.CHECK : Icon.PLAY_INVITE;
+            case WORLD_INVITE -> row.done() ? Icon.CHECK : Icon.WORLD_INVITE;
             case MESSAGE -> Icon.MESSAGE;
             case DISCORD -> Icon.DISCORD;
             case REMOVE_FROM_WORLD -> Icon.SEND_OFF;
@@ -268,20 +270,34 @@ public final class PersonMenu {
         Font small = Fonts.small();
         Font ui = Fonts.ui();
         cancelLabel = Texts.str("people.cancel");
-        confirmLabel = Texts.str(action == FriendMenu.Action.BLOCK ? "people.block" : "people.unfriend");
+        // "Dünyadan çıkar" asks in world sharing's own words (its page asks the same).
+        String titleKey = switch (action) {
+            case BLOCK -> "people.block.ask";
+            case REMOVE_FROM_WORLD -> "host.remove.ask";
+            default -> "people.unfriend.ask";
+        };
+        String bodyKey = switch (action) {
+            case BLOCK -> "people.block.body";
+            case REMOVE_FROM_WORLD -> "host.remove.body";
+            default -> null;
+        };
+        confirmLabel = Texts.str(switch (action) {
+            case BLOCK -> "people.block";
+            case REMOVE_FROM_WORLD -> "people.remove_from_world";
+            default -> "people.unfriend";
+        });
         cancelW = ui.width(cancelLabel) + BUTTON_PAD * 2;
         confirmW = ui.width(confirmLabel) + BUTTON_PAD * 2;
         float buttons = cancelW + BUTTON_GAP + confirmW;
         float maxW = Math.min(ASK_MAX_W, screenW - 2 * EDGE);
         width = Math.min(maxW, Math.max(ASK_MIN_W, buttons + ASK_PAD * 2));
         int textW = Math.round(width - ASK_PAD * 2);
-        String title = Texts.str(action == FriendMenu.Action.BLOCK ? "people.block.ask" : "people.unfriend.ask",
-            friendName.isEmpty() ? Texts.str("toast.someone") : friendName);
+        String title = Texts.str(titleKey, friendName.isEmpty() ? Texts.str("toast.someone") : friendName);
         question.clear();
         question.addAll(Texts.wrap(strong, title, textW, 2));
         body.clear();
-        if (action == FriendMenu.Action.BLOCK) {
-            body.addAll(Texts.wrap(small, Texts.str("people.block.body"), textW, 3));
+        if (bodyKey != null) {
+            body.addAll(Texts.wrap(small, Texts.str(bodyKey), textW, 3));
         }
         height = ASK_PAD + question.size() * 10 + (body.isEmpty() ? 0 : 3 + body.size() * 9) + 9 + BUTTON_H + ASK_PAD;
         place(screenW, screenH);
@@ -292,8 +308,8 @@ public final class PersonMenu {
         confirmHover.snap(0f);
         appear(now);
         String said = String.join(" ", question.stream().map(PersonMenu::plain).toList());
-        if (!body.isEmpty()) {
-            said += ". " + Texts.str("people.block.body");
+        if (bodyKey != null) {
+            said += ". " + Texts.str(bodyKey);
         }
         Minecraft.getInstance().getNarrator().saySystemQueued(Component.literal(said));
     }

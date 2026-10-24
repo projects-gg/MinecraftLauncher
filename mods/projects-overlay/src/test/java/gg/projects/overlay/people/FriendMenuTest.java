@@ -9,6 +9,7 @@ import gg.projects.overlay.people.FriendMenu.Action;
 import gg.projects.overlay.people.FriendMenu.Input;
 import gg.projects.overlay.people.FriendMenu.Row;
 import gg.projects.overlay.people.WorldInvites.Offer;
+import gg.projects.overlay.state.OverlayState;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -46,13 +47,14 @@ class FriendMenuTest {
         assertEquals(expected, actions(plan));
         assertTrue(plan.stream().allMatch(r -> r == null || !r.disabled()));
         assertTrue(Action.BLOCK.danger() && !Action.UNFRIEND.danger());
-        assertTrue(Action.UNFRIEND.asks() && Action.BLOCK.asks() && !Action.REPORT.asks());
+        assertTrue(Action.UNFRIEND.asks() && Action.BLOCK.asks() && Action.REMOVE_FROM_WORLD.asks()
+            && !Action.REPORT.asks());
     }
 
     @Test
     void aGuestOfThePlayersWorldHasItsOwnGroup() {
         Input in = new Input(false, true, true, false, false, Offer.INVITED, true, true, false);
-        List<Action> expected = new ArrayList<>(List.of(Action.INVITE, Action.MESSAGE));
+        List<Action> expected = new ArrayList<>(List.of(Action.WORLD_INVITE, Action.MESSAGE));
         expected.add(null);
         expected.add(Action.REMOVE_FROM_WORLD);
         expected.add(null);
@@ -64,17 +66,20 @@ class FriendMenuTest {
     void inASingleplayerWorldTheInviteGoesThere() {
         // The launcher's own invite cannot go (no server), the world one can.
         Input ready = new Input(false, true, true, false, false, Offer.READY, false, true, false);
-        Row invite = row(FriendMenu.plan(ready), Action.INVITE);
+        Row invite = row(FriendMenu.plan(ready), Action.WORLD_INVITE);
         assertFalse(invite.disabled() || invite.done());
         Row invited = row(FriendMenu.plan(new Input(false, true, true, false, false, Offer.INVITED, false, true,
-            false)), Action.INVITE);
-        assertTrue(invited.disabled() && invited.done(), "Davet gönderildi");
+            false)), Action.WORLD_INVITE);
+        assertTrue(invited.disabled() && invited.done(), "Dünyana çağrıldı");
         Row full = row(FriendMenu.plan(new Input(false, true, true, false, false, Offer.FULL, false, true, false)),
-            Action.INVITE);
+            Action.WORLD_INVITE);
         assertTrue(full.disabled() && !full.done());
+        Row away = row(FriendMenu.plan(new Input(false, true, true, false, false, Offer.AWAY, false, true, false)),
+            Action.WORLD_INVITE);
+        assertTrue(away.disabled() && !away.done());
         // With world sharing there even an older launcher without "people" offers it.
         assertTrue(row(FriendMenu.plan(new Input(false, false, true, false, false, Offer.READY, false, false, false)),
-            Action.INVITE) != null);
+            Action.WORLD_INVITE) != null);
     }
 
     @Test
@@ -121,45 +126,34 @@ class FriendMenuTest {
     }
 
     @Test
-    void withoutWorldSharingNoWorldInviteIsOffered() {
-        WorldInvites.install(null);
-        assertEquals(Offer.NONE, WorldInvites.offer("f1"));
-        assertFalse(WorldInvites.guest("f1"));
-        assertNull(WorldInvites.invite("f1"));
-        assertFalse(WorldInvites.remove("f1"));
-        List<String> asked = new ArrayList<>();
-        WorldInvites.install(new WorldInvites.Hook() {
-            @Override
-            public Offer offer(String friendId) {
-                return friendId.equals("f1") ? Offer.READY : null;
-            }
-
-            @Override
-            public String invite(String friendId) {
-                asked.add("invite " + friendId);
-                return friendId.equals("f2") ? "Dünyan şu an açılamıyor." : null;
-            }
-
-            @Override
-            public boolean guest(String friendId) {
-                return friendId.equals("f3");
-            }
-
-            @Override
-            public void remove(String friendId) {
-                asked.add("remove " + friendId);
-            }
-        });
-        try {
-            assertEquals(Offer.READY, WorldInvites.offer("f1"));
-            assertEquals(Offer.NONE, WorldInvites.offer("f9"), "a hook's null reads as none");
-            assertNull(WorldInvites.invite("f1"));
-            assertEquals("Dünyan şu an açılamıyor.", WorldInvites.invite("f2"));
-            assertTrue(WorldInvites.guest("f3"));
-            assertTrue(WorldInvites.remove("f3"));
-            assertEquals(List.of("invite f1", "invite f2", "remove f3"), asked);
-        } finally {
-            WorldInvites.install(null);
-        }
+    void theWorldInviteFollowsTheSession() {
+        OverlayState.HostGuest ayse = new OverlayState.HostGuest("g1", "f1", "Ayşe", "Ayse", "in");
+        OverlayState.HostGuest mert = new OverlayState.HostGuest("", "f2", "Mert", "", "invited");
+        OverlayState.HostView open = new OverlayState.HostView(true, 3, List.of(ayse, mert), null);
+        // Not in a singleplayer world: the launcher's invite applies.
+        assertEquals(Offer.NONE, WorldInvites.offer(false, open, false, List.of(), "f3", true));
+        // In one with nothing open: the world opens for them.
+        assertEquals(Offer.READY, WorldInvites.offer(true, null, false, List.of(), "f3", true));
+        // Opening for them: sent; for someone else: still ready.
+        assertEquals(Offer.INVITED, WorldInvites.offer(true, null, true, List.of("f3"), "f3", true));
+        assertEquals(Offer.READY, WorldInvites.offer(true, null, true, List.of("f3"), "f4", true));
+        // Open: in it or invited reads as sent; a free place takes one more; no place left is soft.
+        assertEquals(Offer.INVITED, WorldInvites.offer(true, open, false, List.of(), "f1", true));
+        assertEquals(Offer.INVITED, WorldInvites.offer(true, open, false, List.of(), "f2", true));
+        assertEquals(Offer.READY, WorldInvites.offer(true, open, false, List.of(), "f3", true));
+        OverlayState.HostView full = new OverlayState.HostView(true, 2, List.of(ayse, mert), null);
+        assertEquals(Offer.FULL, WorldInvites.offer(true, full, false, List.of(), "f3", true));
+        // Someone offline can't come now (world sharing invites friends who are online), unless already invited.
+        assertEquals(Offer.AWAY, WorldInvites.offer(true, open, false, List.of(), "f3", false));
+        assertEquals(Offer.INVITED, WorldInvites.offer(true, open, false, List.of(), "f2", false));
+        // A closed session's leftovers count for nothing.
+        OverlayState.HostView closed = new OverlayState.HostView(false, 2, List.of(ayse, mert), "unavailable");
+        assertEquals(Offer.READY, WorldInvites.offer(true, closed, false, List.of(), "f1", true));
+        // Only a guest whose launcher connected can be sent off.
+        assertEquals("g1", WorldInvites.guest(open, "f1").guest());
+        assertNull(WorldInvites.guest(open, "f2"));
+        assertNull(WorldInvites.guest(closed, "f1"));
+        assertNull(WorldInvites.guest(null, "f1"));
+        assertNull(WorldInvites.guest(open, "f9"));
     }
 }

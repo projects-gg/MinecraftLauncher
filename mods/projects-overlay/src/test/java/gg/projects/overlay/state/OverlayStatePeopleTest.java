@@ -142,6 +142,12 @@ class OverlayStatePeopleTest {
         assertEquals("reported", state.personNote(22_000).key());
         apply("{\"t\":\"friend-result\",\"friend\":\"f1\",\"action\":\"report\",\"ok\":false}", 23_000);
         assertEquals("report_failed", state.personNote(23_000).key());
+        // Reported with "Ayrıca engelle": the row goes, and the note says so; the next report without it does not.
+        state.reportSent("f1", true);
+        apply("{\"t\":\"friend-result\",\"friend\":\"f1\",\"action\":\"report\",\"ok\":true}", 23_500);
+        assertEquals("reported_blocked", state.personNote(23_500).key());
+        state.reportSent("f1", false);
+        apply("{\"t\":\"friend-result\",\"friend\":\"f1\",\"action\":\"report\",\"ok\":false}", 23_000);
         // Opening Discord says nothing when it went; something newer than this build says nothing either.
         apply("{\"t\":\"friend-result\",\"friend\":\"f1\",\"action\":\"discord\",\"ok\":true}", 24_000);
         apply("{\"t\":\"friend-result\",\"friend\":\"f1\",\"action\":\"later\",\"ok\":true}", 24_000);

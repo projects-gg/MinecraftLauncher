@@ -255,6 +255,8 @@ public final class ReportScreen extends Screen {
      * arrows move the pick, a click or Space picks.
      */
     static final class ReasonList extends PanelWidget {
+        /** How far a row's fill reaches past the radio on each side. */
+        private static final int BLEED = 4;
         private final java.util.function.Consumer<String> onPick;
         private final List<FormattedCharSequence> labels = new ArrayList<>();
         private final List<String> words = new ArrayList<>();
@@ -322,22 +324,25 @@ public final class ReportScreen extends Screen {
                 float y = getY() + i * (REASON_H + REASON_GAP);
                 lit[i].animateTo(i == under ? 1f : 0f, now, HOVER_MS, Ease.OUT);
                 boolean on = i == picked;
+                // The radio stands on the dialog's left edge with the note and the tick box; a row's fill reaches past it.
+                float fx = getX() - BLEED;
+                float fw = getWidth() + 2 * BLEED;
                 if (on) {
-                    Draw.frame(g, Frames.CHOICE_PICKED, getX(), y, getWidth(), REASON_H);
+                    Draw.frame(g, Frames.CHOICE_PICKED, fx, y, fw, REASON_H);
                 } else {
                     float l = lit[i].value(now);
                     if (l > 0.01f) {
                         Draw.pushAlpha(l);
-                        Draw.frame(g, Frames.ROW_HOVER, getX(), y, getWidth(), REASON_H, 0x99FFFFFF);
+                        Draw.frame(g, Frames.ROW_HOVER, fx, y, fw, REASON_H, 0x99FFFFFF);
                         Draw.popAlpha();
                     }
                 }
                 if (keyboardFocus() && i == (picked >= 0 ? picked : cursor)) {
-                    Draw.frame(g, Frames.FOCUS_ROW, getX(), y, getWidth(), REASON_H);
+                    Draw.frame(g, Frames.FOCUS_ROW, fx, y, fw, REASON_H);
                 }
-                Draw.icon(g, on ? Icon.RADIO_ON : Icon.RADIO_OFF, 10, getX() + 4, y + (REASON_H - 10) / 2f,
+                Draw.icon(g, on ? Icon.RADIO_ON : Icon.RADIO_OFF, 10, getX(), y + (REASON_H - 10) / 2f,
                     on ? Theme.GOLD_400 : Theme.ASH_400);
-                Draw.text(g, ui, labels.get(i), getX() + 18, Fonts.centeredY(Fonts.Face.UI, y + REASON_H / 2f),
+                Draw.text(g, ui, labels.get(i), getX() + 14, Fonts.centeredY(Fonts.Face.UI, y + REASON_H / 2f),
                     on ? Theme.BONE_50 : Theme.BONE_100);
             }
         }

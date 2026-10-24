@@ -313,9 +313,10 @@ public final class FriendList extends PanelWidget {
     }
 
     /** The "…" of a row on screen (scrolled), as a menu's anchor. */
+    /** The "…" across its row's height: a menu opened from it stands under the row, clear of its frame and focus ring. */
     private PersonMenu.Anchor dotsAnchor(Row row) {
         float y = getY() + row.y - scroll.value();
-        return new PersonMenu.Anchor(dotsX(), y + (ROW_H - DOTS) / 2f, DOTS, DOTS, false);
+        return new PersonMenu.Anchor(dotsX(), y + 1, DOTS, ROW_H - 2, false);
     }
 
     private float dotsX() {
@@ -497,7 +498,8 @@ public final class FriendList extends PanelWidget {
             if (lit || chosen || open) {
                 Draw.frame(g, Frames.ROW_HOVER, x0 - 2, y + 1, w + 4, ROW_H - 2, 0x99FFFFFF);
             }
-            if (chosen) {
+            if (chosen && !open) {
+                // While its menu is open the focus is in the menu: the row keeps only its fill.
                 Draw.frame(g, Frames.FOCUS_ROW, x0 - 2, y + 1, w + 4, ROW_H - 2);
             }
             float cx = x0 + FACE / 2f + 1;

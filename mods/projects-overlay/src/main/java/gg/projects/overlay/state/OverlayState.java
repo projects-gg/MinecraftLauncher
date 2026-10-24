@@ -304,6 +304,8 @@ public final class OverlayState {
     private final Map<String, String> draftFriends = new HashMap<>();
     /** When "Birlikte oyna" last went to each friend (this computer's clock). */
     private final Map<String, Long> invitedAt = new HashMap<>();
+    /** Friends reported with "Ayrıca engelle": their row goes, and the note says why. */
+    private final Set<String> reportBlocks = new HashSet<>();
     /** The names of friends an action is on its way for (an unfriended one leaves the list before the answer). */
     private final Map<String, String> actionNames = new HashMap<>();
     private PersonNote personNote;
@@ -592,6 +594,15 @@ public final class OverlayState {
         }
     }
 
+    /** A report about {@code friendId} went, {@code alsoBlock}: with "Ayrıca engelle" ticked. */
+    public void reportSent(String friendId, boolean alsoBlock) {
+        if (alsoBlock) {
+            reportBlocks.add(friendId);
+        } else {
+            reportBlocks.remove(friendId);
+        }
+    }
+
     /** The note under the friend list now, or null. */
     public PersonNote personNote(long now) {
         return personNote != null && now - personNote.at() < NOTE_MS ? personNote : null;
@@ -630,6 +641,7 @@ public final class OverlayState {
         draftFriends.clear();
         invitedAt.clear();
         actionNames.clear();
+        reportBlocks.clear();
         personNote = null;
     }
 
@@ -653,7 +665,11 @@ public final class OverlayState {
             }
             case "unfriend" -> ok ? "removed" : "failed";
             case "block" -> ok ? "blocked" : "failed";
-            case "report" -> ok ? "reported" : "report_failed";
+            case "report" -> {
+                // With "Ayrıca engelle" their row goes too: the note says both.
+                boolean blocked = reportBlocks.remove(friend);
+                yield ok ? (blocked ? "reported_blocked" : "reported") : "report_failed";
+            }
             case "discord" -> ok ? null : "failed";
             default -> null;
         };
