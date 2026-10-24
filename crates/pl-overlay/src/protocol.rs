@@ -19,11 +19,15 @@ pub const MAX_MESSAGE_CHARS: usize = 300;
 pub const MAX_HISTORY: usize = 100;
 
 /// A value that never shows up in `Debug` output or logs.
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct Secret(String);
 
 impl Secret {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+
     pub fn expose(&self) -> &str {
         &self.0
     }
@@ -152,6 +156,14 @@ pub enum FromGame {
         #[serde(default)]
         reason: String,
     },
+    /// SKIN1-O (K3; from a mod whose hello lists `link`): a Projects server asked the game on
+    /// `projects:link` whether its launcher vouches for the player; `name` is the game's own
+    /// account name. The launcher answers with `link-offer` (a permit for that account) or
+    /// `link-clear` (none).
+    LinkWant {
+        #[serde(default)]
+        name: String,
+    },
     /// Anything newer than this launcher.
     #[serde(other)]
     Unknown,
@@ -171,6 +183,12 @@ pub const FEATURE_HOST: &str = "host";
 /// `badges` and `note` frames), and the `welcome` feature that says crew tags are on now (T2: the
 /// service offers them and Studio has them on).
 pub const FEATURE_TAGS: &str = "tags";
+
+/// The `hello` feature of a mod that carries the launcher's codeless linking permit to a Projects
+/// server and draws its question (SKIN1-O, K1), and the `welcome` feature that says this launcher
+/// can vouch for the player now (K2: signed in to friends, the service offers codeless linking,
+/// the game was started from here).
+pub const FEATURE_LINK: &str = "link";
 
 impl FromGame {
     /// One of HOST1's frames: they go to the launcher's world sharing, never to the friends
@@ -343,6 +361,20 @@ pub enum ToGame {
         #[serde(skip_serializing_if = "Option::is_none")]
         reason: Option<String>,
     },
+    /// SKIN1-O (K4): the answer to `link-want`: the codeless linking permit for game account
+    /// `name`, valid until `expiresAt` (Unix seconds). The mod keeps it in memory only and hands
+    /// it only to a Projects server that asks, while the game plays as `name`. Only to a mod that
+    /// said `link`.
+    LinkOffer {
+        nonce: Secret,
+        name: String,
+        #[serde(rename = "expiresAt")]
+        expires_at: i64,
+    },
+    /// SKIN1-O (K5): there is no permit (the answer to `link-want`), or the one the mod holds is
+    /// no longer good (another friends account, codeless linking switched off): the mod forgets
+    /// it and tells a server that asks that it has none. Only to a mod that said `link`.
+    LinkClear,
     Bye {
         reason: ByeReason,
     },

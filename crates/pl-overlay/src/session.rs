@@ -12,7 +12,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use pl_social::{
     CallAnswer as SocialAnswer, ChatChangeView, ChatMessageView, ChatPage, ChatRejection,
-    ChatTypingView, ErrorCode, SocialError, SocialNotice, SocialService, SocialView,
+    ChatTypingView, ErrorCode, McIntent, SocialError, SocialNotice, SocialService, SocialView,
 };
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
@@ -21,13 +21,23 @@ use crate::OverlayConfig;
 use crate::feed::{self, Listener, Mirror, Scene, Sends};
 use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
-    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_HOST, FEATURE_TAGS, FromGame,
-    MAX_MESSAGE_CHARS, ReactFailure, SendFailure, ToGame,
+    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_HOST, FEATURE_LINK, FEATURE_TAGS, FromGame,
+    MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure, ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 
 /// How long "Bağlan" waits for the game to say whether it switches servers.
 pub const CONNECT_WAIT: Duration = Duration::from_secs(5);
+
+/// SKIN1-O: a permit with less left than this is not handed out again: the server still has to
+/// ask ProBot, wait for a free screen (up to 30 s) and give the player two minutes to answer.
+const PERMIT_MARGIN_SECS: i64 = 5 * 60;
+/// SKIN1-O: permits one game session opens at most (each lives 30 minutes; the service allows 20 a
+/// day). Projects asks once a connection at most, so a session needs one or two.
+const MAX_PERMITS: u32 = 6;
+/// SKIN1-O: `link-want` is heard at most this often (a server asks once a connection; anything
+/// faster is a stuck mod). The service is asked at most [`MAX_PERMITS`] times anyway.
+const LINK_WANT_GAP: Duration = Duration::from_millis(250);
 
 /// What asking the running game to join a server led to ([`crate::Overlay::connect_in_game`]).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
@@ -96,6 +106,16 @@ pub trait SocialActions: Clone + Send + Sync + 'static {
         call: &str,
         answer: SocialAnswer,
     ) -> impl Future<Output = pl_social::Result<bool>> + Send + 'static;
+    /// SKIN1 §3.7: signed in to friends, and the service offers codeless linking now.
+    fn codeless_offered(&self) -> bool;
+    /// SKIN1 §3.7: a codeless linking permit for game account `name`; None when there is none
+    /// (not signed in, refused, unreachable).
+    fn codeless_permit(
+        &self,
+        name: &str,
+    ) -> impl Future<Output = Option<McIntent>> + Send + 'static;
+    /// SKIN1 §3.7: the permit stops working (the game that held it closed).
+    fn codeless_close(&self) -> impl Future<Output = ()> + Send + 'static;
 }
 
 impl SocialActions for SocialService {
@@ -172,6 +192,24 @@ impl SocialActions for SocialService {
         let service = self.clone();
         let call = call.to_owned();
         async move { service.answer_call(&call, answer).await }
+    }
+
+    fn codeless_offered(&self) -> bool {
+        self.mc_codeless_offered()
+    }
+
+    fn codeless_permit(
+        &self,
+        name: &str,
+    ) -> impl Future<Output = Option<McIntent>> + Send + 'static {
+        let service = self.clone();
+        let name = name.to_owned();
+        async move { service.mc_codeless_permit(&name).await }
+    }
+
+    fn codeless_close(&self) -> impl Future<Output = ()> + Send + 'static {
+        let service = self.clone();
+        async move { service.mc_codeless_close().await }
     }
 }
 
@@ -250,6 +288,37 @@ struct Live {
     hosts: bool,
     /// The mod draws crew tags (TEAM6-O: `tags` in its hello).
     tags: bool,
+    /// The mod carries the codeless linking permit (SKIN1-O: `link` in its hello).
+    links: bool,
+    /// When it last asked for the permit.
+    link_wanted_at: Option<Instant>,
+}
+
+/// The codeless linking permit this session holds (SKIN1-O). It never goes to a log.
+struct Permit {
+    name: String,
+    nonce: Secret,
+    /// Unix seconds.
+    expires_at: i64,
+    /// The friends account it was opened with: another one makes it worthless.
+    me_id: String,
+}
+
+impl Permit {
+    fn offer(&self) -> ToGame {
+        ToGame::LinkOffer {
+            nonce: self.nonce.clone(),
+            name: self.name.clone(),
+            expires_at: self.expires_at,
+        }
+    }
+}
+
+/// What asking the service for a permit came back with.
+struct PermitAnswer {
+    name: String,
+    me_id: String,
+    intent: Option<McIntent>,
 }
 
 pub(crate) struct Session<S> {
@@ -272,6 +341,17 @@ pub(crate) struct Session<S> {
     /// HOST1: world sharing hears the mod here; what it shows of worlds.
     host: HostSink,
     worlds: WorldsShown,
+    /// SKIN1-O: the game account this game was started with (None: not started from here).
+    game: Option<String>,
+    /// SKIN1-O: the friends service offers codeless linking now (read with every view).
+    codeless: bool,
+    permit: Option<Permit>,
+    /// A permit is on its way from the service.
+    permit_asking: bool,
+    /// Permits this session opened (closed again when it ends).
+    permits_opened: u32,
+    permit_tx: mpsc::UnboundedSender<PermitAnswer>,
+    permit_rx: Option<mpsc::UnboundedReceiver<PermitAnswer>>,
 }
 
 fn now_ms() -> i64 {
@@ -283,13 +363,17 @@ fn now_ms() -> i64 {
 }
 
 /// The scene of a view with what world sharing shows (HOST1): the friends who invited the player
-/// to their world, and `host` among the features while the player may open theirs.
-fn scene_of(view: &SocialView, config: &OverlayConfig, worlds: &WorldsShown) -> Scene {
+/// to their world, and `host` among the features while the player may open theirs. With `link`
+/// (SKIN1-O, K2) the launcher can vouch for the player in game now.
+fn scene_of(view: &SocialView, config: &OverlayConfig, worlds: &WorldsShown, link: bool) -> Scene {
     let mut scene = Scene::from_view(view, &config.notify, now_ms());
     if scene.signed_in {
         scene.mark_worlds(&worlds.marks);
         if worlds.may_host {
             scene.features.push(FEATURE_HOST.to_owned());
+        }
+        if link {
+            scene.features.push(FEATURE_LINK.to_owned());
         }
     }
     scene
@@ -358,6 +442,7 @@ fn full(recent: &mut VecDeque<Instant>, now: Instant, window: Duration, max: usi
 }
 
 impl<S: SocialActions> Session<S> {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         social: S,
         launcher: String,
@@ -366,10 +451,13 @@ impl<S: SocialActions> Session<S> {
         connected: ConnectedFn,
         host: HostSink,
         worlds: WorldsShown,
+        game: Option<String>,
     ) -> Self {
         // The friends feature as it is now; every change after comes as a message.
         let view = Arc::new(social.view());
-        let scene = scene_of(&view, &config, &worlds);
+        let codeless = social.codeless_offered();
+        let scene = scene_of(&view, &config, &worlds, codeless && game.is_some());
+        let (permit_tx, permit_rx) = mpsc::unbounded_channel();
         Self {
             social,
             launcher,
@@ -387,6 +475,13 @@ impl<S: SocialActions> Session<S> {
             next_connect: 0,
             host,
             worlds,
+            game,
+            codeless,
+            permit: None,
+            permit_asking: false,
+            permits_opened: 0,
+            permit_tx,
+            permit_rx: Some(permit_rx),
         }
     }
 
@@ -395,6 +490,10 @@ impl<S: SocialActions> Session<S> {
         mut msgs: mpsc::UnboundedReceiver<Msg>,
         mut events: mpsc::UnboundedReceiver<BridgeEvent>,
     ) {
+        // The session keeps a sender itself, so this never closes; it only wakes for an answer.
+        let Some(mut permits) = self.permit_rx.take() else {
+            return;
+        };
         loop {
             tokio::select! {
                 biased;
@@ -413,14 +512,17 @@ impl<S: SocialActions> Session<S> {
                     Some(event) => self.on_event(event),
                     None => {
                         self.set_live(None);
+                        self.close_permit();
                         return;
                     }
                 },
+                Some(answer) = permits.recv() => self.on_permit(answer),
             }
         }
     }
 
     fn finish(&mut self, reason: ByeReason, done: Option<oneshot::Sender<()>>) {
+        self.close_permit();
         self.set_live(None);
         if let Err(error) = self.control.send(Control::Close { reason, done })
             && let Control::Close {
@@ -453,7 +555,9 @@ impl<S: SocialActions> Session<S> {
 
     /// Takes a new view; whether someone now wears another crew tag than before (or none).
     fn set_view(&mut self, view: Arc<SocialView>) -> bool {
-        let scene = scene_of(&view, &self.config, &self.worlds);
+        self.codeless = self.social.codeless_offered();
+        let link = self.codeless && self.game.is_some();
+        let scene = scene_of(&view, &self.config, &self.worlds, link);
         let wears_changed = scene.wears_differ(&self.scene);
         self.scene = scene;
         self.view = view;
@@ -516,6 +620,7 @@ impl<S: SocialActions> Session<S> {
                     // After the cards (in the refresh), so every chip it names is known.
                     self.reshow_open_conversation();
                 }
+                self.drop_stale_permit();
             }
             Msg::Chat(change) => self.on_chat(&change),
             Msg::Notice(notice) => self.on_notice(&notice),
@@ -545,6 +650,116 @@ impl<S: SocialActions> Session<S> {
                 }
             }
         }
+    }
+
+    /// SKIN1-O: a Projects server asked the game whether its launcher vouches for the player
+    /// (`projects:link`), and the mod needs the permit for its account `name`. Answered with the
+    /// permit held for that account, a new one from the service, or `link-clear`: not signed in to
+    /// friends, codeless linking off, or another account than the one this game was started with.
+    fn on_link_want(&mut self, name: &str) {
+        let Some(live) = self.live.as_mut().filter(|live| live.links) else {
+            return;
+        };
+        let now = Instant::now();
+        if live
+            .link_wanted_at
+            .is_some_and(|at| now.duration_since(at) < LINK_WANT_GAP)
+        {
+            // A stuck mod: the answer to the last one is on its way.
+            return;
+        }
+        live.link_wanted_at = Some(now);
+        // The account the game was started with, as the launcher spells it.
+        let game = self
+            .game
+            .clone()
+            .filter(|game| !name.is_empty() && game.eq_ignore_ascii_case(name));
+        let Some(name) = game.filter(|_| self.scene.signed_in && self.codeless) else {
+            self.send(vec![ToGame::LinkClear]);
+            return;
+        };
+        let held = self.permit.as_ref().filter(|permit| {
+            permit.me_id == self.scene.me_id
+                && permit.name == name
+                && permit.expires_at - now_ms() / 1000 > PERMIT_MARGIN_SECS
+        });
+        if let Some(permit) = held {
+            self.send(vec![permit.offer()]);
+            return;
+        }
+        if self.permit_asking {
+            return;
+        }
+        if self.permits_opened >= MAX_PERMITS {
+            tracing::info!("no more codeless linking permits for this game");
+            self.send(vec![ToGame::LinkClear]);
+            return;
+        }
+        self.permit_asking = true;
+        self.permits_opened += 1;
+        let asking = self.social.codeless_permit(&name);
+        let answers = self.permit_tx.clone();
+        let me_id = self.scene.me_id.clone();
+        tokio::spawn(async move {
+            let intent = asking.await;
+            let _ = answers.send(PermitAnswer {
+                name,
+                me_id,
+                intent,
+            });
+        });
+    }
+
+    /// The service answered: the mod gets the permit, or hears there is none. A permit that came
+    /// back for a friends account signed out meanwhile is dropped.
+    fn on_permit(&mut self, answer: PermitAnswer) {
+        self.permit_asking = false;
+        let current = self.scene.signed_in && self.codeless && answer.me_id == self.scene.me_id;
+        let links = self.live.as_ref().is_some_and(|live| live.links);
+        match answer.intent {
+            Some(intent) if current => {
+                let permit = Permit {
+                    name: answer.name,
+                    nonce: Secret::new(intent.nonce),
+                    expires_at: intent.expires_at,
+                    me_id: answer.me_id,
+                };
+                if links {
+                    self.send(vec![permit.offer()]);
+                }
+                self.permit = Some(permit);
+            }
+            _ => {
+                if links {
+                    self.send(vec![ToGame::LinkClear]);
+                }
+            }
+        }
+    }
+
+    /// A permit of another friends account, or held while codeless linking went off, is worth
+    /// nothing: the mod forgets it too.
+    fn drop_stale_permit(&mut self) {
+        let stale = self.permit.as_ref().is_some_and(|permit| {
+            !self.scene.signed_in || !self.codeless || permit.me_id != self.scene.me_id
+        });
+        if !stale {
+            return;
+        }
+        self.permit = None;
+        if self.live.as_ref().is_some_and(|live| live.links) {
+            self.send(vec![ToGame::LinkClear]);
+        }
+    }
+
+    /// The game this session served is gone: a permit it opened stops working (spent or not).
+    fn close_permit(&mut self) {
+        self.permit = None;
+        if self.permits_opened == 0 {
+            return;
+        }
+        self.permits_opened = 0;
+        tokio::spawn(self.social.codeless_close());
     }
 
     /// "Bağlan", which the player chose and confirmed in the launcher: the game joins the server
@@ -741,6 +956,8 @@ impl<S: SocialActions> Session<S> {
                     typed_at: None,
                     hosts,
                     tags,
+                    links: features.iter().any(|f| f == FEATURE_LINK),
+                    link_wanted_at: None,
                 }));
                 self.send(frames);
                 (self.host)(HostSignal::Connected { hosts });
@@ -867,6 +1084,7 @@ impl<S: SocialActions> Session<S> {
                 tracing::info!(?outcome, "the game answered the launcher's server switch");
                 let _ = pending.reply.send(outcome);
             }
+            FromGame::LinkWant { name } => self.on_link_want(&name),
             FromGame::Hello { .. } | FromGame::Unknown => {}
         }
     }
