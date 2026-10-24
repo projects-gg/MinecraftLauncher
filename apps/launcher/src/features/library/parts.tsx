@@ -193,7 +193,8 @@ const toggleTones = {
   neutral: "bg-white/7 text-ash-300",
 } as const;
 
-/** Chamfered on/off chip (log level filters). The focus ring is a chamfered layer. */
+/** Chamfered on/off chip (log level filters). The focus ring is a hollow chamfered layer: the
+ * chip's tints are see-through. */
 export function ToggleChip({
   pressed,
   onPressedChange,
@@ -221,7 +222,7 @@ export function ToggleChip({
     >
       <span
         aria-hidden
-        className="chamfer absolute -inset-[2px] -z-20 bg-gold-300 opacity-0 transition-opacity group-focus-visible:opacity-100"
+        className="chamfer-ring absolute -z-20 bg-gold-300 opacity-0 transition-opacity group-focus-visible:opacity-100"
       />
       <span
         aria-hidden

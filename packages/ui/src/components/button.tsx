@@ -43,8 +43,8 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 /**
- * Chamfered action button. The focus ring is drawn as a larger chamfered layer because
- * clip-path would otherwise clip a normal outline.
+ * Chamfered action button. The focus ring is a hollow chamfered layer (`chamfer-ring`, 2px wide
+ * and 2px out): an outline would stay a rectangle around the chamfered shape.
  */
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = "secondary", size = "md", icon, iconRight, className, children, type, ...props },
@@ -68,9 +68,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       )}
       {...props}
     >
+      {/* Hollow, so a ghost or tinted fill keeps its label (a filled layer turned it solid gold). */}
       <span
         aria-hidden
-        className="chamfer absolute -inset-[3px] -z-20 bg-gold-300 opacity-0 transition-opacity group-focus-visible:opacity-100"
+        className="chamfer-ring absolute -z-20 bg-gold-300 opacity-0 transition-opacity group-focus-visible:opacity-100"
       />
       <span
         aria-hidden

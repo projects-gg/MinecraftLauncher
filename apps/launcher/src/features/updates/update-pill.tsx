@@ -130,10 +130,11 @@ function Pill({ view }: { view: ShownView }) {
             : "cursor-pointer transition-[filter,transform,scale] duration-150 ease-out hover:brightness-110 active:scale-[0.97]",
         )}
       >
-        {/* The focus ring is a larger chamfer (an outline would be cut off by the shape). */}
+        {/* The focus ring: hollow (`chamfer-ring`), since the white surface below is see-through;
+            1px out instead of 2, so it stays clear of the window's edge in the 34px title bar. */}
         <span
           aria-hidden
-          className="chamfer absolute -inset-[3px] -z-20 bg-gold-300 opacity-0 transition-opacity group-focus-visible:opacity-100"
+          className="chamfer-ring absolute -z-20 bg-gold-300 opacity-0 transition-opacity [--chamfer-ring-gap:1px] group-focus-visible:opacity-100"
         />
         {/* Two surfaces cross-fade when the pill changes meaning (a game starts or ends). */}
         <span

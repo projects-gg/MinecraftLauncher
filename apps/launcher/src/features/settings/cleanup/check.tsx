@@ -48,7 +48,7 @@ export function Check({
     >
       <span
         aria-hidden
-        className="chamfer absolute -inset-[3px] -z-20 bg-gold-300 opacity-0 transition-opacity group-focus-visible/check:opacity-100"
+        className="chamfer-ring absolute -z-20 bg-gold-300 opacity-0 transition-opacity group-focus-visible/check:opacity-100"
       />
       <span
         aria-hidden

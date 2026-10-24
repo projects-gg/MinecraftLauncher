@@ -722,7 +722,7 @@ export function WearToggle({ team }: { team: SocialTeam }) {
         >
           <span
             aria-hidden
-            className="chamfer absolute -inset-[2px] bg-gold-300 opacity-0 transition-opacity duration-150 [--cut:6px] group-focus-visible/wear:opacity-100"
+            className="chamfer-ring absolute bg-gold-300 opacity-0 transition-opacity duration-150 [--cut:5px] group-focus-visible/wear:opacity-100"
           />
           <span
             aria-hidden

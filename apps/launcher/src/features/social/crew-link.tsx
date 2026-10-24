@@ -128,7 +128,7 @@ function LinkRow({ team }: { team: SocialTeam }) {
               {asking ? (
                 <motion.div
                   key={asking}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-2.5"
                   {...rise(reduce, 4, 0.2)}
                 >
                   <p className="min-w-0 flex-1 text-[13px] text-bone-100">
@@ -300,7 +300,7 @@ function VisibilitySetting({
         {asking ? (
           <motion.div
             key="ask"
-            className="mt-2.5 flex items-center gap-2"
+            className="mt-2.5 flex items-center gap-2.5"
             {...rise(reduce, 4, 0.2)}
           >
             <p className="min-w-0 flex-1 text-[13px] leading-snug text-bone-100">

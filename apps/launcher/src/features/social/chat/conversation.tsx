@@ -688,7 +688,7 @@ function LineAction({ action }: { action: NonNullable<ChatLine["action"]> }) {
     >
       <span
         aria-hidden
-        className="chamfer absolute -inset-[2px] bg-gold-300 opacity-0 transition-opacity duration-150 [--cut:6px] group-focus-visible/line:opacity-100"
+        className="chamfer-ring absolute bg-gold-300 opacity-0 transition-opacity duration-150 [--cut:5px] group-focus-visible/line:opacity-100"
       />
       <span className="chamfer relative inline-flex h-6 items-center bg-gold-500/12 px-2 text-[12px] font-semibold text-gold-200 transition-colors duration-150 [--cut:5px] group-hover/line:bg-gold-500/20">
         {action.label}

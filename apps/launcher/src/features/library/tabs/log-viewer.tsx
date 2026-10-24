@@ -539,8 +539,9 @@ export function LogViewer({
           </div>
         ) : null}
         <span className="flex-1" />
+        {/* gap-2: a chip's focus ring (4px out) stays clear of the next chip. */}
         <fieldset
-          className="flex min-w-0 items-center gap-1"
+          className="flex min-w-0 items-center gap-2"
           aria-label={t("instance.logs.levels")}
         >
           {levelGroups.map((group) => (

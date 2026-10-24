@@ -317,6 +317,37 @@
   );
 }
 
+/* The keyboard focus ring of a `chamfer` control (design.md §8: gold ring, 2px, offset 2px): a
+   hollow chamfered outline around the control, its inside cut out with `evenodd`, so the control's
+   own surface and label stay as they are whatever its fill. A filled layer behind the control was
+   hidden only by opaque fills: ghost and tinted controls turned solid gold and lost their label.
+   Put it on an absolutely positioned child of the control: it takes the control's --cut (set --cut
+   on it when only the control's face has one) and --chamfer-ring-gap (2px; 1px where the room is
+   tight, as in the title bar). Each diagonal's cut grows by its offset × (2 − √2), so the ring
+   keeps its width around the corners. */
+@utility chamfer-ring {
+  inset: calc(-2px - var(--chamfer-ring-gap, 2px));
+  --chamfer-ring-outer: calc(var(--cut, 8px) + (var(--chamfer-ring-gap, 2px) + 2px) * 0.5858);
+  --chamfer-ring-inner: calc(var(--cut, 8px) + var(--chamfer-ring-gap, 2px) * 0.5858);
+  clip-path: polygon(
+    evenodd,
+    var(--chamfer-ring-outer) 0,
+    100% 0,
+    100% calc(100% - var(--chamfer-ring-outer)),
+    calc(100% - var(--chamfer-ring-outer)) 100%,
+    0 100%,
+    0 var(--chamfer-ring-outer),
+    var(--chamfer-ring-outer) 0,
+    calc(2px + var(--chamfer-ring-inner)) 2px,
+    2px calc(2px + var(--chamfer-ring-inner)),
+    2px calc(100% - 2px),
+    calc(100% - 2px - var(--chamfer-ring-inner)) calc(100% - 2px),
+    calc(100% - 2px) calc(100% - 2px - var(--chamfer-ring-inner)),
+    calc(100% - 2px) 2px,
+    calc(2px + var(--chamfer-ring-inner)) 2px
+  );
+}
+
 /* Translucent obsidian over the art. Falls back to solid in Performance mode.
    Write only `backdrop-filter`: the build adds the -webkit- prefix where a target needs it. */
 @utility glass {
