@@ -792,6 +792,21 @@ async fn projects_te_bulusun_invites_once_the_player_is_on_projects() {
     assert_eq!(h.together.invited.lock().unwrap().len(), 2);
 }
 
+#[tokio::test]
+async fn projects_te_bulusun_from_the_game_invites_the_same_way() {
+    let h = Harness::new().switched_on();
+    h.worlds.on_bridge(HostSignal::Frame(FromGame::HostMeet {
+        invite: vec!["f-ayse".into(), "f-mert".into()],
+    }));
+    tokio::time::sleep(Duration::from_millis(20)).await;
+    assert!(h.together.invited.lock().unwrap().is_empty());
+    h.worlds.on_friends(friends(true), true);
+    eventually("the invites went", || {
+        h.together.invited.lock().unwrap().len() == 2
+    })
+    .await;
+}
+
 // ── The service and the credentials ──────────────────────────────────────────────────────────
 
 fn ice(username: &str) -> TurnIce {

@@ -1043,7 +1043,8 @@ impl<S: SocialActions> Session<S> {
             | FromGame::HostGuest { .. }
             | FromGame::HostInvite { .. }
             | FromGame::HostRemove { .. }
-            | FromGame::HostStop { .. }) => {
+            | FromGame::HostStop { .. }
+            | FromGame::HostMeet { .. }) => {
                 if self.live.as_ref().is_some_and(|live| live.hosts) {
                     (self.host)(HostSignal::Frame(frame));
                 }
