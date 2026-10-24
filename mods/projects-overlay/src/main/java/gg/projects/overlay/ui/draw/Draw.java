@@ -193,6 +193,27 @@ public final class Draw {
         pose.popMatrix();
     }
 
+    /**
+     * A baked white square of {@code size} GUI pixels by its atlas name, tinted {@code color} (a crew mark's frame,
+     * light, edge and emblem). Nothing until the atlas is baked.
+     */
+    public static void mask(GuiGraphicsExtractor g, String key, float x, float y, int size, int color) {
+        int c = color(color);
+        if (key == null || Theme.alpha(c) == 0) {
+            return;
+        }
+        AtlasPacker.Region r = Shapes.ready() ? Shapes.region(key) : null;
+        if (r == null) {
+            return;
+        }
+        Matrix3x2fStack pose = g.pose();
+        pose.pushMatrix();
+        pose.translate(x, y);
+        blit(g, Shapes.texture(), 0, 0, r.x(), r.y(), size, size, r.width(), r.height(), Shapes.textureWidth(),
+            Shapes.textureHeight(), c);
+        pose.popMatrix();
+    }
+
     /** A baked horizontal strip stretched over {@code w x h} (shadows, row fades). */
     public static void strip(GuiGraphicsExtractor g, String key, float x, float y, int w, int h) {
         int c = color(0xFFFFFFFF);

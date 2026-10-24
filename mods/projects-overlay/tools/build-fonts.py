@@ -48,6 +48,8 @@ FACES = {
     "ui_strong": ("figtree-semibold", 8.5, 0.0),
     "small": ("figtree-medium", 7.5, 0.0),
     "display": ("tektur-semibold", 9.0, 0.0),
+    # A crew tag's chip (TEAM6): the launcher's TeamTag is Tektur too, 11 px in an 18 px chip.
+    "tag": ("tektur-semibold", 6.0, 0.0),
 }
 SCALES = range(1, 9)
 

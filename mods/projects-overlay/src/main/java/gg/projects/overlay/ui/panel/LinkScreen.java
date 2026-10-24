@@ -55,6 +55,11 @@ public final class LinkScreen extends Screen {
         this.domain = LinkRule.domain(LinkRule.host(url));
     }
 
+    /** The panel this question stands over (it draws it behind). */
+    OverlayScreen panel() {
+        return panel;
+    }
+
     /** The question for {@code url}, or null when the mod would never open it. */
     public static LinkScreen of(OverlayScreen panel, String url) {
         if (!LinkRule.safe(url)) {
@@ -146,7 +151,7 @@ public final class LinkScreen extends Screen {
             y += 10;
         }
         y += 6;
-        Draw.frame(g, Frames.CHIP_SELECTED, x, y, addressW, 14);
+        Draw.frame(g, Frames.ADDRESS, x, y, addressW, 14);
         Draw.text(g, Fonts.small(), address, x + 6, Fonts.centeredY(Fonts.Face.SMALL, y + 7), Theme.BONE_100);
         y += 14 + 6;
         Draw.text(g, Fonts.small(), note, x, Fonts.centeredY(Fonts.Face.SMALL, y + 4.5f), Theme.ASH_400);

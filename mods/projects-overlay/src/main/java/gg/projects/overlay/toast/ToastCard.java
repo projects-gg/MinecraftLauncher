@@ -4,6 +4,7 @@ import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.stickers.StickerSet;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
@@ -20,7 +21,8 @@ import net.minecraft.util.FormattedCharSequence;
  * name's initial, or the crew, call, invite or info sign), the name in bold with its count, the crew's name
  * under it for crew chat, up to two lines of text, and the hint with the key that opens the overlay. A
  * travel toast ("Projects sunucusuna bağlanılıyor…") is one sentence beside the gold join sign. A sticker
- * message (CHAT2) shows the sticker small before its words ("Çıkartma · GG"), unless message text is hidden.
+ * message (CHAT2) shows the sticker small before its words ("Çıkartma · GG"), unless message text is hidden. A
+ * message's sender who wears a crew tag has its chip before the name ("[GK] Ayşe", TEAM6).
  */
 public final class ToastCard {
     public static final int WIDTH = Frames.TOAST_WIDTH;
@@ -48,6 +50,8 @@ public final class ToastCard {
     final int initialWidth;
     final FormattedCharSequence title;
     final int titleWidth;
+    /** TEAM6: the sender's crew tag before the name, or null. */
+    final TagChip chip;
     final String countText;
     final int countWidth;
     final FormattedCharSequence crew;
@@ -77,6 +81,7 @@ public final class ToastCard {
         this.initialWidth = Fonts.strong().width(b.initial);
         this.title = b.title;
         this.titleWidth = b.titleWidth;
+        this.chip = b.chip;
         this.countText = b.countText;
         this.countWidth = b.countWidth;
         this.crew = b.crew;
@@ -116,6 +121,7 @@ public final class ToastCard {
         String initial;
         FormattedCharSequence title;
         int titleWidth;
+        TagChip chip;
         String countText;
         int countWidth;
         FormattedCharSequence crew;
@@ -164,7 +170,10 @@ public final class ToastCard {
             b.countText = count > 99 ? "99+" : Integer.toString(count);
             b.countWidth = small.width(b.countText) + 8;
         }
-        int titleRoom = TEXT_W - (b.countText == null ? 0 : b.countWidth + 4);
+        if (b.kind == Kind.MESSAGE) {
+            b.chip = TagChip.of(request.badge(), TagChip.ROW);
+        }
+        int titleRoom = Math.round(TEXT_W - (b.countText == null ? 0 : b.countWidth + 4) - TagChip.room(b.chip));
         String titleText = Texts.fit(strong, name, titleRoom);
         b.title = Texts.visual(titleText);
         b.titleWidth = strong.width(titleText);
@@ -194,11 +203,13 @@ public final class ToastCard {
                 b.hintKey = Texts.fit(small, keyName, 48);
             }
         }
+        // The chip is drawn; the narrator says it with the name ("Ayşe, etiket GK").
+        String spokenName = b.chip == null ? name : Texts.str("row.badge", name, b.chip.badge.tag());
         b.narration = switch (b.kind) {
             case CALL, INVITE -> Texts.tr("toast.narration.notice", name, bodyText);
             case INFO, TRAVEL -> Component.literal(name + ". " + bodyText);
-            case MESSAGE -> crewName != null ? Texts.tr("toast.narration.crew", name, crewName, bodyText)
-                : Texts.tr("toast.narration.message", name, bodyText);
+            case MESSAGE -> crewName != null ? Texts.tr("toast.narration.crew", spokenName, crewName, bodyText)
+                : Texts.tr("toast.narration.message", spokenName, bodyText);
         };
         return new ToastCard(b);
     }
@@ -239,9 +250,14 @@ public final class ToastCard {
         drawFace(g, x + PAD_X + FACE / 2f, y + PAD_Y + FACE / 2f);
         float tx = x + TEXT_X;
         float ty = y + PAD_Y;
-        Draw.text(g, Fonts.strong(), title, tx, Fonts.centeredY(Fonts.Face.STRONG, ty + TITLE_H / 2f), Theme.BONE_50);
+        if (chip != null) {
+            chip.draw(g, tx, ty + TITLE_H / 2f);
+        }
+        float nameX = tx + TagChip.room(chip);
+        Draw.text(g, Fonts.strong(), title, nameX, Fonts.centeredY(Fonts.Face.STRONG, ty + TITLE_H / 2f),
+            Theme.BONE_50);
         if (countText != null) {
-            float px = tx + titleWidth + 4;
+            float px = nameX + titleWidth + 4;
             float py = ty + (TITLE_H - 9) / 2f;
             Draw.frame(g, Frames.PILL, px, py, countWidth, 9);
             Draw.text(g, Fonts.small(), countLine, px + 4, Fonts.centeredY(Fonts.Face.SMALL, py + 4.5f),

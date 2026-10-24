@@ -237,6 +237,47 @@ public final class ShapeBaker {
         return new Image(px, px, out);
     }
 
+    /**
+     * A white line {@code width} output pixels wide along path outlines drawn on a {@code viewBox} square, centred on
+     * the outline as an SVG stroke is, with exact anti-aliasing from each pixel's distance to the nearest edge (a
+     * crew mark's frame edge).
+     */
+    public static Image stroke(List<float[]> contours, float viewBox, float size, int k, float width) {
+        int px = Math.max(1, Math.round(size * k));
+        float scale = px / viewBox;
+        float half = width / 2f;
+        int[] out = new int[px * px];
+        for (int y = 0; y < px; y++) {
+            float sy = y + 0.5f;
+            for (int x = 0; x < px; x++) {
+                float sx = x + 0.5f;
+                float nearest = Float.MAX_VALUE;
+                for (float[] c : contours) {
+                    int points = c.length / 2;
+                    for (int i = 0; i < points; i++) {
+                        int j = (i + 1) % points;
+                        nearest = Math.min(nearest, segmentDistance(sx, sy, c[2 * i] * scale, c[2 * i + 1] * scale,
+                            c[2 * j] * scale, c[2 * j + 1] * scale));
+                    }
+                }
+                out[y * px + x] = Theme.withAlpha(0xFFFFFF, coverage(nearest - half));
+            }
+        }
+        return new Image(px, px, out);
+    }
+
+    /** Distance from {@code (px, py)} to the segment from {@code a} to {@code b}. */
+    static float segmentDistance(float px, float py, float ax, float ay, float bx, float by) {
+        float dx = bx - ax;
+        float dy = by - ay;
+        float lengthSquared = dx * dx + dy * dy;
+        float t = lengthSquared <= 0f ? 0f
+            : Math.max(0f, Math.min(1f, ((px - ax) * dx + (py - ay) * dy) / lengthSquared));
+        float qx = ax + t * dx - px;
+        float qy = ay + t * dy - py;
+        return (float) Math.sqrt(qx * qx + qy * qy);
+    }
+
     private static void sortCrossings(float[] xs, int[] dirs, int n) {
         for (int i = 1; i < n; i++) {
             float x = xs[i];

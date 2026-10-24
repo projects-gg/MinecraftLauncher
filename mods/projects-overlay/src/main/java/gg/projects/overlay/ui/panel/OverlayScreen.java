@@ -58,6 +58,11 @@ public final class OverlayScreen extends Screen {
     private static final int COMPOSER_H = 22;
     private static final int REPLY_H = 20;
     private static final int LINE_PLATE_H = 14;
+    /**
+     * The conversation keeps at least this much height before crew chat's quick replies take their row (a short GUI,
+     * 240 px at GUI 3 and 720p, the most common: a call card and the replies left it ~30 px).
+     */
+    private static final int MIN_LIST_WITH_QUICK = 84;
     private static final long ENTER_MS = 220;
     private static final long EXIT_MS = 140;
     private static final long PAGE_MS = 220;
@@ -72,7 +77,6 @@ public final class OverlayScreen extends Screen {
     private final IconButton gear;
     private final IconButton back;
     private final ActionButton retry;
-    private final ActionButton hintOk;
     private final ActionButton[] answers = new ActionButton[3];
     private final ActionButton callJoin;
     private final Segmented tabs;
@@ -95,6 +99,8 @@ public final class OverlayScreen extends Screen {
     private int seenRevision = -1;
     private int panelX;
     private int panelW;
+    /** Where the chat's own rows start (under the notices and a call card): the sticker picker may cover from here. */
+    private int chatTop;
     private int dndY = -1;
     private int callY = -1;
     private int callH;
@@ -110,8 +116,6 @@ public final class OverlayScreen extends Screen {
     private boolean closing;
     private String titleText = "";
     private String settingsTitle = "";
-    private String statusText = "";
-    private BridgeClient.Status statusShown;
     private String dndText = "";
     /** The message the player answers (CHAT2), and the strip over the field that says so. */
     private OverlayState.Reply replyTo;
@@ -137,8 +141,6 @@ public final class OverlayScreen extends Screen {
         gear = new IconButton(Icon.GEAR, Texts.tr("settings.title"), () -> setPage(Page.SETTINGS));
         back = new IconButton(Icon.BACK, Texts.tr("panel.back"), () -> setPage(lastListPage));
         retry = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("retry"), null, overlay::retry);
-        hintOk = new ActionButton(ActionButton.Style.GHOST, Texts.tr("hint.ok"), null,
-            () -> overlay.updateSettings(s -> s.withHintSeen(true)));
         for (int i = 0; i < ANSWERS.length; i++) {
             String answer = ANSWERS[i];
             answers[i] = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("call." + answer), null,
@@ -219,6 +221,8 @@ public final class OverlayScreen extends Screen {
         if (page != Page.SETTINGS) {
             lastListPage = page;
         }
+        // The tabs open on the page the panel opens on (the plate stood on "Sohbetler" over the friend list).
+        tabs.select(lastListPage == Page.FRIENDS ? 1 : 0);
         conversation = pickConversation();
     }
 
@@ -270,6 +274,42 @@ public final class OverlayScreen extends Screen {
         setFocused(messages);
     }
 
+    /** Where the panel starts (GUI pixels): the game's HUD draws only left of it while the panel is open. */
+    public int hudRight() {
+        return closing ? 0 : panelX;
+    }
+
+    /**
+     * Where the open panel starts when {@code screen} is the panel or a question over it (it shows the panel behind),
+     * else 0: the game's HUD draws only left of that.
+     */
+    public static int hudRightOf(Screen screen) {
+        OverlayScreen panel = screen instanceof OverlayScreen p ? p : screen instanceof JoinScreen j ? j.panel()
+            : screen instanceof LinkScreen l ? l.panel() : null;
+        return panel == null ? 0 : panel.hudRight();
+    }
+
+    /** Puts the keyboard on the friend list, as Tab would (the scenario driver picks a row with the keys). */
+    public void focusFriends() {
+        PanelInput.usedKeyboard();
+        setFocused(friends);
+    }
+
+    /** Where a friend's tag chip is in the list (TEAM6; the scenario driver points at it), or null. */
+    public float[] friendChip(String friendId) {
+        return friends.visible ? friends.chipCenter(friendId) : null;
+    }
+
+    /** Where the tag chip before a sender's name is in the conversation (TEAM6), or null. */
+    public float[] senderChip(String from) {
+        return messages.visible ? messages.chipCenter(from) : null;
+    }
+
+    /** Whether crew chat's quick replies show now (the scenario driver checks it). */
+    public boolean quickRepliesShowing() {
+        return quick.visible;
+    }
+
     /** Opens or closes the sticker picker, as its button does. */
     public void toggleStickers() {
         togglePicker();
@@ -317,9 +357,8 @@ public final class OverlayScreen extends Screen {
             pageChangedAt = 0;
         }
         // The picker floats over the conversation: it is asked about a click before the list under it.
-        for (AbstractWidget w : new AbstractWidget[] {picker, gear, back, retry, hintOk, answers[0], answers[1],
-            answers[2], callJoin, tabs, chips, messages, quick, replyClose, field, stickerButton, send, friends,
-            settingsList}) {
+        for (AbstractWidget w : new AbstractWidget[] {picker, gear, back, retry, answers[0], answers[1], answers[2],
+            callJoin, tabs, chips, messages, quick, replyClose, field, stickerButton, send, friends, settingsList}) {
             addWidget(w);
         }
         Shapes.prepare();
@@ -383,9 +422,9 @@ public final class OverlayScreen extends Screen {
         if (next == null || next == page) {
             return;
         }
-        if (next == Page.SETTINGS && !overlay.settings().hintSeen()) {
-            overlay.updateSettings(s -> s.withHintSeen(true));
-        }
+        // A tag's bubble belongs to the page it opened on.
+        friends.dismissBubble();
+        messages.dismissBubble();
         if (page != Page.SETTINGS) {
             lastListPage = page;
         }
@@ -587,14 +626,15 @@ public final class OverlayScreen extends Screen {
         titleText = getTitle().getString();
         settingsTitle = Texts.str("settings.title");
         dndText = Texts.str("dnd");
-        statusShown = state.status();
-        statusText = Texts.str("status." + statusShown.name().toLowerCase(java.util.Locale.ROOT));
         tabs.setReducedMotion(reduced);
         chips.setReducedMotion(reduced);
         messages.setReducedMotion(reduced);
         friends.setReducedMotion(reduced);
         settingsList.setReducedMotion(reduced);
+        // 38 % of the screen between 220 and 300 GUI px, but never past the middle (GUI 3 at 720p and GUI 6 at 1440p
+        // are 426 px wide): the aim point stays in the world, down to 200 px (CHAT2-O2 follow-up).
         panelW = Math.max(220, Math.min(300, Math.round(width * 0.38f)));
+        panelW = Math.max(200, Math.min(panelW, width / 2 - 6));
         panelW = Math.min(panelW, width - 24);
         panelX = width - panelW;
         int x0 = panelX + P;
@@ -619,6 +659,7 @@ public final class OverlayScreen extends Screen {
         if (call != null && state.has("calls")) {
             y = layoutCall(x0, cw, y);
         }
+        chatTop = y;
         if (settingsPage) {
             settingsList.visible = true;
             PanelWidget.place(settingsList, x0, y, cw, Math.max(40, height - P - y));
@@ -677,19 +718,23 @@ public final class OverlayScreen extends Screen {
                 above = replyY;
                 listBottom = replyY - 6;
             }
-            if (isCrew(conversation)) {
+            // Crew chat's quick replies (CHAT2-O2 follow-up: they always took a row): not while a reply is written
+            // (one would go as the reply; the launcher hides them too), not under the sticker picker, and only while
+            // the conversation keeps room for a few messages.
+            int qy = above - 6 - QuickReplies.HEIGHT;
+            if (isCrew(conversation) && !replying() && !picker.isOpen() && qy - 6 - y >= MIN_LIST_WITH_QUICK) {
                 quick.visible = true;
-                int qy = above - 6 - QuickReplies.HEIGHT;
                 PanelWidget.place(quick, x0, qy, cw, QuickReplies.HEIGHT);
                 quick.setHidden(!field.getValue().isEmpty(), now);
                 listBottom = qy - 6;
             }
             if (picker.isOpen()) {
-                // Over the conversation, right above the field. On a short screen (GUI 3 at 720p, the recent row
-                // shown) it rises over the tabs as well: it never covers the field it belongs to.
+                // Over the conversation, right above the field. When it needs the room it rises over the conversation
+                // chips and the tabs (they step aside while it is open), never over a card above them (a call, a
+                // notice) and never over its field: what does not fit scrolls (CHAT2-O2 follow-up).
                 int ph = StickerPicker.height(cw, !overlay.settings().recentStickers().isEmpty());
-                int py = Math.max(HEADER_H + 6, above - 4 - ph);
-                PanelWidget.place(picker, x0, py, cw, Math.max(20, Math.min(ph, above - 4 - py)));
+                int py = Math.max(chatTop, above - 4 - ph);
+                PanelWidget.place(picker, x0, py, cw, Math.max(24, above - 4 - py));
                 // The conversation ends above it (its newest message and edge fade stay in view): no sliver of a
                 // bubble shows over the picker's edge.
                 listBottom = Math.min(listBottom, py - 6);
@@ -718,8 +763,8 @@ public final class OverlayScreen extends Screen {
     }
 
     private void hideAll() {
-        for (AbstractWidget w : new AbstractWidget[] {retry, hintOk, answers[0], answers[1], answers[2], callJoin,
-            tabs, chips, messages, quick, field, send, friends, settingsList, stickerButton, replyClose}) {
+        for (AbstractWidget w : new AbstractWidget[] {retry, answers[0], answers[1], answers[2], callJoin, tabs,
+            chips, messages, quick, field, send, friends, settingsList, stickerButton, replyClose}) {
             w.visible = false;
         }
         if (page != Page.CHATS || conversation == null) {
@@ -756,10 +801,9 @@ public final class OverlayScreen extends Screen {
         } else if (!state.signedIn()) {
             y = addNotice(x0, cw, y, Icon.INFO, Theme.ASH_300,
                 Texts.wrap(ui, Texts.str("detail.signed_out"), textW, 3), null);
-        } else if (!overlay.settings().hintSeen()) {
-            y = addNotice(x0, cw, y, Icon.GEAR, Theme.GOLD_300,
-                Texts.wrap(ui, Texts.str("hint.first"), textW, 3), hintOk);
         }
+        // No first-run tip (CHAT2-O2 follow-up): the gear says where the settings are, and the card took ~60 GUI
+        // pixels of a 240 px tall panel from the conversation.
         return y;
     }
 
@@ -851,6 +895,10 @@ public final class OverlayScreen extends Screen {
 
     /** Closes the innermost thing open over the panel; false when there is none. */
     private boolean dismissInner() {
+        if ((friends.visible && friends.closeBubble()) || (messages.visible && messages.closeBubble())) {
+            // A tag's bubble first: it is the topmost thing.
+            return true;
+        }
         if (picker.isOpen()) {
             picker.close();
             layout();
@@ -883,6 +931,10 @@ public final class OverlayScreen extends Screen {
     public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
         if (overlay.key().matchesMouse(event)) {
             close();
+            return true;
+        }
+        if (friends.bubbleContains(event.x(), event.y()) || messages.bubbleContains(event.x(), event.y())) {
+            // A tag's bubble beside the panel is the panel's: a press there does not go back to the game.
             return true;
         }
         if (event.x() < panelX) {
@@ -969,6 +1021,11 @@ public final class OverlayScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor g, int mouseX, int mouseY, float partialTick) {
         long started = Perf.start();
+        if (PanelInput.pointerSet()) {
+            // The scenario driver points at something (never the player's own pointer, never the OS's).
+            mouseX = PanelInput.pointerX();
+            mouseY = PanelInput.pointerY();
+        }
         sync(false);
         Shapes.prepare();
         long now = now();
@@ -1020,9 +1077,12 @@ public final class OverlayScreen extends Screen {
         Draw.pushAlpha(pe);
         g.pose().pushMatrix();
         g.pose().translate(0f, reducedMotion() ? 0f : (1f - pe) * 4f);
+        // Under an open sticker picker the tabs and the conversation chips step aside as it rises, so its edge never
+        // cuts through them.
+        float underPicker = picker.visible ? picker.opacity(now) : 0f;
         Draw.stratum(g);
-        render(g, tabs, mouseX, mouseY);
-        render(g, chips, mouseX, mouseY);
+        renderUnder(g, tabs, underPicker, mouseX, mouseY);
+        renderUnder(g, chips, underPicker, mouseX, mouseY);
         Draw.stratum(g);
         messages.setFloatingShown(lineText == null ? 0f : lineAlpha.value(now));
         render(g, messages, mouseX, mouseY);
@@ -1042,9 +1102,29 @@ public final class OverlayScreen extends Screen {
         Draw.stratum(g);
         render(g, friends, mouseX, mouseY);
         render(g, settingsList, mouseX, mouseY);
+        // A crew tag's bubble over everything in the panel (TEAM6), inside it.
+        Draw.stratum(g);
+        float left = panelX + P;
+        float right = panelX + panelW - P;
+        friends.drawBubble(g, now, panelX, left, HEADER_H + 4, right, height - 4);
+        messages.drawBubble(g, now, panelX, left, HEADER_H + 4, right, height - 4);
         g.pose().popMatrix();
         Draw.popAlpha();
         g.pose().popMatrix();
+        Draw.popAlpha();
+    }
+
+    /** A row the open sticker picker covers fades out with the picker's rise (only one it really covers). */
+    private void renderUnder(GuiGraphicsExtractor g, AbstractWidget w, float underPicker, int mouseX, int mouseY) {
+        if (!w.visible) {
+            return;
+        }
+        boolean covered = underPicker > 0f && w.getY() + w.getHeight() > picker.getY();
+        if (covered && underPicker >= 0.99f) {
+            return;
+        }
+        Draw.pushAlpha(covered ? 1f - underPicker : 1f);
+        render(g, w, mouseX, mouseY);
         Draw.popAlpha();
     }
 
@@ -1064,25 +1144,9 @@ public final class OverlayScreen extends Screen {
         } else {
             Draw.text(g, Fonts.display(), titleText, x0, Fonts.centeredY(Fonts.Face.DISPLAY, mid), Theme.BONE_50);
             render(g, gear, mouseX, mouseY);
-            if (!overlay.settings().hintSeen() && state.online()) {
-                Draw.disc(g, 5, gear.getX() + 13, gear.getY() + 3, Theme.GOLD_500);
-            }
         }
-        if (statusShown != state.status()) {
-            layout();
-        }
-        BridgeClient.Status status = statusShown;
-        String label = statusText;
-        Font small = Fonts.small();
-        float right = page == Page.SETTINGS ? panelX + panelW - P : gear.getX() - 4;
-        float lx = right - small.width(label);
-        int dot = switch (status) {
-            case ONLINE -> Theme.JADE_400;
-            case CONNECTING -> Theme.ASH_400;
-            default -> Theme.FLARE_400;
-        };
-        Draw.disc(g, 5, lx - 6, mid, dot);
-        Draw.text(g, small, label, lx, Fonts.centeredY(Fonts.Face.SMALL, mid), Theme.ASH_400);
+        // No "● Bağlı" here (CHAT2-O2 follow-up: a status dot is the banned pattern, and connected is the normal
+        // state): when the launcher is away the notice under the header says so, with "Yeniden dene".
         Draw.hairline(g, panelX + P, panelX + panelW - P, HEADER_H, Theme.withAlpha(0xFFFFFF, 0.07f));
     }
 

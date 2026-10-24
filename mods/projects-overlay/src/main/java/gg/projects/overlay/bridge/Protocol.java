@@ -30,9 +30,10 @@ public final class Protocol {
     /**
      * What this build does beyond the first protocol, listed in {@code hello}; the launcher sends only these:
      * {@code connect} (the launcher's "Bağlan"), {@code chat2} (chat extras: replies, reactions, stickers,
-     * "yazıyor…", "Görüldü", links; docs/tasks/ovl2-protocol.md, CHAT2-O).
+     * "yazıyor…", "Görüldü", links; docs/tasks/ovl2-protocol.md, CHAT2-O), {@code tags} (crew tags and their
+     * cards, the crews' "ekibe katıldı" lines; TEAM6-O).
      */
-    public static final List<String> FEATURES = List.of("connect", "chat2");
+    public static final List<String> FEATURES = List.of("connect", "chat2", "tags");
     /** Minecraft's legacy formatting sign; launcher text must never carry formatting into the game. */
     private static final int SECTION_SIGN = 0xA7;
     /** The keycap mark (1️⃣): the digit stays, the mark would draw as a dashed box. */

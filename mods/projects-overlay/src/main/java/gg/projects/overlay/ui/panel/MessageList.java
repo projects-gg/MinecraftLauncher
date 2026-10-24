@@ -10,6 +10,7 @@ import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.stickers.StickerMotion;
 import gg.projects.overlay.stickers.StickerSet;
 import gg.projects.overlay.ui.Fonts;
+import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
@@ -51,6 +52,10 @@ import org.joml.Matrix3x2fStack;
  * sits at the bottom, over the field (as in the launcher), and the list's edges fade into the panel while
  * there is more above or below. The newest message keeps clear of the line that floats over the bottom edge
  * ("yazıyor…", a note), so that line never covers a word.
+ *
+ * <p>Crew tags (TEAM6): in crew chat the name over someone's group carries the tag they wear ("[GK] Mert"); the
+ * pointer resting on it opens the tag's bubble. Who came into the crew while the launcher ran shows as a quiet line
+ * at its time among the messages ("Ece ekibe katıldı").
  */
 public final class MessageList extends PanelWidget {
     private static final int BUBBLE_PAD_X = 6;
@@ -75,6 +80,8 @@ public final class MessageList extends PanelWidget {
     private static final int QUICK_CELL = 22;
     /** More room under a time in the middle of a group ("Görüldü"), so it reads as the bubble above's. */
     private static final int META_GAP = 3;
+    /** A quiet line among the messages ("Ece ekibe katıldı", TEAM6 §7). */
+    private static final int ARRIVAL_H = 14;
     /** The fades at the list's edges; a message picked with the keys is brought out of them. */
     private static final int FADE = ShapeSet.LIST_FADE;
     /** From the newest message's bottom to the end of the content (its gap and the list's own margin). */
@@ -115,9 +122,16 @@ public final class MessageList extends PanelWidget {
     }
 
     private static final class Row {
+        /** The message, or null for a quiet line among them ("Ece ekibe katıldı"). */
         OverlayState.ChatLine line;
         boolean mine;
         FormattedCharSequence name;
+        /** TEAM6: the tag the sender wears, before their name over a group in crew chat. */
+        TagChip chip;
+        /** TEAM6 §7: someone came into the crew; the words of its quiet line. */
+        FormattedCharSequence arrival;
+        float arrivalW;
+        Component arrivalWords;
         List<FormattedCharSequence> text;
         float y;
         float height;
@@ -176,9 +190,12 @@ public final class MessageList extends PanelWidget {
     private final Spring scroll = Spring.snappy(0f);
     private final Set<String> known = new HashSet<>();
     private final float[] pose = new float[StickerMotion.SIZE];
+    /** TEAM6: the bubble of the tag before a sender's name (the pointer only: messages take no focus one by one). */
+    private final BadgeBubble bubble = new BadgeBubble();
     private String conversation;
     private boolean crew;
     private int laidOutRevision = -1;
+    private int laidOutBadges = -1;
     private int laidOutWidth = -1;
     private int laidOutHeight = -1;
     private long laidOutSeen = -1;
@@ -225,6 +242,8 @@ public final class MessageList extends PanelWidget {
     private int hoverChip = -1;
     private int hoverTool = -1;
     private int hoverQuick = -1;
+    /** The pointer rests on a sender's tag: its bubble is the one popover there (no toolbar beside the message). */
+    private boolean hoverTag;
     private boolean hoverQuote;
     private boolean hoverLink;
     private int selected = -1;
@@ -257,6 +276,44 @@ public final class MessageList extends PanelWidget {
 
     public void setReducedMotion(boolean value) {
         reducedMotion = value;
+        bubble.setReducedMotion(value);
+    }
+
+    /** Closes the tag's bubble (another conversation, another page). */
+    public void dismissBubble() {
+        bubble.dismiss(now());
+    }
+
+    /** Esc: closes the tag's bubble if one is open; whether it was. */
+    public boolean closeBubble() {
+        return bubble.close(now());
+    }
+
+    /** The middle of the tag chip before {@code from}'s name (their newest group), or null (for the scenario driver). */
+    public float[] chipCenter(String from) {
+        for (int i = rows.size() - 1; i >= 0; i--) {
+            Row row = rows.get(i);
+            if (row.chip != null && row.line != null && row.line.from.equals(from)) {
+                float y = getY() + row.y - scroll.value() + (row.divider ? DIVIDER_H : 0) + SMALL_H / 2f;
+                if (y > getY() + FADE && y < Math.min(getY() + getHeight(), visibleBottom) - FADE) {
+                    return new float[] {getX() + 1 + row.chip.width / 2f, y};
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Draws the bubble of the tag under the pointer beside the panel (or inside the given box). */
+    public void drawBubble(GuiGraphicsExtractor g, long now, float panelLeft, float left, float top, float right,
+        float bottom) {
+        if (visible) {
+            bubble.draw(g, now, panelLeft, left, top, right, bottom);
+        }
+    }
+
+    /** Whether {@code (mx, my)} is on the tag's bubble (a press there stays in the panel). */
+    public boolean bubbleContains(double mx, double my) {
+        return visible && bubble.contains(mx, my);
     }
 
     /**
@@ -339,6 +396,7 @@ public final class MessageList extends PanelWidget {
         closeStrip();
         flashLine = null;
         settleUntil = now() + SETTLE_MS;
+        bubble.dismiss(now());
     }
 
     /** Lays out again when the conversation's lines, the width or a waiting message's time changed. */
@@ -368,9 +426,11 @@ public final class MessageList extends PanelWidget {
                 scroll.snap(maxScroll());
             }
         }
-        if (revision == laidOutRevision && getWidth() == laidOutWidth && seen == laidOutSeen && now < nextTimeout) {
+        if (revision == laidOutRevision && getWidth() == laidOutWidth && seen == laidOutSeen && now < nextTimeout
+            && state.badgeRevision() == laidOutBadges) {
             return;
         }
+        laidOutBadges = state.badgeRevision();
         boolean first = laidOutRevision == -1 || now < settleUntil;
         // The first message of an empty conversation appears in its place (it rises in by itself): gliding
         // up from the empty list's bottom would carry it across the whole list.
@@ -472,6 +532,9 @@ public final class MessageList extends PanelWidget {
         }
         int dividerAt = dividerLine == null ? -1 : lines.indexOf(dividerLine);
         StickerSet set = StickerSet.get();
+        // Who came into the crew, at their times among the messages (TEAM6 §7).
+        List<OverlayState.Arrival> joins = crew ? state.arrivals(conversation) : List.of();
+        int nextJoin = 0;
         float y = 4f;
         Row previous = null;
         Set<String> seenIds = new HashSet<>();
@@ -480,6 +543,12 @@ public final class MessageList extends PanelWidget {
         for (int i = 0; i < lines.size(); i++) {
             OverlayState.ChatLine line = lines.get(i);
             OverlayState.ChatLine next = i + 1 < lines.size() ? lines.get(i + 1) : null;
+            while (nextJoin < joins.size() && joins.get(nextJoin).at() <= line.at) {
+                y = addJoin(joins.get(nextJoin++), y, previous != null, small, first, now, seenIds);
+                previous = rows.get(rows.size() - 1);
+            }
+            // A join line that comes before the next message ends this group.
+            boolean joinNext = next != null && nextJoin < joins.size() && joins.get(nextJoin).at() <= next.at;
             Row row = new Row();
             row.line = line;
             row.mine = line.mine;
@@ -487,9 +556,9 @@ public final class MessageList extends PanelWidget {
             if (row.delivery == OverlayState.Delivery.PENDING) {
                 nextTimeout = Math.min(nextTimeout, line.createdAt + OverlayState.SEND_TIMEOUT_MS + 1);
             }
-            boolean newGroup = previous == null || previous.mine != line.mine
+            boolean newGroup = previous == null || previous.line == null || previous.mine != line.mine
                 || !previous.line.from.equals(line.from) || i == dividerAt;
-            boolean lastOfGroup = next == null || next.mine != line.mine || !next.from.equals(line.from)
+            boolean lastOfGroup = next == null || joinNext || next.mine != line.mine || !next.from.equals(line.from)
                 || i + 1 == dividerAt;
             if (i == dividerAt && i > 0) {
                 row.divider = true;
@@ -503,7 +572,9 @@ public final class MessageList extends PanelWidget {
                 y += DIVIDER_H;
             }
             if (crew && !line.mine && newGroup) {
-                row.name = Texts.visual(Texts.fit(small, line.from, maxBubble));
+                // "[GK] Mert": the tag they wear before the name (TEAM6); the name gives way, the chip does not.
+                row.chip = TagChip.of(state.badge(line.badge), TagChip.CHAT);
+                row.name = Texts.visual(Texts.fit(small, line.from, Math.round(maxBubble - TagChip.room(row.chip))));
                 y += SMALL_H + 1;
             }
             if (line.reply != null && !line.deleted) {
@@ -582,6 +653,10 @@ public final class MessageList extends PanelWidget {
             y += ROW_GAP + (row.meta && !lastOfGroup ? META_GAP : 0);
             previous = row;
         }
+        while (nextJoin < joins.size()) {
+            y = addJoin(joins.get(nextJoin++), y, previous != null, small, first, now, seenIds);
+            previous = rows.get(rows.size() - 1);
+        }
         known.clear();
         known.addAll(seenIds);
         arrivedBelow = lastArrival > lastKnown;
@@ -589,6 +664,31 @@ public final class MessageList extends PanelWidget {
         contentHeight = rows.isEmpty() ? 0f : y + 4f + floatRoom;
         lastNarration = rows.isEmpty() ? Texts.tr("chat.empty") : narrationOf(rows.get(rows.size() - 1));
         tooltipRow = -1;
+    }
+
+    /**
+     * "Ece ekibe katıldı" (the player's own: "Ekibe katıldın") as a quiet line among the messages, the launcher's
+     * waving hand before it; returns where the next row starts. A new one fades in where it lands.
+     */
+    private float addJoin(OverlayState.Arrival join, float y, boolean gapBefore, Font small, boolean first, long now,
+        Set<String> seenIds) {
+        float top = y + (gapBefore ? GROUP_GAP - ROW_GAP : 0);
+        Row row = new Row();
+        String words = join.mine() ? Texts.str("note.you")
+            : Texts.str("note.joined", join.name().isEmpty() ? Texts.str("toast.someone") : join.name());
+        String fitted = Texts.fit(small, words, Math.max(20, getWidth() - 24));
+        row.arrival = Texts.visual(fitted);
+        row.arrivalW = small.width(fitted);
+        row.arrivalWords = Component.literal(words);
+        row.y = top;
+        row.height = ARRIVAL_H;
+        String key = "join:" + join.id();
+        seenIds.add(key);
+        if (!known.contains(key) && !first) {
+            row.appearedAt = now;
+        }
+        rows.add(row);
+        return top + ARRIVAL_H + ROW_GAP;
     }
 
     /** The quoted message as one quiet line: "Ayşe: metin…", "Önceki bir mesaj", "Mesaj silindi". */
@@ -728,6 +828,9 @@ public final class MessageList extends PanelWidget {
 
     private Component narrationOf(Row row) {
         OverlayState.ChatLine line = row.line;
+        if (line == null) {
+            return row.arrivalWords == null ? Component.empty() : row.arrivalWords;
+        }
         if (line.deleted) {
             return Texts.tr("chat.deleted");
         }
@@ -791,7 +894,7 @@ public final class MessageList extends PanelWidget {
     private void jumpTo(String id) {
         for (int i = 0; i < rows.size(); i++) {
             Row row = rows.get(i);
-            if (id.equals(row.line.id)) {
+            if (row.line != null && id.equals(row.line.id)) {
                 float target = row.y + row.height / 2f - getHeight() / 2f;
                 scrollTo(clampScroll(target));
                 flashLine = row.line;
@@ -833,10 +936,11 @@ public final class MessageList extends PanelWidget {
             return true;
         }
         switch (event.key()) {
-            case InputConstants.KEY_UP -> select(selected < 0 ? rows.size() - 1 : selected - 1);
+            case InputConstants.KEY_UP -> select(selected < 0 ? rows.size() - 1 : selected - 1, -1);
             case InputConstants.KEY_DOWN -> {
-                if (selected >= 0 && selected < rows.size() - 1) {
-                    select(selected + 1);
+                int below = selected < 0 ? -1 : messageFrom(selected + 1, 1);
+                if (below >= 0) {
+                    select(below, 1);
                 } else if (selected >= 0) {
                     selected = -1;
                     toBottom();
@@ -870,11 +974,28 @@ public final class MessageList extends PanelWidget {
         return true;
     }
 
-    private void select(int index) {
+    /** The first message row from {@code index} on in direction {@code dir} (quiet lines are passed over), or -1. */
+    private int messageFrom(int index, int dir) {
+        for (int i = index; i >= 0 && i < rows.size(); i += dir) {
+            if (rows.get(i).line != null) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private void select(int index, int dir) {
         if (rows.isEmpty()) {
             return;
         }
-        selected = Math.max(0, Math.min(rows.size() - 1, index));
+        int found = messageFrom(Math.max(0, Math.min(rows.size() - 1, index)), dir);
+        if (found < 0) {
+            found = messageFrom(Math.max(0, Math.min(rows.size() - 1, index)), -dir);
+        }
+        if (found < 0) {
+            return;
+        }
+        selected = found;
         reveal(selected);
         lastNarration = narrationOf(rows.get(selected));
         net.minecraft.client.Minecraft.getInstance().getNarrator().saySystemQueued(lastNarration);
@@ -1030,7 +1151,7 @@ public final class MessageList extends PanelWidget {
     /** Which toolbar button (0 react, 1 reply) is at {@code mx}, row-local {@code ly}; -1 none. */
     private int toolAt(Row row, float mx, float ly) {
         int n = toolCount(row);
-        if (n == 0 || stripRow >= 0 || !(hoverRowIs(row) || rowIndex(row) == selected)) {
+        if (n == 0 || stripRow >= 0 || hoverTag || !(hoverRowIs(row) || rowIndex(row) == selected)) {
             return -1;
         }
         float tx = toolbarX(row, n) + TOOL_PAD;
@@ -1170,6 +1291,7 @@ public final class MessageList extends PanelWidget {
         if (rows.isEmpty()) {
             Draw.text(g, small, emptyWord, x0 + (w - emptyW) / 2f, Fonts.centeredY(Fonts.Face.SMALL, y0 + h / 2f),
                 Theme.ASH_400);
+            bubble.track(null, false, now);
             return;
         }
         float top = scroll.value();
@@ -1179,7 +1301,7 @@ public final class MessageList extends PanelWidget {
         float band = (floatLineH > 0 ? floatShown : 0f) * Math.min(1f, Math.max(0f, (maxScroll() - top) / FADE));
         float bottom = y0 + h - (band > 0.01f ? band * (floatLineH + 4 + (newBelow ? 18 : 0)) : 0f);
         visibleBottom = bottom;
-        trackPointer(mouseX, mouseY, top);
+        trackPointer(mouseX, mouseY, top, now);
         g.enableScissor(x0 - 3, y0, x0 + w + 3, Math.round(bottom));
         float right = x0 + w;
         for (int i = 0; i < rows.size(); i++) {
@@ -1190,7 +1312,8 @@ public final class MessageList extends PanelWidget {
             }
             float enter = row.appearedAt == 0 ? 1f : Math.min(1f, (now - row.appearedAt) / (float) ENTER_MS);
             float eased = Ease.OUT.at(enter);
-            float rise = reducedMotion || row.sticker != null ? 0f : (1f - eased) * 4f;
+            // A quiet line only fades in where it lands (as the launcher's).
+            float rise = reducedMotion || row.sticker != null || row.line == null ? 0f : (1f - eased) * 4f;
             Draw.pushAlpha(eased);
             drawRow(g, i, row, ry + rise, x0, w, right, mouseX, mouseY, now, ui, small);
             Draw.popAlpha();
@@ -1224,16 +1347,23 @@ public final class MessageList extends PanelWidget {
         }
     }
 
-    /** Works out what is under the pointer (no allocation; the tooltip's words only when its chip changes). */
-    private void trackPointer(int mouseX, int mouseY, float top) {
+    /**
+     * Works out what is under the pointer (no allocation; the tooltip's words only when its chip changes), and tells
+     * the tag's bubble whether the pointer rests on a sender's tag.
+     */
+    private void trackPointer(int mouseX, int mouseY, float top, long now) {
         hoverRow = -1;
         hoverChip = -1;
         hoverTool = -1;
         hoverQuick = -1;
         hoverQuote = false;
         hoverLink = false;
+        BadgeBubble.Target tag = null;
+        hoverTag = false;
+        boolean onBubble = bubble.contains(mouseX, mouseY);
         if (!isHovered()) {
             updateTooltip(-1, -1);
+            bubble.track(null, onBubble, now);
             return;
         }
         if (stripRow >= 0) {
@@ -1242,6 +1372,7 @@ public final class MessageList extends PanelWidget {
         if (mouseY >= visibleBottom) {
             // Under the floating line: nothing of the list shows there.
             updateTooltip(-1, -1);
+            bubble.track(null, onBubble, now);
             return;
         }
         float cy = mouseY - getY() + top;
@@ -1256,9 +1387,25 @@ public final class MessageList extends PanelWidget {
             hoverChip = chipAt(row, mouseX, local);
             hoverQuote = row.quote && row.quoteTarget != null && quoteContains(row, mouseX, local);
             hoverLink = linkAt(row, mouseX, local) != null;
+            if (row.chip != null && stripRow < 0) {
+                float chipY = row.chip.top(getY() + row.y - top + (row.divider ? DIVIDER_H : 0) + SMALL_H / 2f);
+                float chipX = getX() + 1;
+                if (mouseX >= chipX && mouseX < chipX + row.chip.width && mouseY >= chipY
+                    && mouseY < chipY + row.chip.height) {
+                    float groupTop = getY() + row.y - top;
+                    tag = new BadgeBubble.Target(row.line.id != null ? row.line.id : row.line.clientId,
+                        row.chip.badge, chipX, chipY, row.chip.width, row.chip.height, groupTop,
+                        groupTop + row.height, false);
+                }
+            }
             break;
         }
+        hoverTag = tag != null || onBubble;
+        if (hoverTag) {
+            hoverTool = -1;
+        }
         updateTooltip(hoverChip >= 0 ? hoverRow : -1, hoverChip);
+        bubble.track(tag, onBubble, now);
     }
 
     private void updateTooltip(int row, int chip) {
@@ -1312,6 +1459,15 @@ public final class MessageList extends PanelWidget {
     private void drawRow(GuiGraphicsExtractor g, int index, Row row, float y, int x0, int w, float right, int mouseX,
         int mouseY, long now, Font ui, Font small) {
         float rowTop = y;
+        if (row.line == null) {
+            // "Ece ekibe katıldı": the launcher's quiet line, its waving hand in gold.
+            float lineW = 8 + 4 + row.arrivalW;
+            float lx = Draw.snap(x0 + (w - lineW) / 2f);
+            float mid = y + ARRIVAL_H / 2f;
+            Draw.icon(g, Icon.WAVE, 8, lx, Draw.snap(mid - 4f), Theme.GOLD_300);
+            Draw.text(g, small, row.arrival, lx + 12, Fonts.centeredY(Fonts.Face.SMALL, mid), Theme.ASH_400);
+            return;
+        }
         if (row.divider) {
             float lw = dividerW;
             float mid = y + DIVIDER_H / 2f - 1;
@@ -1322,7 +1478,11 @@ public final class MessageList extends PanelWidget {
         }
         if (row.name != null) {
             float ny = rowTop + (row.divider ? DIVIDER_H : 0);
-            Draw.text(g, small, row.name, x0 + 1, Fonts.centeredY(Fonts.Face.SMALL, ny + SMALL_H / 2f), Theme.ASH_300);
+            if (row.chip != null) {
+                row.chip.draw(g, x0 + 1, ny + SMALL_H / 2f);
+            }
+            Draw.text(g, small, row.name, x0 + 1 + TagChip.room(row.chip), Fonts.centeredY(Fonts.Face.SMALL,
+                ny + SMALL_H / 2f), Theme.ASH_300);
         }
         if (row.quote) {
             drawQuote(g, index, row, rowTop + row.quoteTop, x0, right, small);
@@ -1505,8 +1665,8 @@ public final class MessageList extends PanelWidget {
 
     /** "Tepki ver" and "Yanıtla" beside the message under the pointer (or picked with the keys). */
     private void drawToolbar(GuiGraphicsExtractor g, long now) {
-        // The open strip has both actions: one popover at a time.
-        int index = stripRow >= 0 ? -1 : hoverRow >= 0 ? hoverRow : selected;
+        // The open strip has both actions, a tag's bubble is about the sender: one popover at a time.
+        int index = stripRow >= 0 || hoverTag || bubble.showing(now) ? -1 : hoverRow >= 0 ? hoverRow : selected;
         if (index < 0 || index >= rows.size()) {
             return;
         }

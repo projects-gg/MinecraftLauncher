@@ -171,6 +171,25 @@ class ShapesTest {
     }
 
     @Test
+    void aStrokeFollowsTheOutlineOnBothSidesOfIt() {
+        // A 40-unit square's outline from 10 to 30, a 3-pixel stroke at 40 pixels: on the edge, gone inside and out.
+        List<float[]> square = List.of(new float[] {10, 10, 30, 10, 30, 30, 10, 30});
+        ShapeBaker.Image stroke = ShapeBaker.stroke(square, 40f, 40, 1, 3f);
+        assertEquals(255, alpha(stroke, 20, 10), "on the top edge");
+        assertEquals(255, alpha(stroke, 10, 20), "on the left edge");
+        assertEquals(255, alpha(stroke, 20, 9), "half of it outside");
+        assertEquals(0, alpha(stroke, 20, 20), "the middle stays open");
+        assertEquals(0, alpha(stroke, 2, 2), "nothing far outside");
+        assertTrue(alpha(stroke, 20, 11) > 0 && alpha(stroke, 20, 11) < 255, "a soft edge");
+        // The mark's light: the fill's shape, strongest at the top, gone at the bottom.
+        ShapeBaker.Image fill = ShapeBaker.icon(square, 40f, 40, 1);
+        ShapeBaker.Image light = Emblems.light(fill);
+        assertTrue(alpha(light, 20, 11) > alpha(light, 20, 28));
+        assertEquals(0, alpha(light, 2, 2));
+        assertTrue(alpha(light, 20, 11) <= Math.round(Emblems.LIGHT * 255));
+    }
+
+    @Test
     void colorMath() {
         assertEquals(0x80FFFFFF, Theme.fade(0xFFFFFFFF, 128 / 255f));
         assertEquals(0xFF0A090C, Theme.mix(0xFF0A090C, 0xFFFFFFFF, 0f));

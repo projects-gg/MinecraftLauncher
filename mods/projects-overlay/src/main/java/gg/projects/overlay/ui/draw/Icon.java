@@ -35,7 +35,9 @@ public enum Icon {
     REPLY("ArrowBendUpLeft"),
     STICKER("Sticker"),
     GLOBE("Globe"),
-    OPEN("ArrowSquareOut");
+    OPEN("ArrowSquareOut"),
+    /** "Ece ekibe katıldı" in crew chat (TEAM6 §7), as the launcher's line. */
+    WAVE("HandWaving");
 
     /** The sizes icons are drawn at, in GUI pixels. */
     public static final int[] SIZES = {8, 10, 12};

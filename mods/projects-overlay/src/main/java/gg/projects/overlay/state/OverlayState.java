@@ -40,8 +40,14 @@ public final class OverlayState {
     public static final int REACTION_KINDS = 10;
     /** Characters of a quoted message the launcher sends (it ends in an ellipsis when cut). */
     public static final int MAX_QUOTE_CHARS = 121;
+    /** "Ekibe katıldı" lines kept per crew conversation (the launcher keeps 30 a crew). */
+    public static final int MAX_ARRIVALS = 30;
 
-    public record Friend(String id, String name, String where, boolean joinable, String host) {
+    /**
+     * A friend. {@code badge} (TEAM6): the crew whose tag they wear, as the launcher named it (its card is in
+     * {@link #badge(String)}), or null.
+     */
+    public record Friend(String id, String name, String where, boolean joinable, String host, String badge) {
         public boolean onProjects() {
             return where.equals("projects");
         }
@@ -110,6 +116,18 @@ public final class OverlayState {
     public record Note(String conversation, String key, long at) {
     }
 
+    /**
+     * A crew tag's card (TEAM6): the chip ({@code tag} on the crew's colour) and the bubble it opens. {@code since}
+     * is the month the crew was founded ("2026-09", empty when not known); {@code mine}: the player is in it.
+     */
+    public record Badge(String crew, String tag, String color, String frame, String emblem, String name,
+        String motto, String since, int members, boolean mine) {
+    }
+
+    /** Someone came into a crew while the launcher ran (TEAM6 §7): "Ece ekibe katıldı", or the player's own. */
+    public record Arrival(String id, String name, boolean mine, long at) {
+    }
+
     public static final class ChatLine {
         public final String clientId;
         public final String from;
@@ -133,6 +151,8 @@ public final class OverlayState {
         public List<Reaction> reactions = List.of();
         public List<Link> links = List.of();
         public Card card;
+        /** TEAM6: the crew whose tag its sender wears (someone else's message in crew chat), or null. */
+        public String badge;
 
         ChatLine(String id, String clientId, String from, String text, boolean mine, Delivery delivery, long at,
             long createdAt) {
@@ -182,11 +202,14 @@ public final class OverlayState {
         }
     }
 
-    /** A toast the launcher asked for; the mod may still skip it (hidden GUI, conversation already open). */
+    /**
+     * A toast the launcher asked for; the mod may still skip it (hidden GUI, conversation already open). {@code badge}
+     * (TEAM6): the card of the tag a message's sender wears, while tags are on.
+     */
     public record ToastRequest(String kind, String key, String title, String body, String conversation,
-        String crew, String sticker) {
+        String crew, String sticker, Badge badge) {
         public ToastRequest(String kind, String key, String title, String body, String conversation, String crew) {
-            this(kind, key, title, body, conversation, crew, null);
+            this(kind, key, title, body, conversation, crew, null, null);
         }
     }
 
@@ -197,6 +220,11 @@ public final class OverlayState {
     private final Map<String, CrewCall> calls = new LinkedHashMap<>();
     private final Map<String, LinkedHashMap<String, Writer>> writers = new HashMap<>();
     private final Set<String> features = new HashSet<>();
+    /** TEAM6: the cards of the tags friends and crewmates wear, by crew id. */
+    private final Map<String, Badge> badges = new HashMap<>();
+    /** TEAM6 §7: who came into each crew conversation, oldest first. */
+    private final Map<String, List<Arrival>> arrivals = new HashMap<>();
+    private int badgeRevision;
 
     private BridgeClient.Status status = BridgeClient.Status.CONNECTING;
     private String statusReason;
@@ -244,6 +272,27 @@ public final class OverlayState {
 
     public boolean has(String feature) {
         return features.contains(feature);
+    }
+
+    /** Crew tags are on (TEAM6): the launcher's welcome says so (the service offers them, Studio has them on). */
+    public boolean tagsOn() {
+        return features.contains("tags");
+    }
+
+    /** The card of crew {@code crew}'s tag while tags are on, or null. */
+    public Badge badge(String crew) {
+        return crew == null || !tagsOn() ? null : badges.get(crew);
+    }
+
+    /** Bumps whenever a tag's card changes, comes or goes (what a laid-out line shows may change with it). */
+    public int badgeRevision() {
+        return badgeRevision;
+    }
+
+    /** Who came into {@code conversation} (a crew's chat) while the launcher ran, oldest first. */
+    public List<Arrival> arrivals(String conversation) {
+        List<Arrival> list = conversation == null ? null : arrivals.get(conversation);
+        return list == null ? List.of() : list;
     }
 
     /** Bumps on every visible change so an open panel knows when to rebuild. */
@@ -453,8 +502,12 @@ public final class OverlayState {
                     conversations.clear();
                     calls.clear();
                     writers.clear();
+                    badges.clear();
+                    arrivals.clear();
                     note = null;
                 }
+                // Tags may have come or gone with the features: what is laid out is laid out again.
+                badgeRevision++;
                 me = name;
                 welcomed = true;
                 dnd = Protocol.bool(frame, "dnd", false);
@@ -569,16 +622,21 @@ public final class OverlayState {
             }
             case "call" -> putCall(frame);
             case "call-end" -> calls.remove(Protocol.str(frame, "id", ""));
+            case "badges" -> putBadges(frame);
+            case "note" -> putArrival(frame);
             case "toast" -> {
                 String sticker = Protocol.str(frame, "sticker", null);
+                String kind = Protocol.str(frame, "kind", "message");
                 toast = new ToastRequest(
-                    Protocol.str(frame, "kind", "message"),
+                    kind,
                     Protocol.plain(Protocol.str(frame, "key", Protocol.str(frame, "id", "")), 64),
                     name(frame, "title"),
                     Protocol.plain(Protocol.str(frame, "body", ""), Protocol.MAX_MESSAGE_CHARS),
                     Protocol.str(frame, "conv", null),
                     Protocol.plain(Protocol.str(frame, "crew", ""), Protocol.MAX_NAME_CHARS),
-                    sticker == null || !stickerRef(sticker) ? null : sticker);
+                    sticker == null || !stickerRef(sticker) ? null : sticker,
+                    // "[GK] Ayşe": only a message's sender wears one.
+                    kind.equals("message") ? badge(Protocol.str(frame, "badge", null)) : null);
             }
             default -> {
                 return null;
@@ -609,7 +667,76 @@ public final class OverlayState {
         }
         String host = Protocol.plain(Protocol.str(o, "host", ""), 255);
         friends.put(id, new Friend(id, name(o, "name"), Protocol.str(o, "where", "offline"),
-            Protocol.bool(o, "joinable", false), host.isEmpty() ? null : host));
+            Protocol.bool(o, "joinable", false), host.isEmpty() ? null : host, crewId(o)));
+    }
+
+    /** A crew id a frame names in {@code badge} (TEAM6), or null. */
+    private static String crewId(JsonObject o) {
+        String crew = Protocol.str(o, "badge", "");
+        return crew.isEmpty() || crew.length() > 64 ? null : crew;
+    }
+
+    /** The launcher's crew tag cards (TEAM6, T3): the whole set with {@code all}, else changes; null takes one away. */
+    private void putBadges(JsonObject frame) {
+        JsonObject cards = obj(frame, "cards");
+        if (Protocol.bool(frame, "all", false)) {
+            badges.clear();
+        }
+        if (cards != null) {
+            for (Map.Entry<String, JsonElement> e : cards.entrySet()) {
+                String crew = e.getKey();
+                if (crew.isEmpty() || crew.length() > 64) {
+                    continue;
+                }
+                Badge card = e.getValue().isJsonObject() ? badgeOf(crew, e.getValue().getAsJsonObject()) : null;
+                if (card == null) {
+                    badges.remove(crew);
+                } else {
+                    badges.put(crew, card);
+                }
+            }
+        }
+        badgeRevision++;
+    }
+
+    /** A card as the panel shows it: plain text only, a tag of at most four characters; no tag, no card. */
+    private static Badge badgeOf(String crew, JsonObject o) {
+        String tag = Protocol.plain(Protocol.str(o, "tag", ""), 4);
+        if (tag.isEmpty()) {
+            return null;
+        }
+        String since = Protocol.str(o, "since", "");
+        return new Badge(crew, tag, Protocol.plain(Protocol.str(o, "color", ""), 16),
+            Protocol.plain(Protocol.str(o, "frame", ""), 16), Protocol.plain(Protocol.str(o, "emblem", ""), 16),
+            name(o, "name"), Protocol.plain(Protocol.str(o, "motto", ""), 60),
+            since.matches("\\d{4}-\\d{2}") ? since : "", (int) Math.max(0, Math.min(999, Protocol.num(o, "members", 0))),
+            Protocol.bool(o, "mine", false));
+    }
+
+    /** "Ece ekibe katıldı" (TEAM6 §7, T7): kept per crew conversation, oldest first, at most {@link #MAX_ARRIVALS}. */
+    private void putArrival(JsonObject frame) {
+        String conv = Protocol.str(frame, "conv", "");
+        String id = Protocol.str(frame, "id", "");
+        if (conv.isEmpty() || id.isEmpty() || !"joined".equals(Protocol.str(frame, "kind", ""))) {
+            return;
+        }
+        List<Arrival> list = arrivals.computeIfAbsent(conv, k -> new ArrayList<>());
+        for (Arrival a : list) {
+            if (a.id().equals(id)) {
+                return;
+            }
+        }
+        Arrival arrival = new Arrival(id, name(frame, "name"), Protocol.bool(frame, "mine", false),
+            Protocol.num(frame, "at", 0));
+        int at = list.size();
+        while (at > 0 && list.get(at - 1).at() > arrival.at()) {
+            at--;
+        }
+        list.add(at, arrival);
+        while (list.size() > MAX_ARRIVALS) {
+            list.remove(0);
+        }
+        touch(conv);
     }
 
     private void forEachConversation(JsonObject frame, LinkedHashMap<String, Conversation> into) {
@@ -720,10 +847,12 @@ public final class OverlayState {
         }
     }
 
-    /** CHAT2's fields of a message (absent from an older launcher: the line keeps none). */
+    /** CHAT2's fields of a message (absent from an older launcher: the line keeps none), and TEAM6's tag. */
     private static void putExtras(ChatLine line, JsonObject o) {
         long sid = Protocol.id(o, "sid");
         line.sid = sid > 0 ? sid : line.sid;
+        // The launcher's word on the sender's tag stands each time the message comes (it took it off: none).
+        line.badge = line.mine ? null : crewId(o);
         if (line.deleted) {
             line.sticker = null;
             line.reply = null;

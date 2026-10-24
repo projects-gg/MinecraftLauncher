@@ -48,6 +48,11 @@ public final class JoinScreen extends Screen {
         this.target = target;
     }
 
+    /** The panel this question stands over (it draws it behind). */
+    OverlayScreen panel() {
+        return panel;
+    }
+
     @Override
     protected void init() {
         Font ui = Fonts.ui();
@@ -134,7 +139,7 @@ public final class JoinScreen extends Screen {
             Font display = Fonts.display();
             String host = Texts.fit(display, target.host(), WIDTH - 2 * PAD - 12);
             float hw = display.width(host) + 12;
-            Draw.frame(g, Frames.CHIP_SELECTED, x, y, hw, 14);
+            Draw.frame(g, Frames.ADDRESS, x, y, hw, 14);
             Draw.text(g, display, host, x + 6, Fonts.centeredY(Fonts.Face.DISPLAY, y + 7), Theme.GOLD_200);
             y += 14;
         }

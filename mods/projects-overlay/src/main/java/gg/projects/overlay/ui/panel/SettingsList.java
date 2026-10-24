@@ -525,7 +525,7 @@ public final class SettingsList extends PanelWidget {
             boolean lit = isHovered() && mouseY >= y && mouseY < y + item.height;
             boolean chosen = i == selected && keyboardFocus();
             if (chosen || (lit && enabled && !(item instanceof ResetRow))) {
-                Draw.frame(g, Frames.CHIP_HOVER, x0 - 4, y + 1, w + 8, item.height - 2, chosen ? 0xFFFFFFFF
+                Draw.frame(g, Frames.ROW_HOVER, x0 - 4, y + 1, w + 8, item.height - 2, chosen ? 0xFFFFFFFF
                     : 0x99FFFFFF);
             }
             Draw.pushAlpha(enabled ? 1f : 0.45f);

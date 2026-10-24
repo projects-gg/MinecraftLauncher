@@ -23,6 +23,7 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
+import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
@@ -67,6 +68,8 @@ public final class OverlayClient implements ClientModInitializer {
     private int warmScale = -1;
     private String typedIn;
     private long typedAt;
+    /** The HUD draws inside the area beside the open panel this frame (render thread). */
+    private boolean hudClipped;
 
     @Override
     public void onInitializeClient() {
@@ -81,6 +84,29 @@ public final class OverlayClient implements ClientModInitializer {
         KeyMappingHelper.registerKeyMapping(key);
         toasts = new ToastLayer();
         HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "toasts"), toasts);
+        // While the panel is open the game's HUD draws only beside it: the aim mark and the hotbar showed through the
+        // panel at a high GUI scale (CHAT2-O2 follow-up). Everything else of the HUD stays where it is.
+        HudElementRegistry.addFirst(Identifier.fromNamespaceAndPath(MOD_ID, "panel_clip"), (g, delta) -> {
+            Minecraft mc = Minecraft.getInstance();
+            int right = OverlayScreen.hudRightOf(Compat.screen(mc));
+            if (right > 0) {
+                g.enableScissor(0, 0, right, mc.getWindow().getGuiScaledHeight());
+                hudClipped = true;
+            }
+        });
+        HudElementRegistry.addLast(Identifier.fromNamespaceAndPath(MOD_ID, "panel_clip_end"), (g, delta) -> {
+            if (hudClipped) {
+                g.disableScissor();
+                hudClipped = false;
+            }
+        });
+        // The aim mark means nothing while the pointer is out, and a tag's bubble opens beside the panel, often right
+        // over the middle of the screen where the mark sits (TEAM6-O).
+        HudElementRegistry.replaceElement(VanillaHudElements.CROSSHAIR, crosshair -> (g, delta) -> {
+            if (OverlayScreen.hudRightOf(Compat.screen(Minecraft.getInstance())) == 0) {
+                crosshair.extractRenderState(g, delta);
+            }
+        });
         // The travel toast stays above the saving, connecting and loading screens (and the pause menu).
         ScreenEvents.AFTER_INIT.register((mc, screen, width, height) ->
             ScreenEvents.afterExtract(screen).register((s, g, mouseX, mouseY, delta) -> toasts.extractOverScreen(g)));

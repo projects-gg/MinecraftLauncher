@@ -53,12 +53,31 @@ public enum Frames {
         Theme.withAlpha(0xFFFFFF, 0.2f)).chamfer().fixed(16)),
     BUTTON_GHOST_HOVER(FrameSpec.rounded(3, Theme.withAlpha(0xFFFFFF, 0.07f), 0).chamfer().fixed(16)),
     FOCUS_16(FrameSpec.rounded(3, 0, 0).withRing(Theme.GOLD_300, 1.5f).chamfer().fixed(16)),
-    /** Conversation chips and quick replies. */
-    CHIP(FrameSpec.rounded(4, Theme.withAlpha(0xFFFFFF, 0.055f), Theme.withAlpha(0xFFFFFF, 0.08f)).fixed(14)),
-    CHIP_HOVER(FrameSpec.rounded(4, Theme.withAlpha(0xFFFFFF, 0.10f), Theme.withAlpha(0xFFFFFF, 0.14f)).fixed(14)),
-    CHIP_SELECTED(FrameSpec.rounded(4, Theme.withAlpha(Theme.OBSIDIAN_700, 0.95f), Theme.withAlpha(Theme.GOLD_400, 0.4f))
+    /**
+     * Conversation chips, quick replies, "Katıl", "Yeni mesajlar" and the small text actions: actions, so chamfered
+     * like every chip and button (the two-shape rule; CHAT2-O2's second look found them rounded).
+     */
+    CHIP(FrameSpec.rounded(3, Theme.withAlpha(0xFFFFFF, 0.055f), Theme.withAlpha(0xFFFFFF, 0.08f)).chamfer().fixed(14)),
+    CHIP_HOVER(FrameSpec.rounded(3, Theme.withAlpha(0xFFFFFF, 0.10f), Theme.withAlpha(0xFFFFFF, 0.14f)).chamfer()
         .fixed(14)),
-    FOCUS_14(FrameSpec.rounded(4, 0, 0).withRing(Theme.GOLD_300, 1.5f).fixed(14)),
+    CHIP_SELECTED(FrameSpec.rounded(3, Theme.withAlpha(Theme.OBSIDIAN_700, 0.95f), Theme.withAlpha(Theme.GOLD_400, 0.4f))
+        .chamfer().fixed(14)),
+    FOCUS_14(FrameSpec.rounded(3, 0, 0).withRing(Theme.GOLD_300, 1.5f).chamfer().fixed(14)),
+    /** A row under the pointer or picked with the keys (friends, settings): a container, so rounded, at any height. */
+    ROW_HOVER(FrameSpec.rounded(4, Theme.withAlpha(0xFFFFFF, 0.10f), Theme.withAlpha(0xFFFFFF, 0.14f))),
+    /** The ring around a row picked with the keys. */
+    FOCUS_ROW(FrameSpec.rounded(4, 0, 0).withRing(Theme.GOLD_300, 1.5f)),
+    /** An address shown in a question (a server, a link): read, not pressed, so rounded. */
+    ADDRESS(FrameSpec.rounded(4, Theme.withAlpha(Theme.OBSIDIAN_700, 0.95f), Theme.withAlpha(Theme.GOLD_400, 0.4f))
+        .fixed(14)),
+    /**
+     * A crew tag's chip (TEAM6): white, tinted at draw time with the crew colour at 24 % (one frame for every colour),
+     * chamfered like the launcher's {@code TeamTag}.
+     */
+    TAG(FrameSpec.rounded(2, 0xFFFFFFFF, 0).chamfer()),
+    /** The chip at its two heights, baked whole down so it draws in three slices (a toast's budget is tight). */
+    TAG_9(FrameSpec.rounded(2, 0xFFFFFFFF, 0).chamfer().fixed(9)),
+    TAG_8(FrameSpec.rounded(2, 0xFFFFFFFF, 0).chamfer().fixed(8)),
     /** The send button inside the message field: rounded (the owner's wish for the chat), gold once ready. */
     SEND_READY(FrameSpec.rounded(4, 0, Theme.GOLD_600)
         .withGradient(Theme.mix(Theme.GOLD_300, Theme.GOLD_400, 0.45f), Theme.GOLD_600).fixed(18)),

@@ -2,6 +2,7 @@ package gg.projects.overlay.ui.panel;
 
 import com.mojang.blaze3d.platform.cursor.CursorTypes;
 import gg.projects.overlay.motion.Ease;
+import gg.projects.overlay.motion.Spring;
 import gg.projects.overlay.motion.Tween;
 import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.stickers.StickerSet;
@@ -10,6 +11,7 @@ import gg.projects.overlay.ui.Texts;
 import gg.projects.overlay.ui.Theme;
 import gg.projects.overlay.ui.draw.Draw;
 import gg.projects.overlay.ui.draw.Frames;
+import gg.projects.overlay.ui.draw.ShapeSet;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
@@ -26,7 +28,9 @@ import org.joml.Matrix3x2fStack;
  * The sticker picker over the message field (CHAT2 §8.5): the recently sent ones on top, then the set's four
  * themes, eight to a row; the name of the one under the pointer (or picked with the arrows) at the bottom.
  * A press or Enter sends it at once and the picker closes (as a reply when one is being written). It opens
- * from the sticker button with a short rise; nothing about it runs while it is closed.
+ * from the sticker button with a short rise; nothing about it runs while it is closed. Given less height than its
+ * whole grid (a short GUI with a call card above), the grid scrolls under its name line: the wheel, and the arrows
+ * bring the picked one into view (CHAT2-O2 follow-up).
  */
 public final class StickerPicker extends PanelWidget {
     private static final int PAD = 5;
@@ -38,6 +42,8 @@ public final class StickerPicker extends PanelWidget {
     private final List<StickerSet.Sticker> recent = new ArrayList<>(8);
     private final List<StickerSet.Sticker> all = new ArrayList<>(32);
     private final Tween lift = new Tween(1f);
+    private final Spring scroll = Spring.snappy(0f);
+    private long lastFrame;
     private int columns = 8;
     private int cell = 26;
     private int art = 22;
@@ -81,6 +87,8 @@ public final class StickerPicker extends PanelWidget {
         focused = 0;
         namedIndex = -2;
         openedAt = now;
+        scroll.snap(0f);
+        lastFrame = 0;
         visible = true;
     }
 
@@ -91,6 +99,11 @@ public final class StickerPicker extends PanelWidget {
 
     public boolean isOpen() {
         return visible;
+    }
+
+    /** How far it has faded in (what it covers steps aside as much). */
+    public float opacity(long now) {
+        return visible ? Ease.OUT.at(Math.min(1f, (now - openedAt) / (float) OPEN_MS)) : 0f;
     }
 
     /** The picker's height at {@code width}, with or without the recent row. */
@@ -137,16 +150,69 @@ public final class StickerPicker extends PanelWidget {
         return getX() + PAD + columnOf(index) * cell;
     }
 
-    private float cellY(int index) {
+    /** The cell's top in the grid's own content (before scrolling). */
+    private float contentY(int index) {
         int row = rowOf(index);
-        float y = getY() + PAD + row * cell;
+        float y = row * cell;
         if (!recent.isEmpty() && row > 0) {
             y += SECTION_GAP;
         }
         return y;
     }
 
+    private float cellY(int index) {
+        return gridTop() + contentY(index) - scroll.value();
+    }
+
+    /** The grid's box: under the top padding, over the name line. */
+    private float gridTop() {
+        return getY() + PAD;
+    }
+
+    private float gridBottom() {
+        return getY() + getHeight() - PAD - 9 - 4;
+    }
+
+    private float contentHeight() {
+        int rows = Math.max(1, (all.size() + columns - 1) / columns);
+        return (recent.isEmpty() ? 0 : cell + SECTION_GAP) + rows * cell;
+    }
+
+    private float maxScroll() {
+        return Math.max(0f, contentHeight() - (gridBottom() - gridTop()));
+    }
+
+    /** Brings the picked one into view (the arrows; no glide, the keys repeat). */
+    private void reveal(int index) {
+        float top = contentY(index);
+        float view = gridBottom() - gridTop();
+        float target = scroll.target();
+        if (top < target) {
+            target = top;
+        } else if (top + cell > target + view) {
+            target = top + cell - view;
+        }
+        scroll.snap(Math.max(0f, Math.min(maxScroll(), target)));
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (!isMouseOver(mouseX, mouseY) || maxScroll() <= 0f) {
+            return false;
+        }
+        float target = Math.max(0f, Math.min(maxScroll(), scroll.target() - (float) scrollY * cell));
+        if (reducedMotion) {
+            scroll.snap(target);
+        } else {
+            scroll.setTarget(target);
+        }
+        return true;
+    }
+
     private int indexAt(double mx, double my) {
+        if (my < gridTop() || my >= gridBottom()) {
+            return -1;
+        }
         for (int i = 0; i < count(); i++) {
             float x = cellX(i);
             float y = cellY(i);
@@ -201,6 +267,7 @@ public final class StickerPicker extends PanelWidget {
         }
         PanelInput.usedKeyboard();
         focused = next;
+        reveal(focused);
         return true;
     }
 
@@ -236,6 +303,12 @@ public final class StickerPicker extends PanelWidget {
             return;
         }
         layoutCells();
+        float dt = lastFrame == 0 ? 0f : Math.min(0.05f, (now - lastFrame) / 1000f);
+        lastFrame = now;
+        scroll.step(dt);
+        if (scroll.value() > maxScroll()) {
+            scroll.snap(maxScroll());
+        }
         hovered = isHovered() ? indexAt(mouseX, mouseY) : -1;
         if (hovered != lastHovered) {
             lift.snap(1f);
@@ -255,14 +328,23 @@ public final class StickerPicker extends PanelWidget {
         int w = getWidth();
         int h = getHeight();
         Draw.frame(g, Frames.POPOVER, x0, y0, w, h);
+        float gridTop = gridTop();
+        float gridBottom = gridBottom();
+        boolean scrolls = maxScroll() > 0f;
+        if (scrolls) {
+            g.enableScissor(x0, Math.round(gridTop) - 1, x0 + w, Math.round(gridBottom) + 1);
+        }
         if (!recent.isEmpty()) {
-            float line = y0 + PAD + cell + SECTION_GAP / 2f;
+            float line = gridTop + cell + SECTION_GAP / 2f - scroll.value();
             Draw.hairline(g, x0 + PAD, x0 + w - PAD, line, Theme.withAlpha(0xFFFFFF, 0.07f));
         }
         int shownIndex = hovered >= 0 ? hovered : keyboardFocus() ? focused : -1;
         for (int i = 0; i < count(); i++) {
             float cx = cellX(i);
             float cy = cellY(i);
+            if (cy + cell < gridTop - 1 || cy > gridBottom + 1) {
+                continue;
+            }
             if (i == hovered) {
                 Draw.frame(g, Frames.CELL_HOVER, cx, cy, cell, cell);
                 g.requestCursor(CursorTypes.POINTING_HAND);
@@ -287,6 +369,23 @@ public final class StickerPicker extends PanelWidget {
             }
             if (scale != 1f) {
                 m.popMatrix();
+            }
+        }
+        if (scrolls) {
+            g.disableScissor();
+            // The grid's edges fade into the picker while there is more beyond them.
+            float above = Math.min(1f, scroll.value() / ShapeSet.LIST_FADE);
+            float below = Math.min(1f, (maxScroll() - scroll.value()) / ShapeSet.LIST_FADE);
+            if (above > 0.01f) {
+                Draw.pushAlpha(above);
+                Draw.column(g, ShapeSet.POPOVER_FADE_TOP, x0 + 1, gridTop - 1, w - 2, ShapeSet.LIST_FADE);
+                Draw.popAlpha();
+            }
+            if (below > 0.01f) {
+                Draw.pushAlpha(below);
+                Draw.column(g, ShapeSet.POPOVER_FADE_BOTTOM, x0 + 1, gridBottom + 1 - ShapeSet.LIST_FADE, w - 2,
+                    ShapeSet.LIST_FADE);
+                Draw.popAlpha();
             }
         }
         if (shownIndex != namedIndex) {

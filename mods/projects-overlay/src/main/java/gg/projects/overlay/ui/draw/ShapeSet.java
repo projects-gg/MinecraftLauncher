@@ -17,6 +17,9 @@ public final class ShapeSet {
     public static final String FADE_TOP = "strip:fade_top";
     public static final String FADE_BOTTOM = "strip:fade_bottom";
     public static final int LIST_FADE = 8;
+    /** The same fades into a popover's surface (the sticker picker's grid when it scrolls). */
+    public static final String POPOVER_FADE_TOP = "strip:popover_fade_top";
+    public static final String POPOVER_FADE_BOTTOM = "strip:popover_fade_bottom";
     /** The panel's surface, which the row fades blend into. */
     public static final int PANEL_FILL = Theme.withAlpha(Theme.OBSIDIAN_900, Frames.Alphas.PANEL);
 
@@ -42,7 +45,13 @@ public final class ShapeSet {
     }
 
     public static AtlasPacker.Atlas bake(int k, Map<Icon, String> paths) {
+        return bake(k, paths, null);
+    }
+
+    /** Everything, with the crews' marks: their frames always, their emblems when {@code emblems} has them. */
+    public static AtlasPacker.Atlas bake(int k, Map<Icon, String> paths, Map<String, String> emblems) {
         AtlasPacker packer = new AtlasPacker();
+        Emblems.bake(packer, k, emblems);
         for (Frames f : Frames.values()) {
             packer.add(f.key(), ShapeBaker.frame(f.spec, k));
         }
@@ -54,6 +63,8 @@ public final class ShapeSet {
         packer.add(FADE_RIGHT, strip(FADE_WIDTH * k, k, PANEL_FILL, 0f, 1f, 1f));
         packer.add(FADE_TOP, column(LIST_FADE * k, k, PANEL_FILL, true, 1.6f));
         packer.add(FADE_BOTTOM, column(LIST_FADE * k, k, PANEL_FILL, false, 1.6f));
+        packer.add(POPOVER_FADE_TOP, column(LIST_FADE * k, k, Frames.POPOVER.spec.fillTop(), true, 1.6f));
+        packer.add(POPOVER_FADE_BOTTOM, column(LIST_FADE * k, k, Frames.POPOVER.spec.fillTop(), false, 1.6f));
         if (paths != null) {
             for (Map.Entry<Icon, String> e : paths.entrySet()) {
                 for (int size : Icon.SIZES) {

@@ -21,6 +21,9 @@ public final class Shapes {
 
     private static Map<Icon, String> paths;
     private static boolean pathsFailed;
+    /** The crews' emblems (TEAM6): read once with the icons; without them a mark draws its frame only. */
+    private static Map<String, String> emblems;
+    private static boolean emblemsFailed;
     private static AtlasPacker.Atlas atlas;
     private static Identifier texture;
     private static int scale = -1;
@@ -83,11 +86,20 @@ public final class Shapes {
                 LOG.warn("Overlay icons unavailable: {}", e.toString());
             }
         }
+        if (emblems == null && !emblemsFailed) {
+            try {
+                emblems = Emblems.loadPaths();
+            } catch (IOException | RuntimeException e) {
+                emblemsFailed = true;
+                LOG.warn("Crew emblems unavailable: {}", e.toString());
+            }
+        }
         Map<Icon, String> icons = paths;
+        Map<String, String> marks = emblems;
         bakingScale = k;
         baking = CompletableFuture.supplyAsync(() -> {
             long started = System.nanoTime();
-            AtlasPacker.Atlas baked = ShapeSet.bake(k, icons);
+            AtlasPacker.Atlas baked = ShapeSet.bake(k, icons, marks);
             LOG.debug("Baked overlay shapes for GUI scale {} in {} ms ({}x{})", k,
                 (System.nanoTime() - started) / 1_000_000, baked.width(), baked.height());
             return baked;

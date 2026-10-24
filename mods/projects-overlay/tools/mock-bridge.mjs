@@ -2,7 +2,7 @@
 // It listens on 127.0.0.1 only and never connects anywhere.
 //
 //   node tools/mock-bridge.mjs [--port 0] [--token <t>] [--info <file>] [--log <file>] [--auto-demo]
-//                              [--reduced-motion] [--signed-out] [--quiet] [--chat2]
+//                              [--reduced-motion] [--signed-out] [--quiet] [--chat2] [--team6]
 //
 // --info writes {"port","token"} once listening, for the script that starts the game.
 // --chat2 plays a launcher with CHAT2's extras (docs/tasks/ovl2-protocol.md, CHAT2-O): message ids (sid),
@@ -13,6 +13,9 @@
 // docs/tasks/ovl2-protocol.md (L1-L16, and "connect" with its "connect-result").
 // {"t":"dev","cmd":"connect","host":"localhost","port":25599} makes the mock send the launcher's "Bağlan".
 // Each mod frame is written to --log, so a run's connect-result answers can be checked afterwards.
+// --team6 plays crew tags (docs/tasks/ovl2-protocol.md, TEAM6-O): "tags" in the welcome, the cards ("badges")
+// before the snapshot, friends', crew messages' and toasts' "badge", the crews' "ekibe katıldı" lines ("note");
+// dev commands "joined", "tag-change", "hide-crew", "tags-off" and "tags-on" play the live changes.
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, writeFileSync } from "node:fs";
@@ -219,6 +222,85 @@ if (args.chat2) {
   ];
 }
 
+// TEAM6: the cards of the tags friends and crewmates wear, who wears which, and the crews' join lines.
+const CARDS = {
+  "t-gk": {
+    tag: "GK",
+    color: "navy",
+    frame: "shield",
+    emblem: "moon",
+    name: "Gece Kartalları",
+    motto: "Gece bizimdir",
+    since: "2026-09",
+    members: 12,
+  },
+  "t-gece": {
+    tag: "GKŞ",
+    color: "gold",
+    frame: "cut",
+    emblem: "flame",
+    name: "Gece Kuşları",
+    motto: "Akşam 9'da Bedwars, sesli gelin",
+    since: "2026-03",
+    members: 8,
+    mine: true,
+  },
+  "t-akn": {
+    tag: "AKN",
+    color: "crimson",
+    frame: "banner",
+    emblem: "sword",
+    name: "Akıncılar",
+    since: "2025-11",
+    members: 30,
+    mine: true,
+  },
+};
+const WEARS = {
+  "f-ayse": "t-gk",
+  "f-can": "t-gk",
+  "f-mert": "t-gece",
+  "f-deniz": "t-gece",
+  "f-elif": "t-akn",
+};
+const NAMES = { Ayşe: "f-ayse", Can: "f-can", Mert: "f-mert", Deniz: "f-deniz", Elif: "f-elif" };
+const NOTES = [];
+let tagsOn = Boolean(args.team6);
+const wornBy = (name) => (tagsOn ? WEARS[NAMES[name]] : undefined);
+if (args.team6) {
+  for (const friend of state.friends) {
+    friend.badge = WEARS[friend.id];
+  }
+  for (const msg of state.history["crew:gece"]) {
+    if (!msg.mine && WEARS[NAMES[msg.from]]) {
+      msg.badge = WEARS[NAMES[msg.from]];
+    }
+  }
+  // Ece came into the crew between Mert's and Deniz's messages (the player's own line comes on "joined").
+  NOTES.push({ conv: "crew:gece", id: "j:ece", kind: "joined", name: "Ece", at: minutes(85) });
+}
+
+/** A conversation's messages as the launcher sends them now: crewmates' tags as they wear them today. */
+function historyOf(convId) {
+  return (state.history[convId] ?? []).map((m) => {
+    if (!args.team6 || !convId.startsWith("crew:")) {
+      return m;
+    }
+    const { badge, ...rest } = m;
+    const worn = !m.mine ? wornBy(m.from) : undefined;
+    return worn ? { ...rest, badge: worn } : rest;
+  });
+}
+
+/** What the friends' rows say now: their tags while tags are on. */
+function friendRows() {
+  return state.friends.map((f) => ({ ...f, badge: tagsOn ? f.badge : undefined }));
+}
+
+function cardsFrame() {
+  return { t: "badges", all: true, cards: tagsOn ? CARDS : {} };
+}
+
 function parseArgs(list) {
   const out = {};
   for (let i = 0; i < list.length; i++) {
@@ -332,15 +414,23 @@ function welcome(socket) {
     me: state.me,
     dnd: Boolean(args.dnd),
     reducedMotion: Boolean(args.reducedMotion),
-    features: args.signedOut ? [] : ["friends", "chat", "calls", ...(args.chat2 ? EXTRAS : [])],
+    features: args.signedOut
+      ? []
+      : ["friends", "chat", "calls", ...(args.chat2 ? EXTRAS : []), ...(tagsOn ? ["tags"] : [])],
   });
+  if (args.team6) {
+    send(socket, cardsFrame());
+  }
   send(socket, {
     t: "snapshot",
-    friends: args.signedOut ? [] : state.friends,
+    friends: args.signedOut ? [] : friendRows(),
     convs: args.signedOut ? [] : state.convs,
     calls: state.calls,
     dnd: Boolean(args.dnd),
   });
+  for (const note of NOTES) {
+    send(socket, { t: "note", ...note });
+  }
 }
 
 function startSession(socket) {
@@ -363,6 +453,9 @@ function conv(id) {
 function incoming(socket, convId, from, text, sticker) {
   const c = conv(convId);
   const msg = { t: "msg", conv: convId, id: `m${nextId++}`, from, text, at: now(), mine: false };
+  if (convId.startsWith("crew:") && wornBy(from)) {
+    msg.badge = wornBy(from);
+  }
   if (args.chat2) {
     msg.sid = newSid();
     if (sticker) {
@@ -380,6 +473,9 @@ function incoming(socket, convId, from, text, sticker) {
   const toast = { t: "toast", kind: "message", key: convId, title: from, body, conv: convId };
   if (sticker) {
     toast.sticker = sticker;
+  }
+  if (wornBy(from)) {
+    toast.badge = wornBy(from);
   }
   if (c?.kind === "crew") {
     toast.crew = c.title;
@@ -438,7 +534,7 @@ function stack(socket) {
 function onFrame(socket, frame) {
   switch (frame.t) {
     case "open-conv": {
-      const msgs = state.history[frame.conv] ?? [];
+      const msgs = historyOf(frame.conv);
       send(socket, { t: "history", conv: frame.conv, msgs });
       const c = conv(frame.conv);
       if (c && c.unread > 0) {
@@ -614,6 +710,67 @@ function onDev(socket, frame) {
       break;
     case "more":
       incoming(socket, "dm:ayse", "Ayşe", "Hâlâ orada mısın?");
+      break;
+    case "call":
+      // A crew call (its card in the panel, its toast).
+      startCall(socket, "c1", "Gece Kuşları", "Mert");
+      break;
+    case "crew-in":
+      // TEAM6: a crewmate writes in crew chat (the toast and the message carry their tag).
+      incoming(socket, frame.conv ?? "crew:gece", frame.from ?? "Mert", frame.text ?? "Ben hazırım, kim geliyor?");
+      break;
+    case "joined": {
+      // TEAM6 §7: someone comes into the crew while the launcher runs.
+      const note = {
+        conv: frame.conv ?? "crew:gece",
+        id: `j:${frame.name ?? "Kaan"}:${now()}`,
+        kind: "joined",
+        name: frame.name ?? "Kaan",
+        at: now(),
+      };
+      if (frame.mine) {
+        note.mine = true;
+      }
+      NOTES.push(note);
+      send(socket, { t: "note", ...note });
+      break;
+    }
+    case "tag-change": {
+      // TEAM6: Mert wears another crew's tag; his row changes and the open crew chat comes again.
+      const mert = state.friends.find((f) => f.id === "f-mert");
+      mert.badge = "t-gk";
+      WEARS["f-mert"] = "t-gk";
+      for (const msg of state.history["crew:gece"]) {
+        if (msg.from === "Mert") {
+          msg.badge = "t-gk";
+        }
+      }
+      send(socket, { t: "friend", ...mert });
+      send(socket, { t: "history", conv: "crew:gece", msgs: historyOf("crew:gece") });
+      break;
+    }
+    case "hide-crew": {
+      // TEAM6 §5: Gece Kartalları' leader hides the crew: its card goes, its wearers' rows lose it.
+      delete CARDS["t-gk"];
+      send(socket, { t: "badges", all: false, cards: { "t-gk": null } });
+      for (const friend of state.friends) {
+        if (friend.badge === "t-gk") {
+          delete friend.badge;
+          send(socket, { t: "friend", ...friend });
+        }
+      }
+      for (const [id, crew] of Object.entries(WEARS)) {
+        if (crew === "t-gk") {
+          delete WEARS[id];
+        }
+      }
+      break;
+    }
+    case "tags-off":
+    case "tags-on":
+      // Studio's switch: a new greeting without (or with) "tags".
+      tagsOn = frame.cmd === "tags-on";
+      welcome(socket);
       break;
     case "sticker-in":
       // CHAT2: a sticker from a friend (a toast with its picture; in the open conversation it arrives moving).

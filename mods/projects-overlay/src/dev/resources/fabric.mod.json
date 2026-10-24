@@ -10,7 +10,8 @@
     "client": [
       "gg.projects.overlay.dev.ScenarioDriver",
       "gg.projects.overlay.dev.ConnectScenario",
-      "gg.projects.overlay.dev.Chat2Scenario"
+      "gg.projects.overlay.dev.Chat2Scenario",
+      "gg.projects.overlay.dev.Team6Scenario"
     ]
   },
   "mixins": [
