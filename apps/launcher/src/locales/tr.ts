@@ -36,6 +36,7 @@ import { trSafety } from "./tr-safety";
 import { trShortcuts } from "./tr-shortcuts";
 import { trShotCopy } from "./tr-shot-copy";
 import { trSmall7 } from "./tr-small7";
+import { trSmall9 } from "./tr-small9";
 import { trSocial } from "./tr-social";
 import { trTeam6 } from "./tr-team6";
 import { trTeams } from "./tr-teams";
@@ -73,6 +74,7 @@ export const tr = {
   homeLinks: trHomeLinks,
   tray: trTray,
   small7: trSmall7,
+  small9: trSmall9,
   crews: trCrews,
   chat: trChat,
   reports: trReports,
