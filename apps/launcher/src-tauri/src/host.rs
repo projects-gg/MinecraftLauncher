@@ -557,9 +557,11 @@ impl Launcher for AppLauncher {
                     progress(u8::try_from(percent.min(100)).unwrap_or(100));
                 }
             });
-            match pl_mc::gamefiles::backup_world(
+            // Marked, so the Worlds tab lists it as "Arkadaşlarına açılmadan önce".
+            match pl_mc::gamefiles::backup_world_marked(
                 &world,
                 &dest,
+                Some(pl_mc::gamefiles::BackupReason::BeforeSharing),
                 pl_net::CancellationToken::new(),
                 Some(report),
             )

@@ -1,0 +1,6 @@
+// SMALL9: HOST1's small launcher leftovers.
+export const enSmall9 = {
+  backups: {
+    beforeSharing: "Before opening to friends",
+  },
+};
