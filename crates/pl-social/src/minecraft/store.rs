@@ -316,10 +316,13 @@ impl SkinStore {
                         .as_deref()
                         .is_some_and(|name| name.eq_ignore_ascii_case(account_name))
             });
+            // A copy used after `now` was read is as fresh as can be: the first read of a run
+            // prunes on a blocking thread while the panel reads and writes the copies. That
+            // later time made `duration_since` fail, which counted as stale and deleted the copy.
             let stale = fs::metadata(path.join(STATE_FILE))
                 .and_then(|meta| meta.modified())
                 .ok()
-                .and_then(|modified| now.duration_since(modified).ok())
+                .map(|modified| now.duration_since(modified).unwrap_or_default())
                 .is_none_or(|age| age > KEPT_UNUSED);
             if !known || stale {
                 let _ = fs::remove_dir_all(&path);
@@ -498,5 +501,21 @@ mod tests {
                 .set_pending("..", "Ahmet", "j1", &KeptSource::Default, None)
                 .is_err()
         );
+    }
+
+    /// A prune that read the clock before the panel used a copy (its time is later than the
+    /// prune's `now`) keeps that copy, and with it the skin "Geri al" puts back.
+    #[test]
+    fn a_copy_used_while_pruning_stays() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = SkinStore::new(dir.path());
+        store
+            .set_pending("acc1", "Ahmet", "j1", &png_source('a'), Some(&png(1)))
+            .unwrap();
+        store.applied("acc1", "Ahmet", "j1", None).unwrap();
+        let clock_read_before = SystemTime::now() - Duration::from_secs(5);
+        store.prune(&[("acc1".into(), "Ahmet".into())], clock_read_before);
+        assert!(store.read("acc1", "Ahmet").current.is_some());
+        assert_eq!(store.picture("acc1", Slot::Current), Some(png(1)));
     }
 }

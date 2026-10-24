@@ -35,6 +35,10 @@ const JOB_C: &str = "jCCCCCCCCCCCCCCCCCCCCCC";
 const TEXTURE: &str = "1a4af718455d4aab528e7a61f86fa25e6a369d1768dcb13f7df319a713eb810b";
 const DREAM_ID: &str = "ec70bcaf702f4bb8b48d276fa52a780c";
 
+/// How long a test waits for something that does come (signing in, a change told). Only an upper
+/// bound: a busy machine (the whole workspace testing at once) must not fail a test for being slow.
+const PATIENCE: Duration = Duration::from_secs(30);
+
 // --- pictures --------------------------------------------------------------------------------
 
 fn crc32(bytes: &[u8]) -> u32 {
@@ -293,7 +297,7 @@ impl Harness {
             sink,
         );
         social.configure(Some(Url::parse(&server.base()).unwrap()));
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let deadline = std::time::Instant::now() + PATIENCE;
         while !(social.view().auth == AuthPhase::SignedIn && social.view().loaded) {
             assert!(std::time::Instant::now() < deadline, "never signed in");
             tokio::time::sleep(Duration::from_millis(20)).await;
@@ -364,7 +368,7 @@ impl Harness {
         what: &str,
         found: impl Fn(&ProjectsSkinChange) -> bool,
     ) -> ProjectsSkinChange {
-        let deadline = std::time::Instant::now() + Duration::from_secs(8);
+        let deadline = std::time::Instant::now() + PATIENCE;
         loop {
             if let Some(change) = self.changes().into_iter().find(|change| found(change)) {
                 return change;
