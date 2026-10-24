@@ -1,14 +1,20 @@
 package gg.projects.overlay.dev;
 
 import com.google.gson.GsonBuilder;
+import com.mojang.blaze3d.platform.InputConstants;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import gg.projects.overlay.OverlayClient;
 import gg.projects.overlay.Perf;
 import gg.projects.overlay.bridge.BridgeClient;
 import gg.projects.overlay.bridge.Protocol;
 import gg.projects.overlay.compat.Compat;
+import gg.projects.overlay.compat.HostCompat;
+import gg.projects.overlay.host.HostController;
 import gg.projects.overlay.host.HostGate;
+import gg.projects.overlay.host.HostSession;
+import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.toast.ToastLayer;
 import gg.projects.overlay.ui.panel.ActionButton;
 import gg.projects.overlay.ui.panel.ConfirmScreen;
@@ -26,6 +32,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.function.Function;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -38,11 +45,14 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.client.server.IntegratedServer;
+import net.minecraft.core.UUIDUtil;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.LevelSettings;
 import net.minecraft.world.level.WorldDataConfiguration;
 import net.minecraft.world.level.levelgen.WorldOptions;
+import net.minecraft.world.level.storage.LevelResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,7 +63,12 @@ import org.slf4j.LoggerFactory;
  * session, no LAN announcement, nothing listening on another address), the mock launcher's mirror and its probes of
  * the gate, guests in the page, the remove question, the pause menu while hosting, the panel's card, the host's notes,
  * "Paylaşımı kapat", a friend's world invite (toast, card, question), a failed opening, English, and the travel toast
- * of a friend's world. Results and screenshots go to {@code -Dprojects.overlay.dev.out}.
+ * of a friend's world. With {@code -Dprojects.overlay.dev.guest=<name>} (and the mock's {@code --relay-as <name>}), a
+ * real client joins as that guest first: it must be in the world and in the page, bound in the world's guest file,
+ * in the publish's game mode and without commands; then it is removed and its retry must stay out. With a second
+ * name ({@code <name>,<name2>}, the runner's guest plan to match) another friend's try with the first name is
+ * refused, sharing opens again, the second guest joins and the host leaves the world with it inside (instead of the
+ * travel toast). Results and screenshots go to {@code -Dprojects.overlay.dev.out}.
  */
 public final class HostScenario implements ClientModInitializer {
     private static final Logger LOG = LoggerFactory.getLogger("HOST1-M scenario");
@@ -61,7 +76,7 @@ public final class HostScenario implements ClientModInitializer {
     private static final double STEP_TIMEOUT_S = 25;
 
     /** One step: it runs once {@code after} seconds passed since the last, again each tick until it says it is done. */
-    private record Act(String name, double after, Function<Minecraft, Boolean> run) {
+    private record Act(String name, double after, double timeout, Function<Minecraft, Boolean> run) {
     }
 
     private final List<Act> acts = new ArrayList<>();
@@ -77,6 +92,9 @@ public final class HostScenario implements ClientModInitializer {
     private Screen pause;
     private Object reload;
     private boolean done;
+    private CompletableFuture<JsonObject> serverAsk;
+    private String guestId = "";
+    private long leaveStarted;
 
     @Override
     public void onInitializeClient() {
@@ -164,8 +182,15 @@ public final class HostScenario implements ClientModInitializer {
             results.add("panelWorldOpen", perf(Perf.drain()));
             return true;
         });
+        String[] guests = System.getProperty("projects.overlay.dev.guest", "").split(",");
+        String guest = guests[0].trim();
+        String guest2 = guests.length > 1 ? guests[1].trim() : "";
+        if (!guest.isBlank()) {
+            guestSteps(guest, !guest2.isBlank());
+        }
         act("mirror", 3, mc -> {
-            dev("host-mirror", "guests", "[{\"guest\":\"g1\",\"friend\":\"f-ayse\",\"label\":\"Ayşe\",\"name\":\"Notch\","
+            dev("host-mirror", "guests",
+                "[{\"guest\":\"g1\",\"friend\":\"f-ayse\",\"label\":\"Ayşe\",\"name\":\"Notch\","
                 + "\"state\":\"in\"},{\"guest\":\"g2\",\"friend\":\"f-mert\",\"label\":\"Mert\",\"state\":\"joining\"},"
                 + "{\"guest\":\"\",\"friend\":\"f-deniz\",\"label\":\"Deniz\",\"state\":\"invited\"}]");
             return true;
@@ -343,22 +368,321 @@ public final class HostScenario implements ClientModInitializer {
             panel(mc).close();
             return true;
         });
-        act("travel", 0.6, mc -> {
-            dev("world-connect");
-            return true;
-        });
-        act("shot-travel", 0.35, mc -> {
-            shot(mc, "travel");
-            return true;
-        });
+        if (guest2.isBlank()) {
+            act("travel", 0.6, mc -> {
+                dev("world-connect");
+                return true;
+            });
+            act("shot-travel", 0.35, mc -> {
+                shot(mc, "travel");
+                return true;
+            });
+        } else {
+            leaveSteps(guest2);
+        }
         act("quit", 4, mc -> {
             finish(mc);
             return true;
         });
     }
 
+    /**
+     * A real client (the AFK client, offline, as {@code name}) comes in through the mock launcher's relay: it must be
+     * in the world and in the page, bound in the world's guest file, in the publish's game mode, without commands. Then
+     * the host removes it; the client's retry (the runner starts it again) must stay out.
+     */
+    private void guestSteps(String name, boolean takenTry) {
+        act("guest-in", 0, 150, mc -> {
+            JsonObject facts = askServer(mc, server -> guestFacts(server, name));
+            if (facts == null || !facts.get("in").getAsBoolean() || !mirrorShows(name)) {
+                return false;
+            }
+            results.addProperty("guestInSeconds", round(secs()));
+            return true;
+        });
+        act("guest-facts", 1, mc -> {
+            JsonObject facts = askServer(mc, server -> guestFacts(server, name));
+            if (facts == null) {
+                return false;
+            }
+            results.add("guest", facts);
+            guestId = facts.has("guestId") ? facts.get("guestId").getAsString() : "";
+            return true;
+        });
+        act("shot-guest-in", 0.3, mc -> {
+            results.addProperty("pageWithGuest", panel(mc) == null ? "none" : panel(mc).hostMode());
+            shot(mc, "real-guest-in");
+            return true;
+        });
+        act("guest-remove-ask", 0.3, mc -> {
+            float[] row = panel(mc) == null ? null : panel(mc).hostRow("f-ayse");
+            if (row == null) {
+                fail("no row for the real guest");
+                return true;
+            }
+            return clickAt(mc, Math.round(row[2]), row[1]);
+        });
+        act("shot-guest-remove-ask", 0.5, mc -> {
+            results.addProperty("guestRemoveAsked", Compat.screen(mc) instanceof ConfirmScreen);
+            shot(mc, "real-guest-remove-ask");
+            if (Compat.screen(mc) instanceof ConfirmScreen ask) {
+                ask.confirm();
+            }
+            return true;
+        });
+        act("guest-gone", 0, 20, mc -> {
+            JsonObject facts = askServer(mc, server -> guestFacts(server, name));
+            if (facts == null || facts.get("in").getAsBoolean()) {
+                return false;
+            }
+            results.addProperty("guestGoneSeconds", round(secs()));
+            HostSession s = HostGate.session();
+            results.addProperty("guestRemovedInSession", s != null && !guestId.isEmpty() && s.removed(guestId));
+            return true;
+        });
+        act("shot-guest-removed", 0.8, mc -> {
+            shot(mc, "real-guest-removed");
+            return true;
+        });
+        act("guest-retry", 0, 90, mc -> Files.exists(out.resolve("guest-done-2")));
+        act("guest-after-retry", 0.5, mc -> {
+            JsonObject facts = askServer(mc, server -> guestFacts(server, name));
+            if (facts == null) {
+                return false;
+            }
+            results.addProperty("guestInAfterRetry", facts.get("in").getAsBoolean());
+            return true;
+        });
+        if (takenTry) {
+            // Another friend's guest asks for the same name: bound to the first friend in this world.
+            act("guest-taken", 0, 90, mc -> Files.exists(out.resolve("guest-done-3")));
+            act("guest-after-taken", 0.3, mc -> {
+                JsonObject facts = askServer(mc, server -> guestFacts(server, name));
+                if (facts == null) {
+                    return false;
+                }
+                results.addProperty("guestInAfterTaken", facts.get("in").getAsBoolean());
+                return true;
+            });
+        }
+    }
+
+    /**
+     * The friend menu's way (owner, 24 Oct: an invite from the overlay in a singleplayer world opens it by itself):
+     * from the friends page an invite to Deniz is refused first (the card says why), then opens the world; one more
+     * invite goes while it is open. Then the second guest comes in through its own relay, and the host leaves the world
+     * with it inside: the world must close without waiting, the guest must read why (checked in the client's log).
+     */
+    private void leaveSteps(String name) {
+        act("refuse-next", 0.6, mc -> {
+            dev("host-refuse", "error", "limit");
+            overlay.togglePanel();
+            return true;
+        });
+        act("friends-page", 0.4, mc -> {
+            panel(mc).showPage(OverlayScreen.Page.FRIENDS);
+            return true;
+        });
+        act("invite-friend-refused", 0.4, mc -> {
+            results.addProperty("inviteFriendRefused", overlay.host().inviteFriend("f-deniz").name());
+            return true;
+        });
+        act("refused-card", 0, mc -> {
+            if (overlay.host().failure() == null) {
+                return false;
+            }
+            results.addProperty("failureAfterRefusal", overlay.host().failure());
+            return true;
+        });
+        act("shot-refused-card", 0.5, mc -> {
+            shot(mc, "invite-friend-refused");
+            return true;
+        });
+        act("invite-friend", 0.3, mc -> {
+            HostController.WorldInvite r = overlay.host().inviteFriend("f-deniz");
+            results.addProperty("inviteFriend", r.name());
+            return true;
+        });
+        act("shot-card-opening", 0.15, mc -> {
+            shot(mc, "invite-friend-opening");
+            return true;
+        });
+        act("reopen-open", 0, mc -> {
+            OverlayState.HostView v = overlay.state().host();
+            if (!overlay.host().hosting() || v == null || !v.open()) {
+                return false;
+            }
+            IntegratedServer server = mc.getSingleplayerServer();
+            results.addProperty("reopened", server != null && server.isPublished() && HostGate.session() != null);
+            return true;
+        });
+        act("shot-card-open", 0.5, mc -> {
+            shot(mc, "invite-friend-open");
+            return true;
+        });
+        act("invite-friend-more", 0.3, mc -> {
+            results.addProperty("inviteFriendWhileOpen", overlay.host().inviteFriend("f-mert").name());
+            return true;
+        });
+        act("guest2-go", 0.3, mc -> {
+            try {
+                Files.writeString(out.resolve("guest-go-" + name), "1\n", StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                fail("could not let the second guest go: " + e);
+            }
+            return true;
+        });
+        act("guest2-in", 0, 120, mc -> {
+            JsonObject facts = askServer(mc, server -> guestFacts(server, name));
+            if (facts == null || !facts.get("in").getAsBoolean() || !mirrorShows(name)) {
+                return false;
+            }
+            facts.remove("bindingText");
+            results.add("guest2", facts);
+            return true;
+        });
+        act("shot-guest2-in", 0.8, mc -> {
+            shot(mc, "real-guest2-in");
+            return true;
+        });
+        act("leave-pause", 0.3, mc -> {
+            if (panel(mc) != null) {
+                panel(mc).close();
+            }
+            pause = new PauseScreen(true);
+            Compat.setScreen(mc, pause);
+            return true;
+        });
+        act("leave-press", 0.6, mc -> {
+            net.minecraft.client.gui.components.Button quit = vanillaButton(Compat.screen(mc), "menu.returnToMenu",
+                "menu.disconnect");
+            if (quit == null) {
+                fail("no button back to the title screen");
+                return true;
+            }
+            leaveStarted = System.nanoTime();
+            quit.mouseClicked(new MouseButtonEvent(quit.getX() + quit.getWidth() / 2.0,
+                quit.getY() + quit.getHeight() / 2.0, new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0)), false);
+            event("click", "back to title");
+            return true;
+        });
+        act("left-world", 0, 60, mc -> {
+            if (mc.level != null || mc.getSingleplayerServer() != null || !(Compat.screen(mc) instanceof TitleScreen)) {
+                return false;
+            }
+            results.addProperty("leftWorldSeconds", round((System.nanoTime() - leaveStarted) / 1e9));
+            results.addProperty("hostingAfterLeave", overlay.host().hosting());
+            results.addProperty("gateSessionAfterLeave", HostGate.session() != null);
+            return true;
+        });
+        act("guest2-out", 0, 30, mc -> Files.exists(out.resolve("guest-done-4")));
+    }
+
+    private static net.minecraft.client.gui.components.Button vanillaButton(Screen screen, String... keys) {
+        if (screen == null) {
+            return null;
+        }
+        for (GuiEventListener child : screen.children()) {
+            if (child instanceof net.minecraft.client.gui.components.Button b
+                && b.getMessage().getContents() instanceof net.minecraft.network.chat.contents.TranslatableContents t) {
+                for (String key : keys) {
+                    if (key.equals(t.getKey())) {
+                        return b;
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** The launcher's mirror (here the mock's) shows the guest in the world. */
+    private boolean mirrorShows(String name) {
+        OverlayState.HostView view = overlay.state().host();
+        if (view == null) {
+            return false;
+        }
+        for (OverlayState.HostGuest g : view.guests()) {
+            if (g.in() && name.equalsIgnoreCase(g.name())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** Asks the world's server a question on its own thread: null until it answered (ask again next tick). */
+    private JsonObject askServer(Minecraft mc, Function<IntegratedServer, JsonObject> question) {
+        IntegratedServer server = mc.getSingleplayerServer();
+        if (server == null) {
+            JsonObject o = new JsonObject();
+            o.addProperty("in", false);
+            o.addProperty("server", false);
+            return o;
+        }
+        if (serverAsk == null) {
+            serverAsk = server.submit(() -> question.apply(server));
+            return null;
+        }
+        if (!serverAsk.isDone()) {
+            return null;
+        }
+        CompletableFuture<JsonObject> answered = serverAsk;
+        serverAsk = null;
+        try {
+            return answered.join();
+        } catch (RuntimeException e) {
+            JsonObject o = new JsonObject();
+            o.addProperty("in", false);
+            o.addProperty("error", e.toString());
+            return o;
+        }
+    }
+
+    /** On the server thread: where the guest {@code name} stands. */
+    private static JsonObject guestFacts(IntegratedServer server, String name) {
+        JsonObject o = new JsonObject();
+        ServerPlayer p = server.getPlayerList().getPlayerByName(name);
+        o.addProperty("in", p != null);
+        o.addProperty("players", server.getPlayerCount());
+        HostSession s = HostGate.session();
+        o.addProperty("publishMode", s == null ? "" : s.publish().mode());
+        o.addProperty("publishCommands", s != null && s.publish().commands());
+        if (p != null) {
+            o.addProperty("gameMode", p.gameMode.getGameModeForPlayer().getName());
+            o.addProperty("language", String.valueOf(HostCompat.language(p)));
+            o.addProperty("offlineUuid", p.getUUID().equals(UUIDUtil.createOfflinePlayerUUID(name)));
+            HostSession.Guest g = s == null ? null : s.byUuid(p.getUUID());
+            o.addProperty("guestId", g == null ? "" : g.identity.guest());
+            o.addProperty("stage", g == null ? "" : g.stage().name());
+            boolean commands;
+            try {
+                server.getCommands().getDispatcher().execute("time query daytime",
+                    p.createCommandSourceStack().withSuppressedOutput());
+                commands = true;
+            } catch (CommandSyntaxException e) {
+                commands = false;
+            }
+            o.addProperty("guestCommands", commands);
+        }
+        Path file = server.getWorldPath(LevelResource.ROOT).resolve("projects-guests.json");
+        o.addProperty("bindingFile", Files.exists(file));
+        if (Files.exists(file)) {
+            try {
+                String text = Files.readString(file, StandardCharsets.UTF_8);
+                o.addProperty("bindingHasName", text.contains("\"" + name + "\""));
+                o.addProperty("bindingText", text.replaceAll("\\s+", " "));
+            } catch (IOException e) {
+                o.addProperty("bindingError", e.toString());
+            }
+        }
+        return o;
+    }
+
     private void act(String name, double after, Function<Minecraft, Boolean> run) {
-        acts.add(new Act(name, after, run));
+        acts.add(new Act(name, after, STEP_TIMEOUT_S, run));
+    }
+
+    private void act(String name, double after, double timeout, Function<Minecraft, Boolean> run) {
+        acts.add(new Act(name, after, timeout, run));
     }
 
     private void tick(Minecraft mc) {
@@ -387,7 +711,7 @@ public final class HostScenario implements ClientModInitializer {
             fail(a.name() + ": " + e);
             finished = true;
         }
-        if (!finished && secs() - a.after() > STEP_TIMEOUT_S) {
+        if (!finished && secs() - a.after() > a.timeout()) {
             fail(a.name() + ": timed out");
             finished = true;
         }
@@ -420,7 +744,9 @@ public final class HostScenario implements ClientModInitializer {
             fail("no screen to click");
             return true;
         }
-        MouseButtonEvent press = new MouseButtonEvent(x, Math.round(y), new MouseButtonInfo(0, 0));
+        // 26.3 numbers the mouse buttons from 1: the version's own constant.
+        MouseButtonEvent press = new MouseButtonEvent(x, Math.round(y),
+            new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT, 0));
         screen.mouseClicked(press, false);
         screen.mouseReleased(press);
         event("click", x + "," + Math.round(y));

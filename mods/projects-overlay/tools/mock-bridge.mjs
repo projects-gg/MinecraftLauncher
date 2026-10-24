@@ -25,10 +25,12 @@
 // guest logging in for real (to Login Success) and a reused connection number. Each probe's outcome goes to the log
 // as {"dir":"info","frame":{"t":"probe",...}}. --relay-as <name> also opens a relay port (in the --info file as
 // "relayPort") that puts a header for <name> in front of every connection and pipes it to the world, so a real
-// client can join as a guest. Dev commands: "world-invite", "world-connect", "host-mirror", "host-fail",
+// client can join as a guest. --relay <guest>:<friend>:<name>[,...] opens one such port per guest identity
+// ("relayPorts" in the --info file, in order; friend is ayse, mert or deniz; --relay-as <name> is g1:ayse:<name>).
+// Dev commands: "world-invite", "world-connect", "host-mirror", "host-fail", "host-refuse" (the next opening),
 // "host-stop", "host-remove".
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, writeFileSync } from "node:fs";
 import net from "node:net";
 
@@ -976,6 +978,10 @@ function onDev(socket, frame) {
         error: frame.error ?? "unavailable",
       });
       break;
+    case "host-refuse":
+      // The next opening is refused as the launcher would (a daily limit, the service off).
+      hosting.refuse = frame.error ?? "unavailable";
+      break;
     case "host-stop":
       // The launcher closes the world (its own button, the account restricted, the launcher quitting).
       hosting.open = false;
@@ -1017,6 +1023,8 @@ const hosting = {
   mirror: [],
   conn: 0,
   probes: [],
+  relays: null,
+  refuse: null,
 };
 
 /** PROTOCOL.md section 7.1: the gate key is HMAC-SHA256 of a phrase, keyed with the bridge token's ASCII bytes. */
@@ -1158,6 +1166,13 @@ function probe(name, bytes, then) {
 const BINDING_KEY_ID = "sW9hzU3c";
 const AYSE_DIGEST = "1UbirWHKbvkTXKMZNmDDug";
 const MERT_DIGEST = "n7ppm8zILloa1X-qpWnqVA";
+// Any 16 bytes in base64url stand for a friend here.
+const DENIZ_DIGEST = createHash("sha256")
+  .update("f-deniz")
+  .digest()
+  .subarray(0, 16)
+  .toString("base64url");
+const DIGESTS = { ayse: AYSE_DIGEST, mert: MERT_DIGEST, deniz: DENIZ_DIGEST };
 
 /** The gate as the host launcher's connections reach it, one after another. */
 function probeGate() {
@@ -1227,35 +1242,63 @@ function probeGate() {
   );
 }
 
-/** Every connection to the relay port gets a header for {@code args.relayAs} and goes on to the world. */
+/** The guest identities the relay ports stand for: --relay-as first (as g1, Ayşe), then each of --relay. */
+function relayIdentities() {
+  const list = [];
+  if (typeof args.relayAs === "string") {
+    list.push({ guest: "g1", friend: AYSE_DIGEST, name: args.relayAs });
+  }
+  if (typeof args.relay === "string") {
+    for (const item of args.relay.split(",")) {
+      const [guest, friend, name] = item.split(":");
+      if (guest && DIGESTS[friend] && name) {
+        list.push({ guest, friend: DIGESTS[friend], name });
+      }
+    }
+  }
+  return list;
+}
+
+/** Every connection to a relay port gets a header for that port's guest and goes on to the world (as it is now). */
 function openRelay() {
-  if (!args.relayAs || hosting.relay) {
+  const identities = relayIdentities();
+  if (identities.length === 0 || hosting.relays) {
     return;
   }
-  hosting.relay = net.createServer((client) => {
-    const world = net.connect(hosting.port, "127.0.0.1", () => {
-      world.write(
-        header({
-          id: hosting.publish,
-          conn: ++hosting.conn,
-          guest: "g1",
-          name: args.relayAs,
-          premium: false,
-          friend: AYSE_DIGEST,
-        }),
-      );
-      client.pipe(world);
-      world.pipe(client);
+  hosting.relays = [];
+  const ports = [];
+  let listening = 0;
+  identities.forEach((who, index) => {
+    const relay = net.createServer((client) => {
+      const world = net.connect(hosting.port, "127.0.0.1", () => {
+        world.write(
+          header({
+            id: hosting.publish,
+            conn: ++hosting.conn,
+            guest: who.guest,
+            name: who.name,
+            premium: false,
+            friend: who.friend,
+          }),
+        );
+        client.pipe(world);
+        world.pipe(client);
+      });
+      world.on("error", () => client.destroy());
+      client.on("error", () => world.destroy());
     });
-    world.on("error", () => client.destroy());
-    client.on("error", () => world.destroy());
-  });
-  hosting.relay.listen(0, "127.0.0.1", () => {
-    const relayPort = hosting.relay.address().port;
-    log("info", { t: "relay", port: relayPort, as: args.relayAs });
-    if (args.info) {
-      writeFileSync(args.info, JSON.stringify({ port, token, relayPort }));
-    }
+    hosting.relays.push(relay);
+    relay.listen(0, "127.0.0.1", () => {
+      ports[index] = relay.address().port;
+      log("info", { t: "relay", port: ports[index], as: who.name, guest: who.guest });
+      listening++;
+      if (listening === identities.length && args.info) {
+        writeFileSync(
+          args.info,
+          JSON.stringify({ port, token, relayPort: ports[0], relayPorts: ports }),
+        );
+      }
+    });
   });
 }
 
@@ -1269,8 +1312,10 @@ function onHost(socket, frame) {
       hosting.world = frame.open ? frame : null;
       break;
     case "host-request": {
-      if (!hosting.world || hosting.world.lan) {
-        send(socket, { t: "host-state", open: false, max: 7, guests: [], error: "unavailable" });
+      if (!hosting.world || hosting.world.lan || hosting.refuse) {
+        const error = hosting.refuse ?? "unavailable";
+        hosting.refuse = null;
+        later(200, () => send(socket, { t: "host-state", open: false, max: 7, guests: [], error }));
         break;
       }
       hosting.publish = `p${nextId++}`;
