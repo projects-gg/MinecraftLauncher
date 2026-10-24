@@ -16,6 +16,8 @@
 // --team6 plays crew tags (docs/tasks/ovl2-protocol.md, TEAM6-O): "tags" in the welcome, the cards ("badges")
 // before the snapshot, friends', crew messages' and toasts' "badge", the crews' "ekibe katıldı" lines ("note");
 // dev commands "joined", "tag-change", "hide-crew", "tags-off" and "tags-on" play the live changes.
+// --link plays codeless Discord linking (docs/tasks/ovl2-protocol.md, SKIN1-O): "link" in the welcome; a mod's
+// "link-want" gets a made-up permit ("link-offer") for that name, or "link-clear" for the name "Nobody".
 
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, writeFileSync } from "node:fs";
@@ -169,7 +171,12 @@ if (args.chat2) {
       text: "Tamam, ben de geliyorum!",
       at: minutes(3),
       mine: true,
-      reply: { id: "m2", sid: 102, from: "Ayşe", text: "Evet, 21:00'de başlıyor. Kurallar burada:…" },
+      reply: {
+        id: "m2",
+        sid: 102,
+        from: "Ayşe",
+        text: "Evet, 21:00'de başlıyor. Kurallar burada:…",
+      },
       reactions: [
         { e: "❤️", n: 1, who: ["Ayşe"] },
         { e: "🔥", n: 1, who: ["Ayşe"] },
@@ -209,7 +216,15 @@ if (args.chat2) {
       mine: false,
       reply: { id: "m6", sid: 106, from: "Mert", text: "Yarın 21:00'de antrenman var, unutmayın." },
     },
-    { id: "m7b", sid: 108, from: "Deniz", text: "", sticker: "pl1/sleepy", at: minutes(79), mine: false },
+    {
+      id: "m7b",
+      sid: 108,
+      from: "Deniz",
+      text: "",
+      sticker: "pl1/sleepy",
+      at: minutes(79),
+      mine: false,
+    },
     {
       id: "m8",
       sid: 109,
@@ -416,7 +431,14 @@ function welcome(socket) {
     reducedMotion: Boolean(args.reducedMotion),
     features: args.signedOut
       ? []
-      : ["friends", "chat", "calls", ...(args.chat2 ? EXTRAS : []), ...(tagsOn ? ["tags"] : [])],
+      : [
+          "friends",
+          "chat",
+          "calls",
+          ...(args.chat2 ? EXTRAS : []),
+          ...(tagsOn ? ["tags"] : []),
+          ...(args.link ? ["link"] : []),
+        ],
   });
   if (args.team6) {
     send(socket, cardsFrame());
@@ -483,7 +505,12 @@ function incoming(socket, convId, from, text, sticker) {
   send(socket, toast);
 }
 
-const STICKER_NAMES = { "pl1/gg": "GG", "pl1/hi": "Selam", "pl1/love": "Kalp", "pl1/party": "Kutlama" };
+const STICKER_NAMES = {
+  "pl1/gg": "GG",
+  "pl1/hi": "Selam",
+  "pl1/love": "Kalp",
+  "pl1/party": "Kutlama",
+};
 function stickerName(ref) {
   return STICKER_NAMES[ref] ?? "Çıkartma";
 }
@@ -494,7 +521,12 @@ function quoteOf(convId, replySid) {
   if (!original) {
     return { sid: replySid, from: "", missing: true };
   }
-  const quote = { id: original.id, sid: original.sid, from: original.from, mine: Boolean(original.mine) };
+  const quote = {
+    id: original.id,
+    sid: original.sid,
+    from: original.from,
+    mine: Boolean(original.mine),
+  };
   if (original.sticker) {
     quote.sticker = original.sticker;
   } else {
@@ -533,6 +565,20 @@ function stack(socket) {
 
 function onFrame(socket, frame) {
   switch (frame.t) {
+    case "link-want": {
+      // A made-up permit: "i" and 24 random bytes in base64url, 30 minutes, for the name the mod asked for.
+      if (!args.link || frame.name === "Nobody") {
+        send(socket, { t: "link-clear" });
+      } else {
+        send(socket, {
+          t: "link-offer",
+          nonce: `i${randomBytes(24).toString("base64url")}`,
+          name: frame.name,
+          expiresAt: Math.floor(Date.now() / 1000) + 1800,
+        });
+      }
+      break;
+    }
     case "open-conv": {
       const msgs = historyOf(frame.conv);
       send(socket, { t: "history", conv: frame.conv, msgs });
@@ -662,12 +708,24 @@ function onChat2Send(socket, frame) {
 function onReact(socket, frame) {
   const msg = (state.history[frame.conv] ?? []).find((m) => m.sid === frame.sid);
   if (!msg) {
-    send(socket, { t: "react-failed", conv: frame.conv, sid: frame.sid, e: frame.e, reason: "old" });
+    send(socket, {
+      t: "react-failed",
+      conv: frame.conv,
+      sid: frame.sid,
+      e: frame.e,
+      reason: "old",
+    });
     return;
   }
   if (frame.e === "😮") {
     later(80, () =>
-      send(socket, { t: "react-failed", conv: frame.conv, sid: frame.sid, e: frame.e, reason: "full" }),
+      send(socket, {
+        t: "react-failed",
+        conv: frame.conv,
+        sid: frame.sid,
+        e: frame.e,
+        reason: "full",
+      }),
     );
     return;
   }
@@ -717,7 +775,12 @@ function onDev(socket, frame) {
       break;
     case "crew-in":
       // TEAM6: a crewmate writes in crew chat (the toast and the message carry their tag).
-      incoming(socket, frame.conv ?? "crew:gece", frame.from ?? "Mert", frame.text ?? "Ben hazırım, kim geliyor?");
+      incoming(
+        socket,
+        frame.conv ?? "crew:gece",
+        frame.from ?? "Mert",
+        frame.text ?? "Ben hazırım, kim geliyor?",
+      );
       break;
     case "joined": {
       // TEAM6 §7: someone comes into the crew while the launcher runs.
@@ -774,7 +837,13 @@ function onDev(socket, frame) {
       break;
     case "sticker-in":
       // CHAT2: a sticker from a friend (a toast with its picture; in the open conversation it arrives moving).
-      incoming(socket, frame.conv ?? "dm:ayse", frame.from ?? "Ayşe", "", frame.sticker ?? "pl1/party");
+      incoming(
+        socket,
+        frame.conv ?? "dm:ayse",
+        frame.from ?? "Ayşe",
+        "",
+        frame.sticker ?? "pl1/party",
+      );
       break;
     case "typing": {
       // CHAT2: "yazıyor…" from the launcher (a real one sends it only while the panel is open).

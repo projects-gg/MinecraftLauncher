@@ -8,6 +8,9 @@ import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.connect.Connector;
 import gg.projects.overlay.connect.MinecraftGame;
 import gg.projects.overlay.connect.ServerTarget;
+import gg.projects.overlay.link.CodelessLink;
+import gg.projects.overlay.link.LinkMessages;
+import gg.projects.overlay.link.LinkPayload;
 import gg.projects.overlay.settings.OverlaySettings;
 import gg.projects.overlay.settings.SettingsStore;
 import gg.projects.overlay.state.OverlayState;
@@ -15,6 +18,7 @@ import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.toast.ToastLayer;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.draw.Shapes;
+import gg.projects.overlay.ui.panel.DiscordLinkScreen;
 import gg.projects.overlay.ui.panel.JoinScreen;
 import gg.projects.overlay.ui.panel.OverlayScreen;
 import java.util.function.UnaryOperator;
@@ -22,6 +26,7 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
@@ -59,6 +64,8 @@ public final class OverlayClient implements ClientModInitializer {
     private ToastLayer toasts;
     private MinecraftGame game;
     private Connector connector;
+    /** Codeless Discord linking with a Projects server (SKIN1-O). */
+    private CodelessLink link;
     private OverlayScreen.Page lastPage = OverlayScreen.Page.CHATS;
     private String lastConversation;
     private String lastToastConversation;
@@ -126,6 +133,22 @@ public final class OverlayClient implements ClientModInitializer {
                     Minecraft.getInstance().execute(() -> handleFrame(frame));
                 }
             });
+        link = new CodelessLink(new CodelessLink.Out() {
+            @Override
+            public void toServer(String json) {
+                LinkPayload.send(json);
+            }
+
+            @Override
+            public void toLauncher(JsonObject frame) {
+                bridge.send(frame);
+            }
+        });
+        LinkPayload.register(this::onLinkMessage);
+        // A new connection (or the proxy moving the game to another of its servers) starts over; leaving ends the
+        // question: its token means nothing anywhere else.
+        ClientPlayConnectionEvents.JOIN.register((handler, sender, mc) -> mc.execute(this::leftServer));
+        ClientPlayConnectionEvents.DISCONNECT.register((handler, mc) -> mc.execute(this::leftServer));
         ClientLifecycleEvents.CLIENT_STARTED.register(mc -> {
             bridge.start();
             Shapes.prepare();
@@ -157,6 +180,11 @@ public final class OverlayClient implements ClientModInitializer {
 
     public ToastLayer toasts() {
         return toasts;
+    }
+
+    /** Codeless Discord linking with a Projects server (SKIN1-O). */
+    public CodelessLink link() {
+        return link;
     }
 
     public OverlaySettings settings() {
@@ -207,9 +235,56 @@ public final class OverlayClient implements ClientModInitializer {
         }
         hadLevel = hasLevel;
         connector.tick(monotonicMs());
+        tickLink(mc);
         Shapes.prepare();
         StickerArt.tick(monotonicMs());
         warmFonts(mc);
+    }
+
+    /** Codeless linking: an unanswered ask runs out; the server's question comes up once the game is free for it. */
+    private void tickLink(Minecraft mc) {
+        long now = monotonicMs();
+        link.tick(now);
+        if (!link.waitingForScreen()) {
+            // Nearly always: nothing to look at.
+            return;
+        }
+        boolean free = Compat.screen(mc) == null && mc.level != null && mc.player != null
+            && !Compat.overlayShowing(mc) && onProjects();
+        LinkMessages.Question question = link.takeQuestion(now, free);
+        if (question != null) {
+            Compat.setScreen(mc, new DiscordLinkScreen(this, question));
+        }
+    }
+
+    /** A message from the server on {@code projects:link} (the game's thread). Only Projects is ever answered. */
+    private void onLinkMessage(String json) {
+        long now = monotonicMs();
+        switch (LinkMessages.read(json)) {
+            case LinkMessages.Ask ask -> link.onAsk(now, onProjects(), Minecraft.getInstance().getUser().getName(),
+                state.online() && state.has("link"));
+            case LinkMessages.Question question -> link.onQuestion(now, question, onProjects());
+            case LinkMessages.Other other -> {
+            }
+        }
+    }
+
+    /** The game left its server (or the proxy moved it): that connection's ask and question end. */
+    private void leftServer() {
+        link.onLeave();
+        if (Compat.screen(Minecraft.getInstance()) instanceof DiscordLinkScreen screen) {
+            screen.withdraw();
+        }
+    }
+
+    /** "Evet, eşle" ({@code yes}) or "Hayır" on the codeless link question. */
+    public void answerLink(LinkMessages.Question question, boolean yes) {
+        link.answer(question, yes);
+    }
+
+    /** The codeless link question closed without an answer: "not now". */
+    public void dismissLink(LinkMessages.Question question) {
+        link.dismissed(question);
     }
 
     /**
@@ -371,9 +446,23 @@ public final class OverlayClient implements ClientModInitializer {
 
     /** Applies a launcher frame on the render thread. Public for the scenario driver, which replays frames. */
     public void handleFrame(JsonObject frame) {
-        if ("connect".equals(Protocol.type(frame))) {
-            connector.request(frame, monotonicMs());
-            return;
+        switch (Protocol.type(frame)) {
+            case "connect" -> {
+                connector.request(frame, monotonicMs());
+                return;
+            }
+            // Codeless linking (SKIN1-O): the permit goes straight on to the server that asked, never into state.
+            case "link-offer" -> {
+                link.onOffer(Protocol.str(frame, "nonce", ""), Protocol.str(frame, "name", ""),
+                    Protocol.num(frame, "expiresAt", 0L), System.currentTimeMillis());
+                return;
+            }
+            case "link-clear" -> {
+                link.onClear();
+                return;
+            }
+            default -> {
+            }
         }
         OverlayState.ToastRequest toast = state.apply(frame, System.currentTimeMillis());
         if (toast != null) {
@@ -386,6 +475,8 @@ public final class OverlayClient implements ClientModInitializer {
         state.setStatus(status, reason);
         if (status != BridgeClient.Status.ONLINE) {
             toasts.clear();
+            // No permit can come now: a server waiting for one hears there is none.
+            link.onClear();
         }
         refreshScreen();
     }

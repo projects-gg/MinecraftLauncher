@@ -31,9 +31,10 @@ public final class Protocol {
      * What this build does beyond the first protocol, listed in {@code hello}; the launcher sends only these:
      * {@code connect} (the launcher's "Bağlan"), {@code chat2} (chat extras: replies, reactions, stickers,
      * "yazıyor…", "Görüldü", links; docs/tasks/ovl2-protocol.md, CHAT2-O), {@code tags} (crew tags and their
-     * cards, the crews' "ekibe katıldı" lines; TEAM6-O).
+     * cards, the crews' "ekibe katıldı" lines; TEAM6-O), {@code link} (codeless Discord linking: the launcher's
+     * permit to a Projects server that asks, and its question; SKIN1-O).
      */
-    public static final List<String> FEATURES = List.of("connect", "chat2", "tags");
+    public static final List<String> FEATURES = List.of("connect", "chat2", "tags", "link");
     /** Minecraft's legacy formatting sign; launcher text must never carry formatting into the game. */
     private static final int SECTION_SIGN = 0xA7;
     /** The keycap mark (1️⃣): the digit stays, the mark would draw as a dashed box. */
@@ -147,6 +148,16 @@ public final class Protocol {
     public static JsonObject join(String friend) {
         JsonObject o = message("join");
         o.addProperty("friend", friend);
+        return o;
+    }
+
+    /**
+     * A Projects server asked whether the launcher vouches for the player (SKIN1-O): its permit for the account
+     * the game plays as, please. The answer is {@code link-offer} or {@code link-clear}.
+     */
+    public static JsonObject linkWant(String name) {
+        JsonObject o = message("link-want");
+        o.addProperty("name", name);
         return o;
     }
 
