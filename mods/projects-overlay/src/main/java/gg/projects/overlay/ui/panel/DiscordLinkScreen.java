@@ -79,8 +79,8 @@ public final class DiscordLinkScreen extends Screen {
         Font strong = Fonts.strong();
         Font small = Fonts.small();
         int inner = WIDTH - 2 * PAD;
-        title = Texts.wrap(Fonts.display(), getTitle().getString(), inner, 2);
-        hint = Texts.wrap(small, Texts.str("codeless.hint"), inner, 2);
+        title = balanced(Fonts.display(), getTitle().getString(), inner);
+        hint = balanced(small, Texts.str("codeless.hint"), inner);
         // The Discord account's card fits its words, up to the full row; each line cuts on its own.
         int textRoom = inner - (CARD_PAD + MARK + 8 + CARD_PAD);
         name = Texts.fit(strong, question.displayName(), textRoom);
@@ -102,6 +102,28 @@ public final class DiscordLinkScreen extends Screen {
         if (openedAt == 0) {
             openedAt = now();
         }
+    }
+
+    /**
+     * {@code text} on at most two lines, the two as even as they go (as CSS {@code text-wrap: balance}): a long game
+     * name never leaves a lone "mi?" or "account?" on the second line.
+     */
+    private static List<FormattedCharSequence> balanced(Font font, String text, int width) {
+        List<FormattedCharSequence> lines = Texts.wrap(font, text, width, 2);
+        if (lines.size() < 2) {
+            return lines;
+        }
+        int low = width / 2;
+        int high = width;
+        while (low < high) {
+            int mid = (low + high) / 2;
+            if (Texts.wrap(font, text, mid, 3).size() <= 2) {
+                high = mid;
+            } else {
+                low = mid + 1;
+            }
+        }
+        return Texts.wrap(font, text, high, 2);
     }
 
     private boolean armed() {

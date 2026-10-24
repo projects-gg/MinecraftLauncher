@@ -183,7 +183,7 @@
   "projects_overlay.connect.travel": "Connecting to %s…",
   "projects_overlay.connect.already": "You're already on %s.",
   "projects_overlay.codeless.question": "Link %s to this Discord account?",
-  "projects_overlay.codeless.hint": "You use this Discord account in Projects Launcher.",
+  "projects_overlay.codeless.hint": "You're signed in to Projects Launcher with this account.",
   "projects_overlay.codeless.no": "No",
   "projects_overlay.codeless.yes": "Link",
   "projects_overlay.badge.founded": "Founded %s",
