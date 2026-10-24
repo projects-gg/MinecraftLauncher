@@ -274,8 +274,11 @@ public final class OverlayClient implements ClientModInitializer {
         return here != null && here.sameServer(worldTarget);
     }
 
-    /** A note of world sharing for the host (the world opened, a friend came in or left). */
-    private void showHostNote(String title, String body, boolean sprite, String hintKey, String toastKey) {
+    /**
+     * A note of world sharing for the host (the world opened, a friend came in or left); public for the scenario
+     * driver, which shows them as a session would.
+     */
+    public void showHostNote(String title, String body, boolean sprite, String hintKey, String toastKey) {
         if (Compat.screen(Minecraft.getInstance()) instanceof OverlayScreen panel
             && panel.page() == OverlayScreen.Page.WORLD) {
             // The page shows it already.

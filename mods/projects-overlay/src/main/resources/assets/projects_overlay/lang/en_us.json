@@ -262,6 +262,7 @@
   "projects_overlay.world.join.preparing": "Getting your friend's world ready…",
   "projects_overlay.connect.travel.world": "Connecting to your friend's world…",
   "projects_overlay.connect.already.world": "You're already in this world.",
+  "projects_overlay.host.stop.title": "Stop sharing your world?",
   "modmenu.nameTranslation.projects_overlay": "Projects in-game overlay",
   "modmenu.descriptionTranslation.projects_overlay": "Messages, crew calls and friends from Projects Launcher, inside the game."
 }

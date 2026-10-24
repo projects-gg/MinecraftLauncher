@@ -262,6 +262,7 @@
   "projects_overlay.world.join.preparing": "Arkadaşının dünyası hazırlanıyor…",
   "projects_overlay.connect.travel.world": "Arkadaşının dünyasına bağlanılıyor…",
   "projects_overlay.connect.already.world": "Zaten bu dünyadasın.",
+  "projects_overlay.host.stop.title": "Paylaşım kapatılsın mı?",
   "modmenu.nameTranslation.projects_overlay": "Projects oyun içi katman",
   "modmenu.descriptionTranslation.projects_overlay": "Launcher'daki mesajlar, ekip çağrıları ve arkadaşlar oyunun içinde."
 }

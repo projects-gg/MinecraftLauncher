@@ -386,6 +386,16 @@ public final class OverlayScreen extends Screen {
         setFocused(host.list);
     }
 
+    /** What the world page shows now ({@code PICK}, {@code OPENING}, {@code FAILED}, {@code OPEN}, {@code MORE}). */
+    public String hostMode() {
+        return host.mode().name();
+    }
+
+    /** The friends ticked on the world page (the scenario driver checks them). */
+    public List<String> hostPicks() {
+        return host.list.picked();
+    }
+
     private void goBack() {
         if (page == Page.WORLD && host.back()) {
             return;

@@ -301,7 +301,8 @@ public final class HostList extends PanelWidget {
         rows.addAll(gone);
         contentHeight = y;
         laidOut = true;
-        if (cursor != null && next.stream().noneMatch(r -> r.id.equals(cursor))) {
+        // A row picked with the keys meant something on the other list ("tick Mert"), not here.
+        if (fresh || (cursor != null && next.stream().noneMatch(r -> r.id.equals(cursor)))) {
             cursor = null;
         }
         scroll.snap(Math.max(0f, Math.min(maxScroll(), scroll.target())));
@@ -529,11 +530,15 @@ public final class HostList extends PanelWidget {
         };
     }
 
-    /** Where a guest's row is on screen (the scenario driver points at it), or null. */
+    /**
+     * Where a row is on screen (the scenario driver points at it): its middle, and the middle of its remove sign; null
+     * when it is not in the list.
+     */
     public float[] rowCenter(String friendId) {
         for (Row row : live()) {
             if (row.id.equals(friendId)) {
-                return new float[] {getX() + getWidth() / 2f, getY() + row.target - scroll.value() + ROW_H / 2f};
+                float y = getY() + row.target - scroll.value() + ROW_H / 2f;
+                return new float[] {getX() + getWidth() / 2f, y, getX() + getWidth() - REMOVE / 2f};
             }
         }
         return null;

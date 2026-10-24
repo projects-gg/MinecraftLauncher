@@ -257,7 +257,7 @@ final class HostPanel {
             host().stopSharing();
             return;
         }
-        screen.ask(new ConfirmScreen.Question(Texts.tr("host.stop"), Texts.str("host.stop.ask"), null,
+        screen.ask(new ConfirmScreen.Question(Texts.tr("host.stop.title"), Texts.str("host.stop.ask"), null,
             Texts.tr("host.stop"), null, true), () -> host().stopSharing());
     }
 
@@ -489,13 +489,7 @@ final class HostPanel {
                 ActionButton.HEIGHT);
             return y + CARD_H + 8;
         }
-        if (h.canInvite()) {
-            card = Card.INVITE;
-            cardY = y;
-            cardOpen.visible = true;
-            PanelWidget.place(cardOpen, x, y, width, ActionButton.HEIGHT);
-            return y + ActionButton.HEIGHT + 8;
-        }
+        // A friend waiting in their world comes before opening one's own (the pause menu still has that).
         String friend = screen.worldInviteToShow();
         if (friend != null) {
             OverlayState.Friend f = state.friend(friend);
@@ -515,6 +509,13 @@ final class HostPanel {
                     ActionButton.HEIGHT);
                 return y + CARD_H + 8;
             }
+        }
+        if (h.canInvite()) {
+            card = Card.INVITE;
+            cardY = y;
+            cardOpen.visible = true;
+            PanelWidget.place(cardOpen, x, y, width, ActionButton.HEIGHT);
+            return y + ActionButton.HEIGHT + 8;
         }
         return y;
     }

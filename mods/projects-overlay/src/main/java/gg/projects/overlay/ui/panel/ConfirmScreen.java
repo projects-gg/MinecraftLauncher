@@ -80,7 +80,8 @@ public final class ConfirmScreen extends Screen {
         }
     }
 
-    private void confirm() {
+    /** The action, as its button does (the scenario driver answers the question this way too). */
+    public void confirm() {
         Compat.setScreen(minecraft, panel);
         onConfirm.run();
     }
