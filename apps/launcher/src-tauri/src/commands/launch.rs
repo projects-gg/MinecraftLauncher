@@ -991,6 +991,17 @@ async fn prepare_and_spawn(
     // Resource packs a ready-made set installed before the game had an options.txt are turned
     // on now, once (a file read when there are none waiting).
     crate::commands::modsets::activate_pending_packs(&game_dir).await;
+    // The in-game overlay's jar for this Fabric instance (OVL-B), before the mod check sees the
+    // folder: put in place only when nothing about it would stop or warn, else taken away.
+    checkpoint(cancel)?;
+    let overlay_mod = crate::overlay::prepare_mod(
+        state,
+        &instance,
+        (instance_dir.as_path(), game_dir.as_path()),
+        installed.java.info.major,
+        cancel,
+    )
+    .await;
     // The mods are checked with the Java that will run, after the pack sync: problems that
     // would certainly stop the game stop the launch here instead.
     checkpoint(cancel)?;
@@ -1072,10 +1083,10 @@ async fn prepare_and_spawn(
     options.max_memory_mb = Some(memory.max_mb);
     options.launcher_name = "Projects Launcher".to_owned();
     // The in-game overlay (OVL2): a fresh bridge for this game while its switch is on and the
-    // pack put the mod in place. The game reads the port and the token from two system
-    // properties; the printable command masks the token. It closes again unless the game starts.
+    // mod is in place. The game reads the port and the token from two system properties; the
+    // printable command masks the token. It closes again unless the game starts.
     let overlay =
-        crate::overlay::for_launch(state, &game_dir, &launcher_version, &identity.name).await;
+        crate::overlay::for_launch(state, overlay_mod, &launcher_version, &identity.name).await;
     if let Some(endpoint) = overlay.endpoint() {
         options.launcher_jvm_args.extend(endpoint.jvm_args());
         options.secrets.push(endpoint.secret().to_owned());

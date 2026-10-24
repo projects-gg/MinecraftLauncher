@@ -1,15 +1,26 @@
-//! The in-game overlay (OVL2): the player's choices, kept in the data folder so the starts before
-//! the page asks follow them too; one bridge per game start; what the page hears.
+//! The in-game overlay (OVL2, OVL-B): the player's choices, kept in the data folder so the starts
+//! before the page asks follow them too; the mod's jars, shipped with the launcher; one bridge per
+//! game start; what the page hears.
 //!
-//! The logic lives in `pl_overlay` (tested there): this module wires it to the app. A game start
-//! gets a bridge only while "Oyun içi katman" is on and the official pack put the mod in the
-//! instance ([`for_launch`]); the game's exit, "Oyun açılınca launcher: Kapansın", quitting and the
+//! The logic lives in `pl_overlay` (tested there): this module wires it to the app. Right before a
+//! game starts, the instance gets the jar for its Minecraft version while "Oyun içi katman" is on
+//! and it is a Fabric instance the mod supports, official pack or not ([`prepare_mod`]), and then a
+//! bridge ([`for_launch`]); the game's exit, "Oyun açılınca launcher: Kapansın", quitting and the
 //! switch going off end it. Between games the overlay costs nothing.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
 
-use pl_content::{LauncherItems, OVERLAY_ITEM, PackState};
+use pl_content::LauncherItems;
+use pl_mc::addons::{AddonInstallOptions, Addons};
+use pl_mc::gamefiles::ImportKind;
+use pl_mc::instance::Instance;
+use pl_mc::loaders::LoaderKind;
+use pl_mc::modrinth::ModrinthResolveTarget;
+use pl_net::CancellationToken;
+use pl_overlay::install::{BUNDLE_DIR, Bundle, Outcome, Request};
 use pl_overlay::protocol::ByeReason;
 use pl_overlay::{ConnectOutcome, Endpoint, Overlay, OverlayConfig};
 use serde::Serialize;
@@ -24,13 +35,25 @@ pub const STATUS_EVENT: &str = "overlay-status";
 pub const ENABLED_EVENT: &str = "overlay-enabled";
 /// The choices, in the data folder.
 const CONFIG_FILE: &str = "overlay.json";
+/// How long a start waits for the Fabric API the overlay's jar needs: past it, the game starts
+/// without the overlay this time.
+const FABRIC_API_WAIT: Duration = Duration::from_secs(30);
 
 /// "Oyun içi katman" for the code that plans pack syncs far from the app state (the mod center,
 /// repairs, version switches, background preparation). Follows the hub's setting.
 static ENABLED: AtomicBool = AtomicBool::new(true);
 
+/// The jars this build ships, read once at the start ([`load_bundle`]).
+static BUNDLE: OnceLock<Option<Bundle>> = OnceLock::new();
+
+fn bundle() -> Option<&'static Bundle> {
+    BUNDLE.get().and_then(Option::as_ref)
+}
+
 /// The overlay with the choices saved in `root` (or the defaults). Status changes reach the page.
+/// Reads the shipped jars' index too.
 pub fn create(app: &AppHandle, root: &Path) -> Overlay {
+    let _ = BUNDLE.set(load_bundle(app));
     let config: OverlayConfig = std::fs::read(root.join(CONFIG_FILE))
         .ok()
         .and_then(|bytes| serde_json::from_slice(&bytes).ok())
@@ -44,10 +67,46 @@ pub fn create(app: &AppHandle, root: &Path) -> Overlay {
     overlay
 }
 
-/// The launcher settings that own pack items, for every pack sync.
+/// The resources' `overlay/` folder (`scripts/release/overlay-jars.mjs` fills it before a build).
+/// Debug builds take `PROJECTS_OVERLAY_JARS=<folder>` instead (a test exe copied out of the target
+/// folder has no resources next to it).
+fn load_bundle(app: &AppHandle) -> Option<Bundle> {
+    let dir = debug_jars_dir().or_else(|| {
+        app.path()
+            .resource_dir()
+            .ok()
+            .map(|dir| dir.join(BUNDLE_DIR))
+    })?;
+    let bundle = Bundle::load(&dir);
+    match &bundle {
+        Some(bundle) => tracing::info!(versions = ?bundle.versions(), "in-game overlay jars"),
+        None => tracing::info!(
+            dir = %dir.display(),
+            "no in-game overlay jars in this build; the official pack's item stands in"
+        ),
+    }
+    bundle
+}
+
+fn debug_jars_dir() -> Option<PathBuf> {
+    #[cfg(debug_assertions)]
+    {
+        std::env::var_os("PROJECTS_OVERLAY_JARS")
+            .filter(|dir| !dir.is_empty())
+            .map(PathBuf::from)
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        None
+    }
+}
+
+/// The launcher settings that own pack items, for every pack sync: with jars of its own the
+/// launcher never installs the pack's overlay item and keeps the pack's Fabric API for its jar.
 pub fn pack_items() -> LauncherItems {
     LauncherItems {
         overlay: ENABLED.load(Ordering::Relaxed),
+        overlay_bundled: bundle().is_some(),
     }
 }
 
@@ -64,7 +123,7 @@ fn save(root: &Path, config: &OverlayConfig) {
 }
 
 /// Applies (and keeps) new choices: a running session follows them, turning the overlay off ends
-/// it, the next pack sync installs or removes the mod.
+/// it, the next start (and pack sync) installs or removes the mod.
 fn apply(state: &AppState, config: OverlayConfig) {
     if state.overlay.configure(config.clone()) {
         ENABLED.store(config.enabled, Ordering::Relaxed);
@@ -85,28 +144,101 @@ pub fn set_enabled(app: &AppHandle, enabled: bool) {
 }
 
 /// The overlay's mod was switched outside Settings (the crash help's "Bu modu kapat"): the switch
-/// follows and so does the page's. The next launch's sync removes or brings back the mod.
+/// follows and so does the page's. The next start removes or brings back the mod.
 pub fn switched_elsewhere(app: &AppHandle, enabled: bool) {
     set_enabled(app, enabled);
     let _ = app.emit(ENABLED_EVENT, enabled);
 }
 
-/// Whether the official pack's overlay item is in place in this game folder: the last sync
-/// installed it, left it switched on, and its file is there.
-async fn installed(game_dir: &Path) -> bool {
-    let Ok(Some(pack)) = PackState::load(game_dir).await else {
-        return false;
+/// The overlay jars the launcher put in this game folder (lowercase file names without
+/// `.disabled`): mod lists leave them out, "Bu modu kapat" on one turns the switch off.
+pub fn owned_files(game_dir: &Path) -> std::collections::HashSet<String> {
+    pl_overlay::install::owned_files(game_dir)
+}
+
+/// Right before a start, after the pack's sync and before the mod check: the overlay's jar for
+/// this instance in place, or ours taken away (`pl_overlay::install`). Fabric API the jar needs
+/// comes from Modrinth the way the launcher installs mods ([`install_fabric_api`]). Answers whether
+/// the game gets an overlay mod (ours, or a copy someone else put there). Never stops a launch.
+pub async fn prepare_mod(
+    state: &AppState,
+    instance: &Instance,
+    (instance_dir, game_dir): (&Path, &Path),
+    java_major: u32,
+    cancel: &CancellationToken,
+) -> bool {
+    let env = crate::commands::modhealth::environment(instance, Some(java_major));
+    let enabled = state.overlay.enabled();
+    let ask = |ask_fabric_api: bool| {
+        pl_overlay::install::reconcile(Request {
+            game_dir,
+            bundle: bundle(),
+            env: &env,
+            enabled,
+            ask_fabric_api,
+        })
     };
-    let Some(path) = pack.installed_item(OVERLAY_ITEM) else {
-        return false;
+    let outcome = match ask(true).await {
+        Outcome::NeedsFabricApi => {
+            install_fabric_api(state, instance, (instance_dir, game_dir), cancel).await;
+            ask(false).await
+        }
+        outcome => outcome,
     };
-    tokio::fs::metadata(game_dir.join(path))
-        .await
-        .is_ok_and(|meta| meta.is_file())
+    matches!(outcome, Outcome::Ready { .. })
+}
+
+/// Fabric API for the overlay's jar: its newest version for the instance's Minecraft, installed
+/// as the mod pages install a mod (verified, recorded in the instance's add-on index, so the
+/// player sees it and can update it). It stays when the overlay goes: other mods may need it.
+async fn install_fabric_api(
+    state: &AppState,
+    instance: &Instance,
+    (instance_dir, game_dir): (&Path, &Path),
+    cancel: &CancellationToken,
+) {
+    let client = crate::commands::modrinth::modrinth_client(state);
+    let addons = Addons::new(
+        game_dir,
+        crate::commands::modrinth::addon_index_path(instance_dir),
+    )
+    .with_icon_dir(crate::commands::modrinth::icon_dir(state));
+    let target = ModrinthResolveTarget::for_loader(LoaderKind::Fabric, instance.mc_version.clone());
+    let job = async {
+        let version = client
+            .best_version(pl_content::FABRIC_API_PROJECT, &target)
+            .await?
+            .ok_or_else(|| pl_mc::Error::NotFound("Fabric API for this version".to_owned()))?;
+        addons
+            .install(
+                &client,
+                &state.mc.downloader,
+                ImportKind::Mod,
+                vec![version],
+                &target,
+                AddonInstallOptions {
+                    with_dependencies: true,
+                    concurrency: 4,
+                    cancel: cancel.clone(),
+                    progress: None,
+                },
+            )
+            .await
+    };
+    match tokio::time::timeout(FABRIC_API_WAIT, job).await {
+        Ok(Ok(report)) => tracing::info!(
+            installed = ?report.installed.iter().map(|i| &i.file_name).collect::<Vec<_>>(),
+            "Fabric API installed for the in-game overlay"
+        ),
+        Ok(Err(error)) => {
+            tracing::info!(%error, "Fabric API not installed; the game starts without the overlay");
+        }
+        Err(_) => tracing::info!("Fabric API took too long; the game starts without the overlay"),
+    }
 }
 
 /// `PROJECTS_OVERLAY_ALWAYS=1` (debug builds only): every launch gets a bridge, for a local test
-/// without the pack's mod (a stand-in Java, a mock mod client).
+/// without the mod (a stand-in Java, a mock mod client).
 fn debug_always() -> bool {
     #[cfg(debug_assertions)]
     {
@@ -151,12 +283,13 @@ impl Drop for OverlayLaunch {
     }
 }
 
-/// A fresh bridge for the game about to start, when the switch is on and the instance has the
-/// pack's overlay mod. Never stops a launch: a bridge that cannot open means a game without it.
-/// `game_name` is the account the game plays as: codeless linking (SKIN1-O) vouches only for it.
+/// A fresh bridge for the game about to start, when the switch is on and the instance has an
+/// overlay mod ([`prepare_mod`]). Never stops a launch: a bridge that cannot open means a game
+/// without it. `game_name` is the account the game plays as: codeless linking (SKIN1-O) vouches
+/// only for it.
 pub async fn for_launch(
     state: &AppState,
-    game_dir: &Path,
+    has_mod: bool,
     launcher_version: &str,
     game_name: &str,
 ) -> OverlayLaunch {
@@ -167,7 +300,7 @@ pub async fn for_launch(
     if !state.overlay.enabled() {
         return none;
     }
-    if !installed(game_dir).await && !debug_always() {
+    if !has_mod && !debug_always() {
         return none;
     }
     match state
@@ -233,6 +366,9 @@ pub struct OverlayStateView {
     pub config: OverlayConfig,
     /// The mod in the running game is connected now.
     pub connected: bool,
+    /// The Minecraft versions this build ships the mod for (`26.1.2`, `26.2`, …): a Fabric
+    /// instance on one of them gets it. Empty in a build without the jars.
+    pub versions: Vec<String>,
 }
 
 #[tauri::command]
@@ -241,5 +377,6 @@ pub fn overlay_state(state: State<'_, AppState>) -> OverlayStateView {
     OverlayStateView {
         config: state.overlay.config(),
         connected: state.overlay.connected(),
+        versions: bundle().map(Bundle::versions).unwrap_or_default(),
     }
 }

@@ -570,6 +570,8 @@ pub async fn instance_detail(
         })
     };
 
+    // The jars the launcher keeps for the in-game overlay (OVL-B).
+    let overlay_jars = crate::overlay::owned_files(&game_dir);
     let mods = pl_mc::mods::list_mods(&game_dir.join("mods"), false)
         .await
         .unwrap_or_default()
@@ -577,10 +579,11 @@ pub async fn instance_detail(
         // The in-game overlay's mod belongs to its switch in Settings, not to this list.
         .filter(|m| {
             let base = m.file_name.trim_end_matches(".disabled");
-            pack_files
-                .get(&format!("mods/{base}").to_ascii_lowercase())
-                .and_then(|item| item.as_deref())
-                .is_none_or(|item| !pl_content::LauncherItems::owns(item))
+            !pl_overlay::install::is_owned(&overlay_jars, &m.file_name)
+                && pack_files
+                    .get(&format!("mods/{base}").to_ascii_lowercase())
+                    .and_then(|item| item.as_deref())
+                    .is_none_or(|item| !pl_content::LauncherItems::owns(item))
         })
         .map(|m| {
             let meta = m.metadata.as_ref();
@@ -979,6 +982,12 @@ pub async fn mod_set_enabled(
         .instances
         .game_dir(&instance_id)
         .map_err(CmdError::from)?;
+    // The overlay's jar the launcher keeps (OVL-B; the crash help's "Bu modu kapat"): the switch
+    // in Settings follows, the next start removes or brings back the file.
+    if pl_overlay::install::is_owned(&crate::overlay::owned_files(&game_dir), &file_name) {
+        crate::overlay::switched_elsewhere(&app, enabled);
+        return Ok(());
+    }
     if let Some(item) = crate::commands::modcenter::item_for_mod_file(&game_dir, &file_name).await {
         // The in-game overlay's mod (the crash help's "Bu modu kapat"): its switch in Settings
         // follows; the next launch's sync removes or brings back the file.

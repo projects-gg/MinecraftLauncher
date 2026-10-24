@@ -6,18 +6,20 @@ import { useInstallOfficial } from "@/features/library/official-ui";
 import { Row } from "@/features/settings/row";
 import { api } from "@/lib/api";
 import { usePrefs } from "@/stores/prefs";
-import { officialMissing, overlayLine } from "./line";
+import { overlayApi } from "./api";
+import { overlayHasNoHome, overlayLine } from "./line";
 
 /** The line that carries "Kur" (`overlayLine`). */
 const PACK_MISSING = 2;
 
 /**
- * Settings → Genel "Oyun içi katman" (OVL2, on by default): the official pack's overlay mod and a
- * bridge to it at each game start. Its one place: the mod center does not list the mod. The line
- * under it says how it opens; while the switch is on but the overlay cannot work it says why
- * instead, in the same cell, so nothing below moves: no official pack (LIB1: the player deleted
- * it), with "Kur" as the library offers it, or "Oyun açılınca launcher: Kapansın". The shortcut
- * itself is set in the game's Controls.
+ * Settings → Genel "Oyun içi katman" (OVL2, on by default): the overlay's mod, which the launcher
+ * ships and puts in every Fabric instance on a version it supports (OVL-B), and a bridge to it at
+ * each game start. Its one place: no mod list shows the mod. The line under it says how it opens;
+ * while the switch is on but the overlay cannot work it says why instead, in the same cell, so
+ * nothing below moves: no instance can carry it (LIB1: the player deleted the official pack and
+ * has no Fabric instance of a supported version), with "Kur" as the library offers it, or "Oyun
+ * açılınca launcher: Kapansın". The shortcut itself is set in the game's Controls.
  */
 export function OverlayRow() {
   const { t } = useTranslation();
@@ -29,9 +31,15 @@ export function OverlayRow() {
     queryFn: () => api.instances(),
   });
   const { data: official } = useQuery(officialStatusQuery);
+  // The Minecraft versions the launcher ships the mod for (fixed for this build).
+  const { data: overlay } = useQuery({
+    queryKey: ["overlay-state"],
+    queryFn: () => overlayApi.state(),
+    staleTime: Number.POSITIVE_INFINITY,
+  });
   const install = useInstallOfficial();
   const installing = install.isPending;
-  const active = overlayLine(on, leaves, officialMissing(instances, official));
+  const active = overlayLine(on, leaves, overlayHasNoHome(instances, official, overlay?.versions));
   const lines = [t("overlay.settingHelp"), t("overlay.closeHelp"), t("overlay.packMissing")];
   return (
     <Row

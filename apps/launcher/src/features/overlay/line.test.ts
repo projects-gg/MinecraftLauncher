@@ -4,7 +4,7 @@ import type { InstanceSummary, OfficialStatus } from "@/lib/api";
 // The library's helpers come with the backend's API: stubbed, nothing here calls it.
 vi.mock("@/lib/api", () => ({ api: {} }));
 
-const { officialMissing, overlayLine } = await import("./line");
+const { canCarryOverlay, officialMissing, overlayHasNoHome, overlayLine } = await import("./line");
 
 function instance(id: string, extra: Partial<InstanceSummary> = {}): InstanceSummary {
   return {
@@ -57,5 +57,37 @@ describe("the official pack behind the overlay", () => {
   it("counts as there while either list is unknown", () => {
     expect(officialMissing(undefined, status({ removed: true }))).toBe(false);
     expect(officialMissing([instance("vanilla")], undefined)).toBe(false);
+  });
+});
+
+describe("the instances the launcher puts the overlay in", () => {
+  const versions = ["26.1.2", "26.2", "26.3"];
+
+  it("are Fabric instances on a shipped version, official or the player's own", () => {
+    expect(canCarryOverlay([instance("own", { mcVersion: "26.2" })], versions)).toBe(true);
+    expect(canCarryOverlay([instance("own", { mcVersion: "26.2.1" })], versions)).toBe(true);
+    expect(
+      canCarryOverlay([instance("forge", { mcVersion: "26.2", loader: "forge" })], versions),
+    ).toBe(false);
+    expect(canCarryOverlay([instance("old", { mcVersion: "1.21.11" })], versions)).toBe(false);
+    expect(canCarryOverlay([instance("own", { mcVersion: "26.20" })], versions)).toBe(false);
+    expect(canCarryOverlay(undefined, versions)).toBe(false);
+    expect(canCarryOverlay([instance("own")], [])).toBe(false);
+  });
+
+  it("leave the pack line out while one of the player's own can carry it", () => {
+    const own = [instance("own", { mcVersion: "26.3" })];
+    expect(overlayHasNoHome(own, status({ removed: true }), versions)).toBe(false);
+    expect(
+      overlayHasNoHome(
+        [instance("vanilla", { loader: "vanilla" })],
+        status({ removed: true }),
+        versions,
+      ),
+    ).toBe(true);
+    // A build without the jars: only the official pack carries it.
+    expect(overlayHasNoHome(own, status({ removed: true }), [])).toBe(true);
+    // Not known yet: no line, as with unknown lists.
+    expect(overlayHasNoHome([], undefined, undefined)).toBe(false);
   });
 });

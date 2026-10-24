@@ -324,8 +324,15 @@ async fn switch_target(
     })
 }
 
-/// The mods (jars) in `mods_dir` that `state` does not record: the player's own.
-async fn own_mods(mods_dir: &Path, state: Option<&PackState>, with_hashes: bool) -> Vec<ModInfo> {
+/// The mods (jars) in `mods_dir` (a set of `game_dir`) that `state` does not record: the player's
+/// own. The in-game overlay's jar the launcher keeps there is not one (OVL-B).
+async fn own_mods(
+    game_dir: &Path,
+    mods_dir: &Path,
+    state: Option<&PackState>,
+    with_hashes: bool,
+) -> Vec<ModInfo> {
+    let overlay = crate::overlay::owned_files(game_dir);
     let owned: HashSet<String> = state
         .map(|state| {
             state
@@ -346,14 +353,20 @@ async fn own_mods(mods_dir: &Path, state: Option<&PackState>, with_hashes: bool)
                 .strip_suffix(".disabled")
                 .unwrap_or(&m.file_name);
             !owned.contains(&base.to_ascii_lowercase())
+                && !pl_overlay::install::is_owned(&overlay, &m.file_name)
         })
         .collect()
 }
 
-async fn count_mods(mods_dir: &Path) -> u32 {
+/// The jars in `mods_dir`, the in-game overlay's jars the launcher keeps (`overlay`) left out.
+async fn count_mods(mods_dir: &Path, overlay: &HashSet<String>) -> u32 {
     let count = pl_mc::mods::list_mods(mods_dir, false)
         .await
-        .map(|mods| mods.len())
+        .map(|mods| {
+            mods.iter()
+                .filter(|m| !pl_overlay::install::is_owned(overlay, &m.file_name))
+                .count()
+        })
         .unwrap_or(0);
     u32::try_from(count).unwrap_or(u32::MAX)
 }
@@ -695,16 +708,17 @@ pub async fn instance_switch_preview(
     let prepared = target_set.as_ref().is_some_and(|info| info.seeded);
     let returning = target_set.is_some() && !prepared;
     let active_state = PackState::load(&game_dir).await.map_err(pack_error)?;
+    let overlay_jars = crate::overlay::owned_files(&game_dir);
 
     let mut preview = SwitchPreviewView {
         from: instance.mc_version.clone(),
         to: to.clone(),
         first_visit: !returning,
-        parked_mods: count_mods(&game_dir.join("mods")).await,
+        parked_mods: count_mods(&game_dir.join("mods"), &overlay_jars).await,
         parked_bytes: sets.active_size().await,
         has_config: game_dir.join("config").is_dir(),
         restored_mods: if target_set.is_some() {
-            count_mods(&sets.set_dir(&to).join("mods")).await
+            count_mods(&sets.set_dir(&to).join("mods"), &overlay_jars).await
         } else {
             0
         },
@@ -718,9 +732,14 @@ pub async fn instance_switch_preview(
         carried_choices: 0,
         new_items: 0,
         own_mods: u32::try_from(
-            own_mods(&game_dir.join("mods"), active_state.as_ref(), false)
-                .await
-                .len(),
+            own_mods(
+                &game_dir,
+                &game_dir.join("mods"),
+                active_state.as_ref(),
+                false,
+            )
+            .await
+            .len(),
         )
         .unwrap_or(u32::MAX),
         game_download: !version_installed(&state, &to),
@@ -738,7 +757,7 @@ pub async fn instance_switch_preview(
             .map(|(_, manifest)| estimate_downloads(manifest, kept_state.as_ref()));
         preview.trashed_set = Some(SwitchTrashedSetView {
             trash_id: entry.id,
-            mods: count_mods(&item.join("mods")).await,
+            mods: count_mods(&item.join("mods"), &overlay_jars).await,
             size_bytes: entry.size,
             last_played_at: info
                 .and_then(|info| info.last_played_at)
@@ -893,6 +912,7 @@ pub async fn instance_switch_version(
     let own_mods_left = {
         let parked_state = sets.parked_state(&from).await.ok().flatten();
         let left = own_mods(
+            sets.game_dir(),
             &sets.set_dir(&from).join("mods"),
             parked_state.as_ref(),
             false,
@@ -1183,7 +1203,13 @@ pub async fn mods_migration_plan(
         return Ok(plan);
     }
     let (source_dir, source_state, _) = set_location(&sets, &instance, &from).await?;
-    let own = own_mods(&source_dir.join("mods"), source_state.as_ref(), true).await;
+    let own = own_mods(
+        &game_dir,
+        &source_dir.join("mods"),
+        source_state.as_ref(),
+        true,
+    )
+    .await;
     if own.is_empty() {
         return Ok(plan);
     }
@@ -1343,7 +1369,13 @@ pub async fn mods_migration_check(
         return Ok(check);
     }
     let (source_dir, source_state, _) = set_location(&sets, &instance, &from).await?;
-    let own = own_mods(&source_dir.join("mods"), source_state.as_ref(), true).await;
+    let own = own_mods(
+        &game_dir,
+        &source_dir.join("mods"),
+        source_state.as_ref(),
+        true,
+    )
+    .await;
     check.own = u32::try_from(own.len()).unwrap_or(u32::MAX);
     if own.is_empty() {
         return Ok(check);

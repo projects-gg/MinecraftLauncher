@@ -6,6 +6,7 @@ import {
   enabledSet,
   matches,
   neededBy,
+  neededFor,
   pendingSelection,
   safePageUrl,
   totals,
@@ -52,6 +53,20 @@ describe("mod center selection", () => {
     expect([...withShaders].sort()).toEqual(["api", "iris", "minimap", "shaders", "sodium"]);
     expect(neededBy(catalog, withShaders, "sodium")).toEqual(["IRIS"]);
     expect(bringsAlong(catalog, "shaders")).toEqual(["IRIS", "SODIUM", "API"]);
+  });
+
+  it("keeps what the launcher's own overlay needs and says so", () => {
+    const api = item("api", { library: true, category: "library", launcherNeeds: true });
+    const withOverlay = [api, ...catalog.filter((i) => i.id !== "api")];
+    const lean = enabledSet(withOverlay, { ...choicesOf(withOverlay), sodium: false });
+    expect([...lean].sort()).toEqual(["api", "minimap"]);
+    expect(neededFor(withOverlay, lean, api, "Oyun içi katman")).toEqual(["Oyun içi katman"]);
+    const full = enabledSet(withOverlay, choicesOf(withOverlay));
+    expect(neededFor(withOverlay, full, api, "Oyun içi katman")).toEqual([
+      "SODIUM",
+      "Oyun içi katman",
+    ]);
+    expect(neededFor(catalog, full, item("minimap"), "Oyun içi katman")).toEqual([]);
   });
 
   it("sends only what changed", () => {

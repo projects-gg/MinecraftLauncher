@@ -137,6 +137,9 @@ pub struct ModCenterItemView {
     pub is_new: bool,
     /// Ids of enabled items that need this one.
     pub required_by: Vec<String>,
+    /// The launcher's in-game overlay needs it (Fabric API while "Oyun içi katman" is on): it is
+    /// installed for that too.
+    pub launcher_needs: bool,
     pub installed: bool,
     /// Installed, and the pack has a newer file for it ("Güncelleme var").
     pub update_available: bool,
@@ -337,6 +340,7 @@ pub(crate) fn item_views(
                 enabled: status.effectively_enabled,
                 is_new: status.is_new,
                 required_by: status.required_by.clone(),
+                launcher_needs: status.launcher_needs,
                 installed: status.installed,
                 update_available: status.update_available,
                 size_bytes: status.size,

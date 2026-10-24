@@ -10,7 +10,10 @@ export function choicesOf(items: ModCenterItem[]): Choices {
   return Object.fromEntries(items.filter((i) => !i.library).map((i) => [i.id, i.selected]));
 }
 
-/** Installed mods for `choices`: the selected ones plus, transitively, what they require. */
+/**
+ * Installed mods for `choices`: the selected ones plus, transitively, what they require, and what
+ * the launcher's own in-game overlay needs (`launcherNeeds`: Fabric API while it is on).
+ */
 export function enabledSet(items: ModCenterItem[], choices: Choices): Set<string> {
   const byId = new Map(items.map((i) => [i.id, i]));
   const enabled = new Set<string>();
@@ -22,7 +25,7 @@ export function enabledSet(items: ModCenterItem[], choices: Choices): Set<string
     for (const required of item.requires) visit(required);
   };
   for (const item of items) {
-    if (!item.library && choices[item.id]) visit(item.id);
+    if ((!item.library && choices[item.id]) || item.launcherNeeds) visit(item.id);
   }
   return enabled;
 }
@@ -32,6 +35,17 @@ export function neededBy(items: ModCenterItem[], enabled: Set<string>, id: strin
   return items
     .filter((i) => i.id !== id && enabled.has(i.id) && i.requires.includes(id))
     .map((i) => i.title);
+}
+
+/** [`neededBy`] for `item`, plus `overlay` (the switch's name) when the in-game overlay needs it. */
+export function neededFor(
+  items: ModCenterItem[],
+  enabled: Set<string>,
+  item: ModCenterItem,
+  overlay: string,
+): string[] {
+  const needed = neededBy(items, enabled, item.id);
+  return item.launcherNeeds ? [...needed, overlay] : needed;
 }
 
 /** Titles of what `id` brings along (its requirements, transitively), except `skip`. */

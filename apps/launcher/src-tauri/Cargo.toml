@@ -24,6 +24,8 @@ export-bindings = []
 
 [build-dependencies]
 tauri-build = { workspace = true }
+# build.rs reads the in-game overlay's jar index before a release build (OVL-B).
+serde_json = { workspace = true }
 
 [dependencies]
 tauri = { workspace = true, features = ["tray-icon", "image-png", "protocol-asset"] }

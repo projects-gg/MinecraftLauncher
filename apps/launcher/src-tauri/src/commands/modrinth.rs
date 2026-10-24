@@ -506,9 +506,15 @@ pub async fn content_scan(
     let owned = pack_owned(addons.game_dir());
     let sets = pl_content::ModSetStates::load_blocking(addons.game_dir());
     let icons = icon_dir(&state);
+    // The in-game overlay's jar belongs to its switch in Settings, not to the player's mods.
+    let overlay_jars = match kind {
+        ImportKind::Mod => crate::overlay::owned_files(addons.game_dir()),
+        _ => HashSet::new(),
+    };
     let entries = scan
         .entries
         .into_iter()
+        .filter(|entry| !pl_overlay::install::is_owned(&overlay_jars, &entry.file_name))
         .map(|mut entry| {
             let from_pack = owned.contains(&index_key(kind.folder(), &entry.file_name));
             let mod_set =

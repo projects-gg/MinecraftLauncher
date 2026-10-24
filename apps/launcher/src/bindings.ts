@@ -4619,6 +4619,11 @@ export type ModCenterItemView = {
 	isNew: boolean,
 	/**  Ids of enabled items that need this one. */
 	requiredBy: string[],
+	/**
+	 *  The launcher's in-game overlay needs it (Fabric API while "Oyun içi katman" is on): it is
+	 *  installed for that too.
+	 */
+	launcherNeeds: boolean,
 	installed: boolean,
 	/**  Installed, and the pack has a newer file for it ("Güncelleme var"). */
 	updateAvailable: boolean,
@@ -5269,6 +5274,11 @@ export type OverlayStateView = {
 	config: OverlayConfig,
 	/**  The mod in the running game is connected now. */
 	connected: boolean,
+	/**
+	 *  The Minecraft versions this build ships the mod for (`26.1.2`, `26.2`, …): a Fabric
+	 *  instance on one of them gets it. Empty in a build without the jars.
+	 */
+	versions: string[],
 };
 
 /**

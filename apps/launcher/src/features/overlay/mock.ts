@@ -28,7 +28,7 @@ export const mockOverlay: OverlayApi = {
     config = next;
   },
   async state() {
-    return { config, connected: connected() };
+    return { config, connected: connected(), versions: ["26.1.2", "26.2", "26.3"] };
   },
   onStatus() {
     return () => {};
