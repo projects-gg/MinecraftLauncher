@@ -18,8 +18,19 @@
 // dev commands "joined", "tag-change", "hide-crew", "tags-off" and "tags-on" play the live changes.
 // --link plays codeless Discord linking (docs/tasks/ovl2-protocol.md, SKIN1-O): "link" in the welcome; a mod's
 // "link-want" gets a made-up permit ("link-offer") for that name, or "link-clear" for the name "Nobody".
+// --host plays world sharing's host launcher (docs/tasks/ovl2-protocol.md, HOST1, H1-H17): "host" in the welcome;
+// "host-request" is answered with "host-publish", "host-published" with the session's mirror ("host-state"), and
+// then the gate is probed as the host launcher's local connections would reach it (PLG1 headers, crates/pl-host
+// PROTOCOL.md section 7): a connection without a header, a header made with another key, the host's own name, a
+// guest logging in for real (to Login Success) and a reused connection number. Each probe's outcome goes to the log
+// as {"dir":"info","frame":{"t":"probe",...}}. --relay-as <name> also opens a relay port (in the --info file as
+// "relayPort") that puts a header for <name> in front of every connection and pipes it to the world, so a real
+// client can join as a guest. --relay <guest>:<friend>:<name>[,...] opens one such port per guest identity
+// ("relayPorts" in the --info file, in order; friend is ayse, mert or deniz; --relay-as <name> is g1:ayse:<name>).
+// Dev commands: "world-invite", "world-connect", "host-mirror", "host-fail", "host-refuse" (the next opening),
+// "host-stop", "host-remove".
 
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, writeFileSync } from "node:fs";
 import net from "node:net";
 
@@ -438,6 +449,7 @@ function welcome(socket) {
           ...(args.chat2 ? EXTRAS : []),
           ...(tagsOn ? ["tags"] : []),
           ...(args.link ? ["link"] : []),
+          ...(args.host ? ["host"] : []),
         ],
   });
   if (args.team6) {
@@ -673,6 +685,18 @@ function onFrame(socket, frame) {
       break;
     case "dev":
       onDev(socket, frame);
+      break;
+    case "host-world":
+    case "host-request":
+    case "host-published":
+    case "host-guest":
+    case "host-invite":
+    case "host-remove":
+    case "host-stop":
+    case "host-meet":
+      if (args.host) {
+        onHost(socket, frame);
+      }
       break;
     default:
       // panel, join, connect-result and anything newer: the mock only logs them.
@@ -920,11 +944,454 @@ function onDev(socket, frame) {
       later(ms, () => listen());
       break;
     }
+    case "world-invite": {
+      // HOST1 (H13, H14): Ayşe invites the player to her open world.
+      const friend = state.friends.find((f) => f.id === (frame.friend ?? "f-ayse"));
+      friend.where = "single";
+      friend.joinable = true;
+      friend.world = { guests: Number(frame.guests ?? 1), max: Number(frame.max ?? 7) };
+      send(socket, { t: "friend", ...friend });
+      send(socket, { t: "toast", kind: "world", key: `world:${friend.id}`, title: friend.name });
+      break;
+    }
+    case "world-connect":
+      // HOST1 (H12): the launcher's way into a friend's world, read as its label.
+      send(socket, {
+        t: "connect",
+        id: `c${nextId++}`,
+        host: "127.0.0.1",
+        port: Number(frame.port ?? 25599),
+        label: frame.label ?? "Arkadaş dünyası: Ayşe",
+      });
+      break;
+    case "host-mirror":
+      // HOST1 (H8): the guests as the scenario wants them ("in", "joining", "invited").
+      hosting.mirror = frame.guests ? JSON.parse(frame.guests) : hosting.mirror;
+      sendMirror(socket);
+      break;
+    case "host-fail":
+      send(socket, {
+        t: "host-state",
+        open: false,
+        max: 7,
+        guests: [],
+        error: frame.error ?? "unavailable",
+      });
+      break;
+    case "host-refuse":
+      // The next opening is refused as the launcher would (a daily limit, the service off).
+      hosting.refuse = frame.error ?? "unavailable";
+      break;
+    case "host-stop":
+      // The launcher closes the world (its own button, the account restricted, the launcher quitting).
+      hosting.open = false;
+      send(socket, { t: "host-stop", reason: frame.reason ?? "player" });
+      break;
+    case "host-remove":
+      send(socket, {
+        t: "host-remove",
+        guest: frame.guest ?? "g1",
+        reason: frame.reason ?? "removed",
+      });
+      break;
     case "bye":
       send(socket, { t: "bye", reason: frame.reason ?? "launcher-exit" });
       socket.end();
       server.close();
       later(1000, () => process.exit(0));
+      break;
+    default:
+      break;
+  }
+}
+
+// ---- HOST1: the host launcher's side of world sharing ---------------------------------------------------------
+
+const FRIEND_LABELS = {
+  "f-ayse": "Ayşe",
+  "f-mert": "Mert",
+  "f-deniz": "Deniz",
+  "f-elif": "Elif",
+  "f-zeynep": "Zeynep",
+};
+const hosting = {
+  world: null,
+  open: false,
+  publish: null,
+  port: 0,
+  proto: 0,
+  mirror: [],
+  conn: 0,
+  probes: [],
+  relays: null,
+  refuse: null,
+};
+
+/** PROTOCOL.md section 7.1: the gate key is HMAC-SHA256 of a phrase, keyed with the bridge token's ASCII bytes. */
+function gateKey(tokenText = token) {
+  return createHmac("sha256", Buffer.from(tokenText, "ascii"))
+    .update("projects host gate v1")
+    .digest();
+}
+
+/** A PLG1 header for these fields, MAC'd with {@code key}. */
+function header(fields, key = gateKey()) {
+  const json = Buffer.from(JSON.stringify({ v: 1, ...fields }), "utf8");
+  const prefix = Buffer.alloc(6);
+  prefix.write("PLG1", 0, "ascii");
+  prefix.writeUInt16BE(json.length, 4);
+  const signed = Buffer.concat([prefix, json]);
+  return Buffer.concat([signed, createHmac("sha256", key).update(signed).digest()]);
+}
+
+function varInt(value) {
+  const out = [];
+  let v = value >>> 0;
+  do {
+    let b = v & 0x7f;
+    v >>>= 7;
+    if (v !== 0) {
+      b |= 0x80;
+    }
+    out.push(b);
+  } while (v !== 0);
+  return Buffer.from(out);
+}
+
+function mcString(text) {
+  const b = Buffer.from(text, "utf8");
+  return Buffer.concat([varInt(b.length), b]);
+}
+
+function packet(id, ...parts) {
+  const body = Buffer.concat([varInt(id), ...parts]);
+  return Buffer.concat([varInt(body.length), body]);
+}
+
+/** The game's first two packets on a login: the handshake and the hello for {@code name}. */
+function loginStart(name, portNumber, proto) {
+  const p = Buffer.alloc(2);
+  p.writeUInt16BE(portNumber, 0);
+  const handshake = packet(0x00, varInt(proto), mcString("127.0.0.1"), p, varInt(2));
+  const hello = packet(0x00, mcString(name), randomBytes(16));
+  return Buffer.concat([handshake, hello]);
+}
+
+function readVarInt(buf, at) {
+  let value = 0;
+  let shift = 0;
+  for (let i = at; i < buf.length && i < at + 5; i++) {
+    value |= (buf[i] & 0x7f) << shift;
+    if ((buf[i] & 0x80) === 0) {
+      return [value, i + 1];
+    }
+    shift += 7;
+  }
+  return null;
+}
+
+/**
+ * Connects to the world, writes {@code bytes}, reads what comes back for a moment and says what it was: "closed"
+ * (nothing, then the end), "disconnect" with its text, "login-success", "encryption" (Mojang's check) or "silent".
+ */
+function probe(name, bytes, then) {
+  const socket = net.connect(hosting.port, "127.0.0.1");
+  let got = Buffer.alloc(0);
+  let compressed = false;
+  let done = false;
+  const finish = (result) => {
+    if (done) {
+      return;
+    }
+    done = true;
+    socket.destroy();
+    hosting.probes.push({ name, ...result });
+    log("info", { t: "probe", name, ...result });
+    if (then) {
+      later(150, then);
+    }
+  };
+  socket.on("connect", () => socket.write(bytes));
+  socket.on("data", (chunk) => {
+    got = Buffer.concat([got, chunk]);
+    for (;;) {
+      const len = readVarInt(got, 0);
+      if (!len || got.length < len[1] + len[0]) {
+        return;
+      }
+      let body = got.subarray(len[1], len[1] + len[0]);
+      got = got.subarray(len[1] + len[0]);
+      if (compressed) {
+        const dataLength = readVarInt(body, 0);
+        if (dataLength?.[0] !== 0) {
+          finish({ result: "compressed-packet" });
+          return;
+        }
+        body = body.subarray(dataLength[1]);
+      }
+      const id = readVarInt(body, 0);
+      if (!id) {
+        return;
+      }
+      const payload = body.subarray(id[1]);
+      if (id[0] === 0x03 && !compressed) {
+        compressed = true;
+        continue;
+      }
+      if (id[0] === 0x00) {
+        const textLength = readVarInt(payload, 0);
+        const text = textLength
+          ? payload.subarray(textLength[1], textLength[1] + textLength[0]).toString("utf8")
+          : "";
+        finish({ result: "disconnect", text });
+        return;
+      }
+      if (id[0] === 0x02) {
+        finish({ result: "login-success" });
+        return;
+      }
+      if (id[0] === 0x01) {
+        finish({ result: "encryption" });
+        return;
+      }
+      finish({ result: `packet-${id[0]}` });
+      return;
+    }
+  });
+  socket.on("close", () => finish({ result: got.length === 0 ? "closed" : "partial" }));
+  socket.on("error", () => finish({ result: "error" }));
+  later(6500, () => finish({ result: "silent" }));
+}
+
+const BINDING_KEY_ID = "sW9hzU3c";
+const AYSE_DIGEST = "1UbirWHKbvkTXKMZNmDDug";
+const MERT_DIGEST = "n7ppm8zILloa1X-qpWnqVA";
+// Any 16 bytes in base64url stand for a friend here.
+const DENIZ_DIGEST = createHash("sha256")
+  .update("f-deniz")
+  .digest()
+  .subarray(0, 16)
+  .toString("base64url");
+const DIGESTS = { ayse: AYSE_DIGEST, mert: MERT_DIGEST, deniz: DENIZ_DIGEST };
+
+/** The gate as the host launcher's connections reach it, one after another. */
+function probeGate() {
+  const id = hosting.publish;
+  const proto = hosting.proto;
+  const fields = (name, conn, guest, friend, premium = false) => ({
+    id,
+    conn,
+    guest,
+    name,
+    premium,
+    friend,
+  });
+  probe("no-header", Buffer.from("\x10\x00hello there, no header at all"), () =>
+    probe(
+      "other-key",
+      Buffer.concat([
+        header(
+          fields("Notch", ++hosting.conn, "g1", AYSE_DIGEST),
+          gateKey("another-launch-token-0123456789abcdefABCDEF"),
+        ),
+        loginStart("Notch", hosting.port, proto),
+      ]),
+      () =>
+        probe(
+          "host-name",
+          Buffer.concat([
+            header(fields(args.hostName ?? "OVL2Test", ++hosting.conn, "g2", MERT_DIGEST)),
+            loginStart(args.hostName ?? "OVL2Test", hosting.port, proto),
+          ]),
+          () => {
+            const conn = ++hosting.conn;
+            probe(
+              "guest-login",
+              Buffer.concat([
+                header(fields("Notch", conn, "g1", AYSE_DIGEST)),
+                loginStart("Notch", hosting.port, proto),
+              ]),
+              () =>
+                probe(
+                  "conn-reused",
+                  Buffer.concat([
+                    header(fields("Notch", conn, "g1", AYSE_DIGEST)),
+                    loginStart("Notch", hosting.port, proto),
+                  ]),
+                  () =>
+                    probe(
+                      "other-publish",
+                      Buffer.concat([
+                        header({
+                          ...fields("Notch", ++hosting.conn, "g1", AYSE_DIGEST),
+                          id: "p-old",
+                        }),
+                        loginStart("Notch", hosting.port, proto),
+                      ]),
+                      () =>
+                        log("info", {
+                          t: "probes-done",
+                          probes: hosting.probes.map((p) => `${p.name}:${p.result}`),
+                        }),
+                    ),
+                ),
+            );
+          },
+        ),
+    ),
+  );
+}
+
+/** The guest identities the relay ports stand for: --relay-as first (as g1, Ayşe), then each of --relay. */
+function relayIdentities() {
+  const list = [];
+  if (typeof args.relayAs === "string") {
+    list.push({ guest: "g1", friend: AYSE_DIGEST, name: args.relayAs });
+  }
+  if (typeof args.relay === "string") {
+    for (const item of args.relay.split(",")) {
+      const [guest, friend, name] = item.split(":");
+      if (guest && DIGESTS[friend] && name) {
+        list.push({ guest, friend: DIGESTS[friend], name });
+      }
+    }
+  }
+  return list;
+}
+
+/** Every connection to a relay port gets a header for that port's guest and goes on to the world (as it is now). */
+function openRelay() {
+  const identities = relayIdentities();
+  if (identities.length === 0 || hosting.relays) {
+    return;
+  }
+  hosting.relays = [];
+  const ports = [];
+  let listening = 0;
+  identities.forEach((who, index) => {
+    const relay = net.createServer((client) => {
+      const world = net.connect(hosting.port, "127.0.0.1", () => {
+        world.write(
+          header({
+            id: hosting.publish,
+            conn: ++hosting.conn,
+            guest: who.guest,
+            name: who.name,
+            premium: false,
+            friend: who.friend,
+          }),
+        );
+        client.pipe(world);
+        world.pipe(client);
+      });
+      world.on("error", () => client.destroy());
+      client.on("error", () => world.destroy());
+    });
+    hosting.relays.push(relay);
+    relay.listen(0, "127.0.0.1", () => {
+      ports[index] = relay.address().port;
+      log("info", { t: "relay", port: ports[index], as: who.name, guest: who.guest });
+      listening++;
+      if (listening === identities.length && args.info) {
+        writeFileSync(
+          args.info,
+          JSON.stringify({ port, token, relayPort: ports[0], relayPorts: ports }),
+        );
+      }
+    });
+  });
+}
+
+function sendMirror(socket) {
+  send(socket, { t: "host-state", open: hosting.open, max: 7, guests: hosting.mirror });
+}
+
+function onHost(socket, frame) {
+  switch (frame.t) {
+    case "host-world":
+      hosting.world = frame.open ? frame : null;
+      break;
+    case "host-request": {
+      if (!hosting.world || hosting.world.lan || hosting.refuse) {
+        const error = hosting.refuse ?? "unavailable";
+        hosting.refuse = null;
+        later(200, () => send(socket, { t: "host-state", open: false, max: 7, guests: [], error }));
+        break;
+      }
+      hosting.publish = `p${nextId++}`;
+      hosting.mirror = frame.invite.map((friend) => ({
+        guest: "",
+        friend,
+        label: FRIEND_LABELS[friend] ?? friend,
+        state: "invited",
+      }));
+      later(250, () =>
+        send(socket, {
+          t: "host-publish",
+          id: hosting.publish,
+          mode: frame.mode,
+          commands: frame.commands,
+          max: 7,
+          binding: BINDING_KEY_ID,
+        }),
+      );
+      break;
+    }
+    case "host-published":
+      if (frame.id !== hosting.publish) {
+        break;
+      }
+      if (!frame.ok) {
+        send(socket, { t: "host-state", open: false, max: 7, guests: [], error: "unavailable" });
+        break;
+      }
+      hosting.port = frame.port;
+      hosting.proto = frame.proto;
+      hosting.open = true;
+      // The paths and the invites take a moment in the real launcher.
+      later(400, () => {
+        sendMirror(socket);
+        openRelay();
+        if (!args.noProbe) {
+          later(300, probeGate);
+        }
+      });
+      break;
+    case "host-guest": {
+      const row = hosting.mirror.find((g) => g.guest === frame.guest) ?? hosting.mirror[0];
+      if (row && frame.state === "in") {
+        row.guest = frame.guest;
+        row.name = frame.name;
+        row.state = "in";
+        sendMirror(socket);
+      } else if (row && frame.state === "out") {
+        row.state = "invited";
+        sendMirror(socket);
+      }
+      break;
+    }
+    case "host-invite":
+      for (const friend of frame.invite) {
+        if (!hosting.mirror.some((g) => g.friend === friend)) {
+          hosting.mirror.push({
+            guest: "",
+            friend,
+            label: FRIEND_LABELS[friend] ?? friend,
+            state: "invited",
+          });
+        }
+      }
+      sendMirror(socket);
+      break;
+    case "host-remove":
+      // As the launcher: the slot goes, the game hears it (it sent the guest off already).
+      hosting.mirror = hosting.mirror.filter((g) => g.guest !== frame.guest);
+      send(socket, { t: "host-remove", guest: frame.guest, reason: "removed" });
+      sendMirror(socket);
+      break;
+    case "host-stop":
+      hosting.open = false;
+      hosting.mirror = [];
       break;
     default:
       break;

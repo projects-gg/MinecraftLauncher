@@ -14,6 +14,12 @@
   "entrypoints": {
     "client": ["gg.projects.overlay.OverlayClient"]
   },
+  "mixins": [
+    {
+      "config": "projects-overlay.host.mixins.json",
+      "environment": "client"
+    }
+  ],
   "depends": {
     "fabricloader": ">=0.19.5",
     "minecraft": "${minecraft_range}",

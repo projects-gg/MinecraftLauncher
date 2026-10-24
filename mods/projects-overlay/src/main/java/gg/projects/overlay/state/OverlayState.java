@@ -128,6 +128,51 @@ public final class OverlayState {
     public record Arrival(String id, String name, boolean mine, long at) {
     }
 
+    /**
+     * HOST1 (H8): a friend in the player's world session as the launcher mirrors it: the guest id once the friend's
+     * launcher connected (else empty), the friend's id and shown name, the game name once known, and {@code invited},
+     * {@code joining} or {@code in}.
+     */
+    public record HostGuest(String guest, String friend, String label, String name, String state) {
+        public boolean in() {
+            return state.equals("in");
+        }
+
+        public boolean joining() {
+            return state.equals("joining");
+        }
+    }
+
+    /**
+     * HOST1 (H8): the player's world session, whole, on every change; {@code error} ({@code unavailable}, {@code
+     * limit}) only when the world did not open.
+     */
+    public record HostView(boolean open, int max, List<HostGuest> guests, String error) {
+        /** Guests in the world now. */
+        public int inWorld() {
+            int n = 0;
+            for (HostGuest g : guests) {
+                if (g.in()) {
+                    n++;
+                }
+            }
+            return n;
+        }
+
+        public HostGuest byGuest(String guestId) {
+            for (HostGuest g : guests) {
+                if (!guestId.isEmpty() && g.guest().equals(guestId)) {
+                    return g;
+                }
+            }
+            return null;
+        }
+    }
+
+    /** HOST1 (H13): this friend invited the player to their open world: {@code guests + 1} of {@code max + 1}. */
+    public record WorldMark(int guests, int max) {
+    }
+
     public static final class ChatLine {
         public final String clientId;
         public final String from;
@@ -224,6 +269,10 @@ public final class OverlayState {
     private final Map<String, Badge> badges = new HashMap<>();
     /** TEAM6 §7: who came into each crew conversation, oldest first. */
     private final Map<String, List<Arrival>> arrivals = new HashMap<>();
+    /** HOST1 (H13): friends who invited the player to their open world, by friend id. */
+    private final Map<String, WorldMark> worlds = new HashMap<>();
+    /** HOST1 (H8): the player's own world session as the launcher mirrors it, or null. */
+    private HostView host;
     private int badgeRevision;
 
     private BridgeClient.Status status = BridgeClient.Status.CONNECTING;
@@ -298,6 +347,24 @@ public final class OverlayState {
     /** Bumps on every visible change so an open panel knows when to rebuild. */
     public int revision() {
         return revision;
+    }
+
+    /** HOST1: the player's world session as the launcher last mirrored it, or null (none, or it ended). */
+    public HostView host() {
+        return host;
+    }
+
+    /** HOST1: the session ended on this side (the player stopped it, the world closed); no mirror comes after. */
+    public void hostEnded() {
+        if (host != null) {
+            host = null;
+            revision++;
+        }
+    }
+
+    /** HOST1 (H13): the open world friend {@code friendId} invited the player to, or null. */
+    public WorldMark world(String friendId) {
+        return friendId == null ? null : worlds.get(friendId);
     }
 
     /** Bumps when the lines of {@code conversation} change. */
@@ -504,6 +571,8 @@ public final class OverlayState {
                     writers.clear();
                     badges.clear();
                     arrivals.clear();
+                    worlds.clear();
+                    host = null;
                     note = null;
                 }
                 // Tags may have come or gone with the features: what is laid out is laid out again.
@@ -525,6 +594,7 @@ public final class OverlayState {
             }
             case "snapshot" -> {
                 friends.clear();
+                worlds.clear();
                 forEach(frame, "friends", this::putFriend);
                 LinkedHashMap<String, Conversation> next = new LinkedHashMap<>();
                 forEachConversation(frame, next);
@@ -542,7 +612,11 @@ public final class OverlayState {
                     stopWritingEverywhere(Protocol.str(frame, "id", ""));
                 }
             }
-            case "friend-gone" -> friends.remove(Protocol.str(frame, "id", ""));
+            case "friend-gone" -> {
+                friends.remove(Protocol.str(frame, "id", ""));
+                worlds.remove(Protocol.str(frame, "id", ""));
+            }
+            case "host-state" -> putHost(frame);
             case "conv" -> putConversation(frame);
             case "dnd" -> dnd = Protocol.bool(frame, "on", false);
             case "msg" -> putMessage(frame, now, true);
@@ -668,6 +742,33 @@ public final class OverlayState {
         String host = Protocol.plain(Protocol.str(o, "host", ""), 255);
         friends.put(id, new Friend(id, name(o, "name"), Protocol.str(o, "where", "offline"),
             Protocol.bool(o, "joinable", false), host.isEmpty() ? null : host, crewId(o)));
+        // HOST1 (H13): only the launcher that got the invite sends it; gone with the next frame without it.
+        JsonObject world = obj(o, "world");
+        if (world == null) {
+            worlds.remove(id);
+        } else {
+            worlds.put(id, new WorldMark((int) Math.max(0, Math.min(7, Protocol.num(world, "guests", 0))),
+                (int) Math.max(1, Math.min(7, Protocol.num(world, "max", 7)))));
+        }
+    }
+
+    /** HOST1 (H8): the launcher's mirror of the player's world session. */
+    private void putHost(JsonObject frame) {
+        boolean open = Protocol.bool(frame, "open", false);
+        String error = Protocol.str(frame, "error", null);
+        List<HostGuest> guests = new ArrayList<>();
+        forEach(frame, "guests", g -> {
+            String friend = Protocol.str(g, "friend", "");
+            if (friend.isEmpty() || guests.size() >= 7) {
+                return;
+            }
+            String state = Protocol.str(g, "state", "invited");
+            guests.add(new HostGuest(Protocol.plain(Protocol.str(g, "guest", ""), 8), friend, name(g, "label"),
+                Protocol.plain(Protocol.str(g, "name", ""), 16),
+                state.equals("in") || state.equals("joining") ? state : "invited"));
+        });
+        host = new HostView(open, (int) Math.max(1, Math.min(7, Protocol.num(frame, "max", 7))), List.copyOf(guests),
+            open ? null : (error == null ? "unavailable" : error));
     }
 
     /** A crew id a frame names in {@code badge} (TEAM6), or null. */

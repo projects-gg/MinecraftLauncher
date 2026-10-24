@@ -13,12 +13,12 @@ import net.minecraft.client.input.MouseButtonEvent;
 import net.minecraft.network.chat.Component;
 
 /**
- * The launcher's chamfered action button, 16 GUI pixels tall: gold (primary), obsidian (secondary) or
- * bare until hovered (ghost); an optional icon before the words. Hover crossfades to the lighter face,
- * a press settles it a pixel down.
+ * The launcher's chamfered action button, 16 GUI pixels tall: gold (primary), obsidian (secondary), bare until
+ * hovered (ghost) or obsidian under a flare hairline for what ends something (danger); an optional icon before the
+ * words. Hover crossfades to the lighter face, a press settles it a pixel down.
  */
 public class ActionButton extends PanelWidget {
-    public enum Style { PRIMARY, SECONDARY, GHOST }
+    public enum Style { PRIMARY, SECONDARY, GHOST, DANGER }
 
     public static final int HEIGHT = 16;
     static final int PAD = 7;
@@ -122,6 +122,14 @@ public class ActionButton extends PanelWidget {
                     Draw.popAlpha();
                 }
             }
+            case DANGER -> {
+                Draw.frame(g, Frames.BUTTON_DANGER, x, y, getWidth(), HEIGHT);
+                if (h > 0f) {
+                    Draw.pushAlpha(h);
+                    Draw.frame(g, Frames.BUTTON_DANGER_HOVER, x, y, getWidth(), HEIGHT);
+                    Draw.popAlpha();
+                }
+            }
         }
         if (p > 0f) {
             Draw.pushAlpha(p * 0.5f);
@@ -136,6 +144,7 @@ public class ActionButton extends PanelWidget {
             case PRIMARY -> Theme.GOLD_INK;
             case SECONDARY -> Theme.BONE_100;
             case GHOST -> Theme.mix(Theme.ASH_300, Theme.BONE_100, h);
+            case DANGER -> Theme.mix(Theme.FLARE_300, Theme.BONE_50, h * 0.35f);
         };
         float content = (icon == null ? 0 : 10 + (label.isEmpty() ? 0 : ICON_GAP)) + labelWidth;
         float cx = x + (getWidth() - content) / 2f;
