@@ -33,6 +33,7 @@ import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -110,7 +111,9 @@ public final class OverlayClient implements ClientModInitializer {
         // The aim mark means nothing while the pointer is out, and a tag's bubble opens beside the panel, often right
         // over the middle of the screen where the mark sits (TEAM6-O).
         HudElementRegistry.replaceElement(VanillaHudElements.CROSSHAIR, crosshair -> (g, delta) -> {
-            if (OverlayScreen.hudRightOf(Compat.screen(Minecraft.getInstance())) == 0) {
+            // Nor under the codeless link question (SKIN1-O), whose card sits on the middle of the screen.
+            Screen on = Compat.screen(Minecraft.getInstance());
+            if (OverlayScreen.hudRightOf(on) == 0 && !(on instanceof DiscordLinkScreen)) {
                 crosshair.extractRenderState(g, delta);
             }
         });

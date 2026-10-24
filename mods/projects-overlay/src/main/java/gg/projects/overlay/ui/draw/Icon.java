@@ -38,8 +38,6 @@ public enum Icon {
     OPEN("ArrowSquareOut"),
     /** "Ece ekibe katıldı" in crew chat (TEAM6 §7), as the launcher's line. */
     WAVE("HandWaving"),
-    /** "Evet, eşle" on the codeless Discord link question (SKIN1-O), as the launcher's link actions. */
-    LINK("LinkSimple"),
     /** The Discord account in that question: the symbol alone, uncoloured, as the launcher's link area. */
     DISCORD("DiscordLogo");
 

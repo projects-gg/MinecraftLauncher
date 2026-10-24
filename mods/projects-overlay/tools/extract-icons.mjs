@@ -37,7 +37,6 @@ const ICONS = [
   ["Globe", "regular"],
   ["ArrowSquareOut", "regular"],
   ["HandWaving", "regular"],
-  ["LinkSimple", "regular"],
   ["DiscordLogo", "fill"],
 ];
 

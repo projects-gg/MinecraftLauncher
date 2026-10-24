@@ -83,6 +83,7 @@ public final class LinkScenario implements ClientModInitializer {
     private long shownAt;
     private JsonObject round;
     private CompletableFuture<Void> reload;
+    private boolean serverSide;
 
     @Override
     public void onInitializeClient() {
@@ -91,8 +92,16 @@ public final class LinkScenario implements ClientModInitializer {
         }
         out = Path.of(System.getProperty("projects.overlay.dev.out", "link-out")).toAbsolutePath();
         ToastLayer.pauseWhileAway = false;
-        // The world's own server stands in for ProBotLinker: it answers a permit with the question ProBot would
-        // have made of it, and notes everything it hears.
+        ClientTickEvents.END_CLIENT_TICK.register(this::tick);
+        LOG.info("SKIN1-O scenario driver on; results in {}", out);
+    }
+
+    /**
+     * The world's own server stands in for ProBotLinker: it answers a permit with the question ProBot would have
+     * made of it, and notes everything it hears. Registered on the first tick: the overlay registers the payload
+     * type in its own entrypoint, which may run after this one.
+     */
+    private void registerServerSide() {
         ServerPlayNetworking.registerGlobalReceiver(LinkPayload.TYPE, (payload, context) -> {
             JsonObject heardNow = describe(payload.json());
             synchronized (heard) {
@@ -109,8 +118,6 @@ public final class LinkScenario implements ClientModInitializer {
                 ServerPlayNetworking.send(context.player(), new LinkPayload(question.toString()));
             }
         });
-        ClientTickEvents.END_CLIENT_TICK.register(this::tick);
-        LOG.info("SKIN1-O scenario driver on; results in {}", out);
     }
 
     /** A heard message as the results keep it: its type and what was right about it (never the permit itself). */
@@ -157,6 +164,10 @@ public final class LinkScenario implements ClientModInitializer {
         OverlayClient overlay = OverlayClient.get();
         if (overlay == null) {
             return;
+        }
+        if (!serverSide) {
+            serverSide = true;
+            registerServerSide();
         }
         mc.options.pauseOnLostFocus = false;
         BridgeClient.Status status = overlay.bridge().status();
@@ -281,7 +292,7 @@ public final class LinkScenario implements ClientModInitializer {
                 if (on >= 0.20) {
                     // A reflexive Enter right as it appears: nothing has the focus, nothing happens.
                     if (question != null) {
-                        question.keyPressed(new KeyEvent(InputConstants.KEY_RETURN, 0, 0));
+                        question.keyPressed(key(InputConstants.KEY_RETURN));
                     }
                     stage++;
                 }
@@ -292,7 +303,7 @@ public final class LinkScenario implements ClientModInitializer {
                     GuiEventListener yes = question == null || question.children().size() < 2 ? null
                         : question.children().get(1);
                     if (yes != null) {
-                        yes.keyPressed(new KeyEvent(InputConstants.KEY_RETURN, 0, 0));
+                        yes.keyPressed(key(InputConstants.KEY_RETURN));
                     }
                     round.addProperty("earlyKeysIgnored", Compat.screen(mc) instanceof DiscordLinkScreen);
                     stage++;
@@ -307,11 +318,11 @@ public final class LinkScenario implements ClientModInitializer {
             case 7 -> {
                 if (on >= 1.2 && question != null) {
                     switch (r.action()) {
-                        case "escape" -> question.keyPressed(new KeyEvent(InputConstants.KEY_ESCAPE, 0, 0));
-                        case "keys-no" -> question.keyPressed(new KeyEvent(InputConstants.KEY_TAB, 0, 0));
+                        case "escape" -> question.keyPressed(key(InputConstants.KEY_ESCAPE));
+                        case "keys-no" -> question.keyPressed(key(InputConstants.KEY_TAB));
                         default -> {
-                            question.keyPressed(new KeyEvent(InputConstants.KEY_TAB, 0, 0));
-                            question.keyPressed(new KeyEvent(InputConstants.KEY_TAB, 0, 0));
+                            question.keyPressed(key(InputConstants.KEY_TAB));
+                            question.keyPressed(key(InputConstants.KEY_TAB));
                         }
                     }
                     stage++;
@@ -325,7 +336,7 @@ public final class LinkScenario implements ClientModInitializer {
                     if (!"escape".equals(r.action())) {
                         shot(mc, r.name() + "-focus");
                         if (question != null) {
-                            question.keyPressed(new KeyEvent(InputConstants.KEY_RETURN, 0, 0));
+                            question.keyPressed(key(InputConstants.KEY_RETURN));
                         }
                     }
                     stage++;
@@ -356,6 +367,18 @@ public final class LinkScenario implements ClientModInitializer {
             current = null;
             go(Step.QUIT);
         }
+    }
+
+    /**
+     * A key as the game hands it to screens. 26.3 reads the keyboard through SDL3: Escape and Enter come from the
+     * scancode (the first field), Tab and the arrows from the keycode (the second), so both are set; older versions
+     * read the first field only.
+     */
+    private static KeyEvent key(int key) {
+        int keycode = key == InputConstants.KEY_TAB ? 9
+            : key == InputConstants.KEY_RETURN ? 13
+            : key == InputConstants.KEY_ESCAPE ? 27 : 0;
+        return new KeyEvent(key, keycode, 0);
     }
 
     private void openWorld(Minecraft mc) {

@@ -27,7 +27,8 @@ public enum Frames {
      */
     DIALOG(FrameSpec.rounded(6, Theme.withAlpha(Theme.OBSIDIAN_900, Alphas.DIALOG), Theme.withAlpha(0xFFFFFF, 0.10f))
         .withHighlight(Theme.withAlpha(0xFFFFFF, 0.07f))
-        .withShadow(Theme.withAlpha(0x220606, 0.5f), 8f, 3f)),
+        // Softer than a toast's: over the dimmed game a heavy ember shadow read as a dirty ring at GUI 3 (SKIN1-O).
+        .withShadow(Theme.withAlpha(0x220606, 0.32f), 5f, 2f)),
     /** Cards inside the panel (crew call, notices). */
     CARD(FrameSpec.rounded(5, Theme.withAlpha(Theme.OBSIDIAN_800, 0.86f), Theme.withAlpha(0xFFFFFF, 0.07f))),
     /** The crew call card: a touch of gold, the one loud thing in the panel. */
