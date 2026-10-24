@@ -12,7 +12,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use pl_social::{
     CallAnswer as SocialAnswer, ChatChangeView, ChatMessageView, ChatPage, ChatRejection,
-    ChatTypingView, ErrorCode, McIntent, SocialError, SocialNotice, SocialService, SocialView,
+    ChatTypingView, ErrorCode, InviteResult, McIntent, ReportReason, ReportTarget, SocialError,
+    SocialNotice, SocialService, SocialView,
 };
 use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
@@ -21,8 +22,9 @@ use crate::OverlayConfig;
 use crate::feed::{self, Listener, Mirror, Scene, Sends};
 use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::protocol::{
-    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_HOST, FEATURE_LINK, FEATURE_TAGS, FromGame,
-    MAX_MESSAGE_CHARS, ReactFailure, Secret, SendFailure, ToGame,
+    ByeReason, CallAnswer, FEATURE_CONNECT, FEATURE_HOST, FEATURE_LINK, FEATURE_PEOPLE,
+    FEATURE_TAGS, FriendAction, FriendRefusal, FromGame, MAX_MESSAGE_CHARS, ReactFailure, Secret,
+    SendFailure, ToGame,
 };
 use crate::server::{BridgeEvent, ConnId, Control};
 
@@ -116,6 +118,27 @@ pub trait SocialActions: Clone + Send + Sync + 'static {
     ) -> impl Future<Output = Option<McIntent>> + Send + 'static;
     /// SKIN1 §3.7: the permit stops working (the game that held it closed).
     fn codeless_close(&self) -> impl Future<Output = ()> + Send + 'static;
+    /// OVL-UX: "Birlikte oyna" to a friend, from the game's friend menu.
+    fn invite(
+        &self,
+        friend: &str,
+    ) -> impl Future<Output = pl_social::Result<InviteResult>> + Send + 'static;
+    /// OVL-UX: "Arkadaşlıktan çıkar".
+    fn remove_friend(
+        &self,
+        friend: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
+    /// OVL-UX: "Engelle".
+    fn block(&self, friend: &str) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
+    /// OVL-UX: "Rapor et" about a friend: a reason, a note for moderators, and whether to block
+    /// them too.
+    fn report_player(
+        &self,
+        friend: &str,
+        reason: ReportReason,
+        note: Option<String>,
+        block: bool,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static;
 }
 
 impl SocialActions for SocialService {
@@ -211,6 +234,46 @@ impl SocialActions for SocialService {
         let service = self.clone();
         async move { service.mc_codeless_close().await }
     }
+
+    fn invite(
+        &self,
+        friend: &str,
+    ) -> impl Future<Output = pl_social::Result<InviteResult>> + Send + 'static {
+        let service = self.clone();
+        let friend = friend.to_owned();
+        async move { SocialService::invite(&service, &friend).await }
+    }
+
+    fn remove_friend(
+        &self,
+        friend: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let service = self.clone();
+        let friend = friend.to_owned();
+        async move { SocialService::remove_friend(&service, &friend).await }
+    }
+
+    fn block(&self, friend: &str) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let service = self.clone();
+        let friend = friend.to_owned();
+        async move { SocialService::block(&service, &friend).await }
+    }
+
+    fn report_player(
+        &self,
+        friend: &str,
+        reason: ReportReason,
+        note: Option<String>,
+        block: bool,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let service = self.clone();
+        let target = ReportTarget::Player {
+            id: friend.to_owned(),
+            plan: None,
+            reaction: None,
+        };
+        async move { service.report(target, reason, note, block).await }
+    }
 }
 
 /// What the friends feature and the launcher tell a session.
@@ -268,8 +331,61 @@ fn sticker_ref_ok(sticker: &str) -> bool {
             .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
 }
 
+/// The friend menu sends at most this many actions ... (OVL-UX)
+const PEOPLE_BURST: usize = 6;
+/// ... within this long (a person picks slower; anything faster is a stuck key or a bad mod).
+const PEOPLE_WINDOW: Duration = Duration::from_secs(10);
+/// "Discord'dan mesaj at" for the same friend again within this long opens nothing more (a double
+/// click, as the launcher's own button).
+const DISCORD_REPEAT: Duration = Duration::from_secs(2);
+/// Longest note a report takes (the launcher's `NOTE_MAX`).
+const REPORT_NOTE_CHARS: usize = 200;
+
 /// Called with `true` once the mod is greeted and `false` when it goes.
 pub(crate) type ConnectedFn = Arc<dyn Fn(bool) + Send + Sync>;
+
+/// Opens a friend's Discord profile (their user id, their web profile): the app's own way, in the
+/// Discord app when it is installed. False when nothing can open it (OVL-UX).
+pub(crate) type DiscordFn = Arc<dyn Fn(&str, &str) -> bool + Send + Sync>;
+
+/// A player's report reason from the friend menu (the launcher's player reasons), or None.
+fn player_reason(reason: &str) -> Option<ReportReason> {
+    Some(match reason {
+        "name" => ReportReason::Name,
+        "profile" => ReportReason::Profile,
+        "harassment" => ReportReason::Harassment,
+        "spam" => ReportReason::Spam,
+        "scam" => ReportReason::Scam,
+        "other" => ReportReason::Other,
+        _ => return None,
+    })
+}
+
+/// A report's note as it goes: spaces folded, trimmed, at most [`REPORT_NOTE_CHARS`]; None when
+/// empty (the launcher's `noteOf`).
+fn report_note(note: &str) -> Option<String> {
+    let folded = note
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .filter(|c| !c.is_control())
+        .take(REPORT_NOTE_CHARS)
+        .collect::<String>();
+    let note = folded.trim();
+    (!note.is_empty()).then(|| note.to_owned())
+}
+
+/// Why a friend menu action did not go, as the mod says it.
+fn friend_refusal(error: &SocialError) -> FriendRefusal {
+    match error {
+        SocialError::RateLimited { .. } => FriendRefusal::Wait,
+        SocialError::Unavailable { .. } | SocialError::Network(_) | SocialError::Unauthorized => {
+            FriendRefusal::Offline
+        }
+        _ => FriendRefusal::Failed,
+    }
+}
 
 /// The live connection and what it shows.
 struct Live {
@@ -292,6 +408,8 @@ struct Live {
     links: bool,
     /// When it last asked for the permit.
     link_wanted_at: Option<Instant>,
+    /// The mod has the friend menu (OVL-UX: `people` in its hello): it hears `friend-result`.
+    people: bool,
 }
 
 /// The codeless linking permit this session holds (SKIN1-O). It never goes to a log.
@@ -352,6 +470,10 @@ pub(crate) struct Session<S> {
     permits_opened: u32,
     permit_tx: mpsc::UnboundedSender<PermitAnswer>,
     permit_rx: Option<mpsc::UnboundedReceiver<PermitAnswer>>,
+    /// OVL-UX: when the friend menu's last actions came, the Discord opener and its last press.
+    recent_people: VecDeque<Instant>,
+    discord: DiscordFn,
+    last_discord: Option<(String, Instant)>,
 }
 
 fn now_ms() -> i64 {
@@ -452,6 +574,7 @@ impl<S: SocialActions> Session<S> {
         host: HostSink,
         worlds: WorldsShown,
         game: Option<String>,
+        discord: DiscordFn,
     ) -> Self {
         // The friends feature as it is now; every change after comes as a message.
         let view = Arc::new(social.view());
@@ -482,6 +605,9 @@ impl<S: SocialActions> Session<S> {
             permits_opened: 0,
             permit_tx,
             permit_rx: Some(permit_rx),
+            recent_people: VecDeque::new(),
+            discord,
+            last_discord: None,
         }
     }
 
@@ -958,6 +1084,7 @@ impl<S: SocialActions> Session<S> {
                     tags,
                     links: features.iter().any(|f| f == FEATURE_LINK),
                     link_wanted_at: None,
+                    people: features.iter().any(|f| f == FEATURE_PEOPLE),
                 }));
                 self.send(frames);
                 (self.host)(HostSignal::Connected { hosts });
@@ -1085,7 +1212,216 @@ impl<S: SocialActions> Session<S> {
                 let _ = pending.reply.send(outcome);
             }
             FromGame::LinkWant { name } => self.on_link_want(&name),
+            // OVL-UX: the friend menu (the player's own presses, after the mod's question where one
+            // is asked).
+            FromGame::Invite { friend } => self.on_invite(friend),
+            FromGame::Discord { friend } => self.on_discord(friend),
+            FromGame::Unfriend { friend } => {
+                if self.person_allowed(&friend, FriendAction::Unfriend, true) {
+                    let doing = self.social.remove_friend(&friend);
+                    self.settle(friend, FriendAction::Unfriend, doing);
+                }
+            }
+            FromGame::Block { friend } => {
+                if self.person_allowed(&friend, FriendAction::Block, true) {
+                    let doing = self.social.block(&friend);
+                    self.settle(friend, FriendAction::Block, doing);
+                }
+            }
+            FromGame::Report {
+                friend,
+                reason,
+                note,
+                block,
+            } => self.on_report(friend, &reason, &note, block),
             FromGame::Hello { .. } | FromGame::Unknown => {}
+        }
+    }
+
+    // --- the friend menu (OVL-UX) ------------------------------------------------------------------
+
+    /// How a friend menu action went, to a mod that hears it (`people` in its hello).
+    fn friend_result(
+        &self,
+        friend: &str,
+        action: FriendAction,
+        queued: bool,
+        reason: Option<FriendRefusal>,
+    ) {
+        if self.live.as_ref().is_some_and(|live| live.people) {
+            self.send(vec![ToGame::FriendResult {
+                friend: friend.to_owned(),
+                action,
+                ok: reason.is_none(),
+                queued,
+                reason,
+            }]);
+        }
+    }
+
+    /// Whether a friend menu frame may go on: the game has not sent too many, they are on the
+    /// friend list, and (`service`) the friends service is connected. Otherwise the mod hears why
+    /// at once.
+    fn person_allowed(&mut self, friend: &str, action: FriendAction, service: bool) -> bool {
+        let now = Instant::now();
+        let refused = if full(&mut self.recent_people, now, PEOPLE_WINDOW, PEOPLE_BURST) {
+            Some(FriendRefusal::Rate)
+        } else if self.scene.friend(friend).is_none() {
+            Some(FriendRefusal::Failed)
+        } else if service && !self.scene.online {
+            Some(FriendRefusal::Offline)
+        } else {
+            None
+        };
+        if let Some(reason) = refused {
+            tracing::debug!(
+                ?action,
+                ?reason,
+                "a friend menu action from the game did not go"
+            );
+            self.friend_result(friend, action, false, Some(reason));
+            return false;
+        }
+        self.recent_people.push_back(now);
+        true
+    }
+
+    /// Runs an action against the friends service in a task of its own; the mod hears how it went.
+    fn settle(
+        &self,
+        friend: String,
+        action: FriendAction,
+        doing: impl Future<Output = pl_social::Result<()>> + Send + 'static,
+    ) {
+        let reply = self
+            .live
+            .as_ref()
+            .filter(|live| live.people)
+            .map(|live| live.conn);
+        let control = self.control.clone();
+        tracing::info!(?action, "a friend menu action from the in-game overlay");
+        tokio::spawn(async move {
+            let reason = match doing.await {
+                Ok(()) => None,
+                Err(error) => {
+                    tracing::info!(%error, ?action, "the overlay's friend menu action did not go");
+                    Some(friend_refusal(&error))
+                }
+            };
+            if let Some(conn) = reply {
+                let _ = control.send(Control::Send {
+                    conn,
+                    frames: vec![ToGame::FriendResult {
+                        friend,
+                        action,
+                        ok: reason.is_none(),
+                        queued: false,
+                        reason,
+                    }],
+                });
+            }
+        });
+    }
+
+    /// "Birlikte oyna" from the game: only while it can go (the player is on Projects or shows
+    /// their server); the service keeps its own five minutes per friend.
+    fn on_invite(&mut self, friend: String) {
+        if !self.person_allowed(&friend, FriendAction::Invite, true) {
+            return;
+        }
+        if !self.scene.may_invite() {
+            self.friend_result(
+                &friend,
+                FriendAction::Invite,
+                false,
+                Some(FriendRefusal::Failed),
+            );
+            return;
+        }
+        let reply = self
+            .live
+            .as_ref()
+            .filter(|live| live.people)
+            .map(|live| live.conn);
+        let control = self.control.clone();
+        let inviting = self.social.invite(&friend);
+        tracing::info!("the player invites a friend from the in-game overlay");
+        tokio::spawn(async move {
+            let (queued, reason) = match inviting.await {
+                Ok(InviteResult::Delivered) => (false, None),
+                Ok(InviteResult::Queued) => (true, None),
+                Err(error) => {
+                    tracing::info!(%error, "the overlay's invite did not go");
+                    (false, Some(friend_refusal(&error)))
+                }
+            };
+            if let Some(conn) = reply {
+                let _ = control.send(Control::Send {
+                    conn,
+                    frames: vec![ToGame::FriendResult {
+                        friend,
+                        action: FriendAction::Invite,
+                        ok: reason.is_none(),
+                        queued,
+                        reason,
+                    }],
+                });
+            }
+        });
+    }
+
+    /// "Discord'dan mesaj at" from the game: the launcher opens the profile its own way (the
+    /// Discord app when installed, else the web profile). A second press for the same friend right
+    /// after opens nothing more.
+    fn on_discord(&mut self, friend: String) {
+        let now = Instant::now();
+        if self
+            .last_discord
+            .as_ref()
+            .is_some_and(|(last, at)| *last == friend && now.duration_since(*at) < DISCORD_REPEAT)
+        {
+            return;
+        }
+        if !self.person_allowed(&friend, FriendAction::Discord, false) {
+            return;
+        }
+        let Some(url) = self.scene.discord_url(&friend).map(str::to_owned) else {
+            self.friend_result(
+                &friend,
+                FriendAction::Discord,
+                false,
+                Some(FriendRefusal::Failed),
+            );
+            return;
+        };
+        self.last_discord = Some((friend.clone(), now));
+        tracing::info!("the player opens a friend's Discord profile from the in-game overlay");
+        if !(self.discord)(&friend, &url) {
+            self.friend_result(
+                &friend,
+                FriendAction::Discord,
+                false,
+                Some(FriendRefusal::Failed),
+            );
+        }
+    }
+
+    /// "Rapor et" from the game: one of a player's reasons, the note as it goes, maybe a block.
+    fn on_report(&mut self, friend: String, reason: &str, note: &str, block: bool) {
+        let Some(reason) = player_reason(reason) else {
+            self.friend_result(
+                &friend,
+                FriendAction::Report,
+                false,
+                Some(FriendRefusal::Failed),
+            );
+            return;
+        };
+        if self.person_allowed(&friend, FriendAction::Report, true) {
+            let doing = self
+                .social
+                .report_player(&friend, reason, report_note(note), block);
+            self.settle(friend, FriendAction::Report, doing);
         }
     }
 
@@ -1209,6 +1545,37 @@ mod tests {
         assert!(!sticker_ref_ok("pl1gg"));
         assert!(!sticker_ref_ok("verylongset/gg"));
         assert!(!sticker_ref_ok("pl1/"));
+    }
+
+    #[test]
+    fn a_report_from_the_game_takes_a_players_reasons_and_a_clean_note() {
+        assert_eq!(player_reason("harassment"), Some(ReportReason::Harassment));
+        assert_eq!(player_reason("other"), Some(ReportReason::Other));
+        // A message's reason is not a player's, and nothing else is either.
+        assert_eq!(player_reason("inappropriate"), None);
+        assert_eq!(player_reason(""), None);
+        assert_eq!(report_note("  "), None);
+        assert_eq!(
+            report_note("  sürekli \n küfür\tediyor "),
+            Some("sürekli küfür ediyor".into())
+        );
+        let long = "a".repeat(250);
+        assert_eq!(report_note(&long).map(|n| n.chars().count()), Some(200));
+        assert_eq!(
+            friend_refusal(&SocialError::RateLimited {
+                retry_after: None,
+                item: None
+            }),
+            FriendRefusal::Wait
+        );
+        assert_eq!(
+            friend_refusal(&SocialError::Unavailable { retry_after: None }),
+            FriendRefusal::Offline
+        );
+        assert_eq!(
+            friend_refusal(&SocialError::InvalidInput("x")),
+            FriendRefusal::Failed
+        );
     }
 
     #[test]

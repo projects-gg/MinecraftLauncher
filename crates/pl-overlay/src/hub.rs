@@ -19,7 +19,9 @@ use crate::host::{HostSignal, HostSink, WorldsShown};
 use crate::policy::NotifyPrefs;
 use crate::protocol::{ByeReason, ToGame};
 use crate::server::{Bridge, Endpoint};
-use crate::session::{CONNECT_WAIT, ConnectOutcome, ConnectedFn, Msg, Session, SocialActions};
+use crate::session::{
+    CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, Msg, Session, SocialActions,
+};
 
 /// How long [`Overlay::stop`] waits for the goodbye to leave.
 const STOP_WAIT: Duration = Duration::from_secs(1);
@@ -58,6 +60,10 @@ pub struct OverlayStatus {
 
 type StatusFn = Arc<dyn Fn(OverlayStatus) + Send + Sync>;
 
+/// Opens a friend's Discord profile for the friend menu in the game (OVL-UX): their Discord user id
+/// and their web profile (`https://`). The launcher's own way: the Discord app when installed.
+type DiscordSink = Arc<dyn Fn(String, String) + Send + Sync>;
+
 struct Running {
     id: u64,
     /// The bridge's port: names the session for [`Overlay::stop_for`].
@@ -79,6 +85,8 @@ struct Shared {
     status: Mutex<Option<StatusFn>>,
     /// World sharing (HOST1) hears the running session's mod here.
     host: Mutex<Option<HostSink>>,
+    /// "Discord'dan mesaj at" from the game's friend menu (OVL-UX).
+    discord: Mutex<Option<DiscordSink>>,
 }
 
 /// Cheap to clone; the launcher keeps one.
@@ -108,6 +116,7 @@ impl Overlay {
                 connected: AtomicBool::new(false),
                 status: Mutex::new(None),
                 host: Mutex::new(None),
+                discord: Mutex::new(None),
             }),
         }
     }
@@ -189,8 +198,9 @@ impl Overlay {
             SocialUpdate::Chat(change) => Msg::Chat(change),
             // "Yazıyor…" (CHAT2): the session passes it on while the panel is open.
             SocialUpdate::Typing(typing) => Msg::Typing(typing),
-            // The player's own crew tag taken off by its crew's leader (TEAM6) does not reach the
-            // game: the overlay never shows the player's own tag, the launcher's toast says it.
+            // The player's own crew tag taken off by its crew's leader (TEAM6): the next view
+            // greets the mod again without it (the panel's header drops the chip, OVL-UX); the
+            // launcher's toast says why.
             SocialUpdate::TagOff(_) => return,
         };
         let _ = msgs.send(msg);
@@ -243,8 +253,10 @@ impl Overlay {
         let connected: ConnectedFn = Arc::new(move |on| hub.report(id, on, false));
         let hub = self.clone();
         let host: HostSink = Arc::new(move |signal| hub.host_signal(id, signal));
+        let hub = self.clone();
+        let discord: DiscordFn = Arc::new(move |friend, url| hub.open_discord(friend, url));
         let session = Session::new(
-            social, launcher, config, control, connected, host, worlds, game,
+            social, launcher, config, control, connected, host, worlds, game, discord,
         );
         tokio::spawn(bridge.serve(control_rx, events_tx));
         tokio::spawn(session.run(msgs_rx, events));
@@ -338,6 +350,30 @@ impl Overlay {
             .host
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
+    }
+
+    /// "Discord'dan mesaj at" from the game's friend menu (OVL-UX): `sink` opens a friend's
+    /// profile (their Discord user id, their web profile) the launcher's own way.
+    pub fn on_discord(&self, sink: impl Fn(String, String) + Send + Sync + 'static) {
+        *self
+            .shared
+            .discord
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
+    }
+
+    /// Hands a friend's Discord profile to the launcher's opener; false without one.
+    fn open_discord(&self, friend: &str, url: &str) -> bool {
+        let sink = self
+            .shared
+            .discord
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        sink.is_some_and(|sink| {
+            sink(friend.to_owned(), url.to_owned());
+            true
+        })
     }
 
     /// HOST1: frames for the running game's mod (H5, H8, H10, H11, H14), dropped unless its hello

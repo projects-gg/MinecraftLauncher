@@ -509,7 +509,10 @@ mod tests {
         ToGame::Welcome {
             proto: PROTO,
             launcher: "test".into(),
-            me: Me { name: "Ece".into() },
+            me: Me {
+                name: "Ece".into(),
+                badge: None,
+            },
             dnd: false,
             reduced_motion: false,
             features: vec!["chat".into()],

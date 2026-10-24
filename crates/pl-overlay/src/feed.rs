@@ -19,8 +19,8 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use pl_social::{
-    AuthPhase, CallAnswer as SocialAnswer, CardState, ChatChangeView, ChatExtrasView,
-    ChatMessageView, ChatPage, Connection, CrewBadgeView, GameLocation, MessageState,
+    ActivityView, AuthPhase, CallAnswer as SocialAnswer, CardState, ChatChangeView, ChatExtrasView,
+    ChatMessageView, ChatPage, Connection, CrewBadgeView, GameLocation, MeView, MessageState,
     PresenceState, SendFailure as SocialFailure, SocialNotice, SocialView, StatusMode,
     TEAM_FEATURE_BADGES, TEAM_FEATURE_CALLS,
 };
@@ -28,9 +28,10 @@ use pl_social::{
 use crate::links::{self, LinkLists};
 use crate::policy::{self, CrewMute, CrewSettings, Mute, Notice, NotifyPrefs, Situation};
 use crate::protocol::{
-    AnswerCounts, BadgeView, CallAnswer, CallView, CardView, ConvKind, ConvView, FEATURE_TAGS,
-    FriendView, LinkView, MAX_HISTORY, MAX_LAUNCHER_FRAME, MAX_QUOTE_CHARS, Me, MsgView, NoteKind,
-    PROTO, Place, ReactionView, ReplyView, SendFailure, ToGame, ToastView, WorldMark,
+    AnswerCounts, BadgeView, CallAnswer, CallView, CardView, ConvKind, ConvView, FEATURE_INVITE,
+    FEATURE_PEOPLE, FEATURE_TAGS, FriendView, LinkView, MAX_HISTORY, MAX_LAUNCHER_FRAME,
+    MAX_QUOTE_CHARS, Me, MsgView, NoteKind, PROTO, Place, ReactionView, ReplyView, SendFailure,
+    ToGame, ToastView, WorldMark,
 };
 
 /// Conversations a snapshot lists at most (the newest first).
@@ -70,8 +71,12 @@ pub struct Scene {
     pub badges: BTreeMap<String, BadgeView>,
     /// The crews' "Ece ekibe katıldı" lines, oldest first (TEAM6 §7).
     pub joins: Vec<JoinLine>,
+    /// The crew whose tag the player wears (OVL-UX; its card is in `badges`; only while `tags`).
+    pub me_badge: Option<String>,
     /// User id → the crew whose tag they wear (friends and crewmates; only while `tags`).
     wears: HashMap<String, String>,
+    /// Friend id → their Discord web profile, for "Discord'dan mesaj at" from the game (OVL-UX).
+    discord: HashMap<String, String>,
     /// User id → name (the player, friends, crewmates).
     names: HashMap<String, String>,
     crew_names: HashMap<String, String>,
@@ -172,6 +177,22 @@ fn badge_view(badge: &CrewBadgeView, view: &SocialView) -> BadgeView {
         members: badge.members,
         mine: view.crews.iter().any(|crew| crew.id == badge.crew),
     }
+}
+
+/// "Birlikte oyna" can go now (OVL-UX; the launcher's `canInvite`): the player's game is on
+/// Projects, or on another server they show their friends.
+fn may_invite(view: &SocialView, me: &MeView) -> bool {
+    match &view.activity {
+        ActivityView::Playing { host: Some(host) } => {
+            pl_social::is_projects_host(host) || me.privacy.share_server
+        }
+        _ => false,
+    }
+}
+
+/// A Discord profile the launcher would open: on the web, over `https` (OVL-UX).
+fn discord_profile(url: &str) -> bool {
+    url.starts_with("https://")
 }
 
 /// The crews' "Ece ekibe katıldı" lines in their chats, oldest first; none of someone the player
@@ -285,6 +306,18 @@ impl Scene {
                 }
             }
         }
+        // The tag the player wears (OVL-UX): before their own name in the panel's header. A hidden
+        // crew's never comes from the service.
+        let me_badge = me
+            .badge
+            .as_deref()
+            .filter(|badge| tags && !badge.crew.is_empty())
+            .map(|badge| {
+                badges
+                    .entry(badge.crew.clone())
+                    .or_insert_with(|| badge_view(badge, view));
+                badge.crew.clone()
+            });
         // CHAT2's extras, each on its own (Studio may switch one off at once).
         let extras = view
             .chat
@@ -304,6 +337,12 @@ impl Scene {
                     features.push(name.to_owned());
                 }
             }
+        }
+        // The friend menu's frames (OVL-UX): this launcher takes them while signed in; "Birlikte
+        // oyna" only while it can go.
+        features.push(FEATURE_PEOPLE.to_owned());
+        if may_invite(view, me) {
+            features.push(FEATURE_INVITE.to_owned());
         }
         let links = view
             .chat
@@ -331,8 +370,17 @@ impl Scene {
                     host,
                     world: None,
                     badge: wears.get(&friend.id).cloned(),
+                    // Friends write to each other (a new conversation too) while chat is on.
+                    dm: chat_on.then(|| pl_social::direct_conversation(&me.id, &friend.id)),
+                    discord: discord_profile(&friend.discord_url),
                 }
             })
+            .collect();
+        let discord: HashMap<String, String> = view
+            .friends
+            .iter()
+            .filter(|friend| discord_profile(&friend.discord_url))
+            .map(|friend| (friend.id.clone(), friend.discord_url.clone()))
             .collect();
         // In game first, then online, then the rest, each in the list's order (a stable sort).
         friends.sort_by_key(|friend| match friend.place {
@@ -475,13 +523,27 @@ impl Scene {
             tags,
             badges,
             joins,
+            me_badge,
             wears,
+            discord,
             names,
             crew_names,
             blocked,
             invites,
             shared,
         }
+    }
+
+    /// A friend's Discord web profile ("Discord'dan mesaj at" from the game; OVL-UX), or None.
+    pub fn discord_url(&self, id: &str) -> Option<&str> {
+        self.discord.get(id).map(String::as_str)
+    }
+
+    /// "Birlikte oyna" can go now (OVL-UX).
+    pub fn may_invite(&self) -> bool {
+        self.features
+            .iter()
+            .any(|feature| feature == FEATURE_INVITE)
     }
 
     /// The crew whose tag `id` wears, as friends and crewmates see it (None while tags are off).
@@ -570,6 +632,8 @@ impl Scene {
 struct Identity {
     me_id: String,
     me: String,
+    /// The tag the player wears (OVL-UX): another one (or none) greets again.
+    me_badge: Option<String>,
     features: Vec<String>,
     reduced_motion: bool,
 }
@@ -604,6 +668,7 @@ impl Mirror {
         let identity = Identity {
             me_id: scene.me_id.clone(),
             me: scene.me.clone(),
+            me_badge: scene.me_badge.clone(),
             features: if scene.signed_in {
                 scene.features.clone()
             } else {
@@ -616,6 +681,7 @@ impl Mirror {
             launcher: launcher.to_owned(),
             me: Me {
                 name: identity.me.clone(),
+                badge: identity.me_badge.clone(),
             },
             dnd: scene.dnd,
             reduced_motion,
@@ -661,6 +727,7 @@ impl Mirror {
         let identity_changed = self.identity.as_ref().is_none_or(|known| {
             known.me_id != scene.me_id
                 || known.me != scene.me
+                || known.me_badge != scene.me_badge
                 || known.reduced_motion != reduced_motion
                 || (if scene.signed_in {
                     known.features != scene.features
@@ -1506,7 +1573,7 @@ pub(crate) mod tests {
         let scene = Scene::from_view(&view(), &NotifyPrefs::default(), NOW);
         assert!(scene.signed_in && scene.online && !scene.dnd);
         assert_eq!(scene.me, "Ece");
-        assert_eq!(scene.features, ["friends", "chat", "calls"]);
+        assert_eq!(scene.features, ["friends", "chat", "calls", "people"]);
         // In game first, then the launcher, then offline.
         let order: Vec<&str> = scene.friends.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(order, ["Ayşe", "Zeynep", "Mert", "Can"]);
@@ -1658,7 +1725,7 @@ pub(crate) mod tests {
         no_chat.chat = None;
         let again = mirror.update(&Scene::from_view(&no_chat, &prefs, NOW), "2.0.0", false);
         assert!(
-            matches!(again[0], ToGame::Welcome { ref features, .. } if features == &["friends", "calls"])
+            matches!(again[0], ToGame::Welcome { ref features, .. } if features == &["friends", "calls", "people"])
         );
         // So does the reduced-motion choice.
         let again = mirror.update(&Scene::from_view(&no_chat, &prefs, NOW), "2.0.0", true);
@@ -2066,7 +2133,8 @@ pub(crate) mod tests {
                 "stickers",
                 "typing",
                 "reads",
-                "links"
+                "links",
+                "people"
             ]
         );
         assert!(scene.offers(|e| e.typing));
@@ -2089,7 +2157,7 @@ pub(crate) mod tests {
             chat.on = false;
         }
         let scene = Scene::from_view(&off, &NotifyPrefs::default(), NOW);
-        assert_eq!(scene.features, ["friends", "calls"]);
+        assert_eq!(scene.features, ["friends", "calls", "people"]);
     }
 
     #[test]
@@ -2448,7 +2516,10 @@ pub(crate) mod tests {
     fn crew_tags_ride_on_friends_crew_messages_and_toasts() {
         let prefs = NotifyPrefs::default();
         let scene = Scene::from_view(&team6_view(), &prefs, NOW);
-        assert_eq!(scene.features, ["friends", "chat", "calls", "tags"]);
+        assert_eq!(
+            scene.features,
+            ["friends", "chat", "calls", "tags", "people"]
+        );
         assert_eq!(
             scene.badges.keys().map(String::as_str).collect::<Vec<_>>(),
             ["t1", "t9"]
@@ -2600,5 +2671,79 @@ pub(crate) mod tests {
             matches!(&frames[0], ToGame::Welcome { features, .. } if !features.iter().any(|f| f == "tags"))
         );
         assert!(matches!(&frames[1], ToGame::Badges { all: true, cards } if cards.is_empty()));
+    }
+
+    #[test]
+    fn friends_carry_their_conversation_and_discord_and_invites_follow_the_game() {
+        let prefs = NotifyPrefs::default();
+        let mut v = view();
+        v.friends[0].discord_url = "https://discord.com/users/f-ayse".into();
+        // Not a profile the launcher would open.
+        v.friends[3].discord_url = "discord://-/users/f-mert".into();
+        let scene = Scene::from_view(&v, &prefs, NOW);
+        let ayse = scene.friend("f-ayse").unwrap();
+        assert_eq!(ayse.dm.as_deref(), Some("d:me:f-ayse"));
+        assert!(ayse.discord);
+        assert!(!scene.friend("f-mert").unwrap().discord);
+        assert_eq!(
+            scene.discord_url("f-ayse"),
+            Some("https://discord.com/users/f-ayse")
+        );
+        assert_eq!(scene.discord_url("f-mert"), None);
+        // In the launcher: "Birlikte oyna" cannot go.
+        assert!(!scene.may_invite());
+        // Chat off: no conversation to open.
+        let mut quiet = v.clone();
+        quiet.chat.as_mut().unwrap().on = false;
+        let scene = Scene::from_view(&quiet, &prefs, NOW);
+        assert!(scene.friends.iter().all(|f| f.dm.is_none()));
+
+        // On Projects it can; on another server only while the player shows it.
+        v.activity = pl_social::ActivityView::Playing {
+            host: Some("play.projects.gg".into()),
+        };
+        let scene = Scene::from_view(&v, &prefs, NOW);
+        assert!(scene.may_invite());
+        assert_eq!(
+            scene.features,
+            ["friends", "chat", "calls", "people", "invite"]
+        );
+        v.activity = pl_social::ActivityView::Playing {
+            host: Some("mc.example.net".into()),
+        };
+        assert!(!Scene::from_view(&v, &prefs, NOW).may_invite());
+        v.me.as_mut().unwrap().privacy.share_server = true;
+        assert!(Scene::from_view(&v, &prefs, NOW).may_invite());
+        v.activity = pl_social::ActivityView::Singleplayer;
+        assert!(!Scene::from_view(&v, &prefs, NOW).may_invite());
+    }
+
+    #[test]
+    fn the_players_own_tag_rides_on_the_welcome_with_its_card() {
+        let prefs = NotifyPrefs::default();
+        let mut v = team6_view();
+        v.me.as_mut().unwrap().badge = Some(card("t1", "GKŞ", "Gece Kuşları"));
+        let scene = Scene::from_view(&v, &prefs, NOW);
+        assert_eq!(scene.me_badge.as_deref(), Some("t1"));
+        assert_eq!(scene.badges["t1"].tag, "GKŞ");
+        assert!(scene.badges["t1"].mine);
+        let mut mirror = Mirror::for_mod(true);
+        let frames = mirror.greet(&scene, "2.0.0", false);
+        assert!(
+            matches!(&frames[0], ToGame::Welcome { me, .. } if me.badge.as_deref() == Some("t1") && me.name == "Ece")
+        );
+        // Unchanged: nothing goes.
+        assert!(mirror.update(&scene, "2.0.0", false).is_empty());
+        // Taken off (or its crew hidden by the leader): greeted again without it.
+        v.me.as_mut().unwrap().badge = None;
+        let off = Scene::from_view(&v, &prefs, NOW);
+        let again = mirror.update(&off, "2.0.0", false);
+        assert!(matches!(&again[0], ToGame::Welcome { me, .. } if me.badge.is_none()));
+        // Tags switched off: never one, even if the profile still had it.
+        let mut no_tags = team6_view();
+        no_tags.team_features.retain(|f| f != "badges");
+        no_tags.me.as_mut().unwrap().badge = Some(card("t1", "GKŞ", "Gece Kuşları"));
+        let scene = Scene::from_view(&no_tags, &prefs, NOW);
+        assert!(scene.me_badge.is_none() && scene.badges.is_empty());
     }
 }

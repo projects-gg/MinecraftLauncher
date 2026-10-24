@@ -41,6 +41,21 @@ pub fn create(app: &AppHandle, root: &Path) -> Overlay {
     overlay.on_status(move |status| {
         let _ = emitter.emit(STATUS_EVENT, status);
     });
+    // "Discord'dan mesaj at" from the game's friend menu (OVL-UX): the profile in the Discord app
+    // when it is installed, else the web profile (`https://` only), as the page's button does.
+    overlay.on_discord(|id, url| {
+        tauri::async_runtime::spawn_blocking(move || {
+            let in_app = pl_desktop::discord::open_profile_in_app(&id, |link| {
+                tauri_plugin_opener::open_url(link, None::<&str>).is_ok()
+            });
+            if !in_app
+                && url.starts_with("https://")
+                && let Err(error) = tauri_plugin_opener::open_url(&url, None::<&str>)
+            {
+                tracing::warn!(%error, "could not open a friend's Discord profile");
+            }
+        });
+    });
     overlay
 }
 
