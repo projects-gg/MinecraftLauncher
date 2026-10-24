@@ -682,7 +682,8 @@ function onFrame(socket, frame) {
 
 /** CHAT2: a sticker or a reply from the panel, answered as the launcher does (sent, then the whole message). */
 function onChat2Send(socket, frame) {
-  const history = state.history[frame.conv] ?? (state.history[frame.conv] = []);
+  state.history[frame.conv] ??= [];
+  const history = state.history[frame.conv];
   const msg = { id: `m${nextId++}`, sid: newSid(), from: state.me.name, at: now(), mine: true };
   if (typeof frame.sticker === "string") {
     if (!/^[a-z0-9]{1,8}[/][a-z0-9-]{1,24}$/.test(frame.sticker)) {
@@ -729,7 +730,8 @@ function onReact(socket, frame) {
     );
     return;
   }
-  const reactions = msg.reactions ?? (msg.reactions = []);
+  msg.reactions ??= [];
+  const reactions = msg.reactions;
   const vs16 = String.fromCodePoint(0xfe0f);
   const same = (r) => r.e.replace(vs16, "") === frame.e.replace(vs16, "");
   let kind = reactions.find(same);
