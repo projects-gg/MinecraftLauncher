@@ -100,7 +100,7 @@ final class HostPanel {
         stop = new ActionButton(ActionButton.Style.DANGER, Texts.tr("host.stop"), null, this::stopPressed);
         cardOpen = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("host.invite_friends"), Icon.USER_PLUS,
             () -> screen.showPage(OverlayScreen.Page.WORLD));
-        cardManage = new ActionButton(ActionButton.Style.GHOST, Texts.tr("host.manage"), null,
+        cardManage = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("host.manage"), null,
             () -> screen.showPage(OverlayScreen.Page.WORLD));
         cardJoin = new ActionButton(ActionButton.Style.SECONDARY, Texts.tr("friend.join"), Icon.JOIN, () -> {
             if (cardFriend != null) {
@@ -164,6 +164,10 @@ final class HostPanel {
     boolean sync(long now) {
         Mode next = resolve();
         if (next != mode) {
+            if (next == Mode.FAILED && list.picked().isEmpty()) {
+                // A failed opening keeps its friends ticked (asked from the friend menu too): "Tekrar dene" works.
+                list.restorePicks(host().lastInvite());
+            }
             mode = next;
             return true;
         }
@@ -301,6 +305,7 @@ final class HostPanel {
                     PanelWidget.place(primary, x + width - pw, by, pw, ActionButton.HEIGHT);
                 }
                 // What the guests may do, and the voice chat note when the pack has it.
+                // "Yaratıcı, komutlar kapalı" (no middle-dot chains, design.md §7).
                 String meta = Texts.str("host.meta", Texts.str("host.mode." + host().sessionMode()),
                     Texts.str(host().sessionCommands() ? "host.commands.on" : "host.commands.off"));
                 List<FormattedCharSequence> lines = new java.util.ArrayList<>(Texts.wrap(small, meta, width, 1));
@@ -326,7 +331,9 @@ final class HostPanel {
                 primary.visible = !(mode == Mode.FAILED && "limit".equals(failure));
                 primary.setStyle(ActionButton.Style.PRIMARY);
                 primary.setIcon(null);
-                primary.setLabel(Texts.tr(mode == Mode.FAILED ? "host.retry" : busy ? "host.opening" : "host.invite"));
+                // "Tekrar dene" only with friends to try again for; with none it is "Davet et" waiting for a pick.
+                boolean retry = mode == Mode.FAILED && !list.picked().isEmpty();
+                primary.setLabel(Texts.tr(retry ? "host.retry" : busy ? "host.opening" : "host.invite"));
                 primary.active = online && !busy && !list.picked().isEmpty();
                 int pw = primary.preferredWidth();
                 PanelWidget.place(primary, x + width - pw, by, pw, ActionButton.HEIGHT);
@@ -421,8 +428,10 @@ final class HostPanel {
             float mid = sectionY + SECTION_H / 2f - 1;
             Draw.text(g, small, sectionLeft, x0 + 1, Fonts.centeredY(Fonts.Face.SMALL, mid), Theme.ASH_400);
             if (!sectionRight.isEmpty()) {
-                Draw.text(g, small, sectionRight, x0 + cw - small.width(sectionRight),
-                    Fonts.centeredY(Fonts.Face.SMALL, mid), sectionRightColor);
+                float tx = x0 + cw - small.width(sectionRight);
+                Draw.text(g, small, sectionRight, tx, Fonts.centeredY(Fonts.Face.SMALL, mid), sectionRightColor);
+                // The launcher's people count: the sign says what the figure counts.
+                Draw.icon(g, Icon.CREW, 8, tx - 3 - 8, mid - 4, sectionRightColor);
             }
         }
         render(g, list, mouseX, mouseY);
@@ -486,13 +495,14 @@ final class HostPanel {
             int mw = cardManage.preferredWidth();
             int textW = width - 8 - PixelSprites.SIZE - 7 - mw - 8 - 4;
             cardTitle = Texts.visual(Texts.fit(strong, Texts.str(open ? "host.open" : "host.opening"), textW));
-            cardSub = Texts.visual(Texts.fit(small, guestNames(view), textW));
+            // Who is in it ("Dünyanda: Ayşe"); while it opens the title stands alone.
+            cardSub = open ? Texts.visual(Texts.fit(small, inWorldLine(view), textW)) : null;
             cardManage.visible = true;
             PanelWidget.place(cardManage, x + width - 6 - mw, y + (CARD_H - ActionButton.HEIGHT) / 2, mw,
                 ActionButton.HEIGHT);
             return y + CARD_H + 8;
         }
-        if (h.failure() != null && h.inWorld()) {
+        if (h.recentFailure() && h.inWorld()) {
             // The last opening failed (asked from the friend menu too): one line over whatever card follows.
             cardNoticeLines = Texts.wrap(Fonts.ui(), HostController.failureLine(h.failure()), width - 8 - 10 - 6 - 8,
                 2);
@@ -513,8 +523,7 @@ final class HostPanel {
                 int textW = width - 8 - PixelSprites.SIZE - 7 - jw - 8 - 4;
                 cardTitle = Texts.visual(Texts.fit(strong, f.name().isEmpty() ? Texts.str("toast.someone") : f.name(),
                     textW));
-                cardSub = Texts.visual(Texts.fit(small, Texts.str("host.invite.line", (mark.guests() + 1) + "/"
-                    + (mark.max() + 1)), textW));
+                cardSub = Texts.visual(Texts.fit(small, Texts.str("host.invite.line"), textW));
                 cardJoin.visible = true;
                 PanelWidget.place(cardJoin, x + width - 6 - jw, y + (CARD_H - ActionButton.HEIGHT) / 2, jw,
                     ActionButton.HEIGHT);
@@ -532,10 +541,16 @@ final class HostPanel {
         return cardNoticeY >= 0 ? y + 4 : y;
     }
 
-    /** "Mert, Ayşe" for the friends in the world now, or "Henüz kimse yok.". */
+    /** "Dünyanda: Mert, Ayşe" for the friends in the world now, or "Henüz kimse yok.". */
+    private static String inWorldLine(OverlayState.HostView view) {
+        String names = guestNames(view);
+        return names.isEmpty() ? Texts.str("host.none") : Texts.str("host.card.in", names);
+    }
+
+    /** "Mert, Ayşe" for the friends in the world now, or empty. */
     private static String guestNames(OverlayState.HostView view) {
         if (view == null) {
-            return Texts.str("host.none");
+            return "";
         }
         StringBuilder b = new StringBuilder();
         for (OverlayState.HostGuest g : view.guests()) {
@@ -546,7 +561,7 @@ final class HostPanel {
                 b.append(g.label().isEmpty() ? g.name() : g.label());
             }
         }
-        return b.length() == 0 ? Texts.str("host.none") : b.toString();
+        return b.toString();
     }
 
     void drawCard(GuiGraphicsExtractor g, int mouseX, int mouseY) {
@@ -564,10 +579,12 @@ final class HostPanel {
                 float sy = cardY + (CARD_H - PixelSprites.SIZE) / 2f;
                 PixelSprites.draw(g, PixelSprites.Sprite.WORLD, sx, sy);
                 float tx = sx + PixelSprites.SIZE + 7;
-                Draw.text(g, Fonts.strong(), cardTitle, tx, Fonts.centeredY(Fonts.Face.STRONG, cardY + 11f),
-                    Theme.BONE_100);
-                Draw.text(g, Fonts.small(), cardSub, tx, Fonts.centeredY(Fonts.Face.SMALL, cardY + 21f),
-                    Theme.ASH_300);
+                Draw.text(g, Fonts.strong(), cardTitle, tx,
+                    Fonts.centeredY(Fonts.Face.STRONG, cardY + (cardSub == null ? CARD_H / 2f : 11f)), Theme.BONE_100);
+                if (cardSub != null) {
+                    Draw.text(g, Fonts.small(), cardSub, tx, Fonts.centeredY(Fonts.Face.SMALL, cardY + 21f),
+                        Theme.ASH_300);
+                }
                 render(g, card == Card.OPEN ? cardManage : cardJoin, mouseX, mouseY);
             }
             default -> {

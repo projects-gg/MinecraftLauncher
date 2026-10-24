@@ -1,5 +1,6 @@
 package gg.projects.overlay.ui.panel;
 
+import gg.projects.overlay.host.HostController;
 import com.mojang.blaze3d.platform.InputConstants;
 import gg.projects.overlay.host.Names;
 import gg.projects.overlay.motion.Ease;
@@ -114,6 +115,22 @@ public final class HostList extends PanelWidget {
 
     public int max() {
         return max;
+    }
+
+    /**
+     * Ticks these friends again when nothing is ticked (a failed opening's, so "Tekrar dene" works); those not on the
+     * list drop out when it is shown.
+     */
+    public void restorePicks(List<String> ids) {
+        if (!picked.isEmpty() || ids.isEmpty()) {
+            return;
+        }
+        for (String id : ids) {
+            if (picked.size() < HostController.MAX_INVITE) {
+                picked.add(id);
+            }
+        }
+        onPicksChanged.run();
     }
 
     public void clearPicks() {

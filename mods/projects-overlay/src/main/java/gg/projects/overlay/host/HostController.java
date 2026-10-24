@@ -102,6 +102,12 @@ public final class HostController implements HostGate.Listener {
     private String failure;
     /** Friends invited while the world was still opening: their invites go once it is open. */
     private final List<String> waiting = new ArrayList<>();
+    /** The friends the last opening was for (a failed one keeps them ticked for "Tekrar dene"). */
+    private List<String> lastInvite = List.of();
+    /** When the last opening failed ({@code Util.getMillis()}). */
+    private long failedAt;
+    /** How long the card on the other pages keeps a failed opening's line. */
+    private static final long FAILURE_SHOWN_MS = 120_000;
 
     public HostController(OverlayClient overlay, View view) {
         this.overlay = overlay;
@@ -206,6 +212,16 @@ public final class HostController implements HostGate.Listener {
         return failure;
     }
 
+    /** A failed opening the card on the other pages still mentions (for two minutes; the world page keeps it). */
+    public boolean recentFailure() {
+        return failure != null && Util.getMillis() - failedAt < FAILURE_SHOWN_MS;
+    }
+
+    /** The friends the last opening was for. */
+    public List<String> lastInvite() {
+        return lastInvite;
+    }
+
     /**
      * "Davet et": with no session the world opens for these friends ({@code host-request}; the launcher checks and
      * answers with {@code host-publish}), with one open they get invites ({@code host-invite}).
@@ -231,6 +247,7 @@ public final class HostController implements HostGate.Listener {
         requestedAt = Util.getMillis();
         failure = null;
         waiting.clear();
+        lastInvite = ids;
         // A new try clears what the last failed one left on screen.
         overlay.state().hostEnded();
         return true;
@@ -441,6 +458,7 @@ public final class HostController implements HostGate.Listener {
         requestedAt = 0;
         waiting.clear();
         failure = why == null || why.isEmpty() ? "unavailable" : why;
+        failedAt = Util.getMillis();
         overlay.showHostFailure(failureLine(failure));
         view.changed();
     }
@@ -474,6 +492,7 @@ public final class HostController implements HostGate.Listener {
             requestedAt = 0;
             waiting.clear();
             failure = error;
+            failedAt = Util.getMillis();
             if (!told) {
                 overlay.showHostFailure(failureLine(error));
             }
