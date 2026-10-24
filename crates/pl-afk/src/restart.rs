@@ -2,7 +2,8 @@
 //!
 //! A hosted client (`ExitOnFailure = true`) exits on every disconnect, so reconnecting is the
 //! launcher's job. Restarts back off: the first waits the account's shortest AutoRelog delay and
-//! each further one in a row waits longer, doubling towards a minute (see [`RestartSchedule`]).
+//! each further one in a row waits longer, doubling up to a minute and then stepping up to four
+//! minutes (see [`RestartSchedule`]).
 //! The count starts over only after a lasting connection: joined and kicked a second later is a
 //! failure like any other, so a login plugin or an anti-bot kick no longer brings the client
 //! back every few seconds forever. Kicks reconnecting cannot fix (a ban, the whitelist, a wrong
@@ -23,10 +24,23 @@ use crate::util::{contains_ignore_case, one_line, strip_color_codes};
 /// Longest server message kept in a failure reason (characters).
 const MAX_MESSAGE_CHARS: usize = 300;
 
+/// The back-off of failures in a row past the doubling (owner, 24 Oct 2026: a server that keeps
+/// turning the client away must not see the same address every few seconds; the wait grows to
+/// three or four minutes): the shortest delay doubles up to the first step (a minute), then each
+/// further failure waits the next step, and the last one repeats. With the default 5 s delay:
+/// 5, 10, 20, 40, 60, 90, 120, 180, 240, 240, ... seconds.
+pub const BACKOFF_STEPS: &[Duration] = &[
+    Duration::from_secs(60),
+    Duration::from_secs(90),
+    Duration::from_secs(120),
+    Duration::from_secs(180),
+    Duration::from_secs(240),
+];
+
 /// The wait before an automatic restart. It comes from the account's AutoRelog delay ("Bekleme
 /// süresi", `delay_min`..`delay_max` seconds): the first restart waits the shortest delay and
 /// restart number `ramp` and later ones the longest, with steps in between. Failures in a row also
-/// double the shortest delay each time, up to `backoff_cap`, so a client that cannot get in waits
+/// back off along `backoff_steps` (see [`BACKOFF_STEPS`]), so a client that cannot get in waits
 /// longer and longer whatever the account says (the account's own longer delays still win).
 /// Whatever the stored settings say, the delays stay between `floor` and `ceiling`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,8 +52,9 @@ pub struct RestartSchedule {
     pub ceiling: Duration,
     /// Restart number that first waits the longest delay (1: every restart does).
     pub ramp: u32,
-    /// Where the doubling of failures in a row stops.
-    pub backoff_cap: Duration,
+    /// The back-off of failures in a row: the shortest delay doubles up to the first step, then
+    /// every further failure takes the next one; the last repeats. Empty means [`BACKOFF_STEPS`].
+    pub backoff_steps: &'static [Duration],
     /// Time in game after which the connection counts as working: the next restart starts over
     /// from the shortest delay.
     pub stable_after: Duration,
@@ -51,7 +66,7 @@ impl Default for RestartSchedule {
             floor: Duration::from_secs_f64(MIN_RELOG_DELAY_SECONDS),
             ceiling: Duration::from_secs_f64(MAX_RELOG_DELAY_SECONDS),
             ramp: 4,
-            backoff_cap: Duration::from_secs(60),
+            backoff_steps: BACKOFF_STEPS,
             stable_after: Duration::from_secs(120),
         }
     }
@@ -84,10 +99,35 @@ impl RestartSchedule {
             f64::from(attempt.clamp(1, ramp) - 1) / f64::from(ramp - 1)
         };
         let ramped = shortest + (longest - shortest) * fraction;
-        // 1, 2, 4, 8, ... times the shortest delay (the exponent is capped long before f64 is).
-        let doubled = shortest * 2f64.powi(attempt.clamp(1, 31).cast_signed() - 1);
-        let backoff = doubled.min(self.backoff_cap.as_secs_f64());
+        let backoff = self.backoff(shortest, attempt);
         Duration::from_secs_f64(ramped.max(backoff).clamp(floor, ceiling))
+    }
+
+    /// Seconds the back-off of failures in a row asks before restart number `attempt`: 1, 2, 4,
+    /// 8, ... times `shortest` up to the first of `backoff_steps`, then one step per failure.
+    fn backoff(&self, shortest: f64, attempt: u32) -> f64 {
+        let steps = if self.backoff_steps.is_empty() {
+            BACKOFF_STEPS
+        } else {
+            self.backoff_steps
+        };
+        let first = steps[0].as_secs_f64();
+        let attempt = attempt.max(1);
+        // The restart whose doubled delay first reaches the first step (32 at most, so the
+        // exponent below stays far inside f64's range).
+        let mut reached = 1u32;
+        let mut doubled = shortest;
+        while doubled < first && reached < 32 {
+            doubled *= 2.0;
+            reached += 1;
+        }
+        if attempt <= reached {
+            return (shortest * 2f64.powi(attempt.cast_signed() - 1)).min(first);
+        }
+        let step = usize::try_from(attempt - reached)
+            .unwrap_or(usize::MAX)
+            .min(steps.len() - 1);
+        steps[step].as_secs_f64()
     }
 
     /// [`Self::delay`] spread by ±20 % (`spread` in `0.0..=1.0`, normally random). When the
@@ -232,7 +272,15 @@ const CAUSES: &[(KickCause, &[&str])] = &[
     ),
     (
         KickCause::NotWhitelisted,
-        &["WHITELIST", "WHITE-LIST", "BEYAZ LISTE"],
+        &[
+            "WHITELIST",
+            "WHITE-LIST",
+            "BEYAZ LISTE",
+            // projects.gg's lobby (`protection.sk`): an admin's name from an address that is not
+            // on its list. A cloud machine never is, and a player's own address does not change
+            // by trying again.
+            "YONETICI HESABINA BU ADRESTEN",
+        ],
     ),
     (
         KickCause::WrongPassword,
@@ -563,29 +611,68 @@ mod tests {
     }
 
     #[test]
-    fn failures_in_a_row_back_off_towards_a_minute() {
+    fn failures_in_a_row_back_off_to_four_minutes() {
         let schedule = RestartSchedule::default();
-        // New accounts (5-10 s): the shortest delay doubles up to a minute.
+        // New accounts (5-10 s): the shortest delay doubles up to a minute, then the steps up to
+        // four minutes, which repeats.
         assert_eq!(
-            secs(&schedule, &AutoRelogOptions::default(), 7),
-            vec![5.0, 10.0, 20.0, 40.0, 60.0, 60.0, 60.0]
+            secs(&schedule, &AutoRelogOptions::default(), 11),
+            vec![
+                5.0, 10.0, 20.0, 40.0, 60.0, 90.0, 120.0, 180.0, 240.0, 240.0, 240.0
+            ]
         );
-        // The legacy range 15-60 s.
+        // The legacy range 15-60 s reaches the minute sooner and steps on from there.
         assert_eq!(
-            secs(&schedule, &delays(15.0, 60.0), 5),
-            vec![15.0, 30.0, 60.0, 60.0, 60.0]
+            secs(&schedule, &delays(15.0, 60.0), 8),
+            vec![15.0, 30.0, 60.0, 90.0, 120.0, 180.0, 240.0, 240.0]
         );
-        // The account's own longer delays still win.
+        // The account's own longer delays still win, also past four minutes.
         assert_eq!(
             secs(&schedule, &delays(120.0, 300.0), 5),
             vec![120.0, 180.0, 240.0, 300.0, 300.0]
         );
-        assert_eq!(schedule.delay(&delays(15.0, 60.0), u32::MAX).as_secs(), 60);
+        assert_eq!(
+            secs(&schedule, &delays(300.0, 600.0), 5),
+            vec![300.0, 400.0, 500.0, 600.0, 600.0]
+        );
+        assert_eq!(schedule.delay(&delays(15.0, 60.0), u32::MAX).as_secs(), 240);
         assert_eq!(schedule.delay(&delays(15.0, 60.0), 0).as_secs(), 15);
         // One value: the first restart waits it, failures in a row then back off.
         assert_eq!(
-            secs(&schedule, &delays(30.0, 30.0), 3),
-            vec![30.0, 60.0, 60.0]
+            secs(&schedule, &delays(30.0, 30.0), 7),
+            vec![30.0, 60.0, 90.0, 120.0, 180.0, 240.0, 240.0]
+        );
+        // Restart number 1 (the count after a lasting connection) is the shortest delay again.
+        assert_eq!(schedule.stable_after, Duration::from_secs(120));
+        assert_eq!(
+            schedule.delay(&AutoRelogOptions::default(), 1),
+            Duration::from_secs(5)
+        );
+    }
+
+    #[test]
+    fn custom_back_off_steps_double_to_the_first_and_step_on() {
+        const STEPS: &[Duration] = &[Duration::from_millis(400), Duration::from_millis(900)];
+        let schedule = RestartSchedule {
+            floor: Duration::from_millis(100),
+            ceiling: Duration::from_secs(10),
+            ramp: 1,
+            backoff_steps: STEPS,
+            ..RestartSchedule::default()
+        };
+        let relog = delays(0.1, 0.1);
+        let ms: Vec<u128> = (1..=6)
+            .map(|a| schedule.delay(&relog, a).as_millis())
+            .collect();
+        assert_eq!(ms, vec![100, 200, 400, 900, 900, 900]);
+        // No steps at all falls back to the defaults rather than panicking.
+        let empty = RestartSchedule {
+            backoff_steps: &[],
+            ..RestartSchedule::default()
+        };
+        assert_eq!(
+            secs(&empty, &AutoRelogOptions::default(), 9),
+            secs(&RestartSchedule::default(), &AutoRelogOptions::default(), 9)
         );
     }
 
@@ -625,9 +712,13 @@ mod tests {
     fn spread_keeps_reconnects_apart_within_twenty_percent() {
         let schedule = RestartSchedule::default();
         let relog = delays(15.0, 60.0);
-        assert_eq!(schedule.spread_delay(&relog, 4, 0.0).as_secs(), 48);
-        assert_eq!(schedule.spread_delay(&relog, 4, 0.5).as_secs(), 60);
-        assert_eq!(schedule.spread_delay(&relog, 4, 1.0).as_secs(), 72);
+        assert_eq!(schedule.spread_delay(&relog, 3, 0.0).as_secs(), 48);
+        assert_eq!(schedule.spread_delay(&relog, 3, 0.5).as_secs(), 60);
+        assert_eq!(schedule.spread_delay(&relog, 3, 1.0).as_secs(), 72);
+        // At the four-minute cap too.
+        assert_eq!(schedule.spread_delay(&relog, 30, 0.0).as_secs(), 192);
+        assert_eq!(schedule.spread_delay(&relog, 30, 0.5).as_secs(), 240);
+        assert_eq!(schedule.spread_delay(&relog, 30, 1.0).as_secs(), 288);
         // Out-of-range input is clamped rather than producing a zero or huge delay.
         assert_eq!(schedule.spread_delay(&relog, 1, -3.0).as_secs(), 12);
         assert_eq!(schedule.spread_delay(&relog, 1, 9.0).as_secs(), 18);
@@ -832,6 +923,11 @@ mod tests {
                 "Birçok kez hatalı şifre girdiğiniz için sunucudan atıldınız.",
                 KickCause::WrongPassword,
             ),
+            // The lobby's admin protection (`protection.sk`), as the client reports it.
+            (
+                "§6§lPROJECTS §cYönetici hesabına bu adresten bağlanılamaz. §6§lprojects.gg",
+                KickCause::NotWhitelisted,
+            ),
         ];
         for (message, cause) in cases {
             let failure = kicked(message);
@@ -903,6 +999,13 @@ mod tests {
             Some(KickCause::AlreadyConnected)
         );
         // The account's own kick messages say "reconnect on this".
+        // The lobby's admin protection stops at once: trying again only repeats the refusal (and
+        // its "unauthorised login" alert on the server).
+        let admin = kicked("PROJECTS Yönetici hesabına bu adresten bağlanılamaz. projects.gg");
+        assert_eq!(
+            cause_of(&decide_exit(&relog, false, Some(2), Some(&admin), 0, 0)),
+            Some(KickCause::NotWhitelisted)
+        );
         let listed = AutoRelogOptions {
             kick_messages: vec!["whitelist".into()],
             ..relog.clone()
