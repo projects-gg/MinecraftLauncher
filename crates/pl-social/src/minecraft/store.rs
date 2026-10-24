@@ -180,6 +180,20 @@ impl SkinStore {
         }
     }
 
+    /// The picture of the skin `name`'s copy has now, without marking the copy as used or removing
+    /// one made for another name (that is `read`'s work): the account's face, wherever it shows.
+    pub fn current_picture(&self, account: &str, name: &str) -> Option<Vec<u8>> {
+        let folder = self.folder(account)?;
+        let kept: Kept = serde_json::from_slice(&fs::read(folder.join(STATE_FILE)).ok()?).ok()?;
+        let current = kept
+            .current
+            .filter(|_| kept.name.eq_ignore_ascii_case(name))?;
+        if !current.has_picture() {
+            return None;
+        }
+        self.picture(account, Slot::Current)
+    }
+
     pub fn picture(&self, account: &str, slot: Slot) -> Option<Vec<u8>> {
         let folder = self.folder(account)?;
         fs::read(folder.join(slot.file()))
@@ -517,5 +531,50 @@ mod tests {
         store.prune(&[("acc1".into(), "Ahmet".into())], clock_read_before);
         assert!(store.read("acc1", "Ahmet").current.is_some());
         assert_eq!(store.picture("acc1", Slot::Current), Some(png(1)));
+    }
+
+    /// The face's read changes nothing: no "used" mark, no copy removed for another name.
+    #[test]
+    fn the_face_read_changes_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = SkinStore::new(dir.path());
+        assert_eq!(store.current_picture("acc1", "Ahmet"), None);
+        store
+            .set_pending("acc1", "Ahmet", "j1", &png_source('a'), Some(&png(1)))
+            .unwrap();
+        assert_eq!(
+            store.current_picture("acc1", "Ahmet"),
+            None,
+            "sent, not applied"
+        );
+        store.applied("acc1", "Ahmet", "j1", None).unwrap();
+        let state = dir.path().join("acc1").join(STATE_FILE);
+        let old = SystemTime::now() - Duration::from_secs(3_600);
+        fs::File::options()
+            .append(true)
+            .open(&state)
+            .unwrap()
+            .set_modified(old)
+            .unwrap();
+        assert_eq!(store.current_picture("acc1", "ahmet"), Some(png(1)));
+        assert_eq!(store.current_picture("acc1", "Veli"), None);
+        assert!(
+            dir.path().join("acc1").exists(),
+            "another name removes nothing"
+        );
+        let modified = fs::metadata(&state).unwrap().modified().unwrap();
+        assert!(
+            modified <= old + Duration::from_secs(1),
+            "not marked as used"
+        );
+        store
+            .set_pending("acc1", "Ahmet", "j2", &KeptSource::Default, None)
+            .unwrap();
+        store.applied("acc1", "Ahmet", "j2", None).unwrap();
+        assert_eq!(
+            store.current_picture("acc1", "Ahmet"),
+            None,
+            "the default look has no picture"
+        );
     }
 }

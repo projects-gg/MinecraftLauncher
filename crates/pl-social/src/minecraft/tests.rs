@@ -386,6 +386,22 @@ impl Harness {
         let message: McMessage = serde_json::from_value(message).unwrap();
         self.skins.on_signal(McSignal::Message(Box::new(message)));
     }
+
+    /// How many `State` changes were told.
+    fn states(&self) -> usize {
+        self.changes()
+            .iter()
+            .filter(|change| **change == ProjectsSkinChange::State)
+            .count()
+    }
+
+    async fn until(&self, what: &str, done: impl Fn(&Self) -> bool) {
+        let deadline = std::time::Instant::now() + PATIENCE;
+        while !done(self) {
+            assert!(std::time::Instant::now() < deadline, "never {what}");
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+    }
 }
 
 fn closed_skin(id: &str, code: &str, texture: Option<&str>) -> serde_json::Value {
@@ -433,14 +449,17 @@ async fn the_entry_points_read_the_service_once_in_the_background() {
     tokio::time::sleep(Duration::from_millis(200)).await;
     assert_eq!(harness.hits("GET", "/v1/mc"), 0);
 
+    // The flag's change is told at once (the entry points and the heads read again)…
     harness.skins.set_shown(true);
+    assert_eq!(harness.states(), 1);
+    harness.skins.set_shown(true);
+    assert_eq!(harness.states(), 1, "only a change is told");
     let first = harness.skins.overview();
     assert!(first.shown);
     assert_eq!(first.link, None, "nothing known yet");
+    // …and the background read's once it is known.
     harness
-        .until_change("a state change", |change| {
-            *change == ProjectsSkinChange::State
-        })
+        .until("the background read told", |h| h.states() == 2)
         .await;
     let second = harness.skins.overview();
     let link = second.link.unwrap();
@@ -724,6 +743,57 @@ async fn a_change_that_closed_while_the_launcher_was_closed_is_kept() {
     );
     // Nothing is told: the panel's last job says it.
     assert!(job_changes(&harness).is_empty());
+}
+
+#[tokio::test]
+async fn the_head_comes_from_the_applied_skin_while_the_feature_shows() {
+    let harness = Harness::start(state_json(TEXTURE, 2)).await;
+    let store = store::SkinStore::new(harness.dir.path().join("skins").join("projects"));
+    let png = store::KeptSource::Png {
+        variant: SkinVariant::Slim,
+        sha256: "a".repeat(64),
+        texture: None,
+    };
+    harness.skins.set_shown(true);
+    let head = || harness.skins.head_skin(&harness.account);
+    assert_eq!(head(), None, "nothing kept: the account's own head");
+    store
+        .set_pending("acc1", "Ahmet", JOB_A, &png, Some(&skin(1)))
+        .unwrap();
+    assert_eq!(head(), None, "sent, not applied yet");
+    store.applied("acc1", "Ahmet", JOB_A, Some("aa11")).unwrap();
+    assert_eq!(head(), Some(skin(1)), "the applied skin");
+
+    // The feature off: none of it shows, and it comes back with the feature.
+    harness.skins.set_shown(false);
+    assert_eq!(head(), None);
+    harness.skins.set_shown(true);
+    assert_eq!(head(), Some(skin(1)));
+
+    // Another player on this id (the account was renamed): not theirs.
+    let renamed = SkinAccount {
+        id: "acc1".into(),
+        name: "Veli".into(),
+    };
+    store
+        .set_pending("acc2", "Mehmet", JOB_B, &png, Some(&skin(2)))
+        .unwrap();
+    store.applied("acc2", "Mehmet", JOB_B, None).unwrap();
+    assert_eq!(harness.skins.head_skin(&renamed), None);
+
+    // Back to the default look (no picture of its own): the account's own head again.
+    let mehmet = SkinAccount {
+        id: "acc2".into(),
+        name: "Mehmet".into(),
+    };
+    assert_eq!(harness.skins.head_skin(&mehmet), Some(skin(2)));
+    store
+        .set_pending("acc2", "Mehmet", JOB_C, &store::KeptSource::Default, None)
+        .unwrap();
+    store.applied("acc2", "Mehmet", JOB_C, None).unwrap();
+    assert_eq!(harness.skins.head_skin(&mehmet), None);
+    // Only reads: nothing asked of the service or Mojang.
+    assert_eq!(harness.hits("GET", "/v1/mc"), 0);
 }
 
 #[tokio::test]

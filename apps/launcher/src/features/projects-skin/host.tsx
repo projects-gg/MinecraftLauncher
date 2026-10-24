@@ -1,13 +1,14 @@
 // What SKIN1 keeps mounted with the main window (accounts-host.tsx): the Projects skin panel of a
 // username account (opened from its card, the palette or a toast) and the toasts of jobs that
 // closed while the player looks elsewhere (rules.ts → `toastFor`). Every change also refreshes
-// what the panel, the link row and the palette know.
+// what the panel, the link row and the palette know, and the accounts: a username account's face
+// is its applied Projects skin's head while the feature shows (skin1.md §5.6).
 import { toast } from "@pl/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useAccountsUi } from "@/features/accounts/store";
-import { useAccounts } from "@/features/accounts/use-accounts";
+import { ACCOUNTS_KEY, useAccounts } from "@/features/accounts/use-accounts";
 import { projectsSkinApi } from "@/lib/api/projects-skin-api";
 import { ProjectsSkinSheet } from "./projects-skin-sheet";
 import { PROJECTS_SKIN_KEY, useProjectsSkinUi } from "./queries";
@@ -40,6 +41,8 @@ function useChangeToasts() {
 
     return projectsSkinApi.onChange((change) => {
       void queryClient.invalidateQueries({ queryKey: PROJECTS_SKIN_KEY });
+      // An applied skin, or the feature turning on or off, changes the account's face.
+      void queryClient.invalidateQueries({ queryKey: ACCOUNTS_KEY });
       const plan = toastFor(change, {
         panelFor: useAccountsUi.getState().appearanceFor,
         codeBox: useProjectsSkinUi.getState().codeBoxes > 0,

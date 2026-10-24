@@ -6,6 +6,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD;
 use pl_auth::{Account, AccountKind, HeadCache, LoginStep, SessionCheck};
 use pl_net::CancellationToken;
+use pl_social::{ProjectsSkins, SkinAccount};
 use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State};
@@ -50,7 +51,28 @@ fn client_jars(state: &AppState) -> Vec<PathBuf> {
     pl_auth::client_jars(&state.root.join("versions"))
 }
 
-fn view(account: &Account, active_id: Option<Uuid>, heads: &HeadCache) -> AccountView {
+/// The account's face: the head of its Projects skin while SKIN1 shows (a username account's
+/// applied skin, kept on this computer; skin1.md §5.6), else its own head once cached. A preset
+/// picture the player chose still wins in the interface (`avatar`).
+fn face_png(account: &Account, heads: &HeadCache, projects: &ProjectsSkins) -> Option<Vec<u8>> {
+    let projects_head = if matches!(account.kind, AccountKind::Offline) {
+        let skin = projects.head_skin(&SkinAccount {
+            id: account.id.to_string(),
+            name: account.username.clone(),
+        });
+        skin.and_then(|skin| pl_auth::head_png(&skin).ok())
+    } else {
+        None
+    };
+    projects_head.or_else(|| heads.for_account(account))
+}
+
+fn view(
+    account: &Account,
+    active_id: Option<Uuid>,
+    heads: &HeadCache,
+    projects: &ProjectsSkins,
+) -> AccountView {
     AccountView {
         id: account.id.to_string(),
         kind: account.kind,
@@ -58,8 +80,7 @@ fn view(account: &Account, active_id: Option<Uuid>, heads: &HeadCache) -> Accoun
         uuid: account.uuid.simple().to_string(),
         active: Some(account.id) == active_id,
         skin_url: account.skin.as_ref().map(|s| s.url.clone()),
-        head_url: heads
-            .for_account(account)
+        head_url: face_png(account, heads, projects)
             .map(|png| format!("data:image/png;base64,{}", STANDARD.encode(png))),
         added_at: account.added_at.to_string(),
         last_used_at: account.last_used_at.map(|at| at.to_string()),
@@ -70,7 +91,12 @@ fn view(account: &Account, active_id: Option<Uuid>, heads: &HeadCache) -> Accoun
 }
 
 fn view_of(state: &AppState, account: &Account) -> AccountView {
-    view(account, state.auth.store().active_id(), &head_cache(state))
+    view(
+        account,
+        state.auth.store().active_id(),
+        &head_cache(state),
+        &state.projects_skin,
+    )
 }
 
 fn parse_id(id: &str) -> CmdResult<Uuid> {
@@ -86,7 +112,7 @@ pub fn accounts_list(state: State<'_, AppState>) -> Vec<AccountView> {
         .auth
         .accounts()
         .iter()
-        .map(|a| view(a, active, &heads))
+        .map(|a| view(a, active, &heads, &state.projects_skin))
         .collect()
 }
 

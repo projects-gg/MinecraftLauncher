@@ -228,9 +228,25 @@ impl ProjectsSkins {
         (self.inner.sink)(change);
     }
 
-    /// The signed content's `features.friends && features.skins` (the entry points).
+    /// The signed content's `features.friends && features.skins` (the entry points). A change is
+    /// told (`State`): the entry points and the account heads ([`Self::head_skin`]) read again.
     pub fn set_shown(&self, shown: bool) {
-        self.lock().shown = shown;
+        let changed = std::mem::replace(&mut self.lock().shown, shown) != shown;
+        if changed {
+            self.emit(ProjectsSkinChange::State);
+        }
+    }
+
+    /// The skin the account's head is cut from wherever the account shows (skin1.md §5.6): this
+    /// computer's copy of its applied Projects skin, while the entry points show. None with the
+    /// feature off, for the default look (no picture of its own) and without a copy here: the
+    /// account keeps its own head then. Reads this computer only (never the service) and changes
+    /// nothing, as it runs whenever the accounts are listed.
+    pub fn head_skin(&self, account: &SkinAccount) -> Option<Vec<u8>> {
+        if !self.lock().shown {
+            return None;
+        }
+        self.inner.store.current_picture(&account.id, &account.name)
     }
 
     /// The friends session, and what an earlier one left behind gone.
