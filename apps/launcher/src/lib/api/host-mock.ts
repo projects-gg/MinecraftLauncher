@@ -184,12 +184,16 @@ function initialInvites(): WorldInvite[] {
       return [mertInvite({ join: stageOf(param("stage")) })];
     case "ask":
       return [mertInvite({ join: { kind: "ask", ask: askOf(param("ask")) } })];
-    case "failedJoin":
+    case "failedJoin": {
+      const failure = (param("failure") ?? "full") as JoinFailure;
       return [
         mertInvite({
-          join: { kind: "failed", failure: (param("failure") ?? "full") as JoinFailure },
+          join: { kind: "failed", failure },
+          // A full world counts everyone it holds (8/8, the host too), as the live count would.
+          ...(failure === "full" ? { guests: MAX } : {}),
         }),
       ];
+    }
     default:
       return [];
   }

@@ -398,6 +398,16 @@ function filesOf(instanceId: string): InstanceFiles {
         ? []
         : [
             {
+              // HOST1: the launcher's own backup before the world first opened to friends.
+              fileName: "2026-10-14_19-02-31_Yeni Dünya.zip",
+              sizeBytes: 121_000_000,
+              createdAt: hoursAgo(30),
+              worldFolder: "Yeni Dünya",
+              worldName: "Yeni Dünya",
+              valid: true,
+              reason: "beforeSharing",
+            },
+            {
               fileName: "2026-10-12_20-11-04_Yeni Dünya.zip",
               sizeBytes: 118_000_000,
               createdAt: hoursAgo(76),

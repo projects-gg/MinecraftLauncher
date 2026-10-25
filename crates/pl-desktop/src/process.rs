@@ -24,6 +24,26 @@ pub fn is_same(pid: u32, started: u64) -> bool {
     start_time(pid) == Some(started)
 }
 
+/// Whether the process `pid` is `root` or was started by it, directly or through others: the
+/// Java a wrapper command (`hooks.wrapper`) starts belongs to the game started as `root`. One
+/// look at the process table; stale parent numbers are not followed
+/// ([`crate::game_window::descends_from`]). False when the table cannot tell.
+pub fn started_by(pid: u32, root: u32) -> bool {
+    if pid == root {
+        return true;
+    }
+    let mut system = sysinfo::System::new();
+    system.refresh_processes_specifics(
+        sysinfo::ProcessesToUpdate::All,
+        true,
+        sysinfo::ProcessRefreshKind::nothing(),
+    );
+    crate::game_window::descends_from(pid, root, |id| {
+        let process = system.process(sysinfo::Pid::from_u32(id))?;
+        Some((process.parent()?.as_u32(), process.start_time()))
+    })
+}
+
 /// Blocks until the process `pid` that started at `started` has ended; its exit code when the OS
 /// still tells it. Returns at once when that process does not run (any more). Windows waits on the
 /// process itself, so nothing wakes meanwhile; elsewhere it looks every [`LOOK_EVERY`].
@@ -125,6 +145,18 @@ mod tests {
         child.wait().unwrap();
         drop(child);
         assert!(!is_same(pid, started));
+    }
+
+    /// A process this one started counts as started by it; this one was not started by its child.
+    #[test]
+    fn a_child_is_started_by_its_parent() {
+        let mut child = short_lived();
+        let pid = child.id();
+        let me = std::process::id();
+        assert!(started_by(pid, me));
+        assert!(started_by(me, me));
+        assert!(!started_by(me, pid));
+        child.wait().unwrap();
     }
 
     #[test]

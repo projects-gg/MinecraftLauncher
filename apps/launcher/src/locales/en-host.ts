@@ -102,7 +102,7 @@ export const enHost = {
     rejoin: "Rejoin",
     missing_one: "Couldn't find {{count}} mod; you may have trouble getting in.",
     missing_other: "Couldn't find {{count}} mods; you may have trouble getting in.",
-    copyAction: "Copy the install",
+    copyAction: "Install and join",
     failed: {
       full: "The world is full.",
       closed: "{{name}} closed their world.",
@@ -110,15 +110,15 @@ export const enHost = {
       unreachable: "Couldn't connect.",
       hostPackOld:
         "This world's pack is out of date. You can join once {{name}} restarts the game.",
-      mods: "You're missing some of this world's mods.",
+      mods: "You need the same mods as {{name}} to join.",
     },
   },
   copy: {
     title: "This world uses other mods",
-    body: "To join, a new install with the same mods is made.",
+    body: "To join, a new instance with the same mods is made.",
     size_one: "{{count}} mod, {{size}}",
     size_other: "{{count}} mods, {{size}}",
-    confirm: "Copy and join",
+    confirm: "Install and join",
     name: "{{name}}'s world",
   },
   install: {
