@@ -275,11 +275,13 @@ function StartsAt({ iso }: { iso: string }) {
 /**
  * The list behind "1 etkinlik daha": the other live and upcoming events, upcoming ones with their
  * reminder bell, each with the card's one line of time ("4 gün 23 saat kaldı", "Cumartesi
- * 20:00'de başlıyor": the words say which is which, no "Sürüyor"). It opens from its link, upward
- * over the patch notes and inside the column, so the card stays readable and the hero's words stay
- * clear (beside the column it covered them at 1024 px), under its own quiet name: opening upward
- * leaves its link below it and the patch notes' heading right above it, which then read as the
- * list's name. Its times are as of the moment it opened.
+ * 20:00'de başlıyor": the words say which is which, no "Sürüyor"). Its link opens it upward from
+ * the event block, over the patch notes and inside the column, so the card stays readable and the
+ * hero's words stay clear (beside the column it covered them at 1024 px). It is as wide as the
+ * column with equal insets (a fixed width left the patch notes' words showing beside it at
+ * 1280 px) and sits just above its own block, under its own quiet name: opening upward leaves its
+ * link below it and the patch notes' heading right above it, which then read as the list's name.
+ * Its times are as of the moment it opened.
  */
 function OtherEvents({ events, onChosen }: { events: EventItem[]; onChosen: () => void }) {
   const { t } = useTranslation();
@@ -297,11 +299,11 @@ function OtherEvents({ events, onChosen }: { events: EventItem[]; onChosen: () =
           through beside its name. No drop shadow: opening upward, it would dim its own link. */}
       <Popover.Content
         side="top"
-        align="end"
-        sideOffset={6}
+        align="center"
+        sideOffset={4}
         collisionPadding={12}
         aria-labelledby={headingId}
-        className="pop-motion z-50 w-[264px] rounded-[var(--radius-panel)] border border-white/7 bg-obsidian-900 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]"
+        className="pop-motion z-50 w-[calc(var(--radix-popover-trigger-width)-12px)] rounded-[var(--radius-panel)] border border-white/7 bg-obsidian-900 p-1.5 shadow-[inset_0_1px_0_rgb(255_255_255/0.06)]"
       >
         <h3 id={headingId} className="px-2 pt-1 pb-0.5 text-[12px] font-medium text-ash-300">
           {t("home.otherEvents")}
@@ -446,93 +448,96 @@ function EventBlock({
   const titleId = useId();
   return (
     <Popover.Root open={listOpen} onOpenChange={setListOpen}>
-      {/* `pb-1`: "Katıl" and the bell, as tall as a button, keep air above the links' divider. */}
-      <section className="relative border-t border-white/7 px-3.5 pt-2.5 pb-1">
-        {/* The block's own heading, as the patch notes have theirs (it was a small coloured
+      {/* The other events' list measures and places itself on the whole block (its link opens it).
+          `pb-1`: "Katıl" and the bell, as tall as a button, keep air above the links' divider. */}
+      <Popover.Anchor asChild>
+        <section className="relative border-t border-white/7 px-3.5 pt-2.5 pb-1">
+          {/* The block's own heading, as the patch notes have theirs (it was a small coloured
               kicker over the event's title), and the other events behind a plain link beside it.
               "Süren etkinlik" says it runs, so the time line below needs no word for it (a bare
               "Etkinlik" also repeated the stories' category). */}
-        <div className="flex min-h-[22px] items-center justify-between gap-3">
-          <h3 className="font-display text-title font-semibold text-bone-50">
-            {live ? t("newsColumn.liveEvent") : t("home.nextEvent")}
-          </h3>
-          {/* `-mr-1` like "Tümü": the three carets of the column end on one line. */}
-          {others.length ? (
-            <Popover.Trigger asChild>
-              <button
-                type="button"
-                className="-mr-1 flex cursor-pointer items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[12.5px] font-medium text-ash-300 tabular-nums transition-colors duration-150 hover:text-gold-300 focus-visible:outline-2 data-[state=open]:text-gold-300"
-              >
-                {t("home.moreEvents", { count: others.length })}
-                {/* Up, toward the list it opens; the column's other carets lead to pages. */}
-                <CaretUp size={13} weight="bold" aria-hidden />
-              </button>
-            </Popover.Trigger>
-          ) : null}
-        </div>
-        {/* The leaving event is lifted out of the flow, so a switch cross-fades at once and a
-          second switch mid-way retargets instead of waiting. The bell goes with its event. */}
-        <AnimatePresence mode="popLayout" initial={false}>
-          <motion.div
-            key={`${event.id}:${live ? "live" : "next"}`}
-            // The card stays lit while the pointer is on its bell (a sibling, not inside it).
-            className="relative [&:has([data-bell]:hover)_[data-event-target]]:bg-white/6"
-            initial={{ opacity: 0, transform: `translateY(${shift}px)` }}
-            animate={{
-              opacity: 1,
-              transform: "translateY(0px)",
-              transition: { duration: enter, ease: easeOutExpo },
-            }}
-            exit={{
-              opacity: 0,
-              transform: `translateY(${-shift / 2}px)`,
-              transition: { duration: exitOf(enter), ease: easeOutExpo },
-            }}
-          >
-            <EventTarget event={event}>
-              <div className="flex items-start justify-between gap-2">
-                <p
-                  id={titleId}
-                  className="line-clamp-2 text-[13px] leading-snug font-semibold text-balance text-bone-100 transition-colors duration-150 group-hover:text-bone-50"
+          <div className="flex min-h-[22px] items-center justify-between gap-3">
+            <h3 className="font-display text-title font-semibold text-bone-50">
+              {live ? t("newsColumn.liveEvent") : t("home.nextEvent")}
+            </h3>
+            {/* `-mr-1` like "Tümü": the three carets of the column end on one line. */}
+            {others.length ? (
+              <Popover.Trigger asChild>
+                <button
+                  type="button"
+                  className="-mr-1 flex cursor-pointer items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[12.5px] font-medium text-ash-300 tabular-nums transition-colors duration-150 hover:text-gold-300 focus-visible:outline-2 data-[state=open]:text-gold-300"
                 >
-                  {event.title}
-                </p>
-                {/* Like the stories above, an article opens without a caret (one already leads to
+                  {t("home.moreEvents", { count: others.length })}
+                  {/* Up, toward the list it opens; the column's other carets lead to pages. */}
+                  <CaretUp size={13} weight="bold" aria-hidden />
+                </button>
+              </Popover.Trigger>
+            ) : null}
+          </div>
+          {/* The leaving event is lifted out of the flow, so a switch cross-fades at once and a
+          second switch mid-way retargets instead of waiting. The bell goes with its event. */}
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.div
+              key={`${event.id}:${live ? "live" : "next"}`}
+              // The card stays lit while the pointer is on its bell (a sibling, not inside it).
+              className="relative [&:has([data-bell]:hover)_[data-event-target]]:bg-white/6"
+              initial={{ opacity: 0, transform: `translateY(${shift}px)` }}
+              animate={{
+                opacity: 1,
+                transform: "translateY(0px)",
+                transition: { duration: enter, ease: easeOutExpo },
+              }}
+              exit={{
+                opacity: 0,
+                transform: `translateY(${-shift / 2}px)`,
+                transition: { duration: exitOf(enter), ease: easeOutExpo },
+              }}
+            >
+              <EventTarget event={event}>
+                <div className="flex items-start justify-between gap-2">
+                  <p
+                    id={titleId}
+                    className="line-clamp-2 text-[13px] leading-snug font-semibold text-balance text-bone-100 transition-colors duration-150 group-hover:text-bone-50"
+                  >
+                    {event.title}
+                  </p>
+                  {/* Like the stories above, an article opens without a caret (one already leads to
                       the other events beside the heading); the browser's mark stays. */}
-                {event.url && !event.newsId && isWebLink(event.url) ? (
-                  <ArrowSquareOut
-                    size={14}
-                    aria-hidden
-                    className="mt-[2px] shrink-0 text-ash-400 transition-colors duration-200 group-hover:text-gold-300"
-                  />
-                ) : null}
-              </div>
-              {/* One line of time, in the other events list's words: what is left (or since
+                  {event.url && !event.newsId && isWebLink(event.url) ? (
+                    <ArrowSquareOut
+                      size={14}
+                      aria-hidden
+                      className="mt-[2px] shrink-0 text-ash-400 transition-colors duration-200 group-hover:text-gold-300"
+                    />
+                  ) : null}
+                </div>
+                {/* One line of time, in the other events list's words: what is left (or since
                     when), or when it starts. Big ticking digits outshouted the panel. */}
+                {live ? (
+                  <p className="mt-1 min-w-0 text-[12.5px] text-ash-300">
+                    {event.openEnded ? (
+                      <StartedAgo at={event.startsAt} />
+                    ) : (
+                      <TimeLeft to={event.endsAt} />
+                    )}
+                  </p>
+                ) : (
+                  <StartsAt iso={event.startsAt} />
+                )}
+              </EventTarget>
               {live ? (
-                <p className="mt-1 min-w-0 text-[12.5px] text-ash-300">
-                  {event.openEnded ? (
-                    <StartedAgo at={event.startsAt} />
-                  ) : (
-                    <TimeLeft to={event.endsAt} />
-                  )}
-                </p>
+                // On the server: "Katıl" takes the bell's place, level with the time line.
+                event.join ? (
+                  <EventJoin describedBy={titleId} className="absolute right-0 bottom-[1px]" />
+                ) : null
               ) : (
-                <StartsAt iso={event.startsAt} />
+                // Level with the start time.
+                <ReminderBell event={event} className="absolute right-[-6px] bottom-[1px]" />
               )}
-            </EventTarget>
-            {live ? (
-              // On the server: "Katıl" takes the bell's place, level with the time line.
-              event.join ? (
-                <EventJoin describedBy={titleId} className="absolute right-0 bottom-[1px]" />
-              ) : null
-            ) : (
-              // Level with the start time.
-              <ReminderBell event={event} className="absolute right-[-6px] bottom-[1px]" />
-            )}
-          </motion.div>
-        </AnimatePresence>
-      </section>
+            </motion.div>
+          </AnimatePresence>
+        </section>
+      </Popover.Anchor>
       {others.length ? <OtherEvents events={others} onChosen={() => setListOpen(false)} /> : null}
     </Popover.Root>
   );
