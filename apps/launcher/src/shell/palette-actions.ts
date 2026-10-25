@@ -99,6 +99,11 @@ export const PALETTE_WORDS = {
       "quilt",
       "neoforge",
       "modrinth",
+      // The mod center became the Modlar tab's sections (MODHUB2): its words still find it.
+      "mod merkezi",
+      "önerilen",
+      "keşfet",
+      "mod center",
     ],
   },
   resourcePacks: {

@@ -1073,7 +1073,7 @@ export const mockSetCatalog: MockSetCard[] = [
     id: "gorsel",
     name: "Görsel",
     nameEn: "Visual",
-    summary: "Shader ile ışık, gölge ve su; güçlü bir ekran kartı ister.",
+    summary: "Shader ile ışık, gölge ve su; iyi bir ekran kartı ister.",
     summaryEn: "Light, shadows and water with shaders; needs a strong graphics card.",
     purpose: "visual",
     variants: [
@@ -1101,7 +1101,7 @@ export const mockSetCatalog: MockSetCard[] = [
           {
             id: "HVnmMxH1",
             title: "Complementary Shaders - Reimagined",
-            summary: "Gerçekçi ışık ve su; güçlü ekran kartı ister.",
+            summary: "Gerçekçi ışık ve su; iyi bir ekran kartı ister.",
             kind: "shaderPack",
             iconUrl:
               "https://cdn.modrinth.com/data/HVnmMxH1/79cb7c8123bbc54945305b2ebad6b8881efdf5f8_96.webp",
@@ -1176,7 +1176,7 @@ export const mockSetCatalog: MockSetCard[] = [
           {
             id: "HVnmMxH1",
             title: "Complementary Shaders - Reimagined",
-            summary: "Gerçekçi ışık ve su; güçlü ekran kartı ister.",
+            summary: "Gerçekçi ışık ve su; iyi bir ekran kartı ister.",
             kind: "shaderPack",
             iconUrl:
               "https://cdn.modrinth.com/data/HVnmMxH1/79cb7c8123bbc54945305b2ebad6b8881efdf5f8_96.webp",
@@ -1228,5 +1228,63 @@ export const mockSetCatalog: MockSetCard[] = [
         downloadBytes: 5112284,
       },
     ],
+  },
+  // MODHUB2: the builder set prepared for Studio (docs/tasks/modhub2.md), real files.
+  {
+    id: "yapi",
+    name: "Yapı",
+    summary:
+      "Litematica ile şemayı dünyada görerek inşa et. Easy Place Projects'te yasak, kapalı gelir.",
+    summaryEn:
+      "Build with Litematica's schematic in your world. Easy Place stays off: Projects doesn't allow it.",
+    purpose: "other",
+    variants: (
+      [
+        ["26.3", "ZqV316KY", 1972556, "0.29.1", "JX9bESec", 2081094, "0.30.2"],
+        ["26.2", "CuniXtbo", 1929569, "0.28.8", "KvjmGjAV", 2037195, "0.29.6"],
+        ["26.1.2", "w8P6TokG", 1934808, "0.27.14", "FItuNokS", 2042597, "0.28.12"],
+      ] as const
+    ).map(([minecraft, , liteSize, liteVersion, , maliSize, maliVersion]) => ({
+      minecraft,
+      loader: "fabric" as const,
+      loaderVersion: "0.19.5",
+      items: [
+        {
+          id: "bEpr0Arc",
+          title: "Litematica",
+          summary: "Şemayı dünyada yarı saydam bloklarla gösterir. Menüsü J tuşunda.",
+          kind: "mod" as const,
+          iconUrl:
+            "https://cdn.modrinth.com/data/bEpr0Arc/25b5529d7a3b030ac136a6ce879d8ed2a1aa4a8d.png",
+          pageUrl: "https://modrinth.com/project/bEpr0Arc",
+          projectId: "bEpr0Arc",
+          defaultEnabled: true,
+          library: false,
+          requires: ["GcWjdA9I"],
+          sizeBytes: liteSize,
+          fileName: `litematica-fabric-${minecraft}-${liteVersion}.jar`,
+          category: "other" as const,
+        },
+        {
+          id: "GcWjdA9I",
+          title: "MaLiLib",
+          kind: "mod" as const,
+          iconUrl:
+            "https://cdn.modrinth.com/data/GcWjdA9I/a530ae55df5e0c405f5cf1b3e4fd6163a398bdc3.png",
+          pageUrl: "https://modrinth.com/project/GcWjdA9I",
+          projectId: "GcWjdA9I",
+          defaultEnabled: true,
+          library: true,
+          requires: [],
+          sizeBytes: maliSize,
+          fileName: `malilib-fabric-${minecraft}-${maliVersion}.jar`,
+          category: "library" as const,
+        },
+      ],
+      mods: 1,
+      resourcePacks: 0,
+      shaderPacks: 0,
+      downloadBytes: liteSize + maliSize,
+    })),
   },
 ];

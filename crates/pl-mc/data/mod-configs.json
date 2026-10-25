@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "about": "Settings files the desktop launcher writes for a mod when a ready-made set puts the mod in place and the file does not exist yet (pl-mc instance::mod_configs). A file that exists is never touched, so the player's later changes and the mod's own file always win. Each entry holds only the values that matter; the mod keeps its defaults for the rest and writes its full file itself. Keys move so that nothing shares a key with the official pack's mappings in normal play (inventory: crates/pl-mc/testdata/key-bindings). `projects` are the Modrinth project ids (a set item's id or its Modrinth project); `path` is relative to the game folder and stays under config/.",
+  "files": [
+    {
+      "projects": ["bEpr0Arc"],
+      "mod": "Litematica",
+      "path": "config/litematica.json",
+      "json": {
+        "Generic": {
+          "easyPlaceMode": false
+        },
+        "Hotkeys": {
+          "easyPlaceToggle": "",
+          "openGuiMainMenu": "J",
+          "addSelectionBox": "J,A",
+          "layerModeNext": "J,PAGE_UP",
+          "layerModePrevious": "J,PAGE_DOWN",
+          "openGuiMaterialList": "J,L",
+          "openGuiSchematicPlacements": "J,P",
+          "openGuiSchematicVerifier": "J,V",
+          "openGuiSelectionManager": "J,S",
+          "openGuiSettings": "J,C",
+          "selectionModeCycle": "LEFT_CONTROL,J",
+          "toggleAllRendering": "J,R",
+          "toggleSchematicRendering": "J,G",
+          "toolEnabledToggle": "J,T",
+          "pickBlockToggle": "",
+          "rerenderSchematic": ""
+        }
+      },
+      "why": "Easy placement (a click puts the schematic's block in place) is placement automation, which the Projects server's rules forbid: it is off and its toggle unbound in every Litematica for 26.x already, and the file says so too. Litematica's menu key M and its M combinations are Simple Voice Chat's microphone mute in the official pack, so pressing M to open the menu also muted or unmuted the player: they move to J, which nothing uses in play (F3+J, the pack's language reload, needs F3 held). The pick block toggle (M with the middle mouse button, whose name differs between versions) and the schematic redraw (F3+M) are rare and stay unbound."
+    },
+    {
+      "projects": ["GcWjdA9I"],
+      "mod": "MaLiLib",
+      "path": "config/malilib.json",
+      "json": {
+        "Generic": {
+          "openGuiConfigs": ""
+        }
+      },
+      "why": "MaLiLib opens its settings with A then C: walking left and pressing the pack's zoom key (C) opened a menu mid-fight. Litematica's own settings stay on J then C, and Mod Menu, where installed, still opens MaLiLib's."
+    }
+  ]
+}

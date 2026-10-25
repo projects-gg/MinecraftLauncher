@@ -22,11 +22,10 @@ import { InstanceIcon } from "@/shell/instance-icon";
 import { settingsChanged, useDrafts } from "@/stores/drafts";
 import { isOpening, useLaunch } from "@/stores/launch";
 import { usePrefs } from "@/stores/prefs";
-import { type InstanceTab, instanceTab } from "./instance-tab";
+import { type InstanceTab, instanceTab, type ModsSection } from "./instance-tab";
 import { OverviewTab } from "./overview/overview-tab";
 import { createDesktopShortcut } from "./shortcut";
 import { LogsTab } from "./tabs/logs-tab";
-import { ModsTab } from "./tabs/mods-tab";
 import { PacksTab } from "./tabs/packs-tab";
 import { ScreenshotsTab } from "./tabs/screenshots-tab";
 import { ServersTab } from "./tabs/servers-tab";
@@ -35,7 +34,8 @@ import { WorldsTab } from "./tabs/worlds-tab";
 
 export type { InstanceTab } from "./instance-tab";
 
-const browseKinds: ContentKind[] = ["mod", "resourcePack", "shaderPack"];
+/** Kinds browsed on a page of their own; mods are found in "Modlar" → "Keşfet" (MODHUB2). */
+const browseKinds: ContentKind[] = ["resourcePack", "shaderPack"];
 /** The tab the browser of each kind returns to. */
 const tabOfKind: Record<ContentKind, InstanceTab> = {
   mod: "mods",
@@ -79,7 +79,18 @@ export function InstancePage() {
     void navigate({
       to: "/library/$instanceId",
       params: { instanceId },
-      search: { tab: tabOfKind[kind], browse: kind },
+      search:
+        kind === "mod"
+          ? { tab: "mods", focus: "discover" }
+          : { tab: tabOfKind[kind], browse: kind },
+    });
+  /** "Modlar" on one of its sections (the version switch's new recommendations). */
+  const openMods = (section: ModsSection) =>
+    void navigate({
+      to: "/library/$instanceId",
+      params: { instanceId },
+      search: { tab: "mods", focus: section },
+      replace: true,
     });
 
   if (isPending || !data) {
@@ -107,7 +118,7 @@ export function InstancePage() {
 
   const loader = data.loader === "vanilla" ? "Minecraft" : t(`loaders.${data.loader}`);
   // The tab a link asked for, when this instance has it (else the overview).
-  const tab = instanceTab(search.tab, data.loader === "vanilla");
+  const tab = instanceTab(search.tab, search.browse);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col px-page pt-2">
@@ -210,19 +221,12 @@ export function InstancePage() {
           className="mt-3.5"
           items={[
             { value: "overview", label: t("instance.tabs.overview") },
-            ...(data.loader === "vanilla"
-              ? []
-              : [
-                  {
-                    value: "modcenter" as InstanceTab,
-                    label: t("modCenter.tab"),
-                    marker: modsPending ? t("instance.tabs.pendingMarker") : undefined,
-                  },
-                ]),
+            // What is installed, recommended and findable, in one place (MODHUB2).
             {
               value: "mods",
               label: t("instance.tabs.mods"),
               count: data.loader === "vanilla" ? undefined : data.mods.length || undefined,
+              marker: modsPending ? t("instance.tabs.pendingMarker") : undefined,
             },
             {
               value: "resourcePacks",
@@ -262,17 +266,10 @@ export function InstancePage() {
             <OverviewTab instance={data} onOpenTab={setTab} onBrowse={openBrowser} />
           </TabPanel>
           <TabPanel
-            value="modcenter"
+            value="mods"
             className="flex flex-col pb-0 [mask-image:linear-gradient(to_bottom,black_calc(100%-10px),transparent)]"
           >
             <ModCenter instance={data} onSwitchVersion={() => setVersionsOpen(true)} />
-          </TabPanel>
-          <TabPanel value="mods" className="pb-8">
-            <ModsTab
-              instance={data}
-              onBrowse={() => openBrowser("mod")}
-              onOpenModCenter={() => setTab("modcenter")}
-            />
           </TabPanel>
           <TabPanel value="resourcePacks" className="pb-8">
             <PacksTab
@@ -317,7 +314,7 @@ export function InstancePage() {
         instance={data}
         open={versionsOpen}
         onClose={() => setVersionsOpen(false)}
-        onOpenModCenter={data.loader === "vanilla" ? undefined : () => setTab("modcenter")}
+        onOpenModCenter={data.managed ? () => openMods("recommended") : undefined}
       />
     </div>
   );

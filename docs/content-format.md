@@ -1537,6 +1537,12 @@ What a set does in an instance:
 - **Keys.** A new `options.txt` of an instance with sets gets the official pack's key table, as
   the pack's instances do (the sets bring the pack's WI Zoom and Gamma Utils, whose own keys
   clash with the game's), and the mod check offers the same one-tap fix for an older file.
+- **Settings.** Not part of the format: the catalog carries no settings files. When a set puts a
+  mod in place (a file added, or a disabled copy renamed back) and that mod's settings file does
+  not exist yet, the desktop launcher writes it with the few values the server and the official
+  pack need (`crates/pl-mc/data/mod-configs.json`: Litematica's easy placement off, its keys clear
+  of the voice chat's mute; MaLiLib's settings key clear of the zoom key). A file that exists is
+  never touched, so the player's later changes and the mod's own file always win.
 - **Old versions.** Sets carry Modrinth files (and the content tree's own) only, for the
   versions the server supports with Fabric or NeoForge. 1.8.9 with Forge and OptiFine is out of scope: OptiFine may not be
   redistributed and has no Modrinth files.

@@ -5,9 +5,16 @@ import { useNavigate, useSearch } from "@tanstack/react-router";
 import { AnimatePresence, LayoutGroup, MotionConfig, motion } from "motion/react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { create } from "zustand";
 import offlineArt from "@/assets/art/empty-offline.webp";
 import { ContentBrowser } from "@/features/content/content-browser";
 import { ProjectDialog } from "@/features/content/project-dialog";
+import {
+  askedModsSection,
+  type ModsSection,
+  modsSections,
+  pickModsSection,
+} from "@/features/library/instance-tab";
 import { ModsTab, VanillaModsEmpty } from "@/features/library/tabs/mods-tab";
 import { useModCheck } from "@/features/modhealth/flow";
 import { ModHealthSection } from "@/features/modhealth/health-banner";
@@ -20,7 +27,18 @@ import { MigrateDialog } from "./migrate-dialog";
 import { fade, glide, rise, useMotionPrefs } from "./motion";
 import { RecommendedTab, refreshMods } from "./recommended-tab";
 
-export type ModCenterSection = "recommended" | "sets" | "discover" | "own";
+/**
+ * The section each instance's "Modlar" tab showed last, for this session: another tab or page
+ * and back finds it where it was (the tab's panel unmounts in between).
+ */
+const useLastSection = create<{
+  sections: Record<string, ModsSection>;
+  remember: (instanceId: string, section: ModsSection) => void;
+}>((set) => ({
+  sections: {},
+  remember: (instanceId, section) =>
+    set((state) => ({ sections: { ...state.sections, [instanceId]: section } })),
+}));
 
 const titleWidths = ["w-40", "w-28", "w-36", "w-24", "w-32"];
 
@@ -44,10 +62,12 @@ function Loading() {
 }
 
 /**
- * The mod center of an instance: "Önerilenler" (the official pack's recommended mods, one by
- * one), "Keşfet" (Modrinth, filtered to the instance's version and loader) and "Kendi modların"
- * (the player's own mods). Problems with mod files show on top. Everything sits in one layout
- * group, so a banner opening or a notice leaving glides the content instead of jumping.
+ * The "Modlar" tab of an instance (the mod center and the old mod list in one, MODHUB2). Every
+ * mod has one home: "Önerilenler" (the official pack's recommended mods, one by one), "Kendi
+ * modların" (every other file in the mods folder), "Setler" (ready-made sets and their files)
+ * and "Keşfet" (Modrinth, filtered to the instance's version and loader). Problems with mod
+ * files show on top. Everything sits in one layout group, so a banner opening or a notice
+ * leaving glides the content instead of jumping.
  */
 export function ModCenter({
   instance,
@@ -58,23 +78,32 @@ export function ModCenter({
 }) {
   const { t } = useTranslation();
   const prefs = useMotionPrefs();
-  // The crash dialog's "Setlerde güncelle" opens the sets (FIX2); the request is then dropped
-  // from the address.
-  const { focus } = useSearch({ from: "/library/$instanceId" });
+  // A link may ask for a section (`focus`, or `browse=mod` for "Keşfet": the crash dialog's
+  // "Setlerde güncelle", a dropped mod's "Göster", the launch notices); the request is then
+  // dropped from the address. Otherwise the tab opens where the player left it.
+  const { focus, browse } = useSearch({ from: "/library/$instanceId" });
+  const asked = askedModsSection(focus, browse);
   const navigate = useNavigate();
-  const [section, setSection] = useState<ModCenterSection>(() =>
-    focus === "sets" ? "sets" : instance.managed ? "recommended" : "own",
+  const remember = useLastSection((s) => s.remember);
+  const [section, showSection] = useState<ModsSection>(() =>
+    pickModsSection(instance.managed, asked, useLastSection.getState().sections[instance.id]),
   );
+  const setSection = (next: ModsSection) => {
+    showSection(next);
+    remember(instance.id, next);
+  };
   useEffect(() => {
-    if (focus !== "sets") return;
-    setSection("sets");
+    if (!asked) return;
+    const next = pickModsSection(instance.managed, asked);
+    showSection(next);
+    useLastSection.getState().remember(instance.id, next);
     void navigate({
       to: "/library/$instanceId",
       params: { instanceId: instance.id },
-      search: (prev) => ({ ...prev, focus: undefined }),
+      search: (prev) => ({ ...prev, tab: "mods", focus: undefined, browse: undefined }),
       replace: true,
     });
-  }, [focus, instance.id, navigate]);
+  }, [asked, instance.id, instance.managed, navigate]);
   const [project, setProject] = useState<ModCenterItem | null>(null);
   const [migrating, setMigrating] = useState(false);
   const [addingSet, setAddingSet] = useState(false);
@@ -102,29 +131,26 @@ export function ModCenter({
   if (instance.loader === "vanilla") return <VanillaModsEmpty />;
 
   const newCount = view.data?.items.filter((i) => i.isNew && !i.library).length ?? 0;
-  const sections: Array<{ value: ModCenterSection; label: string }> = [
-    ...(instance.managed
-      ? [
-          {
-            value: "recommended" as const,
-            label:
-              newCount > 0
-                ? t("modCenter.sections.recommendedNew", { count: newCount })
-                : t("modCenter.sections.recommended"),
-          },
-        ]
-      : []),
-    {
-      value: "sets",
-      label:
-        addedSets.size > 0
+  const sectionLabel = (value: ModsSection): string => {
+    switch (value) {
+      case "recommended":
+        return newCount > 0
+          ? t("modCenter.sections.recommendedNew", { count: newCount })
+          : t("modCenter.sections.recommended");
+      case "sets":
+        return addedSets.size > 0
           ? t("modSets.center.sectionCount", { count: addedSets.size })
-          : t("modSets.center.section"),
-    },
-    { value: "discover", label: t("modCenter.sections.discover") },
-    { value: "own", label: t("modCenter.sections.own") },
-  ];
-  const pack = section === "recommended" ? view.data?.pack : undefined;
+          : t("modSets.center.section");
+      case "discover":
+        return t("modCenter.sections.discover");
+      default:
+        return t("modCenter.sections.own");
+    }
+  };
+  const sections = modsSections(instance.managed).map((value) => ({
+    value,
+    label: sectionLabel(value),
+  }));
   const position = prefs.layout ? ("position" as const) : false;
   // Files the sync already lists as unreadable are not repeated by the mod check.
   const unreadable = new Set((view.data?.issues ?? []).map((i) => i.fileName.toLowerCase()));
@@ -205,7 +231,6 @@ export function ModCenter({
       <div className="pb-8">
         <ModsTab
           instance={instance}
-          ownOnly
           onBrowse={() => setSection("discover")}
           onMigrate={() => setMigrating(true)}
         />
@@ -233,30 +258,23 @@ export function ModCenter({
               label={t("modCenter.sectionsLabel")}
               options={sections}
             />
+            {/* "Set ekle" beside the added sets (with none, the section's own empty state offers
+                it); the other sections keep this row to their names. */}
             <div className="ml-auto flex items-center gap-3">
               <AnimatePresence initial={false}>
-                {pack ? (
-                  <motion.span
-                    key="pack"
-                    {...fade(0.16)}
-                    className="text-[12.5px] text-ash-400 tabular-nums"
-                  >
-                    {t("modCenter.packCaption", {
-                      name: pack.name,
-                      version: pack.version,
-                      minecraft: pack.minecraft,
-                    })}
+                {section === "sets" && addedSets.size > 0 ? (
+                  <motion.span key="add-set" {...fade(0.16)} className="flex">
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<Plus size={14} weight="bold" />}
+                      onClick={() => setAddingSet(true)}
+                    >
+                      {t("modSets.center.add")}
+                    </Button>
                   </motion.span>
                 ) : null}
               </AnimatePresence>
-              <Button
-                size="sm"
-                variant="secondary"
-                icon={<Plus size={14} weight="bold" />}
-                onClick={() => setAddingSet(true)}
-              >
-                {t("modSets.center.add")}
-              </Button>
             </div>
           </motion.div>
 

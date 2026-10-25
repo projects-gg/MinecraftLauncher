@@ -101,7 +101,12 @@ export function Tabs<T extends string>({
               {item.marker ? (
                 <motion.span
                   key="marker"
-                  className="pointer-events-none absolute top-[7px] right-[3px] flex"
+                  // Beside a count it sits a little higher and further out, clear of the
+                  // count's corner (MODHUB2: "Modlar 12" with unapplied choices).
+                  className={cn(
+                    "pointer-events-none absolute flex",
+                    typeof item.count === "number" ? "top-[5px] right-px" : "top-[7px] right-[3px]",
+                  )}
                   initial={{ opacity: 0, transform: "scale(0.6)" }}
                   animate={{ opacity: 1, transform: "scale(1)", transition: enter(0.2) }}
                   exit={{ opacity: 0, transform: "scale(0.6)", transition: leave(0.2) }}
