@@ -761,7 +761,10 @@ mod tests {
         let command = LaunchCommand::for_tests(program, args, tmp.path().join("game"))
             .with_player_jvm_options(player);
         assert_eq!(command.player_jvm_options(), ["-XX:+UseFancyThing"]);
-        let started = Instant::now();
+        // "At once" counts from the JVM's last line, not from the start: starting a process (a
+        // fresh script the virus scanner reads first) took 5 s on a busy machine.
+        let last_line = Arc::new(Mutex::new(None::<Instant>));
+        let seen = Arc::clone(&last_line);
         let process = GameProcess::spawn(
             &command,
             SpawnOptions {
@@ -770,7 +773,11 @@ mod tests {
                 max_memory_mb: Some(4096),
                 ..SpawnOptions::default()
             },
-            Arc::new(|_| {}),
+            Arc::new(move |event| {
+                if matches!(event, GameEvent::Line(_)) {
+                    *seen.lock() = Some(Instant::now());
+                }
+            }),
         )
         .await
         .unwrap();
@@ -787,7 +794,11 @@ mod tests {
             crash.suggested_actions[0],
             crate::launch::crash::SuggestedAction::ResetJvmArguments
         );
-        assert!(started.elapsed() < DRAIN_TIMEOUT, "{:?}", started.elapsed());
+        let since = last_line
+            .lock()
+            .expect("the JVM's lines were read")
+            .elapsed();
+        assert!(since < DRAIN_TIMEOUT, "{since:?}");
     }
 
     /// A shell command that prints `line` (a log line, or nothing) and then lives about a second

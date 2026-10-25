@@ -439,6 +439,9 @@ pub struct WorldBackupView {
     pub world_name: Option<String>,
     /// False when the archive does not hold a world.
     pub valid: bool,
+    /// Why the launcher made it by itself ("Arkadaşlarına açılmadan önce"); none for the
+    /// player's own backups and the game's.
+    pub reason: Option<gamefiles::BackupReason>,
 }
 
 /// Something in the launcher trash.
@@ -485,6 +488,7 @@ fn backup_view(b: gamefiles::WorldBackupInfo) -> WorldBackupView {
         world_folder: b.world_folder,
         world_name: b.world_name,
         valid: b.valid,
+        reason: b.reason,
     }
 }
 
@@ -607,6 +611,7 @@ pub async fn world_backup(
             world_folder: Some(folder),
             world_name: None,
             valid: true,
+            reason: None,
         },
     })
 }

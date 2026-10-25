@@ -50,6 +50,6 @@ pub use trash::{
 };
 pub(crate) use worlds::world_summary;
 pub use worlds::{
-    BackupProgress, BackupProgressFn, BackupSummary, WorldGameMode, WorldInfo, backup_world,
-    default_backup_path, delete_world, list_worlds, read_world,
+    BackupProgress, BackupProgressFn, BackupReason, BackupSummary, WorldGameMode, WorldInfo,
+    backup_world, backup_world_marked, default_backup_path, delete_world, list_worlds, read_world,
 };

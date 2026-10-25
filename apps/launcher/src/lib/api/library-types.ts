@@ -63,6 +63,9 @@ export interface WorldDetail {
   readable: boolean;
 }
 
+/** Why the launcher made a backup by itself: before the world first opened to friends (HOST1). */
+export type BackupReason = "beforeSharing";
+
 export interface WorldBackup {
   fileName: string;
   sizeBytes: number;
@@ -72,6 +75,8 @@ export interface WorldBackup {
   worldName?: string;
   /** False when the archive does not hold a world. */
   valid: boolean;
+  /** Set on the launcher's own backups ("Arkadaşlarına açılmadan önce"). */
+  reason?: BackupReason;
 }
 
 export interface BackupProgress {

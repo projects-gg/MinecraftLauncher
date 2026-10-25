@@ -146,7 +146,7 @@ pub enum HostSessionView {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum WorldJoinAsk {
-    /// A new install with exactly the world's mods ("Kopyala ve katıl").
+    /// A new install with exactly the world's mods ("Kur ve katıl").
     Copy { mods: u32, bytes: u64, unknown: u32 },
     /// No install of the world's Minecraft version: the official pack is installed for it.
     Install { mc: String },
@@ -169,7 +169,7 @@ pub enum WorldNameVerdict {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum WorldJoinAnswer {
-    /// "Kopyala ve katıl": the new install's name in the player's language.
+    /// "Kur ve katıl": the new install's name in the player's language.
     Copy { name: String },
     /// "Kur ve katıl".
     Install,

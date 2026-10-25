@@ -13,19 +13,22 @@ import { useSocialUi } from "@/features/social/store";
 import type { WorldInvite } from "@/lib/api/host-types";
 import { dismissWorldInvite, pressJoin } from "./actions";
 import { Faces, PeopleCount, WorldJoinButton } from "./parts";
-import { invitePeople, joinActive } from "./rules";
+import { inviteFailureKey, invitePeople, joinActive, retryWithCopy } from "./rules";
 import { useHostUi } from "./store";
 
 function useInviteItems(invite: WorldInvite): Array<MenuItem | null> {
   const { t } = useTranslation();
   const active = joinActive(invite.join);
+  // After the game turned away for missing mods the row's button is "Kur ve katıl": the menu
+  // names the same action the same way (it still ends in joining, hence the same mark).
+  const copy = retryWithCopy(invite.join);
   const people = usePeopleItems(
     [{ id: invite.from, name: invite.name, avatar: invite.avatar, avatarUrl: invite.avatarUrl }],
     { from: "list" },
   );
   return [
     {
-      label: t("social.actions.join"),
+      label: copy ? t("host.join.copyAction") : t("social.actions.join"),
       icon: <Play size={16} />,
       disabled: active,
       onSelect: () => pressJoin(invite),
@@ -64,6 +67,11 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
   const { t } = useTranslation();
   const items = useInviteItems(invite);
   const active = joinActive(invite.join);
+  // A failed join says why beside its button ("Tekrar dene", or "Kur ve katıl" after
+  // missing mods): the toast that said it may be gone when the player looks. Missing mods are one
+  // press from fixed, so their line stays calm; a refused join reads as an error.
+  const failed = inviteFailureKey(invite.join);
+  const calm = retryWithCopy(invite.join);
   return (
     <ContextMenu items={items}>
       <div className="mb-1.5 flex items-center gap-3 rounded-[var(--radius-panel)] bg-gold-500/[0.07] py-2 pr-1.5 pl-2 ring-1 ring-gold-400/15">
@@ -77,8 +85,16 @@ function InviteRowBody({ invite }: { invite: WorldInvite }) {
             {invite.name}
           </span>
           <span className="flex items-center gap-2 text-[12.5px] text-ash-300">
-            <span className="truncate">{t("host.invite.line")}</span>
-            <InviteCount invite={invite} className="shrink-0 text-ash-400" />
+            {failed ? (
+              <span className={calm ? "truncate" : "truncate text-flare-300"}>
+                {t(failed, { name: invite.name })}
+              </span>
+            ) : (
+              <>
+                <span className="truncate">{t("host.invite.line")}</span>
+                <InviteCount invite={invite} className="shrink-0 text-ash-400" />
+              </>
+            )}
           </span>
         </span>
         <WorldJoinButton invite={invite} />
@@ -108,7 +124,11 @@ export function HomeWorldLine({ invite }: { invite: WorldInvite }) {
   const items = useInviteItems(invite);
   const openPanel = useSocialUi((s) => s.openPanel);
   const closeHome = useHostUi((s) => s.closeHome);
-  const text = t("host.invite.title", { name: invite.name });
+  // After missing mods the line says why its button copies the install (Home has no row below
+  // the name for it, and the toast that said it may be long gone when the player comes back).
+  const text = retryWithCopy(invite.join)
+    ? t("small9.join.homeMissingMods", { name: invite.name })
+    : t("host.invite.title", { name: invite.name });
   return (
     <>
       <ContextMenu items={items}>

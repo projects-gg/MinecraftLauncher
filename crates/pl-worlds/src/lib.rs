@@ -11,6 +11,7 @@
 mod link;
 mod manager;
 pub mod manifest;
+mod mismatch;
 pub mod view;
 
 #[cfg(test)]
