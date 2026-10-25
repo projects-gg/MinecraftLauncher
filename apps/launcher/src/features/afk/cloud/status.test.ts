@@ -7,6 +7,7 @@ import {
   causeText,
   cloudPrimary,
   cloudStatus,
+  endsSoon,
   formatPrice,
   isCloudActive,
   isInGame,
@@ -255,6 +256,21 @@ describe("timeLeft", () => {
   it("tells an ended account how long its settings are kept", () => {
     const ended = account({ expired: true, expiresAt: NOW - DAY, graceUntil: NOW + 27.5 * DAY });
     expect(timeLeft(ended, NOW * 1000, t)).toBe("Ayarları 28 gün daha saklanır");
+  });
+});
+
+describe("endsSoon", () => {
+  it("is the paid time's last week, as on the site, whether renewal is open or not", () => {
+    // Renewal is open at any time now: an open renewal alone is not the end coming.
+    const open = { open: true } as CloudAccount["renewal"];
+    expect(endsSoon(account({ expiresAt: NOW + 18 * DAY, renewal: open }), NOW * 1000)).toBe(false);
+    expect(endsSoon(account({ expiresAt: NOW + 7 * DAY + 60 }), NOW * 1000)).toBe(false);
+    expect(endsSoon(account({ expiresAt: NOW + 7 * DAY }), NOW * 1000)).toBe(true);
+    expect(endsSoon(account({ expiresAt: NOW + 3_600 }), NOW * 1000)).toBe(true);
+  });
+
+  it("is over once the time is up (the state line says so)", () => {
+    expect(endsSoon(account({ expired: true, expiresAt: NOW - DAY }), NOW * 1000)).toBe(false);
   });
 });
 
