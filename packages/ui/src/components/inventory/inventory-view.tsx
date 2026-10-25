@@ -1244,15 +1244,18 @@ export function InventoryView({
                     </p>
                     <p
                       aria-hidden
-                      // Not through `cn`: its merge reads `text-meta` as a colour and drops it.
-                      className={`flex min-w-0 items-center text-meta text-ash-300 transition-opacity duration-150 ${
-                        statusKey ? "opacity-100" : "opacity-0"
-                      }`}
+                      className={cn(
+                        "flex min-w-0 items-center text-meta text-ash-300 transition-opacity duration-150",
+                        statusKey ? "opacity-100" : "opacity-0",
+                      )}
                     >
                       {statusKey ? (
                         <span
                           key={flashAt ?? "rest"}
-                          className={`flex min-w-0 items-center gap-1.5${flashAt !== null ? " pl-inv-dim" : ""}`}
+                          className={cn(
+                            "flex min-w-0 items-center gap-1.5",
+                            flashAt !== null && "pl-inv-dim",
+                          )}
                         >
                           {touchCarry ? null : (
                             <StatusIcon size={14} weight="bold" className="shrink-0 text-ash-400" />
