@@ -23,8 +23,8 @@ const KEY_SLOT = "@@key@@";
 
 /**
  * The longest install name a line shows in full. The lines never wrap (a second line would make
- * the cell taller for every line); with two names this long the widest, in English, is ~570 px,
- * inside the ~610 px the row's words have at the launcher's narrowest window (measured).
+ * the cell taller for every line); with two names this long the widest, in English, is about
+ * 570 px, inside the ~610 px the row's words have at the launcher's narrowest window.
  */
 const NAME_MAX = 16;
 
@@ -49,12 +49,11 @@ function markRow(from: Element | null, on: boolean) {
  * while the switch is on but the overlay cannot work it says why instead, in the same cell, so
  * nothing below moves (`overlayLine`, the most basic blocker first): no install can carry it
  * (LIB1: the player deleted the official pack and has no Fabric install of a supported version),
- * with "Resmî paketi kur"; "Oyun açılınca launcher: Kapansın", with "Simge durumuna küçülsün"
- * (its default); or the install Play opens is not
- * Fabric, or not a version the mod is made for (OVL-SEL1), with "Projects kurulumuna geç", which
- * selects the official pack or another install it works in for Play. A line with an action is not
- * the switch's label: a click beside the action does nothing. The shortcut itself is set in the
- * game's Controls.
+ * with "Resmî paketi kur"; "Oyun açılınca launcher: Kapansın", with "Simge durumuna küçülsün" (its
+ * default); or the install Play opens is not Fabric, or not a version the mod is made for
+ * (OVL-SEL1), with "Projects kurulumuna geç", which selects the official pack or another install it
+ * works in for Play. A line with an action is not the switch's label: a click beside the action
+ * does nothing. The shortcut itself is set in the game's Controls.
  */
 export function OverlayRow() {
   const { t } = useTranslation();
