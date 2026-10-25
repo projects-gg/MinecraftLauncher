@@ -14,7 +14,7 @@ describe("countdownTickMs", () => {
   });
 
   it("brings the seconds in as the last minute begins", () => {
-    // Exactly one minute left still says "1 dk"; a millisecond later it counts seconds.
+    // Exactly one minute left still says "1 dakika"; a millisecond later it counts seconds.
     expect(countdownTickMs(MINUTE)).toBe(1);
     expect(countdownTickMs(MINUTE - 1)).toBe(1000);
   });

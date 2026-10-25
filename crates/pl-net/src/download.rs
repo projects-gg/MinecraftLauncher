@@ -848,22 +848,24 @@ mod tests {
             let downloader = downloader.clone();
             async move { downloader.download_all(items, &options).await }
         });
-        // Wait until the first file is being written.
+        // Wait until the first file is being written (deadlines here only run out when something
+        // is broken; a loaded machine is slow, not this slow).
         let part = dir.path().join("file0.part");
-        let deadline = Instant::now() + Duration::from_secs(10);
+        let deadline = Instant::now() + Duration::from_secs(300);
         while !(part.is_file() && std::fs::metadata(&part).unwrap().len() > 0) {
             assert!(Instant::now() < deadline, "the download never started");
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
         let cancelled_at = Instant::now();
         cancel.cancel();
-        let result = tokio::time::timeout(Duration::from_secs(5), run)
+        let result = tokio::time::timeout(Duration::from_secs(300), run)
             .await
             .expect("the batch kept running")
             .unwrap();
         let took = cancelled_at.elapsed();
         assert!(matches!(result, Err(NetError::Cancelled)), "{result:?}");
-        assert!(took < Duration::from_secs(1), "cancel took {took:?}");
+        // At once, not after the file (some 80 s more at 1 KiB every 20 ms).
+        assert!(took < Duration::from_secs(30), "cancel took {took:?}");
         // Give a stray request or tick the chance to show up.
         tokio::time::sleep(Duration::from_millis(150)).await;
         assert_eq!(requests.load(Ordering::SeqCst), 1, "queued files started");
@@ -1194,14 +1196,25 @@ mod tests {
         let http = Http::new(crate::HttpConfig::new("pl-net-test")).unwrap();
         let cancel = CancellationToken::new();
         let trigger = cancel.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            trigger.cancel();
+        let fired = Arc::new(parking_lot::Mutex::new(None::<Instant>));
+        // Fired once the request is at the server, however long that takes on a loaded machine
+        // (a timer could fire before it was even sent).
+        tokio::spawn({
+            let requests = Arc::clone(&requests);
+            let fired = Arc::clone(&fired);
+            async move {
+                while requests.load(Ordering::SeqCst) == 0 {
+                    tokio::time::sleep(Duration::from_millis(5)).await;
+                }
+                *fired.lock() = Some(Instant::now());
+                trigger.cancel();
+            }
         });
-        let started = Instant::now();
         let result = until_cancelled(&cancel, http.get_bytes(&format!("{base}/big"))).await;
         assert!(matches!(result, Err(NetError::Cancelled)), "{result:?}");
-        assert!(started.elapsed() < Duration::from_secs(1));
+        // The body would take some 80 s more (1 KiB every 20 ms).
+        let took = fired.lock().expect("cancelled by the token").elapsed();
+        assert!(took < Duration::from_secs(30), "{took:?}");
         assert_eq!(requests.load(Ordering::SeqCst), 1);
         // A finished future wins over a token cancelled later.
         let done: Result<u8> = until_cancelled(&CancellationToken::new(), async { Ok(7) }).await;

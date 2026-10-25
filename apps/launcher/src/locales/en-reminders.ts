@@ -12,6 +12,4 @@ export const enReminders = {
   newsNew: "new",
   railNews: "{{label}}, something new",
   mainMenu: "Main menu",
-  daysHours: "{{days}} d {{hours}} h",
-  days: "{{days}} d",
 };

@@ -19,7 +19,4 @@ export const trReminders = {
   railNews: "{{label}}, yeni haber var",
   /** The navigation rail, for screen readers. */
   mainMenu: "Ana menü",
-  /** Time left in the other events list ("5 gün 3 sa"); under a day it reads "2 sa 14 dk". */
-  daysHours: "{{days}} gün {{hours}} sa",
-  days: "{{days}} gün",
 };

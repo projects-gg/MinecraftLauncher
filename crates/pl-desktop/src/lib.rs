@@ -23,6 +23,8 @@
 //!   takes only the game's).
 
 pub mod close;
+#[cfg(windows)]
+mod com;
 pub mod discord;
 mod error;
 pub mod game_close;
