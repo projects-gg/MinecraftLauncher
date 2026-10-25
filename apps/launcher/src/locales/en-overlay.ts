@@ -3,6 +3,8 @@
 export const enOverlay = {
   setting: "In-game overlay",
   settingHelp: "{{key}} opens messages, friends and crew calls in game.",
+  emojiSetting: "Emoji picker in chat",
+  emojiHelp: "Emojis go into chat with one click, and {{key}} opens them.",
   closeHelp: "Won't work: the launcher closes when the game starts.",
   toMinimize: "Minimize instead",
   packMissing: "None of your installs can run it.",

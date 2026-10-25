@@ -24,6 +24,11 @@ export interface OverlayApi {
    * page keeps those marks, as its own buttons would.
    */
   onPeople(listener: (change: PeopleChange) => void): () => void;
+  /**
+   * The chat's emoji picker was switched in the game's overlay settings (CHAT-EMOJI): the page
+   * keeps the switch, which Settings → Genel shows too.
+   */
+  onEmoji(listener: (on: boolean) => void): () => void;
 }
 
 function subscribe<T>(event: string, listener: (payload: T) => void): () => void {
@@ -39,6 +44,7 @@ const tauriOverlay: OverlayApi = {
   onStatus: (listener) => subscribe<OverlayStatus>("overlay-status", listener),
   onEnabled: (listener) => subscribe<boolean>("overlay-enabled", listener),
   onPeople: (listener) => subscribe<PeopleChange>("overlay-people", listener),
+  onEmoji: (listener) => subscribe<boolean>("overlay-emoji", listener),
 };
 
 export const overlayApi: OverlayApi = isTauri() ? tauriOverlay : mockOverlay;

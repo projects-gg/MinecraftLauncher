@@ -4468,6 +4468,11 @@ export type LaunchSettings = {
 	 *  pack sync installs or removes the mod by it, and the game gets a bridge while it is on.
 	 */
 	overlay?: boolean | null,
+	/**
+	 *  Settings → Genel "Sohbette emoji seçici" as the page shows it (CHAT-EMOJI): the mod's jar
+	 *  is also there for it alone.
+	 */
+	emoji?: boolean | null,
 };
 
 export type LeftoverKindView = "cache" | "downloads" | "logs" | "crashReports";
@@ -5545,6 +5550,12 @@ export type OverlayConfig = {
 	notify?: NotifyPrefs,
 	/**  Performance mode or the system's reduced motion: toasts appear in place. */
 	reducedMotion?: boolean,
+	/**
+	 *  "Sohbette emoji seçici" (CHAT-EMOJI, on by default): the chat screen's emoji button. The
+	 *  mod's jar goes into an instance while this or [`Self::enabled`] is on; with this one alone
+	 *  the mod runs the picker only (no panel, key, toasts or pause menu button).
+	 */
+	emoji?: boolean,
 };
 
 /**  What the page shows at its start. */

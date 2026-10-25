@@ -221,6 +221,7 @@ test("the source stamp covers what the jar is made of and nothing else", () => {
   assert.ok(files.includes("mods/projects-overlay/src/main/resources/fabric.mod.json"));
   assert.ok(files.some((f) => /^mods\/projects-overlay\/src\/mc26_2\/java\//.test(f)));
   assert.ok(files.includes("packages/stickers/pl1/manifest.json"));
+  assert.ok(files.includes("crates/pl-content/data/chat-emojis.json"));
   assert.ok(files.includes("LICENSE"));
   assert.ok(
     !files.some((f) => f.includes("/src/test/") || f.includes("/tools/") || f.includes("/dev/")),

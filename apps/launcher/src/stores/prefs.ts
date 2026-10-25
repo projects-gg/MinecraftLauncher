@@ -44,6 +44,11 @@ interface PrefsState {
    * each game start gets a bridge to it (features/overlay, src-tauri overlay.rs).
    */
   inGameOverlay: boolean;
+  /**
+   * Settings → Genel "Sohbette emoji seçici" (CHAT-EMOJI): the chat screen's emoji button in the
+   * game. The overlay's mod goes into an install for it too; with the overlay off it runs alone.
+   */
+  chatEmoji: boolean;
   updateChannel: UpdateChannel;
   autoDownloadUpdates: boolean;
   discordEnabled: boolean;
@@ -99,6 +104,7 @@ export const usePrefs = create<PrefsState>()(
       desktopNotifications: true,
       copyScreenshots: false,
       inGameOverlay: true,
+      chatEmoji: true,
       updateChannel: "stable",
       autoDownloadUpdates: true,
       discordEnabled: true,

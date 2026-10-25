@@ -189,6 +189,10 @@ pub struct LaunchSettings {
     /// pack sync installs or removes the mod by it, and the game gets a bridge while it is on.
     #[serde(default)]
     pub overlay: Option<bool>,
+    /// Settings → Genel "Sohbette emoji seçici" as the page shows it (CHAT-EMOJI): the mod's jar
+    /// is also there for it alone.
+    #[serde(default)]
+    pub emoji: Option<bool>,
 }
 
 /// One line of the running game's log, emitted as the `game-log` event.
@@ -357,6 +361,9 @@ pub async fn launch_instance(
     // The page's switch wins over a push it may have missed: the pack sync below follows it.
     if let Some(on) = settings.overlay {
         crate::overlay::set_enabled(&app, on);
+    }
+    if let Some(on) = settings.emoji {
+        crate::overlay::set_emoji(&app, on);
     }
     let cancel = CancellationToken::new();
     let id = NEXT_LAUNCH.fetch_add(1, Ordering::Relaxed);
