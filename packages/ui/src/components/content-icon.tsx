@@ -447,6 +447,28 @@ export const CONTENT_SPRITES = {
       "................",
     ],
   },
+  /** A backpack with a buckled flap and a front pocket: a cloud account's live inventory (ITEMART). */
+  inventory: {
+    shadow: "o",
+    rows: [
+      "................",
+      "................",
+      "......llll......",
+      ".....l....d.....",
+      "....hllllllm....",
+      "...lmmmmmmmmd...",
+      "..lmhmmmmmmmmd..",
+      "..lmmmmmmmmmmd..",
+      "..ldddddddddds..",
+      "..lmmmmhhmmmmd..",
+      "..lmmmmssmmmmd..",
+      "..lmllllllllmd..",
+      "..lmlmmmmmmdmd..",
+      "..lmlmmmmmmdmd..",
+      "...sssssssssss..",
+      "................",
+    ],
+  },
 } satisfies Record<string, Sprite>;
 
 export type ContentIconKind = keyof typeof CONTENT_SPRITES;
