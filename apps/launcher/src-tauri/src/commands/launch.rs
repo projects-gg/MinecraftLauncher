@@ -16,7 +16,8 @@ use pl_mc::install::{
 };
 use pl_mc::instance::Instance;
 use pl_mc::launch::{
-    GameEvent, GameProcess, LaunchIdentity, QuickPlay, SpawnOptions, UserType, build_launch_command,
+    GameEvent, GameProcess, LaunchIdentity, QuickPlay, SpawnOptions, UserType, WorldEntry,
+    build_launch_command,
 };
 use pl_mc::loaders::LoaderKind;
 use pl_net::{CancellationToken, VerifyMode};
@@ -131,6 +132,12 @@ pub enum LaunchEventView {
     PackVersionDropped {
         minecraft: String,
         recommended: Option<String>,
+    },
+    /// "Devam et" into a world while a mod breaks the game's quick play into worlds and no overlay
+    /// of this launcher opens it instead (`pl_mc::launch::world_entry`): the game starts on its
+    /// title screen, where the player opens the world. `mods` names those mods.
+    WorldFromTitle {
+        mods: Vec<String>,
     },
     /// The mods would certainly stop the game: it was not started (the player chooses
     /// "Onar", "Yine de başlat" or "İptal").
@@ -900,6 +907,16 @@ pub(crate) async fn ready_game_files(
     }))
 }
 
+/// How "Devam et" enters its world (OVL-FIX, `pl_mc::launch::world_entry`): `overlay_opens` when
+/// this launcher's own overlay mod is in place with a bridge; else the instance's mods decide.
+async fn world_entry(game_dir: &Path, overlay_opens: bool) -> WorldEntry {
+    if overlay_opens {
+        return WorldEntry::Overlay;
+    }
+    let mods = modhealth::scan(game_dir.join("mods")).await;
+    pl_mc::launch::world_entry(false, &mods)
+}
+
 async fn prepare_and_spawn(
     app: &AppHandle,
     state: &AppState,
@@ -1085,8 +1102,13 @@ async fn prepare_and_spawn(
     // The in-game overlay (OVL2): a fresh bridge for this game while its switch is on and the
     // mod is in place. The game reads the port and the token from two system properties; the
     // printable command masks the token. It closes again unless the game starts.
-    let overlay =
-        crate::overlay::for_launch(state, overlay_mod, &launcher_version, &identity.name).await;
+    let overlay = crate::overlay::for_launch(
+        state,
+        overlay_mod.present,
+        &launcher_version,
+        &identity.name,
+    )
+    .await;
     if let Some(endpoint) = overlay.endpoint() {
         options.launcher_jvm_args.extend(endpoint.jvm_args());
         options.secrets.push(endpoint.secret().to_owned());
@@ -1103,6 +1125,28 @@ async fn prepare_and_spawn(
         auto_join,
         resolved.supports_quick_play(),
     );
+    // A world (OVL-FIX): our own overlay opens it once the title screen drew a frame; without it,
+    // a mod that breaks quick play into worlds keeps the game on its title screen, said once.
+    if let Some(QuickPlay::Singleplayer { world }) = options.quick_play.clone() {
+        let overlay_opens = overlay_mod.ours && overlay.endpoint().is_some();
+        match world_entry(&game_dir, overlay_opens).await {
+            WorldEntry::QuickPlay => {}
+            WorldEntry::Overlay => {
+                options.quick_play = None;
+                options
+                    .launcher_jvm_args
+                    .push(pl_overlay::world_jvm_arg(&world));
+            }
+            WorldEntry::TitleScreen { mods } => {
+                tracing::info!(
+                    ?mods,
+                    "a world from the title screen: these mods break quick play"
+                );
+                options.quick_play = None;
+                let _ = on_event.send(LaunchEventView::WorldFromTitle { mods });
+            }
+        }
+    }
     let command = build_launch_command(&state.mc.dirs, &resolved, &installed, &identity, &options)
         .map_err(CmdError::from)?;
     tracing::info!(command = %command.display_redacted(), "launching");

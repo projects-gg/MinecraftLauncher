@@ -8,6 +8,7 @@ import gg.projects.overlay.compat.Compat;
 import gg.projects.overlay.connect.Connector;
 import gg.projects.overlay.connect.MinecraftGame;
 import gg.projects.overlay.connect.ServerTarget;
+import gg.projects.overlay.connect.WorldResume;
 import gg.projects.overlay.host.HostController;
 import gg.projects.overlay.host.HostGate;
 import gg.projects.overlay.lang.Language;
@@ -46,6 +47,7 @@ import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.resources.Identifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,6 +83,8 @@ public final class OverlayClient implements ClientModInitializer {
     private CodelessLink link;
     /** Opening the player's singleplayer world to friends (HOST1). */
     private HostController host;
+    /** The launcher's "Devam et" world, opened once the title screen drew a frame (OVL-FIX); null: none. */
+    private WorldResume resume;
     /** The friend whose world "Katıl" was pressed for, and when (the launcher's {@code connect} follows). */
     private String pendingWorld;
     private long pendingWorldAt;
@@ -110,6 +114,7 @@ public final class OverlayClient implements ClientModInitializer {
         // welcome names it again; an older launcher names none and the game's own language stays.
         Texts.speak(new LanguageChoice(System.getProperty(LanguageChoice.PROPERTY), Texts::gameLanguage));
         state = new OverlayState();
+        resume = WorldResume.fromSystemProperty();
         settings = new SettingsStore(FabricLoader.getInstance().getGameDir());
         key = new OverlayKey(KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main")));
         KeyMappingHelper.registerKeyMapping(key);
@@ -143,6 +148,13 @@ public final class OverlayClient implements ClientModInitializer {
         // The travel toast stays above the saving, connecting and loading screens (and the pause menu).
         ScreenEvents.AFTER_INIT.register((mc, screen, width, height) -> {
             ScreenEvents.afterExtract(screen).register((s, g, mouseX, mouseY, delta) -> toasts.extractOverScreen(g));
+            // "Devam et" (OVL-FIX): the world waits for the title screen and a frame after it, when every mod has had
+            // its first frame.
+            WorldResume waiting = resume;
+            if (waiting != null && screen instanceof TitleScreen) {
+                waiting.titleScreen(WorldResume.frames(), monotonicMs());
+                ScreenEvents.afterExtract(screen).register((s, g, mouseX, mouseY, delta) -> waiting.titleFrame());
+            }
             // "Arkadaşlarını çağır" in the pause menu of a singleplayer world (HOST1, host1.md §4.8).
             if (screen instanceof PauseScreen pause && pause.showsPauseMenu()) {
                 HostPauseButton.attach(this, pause);
@@ -356,6 +368,12 @@ public final class OverlayClient implements ClientModInitializer {
             warmIndex = 0;
         }
         hadLevel = hasLevel;
+        if (resume != null) {
+            resume.tick(game, WorldResume.frames(), monotonicMs());
+            if (resume.pending() == null) {
+                resume = null;
+            }
+        }
         connector.tick(monotonicMs());
         host.tick(mc);
         tickLink(mc);

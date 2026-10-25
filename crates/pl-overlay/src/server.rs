@@ -31,9 +31,31 @@ pub const TOKEN_ARG: &str = "-Dprojects.overlay.token=";
 /// its first frame, before the bridge has said anything.
 pub const LANG_ARG: &str = "-Dprojects.overlay.lang=";
 
+/// OVL-FIX: "Devam et" into a singleplayer world through the overlay instead of the game's quick
+/// play. The mod opens the world once the title screen has drawn a frame (a mod that finishes the
+/// game's loading early made quick play open it before the first frame, and mods that set up on
+/// that frame crashed: `pl_mc::launch::world_entry`).
+pub const WORLD_ARG: &str = "-Dprojects.overlay.world=";
+
 /// Whether a launch argument carries the session token and must be masked in logs.
 pub fn is_secret_jvm_arg(arg: &str) -> bool {
     arg.starts_with(TOKEN_ARG)
+}
+
+/// The JVM argument naming the world folder `folder` for the overlay ([`WORLD_ARG`]): its UTF-8
+/// bytes percent-encoded except letters, digits and `-._~`, so any name reaches the game intact
+/// whatever the code page Java reads its command line in (the mod's `WorldResume.decode`).
+pub fn world_jvm_arg(folder: &str) -> String {
+    let mut arg = String::with_capacity(WORLD_ARG.len() + folder.len() * 3);
+    arg.push_str(WORLD_ARG);
+    for byte in folder.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            arg.push(char::from(byte));
+        } else {
+            arg.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    arg
 }
 
 /// Where the game finds this session's bridge.
@@ -827,6 +849,30 @@ mod tests {
         assert_eq!(args.len(), 3);
         assert_eq!(args[2], "-Dprojects.overlay.lang=en");
         assert!(!is_secret_jvm_arg(&args[2]));
+    }
+
+    #[test]
+    fn the_world_argument_reaches_the_game_in_any_code_page() {
+        // The same vectors as the mod's WorldResumeTest.
+        assert_eq!(
+            world_jvm_arg("Yeni Dünya"),
+            "-Dprojects.overlay.world=Yeni%20D%C3%BCnya"
+        );
+        assert_eq!(
+            world_jvm_arg("Dünya (1)"),
+            "-Dprojects.overlay.world=D%C3%BCnya%20%281%29"
+        );
+        assert_eq!(world_jvm_arg("a+b&c"), "-Dprojects.overlay.world=a%2Bb%26c");
+        assert_eq!(
+            world_jvm_arg("New World-2_x.~"),
+            "-Dprojects.overlay.world=New%20World-2_x.~"
+        );
+        assert_eq!(
+            world_jvm_arg("Мир"),
+            "-Dprojects.overlay.world=%D0%9C%D0%B8%D1%80"
+        );
+        assert!(world_jvm_arg("Yeni Dünya").is_ascii());
+        assert!(!is_secret_jvm_arg(&world_jvm_arg("w")));
     }
 
     #[test]

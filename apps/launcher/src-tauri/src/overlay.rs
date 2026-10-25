@@ -206,17 +206,28 @@ pub fn owned_files(game_dir: &Path) -> std::collections::HashSet<String> {
     pl_overlay::install::owned_files(game_dir)
 }
 
+/// What a start gets of the overlay mod ([`prepare_mod`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PreparedMod {
+    /// An enabled overlay mod is in the folder (ours, or a copy someone else put there): the game
+    /// gets a bridge.
+    pub present: bool,
+    /// It is this launcher's own jar, so it knows everything this launcher passes (OVL-FIX: the
+    /// "Devam et" world it opens itself, `pl_overlay::world_jvm_arg`).
+    pub ours: bool,
+}
+
 /// Right before a start, after the pack's sync and before the mod check: the overlay's jar for
 /// this instance in place, or ours taken away (`pl_overlay::install`). Fabric API the jar needs
 /// comes from Modrinth the way the launcher installs mods ([`install_fabric_api`]). Answers whether
-/// the game gets an overlay mod (ours, or a copy someone else put there). Never stops a launch.
+/// the game gets an overlay mod, and whether it is ours. Never stops a launch.
 pub async fn prepare_mod(
     state: &AppState,
     instance: &Instance,
     (instance_dir, game_dir): (&Path, &Path),
     java_major: u32,
     cancel: &CancellationToken,
-) -> bool {
+) -> PreparedMod {
     let env = crate::commands::modhealth::environment(instance, Some(java_major));
     let enabled = state.overlay.enabled();
     let ask = |ask_fabric_api: bool| {
@@ -235,7 +246,16 @@ pub async fn prepare_mod(
         }
         outcome => outcome,
     };
-    matches!(outcome, Outcome::Ready { .. })
+    match outcome {
+        Outcome::Ready { ours } => PreparedMod {
+            present: true,
+            ours,
+        },
+        Outcome::NeedsFabricApi | Outcome::Off(_) => PreparedMod {
+            present: false,
+            ours: false,
+        },
+    }
 }
 
 /// Fabric API for the overlay's jar: its newest version for the instance's Minecraft, installed
