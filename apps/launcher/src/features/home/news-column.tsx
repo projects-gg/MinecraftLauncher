@@ -18,9 +18,8 @@ import { CoverImage } from "@/features/news/cover-image";
 import { MinecraftLabel, useMinecraftText } from "@/features/news/minecraft";
 import { NewDot, NewLabel } from "@/features/news/new-dot";
 import type { EventItem, HomeContent, MinecraftNewsItem, NewsItem, PatchNotes } from "@/lib/api";
-import { cardEvents, nextBoundary, phaseOf, timeLeftText } from "@/lib/event-card";
-import { dateTimeFormat, formatRelative } from "@/lib/format";
-import i18n from "@/lib/i18n";
+import { cardEvents, nextBoundary, phaseOf, startsText, timeLeftText } from "@/lib/event-card";
+import { formatRelative } from "@/lib/format";
 import { isWebLink, openLink } from "@/lib/links";
 import { columnFill, liveMinecraft, NEWS_COLUMN_ROWS } from "@/lib/minecraft";
 import { isNewsNew, useNewsSeen } from "@/stores/news-seen";
@@ -66,19 +65,20 @@ function NewsRow({
           ) : null}
         </span>
         <span className="min-w-0 flex-1">
-          {/* What it is and when, in quiet words (a coloured pill per category was a badge over
-              every title and a second accent beside the gold). */}
-          <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ash-300">
+          {/* The title first, balanced so a second line never holds one word ("İnşa yarışması:
+              Gökyüzü / şehri"); then what it is and when, in quiet words (a coloured pill per
+              category was a badge over every title, and the line above the title still read as a
+              kicker). Every block of the column puts its time under its title. */}
+          <span className="line-clamp-2 text-[13px] leading-snug font-semibold text-balance text-bone-100 transition-colors duration-150 group-hover:text-bone-50">
+            {item.title}
+          </span>
+          <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[11.5px] text-ash-300">
             <span className="shrink-0 font-medium">{t(`categories.${item.category}`)}</span>
             <span aria-hidden className="text-ash-500">
               ·
             </span>
             <NewDot on={isNew} />
             <span className="truncate">{formatRelative(item.publishedAt)}</span>
-          </span>
-          {/* Balanced, so a second line never holds one word ("İnşa yarışması: Gökyüzü / şehri"). */}
-          <span className="mt-1 line-clamp-2 text-[13px] leading-snug font-semibold text-balance text-bone-100 transition-colors duration-150 group-hover:text-bone-50">
-            {item.title}
           </span>
           <NewLabel on={isNew} />
         </span>
@@ -123,15 +123,15 @@ function MinecraftRow({
           imgClassName="group-hover:scale-[1.06]"
         />
         <span className="min-w-0 flex-1">
-          <span className="flex min-w-0 items-center gap-1.5 text-[11.5px] text-ash-300">
+          <span className="line-clamp-2 text-[13px] leading-snug font-medium text-balance text-bone-100/90 transition-colors duration-150 group-hover:text-bone-50">
+            {text.title}
+          </span>
+          <span className="mt-1 flex min-w-0 items-center gap-1.5 text-[11.5px] text-ash-300">
             <MinecraftLabel />
             <span aria-hidden className="text-ash-500">
               ·
             </span>
             <span className="truncate">{formatRelative(item.publishedAt)}</span>
-          </span>
-          <span className="mt-1 line-clamp-2 text-[13px] leading-snug font-medium text-balance text-bone-100/90 transition-colors duration-150 group-hover:text-bone-50">
-            {text.title}
           </span>
         </span>
       </Link>
@@ -140,8 +140,8 @@ function MinecraftRow({
 }
 
 /**
- * Bullet lines of the patch notes box (a repeated line is shown once). The square is a quiet mark:
- * gold stays with OYNA and the actions.
+ * Bullet lines of the patch notes box (a repeated line is shown once). The square is a quiet mark
+ * (gold stays with OYNA and the actions), 4 whole pixels: 3.5 px drew as 3 or 4 by where it fell.
  */
 function Highlights({ lines }: { lines: string[] }) {
   return (
@@ -151,7 +151,7 @@ function Highlights({ lines }: { lines: string[] }) {
           key={line}
           className="flex gap-2 text-[12.5px] leading-snug text-ash-300 [overflow-wrap:anywhere]"
         >
-          <span className="mt-[6px] size-1 shrink-0 bg-ash-500" />
+          <span className="mt-[7px] size-[4px] shrink-0 bg-ash-500" />
           <span className="line-clamp-2">{line}</span>
         </li>
       ))}
@@ -165,34 +165,46 @@ function Highlights({ lines }: { lines: string[] }) {
  */
 function PatchNotesBox({ notes }: { notes: PatchNotes }) {
   const { t } = useTranslation();
+  // Like a story: the title, then when it came out under it, then the highlights.
+  const body = (title: string) => (
+    <>
+      <span className="mt-1 block truncate text-[13px] font-semibold text-bone-100 transition-colors duration-150 group-hover:text-bone-50">
+        {title}
+      </span>
+      <span className="mt-1 block truncate text-[11.5px] text-ash-300">
+        {formatRelative(notes.publishedAt)}
+      </span>
+      <Highlights lines={notes.highlights} />
+    </>
+  );
   if (notes.kind === "pack") {
+    // The official pack's changelog has no article: no link, and its version is the title (beside
+    // the heading, where the column's links sit, it read as a dead link).
     return (
-      <section className="mt-1.5 border-t border-white/7 px-2 pt-3 pb-2.5">
-        <div className="flex items-baseline justify-between gap-3">
-          <h3 className="font-display text-[14px] font-semibold text-bone-50">
+      <section className="mt-1.5 border-t border-white/7 py-1.5">
+        <div className="px-2 py-2">
+          <h3 className="font-display text-title font-semibold text-bone-50">
             {t("home.patchNotes")}
           </h3>
-          <span className="text-[12px] text-ash-300">
-            {t("home.patchVersion", { pack: notes.packName, version: notes.version })}
-          </span>
+          {body(t("home.patchVersion", { pack: notes.packName, version: notes.version }))}
         </div>
-        <Highlights lines={notes.highlights} />
       </section>
     );
   }
   return (
-    <section className="mt-1.5 border-t border-white/7 pt-1.5 pb-1">
+    <section className="mt-1.5 border-t border-white/7 py-1.5">
       <Link
         to="/"
         search={{ news: notes.newsId }}
-        className="group block rounded-[var(--radius-panel)] px-2 pt-2 pb-2 transition-colors duration-150 hover:bg-white/6 focus-visible:outline-2"
+        className="group block rounded-[var(--radius-panel)] p-2 transition-colors duration-150 hover:bg-white/6 focus-visible:outline-2"
       >
         <span className="flex items-baseline justify-between gap-3">
-          <span className="font-display text-[14px] font-semibold text-bone-50">
+          <span className="font-display text-title font-semibold text-bone-50">
             {t("home.patchNotes")}
           </span>
           {/* What the box does, named like the column's other links ("Tümü", "1 etkinlik daha"):
-              a bare "5 saat önce ›" read as a link to a time. */}
+              a bare "5 saat önce ›" read as a link to a time, and "Notları oku" said "notları" a
+              third time beside the heading and most titles. */}
           <span className="flex shrink-0 items-center gap-0.5 text-[12.5px] font-medium text-ash-300 transition-colors duration-150 group-hover:text-gold-300">
             {t("newsColumn.readNotes")}
             <CaretRight
@@ -203,19 +215,7 @@ function PatchNotesBox({ notes }: { notes: PatchNotes }) {
             />
           </span>
         </span>
-        {/* The notes' title, then when they came out as plain meta (a long title gives way). */}
-        <span className="mt-1 flex min-w-0 items-baseline gap-1.5">
-          <span className="min-w-0 truncate text-[13px] font-semibold text-bone-100 transition-colors duration-150 group-hover:text-bone-50">
-            {notes.title}
-          </span>
-          <span aria-hidden className="shrink-0 text-[12px] text-ash-500">
-            ·
-          </span>
-          <span className="shrink-0 text-[12px] text-ash-300">
-            {formatRelative(notes.publishedAt)}
-          </span>
-        </span>
-        <Highlights lines={notes.highlights} />
+        {body(notes.title)}
       </Link>
     </section>
   );
@@ -251,26 +251,10 @@ function useEventCard(events: EventItem[] | undefined) {
   return { event, live, others: ordered.slice(1) };
 }
 
-// In the interface's language, looked up at each call (the language can change live).
-const clock = () => dateTimeFormat({ hour: "2-digit", minute: "2-digit" });
-const weekdayMoment = () => dateTimeFormat({ weekday: "long", hour: "2-digit", minute: "2-digit" });
-const dateMoment = () =>
-  dateTimeFormat({ day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
-
 /**
- * When an upcoming event starts: "Bugün 20:00", "Yarın 20:00", "Cumartesi 20:00" within the
- * week, "25 Ekim 20:00" beyond it (a weekday alone would point at the wrong week).
+ * The start under an upcoming event's title, a sentence like the live ones ("Cumartesi 20:00'de
+ * başlıyor"); "Yarın" turns into "Bugün" at midnight.
  */
-function startMoment(iso: string, now: number): string {
-  const at = new Date(iso);
-  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const days = Math.round((day(at) - day(new Date(now))) / 86_400_000);
-  if (days === 0) return i18n.t("library.when.today", { time: clock().format(at) });
-  if (days === 1) return i18n.t("library.when.tomorrow", { time: clock().format(at) });
-  return days < 7 ? weekdayMoment().format(at) : dateMoment().format(at);
-}
-
-/** The start under an upcoming event's title; "Yarın" turns into "Bugün" at midnight. */
 function StartsAt({ iso }: { iso: string }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -280,14 +264,15 @@ function StartsAt({ iso }: { iso: string }) {
     const id = window.setTimeout(() => setNow(Date.now()), wait);
     return () => window.clearTimeout(id);
   }, [now]);
-  return <p className="mt-1 text-[12.5px] text-ash-300 tabular-nums">{startMoment(iso, now)}</p>;
+  return <p className="mt-1 text-[12.5px] text-ash-300 tabular-nums">{startsText(iso, now)}</p>;
 }
 
 /**
  * The list behind "1 etkinlik daha": the other live and upcoming events, upcoming ones with their
- * reminder bell. It opens beside the card (anchored to the whole event block), so the card stays
- * readable; its times are as of the moment it opened. A live one says "Sürüyor" in the text's
- * own colour (the list mixes both kinds; gold stays with the actions).
+ * reminder bell, each with the card's one line of time ("4 gün 23 saat kaldı", "Cumartesi
+ * 20:00'de başlıyor": the words say which is which, no "Sürüyor" and no heading repeating the
+ * link). It opens beside the card, level with the block's heading, so the card stays readable; its
+ * times are as of the moment it opened.
  */
 function OtherEvents({ events, onChosen }: { events: EventItem[]; onChosen: () => void }) {
   const { t } = useTranslation();
@@ -302,14 +287,12 @@ function OtherEvents({ events, onChosen }: { events: EventItem[]; onChosen: () =
     <Popover.Portal>
       <Popover.Content
         side="left"
-        align="end"
+        align="start"
         sideOffset={12}
         collisionPadding={12}
+        aria-label={t("home.otherEvents")}
         className="glass-strong pop-motion z-50 w-[264px] rounded-[var(--radius-panel)] p-1.5 shadow-[0_24px_60px_rgb(34_6_6/0.55)]"
       >
-        <p className="px-2 pt-1 pb-1.5 text-[12px] font-medium text-ash-300">
-          {t("home.otherEvents")}
-        </p>
         <ul>
           {events.map((event) => {
             const live = phaseOf(event, now) === "live";
@@ -319,19 +302,14 @@ function OtherEvents({ events, onChosen }: { events: EventItem[]; onChosen: () =
                 <span className="block truncate text-[13px] font-semibold text-bone-100">
                   {event.title}
                 </span>
-                <span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-ash-300">
-                  {live ? (
-                    <span className="font-medium text-bone-100">{t("home.eventRunning")}</span>
-                  ) : null}
-                  <span className="tabular-nums">
-                    {live
-                      ? event.openEnded
-                        ? t("home.eventStarted", { when: formatRelative(event.startsAt, now) })
-                        : t("home.eventEndsIn", {
-                            when: timeLeftText(Date.parse(event.endsAt) - now),
-                          })
-                      : t("home.eventStartsAt", { when: startMoment(event.startsAt, now) })}
-                  </span>
+                <span className="mt-0.5 block truncate text-[12px] text-ash-300 tabular-nums">
+                  {live
+                    ? event.openEnded
+                      ? t("home.eventStarted", { when: formatRelative(event.startsAt, now) })
+                      : t("home.eventEndsIn", {
+                          when: timeLeftText(Date.parse(event.endsAt) - now),
+                        })
+                    : startsText(event.startsAt, now)}
                 </span>
               </>
             );
@@ -453,21 +431,23 @@ function EventBlock({
   const titleId = useId();
   return (
     <Popover.Root open={listOpen} onOpenChange={setListOpen}>
+      {/* `pb-1`: "Katıl" and the bell, as tall as a button, keep air above the links' divider. */}
       <Popover.Anchor asChild>
-        <section className="relative border-t border-white/7 px-3.5 pt-2.5">
+        <section className="relative border-t border-white/7 px-3.5 pt-2.5 pb-1">
           {/* The block's own heading, as the patch notes have theirs (it was a small coloured
               kicker over the event's title), and the other events behind a plain link beside it.
               "Süren etkinlik" says it runs, so the time line below needs no word for it (a bare
               "Etkinlik" also repeated the stories' category). */}
           <div className="flex min-h-[22px] items-center justify-between gap-3">
-            <h3 className="font-display text-[14px] font-semibold text-bone-50">
+            <h3 className="font-display text-title font-semibold text-bone-50">
               {live ? t("newsColumn.liveEvent") : t("home.nextEvent")}
             </h3>
+            {/* `-mr-1` like "Tümü": the three carets of the column end on one line. */}
             {others.length ? (
               <Popover.Trigger asChild>
                 <button
                   type="button"
-                  className="-mr-1.5 flex cursor-pointer items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[12.5px] font-medium text-ash-300 tabular-nums transition-colors duration-150 hover:text-gold-300 focus-visible:outline-2 data-[state=open]:text-gold-300"
+                  className="-mr-1 flex cursor-pointer items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[12.5px] font-medium text-ash-300 tabular-nums transition-colors duration-150 hover:text-gold-300 focus-visible:outline-2 data-[state=open]:text-gold-300"
                 >
                   {t("home.moreEvents", { count: others.length })}
                   <CaretRight size={13} weight="bold" aria-hidden />
@@ -580,15 +560,17 @@ export function NewsColumn({ content, loading }: { content?: HomeContent; loadin
       className="glass flex max-h-full w-news shrink-0 flex-col self-start overflow-hidden rounded-[var(--radius-panel)]"
       aria-label={t("home.newsTitle")}
     >
+      {/* The column's three blocks (stories, patch notes, the event) head themselves alike: the
+          card title size (15 px), one link at the right. 16 px over 14 px read as a slip. */}
       <header className="flex items-center justify-between px-3.5 pt-3 pb-1.5">
-        <h2 className="font-display text-[16px] font-semibold text-bone-50">
+        <h2 className="font-display text-title font-semibold text-bone-50">
           {t("home.newsTitle")}
         </h2>
         <Link
           to="/news"
           className="-mr-1 flex items-center gap-0.5 rounded-md px-1.5 py-1 text-[12.5px] font-medium text-ash-300 transition-colors hover:text-gold-300"
         >
-          {t("home.allNews")} <CaretRight size={13} weight="bold" />
+          {t("newsColumn.allNews")} <CaretRight size={13} weight="bold" />
         </Link>
       </header>
 

@@ -4,7 +4,47 @@
 // The backend sends the events in this order for the moment it built the home content; the
 // card applies the rule again whenever an event starts or ends, so it changes on time.
 import type { EventItem } from "@/lib/api";
+import { dateTimeFormat } from "@/lib/format";
 import i18n from "@/lib/i18n";
+
+/** Bir … dokuz: the locative each takes ("birde", "üçte", "altıda"). */
+const ONES_LOCATIVE = ["da", "de", "de", "te", "te", "te", "da", "de", "de", "da"] as const;
+/** On, yirmi, otuz, kırk, elli. */
+const TENS_LOCATIVE = ["da", "da", "de", "da", "ta", "de"] as const;
+
+/**
+ * The Turkish locative ending a clock time takes after its apostrophe, by how it is read: the
+ * minutes' last word, or the hour's on the hour ("20:00'de", "19:30'da", "15:00'te", "21:40'ta").
+ */
+export function timeLocative(hour: number, minute: number): "da" | "de" | "ta" | "te" {
+  const read = minute === 0 ? hour : minute;
+  // Sıfır (00:00): "sıfırda".
+  if (read === 0) return "da";
+  const ones = read % 10;
+  return (ones ? ONES_LOCATIVE[ones] : TENS_LOCATIVE[Math.floor(read / 10) % 10]) ?? "de";
+}
+
+// In the interface's language, looked up at each call (the language can change live).
+const clock = () => dateTimeFormat({ hour: "2-digit", minute: "2-digit" });
+const weekday = () => dateTimeFormat({ weekday: "long" });
+const date = () => dateTimeFormat({ day: "numeric", month: "long" });
+
+/**
+ * When an upcoming event starts, as a sentence like the live ones ("2 saat 14 dakika kaldı"):
+ * "Bugün 20:00'de başlıyor", "Yarın …", "Cumartesi …" within the week, "25 Ekim …" beyond it (a
+ * weekday alone would point at the wrong week). "Yarın" turns into "Bugün" at local midnight.
+ */
+export function startsText(iso: string, now: number): string {
+  const at = new Date(iso);
+  const time = clock().format(at);
+  const ending = timeLocative(at.getHours(), at.getMinutes());
+  const dayOf = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((dayOf(at) - dayOf(new Date(now))) / 86_400_000);
+  if (days === 0) return i18n.t("newsColumn.starts.today", { time, ending });
+  if (days === 1) return i18n.t("newsColumn.starts.tomorrow", { time, ending });
+  const day = (days < 7 ? weekday() : date()).format(at);
+  return i18n.t("newsColumn.starts.later", { day, time, ending });
+}
 
 type SpanUnit = "days" | "hours" | "minutes" | "seconds";
 

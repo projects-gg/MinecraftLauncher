@@ -2,7 +2,7 @@
 import { countdownTickMs } from "@pl/ui";
 import { afterEach, describe, expect, it } from "vitest";
 import type { EventItem } from "@/lib/api";
-import { cardEvents, nextBoundary, timeLeftText } from "./event-card";
+import { cardEvents, nextBoundary, startsText, timeLeftText, timeLocative } from "./event-card";
 import i18n, { loadEnglish } from "./i18n";
 
 function event(
@@ -86,5 +86,42 @@ describe("time left", () => {
     expect(timeLeftText(DAY + HOUR)).toBe("1 day 1 hour");
     expect(timeLeftText(2 * HOUR + MINUTE)).toBe("2 hours 1 minute");
     expect(timeLeftText(SECOND)).toBe("1 second");
+  });
+});
+
+describe("an upcoming event's start", () => {
+  afterEach(async () => {
+    await i18n.changeLanguage("tr");
+  });
+
+  it("gives a time the locative it takes as it is read", () => {
+    const cases: [number, number, string][] = [
+      [20, 0, "de"], // yirmide
+      [19, 30, "da"], // otuzda
+      [15, 0, "te"], // on beşte
+      [21, 40, "ta"], // kırkta
+      [16, 0, "da"], // on altıda
+      [13, 0, "te"], // on üçte
+      [10, 0, "da"], // onda
+      [9, 0, "da"], // dokuzda
+      [18, 50, "de"], // ellide
+      [0, 0, "da"], // sıfırda
+    ];
+    for (const [hour, minute, ending] of cases) expect(timeLocative(hour, minute)).toBe(ending);
+  });
+
+  it("says when it starts in a sentence, by how far the day is", async () => {
+    // Local times: Sunday 25 October 2026, 10:00.
+    const now = new Date(2026, 9, 25, 10, 0).getTime();
+    const at = (day: number, hour: number, minute = 0) =>
+      new Date(2026, 9, day, hour, minute).toISOString();
+    expect(startsText(at(25, 20), now)).toBe("Bugün 20:00'de başlıyor");
+    expect(startsText(at(26, 19, 30), now)).toBe("Yarın 19:30'da başlıyor");
+    expect(startsText(at(31, 15), now)).toBe("Cumartesi 15:00'te başlıyor");
+    expect(startsText(at(2 + 31, 21, 40), now)).toBe("2 Kasım 21:40'ta başlıyor");
+    await loadEnglish();
+    await i18n.changeLanguage("en");
+    expect(startsText(at(25, 20), now)).toBe("Starts today at 20:00");
+    expect(startsText(at(31, 15), now)).toBe("Starts Saturday at 15:00");
   });
 });

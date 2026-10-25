@@ -1,7 +1,13 @@
 // English for tr-news-column.ts. Missing keys fall back to Turkish.
 export const enNewsColumn = {
-  readNotes: "Read the notes",
-  liveEvent: "Live event",
+  allNews: "See all",
+  readNotes: "Read in full",
+  liveEvent: "Ongoing event",
+  starts: {
+    today: "Starts today at {{time}}",
+    tomorrow: "Starts tomorrow at {{time}}",
+    later: "Starts {{day}} at {{time}}",
+  },
   span: {
     days: "{{count}} days",
     days_one: "{{count}} day",
