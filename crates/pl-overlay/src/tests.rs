@@ -46,6 +46,11 @@ struct Calls {
     blocks: Vec<String>,
     reports: Vec<(String, pl_social::ReportReason, Option<String>, bool)>,
     refuse_people: Option<SocialError>,
+    /// OVL-UX2: the categories saved, crew invites, crewmates asked and requests accepted.
+    groups_saved: Vec<(Vec<pl_social::FriendGroup>, Vec<pl_social::GroupMember>)>,
+    crew_invites: Vec<(String, String)>,
+    crewmates_asked: Vec<String>,
+    accepted: Vec<String>,
 }
 
 /// A permit as the service makes them: `i` and 32 base64url characters.
@@ -232,6 +237,47 @@ impl SocialActions for FakeSocial {
         calls.reports.push((friend.to_owned(), reason, note, block));
         std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
     }
+
+    fn save_groups(
+        &self,
+        groups: Vec<pl_social::FriendGroup>,
+        members: Vec<pl_social::GroupMember>,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let mut calls = self.calls();
+        calls.groups_saved.push((groups, members));
+        std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
+    }
+
+    fn invite_to_team(
+        &self,
+        team: &str,
+        friend: &str,
+    ) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let mut calls = self.calls();
+        calls
+            .crew_invites
+            .push((team.to_owned(), friend.to_owned()));
+        std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
+    }
+
+    fn request_crewmate(
+        &self,
+        user: &str,
+    ) -> impl Future<Output = pl_social::Result<pl_social::SendOutcome>> + Send + 'static {
+        let mut calls = self.calls();
+        calls.crewmates_asked.push(user.to_owned());
+        let answer = calls
+            .refuse_people
+            .take()
+            .map_or(Ok(pl_social::SendOutcome::Requested), Err);
+        std::future::ready(answer)
+    }
+
+    fn accept(&self, user: &str) -> impl Future<Output = pl_social::Result<()>> + Send + 'static {
+        let mut calls = self.calls();
+        calls.accepted.push(user.to_owned());
+        std::future::ready(calls.refuse_people.take().map_or(Ok(()), Err))
+    }
 }
 
 /// The mod's side of the bridge.
@@ -358,7 +404,7 @@ async fn a_game_session_from_greeting_to_goodbye() {
     assert_eq!(welcome["me"]["name"], "Ece");
     assert_eq!(
         welcome["features"],
-        serde_json::json!(["friends", "chat", "calls", "people"])
+        serde_json::json!(["friends", "chat", "calls", "people", "people2"])
     );
     let snapshot = game.next().await.unwrap();
     assert_eq!(snapshot["t"], "snapshot");
@@ -670,7 +716,8 @@ async fn chat2_from_the_panel_and_to_it() {
             "typing",
             "reads",
             "links",
-            "people"
+            "people",
+            "people2"
         ])
     );
     let snapshot = game.next_of("snapshot").await;
@@ -1292,5 +1339,253 @@ async fn the_friend_menu_unfriends_blocks_reports_and_holds_back_a_flood() {
     assert_eq!(game.next_of("friend-result").await["reason"], "rate");
     assert_eq!(social.calls().blocks, ["f-can", "f-ayse", "f-zey"]);
     assert_eq!(social.calls().removed, ["f-mert"]);
+    overlay.stop(ByeReason::LauncherExit).await;
+}
+
+/// OVL-UX2: the player's categories (Can in "Okul"), Mert invited to the crew already, crewmates
+/// allowed to ask each other, and Cem (a crewmate, not a friend) asking the player.
+fn people2_view() -> SocialView {
+    let mut v = view();
+    v.groups = Some(pl_social::FriendGroupsView {
+        version: 3,
+        groups: vec![
+            pl_social::FriendGroup {
+                id: "g1".into(),
+                name: "Okul".into(),
+            },
+            pl_social::FriendGroup {
+                id: "g2".into(),
+                name: "PvP".into(),
+            },
+        ],
+        members: vec![pl_social::GroupMember {
+            friend: "f-can".into(),
+            group: "g1".into(),
+        }],
+    });
+    v.crews[0].invited = vec!["f-mert".into()];
+    v.team_features.push("crewFriendRequests".into());
+    v.incoming = vec![pl_social::RequestView {
+        id: "u-cem".into(),
+        name: "Cem".into(),
+        username: "cem".into(),
+        avatar: "discord".into(),
+        avatar_url: None,
+        sent_at: 1,
+    }];
+    v
+}
+
+#[tokio::test]
+async fn favourites_online_notices_and_categories_from_the_game() {
+    use serde_json::json;
+
+    let social = FakeSocial::new(people2_view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let changes = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&changes);
+    overlay.on_people(move |change| sink.lock().unwrap().push(change));
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+
+    // An older mod (OVL-UX's menu only): no lists, and a favourite from it changes nothing.
+    let mut old = MockMod::connect_with(&endpoint, &["people"]).await;
+    let welcome = old.next_of("welcome").await;
+    assert!(lists(&welcome, "people2"));
+    assert_eq!(old.next().await.unwrap()["t"], "snapshot", "no lists first");
+    old.send(json!({"t":"favorite","friend":"f-ayse","on":true}))
+        .await;
+    old.send(json!({"t":"open-conv","conv":"d:me:f-ayse"}))
+        .await;
+    assert_eq!(old.next().await.unwrap()["t"], "history", "nothing first");
+    assert!(changes.lock().unwrap().is_empty());
+    drop(old);
+
+    let mut game = MockMod::connect_with(&endpoint, &["people", "people2"]).await;
+    game.next_of("welcome").await;
+    let lists_frame = game.next().await.unwrap();
+    assert_eq!(
+        lists_frame["t"], "lists",
+        "the lists before the friends that name them"
+    );
+    assert_eq!(
+        lists_frame["groups"],
+        json!([{"id":"g1","name":"Okul"},{"id":"g2","name":"PvP"}])
+    );
+    assert_eq!(
+        lists_frame["crews"],
+        json!([{"id":"t1","name":"Gece Kuşları"}])
+    );
+    assert_eq!(lists_frame["crewmates"], true);
+    assert_eq!(lists_frame["asked"], json!(["u-cem"]));
+    let snapshot = game.next_of("snapshot").await;
+    assert_eq!(friend_row(&snapshot, "f-can")["group"], "g1");
+    assert_eq!(
+        friend_row(&snapshot, "f-mert")["crews"],
+        json!({"t1":"invited"})
+    );
+    assert!(friend_row(&snapshot, "f-ayse").get("fav").is_none());
+
+    // A favourite: the friend's frame says so at once (favourites are told when they come
+    // online), the choices here follow and the page hears it.
+    game.send(json!({"t":"favorite","friend":"f-ayse","on":true}))
+        .await;
+    let ayse = game.next_of("friend").await;
+    assert_eq!(ayse["id"], "f-ayse");
+    assert_eq!(
+        (ayse["fav"].clone(), ayse["alert"].clone()),
+        (true.into(), true.into())
+    );
+    assert_eq!(
+        changes.lock().unwrap().as_slice(),
+        [crate::PeopleChange::Favorite {
+            friend: "f-ayse".into(),
+            on: true
+        }]
+    );
+    assert!(overlay.config().notify.favorite("f-ayse"));
+    // "Çevrimiçi olunca bildir" off for her alone; the page pushing the same choices back changes
+    // nothing.
+    game.send(json!({"t":"alert","friend":"f-ayse","on":false}))
+        .await;
+    let ayse = game.next_of("friend").await;
+    assert!(ayse.get("alert").is_none() && ayse["fav"] == true);
+    assert!(!overlay.configure(overlay.config()));
+
+    // A category: the document saved whole, as the launcher's list saves it.
+    game.send(json!({"t":"move","friend":"f-ayse","group":"g2"}))
+        .await;
+    assert_eq!(
+        game.next_of("friend-result").await,
+        json!({"t":"friend-result","friend":"f-ayse","action":"move","ok":true})
+    );
+    let (groups, members) = social.calls().groups_saved[0].clone();
+    assert_eq!(groups.len(), 2);
+    assert!(
+        members
+            .iter()
+            .any(|m| m.friend == "f-ayse" && m.group == "g2")
+    );
+    assert!(
+        members
+            .iter()
+            .any(|m| m.friend == "f-can" && m.group == "g1")
+    );
+    // Back to "Arkadaşlar"; a category that does not exist goes nowhere.
+    game.send(json!({"t":"move","friend":"f-can","group":""}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["ok"], true);
+    assert!(
+        !social.calls().groups_saved[1]
+            .1
+            .iter()
+            .any(|m| m.friend == "f-can")
+    );
+    game.send(json!({"t":"move","friend":"f-can","group":"nope"}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["ok"], false);
+    assert_eq!(social.calls().groups_saved.len(), 2);
+    // The category they are in already (the service's view still has Can in "Okul"): nothing to
+    // save, and no failure to show.
+    game.send(json!({"t":"move","friend":"f-can","group":"g1"}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["ok"], true);
+    assert_eq!(social.calls().groups_saved.len(), 2);
+    overlay.stop(ByeReason::LauncherExit).await;
+}
+
+#[tokio::test]
+async fn crew_invites_and_crewmates_from_the_game_and_never_anyone_else() {
+    use serde_json::json;
+
+    let social = FakeSocial::new(people2_view());
+    let overlay = Overlay::new(OverlayConfig::default());
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+    let mut game = MockMod::connect_with(&endpoint, &["people", "people2"]).await;
+    game.next_of("snapshot").await;
+
+    // "Ekibe davet et": Ayşe may be invited; Mert is invited already.
+    game.send(json!({"t":"crew-invite","friend":"f-ayse","crew":"t1"}))
+        .await;
+    assert_eq!(
+        game.next_of("friend-result").await,
+        json!({"t":"friend-result","friend":"f-ayse","action":"crew-invite","ok":true})
+    );
+    game.send(json!({"t":"crew-invite","friend":"f-mert","crew":"t1"}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["ok"], false);
+    assert_eq!(
+        social.calls().crew_invites,
+        [("t1".to_owned(), "f-ayse".to_owned())]
+    );
+
+    // Cem asked first: "İsteği kabul et" makes them friends (not queued).
+    game.send(json!({"t":"add-friend","friend":"u-cem"})).await;
+    let added = game.next_of("friend-result").await;
+    assert_eq!(
+        (
+            added["action"].clone(),
+            added["ok"].clone(),
+            added.get("queued").is_none()
+        ),
+        ("add-friend".into(), true.into(), true)
+    );
+    assert_eq!(social.calls().accepted, ["u-cem"]);
+    // A friend is no crewmate to ask.
+    game.send(json!({"t":"add-friend","friend":"f-ayse"})).await;
+    assert_eq!(game.next_of("friend-result").await["ok"], false);
+    assert!(social.calls().crewmates_asked.is_empty());
+
+    // Crew chat's sender menu: a crewmate may be blocked; someone the player shares nothing with
+    // may not be reported from the game.
+    game.send(json!({"t":"block","friend":"u-cem"})).await;
+    assert_eq!(game.next_of("friend-result").await["ok"], true);
+    game.send(json!({"t":"report","friend":"u-zz","reason":"spam"}))
+        .await;
+    assert_eq!(game.next_of("friend-result").await["ok"], false);
+    assert_eq!(social.calls().blocks, ["u-cem"]);
+    assert!(social.calls().reports.is_empty());
+    overlay.stop(ByeReason::LauncherExit).await;
+}
+
+#[tokio::test]
+async fn a_crewmates_katil_and_discord_reach_crew_chats_menu() {
+    use serde_json::json;
+
+    // Cem (a crewmate, not a friend) plays on Projects and his Discord profile is known.
+    let mut start = people2_view();
+    let cem = &mut start.crews[0].members[1];
+    assert_eq!(cem.id, "u-cem");
+    cem.state = PresenceState::Playing;
+    cem.game = crate::feed::tests::projects();
+    cem.discord_url = "https://discord.com/users/u-cem".into();
+    let social = FakeSocial::new(start);
+    let overlay = Overlay::new(OverlayConfig::default());
+    let opened = Arc::new(Mutex::new(Vec::new()));
+    let sink = Arc::clone(&opened);
+    overlay.on_discord(move |id, url| sink.lock().unwrap().push((id, url)));
+    let endpoint = overlay.start(social.clone(), "t").await.unwrap();
+    let mut game = MockMod::connect_with(&endpoint, &["people", "people2"]).await;
+    let lists_frame = game.next_of("lists").await;
+    assert_eq!(lists_frame["projects"], json!(["u-cem"]));
+    assert_eq!(lists_frame["discord"], json!(["u-cem"]));
+    game.next_of("snapshot").await;
+
+    // His menu's "Discord'dan mesaj at" opens his profile through the launcher.
+    game.send(json!({"t":"discord","friend":"u-cem"})).await;
+    eventually("the crewmate's profile opened", || {
+        opened.lock().unwrap().len() == 1
+    })
+    .await;
+    assert_eq!(
+        *opened.lock().unwrap(),
+        [(
+            "u-cem".to_owned(),
+            "https://discord.com/users/u-cem".to_owned()
+        )]
+    );
+    // Someone the player shares nothing with: never.
+    game.send(json!({"t":"discord","friend":"u-zz"})).await;
+    assert_eq!(game.next_of("friend-result").await["reason"], "failed");
+    assert_eq!(opened.lock().unwrap().len(), 1);
     overlay.stop(ByeReason::LauncherExit).await;
 }

@@ -20,7 +20,8 @@ use crate::policy::NotifyPrefs;
 use crate::protocol::{ByeReason, ToGame};
 use crate::server::{Bridge, Endpoint};
 use crate::session::{
-    CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, Msg, Session, SocialActions,
+    CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, Msg, PeopleChange, PeopleFn, Session,
+    SocialActions,
 };
 
 /// How long [`Overlay::stop`] waits for the goodbye to leave.
@@ -64,6 +65,10 @@ type StatusFn = Arc<dyn Fn(OverlayStatus) + Send + Sync>;
 /// and their web profile (`https://`). The launcher's own way: the Discord app when installed.
 type DiscordSink = Arc<dyn Fn(String, String) + Send + Sync>;
 
+/// Hears the marks the player changed on a friend from the game's person menu (OVL-UX2):
+/// favourites and "Çevrimiçi olunca bildir", which the launcher's page keeps.
+type PeopleSink = Arc<dyn Fn(PeopleChange) + Send + Sync>;
+
 struct Running {
     id: u64,
     /// The bridge's port: names the session for [`Overlay::stop_for`].
@@ -87,6 +92,8 @@ struct Shared {
     host: Mutex<Option<HostSink>>,
     /// "Discord'dan mesaj at" from the game's friend menu (OVL-UX).
     discord: Mutex<Option<DiscordSink>>,
+    /// Favourites and online notices changed from the game (OVL-UX2).
+    people: Mutex<Option<PeopleSink>>,
 }
 
 /// Cheap to clone; the launcher keeps one.
@@ -117,6 +124,7 @@ impl Overlay {
                 status: Mutex::new(None),
                 host: Mutex::new(None),
                 discord: Mutex::new(None),
+                people: Mutex::new(None),
             }),
         }
     }
@@ -255,8 +263,10 @@ impl Overlay {
         let host: HostSink = Arc::new(move |signal| hub.host_signal(id, signal));
         let hub = self.clone();
         let discord: DiscordFn = Arc::new(move |friend, url| hub.open_discord(friend, url));
+        let hub = self.clone();
+        let people: PeopleFn = Arc::new(move |change| hub.people_change(id, change));
         let session = Session::new(
-            social, launcher, config, control, connected, host, worlds, game, discord,
+            social, launcher, config, control, connected, host, worlds, game, discord, people,
         );
         tokio::spawn(bridge.serve(control_rx, events_tx));
         tokio::spawn(session.run(msgs_rx, events));
@@ -360,6 +370,44 @@ impl Overlay {
             .discord
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
+    }
+
+    /// Favourites and "Çevrimiçi olunca bildir" changed from the game's person menu (OVL-UX2):
+    /// `sink` hands them to the launcher's page, which keeps them (and pushes its choices back).
+    pub fn on_people(&self, sink: impl Fn(PeopleChange) + Send + Sync + 'static) {
+        *self
+            .shared
+            .people
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
+    }
+
+    /// A session's mod changed a friend's mark: the choices here follow at once (the sessions that
+    /// start later, and the page pushing the same choices back changes nothing), then the page
+    /// hears it. Only the running session counts.
+    fn people_change(&self, session: u64, change: PeopleChange) {
+        {
+            let mut inner = self.lock();
+            if inner.running.as_ref().map(|running| running.id) != Some(session) {
+                return;
+            }
+            let notify = &mut inner.config.notify;
+            match &change {
+                PeopleChange::Favorite { friend, on } => notify.set_favorite(friend, *on),
+                PeopleChange::Alert { friend, on } => {
+                    notify.online_alerts.insert(friend.clone(), *on);
+                }
+            }
+        }
+        let sink = self
+            .shared
+            .people
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        if let Some(sink) = sink {
+            sink(change);
+        }
     }
 
     /// Hands a friend's Discord profile to the launcher's opener; false without one.

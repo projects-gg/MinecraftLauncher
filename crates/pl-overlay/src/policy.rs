@@ -34,6 +34,14 @@ pub struct NotifyPrefs {
     /// Conversations muted on this computer: until when (Unix milliseconds), or null until the
     /// player unmutes.
     pub chat_mutes: BTreeMap<String, Option<i64>>,
+    /// OVL-UX2: the friends the player marked as favourites (the friend list's star; the page
+    /// keeps them).
+    pub favorites: Vec<String>,
+    /// OVL-UX2: "Çevrimiçi olunca bildir" chosen for one friend: on or off. Friends without an
+    /// entry follow the favourites' setting.
+    pub online_alerts: BTreeMap<String, bool>,
+    /// OVL-UX2: "Favorilerim çevrimiçi olunca" (on unless turned off).
+    pub favorites_online: bool,
 }
 
 impl Default for NotifyPrefs {
@@ -42,6 +50,9 @@ impl Default for NotifyPrefs {
             crew_calls: true,
             crew_chat: false,
             chat_mutes: BTreeMap::new(),
+            favorites: Vec::new(),
+            online_alerts: BTreeMap::new(),
+            favorites_online: true,
         }
     }
 }
@@ -52,6 +63,28 @@ impl NotifyPrefs {
         self.chat_mutes
             .get(conv)
             .is_some_and(|until| until.is_none_or(|until| until > now_ms))
+    }
+
+    /// `id` is one of the player's favourites.
+    pub fn favorite(&self, id: &str) -> bool {
+        self.favorites.iter().any(|favorite| favorite == id)
+    }
+
+    /// "Çevrimiçi olunca bildir" is on for `id`: their own choice, else the favourites' setting
+    /// (the launcher's `notifiesOnline`).
+    pub fn alerts(&self, id: &str) -> bool {
+        self.online_alerts
+            .get(id)
+            .copied()
+            .unwrap_or_else(|| self.favorites_online && self.favorite(id))
+    }
+
+    /// The player marks `id` as a favourite (`on`) or not, as the friend list's star does.
+    pub fn set_favorite(&mut self, id: &str, on: bool) {
+        self.favorites.retain(|favorite| favorite != id);
+        if on {
+            self.favorites.push(id.to_owned());
+        }
     }
 }
 
@@ -332,6 +365,7 @@ mod tests {
                 crew_calls: t.crew_calls,
                 crew_chat: t.crew_chat,
                 chat_mutes: t.chat_mutes.clone(),
+                ..NotifyPrefs::default()
             };
             let crews: Vec<CrewMute> = t
                 .crews
@@ -507,5 +541,34 @@ mod tests {
             serde_json::from_str::<NotifyPrefs>("{}").unwrap(),
             NotifyPrefs::default()
         );
+    }
+
+    #[test]
+    fn favourites_and_online_notices_follow_the_launchers_rule() {
+        let mut prefs = NotifyPrefs::default();
+        assert!(!prefs.favorite("f1") && !prefs.alerts("f1"));
+        // A favourite is told when they come online while "Favorilerim çevrimiçi olunca" is on.
+        prefs.set_favorite("f1", true);
+        assert!(prefs.favorite("f1") && prefs.alerts("f1"));
+        prefs.favorites_online = false;
+        assert!(!prefs.alerts("f1"));
+        // The player's own choice for one friend wins either way.
+        prefs.online_alerts.insert("f1".into(), true);
+        prefs.online_alerts.insert("f2".into(), true);
+        assert!(prefs.alerts("f1") && prefs.alerts("f2"));
+        prefs.set_favorite("f1", false);
+        assert!(!prefs.favorite("f1") && prefs.alerts("f1"));
+        // As the list's star: once each, the newest last.
+        prefs.set_favorite("f3", true);
+        prefs.set_favorite("f4", true);
+        prefs.set_favorite("f3", true);
+        assert_eq!(prefs.favorites, ["f4", "f3"]);
+        // The page's choices as it pushes them.
+        let pushed: NotifyPrefs = serde_json::from_str(
+            r#"{"favorites":["a"],"onlineAlerts":{"b":false},"favoritesOnline":false}"#,
+        )
+        .unwrap();
+        assert!(pushed.favorite("a") && !pushed.alerts("a") && !pushed.alerts("b"));
+        assert!(pushed.crew_calls, "the rest keeps its defaults");
     }
 }

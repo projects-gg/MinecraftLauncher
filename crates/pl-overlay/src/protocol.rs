@@ -191,6 +191,24 @@ pub enum FromGame {
         #[serde(default)]
         block: bool,
     },
+    /// OVL-UX2 (Q8; from a mod whose hello lists `people2`): "Favorilere ekle" (`on`) or
+    /// "Favorilerden çıkar". The friend's next frame carries it (`fav`).
+    Favorite { friend: String, on: bool },
+    /// OVL-UX2 (Q9): "Çevrimiçi olunca bildir" on or off for this friend (`alert`).
+    Alert { friend: String, on: bool },
+    /// OVL-UX2 (Q10): "Kategoriye taşı": one of the player's categories by id, empty for the
+    /// implicit "Arkadaşlar". Answered with `friend-result`.
+    Move {
+        friend: String,
+        #[serde(default)]
+        group: String,
+    },
+    /// OVL-UX2 (Q11): "Ekibe davet et": to one of the crews `lists` names. Answered with
+    /// `friend-result`.
+    CrewInvite { friend: String, crew: String },
+    /// OVL-UX2 (Q12): "Arkadaş ekle" (or "İsteği kabul et" when they asked first) on a crewmate who
+    /// is not a friend yet. Answered with `friend-result` (`queued`: the request waits for them).
+    AddFriend { friend: String },
     /// Anything newer than this launcher.
     #[serde(other)]
     Unknown,
@@ -225,6 +243,12 @@ pub const FEATURE_PEOPLE: &str = "people";
 /// The `welcome` feature that says "Birlikte oyna" can go now (OVL-UX, P2): the player's game is
 /// on Projects, or on a server they show their friends.
 pub const FEATURE_INVITE: &str = "invite";
+
+/// The `hello` feature of a mod with the launcher's whole person menu (OVL-UX2, Q1: it reads the
+/// friends' `fav`, `alert`, `group` and `crews`, hears `lists` and sends `favorite`, `alert`,
+/// `move`, `crew-invite` and `add-friend`), and the `welcome` feature that says this launcher takes
+/// those frames (signed in to friends).
+pub const FEATURE_PEOPLE2: &str = "people2";
 
 impl FromGame {
     /// One of HOST1's frames: they go to the launcher's world sharing, never to the friends
@@ -412,6 +436,34 @@ pub enum ToGame {
     /// no longer good (another friends account, codeless linking switched off): the mod forgets
     /// it and tells a server that asks that it has none. Only to a mod that said `link`.
     LinkClear,
+    /// OVL-UX2 (Q7): what the person menu's rows choose from, whole, after the greeting and on
+    /// every change. Only to a mod that said `people2`.
+    Lists {
+        /// The player's friend categories, in their order ("Kategoriye taşı"; empty while there
+        /// are none or the service is older).
+        groups: Vec<GroupItem>,
+        /// The crews the player may invite friends to, in the launcher's order ("Ekibe davet et";
+        /// empty while crews are off).
+        crews: Vec<CrewItem>,
+        /// Crewmates may ask each other to be friends here (the service offers it): "Arkadaş
+        /// ekle" on a crewmate.
+        #[serde(skip_serializing_if = "std::ops::Not::not")]
+        crewmates: bool,
+        /// Crewmates who asked the player to be friends ("İsteği kabul et").
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        asked: Vec<String>,
+        /// Crewmates the player asked ("İstek gönderildi").
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        asking: Vec<String>,
+        /// Q15: crewmates who are not friends and play on Projects now ("Katıl" in their menu;
+        /// never a blocked one).
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        projects: Vec<String>,
+        /// Q15: crewmates who are not friends, whose Discord profile is known ("Discord'dan mesaj
+        /// at" in their menu).
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        discord: Vec<String>,
+    },
     /// OVL-UX (P8): how a friend menu action went. `queued`: the invite waits for the friend
     /// (offline or on do-not-disturb); `reason` when it did not go. Only to a mod that said
     /// `people`.
@@ -438,6 +490,12 @@ pub enum FriendAction {
     Unfriend,
     Block,
     Report,
+    /// OVL-UX2: these go only to a mod that said `people2`.
+    Favorite,
+    Alert,
+    Move,
+    CrewInvite,
+    AddFriend,
 }
 
 /// Why a friend menu action did not go (OVL-UX).
@@ -510,6 +568,50 @@ pub struct FriendView {
     /// OVL-UX (P11): their Discord profile is known ("Discord'dan mesaj at").
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub discord: bool,
+    /// OVL-UX2 (Q2): when an offline friend was last seen, as roughly as the launcher's list says
+    /// it (`today`, `yesterday`, `week`, `long`): only what the service gives, which is nothing for
+    /// a friend who keeps it to themselves. Never a time.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seen: Option<pl_social::LastSeen>,
+    /// OVL-UX2 (Q3): one of the player's favourites (the list's star; they lead their section).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub fav: bool,
+    /// OVL-UX2 (Q3): "Çevrimiçi olunca bildir" is on for them (their own choice, else the
+    /// favourites' setting).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub alert: bool,
+    /// OVL-UX2 (Q4): their category's id (none: the implicit "Arkadaşlar").
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    /// OVL-UX2 (Q5): where they stand in the crews `lists` names: `member` or `invited` (the
+    /// others may invite them, unless full).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub crews: BTreeMap<String, CrewPlace>,
+}
+
+/// A friend in one of the crews the player may invite to (OVL-UX2, Q5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CrewPlace {
+    Member,
+    Invited,
+}
+
+/// One of the player's friend categories (OVL-UX2, Q7).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct GroupItem {
+    pub id: String,
+    pub name: String,
+}
+
+/// A crew the player may invite friends to (OVL-UX2, Q7).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct CrewItem {
+    pub id: String,
+    pub name: String,
+    /// Every place is taken: nobody more can be invited.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub full: bool,
 }
 
 /// A crew tag's card as the overlay shows it (TEAM6-O, T3): the chip (`tag` on the crew's colour)
@@ -621,6 +723,10 @@ pub struct MsgView {
     /// (the chip before the name over their group).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub badge: Option<String>,
+    /// OVL-UX2 (Q6): its sender's user id, on someone else's message in a crew's chat (their
+    /// name opens their person menu).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub by: Option<String>,
 }
 
 /// The message a reply answers (CHAT2): the service keeps only the link, the words come from this
@@ -1135,6 +1241,130 @@ mod tests {
     }
 
     #[test]
+    fn the_whole_person_menus_frames_read_and_write_as_the_log_says() {
+        let favorite: FromGame =
+            serde_json::from_str(r#"{"t":"favorite","friend":"f1","on":true}"#).unwrap();
+        assert_eq!(
+            favorite,
+            FromGame::Favorite {
+                friend: "f1".into(),
+                on: true
+            }
+        );
+        let alert: FromGame =
+            serde_json::from_str(r#"{"t":"alert","friend":"f1","on":false}"#).unwrap();
+        assert!(matches!(alert, FromGame::Alert { ref friend, on: false } if friend == "f1"));
+        let moved: FromGame = serde_json::from_str(r#"{"t":"move","friend":"f2"}"#).unwrap();
+        assert!(matches!(moved, FromGame::Move { ref group, .. } if group.is_empty()));
+        let invited: FromGame =
+            serde_json::from_str(r#"{"t":"crew-invite","friend":"f3","crew":"t1"}"#).unwrap();
+        assert!(
+            matches!(invited, FromGame::CrewInvite { ref friend, ref crew } if friend == "f3" && crew == "t1")
+        );
+        let added: FromGame =
+            serde_json::from_str(r#"{"t":"add-friend","friend":"u-cem"}"#).unwrap();
+        assert!(matches!(added, FromGame::AddFriend { ref friend } if friend == "u-cem"));
+        // A mark without its state is not one.
+        assert!(serde_json::from_str::<FromGame>(r#"{"t":"favorite","friend":"f1"}"#).is_err());
+
+        let lists = serde_json::to_value(ToGame::Lists {
+            groups: vec![GroupItem {
+                id: "g1".into(),
+                name: "Okul".into(),
+            }],
+            crews: vec![
+                CrewItem {
+                    id: "t1".into(),
+                    name: "Gece Kuşları".into(),
+                    full: false,
+                },
+                CrewItem {
+                    id: "t2".into(),
+                    name: "Akıncılar".into(),
+                    full: true,
+                },
+            ],
+            crewmates: false,
+            asked: Vec::new(),
+            asking: Vec::new(),
+            projects: Vec::new(),
+            discord: Vec::new(),
+        })
+        .unwrap();
+        assert_eq!(
+            lists,
+            serde_json::json!({"t":"lists","groups":[{"id":"g1","name":"Okul"}],
+                "crews":[{"id":"t1","name":"Gece Kuşları"},{"id":"t2","name":"Akıncılar","full":true}]})
+        );
+        // Q15: crewmates on Projects and with a Discord profile, only when there are any.
+        let mates = serde_json::to_value(ToGame::Lists {
+            groups: Vec::new(),
+            crews: Vec::new(),
+            crewmates: true,
+            asked: Vec::new(),
+            asking: Vec::new(),
+            projects: vec!["u-cem".into()],
+            discord: vec!["u-cem".into(), "u-ali".into()],
+        })
+        .unwrap();
+        assert_eq!(
+            mates,
+            serde_json::json!({"t":"lists","groups":[],"crews":[],"crewmates":true,
+                "projects":["u-cem"],"discord":["u-cem","u-ali"]})
+        );
+        let marked = serde_json::to_value(FriendView {
+            id: "f1".into(),
+            name: "Ayşe".into(),
+            place: Place::Offline,
+            joinable: false,
+            host: None,
+            world: None,
+            badge: None,
+            dm: None,
+            discord: false,
+            seen: Some(pl_social::LastSeen::Today),
+            fav: true,
+            alert: true,
+            group: Some("g1".into()),
+            crews: BTreeMap::from([("t1".to_owned(), CrewPlace::Invited)]),
+        })
+        .unwrap();
+        assert_eq!(
+            (
+                marked["seen"].clone(),
+                marked["fav"].clone(),
+                marked["alert"].clone(),
+                marked["group"].clone(),
+                marked["crews"].clone()
+            ),
+            (
+                "today".into(),
+                true.into(),
+                true.into(),
+                "g1".into(),
+                serde_json::json!({"t1":"invited"})
+            )
+        );
+        let result = serde_json::to_value(ToGame::FriendResult {
+            friend: "u-cem".into(),
+            action: FriendAction::AddFriend,
+            ok: true,
+            queued: true,
+            reason: None,
+        })
+        .unwrap();
+        assert_eq!(result["action"], "add-friend");
+        let by = serde_json::to_value(MsgView {
+            id: "i:1".into(),
+            from: "Cem".into(),
+            by: Some("u-cem".into()),
+            ..MsgView::default()
+        })
+        .unwrap();
+        assert_eq!(by["by"], "u-cem");
+    }
+
+    #[test]
     fn frames_to_the_game_use_the_wire_names() {
         let toast = ToGame::Toast(ToastView {
             kind: ToastKind::Call,
@@ -1171,6 +1401,11 @@ mod tests {
             badge: None,
             dm: None,
             discord: false,
+            seen: None,
+            fav: false,
+            alert: false,
+            group: None,
+            crews: BTreeMap::new(),
         }))
         .unwrap();
         assert_eq!(friend["where"], "projects");
@@ -1188,6 +1423,11 @@ mod tests {
             badge: None,
             dm: Some("d:f2:me".into()),
             discord: true,
+            seen: None,
+            fav: false,
+            alert: false,
+            group: None,
+            crews: BTreeMap::new(),
         }))
         .unwrap();
         assert_eq!(inviting["world"], serde_json::json!({"guests":1,"max":7}));

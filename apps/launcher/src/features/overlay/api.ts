@@ -4,6 +4,7 @@ import {
   type OverlayConfig,
   type OverlayStateView,
   type OverlayStatus,
+  type PeopleChange,
 } from "@/bindings";
 import { isTauri } from "@/lib/platform";
 import { mockOverlay } from "./mock";
@@ -18,6 +19,11 @@ export interface OverlayApi {
   onStatus(listener: (status: OverlayStatus) => void): () => void;
   /** The switch changed without the page (the crash help turned the overlay's mod off). */
   onEnabled(listener: (enabled: boolean) => void): () => void;
+  /**
+   * A favourite or "Çevrimiçi olunca bildir" changed from the game's person menu (OVL-UX2): the
+   * page keeps those marks, as its own buttons would.
+   */
+  onPeople(listener: (change: PeopleChange) => void): () => void;
 }
 
 function subscribe<T>(event: string, listener: (payload: T) => void): () => void {
@@ -32,6 +38,7 @@ const tauriOverlay: OverlayApi = {
   state: () => commands.overlayState(),
   onStatus: (listener) => subscribe<OverlayStatus>("overlay-status", listener),
   onEnabled: (listener) => subscribe<boolean>("overlay-enabled", listener),
+  onPeople: (listener) => subscribe<PeopleChange>("overlay-people", listener),
 };
 
 export const overlayApi: OverlayApi = isTauri() ? tauriOverlay : mockOverlay;

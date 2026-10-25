@@ -5170,6 +5170,18 @@ export type NotifyPrefs = {
 	 *  player unmutes.
 	 */
 	chatMutes?: { [key in string]: number | null },
+	/**
+	 *  OVL-UX2: the friends the player marked as favourites (the friend list's star; the page
+	 *  keeps them).
+	 */
+	favorites?: string[],
+	/**
+	 *  OVL-UX2: "Çevrimiçi olunca bildir" chosen for one friend: on or off. Friends without an
+	 *  entry follow the favourites' setting.
+	 */
+	onlineAlerts?: { [key in string]: boolean },
+	/**  OVL-UX2: "Favorilerim çevrimiçi olunca" (on unless turned off). */
+	favoritesOnline?: boolean,
 };
 
 export type OfficialPackView = {
@@ -5378,6 +5390,17 @@ export type PatternProblem =
  *  some chat lines.
  */
 "tooComplex";
+
+/**
+ *  A mark the player changed on a friend from the game's person menu (OVL-UX2): the launcher's
+ *  page keeps these (its friend list's star and "Çevrimiçi olunca bildir"), so it hears them as
+ *  the `overlay-people` event and keeps them as its own buttons would.
+ */
+export type PeopleChange = 
+/**  "Favorilere ekle" (`on`) or "Favorilerden çıkar". */
+{ kind: "favorite"; friend: string; on: boolean } | 
+/**  "Çevrimiçi olunca bildir" on or off. */
+{ kind: "alert"; friend: string; on: boolean };
 
 /**
  *  Who may do something in a crew: the lowest role that may (every role above it may too).
