@@ -52,6 +52,8 @@ export interface ItemInfo {
   readonly aliases: readonly string[];
   /** Indexes into `ItemData.enchantments`: the enchantments that fit (any on an enchanted book). */
   readonly enchantments: readonly number[];
+  /** An operator's item no one gets in survival (command blocks, barrier): pickers leave it out. */
+  readonly operator: boolean;
 }
 
 export interface EnchantmentInfo {
@@ -146,6 +148,7 @@ function parseItem(row: unknown, groups: readonly number[][]): ItemInfo | undefi
   if (group !== -1 && !isIndex(group, groups.length)) return undefined;
   let aliases: string[] | undefined = [];
   let desc: ItemNames | undefined;
+  let operator = false;
   if (extra !== undefined) {
     if (!isRecord(extra)) return undefined;
     aliases = aliasesOf(extra.a);
@@ -154,10 +157,14 @@ function parseItem(row: unknown, groups: readonly number[][]): ItemInfo | undefi
       if (!Array.isArray(d) || d.length !== 2 || !isName(d[0]) || !isName(d[1])) return undefined;
       desc = { tr: d[0], en: d[1] };
     }
+    if (extra.o !== undefined) {
+      if (typeof extra.o !== "number") return undefined;
+      operator = extra.o === 1;
+    }
   }
   if (!aliases) return undefined;
   const enchantments = group === -1 ? [] : (groups[group as number] ?? []);
-  return { id, stack, maxDamage, name: { tr, en }, desc, aliases, enchantments };
+  return { id, stack, maxDamage, name: { tr, en }, desc, aliases, enchantments, operator };
 }
 
 /**
@@ -526,6 +533,8 @@ export interface SearchItemsOptions {
   limit?: number;
   /** The account's custom items: searched by their names, first among equals. */
   extras?: readonly ItemSearchExtra[];
+  /** Also operator items (command blocks, barrier); left out by default. */
+  operatorItems?: boolean;
 }
 
 /**
@@ -549,10 +558,35 @@ export function searchItems(
     const folded = foldedFor(data, options.lang);
     for (const [i, item] of data.items.entries()) {
       const f = folded[i];
-      if (f) things.push({ folded: f, hit: { ref: item.id, item } });
+      if (f && (options.operatorItems || !item.operator)) {
+        things.push({ folded: f, hit: { ref: item.id, item } });
+      }
     }
   }
   return ranked(things, q, options.limit ?? 20);
+}
+
+const repeated = new WeakMap<ItemData, Record<ItemLang, Set<string>>>();
+
+/**
+ * The other language's name, when another item shows the same name and description line in
+ * `lang` (Turkish "Fener" is both Beacon and Lantern): a picker writes it beside the name so the
+ * two rows differ. Undefined for a name only one item has.
+ */
+export function nameHint(data: ItemData, item: ItemInfo, lang: ItemLang): string | undefined {
+  let byLang = repeated.get(data);
+  if (!byLang) {
+    const find = (l: ItemLang) => {
+      const seen = new Map<string, number>();
+      const key = (i: ItemInfo) => `${fold(i.name[l])}\n${i.desc ? fold(i.desc[l]) : ""}`;
+      for (const i of data.items) seen.set(key(i), (seen.get(key(i)) ?? 0) + 1);
+      return new Set(data.items.filter((i) => (seen.get(key(i)) ?? 0) > 1).map((i) => i.id));
+    };
+    byLang = { tr: find("tr"), en: find("en") };
+    repeated.set(data, byLang);
+  }
+  if (!byLang[lang].has(item.id)) return undefined;
+  return item.name[lang === "tr" ? "en" : "tr"];
 }
 
 export interface SearchEnchantmentsOptions {

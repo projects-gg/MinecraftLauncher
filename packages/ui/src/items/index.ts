@@ -30,6 +30,7 @@ export {
   type LoadItemDataOptions,
   levelText,
   loadItemData,
+  nameHint,
   parseItemData,
   pickItemDataVersion,
   type SearchEnchantmentsOptions,

@@ -27,14 +27,19 @@
 //! ```
 //!
 //! - `src`: the SHA-1s of what it was built from, the ones Mojang publishes: `server` (the server
-//!   download), `tr` (`tr_tr.json`, the asset index's hash), `en` (`en_us.json` in the jar); for
-//!   1.20.5 and 1.20.6, whose enchantments are built into the game, also `enchFrom` (the version
-//!   whose enchantment definitions were taken, 1.21) and `ench` (that server download's SHA-1).
+//!   download), `tr` (`tr_tr.json`, the asset index's hash; Mojang updates the language files of
+//!   older asset indexes too, so it is mostly the same file for every version), `en` (`en_us.json`
+//!   in the jar); for 1.20.5 and 1.20.6, whose enchantments are built into the game, also
+//!   `enchFrom` (the version whose enchantment definitions were taken, 1.21) and `ench` (that
+//!   server download's SHA-1).
 //! - An item row is `[id, stack, maxDamage, tr, en, group]`, then an object of extras when it has
-//!   any: `a` our aliases (folded, see `fold`; with the word swaps' phrases), `d` the description
-//!   line `[tr, en]`. Items are in the game's registry order; `minecraft:air` is left out. Names are
-//!   the item's own (`item_name`), Turkish falling back to English as in the game; never a name an
-//!   anvil gave.
+//!   any: `a` our aliases (folded; ours, the word swaps' phrases and the families': a trim template
+//!   by its pattern, a disc by its title, a banner pattern by its longer name), `d` the description
+//!   line `[tr, en]`, `o` 1 for an operator's item no one gets in survival (pickers leave it out).
+//!   Items are in the game's registry order; `minecraft:air` is left out. Names are the item's own
+//!   (`item_name`), Turkish falling back to English as in the game; never a name an anvil gave. A
+//!   name can repeat in one language (Turkish "Fener": beacon and lantern): pickers write the other
+//!   language's name beside it (`nameHint` in TypeScript), the assistant asks which one.
 //! - `id` is the order's item reference (`minecraft:diamond_block`, `^minecraft:[a-z0-9_]{1,64}$`)
 //!   and the icon's key in ITEMART's atlas index (`AtlasIndex::icons`). `maxDamage` 0: the item
 //!   takes no damage. `group` indexes `groups` (-1: no enchantment fits); a group lists `ench`
@@ -43,7 +48,20 @@
 //!   `x` the enchantments it cannot share an item with (both ways: the game refuses a pair either
 //!   one's exclusive set names). Enchantments are sorted by id.
 //! - Readers ignore extras keys they do not know (format 1 grows only there); a newer `format` is
-//!   rejected (`DataError::Newer`).
+//!   rejected (`DataError::Newer`). Indexes (`group`, `x`, a group's entries) are positions in this
+//!   one file: another version's file numbers differently, so orders and caches store ids.
+//! - Matching (`Item::terms`): a name, a description line or an alias, folded, anywhere in a text;
+//!   the longest match wins ("bakır kazma" is the pickaxe, "bakır" alone the ingot). No alias is
+//!   another item's or enchantment's name or alias.
+//!
+//! Folding (`fold`; the same in every reader): lower case the Turkish way, "I", "İ" and "ı" all
+//! "i"; then canonical decomposition with the combining marks (U+0300–036F, U+1AB0–1AFF,
+//! U+1DC0–1DFF, U+20D0–20FF, U+FE20–FE2F) dropped ("ş" → "s", "ğ" → "g", "â" → "a", "é" → "e");
+//! nothing else changes (spaces, digits, apostrophes and other signs stay). Cases every reader
+//! passes: "Elmas Kılıç" → "elmas kilic", "IŞIK" → "isik", "İnci" → "inci", "Rüzgâr Patlaması" →
+//! "ruzgar patlamasi", "ÇĞİÖŞÜ çğıöşü" → "cgiosu cgiosu", "Café crème" → "cafe creme",
+//! "s\u{0327}apka" → "sapka", "TNT’li Vagon" → "tnt’li vagon", "æøł" → "æøł" (letters without a
+//! decomposition stay).
 //!
 //! Next to the files, `manifest.json` (`DataManifest`) names each version's file with its SHA-256,
 //! which a reader checks before parsing: `{"format": 1, "default": "26.3", "versions": {"26.3":
@@ -52,7 +70,7 @@
 //! immutable; the manifest for five minutes). `DataManifest::pick` chooses a version's file.
 
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use serde_json::Value;
 
@@ -226,6 +244,9 @@ pub struct Item {
     pub aliases: Vec<String>,
     /// Index into `ItemData::groups`: the enchantments that fit; None when none does.
     pub group: Option<usize>,
+    /// An operator's item no one gets in survival (command blocks, barrier, debug stick): pickers
+    /// leave it out.
+    pub operator: bool,
 }
 
 impl Item {
@@ -579,8 +600,8 @@ fn parse_item(i: usize, row: &Value) -> Result<Item, DataError> {
         Some(g) => Some(usize::try_from(g).map_err(|_| at("group"))?),
         None => return Err(at("group")),
     };
-    let (aliases, desc) = match row.get(6) {
-        None => (Vec::new(), None),
+    let (aliases, desc, operator) = match row.get(6) {
+        None => (Vec::new(), None, false),
         Some(extra) => {
             let extra = extra.as_object().ok_or_else(|| at("extras"))?;
             let aliases = strings(extra.get("a")).ok_or_else(|| at("aliases"))?;
@@ -588,7 +609,11 @@ fn parse_item(i: usize, row: &Value) -> Result<Item, DataError> {
                 None => None,
                 Some(d) => Some(pair(d).ok_or_else(|| at("desc"))?),
             };
-            (aliases, desc)
+            let operator = match extra.get("o") {
+                None => false,
+                Some(o) => o.as_u64().ok_or_else(|| at("operator"))? == 1,
+            };
+            (aliases, desc, operator)
         }
     };
     Ok(Item {
@@ -602,6 +627,7 @@ fn parse_item(i: usize, row: &Value) -> Result<Item, DataError> {
         desc,
         aliases,
         group,
+        operator,
     })
 }
 
@@ -681,21 +707,23 @@ fn push_item(out: &mut String, item: &Item) {
         Some(g) => out.push_str(&format!(",{g}")),
         None => out.push_str(",-1"),
     }
-    if !item.aliases.is_empty() || item.desc.is_some() {
+    let mut extras: Vec<String> = Vec::new();
+    if !item.aliases.is_empty() {
+        let mut a = String::from("\"a\":");
+        push_strings(&mut a, &item.aliases);
+        extras.push(a);
+    }
+    if let Some(desc) = &item.desc {
+        let mut d = String::from("\"d\":");
+        push_strings(&mut d, &[desc.tr.clone(), desc.en.clone()]);
+        extras.push(d);
+    }
+    if item.operator {
+        extras.push("\"o\":1".into());
+    }
+    if !extras.is_empty() {
         out.push_str(",{");
-        let mut first = true;
-        if !item.aliases.is_empty() {
-            out.push_str("\"a\":");
-            push_strings(out, &item.aliases);
-            first = false;
-        }
-        if let Some(desc) = &item.desc {
-            if !first {
-                out.push(',');
-            }
-            out.push_str("\"d\":");
-            push_strings(out, &[desc.tr.clone(), desc.en.clone()]);
-        }
+        out.push_str(&extras.join(","));
         out.push('}');
     }
     out.push(']');
@@ -884,17 +912,24 @@ impl DataManifest {
 }
 
 /// Our aliases (`crates/pl-items/data/aliases.json`): what players type for an item or an
-/// enchantment besides its names (slang, short forms, a word of the other language), and word
-/// swaps tried on every item name ("elmas" → "dia": "Elmas Kılıç" is also "dia kilic").
+/// enchantment besides its names (slang, short forms, a word of the other language), word swaps
+/// tried on every item name ("elmas" → "dia": "Elmas Kılıç" is also "dia kilic"; "-" drops the
+/// word when two or more stay: "Kırmızı Shulker Kutusu" is also "kirmizi shulker"), and the
+/// operator items no one gets in survival.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Aliases {
     pub items: BTreeMap<String, Vec<String>>,
     pub enchantments: BTreeMap<String, Vec<String>>,
     pub words: BTreeMap<String, Vec<String>>,
+    pub operator: BTreeSet<String>,
 }
 
+/// A word swap that drops the word.
+const DROP: &str = "-";
+
 impl Aliases {
-    /// Reads and checks the file: ids as the game's, aliases folded, no alias for two things.
+    /// Reads and checks the file: ids as the game's, aliases folded, no alias for two things (an
+    /// item and an enchantment included).
     pub fn parse(bytes: &[u8]) -> Result<Self, DataError> {
         let doc: Value = serde_json::from_slice(bytes)
             .map_err(|e| invalid(format!("aliases: not JSON ({e})")))?;
@@ -916,13 +951,26 @@ impl Aliases {
             }
             Ok(out)
         };
+        let operator: BTreeSet<String> = match doc.get("operator") {
+            None => BTreeSet::new(),
+            Some(list) => strings(Some(list))
+                .ok_or_else(|| invalid("aliases: operator"))?
+                .into_iter()
+                .collect(),
+        };
+        if let Some(id) = operator.iter().find(|id| !vanilla_id(id)) {
+            return Err(invalid(format!(
+                "aliases: operator: {id} is not a vanilla id"
+            )));
+        }
         let aliases = Self {
             items: section("items")?,
             enchantments: section("ench")?,
             words: section("words")?,
+            operator,
         };
+        let mut owner: HashMap<&str, &str> = HashMap::new();
         for (what, map) in [("items", &aliases.items), ("ench", &aliases.enchantments)] {
-            let mut owner: HashMap<&str, &str> = HashMap::new();
             for (id, list) in map {
                 if !vanilla_id(id) {
                     return Err(invalid(format!(
@@ -952,7 +1000,10 @@ impl Aliases {
                     .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
         };
         for (from, to) in &aliases.words {
-            if !word(from) || to.is_empty() || to.iter().any(|t| !word(t) || t == from) {
+            if !word(from)
+                || to.is_empty()
+                || to.iter().any(|t| (t != DROP && !word(t)) || t == from)
+            {
                 return Err(invalid(format!("aliases: words.{from}")));
             }
         }
@@ -1245,8 +1296,12 @@ fn description(
 }
 
 /// Every phrase a name becomes with the word swaps (the name itself left out), at most
-/// `MAX_VARIANTS`.
+/// `MAX_VARIANTS`: a dropped word ("-") leaves at least two words. English "Block of X" names
+/// take no swaps ("block of dia" is no one's phrase; the Turkish "Elmas Bloğu" gives "dia blok").
 fn variants(name: &str, words: &BTreeMap<String, Vec<String>>) -> Vec<String> {
+    if name.starts_with("block of ") {
+        return Vec::new();
+    }
     let mut phrases: Vec<Vec<&str>> = vec![Vec::new()];
     for word in name.split(' ') {
         let mut choices: Vec<&str> = vec![word];
@@ -1257,15 +1312,19 @@ fn variants(name: &str, words: &BTreeMap<String, Vec<String>>) -> Vec<String> {
         for phrase in &phrases {
             for choice in &choices {
                 let mut longer = phrase.clone();
-                longer.push(choice);
+                if *choice != DROP {
+                    longer.push(choice);
+                }
                 next.push(longer);
             }
         }
         next.truncate(MAX_VARIANTS + 1);
         phrases = next;
     }
+    let dropped = |p: &Vec<&str>| p.len() < name.split(' ').count();
     phrases
         .into_iter()
+        .filter(|p| !dropped(p) || p.len() >= 2)
         .map(|p| p.join(" "))
         .filter(|p| p != name)
         .take(MAX_VARIANTS)
@@ -1291,6 +1350,8 @@ pub fn build_item_data(inputs: DataInputs<'_>) -> Result<DataBuild, DataError> {
 
     // Items, in the registry's order.
     let mut items: Vec<Item> = Vec::new();
+    // The families' phrases, by item.
+    let mut families: Vec<Vec<String>> = Vec::new();
     let mut turkish_fallbacks: Vec<String> = Vec::new();
     for (id, components) in &report.items {
         if id == "minecraft:air" {
@@ -1331,6 +1392,7 @@ pub fn build_item_data(inputs: DataInputs<'_>) -> Result<DataBuild, DataError> {
             turkish_fallbacks.push(id.clone());
         }
         let desc = description(path, key.as_deref(), &en, tr);
+        families.push(family_aliases(path, key.as_deref(), desc.as_ref(), &en, tr));
         items.push(Item {
             id: id.clone(),
             stack,
@@ -1339,6 +1401,7 @@ pub fn build_item_data(inputs: DataInputs<'_>) -> Result<DataBuild, DataError> {
             desc,
             aliases: Vec::new(),
             group: None,
+            operator: false,
         });
     }
     if !turkish_fallbacks.is_empty() {
@@ -1487,21 +1550,110 @@ pub fn build_item_data(inputs: DataInputs<'_>) -> Result<DataBuild, DataError> {
         item.group = Some(g);
     }
 
-    apply_item_aliases(&mut items, aliases, &mut notes)?;
-    apply_enchantment_aliases(&mut enchantments, aliases, &mut notes)?;
+    // What one kind may not call itself: the other kind's names and our aliases for it (a text
+    // matcher looks for items and enchantments at once: "feather" is an item, not Feather
+    // Falling).
+    let item_ids: BTreeSet<&str> = items.iter().map(|i| i.id.as_str()).collect();
+    let ench_ids: BTreeSet<&str> = enchantments.iter().map(|e| e.id.as_str()).collect();
+    let for_items: HashSet<String> = enchantments
+        .iter()
+        .flat_map(|e| [fold(&e.name.tr), fold(&e.name.en)])
+        .chain(present_aliases(&aliases.enchantments, &ench_ids))
+        .collect();
+    let for_enchantments: HashSet<String> = items
+        .iter()
+        .flat_map(|i| [fold(&i.name.tr), fold(&i.name.en)])
+        .chain(present_aliases(&aliases.items, &item_ids))
+        .collect();
+    apply_item_aliases(&mut items, &families, aliases, &for_items, &mut notes)?;
+    apply_enchantment_aliases(&mut enchantments, aliases, &for_enchantments, &mut notes)?;
     note_repeated_names(&items, &mut notes);
 
     let data = ItemData::new(minecraft.to_owned(), sources, items, enchantments, groups)?;
     Ok(DataBuild { data, notes })
 }
 
-/// Our aliases onto the items: each alias is the item's alone (never another's name or alias);
-/// the word swaps' phrases only when no other item has the same.
+/// Our aliases for the ids this version has.
+fn present_aliases(map: &BTreeMap<String, Vec<String>>, ids: &BTreeSet<&str>) -> Vec<String> {
+    map.iter()
+        .filter(|(id, _)| ids.contains(id.as_str()))
+        .flat_map(|(_, list)| list.iter().cloned())
+        .collect()
+}
+
+/// Aliases the game's own words give the families whose names repeat: a trim template by its
+/// pattern ("silence trim", "sessizlik sablonu"), a music disc by its title ("pigstep diski"),
+/// a banner pattern by the game's longer name ("cicek sekli sancak deseni").
+fn family_aliases(
+    path: &str,
+    key: Option<&str>,
+    desc: Option<&Names>,
+    en: &HashMap<String, String>,
+    tr: &HashMap<String, String>,
+) -> Vec<String> {
+    let words = |text: &str| {
+        fold(text)
+            .split(|c: char| !c.is_ascii_alphanumeric())
+            .filter(|w| !w.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let mut out: Vec<String> = Vec::new();
+    if let Some(pattern) = path.strip_suffix("_armor_trim_smithing_template") {
+        let pattern = pattern.replace('_', " ");
+        out.push(format!("{pattern} trim"));
+        out.push(format!("{pattern} template"));
+        if let Some(base) = desc.and_then(|d| {
+            words(&d.tr)
+                .strip_suffix(" zirh suslemesi")
+                .map(str::to_owned)
+        }) {
+            out.push(format!("{base} sablonu"));
+            out.push(format!("{base} sablon"));
+        }
+    } else if path.starts_with("music_disc_") {
+        if let Some(desc) = desc {
+            let title = words(desc.en.rsplit(" - ").next().unwrap_or(&desc.en));
+            if !title.is_empty() {
+                for word in ["disk", "diski", "plak", "plagi", "disc"] {
+                    out.push(format!("{title} {word}"));
+                }
+            }
+        }
+    } else if path.ends_with("_banner_pattern")
+        && let Some(names) = key.and_then(|k| lang_names(&format!("{k}.new"), en, tr))
+    {
+        out.push(words(&names.tr));
+        out.push(words(&names.en));
+    }
+    out.retain(|a| alias_ok(a));
+    out.dedup();
+    out
+}
+
+/// Our aliases onto the items: each alias is the item's alone (never another's name or alias,
+/// never an enchantment's name or alias); the word swaps' and the families' phrases only when no
+/// other item has the same. Operator items take none of those phrases.
 fn apply_item_aliases(
     items: &mut [Item],
+    families: &[Vec<String>],
     aliases: &Aliases,
+    reserved: &HashSet<String>,
     notes: &mut Vec<String>,
 ) -> Result<(), DataError> {
+    let mut operators_absent: Vec<&str> = Vec::new();
+    for id in &aliases.operator {
+        match items.iter_mut().find(|item| &item.id == id) {
+            Some(item) => item.operator = true,
+            None => operators_absent.push(id),
+        }
+    }
+    if !operators_absent.is_empty() {
+        notes.push(format!(
+            "operator items not in this version: {}",
+            operators_absent.join(", ")
+        ));
+    }
     // Folded names → the items that carry them.
     let mut names: HashMap<String, Vec<usize>> = HashMap::new();
     for (i, item) in items.iter().enumerate() {
@@ -1540,6 +1692,11 @@ fn apply_item_aliases(
                 }
                 None => {}
             }
+            if reserved.contains(alias) {
+                return Err(build_error(format!(
+                    "alias {alias} of {id} names an enchantment"
+                )));
+            }
             taken.insert(alias.clone(), i);
             explicit[i].push(alias.clone());
         }
@@ -1556,20 +1713,26 @@ fn apply_item_aliases(
             redundant.join(", ")
         ));
     }
-    // Word swaps: phrases no name, alias or other item's phrase has.
+    // Word swaps and families: phrases no name, alias, enchantment or other item's phrase has.
     let mut phrases: HashMap<String, Vec<usize>> = HashMap::new();
-    if !aliases.words.is_empty() {
-        for (i, item) in items.iter().enumerate() {
-            for name in [fold(&item.name.tr), fold(&item.name.en)] {
-                for phrase in variants(&name, &aliases.words) {
-                    if names.contains_key(&phrase) || taken.contains_key(&phrase) {
-                        continue;
-                    }
-                    let owners = phrases.entry(phrase).or_default();
-                    if !owners.contains(&i) {
-                        owners.push(i);
-                    }
-                }
+    for (i, item) in items.iter().enumerate() {
+        if item.operator {
+            continue;
+        }
+        let swapped = [fold(&item.name.tr), fold(&item.name.en)]
+            .into_iter()
+            .flat_map(|name| variants(&name, &aliases.words));
+        let family = families.get(i).into_iter().flatten().cloned();
+        for phrase in swapped.chain(family) {
+            if names.contains_key(&phrase)
+                || taken.contains_key(&phrase)
+                || reserved.contains(&phrase)
+            {
+                continue;
+            }
+            let owners = phrases.entry(phrase).or_default();
+            if !owners.contains(&i) {
+                owners.push(i);
             }
         }
     }
@@ -1596,7 +1759,7 @@ fn apply_item_aliases(
     }
     if made > 0 || shared > 0 {
         notes.push(format!(
-            "word swaps: {made} aliases made, {shared} left out (more than one item)"
+            "word swaps and families: {made} aliases made, {shared} left out (more than one item)"
         ));
     }
     Ok(())
@@ -1605,6 +1768,7 @@ fn apply_item_aliases(
 fn apply_enchantment_aliases(
     enchantments: &mut [Enchantment],
     aliases: &Aliases,
+    reserved: &HashSet<String>,
     notes: &mut Vec<String>,
 ) -> Result<(), DataError> {
     let names: HashMap<String, usize> = enchantments
@@ -1626,6 +1790,9 @@ fn apply_enchantment_aliases(
                         "alias {alias} of {id} is the name of {}",
                         enchantments[owner].id
                     )));
+                }
+                None if reserved.contains(alias) => {
+                    return Err(build_error(format!("alias {alias} of {id} names an item")));
                 }
                 None => enchantments[i].aliases.push(alias.clone()),
             }
@@ -1712,6 +1879,16 @@ mod tests {
         ("enchantment.minecraft.mending", "Mending"),
         ("enchantment.minecraft.binding_curse", "Curse of Binding"),
         ("enchantment.minecraft.protection", "Protection"),
+        ("block.minecraft.command_block", "Command Block"),
+        ("block.minecraft.red_shulker_box", "Red Shulker Box"),
+        ("block.minecraft.diamond_block", "Block of Diamond"),
+        ("item.minecraft.flower_banner_pattern", "Banner Pattern"),
+        ("item.minecraft.flower_banner_pattern.desc", "Flower Charge"),
+        (
+            "item.minecraft.flower_banner_pattern.new",
+            "Flower Charge Banner Pattern",
+        ),
+        ("item.minecraft.feather", "Feather"),
     ];
 
     const TR: &[(&str, &str)] = &[
@@ -1744,6 +1921,16 @@ mod tests {
         ("enchantment.minecraft.mending", "Onarım"),
         ("enchantment.minecraft.binding_curse", "Bağlanma Laneti"),
         ("enchantment.minecraft.protection", "Koruma"),
+        ("block.minecraft.command_block", "Komut Bloğu"),
+        ("block.minecraft.red_shulker_box", "Kırmızı Shulker Kutusu"),
+        ("block.minecraft.diamond_block", "Elmas Bloğu"),
+        ("item.minecraft.flower_banner_pattern", "Sancak Deseni"),
+        ("item.minecraft.flower_banner_pattern.desc", "Çiçek Şekli"),
+        (
+            "item.minecraft.flower_banner_pattern.new",
+            "Çiçek Şekli Sancak Deseni",
+        ),
+        ("item.minecraft.feather", "Tüy"),
     ];
 
     /// (id, stack, max damage, item_name key) in registry order; stone has no item_name (as in
@@ -1814,6 +2001,31 @@ mod tests {
             Some("item.minecraft.beacon_like"),
         ),
         ("minecraft:lantern", 64, 0, Some("block.minecraft.lantern")),
+        (
+            "minecraft:command_block",
+            64,
+            0,
+            Some("block.minecraft.command_block"),
+        ),
+        (
+            "minecraft:red_shulker_box",
+            1,
+            0,
+            Some("block.minecraft.red_shulker_box"),
+        ),
+        (
+            "minecraft:diamond_block",
+            64,
+            0,
+            Some("block.minecraft.diamond_block"),
+        ),
+        (
+            "minecraft:flower_banner_pattern",
+            1,
+            0,
+            Some("item.minecraft.flower_banner_pattern"),
+        ),
+        ("minecraft:feather", 64, 0, Some("item.minecraft.feather")),
     ];
 
     fn components(stack: u64, damage: u64, key: Option<&str>) -> Value {
@@ -2013,10 +2225,12 @@ mod tests {
     fn aliases() -> Aliases {
         Aliases::parse(
             br#"{"format":1,
-              "words":{"elmas":["dia"],"diamond":["dia"],"migfer":["kask"]},
+              "words":{"elmas":["dia"],"diamond":["dia"],"migfer":["kask"],"blogu":["blok"],
+                       "kutusu":["-"],"box":["-"]},
               "items":{"minecraft:elytra":["elitra","kanat"],"minecraft:obsidian":["obsi","obsidyen"],
                        "minecraft:copper_golem_statue":["golem"]},
-              "ench":{"minecraft:sharpness":["sharp","keskin"],"minecraft:fortune":["fort"]}}"#,
+              "ench":{"minecraft:sharpness":["sharp","keskin"],"minecraft:fortune":["fort"]},
+              "operator":["minecraft:command_block"]}"#,
         )
         .unwrap()
     }
@@ -2057,6 +2271,7 @@ mod tests {
             ("Café crème", "cafe creme"),
             ("s\u{0327}apka", "sapka"),
             ("Jack o\u{2019}Lantern", "jack o\u{2019}lantern"),
+            ("TNT\u{2019}li Vagon", "tnt\u{2019}li vagon"),
             ("æøł", "æøł"),
         ] {
             assert_eq!(fold(text), folded, "{text}");
@@ -2221,9 +2436,42 @@ mod tests {
                 "demirci sablonu",
                 "smithing template",
                 "nobetci zirh suslemesi",
-                "sentry armor trim"
-            ]
+                "sentry armor trim",
+                "nobetci sablon",
+                "nobetci sablonu",
+                "sentry template",
+                "sentry trim"
+            ],
+            "a trim template is also called by its pattern"
         );
+        assert_eq!(
+            aliases("minecraft:music_disc_cat"),
+            vec!["cat disc", "cat disk", "cat diski", "cat plagi", "cat plak"],
+            "a disc by its title"
+        );
+        assert_eq!(
+            aliases("minecraft:flower_banner_pattern"),
+            vec!["cicek sekli sancak deseni", "flower charge banner pattern"],
+            "a banner pattern by the game's longer name"
+        );
+        assert!(
+            aliases("minecraft:netherite_upgrade_smithing_template").is_empty(),
+            "no family phrase for the upgrade"
+        );
+        assert_eq!(
+            aliases("minecraft:diamond_block"),
+            vec!["dia blogu", "dia blok", "elmas blok"],
+            "no swaps on \"Block of Diamond\""
+        );
+        assert_eq!(
+            aliases("minecraft:red_shulker_box"),
+            vec!["kirmizi shulker", "red shulker"],
+            "a dropped word leaves two"
+        );
+        let command = data.item("minecraft:command_block").unwrap();
+        assert!(command.operator);
+        assert!(command.aliases.is_empty(), "no phrases for operator items");
+        assert!(!data.item("minecraft:feather").unwrap().operator);
         let sharpness = data.enchantment("minecraft:sharpness").unwrap();
         assert_eq!(
             sharpness.terms(),
@@ -2240,6 +2488,42 @@ mod tests {
             !data.compatible("minecraft:sharpness", "minecraft:fortune"),
             "unknown"
         );
+    }
+
+    #[test]
+    fn refuses_an_alias_across_items_and_enchantments() {
+        let tr = map(TR);
+        for (file, want) in [
+            (
+                &br#"{"format":1,"ench":{"minecraft:mending":["feather"]}}"#[..],
+                "alias feather of minecraft:mending names an item",
+            ),
+            (
+                &br#"{"format":1,"items":{"minecraft:elytra":["sharpness"]}}"#[..],
+                "alias sharpness of minecraft:elytra names an enchantment",
+            ),
+            (
+                &br#"{"format":1,"items":{"minecraft:elytra":["mend"]},"ench":{"minecraft:smite":["mend"]}}"#[..],
+                "mend names both",
+            ),
+        ] {
+            let error = match Aliases::parse(file) {
+                Err(error) => error.to_string(),
+                Ok(bad) => build_item_data(DataInputs {
+                    minecraft: "26.3",
+                    jar: &mut jar(),
+                    donor: None,
+                    report: &report(false, &[]),
+                    tr: &tr,
+                    aliases: &bad,
+                    sources: BTreeMap::new(),
+                })
+                .err()
+                .unwrap()
+                .to_string(),
+            };
+            assert!(error.contains(want), "{error}");
+        }
     }
 
     #[test]
@@ -2280,7 +2564,8 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("\n[\"minecraft:diamond_sword\",1,1561,\"Elmas Kılıç\",\"Diamond Sword\",0,{\"a\":[\"dia kilic\",\"dia sword\"]}],\n"), "{text}");
-        assert!(text.contains("\n[\"minecraft:music_disc_cat\",1,0,\"Müzik Diski\",\"Music Disc\",-1,{\"d\":[\"C418 - cat\",\"C418 - cat\"]}],\n"), "{text}");
+        assert!(text.contains("\n[\"minecraft:music_disc_cat\",1,0,\"Müzik Diski\",\"Music Disc\",-1,{\"a\":[\"cat disc\",\"cat disk\",\"cat diski\",\"cat plagi\",\"cat plak\"],\"d\":[\"C418 - cat\",\"C418 - cat\"]}],\n"), "{text}");
+        assert!(text.contains("\n[\"minecraft:command_block\",64,0,\"Komut Bloğu\",\"Command Block\",-1,{\"o\":1}],\n"), "{text}");
         assert!(
             text.contains(
                 "[\"minecraft:binding_curse\",1,\"Bağlanma Laneti\",\"Curse of Binding\",{\"c\":1}]"

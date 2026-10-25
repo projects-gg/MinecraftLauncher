@@ -8,6 +8,7 @@ import {
   itemName,
   levelText,
   loadItemData,
+  nameHint,
   parseItemData,
   pickItemDataVersion,
   searchEnchantments,
@@ -66,6 +67,7 @@ const DOC = {
     ],
     ["minecraft:beacon", 64, 0, "Fener", "Beacon", -1, { a: ["isaret feneri"] }],
     ["minecraft:lantern", 64, 0, "Fener", "Lantern", -1],
+    ["minecraft:command_block", 64, 0, "Komut Bloğu", "Command Block", -1, { o: 1 }],
   ],
   ench: [
     ["minecraft:binding_curse", 1, "Bağlanma Laneti", "Curse of Binding", { c: 1 }],
@@ -84,7 +86,7 @@ const ids = (hits: { ref: string }[]) => hits.map((h) => h.ref.replace("minecraf
 describe("item data", () => {
   it("reads rows, extras and enchantment groups", () => {
     expect(data.minecraft).toBe("26.3");
-    expect(data.items).toHaveLength(12);
+    expect(data.items).toHaveLength(13);
     const sword = data.byId.get("minecraft:diamond_sword");
     expect(sword).toMatchObject({ stack: 1, maxDamage: 1561, aliases: ["dia kilic"] });
     expect(sword && itemName(sword, "tr")).toBe("Elmas Kılıç");
@@ -134,7 +136,7 @@ describe("item data", () => {
       changed((d) => d.items.push(["minecraft:x", 64, 0, "X", "X", -1, { a: ["x x"], z: 1 }])),
     ).toBeDefined();
     expect(itemDataFromText("{")).toBeUndefined();
-    expect(itemDataFromText(JSON.stringify(DOC))?.items).toHaveLength(12);
+    expect(itemDataFromText(JSON.stringify(DOC))?.items).toHaveLength(13);
   });
 
   it("picks the nearest version's file", () => {
@@ -171,6 +173,19 @@ describe("item data", () => {
     expect(tr("pigstep")).toEqual(["music_disc_pigstep"]);
     expect(tr("müzik")).toEqual(["music_disc_cat", "music_disc_pigstep"]);
     expect(tr("fener")).toEqual(["beacon", "lantern"]);
+    expect(tr("komut")).toEqual([]);
+    expect(ids(searchItems(data, "komut", { lang: "tr", operatorItems: true }))).toEqual([
+      "command_block",
+    ]);
+    const at = (id: string) => data.byId.get(`minecraft:${id}`);
+    const hint = (id: string, lang: "tr" | "en") => {
+      const item = at(id);
+      return item && nameHint(data, item, lang);
+    };
+    expect([hint("beacon", "tr"), hint("lantern", "tr")]).toEqual(["Beacon", "Lantern"]);
+    expect(hint("beacon", "en")).toBeUndefined();
+    expect(hint("music_disc_cat", "tr")).toBeUndefined();
+    expect(hint("diamond", "tr")).toBeUndefined();
     expect(tr("obsi")).toEqual(["obsidian"]);
     expect(tr("elmas", 2)).toHaveLength(2);
     expect(tr("")).toEqual([]);
@@ -221,7 +236,7 @@ describe("item data", () => {
     expect(await loadItemData("26.3.1", { base, get })).toBeUndefined();
     corrupt = false;
     const loaded = await loadItemData("26.3.1", { base, get });
-    expect(loaded?.items).toHaveLength(12);
+    expect(loaded?.items).toHaveLength(13);
     expect(await loadItemData("26.3.1", { base, get })).toBe(loaded);
     expect(asked.filter((u) => u.endsWith(".json") && !u.endsWith("manifest.json"))).toHaveLength(
       2,
@@ -258,6 +273,7 @@ describe("item data", () => {
       ["Café crème", "cafe creme"],
       ["s\u0327apka", "sapka"],
       ["Jack o\u2019Lantern", "jack o\u2019lantern"],
+      ["TNT\u2019li Vagon", "tnt\u2019li vagon"],
       ["æøł", "æøł"],
     ];
     for (const [text, folded] of vectors) expect(fold(text)).toBe(folded);
