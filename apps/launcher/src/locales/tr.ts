@@ -46,6 +46,7 @@ import { trTeams } from "./tr-teams";
 import { trTray } from "./tr-tray";
 import { trTuning } from "./tr-tuning";
 import { trUpdates } from "./tr-updates";
+import { trVerify } from "./tr-verify";
 
 export const tr = {
   reminders: trReminders,
@@ -90,6 +91,7 @@ export const tr = {
   fix2: trFix2,
   chat2: trChat2,
   team6: trTeam6,
+  verify: trVerify,
   cloudAfk: trCloudAfk,
   projectsSkin: trProjectsSkin,
   host: trHost,

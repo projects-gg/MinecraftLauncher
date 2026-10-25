@@ -44,6 +44,7 @@ import { enTeams } from "./en-teams";
 import { enTray } from "./en-tray";
 import { enTuning } from "./en-tuning";
 import { enUpdates } from "./en-updates";
+import { enVerify } from "./en-verify";
 import type { Strings } from "./tr";
 
 /**
@@ -296,6 +297,7 @@ export const en: DeepPartial<Strings> = {
   fix2: enFix2,
   chat2: enChat2,
   team6: enTeam6,
+  verify: enVerify,
   cloudAfk: enCloudAfk,
   projectsSkin: enProjectsSkin,
   host: enHost,
