@@ -142,7 +142,7 @@ public final class MinecraftGame implements Connector.Game, WorldResume.Game {
     @Override
     public void missing(String world) {
         // On the title screen, where the HUD's toasts do not draw: in the travel toast's place, for a while.
-        overlay.toasts().noteOverScreens(ToastCard.travel(Texts.str("resume.missing", world)), MISSING_NOTE_MS,
+        overlay.toasts().noteOverScreens(ToastCard.note(Texts.str("resume.missing", world)), MISSING_NOTE_MS,
             overlay.reducedMotion());
     }
 }

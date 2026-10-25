@@ -15,6 +15,7 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.gui.screens.TitleScreen;
 
 /**
  * The toasts, drawn in the mod's own HUD layer at the bottom right (or top right): not the game's toast
@@ -37,6 +38,8 @@ public final class ToastLayer implements HudElement {
     /** Room for five subtitle lines (the game draws them at the bottom right, 10 pixels each from 35 up). */
     private static final int ABOVE_SUBTITLES = 35 + 4 * 10 + 7;
     private static final int BELOW_EFFECTS = 52;
+    /** The title screen's copyright line (10 GUI pixels from the bottom) plus the card's usual margin. */
+    private static final int ABOVE_TITLE_COPYRIGHT = 10;
     private static final long MESSAGE_MS = 5_000;
     private static final long CALL_MS = 8_000;
     private static final long INFO_MS = 4_000;
@@ -288,6 +291,10 @@ public final class ToastLayer implements HudElement {
             y = overScreen ? MARGIN : topEdge(mc);
         } else {
             y = (overScreen ? height - MARGIN : bottomEdge(mc, width, height, x)) - travel.height();
+            // On the title screen the game's copyright line runs along the bottom right: the card keeps clear of it.
+            if (overScreen && Compat.screen(mc) instanceof TitleScreen) {
+                y -= ABOVE_TITLE_COPYRIGHT;
+            }
         }
         Draw.pushAlpha(travelAlpha.value(now));
         travel.draw(g, x, y + travelDrop.value(now), 1f);

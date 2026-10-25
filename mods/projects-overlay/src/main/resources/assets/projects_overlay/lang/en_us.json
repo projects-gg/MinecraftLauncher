@@ -343,7 +343,7 @@
   "projects_overlay.world.join.preparing": "Getting your friend's world ready…",
   "projects_overlay.connect.travel.world": "Connecting to your friend's world…",
   "projects_overlay.connect.already.world": "You're already in this world.",
-  "projects_overlay.resume.missing": "Couldn't find the world %s.",
+  "projects_overlay.resume.missing": "Couldn't find the world “%s”.",
   "projects_overlay.host.card.in": "In your world: %s",
   "projects_overlay.host.stop.title": "Stop sharing your world?",
   "modmenu.nameTranslation.projects_overlay": "Projects in-game overlay",

@@ -52,6 +52,9 @@ public final class SettingsList extends PanelWidget {
     private static final int TOGGLE_H = 10;
     private static final int SLIDER_W = 60;
     private static final long UNDO_MS = 6_000;
+    /** "Varsayılana dön" stands apart from the last section: a hairline this far down its row, the button below it. */
+    private static final int RESET_RULE = 6;
+    private static final int RESET_H = RESET_RULE + 26;
 
     private abstract static class Item {
         String label;
@@ -237,7 +240,7 @@ public final class SettingsList extends PanelWidget {
     private static final class ResetRow extends Item {
         ResetRow(String label) {
             this.label = label;
-            this.height = ROW_H + 6;
+            this.height = RESET_H;
         }
     }
 
@@ -253,6 +256,7 @@ public final class SettingsList extends PanelWidget {
     private Slider dragging;
     private Defaults.Undo undo;
     private long undoUntil;
+    private String resetLabel = "";
     private String resetDone = "";
     private String undoLabel = "";
     /** What the rows were laid out for: the list's width, the GUI scale and whether the bundled fonts draw. */
@@ -326,7 +330,8 @@ public final class SettingsList extends PanelWidget {
                 items.add(new KeyRow(shortcut));
             }
         }
-        items.add(new ResetRow(Texts.str("settings.reset")));
+        resetLabel = Texts.str("settings.reset");
+        items.add(new ResetRow(resetLabel));
         resetDone = Texts.str("settings.reset.done");
         undoLabel = Texts.str("settings.reset.undo");
         layout();
@@ -370,7 +375,8 @@ public final class SettingsList extends PanelWidget {
     public float[] resetButton() {
         for (Item item : items) {
             if (item instanceof ResetRow) {
-                return new float[] {getX() + getWidth() / 2f, getY() + item.y - scroll.value() + item.height / 2f};
+                float[] span = resetSpan(now());
+                return new float[] {span[0] + span[1] / 2f, resetMid(getY() + item.y - scroll.value(), item)};
             }
         }
         return null;
@@ -719,7 +725,9 @@ public final class SettingsList extends PanelWidget {
                 k.shortcut.change();
             }
         } else if (item instanceof ResetRow) {
-            reset();
+            if (onResetButton(item, event.x(), event.y())) {
+                reset();
+            }
         } else {
             activate(item, 0);
         }
@@ -786,7 +794,8 @@ public final class SettingsList extends PanelWidget {
             boolean enabled = enabled(item, s, now);
             boolean lit = isHovered() && mouseY >= y && mouseY < y + item.height;
             boolean chosen = i == selected && keyboardFocus();
-            if (chosen || (lit && enabled && !(item instanceof ResetRow))) {
+            // The reset's state shows on its button (lit, and the focus ring from the keys), never as a plate around it.
+            if (!(item instanceof ResetRow) && (chosen || (lit && enabled))) {
                 Draw.frame(g, Frames.ROW_HOVER, x0 - 4, y + 1, w + 8, item.height - 2, chosen ? 0xFFFFFFFF
                     : 0x99FFFFFF);
             }
@@ -808,7 +817,8 @@ public final class SettingsList extends PanelWidget {
                 k.check(now);
                 drawKey(g, k, right, mid, small, mouseX, lit);
             } else if (item instanceof ResetRow) {
-                drawReset(g, (ResetRow) item, x0, w, mid, now, small, lit && enabled);
+                boolean over = enabled && isHovered() && onResetButton(item, mouseX, mouseY);
+                drawReset(g, (ResetRow) item, y, now, small, over, chosen);
             }
             Draw.popAlpha();
         }
@@ -932,31 +942,59 @@ public final class SettingsList extends PanelWidget {
     }
 
     /**
-     * "Varsayılana dön" in the row's middle, soft while everything is at its default (the row's alpha); for a while after
-     * a reset "Varsayılanlar geri geldi." with "Geri al".
+     * The settings' last row, apart from the sections above by a hairline: "Varsayılana dön" in its middle, soft while
+     * everything is at its default (the row's alpha); for a while after a reset "Varsayılanlar geri geldi." with "Geri
+     * al". The button sits on whole screen pixels: half a pixel off, its thin letters ("ı", "l") drew twice as thick.
      */
-    private void drawReset(GuiGraphicsExtractor g, ResetRow r, float x0, int w, float mid, long now, Font small,
-        boolean lit) {
+    private void drawReset(GuiGraphicsExtractor g, ResetRow r, float y, long now, Font small, boolean lit,
+        boolean focused) {
+        Draw.hairline(g, getX(), getX() + getWidth(), y + RESET_RULE, Theme.withAlpha(0xFFFFFF, 0.07f));
+        float mid = resetMid(y, r);
         boolean undoing = undoing(now);
-        String label = undoing ? undoLabel : r.label;
-        float lw = small.width(label) + 22;
+        float[] span = resetSpan(now);
+        if (undoing) {
+            Draw.text(g, small, resetDone, span[2], Fonts.centeredY(Fonts.Face.SMALL, mid), Theme.ASH_300);
+        }
+        drawResetButton(g, undoing ? undoLabel : resetLabel, span[0], mid, span[1], small, lit || focused, focused);
+    }
+
+    /** The reset button's middle line in a row drawn at {@code y}. */
+    private static float resetMid(float y, Item row) {
+        return y + RESET_RULE + (row.height - RESET_RULE) / 2f;
+    }
+
+    /**
+     * Where the button is now: {x, width, and the note's x while "Geri al" is up}, centred in the list and on whole
+     * screen pixels.
+     */
+    private float[] resetSpan(long now) {
+        Font small = Fonts.small();
+        boolean undoing = undoing(now);
+        float lw = small.width(undoing ? undoLabel : resetLabel) + 22;
         if (undoing) {
             float dw = small.width(resetDone);
-            float total = dw + 8 + lw;
-            float sx = x0 + (w - total) / 2f;
-            Draw.text(g, small, resetDone, sx, Fonts.centeredY(Fonts.Face.SMALL, mid), Theme.ASH_300);
-            drawResetButton(g, label, sx + dw + 8, mid, lw, small, lit, Icon.RESET);
-        } else {
-            drawResetButton(g, label, x0 + (w - lw) / 2f, mid, lw, small, lit, Icon.RESET);
+            float sx = Draw.snap(getX() + (getWidth() - (dw + 8 + lw)) / 2f);
+            return new float[] {sx + dw + 8, lw, sx};
         }
+        return new float[] {Draw.snap(getX() + (getWidth() - lw) / 2f), lw, 0f};
+    }
+
+    /** The pointer is on the reset button (not just on its row). */
+    private boolean onResetButton(Item row, double mouseX, double mouseY) {
+        float mid = resetMid(getY() + row.y - scroll.value(), row);
+        float[] span = resetSpan(now());
+        return mouseX >= span[0] && mouseX < span[0] + span[1] && mouseY >= mid - 7 && mouseY < mid + 7;
     }
 
     private void drawResetButton(GuiGraphicsExtractor g, String label, float x, float mid, float w, Font small,
-        boolean lit, Icon icon) {
+        boolean lit, boolean focused) {
         Draw.frame(g, lit ? Frames.CHIP_HOVER : Frames.CHIP, x, mid - 7, w, 14);
-        Draw.icon(g, icon, 8, x + 6, mid - 4, lit ? Theme.BONE_50 : Theme.ASH_300);
+        Draw.icon(g, Icon.RESET, 8, x + 6, mid - 4, lit ? Theme.BONE_50 : Theme.ASH_300);
         Draw.text(g, small, label, x + 17, Fonts.centeredY(Fonts.Face.SMALL, mid), lit ? Theme.BONE_50
             : Theme.BONE_100);
+        if (focused) {
+            Draw.frame(g, Frames.FOCUS_14, x, mid - 7, w, 14);
+        }
     }
 
     @Override
