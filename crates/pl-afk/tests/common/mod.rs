@@ -171,6 +171,14 @@ pub fn shared_client(source: &Path) -> PathBuf {
             part.as_file_mut(),
         )
         .unwrap();
+        // A temporary file is created owner read/write only: on Unix it cannot be started as is.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            part.as_file()
+                .set_permissions(std::fs::Permissions::from_mode(0o755))
+                .unwrap();
+        }
         let _ = part.persist_noclobber(&exe);
     }
     dir
