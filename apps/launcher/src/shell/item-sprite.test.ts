@@ -46,6 +46,7 @@ const INDEX: VanillaAtlasIndex = {
       kind: "flat",
       layers: [{ rect: [96, 0, 16, 16] }, { rect: [112, 0, 16, 16], tint: { source: "dye" } }],
     },
+    "minecraft:coal": { kind: "flat", layers: [{ rect: [128, 0, 16, 16] }], dark: true },
   },
 };
 
@@ -413,14 +414,21 @@ describe("ItemSprite", () => {
     expect(html).toMatch(/mask-position:-48px 0px, -64px 0px/);
   });
 
-  it("edges a dark icon by one hard texel, which a light surface can turn off", () => {
+  it("edges a dark icon by one hard pixel of its own grid, which a light surface can turn off", () => {
     const edge = (t: number) =>
       [`${t}px 0`, `-${t}px 0`, `0 ${t}px`, `0 -${t}px`]
         .map((offset) => `drop-shadow(${offset} 0 var(--pl-item-rim, #2c2733))`)
         .join(" ");
-    expect(render({ id: "obsidian", size: 32, art: art() })).toContain(`filter:${edge(2)}`);
+    // A flat item: one texel (16 to a side).
+    expect(render({ id: "coal", size: 32, art: art() })).toContain(`filter:${edge(2)}`);
+    expect(render({ id: "coal", size: 16, art: art() })).toContain(`filter:${edge(1)}`);
+    expect(render({ id: "coal", size: 48, art: art() })).toContain(`filter:${edge(3)}`);
+    // A 3D icon: one pixel of its 32 px drawing, at least one CSS pixel (a texel wide ring sat
+    // around blocks and heads like a plate).
     expect(render({ id: "obsidian", size: 16, art: art() })).toContain(`filter:${edge(1)}`);
-    expect(render({ id: "obsidian", size: 48, art: art() })).toContain(`filter:${edge(3)}`);
+    expect(render({ id: "obsidian", size: 32, art: art() })).toContain(`filter:${edge(1)}`);
+    expect(render({ id: "obsidian", size: 48, art: art() })).toContain(`filter:${edge(1)}`);
+    expect(render({ id: "obsidian", size: 64, art: art() })).toContain(`filter:${edge(2)}`);
     expect(render({ id: "stone", art: art() })).not.toContain("drop-shadow");
   });
 
