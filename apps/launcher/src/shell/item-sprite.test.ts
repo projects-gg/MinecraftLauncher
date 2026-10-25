@@ -84,8 +84,11 @@ const LARGE_INDEX: VanillaAtlasIndex = {
   },
 };
 
-function largeArt(): ItemArt {
-  return { vanilla: { index: LARGE_INDEX, imageUrl: "atlas.png", largeUrl: "atlas-48.png" } };
+/** The large atlas art; `largeReady` as a host that has its image already (a screenshot page). */
+function largeArt(largeReady = true): ItemArt {
+  return {
+    vanilla: { index: LARGE_INDEX, imageUrl: "atlas.png", largeUrl: "atlas-48.png", largeReady },
+  };
 }
 
 describe("item ids and hosts", () => {
@@ -357,6 +360,15 @@ describe("ItemSprite", () => {
     expect(render({ id: "stone", size: 48, art: without })).not.toContain("atlas-48.png");
   });
 
+  it("shows the 32 px drawing at 48 px until the large image has loaded, never an empty slot", () => {
+    // On the server and while the large image loads (or after it failed): the stone's 32 px cell,
+    // scaled to the box.
+    const html = render({ id: "stone", size: 48, art: largeArt(false) });
+    expect(html).not.toContain("atlas-48.png");
+    expect(html).toContain('src="atlas.png"');
+    expect(html).toMatch(/left:-24px;top:0;width:384px;height:192px/);
+  });
+
   it("halves the 32 px drawing of a 3D icon at 16 px", () => {
     expect(render({ id: "stone", size: 16, art: largeArt() })).toMatch(
       /left:-8px;top:0;width:128px;height:64px/,
@@ -417,10 +429,10 @@ describe("ItemSprite", () => {
     expect(render({ id: "minecraft:unknown_block" })).toBe(html);
     // One path in one tone (no light, no outline) that a light surface can set.
     expect(html.match(/<path/g)).toHaveLength(1);
-    expect(html).toContain("fill:var(--pl-item-standin, #7d7586)");
+    expect(html).toContain("fill:var(--pl-item-standin, #5a5462)");
     expect(html).not.toMatch(/fill="#/);
-    // The block's hexagon: its widest rows span the whole box.
-    expect(html).toContain("M0 3h16v1h-16z");
+    // The block's three faces: its sides parted by the near edge.
+    expect(html).toContain("M0 7h7v1h-7zM8 7h8v1h-8z");
   });
 
   it("draws Projects' art from the overlay atlas on its servers", () => {

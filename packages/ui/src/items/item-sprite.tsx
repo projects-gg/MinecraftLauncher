@@ -5,15 +5,17 @@
 // item (never animated). Every atlas request is a CORS request (images with `crossorigin` and CSS
 // masks alike): a CDN answers a request without an Origin without CORS headers, and a browser that
 // cached that answer would refuse it to the masks. 3D icons drawn 48 device pixels wide (the
-// game's GUI scale 3) come from the atlas's second, 48 px image, loaded only then. Icons the atlas
+// game's GUI scale 3) come from the atlas's second, 48 px image, loaded only then; until it has
+// loaded (and if it fails) they show their 32 px drawing, never an empty slot. Icons the atlas
 // marks dark get a quiet one-texel edge so they stay visible on our dark slots; a light surface (the
-// game-grey inventory) turns it off with `--pl-item-rim: transparent` and sets the stand-ins' tone
-// with `--pl-item-standin` (the game's own `#555555` there). Renders on the server too.
+// game-grey inventory) turns it off with `--pl-item-rim: transparent` and can set the stand-ins'
+// tone with `--pl-item-standin`. Renders on the server too.
 import {
   type CSSProperties,
   createContext,
   type ReactNode,
   useContext,
+  useEffect,
   useSyncExternalStore,
 } from "react";
 import { cn } from "../lib/cn";
@@ -136,11 +138,11 @@ function mask(sheet: Sheet, rects: readonly Rect[], size: number): CSSProperties
 }
 
 /**
- * The stand-ins' one flat tone, like the game's own empty-slot hints (one grey, no light, no
- * outline), so a stand-in never passes for a real item: our placeholder grey (`ash-500`, 4:1 on
- * the darkest card) by default; the game-grey inventory sets the game's own `#555555`.
+ * The stand-ins' one flat tone (no light, no outline, no texture), so a stand-in never passes for
+ * a real item: a quiet ash between our borders and `ash-500` (2.4:1 on the darkest card), below the
+ * real icons beside it. A light surface sets its own with `--pl-item-standin`.
  */
-const STANDIN_FILL = "var(--pl-item-standin, #7d7586)";
+const STANDIN_FILL = "var(--pl-item-standin, #5a5462)";
 
 const glyphPaths = new Map<string, string>();
 
@@ -197,6 +199,40 @@ function subscribeRatio(listener: () => void): () => void {
 const screenRatio = () => (typeof window === "undefined" ? 1 : window.devicePixelRatio || 1);
 const serverRatio = () => 1;
 
+// The large atlases (3D icons at 48 px), by image URL: a sprite draws from one only once it has
+// loaded and decoded, and draws its 32 px drawing until then and if it fails, so a slot is never
+// empty. Loaded on the first sprite that needs it; kept so its pixels stay ready.
+type LargeState = "loading" | "ready" | "failed";
+const largeStates = new Map<string, LargeState>();
+const largeImages = new Map<string, HTMLImageElement>();
+const largeListeners = new Set<() => void>();
+
+function subscribeLarge(listener: () => void): () => void {
+  largeListeners.add(listener);
+  return () => {
+    largeListeners.delete(listener);
+  };
+}
+
+function loadLarge(url: string): void {
+  if (largeStates.has(url) || typeof Image !== "function") return;
+  largeStates.set(url, "loading");
+  const image = new Image();
+  // A CORS request, like every atlas request (the masks need it).
+  image.crossOrigin = "anonymous";
+  image.src = url;
+  largeImages.set(url, image);
+  const settle = (state: LargeState) => {
+    largeStates.set(url, state);
+    if (state === "failed") largeImages.delete(url);
+    for (const listener of largeListeners) listener();
+  };
+  image.decode().then(
+    () => settle("ready"),
+    () => settle("failed"),
+  );
+}
+
 /**
  * Which drawing of a 3D icon to show `device` pixels wide: its large one (48) where that fits a
  * whole number of times and 32 does not (48, the game's GUI scale 3, where 32 scaled by 1.5 shows
@@ -210,12 +246,33 @@ export function pickDrawing(device: number, large?: number, base = 32): "base" |
   return large !== undefined && whole(large) && !whole(base) ? "large" : "base";
 }
 
+/**
+ * The large atlas image a sprite would draw from: a 3D icon (one untinted layer) whose size in
+ * device pixels picks the large drawing.
+ */
+function largeWanted(
+  resolved: ResolvedIcon,
+  art: ItemArt | undefined,
+  size: number,
+  ratio: number,
+): string | undefined {
+  if (resolved.source !== "vanilla" || !art?.vanilla) return undefined;
+  const { largeUrl, index } = art.vanilla;
+  return resolved.icon.large &&
+    largeUrl &&
+    index.large &&
+    resolved.icon.layers.every((layer) => !layer.tint) &&
+    pickDrawing(size * ratio, index.large.icon) === "large"
+    ? largeUrl
+    : undefined;
+}
+
 function drawLayers(
   resolved: ResolvedIcon,
   item: ItemRef,
   art: ItemArt | undefined,
   size: number,
-  ratio: number,
+  largeReady: boolean,
 ): Drawn | undefined {
   if (resolved.source === "overlay") {
     const { atlas, url, rect } = resolved;
@@ -235,15 +292,9 @@ function drawLayers(
   if (resolved.source === "vanilla" && art?.vanilla) {
     const { imageUrl, largeUrl, index } = art.vanilla;
     const sheet: Sheet = { url: imageUrl, width: index.size[0], height: index.size[1] };
-    // A 3D icon (one untinted layer) 48 device px wide: the drawing made for that size.
+    // A 3D icon 48 device px wide, once the large image is there: the drawing made for that size.
     const { large } = resolved.icon;
-    if (
-      large &&
-      largeUrl &&
-      index.large &&
-      resolved.icon.layers.every((layer) => !layer.tint) &&
-      pickDrawing(size * ratio, index.large.icon) === "large"
-    ) {
+    if (largeReady && large && largeUrl && index.large) {
       const largeSheet: Sheet = {
         url: largeUrl,
         width: index.large.size[0],
@@ -295,7 +346,19 @@ export function ItemSprite({ size = 32, label, className, art: own, ...item }: I
   const art = own ?? context;
   const ratio = useSyncExternalStore(subscribeRatio, screenRatio, serverRatio);
   const resolved = resolveIcon(item, art, size);
-  const drawn = drawLayers(resolved, item, art, size, ratio);
+  // The large drawing once its image is there (or the host says it already is).
+  const largeUrl = largeWanted(resolved, art, size, ratio);
+  const preloaded = art?.vanilla?.largeReady === true;
+  const largeState = useSyncExternalStore(
+    subscribeLarge,
+    () => (largeUrl ? largeStates.get(largeUrl) : undefined),
+    () => undefined,
+  );
+  useEffect(() => {
+    if (largeUrl && !preloaded) loadLarge(largeUrl);
+  }, [largeUrl, preloaded]);
+  const largeReady = largeUrl !== undefined && (preloaded || largeState === "ready");
+  const drawn = drawLayers(resolved, item, art, size, largeReady);
   const a11y = label
     ? ({ role: "img", "aria-label": label } as const)
     : ({ "aria-hidden": true } as const);
