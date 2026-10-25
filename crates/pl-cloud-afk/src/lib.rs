@@ -17,6 +17,8 @@
 //!   vectors.
 //! - [`Copies`]: the words of the rows this launcher sealed, in the OS keychain.
 //! - [`plan`]: a desktop AFK account in the cloud's form, with what stays on the desktop.
+//! - AFK+ (the AI tier, README "AFK+"): its objects ([`PlusConfig`], [`PlusAi`], …), the checks
+//!   before a write ([`check_config`]), the routes, and the panel's calls ([`PlusPanelView`]).
 //!
 //! Nothing polls: the gate is read when the AFK page opens (cached a minute), the accounts with it
 //! and after an action, and the socket runs only while a console is on screen.
@@ -28,9 +30,11 @@ mod error;
 mod live;
 mod migrate;
 mod model;
+mod plus;
 mod seal;
 mod server;
 mod service;
+mod service_plus;
 mod text;
 mod tls;
 
@@ -53,6 +57,22 @@ pub use model::{
     CloudStock, CloudVersionOption, CloudVersions, CommandInput, ConfigInput, Me, MeUser, Offer,
     PayloadInput, RevealAnswer, RuleInput, ServiceMode, VaultKey,
 };
+pub use plus::{
+    CloudNotifyPrefs, CloudQuietHours, DEFAULT_MAX_DEAL, LIST_MAX, MAX_BLOCKED, MAX_INTRO,
+    MAX_PARSE, MAX_PAUSE_SECONDS, MAX_QTY, MAX_REPLY, MAX_STATUS, MAX_WINDOWS, MePlus, PlusAction,
+    PlusAdTemplate, PlusAi, PlusAllowance, PlusApproval, PlusApprovalDeal, PlusApprovalList,
+    PlusBlockedCounts, PlusBuyRow, PlusCanBuy, PlusCatalog, PlusCatalogItem, PlusCatalogLimits,
+    PlusConfig, PlusControlAnswer, PlusDeal, PlusDealPage, PlusDealSummary, PlusDiscovery,
+    PlusEnchantment, PlusFeatures, PlusFeedItem, PlusFeedPage, PlusGift, PlusHistory,
+    PlusHistoryEntry, PlusInboxLast, PlusInboxLine, PlusInboxPage, PlusInboxThread, PlusIssue,
+    PlusItemSummary, PlusJudge, PlusJudgeState, PlusLimits, PlusMoney, PlusNewMessages, PlusOffer,
+    PlusParseAnswer, PlusParseDraft, PlusPersona, PlusProfile, PlusPromo, PlusQuota,
+    PlusQuotaBrief, PlusQuotaWindow, PlusReplies, PlusRequirements, PlusRestriction, PlusSchedule,
+    PlusSellRow, PlusSettings, PlusSpent, PlusThreadPage, PlusTotals, PlusTradeSettings,
+    PlusTradeState, PlusWeeklyAccount, PlusWeeklyReport, PlusWindow, PlusWindowCaps, PlusWritten,
+    TABLE_PREFIX, check_config, is_player_name, is_table_file_name, is_time, normalized,
+    refusal_issues as plus_refusal_issues, table_file_name,
+};
 pub use seal::{
     CONSOLE_ROW, RevealKey, RevealTarget, SEAL_ALG, SealError, SealTarget, fingerprint, seal,
 };
@@ -60,6 +80,7 @@ pub use server::{CloudAddressProblem, check_port, normalize, normalize_host, sam
 pub use service::{
     CloudEdit, CloudEditView, CloudOverview, CloudSaveOutcome, CloudService, CloudSession,
 };
+pub use service_plus::{PlusPanelView, PlusSaveOutcome};
 pub use text::{
     CloudTextProblem, MAX_TEXT_UNITS, check_text, check_text_utf16, is_leading_ignorable,
     is_sensitive, looks_sensitive, preview, sensitive_command_names, without_leading_ignorable,

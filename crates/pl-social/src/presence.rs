@@ -38,6 +38,7 @@ use tokio_tungstenite::{
 };
 use url::Url;
 
+use crate::afk::AfkNotice;
 use crate::auth::SessionToken;
 use crate::backoff::{Backoff, BackoffPolicy, jitter};
 use crate::error::{ErrorCode, Result, SocialError, parse_retry_after};
@@ -49,8 +50,8 @@ use crate::model::{
     TeamNotifications,
 };
 use crate::protocol::{
-    BADGES_CAP, CHAT_CAP, CallAnswer, CallEndReason, ClientMessage, CrewCall, CrewPlan, Invite,
-    LocalStatus, PLANS_CAP, PlanAnswer, Presence, ServerMessage, chat_caps,
+    AFK_CAP, BADGES_CAP, CHAT_CAP, CallAnswer, CallEndReason, ClientMessage, CrewCall, CrewPlan,
+    Invite, LocalStatus, PLANS_CAP, PlanAnswer, Presence, ServerMessage, chat_caps,
 };
 use crate::tls;
 use crate::world::{WORLDS_CAP, WorldAnswer, WorldError, WorldEvent, WorldFrame};
@@ -220,6 +221,9 @@ pub enum PresenceEvent {
     /// SKIN1: a job of the player's closed (`job`), or the link or the Projects skin changed
     /// elsewhere; `link`, `skin` and `blocked` are what the service knows now.
     Mc(Box<McMessage>),
+    /// Cloud AFK's notice about one of the player's cloud accounts (AFKPLUS): say it, and send
+    /// [`PresenceControl::afk_seen`] once the player saw it.
+    AfkNotice(AfkNotice),
     /// A crew call, new or changed: replaces the one with the same id. `quiet`: show it but do
     /// not announce it (your own call, do-not-disturb, or a call that is only new to you).
     Call {
@@ -414,8 +418,17 @@ struct ChatAnswer {
 /// A chat frame that is never answered (CHAT2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Signal {
-    Typing { conv: String },
-    Read { conv: String, id: i64 },
+    Typing {
+        conv: String,
+    },
+    Read {
+        conv: String,
+        id: i64,
+    },
+    /// The player saw an AFK notice (AFKPLUS).
+    AfkSeen {
+        id: String,
+    },
 }
 
 enum Command {
@@ -688,6 +701,14 @@ impl PresenceControl {
         let _ = self.commands.try_send(Command::Signal(Signal::Typing {
             conv: conv.to_owned(),
         }));
+    }
+
+    /// The player saw Cloud AFK's notice `id` (AFKPLUS): its window in front, or the in-game
+    /// overlay showed it. Never answered; dropped while the connection does not take `afk`.
+    pub fn afk_seen(&self, id: &str) {
+        let _ = self
+            .commands
+            .try_send(Command::Signal(Signal::AfkSeen { id: id.to_owned() }));
     }
 
     /// The player has read a conversation up to message `id` (CHAT2): never answered, dropped
@@ -1131,6 +1152,7 @@ async fn session(
         plans_on: false,
         badges_on: false,
         worlds_on: false,
+        afk_on: false,
         sync: None,
         sync_again: None,
         restricted: None,
@@ -1219,8 +1241,11 @@ async fn session(
                                 Signal::Read { conv, id } if state.chat_on && state.chat_caps.reads => {
                                     ClientMessage::ChatRead { conv, id }
                                 }
-                                // Not on this connection: nothing to tell (CHAT2).
-                                Signal::Typing { .. } | Signal::Read { .. } => continue,
+                                Signal::AfkSeen { id } if state.afk_on => ClientMessage::AfkSeen { id },
+                                // Not on this connection: nothing to tell (CHAT2, AFKPLUS).
+                                Signal::Typing { .. } | Signal::Read { .. } | Signal::AfkSeen { .. } => {
+                                    continue;
+                                }
                             };
                             if send(&mut sink, &frame).await.is_err() {
                                 break RETRY_NOW;
@@ -1405,6 +1430,8 @@ struct SessionState {
     badges_on: bool,
     /// The service took world sessions on this connection (HOST1).
     worlds_on: bool,
+    /// The service took Cloud AFK's notices on this connection (AFKPLUS).
+    afk_on: bool,
     /// The sync under way: its `rid`, where it started (ms) and whether it is the week-long one
     /// that catches up with chat extras (CHAT2).
     sync: Option<(u32, i64, bool)>,
@@ -1528,6 +1555,7 @@ async fn on_text(
             // so do crew tag changes (TEAM6).
             state.plans_on = caps.iter().any(|cap| cap == PLANS_CAP);
             state.badges_on = caps.iter().any(|cap| cap == BADGES_CAP);
+            state.afk_on = caps.iter().any(|cap| cap == AFK_CAP);
             state.sync = None;
             state.sync_again = None;
             // Everyone online the player may see: friends, then teammates who are not friends.
@@ -1765,6 +1793,8 @@ async fn on_text(
             PresenceEvent::World(WorldEvent::Status(worlds))
         }
         ServerMessage::Mc(message) => PresenceEvent::Mc(message),
+        // A service sends these only to a socket that took `afk`.
+        ServerMessage::AfkNotice { notice } => PresenceEvent::AfkNotice(notice),
         ServerMessage::Ack {
             rid,
             delivered,
@@ -2106,10 +2136,8 @@ mod tests {
                     .any(|(k, v)| k == "user-agent" && v == "ProjectsLauncher/test")
             );
             // What this launcher understands rides on the address (older services ignore it).
-            assert!(
-                headers.iter().any(|(k, v)| k == ":uri"
-                    && v == "/v1/presence?caps=callServer,crews,plans,badges,mc")
-            );
+            assert!(headers.iter().any(|(k, v)| k == ":uri"
+                && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk"));
         }
         send_json(&mut server, hello()).await;
         match handle.next_event().await.unwrap() {
@@ -2654,11 +2682,8 @@ mod tests {
         let mut server = accept(&listener, None, seen.clone()).await.unwrap();
         // Plans are asked for on every connection (older services ignore it).
         assert!(
-            seen.lock()
-                .unwrap()
-                .iter()
-                .any(|(k, v)| k == ":uri"
-                    && v == "/v1/presence?caps=callServer,crews,plans,badges,mc")
+            seen.lock().unwrap().iter().any(|(k, v)| k == ":uri"
+                && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk")
         );
         let mut greeting = hello();
         greeting["caps"] = serde_json::json!(["callServer", "crews", "plans"]);
@@ -2825,6 +2850,57 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn afk_notices_come_live_and_seen_goes_out_only_where_the_service_took_afk() {
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut handle = client.session(token()).connect_presence(fast());
+        let mut server = accept(&listener, None, seen).await.unwrap();
+        let mut greeting = hello();
+        greeting["caps"] = serde_json::json!(["callServer", "crews", "afk"]);
+        send_json(&mut server, greeting).await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::Connected { .. }
+        ));
+        send_json(
+            &mut server,
+            serde_json::json!({"t": "afk_notice", "notice": {"id": "01JBXK4V7Q2M9R3T5W8Y0ZA1BC",
+                "event": "approval", "kind": "afk_deal", "priority": "high", "at": 1792521000,
+                "tag": "approval:01JBXK3D2E",
+                "data": {"acct": "a_1", "name": "Ahmet_AFK", "price": "37500"}}}),
+        )
+        .await;
+        match handle.next_event().await.unwrap() {
+            PresenceEvent::AfkNotice(notice) => {
+                assert_eq!(notice.event, "approval");
+                assert_eq!(notice.get("price"), Some("37500"));
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        handle.control().afk_seen("01JBXK4V7Q2M9R3T5W8Y0ZA1BC");
+        assert_eq!(
+            next_json(&mut server).await,
+            serde_json::json!({"t": "afk_seen", "id": "01JBXK4V7Q2M9R3T5W8Y0ZA1BC"})
+        );
+        handle.shutdown().await;
+
+        // A service that did not take `afk` hears nothing of it.
+        let (listener, client) = start().await;
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut handle = client.session(token()).connect_presence(fast());
+        let mut server = accept(&listener, None, seen).await.unwrap();
+        send_json(&mut server, hello()).await;
+        assert!(matches!(
+            handle.next_event().await.unwrap(),
+            PresenceEvent::Connected { .. }
+        ));
+        handle.control().afk_seen("01JBXK4V7Q2M9R3T5W8Y0ZA1BC");
+        assert!(handle.set_status(LocalStatus::Singleplayer));
+        assert_eq!(next_json(&mut server).await["t"], "status");
+        handle.shutdown().await;
+    }
+
+    #[tokio::test]
     async fn crew_tags_come_live_only_where_the_service_took_them() {
         let (listener, client) = start().await;
         let seen = Arc::new(Mutex::new(Vec::new()));
@@ -2924,7 +3000,7 @@ mod tests {
                 .unwrap()
                 .iter()
                 .any(|(k, v)| k == ":uri"
-                    && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,chat,replies,stickers,reactions,typing,reads"),
+                    && v == "/v1/presence?caps=callServer,crews,plans,badges,mc,afk,chat,replies,stickers,reactions,typing,reads"),
             "chat and its extras are asked for"
         );
         // A service from before CHAT2 takes chat alone.

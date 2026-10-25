@@ -852,7 +852,27 @@ export type SocialNotice =
   /** A new chat message from someone else, live (never a sync's). */
   | { kind: "chatMessage"; conv: string; message: ChatMessage; name?: string; crew?: string }
   /** Moderators suspended (`until`) or banned the account: every session ended. */
-  | { kind: "restricted"; until?: number };
+  | { kind: "restricted"; until?: number }
+  /** Cloud AFK's notice about one of the player's cloud accounts (AFKPLUS; worded by the launcher). */
+  | { kind: "afkNotice"; notice: AfkNotice };
+
+/**
+ * One Cloud AFK notice (services/social README "AFK notices"): `event` (`approval`, `deal_done`…),
+ * `data` as text (account id `acct`, the bot's own `name`, item ids, amounts, times; never a
+ * counterpart's name or a message), `quiet` in the player's quiet hours (no system notification),
+ * `tag` shared by notices that replace each other, the item's names when the launcher knew them.
+ */
+export interface AfkNotice {
+  id: string;
+  event: string;
+  kind: string;
+  priority: string;
+  at: number;
+  tag?: string;
+  quiet: boolean;
+  data: Partial<Record<string, string>>;
+  itemName?: { tr: string; en: string };
+}
 
 export interface CodeLookup {
   profile: SocialProfile;

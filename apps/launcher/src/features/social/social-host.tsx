@@ -9,6 +9,7 @@ import { Button, Dialog, toast } from "@pl/ui";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { announce } from "@/features/accounts/use-accounts";
+import { handleAfkNotice } from "@/features/afk/cloud/plus/notices";
 import { WorldShareHost } from "@/features/host/host";
 import { shownInGame } from "@/features/overlay/store";
 import { useOverlaySync } from "@/features/overlay/use-overlay-sync";
@@ -173,6 +174,11 @@ function handleNotice(notice: SocialNotice) {
   }
   if (notice.kind === "signInFailed") {
     ui.setSignIn(null, notice.reason);
+    return;
+  }
+  // Cloud AFK's notices (AFK+): their own quiet hours, not the friends status ("Rahatsız etmeyin").
+  if (notice.kind === "afkNotice") {
+    handleAfkNotice(notice.notice);
     return;
   }
   const prefs = useSocialPrefs.getState();

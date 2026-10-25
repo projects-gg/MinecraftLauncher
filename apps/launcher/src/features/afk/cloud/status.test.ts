@@ -61,6 +61,9 @@ function account(overrides: Partial<CloudAccount> = {}): CloudAccount {
     },
     rev: 4,
     serverChanges: { used: 0, limit: 6, resetAt: null },
+    tier: "plain",
+    plusUntil: null,
+    ai: null,
     ...overrides,
   };
 }

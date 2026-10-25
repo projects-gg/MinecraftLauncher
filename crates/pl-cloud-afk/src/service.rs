@@ -28,6 +28,7 @@ use crate::model::{
     AccountPatch, CloudAccount, CloudAccountCount, CloudCanBuy, CloudLimits, CloudLocalized,
     CloudLogPage, CloudServer, CloudVersions, Me, Offer, ServiceMode, VaultKey,
 };
+use crate::plus::{MePlus, PlusCatalog, PlusOffer};
 use crate::seal::{CONSOLE_ROW, RevealKey, RevealTarget, SealTarget, seal};
 use crate::server::{CloudAddressProblem, normalize, same_server};
 use crate::text::{check_text, looks_sensitive};
@@ -71,6 +72,10 @@ pub struct CloudOverview {
     pub can_buy: Option<CloudCanBuy>,
     /// The service's clock when the accounts were read (Unix seconds): the UI's skew.
     pub now: i64,
+    /// AFK+ as sold now: None while its `plusMode` is `off` (then nothing of AFK+ shows).
+    pub plus: Option<PlusOffer>,
+    /// With a session: whether this player may buy AFK+ (an invite list, a restriction).
+    pub plus_me: Option<MePlus>,
 }
 
 impl CloudOverview {
@@ -90,6 +95,8 @@ impl CloudOverview {
             count: None,
             can_buy: None,
             now: 0,
+            plus: None,
+            plus_me: None,
         }
     }
 }
@@ -170,26 +177,28 @@ impl<T: Clone> Cached<T> {
 }
 
 #[derive(Default)]
-struct Known {
+pub(crate) struct Known {
     /// The signed-in player's Discord id (from `/me`).
     owner: Option<String>,
-    accounts: HashMap<String, CloudAccount>,
+    pub(crate) accounts: HashMap<String, CloudAccount>,
 }
 
-struct Inner {
-    client: CloudClient,
+pub(crate) struct Inner {
+    pub(crate) client: CloudClient,
     offer: Mutex<Cached<Offer>>,
     versions: Mutex<Cached<CloudVersions>>,
     vault: Mutex<Cached<VaultKey>>,
-    known: Mutex<Known>,
+    pub(crate) known: Mutex<Known>,
     copies: Arc<Copies>,
-    live: LiveHub,
+    pub(crate) live: LiveHub,
+    /// AFK+ catalogs by game mode, with when they were read (an hour, as the service's caches).
+    pub(crate) catalogs: Mutex<HashMap<String, (Instant, PlusCatalog)>>,
 }
 
 /// Cheap to clone.
 #[derive(Clone)]
 pub struct CloudService {
-    inner: Arc<Inner>,
+    pub(crate) inner: Arc<Inner>,
 }
 
 impl std::fmt::Debug for CloudService {
@@ -228,6 +237,7 @@ impl CloudService {
                 known: Mutex::new(Known::default()),
                 copies: Arc::new(copies),
                 live,
+                catalogs: Mutex::new(HashMap::new()),
             }),
         }
     }
@@ -291,7 +301,7 @@ impl CloudService {
         Ok(me.user.id)
     }
 
-    fn remember(&self, account: &CloudAccount) {
+    pub(crate) fn remember(&self, account: &CloudAccount) {
         self.inner
             .known
             .lock()
@@ -300,7 +310,7 @@ impl CloudService {
     }
 
     /// The account as last read, or read now.
-    async fn account(&self, token: &Bearer, id: &str) -> Result<CloudAccount> {
+    pub(crate) async fn account(&self, token: &Bearer, id: &str) -> Result<CloudAccount> {
         if let Some(account) = self.inner.known.lock().accounts.get(id).cloned() {
             return Ok(account);
         }
@@ -335,6 +345,7 @@ impl CloudService {
             sales_open: offer.sales.new_accounts,
             renewal_window_days: offer.renewal_window_days,
             limits: offer.limits.clone(),
+            plus: offer.plus.clone(),
             ..CloudOverview::hidden()
         };
         let Some(token) = token else {
@@ -348,6 +359,7 @@ impl CloudService {
                 overview.session = CloudSession::SignedIn;
                 overview.count = Some(me.accounts);
                 overview.can_buy = Some(me.can_buy);
+                overview.plus_me = me.plus;
                 overview.now = list.now;
                 overview.accounts = list.accounts;
             }
@@ -387,6 +399,7 @@ impl CloudService {
     pub async fn forget(&self) {
         self.inner.live.stop_all();
         *self.inner.known.lock() = Known::default();
+        self.inner.catalogs.lock().clear();
         let copies = self.inner.copies.clone();
         let _ = blocking(move || copies.forget_all()).await;
     }
