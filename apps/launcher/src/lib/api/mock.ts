@@ -34,6 +34,7 @@ import { mockOpening, mockWindowShown } from "./mock-opening";
 import { createMockSkins } from "./mock-skins";
 import { mockSocial } from "./mock-social";
 import { mockTrashedInstances } from "./mock-trash";
+import { mockWorldFromTitle } from "./mock-world-entry";
 import type {
   ContentLinks,
   HomeContent,
@@ -1163,6 +1164,9 @@ export const mockApi: LauncherApi = {
         onEvent({ type: "modsWarning", check });
       }
     }
+    // Preview switch (mock-world-entry.ts): "Devam et" into a world opens on the main menu.
+    const fromTitle = mockWorldFromTitle(options);
+    if (fromTitle) onEvent(fromTitle);
     onEvent({ type: "launching" });
     await delay(1600);
     // Preview switches (mock-opening.ts): how long the game's window takes, a first start.

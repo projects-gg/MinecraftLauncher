@@ -45,6 +45,7 @@ import { enTray } from "./en-tray";
 import { enTuning } from "./en-tuning";
 import { enUpdates } from "./en-updates";
 import { enVerify } from "./en-verify";
+import { enWorldEntry } from "./en-world-entry";
 import type { Strings } from "./tr";
 
 /**
@@ -303,6 +304,7 @@ export const en: DeepPartial<Strings> = {
   host: enHost,
   afkPlus: enAfkPlus,
   newsColumn: enNewsColumn,
+  worldEntry: enWorldEntry,
   nav: {
     home: "Home",
     library: "Library",

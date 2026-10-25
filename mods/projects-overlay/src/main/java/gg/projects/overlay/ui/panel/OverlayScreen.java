@@ -290,8 +290,8 @@ public final class OverlayScreen extends Screen {
         picker = new StickerPicker(this::sendSticker);
         picker.visible = false;
         languageRevision = Texts.language().revision();
-        settingsList = new SettingsList(overlay::settings, overlay::updateSettings, overlay.key()::keyName,
-            () -> Compat.setScreen(minecraft, new KeyBindsScreen(this, minecraft.options)),
+        settingsList = new SettingsList(overlay::settings, overlay::updateSettings,
+            List.of(overlay.key().shortcut(() -> Compat.setScreen(minecraft, new KeyBindsScreen(this, minecraft.options)))),
             Texts.language().managed() ? overlay.languages() : null);
         lastListPage = state.has("chat") || !state.welcomed() ? Page.CHATS : Page.FRIENDS;
         page = overlay.lastPage() == Page.SETTINGS || overlay.lastPage() == Page.WORLD ? lastListPage

@@ -337,6 +337,8 @@ function launchEvent(e: LaunchEventView): LaunchEvent {
         minecraft: e.minecraft,
         recommended: e.recommended ?? undefined,
       };
+    case "worldFromTitle":
+      return { type: "worldFromTitle", mods: e.mods };
     case "newScreenshots":
       // The backend allowed their folder in the asset protocol for the thumbnails.
       return {

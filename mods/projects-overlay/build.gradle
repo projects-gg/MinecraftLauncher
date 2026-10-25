@@ -76,6 +76,16 @@ loom {
             programArgs '--username', providers.gradleProperty('ovl.username').getOrElse('OVL2Test'),
                 '--width', providers.gradleProperty('ovl.width').getOrElse('1280'),
                 '--height', providers.gradleProperty('ovl.height').getOrElse('720')
+            // The game's own quick play, as a launcher passes it (OVL-FIX's resume runs): -Povl.quickPlay=<world folder>
+            // or -Povl.quickPlayServer=<host[:port]>.
+            def quickPlayWorld = providers.gradleProperty('ovl.quickPlay')
+            if (quickPlayWorld.isPresent()) {
+                programArgs '--quickPlaySingleplayer', quickPlayWorld.get()
+            }
+            def quickPlayServer = providers.gradleProperty('ovl.quickPlayServer')
+            if (quickPlayServer.isPresent()) {
+                programArgs '--quickPlayMultiplayer', quickPlayServer.get()
+            }
             vmArgs '-Xmx2G'
             // Extra JVM arguments for measurement runs, separated by ';' (gradlew.bat passes '|' to cmd), e.g. a
             // flight recording: -Povl.jvmArgs=-XX:StartFlightRecording=settings=profile,filename=run.jfr
@@ -89,10 +99,14 @@ loom {
                 'token'     : 'ovl.token',
                 // The overlay's language as the game starts (OVL-LANG: the launcher's, or the player's pick).
                 'lang'      : 'ovl.lang',
+                // "Devam et" into a world through the overlay (OVL-FIX): the world's folder, percent-encoded UTF-8.
+                'world'     : 'ovl.world',
                 'perf'      : 'ovl.perf',
                 'dev.script': 'ovl.script',
                 'dev.out'   : 'ovl.out',
                 'dev.server': 'ovl.server',
+                // The same world for the resume scenario's record (the overlay clears its own property once read).
+                'dev.world' : 'ovl.world',
             ].each { name, property ->
                 def value = providers.gradleProperty(property)
                 if (value.isPresent()) {
