@@ -20,12 +20,12 @@ mod render;
 mod source;
 mod special;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub use image::Image;
+pub use image::{EdgeTone, Image};
 pub use source::{AssetSource, JarSource, MemSource};
 
 use itemdef::{Part, Tint};
@@ -50,8 +50,9 @@ pub const INDEX_FORMAT: u32 = 1;
 /// 2: the game's slot lighting by face normals, beds, the piglin head and skins' hat layer, the
 /// static glint frame, dark icons marked, hidden dye layers. 3: the dragon head and the decorated
 /// pot. 4: copper golem statues, dark icons by their outline's lightness, 3D icons drawn at 48 px
-/// too, cells on even pixels.
-pub const ATLAS_REVISION: u32 = 4;
+/// too, cells on even pixels. 5: dark icons count see-through pixels, leave coloured outlines
+/// alone and decide per armour and tool set.
+pub const ATLAS_REVISION: u32 = 5;
 
 /// The atlas index (`index.json`).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -92,8 +93,8 @@ pub struct Icon {
     pub kind: IconKind,
     /// Drawn in order; each `rect` is 16 (flat) or the block size (3D) square.
     pub layers: Vec<Layer>,
-    /// The icon's outline melts into a dark slot (obsidian, black wool, netherite): there the
-    /// client draws it a quiet one-texel edge.
+    /// The icon's outline melts into a dark slot (obsidian, black wool, black glass, netherite
+    /// gear): there the client draws it a quiet one-texel edge.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub dark: bool,
     /// A 3D icon's larger drawing, `[x, y, width, height]` in the large atlas.
@@ -178,14 +179,41 @@ const DEFAULT_BLOCK_GUI: Display = Display {
 /// Our darkest card colour (`--color-obsidian-800`), the ground a dark icon is measured against.
 const DARK_GROUND: [u8; 3] = [0x1b, 0x18, 0x20];
 
-/// An icon is marked dark when its outline is near-black on that ground: the median lightness of
-/// its silhouette's edge (two texels deep) within about 6 L* of the ground's 8.9 (obsidian, black
-/// wool, the ender chest, netherite armour; not a netherite ingot or a hopper, which read). And only
-/// when the client's one-texel edge would not fill in between its parts: see-through structure
-/// (leaves, sculk veins, spawners, chains) keeps its holes and gets no edge.
+/// An icon is marked dark when its outline is near-black and grey on that ground: the median
+/// lightness of its silhouette's edge (two texels deep, see-through pixels over the ground) within
+/// about 6 L* of the ground's 8.9 (obsidian, black wool, the ender chest, netherite armour, black
+/// and tinted glass; not a netherite ingot or a hopper, which read), and its median chroma low: a
+/// dark red or blue outline (redstone, netherrack, a blue shulker box) reads by its colour, and a
+/// grey edge around it looks like a sticker. And only when the client's one-texel edge would not
+/// fill in between its parts: see-through structure (leaves, sculk veins, spawners, chains) keeps
+/// its holes and gets no edge.
 const DARK_EDGE_TEXELS: u32 = 2;
 const DARK_EDGE_LIGHTNESS: f32 = 15.0;
+const DARK_EDGE_CHROMA: f32 = 0.055;
 const DARK_GAP_SHARE: f32 = 0.02;
+
+/// The pieces of an armour and tool set (`<material>_<piece>`). A set is dark as a whole when any
+/// piece is, so the armour row and the hotbar show one material one way (netherite boots and
+/// leggings, its sword and hoe, sit just either side of the line).
+const SET_PIECES: [&str; 10] = [
+    "helmet",
+    "chestplate",
+    "leggings",
+    "boots",
+    "sword",
+    "pickaxe",
+    "axe",
+    "shovel",
+    "hoe",
+    "spear",
+];
+
+/// The material of an armour or tool piece: `minecraft:netherite_sword` → `minecraft:netherite`.
+fn set_material(id: &str) -> Option<&str> {
+    SET_PIECES
+        .iter()
+        .find_map(|piece| id.strip_suffix(piece)?.strip_suffix('_'))
+}
 
 /// A flat item's layers, each with the tint the client applies.
 type FlatLayers = Vec<(Image, Option<LayerTint>)>;
@@ -559,8 +587,10 @@ pub fn build_atlas(source: &mut dyn AssetSource, options: &BuildOptions) -> Resu
     let dark = |picture: &Image| {
         let texel = (picture.width / 16).max(1);
         picture
-            .edge_lightness(DARK_GROUND, DARK_EDGE_TEXELS * texel)
-            .is_some_and(|lightness| lightness <= DARK_EDGE_LIGHTNESS)
+            .edge_tone(DARK_GROUND, DARK_EDGE_TEXELS * texel)
+            .is_some_and(|edge| {
+                edge.lightness <= DARK_EDGE_LIGHTNESS && edge.chroma < DARK_EDGE_CHROMA
+            })
             && picture.gap_share(texel) <= DARK_GAP_SHARE
     };
     let mut drawn: Vec<DrawnIcon> = Vec::new();
@@ -600,6 +630,17 @@ pub fn build_atlas(source: &mut dyn AssetSource, options: &BuildOptions) -> Resu
                 large,
             }),
             None => missing.push(id.clone()),
+        }
+    }
+    // A set is dark as a whole when any piece is.
+    let dark_sets: HashSet<String> = drawn
+        .iter()
+        .filter(|icon| icon.dark)
+        .filter_map(|icon| set_material(&icon.id).map(str::to_owned))
+        .collect();
+    for icon in &mut drawn {
+        if set_material(&icon.id).is_some_and(|material| dark_sets.contains(material)) {
+            icon.dark = true;
         }
     }
     let glint = builder
