@@ -22,7 +22,8 @@ public record OverlaySettings(
     boolean callSound,
     int callVolume,
     boolean hintSeen,
-    List<String> recentStickers) {
+    List<String> recentStickers,
+    List<String> recentEmojis) {
 
     public static final int MAX_VOLUME = 100;
 
@@ -72,9 +73,11 @@ public record OverlaySettings(
     }
 
     public static final OverlaySettings DEFAULTS = new OverlaySettings(true, true, true, true, true,
-        Duration.NORMAL, Corner.BOTTOM_RIGHT, false, true, 70, true, 85, false, List.of());
+        Duration.NORMAL, Corner.BOTTOM_RIGHT, false, true, 70, true, 85, false, List.of(), List.of());
     /** Stickers the picker keeps at the top (the last sent first). */
     public static final int RECENT_STICKERS = 8;
+    /** Emojis the chat's emoji picker keeps at the top (the last written first; CHAT-EMOJI). */
+    public static final int RECENT_EMOJIS = 16;
 
     public OverlaySettings {
         duration = duration == null ? Duration.NORMAL : duration;
@@ -83,6 +86,8 @@ public record OverlaySettings(
         callVolume = clampVolume(callVolume);
         recentStickers = recentStickers == null ? List.of()
             : List.copyOf(recentStickers.subList(0, Math.min(RECENT_STICKERS, recentStickers.size())));
+        recentEmojis = recentEmojis == null ? List.of()
+            : List.copyOf(recentEmojis.subList(0, Math.min(RECENT_EMOJIS, recentEmojis.size())));
     }
 
     public static int clampVolume(int volume) {
@@ -100,14 +105,30 @@ public record OverlaySettings(
         };
     }
 
-    /** The display preferences equal the defaults (the first-time hint and the recent stickers do not count). */
+    /**
+     * The display preferences equal the defaults (the first-time hint, the recent stickers and the recent emojis do not
+     * count).
+     */
     public boolean isDefault() {
-        return withHintSeen(DEFAULTS.hintSeen).withRecentStickers(List.of()).equals(DEFAULTS);
+        return withHintSeen(DEFAULTS.hintSeen).withRecentStickers(List.of()).withRecentEmojis(List.of())
+            .equals(DEFAULTS);
     }
 
-    /** The defaults, keeping what is not a display preference (the first-time hint, the recent stickers). */
+    /** The defaults, keeping what is not a display preference (the first-time hint, the recent stickers and emojis). */
     public OverlaySettings reset() {
-        return DEFAULTS.withHintSeen(hintSeen).withRecentStickers(recentStickers);
+        return DEFAULTS.withHintSeen(hintSeen).withRecentStickers(recentStickers).withRecentEmojis(recentEmojis);
+    }
+
+    /** {@code emoji} (what the picker wrote: a code, or the text itself) written now: it comes first in its recent row. */
+    public OverlaySettings withEmojiUsed(String emoji) {
+        List<String> next = new ArrayList<>(RECENT_EMOJIS);
+        next.add(emoji);
+        for (String e : recentEmojis) {
+            if (!e.equals(emoji) && next.size() < RECENT_EMOJIS) {
+                next.add(e);
+            }
+        }
+        return withRecentEmojis(next);
     }
 
     /** {@code sticker} sent now: it comes first in the picker's recent row. */
@@ -124,71 +145,76 @@ public record OverlaySettings(
 
     public OverlaySettings withMessageToasts(boolean v) {
         return new OverlaySettings(v, callToasts, inviteToasts, infoToasts, showMessageText, duration, corner,
-            reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers);
+            reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers, recentEmojis);
     }
 
     public OverlaySettings withCallToasts(boolean v) {
         return new OverlaySettings(messageToasts, v, inviteToasts, infoToasts, showMessageText, duration, corner,
-            reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers);
+            reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers, recentEmojis);
     }
 
     public OverlaySettings withInviteToasts(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, v, infoToasts, showMessageText, duration, corner,
-            reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers);
+            reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers, recentEmojis);
     }
 
     public OverlaySettings withInfoToasts(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, v, showMessageText, duration, corner,
-            reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers);
+            reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers, recentEmojis);
     }
 
     public OverlaySettings withShowMessageText(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, v, duration, corner,
-            reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers);
+            reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers, recentEmojis);
     }
 
     public OverlaySettings withDuration(Duration v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, v, corner,
-            reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers);
+            reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers, recentEmojis);
     }
 
     public OverlaySettings withCorner(Corner v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration, v,
-            reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers);
+            reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers, recentEmojis);
     }
 
     public OverlaySettings withReduceMotion(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, v, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers);
+            corner, v, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers, recentEmojis);
     }
 
     public OverlaySettings withMessageSound(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, reduceMotion, v, messageVolume, callSound, callVolume, hintSeen, recentStickers);
+            corner, reduceMotion, v, messageVolume, callSound, callVolume, hintSeen, recentStickers, recentEmojis);
     }
 
     public OverlaySettings withMessageVolume(int v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, reduceMotion, messageSound, v, callSound, callVolume, hintSeen, recentStickers);
+            corner, reduceMotion, messageSound, v, callSound, callVolume, hintSeen, recentStickers, recentEmojis);
     }
 
     public OverlaySettings withCallSound(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, reduceMotion, messageSound, messageVolume, v, callVolume, hintSeen, recentStickers);
+            corner, reduceMotion, messageSound, messageVolume, v, callVolume, hintSeen, recentStickers, recentEmojis);
     }
 
     public OverlaySettings withCallVolume(int v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, reduceMotion, messageSound, messageVolume, callSound, v, hintSeen, recentStickers);
+            corner, reduceMotion, messageSound, messageVolume, callSound, v, hintSeen, recentStickers, recentEmojis);
     }
 
     public OverlaySettings withRecentStickers(List<String> v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, v);
+            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, v, recentEmojis);
+    }
+
+    public OverlaySettings withRecentEmojis(List<String> v) {
+        return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
+            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, hintSeen, recentStickers, v);
     }
 
     public OverlaySettings withHintSeen(boolean v) {
         return new OverlaySettings(messageToasts, callToasts, inviteToasts, infoToasts, showMessageText, duration,
-            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, v, recentStickers);
+            corner, reduceMotion, messageSound, messageVolume, callSound, callVolume, v, recentStickers, recentEmojis);
     }
 }

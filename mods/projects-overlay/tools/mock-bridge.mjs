@@ -50,10 +50,18 @@
 // mock's own words for the mod (a sticker in words) follow it. Dev commands "launcher-lang" (with "lang": the
 // launcher's language changes; the overlay follows while nothing is picked) and "clear-pick". --welcome-delay <ms>
 // greets that much later (under the mod's 5 s handshake wait), to see the panel before the launcher said anything.
+// --emojis [file] plays the chat's emoji picker (docs/tasks/ovl2-protocol.md, CHAT-EMOJI, E1-E4): a mod whose hello lists
+// "emoji" hears "emojis" after the greeting (the switch and the list: the given file, else the launcher's built-in one,
+// crates/pl-content/data/chat-emojis.json); --emoji-off starts with the switch off. The mod's "emoji" switch is kept and
+// answered with "emojis". Dev commands "emojis-off" / "emojis-on" switch it as the launcher's Settings would, "emojis-list"
+// (with "count") sends a shorter list as a Studio publish would. A mod whose hello lists "panel-off" (the picker alone)
+// hears only "welcome" and "emojis", as the launcher's quiet session.
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import net from "node:net";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const PROTO = 1;
 // Launcher frames may carry a snapshot or a history; the mod's frames are small player actions.
@@ -93,6 +101,35 @@ function keepPick() {
     writeFileSync(args.langFile, langs.pick ?? "auto");
   }
 }
+// CHAT-EMOJI: the picker's switch and list, and what the connected mod is (it has the picker; it runs it alone).
+const emojis = {
+  on: !args.emojiOff,
+  doc: readEmojis(),
+  hears: false,
+  quiet: false,
+};
+function readEmojis() {
+  const file =
+    typeof args.emojis === "string"
+      ? args.emojis
+      : join(
+          dirname(fileURLToPath(import.meta.url)),
+          "../../../crates/pl-content/data/chat-emojis.json",
+        );
+  try {
+    return JSON.parse(readFileSync(file, "utf8"));
+  } catch {
+    return { hosts: [], emojis: [] };
+  }
+}
+function sendEmojis(socket, count) {
+  if (!args.emojis || !emojis.hears) {
+    return;
+  }
+  const list = count === undefined ? emojis.doc.emojis : emojis.doc.emojis.slice(0, count);
+  send(socket, { t: "emojis", on: emojis.on, hosts: emojis.doc.hosts, emojis: list });
+}
+
 /** The overlay's language: the player's pick, else the launcher's (null: this mock plays no language). */
 function overlayLang() {
   return langs.pick ?? langs.launcher;
@@ -525,6 +562,8 @@ function onConnection(socket) {
         }
         authed = true;
         langs.follows = Array.isArray(frame.features) && frame.features.includes("lang");
+        emojis.hears = Array.isArray(frame.features) && frame.features.includes("emoji");
+        emojis.quiet = Array.isArray(frame.features) && frame.features.includes("panel-off");
         startSession(socket);
         continue;
       }
@@ -548,6 +587,21 @@ function onConnection(socket) {
 }
 
 function welcome(socket) {
+  if (emojis.quiet) {
+    // The picker alone (E2): its words and its list, nothing of the friends feature.
+    send(socket, {
+      t: "welcome",
+      proto: PROTO,
+      launcher: "mock",
+      me: state.me,
+      dnd: false,
+      reducedMotion: Boolean(args.reducedMotion),
+      ...(langs.follows && overlayLang() ? { lang: overlayLang() } : {}),
+      features: [],
+    });
+    sendEmojis(socket);
+    return;
+  }
   send(socket, {
     t: "welcome",
     proto: PROTO,
@@ -586,6 +640,7 @@ function welcome(socket) {
   for (const note of NOTES) {
     send(socket, { t: "note", ...note });
   }
+  sendEmojis(socket);
 }
 
 function startSession(socket) {
@@ -839,6 +894,16 @@ function onFrame(socket, frame) {
     case "dev":
       onDev(socket, frame);
       break;
+    case "emoji": {
+      // CHAT-EMOJI (E4): the player's switch from the overlay's settings, kept and answered.
+      if (!emojis.hears || typeof frame.on !== "boolean") {
+        break;
+      }
+      emojis.on = frame.on;
+      log("info", { t: "emoji-switch", on: frame.on });
+      sendEmojis(socket);
+      break;
+    }
     case "lang": {
       // OVL-LANG (G4): the player's pick, kept; a new welcome in it when the overlay's language changed.
       if (!langs.follows || (frame.lang !== "tr" && frame.lang !== "en")) {
@@ -1110,6 +1175,16 @@ function onReact(socket, frame) {
 
 function onDev(socket, frame) {
   switch (frame.cmd) {
+    case "emojis-off":
+    case "emojis-on":
+      // CHAT-EMOJI: the launcher's Settings switched the picker.
+      emojis.on = frame.cmd === "emojis-on";
+      sendEmojis(socket);
+      break;
+    case "emojis-list":
+      // CHAT-EMOJI: a Studio publish with a shorter list.
+      sendEmojis(socket, Number(frame.count ?? 3));
+      break;
     case "demo":
       demo(socket);
       break;

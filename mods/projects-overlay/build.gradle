@@ -107,6 +107,12 @@ loom {
                 'dev.server': 'ovl.server',
                 // The same world for the resume scenario's record (the overlay clears its own property once read).
                 'dev.world' : 'ovl.world',
+                // CHAT-EMOJI: the launcher's switches as it passes them (off only), the scenario's mode and the server
+                // pack's pictures for its test pack.
+                'panel'     : 'ovl.panel',
+                'emoji'     : 'ovl.emoji',
+                'dev.emoji' : 'ovl.devEmoji',
+                'dev.packart': 'ovl.packart',
             ].each { name, property ->
                 def value = providers.gradleProperty(property)
                 if (value.isPresent()) {
@@ -137,6 +143,14 @@ processResources {
         include 'pl1-atlas.png'
         rename 'pl1-atlas.png', 'pl1.png'
         into 'assets/projects_overlay/stickers'
+    }
+
+    // The Projects server's chat emojis the launcher uses while Studio has published none (CHAT-EMOJI): the picker's
+    // list while the launcher has said nothing, the same file.
+    from(file('../../crates/pl-content/data')) {
+        include 'chat-emojis.json'
+        rename 'chat-emojis.json', 'projects.json'
+        into 'assets/projects_overlay/emojis'
     }
 }
 

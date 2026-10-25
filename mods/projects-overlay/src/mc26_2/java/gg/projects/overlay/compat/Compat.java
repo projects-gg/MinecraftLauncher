@@ -8,6 +8,7 @@ import java.net.URI;
 import java.util.function.Supplier;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.input.KeyEvent;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import net.minecraft.util.Util;
 
@@ -31,6 +32,20 @@ public final class Compat {
     /** Keys that type a character (GLFW key codes): a letter key bound to the overlay still types while writing. */
     public static boolean typesCharacter(int key) {
         return key >= 32 && key <= 162;
+    }
+
+    /**
+     * The chat's emoji picker shortcut (CHAT-EMOJI): Ctrl+E (⌘E on macOS), read as the game reads its own Ctrl+C in a
+     * text field: the key in the GLFW layout's place, Control (Command on macOS), no Shift or Alt.
+     */
+    public static boolean isEmojiShortcut(KeyEvent event) {
+        return event.input() == InputConstants.KEY_E && event.hasControlDownWithQuirk() && !event.hasShiftDown()
+            && !event.hasAltDown();
+    }
+
+    /** The emoji picker shortcut as its tooltip names it. */
+    public static String emojiShortcutLabel() {
+        return System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("mac") ? "⌘E" : "Ctrl+E";
     }
 
     /** The screen on top, or null in the game. */

@@ -189,4 +189,21 @@ public final class Fonts {
             return null;
         }
     }
+
+    private static Font.Provider gameProvider;
+    private static Font gameProviderOf;
+
+    /**
+     * The glyphs of the game's own default font, the one chat draws with (CHAT-EMOJI: what a line written into chat will
+     * look like, the server resource pack's pictures included). Null when they cannot be read. The source changes with
+     * every resource reload, so callers keep only what they work out from it, keyed by it.
+     */
+    public static GlyphSource gameGlyphs() {
+        Font font = Minecraft.getInstance().font;
+        if (font != gameProviderOf) {
+            gameProviderOf = font;
+            gameProvider = baseProvider(font);
+        }
+        return gameProvider == null ? null : gameProvider.glyphs(FontDescription.DEFAULT);
+    }
 }

@@ -52,6 +52,8 @@ public final class BridgeClient {
     private final String modVersion;
     private final String minecraftVersion;
     private final Supplier<String> language;
+    /** The panel runs in this game (else the emoji picker alone, CHAT-EMOJI): what the hello says. */
+    private final boolean panel;
     private final Listener listener;
     private final Thread thread;
     private final ExecutorService writer;
@@ -67,10 +69,16 @@ public final class BridgeClient {
 
     public BridgeClient(BridgeConfig config, String modVersion, String minecraftVersion, Supplier<String> language,
         Listener listener) {
+        this(config, modVersion, minecraftVersion, language, true, listener);
+    }
+
+    public BridgeClient(BridgeConfig config, String modVersion, String minecraftVersion, Supplier<String> language,
+        boolean panel, Listener listener) {
         this.config = config;
         this.modVersion = modVersion;
         this.minecraftVersion = minecraftVersion;
         this.language = language;
+        this.panel = panel;
         this.listener = listener;
         this.thread = daemon(this::run, "Projects Overlay bridge");
         this.writer = Executors.newSingleThreadExecutor(r -> daemon(r, "Projects Overlay bridge writer"));
@@ -166,7 +174,7 @@ public final class BridgeClient {
                 socket = s;
                 out = o;
             }
-            JsonObject hello = Protocol.hello(config.token(), modVersion, minecraftVersion, language.get());
+            JsonObject hello = Protocol.hello(config.token(), modVersion, minecraftVersion, language.get(), panel);
             o.write((hello + "\n").getBytes(StandardCharsets.UTF_8));
             o.flush();
 

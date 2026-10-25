@@ -81,7 +81,8 @@ class SettingsTest {
     @Test
     void writesAndReadsEveryField() throws IOException {
         OverlaySettings s = new OverlaySettings(false, true, false, true, false, OverlaySettings.Duration.LONG,
-            OverlaySettings.Corner.TOP_RIGHT, true, false, 35, true, 90, true, List.of("pl1/gg", "pl1/hi"));
+            OverlaySettings.Corner.TOP_RIGHT, true, false, 35, true, 90, true, List.of("pl1/gg", "pl1/hi"),
+            List.of(":kalp:", "¯\\_(ツ)_/¯"));
         Path file = dir.resolve(SettingsStore.FILE_NAME);
         SettingsStore.write(file, s);
         assertEquals(s, SettingsStore.read(file));

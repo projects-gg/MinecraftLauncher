@@ -292,7 +292,9 @@ public final class OverlayScreen extends Screen {
         languageRevision = Texts.language().revision();
         settingsList = new SettingsList(overlay::settings, overlay::updateSettings,
             List.of(overlay.key().shortcut(() -> Compat.setScreen(minecraft, new KeyBindsScreen(this, minecraft.options)))),
-            Texts.language().managed() ? overlay.languages() : null);
+            Texts.language().managed() ? overlay.languages() : null,
+            // CHAT-EMOJI: the launcher's emoji picker switch, once the launcher has spoken of it.
+            overlay.emojis().heard() ? overlay.emojiSwitch() : null);
         lastListPage = state.has("chat") || !state.welcomed() ? Page.CHATS : Page.FRIENDS;
         page = overlay.lastPage() == Page.SETTINGS || overlay.lastPage() == Page.WORLD ? lastListPage
             : overlay.lastPage();
