@@ -224,9 +224,9 @@ function PrivacySwitch({
 }) {
   const save = useCallback(
     (on: boolean) => {
-      const change: Partial<Record<PrivacyKey, boolean>> = {};
-      change[field] = on;
-      return attempt(() => api.social.setPrivacy(change));
+      const patch: Partial<Record<PrivacyKey, boolean>> = {};
+      patch[field] = on;
+      return attempt(() => api.social.setPrivacy(patch));
     },
     [field],
   );
