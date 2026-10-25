@@ -46,12 +46,14 @@ const placeholders = (text: string) =>
  * Keys whose English names a placeholder differently on purpose: the importer passes both forms
  * ("Minecraft Launcher'daki dünyaların" reads the source first, "your worlds from the Minecraft
  * Launcher" last; a Turkish sentence may start with the item, so it has a capitalised `What`). A
- * crew's mute end gives Turkish the ending its time takes ("14:30'a kadar"); English needs none.
+ * crew's mute end gives Turkish the ending its time takes ("14:30'a kadar"); English needs none,
+ * and neither does an upcoming event's start ("20:00'de başlıyor").
  */
 const OWN_PLACEHOLDERS = [
   /^import\.what\./,
   /^import\.outcome\.(optionsKept|unreadable|failed)$/,
   /^teams\.mute\.until(Today|Tomorrow|Later)$/,
+  /^newsColumn\.starts\./,
 ];
 
 /** English strings that name Turkish letters on purpose. */
