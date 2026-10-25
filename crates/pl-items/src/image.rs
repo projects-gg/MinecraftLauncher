@@ -12,6 +12,15 @@ pub struct Image {
     pub pixels: Vec<u8>,
 }
 
+/// How a silhouette's edge looks on a ground colour ([`Image::edge_tone`]).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct EdgeTone {
+    /// The median CIELAB lightness L* (0–100).
+    pub lightness: f32,
+    /// The median OKLab chroma (0 for greys).
+    pub chroma: f32,
+}
+
 impl Image {
     /// A transparent image.
     pub fn new(width: u32, height: u32) -> Self {
@@ -189,20 +198,22 @@ impl Image {
         out
     }
 
-    /// Whether the pixel is inside the picture and at least half opaque.
+    /// Whether the pixel is inside the picture and part of the silhouette: at least a sixteenth
+    /// opaque, so see-through glass counts (it shows on the slot, if faintly).
     fn solid(&self, x: i64, y: i64) -> bool {
         (0..self.width as i64).contains(&x)
             && (0..self.height as i64).contains(&y)
-            && self.get(x as u32, y as u32)[3] >= 128
+            && self.get(x as u32, y as u32)[3] >= 16
     }
 
-    /// How light the silhouette's edge looks on a ground colour: the median CIELAB lightness (L*,
-    /// 0–100) of the opaque pixels within `radius` pixels of a clear one (or of the border), each
-    /// laid over the ground. Low when the outline melts into a near-black card (obsidian, black
-    /// wool). None for a picture without opaque pixels.
-    pub fn edge_lightness(&self, ground: [u8; 3], radius: u32) -> Option<f32> {
+    /// How the silhouette's edge looks on a ground colour: the median CIELAB lightness and the
+    /// median OKLab chroma of its pixels within `radius` pixels of a clear one (or of the border),
+    /// each laid over the ground (see-through ones show the ground through them). Dark and grey when
+    /// the outline melts into a near-black card (obsidian, black wool, black glass); a dark red
+    /// outline (redstone, netherrack) stays coloured. None for a picture with nothing in it.
+    pub fn edge_tone(&self, ground: [u8; 3], radius: u32) -> Option<EdgeTone> {
         let r = radius as i64;
-        let mut values = Vec::new();
+        let (mut lights, mut chromas) = (Vec::new(), Vec::new());
         for y in 0..self.height as i64 {
             for x in 0..self.width as i64 {
                 let inner = (-r..=r).all(|dy| (-r..=r).all(|dx| self.solid(x + dx, y + dy)));
@@ -213,19 +224,25 @@ impl Image {
                     [ground[0], ground[1], ground[2], 255],
                     self.get(x as u32, y as u32),
                 );
-                values.push(lightness([seen[0], seen[1], seen[2]]));
+                let rgb = [seen[0], seen[1], seen[2]];
+                lights.push(lightness(rgb));
+                chromas.push(chroma(rgb));
             }
         }
-        if values.is_empty() {
-            return None;
-        }
-        values.sort_by(f32::total_cmp);
-        Some(values[values.len() / 2])
+        let median = |mut values: Vec<f32>| {
+            values.sort_by(f32::total_cmp);
+            values[values.len() / 2]
+        };
+        (!lights.is_empty()).then(|| EdgeTone {
+            lightness: median(lights),
+            chroma: median(chromas),
+        })
     }
 
     /// How much an edge `width` pixels wide drawn around the silhouette would fill in between its
-    /// parts (the holes in leaves, a chain's links, the crook of a pickaxe): the clear pixels with an
-    /// opaque one within `width` on both sides of a row, a column or a diagonal, per opaque pixel.
+    /// parts (the holes in leaves, a chain's links, the crook of a pickaxe): the clear pixels with a
+    /// silhouette one within `width` on both sides of a row, a column or a diagonal, per silhouette
+    /// pixel.
     pub fn gap_share(&self, width: u32) -> f32 {
         let reach = |x: i64, y: i64, dx: i64, dy: i64| {
             (1..=width as i64).any(|k| self.solid(x + dx * k, y + dy * k))
@@ -270,6 +287,17 @@ fn lightness(rgb: [u8; 3]) -> f32 {
     } else {
         y * 24389.0 / 27.0
     }
+}
+
+/// An sRGB colour's OKLab chroma: 0 for greys, about 0.1 for redstone's dark red, 0.3 at most.
+fn chroma(rgb: [u8; 3]) -> f32 {
+    let [r, g, b] = rgb.map(linear);
+    let l = (0.412_221_5 * r + 0.536_332_5 * g + 0.051_445_99 * b).cbrt();
+    let m = (0.211_903_5 * r + 0.680_699_5 * g + 0.107_397 * b).cbrt();
+    let s = (0.088_302_46 * r + 0.281_718_8 * g + 0.629_978_7 * b).cbrt();
+    let a = 1.977_998 * l - 2.428_592 * m + 0.450_593_7 * s;
+    let b = 0.025_904_04 * l + 0.782_771_8 * m - 0.808_675_8 * s;
+    a.hypot(b)
 }
 
 /// `top` over `bottom`, straight alpha.

@@ -71,6 +71,11 @@ export interface VanillaAtlas {
   imageUrl: string;
   /** The large atlas's image, loaded only by sprites drawn at its size. */
   largeUrl?: string;
+  /**
+   * The large image is known to be loaded already (a page drawn on the server for a screenshot):
+   * sprites draw from it at once instead of showing their 32 px drawing until it has loaded.
+   */
+  largeReady?: boolean;
 }
 
 /** A file the signed content index points at. */

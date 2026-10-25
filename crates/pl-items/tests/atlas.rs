@@ -37,6 +37,21 @@ fn texture(source: &mut MemSource, path: &str, width: u32, height: u32, color: [
     );
 }
 
+/// A flat item of one colour (`item/<name>`).
+fn flat(source: &mut MemSource, name: &str, color: [u8; 4]) {
+    texture(source, &format!("item/{name}"), 16, 16, color);
+    model(
+        source,
+        &format!("item/{name}"),
+        &format!(r#"{{"parent":"item/generated","textures":{{"layer0":"item/{name}"}}}}"#),
+    );
+    item(
+        source,
+        name,
+        &format!(r#"{{"model":{{"type":"minecraft:model","model":"minecraft:item/{name}"}}}}"#),
+    );
+}
+
 /// A tiny jar with the vanilla parents the test items need.
 fn jar() -> MemSource {
     let mut s = MemSource::default();
@@ -263,6 +278,30 @@ fn jar() -> MemSource {
         &mut s,
         "red_dye",
         r#"{"model":{"type":"minecraft:model","model":"minecraft:item/red_dye"}}"#,
+    );
+    // Near-black, but dark red: redstone's outline reads by its colour.
+    flat(&mut s, "redstone", [75, 8, 8, 255]);
+    // An armour and tool set whose helmet is near-black and whose sword is not; another set.
+    flat(&mut s, "netherite_helmet", [22, 20, 24, 255]);
+    flat(&mut s, "netherite_sword", [70, 66, 70, 255]);
+    flat(&mut s, "iron_sword", [200, 200, 200, 255]);
+    // See-through black glass: the slot shows through it.
+    texture(
+        &mut s,
+        "block/black_stained_glass",
+        16,
+        16,
+        [20, 18, 24, 110],
+    );
+    model(
+        &mut s,
+        "block/black_stained_glass",
+        r#"{"parent":"block/cube_all","textures":{"all":"minecraft:block/black_stained_glass"}}"#,
+    );
+    item(
+        &mut s,
+        "black_stained_glass",
+        r#"{"model":{"type":"minecraft:model","model":"minecraft:block/black_stained_glass"}}"#,
     );
     // The dragon head: the dragon's own texture, a skull's placement.
     texture(
@@ -512,16 +551,22 @@ fn hides_a_dye_layer_until_dyed() {
 #[test]
 fn marks_dark_icons() {
     let atlas = build_atlas(&mut jar(), &options()).unwrap();
-    // A near-black outline.
+    // A near-black outline, also see-through.
     assert!(atlas.index.icons["minecraft:obsidian"].dark);
+    assert!(atlas.index.icons["minecraft:black_stained_glass"].dark);
     // Outlines that read on a dark slot: dark grey with highlights, a saturated dark red, a lit
-    // block, a light item.
+    // block, a light item, a near-black red (a grey edge around it would look like a sticker).
     assert!(!atlas.index.icons["minecraft:netherite_ingot"].dark);
     assert!(!atlas.index.icons["minecraft:red_dye"].dark);
     assert!(!atlas.index.icons["minecraft:stone"].dark);
     assert!(!atlas.index.icons["minecraft:sword"].dark);
+    assert!(!atlas.index.icons["minecraft:redstone"].dark);
     // Near-black, but its holes would fill in under an edge.
     assert!(!atlas.index.icons["minecraft:dark_leaves"].dark);
+    // A set is dark as a whole: the helmet takes the sword of its material along, not another's.
+    assert!(atlas.index.icons["minecraft:netherite_helmet"].dark);
+    assert!(atlas.index.icons["minecraft:netherite_sword"].dark);
+    assert!(!atlas.index.icons["minecraft:iron_sword"].dark);
 }
 
 #[test]

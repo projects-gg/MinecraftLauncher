@@ -84,8 +84,11 @@ const LARGE_INDEX: VanillaAtlasIndex = {
   },
 };
 
-function largeArt(): ItemArt {
-  return { vanilla: { index: LARGE_INDEX, imageUrl: "atlas.png", largeUrl: "atlas-48.png" } };
+/** The large atlas art; `largeReady` as a host that has its image already (a screenshot page). */
+function largeArt(largeReady = true): ItemArt {
+  return {
+    vanilla: { index: LARGE_INDEX, imageUrl: "atlas.png", largeUrl: "atlas-48.png", largeReady },
+  };
 }
 
 describe("item ids and hosts", () => {
@@ -357,6 +360,15 @@ describe("ItemSprite", () => {
     expect(render({ id: "stone", size: 48, art: without })).not.toContain("atlas-48.png");
   });
 
+  it("shows the 32 px drawing at 48 px until the large image has loaded, never an empty slot", () => {
+    // On the server and while the large image loads (or after it failed): the stone's 32 px cell,
+    // scaled to the box.
+    const html = render({ id: "stone", size: 48, art: largeArt(false) });
+    expect(html).not.toContain("atlas-48.png");
+    expect(html).toContain('src="atlas.png"');
+    expect(html).toMatch(/left:-24px;top:0;width:384px;height:192px/);
+  });
+
   it("halves the 32 px drawing of a 3D icon at 16 px", () => {
     expect(render({ id: "stone", size: 16, art: largeArt() })).toMatch(
       /left:-8px;top:0;width:128px;height:64px/,
@@ -412,13 +424,15 @@ describe("ItemSprite", () => {
     expect(render({ id: "stone", art: art() })).not.toContain("drop-shadow");
   });
 
-  it("draws the stand-ins flat inside a dark outline, the same on every render", () => {
+  it("draws the stand-ins as one flat silhouette, the same on every render", () => {
     const html = render({ id: "minecraft:unknown_block" });
     expect(render({ id: "minecraft:unknown_block" })).toBe(html);
-    const fills = new Set([...html.matchAll(/fill="(#[0-9a-f]{6})"/g)].map((m) => m[1]));
-    // The outline, the lit top and its edge highlight, and the two shaded sides.
-    expect(fills).toContain("#322d29");
-    expect(fills.size).toBe(5);
+    // One path in one tone (no light, no outline) that a light surface can set.
+    expect(html.match(/<path/g)).toHaveLength(1);
+    expect(html).toContain("fill:var(--pl-item-standin, #5a5462)");
+    expect(html).not.toMatch(/fill="#/);
+    // The block's three faces, 14 texels wide like the game's: its sides parted by the near edge.
+    expect(html).toContain("M1 7h6v1h-6zM8 7h7v1h-7z");
   });
 
   it("draws Projects' art from the overlay atlas on its servers", () => {
