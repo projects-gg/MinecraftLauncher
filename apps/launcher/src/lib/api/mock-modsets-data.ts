@@ -1234,9 +1234,9 @@ export const mockSetCatalog: MockSetCard[] = [
     id: "yapi",
     name: "Yapı",
     summary:
-      "Litematica ile şemayı dünyada görerek inşa et. Kolay yerleştirme Projects'te yasak, kapalı gelir.",
+      "Litematica ile şemayı dünyada görerek inşa et. Kolay yerleştirme (Easy Place) Projects'te yasak, kapalı gelir.",
     summaryEn:
-      "Build with the schematic shown in your world (Litematica). Easy placement isn't allowed on Projects and comes switched off.",
+      "Build with the schematic shown in your world (Litematica). Easy Place isn't allowed on Projects and comes switched off.",
     purpose: "other",
     variants: (
       [
