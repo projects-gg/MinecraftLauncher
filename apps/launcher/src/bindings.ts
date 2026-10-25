@@ -3138,6 +3138,8 @@ export type CrewCallView_Deserialize = {
 	name: string | null,
 	avatar: string | null,
 	avatarUrl: string | null,
+	/**  The caller's mark (SOC-VERIFY), as the crew shows them. */
+	mark: ProfileMark | null,
 	/**
 	 *  `join`: "Geliyorum" can join the caller where `server` says; `ready`: "Hazır mısın?" (a
 	 *  call from before CALL1: an answer, nothing to join).
@@ -3172,6 +3174,8 @@ export type CrewCallView_Serialize = {
 	name: string | null,
 	avatar: string | null,
 	avatarUrl: string | null,
+	/**  The caller's mark (SOC-VERIFY), as the crew shows them. */
+	mark: ProfileMark | null,
 	/**
 	 *  `join`: "Geliyorum" can join the caller where `server` says; `ready`: "Hazır mısın?" (a
 	 *  call from before CALL1: an answer, nothing to join).
@@ -3531,6 +3535,8 @@ export type FriendView_Deserialize = {
 	discordUrl: string,
 	/**  The crew tag they wear before their name (TEAM6; None while crew tags are off). */
 	badge: CrewBadgeView | null,
+	/**  Their mark right of the name (SOC-VERIFY). */
+	mark: ProfileMark | null,
 };
 
 export type FriendView_Serialize = {
@@ -3552,6 +3558,8 @@ export type FriendView_Serialize = {
 	discordUrl: string,
 	/**  The crew tag they wear before their name (TEAM6; None while crew tags are off). */
 	badge: CrewBadgeView | null,
+	/**  Their mark right of the name (SOC-VERIFY). */
+	mark: ProfileMark | null,
 };
 
 export type Game = Game_Serialize | Game_Deserialize;
@@ -3988,6 +3996,8 @@ export type InviteView_Deserialize = {
 	name: string | null,
 	avatar: string | null,
 	avatarUrl: string | null,
+	/**  Their mark (SOC-VERIFY), from the friend list. */
+	mark: ProfileMark | null,
 	/**  Unix seconds. */
 	at: number,
 	/**  Their server when it can be shared (`projects` = "Katıl"). */
@@ -4004,6 +4014,8 @@ export type InviteView_Serialize = {
 	name: string | null,
 	avatar: string | null,
 	avatarUrl: string | null,
+	/**  Their mark (SOC-VERIFY), from the friend list. */
+	mark: ProfileMark | null,
 	/**  Unix seconds. */
 	at: number,
 	/**  Their server when it can be shared (`projects` = "Katıl"). */
@@ -4243,6 +4255,8 @@ export type JoinRequestView = {
 	username: string,
 	avatar: string,
 	avatarUrl: string | null,
+	/**  Their mark (SOC-VERIFY). */
+	mark: ProfileMark | null,
 	/**  Unix seconds. */
 	sentAt: number,
 	/**
@@ -4716,6 +4730,8 @@ export type MeView = {
 	limited: LimitedView | null,
 	/**  The crew tag the player wears (TEAM6; None when none, and while crew tags are off). */
 	badge: CrewBadgeView | null,
+	/**  The player's own mark (SOC-VERIFY), as friends see it. */
+	mark: ProfileMark | null,
 };
 
 /**  "Belleği artır/düşür ve yeniden dene". */
@@ -6470,6 +6486,13 @@ export type Privacy = {
 	shareTyping?: boolean | null,
 };
 
+/**
+ *  A mark Projects' staff give an account in Studio (SOC-VERIFY), shown right of the name wherever
+ *  the account shows: the verified mark (blue, "Doğrulanmış hesap") or the admin mark (red,
+ *  "Projects yöneticisi").
+ */
+export type ProfileMark = "verified" | "admin";
+
 /**  What one profile brings, read on demand. */
 export type ProfileMeasure = {
 	id: string,
@@ -6490,6 +6513,8 @@ export type ProfileView = {
 	username: string,
 	avatar: string,
 	avatarUrl: string | null,
+	/**  Their mark (SOC-VERIFY). */
+	mark: ProfileMark | null,
 };
 
 export type ProgressView = {
@@ -7014,6 +7039,8 @@ export type RequestView = {
 	username: string,
 	avatar: string,
 	avatarUrl: string | null,
+	/**  Their mark (SOC-VERIFY). */
+	mark: ProfileMark | null,
 	/**  Unix seconds. */
 	sentAt: number,
 };
@@ -8099,6 +8126,8 @@ export type TeamMemberView_Deserialize = {
 	togetherMonth: number,
 	/**  The crew tag they wear, of any crew (TEAM6; None while crew tags are off). */
 	badge: CrewBadgeView | null,
+	/**  Their mark (SOC-VERIFY), the player's own too. */
+	mark: ProfileMark | null,
 };
 
 export type TeamMemberView_Serialize = {
@@ -8130,6 +8159,8 @@ export type TeamMemberView_Serialize = {
 	togetherMonth: number,
 	/**  The crew tag they wear, of any crew (TEAM6; None while crew tags are off). */
 	badge: CrewBadgeView | null,
+	/**  Their mark (SOC-VERIFY), the player's own too. */
+	mark: ProfileMark | null,
 };
 
 /**
