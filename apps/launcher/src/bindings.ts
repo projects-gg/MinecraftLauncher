@@ -411,6 +411,24 @@ export const commands = {
 	cloudAfkConnectHere: () => __TAURI_INVOKE<number>("cloud_afk_connect_here"),
 	/**  Opens afk.projects.gg in the browser: purchase, renewal and linking always happen there. */
 	cloudAfkOpen: (page: CloudPage, account: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_open", { page, account })),
+	/**
+	 *  The item atlas of `minecraft`'s client jar, else of the newest installed one; `None` while no
+	 *  version is installed or no jar could be drawn (the sprites then show their stand-ins). Never
+	 *  an error: a missing picture is not worth a toast.
+	 */
+	itemsAtlas: (minecraft: string | null) => typedError<{
+	/**  The Minecraft version of the jar it was drawn from. */
+	minecraft: string,
+	/**  Local path of the atlas image; the UI loads it with `convertFileSrc` (`cache/` is allowed). */
+	image: string,
+	/**  Local path of the second image, 3D icons drawn at 48 px (`index.large`), when drawn. */
+	large: string | null,
+	/**
+	 *  The atlas index (`pl_items::AtlasIndex`) as JSON text, read by `vanillaAtlas` in
+	 *  `@pl/ui/items`.
+	 */
+	index: string,
+} | null, CmdError>(__TAURI_INVOKE("items_atlas", { minecraft })),
 	legacyScan: () => typedError<LegacyScan, CmdError>(__TAURI_INVOKE("legacy_scan")),
 	legacyImport: (request: LegacyImportRequest) => typedError<LegacyImportReport, CmdError>(__TAURI_INVOKE("legacy_import", { request })),
 	/**  Other launchers' data on this computer (cheap: small files and folder listings). */
@@ -3819,6 +3837,21 @@ export type IssueKind =
  *  never reports it: the launcher adds it for official pack instances.
  */
 "keyClash";
+
+/**  An atlas on disk. */
+export type ItemAtlasFiles = {
+	/**  The Minecraft version of the jar it was drawn from. */
+	minecraft: string,
+	/**  Local path of the atlas image; the UI loads it with `convertFileSrc` (`cache/` is allowed). */
+	image: string,
+	/**  Local path of the second image, 3D icons drawn at 48 px (`index.large`), when drawn. */
+	large: string | null,
+	/**
+	 *  The atlas index (`pl_items::AtlasIndex`) as JSON text, read by `vanillaAtlas` in
+	 *  `@pl/ui/items`.
+	 */
+	index: string,
+};
 
 export type ItemOutcome = {
 	sourceId: string,

@@ -309,6 +309,7 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::cloud_afk::cloud_afk_move,
             commands::cloud_afk::cloud_afk_connect_here,
             commands::cloud_afk::cloud_afk_open,
+            commands::items::items_atlas,
             commands::migrate::legacy_scan,
             commands::migrate::legacy_import,
             commands::import::import_scan,

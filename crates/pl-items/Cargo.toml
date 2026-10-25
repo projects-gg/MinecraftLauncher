@@ -1,0 +1,22 @@
+[package]
+name = "pl-items"
+description = "Item icons for inventories, rendered from the player's own Minecraft client jar (ITEMART)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+# Client jars are zip archives; textures are PNG (the versions the workspace already builds).
+zip = { workspace = true }
+png = "0.18"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+# The build_atlas example names the site's files by their SHA-256 (`--cdn`).
+sha2 = { workspace = true }
+hex = { workspace = true }
