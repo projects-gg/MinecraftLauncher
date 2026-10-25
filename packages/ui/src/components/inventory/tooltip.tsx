@@ -33,6 +33,7 @@ export function TooltipLines({ lines, width }: { lines: TooltipLine[]; width: nu
               text={part}
               color={line.color}
               shadow={shadowOf(line.color)}
+              italic={line.italic}
             />
           ))}
         </div>

@@ -22,6 +22,7 @@ import { enLib1 } from "./en-lib1";
 import { enLibraryDrop } from "./en-library-drop";
 import { enMinecraft } from "./en-minecraft";
 import { enModSets } from "./en-modsets";
+import { enNewsColumn } from "./en-news-column";
 import { enOverlay } from "./en-overlay";
 import { enOverview } from "./en-overview";
 import { enPlacement } from "./en-placement";
@@ -295,6 +296,7 @@ export const en: DeepPartial<Strings> = {
   cloudAfk: enCloudAfk,
   projectsSkin: enProjectsSkin,
   host: enHost,
+  newsColumn: enNewsColumn,
   nav: {
     home: "Home",
     library: "Library",
@@ -318,7 +320,7 @@ export const en: DeepPartial<Strings> = {
     copied: "Copied",
   },
   home: {
-    readNews: "Read more",
+    readNews: "Read the article",
     newsTitle: "News",
     allNews: "All",
     patchNotes: "Patch notes",
@@ -337,9 +339,7 @@ export const en: DeepPartial<Strings> = {
     moreEvents: "{{count}} more events",
     moreEvents_one: "{{count}} more event",
     otherEvents: "Other events",
-    eventRunning: "Live",
     eventEndsIn: "{{when}} left",
-    eventStartsAt: "{{when}}",
     noNews: "No news yet.",
     welcomeTitle: "Welcome to Projects",
     welcomeSubtitle: "Press Play. See you on the server.",

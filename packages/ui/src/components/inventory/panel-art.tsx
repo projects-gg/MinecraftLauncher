@@ -12,7 +12,8 @@ export const GUI = {
   slot: "#8b8b8b",
   slotDark: "#373737",
   slotLight: "#ffffff",
-  ghost: "#a2a2a2",
+  /** Empty armour and off hand outlines: the game's own slot hints are flat #555555. */
+  ghost: "#555555",
 } as const;
 
 type Rect = [x: number, y: number, w: number, h: number];

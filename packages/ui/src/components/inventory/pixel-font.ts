@@ -82,14 +82,18 @@ export function wrapText(text: string, width: number): string[] {
 }
 
 const paths = new Map<string, string>();
+const leaningPaths = new Map<string, string>();
 
 /**
  * The text's pixels as one SVG path in GUI pixels: x from the pen's start, y down from the glyph
  * cell's top (the baseline is under row 6; accents of capitals reach above 0, tails below 7).
- * Runs of lit pixels in a row are one rectangle each.
+ * Runs of lit pixels in a row are one rectangle each. Italic leans each row as the game's glyph
+ * quad does (its top a pixel right, its bottom a pixel left: `1 - y / 4` at the row's middle), and
+ * whole device pixels turn the lean into the game's steps.
  */
-export function textPath(text: string): string {
-  const cached = paths.get(text);
+export function textPath(text: string, italic = false): string {
+  const memo = italic ? leaningPaths : paths;
+  const cached = memo.get(text);
   if (cached !== undefined) return cached;
   let d = "";
   let pen = 0;
@@ -103,6 +107,7 @@ export function textPath(text: string): string {
     for (let i = 2; i < glyph.length; i++) {
       const mask = glyph[i] ?? 0;
       const y = 6 - top + (i - 2);
+      const lean = italic ? 0.875 - 0.25 * y : 0;
       let x = 0;
       while (mask >> x) {
         if (!((mask >> x) & 1)) {
@@ -111,14 +116,14 @@ export function textPath(text: string): string {
         }
         let w = 1;
         while ((mask >> (x + w)) & 1) w++;
-        d += `M${pen + x} ${y}h${w}v1h${-w}z`;
+        d += `M${pen + x + lean} ${y}h${w}v1h${-w}z`;
         x += w;
       }
     }
     pen += advance;
   }
   // Item names and lore repeat while the player looks around; a bounded memory keeps them.
-  if (paths.size > 600) paths.clear();
-  paths.set(text, d);
+  if (memo.size > 600) memo.clear();
+  memo.set(text, d);
   return d;
 }
