@@ -361,6 +361,10 @@ describe("a finger", () => {
     const { onOp } = mount({ window: SAMPLE_CHEST, mode: "view" });
     // Looking only says so all along; a tap is the tooltip and nothing else.
     expect(status()).toBe("Bu envanterde değişiklik yapamazsın.");
+    // The line keeps its size and its colour through the shared cn (UI-CN).
+    const line = document.querySelector('.pl-inv-bar p[aria-hidden="true"]');
+    expect(line?.className).toContain("text-meta");
+    expect(line?.className).toContain("text-ash-300");
     fireEvent.pointerDown(cell("win:13"), finger);
     fireEvent.pointerUp(cell("win:13"), finger);
     expect(has(tooltip(), "data-shown")).toBe(true);
