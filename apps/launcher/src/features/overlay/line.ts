@@ -1,6 +1,6 @@
 // The help line under Settings → Genel "Oyun içi katman" (OVL2, OVL-SEL1): which of its lines
-// shows, and the install its "Fabric'e geç" picks. Kept free of UI imports so the rules are tested
-// on their own.
+// shows, and the install its switch ("Projects kurulumuna geç") picks. Kept free of UI imports so
+// the rules are tested on their own.
 import { hasOfficial } from "@/features/library/official";
 import type { InstanceSummary, OfficialStatus } from "@/lib/api";
 
@@ -11,8 +11,9 @@ import type { InstanceSummary, OfficialStatus } from "@/lib/api";
  * - `noHome`: no install can carry it, with "Kur" (the official pack was deleted and no Fabric
  *   install of the player's is on a version the mod ships for);
  * - `closes`: "Oyun açılınca launcher: Kapansın" is chosen;
- * - `notFabric`: the install Play opens is not Fabric (the backend's `NotFabric`), with "Fabric'e geç";
- * - `version`: it is Fabric on a version the mod does not ship for (`NoJar`), with "Uygun kuruluma geç".
+ * - `notFabric`: the install Play opens is not Fabric (the backend's `NotFabric`);
+ * - `version`: it is Fabric on a version the mod does not ship for (`NoJar`).
+ * The last two switch Play to an install that carries it, named in the action.
  * A later state (OVL-AUTO: "not out for this Minecraft version yet", for a newer version whose
  * tested jar is still to come) is one more name here, one more sentence in `tr/en-overlay.ts` and
  * one more rule in `overlayLine`, before `version`.
@@ -23,10 +24,15 @@ export type OverlayLineKind = (typeof OVERLAY_LINES)[number];
 export interface OverlayLine {
   kind: OverlayLineKind;
   /**
-   * The install the line's action selects (`notFabric`, `version`): none while nothing else can
-   * carry the overlay, or while a game is prepared or open (the command bar stays on it).
+   * The install the line's action selects (`notFabric`, `version`): none while no other install
+   * can carry the overlay.
    */
   switchTo?: InstanceSummary;
+  /**
+   * A game is prepared or open: the command bar stays on it and its picker is locked, so the
+   * action waits (shown, not taken).
+   */
+  locked?: boolean;
 }
 
 export interface OverlayLineInput {
@@ -58,7 +64,7 @@ export function overlayLine(input: OverlayLineInput): OverlayLine {
   if (!instances || !official || !versions || !play) return { kind: "opens" };
   if (carriesOverlay(play, official, versions)) return { kind: "opens" };
   const kind = play.loader === "fabric" ? "version" : "notFabric";
-  return { kind, switchTo: locked ? undefined : overlayHome(instances, official, versions) };
+  return { kind, switchTo: overlayHome(instances, official, versions), locked };
 }
 
 /**
@@ -133,7 +139,7 @@ function playedAt(instance: InstanceSummary): number {
 }
 
 /**
- * The install "Fabric'e geç" selects: the official pack (the instance the status names, then a
+ * The install the line's switch selects: the official pack (the instance the status names, then a
  * copy that follows the pack), else the player's own install that carries the overlay; the last
  * played first within each, the list's order after that. None while no install carries it.
  */

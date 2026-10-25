@@ -5,8 +5,6 @@ export const enOverlay = {
   closeHelp: "Won't work: the launcher closes when the game opens.",
   packMissing: "The official pack isn't installed.",
   fabricOnly: "Only works in Fabric installs.",
-  toFabric: "Switch to Fabric",
   versionMissing: "Won't work on Minecraft {{version}}.",
-  toWorking: "Switch install",
-  switchTarget: "{{action}}: {{name}}",
+  switchTo: "Switch to {{name}}",
 };

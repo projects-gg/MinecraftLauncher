@@ -105,8 +105,13 @@ describe("the overlay switch's line", () => {
     expect(line(oldFabric).switchTo?.id).toBe("projects");
   });
 
-  it("offers nothing to switch to while a game is prepared or open", () => {
-    expect(line(vanilla, { locked: true })).toEqual({ kind: "notFabric", switchTo: undefined });
+  it("keeps the switch waiting while a game is prepared or open", () => {
+    expect(line(vanilla, { locked: true })).toEqual({
+      kind: "notFabric",
+      switchTo: projects,
+      locked: true,
+    });
+    expect(line(vanilla).locked).toBe(false);
   });
 
   it("offers nothing when no install carries it but the official pack is there", () => {
@@ -114,7 +119,7 @@ describe("the overlay switch's line", () => {
     const ahead = instance("projects", { managed: true, mcVersion: "26.4" });
     expect(
       line(ahead, { instances: [ahead, vanilla], official: status({ instanceId: "projects" }) }),
-    ).toEqual({ kind: "version", switchTo: undefined });
+    ).toEqual({ kind: "version", switchTo: undefined, locked: false });
   });
 
   it("decides nothing about the install while a list is unknown", () => {
@@ -131,7 +136,7 @@ describe("the overlay switch's line", () => {
   });
 });
 
-describe("the install Fabric'e geç picks", () => {
+describe("the install the line's switch picks", () => {
   it("is the instance the status names before a copy and the player's own", () => {
     const copy = instance("kopya", { managed: true, lastPlayedAt: hoursAgo(1) });
     const recent = instance("own", { mcVersion: "26.3", lastPlayedAt: hoursAgo(0.5) });
@@ -161,7 +166,7 @@ describe("the install Fabric'e geç picks", () => {
     const instances = [vanilla, ownFabric];
     const official = status({ removed: true });
     const before = line(vanilla, { instances, official });
-    expect(before).toEqual({ kind: "notFabric", switchTo: ownFabric });
+    expect(before).toEqual({ kind: "notFabric", switchTo: ownFabric, locked: false });
     expect(line(before.switchTo, { instances, official })).toEqual({ kind: "opens" });
   });
 });
