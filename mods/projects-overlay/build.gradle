@@ -87,6 +87,8 @@ loom {
             [
                 'port'      : 'ovl.port',
                 'token'     : 'ovl.token',
+                // The overlay's language as the game starts (OVL-LANG: the launcher's, or the player's pick).
+                'lang'      : 'ovl.lang',
                 'perf'      : 'ovl.perf',
                 'dev.script': 'ovl.script',
                 'dev.out'   : 'ovl.out',
@@ -121,6 +123,16 @@ processResources {
         include 'pl1-atlas.png'
         rename 'pl1-atlas.png', 'pl1.png'
         into 'assets/projects_overlay/stickers'
+    }
+}
+
+// The mod is GPL-3.0-only: every jar carries the license text at its root, named as Fabric's mod template names it
+// (LICENSE_<archive name>, so it never clashes with another mod's LICENSE in a merged or nested jar).
+// scripts/release/overlay-jars.mjs refuses a jar without it.
+jar {
+    inputs.property 'archivesName', base.archivesName
+    from(file('../../LICENSE')) {
+        rename { "${it}_${inputs.properties.archivesName}" }
     }
 }
 

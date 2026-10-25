@@ -18,20 +18,22 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use pl_lang::Lang;
 use pl_social::{
     ActivityView, AuthPhase, CallAnswer as SocialAnswer, CardState, ChatChangeView, ChatExtrasView,
     ChatMessageView, ChatPage, Connection, CrewBadgeView, GameLocation, MeView, MessageState,
-    PresenceState, SendFailure as SocialFailure, SocialNotice, SocialView, StatusMode,
-    TEAM_FEATURE_BADGES, TEAM_FEATURE_CALLS,
+    PermissionLevel, PresenceState, SendFailure as SocialFailure, SocialNotice, SocialView,
+    StatusMode, TEAM_FEATURE_BADGES, TEAM_FEATURE_CALLS, TEAM_FEATURE_CREW_FRIEND_REQUESTS,
+    TeamRole, TeamView,
 };
 
 use crate::links::{self, LinkLists};
 use crate::policy::{self, CrewMute, CrewSettings, Mute, Notice, NotifyPrefs, Situation};
 use crate::protocol::{
-    AnswerCounts, BadgeView, CallAnswer, CallView, CardView, ConvKind, ConvView, FEATURE_INVITE,
-    FEATURE_PEOPLE, FEATURE_TAGS, FriendView, LinkView, MAX_HISTORY, MAX_LAUNCHER_FRAME,
-    MAX_QUOTE_CHARS, Me, MsgView, NoteKind, PROTO, Place, ReactionView, ReplyView, SendFailure,
-    ToGame, ToastView, WorldMark,
+    AnswerCounts, BadgeView, CallAnswer, CallView, CardView, ConvKind, ConvView, CrewItem,
+    CrewPlace, FEATURE_INVITE, FEATURE_PEOPLE, FEATURE_PEOPLE2, FEATURE_TAGS, FriendView,
+    GroupItem, LinkView, MAX_HISTORY, MAX_LAUNCHER_FRAME, MAX_QUOTE_CHARS, Me, MsgView, NoteKind,
+    PROTO, Place, ReactionView, ReplyView, SendFailure, ToGame, ToastView, WorldMark,
 };
 
 /// Conversations a snapshot lists at most (the newest first).
@@ -73,6 +75,11 @@ pub struct Scene {
     pub joins: Vec<JoinLine>,
     /// The crew whose tag the player wears (OVL-UX; its card is in `badges`; only while `tags`).
     pub me_badge: Option<String>,
+    /// What the person menu's rows choose from (OVL-UX2, `lists`).
+    pub lists: PeopleLists,
+    /// The player's crewmates (not the player): the person menu of crew chat's senders may act
+    /// on them too (OVL-UX2).
+    crewmates: HashSet<String>,
     /// User id → the crew whose tag they wear (friends and crewmates; only while `tags`).
     wears: HashMap<String, String>,
     /// Friend id → their Discord web profile, for "Discord'dan mesaj at" from the game (OVL-UX).
@@ -225,6 +232,58 @@ fn join_lines(view: &SocialView, blocked: &HashSet<String>) -> Vec<JoinLine> {
         .collect()
 }
 
+/// What the person menu's rows choose from (OVL-UX2, `lists`): the player's friend categories, the
+/// crews they may invite friends to, and crewmates' friend requests.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct PeopleLists {
+    pub groups: Vec<GroupItem>,
+    pub crews: Vec<CrewItem>,
+    /// Crewmates may ask each other to be friends (the service offers it).
+    pub crewmates: bool,
+    /// Crewmates who asked the player to be friends.
+    pub asked: Vec<String>,
+    /// Crewmates the player asked.
+    pub asking: Vec<String>,
+    /// Crewmates who are not friends, playing on Projects now ("Katıl"; Q15).
+    pub projects: Vec<String>,
+    /// Crewmates who are not friends, whose Discord profile is known (Q15).
+    pub discord: Vec<String>,
+}
+
+impl PeopleLists {
+    fn frame(&self) -> ToGame {
+        ToGame::Lists {
+            groups: self.groups.clone(),
+            crews: self.crews.clone(),
+            crewmates: self.crewmates,
+            asked: self.asked.clone(),
+            asking: self.asking.clone(),
+            projects: self.projects.clone(),
+            discord: self.discord.clone(),
+        }
+    }
+}
+
+/// Whether the player's place in `crew` has a right at `level` (the launcher's `allows`): the
+/// leader has every right; the others as the level says.
+fn allows(level: PermissionLevel, crew: &TeamView) -> bool {
+    crew.role == TeamRole::Founder
+        || level == PermissionLevel::Members
+        || (level == PermissionLevel::Moderators && crew.moderator)
+}
+
+/// The crews the player may invite friends to, in the launcher's order (its `inviteTargets`):
+/// only while crews are on.
+fn invite_crews(view: &SocialView) -> Vec<&TeamView> {
+    if !view.teams {
+        return Vec::new();
+    }
+    view.crews
+        .iter()
+        .filter(|crew| allows(crew.permissions.invite, crew))
+        .collect()
+}
+
 impl Scene {
     pub fn from_view(view: &SocialView, prefs: &NotifyPrefs, now_ms: i64) -> Self {
         let Some(me) = view
@@ -341,6 +400,9 @@ impl Scene {
         // The friend menu's frames (OVL-UX): this launcher takes them while signed in; "Birlikte
         // oyna" only while it can go.
         features.push(FEATURE_PEOPLE.to_owned());
+        // The launcher's whole person menu (OVL-UX2): favourites, online notices, categories,
+        // crew invites, crewmates' friend requests, a crewmate's "Katıl" and Discord.
+        features.push(FEATURE_PEOPLE2.to_owned());
         if may_invite(view, me) {
             features.push(FEATURE_INVITE.to_owned());
         }
@@ -355,6 +417,94 @@ impl Scene {
                 invites: lists.invites,
             });
         let reads = extras.is_some_and(|extras| extras.reads);
+
+        // OVL-UX2: what the person menu chooses from.
+        let crewmates: HashSet<String> = view
+            .crews
+            .iter()
+            .flat_map(|crew| crew.members.iter())
+            .filter(|member| !member.me)
+            .map(|member| member.id.clone())
+            .collect();
+        let inviting = invite_crews(view);
+        let groups: Vec<GroupItem> = view
+            .groups
+            .as_ref()
+            .map(|doc| {
+                doc.groups
+                    .iter()
+                    .map(|group| GroupItem {
+                        id: group.id.clone(),
+                        name: group.name.clone(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let group_of: HashMap<&str, &str> = view
+            .groups
+            .as_ref()
+            .map(|doc| {
+                doc.members
+                    .iter()
+                    .filter(|member| groups.iter().any(|group| group.id == member.group))
+                    .map(|member| (member.friend.as_str(), member.group.as_str()))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let crew_requests = view.teams
+            && view
+                .team_features
+                .iter()
+                .any(|f| f == TEAM_FEATURE_CREW_FRIEND_REQUESTS);
+        let crewmate_requests = |requests: &[pl_social::RequestView]| -> Vec<String> {
+            if !crew_requests {
+                return Vec::new();
+            }
+            requests
+                .iter()
+                .filter(|request| crewmates.contains(&request.id))
+                .map(|request| request.id.clone())
+                .collect()
+        };
+        // Q15: crewmates who are not friends, as the launcher's person menu reads them (its
+        // `presence = friend ?? member`): "Katıl" while they play on Projects (never for a blocked
+        // one), "Discord'dan mesaj at" while their profile is known. Each once, in the crews' order.
+        let friend_ids: HashSet<&str> = view.friends.iter().map(|f| f.id.as_str()).collect();
+        let mut mates: Vec<&pl_social::TeamMemberView> = Vec::new();
+        for member in view.crews.iter().flat_map(|crew| crew.members.iter()) {
+            if !member.me
+                && !friend_ids.contains(member.id.as_str())
+                && !mates.iter().any(|mate| mate.id == member.id)
+            {
+                mates.push(member);
+            }
+        }
+        let blocked_ids: HashSet<&str> = view.blocked.iter().map(|b| b.id.as_str()).collect();
+        let lists = PeopleLists {
+            groups: groups.clone(),
+            crews: inviting
+                .iter()
+                .map(|crew| CrewItem {
+                    id: crew.id.clone(),
+                    name: crew.name.clone(),
+                    full: crew.members.len() >= usize::try_from(crew.limit).unwrap_or(usize::MAX),
+                })
+                .collect(),
+            crewmates: crew_requests,
+            asked: crewmate_requests(&view.incoming),
+            asking: crewmate_requests(&view.outgoing),
+            projects: mates
+                .iter()
+                .filter(|mate| !mate.blocked && !blocked_ids.contains(mate.id.as_str()))
+                .filter(|mate| place_of(mate.state, mate.game.as_ref()).0 == Place::Projects)
+                .map(|mate| mate.id.clone())
+                .collect(),
+            discord: mates
+                .iter()
+                .filter(|mate| discord_profile(&mate.discord_url))
+                .map(|mate| mate.id.clone())
+                .collect(),
+        };
 
         let mut friends: Vec<FriendView> = view
             .friends
@@ -373,14 +523,38 @@ impl Scene {
                     // Friends write to each other (a new conversation too) while chat is on.
                     dm: chat_on.then(|| pl_social::direct_conversation(&me.id, &friend.id)),
                     discord: discord_profile(&friend.discord_url),
+                    // The launcher's list says it only under an offline friend (`presenceLine`).
+                    seen: friend.last_seen.filter(|_| place == Place::Offline),
+                    fav: prefs.favorite(&friend.id),
+                    alert: prefs.alerts(&friend.id),
+                    group: group_of
+                        .get(friend.id.as_str())
+                        .map(|group| (*group).to_owned()),
+                    crews: inviting
+                        .iter()
+                        .filter_map(|crew| {
+                            let place = if crew.members.iter().any(|member| member.id == friend.id)
+                            {
+                                CrewPlace::Member
+                            } else if crew.invited.contains(&friend.id) {
+                                CrewPlace::Invited
+                            } else {
+                                return None;
+                            };
+                            Some((crew.id.clone(), place))
+                        })
+                        .collect(),
                 }
             })
             .collect();
+        // Friends' profiles, and crewmates' who are not friends (their menu in crew chat, Q15).
         let discord: HashMap<String, String> = view
             .friends
             .iter()
-            .filter(|friend| discord_profile(&friend.discord_url))
-            .map(|friend| (friend.id.clone(), friend.discord_url.clone()))
+            .map(|friend| (&friend.id, &friend.discord_url))
+            .chain(mates.iter().map(|mate| (&mate.id, &mate.discord_url)))
+            .filter(|(_, url)| discord_profile(url))
+            .map(|(id, url)| (id.clone(), url.clone()))
             .collect();
         // In game first, then online, then the rest, each in the list's order (a stable sort).
         friends.sort_by_key(|friend| match friend.place {
@@ -524,6 +698,8 @@ impl Scene {
             badges,
             joins,
             me_badge,
+            lists,
+            crewmates,
             wears,
             discord,
             names,
@@ -589,6 +765,11 @@ impl Scene {
             .then_some((host, port))
     }
 
+    /// `id` is in one of the player's crews (not the player): crew chat's senders (OVL-UX2).
+    pub fn is_crewmate(&self, id: &str) -> bool {
+        self.crewmates.contains(id)
+    }
+
     /// A user's name as the lists show it.
     pub fn name_of(&self, id: &str) -> Option<&str> {
         self.names.get(id).map(String::as_str)
@@ -612,8 +793,9 @@ impl Scene {
     }
 
     /// The name a message shows for its sender: as the lists know them, else the conversation's
-    /// title for a direct conversation (the sender is the other one), else "someone".
-    pub(crate) fn sender(&self, conv: &str, from: &str) -> String {
+    /// title for a direct conversation (the sender is the other one), else "someone" in the
+    /// overlay's language.
+    pub(crate) fn sender(&self, conv: &str, from: &str, english: bool) -> String {
         if let Some(name) = self.name_of(from) {
             return name.to_owned();
         }
@@ -623,7 +805,7 @@ impl Scene {
         {
             return conv.title.clone();
         }
-        pl_lang::pick("Biri", "Someone").to_owned()
+        if english { "Someone" } else { "Biri" }.to_owned()
     }
 }
 
@@ -636,12 +818,16 @@ struct Identity {
     me_badge: Option<String>,
     features: Vec<String>,
     reduced_motion: bool,
+    /// The overlay's language (OVL-LANG): another one greets again.
+    lang: Option<Lang>,
 }
 
 /// What the live connection was told, for the next differences.
 #[derive(Debug, Clone, Default)]
 pub struct Mirror {
     identity: Option<Identity>,
+    /// The language the mod's words follow (OVL-LANG: `lang` in its hello), none for an older mod.
+    lang: Option<Lang>,
     friends: BTreeMap<String, FriendView>,
     convs: BTreeMap<String, ConvView>,
     calls: BTreeMap<String, CallView>,
@@ -651,15 +837,27 @@ pub struct Mirror {
     badges: BTreeMap<String, BadgeView>,
     /// The "ekibe katıldı" lines it heard.
     joins: HashSet<String>,
+    /// The mod has the launcher's whole person menu (`people2` in its hello): it hears `lists`
+    /// (OVL-UX2).
+    people2: bool,
+    lists: Option<PeopleLists>,
 }
 
 impl Mirror {
-    /// For a mod that knows TEAM6-O's frames (`tags` in its hello) or not.
-    pub fn for_mod(tags: bool) -> Self {
+    /// For a mod that knows TEAM6-O's frames (`tags` in its hello) and OVL-UX2's lists
+    /// (`people2`), or not.
+    pub fn for_mod(tags: bool, people2: bool) -> Self {
         Self {
             tags,
+            people2,
             ..Self::default()
         }
+    }
+
+    /// The language the mod's words follow from now on (OVL-LANG; a mod whose hello lists
+    /// `lang`): another one than the greeting named greets again in the next update.
+    pub fn set_lang(&mut self, lang: Option<Lang>) {
+        self.lang = lang;
     }
 
     /// `welcome` and `snapshot`: everything after a handshake or a change of account. A mod that
@@ -675,6 +873,7 @@ impl Mirror {
                 Vec::new()
             },
             reduced_motion,
+            lang: self.lang,
         };
         let welcome = ToGame::Welcome {
             proto: PROTO,
@@ -686,11 +885,15 @@ impl Mirror {
             dnd: scene.dnd,
             reduced_motion,
             features: identity.features.clone(),
+            lang: identity.lang,
         };
         let (friends, convs, calls) = fitting_snapshot(scene);
         let tags = self.tags;
+        let people2 = self.people2;
+        let lang = self.lang;
         *self = Self {
             identity: Some(identity),
+            lang,
             friends: friends.iter().map(|f| (f.id.clone(), f.clone())).collect(),
             convs: convs.iter().map(|c| (c.id.clone(), c.clone())).collect(),
             calls: calls.iter().map(|c| (c.id.clone(), c.clone())).collect(),
@@ -698,6 +901,8 @@ impl Mirror {
             tags,
             badges: BTreeMap::new(),
             joins: HashSet::new(),
+            people2,
+            lists: None,
         };
         let snapshot = ToGame::Snapshot {
             friends,
@@ -705,19 +910,27 @@ impl Mirror {
             calls,
             dnd: scene.dnd,
         };
-        if !tags {
-            return vec![welcome, snapshot];
+        let mut frames = vec![welcome];
+        if tags {
+            self.badges = scene.badges.clone();
+            let cards = scene
+                .badges
+                .iter()
+                .map(|(crew, card)| (crew.clone(), Some(card.clone())))
+                .collect();
+            frames.push(ToGame::Badges { all: true, cards });
         }
-        self.badges = scene.badges.clone();
-        let cards = scene
-            .badges
-            .iter()
-            .map(|(crew, card)| (crew.clone(), Some(card.clone())))
-            .collect();
-        let mut frames = vec![welcome, ToGame::Badges { all: true, cards }, snapshot];
-        for join in &scene.joins {
-            self.joins.insert(join.id.clone());
-            frames.push(join.frame());
+        // The lists before the friends that name their categories and crews (OVL-UX2).
+        if people2 && scene.signed_in {
+            self.lists = Some(scene.lists.clone());
+            frames.push(scene.lists.frame());
+        }
+        frames.push(snapshot);
+        if tags {
+            for join in &scene.joins {
+                self.joins.insert(join.id.clone());
+                frames.push(join.frame());
+            }
         }
         frames
     }
@@ -729,6 +942,7 @@ impl Mirror {
                 || known.me != scene.me
                 || known.me_badge != scene.me_badge
                 || known.reduced_motion != reduced_motion
+                || known.lang != self.lang
                 || (if scene.signed_in {
                     known.features != scene.features
                 } else {
@@ -758,6 +972,10 @@ impl Mirror {
             }
             self.badges = scene.badges.clone();
             frames.push(ToGame::Badges { all: false, cards });
+        }
+        if self.people2 && scene.signed_in && self.lists.as_ref() != Some(&scene.lists) {
+            self.lists = Some(scene.lists.clone());
+            frames.push(scene.lists.frame());
         }
         diff(
             &mut self.friends,
@@ -875,8 +1093,9 @@ fn failure_of(failure: Option<SocialFailure>, listener: Listener) -> SendFailure
     }
 }
 
-/// Who hears the frames: the game's language (a sticker in words, for a mod that cannot draw it)
-/// and whether the mod knows CHAT2 (`chat2` in its hello: it hears the precise reasons).
+/// Who hears the frames: the overlay's language (the words the launcher writes for it: a sticker
+/// in words, a sender nobody named) and whether the mod knows CHAT2 (`chat2` in its hello: it hears
+/// the precise reasons).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Listener {
     pub english: bool,
@@ -884,11 +1103,15 @@ pub struct Listener {
 }
 
 impl Listener {
-    /// From the mod's hello: its language (`tr_tr`, `en_us`; the launcher's own when it says
-    /// none) and its features.
-    pub fn from_hello(language: &str, features: &[String]) -> Self {
-        let english = if language.trim().is_empty() {
-            pl_lang::pick("tr", "en") == "en"
+    /// From the mod's hello: its features and its language. A mod whose words follow the launcher
+    /// (OVL-LANG: `lang` among its features) shows `overlay`, the overlay's language; an older one
+    /// says its own (the game's: `tr_tr`, `en_us`; `overlay` when it says none).
+    pub fn from_hello(language: &str, features: &[String], overlay: Lang) -> Self {
+        let follows = features
+            .iter()
+            .any(|feature| feature == crate::protocol::FEATURE_LANG);
+        let english = if follows || language.trim().is_empty() {
+            overlay == Lang::En
         } else {
             !language.trim().to_ascii_lowercase().starts_with("tr")
         };
@@ -984,7 +1207,7 @@ pub fn msg_view(
             } else if mine {
                 scene.me.clone()
             } else {
-                scene.sender(conv, &reply.from)
+                scene.sender(conv, &reply.from, listener.english)
             },
             mine,
             text: reply
@@ -1026,7 +1249,7 @@ pub fn msg_view(
         from: if message.mine {
             scene.me.clone()
         } else {
-            scene.sender(conv, &message.from)
+            scene.sender(conv, &message.from, listener.english)
         },
         text,
         at: message.at,
@@ -1045,6 +1268,9 @@ pub fn msg_view(
         } else {
             scene.badge_of(&message.from).map(str::to_owned)
         },
+        // Their name opens their person menu (OVL-UX2): only crew chat names its senders.
+        by: (!message.mine && scene.is_crew_conv(conv) && !message.from.is_empty())
+            .then(|| message.from.clone()),
     }
 }
 
@@ -1224,7 +1450,7 @@ pub fn toast_of(
                 .map(|id| (id, scene.crew_name(id).unwrap_or_default()));
             let from = name
                 .clone()
-                .unwrap_or_else(|| scene.sender(conv, &message.from));
+                .unwrap_or_else(|| scene.sender(conv, &message.from, listener.english));
             // A sticker is told in words ("Çıkartma · GG"); a mod that knows it draws it too.
             let text = match &message.sticker {
                 Some(sticker) => sticker_words(sticker, listener.english),
@@ -1576,7 +1802,10 @@ pub(crate) mod tests {
         let scene = Scene::from_view(&view(), &NotifyPrefs::default(), NOW);
         assert!(scene.signed_in && scene.online && !scene.dnd);
         assert_eq!(scene.me, "Ece");
-        assert_eq!(scene.features, ["friends", "chat", "calls", "people"]);
+        assert_eq!(
+            scene.features,
+            ["friends", "chat", "calls", "people", "people2"]
+        );
         // In game first, then the launcher, then offline.
         let order: Vec<&str> = scene.friends.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(order, ["Ayşe", "Zeynep", "Mert", "Can"]);
@@ -1728,7 +1957,7 @@ pub(crate) mod tests {
         no_chat.chat = None;
         let again = mirror.update(&Scene::from_view(&no_chat, &prefs, NOW), "2.0.0", false);
         assert!(
-            matches!(again[0], ToGame::Welcome { ref features, .. } if features == &["friends", "calls", "people"])
+            matches!(again[0], ToGame::Welcome { ref features, .. } if features == &["friends", "calls", "people", "people2"])
         );
         // So does the reduced-motion choice.
         let again = mirror.update(&Scene::from_view(&no_chat, &prefs, NOW), "2.0.0", true);
@@ -2137,7 +2366,8 @@ pub(crate) mod tests {
                 "typing",
                 "reads",
                 "links",
-                "people"
+                "people",
+                "people2"
             ]
         );
         assert!(scene.offers(|e| e.typing));
@@ -2160,7 +2390,7 @@ pub(crate) mod tests {
             chat.on = false;
         }
         let scene = Scene::from_view(&off, &NotifyPrefs::default(), NOW);
-        assert_eq!(scene.features, ["friends", "calls", "people"]);
+        assert_eq!(scene.features, ["friends", "calls", "people", "people2"]);
     }
 
     #[test]
@@ -2454,13 +2684,58 @@ pub(crate) mod tests {
         let quiet = Scene::from_view(&view(), &NotifyPrefs::default(), NOW);
         assert!(!wants_card(&m, &quiet, NOW), "links off");
         assert_eq!(
-            Listener::from_hello("en_us", &["connect".into(), "chat2".into()]),
+            Listener::from_hello("en_us", &["connect".into(), "chat2".into()], Lang::Tr),
             Listener {
                 english: true,
                 chat2: true
             }
         );
-        assert_eq!(Listener::from_hello("tr_tr", &[]), Listener::default());
+        assert_eq!(
+            Listener::from_hello("tr_tr", &[], Lang::En),
+            Listener::default()
+        );
+    }
+
+    /// OVL-LANG: a mod whose words follow the launcher hears the overlay's language whatever its
+    /// game speaks; an older one keeps the game's (the overlay's only when its hello names none).
+    #[test]
+    fn the_launchers_words_follow_the_overlays_language() {
+        let follows: Vec<String> = vec!["chat2".into(), "lang".into()];
+        assert!(Listener::from_hello("tr_tr", &follows, Lang::En).english);
+        assert!(!Listener::from_hello("en_us", &follows, Lang::Tr).english);
+        assert!(Listener::from_hello("", &[], Lang::En).english);
+        assert!(Listener::from_hello("de_de", &[], Lang::Tr).english);
+        // A sender nobody named, in the overlay's words.
+        let scene = Scene::from_view(&view(), &NotifyPrefs::default(), NOW);
+        assert_eq!(scene.sender("t:t1", "u-nobody", false), "Biri");
+        assert_eq!(scene.sender("t:t1", "u-nobody", true), "Someone");
+        // The greeting names the language only for a mod that follows it, and another language
+        // greets again.
+        let mut old = Mirror::for_mod(false, false);
+        let greeting = old.greet(&scene, "2.0.0", false);
+        assert!(matches!(greeting[0], ToGame::Welcome { lang: None, .. }));
+        let mut mirror = Mirror::for_mod(false, false);
+        mirror.set_lang(Some(Lang::Tr));
+        let greeting = mirror.greet(&scene, "2.0.0", false);
+        assert!(matches!(
+            greeting[0],
+            ToGame::Welcome {
+                lang: Some(Lang::Tr),
+                ..
+            }
+        ));
+        assert!(mirror.update(&scene, "2.0.0", false).is_empty());
+        mirror.set_lang(Some(Lang::En));
+        let again = mirror.update(&scene, "2.0.0", false);
+        assert!(matches!(
+            again[0],
+            ToGame::Welcome {
+                lang: Some(Lang::En),
+                ..
+            }
+        ));
+        assert!(matches!(again.last(), Some(ToGame::Snapshot { .. })));
+        assert!(mirror.update(&scene, "2.0.0", false).is_empty());
     }
 
     pub fn card(crew: &str, tag: &str, name: &str) -> Box<CrewBadgeView> {
@@ -2521,7 +2796,7 @@ pub(crate) mod tests {
         let scene = Scene::from_view(&team6_view(), &prefs, NOW);
         assert_eq!(
             scene.features,
-            ["friends", "chat", "calls", "tags", "people"]
+            ["friends", "chat", "calls", "tags", "people", "people2"]
         );
         assert_eq!(
             scene.badges.keys().map(String::as_str).collect::<Vec<_>>(),
@@ -2592,7 +2867,7 @@ pub(crate) mod tests {
         let old = Mirror::default().greet(&scene, "2.0.0", false);
         assert_eq!(kinds(&old), ["welcome", "snapshot"]);
 
-        let mut mirror = Mirror::for_mod(true);
+        let mut mirror = Mirror::for_mod(true, false);
         let greeting = mirror.greet(&scene, "2.0.0", false);
         assert_eq!(
             kinds(&greeting),
@@ -2645,7 +2920,7 @@ pub(crate) mod tests {
     #[test]
     fn tags_switched_off_greet_again_without_any() {
         let prefs = NotifyPrefs::default();
-        let mut mirror = Mirror::for_mod(true);
+        let mut mirror = Mirror::for_mod(true, false);
         mirror.greet(
             &Scene::from_view(&team6_view(), &prefs, NOW),
             "2.0.0",
@@ -2709,7 +2984,7 @@ pub(crate) mod tests {
         assert!(scene.may_invite());
         assert_eq!(
             scene.features,
-            ["friends", "chat", "calls", "people", "invite"]
+            ["friends", "chat", "calls", "people", "people2", "invite"]
         );
         v.activity = pl_social::ActivityView::Playing {
             host: Some("mc.example.net".into()),
@@ -2730,7 +3005,7 @@ pub(crate) mod tests {
         assert_eq!(scene.me_badge.as_deref(), Some("t1"));
         assert_eq!(scene.badges["t1"].tag, "GKŞ");
         assert!(scene.badges["t1"].mine);
-        let mut mirror = Mirror::for_mod(true);
+        let mut mirror = Mirror::for_mod(true, false);
         let frames = mirror.greet(&scene, "2.0.0", false);
         assert!(
             matches!(&frames[0], ToGame::Welcome { me, .. } if me.badge.as_deref() == Some("t1") && me.name == "Ece")
@@ -2748,5 +3023,166 @@ pub(crate) mod tests {
         no_tags.me.as_mut().unwrap().badge = Some(card("t1", "GKŞ", "Gece Kuşları"));
         let scene = Scene::from_view(&no_tags, &prefs, NOW);
         assert!(scene.me_badge.is_none() && scene.badges.is_empty());
+    }
+
+    #[test]
+    fn an_offline_friend_says_when_they_were_seen_as_roughly_as_the_launcher() {
+        let prefs = NotifyPrefs::default();
+        let mut v = view();
+        // Can is offline; Mert is in the launcher (an online friend never says it).
+        v.friends[1].last_seen = Some(pl_social::LastSeen::Yesterday);
+        v.friends[3].last_seen = Some(pl_social::LastSeen::Today);
+        let scene = Scene::from_view(&v, &prefs, NOW);
+        assert_eq!(
+            scene.friend("f-can").unwrap().seen,
+            Some(pl_social::LastSeen::Yesterday)
+        );
+        assert_eq!(scene.friend("f-mert").unwrap().seen, None);
+        let can = serde_json::to_value(scene.friend("f-can").unwrap()).unwrap();
+        assert_eq!(can["seen"], "yesterday");
+        // A friend who keeps it to themselves: the service gives nothing, nothing goes.
+        v.friends[1].last_seen = None;
+        let scene = Scene::from_view(&v, &prefs, NOW);
+        let can = serde_json::to_value(scene.friend("f-can").unwrap()).unwrap();
+        assert!(can.get("seen").is_none());
+        // It changes on its own: the mirror tells the mod.
+        let mut mirror = Mirror::for_mod(false, false);
+        mirror.greet(&scene, "2.0.0", false);
+        v.friends[1].last_seen = Some(pl_social::LastSeen::Week);
+        let later = Scene::from_view(&v, &prefs, NOW);
+        let frames = mirror.update(&later, "2.0.0", false);
+        assert!(
+            matches!(&frames[..], [ToGame::Friend(f)] if f.id == "f-can" && f.seen == Some(pl_social::LastSeen::Week))
+        );
+    }
+
+    #[test]
+    fn the_person_menus_lists_follow_the_players_rights_in_each_crew() {
+        let prefs = NotifyPrefs::default();
+        let mut v = view();
+        // Members invite (the default): the player's crew is listed, with room.
+        let scene = Scene::from_view(&v, &prefs, NOW);
+        assert_eq!(
+            scene.lists.crews,
+            [CrewItem {
+                id: "t1".into(),
+                name: "Gece Kuşları".into(),
+                full: false
+            }]
+        );
+        assert!(scene.lists.groups.is_empty() && !scene.lists.crewmates);
+        assert!(scene.is_crewmate("u-cem") && !scene.is_crewmate("me"));
+        assert!(scene.features.iter().any(|f| f == FEATURE_PEOPLE2));
+        // Only moderators invite, and the player is a plain member: no crew to invite to.
+        v.crews[0].permissions.invite = PermissionLevel::Moderators;
+        assert!(Scene::from_view(&v, &prefs, NOW).lists.crews.is_empty());
+        v.crews[0].moderator = true;
+        assert_eq!(Scene::from_view(&v, &prefs, NOW).lists.crews.len(), 1);
+        // The leader always may; a full crew says so.
+        v.crews[0].moderator = false;
+        v.crews[0].permissions.invite = PermissionLevel::Leader;
+        v.crews[0].role = TeamRole::Founder;
+        v.crews[0].limit = 2;
+        let scene = Scene::from_view(&v, &prefs, NOW);
+        assert!(scene.lists.crews[0].full);
+        // Crews off: none.
+        v.teams = false;
+        assert!(Scene::from_view(&v, &prefs, NOW).lists.crews.is_empty());
+    }
+
+    #[test]
+    fn a_crewmate_who_is_not_a_friend_is_joined_and_written_to_as_the_launcher_offers() {
+        let prefs = NotifyPrefs::default();
+        let mut v = view();
+        // Cem in the launcher, no Discord profile: nothing to offer.
+        let scene = Scene::from_view(&v, &prefs, NOW);
+        assert!(scene.lists.projects.is_empty() && scene.lists.discord.is_empty());
+        // On Projects with a profile; a friend in the crew is never listed (their own frame
+        // carries it), nor the player.
+        v.crews[0].members[1].state = PresenceState::Playing;
+        v.crews[0].members[1].game = projects();
+        v.crews[0].members[1].discord_url = "https://discord.com/users/42".into();
+        let mut friend_too = v.crews[0].members[1].clone();
+        friend_too.id = v.friends[0].id.clone();
+        v.crews[0].members.push(friend_too);
+        v.crews[0].members[0].discord_url = "https://discord.com/users/me".into();
+        let scene = Scene::from_view(&v, &prefs, NOW);
+        assert_eq!(scene.lists.projects, ["u-cem"]);
+        assert_eq!(scene.lists.discord, ["u-cem"]);
+        assert_eq!(
+            scene.discord_url("u-cem"),
+            Some("https://discord.com/users/42")
+        );
+        // Blocked: no "Katıl" (the profile stays, as in the launcher's menu).
+        v.crews[0].members[1].blocked = true;
+        let blocked = Scene::from_view(&v, &prefs, NOW);
+        assert!(blocked.lists.projects.is_empty());
+        assert_eq!(blocked.lists.discord, ["u-cem"]);
+        // Anywhere but Projects: never (another server is never named for a crewmate).
+        v.crews[0].members[1].blocked = false;
+        v.crews[0].members[1].game = Some(Game {
+            location: GameLocation::Singleplayer,
+            host: None,
+        });
+        assert!(Scene::from_view(&v, &prefs, NOW).lists.projects.is_empty());
+        // A web profile that is not `https`: no row.
+        v.crews[0].members[1].discord_url = "http://discord.com/users/42".into();
+        assert!(Scene::from_view(&v, &prefs, NOW).lists.discord.is_empty());
+        // The mod hears it when Cem comes to Projects.
+        let mut mirror = Mirror::for_mod(false, true);
+        mirror.greet(&Scene::from_view(&v, &prefs, NOW), "2.0.0", false);
+        v.crews[0].members[1].game = projects();
+        let frames = mirror.update(&Scene::from_view(&v, &prefs, NOW), "2.0.0", false);
+        assert!(matches!(&frames[..], [ToGame::Lists { projects, .. }] if projects == &["u-cem"]));
+    }
+
+    #[test]
+    fn a_mod_with_the_whole_person_menu_hears_the_lists_before_the_friends_and_their_changes() {
+        let prefs = NotifyPrefs::default();
+        let mut v = view();
+        v.groups = Some(pl_social::FriendGroupsView {
+            version: 1,
+            groups: vec![pl_social::FriendGroup {
+                id: "g1".into(),
+                name: "Okul".into(),
+            }],
+            // A member of a category that is gone counts as "Arkadaşlar".
+            members: vec![
+                pl_social::GroupMember {
+                    friend: "f-can".into(),
+                    group: "g1".into(),
+                },
+                pl_social::GroupMember {
+                    friend: "f-mert".into(),
+                    group: "gone".into(),
+                },
+            ],
+        });
+        let scene = Scene::from_view(&v, &prefs, NOW);
+        assert_eq!(scene.friend("f-can").unwrap().group.as_deref(), Some("g1"));
+        assert_eq!(scene.friend("f-mert").unwrap().group, None);
+        let mut mirror = Mirror::for_mod(false, true);
+        let frames = mirror.greet(&scene, "2.0.0", false);
+        assert!(matches!(
+            &frames[..],
+            [ToGame::Welcome { .. }, ToGame::Lists { groups, .. }, ToGame::Snapshot { .. }]
+                if groups.len() == 1
+        ));
+        assert!(mirror.update(&scene, "2.0.0", false).is_empty());
+        // A new category: the lists again, nothing else.
+        v.groups
+            .as_mut()
+            .unwrap()
+            .groups
+            .push(pl_social::FriendGroup {
+                id: "g2".into(),
+                name: "PvP".into(),
+            });
+        let later = Scene::from_view(&v, &prefs, NOW);
+        let frames = mirror.update(&later, "2.0.0", false);
+        assert!(matches!(&frames[..], [ToGame::Lists { groups, .. }] if groups.len() == 2));
+        // A mod without it never hears them.
+        let frames = Mirror::for_mod(false, false).greet(&later, "2.0.0", false);
+        assert!(!frames.iter().any(|f| matches!(f, ToGame::Lists { .. })));
     }
 }

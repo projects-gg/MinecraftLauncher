@@ -40,6 +40,8 @@ export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..")
 export const MOD_DIR = join(ROOT, "mods", "projects-overlay");
 export const OUT_DIR = join(ROOT, "apps", "launcher", "src-tauri", "overlay");
 export const MOD_ID = "projects_overlay";
+/** The GPL text every jar carries at its root (build.gradle's `jar`, Fabric's template name). */
+export const LICENSE_ENTRY = "LICENSE_projects-overlay";
 export const INDEX_FILE = "index.json";
 export const SCHEMA = 1;
 
@@ -122,6 +124,11 @@ export function describeJar(file, bytes, target) {
   if (range !== target.range) {
     throw new Error(`${file}: Minecraft range ${range}, build.gradle says ${target.range}`);
   }
+  // The mod is GPL-3.0-only: a jar without the license text does not ship.
+  const license = readZipEntry(bytes, LICENSE_ENTRY);
+  if (!license?.toString("utf8").includes("GNU GENERAL PUBLIC LICENSE")) {
+    throw new Error(`${file}: no GPL text (${LICENSE_ENTRY})`);
+  }
   return {
     minecraft: target.minecraft,
     range,
@@ -134,10 +141,13 @@ export function describeJar(file, bytes, target) {
 
 // --- source stamp ---------------------------------------------------------------------------
 
-/** The files a jar is made of: the build files, main and per-version sources, the stickers. */
+/**
+ * The files a jar is made of: the build files, main and per-version sources, the stickers, the
+ * license text.
+ */
 export function sourceFiles(root = ROOT) {
   const mod = join(root, "mods", "projects-overlay");
-  const out = [];
+  const out = [join(root, "LICENSE")];
   const walk = (dir) => {
     if (!existsSync(dir)) return;
     for (const entry of readdirSync(dir, { withFileTypes: true })) {

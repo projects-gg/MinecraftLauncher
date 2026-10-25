@@ -7,9 +7,10 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.util.FormattedCharSequence;
 
 /**
- * A crew tag's chip before a name (TEAM6: "[GK] Ayşe"): the tag in Tektur, bone-50 on the crew colour at 24 %,
- * chamfered as the launcher's {@code TeamTag}. Laid out once (its text keeps its layout) and drawn with two calls,
- * the frame and the text. The chip never shrinks; the name beside it does.
+ * A crew tag's chip before a name (TEAM6: "[GK] Ayşe"): the tag in Figtree SemiBold (Turkish letters legible at every
+ * GUI scale: Ş with its cedilla, not Tektur's one-pixel comma), bone-50 on the crew colour at 24 %, chamfered as the
+ * launcher's {@code TeamTag}. Laid out once (its text keeps its layout) and drawn with two calls, the frame and the
+ * text. The chip never shrinks; the name beside it does.
  */
 public final class TagChip {
     /** Beside a name in a list row or a toast's title. */
@@ -33,8 +34,9 @@ public final class TagChip {
         this.badge = badge;
         this.text = Texts.visual(badge.tag());
         this.tint = CrewLook.tagTint(badge.color());
-        // The game's own font (GUI 1, "Force Unicode Font") is taller than ours: the chip grows with it.
-        this.height = Math.max(height, Math.round(Fonts.capHeight(Fonts.Face.TAG) + 4f));
+        // The game's own font (GUI 1, "Force Unicode Font") is taller than ours: the chip grows with it, with a pixel
+        // more above and below for its accents (Ğ's breve, Ş's cedilla touched the chip's edges).
+        this.height = Math.max(height, Math.round(Fonts.capHeight(Fonts.Face.TAG) + (Fonts.bundled() ? 4f : 6f)));
         this.width = Fonts.tag().width(badge.tag()) + 2 * PAD_X;
         // Three slices at the usual heights; nine only for the game's taller font.
         this.frame = this.height == ROW ? Frames.TAG_9 : this.height == CHAT ? Frames.TAG_8 : Frames.TAG;

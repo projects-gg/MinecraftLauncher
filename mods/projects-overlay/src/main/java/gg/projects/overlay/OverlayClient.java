@@ -10,6 +10,8 @@ import gg.projects.overlay.connect.MinecraftGame;
 import gg.projects.overlay.connect.ServerTarget;
 import gg.projects.overlay.host.HostController;
 import gg.projects.overlay.host.HostGate;
+import gg.projects.overlay.lang.Language;
+import gg.projects.overlay.lang.LanguageChoice;
 import gg.projects.overlay.link.CodelessLink;
 import gg.projects.overlay.link.LinkMessages;
 import gg.projects.overlay.link.LinkPayload;
@@ -26,6 +28,7 @@ import gg.projects.overlay.ui.panel.DiscordLinkScreen;
 import gg.projects.overlay.ui.panel.HostPauseButton;
 import gg.projects.overlay.ui.panel.JoinScreen;
 import gg.projects.overlay.ui.panel.OverlayScreen;
+import gg.projects.overlay.ui.panel.SettingsList;
 import java.util.List;
 import java.util.function.UnaryOperator;
 import net.fabricmc.api.ClientModInitializer;
@@ -103,6 +106,9 @@ public final class OverlayClient implements ClientModInitializer {
             LOG.info("Not started by Projects Launcher; the overlay stays off.");
             return;
         }
+        // The overlay speaks the launcher's language from its first frame (OVL-LANG): the game starts with it, every
+        // welcome names it again; an older launcher names none and the game's own language stays.
+        Texts.speak(new LanguageChoice(System.getProperty(LanguageChoice.PROPERTY), Texts::gameLanguage));
         state = new OverlayState();
         settings = new SettingsStore(FabricLoader.getInstance().getGameDir());
         key = new OverlayKey(KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main")));
@@ -147,7 +153,7 @@ public final class OverlayClient implements ClientModInitializer {
         ClientTickEvents.END_CLIENT_TICK.register(this::tick);
 
         bridge = new BridgeClient(config, version(MOD_ID), version("minecraft"),
-            () -> Minecraft.getInstance().options.languageCode, new BridgeClient.Listener() {
+            () -> Texts.language().helloCode(), new BridgeClient.Listener() {
                 @Override
                 public void onStatus(BridgeClient.Status status, String reason) {
                     Minecraft.getInstance().execute(() -> onBridgeStatus(status, reason));
@@ -444,15 +450,67 @@ public final class OverlayClient implements ClientModInitializer {
     }
 
     public void panelOpened() {
+        if (swappingPanel) {
+            return;
+        }
         toasts.clear();
         bridge.send(Protocol.panel(true));
     }
 
     public void panelClosed() {
+        if (swappingPanel) {
+            return;
+        }
         bridge.send(Protocol.panel(false));
         // No "yazıyor…" comes while the panel is closed: what was shown would only go stale.
         state.clearTyping();
         typedIn = null;
+    }
+
+    // ---- The overlay's language (OVL-LANG) ----------------------------------------------------------------
+
+    /** The panel is being built anew in another language: it neither closes nor opens for the launcher. */
+    private boolean swappingPanel;
+
+    /** The open panel gives way to {@code next}, the same panel in the overlay's new language. */
+    public void swapPanel(OverlayScreen next) {
+        swappingPanel = true;
+        try {
+            Compat.setScreen(Minecraft.getInstance(), next);
+        } finally {
+            swappingPanel = false;
+        }
+    }
+
+    /** The settings' "Dil" row: the overlay's language, kept by the launcher. */
+    public SettingsList.Languages languages() {
+        return new SettingsList.Languages() {
+            @Override
+            public Language current() {
+                return Texts.current();
+            }
+
+            @Override
+            public boolean editable() {
+                return Texts.language().editable() && state.online();
+            }
+
+            @Override
+            public void pick(Language language) {
+                pickLanguage(language);
+            }
+        };
+    }
+
+    /**
+     * The player picked the overlay's language in its settings: the launcher keeps it and answers with a welcome in it,
+     * which is when the panel changes (never before: its words and the launcher's stay one language).
+     */
+    public void pickLanguage(Language language) {
+        String code = Texts.language().pick(language, monotonicMs());
+        if (code != null) {
+            bridge.send(Protocol.lang(code));
+        }
     }
 
     public void openConversation(String conversation) {
@@ -532,6 +590,11 @@ public final class OverlayClient implements ClientModInitializer {
         friendAction(friendId, Protocol.discord(friendId), "failed");
     }
 
+    /** "Discord'dan mesaj at" on a crewmate who is not a friend (OVL-UX2, Q15): the name crew chat showed. */
+    public void openDiscord(String id, String name) {
+        personAction(id, name, null, Protocol.discord(id), "failed");
+    }
+
     /** "Arkadaşlıktan çıkar", after the panel's question. */
     public void unfriend(String friendId) {
         friendAction(friendId, Protocol.unfriend(friendId), "failed");
@@ -542,20 +605,91 @@ public final class OverlayClient implements ClientModInitializer {
         friendAction(friendId, Protocol.block(friendId), "failed");
     }
 
+    /** "Engelle" on someone the panel names (a crewmate from crew chat, OVL-UX2), after the panel's question. */
+    public void block(String id, String name) {
+        personAction(id, name, null, Protocol.block(id), "failed");
+    }
+
     /** "Rapor et": a player's reason, a note for moderators, maybe a block too. */
     public void report(String friendId, String reason, String note, boolean alsoBlock) {
         state.reportSent(friendId, alsoBlock);
-        friendAction(friendId, Protocol.report(friendId, reason, note, alsoBlock), "report_failed");
+        OverlayState.Friend friend = state.friend(friendId);
+        personAction(friendId, friend == null ? reportName(friendId) : friend.name(), null,
+            Protocol.report(friendId, reason, note, alsoBlock), "report_failed");
     }
 
     /** Sends a friend menu frame; when it cannot go at all the panel says so at once. */
     private void friendAction(String friendId, JsonObject frame, String failedKey) {
         OverlayState.Friend friend = state.friend(friendId);
-        state.actionSent(friendId);
+        personAction(friendId, friend == null ? "" : friend.name(), null, frame, failedKey);
+    }
+
+    /**
+     * Sends a person menu frame about {@code id} (a friend, or a crewmate from crew chat), keeping their {@code name}
+     * and what the answer's words name besides them ({@code detail}); when it cannot go at all the panel says so at
+     * once.
+     */
+    private void personAction(String id, String name, String detail, JsonObject frame, String failedKey) {
+        state.actionSent(id, name, detail);
         if (!bridge.send(frame)) {
-            state.personNote(failedKey, friend == null ? "" : friend.name(), true, System.currentTimeMillis());
+            state.personNote(failedKey, name, true, System.currentTimeMillis());
         }
         refreshScreen();
+    }
+
+    // ---- The rest of the launcher's person menu (OVL-UX2) -------------------------------------------------
+
+    /** Whom the report dialog is about while it is not a friend (a crewmate from crew chat), and their name. */
+    private String reportedId;
+    private String reportedName = "";
+
+    /** The report dialog opens about someone who is not on the friend list (a crewmate): their name for the note. */
+    public void reportingAbout(String id, String name) {
+        reportedId = id;
+        reportedName = name == null ? "" : name;
+    }
+
+    private String reportName(String id) {
+        return id.equals(reportedId) ? reportedName : "";
+    }
+
+    /** "Favorilere ekle" ({@code on}) or "Favorilerden çıkar": the launcher keeps it; the row's star follows. */
+    public void favorite(String friendId, boolean on) {
+        markAction(friendId, Protocol.favorite(friendId, on), on ? "favorited" : "unfavorited");
+    }
+
+    /** "Çevrimiçi olunca bildir" on or off for a friend. */
+    public void alert(String friendId, boolean on) {
+        markAction(friendId, Protocol.alert(friendId, on), on ? "alert_on" : "alert_off");
+    }
+
+    /** A favourite or an online notice: said under the list at once (the launcher answers only a refusal). */
+    private void markAction(String friendId, JsonObject frame, String doneKey) {
+        OverlayState.Friend friend = state.friend(friendId);
+        String name = friend == null ? "" : friend.name();
+        state.actionSent(friendId, name, null);
+        boolean sent = bridge.send(frame);
+        state.personNote(sent ? doneKey : "failed", name, !sent, System.currentTimeMillis());
+        refreshScreen();
+    }
+
+    /** "Kategoriye taşı": a category by id ({@code ""} for "Arkadaşlar"), and its name for the note. */
+    public void moveFriend(String friendId, String group, String groupName) {
+        OverlayState.Friend friend = state.friend(friendId);
+        personAction(friendId, friend == null ? "" : friend.name(), groupName, Protocol.move(friendId, group),
+            "failed");
+    }
+
+    /** "Ekibe davet et" to one crew, and its name for the note. */
+    public void crewInvite(String friendId, String crew, String crewName) {
+        OverlayState.Friend friend = state.friend(friendId);
+        personAction(friendId, friend == null ? "" : friend.name(), crewName, Protocol.crewInvite(friendId, crew),
+            "failed");
+    }
+
+    /** "Arkadaş ekle" or "İsteği kabul et" on a crewmate from crew chat. */
+    public void addCrewmate(String id, String name) {
+        personAction(id, name, null, Protocol.addFriend(id), "failed");
     }
 
     /**
@@ -635,6 +769,10 @@ public final class OverlayClient implements ClientModInitializer {
             default -> {
             }
         }
+        if ("welcome".equals(Protocol.type(frame))) {
+            // The overlay's language (G3): the open panel builds itself anew in another one on its next tick.
+            Texts.language().welcome(Protocol.str(frame, "lang", null));
+        }
         OverlayState.HostView before = state.host();
         OverlayState.ToastRequest toast = state.apply(frame, System.currentTimeMillis());
         if (toast != null) {
@@ -659,6 +797,8 @@ public final class OverlayClient implements ClientModInitializer {
         host.onBridgeStatus(status);
         state.setStatus(status, reason);
         if (status != BridgeClient.Status.ONLINE) {
+            // No launcher keeps a language pick until the next welcome.
+            Texts.language().offline();
             toasts.clear();
             // No permit can come now: a server waiting for one hears there is none.
             link.onClear();

@@ -73,6 +73,8 @@ public final class PeopleScenario implements ClientModInitializer {
     private boolean started;
     private boolean done;
     private CompletableFuture<Void> reload;
+    /** OVL-UX2: the launcher (the mock's --people2) takes the whole person menu; its steps run only then. */
+    private boolean people2;
 
     @Override
     public void onInitializeClient() {
@@ -133,6 +135,8 @@ public final class PeopleScenario implements ClientModInitializer {
                 results.addProperty("people", overlay.state().has("people"));
                 results.addProperty("invite", overlay.state().has("invite"));
                 results.addProperty("meBadge", String.valueOf(overlay.state().meBadge()));
+                people2 = overlay.state().has("people2");
+                results.addProperty("people2", people2);
                 openWorld(mc);
                 worldTicks = 0;
             }
@@ -286,6 +290,7 @@ public final class PeopleScenario implements ClientModInitializer {
             shot(mc, "note-reported");
             PanelInput.clearPointer();
         });
+        people2Rows();
         // A row's own press: Ayşe's conversation, the field ready.
         step(0.2, "press Ayşe", mc -> need(mc).pressFriend("f-ayse"));
         step(0.6, "shot conversation", mc -> {
@@ -308,6 +313,7 @@ public final class PeopleScenario implements ClientModInitializer {
             String conv = need(mc).openConversation();
             results.addProperty("madeReal", conv != null && OverlayClient.get().state().conversation(conv) != null);
         });
+        people2Chats();
         // The tag taken off: the header shows the name alone.
         step(0.2, "badge off", mc -> dev("badge-off"));
         step(0.8, "shot header without tag", mc -> {
@@ -353,6 +359,125 @@ public final class PeopleScenario implements ClientModInitializer {
         });
         step(0.3, "close", mc -> need(mc).close());
         pauseMatrix();
+    }
+
+    /** A step that runs only with the whole person menu (OVL-UX2). */
+    private void step2(double wait, String name, Consumer<Minecraft> action) {
+        step(wait, name, mc -> {
+            if (people2) {
+                action.accept(mc);
+            }
+        });
+    }
+
+    /**
+     * OVL-UX2 on the friend list: the friend list's group of the menu (favourite, online notice, category, crew invite),
+     * the categories and the crews as lists in place, a favourite's star, an online notice turned off, and the keys
+     * opening a list (→) and coming back (←).
+     */
+    private void people2Rows() {
+        step2(0.3, "Ayşe's whole menu", mc -> need(mc).openFriendMenu("f-ayse", false));
+        step2(0.4, "shot whole menu", mc -> shot(mc, "menu-full"));
+        step2(0.1, "categories", mc -> need(mc).pressMenu(FriendMenu.Action.MOVE));
+        step2(0.4, "shot categories", mc -> {
+            shot(mc, "menu-categories");
+            results.addProperty("categoriesListed", need(mc).menuListing() == FriendMenu.Action.MOVE);
+        });
+        step2(0.1, "to PvP", mc -> results.addProperty("movePicked", need(mc).chooseMenu("pvp")));
+        step2(0.6, "shot moved", mc -> {
+            shot(mc, "note-moved");
+            results.addProperty("ayseGroup", String.valueOf(OverlayClient.get().state().friend("f-ayse").group()));
+        });
+        step2(0.3, "Ayşe's crews", mc -> {
+            need(mc).openFriendMenu("f-ayse", false);
+            need(mc).pressMenu(FriendMenu.Action.CREW_INVITE);
+        });
+        step2(0.4, "shot crews", mc -> {
+            shot(mc, "menu-crews");
+            results.addProperty("crewsListed", need(mc).menuListing() == FriendMenu.Action.CREW_INVITE);
+        });
+        step2(0.1, "invite to Gece Kuşları", mc -> results.addProperty("crewPicked", need(mc).chooseMenu("t-gece")));
+        step2(0.6, "shot crew invited", mc -> {
+            shot(mc, "note-crew-invited");
+            results.addProperty("ayseInvited",
+                String.valueOf(OverlayClient.get().state().friend("f-ayse").crews().get("t-gece")));
+        });
+        step2(0.3, "Mert a favourite", mc -> {
+            need(mc).openFriendMenu("f-mert", false);
+            need(mc).pressMenu(FriendMenu.Action.FAVORITE);
+        });
+        step2(0.6, "shot favourite", mc -> {
+            shot(mc, "note-favorited");
+            results.addProperty("mertFavorite", OverlayClient.get().state().friend("f-mert").fav());
+        });
+        step2(0.3, "Ayşe's notices off", mc -> {
+            need(mc).openFriendMenu("f-ayse", false);
+            need(mc).pressMenu(FriendMenu.Action.ALERT);
+        });
+        step2(0.6, "shot notices off", mc -> {
+            shot(mc, "note-alert-off");
+            results.addProperty("ayseAlert", OverlayClient.get().state().friend("f-ayse").alert());
+        });
+        // The keys: Shift+F10 on Ayşe, the category row lit, → opens its list, ← comes back to it.
+        step2(0.3, "keys on Ayşe", mc -> {
+            PanelInput.clearPointer();
+            need(mc).pickFriend("f-ayse");
+            key(need(mc), InputConstants.KEY_F10, 1);
+        });
+        step2(0.3, "light the categories", mc -> results.addProperty("categoryLit",
+            need(mc).focusMenuRow(FriendMenu.Action.MOVE)));
+        step2(0.1, "right", mc -> key(need(mc), InputConstants.KEY_RIGHT, 0));
+        step2(0.4, "shot categories from keys", mc -> {
+            shot(mc, "menu-categories-keys");
+            results.addProperty("rightOpenedList", need(mc).menuListing() == FriendMenu.Action.MOVE);
+        });
+        step2(0.1, "left", mc -> key(need(mc), InputConstants.KEY_LEFT, 0));
+        step2(0.3, "left result", mc -> {
+            results.addProperty("leftCameBack", need(mc).menuFriend() != null && need(mc).menuListing() == null);
+            key(need(mc), InputConstants.KEY_ESCAPE, 0);
+        });
+        step2(0.4, "shot list after", mc -> shot(mc, "friends-after"));
+    }
+
+    /**
+     * OVL-UX2 on the chat page: a friend's chip has their menu (a right click; Shift+F10 on the chosen chip leaves out
+     * "Mesaj gönder"), a sender's name in crew chat has theirs (a friend's whole menu, a crewmate's own: a friend
+     * request, a block, a report), and the note of an action taken there shows in the conversation's line.
+     */
+    private void people2Chats() {
+        // Ayşe's conversation on screen; a right click on Mert's chip opens his menu ("Mesaj gönder" opens his).
+        step2(0.2, "Ayşe's conversation", mc -> need(mc).showConversation("dm:ayse"));
+        step2(0.5, "chip menu", mc -> need(mc).openChipMenu("dm:mert", false));
+        step2(0.4, "shot chip menu", mc -> {
+            shot(mc, "chip-menu");
+            results.addProperty("chipMenuFor", String.valueOf(need(mc).menuFriend()));
+        });
+        step2(0.1, "esc", this::escMenu);
+        // Shift+F10 on the chosen chip: Ayşe's menu, without "Mesaj gönder" (her conversation is on screen).
+        step2(0.3, "chip menu from keys", mc -> need(mc).openChipMenu("dm:ayse", true));
+        step2(0.4, "shot chip menu keys", mc -> shot(mc, "chip-menu-keys"));
+        step2(0.1, "esc", this::escMenu);
+        step2(0.2, "crew chat", mc -> need(mc).showConversation("crew:gece"));
+        step2(0.9, "Mert's name", mc -> results.addProperty("senderMenuFriend", need(mc).openSenderMenuAt("m6")));
+        step2(0.4, "shot sender friend", mc -> {
+            shot(mc, "sender-menu-friend");
+            results.addProperty("senderMenuFor", String.valueOf(need(mc).menuFriend()));
+        });
+        step2(0.1, "esc", this::escMenu);
+        step2(0.3, "Cem's name", mc -> results.addProperty("senderMenuCrewmate", need(mc).openSenderMenuAt("m6c")));
+        step2(0.4, "shot sender crewmate", mc -> {
+            shot(mc, "sender-menu-crewmate");
+            // Q15: Cem plays on Projects (the game is not there) and his Discord profile is known.
+            results.addProperty("crewmateJoin", need(mc).menuHas(FriendMenu.Action.JOIN));
+            results.addProperty("crewmateDiscord", need(mc).menuHas(FriendMenu.Action.DISCORD));
+        });
+        step2(0.1, "accept Cem", mc -> results.addProperty("cemAccepted",
+            need(mc).pressMenu(FriendMenu.Action.ADD_FRIEND)));
+        step2(0.7, "shot friends now", mc -> {
+            shot(mc, "note-now-friends");
+            results.addProperty("cemFriend", OverlayClient.get().state().friend("u-cem") != null);
+            PanelInput.clearPointer();
+        });
     }
 
     /**
@@ -534,6 +659,13 @@ public final class PeopleScenario implements ClientModInitializer {
             WorldDataConfiguration.DEFAULT);
         mc.createWorldOpenFlows().createFreshLevel(WORLD, settings, new WorldOptions(20261024L, false, false),
             DevCompat.flatWorld(), new TitleScreen());
+    }
+
+    /** Esc on the open menu; nothing when none opened (a missing menu must not close the panel and end the run). */
+    private void escMenu(Minecraft mc) {
+        if (need(mc).menuFriend() != null) {
+            key(need(mc), InputConstants.KEY_ESCAPE, 0);
+        }
     }
 
     private void shot(Minecraft mc, String name) {

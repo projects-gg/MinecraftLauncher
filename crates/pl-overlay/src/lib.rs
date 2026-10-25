@@ -33,10 +33,12 @@ mod token;
 
 pub use feed::{MAX_CONVS, MAX_FRIENDS};
 pub use host::{HostSignal, HostSink, WorldsShown};
-pub use hub::{Overlay, OverlayConfig, OverlayStatus};
+pub use hub::{
+    LANGUAGE_FILE, Overlay, OverlayConfig, OverlayStatus, read_language_pick, write_language_pick,
+};
 pub use server::{
-    BYE_TIMEOUT, Bridge, BridgeEvent, ConnId, Control, Endpoint, PORT_ARG, TOKEN_ARG,
+    BYE_TIMEOUT, Bridge, BridgeEvent, ConnId, Control, Endpoint, LANG_ARG, PORT_ARG, TOKEN_ARG,
     is_secret_jvm_arg,
 };
-pub use session::{CONNECT_WAIT, ConnectOutcome, SocialActions};
+pub use session::{CONNECT_WAIT, ConnectOutcome, PeopleChange, SocialActions};
 pub use token::SessionToken;

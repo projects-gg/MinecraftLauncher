@@ -20,7 +20,14 @@ function connected(): boolean {
 let config: OverlayConfig = {
   enabled: true,
   reducedMotion: false,
-  notify: { crewCalls: true, crewChat: false, chatMutes: {} },
+  notify: {
+    crewCalls: true,
+    crewChat: false,
+    chatMutes: {},
+    favorites: [],
+    onlineAlerts: {},
+    favoritesOnline: true,
+  },
 };
 
 export const mockOverlay: OverlayApi = {
@@ -34,6 +41,9 @@ export const mockOverlay: OverlayApi = {
     return () => {};
   },
   onEnabled() {
+    return () => {};
+  },
+  onPeople() {
     return () => {};
   },
 };

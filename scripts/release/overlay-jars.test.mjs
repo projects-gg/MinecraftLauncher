@@ -11,6 +11,7 @@ import {
   checkBundle,
   describeJar,
   INDEX_FILE,
+  LICENSE_ENTRY,
   MOD_DIR,
   parseModVersion,
   parseTargets,
@@ -63,7 +64,10 @@ function makeZip(entries) {
   return Buffer.concat([...parts, directory, end]);
 }
 
-function overlayJar(version, range, extra = "") {
+const GPL =
+  "                    GNU GENERAL PUBLIC LICENSE\n                       Version 3, 29 June 2007\n";
+
+function overlayJar(version, range, extra = "", license = GPL) {
   const json = JSON.stringify({
     schemaVersion: 1,
     id: "projects_overlay",
@@ -73,6 +77,7 @@ function overlayJar(version, range, extra = "") {
   return makeZip([
     ["fabric.mod.json", json],
     ["build.txt", extra, true],
+    ...(license === null ? [] : [[LICENSE_ENTRY, license]]),
   ]);
 }
 
@@ -151,6 +156,19 @@ test("a built jar is described from its own fabric.mod.json", () => {
   assert.throws(() => describeJar("x.jar", other, TARGETS[1]), /mod id sodium/);
 });
 
+test("a jar without the GPL text is refused", () => {
+  const bare = overlayJar("0.1.0+26.2", "~26.2", "", null);
+  assert.throws(() => describeJar("x.jar", bare, TARGETS[1]), /no GPL text/);
+  const wrong = overlayJar("0.1.0+26.2", "~26.2", "", "MIT License\n");
+  assert.throws(() => describeJar("x.jar", wrong, TARGETS[1]), /no GPL text/);
+
+  // build.gradle puts it there: the template's name, from the repository's own license.
+  const gradle = readFileSync(join(MOD_DIR, "build.gradle"), "utf8");
+  assert.match(gradle, /from\(file\('\.\.\/\.\.\/LICENSE'\)\)/);
+  assert.equal(LICENSE_ENTRY, "LICENSE_projects-overlay");
+  assert.match(readFileSync(join(ROOT, "LICENSE"), "utf8"), /GNU GENERAL PUBLIC LICENSE/);
+});
+
 test("the folder check finds every way a release could ship a wrong overlay", () => {
   const dir = folder("stamp-1");
   try {
@@ -203,6 +221,7 @@ test("the source stamp covers what the jar is made of and nothing else", () => {
   assert.ok(files.includes("mods/projects-overlay/src/main/resources/fabric.mod.json"));
   assert.ok(files.some((f) => /^mods\/projects-overlay\/src\/mc26_2\/java\//.test(f)));
   assert.ok(files.includes("packages/stickers/pl1/manifest.json"));
+  assert.ok(files.includes("LICENSE"));
   assert.ok(
     !files.some((f) => f.includes("/src/test/") || f.includes("/tools/") || f.includes("/dev/")),
   );

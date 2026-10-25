@@ -3,6 +3,7 @@ package gg.projects.overlay.toast;
 import gg.projects.overlay.state.OverlayState;
 import gg.projects.overlay.stickers.StickerArt;
 import gg.projects.overlay.stickers.StickerSet;
+import gg.projects.overlay.ui.Face;
 import gg.projects.overlay.ui.Fonts;
 import gg.projects.overlay.ui.TagChip;
 import gg.projects.overlay.ui.Texts;
@@ -49,8 +50,8 @@ public final class ToastCard {
     final Kind kind;
     final String conversation;
     final boolean crewChat;
-    final String initial;
-    final int initialWidth;
+    /** The sender's face (the launcher's player head with their letter; OVL-UX2), the crew sign for crew chat. */
+    final Face face;
     final FormattedCharSequence title;
     final int titleWidth;
     /** TEAM6: the sender's crew tag before the name, or null. */
@@ -70,7 +71,6 @@ public final class ToastCard {
     final boolean sprite;
     // The short strings again, in the form the game draws: made once here, not on every frame (each String
     // draw runs the game's bidirectional text pass).
-    private final FormattedCharSequence initialLine;
     private final FormattedCharSequence countLine;
     private final FormattedCharSequence hintBeforeLine;
     private final FormattedCharSequence hintKeyLine;
@@ -82,8 +82,8 @@ public final class ToastCard {
         this.kind = b.kind;
         this.conversation = b.conversation;
         this.crewChat = b.crewChat;
-        this.initial = b.initial;
-        this.initialWidth = Fonts.strong().width(b.initial);
+        this.face = b.crewChat ? Face.sign(Icon.CREW)
+            : b.initial == null || b.initial.isEmpty() ? null : Face.of(b.initial);
         this.title = b.title;
         this.titleWidth = b.titleWidth;
         this.chip = b.chip;
@@ -99,7 +99,6 @@ public final class ToastCard {
         this.hintAfter = b.hintAfter;
         this.sprite = b.sprite;
         this.narration = b.narration;
-        this.initialLine = line(b.initial);
         this.countLine = line(b.countText);
         this.hintBeforeLine = line(b.hintBefore);
         this.hintKeyLine = line(b.hintKey);
@@ -371,12 +370,10 @@ public final class ToastCard {
                 Draw.icon(g, Icon.INFO, 10, cx - 5, cy - 5, Theme.ASH_300);
             }
             case MESSAGE, HOST, WORLD -> {
-                Draw.disc(g, FACE, cx, cy, Theme.OBSIDIAN_600);
-                if (crewChat) {
-                    Draw.icon(g, Icon.CREW, 10, cx - 5, cy - 5, Theme.BONE_100);
-                } else if (initialLine != null) {
-                    Draw.text(g, Fonts.strong(), initialLine, cx - initialWidth / 2f,
-                        Fonts.centeredY(Fonts.Face.STRONG, cy), Theme.BONE_100);
+                if (face != null) {
+                    face.draw(g, FACE, cx, cy);
+                } else {
+                    Draw.disc(g, FACE, cx, cy, Theme.OBSIDIAN_600);
                 }
             }
         }

@@ -299,6 +299,7 @@ public final class Draw {
         Matrix3x2fStack pose = g.pose();
         pose.pushMatrix();
         pose.translate(x, y);
+        onWholePixels(pose);
         g.text(font, text, 0, 0, c, false);
         pose.popMatrix();
     }
@@ -311,8 +312,30 @@ public final class Draw {
         Matrix3x2fStack pose = g.pose();
         pose.pushMatrix();
         pose.translate(x, y);
+        onWholePixels(pose);
         g.text(font, text, 0, 0, c, false);
         pose.popMatrix();
+    }
+
+    /**
+     * At GUI scale 1 a line of the game's pixel font starts on a whole screen pixel: half a pixel off (a centred line's
+     * {@code y} often ends in .5), every glyph lost its top row of pixels ("Ayşe" read "Myşe", "Online" "Unline"). Larger
+     * scales draw the bundled faces, whose positions stay as laid out (their motion stays smooth).
+     */
+    private static void onWholePixels(Matrix3x2fStack pose) {
+        if (scale() != 1) {
+            return;
+        }
+        float sx = pose.m00();
+        float sy = pose.m11();
+        if (Math.abs(sx) < 1e-3f || Math.abs(sy) < 1e-3f) {
+            return;
+        }
+        float dx = Math.round(pose.m20()) - pose.m20();
+        float dy = Math.round(pose.m21()) - pose.m21();
+        if (dx != 0f || dy != 0f) {
+            pose.translate(dx / sx, dy / sy);
+        }
     }
 
     /**

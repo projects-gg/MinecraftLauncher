@@ -196,6 +196,8 @@ fn specta_builder() -> tauri_specta::Builder<tauri::Wry> {
         .typ::<pl_social::ProjectsSkinChange>()
         // Emitted as the plain "overlay-status" event (the in-game overlay's mod connected).
         .typ::<pl_overlay::OverlayStatus>()
+        // "overlay-people" (a favourite or an online notice changed from the game, OVL-UX2).
+        .typ::<pl_overlay::PeopleChange>()
         // Emitted as the plain "cloud-afk-live" event (a watched 7/24 Bulut console).
         .typ::<pl_cloud_afk::CloudLiveEvent>()
         // "host-changed" / "host-notice" (world sharing, HOST1).

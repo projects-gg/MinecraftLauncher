@@ -47,6 +47,8 @@ pub async fn app_set_language(
     #[cfg(desktop)]
     crate::shell::retitle_tray(&app);
     crate::commands::discord::refresh_language(&app);
+    // The in-game overlay follows while the player has picked no language of its own (OVL-LANG).
+    crate::overlay::launcher_language(&app, lang);
 }
 
 /// Basic facts about the running launcher, shown in Settings → About.
