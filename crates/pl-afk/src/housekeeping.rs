@@ -66,22 +66,37 @@ pub(crate) fn purge_login_scripts(accounts_dir: &Path) -> usize {
 /// never stall a session. Rotates the file if it grows past twice the cap while running.
 pub(crate) struct ConsoleLog {
     tx: std::sync::mpsc::Sender<ConsoleLine>,
+    /// Ends once the writer thread has closed the file (it sends nothing, it just goes).
+    closed: tokio::sync::oneshot::Receiver<()>,
 }
 
 impl ConsoleLog {
     pub(crate) fn open(path: PathBuf, cap: u64) -> Self {
         let (tx, rx) = std::sync::mpsc::channel::<ConsoleLine>();
+        let (done, closed) = tokio::sync::oneshot::channel::<()>();
         let spawned = std::thread::Builder::new()
             .name("pl-afk-console-log".into())
-            .spawn(move || write_loop(&path, cap, &rx));
+            .spawn(move || {
+                write_loop(&path, cap, &rx);
+                // The file went with `write_loop`.
+                drop(done);
+            });
         if let Err(error) = spawned {
             tracing::warn!(%error, "AFK console log disabled");
         }
-        Self { tx }
+        Self { tx, closed }
     }
 
     pub(crate) fn write(&self, line: &ConsoleLine) {
         let _ = self.tx.send(line.clone());
+    }
+
+    /// Writes what is queued and waits until the file is closed: the account's folder can go
+    /// then (Windows keeps a folder with an open file in it).
+    pub(crate) async fn close(self) {
+        let Self { tx, closed } = self;
+        drop(tx);
+        let _ = closed.await;
     }
 }
 
@@ -183,16 +198,9 @@ mod tests {
             kind: ConsoleLineKind::Normal,
             origin: ConsoleOrigin::Client,
         });
-        drop(log);
-        // The writer thread takes its time on a loaded machine; the deadline only runs out when
-        // nothing is ever written.
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
-        while !std::fs::read_to_string(&path).is_ok_and(|t| t.contains("merhaba")) {
-            assert!(
-                std::time::Instant::now() < deadline,
-                "console log was not written"
-            );
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
+        // Waits for the writer thread, however long a loaded machine makes it take.
+        futures::executor::block_on(log.close());
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("merhaba"), "{text}");
     }
 }

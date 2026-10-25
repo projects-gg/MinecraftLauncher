@@ -475,6 +475,11 @@ impl Actor {
                 }
             }
         }
+        // The console log's file is closed before the actor ends: a removed account's folder is
+        // deleted right after, and Windows keeps a folder with an open file in it.
+        if let Some(log) = self.log.take() {
+            log.close().await;
+        }
     }
 
     // --- Commands ---------------------------------------------------------------------------
