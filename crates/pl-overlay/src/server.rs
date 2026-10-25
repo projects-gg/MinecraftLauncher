@@ -37,6 +37,15 @@ pub const LANG_ARG: &str = "-Dprojects.overlay.lang=";
 /// that frame crashed: `pl_mc::launch::world_entry`).
 pub const WORLD_ARG: &str = "-Dprojects.overlay.world=";
 
+/// CHAT-EMOJI: `off` while "Oyun içi katman" is off and the mod's jar is there for the chat's emoji
+/// picker alone: the mod then runs only the picker (no panel, key, toasts or pause menu button).
+/// Never passed while the panel is on; a launcher from before it never passes it.
+pub const PANEL_ARG: &str = "-Dprojects.overlay.panel=";
+
+/// CHAT-EMOJI: `off` while "Sohbette emoji seçici" is off, so the chat screen shows no emoji button
+/// from the game's first frame. Never passed while it is on.
+pub const EMOJI_ARG: &str = "-Dprojects.overlay.emoji=";
+
 /// Whether a launch argument carries the session token and must be masked in logs.
 pub fn is_secret_jvm_arg(arg: &str) -> bool {
     arg.starts_with(TOKEN_ARG)
@@ -64,6 +73,9 @@ pub struct Endpoint {
     token: SessionToken,
     /// The overlay's language at the start ([`LANG_ARG`]); none for a bare bridge.
     lang: Option<pl_lang::Lang>,
+    /// "Oyun içi katman" ([`PANEL_ARG`]) and "Sohbette emoji seçici" ([`EMOJI_ARG`]) at the start.
+    panel: bool,
+    emoji: bool,
 }
 
 impl Endpoint {
@@ -72,7 +84,7 @@ impl Endpoint {
     }
 
     /// The JVM arguments for the game's command line: the port, the token and, when the overlay
-    /// has one, its language.
+    /// has one, its language; the panel and the emoji picker only when they are off.
     pub fn jvm_args(&self) -> Vec<String> {
         let mut args = vec![
             format!("{PORT_ARG}{}", self.port),
@@ -81,6 +93,12 @@ impl Endpoint {
         if let Some(lang) = self.lang {
             args.push(format!("{LANG_ARG}{}", lang.code()));
         }
+        if !self.panel {
+            args.push(format!("{PANEL_ARG}off"));
+        }
+        if !self.emoji {
+            args.push(format!("{EMOJI_ARG}off"));
+        }
         args
     }
 
@@ -88,6 +106,16 @@ impl Endpoint {
     pub(crate) fn speaking(self, lang: pl_lang::Lang) -> Self {
         Self {
             lang: Some(lang),
+            ..self
+        }
+    }
+
+    /// The same endpoint for a game that starts with the panel (`panel`) and the chat's emoji
+    /// picker (`emoji`) on or off (CHAT-EMOJI).
+    pub(crate) fn switched(self, panel: bool, emoji: bool) -> Self {
+        Self {
+            panel,
+            emoji,
             ..self
         }
     }
@@ -260,6 +288,8 @@ impl Bridge {
                 port,
                 token,
                 lang: None,
+                panel: true,
+                emoji: true,
             },
         ))
     }
@@ -849,6 +879,16 @@ mod tests {
         assert_eq!(args.len(), 3);
         assert_eq!(args[2], "-Dprojects.overlay.lang=en");
         assert!(!is_secret_jvm_arg(&args[2]));
+        // CHAT-EMOJI: the panel and the emoji picker are named only when they are off.
+        let on = english.switched(true, true);
+        assert_eq!(on.jvm_args().len(), 3);
+        let picker_only = on.switched(false, true);
+        let args = picker_only.jvm_args();
+        assert_eq!(args[3..], ["-Dprojects.overlay.panel=off".to_owned()]);
+        let panel_only = picker_only.switched(true, false);
+        let args = panel_only.jvm_args();
+        assert_eq!(args[3..], ["-Dprojects.overlay.emoji=off".to_owned()]);
+        assert!(args.iter().skip(2).all(|arg| !is_secret_jvm_arg(arg)));
     }
 
     #[test]

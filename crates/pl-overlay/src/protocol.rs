@@ -216,6 +216,10 @@ pub enum FromGame {
         #[serde(default)]
         lang: String,
     },
+    /// CHAT-EMOJI (E4; from a mod whose hello lists `emoji`): the player switched the chat's emoji
+    /// picker in the overlay's settings. The launcher keeps it ("Sohbette emoji seçici", the same
+    /// switch as its own Settings) and answers with `emojis`.
+    Emoji { on: bool },
     /// Anything newer than this launcher.
     #[serde(other)]
     Unknown,
@@ -260,6 +264,15 @@ pub const FEATURE_PEOPLE2: &str = "people2";
 /// The `hello` feature of a mod whose words follow the launcher (OVL-LANG, G1): it reads `lang` in
 /// `welcome`, shows the "Dil" row in its settings and sends `lang` when the player picks there.
 pub const FEATURE_LANG: &str = "lang";
+
+/// The `hello` feature of a mod with the chat's emoji picker (CHAT-EMOJI, E1): it hears `emojis`
+/// and sends `emoji` when the player switches the picker in its settings.
+pub const FEATURE_EMOJI: &str = "emoji";
+
+/// The `hello` feature of a mod that runs the emoji picker alone (CHAT-EMOJI, E2: started with
+/// `-Dprojects.overlay.panel=off`): it has no panel and shows no toasts, so the launcher does not
+/// count it as connected (its own notifications stay) and sends it only `welcome` and `emojis`.
+pub const FEATURE_PANEL_OFF: &str = "panel-off";
 
 impl FromGame {
     /// One of HOST1's frames: they go to the launcher's world sharing, never to the friends
@@ -491,6 +504,15 @@ pub enum ToGame {
         queued: bool,
         #[serde(skip_serializing_if = "Option::is_none")]
         reason: Option<FriendRefusal>,
+    },
+    /// CHAT-EMOJI (E3): the chat's emoji picker: whether it is on ("Sohbette emoji seçici") and
+    /// the server's emojis (Studio's list, else the launcher's built-in one) with the hosts they
+    /// belong to (`pl_content::ChatEmojis`, `docs/content-format.md` "Chat emojis"). After the
+    /// greeting and whenever the switch or the list changes. Only to a mod that said `emoji`.
+    Emojis {
+        on: bool,
+        hosts: Vec<String>,
+        emojis: Vec<pl_content::ChatEmoji>,
     },
     Bye {
         reason: ByeReason,
@@ -1087,6 +1109,41 @@ mod tests {
                 "reducedMotion":false,"features":[]})
         );
         assert_eq!(FEATURE_LANG, "lang");
+    }
+
+    #[test]
+    fn the_emoji_pickers_frames_read_and_write_as_the_log_says() {
+        // E4: the player's switch from the game; anything but a bool is not this frame.
+        let off: FromGame = serde_json::from_str(r#"{"t":"emoji","on":false}"#).unwrap();
+        assert_eq!(off, FromGame::Emoji { on: false });
+        assert!(serde_json::from_str::<FromGame>(r#"{"t":"emoji","on":"no"}"#).is_err());
+        // E3: the switch and the list as the content document has them.
+        let list = pl_content::ChatEmojis::builtin();
+        let kalp = list.emojis[0].clone();
+        let frame = serde_json::to_value(ToGame::Emojis {
+            on: true,
+            hosts: list.hosts.clone(),
+            emojis: vec![kalp],
+        })
+        .unwrap();
+        assert_eq!(
+            frame,
+            serde_json::json!({"t":"emojis","on":true,"hosts":["projects.gg"],"emojis":[
+                {"code":":kalp:","aliases":["<3","♥"],"look":"&c❤","kind":"symbol","rank":"VIP"}]})
+        );
+        // The whole built-in list fits a frame many times over.
+        let whole = serde_json::to_vec(&ToGame::Emojis {
+            on: true,
+            hosts: list.hosts,
+            emojis: list.emojis,
+        })
+        .unwrap();
+        assert!(
+            whole.len() < MAX_LAUNCHER_FRAME / 8,
+            "{} bytes",
+            whole.len()
+        );
+        assert_eq!((FEATURE_EMOJI, FEATURE_PANEL_OFF), ("emoji", "panel-off"));
     }
 
     #[test]

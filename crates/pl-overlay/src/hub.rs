@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
+use pl_content::ChatEmojis;
 use pl_lang::Lang;
 use pl_social::SocialUpdate;
 use serde::{Deserialize, Serialize};
@@ -22,8 +23,8 @@ use crate::policy::NotifyPrefs;
 use crate::protocol::{ByeReason, ToGame};
 use crate::server::{Bridge, Endpoint};
 use crate::session::{
-    CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, LangFn, Msg, PeopleChange, PeopleFn,
-    Session, SocialActions,
+    CONNECT_WAIT, ConnectOutcome, ConnectedFn, DiscordFn, EmojiFn, LangFn, Msg, PeopleChange,
+    PeopleFn, Session, SocialActions,
 };
 
 /// How long [`Overlay::stop`] waits for the goodbye to leave.
@@ -58,6 +59,10 @@ pub struct OverlayConfig {
     pub notify: NotifyPrefs,
     /// Performance mode or the system's reduced motion: toasts appear in place.
     pub reduced_motion: bool,
+    /// "Sohbette emoji seçici" (CHAT-EMOJI, on by default): the chat screen's emoji button. The
+    /// mod's jar goes into an instance while this or [`Self::enabled`] is on; with this one alone
+    /// the mod runs the picker only (no panel, key, toasts or pause menu button).
+    pub emoji: bool,
 }
 
 impl Default for OverlayConfig {
@@ -66,7 +71,15 @@ impl Default for OverlayConfig {
             enabled: true,
             notify: NotifyPrefs::default(),
             reduced_motion: false,
+            emoji: true,
         }
+    }
+}
+
+impl OverlayConfig {
+    /// The mod is wanted in a game: for its panel, its emoji picker or both.
+    pub fn wants_mod(&self) -> bool {
+        self.enabled || self.emoji
     }
 }
 
@@ -92,6 +105,10 @@ type PeopleSink = Arc<dyn Fn(PeopleChange) + Send + Sync>;
 /// it ([`write_language_pick`]).
 type LangSink = Arc<dyn Fn(Lang) + Send + Sync>;
 
+/// Hears the emoji picker switched in the overlay's settings (CHAT-EMOJI): the launcher's page
+/// keeps the switch (Settings → Genel shows the same one).
+type EmojiSink = Arc<dyn Fn(bool) + Send + Sync>;
+
 struct Running {
     id: u64,
     /// The bridge's port: names the session for [`Overlay::stop_for`].
@@ -108,6 +125,8 @@ struct Inner {
     lang_pick: Option<Lang>,
     /// The launcher's own language (Settings → Dil, else the automatic one).
     launcher_lang: Lang,
+    /// CHAT-EMOJI: the server's chat emojis for the picker (Studio's list, else the built-in one).
+    emojis: Arc<ChatEmojis>,
 }
 
 impl Inner {
@@ -130,6 +149,8 @@ struct Shared {
     people: Mutex<Option<PeopleSink>>,
     /// The overlay's language picked in the game (OVL-LANG).
     lang: Mutex<Option<LangSink>>,
+    /// The emoji picker switched in the game (CHAT-EMOJI).
+    emoji: Mutex<Option<EmojiSink>>,
 }
 
 /// Cheap to clone; the launcher keeps one.
@@ -156,6 +177,7 @@ impl Overlay {
                     worlds: WorldsShown::default(),
                     lang_pick: None,
                     launcher_lang: Lang::default(),
+                    emojis: Arc::new(ChatEmojis::builtin()),
                 }),
                 next: AtomicU64::new(1),
                 connected: AtomicBool::new(false),
@@ -164,6 +186,7 @@ impl Overlay {
                 discord: Mutex::new(None),
                 people: Mutex::new(None),
                 lang: Mutex::new(None),
+                emoji: Mutex::new(None),
             }),
         }
     }
@@ -182,6 +205,63 @@ impl Overlay {
     /// "Oyun içi katman" is on.
     pub fn enabled(&self) -> bool {
         self.lock().config.enabled
+    }
+
+    /// "Sohbette emoji seçici" is on (CHAT-EMOJI).
+    pub fn emoji_enabled(&self) -> bool {
+        self.lock().config.emoji
+    }
+
+    /// The mod is wanted in a game: for its panel, its emoji picker or both
+    /// ([`OverlayConfig::wants_mod`]).
+    pub fn wants_mod(&self) -> bool {
+        self.lock().config.wants_mod()
+    }
+
+    /// CHAT-EMOJI: the server's chat emojis from now on (the content refresh brought Studio's
+    /// list, or the built-in one while it has none). A running session hears a different list.
+    pub fn set_emojis(&self, emojis: ChatEmojis) {
+        let mut inner = self.lock();
+        if *inner.emojis == emojis {
+            return;
+        }
+        inner.emojis = Arc::new(emojis);
+        if let Some(running) = &inner.running {
+            let _ = running.msgs.send(Msg::Emojis(Arc::clone(&inner.emojis)));
+        }
+    }
+
+    /// The emoji picker switched in the overlay's settings (CHAT-EMOJI): `sink` hands it to the
+    /// launcher's page, which keeps it (and pushes its choices back).
+    pub fn on_emoji(&self, sink: impl Fn(bool) + Send + Sync + 'static) {
+        *self
+            .shared
+            .emoji
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(Arc::new(sink));
+    }
+
+    /// A session's mod switched the emoji picker: the choices here follow at once (the session's
+    /// own already did), then the page hears it. Only the running session counts.
+    fn emoji_switched(&self, session: u64, on: bool) {
+        {
+            let mut inner = self.lock();
+            if inner.running.as_ref().map(|running| running.id) != Some(session)
+                || inner.config.emoji == on
+            {
+                return;
+            }
+            inner.config.emoji = on;
+        }
+        let sink = self
+            .shared
+            .emoji
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone();
+        if let Some(sink) = sink {
+            sink(on);
+        }
     }
 
     /// OVL-LANG: the overlay's language: the player's pick in its settings, else the launcher's.
@@ -256,20 +336,25 @@ impl Overlay {
     }
 
     /// The page's choices. A session running now follows them; turning the overlay off ends it
-    /// (`bye{disabled}`). Returns whether anything changed.
+    /// (`bye{disabled}`), as does turning off the emoji picker of a game that has only that.
+    /// Returns whether anything changed.
     pub fn configure(&self, config: OverlayConfig) -> bool {
         let ended = {
             let mut inner = self.lock();
             if inner.config == config {
                 return false;
             }
+            // The panel of a running game cannot go away while it runs: switching it off ends the
+            // session, as before. A game started with the emoji picker alone keeps its session
+            // while the picker stays on.
+            let panel_off = inner.config.enabled && !config.enabled;
             inner.config = config.clone();
             match &inner.running {
-                Some(running) if config.enabled => {
+                Some(_) if panel_off || !config.wants_mod() => inner.running.take(),
+                Some(running) => {
                     let _ = running.msgs.send(Msg::Config(config));
                     None
                 }
-                Some(_) => inner.running.take(),
                 None => None,
             }
         };
@@ -358,17 +443,25 @@ impl Overlay {
         let (control, control_rx) = mpsc::unbounded_channel();
         let (events_tx, events) = mpsc::unbounded_channel();
         let (msgs, msgs_rx) = mpsc::unbounded_channel();
-        let (config, worlds, lang) = {
+        let (config, worlds, lang, emojis) = {
             let mut inner = self.lock();
             inner.running = Some(Running {
                 id,
                 port: endpoint.port(),
                 msgs: msgs.clone(),
             });
-            (inner.config.clone(), inner.worlds.clone(), inner.language())
+            (
+                inner.config.clone(),
+                inner.worlds.clone(),
+                inner.language(),
+                Arc::clone(&inner.emojis),
+            )
         };
-        // The game starts in the overlay's language (G2).
-        let endpoint = endpoint.speaking(lang);
+        // The game starts in the overlay's language (G2), with the panel and the emoji picker as
+        // they are now (CHAT-EMOJI).
+        let endpoint = endpoint
+            .speaking(lang)
+            .switched(config.enabled, config.emoji);
         let hub = self.clone();
         let connected: ConnectedFn = Arc::new(move |on| hub.report(id, on, false));
         let hub = self.clone();
@@ -379,6 +472,8 @@ impl Overlay {
         let people: PeopleFn = Arc::new(move |change| hub.people_change(id, change));
         let hub = self.clone();
         let picked: LangFn = Arc::new(move |lang| hub.language_picked(id, lang));
+        let hub = self.clone();
+        let emoji: EmojiFn = Arc::new(move |on| hub.emoji_switched(id, on));
         let session = Session::new(
             social,
             launcher,
@@ -391,6 +486,7 @@ impl Overlay {
             discord,
             people,
             (lang, picked),
+            (emojis, emoji),
         );
         tokio::spawn(bridge.serve(control_rx, events_tx));
         tokio::spawn(session.run(msgs_rx, events));
@@ -628,6 +724,11 @@ mod tests {
         )
         .unwrap();
         assert!(!config.enabled && config.reduced_motion && config.notify.crew_chat);
+        // CHAT-EMOJI: a file from before the emoji picker has it on; the mod is wanted for it.
+        assert!(config.emoji && config.wants_mod());
+        let config: OverlayConfig =
+            serde_json::from_str(r#"{"enabled":false,"emoji":false}"#).unwrap();
+        assert!(!config.wants_mod());
     }
 
     #[test]

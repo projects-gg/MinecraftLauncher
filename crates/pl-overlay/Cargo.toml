@@ -17,6 +17,9 @@ pl-lang = { workspace = true }
 # version ranges and atomic writes are the launcher's own; files are hashed the downloader's way.
 pl-mc = { workspace = true }
 pl-net = { workspace = true }
+# The chat's emoji picker (CHAT-EMOJI): Studio's list (or the built-in one) goes to the mod as the
+# content document has it.
+pl-content = { workspace = true }
 base64 = { workspace = true }
 rand = { workspace = true }
 serde = { workspace = true }
