@@ -47,7 +47,7 @@ function Subject({ request, inviter }: { request: ReportRequest; inviter: boolea
             </p>
             {request.plan.note ? (
               <p className="mt-1 line-clamp-2 text-[13px] leading-snug text-bone-100 break-words">
-                <span className="sr-only">{t("fix2.note.label")}: </span>“{request.plan.note}”
+                <span className="sr-only">{t("fix2.note.label")}: </span>"{request.plan.note}"
               </p>
             ) : null}
           </>

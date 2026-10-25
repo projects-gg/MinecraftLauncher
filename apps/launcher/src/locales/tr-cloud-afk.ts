@@ -219,7 +219,7 @@ export const trCloudAfk = {
     antiAfkMin: "En az",
     antiAfkMax: "En çok",
     owner: "Oyundaki kendi adın",
-    ownerHelp: "“Yalnız ana hesabımdan” kuralları bu adı tanır.",
+    ownerHelp: '"Yalnız ana hesabımdan" kuralları bu adı tanır.',
     seconds: "sn",
     commands: {
       add: "Komut ekle",

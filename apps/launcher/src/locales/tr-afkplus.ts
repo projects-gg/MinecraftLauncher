@@ -685,8 +685,8 @@ export const trAfkPlus = {
       lede: "Yalnız oyundaki parayı harcar ve bu sınırları asla aşmaz. Büyük alımlarda önce sana sorar.",
       notNow: "Şimdilik alım yapmasın",
       notNowHelp: "Aradığını bulunca yalnız haber verir.",
-      required: "İki tutarı da yaz ya da “Şimdilik alım yapmasın” seçeneğini aç.",
-      requiredOne: "Bir tutar yaz ya da “Şimdilik alım yapmasın” seçeneğini aç.",
+      required: 'İki tutarı da yaz ya da "Şimdilik alım yapmasın" seçeneğini aç.',
+      requiredOne: 'Bir tutar yaz ya da "Şimdilik alım yapmasın" seçeneğini aç.',
     },
     list: {
       title: "İlk kuralın",
