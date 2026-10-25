@@ -85,11 +85,13 @@ const content: HomeContent = {
     particles: "embers",
   },
   banners: [
+    // An announcement of its own (it used to repeat the double XP event the card and a story
+    // already show).
     {
-      id: "xp",
-      level: "event",
-      text: "Hafta sonu boyunca iki kat XP etkinliği açık.",
-      url: "https://projects.gg/etkinlik",
+      id: "qa",
+      level: "info",
+      text: "Cuma 21.00'de Discord'da soru-cevap yayını var.",
+      url: "https://discord.gg/projects",
       dismissible: true,
     },
   ],

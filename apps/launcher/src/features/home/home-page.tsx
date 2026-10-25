@@ -1,5 +1,5 @@
 import { ArrowSquareOut, BookOpenText, WifiHigh, WifiSlash } from "@phosphor-icons/react";
-import { Button, Chip, easeOutExpo, Skeleton, useMotionPrefs } from "@pl/ui";
+import { Button, easeOutExpo, Skeleton, useMotionPrefs } from "@pl/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { AnimatePresence, LayoutGroup, motion, useReducedMotion } from "motion/react";
@@ -40,11 +40,7 @@ function HeroCopy({ content }: { content: HomeContent }) {
       transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
       className="max-w-[min(540px,100%)]"
     >
-      {featured ? (
-        <Chip tone="onArt" className="mb-3">
-          {t(`categories.${featured.category}`)}
-        </Chip>
-      ) : null}
+      {/* The headline stands alone: the story's category over it was a pill above a heading. */}
       <h1 className="text-shadow-art font-display text-hero font-[640] tracking-[-0.01em] text-bone-50">
         {content.hero.title}
       </h1>
@@ -186,10 +182,9 @@ export function HomePage() {
           </motion.div>
         </div>
         {isPending || !data ? (
-          // Shaped like the hero (chip, headline, subtitle, button), so nothing moves when the
-          // content arrives.
+          // Shaped like the hero (headline, subtitle, button), so nothing moves when the content
+          // arrives.
           <div className="max-w-[500px]">
-            <Skeleton className="mb-3 h-5 w-20" />
             <Skeleton className="h-[44px] w-full" />
             <Skeleton className="mt-3 h-5 w-4/5" />
             <Skeleton className="mt-5 h-[38px] w-36" />
