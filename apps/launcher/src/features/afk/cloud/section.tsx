@@ -5,6 +5,7 @@
 import { ArrowSquareOut, ArrowsClockwise, WarningCircle } from "@phosphor-icons/react";
 import { Button, cn, enter, IconButton, leave } from "@pl/ui";
 import { AnimatePresence, motion } from "motion/react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { AfkAccount } from "@/lib/api";
 import { afkFailed } from "../errors";
@@ -14,6 +15,10 @@ import { CloudConsole } from "./console";
 import { CloudGuardDialog } from "./guard";
 import { CloudIntroCard, CloudIntroDialog } from "./intro";
 import { CloudMoveDialog } from "./move";
+import { PlusIntroCard, PlusIntroDialog } from "./plus/intro";
+import { PlusPanel } from "./plus/plus-panel";
+import { plusMe, plusOffer } from "./plus/types";
+import { isPlusAccount, plusShown, usePlusUi } from "./plus/use-plus";
 import { CloudSettingsSheet } from "./settings";
 import { localized } from "./status";
 import {
@@ -40,6 +45,8 @@ export function CloudSection({
   const stop = useCloudAction("stop");
   const restart = useCloudAction("restart");
   const guardedStart = useGuardedStart();
+  const openPlus = usePlusUi((s) => s.openPanel);
+  const [plusIntro, setPlusIntro] = useState(false);
   const overview = data?.overview;
   if (!overview?.available) return null;
 
@@ -59,6 +66,15 @@ export function CloudSection({
   const buy = () =>
     cloudApi
       .open("start")
+      .catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")));
+  // AFK+ shows only while the service offers it (README: "off" means invisible).
+  const plus = plusShown(data);
+  const canBuyPlus =
+    plus && plusMe(overview)?.canBuy.ok !== false && plusOffer(overview)?.sales !== false;
+  const plusIntroCard = plus && !accounts.some(isPlusAccount) && canBuyPlus;
+  const upgrade = (id: string) =>
+    cloudApi
+      .open("plusBuy", id)
       .catch((error: unknown) => afkFailed(error, t("cloudAfk.actions.failed")));
 
   return (
@@ -141,10 +157,22 @@ export function CloudSection({
                 onRestart={() => void restart(account)}
                 onConsole={() => ui.openConsole(account.id)}
                 onSettings={() => ui.openSettings(account.id)}
+                onPlus={plus && isPlusAccount(account) ? () => openPlus(account.id) : undefined}
+                onUpgrade={
+                  canBuyPlus && !isPlusAccount(account) && !account.expired
+                    ? () => void upgrade(account.id)
+                    : undefined
+                }
               />
             ))}
           </AnimatePresence>
         </ul>
+      ) : plusIntroCard ? (
+        // Two offers side by side (stacked under the page's centred form).
+        <div className={cn("grid gap-3", centered ? "grid-cols-1" : "max-w-[940px] grid-cols-2")}>
+          <CloudIntroCard overview={overview} onOpen={() => ui.setIntroOpen(true)} />
+          <PlusIntroCard overview={overview} onOpen={() => setPlusIntro(true)} />
+        </div>
       ) : (
         <CloudIntroCard
           overview={overview}
@@ -154,6 +182,12 @@ export function CloudSection({
       )}
 
       <CloudIntroDialog overview={overview} open={ui.introOpen} onOpenChange={ui.setIntroOpen} />
+      {plus ? (
+        <>
+          <PlusIntroDialog overview={overview} open={plusIntro} onOpenChange={setPlusIntro} />
+          <PlusPanel />
+        </>
+      ) : null}
       <CloudConsole
         account={consoleAccount}
         skewMs={skewMs}

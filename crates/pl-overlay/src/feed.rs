@@ -1516,6 +1516,9 @@ pub fn toast_of(
                 &situation,
             )
         }
+        // Cloud AFK's notices (AFKPLUS): Cloud AFK already chose them by the player's own switches;
+        // do-not-disturb is a social status and does not apply.
+        SocialNotice::AfkNotice { notice } => crate::afk::afk_toast(notice, listener.english),
         _ => None,
     }
 }

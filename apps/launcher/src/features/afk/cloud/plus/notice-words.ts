@@ -1,0 +1,141 @@
+// Cloud AFK notices in words, as the in-game card says them (pl-overlay afk.rs): the bot account's
+// name over one line about what happened, and where "Aç" leads. Pure, so tests read it directly.
+import type { TFunction } from "i18next";
+import type { AfkNotice } from "@/lib/api/social-types";
+import { atPhrase } from "./time";
+import type { PlusSection } from "./use-plus";
+import { formatAmount, type Lang, qtyItem } from "./words";
+
+/** Where a notice's "Aç" (or a click on its Windows notification) leads. */
+export type Target = { panel: PlusSection } | { page: true };
+
+export interface NoticeWords {
+  title: string;
+  body: string;
+  target: Target;
+}
+
+/** The item's name: the catalog's when the launcher knew it, else its id made readable. */
+function itemOf(notice: AfkNotice, lang: Lang): string | null {
+  const named = notice.itemName ? (lang === "en" ? notice.itemName.en : notice.itemName.tr) : "";
+  if (named.trim()) return named.trim();
+  const id = notice.data.item;
+  if (!id) return null;
+  const words = (id.split(":").pop() ?? id).replace(/_/g, " ").trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : null;
+}
+
+const whole = (text: string | undefined): number | null =>
+  text !== undefined && /^\d+$/.test(text.trim()) ? Number(text.trim()) : null;
+
+/** "1 Elytra, 37.500" / "1 × Elytra, 37,500": what a deal or an approval is about. */
+function dealOf(notice: AfkNotice, lang: Lang): string | null {
+  const item = itemOf(notice, lang);
+  if (!item) return null;
+  const what = qtyItem(notice.data.qty?.trim() || "1", item, lang);
+  const price = whole(notice.data.price);
+  return price === null ? what : `${what}, ${formatAmount(price, lang)}`;
+}
+
+/**
+ * Events of every 7/24 Bulut account, AFK+ or not: titled with the account's name (without one,
+ * the cloud's name), never "AFK+" (AFK+ that is off shows nowhere). The assistant's own events say
+ * whose assistant it is, as its panel does ("Ahmet_AFK asistanı").
+ */
+const PLAIN_EVENTS = new Set(["stopped", "expired", "renewal", "night"]);
+
+/** A notice in words, or null for one this launcher does not show (an unknown event). */
+export function noticeWords(notice: AfkNotice, t: TFunction, lang: Lang): NoticeWords | null {
+  const plain = PLAIN_EVENTS.has(notice.event);
+  const name = notice.data.name?.trim();
+  const fallback = plain ? t("cloudAfk.title") : t("afkPlus.notices.title");
+  const title = name ? (plain ? name : t("afkPlus.notices.titleOf", { name })) : fallback;
+  const at = (body: string | null, target: Target): NoticeWords | null =>
+    body ? { title, body, target } : null;
+  const data = notice.data;
+  switch (notice.event) {
+    case "approval": {
+      const deal = dealOf(notice, lang);
+      return at(deal && t("afkPlus.notices.approval", { deal }), { panel: "feed" });
+    }
+    case "deal_done": {
+      const deal = dealOf(notice, lang);
+      const key = data.side === "sell" ? "afkPlus.notices.dealSold" : "afkPlus.notices.dealBought";
+      return at(deal && t(key, { deal }), { panel: "feed" });
+    }
+    case "deal_failed": {
+      const item = itemOf(notice, lang);
+      return at(item && t("afkPlus.notices.dealFailed", { item }), { panel: "feed" });
+    }
+    case "found": {
+      const item = itemOf(notice, lang);
+      const price = whole(data.price);
+      if (!item) return null;
+      return at(
+        price === null
+          ? t("afkPlus.notices.found", { item })
+          : t("afkPlus.notices.foundPrice", { item, price: formatAmount(price, lang) }),
+        { panel: "feed" },
+      );
+    }
+    case "stopped":
+      return at(t("afkPlus.notices.stopped"), { page: true });
+    case "expired":
+      return at(t("afkPlus.notices.expired"), { page: true });
+    case "renewal": {
+      const days = whole(data.days);
+      return at(
+        days === null
+          ? t("afkPlus.notices.renewalSoon")
+          : t("afkPlus.notices.renewal", { count: days }),
+        { page: true },
+      );
+    }
+    case "quota": {
+      if (data.which === "full") {
+        const until = whole(data.until);
+        return at(
+          until === null
+            ? t("afkPlus.notices.quotaFull")
+            : t("afkPlus.notices.quotaFullUntil", {
+                when: atPhrase(until, Date.now(), lang, t("afkPlus.time.tomorrow")),
+              }),
+          { panel: "feed" },
+        );
+      }
+      if (data.which === "80") return at(t("afkPlus.notices.quota80"), { panel: "feed" });
+      if (data.which === "gift") return at(t("afkPlus.notices.giftEnding"), { panel: "feed" });
+      return null;
+    }
+    case "incident":
+      return at(t("afkPlus.notices.incident"), { panel: "messages" });
+    case "message": {
+      const count = whole(data.count) ?? 1;
+      return at(
+        count > 1 ? t("afkPlus.notices.messages", { count }) : t("afkPlus.notices.message"),
+        { panel: "messages" },
+      );
+    }
+    case "paused":
+      return at(t("afkPlus.notices.paused"), { panel: "feed" });
+    case "summary": {
+      const pms = whole(data.pms) ?? 0;
+      const deals = whole(data.deals) ?? 0;
+      return at(
+        t("afkPlus.notices.summary", {
+          pms: t("afkPlus.notices.summaryPms", { count: pms }),
+          deals: t("afkPlus.notices.summaryDeals", { count: deals }),
+        }),
+        { panel: "feed" },
+      );
+    }
+    case "weekly":
+      return at(t("afkPlus.notices.weekly", { count: whole(data.deals) ?? 0 }), {
+        panel: "report",
+      });
+    case "night":
+      return { title: fallback, body: t("afkPlus.notices.night"), target: { page: true } };
+    default:
+      return null;
+  }
+}

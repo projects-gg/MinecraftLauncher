@@ -412,6 +412,73 @@ export const commands = {
 	/**  Opens afk.projects.gg in the browser: purchase, renewal and linking always happen there. */
 	cloudAfkOpen: (page: CloudPage, account: string | null) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_open", { page, account })),
 	/**
+	 *  The panel's first look at an account: its settings, the mode's catalog, the quota and the
+	 *  approvals (the last two wait while the account's machine is away).
+	 */
+	cloudAfkPlusPanel: (id: string) => typedError<PlusPanelView, CmdError>(__TAURI_INVOKE("cloud_afk_plus_panel", { id })),
+	/**  The settings as stored now (after a conflict, "Son halini yükle"). */
+	cloudAfkPlusSettings: (id: string) => typedError<PlusSettings, CmdError>(__TAURI_INVOKE("cloud_afk_plus_settings", { id })),
+	/**  A game mode's catalog (no session needed; kept an hour). None when it cannot be had now. */
+	cloudAfkPlusCatalog: (mode: string) => typedError<{
+	mode?: string,
+	name?: CloudLocalized,
+	items?: PlusCatalogItem[],
+	enchantments?: PlusEnchantment[],
+	money?: PlusMoney,
+	limits?: PlusCatalogLimits,
+	adTemplates?: PlusAdTemplate[],
+} | null, CmdError>(__TAURI_INVOKE("cloud_afk_plus_catalog", { mode })),
+	/**  Saves the settings (`rev`: the revision the panel started from). */
+	cloudAfkPlusSave: (id: string, rev: number, config: PlusConfig) => typedError<PlusSaveOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_plus_save", { id, rev, config })),
+	/**  "Bu hale dön": the saved revision `rev` becomes the next one (`current`: the one on screen). */
+	cloudAfkPlusRestore: (id: string, rev: number, current: number) => typedError<PlusSaveOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_plus_restore", { id, rev, current })),
+	/**  The AI's switch, a player blocked, unblocked or forgotten, the spent total reset. */
+	cloudAfkPlusControl: (id: string, action: PlusAction, name: string | null) => typedError<PlusControlAnswer, CmdError>(__TAURI_INVOKE("cloud_afk_plus_control", { id, action, name })),
+	/**  Older feed lines (the socket brings the latest while the panel is open). */
+	cloudAfkPlusFeed: (id: string, after: string | null) => typedError<PlusFeedPage, CmdError>(__TAURI_INVOKE("cloud_afk_plus_feed", { id, after })),
+	cloudAfkPlusDeals: (id: string, after: string | null) => typedError<PlusDealPage, CmdError>(__TAURI_INVOKE("cloud_afk_plus_deals", { id, after })),
+	cloudAfkPlusApprovals: (id: string) => typedError<PlusApproval[], CmdError>(__TAURI_INVOKE("cloud_afk_plus_approvals", { id })),
+	/**  "Onayla", "Reddet", or "Fiyatı düşür" (`approve` with `max_price` below the deal's price). */
+	cloudAfkPlusAnswer: (id: string, approval: string, approve: boolean, maxPrice: number | null) => typedError<PlusAnswerOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_plus_answer", { id, approval, approve, maxPrice })),
+	cloudAfkPlusQuota: (id: string) => typedError<PlusQuota, CmdError>(__TAURI_INVOKE("cloud_afk_plus_quota", { id })),
+	/**  "Mesajlar" (QoL Q1): the conversations of the last 7 days (live from the machine). */
+	cloudAfkPlusInbox: (id: string, after: string | null) => typedError<PlusInboxPage, CmdError>(__TAURI_INVOKE("cloud_afk_plus_inbox", { id, after })),
+	cloudAfkPlusThread: (id: string, name: string, after: string | null) => typedError<PlusThreadPage, CmdError>(__TAURI_INVOKE("cloud_afk_plus_thread", { id, name, after })),
+	cloudAfkPlusReply: (id: string, name: string, text: string) => typedError<PlusReplyOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_plus_reply", { id, name, text })),
+	/**  The conversation was read up to `up_to` (Unix seconds). */
+	cloudAfkPlusRead: (id: string, name: string, upTo: number) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_plus_read", { id, name, upTo })),
+	/**  "Şimdi devret": the assistant answers in this conversation again. */
+	cloudAfkPlusHandBack: (id: string, name: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_plus_hand_back", { id, name })),
+	cloudAfkPlusParse: (id: string, text: string) => typedError<PlusParseOutcome, CmdError>(__TAURI_INVOKE("cloud_afk_plus_parse", { id, text })),
+	/**  "Ayar geçmişi" (QoL Q7), newest first. */
+	cloudAfkPlusHistory: (id: string) => typedError<PlusHistory, CmdError>(__TAURI_INVOKE("cloud_afk_plus_history", { id })),
+	/**  The trade summary (QoL Q4) of `from..to` (Unix seconds; none: the last 30 days). */
+	cloudAfkPlusSummary: (id: string, from: number | null, to: number | null) => typedError<PlusDealSummary, CmdError>(__TAURI_INVOKE("cloud_afk_plus_summary", { id, from, to })),
+	/**
+	 *  The weekly report (QoL Q4) of every AFK+ account of the player; `week` `YYYY-Www` (none: the
+	 *  last whole week).
+	 */
+	cloudAfkPlusReport: (week: string | null) => typedError<PlusWeeklyReport, CmdError>(__TAURI_INVOKE("cloud_afk_plus_report", { week })),
+	/**
+	 *  "Tabloyu indir": the range's deals as a CSV table in the Downloads folder (Turkish headers with
+	 *  `;` as Turkish Excel reads them, or English with `,`; UTF-8 with a byte order mark).
+	 */
+	cloudAfkPlusExport: (id: string, name: string, from: number | null, to: number | null) => typedError<PlusExport, CmdError>(__TAURI_INVOKE("cloud_afk_plus_export", { id, name, from, to })),
+	/**  "Klasörde göster" for a table "Tabloyu indir" saved (only such a file, in Downloads). */
+	cloudAfkPlusShowExport: (fileName: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_plus_show_export", { fileName })),
+	/**  The player's notification switches and quiet hours (all their cloud accounts). */
+	cloudAfkNotifyPrefs: () => typedError<CloudNotifyPrefs, CmdError>(__TAURI_INVOKE("cloud_afk_notify_prefs")),
+	cloudAfkSetNotifyPrefs: (prefs: CloudNotifyPrefs) => typedError<CloudNotifyPrefs, CmdError>(__TAURI_INVOKE("cloud_afk_set_notify_prefs", { prefs })),
+	/**
+	 *  The player saw an AFK notice (its toast with the window in front, or the panel showing it): the
+	 *  friends service keeps it from the phone.
+	 */
+	cloudAfkNoticeSeen: (id: string) => __TAURI_INVOKE<void>("cloud_afk_notice_seen", { id }),
+	/**  The AFK+ panel is on screen: the AI's state, feed and approvals stream as `cloud-afk-live`. */
+	cloudAfkPlusWatch: (id: string) => typedError<null, CmdError>(__TAURI_INVOKE("cloud_afk_plus_watch", { id })),
+	/**  The panel left the screen (closed, the window hidden). */
+	cloudAfkPlusUnwatch: (id: string) => __TAURI_INVOKE<void>("cloud_afk_plus_unwatch", { id }),
+	/**
 	 *  The item atlas of `minecraft`'s client jar, else of the newest installed one; `None` while no
 	 *  version is installed or no jar could be drawn (the sprites then show their stand-ins). Never
 	 *  an error: a missing picture is not worth a toast.
@@ -1403,6 +1470,82 @@ export type AfkEventKind = { type: "state"; data: SessionState } |
  */
 { type: "client"; data: ClientStep | null };
 
+/**  An item's name in Turkish and English (from the AFK+ catalog). */
+export type AfkItemName = {
+	tr: string,
+	en: string,
+};
+
+/**
+ *  One notice. `event`: `stopped`, `renewal`, `expired`, `found`, `approval`, `approval_closed`,
+ *  `deal_done`, `deal_failed`, `quota`, `summary`, `paused`, `incident`, `message`, `weekly`, or the
+ *  service's own `night` (kept as text, so a newer event still arrives). `kind`: `afk_alert`,
+ *  `afk_deal`, `afk_info`; `priority`: `high` or `normal`.
+ */
+export type AfkNotice = AfkNotice_Serialize | AfkNotice_Deserialize;
+
+/**
+ *  One notice. `event`: `stopped`, `renewal`, `expired`, `found`, `approval`, `approval_closed`,
+ *  `deal_done`, `deal_failed`, `quota`, `summary`, `paused`, `incident`, `message`, `weekly`, or the
+ *  service's own `night` (kept as text, so a newer event still arrives). `kind`: `afk_alert`,
+ *  `afk_deal`, `afk_info`; `priority`: `high` or `normal`.
+ */
+export type AfkNotice_Deserialize = {
+	/**  A ULID, the same on every retry (`night:<until>` for the night's digest). */
+	id?: string,
+	event?: string,
+	kind?: string,
+	priority?: string,
+	/**  Unix seconds. */
+	at?: number,
+	/**  A newer notice with the same tag replaces this one (`approval:<id>`). */
+	tag?: string | null,
+	/**  The player's quiet hours: shown in the launcher only, without a system notification. */
+	quiet?: boolean,
+	/**
+	 *  Account ids, item ids, amounts, times, reason codes and the bot account's own name
+	 *  (`name`); never a counterpart's name or a message's text. Numbers that come as numbers read
+	 *  as their text.
+	 */
+	data?: { [key in string]: string },
+	/**
+	 *  The item's name in both languages, when this launcher knows the mode's catalog (filled in
+	 *  by the launcher; the service never sends it).
+	 */
+	itemName?: AfkItemName | null,
+};
+
+/**
+ *  One notice. `event`: `stopped`, `renewal`, `expired`, `found`, `approval`, `approval_closed`,
+ *  `deal_done`, `deal_failed`, `quota`, `summary`, `paused`, `incident`, `message`, `weekly`, or the
+ *  service's own `night` (kept as text, so a newer event still arrives). `kind`: `afk_alert`,
+ *  `afk_deal`, `afk_info`; `priority`: `high` or `normal`.
+ */
+export type AfkNotice_Serialize = {
+	/**  A ULID, the same on every retry (`night:<until>` for the night's digest). */
+	id: string,
+	event: string,
+	kind: string,
+	priority: string,
+	/**  Unix seconds. */
+	at: number,
+	/**  A newer notice with the same tag replaces this one (`approval:<id>`). */
+	tag: string | null,
+	/**  The player's quiet hours: shown in the launcher only, without a system notification. */
+	quiet: boolean,
+	/**
+	 *  Account ids, item ids, amounts, times, reason codes and the bot account's own name
+	 *  (`name`); never a counterpart's name or a message's text. Numbers that come as numbers read
+	 *  as their text.
+	 */
+	data: { [key in string]: string },
+	/**
+	 *  The item's name in both languages, when this launcher knows the mode's catalog (filled in
+	 *  by the launcher; the service never sends it).
+	 */
+	itemName: AfkItemName | null,
+};
+
 /**  Account-independent AFK preferences (`settings.json`). */
 export type AfkSettings = {
 	/**
@@ -2075,6 +2218,12 @@ export type CloudAccount_Deserialize = {
 	/**  Version of name, server, version, lang and config (`If-Match`). */
 	rev: number,
 	serverChanges: CloudServerChanges,
+	/**  `plain` or `plus` ("plus" while `plus_until` is ahead); "" from a service before AFK+. */
+	tier?: string,
+	/**  AFK+ until then; None: never AFK+. May lie in the past (its deals and settings stay readable). */
+	plusUntil?: number | null,
+	/**  The assistant's state; None unless the tier is `plus`. */
+	ai?: PlusAi | null,
 };
 
 /**  A cloud account (`GET /accounts`, `GET /accounts/:id`, and the answer of every change). */
@@ -2105,6 +2254,12 @@ export type CloudAccount_Serialize = {
 	/**  Version of name, server, version, lang and config (`If-Match`). */
 	rev: number,
 	serverChanges: CloudServerChanges,
+	/**  `plain` or `plus` ("plus" while `plus_until` is ahead); "" from a service before AFK+. */
+	tier: string,
+	/**  AFK+ until then; None: never AFK+. May lie in the past (its deals and settings stay readable). */
+	plusUntil: number | null,
+	/**  The assistant's state; None unless the tier is `plus`. */
+	ai: PlusAi | null,
 };
 
 /**  Why an address cannot be used. */
@@ -2388,7 +2543,18 @@ export type CloudLiveEvent =
  *  The service said no to something: `not_found` (not the player's account there),
  *  `rate_limited`, `host_offline`, `bad_request`.
  */
-{ kind: "problem"; acct: string | null; code: string } | { kind: "status"; host: string; status: CloudLiveStatus };
+{ kind: "problem"; acct: string | null; code: string } | { kind: "status"; host: string; status: CloudLiveStatus } | 
+/**  AFK+ (watched with `ai`): the account's AI state changed (also once right after `watch`). */
+{ kind: "ai"; acct: string; ai: PlusAi | null } | 
+/**
+ *  AFK+: feed items in batches at least 2 s apart; `snapshot`: the latest 20 right after
+ *  `watch`.
+ */
+{ kind: "feed"; acct: string; items: PlusFeedItem[]; snapshot: boolean } | 
+/**  AFK+: an approval came, was answered, expired or closed. */
+{ kind: "approval"; acct: string; approval: PlusApproval } | 
+/**  AFK+ (QoL Q1): the assistant left the owner a message: "Mesajlar" is read again. */
+{ kind: "messages"; acct: string; count: number; at: number };
 
 /**
  *  What the machine says about the account now. `state` is one of `unknown`, `stopped`, `queued`,
@@ -2464,6 +2630,17 @@ export type CloudMoveResult_Serialize = {
 	started: boolean,
 };
 
+/**
+ *  `GET`/`PUT /me/notifications`: the player's switches per event (all their cloud accounts) and
+ *  quiet hours ("HH:MM" Turkey time). Events: `stopped`, `renewal`, `expired`, `found`,
+ *  `approval`, `deal_done`, `deal_failed`, `quota_full`, `quota_80`, `gift_ending`, `summary`,
+ *  `paused`, `incident`, `message`, `weekly`.
+ */
+export type CloudNotifyPrefs = {
+	events?: { [key in string]: boolean },
+	quiet?: CloudQuietHours,
+};
+
 /**  The AFK page's look at 7/24 Bulut. */
 export type CloudOverview = CloudOverview_Serialize | CloudOverview_Deserialize;
 
@@ -2488,6 +2665,10 @@ export type CloudOverview_Deserialize = {
 	canBuy: CloudCanBuy | null,
 	/**  The service's clock when the accounts were read (Unix seconds): the UI's skew. */
 	now: number,
+	/**  AFK+ as sold now: None while its `plusMode` is `off` (then nothing of AFK+ shows). */
+	plus: PlusOffer | null,
+	/**  With a session: whether this player may buy AFK+ (an invite list, a restriction). */
+	plusMe: MePlus | null,
 };
 
 /**  The AFK page's look at 7/24 Bulut. */
@@ -2511,6 +2692,10 @@ export type CloudOverview_Serialize = {
 	canBuy: CloudCanBuy | null,
 	/**  The service's clock when the accounts were read (Unix seconds): the UI's skew. */
 	now: number,
+	/**  AFK+ as sold now: None while its `plusMode` is `off` (then nothing of AFK+ shows). */
+	plus: PlusOffer | null,
+	/**  With a session: whether this player may buy AFK+ (an invite list, a restriction). */
+	plusMe: MePlus | null,
 };
 
 /**  Which page of afk.projects.gg to open. */
@@ -2524,7 +2709,13 @@ export type CloudPage =
 /**  The account's own page. */
 "account" | 
 /**  The player's accounts. */
-"accounts";
+"accounts" | 
+/**  AFK+'s page ("AFK+ ne yapar?"). */
+"plus" | 
+/**  Upgrading `account` to AFK+, or buying a new AFK+ account without one. */
+"plusBuy" | 
+/**  The AFK+ tab of `account` on the site (what the launcher leaves to the site: plan changes). */
+"plusAccount";
 
 export type CloudPageView = CloudPageView_Serialize | CloudPageView_Deserialize;
 
@@ -2547,6 +2738,19 @@ export type CloudPayloadView = {
 	text: string | null,
 	preview: string | null,
 	fp: string | null,
+};
+
+/**  One plan's price: `plan` is `month` or `year`, `price_tl` a decimal string (`"60.00"`). */
+export type CloudPlanPrice = {
+	plan?: string,
+	priceTl?: string,
+	days?: number,
+};
+
+export type CloudQuietHours = {
+	enabled?: boolean,
+	from?: string,
+	to?: string,
 };
 
 export type CloudRenewal = {
@@ -2630,6 +2834,12 @@ export type CloudSession =
 "signedOut" | "signedIn" | 
 /**  Signed in, but the accounts could not be read now. */
 "failed";
+
+/**  `remaining` only below Studio's "Son N yer" threshold. */
+export type CloudStock = {
+	soldOut?: boolean,
+	remaining?: number | null,
+};
 
 /**
  *  A desktop AFK account and the cloud account with its name on its server (the same account in
@@ -4477,6 +4687,12 @@ export type McVersionView = {
 	recommended: boolean,
 };
 
+/**  `Me.plus`: whether this player may buy AFK+ now, and AFK+'s own restriction of them. */
+export type MePlus = {
+	canBuy?: PlusCanBuy,
+	restricted?: PlusRestriction | null,
+};
+
 export type MeView = {
 	id: string,
 	name: string,
@@ -5525,6 +5741,684 @@ export type PlanView = {
 	canWriteNote: boolean,
 	/**  The player may clear its note (they made it, or lead or moderate the crew). */
 	canClearNote: boolean,
+};
+
+/**
+ *  What "control" does: `pause`/`resume` (the AI switch), `block`/`unblock` and `forget` (a
+ *  player, by in-game name), `reset_spent` ("Harcananı sıfırla").
+ */
+export type PlusAction = "pause" | "resume" | "block" | "unblock" | "forget" | "reset_spent";
+
+export type PlusAdTemplate = {
+	id?: string,
+	tr?: string,
+	en?: string,
+};
+
+/**
+ *  `Account.ai` (`AiView`): the assistant's state now. `state` is `on`, `paused` (comes back by
+ *  itself), `off` (someone has to act) or `unknown`; `reason` with `paused` and `off`
+ *  (`restricted`, `staff`, `service`, `server`, `player`, `break`, `schedule`, `gate`, `muted`,
+ *  `host`, `budget`, `outage`, `quota`). Both kept as text.
+ */
+export type PlusAi = {
+	state?: string,
+	reason?: string | null,
+	/**  With `staff`: a reason key. */
+	staffReason?: string | null,
+	/**  `paused`: when it comes back by itself, if known; `off`: a restriction's end. */
+	until?: number | null,
+	trade?: PlusTradeState,
+	pendingApprovals?: number,
+	quota?: PlusQuotaBrief | null,
+	/**  Set when this is the machine's last snapshot, not a live answer. */
+	asOf?: number | null,
+	/**  What the assistant spent (CAFK-W5): only with a live machine answer. */
+	spent?: PlusSpent | null,
+	/**
+	 *  "Mesajlar" (QoL Q1): the latest message the assistant left to the owner since they last
+	 *  opened the conversations; only in the player's own views.
+	 */
+	newMessages?: PlusNewMessages | null,
+};
+
+/**  The two quota windows' caps (credits) per plan. */
+export type PlusAllowance = {
+	month?: PlusWindowCaps,
+	year?: PlusWindowCaps,
+};
+
+/**  How an answer to an approval ended. */
+export type PlusAnswerOutcome = 
+/**  Stored: final, the machine hears it (now or on its return). Boxed: the other variant is small. */
+{ kind: "done"; approval: PlusApproval } | 
+/**  It was no longer waiting (answered elsewhere, expired, the deal gone): `state` says how. */
+{ kind: "closed"; state: string };
+
+/**  A deal waiting for the player's OK (`state` `pending`), or one of the last 24 hours' answers. */
+export type PlusApproval = {
+	id?: string,
+	acct?: string,
+	deal?: PlusApprovalDeal,
+	/**  In-game name. */
+	counterpart?: string,
+	/**  `above`, `new_counterpart`, `always`, `price_unusual`, `budget`, `daily`. */
+	why?: string[],
+	createdAt?: number,
+	expiresAt?: number,
+	/**  `pending`, `approved`, `rejected`, `expired`, `closed`. */
+	state?: string,
+	/**  Approved with a lower ceiling ("Fiyatı düşür"). */
+	maxPrice?: number | null,
+	/**  `deal_gone`, `ai_stopped`. */
+	closed?: string | null,
+};
+
+export type PlusApprovalDeal = {
+	/**  `buy` or `sell`. */
+	side?: string,
+	item?: string,
+	qty?: number,
+	price?: number,
+	currency?: string,
+};
+
+/**  Messages held back last week, by kind (no content). */
+export type PlusBlockedCounts = {
+	scam?: number,
+	rmt?: number,
+	unsafe?: number,
+	fake?: number,
+};
+
+/**  A buy row ("Alınacak"). */
+export type PlusBuyRow = {
+	/**  `^[a-z0-9]{1,8}$`, unique across buy and sell. */
+	id?: string,
+	/**  A catalog id of the mode's profile. */
+	item?: string,
+	req?: PlusRequirements,
+	qty?: number,
+	/**  `each` or `total`: whether target and max are per item or for `qty` items. */
+	unit?: string,
+	target?: number,
+	/**  Never exceeded. */
+	max?: number,
+	/**  `patient`, `balanced`, `quick`. */
+	style?: string,
+	/**  `auto`, `above` (over `limits.approvalAbove`), `always`. */
+	approval?: string,
+	dailyQty?: number,
+	notify?: boolean,
+	enabled?: boolean,
+};
+
+/**
+ *  `{ok: true}` or `{ok: false, reason, until?}` (`plus_off`, `sales_closed`, `plus_invite_only`,
+ *  `plus_restricted`, `plus_account_limit`, `plus_sold_out`; kept as text).
+ */
+export type PlusCanBuy = {
+	ok?: boolean,
+	reason?: string | null,
+	until?: number | null,
+};
+
+/**  `GET /plus/catalog?mode=`: what a game mode trades, and its money's limits. */
+export type PlusCatalog = {
+	mode?: string,
+	name?: CloudLocalized,
+	items?: PlusCatalogItem[],
+	enchantments?: PlusEnchantment[],
+	money?: PlusMoney,
+	limits?: PlusCatalogLimits,
+	adTemplates?: PlusAdTemplate[],
+};
+
+export type PlusCatalogItem = {
+	/**  `minecraft:elytra`, or a profile's own item (`custom:spawner:zombie`). */
+	id?: string,
+	tr?: string,
+	en?: string,
+	/**  The picture's key (the item's `minecraft:` path). */
+	sprite?: string,
+	stack?: number,
+	damageable?: boolean,
+};
+
+export type PlusCatalogLimits = {
+	listMax?: number,
+	/**  `[lowest, highest]` minutes. */
+	approvalTimeoutMin?: number[],
+};
+
+/**
+ *  The player's AFK+ settings of one account, written whole with `PUT /plus` and `If-Match`.
+ *  Values with a closed set (`lang`, `persona.preset`, a row's `unit`, `style`, `approval`, …) are
+ *  kept as text, so a value a newer service adds round-trips unchanged.
+ */
+export type PlusConfig = {
+	v?: number,
+	/**  The player's AI switch ("Yapay zekâyı durdur"); false: plain AFK and templates only. */
+	enabled?: boolean,
+	/**  A server profile open for the account's server (`projects-smp`). */
+	mode?: string,
+	/**  `auto` (English to players who write English, else Turkish), `tr`, `en`. */
+	lang?: string,
+	persona?: PlusPersona,
+	replies?: PlusReplies,
+	buy?: PlusBuyRow[],
+	sell?: PlusSellRow[],
+	limits?: PlusLimits,
+	discovery?: PlusDiscovery,
+	trade?: PlusTradeSettings,
+	/**  "HH:MM" Turkey time: the daily summary. */
+	summaryAt?: string,
+	/**  In-game names the bot never answers (at most 100). */
+	blocked?: string[],
+	/**  Working hours, Turkey time (QoL Q3). */
+	schedule?: PlusSchedule,
+	/**  A break until then (QoL Q3). */
+	pauseUntil?: number | null,
+};
+
+/**  `POST /plus/control`: the AI's state after it, and the settings' revision. */
+export type PlusControlAnswer = {
+	ai?: PlusAi | null,
+	aiRev?: number,
+};
+
+/**  A finished deal (D1, 90 days). */
+export type PlusDeal = {
+	id?: string,
+	side?: string,
+	item?: string,
+	qty?: number,
+	price?: number,
+	currency?: string,
+	counterpart?: string,
+	/**  `completed`, `failed`, `cancelled`, `review`. */
+	status?: string,
+	reason?: string | null,
+	/**  `auto` or `approved`. */
+	approval?: string,
+	at?: number,
+};
+
+export type PlusDealPage = {
+	deals?: PlusDeal[],
+	next?: string | null,
+};
+
+/**  The trade summary of a range (Q4): completed deals by side, item and currency. */
+export type PlusDealSummary = {
+	from?: number,
+	to?: number,
+	items?: PlusItemSummary[],
+	totals?: PlusTotals[],
+};
+
+export type PlusDiscovery = {
+	scanChat?: boolean,
+	proactivePm?: boolean,
+	ads?: boolean,
+	adTemplate?: string,
+};
+
+export type PlusEnchantment = {
+	id?: string,
+	tr?: string,
+	en?: string,
+	max?: number,
+};
+
+/**  A table written to the player's Downloads folder. */
+export type PlusExport = {
+	fileName: string,
+};
+
+/**
+ *  `Offer.plus.features` (README "AFK+ player API" → QoL v1): what to show. A switch an older
+ *  service does not name reads as off.
+ */
+export type PlusFeatures = {
+	/**  "Mesajlar" (Q1). */
+	inbox?: boolean,
+	/**  "Yazarak ekle" (Q2). */
+	parse?: boolean,
+	/**  "Çalışma saatleri", breaks and ready statuses (Q3). */
+	schedule?: boolean,
+	/**  The weekly report and the trade history (Q4). */
+	report?: boolean,
+	/**  "Ayar geçmişi" (Q7). */
+	history?: boolean,
+	/**  "Hakkı koru" (Q9). */
+	saver?: boolean,
+	notifyDigest?: boolean,
+	handoff?: boolean,
+	watch?: boolean,
+};
+
+/**
+ *  One line of the live feed. `kind`: `pm_in`, `pm_out`, `offer`, `counter`, `deal`, `approval`,
+ *  `approval_answer`, `trade_started`, `trade_done`, `trade_failed`, `trade_cancelled`, `found`,
+ *  `suspicious`, `ai_stopped`, `ai_resumed`, `summary`, `review` (kept as text).
+ */
+export type PlusFeedItem = {
+	/**  A ULID: time order. */
+	id?: string,
+	at?: number,
+	kind?: string,
+	/**  In-game name (the owner's own bot's messages show real names). */
+	counterpart?: string | null,
+	/**  `pm_in`, `pm_out`: the masked text. */
+	text?: string | null,
+	item?: string | null,
+	qty?: number | null,
+	price?: number | null,
+	currency?: string | null,
+	/**  A code the launcher words in one short sentence. */
+	reason?: string | null,
+};
+
+/**  A page of the feed, newest first; `next` continues further back. */
+export type PlusFeedPage = {
+	items?: PlusFeedItem[],
+	next?: string | null,
+};
+
+export type PlusGift = {
+	id?: string,
+	remaining?: number,
+	expiresAt?: number | null,
+};
+
+export type PlusHistory = {
+	/**  Newest first. */
+	entries?: PlusHistoryEntry[],
+};
+
+/**
+ *  A saved revision of the settings (Q7). `by`: `site`, `launcher`, `phone`, `restore`, `studio`,
+ *  `player` (kept as text).
+ */
+export type PlusHistoryEntry = {
+	aiRev?: number,
+	at?: number,
+	by?: string,
+	config?: PlusConfig,
+};
+
+export type PlusInboxLast = {
+	/**  `them`, `bot`, `you`. */
+	from?: string,
+	text?: string,
+};
+
+/**  A line of a conversation: `hidden: "unsafe"` comes folded ("Uygunsuz mesaj gizlendi. Göster"). */
+export type PlusInboxLine = {
+	at?: number,
+	from?: string,
+	text?: string,
+	hidden?: string | null,
+};
+
+export type PlusInboxPage = {
+	threads?: PlusInboxThread[],
+	next?: string | null,
+};
+
+/**  A conversation of "Mesajlar" (Q1): a player who wrote to the bot in the last 7 days. */
+export type PlusInboxThread = {
+	name?: string,
+	lastAt?: number,
+	last?: PlusInboxLast,
+	unread?: number,
+	/**  `active`, `handoff` (the owner holds it until `handoff_until`), `blocked`. */
+	state?: string,
+	handoffUntil?: number | null,
+};
+
+/**
+ *  One problem of a config, where the contract names it: `field` a path (`buy[2].max`,
+ *  `limits.approvalAbove`, `persona.intro`, `schedule.windows[0].from`), `reason` the contract's
+ *  (`range`, `order`, `id`, `item`, `limits`, `name`, `text`, `limit_rows`, `mode`, `row`,
+ *  `missing`, `type`, `unknown`), `problem` the text rule's word with `text` (`length`, `marker`,
+ *  `link`, `phone`, …).
+ */
+export type PlusIssue = {
+	field: string,
+	reason: string,
+	problem: string | null,
+};
+
+export type PlusItemSummary = {
+	side?: string,
+	item?: string,
+	currency?: string,
+	deals?: number,
+	qty?: number,
+	total?: number,
+	avgUnit?: number,
+	minUnit?: number,
+	maxUnit?: number,
+};
+
+/**
+ *  How the persona texts were judged: `ok`, `pending` (not used until judged) or `rejected`
+ *  (`reason`: `inappropriate`, `impersonation`, `contact`, `redirect`).
+ */
+export type PlusJudge = {
+	intro?: PlusJudgeState,
+	status?: PlusJudgeState,
+};
+
+export type PlusJudgeState = {
+	state?: string,
+	reason?: string | null,
+	at?: number,
+};
+
+/**
+ *  Spending limits ("Harcama"). None: no limit, or for `per_deal_max` and `total_budget` no
+ *  spending authority at all (buy rows then only notify).
+ */
+export type PlusLimits = {
+	perDealMax?: number | null,
+	dailySpendMax?: number | null,
+	totalBudget?: number | null,
+	balanceFloor?: number,
+	approvalAbove?: number | null,
+	newCounterpartApprovalAbove?: number | null,
+	/**  1-60: an unanswered approval is a no. */
+	approvalTimeoutMin?: number,
+};
+
+export type PlusMoney = {
+	currency?: string,
+	maxDeal?: number,
+};
+
+/**  `AiView.newMessages`: that conversation's unread lines, and when the message came. */
+export type PlusNewMessages = {
+	count?: number,
+	at?: number,
+};
+
+/**  `Offer.plus`: AFK+ as sold now. Null (None) while `plusMode` is `off`: then nothing of AFK+ shows. */
+export type PlusOffer = {
+	/**  `invite`, `on` or `paused`. */
+	mode?: string,
+	/**  Purchases and upgrades open (an invite list may still apply: [`MePlus`]). */
+	sales?: boolean,
+	prices?: CloudPlanPrice[],
+	stock?: CloudStock,
+	refundWindowHours?: number,
+	termsVersion?: number,
+	allowance?: PlusAllowance,
+	/**  Studio's QoL switches: a feature that is off is not shown. */
+	features?: PlusFeatures,
+};
+
+/**  The AFK+ panel's first look at an account. */
+export type PlusPanelView = {
+	settings: PlusSettings,
+	/**
+	 *  The mode's catalog (item names, enchantments, the money's limits); None when the service
+	 *  does not offer that mode now.
+	 */
+	catalog: PlusCatalog | null,
+	/**  None while the account's machine cannot be asked (`machine_away`). */
+	quota: PlusQuota | null,
+	/**  Pending ones first, then the last 24 hours' answers. */
+	approvals: PlusApproval[],
+	/**  The account's machine is not connected now: the quota, the feed and "Mesajlar" wait. */
+	machineAway: boolean,
+};
+
+/**
+ *  "Yazarak ekle" (Q2): a rule's draft, never stored by itself. `item` None with 2-5 `candidates`
+ *  when the item is unclear.
+ */
+export type PlusParseDraft = {
+	side?: string,
+	item?: string | null,
+	candidates?: string[],
+	qty?: number,
+	unit?: string,
+	target?: number | null,
+	/**  Buy rows. */
+	max?: number | null,
+	/**  Sell rows. */
+	min?: number | null,
+	style?: string,
+	approval?: string,
+};
+
+/**  How "Kural oluştur" (QoL Q2) ended. */
+export type PlusParseOutcome = { kind: "draft"; draft: PlusParseDraft; issues: string[] } | 
+/**  Nothing could be read: `no_item`, `no_amount`, `many_items` or `unsafe`. */
+{ kind: "failed"; reason: string } | 
+/**  The day's typed rules are used up (`daily`), or too many in an hour. */
+{ kind: "limited"; daily: boolean } | 
+/**  The account's machine is not connected now. */
+{ kind: "offline" };
+
+export type PlusPersona = {
+	/**  `friendly`, `brief`, `polite`, `playful`. */
+	preset?: string,
+	/**  "" or 1-60 code points. */
+	intro?: string,
+	/**  "" or 1-80 code points; "" while `status_preset` is set. */
+	status?: string,
+	/**  `back_soon`, `back_evening`, `back_tomorrow`, `weekend`, `busy` (QoL Q3). */
+	statusPreset?: string | null,
+	smallTalk?: boolean,
+};
+
+export type PlusProfile = {
+	id?: string,
+	name?: CloudLocalized,
+	trade?: boolean,
+};
+
+/**  A promotion's multiplier (100-500 %), its words and its end. */
+export type PlusPromo = {
+	pct?: number,
+	label?: CloudLocalized,
+	until?: number,
+};
+
+/**  `GET /accounts/:id/plus/quota` (`QuotaView`). */
+export type PlusQuota = {
+	w5h?: PlusQuotaWindow,
+	week?: PlusQuotaWindow,
+	/**  In spending order. */
+	gifts?: PlusGift[],
+	promo?: PlusPromo | null,
+	frozen?: boolean,
+	/**  "Yaklaşık N yanıt kaldı". */
+	estReplies?: number,
+	pct5?: number,
+	pctWeek?: number,
+	asOf?: number,
+};
+
+/**  `AiView.quota` (`QuotaBrief`): the two bars. */
+export type PlusQuotaBrief = {
+	pct5?: number,
+	pctWeek?: number,
+	w5hResetAt?: number | null,
+	weekResetAt?: number,
+	/**  When used up: when room comes back. */
+	exhaustedUntil?: number | null,
+	/**  Credits of unexpired gifts. */
+	giftsLeft?: number,
+};
+
+/**  One window: `reset_at` is None for a 5-hour window that is not open yet ("İlk kullanımda başlar"). */
+export type PlusQuotaWindow = {
+	used?: number,
+	cap?: number,
+	resetAt?: number | null,
+};
+
+export type PlusReplies = {
+	/**  `all`, `trade`, `off`. */
+	scope?: string,
+	/**  The away template for the other messages. */
+	away?: boolean,
+	/**  "Hakkı koru" (QoL Q9): 50, 80 or None (off). */
+	saveAt?: number | null,
+};
+
+/**  How the owner's reply ended. */
+export type PlusReplyOutcome = { kind: "sent"; line: PlusInboxLine } | 
+/**
+ *  The text rule said no: `reason` (`link`, `phone`, `email`, `iban`, `tckn`, `card`, `words`,
+ *  `marker`, `length`, `form`).
+ */
+{ kind: "rejected"; reason: string } | 
+/**  The player wrote more than 24 hours ago. */
+{ kind: "notContacted" } | 
+/**  Too many replies now; `retry_after` seconds when the service said. */
+{ kind: "limited"; retry_after: number | null } | 
+/**  The account's machine is not connected now. */
+{ kind: "offline" };
+
+/**  What a bought item must be: enchantments (id → lowest level), durability, an anvil name, curses. */
+export type PlusRequirements = {
+	ench?: { [key in string]: number },
+	minDurabilityPct?: number,
+	allowCustomName?: boolean,
+	allowCurses?: boolean,
+};
+
+export type PlusRestriction = {
+	until?: number | null,
+	/**  A reason key (README "Reasons and notes"). */
+	reason?: string,
+};
+
+/**  How a save (or "Bu hale dön") ended. Problems are worded where they are. */
+export type PlusSaveOutcome = { kind: "saved"; settings: PlusSettings } | 
+/**  Something the service would refuse, found here or said by it. */
+{ kind: "invalid"; issues: PlusIssue[] } | 
+/**  The settings changed elsewhere since the panel read them: their newer state. */
+{ kind: "conflict"; settings: PlusSettings };
+
+export type PlusSchedule = {
+	on?: boolean,
+	windows?: PlusWindow[],
+};
+
+/**  A sell row ("Satılacak"). */
+export type PlusSellRow = {
+	id?: string,
+	item?: string,
+	qty?: number,
+	unit?: string,
+	target?: number,
+	/**  Never undercut. */
+	min?: number,
+	style?: string,
+	approval?: string,
+	dailyQty?: number,
+	enabled?: boolean,
+};
+
+/**  `GET /accounts/:id/plus`. */
+export type PlusSettings = {
+	config?: PlusConfig,
+	/**  The revision (`If-Match` of the next write). */
+	aiRev?: number,
+	judge?: PlusJudge,
+	/**  The mode's profile: its name and whether it trades now. None for an unknown mode. */
+	profile?: PlusProfile | null,
+	/**  What the assistant spent (CAFK-W5); None when the machine cannot say now. */
+	spent?: PlusSpent | null,
+};
+
+/**
+ *  What the assistant spent in the game's money: `total` since the player last reset it (against
+ *  `limits.totalBudget`), `today` this AFK+ day (04:00 to 04:00 Turkey time, against
+ *  `limits.dailySpendMax`).
+ */
+export type PlusSpent = {
+	total?: number,
+	today?: number,
+};
+
+export type PlusThreadPage = {
+	lines?: PlusInboxLine[],
+	handoffUntil?: number | null,
+	/**  The player wrote within 24 hours: the owner may answer. */
+	canReply?: boolean,
+	next?: string | null,
+};
+
+export type PlusTotals = {
+	currency?: string,
+	buys?: number,
+	sells?: number,
+	spent?: number,
+	earned?: number,
+};
+
+export type PlusTradeSettings = {
+	/**  A plain command row of the account's config to run after a trade, or None (stay at spawn). */
+	returnRow?: string | null,
+};
+
+/**
+ *  `AiView.trade`: `on: false` with `off: "mode"` (the bot is not in the profile's game mode) or
+ *  `"profile"` (the mode's profile is not enabled); `buy: "notify"` without spending authority.
+ */
+export type PlusTradeState = {
+	on?: boolean,
+	off?: string | null,
+	buy?: string,
+};
+
+export type PlusWeeklyAccount = {
+	id?: string,
+	name?: string,
+	/**  Answers the assistant wrote. */
+	pms?: number,
+	bought?: number,
+	sold?: number,
+	spent?: number,
+	earned?: number,
+	/**  Buys: the rows' limits minus what was paid ("Alımlarda tasarruf"). */
+	belowLimit?: number,
+	/**  Sales: what came above the rows' floors ("Satışta fazladan"). */
+	aboveFloor?: number,
+	blocked?: PlusBlockedCounts,
+	allowancePct?: number,
+	currency?: string | null,
+};
+
+/**  `GET /me/plus/report`: an AFK+ week (Monday 04:00 Turkey time), each of the player's accounts. */
+export type PlusWeeklyReport = {
+	/**  `2026-W43`. */
+	week?: string,
+	from?: number,
+	to?: number,
+	accounts?: PlusWeeklyAccount[],
+};
+
+/**
+ *  A working-hours window: `days` 1 Monday … 7 Sunday; `from` and `to` "HH:MM" Turkey time; it
+ *  belongs to the day it starts and may run past midnight; `from == to` is the whole day.
+ */
+export type PlusWindow = {
+	days?: number[],
+	from?: string,
+	to?: string,
+};
+
+export type PlusWindowCaps = {
+	w5h?: number,
+	week?: number,
 };
 
 /**  What the command bar shows (`prepare-status`, `prepare_status`). */
@@ -6613,25 +7507,25 @@ export type SocialNotice = SocialNotice_Serialize | SocialNotice_Deserialize;
 /**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
 export type SocialNotice_Deserialize = 
 /**  A live invite (never while on do-not-disturb: those wait as quiet invites). */
-({ kind: "invite"; invite: InviteView_Deserialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "invite"; invite: InviteView_Deserialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Someone sent a friend request. */
-({ kind: "request"; request: RequestView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "request"; request: RequestView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
 /**  A request was accepted (by them, or on another device): a new friend. */
-({ kind: "friendAdded"; friend: FriendView_Deserialize }) & { call?: never; conv?: never; crew?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendAdded"; friend: FriendView_Deserialize }) & { call?: never; conv?: never; crew?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A friend came online. */
-({ kind: "friendOnline"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendOnline"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A friend started playing on projects.gg. */
-({ kind: "friendOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Signed in. `restore` is a settings backup saved by another computer, worth offering. */
-({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; staff?: never; until?: never } | 
+({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; staff?: never; until?: never } | 
 /**  A friend invited the player to their team (only while teams are on). */
-({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The founder removed the player from the team, or ended it. */
 ({ kind: "teamGone"; reason: TeamExit; 
 /**  The team's name, for the sentence. */
 name: string | null; 
 /**  Projects' moderators did it (community rules). */
-staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; plan?: never; request?: never; restore?: never; until?: never } | 
+staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; notice?: never; plan?: never; request?: never; restore?: never; until?: never } | 
 /**
  *  A new chat message from someone else, live (never one of the player's own, nor one a sync
  *  brought): the launcher decides whether to say it.
@@ -6640,58 +7534,63 @@ staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; 
 /**  The sender's name as the lists show it. */
 name: string | null; 
 /**  The crew of a crew's chat. */
-crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Moderators suspended or banned the account: every session ended. */
-({ kind: "restricted"; until: number | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never } | 
+({ kind: "restricted"; until: number | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never } | 
 /**
  *  A teammate called the crew, live (never for the player's own call, on do-not-disturb or
  *  for a call that is only new to this launcher).
  */
-({ kind: "crewCall"; call: CrewCallView_Deserialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewCall"; call: CrewCallView_Deserialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**
  *  The caller of a call the player said "Geliyorum" or "Birazdan" to moved: to projects.gg (a
  *  call that was "Hazır mısın?"), or to another server (the call's `server` says where).
  */
-({ kind: "crewCallJoin"; call: CrewCallView_Deserialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewCallJoin"; call: CrewCallView_Deserialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A teammate (a friend or not) started playing on projects.gg. */
-({ kind: "crewmateOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewmateOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**
  *  Someone asked to join one of the player's crews, live (only for a player who may answer,
  *  never while every crew or that crew is muted).
  */
-({ kind: "joinRequest"; crew: string; request: JoinRequestView }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "joinRequest"; crew: string; request: JoinRequestView }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
 /**  A join request of the player's was taken: they are in that crew now. */
-({ kind: "requestAccepted"; crew: string; name: string }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "requestAccepted"; crew: string; name: string }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**
  *  A crewmate made a plan, live (never the player's own, never while that crew or every crew
  *  is muted).
  */
-({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
-({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never };
+({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+/**
+ *  Cloud AFK's notice about one of the player's cloud accounts (AFKPLUS): the launcher words it
+ *  and, once the player saw it, sends `afk_seen` ([`crate::SocialService::afk_seen`]).
+ */
+({ kind: "afkNotice"; notice: AfkNotice_Deserialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never };
 
 /**  A moment worth telling the player about (toasts, notifications). Views carry the state. */
 export type SocialNotice_Serialize = 
 /**  A live invite (never while on do-not-disturb: those wait as quiet invites). */
-({ kind: "invite"; invite: InviteView_Serialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "invite"; invite: InviteView_Serialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Someone sent a friend request. */
-({ kind: "request"; request: RequestView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "request"; request: RequestView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
 /**  A request was accepted (by them, or on another device): a new friend. */
-({ kind: "friendAdded"; friend: FriendView_Serialize }) & { call?: never; conv?: never; crew?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendAdded"; friend: FriendView_Serialize }) & { call?: never; conv?: never; crew?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A friend came online. */
-({ kind: "friendOnline"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendOnline"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A friend started playing on projects.gg. */
-({ kind: "friendOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "friendOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Signed in. `restore` is a settings backup saved by another computer, worth offering. */
-({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; staff?: never; until?: never } | 
+({ kind: "signedIn"; restore: SettingsMeta | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; staff?: never; until?: never } | 
 /**  A friend invited the player to their team (only while teams are on). */
-({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "teamInvite"; invite: TeamInviteView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The founder removed the player from the team, or ended it. */
 ({ kind: "teamGone"; reason: TeamExit; 
 /**  The team's name, for the sentence. */
 name: string | null; 
 /**  Projects' moderators did it (community rules). */
-staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; plan?: never; request?: never; restore?: never; until?: never } | 
+staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; notice?: never; plan?: never; request?: never; restore?: never; until?: never } | 
 /**
  *  A new chat message from someone else, live (never one of the player's own, nor one a sync
  *  brought): the launcher decides whether to say it.
@@ -6700,35 +7599,40 @@ staff: boolean }) & { call?: never; conv?: never; crew?: never; friend?: never; 
 /**  The sender's name as the lists show it. */
 name: string | null; 
 /**  The crew of a crew's chat. */
-crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+crew: string | null }) & { call?: never; friend?: never; id?: never; invite?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  Moderators suspended or banned the account: every session ended. */
-({ kind: "restricted"; until: number | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never } | 
+({ kind: "restricted"; until: number | null }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never } | 
 /**
  *  A teammate called the crew, live (never for the player's own call, on do-not-disturb or
  *  for a call that is only new to this launcher).
  */
-({ kind: "crewCall"; call: CrewCallView_Serialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewCall"; call: CrewCallView_Serialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**
  *  The caller of a call the player said "Geliyorum" or "Birazdan" to moved: to projects.gg (a
  *  call that was "Hazır mısın?"), or to another server (the call's `server` says where).
  */
-({ kind: "crewCallJoin"; call: CrewCallView_Serialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewCallJoin"; call: CrewCallView_Serialize }) & { conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  A teammate (a friend or not) started playing on projects.gg. */
-({ kind: "crewmateOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewmateOnProjects"; id: string }) & { call?: never; conv?: never; crew?: never; friend?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**
  *  Someone asked to join one of the player's crews, live (only for a player who may answer,
  *  never while every crew or that crew is muted).
  */
-({ kind: "joinRequest"; crew: string; request: JoinRequestView }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "joinRequest"; crew: string; request: JoinRequestView }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; restore?: never; staff?: never; until?: never } | 
 /**  A join request of the player's was taken: they are in that crew now. */
-({ kind: "requestAccepted"; crew: string; name: string }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "requestAccepted"; crew: string; name: string }) & { call?: never; conv?: never; friend?: never; id?: never; invite?: never; message?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**
  *  A crewmate made a plan, live (never the player's own, never while that crew or every crew
  *  is muted).
  */
-({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+({ kind: "crewPlan"; plan: PlanView }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | ({ kind: "signInFailed"; reason: SignInFailure }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; request?: never; restore?: never; staff?: never; until?: never } | 
 /**  The session ended elsewhere (signed out, revoked, expired or the account deleted). */
-({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never };
+({ kind: "signedOutRemotely" }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; notice?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never } | 
+/**
+ *  Cloud AFK's notice about one of the player's cloud accounts (AFKPLUS): the launcher words it
+ *  and, once the player saw it, sends `afk_seen` ([`crate::SocialService::afk_seen`]).
+ */
+({ kind: "afkNotice"; notice: AfkNotice_Serialize }) & { call?: never; conv?: never; crew?: never; friend?: never; id?: never; invite?: never; message?: never; name?: never; plan?: never; reason?: never; request?: never; restore?: never; staff?: never; until?: never };
 
 export type SocialView = SocialView_Serialize | SocialView_Deserialize;
 

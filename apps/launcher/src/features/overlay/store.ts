@@ -14,9 +14,15 @@ export const useOverlay = create<OverlayState>()((set) => ({
 
 /**
  * What the in-game overlay tells as its own toasts (`crates/pl-overlay` policy): a chat message, a
- * crew call, a "Birlikte oyna" invite. The rest keep the launcher's notifications.
+ * crew call, a "Birlikte oyna" invite, and Cloud AFK's notices it has a card for (pl-overlay
+ * afk.rs; the AFK+ notices module checks the event). The rest keep the launcher's notifications.
  */
-const IN_GAME: ReadonlySet<SocialNotice["kind"]> = new Set(["chatMessage", "crewCall", "invite"]);
+const IN_GAME: ReadonlySet<SocialNotice["kind"]> = new Set([
+  "chatMessage",
+  "crewCall",
+  "invite",
+  "afkNotice",
+]);
 
 /**
  * While the game's overlay is connected, its toast stands in for the system notification of the

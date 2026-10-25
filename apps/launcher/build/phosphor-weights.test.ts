@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -7,10 +7,11 @@ import { dropUnusedWeights, USED_WEIGHTS } from "./phosphor-weights";
 const launcher = fileURLToPath(new URL("..", import.meta.url));
 
 function sources(dir: string): string[] {
-  return readdirSync(dir).flatMap((name) => {
-    const path = join(dir, name);
-    if (statSync(path).isDirectory()) return name === "node_modules" ? [] : sources(path);
-    return /\.(ts|tsx)$/.test(name) ? [path] : [];
+  // The entries' types come with the listing: no second call per file to ask what it is.
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) return entry.name === "node_modules" ? [] : sources(path);
+    return /\.(ts|tsx)$/.test(entry.name) ? [path] : [];
   });
 }
 
@@ -29,7 +30,9 @@ describe("phosphor icon weights", () => {
     expect(out.trimEnd()).toMatch(/\]\);\s*export\s*\{/);
   });
 
-  it("is asked only for weights that are kept", () => {
+  // It reads every source file of the launcher and @pl/ui (some 1,500): 1.5 s on a quiet machine,
+  // up to 8.5 s seen beside other builds, past the 5 s meant for unit work.
+  it("is asked only for weights that are kept", { timeout: 30_000 }, () => {
     const files = [
       ...sources(join(launcher, "src")),
       ...sources(join(launcher, "../../packages/ui/src")),

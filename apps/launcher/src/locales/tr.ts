@@ -2,6 +2,7 @@
 import { trAfkAlerts } from "./tr-afk-alerts";
 import { trAfkConnect } from "./tr-afk-connect";
 import { trAfkReconnect } from "./tr-afk-reconnect";
+import { trAfkPlus } from "./tr-afkplus";
 import { trChat } from "./tr-chat";
 import { trChat2 } from "./tr-chat2";
 import { trCloudAfk } from "./tr-cloud-afk";
@@ -90,6 +91,7 @@ export const tr = {
   cloudAfk: trCloudAfk,
   projectsSkin: trProjectsSkin,
   host: trHost,
+  afkPlus: trAfkPlus,
   newsColumn: trNewsColumn,
   nav: {
     home: "Ana Sayfa",
