@@ -45,6 +45,7 @@ import { trTeams } from "./tr-teams";
 import { trTray } from "./tr-tray";
 import { trTuning } from "./tr-tuning";
 import { trUpdates } from "./tr-updates";
+import { trWorldEntry } from "./tr-world-entry";
 
 export const tr = {
   reminders: trReminders,
@@ -93,6 +94,7 @@ export const tr = {
   host: trHost,
   afkPlus: trAfkPlus,
   newsColumn: trNewsColumn,
+  worldEntry: trWorldEntry,
   nav: {
     home: "Ana Sayfa",
     library: "Kütüphane",
