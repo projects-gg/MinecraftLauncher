@@ -49,10 +49,12 @@ import { type CenterFocus, useAccountsUi } from "@/features/accounts/store";
 import { ACCOUNTS_KEY, switchAccount } from "@/features/accounts/use-accounts";
 import { runAfk } from "@/features/afk/errors";
 import { showError } from "@/features/content/jobs";
+import { useHostUi } from "@/features/host/store";
 import type { InstanceTab } from "@/features/library/instance-page";
 import { useProjectsSkinOverview } from "@/features/projects-skin/queries";
 import { useSocialUi } from "@/features/social/store";
 import { api, type ServerStatus } from "@/lib/api";
+import { hostApi } from "@/lib/api/host-api";
 import { copyText } from "@/lib/clipboard";
 import { liveMinecraft, minecraftText } from "@/lib/minecraft";
 import { detectOs } from "@/lib/platform";
@@ -190,6 +192,22 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
   const friendsOn = useSocialUi((s) => s.view.enabled);
   const friendsSignedIn = useSocialUi((s) => s.view.auth === "signedIn");
   const projectsSkin = useProjectsSkinOverview().data;
+  // The command bar's instance: the one a game is prepared or played for, else the selected.
+  const busy = phaseKind === "working" || phaseKind === "launching" || phaseKind === "running";
+  const selected =
+    (busy ? instances.find((i) => i.id === launchId) : undefined) ??
+    instances.find((i) => i.id === selectedId) ??
+    instances[0];
+  // World sharing (HOST1): the open world's sheet, else the Worlds tab of the command bar's
+  // instance while it may share its worlds (asked at every opening, like the AFK accounts).
+  const worldsOn = useHostUi((s) => s.view.enabled) && friendsSignedIn;
+  const worldOpen = useHostUi((s) => s.view.session !== null);
+  const { data: hostPlace } = useQuery({
+    queryKey: ["host-place", selected?.id, "palette"],
+    queryFn: () => hostApi.place(selected?.id ?? ""),
+    enabled: open && worldsOn && !worldOpen && Boolean(selected),
+    staleTime: 0,
+  });
 
   useEffect(() => {
     if (!open) {
@@ -248,12 +266,6 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
   };
 
   const groups = (): Group[] => {
-    // The command bar's instance: the one a game is prepared or played for, else the selected.
-    const busy = phaseKind === "working" || phaseKind === "launching" || phaseKind === "running";
-    const selected =
-      (busy ? instances.find((i) => i.id === launchId) : undefined) ??
-      instances.find((i) => i.id === selectedId) ??
-      instances[0];
     const activeAccount = accounts.find((a) => a.active);
     const tab = (id: InstanceTab) => () => selected && run(() => openInstance(selected.id, id));
     const setting = (focus: "graphics" | "memory") => () =>
@@ -608,6 +620,27 @@ export function CommandPalette({ disabled }: { disabled?: boolean }) {
             () => run(copyAddress),
             { words: PALETTE_WORDS.copyAddress },
           ),
+          ...(worldsOn && worldOpen
+            ? [
+                entry(
+                  "action:host-world",
+                  t("small9.palette.manageWorld"),
+                  <UsersThree size={18} />,
+                  () => run(() => afterClose(() => useHostUi.getState().openSheet())),
+                  { words: PALETTE_WORDS.hostWorld },
+                ),
+              ]
+            : worldsOn && hostPlace?.shown
+              ? [
+                  entry(
+                    "action:host-world",
+                    t("small9.palette.openWorld"),
+                    <UsersThree size={18} />,
+                    tab("worlds"),
+                    { words: PALETTE_WORDS.hostWorld },
+                  ),
+                ]
+              : []),
           // Like the AFK page: only with AFK accounts, "durdur" only while one runs.
           ...(afk.connectAll
             ? [

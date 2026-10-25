@@ -1163,6 +1163,8 @@ async fn prepare_and_spawn(
     // Friends see the game: in game once its window shows, the server read from the log, exited.
     let game_presence =
         crate::commands::social::GamePresence::new(&state.social, options.quick_play.as_ref());
+    // A friend's world that turned the game away for missing mods says so in the log (HOST1).
+    let log_worlds = state.worlds.clone();
     let on_game: pl_mc::launch::GameEventFn = Arc::new(move |event| {
         game_presence.on_event(&event);
         let view = match event {
@@ -1171,6 +1173,7 @@ async fn prepare_and_spawn(
             // Sent after the exit, once the suspects are found in the mods folder.
             GameEvent::Crashed(_) => None,
             GameEvent::Line(line) => {
+                log_worlds.game_log(&line.message);
                 // The instance page's log tab follows the game live.
                 let _ = log_app.emit(
                     "game-log",

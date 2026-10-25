@@ -325,6 +325,7 @@ async fn connections_to_one_server_go_one_by_one_in_order() {
         ..fast_config()
     };
     let manager = env.manager(Some(spawner.clone()), config);
+    let asked_at = std::time::Instant::now();
     for id in &ids {
         manager.connect(id).await.unwrap();
         // A clear order of asking (the actors run on two threads).
@@ -342,15 +343,18 @@ async fn connections_to_one_server_go_one_by_one_in_order() {
     let first: Vec<&str> = spawns.iter().take(3).map(|(id, _)| id.as_str()).collect();
     let asked: Vec<&str> = ids.iter().map(String::as_str).collect();
     assert_eq!(first, asked);
-    // Never two connections to the server closer than the spacing (a little slack for the
-    // settings each launch reads and writes after its slot).
-    for pair in spawns.windows(2) {
-        let gap = pair[1].1.duration_since(pair[0].1);
+    // Each connection waits for its slot and the slots to one server are a spacing apart, so the
+    // n-th connection starts at least n - 1 spacings after the first was asked for (unpaced, the
+    // first three would start within 150 ms). The gap between two connections is not compared:
+    // a launch still prepares after its slot (the account's settings are read and written on a
+    // blocking thread), and on a busy machine one launch got through that 340 ms slower than the
+    // next one did. Production's spacing keeps room for that (4.5 s against BungeeCord's 4 s).
+    for (n, (id, at)) in spawns.iter().enumerate() {
+        let after = at.duration_since(asked_at);
+        let floor = SPACING * u32::try_from(n).unwrap();
         assert!(
-            gap >= SPACING - Duration::from_millis(100),
-            "{} then {}: {gap:?}",
-            pair[0].0,
-            pair[1].0
+            after >= floor,
+            "connection {n} ({id}) came {after:?} after the first ask"
         );
     }
     // A reconnect waiting for its turn showed when it would go.

@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import type {
   HostSession,
   HostView,
+  JoinFailure,
   JoinStage,
   WorldGuest,
   WorldInvite,
 } from "@/lib/api/host-types";
 import type { Friend, SocialTeam, TeamMember } from "@/lib/api/social-types";
+import { enSmall9 } from "@/locales/en-small9";
+import { trSmall9 } from "@/locales/tr-small9";
 import type { LaunchPhase } from "@/stores/launch";
 import {
   defaultMode,
@@ -17,6 +20,7 @@ import {
   homeInvite,
   hostMenuKey,
   hostRowAction,
+  inviteFailureKey,
   inviteFrom,
   inviteKeys,
   inviteList,
@@ -271,6 +275,8 @@ describe("Katıl", () => {
     expect(joinButton({ kind: "in" }, idle)).toEqual({ kind: "in" });
     expect(joinButton({ kind: "lost" }, idle)).toEqual({ kind: "rejoin" });
     expect(joinButton({ kind: "failed", failure: "full" }, idle)).toEqual({ kind: "retry" });
+    // Mods were missing: the button says the way that fixes it.
+    expect(joinButton({ kind: "failed", failure: "mods" }, idle)).toEqual({ kind: "copy" });
   });
 
   it("follows the launch once ready", () => {
@@ -297,6 +303,26 @@ describe("Katıl", () => {
     expect(retryWithCopy({ kind: "failed", failure: "mods" })).toBe(true);
     expect(retryWithCopy({ kind: "failed", failure: "full" })).toBe(false);
     expect(retryWithCopy(undefined)).toBe(false);
+  });
+
+  it("says on the invite why its join failed, for every failure", () => {
+    expect(inviteFailureKey(undefined)).toBeNull();
+    expect(inviteFailureKey({ kind: "in" })).toBeNull();
+    expect(inviteFailureKey({ kind: "lost" })).toBeNull();
+    const failures: JoinFailure[] = [
+      "full",
+      "closed",
+      "removed",
+      "unreachable",
+      "hostPackOld",
+      "mods",
+    ];
+    for (const failure of failures) {
+      expect(inviteFailureKey({ kind: "failed", failure })).toBe(`small9.join.failed.${failure}`);
+      // The row's own short words exist in both languages (the toast's would not fit).
+      expect(trSmall9.join.failed[failure]).toBeTruthy();
+      expect(enSmall9.join.failed[failure]).toBeTruthy();
+    }
   });
 
   it("asks one question at a time, the oldest first", () => {
