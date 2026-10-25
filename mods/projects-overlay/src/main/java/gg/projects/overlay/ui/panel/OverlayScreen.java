@@ -1831,6 +1831,14 @@ public final class OverlayScreen extends Screen {
         if (alpha <= 0.004f) {
             return;
         }
+        // Under an open person menu nothing else answers the pointer, as under the launcher's menus: no hover and no
+        // message tools beside it (a sender's menu opens over their message). The menu itself still has the pointer.
+        int menuMouseX = mouseX;
+        int menuMouseY = mouseY;
+        if (menu.isOpen()) {
+            mouseX = -1;
+            mouseY = -1;
+        }
         Draw.pushAlpha(alpha);
         g.pose().pushMatrix();
         g.pose().translate(dx, 0f);
@@ -1909,7 +1917,7 @@ public final class OverlayScreen extends Screen {
         // Beside the panel its first line stays level with the header's chip (as every tag's bubble does with its own).
         identityBubble.draw(g, now, panelX, left, 4, right, height - 4);
         friends.setNote(state.personNote(System.currentTimeMillis()), now);
-        menu.draw(g, mouseX, mouseY, now);
+        menu.draw(g, menuMouseX, menuMouseY, now);
         if (!menu.isOpen()) {
             friends.setMenuFor(null);
         }
