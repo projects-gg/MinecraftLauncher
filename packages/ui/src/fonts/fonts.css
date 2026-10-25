@@ -1,7 +1,8 @@
 /* The launcher's text faces (docs/design.md §3): Tektur and Figtree, variable, self-hosted so the
    app looks right offline. The latin subsets are our builds of fontsource's files with one added
-   kerning pair, "r" + "ı" (packages/ui/scripts/build-text-fonts.py, FONTLOG.txt): at our sizes the
-   arm of "r" ran into the stem of "ı" and "Ayarları" read "Ayarlan". The other subsets are
+   kerning pair, "r" + "ı", and in Tektur a longer stem on "Y" (packages/ui/scripts/
+   build-text-fonts.py, FONTLOG.txt): at our sizes the arm of "r" ran into the stem of "ı"
+   ("Ayarları" read "Ayarlan") and Tektur's "Y" read "V" ("Yama" as "Vama"). The other subsets are
    fontsource's own, from the same version (a launcher test keeps the two in step). Where two
    subsets share a character the face declared last wins, so latin comes last, as in fontsource:
    "ı" (U+0131) comes from latin, beside "r"; "ğ", "ş", "İ" from latin-ext. */
@@ -61,7 +62,7 @@
     U+A720-A7FF;
 }
 
-/* Ours: "r" + "ı" kerned (fonts.json). */
+/* Ours: "r" + "ı" kerned, a longer "Y" stem (fonts.json). */
 @font-face {
   font-family: "Tektur Variable";
   font-style: normal;
